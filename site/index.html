@@ -3924,6 +3924,10 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <script src="numbering_ui.js?v=1.0.1" defer></script>
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
     <script src="auth_gate.js?v=62.60" defer></script>
+    <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; injects the
+         "Sign in with Microsoft" button into #signup-modal and drives Supabase Azure OAuth.
+         Tenant restriction enforced server-side (approved_tenants + before-user-created hook). -->
+    <script src="ms_sso.js?v=1.0" defer></script>
     <!-- One-time EULA acceptance modal (defines window.SafetyLab.checkEula; called from auth_gate liftGate). -->
     <script src="eula_modal.js?v=1.0.7" defer></script>
     <!-- Software License & Subscription Agreement — a SECOND one-time acceptance shown right
