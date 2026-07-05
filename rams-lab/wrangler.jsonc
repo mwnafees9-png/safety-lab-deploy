@@ -1,0 +1,15 @@
+// RAMS Lab — its OWN Cloudflare Worker, fully separate from Safety Lab Aero.
+// Deploy (when ready, from this directory): wrangler deploy
+// Until a custom domain is attached it serves at <name>.<account>.workers.dev.
+{
+    "name": "rams-lab",
+    "compatibility_date": "2026-06-01",
+    "assets": {
+        "directory": "./site",
+        "html_handling": "auto-trailing-slash",
+        "not_found_handling": "404-page"
+    }
+    // No worker script needed — pure static assets. Add "main" later when the
+    // product grows an API (auth, sync, billing), same shape as the aero worker.
+    // Custom domain: add a "routes" entry once the RAMS Lab domain is chosen.
+}

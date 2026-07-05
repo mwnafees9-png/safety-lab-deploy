@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAMS Lab — EN 50126 RAMS Assessment Workspace (standalone)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* rams.css — ink-on-paper identity. Monochrome everywhere EXCEPT risk & SIL
+   stamps, which keep their severity colors (set inline from the spine palette). */
+:root {
+  --paper: #FFFFFF; --card: #FFFFFF; --field: #F6F6F6; --hair: #E2E2E2;
+  --ink: #0B0B0C; --ink-2: #45464A; --ink-3: #8A8B90;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
+body { font-family: 'IBM Plex Sans', sans-serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--ink); z-index: 10; }
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+.sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 232px; padding: 20px 0; background: var(--ink); color: #fff; display: flex; flex-direction: column; }
+.brand { padding: 10px 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.18); margin-bottom: 8px; }
+.brand .logo-row { display: flex; align-items: center; gap: 10px; }
+.brand .wordmark { font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
+.brand .tagline { display: block; font-size: 9.5px; font-weight: 500; opacity: 0.7; letter-spacing: 0.12em; margin-top: 6px; }
+.nav { flex: 1; overflow-y: auto; }
+.nav-sec { padding: 12px 18px 5px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; font-family: 'IBM Plex Mono', monospace; }
+.nav a { display: block; padding: 6px 18px; color: rgba(255,255,255,0.85); text-decoration: none; font-size: 13px; }
+.nav a.on { background: rgba(255,255,255,0.16); color: #fff; font-weight: 600; }
+.nav a:hover { background: rgba(255,255,255,0.08); }
+.side-foot { padding: 12px 18px 4px; font-size: 9px; letter-spacing: 0.12em; opacity: 0.45; }
+
+.main { margin-left: 232px; padding: 26px 34px 60px; min-height: 100vh; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 22px; gap: 14px; flex-wrap: wrap; }
+.head h1 { font-size: 19px; font-weight: 700; }
+.head h1 .sub { font-size: 11px; color: var(--ink-3); display: block; font-weight: 500; margin-top: 2px; font-family: 'IBM Plex Mono', monospace; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { height: 32px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--ink); background: var(--card); font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+.chip b { margin-left: 6px; }
+
+h3 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace; border-bottom: 2px solid var(--ink); padding-bottom: 6px; margin: 28px 0 14px; }
+h4 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace; color: var(--ink-2); margin: 0 0 8px; }
+.methods { font-size: 10.5px; font-family: 'IBM Plex Mono', monospace; color: var(--ink-3); margin: -4px 0 12px; line-height: 1.7; }
+
+.cockpits { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.ckpt { background: var(--card); border: 1px solid var(--ink); padding: 12px 12px 10px; cursor: default; }
+.ckpt .ph { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-3); letter-spacing: 0.1em; }
+.ckpt .nm { font-weight: 600; font-size: 12.5px; margin: 3px 0 8px; }
+.ckpt .st { font-size: 10.5px; font-family: 'IBM Plex Mono', monospace; padding: 2px 6px; display: inline-block; color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.ckpt .st.done { background: var(--ink); color: #fff; }
+.ckpt .bar { height: 3px; background: var(--hair); margin-top: 10px; }
+.ckpt .bar i { display: block; height: 3px; background: var(--ink); }
+
+table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--ink); }
+thead th { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); text-align: left; padding: 9px 12px; border-bottom: 2px solid var(--ink); }
+tbody td { padding: 9px 12px; border-bottom: 1px solid var(--hair); font-size: 13px; vertical-align: top; }
+tbody tr:hover td { background: var(--field); }
+
+.stamp { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; padding: 3px 8px; display: inline-block; box-shadow: inset 0 0 0 1.5px currentColor; white-space: nowrap; }
+.stamp.bw { color: var(--ink); background: transparent; }
+.thr { font-family: 'IBM Plex Mono', monospace; font-size: 12px; white-space: nowrap; }
+.prov { font-size: 11px; color: var(--ink-3); font-family: 'IBM Plex Mono', monospace; }
+.ok { color: #1D6E3E; } .warn { color: #9A6200; } .bad { color: #8E2A2A; }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; align-items: start; }
+.kpis { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.kpi { border: 1px solid var(--ink); padding: 8px 12px; flex: 1; min-width: 110px; }
+.kpi .v { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 16px; }
+.kpi .l { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+.note { background: var(--field); border: 1px solid var(--hair); border-left: 3px solid var(--ink); padding: 10px 14px; font-size: 12px; color: var(--ink-2); margin-top: 16px; }
+
+button, .btn { font-family: 'IBM Plex Sans', sans-serif; font-size: 12px; padding: 6px 12px; background: transparent; border: 1px solid var(--ink); color: var(--ink); cursor: pointer; }
+button:hover, .btn:hover { background: var(--ink); color: #fff; }
+button.primary { background: var(--ink); color: #fff; }
+button.primary:hover { background: var(--ink-2); }
+input, select, textarea { font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; padding: 6px 8px; border: 1px solid var(--hair); border-bottom: 1.5px solid var(--ink); background: var(--card); color: var(--ink); }
+input:focus, select:focus, textarea:focus { outline: none; border-bottom-color: var(--ink-2); }
+.toolbar { display: flex; gap: 8px; margin: 0 0 12px; align-items: center; flex-wrap: wrap; }
+.clickable { cursor: pointer; }
+.foot { margin-top: 40px; font-size: 11px; color: var(--ink-3); font-family: 'IBM Plex Mono', monospace; }
+@media (max-width: 1100px) { .cols3 { grid-template-columns: 1fr; } .cols { grid-template-columns: 1fr; } .cockpits { grid-template-columns: repeat(3, 1fr); } }
+
+</style>
+</head>
+<body>
+<script>
+'use strict';
+// RAMS Lab standalone bundle — generated by build-standalone.mjs from the
+// modular sources in site/. Do not edit by hand; edit the modules and rebuild.
+// ===== core/bus.js =====
+// core/bus.js — event bus. Modules communicate ONLY through this (or the store).
+const handlers = new Map();
+
+const bus = {
+    on(event, fn) {
+        if (!handlers.has(event)) handlers.set(event, new Set());
+        handlers.get(event).add(fn);
+        return () => handlers.get(event).delete(fn);
+    },
+    emit(event, payload) {
+        (handlers.get(event) || []).forEach(fn => {
+            try { fn(payload); } catch (e) { console.error('[bus]', event, e); }
+        });
+        (handlers.get('*') || []).forEach(fn => {
+            try { fn(event, payload); } catch (e) { console.error('[bus:*]', e); }
+        });
+    },
+};
+
+
+// ===== core/store.js =====
+// core/store.js — the ONE state root. Modules read ctx.state, write via
+// ctx.update(fn); every update persists, stamps, and broadcasts. No module
+// owns private persistence (Constitution rule 6).
+
+const KEY = 'ramslab.project.v1';
+let state = null;
+let idCounter = 1;
+
+function blank() {
+    return {
+        meta: { name: 'Untitled RAMS Program', createdAt: new Date().toISOString(), phase: 1 },
+        systemDef: { description: '', boundary: '', operationalContext: '' },
+        hazards: [],           // hazard log rows
+        thr: [],               // apportionment nodes
+        reliability: { items: [], fieldData: [] },
+        availability: { measures: [] },
+        maintainability: { tasks: [] },
+        sracs: [],
+        safetyCase: { parts: {} },
+        evidence: { signoffs: [], baselines: [], attests: {}, tailored: {} },
+        counters: {},
+    };
+}
+
+const store = {
+    load() {
+        try {
+            const raw = localStorage.getItem(KEY);
+            state = raw ? JSON.parse(raw) : blank();
+        } catch (_) { state = blank(); }
+        idCounter = state._idCounter || 1000;
+        return state;
+    },
+    get state() { return state || this.load(); },
+    replace(next) {
+        state = next;
+        this.persist();
+        bus.emit('state:replaced', state);
+    },
+    update(fn, eventName) {
+        fn(this.state);
+        this.persist();
+        bus.emit(eventName || 'state:changed', state);
+    },
+    persist() {
+        try {
+            state._idCounter = idCounter;
+            state.meta.updatedAt = new Date().toISOString();
+            localStorage.setItem(KEY, JSON.stringify(state));
+        } catch (e) { console.warn('[store] persist failed', e); }
+    },
+    id(prefix) {
+        const c = this.state.counters;
+        c[prefix] = (c[prefix] || 0) + 1;
+        return prefix + '-' + String(c[prefix]).padStart(3, '0');
+    },
+    nid() { return idCounter++; },
+    reset() { state = blank(); this.persist(); bus.emit('state:replaced', state); },
+};
+
+
+// ===== core/evidence.js =====
+// core/evidence.js — the evidence layer every vertical inherits: FNV-1a
+// fingerprints (drift detection), SHA-256 hash-chained sign-offs (tamper
+// evidence), baselines. Vertical-agnostic (Constitution rule 7).
+
+function fnv(str) {
+    let h = 0x811c9dc5;
+    const s = String(str);
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return ('0000000' + (h >>> 0).toString(16)).slice(-8);
+}
+
+// Deterministic stringify: sorted keys, underscore-prefixed keys dropped.
+function stableStringify(obj) {
+    return JSON.stringify(obj, function (k, v) {
+        if (k && k.charAt && k.charAt(0) === '_') return undefined;
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const o = {};
+            Object.keys(v).sort().forEach(key => { if (key.charAt(0) !== '_') o[key] = v[key]; });
+            return o;
+        }
+        return v;
+    });
+}
+
+function fingerprint(obj) { return fnv(stableStringify(obj)); }
+
+async function sha256(str) {
+    if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(str)));
+        return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    return 'fnv:' + fnv(str);   // headless/test fallback — still deterministic
+}
+
+// Signed act appended to a hash chain on the evidence root. `target` is any
+// {kind, id} the vertical defines; content is fingerprinted at signing time.
+async function sign(evidenceRoot, target, stage, signer, content) {
+    const chain = evidenceRoot.signoffs;
+    const prev = chain.length ? chain[chain.length - 1].hash : '';
+    const contentFp = fingerprint(content || {});
+    const at = new Date().toISOString();
+    const hash = await sha256([prev, target.kind, target.id, stage, signer, at, contentFp].join('§'));
+    const rec = { kind: target.kind, id: target.id, stage, signer, at, contentFp, prevHash: prev, hash };
+    chain.push(rec);
+    return rec;
+}
+
+async function verifyChain(evidenceRoot) {
+    const chain = evidenceRoot.signoffs || [];
+    let prev = '';
+    for (const rec of chain) {
+        if (rec.prevHash !== prev) return { ok: false, at: rec };
+        const expect = await sha256([prev, rec.kind, rec.id, rec.stage, rec.signer, rec.at, rec.contentFp].join('§'));
+        if (expect !== rec.hash) return { ok: false, at: rec };
+        prev = rec.hash;
+    }
+    return { ok: true, length: chain.length };
+}
+
+function latestSignoff(evidenceRoot, target) {
+    const chain = evidenceRoot.signoffs || [];
+    for (let i = chain.length - 1; i >= 0; i--) {
+        if (chain[i].kind === target.kind && String(chain[i].id) === String(target.id)) return chain[i];
+    }
+    return null;
+}
+
+// Drift: content changed since it was signed.
+function isStale(evidenceRoot, target, content) {
+    const s = latestSignoff(evidenceRoot, target);
+    return s ? s.contentFp !== fingerprint(content || {}) : false;
+}
+
+async function baseline(evidenceRoot, label, projectState) {
+    const hash = await sha256(stableStringify(projectState));
+    const rec = { label, at: new Date().toISOString(), hash };
+    evidenceRoot.baselines.push(rec);
+    return rec;
+}
+
+
+// ===== core/engine.js =====
+// core/engine.js — vertical-agnostic math. Knows NOTHING about hazards, SILs
+// or trains (Constitution rule 2): pure functions over rates, probabilities,
+// structures. The spine supplies interpretation.
+
+// ---- probability / rate primitives -----------------------------------------
+const pFromLambda = (lambda, t) => -Math.expm1(-lambda * t);   // P = 1−e^(−λt)
+const lambdaFromP = (p, t) => -Math.log1p(-p) / t;
+
+// ---- structure evaluation (RBD / fault-tree dual) ---------------------------
+// node: { kind: 'event', p } | { kind: 'and'|'or', children } | { kind: 'koon', k, children }
+// AND = all fail (parallel redundancy in RBD terms); OR = any fails (series).
+function evalStructure(node) {
+    if (!node) return 0;
+    if (node.kind === 'event') return Math.min(Math.max(node.p || 0, 0), 1);
+    const ps = (node.children || []).map(evalStructure);
+    if (node.kind === 'and') return ps.reduce((a, b) => a * b, 1);
+    if (node.kind === 'or') return 1 - ps.reduce((a, b) => a * (1 - b), 1);
+    if (node.kind === 'koon') {
+        // exact: probability that ≥k of n fail (independent, possibly unequal p)
+        const n = ps.length;
+        let dist = [1];                        // dist[j] = P(j failures) so far
+        for (const p of ps) {
+            const next = new Array(dist.length + 1).fill(0);
+            for (let j = 0; j < dist.length; j++) {
+                next[j] += dist[j] * (1 - p);
+                next[j + 1] += dist[j] * p;
+            }
+            dist = next;
+        }
+        let sum = 0;
+        for (let j = node.k; j <= n; j++) sum += dist[j] || 0;
+        return sum;
+    }
+    return 0;
+}
+
+// ---- top-down apportionment (THR / downtime / MTTR budgets) -----------------
+// Splits a parent target across children by weight; kind 'or' divides the
+// budget (series — contributions add), kind 'and' takes the weighted root of
+// the product (parallel).
+//
+// DOMAIN RULE (dimensional correctness): 'or' is valid for RATES and
+// probabilities alike (both add in series, first order). 'and' is valid for
+// PROBABILITIES ONLY — a product of rates is not a rate (/h² is not a unit
+// of hazard). Callers apportioning a rate through a parallel structure must
+// convert to probability over a stated exposure time first (P = 1−e^(−λT)),
+// split, then convert back (λ = −ln(1−P)/T). See modules/thr.js.
+function apportion(target, children, kind) {
+    const n = children.length;
+    if (!n) return [];
+    const wsum = children.reduce((a, c) => a + (c.weight || 1), 0);
+    if (kind === 'and') {
+        // equal-exponent split of the product: each child gets target^(w/wsum)
+        return children.map(c => ({ ...c, target: Math.pow(target, (c.weight || 1) / wsum) }));
+    }
+    return children.map(c => ({ ...c, target: target * (c.weight || 1) / wsum }));
+}
+
+// ---- reliability rollups ----------------------------------------------------
+const mtbf = (lambda) => (lambda > 0 ? 1 / lambda : Infinity);
+const seriesLambda = (items) => items.reduce((a, it) => a + (it.lambda || 0), 0);
+
+// ---- availability -----------------------------------------------------------
+// Inherent availability from λ + MTTR (both in hours).
+function inherentAvailability(lambda, mttr) {
+    const m = mtbf(lambda);
+    if (!isFinite(m)) return 1;
+    return m / (m + (mttr || 0));
+}
+// Operational availability from uptime/downtime totals.
+const operationalAvailability = (upH, downH) => (upH + downH > 0 ? upH / (upH + downH) : 1);
+// Steady-state availability of a series of items (independent): product.
+const seriesAvailability = (avs) => avs.reduce((a, b) => a * b, 1);
+// Expected downtime hours per year for an item.
+const annualDowntime = (lambda, mttr, opHoursPerYear) => (lambda || 0) * (opHoursPerYear || 8760) * (mttr || 0);
+
+// ---- maintainability --------------------------------------------------------
+// MDT = active repair + logistics + administrative delays.
+const mdt = (t) => (t.activeRepair || 0) + (t.logistics || 0) + (t.admin || 0);
+// Fleet/mean MTTR weighted by task frequency (λ of the initiating failure).
+function meanMttr(tasks) {
+    let num = 0, den = 0;
+    tasks.forEach(t => { const w = t.lambda || 0; num += w * (t.mttr || 0); den += w; });
+    return den > 0 ? num / den : 0;
+}
+
+// ---- reliability demonstration statistics (MIL-HDBK-781A) --------------------
+// One-sided lower confidence bound on MTBF from (T hours, r failures):
+//   r = 0: T / (−ln(1−C));  r > 0: 2T / χ²(C; 2r+2)  (time-terminated).
+function normInv(p) {   // Beasley–Springer rational approx (|err| < 3e-4)
+    const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+    const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+    const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+    const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+    const pl = 0.02425;
+    if (p < pl) { const q = Math.sqrt(-2 * Math.log(p)); return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+    if (p > 1 - pl) { const q = Math.sqrt(-2 * Math.log(1-p)); return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+    const q = p - 0.5, r = q * q;
+    return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+function chi2Quantile(p, k) {   // Wilson–Hilferty; exact for k=2
+    if (k === 2) return -2 * Math.log(1 - p);
+    const z = normInv(p), t = 2 / (9 * k);
+    return k * Math.pow(1 - t + z * Math.sqrt(t), 3);
+}
+function mtbfLowerBound(T, r, C) {
+    if (!(T > 0) || r < 0) return null;
+    if (r === 0) return T / (-Math.log(1 - C));
+    return 2 * T / chi2Quantile(C, 2 * r + 2);
+}
+
+// ---- demonstrated-vs-target verdicts (two-lane check, generic) ---------------
+function laneCheck(computed, elicited, tolerance) {
+    if (computed == null || elicited == null) return 'open';
+    const tol = tolerance == null ? 0 : tolerance;
+    if (elicited <= computed * (1 + tol)) return 'verified';
+    return 'finding';
+}
+
+
+// ===== core/registry.js =====
+// core/registry.js — modules register themselves; the shell consumes the
+// registry. The shell never imports a module; modules never import the shell
+// (Constitution rules 1 & 5).
+
+const modules = [];
+
+const registry = {
+    register(mod) {
+        if (!mod || !mod.id || typeof mod.render !== 'function') {
+            throw new Error('[registry] module must declare { id, section, title, render }');
+        }
+        if (modules.some(m => m.id === mod.id)) throw new Error('[registry] duplicate module id: ' + mod.id);
+        modules.push(mod);
+    },
+    all() { return modules.slice(); },
+    get(id) { return modules.find(m => m.id === id) || null; },
+    sections() {
+        const out = [];
+        modules.forEach(m => {
+            let sec = out.find(s => s.name === m.section);
+            if (!sec) { sec = { name: m.section, items: [] }; out.push(sec); }
+            sec.items.push(m);
+        });
+        return out;
+    },
+};
+
+
+// ===== spine/en50126.js =====
+// spine/en50126.js — THE STANDARD AS DATA (Constitution rule 3).
+// Everything rail-specific lives here: lifecycle, risk matrix, THR→SIL,
+// checklist objectives, palette. FuSa Lab = a sibling file, zero core edits.
+
+const spine = {
+    id: 'en50126',
+    productName: 'RAMS Lab',
+    tagline: 'EN 50126 · 50128 · 50129 · CSM-RA',
+
+    lifecycle: [
+        { id: 'ph1_3', label: 'PH 1–3', name: 'Concept & Risk Policy' },
+        { id: 'ph4', label: 'PH 4', name: 'System Definition + PHA' },
+        { id: 'ph5', label: 'PH 5', name: 'Risk Assessment · THR' },
+        { id: 'ph6', label: 'PH 6', name: 'Requirements & SIL' },
+        { id: 'ph7_8', label: 'PH 7–8', name: 'Design & Verification' },
+        { id: 'ph9_12', label: 'PH 9–12', name: 'Safety Case & Acceptance' },
+    ],
+
+    // Frequency × severity → risk category. This is the EXPLICIT example
+    // calibration published in EN 50126-1 (risk evaluation example) — encoded
+    // as data, not a scoring formula, because calibration is a project act
+    // under CSM-RA: replace this table per project, never bend a heuristic.
+    frequencies: ['Incredible', 'Improbable', 'Remote', 'Occasional', 'Probable', 'Frequent'],
+    severities: ['Insignificant', 'Marginal', 'Critical', 'Catastrophic'],
+    riskMatrix: {
+        categories: ['Negligible', 'Tolerable', 'Undesirable', 'Intolerable'],
+        // rows = frequency (ascending, Incredible→Frequent); cols = severity
+        table: [
+            ['Negligible', 'Negligible', 'Negligible', 'Negligible'],   // Incredible
+            ['Negligible', 'Negligible', 'Tolerable',  'Tolerable'],    // Improbable
+            ['Negligible', 'Tolerable',  'Undesirable','Undesirable'],  // Remote
+            ['Tolerable',  'Undesirable','Undesirable','Intolerable'],  // Occasional
+            ['Tolerable',  'Undesirable','Intolerable','Intolerable'],  // Probable
+            ['Undesirable','Intolerable','Intolerable','Intolerable'],  // Frequent
+        ],
+        cell(freqIdx, sevIdx) {
+            const row = this.table[freqIdx];
+            return (row && row[sevIdx]) || 'Negligible';
+        },
+    },
+
+    // EN 50129 Table A.1 (THR per hazardous failure mode, per hour → SIL).
+    // Ranges are closed below, OPEN above: 1e-9 ≤ THR < 1e-8 → SIL 4, so a
+    // THR of exactly 1e-8 belongs to SIL 3. THR below 1e-9 stays SIL 4 (the
+    // standard defines no process beyond SIL 4 — tighter targets are met by
+    // architecture, not by a higher SIL).
+    silFromThr(thr) {
+        if (!(thr > 0)) return null;
+        if (thr < 1e-8) return 4;
+        if (thr < 1e-7) return 3;
+        if (thr < 1e-6) return 2;
+        if (thr < 1e-5) return 1;
+        return 0;
+    },
+
+    riskAcceptancePrinciples: ['Code of Practice', 'Reference System', 'Explicit Risk Estimation'],
+
+    hazardStates: ['open', 'controlled', 'transferred', 'closed'],
+    sracStates: ['open', 'exported', 'accepted', 'verified'],
+
+    safetyCaseParts: [
+        { id: 'p1', name: 'Definition of System' },
+        { id: 'p2', name: 'Quality Management Report' },
+        { id: 'p3', name: 'Safety Management Report' },
+        { id: 'p4', name: 'Technical Safety Report' },
+        { id: 'p5', name: 'Related Safety Cases' },
+        { id: 'p6', name: 'Conclusion' },
+    ],
+
+    // Phase-gate checklists (ISA gates). kind 'auto' items are evaluated by the
+    // dashboard against live state; 'attest' items are signed acts.
+    checklists: {
+        ph4: [
+            { id: 'sysdef', kind: 'auto', label: 'System definition and boundary recorded', eval: s => !!(s.systemDef.description && s.systemDef.boundary) },
+            { id: 'pha', kind: 'auto', label: 'Every hazard classified on the risk matrix', eval: s => s.hazards.length > 0 && s.hazards.every(h => h.frequency != null && h.severity != null) },
+            { id: 'rap', kind: 'auto', label: 'Risk-acceptance principle chosen per hazard', eval: s => s.hazards.every(h => !!h.principle) },
+            { id: 'rev', kind: 'attest', label: 'PHA review held (multi-disciplinary)' },
+        ],
+        ph5: [
+            { id: 'thr', kind: 'auto', label: 'THR set for every non-negligible hazard', eval: s => s.hazards.filter(h => h.category !== 'Negligible').every(h => h.thr > 0) },
+            { id: 'app', kind: 'auto', label: 'THR apportioned to subsystems', eval: s => s.thr.length > 0 },
+            { id: 'isa', kind: 'attest', label: 'ISA agreement on risk assessment basis' },
+        ],
+        ph6: [
+            { id: 'sil', kind: 'auto', label: 'SIL allocated wherever a THR demands one', eval: s => s.hazards.filter(h => h.thr > 0).every(h => h.sil != null) },
+            { id: 'srac', kind: 'auto', label: 'SRACs exported for external conditions', eval: s => s.sracs.length > 0 },
+            { id: 'acc', kind: 'attest', label: 'Requirements accepted by design authority' },
+        ],
+    },
+
+    // Ink-on-paper identity: monochrome EXCEPT risk & SIL, which keep color.
+    palette: {
+        risk: { Intolerable: '#8E2A2A', Undesirable: '#9A6200', Tolerable: '#1D6E3E', Negligible: '#3D5A80' },
+        sil: { 4: '#8E2A2A', 3: '#9A6200', 2: '#1D6E3E', 1: '#3D5A80', 0: '#5B4FA8' },
+    },
+};
+
+
+// ===== ui/shell.js =====
+// ui/shell.js — sidebar, router, page host. Consumes the registry; knows no
+// module by name. Renders the ink-on-paper chrome and hands modules a ctx.
+
+const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+const TRAIN_MARK = `
+<svg width="44" height="30" viewBox="0 0 44 30" xmlns="http://www.w3.org/2000/svg" aria-label="RAMS Lab">
+  <path fill="#fff" d="M4 4 h26 c5 0 9 3.5 11 9 l1.5 5 h-38.5 z"/>
+  <rect x="7" y="8" width="6" height="6" fill="#0B0B0C"/>
+  <rect x="16" y="8" width="6" height="6" fill="#0B0B0C"/>
+  <path d="M25 8 h5.5 c2.6 0 4.8 2.2 6 6 H25 z" fill="#0B0B0C"/>
+  <rect x="4" y="20" width="38" height="3" fill="#fff"/>
+  <rect x="1" y="26" width="42" height="2.5" fill="#fff"/>
+</svg>`;
+
+let activeId = null;
+let rootEl = null;
+let spineRef = null;
+
+function ctx() {
+    return {
+        state: store.state,
+        spine: spineRef,
+        update: (fn, ev) => store.update(fn, ev),
+        id: p => store.id(p),
+        nid: () => store.nid(),
+        bus,
+        esc,
+        go: id => navigate(id),
+        stamp(text, color, tint) {
+            return '<span class="stamp" style="color:' + color + ';' + (tint === false ? '' : 'background:' + color + '1A;') + '">' + esc(text) + '</span>';
+        },
+    };
+}
+
+function renderNav() {
+    const nav = rootEl.querySelector('#rl-nav');
+    nav.innerHTML = registry.sections().map(sec =>
+        '<div class="nav-sec">' + esc(sec.name) + '</div>' +
+        sec.items.map(m =>
+            '<a href="#' + esc(m.id) + '" class="' + (m.id === activeId ? 'on' : '') + '" data-mod="' + esc(m.id) + '">' + esc(m.title) + '</a>'
+        ).join('')
+    ).join('');
+    nav.querySelectorAll('a[data-mod]').forEach(a => {
+        a.onclick = e => { e.preventDefault(); navigate(a.getAttribute('data-mod')); };
+    });
+}
+
+function renderPage() {
+    const host = rootEl.querySelector('#rl-page');
+    const mod = registry.get(activeId) || registry.all()[0];
+    if (!mod) { host.innerHTML = '<p>No modules registered.</p>'; return; }
+    activeId = mod.id;
+    host.innerHTML = '';
+    try { mod.render(host, ctx()); }
+    catch (e) {
+        console.error('[shell] render failed:', mod.id, e);
+        host.innerHTML = '<div class="note">Module "' + esc(mod.id) + '" failed to render: ' + esc(e.message) + '</div>';
+    }
+}
+
+function navigate(id) {
+    activeId = id;
+    try { location.hash = id; } catch (_) {}
+    renderNav();
+    renderPage();
+}
+
+const shell = {
+    mount(body, opts) {
+        spineRef = opts.spine;
+        store.load();
+        rootEl = document.createElement('div');
+        rootEl.innerHTML =
+            '<aside class="sidebar">' +
+            '  <div class="brand"><div class="logo-row">' + TRAIN_MARK +
+            '    <span class="wordmark">' + esc(spineRef.productName) + '</span></div>' +
+            '    <span class="mono tagline">' + esc(spineRef.tagline) + '</span></div>' +
+            '  <div class="nav" id="rl-nav"></div>' +
+            '  <div class="side-foot mono">SAFETY LAB PLATFORM · VERTICAL 2</div>' +
+            '</aside>' +
+            '<main class="main"><div id="rl-page"></div></main>';
+        body.appendChild(rootEl);
+        const initial = (location.hash || '').slice(1);
+        activeId = registry.get(initial) ? initial : (registry.all()[0] || {}).id;
+        renderNav();
+        renderPage();
+        bus.on('state:changed', () => renderPage());
+        bus.on('state:replaced', () => renderPage());
+        window.addEventListener('hashchange', () => {
+            const id = location.hash.slice(1);
+            if (registry.get(id) && id !== activeId) navigate(id);
+        });
+    },
+};
+
+
+// ===== modules/dashboard.js =====
+(() => {
+// modules/dashboard.js — lifecycle cockpits + phase-gate checklists, all
+// derived live from state through the spine's checklist definitions.
+
+function phaseProgress(S, spine) {
+    // crude derived completion per lifecycle block for the bars
+    const hz = S.hazards.length;
+    const classified = S.hazards.filter(h => h.frequency != null && h.severity != null).length;
+    const withThr = S.hazards.filter(h => h.thr > 0).length;
+    const withSil = S.hazards.filter(h => h.sil != null).length;
+    return {
+        ph1_3: S.systemDef.description ? 1 : 0,
+        ph4: hz ? classified / hz : 0,
+        ph5: hz ? withThr / Math.max(1, S.hazards.filter(h => h.category !== 'Negligible').length || hz) : 0,
+        ph6: withThr ? withSil / withThr : 0,
+        ph7_8: (S.reliability.items.length ? 0.5 : 0) + (S.maintainability.tasks.some(t => t.demonstrated != null) ? 0.5 : 0),
+        ph9_12: Object.values(S.safetyCase.parts).filter(v => v === 'generated' || v === 'accepted').length / 6,
+    };
+}
+
+function checklist(S, spine, key, attests) {
+    const defs = spine.checklists[key] || [];
+    return defs.map(d => {
+        if (d.kind === 'attest') {
+            const a = attests[key + ':' + d.id];
+            return { label: d.label, state: a ? 'attested · ' + a.by : 'open — attest', ok: !!a, id: d.id, kind: 'attest', key };
+        }
+        let ok = false;
+        try { ok = !!d.eval(S); } catch (_) {}
+        return { label: d.label, state: ok ? 'pass' : 'open', ok, id: d.id, kind: 'auto', key };
+    });
+}
+
+function render(host, ctx) {
+    const S = ctx.state;
+    const spine = ctx.spine;
+    const prog = phaseProgress(S, spine);
+    const attests = S.evidence.attests;
+    const open = S.hazards.filter(h => h.state === 'open').length;
+
+    host.innerHTML =
+        '<div class="head"><h1>' + ctx.esc(S.meta.name) +
+        '<span class="sub">CSM-RA · lifecycle position and gate posture, derived live — never self-reported</span></h1>' +
+        '<div class="chips">' +
+        '<span class="chip">Hazard log <b>' + open + ' open · ' + (S.hazards.length - open) + ' dispositioned</b></span>' +
+        '<span class="chip">SRACs <b>' + S.sracs.filter(x => x.state === 'open').length + ' open</b></span>' +
+        '<span class="chip clickable" id="dash-rename">Program <b>rename</b></span>' +
+        '</div></div>' +
+        '<h3>EN 50126 lifecycle — phase cockpits</h3>' +
+        '<div class="cockpits">' +
+        spine.lifecycle.map(ph => {
+            const p = Math.min(1, prog[ph.id] || 0);
+            const done = p >= 1;
+            return '<div class="ckpt"><div class="ph">' + ctx.esc(ph.label) + '</div><div class="nm">' + ctx.esc(ph.name) + '</div>' +
+                '<span class="st' + (done ? ' done' : '') + '">' + (done ? 'COMPLETE' : p > 0 ? 'IN WORK' : 'NOT STARTED') + '</span>' +
+                '<div class="bar"><i style="width:' + Math.round(p * 100) + '%"></i></div></div>';
+        }).join('') +
+        '</div>' +
+        '<h3>Phase gates — ISA checklists (live)</h3>' +
+        '<div class="cols3">' +
+        ['ph4', 'ph5', 'ph6'].map(key => {
+            const items = checklist(S, spine, key, attests);
+            const ready = items.every(i => i.ok);
+            return '<div><h4>' + key.toUpperCase().replace('PH', 'Phase ') + ' gate ' + (ready ? '· <span class="ok">READY</span>' : '') + '</h4>' +
+                '<table><tbody>' + items.map(i =>
+                    '<tr><td>' + ctx.esc(i.label) + '</td><td style="width:130px" class="' + (i.ok ? 'ok' : 'warn') + (i.kind === 'attest' && !i.ok ? ' clickable' : '') + '"' +
+                    (i.kind === 'attest' && !i.ok ? ' data-attest="' + i.key + ':' + i.id + '"' : '') + '>' +
+                    (i.ok ? '✓ ' : '· ') + ctx.esc(i.state) + '</td></tr>'
+                ).join('') + '</tbody></table></div>';
+        }).join('') +
+        '</div>' +
+        '<div class="note"><b>Gate rule</b> — auto items are computed from the model and cannot be argued with; attest items are signed acts. ' +
+        'A gate is READY when every line holds. Hand-off baselines the project (SHA-256) and drift reopens it.</div>';
+
+    host.querySelector('#dash-rename').onclick = () => {
+        const n = prompt('Program name:', S.meta.name);
+        if (n) ctx.update(s => { s.meta.name = n; }, 'meta:changed');
+    };
+    host.querySelectorAll('[data-attest]').forEach(el => {
+        el.onclick = () => {
+            const key = el.getAttribute('data-attest');
+            const by = prompt('Attest "' + key + '". Sign with your name:');
+            if (!by) return;
+            ctx.update(s => { s.evidence.attests[key] = { by, at: new Date().toISOString() }; }, 'evidence:changed');
+        };
+    });
+}
+
+const module = { id: 'dashboard', section: 'Program', title: 'Dashboard', render };
+
+registry.register(module);
+})();
+
+// ===== modules/sample.js =====
+(() => {
+// modules/sample.js — the M4 Platform Screen Door sample program (original
+// content, mirrors the mockup) + system definition page. Loading replaces state.
+
+function sampleProject() {
+    return {
+        meta: { name: 'Metro Line M4 — Platform Screen Doors', createdAt: new Date().toISOString(), phase: 6 },
+        systemDef: {
+            description: 'Platform screen door (PSD) system for a driverless metro line: 24 stations, 48 door-sets per platform pair, interlocked with train position and departure authority.',
+            boundary: 'PSD mechanical assemblies, door control units, interlock controller (2oo2), obstacle detection, OCC interface. Excludes trainborne doors and signalling (interfaces only).',
+            operationalContext: '20 operating hours/day, 6,000 op hours/yr per door-set, GoA4 unattended operation, CSM-RA explicit risk estimation.',
+        },
+        hazards: [
+            { id: 'HZ-001', description: 'Doors open while train in motion / not aligned at platform', frequency: 3, severity: 3, category: 'Intolerable', principle: 'Explicit Risk Estimation', thr: 1e-9, sil: 4, state: 'controlled', signedBy: 'R. Váldez' },
+            { id: 'HZ-002', description: 'Passenger trapped between PSD and train door, departure enabled', frequency: 4, severity: 2, category: 'Intolerable', principle: 'Explicit Risk Estimation', thr: 1e-8, sil: 3, state: 'open', signedBy: '' },
+            { id: 'HZ-003', description: 'PSD fails to open in emergency evacuation (all doors)', frequency: 2, severity: 2, category: 'Undesirable', principle: 'Code of Practice', thr: 5e-8, sil: 3, state: 'controlled', signedBy: 'J. Okafor' },
+            { id: 'HZ-004', description: 'Misleading door-status indication to OCC', frequency: 3, severity: 2, category: 'Undesirable', principle: 'Reference System', thr: 1e-7, sil: 2, state: 'controlled', signedBy: 'J. Okafor' },
+            { id: 'HZ-005', description: 'Door closes on passenger with force above limit', frequency: 4, severity: 1, category: 'Undesirable', principle: 'Code of Practice', thr: 1e-6, sil: 1, state: 'open', signedBy: '' },
+        ],
+        thr: [{
+            hazardId: 'HZ-001', kind: 'or',
+            children: [
+                { name: 'Interlock controller (2oo2)', weight: 1, target: 2.5e-10 },
+                { name: 'Door drive & lock', weight: 1, target: 2.5e-10 },
+                { name: 'Train position input', weight: 1, target: 2.5e-10 },
+                { name: 'Departure authority interface', weight: 1, target: 2.5e-10 },
+            ],
+        }],
+        reliability: {
+            items: [
+                { name: 'Door drive unit (DCU + motor)', lambda: 8.1e-6, source: 'Field', qty: 1 },
+                { name: 'Obstacle detection sensor pair', lambda: 1.2e-5, source: 'MIL-HDBK-217F', qty: 1 },
+                { name: 'Interlock controller (2oo2)', lambda: 4.0e-6, source: 'Vendor', qty: 1 },
+                { name: 'Position lock & limit switches', lambda: 9.5e-6, source: 'NSWC-11', qty: 1 },
+            ],
+            fieldData: [{ observedMtbf: 52900, windowMonths: 12, at: new Date().toISOString() }],
+        },
+        availability: {
+            opHoursPerYear: 6000,
+            measures: [
+                { name: 'A(op) — service availability (%)', target: 99.975, higherIsBetter: true, achieved: 99.981 },
+                { name: 'MTBSAF — service-affecting failures (h)', target: 5000, higherIsBetter: true, achieved: 6340 },
+                { name: 'Downtime per door-set per year (h)', target: 2.2, higherIsBetter: false, achieved: 1.6 },
+                { name: 'Line service loss > 5 min (events/yr)', target: 2, higherIsBetter: false, achieved: 2 },
+            ],
+        },
+        maintainability: {
+            tasks: [
+                { name: 'DCU LRU swap (platform level)', itemName: 'Door drive unit (DCU + motor)', activeRepair: 0.2, logistics: 0.1, admin: 0.05, mttr: 0.25, lambda: 8.1e-6, demonstrated: 0.2 },
+                { name: 'Sensor pair align & verify', itemName: 'Obstacle detection sensor pair', activeRepair: 0.35, logistics: 0.05, admin: 0.02, mttr: 0.42, lambda: 1.2e-5, demonstrated: 0.32 },
+                { name: 'Manual release inspection (T-114)', itemName: '', activeRepair: 0.13, logistics: 0, admin: 0, mttr: 0.13, lambda: 0, demonstrated: 0.12 },
+                { name: 'Full door-set replacement (night)', itemName: '', activeRepair: 3.5, logistics: 0.4, admin: 0.1, mttr: 4.0, lambda: 1e-6, demonstrated: 4.6 },
+            ],
+        },
+        sracs: [
+            { id: 'SRAC-001', text: 'Manual release handles inspected per maintenance plan T-114 every 90 days.', hazardId: 'HZ-003', state: 'accepted', signedBy: 'M. Chen' },
+            { id: 'SRAC-002', text: 'Platform gap ≤ 85 mm maintained at all served stations.', hazardId: 'HZ-002', state: 'open', signedBy: '' },
+            { id: 'SRAC-003', text: 'OCC override of door interlock restricted to authorized supervisors (two-person rule).', hazardId: 'HZ-001', state: 'accepted', signedBy: 'M. Chen' },
+        ],
+        safetyCase: { parts: { p1: 'generated', p2: 'generated', p3: 'drafted', p4: 'in work', p5: 'n/a — tailored', p6: 'not started' } },
+        evidence: { signoffs: [], baselines: [], attests: { 'ph4:rev': { by: 'R. Váldez', at: new Date().toISOString() } }, tailored: {} },
+        counters: { HZ: 5, SRAC: 3 },
+    };
+}
+
+function render(host, ctx) {
+    const S = ctx.state;
+    host.innerHTML =
+        '<div class="head"><h1>System Definition<span class="sub">the analysis boundary — everything downstream traces here</span></h1>' +
+        '<div class="chips"><span class="chip clickable" id="sd-sample">Load <b>M4 sample program</b></span>' +
+        '<span class="chip clickable" id="sd-reset">Reset <b>blank project</b></span></div></div>' +
+        ['description', 'boundary', 'operationalContext'].map(k =>
+            '<h3>' + { description: 'System description', boundary: 'System boundary', operationalContext: 'Operational context' }[k] + '</h3>' +
+            '<div class="clickable" data-field="' + k + '" style="border:1px solid var(--hair); padding:10px 14px; min-height:44px; font-size:13.5px;">' +
+            (S.systemDef[k] ? ctx.esc(S.systemDef[k]) : '<span class="prov">click to write…</span>') + '</div>'
+        ).join('') +
+        '<div class="note">Loading the sample replaces the current project (local browser storage only in v1).</div>';
+
+    host.querySelector('#sd-sample').onclick = () => {
+        if (!confirm('Replace the current project with the M4 Platform Screen Door sample?')) return;
+        store.replace(sampleProject());
+        ctx.go('dashboard');
+    };
+    host.querySelector('#sd-reset').onclick = () => {
+        if (!confirm('Reset to a blank project? This clears local data.')) return;
+        store.reset();
+        ctx.go('dashboard');
+    };
+    host.querySelectorAll('[data-field]').forEach(el => {
+        el.onclick = () => {
+            const k = el.getAttribute('data-field');
+            const v = prompt('Edit:', S.systemDef[k] || '');
+            if (v == null) return;
+            ctx.update(s => { s.systemDef[k] = v; }, 'sysdef:changed');
+        };
+    });
+}
+
+const module = { id: 'sysdef', section: 'Program', title: 'System Definition', render };
+
+registry.register(module);
+})();
+
+// ===== modules/hazards.js =====
+(() => {
+// modules/hazards.js — the Hazard Log: rail's living ledger. Rows classify on
+// the CSM-RA matrix (spine), carry THR targets, and SIL derives from THR via
+// the spine table. Signed state changes go through core/evidence.
+
+function fmtThr(v) { return v > 0 ? '≤ ' + v.toExponential(1) + ' /h' : '—'; }
+
+function riskCell(ctx, h) {
+    if (h.frequency == null || h.severity == null) return '<span class="stamp bw">UNCLASSIFIED</span>';
+    const cat = ctx.spine.riskMatrix.cell(h.frequency, h.severity);
+    return ctx.stamp(cat.toUpperCase(), ctx.spine.palette.risk[cat]);
+}
+
+function silCell(ctx, h) {
+    if (h.sil == null) return '<span class="prov">—</span>';
+    return ctx.stamp('SIL ' + h.sil, ctx.spine.palette.sil[h.sil]);
+}
+
+function render(host, ctx) {
+    const S = ctx.state;
+    const open = S.hazards.filter(h => h.state === 'open').length;
+    host.innerHTML =
+        '<div class="head"><h1>Hazard Log<span class="sub">the living ledger — one row per hazard, cradle to acceptance</span></h1>' +
+        '<div class="chips"><span class="chip">Total <b>' + S.hazards.length + '</b></span>' +
+        '<span class="chip">Open <b>' + open + '</b></span></div></div>' +
+        '<div class="toolbar"><button class="primary" id="hz-add">+ New hazard</button>' +
+        '<span class="prov">click Risk to cycle frequency · shift-click for severity · click THR to set · SIL derives · click State to advance (signed)</span></div>' +
+        '<table><thead><tr><th style="width:80px">Hazard</th><th>Description</th><th style="width:130px">Risk (CSM-RA)</th>' +
+        '<th style="width:120px">Principle</th><th style="width:110px">THR</th><th style="width:70px">SIL</th>' +
+        '<th style="width:110px">State</th><th style="width:150px">Provenance</th></tr></thead><tbody>' +
+        S.hazards.map(h => {
+            const stale = isStale(S.evidence, { kind: 'hazard', id: h.id }, h);
+            return '<tr data-id="' + h.id + '">' +
+                '<td class="mono">' + ctx.esc(h.id) + '</td>' +
+                '<td class="clickable" data-act="desc">' + ctx.esc(h.description) + '</td>' +
+                '<td class="clickable" data-act="risk">' + riskCell(ctx, h) +
+                '  <div class="prov">' + ctx.esc(ctx.spine.frequencies[h.frequency] || '?') + ' × ' + ctx.esc(ctx.spine.severities[h.severity] || '?') + '</div></td>' +
+                '<td class="clickable" data-act="principle">' + (h.principle ? ctx.esc(h.principle) : '<span class="prov">choose…</span>') + '</td>' +
+                '<td class="thr clickable" data-act="thr">' + fmtThr(h.thr) + '</td>' +
+                '<td>' + silCell(ctx, h) + '</td>' +
+                '<td class="clickable" data-act="state"><span class="stamp bw">' + ctx.esc(h.state.toUpperCase()) + '</span></td>' +
+                '<td class="prov">' + (h.signedBy ? 'signed ' + ctx.esc(h.signedBy) : 'unsigned') + (stale ? ' · <span class="warn">drift ⚠</span>' : '') + '</td>' +
+                '</tr>';
+        }).join('') +
+        '</tbody></table>' +
+        '<div class="note"><b>Two-lane rule</b> — the risk category and the SIL are computed from the spine (matrix, THR table); ' +
+        'the frequency, severity, principle and THR are elicited engineering judgments. The computed lane never fills the elicited one.</div>';
+
+    host.querySelector('#hz-add').onclick = () => {
+        const description = prompt('Hazard description:');
+        if (!description) return;
+        ctx.update(s => s.hazards.push({
+            id: ctx.id('HZ'), description, frequency: null, severity: null,
+            principle: '', thr: 0, sil: null, state: 'open', signedBy: '',
+        }), 'hazards:changed');
+    };
+
+    host.querySelectorAll('td[data-act]').forEach(td => {
+        td.onclick = async (e) => {
+            const id = td.parentElement.getAttribute('data-id');
+            const act = td.getAttribute('data-act');
+            const S2 = ctx.state;
+            const h = S2.hazards.find(x => x.id === id);
+            if (!h) return;
+            if (act === 'desc') {
+                const d = prompt('Description:', h.description); if (d == null) return;
+                ctx.update(s => { s.hazards.find(x => x.id === id).description = d; });
+            } else if (act === 'risk') {
+                ctx.update(s => {
+                    const r = s.hazards.find(x => x.id === id);
+                    if (e.shiftKey) r.severity = r.severity == null ? 0 : (r.severity + 1) % ctx.spine.severities.length;
+                    else r.frequency = r.frequency == null ? 0 : (r.frequency + 1) % ctx.spine.frequencies.length;
+                    if (r.frequency != null && r.severity != null) r.category = ctx.spine.riskMatrix.cell(r.frequency, r.severity);
+                });
+            } else if (act === 'principle') {
+                const opts = ctx.spine.riskAcceptancePrinciples;
+                const pick = prompt('Risk-acceptance principle (CSM-RA):\n' + opts.map((o, i) => (i + 1) + '. ' + o).join('\n'), '3');
+                const idx = parseInt(pick) - 1;
+                if (!(idx >= 0 && idx < opts.length)) return;
+                ctx.update(s => { s.hazards.find(x => x.id === id).principle = opts[idx]; });
+            } else if (act === 'thr') {
+                const v = prompt('Tolerable Hazard Rate (per hour, e.g. 1e-8):', h.thr || '1e-8');
+                const n = parseFloat(v); if (!(n > 0)) return;
+                ctx.update(s => {
+                    const r = s.hazards.find(x => x.id === id);
+                    r.thr = n; r.sil = ctx.spine.silFromThr(n);   // computed lane
+                });
+            } else if (act === 'state') {
+                const states = ctx.spine.hazardStates;
+                const next = states[(states.indexOf(h.state) + 1) % states.length];
+                const signer = prompt('Advance ' + h.id + ' → "' + next + '". Sign with your name:');
+                if (!signer) return;
+                const rec = { kind: 'hazard', id: h.id };
+                ctx.update(s => { const r = s.hazards.find(x => x.id === id); r.state = next; r.signedBy = signer; });
+                await sign(ctx.state.evidence, rec, 'state:' + next, signer, ctx.state.hazards.find(x => x.id === id));
+                ctx.update(() => {}, 'evidence:changed');
+            }
+        };
+    });
+}
+
+const module = { id: 'hazards', section: 'Safety Analyses', title: 'Hazard Log', render };
+
+registry.register(module);
+})();
+
+// ===== modules/thr.js =====
+(() => {
+// modules/thr.js — THR apportionment: split a hazard's tolerable rate across
+// subsystems with the core apportion engine.
+// Dimensional discipline: series ('or') splits the RATE directly (rates add
+// in series). Parallel ('and') converts to probability over a stated exposure
+// time T, splits in the probability domain, and converts back — a product of
+// rates is not a rate. The exposure time is recorded on the apportionment.
+
+function render(host, ctx) {
+    const S = ctx.state;
+    const withThr = S.hazards.filter(h => h.thr > 0);
+    host.innerHTML =
+        '<div class="head"><h1>THR Apportionment<span class="sub">top-down budget split — the same allocation engine as the platform, THR semantics</span></h1>' +
+        '<div class="chips"><span class="chip">Hazards with THR <b>' + withThr.length + '</b></span>' +
+        '<span class="chip">Apportionments <b>' + S.thr.length + '</b></span></div></div>' +
+        '<div class="toolbar"><button class="primary" id="thr-add">+ Apportion a hazard THR</button></div>' +
+        (S.thr.length === 0
+            ? '<p class="prov">No apportionments yet — pick a hazard with a THR and split it across contributing subsystems.</p>'
+            : S.thr.map((a, i) => {
+                const hz = S.hazards.find(h => h.id === a.hazardId) || {};
+                return '<h3>' + ctx.esc(a.hazardId) + ' — ' + ctx.esc(hz.description || '') + ' · ' + (a.kind === 'and' ? 'parallel (AND)' : 'series (OR)') + '</h3>' +
+                    '<table><thead><tr><th>Subsystem</th><th style="width:90px">Weight</th><th style="width:150px">Apportioned THR</th><th style="width:80px">SIL</th></tr></thead><tbody>' +
+                    a.children.map(c =>
+                        '<tr><td>' + ctx.esc(c.name) + '</td><td class="mono">' + c.weight + '</td>' +
+                        '<td class="thr">≤ ' + c.target.toExponential(2) + ' /h</td>' +
+                        '<td>' + (ctx.spine.silFromThr(c.target) != null ? ctx.stamp('SIL ' + ctx.spine.silFromThr(c.target), ctx.spine.palette.sil[ctx.spine.silFromThr(c.target)]) : '—') + '</td></tr>'
+                    ).join('') +
+                    '</tbody></table>' +
+                    '<div class="prov" style="margin:6px 0 4px;">parent THR ' + (hz.thr || 0).toExponential(1) + ' /h · ' +
+                    (a.kind === 'or' ? 'series: child rates sum to the parent budget'
+                        : 'parallel: split in the probability domain over T = ' + (a.exposureT || 1) + ' h, converted back to rates') +
+                    ' · <a href="#" data-del="' + i + '">remove</a></div>';
+            }).join(''));
+
+    host.querySelector('#thr-add').onclick = () => {
+        if (!withThr.length) { alert('Set a THR on a hazard first (Hazard Log).'); return; }
+        const pick = prompt('Hazard to apportion:\n' + withThr.map(h => h.id + ' — ' + h.description.slice(0, 50)).join('\n') + '\n\nEnter hazard id:', withThr[0].id);
+        const hz = withThr.find(h => h.id === (pick || '').trim());
+        if (!hz) return;
+        const names = prompt('Contributing subsystems (comma-separated):', 'Interlock, Door drive, Detection');
+        if (!names) return;
+        const kind = (prompt('Structure — series contributions (or) / parallel redundancy (and):', 'or') || 'or').trim().toLowerCase() === 'and' ? 'and' : 'or';
+        const children = names.split(',').map(n => ({ name: n.trim(), weight: 1 })).filter(c => c.name);
+        let split, exposureT = null;
+        if (kind === 'and') {
+            // rate → probability over exposure T → split → back to rate
+            exposureT = parseFloat(prompt('Exposure time for the parallel combination (hours — e.g. mission or detection interval):', '1')) || 1;
+            const pParent = pFromLambda(hz.thr, exposureT);
+            split = apportion(pParent, children, 'and').map(c => ({ ...c, target: lambdaFromP(c.target, exposureT) }));
+        } else {
+            split = apportion(hz.thr, children, 'or');
+        }
+        ctx.update(s => s.thr.push({ hazardId: hz.id, kind, exposureT, children: split }), 'thr:changed');
+    };
+    host.querySelectorAll('a[data-del]').forEach(a => {
+        a.onclick = e => {
+            e.preventDefault();
+            const i = parseInt(a.getAttribute('data-del'));
+            if (!confirm('Remove this apportionment?')) return;
+            ctx.update(s => s.thr.splice(i, 1), 'thr:changed');
+        };
+    });
+}
+
+const module = { id: 'thr', section: 'Safety Analyses', title: 'THR Apportionment', render };
+
+registry.register(module);
+})();
+
+// ===== modules/reliability.js =====
+(() => {
+// modules/reliability.js — reliability prediction: item λ registry with
+// sources, MTBF rollup, predicted-vs-field lane check (FRACAS seed).
+
+const SOURCES = ['MIL-HDBK-217F', 'FIDES', 'NPRD/EPRD', 'NSWC-11', 'Vendor', 'Field'];
+
+function render(host, ctx) {
+    const S = ctx.state;
+    const items = S.reliability.items;
+    const sysLambda = seriesLambda(items);
+    const sysMtbf = mtbf(sysLambda);
+    const field = S.reliability.fieldData[0];   // { observedMtbf, windowMonths }
+    const lane = field ? laneCheck(sysMtbf, field.observedMtbf ? sysMtbf * (sysMtbf / field.observedMtbf) : null, 0) : null;
+    const fieldOk = field && field.observedMtbf >= sysMtbf;
+
+    host.innerHTML =
+        '<div class="head"><h1>Reliability Prediction<span class="sub">parts-level λ · MTBF rollup · predicted vs field (FRACAS lane)</span></h1>' +
+        '<div class="chips"><span class="chip">Σλ <b>' + (sysLambda ? sysLambda.toExponential(2) : '—') + ' /h</b></span>' +
+        '<span class="chip">System MTBF <b>' + (isFinite(sysMtbf) ? Math.round(sysMtbf).toLocaleString() + ' h' : '—') + '</b></span>' +
+        (field ? '<span class="chip">Field (' + field.windowMonths + ' mo) <b class="' + (fieldOk ? 'ok' : 'warn') + '">' + Math.round(field.observedMtbf).toLocaleString() + ' h ' + (fieldOk ? '✓' : '⚠') + '</b></span>' : '') +
+        '</div></div>' +
+        '<div class="methods">Prediction · Allocation · RBD k-of-n (engine) · FMECA criticality · Weibull/B-life · Growth (Crow-AMSAA) · FRACAS — v1 ships prediction + the field lane; the rest are registered slots.</div>' +
+        '<div class="toolbar"><button class="primary" id="rel-add">+ Add item</button>' +
+        '<button id="rel-field">Record field MTBF</button></div>' +
+        '<table><thead><tr><th>Item</th><th style="width:110px">λ (/h)</th><th style="width:110px">MTBF</th><th style="width:130px">Source</th><th style="width:90px">Qty</th><th style="width:130px">Contribution</th></tr></thead><tbody>' +
+        items.map((it, i) =>
+            '<tr><td>' + ctx.esc(it.name) + '</td>' +
+            '<td class="thr clickable" data-edit="' + i + '">' + (it.lambda || 0).toExponential(2) + '</td>' +
+            '<td class="thr">' + (it.lambda > 0 ? Math.round(1 / it.lambda).toLocaleString() + ' h' : '—') + '</td>' +
+            '<td class="prov">' + ctx.esc(it.source || '—') + '</td>' +
+            '<td class="mono">' + (it.qty || 1) + '</td>' +
+            '<td class="thr">' + (sysLambda > 0 ? ((it.lambda || 0) / sysLambda * 100).toFixed(1) + '%' : '—') + '</td></tr>'
+        ).join('') +
+        '</tbody></table>' +
+        '<div class="note"><b>Lane rule</b> — the prediction is the computed lane; field data is the elicited lane. ' +
+        'Field MTBF below prediction is a FINDING that reopens the prediction, never a number to quietly average in.' +
+        (field && !fieldOk ? ' <span class="bad">Current field data challenges the prediction — disposition required.</span>' : '') + '</div>';
+
+    host.querySelector('#rel-add').onclick = () => {
+        const name = prompt('Item name:'); if (!name) return;
+        const lam = parseFloat(prompt('λ per hour (e.g. 8.1e-6):', '1e-6')); if (!(lam > 0)) return;
+        const src = prompt('Source — ' + SOURCES.join(' / ') + ':', 'Field') || 'Field';
+        ctx.update(s => s.reliability.items.push({ name, lambda: lam, source: src, qty: 1 }), 'reliability:changed');
+    };
+    host.querySelector('#rel-field').onclick = () => {
+        const m = parseFloat(prompt('Observed field MTBF (hours):', field ? field.observedMtbf : '50000'));
+        if (!(m > 0)) return;
+        const w = parseInt(prompt('Observation window (months):', '12')) || 12;
+        ctx.update(s => { s.reliability.fieldData = [{ observedMtbf: m, windowMonths: w, at: new Date().toISOString() }]; }, 'reliability:changed');
+    };
+    host.querySelectorAll('td[data-edit]').forEach(td => {
+        td.onclick = () => {
+            const i = parseInt(td.getAttribute('data-edit'));
+            const lam = parseFloat(prompt('λ per hour:', items[i].lambda));
+            if (!(lam > 0)) return;
+            ctx.update(s => { s.reliability.items[i].lambda = lam; }, 'reliability:changed');
+        };
+    });
+}
+
+const module = { id: 'reliability', section: 'Reliability', title: 'Prediction · λ / MTBF', render };
+
+registry.register(module);
+})();
+
+// ===== modules/availability.js =====
+(() => {
+// modules/availability.js — Ai from λ+MTTR (computed), Ao from service data
+// (elicited), downtime budgets. Uses core engine only.
+
+function render(host, ctx) {
+    const S = ctx.state;
+    const items = S.reliability.items;
+    const tasks = S.maintainability.tasks;
+    const mttrByName = {};
+    tasks.forEach(t => { if (t.itemName) mttrByName[t.itemName] = t.mttr; });
+    // Ai only where a maintenance task supplies a real MTTR — no invented
+    // repair times. Items without a linked task are listed but excluded from
+    // the rollup (shown as '—'), which is honest, unlike a default.
+    const rows = items.map(it => {
+        const mttr = mttrByName[it.name] != null ? mttrByName[it.name] : null;
+        const ai = mttr != null ? inherentAvailability(it.lambda || 0, mttr) : null;
+        return { name: it.name, lambda: it.lambda || 0, mttr, ai,
+                 downtime: mttr != null ? annualDowntime(it.lambda, mttr, S.availability.opHoursPerYear || 6000) : null };
+    });
+    const linked = rows.filter(r => r.ai != null);
+    const sysAi = linked.length ? seriesAvailability(linked.map(r => r.ai)) : null;
+    const M = S.availability.measures;
+
+    host.innerHTML =
+        '<div class="head"><h1>Availability Analysis<span class="sub">Ai computed from λ + MTTR · Ao elicited from service records · budgets apportioned</span></h1>' +
+        '<div class="chips"><span class="chip">System Ai <b>' + (sysAi != null ? (sysAi * 100).toFixed(3) + '%' : '— (link tasks)') + '</b></span>' +
+        '<span class="chip">Op hours/yr <b>' + (S.availability.opHoursPerYear || 6000) + '</b></span></div></div>' +
+        '<div class="methods">Ai/Aa/Ao · steady-state series model (engine) · MTBSAF · downtime apportionment · degraded modes · spares — v1 ships Ai + measures ledger.</div>' +
+        '<h3>Inherent availability — computed lane</h3>' +
+        '<table><thead><tr><th>Item</th><th style="width:100px">λ (/h)</th><th style="width:90px">MTTR (h)</th><th style="width:110px">Ai</th><th style="width:150px">Downtime (h/yr)</th></tr></thead><tbody>' +
+        rows.map(r =>
+            '<tr><td>' + ctx.esc(r.name) + '</td><td class="thr">' + r.lambda.toExponential(2) + '</td>' +
+            '<td class="thr">' + (r.mttr != null ? r.mttr.toFixed(2) : '—') + '</td><td class="thr">' + (r.ai != null ? (r.ai * 100).toFixed(4) + '%' : '—') + '</td>' +
+            '<td class="thr">' + (r.downtime != null ? r.downtime.toFixed(2) : '—') + '</td></tr>'
+        ).join('') +
+        '</tbody></table>' +
+        '<h3>Service measures — targets vs achieved (elicited lane)</h3>' +
+        '<div class="toolbar"><button class="primary" id="av-add">+ Add measure</button></div>' +
+        '<table><thead><tr><th>Measure</th><th style="width:130px">Target</th><th style="width:150px">Achieved</th><th style="width:100px">Verdict</th></tr></thead><tbody>' +
+        M.map((m, i) => {
+            const ok = m.higherIsBetter ? (m.achieved >= m.target) : (m.achieved <= m.target);
+            return '<tr><td>' + ctx.esc(m.name) + '</td><td class="thr">' + ctx.esc(m.targetLabel || m.target) + '</td>' +
+                '<td class="thr clickable" data-ach="' + i + '">' + ctx.esc(m.achievedLabel || m.achieved) + '</td>' +
+                '<td>' + (m.achieved == null ? '<span class="prov">open</span>' : (ok ? '<span class="ok">✓ meets</span>' : '<span class="warn">⚠ miss</span>')) + '</td></tr>';
+        }).join('') +
+        '</tbody></table>' +
+        '<div class="note"><b>Money view</b> — rail tenders score availability with penalty regimes; the achieved column is what liquidated damages are computed from. Keep it elicited from operations records, never from the model.</div>';
+
+    host.querySelector('#av-add').onclick = () => {
+        const name = prompt('Measure name (e.g. "MTBSAF", "Line service loss > 5 min / yr"):'); if (!name) return;
+        const target = parseFloat(prompt('Target (number):', '5000')); if (isNaN(target)) return;
+        const hib = confirm('Is higher better? (OK = yes, Cancel = lower is better)');
+        ctx.update(s => s.availability.measures.push({ name, target, higherIsBetter: hib, achieved: null }), 'availability:changed');
+    };
+    host.querySelectorAll('td[data-ach]').forEach(td => {
+        td.onclick = () => {
+            const i = parseInt(td.getAttribute('data-ach'));
+            const v = parseFloat(prompt('Achieved value (from service records):', M[i].achieved ?? ''));
+            if (isNaN(v)) return;
+            ctx.update(s => { s.availability.measures[i].achieved = v; s.availability.measures[i].achievedLabel = null; }, 'availability:changed');
+        };
+    });
+}
+
+const module = { id: 'availability', section: 'Availability', title: 'Ai / Ao · Service Measures', render };
+
+registry.register(module);
+})();
+
+// ===== modules/maintainability.js =====
+(() => {
+// modules/maintainability.js — MTTR estimates, MDT decomposition, demonstrated
+// times vs targets (two-lane), mean MTTR weighted by failure rate.
+
+function render(host, ctx) {
+    const S = ctx.state;
+    const T = S.maintainability.tasks;
+    const mean = meanMttr(T.map(t => ({ lambda: t.lambda, mttr: t.mttr })));
+
+    host.innerHTML =
+        '<div class="head"><h1>Maintainability Analysis<span class="sub">MTTR estimates (HDBK-472 style) · MDT decomposition · demonstrated vs target</span></h1>' +
+        '<div class="chips"><span class="chip">Tasks <b>' + T.length + '</b></span>' +
+        '<span class="chip">Mean MTTR (λ-weighted) <b>' + (mean ? (mean * 60).toFixed(0) + ' min' : '—') + '</b></span></div></div>' +
+        '<div class="methods">MTTR prediction · MDT = active + logistics + admin · task analysis · LORA · testability/BIT · PM intervals (RCM) — v1 ships the task ledger + lanes.</div>' +
+        '<div class="toolbar"><button class="primary" id="mt-add">+ Add maintenance task</button>' +
+        '<span class="prov">click Demonstrated to record a timed demonstration</span></div>' +
+        '<table><thead><tr><th>Task</th><th style="width:120px">Linked item</th><th style="width:90px">λ (/h)</th>' +
+        '<th style="width:100px">MTTR est (h)</th><th style="width:130px">MDT (act+log+adm)</th><th style="width:120px">Demonstrated</th><th style="width:90px">Verdict</th></tr></thead><tbody>' +
+        T.map((t, i) => {
+            const d = mdt(t);
+            const ok = t.demonstrated != null ? t.demonstrated <= t.mttr : null;
+            return '<tr><td>' + ctx.esc(t.name) + '</td><td class="prov">' + ctx.esc(t.itemName || '—') + '</td>' +
+                '<td class="thr">' + (t.lambda ? t.lambda.toExponential(1) : '—') + '</td>' +
+                '<td class="thr">' + t.mttr.toFixed(2) + '</td>' +
+                '<td class="thr">' + d.toFixed(2) + ' <span class="prov">(' + (t.activeRepair || 0) + '+' + (t.logistics || 0) + '+' + (t.admin || 0) + ')</span></td>' +
+                '<td class="thr clickable" data-demo="' + i + '">' + (t.demonstrated != null ? t.demonstrated.toFixed(2) + ' h' : '<span class="prov">record…</span>') + '</td>' +
+                '<td>' + (ok == null ? '<span class="prov">open</span>' : ok ? '<span class="ok">✓ within</span>' : '<span class="warn">⚠ over</span>') + '</td></tr>';
+        }).join('') +
+        '</tbody></table>' +
+        '<div class="note"><b>Bridge to safety</b> — testability coverage and inspection intervals here feed latent-exposure ' +
+        'times in the safety analyses; the PM-interval optimizer (roadmap) bisects intervals against hazard AND availability targets through the live model.</div>';
+
+    host.querySelector('#mt-add').onclick = () => {
+        const name = prompt('Task name (e.g. "DCU LRU swap"):'); if (!name) return;
+        const itemName = prompt('Linked reliability item (optional, exact name):') || '';
+        const active = parseFloat(prompt('Active repair time (h):', '0.25')) || 0;
+        const log = parseFloat(prompt('Logistics delay (h):', '0.1')) || 0;
+        const adm = parseFloat(prompt('Admin delay (h):', '0.05')) || 0;
+        const lam = parseFloat(prompt('Initiating failure rate λ (/h, optional):', '1e-6')) || 0;
+        ctx.update(s => s.maintainability.tasks.push({
+            name, itemName, activeRepair: active, logistics: log, admin: adm,
+            mttr: active, lambda: lam, demonstrated: null,
+        }), 'maintainability:changed');
+    };
+    host.querySelectorAll('td[data-demo]').forEach(td => {
+        td.onclick = () => {
+            const i = parseInt(td.getAttribute('data-demo'));
+            const v = parseFloat(prompt('Demonstrated repair time (hours):', T[i].demonstrated ?? T[i].mttr));
+            if (isNaN(v)) return;
+            ctx.update(s => { s.maintainability.tasks[i].demonstrated = v; }, 'maintainability:changed');
+        };
+    });
+}
+
+const module = { id: 'maintainability', section: 'Maintainability', title: 'MTTR · MDT · Tasks', render };
+
+registry.register(module);
+})();
+
+// ===== modules/sracs.js =====
+(() => {
+// modules/sracs.js — Safety-Related Application Conditions: the register of
+// conditions exported to the operator/integrator. Signed state advances.
+
+function render(host, ctx) {
+    const S = ctx.state;
+    host.innerHTML =
+        '<div class="head"><h1>SRAC Register<span class="sub">safety-related application conditions — exported, tracked to acceptance</span></h1>' +
+        '<div class="chips"><span class="chip">Total <b>' + S.sracs.length + '</b></span>' +
+        '<span class="chip">Open <b>' + S.sracs.filter(x => x.state === 'open').length + '</b></span></div></div>' +
+        '<div class="toolbar"><button class="primary" id="sr-add">+ New SRAC</button>' +
+        '<span class="prov">click State to advance (signed act)</span></div>' +
+        '<table><thead><tr><th style="width:90px">SRAC</th><th>Condition placed on operator / integrator</th>' +
+        '<th style="width:110px">Linked hazard</th><th style="width:120px">State</th><th style="width:130px">Provenance</th></tr></thead><tbody>' +
+        S.sracs.map(r =>
+            '<tr data-id="' + r.id + '"><td class="mono">' + ctx.esc(r.id) + '</td>' +
+            '<td>' + ctx.esc(r.text) + '</td>' +
+            '<td class="mono">' + ctx.esc(r.hazardId || '—') + '</td>' +
+            '<td class="clickable" data-act="state"><span class="stamp ' + (r.state === 'open' ? '' : 'bw') + '"' +
+            (r.state === 'open' ? ' style="color:#9A6200;background:rgba(154,98,0,0.1);"' : '') + '>' + ctx.esc(r.state.toUpperCase()) + '</span></td>' +
+            '<td class="prov">' + (r.signedBy ? 'signed ' + ctx.esc(r.signedBy) : 'unsigned') + '</td></tr>'
+        ).join('') +
+        '</tbody></table>' +
+        '<div class="note"><b>Why SRACs are first-class</b> — every assumption the analysis rests on that the OPERATOR must uphold ' +
+        'is an exported condition, not a footnote. The 50129 safety case is incomplete until every SRAC is accepted by its addressee.</div>';
+
+    host.querySelector('#sr-add').onclick = () => {
+        const text = prompt('Condition text:'); if (!text) return;
+        const hazardId = prompt('Linked hazard id (optional):') || '';
+        ctx.update(s => s.sracs.push({ id: ctx.id('SRAC'), text, hazardId, state: 'open', signedBy: '' }), 'sracs:changed');
+    };
+    host.querySelectorAll('td[data-act="state"]').forEach(td => {
+        td.onclick = async () => {
+            const id = td.parentElement.getAttribute('data-id');
+            const r = ctx.state.sracs.find(x => x.id === id); if (!r) return;
+            const states = ctx.spine.sracStates;
+            const next = states[(states.indexOf(r.state) + 1) % states.length];
+            const signer = prompt('Advance ' + r.id + ' → "' + next + '". Sign with your name:');
+            if (!signer) return;
+            ctx.update(s => { const x = s.sracs.find(y => y.id === id); x.state = next; x.signedBy = signer; });
+            await sign(ctx.state.evidence, { kind: 'srac', id }, 'state:' + next, signer, ctx.state.sracs.find(y => y.id === id));
+            ctx.update(() => {}, 'evidence:changed');
+        };
+    });
+}
+
+const module = { id: 'sracs', section: 'Evidence', title: 'SRAC Register', render };
+
+registry.register(module);
+})();
+
+// ===== modules/safetycase.js =====
+(() => {
+// modules/safetycase.js — EN 50129 safety-case structure with live evidence
+// states per part, plus the tamper-evident sign-off chain viewer.
+
+const STATES = ['not started', 'in work', 'drafted', 'generated', 'accepted', 'n/a — tailored'];
+
+function autoHint(partId, S) {
+    if (partId === 'p1') return S.systemDef.description ? 'system definition recorded ✓' : 'record the system definition first';
+    if (partId === 'p4') {
+        const n = S.hazards.length, c = S.hazards.filter(h => h.state !== 'open').length;
+        return n ? c + '/' + n + ' hazards dispositioned' : 'no hazards yet';
+    }
+    if (partId === 'p6') {
+        const openSracs = S.sracs.filter(x => x.state !== 'accepted' && x.state !== 'verified').length;
+        return openSracs ? openSracs + ' SRAC(s) not yet accepted — conclusion blocked' : 'SRACs accepted';
+    }
+    return '';
+}
+
+function render(host, ctx) {
+    const S = ctx.state;
+    host.innerHTML =
+        '<div class="head"><h1>Safety Case — EN 50129<span class="sub">six-part structure · evidence states from the live model, prose never drifts</span></h1></div>' +
+        '<table><thead><tr><th style="width:60px">Part</th><th>Title</th><th style="width:170px">State</th><th>Live evidence hint</th></tr></thead><tbody>' +
+        ctx.spine.safetyCaseParts.map(p => {
+            const st = S.safetyCase.parts[p.id] || 'not started';
+            return '<tr><td class="mono">' + p.id.toUpperCase() + '</td><td>' + ctx.esc(p.name) + '</td>' +
+                '<td class="clickable" data-part="' + p.id + '"><span class="stamp bw">' + ctx.esc(st.toUpperCase()) + '</span></td>' +
+                '<td class="prov">' + ctx.esc(autoHint(p.id, S)) + '</td></tr>';
+        }).join('') +
+        '</tbody></table>' +
+        '<h3>Sign-off chain — tamper-evident</h3>' +
+        '<div id="sc-chain" class="prov">verifying…</div>' +
+        '<table style="margin-top:8px;"><thead><tr><th style="width:150px">When</th><th style="width:110px">Target</th><th style="width:130px">Stage</th><th style="width:120px">Signer</th><th>Hash</th></tr></thead><tbody>' +
+        (S.evidence.signoffs.slice(-12).reverse().map(r =>
+            '<tr><td class="prov">' + ctx.esc(String(r.at).slice(0, 16).replace('T', ' ')) + '</td>' +
+            '<td class="mono">' + ctx.esc(r.kind + ':' + r.id) + '</td>' +
+            '<td class="mono">' + ctx.esc(r.stage) + '</td>' +
+            '<td>' + ctx.esc(r.signer) + '</td>' +
+            '<td class="prov">' + ctx.esc(String(r.hash).slice(0, 16)) + '…</td></tr>'
+        ).join('') || '<tr><td colspan="5" class="prov">no signed acts yet</td></tr>') +
+        '</tbody></table>';
+
+    verifyChain(S.evidence).then(v => {
+        const el = host.querySelector('#sc-chain');
+        if (el) el.innerHTML = v.ok
+            ? '<span class="ok">✓ chain intact — ' + v.length + ' signed act(s), each hash-linked to the previous</span>'
+            : '<span class="bad">✗ CHAIN BROKEN at ' + ctx.esc(v.at && v.at.id) + ' — evidence has been altered</span>';
+    });
+
+    host.querySelectorAll('td[data-part]').forEach(td => {
+        td.onclick = () => {
+            const pid = td.getAttribute('data-part');
+            const cur = S.safetyCase.parts[pid] || 'not started';
+            const next = STATES[(STATES.indexOf(cur) + 1) % STATES.length];
+            ctx.update(s => { s.safetyCase.parts[pid] = next; }, 'safetycase:changed');
+        };
+    });
+}
+
+const module = { id: 'safetycase', section: 'Evidence', title: 'Safety Case · EN 50129', render };
+
+registry.register(module);
+})();
+
+// ===== composition (app.js equivalent) =====
+shell.mount(document.body, { spine });
+</script>
+</body>
+</html>

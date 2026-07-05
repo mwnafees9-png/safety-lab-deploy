@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAMS Lab — EN 50126 RAMS Assessment Workspace (Mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #FFFFFF; --card: #FFFFFF; --field: #F6F6F6; --hair: #E2E2E2;
+    --ink: #0B0B0C; --ink-2: #45464A; --ink-3: #8A8B90;
+    /* risk & SIL keep their color — everything else is ink on paper */
+    --sil4: #8E2A2A; --sil3: #9A6200; --sil2: #1D6E3E; --sil1: #3D5A80; --ram: #5B4FA8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0 !important; }
+  body { font-family: 'IBM Plex Sans', sans-serif; background: var(--paper); color: var(--ink); font-size: 14px; }
+  body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--ink); z-index: 10; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+
+  .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 232px; padding: 20px 0;
+    background: var(--ink); color: #fff; }
+  .brand { padding: 10px 18px 20px; border-bottom: 1px solid rgba(255,255,255,0.18); margin-bottom: 8px; }
+  .brand .logo-row { display: flex; align-items: center; gap: 10px; }
+  .brand .wordmark { font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
+  .brand .mono { display: block; font-size: 9.5px; font-weight: 500; opacity: 0.7; letter-spacing: 0.12em; margin-top: 6px; }
+  .brand svg { flex: 0 0 auto; }
+  .nav-sec { padding: 12px 18px 5px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; font-family: 'IBM Plex Mono', monospace; }
+  .nav a { display: block; padding: 7px 18px; color: rgba(255,255,255,0.85); text-decoration: none; font-size: 13px; }
+  .nav a.on { background: rgba(255,255,255,0.16); color: #fff; font-weight: 600; }
+  .nav a:hover { background: rgba(255,255,255,0.08); }
+
+  .main { margin-left: 232px; padding: 26px 34px 60px; }
+  .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .head h1 { font-size: 19px; font-weight: 700; }
+  .head h1 .mono { font-size: 11px; color: var(--ink-3); display: block; font-weight: 500; margin-top: 2px; }
+  .chips { display: flex; gap: 8px; }
+  .chip { height: 32px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--ink);
+    background: var(--card); font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+  .chip b { margin-left: 6px; }
+
+  h3 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace;
+    border-bottom: 2px solid var(--ink); padding-bottom: 6px; margin: 28px 0 14px; }
+  h4 { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-family: 'IBM Plex Mono', monospace;
+    color: var(--ink-2); margin: 0 0 8px; }
+
+  .cockpits { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .ckpt { background: var(--card); border: 1px solid var(--ink); padding: 12px 12px 10px; }
+  .ckpt .ph { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-3); letter-spacing: 0.1em; }
+  .ckpt .nm { font-weight: 600; font-size: 12.5px; margin: 3px 0 8px; }
+  .ckpt .st { font-size: 10.5px; font-family: 'IBM Plex Mono', monospace; padding: 2px 6px; display: inline-block;
+    color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .ckpt .st.done { background: var(--ink); color: #fff; }
+  .ckpt .bar { height: 3px; background: var(--hair); margin-top: 10px; }
+  .ckpt .bar i { display: block; height: 3px; background: var(--ink); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--ink); }
+  thead th { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-2); text-align: left; padding: 9px 12px; border-bottom: 2px solid var(--ink); }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--hair); font-size: 13px; vertical-align: top; }
+  tbody tr:hover td { background: var(--field); }
+  .stamp { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.05em;
+    padding: 3px 8px; display: inline-block; box-shadow: inset 0 0 0 1.5px currentColor; }
+  .s4 { color: var(--sil4); background: rgba(142,42,42,0.10); }
+  .s3 { color: var(--sil3); background: rgba(154,98,0,0.10); }
+  .s2 { color: var(--sil2); background: rgba(29,110,62,0.10); }
+  .s1 { color: var(--sil1); background: rgba(61,90,128,0.10); }
+  .sr { color: var(--ram); background: rgba(91,79,168,0.10); }
+  .bw { color: var(--ink); background: transparent; }   /* monochrome stamp for non-risk states */
+  .thr { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+  .prov { font-size: 11px; color: var(--ink-3); font-family: 'IBM Plex Mono', monospace; }
+  .ok { color: var(--sil2); } .warn { color: var(--sil3); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; align-items: start; }
+  .kpis { display: flex; gap: 10px; margin-bottom: 10px; }
+  .kpi { border: 1px solid var(--ink); padding: 8px 12px; flex: 1; }
+  .kpi .v { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 16px; }
+  .kpi .l { font-size: 10px; font-family: 'IBM Plex Mono', monospace; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+  .methods { font-size: 10.5px; font-family: 'IBM Plex Mono', monospace; color: var(--ink-3); margin: -4px 0 10px; line-height: 1.7; }
+  .note { background: var(--field); border: 1px solid var(--hair); border-left: 3px solid var(--ink);
+    padding: 10px 14px; font-size: 12px; color: var(--ink-2); margin-top: 16px; }
+  .foot { margin-top: 40px; font-size: 11px; color: var(--ink-3); font-family: 'IBM Plex Mono', monospace; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="logo-row">
+      <!-- original train glyph (side profile + ground rule) -->
+      <svg width="44" height="30" viewBox="0 0 44 30" xmlns="http://www.w3.org/2000/svg" aria-label="RAMS Lab train mark">
+        <path fill="#fff" d="M4 4 h26 c5 0 9 3.5 11 9 l1.5 5 h-38.5 z" />
+        <rect x="7"  y="8" width="6" height="6" fill="#0B0B0C"/>
+        <rect x="16" y="8" width="6" height="6" fill="#0B0B0C"/>
+        <path d="M25 8 h5.5 c2.6 0 4.8 2.2 6 6 H25 z" fill="#0B0B0C"/>
+        <rect x="4" y="20" width="38" height="3" fill="#fff"/>
+        <rect x="1" y="26" width="42" height="2.5" fill="#fff"/>
+      </svg>
+      <span class="wordmark">RAMS Lab</span>
+    </div>
+    <span class="mono">EN 50126 · 50128 · 50129 · CSM-RA</span>
+  </div>
+  <div class="nav">
+    <div class="nav-sec">Program</div>
+    <a href="#" class="on">Dashboard</a>
+    <a href="#">System Definition</a>
+    <a href="#">Operational Context</a>
+    <div class="nav-sec">Safety Analyses</div>
+    <a href="#">Preliminary Hazard Analysis</a>
+    <a href="#">Hazard Log</a>
+    <a href="#">Risk Assessment · CSM-RA</a>
+    <a href="#">THR Apportionment</a>
+    <a href="#">SIL Allocation</a>
+    <a href="#">Fault Trees</a>
+    <a href="#">FMEA / FMECA</a>
+    <a href="#">Common Cause · Independence</a>
+    <div class="nav-sec">Reliability</div>
+    <a href="#">Prediction · 217F/FIDES/Field</a>
+    <a href="#">Allocation &amp; Block Diagrams</a>
+    <a href="#">Weibull · Life Data</a>
+    <a href="#">Growth · FRACAS</a>
+    <div class="nav-sec">Availability</div>
+    <a href="#">Ai / Aa / Ao Modeling</a>
+    <a href="#">Service &amp; Downtime Budgets</a>
+    <a href="#">Degraded Modes · Spares</a>
+    <div class="nav-sec">Maintainability</div>
+    <a href="#">MTTR Estimates · MDT</a>
+    <a href="#">Task Analysis · LORA</a>
+    <a href="#">Testability · Diagnostics</a>
+    <a href="#">PM Intervals · RCM</a>
+    <div class="nav-sec">Evidence</div>
+    <a href="#">SRAC Register</a>
+    <a href="#">Safety Case · EN 50129</a>
+    <a href="#">ISA Gates &amp; Baselines</a>
+    <a href="#">Reports</a>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="head">
+    <h1>Metro Line M4 — Platform Screen Door System
+      <span class="mono">CSM-RA · explicit risk estimation · design authority: (sample program)</span></h1>
+    <div class="chips">
+      <span class="chip">Lifecycle phase <b>6 — Design &amp; Implementation</b></span>
+      <span class="chip">ISA gate <b>Phase 4 baselined ✓</b></span>
+      <span class="chip">Hazard log <b>27 open · 41 controlled</b></span>
+    </div>
+  </div>
+
+  <h3>EN 50126 Lifecycle — phase cockpits</h3>
+  <div class="cockpits">
+    <div class="ckpt"><div class="ph">PH 1–3</div><div class="nm">Concept &amp; Risk Policy</div><span class="st done">HANDED OFF</span><div class="bar"><i style="width:100%"></i></div></div>
+    <div class="ckpt"><div class="ph">PH 4</div><div class="nm">System Definition + PHA</div><span class="st done">HANDED OFF</span><div class="bar"><i style="width:100%"></i></div></div>
+    <div class="ckpt"><div class="ph">PH 5</div><div class="nm">Risk Assessment · THR</div><span class="st">READY — ISA GATE</span><div class="bar"><i style="width:96%"></i></div></div>
+    <div class="ckpt"><div class="ph">PH 6</div><div class="nm">Requirements &amp; SIL</div><span class="st">IN WORK</span><div class="bar"><i style="width:62%"></i></div></div>
+    <div class="ckpt"><div class="ph">PH 7–8</div><div class="nm">Design &amp; Verification</div><span class="st">IN WORK</span><div class="bar"><i style="width:31%"></i></div></div>
+    <div class="ckpt"><div class="ph">PH 9–12</div><div class="nm">Safety Case &amp; Acceptance</div><span class="st">NOT STARTED</span><div class="bar"><i style="width:4%"></i></div></div>
+  </div>
+
+  <h3>Hazard Log — the living ledger (extract)</h3>
+  <table>
+    <thead><tr>
+      <th style="width:84px">Hazard</th><th>Description</th><th style="width:110px">Risk (CSM-RA)</th>
+      <th style="width:120px">THR (target)</th><th style="width:120px">Achieved (BDD)</th>
+      <th style="width:72px">SIL</th><th>Status · Provenance</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">HZ-014</td>
+        <td>Doors open while train in motion / not aligned at platform</td>
+        <td><span class="stamp s4">INTOLERABLE</span></td>
+        <td class="thr">≤ 1.0e-9 /h</td>
+        <td class="thr ok">6.2e-10 /h ✓</td>
+        <td><span class="stamp s4">SIL 4</span></td>
+        <td>Controlled — FTA proven vs interlock MAC floor · <span class="prov">signed R.V · fp 8c11a2</span></td>
+      </tr>
+      <tr>
+        <td class="mono">HZ-021</td>
+        <td>Passenger trapped between PSD and train door, departure enabled</td>
+        <td><span class="stamp s4">INTOLERABLE</span></td>
+        <td class="thr">≤ 1.0e-8 /h</td>
+        <td class="thr warn">1.4e-8 /h ⚠</td>
+        <td><span class="stamp s3">SIL 3</span></td>
+        <td>Open — gap detection budget exceeded; obstacle-sensor λ under review · <span class="prov">reopened · drift</span></td>
+      </tr>
+      <tr>
+        <td class="mono">HZ-032</td>
+        <td>PSD fails to open in emergency evacuation (all doors)</td>
+        <td><span class="stamp s3">UNDESIRABLE</span></td>
+        <td class="thr">≤ 1.0e-7 /h</td>
+        <td class="thr ok">3.8e-8 /h ✓</td>
+        <td><span class="stamp s2">SIL 2</span></td>
+        <td>Controlled — manual release SRAC-07 exported to operator · <span class="prov">signed J.O</span></td>
+      </tr>
+      <tr>
+        <td class="mono">HZ-040</td>
+        <td>Misleading door-status indication to driver / OCC</td>
+        <td><span class="stamp s3">UNDESIRABLE</span></td>
+        <td class="thr">≤ 1.0e-7 /h</td>
+        <td class="thr ok">2.1e-8 /h ✓</td>
+        <td><span class="stamp s2">SIL 2</span></td>
+        <td>Controlled — dual-lane CoFFE verdict verified vs computed · <span class="prov">✦ AI-draft accepted · checker clean</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>RAM Analyses — Reliability · Availability · Maintainability</h3>
+  <div class="cols3">
+    <div>
+      <h4>Reliability — predictions vs field</h4>
+      <div class="methods">Prediction (217F · FIDES · NPRD · field) · Allocation · RBD k-of-n · FMECA criticality · Markov · Weibull/B-life · Growth (Crow-AMSAA) · FRACAS · Derating · Demo test planning</div>
+      <div class="kpis">
+        <div class="kpi"><div class="v">48,200 h</div><div class="l">System MTBF (pred.)</div></div>
+        <div class="kpi"><div class="v ok">52,900 h</div><div class="l">Field (12 mo) ✓</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Item</th><th style="width:86px">λ (/h)</th><th style="width:90px">MTBF</th><th style="width:80px">Source</th></tr></thead>
+        <tbody>
+          <tr><td>Door drive unit (DCU + motor)</td><td class="thr">8.1e-6</td><td class="thr">123 kh</td><td class="prov">Field</td></tr>
+          <tr><td>Obstacle detection sensor pair</td><td class="thr">1.2e-5</td><td class="thr">83 kh</td><td class="prov">217F</td></tr>
+          <tr><td>Interlock controller (2oo2)</td><td class="thr">4.0e-6</td><td class="thr">250 kh</td><td class="prov">Vendor</td></tr>
+          <tr><td>Position lock &amp; limit switches</td><td class="thr">9.5e-6</td><td class="thr">105 kh</td><td class="prov">NSWC-11</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h4>Availability — service targets</h4>
+      <div class="methods">Ai/Aa/Ao · Steady-state Markov+RBD · MTBSAF/service models · Downtime apportionment · Degraded modes · Spares optimization · Penalty/LD exposure</div>
+      <div class="kpis">
+        <div class="kpi"><div class="v">99.975%</div><div class="l">A(op) target</div></div>
+        <div class="kpi"><div class="v ok">99.981%</div><div class="l">Achieved ✓</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Measure</th><th style="width:96px">Target</th><th style="width:96px">Achieved</th></tr></thead>
+        <tbody>
+          <tr><td>MTBSAF — service-affecting failures</td><td class="thr">≥ 5,000 h</td><td class="thr ok">6,340 h ✓</td></tr>
+          <tr><td>Downtime budget / door-set / yr</td><td class="thr">≤ 2.2 h</td><td class="thr ok">1.6 h ✓</td></tr>
+          <tr><td>Line-level service loss &gt; 5 min</td><td class="thr">≤ 2 / yr</td><td class="thr warn">2 (at limit) ⚠</td></tr>
+          <tr><td>Degraded-mode ops (single door out)</td><td class="thr">permitted</td><td class="thr">per OP-114</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h4>Maintainability — restore times</h4>
+      <div class="methods">MTTR prediction (HDBK-472) · MDT decomposition · Allocation · Task analysis · LORA · Testability/BIT coverage · PM interval optimization (RCM) · Demonstration</div>
+      <div class="kpis">
+        <div class="kpi"><div class="v">30 min</div><div class="l">MDT target</div></div>
+        <div class="kpi"><div class="v ok">22 min</div><div class="l">Achieved ✓</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Task</th><th style="width:80px">MTTR</th><th style="width:110px">Demonstrated</th></tr></thead>
+        <tbody>
+          <tr><td>DCU LRU swap (platform level)</td><td class="thr">15 min</td><td class="thr ok">12 min ✓</td></tr>
+          <tr><td>Sensor pair align &amp; verify</td><td class="thr">25 min</td><td class="thr ok">19 min ✓</td></tr>
+          <tr><td>Manual release inspection (T-114)</td><td class="thr">8 min</td><td class="thr ok">7 min ✓</td></tr>
+          <tr><td>Full door-set replacement (night)</td><td class="thr">4 h</td><td class="thr warn">4.6 h ⚠</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div>
+      <h3>SRAC Register — exported application conditions</h3>
+      <table>
+        <thead><tr><th style="width:80px">SRAC</th><th>Condition placed on the operator / integrator</th><th style="width:110px">State</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">SRAC-07</td><td>Manual release handles inspected per maintenance plan T-114 every 90 days</td><td><span class="stamp bw">ACCEPTED</span></td></tr>
+          <tr><td class="mono">SRAC-11</td><td>Platform gap ≤ 85 mm maintained at all served stations</td><td><span class="stamp s3">OPEN</span></td></tr>
+          <tr><td class="mono">SRAC-12</td><td>OCC override of door interlock restricted to authorized supervisors (two-person rule)</td><td><span class="stamp bw">ACCEPTED</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Safety Case — EN 50129 structure (live)</h3>
+      <table>
+        <thead><tr><th>Part</th><th style="width:160px">Evidence state</th></tr></thead>
+        <tbody>
+          <tr><td>1 · Definition of system</td><td><span class="stamp bw">GENERATED ✓</span></td></tr>
+          <tr><td>2 · Quality management report</td><td><span class="stamp bw">GENERATED ✓</span></td></tr>
+          <tr><td>3 · Safety management report</td><td><span class="stamp s3">DRAFT — ✦ AI, 2 flags</span></td></tr>
+          <tr><td>4 · Technical safety report</td><td><span class="stamp bw">61% EVIDENCE LINKED</span></td></tr>
+          <tr><td>5 · Related safety cases</td><td><span class="stamp bw">N/A — TAILORED ⊘</span></td></tr>
+          <tr><td>6 · Conclusion</td><td><span class="stamp bw">AWAITS PH 9</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Platform note</b> — everything below the skin is Safety Lab core: the BDD engine proves the achieved
+    hazard rates, THR apportionment is the probability-allocation engine, SIL allocation reuses DALgebra with the
+    EN 50128/50129 tables, the SRAC register is the assumptions machinery with export semantics, ISA gates are
+    the hand-off/baseline system, RAM measures ride the same reliability-data + Markov models, and every AI draft
+    passes the claim checker before a human signs it.
+  </div>
+
+  <div class="foot">RAMS LAB · MOCKUP (2026-07-02) · ORIGINAL SAMPLE CONTENT — NOT FROM ANY REAL PROGRAM</div>
+</main>
+</body>
+</html>

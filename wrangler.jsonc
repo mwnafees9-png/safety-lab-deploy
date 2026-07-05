@@ -1,0 +1,51 @@
+// Safety Lab — Cloudflare Workers deploy config
+// =================================================================
+// Targets the existing Worker `black-recipe-1776` on account
+// `1b4c03e0a52c2a7bda1953c365dc7f0f`.
+//
+// Phase 56.29 — Now backed by a Worker script (./worker.js) that
+// does path-based routing on top of the static-asset bundle:
+//
+//     /              → landing.html  (marketing)
+//     /app and /app/ → index.html    (the application)
+//     /app/<...>     → /<...>        (strip /app, serve from /site)
+//     other          → served from /site as-is
+//
+// The assets binding (`directory: "./site"`) still serves the
+// static files; the Worker is just a URL rewriter on top of it.
+//
+// Custom domain (safetylabaero.com) is attached to this Worker via
+// the Cloudflare dashboard — wrangler does not manage it here.
+//
+// Deploy:   wrangler deploy
+// Dry-run:  wrangler deploy --dry-run
+// =================================================================
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "black-recipe-1776",
+  "main": "./worker.js",
+  "compatibility_date": "2026-05-26",
+  "account_id": "1b4c03e0a52c2a7bda1953c365dc7f0f",
+  // D-PUB — R2 binding for the chunked-upload route (/api/upload).
+  // Lets releases upload in 25MB parts through the Worker, sidestepping the
+  // ~100MB single-PUT ceiling that kills `wrangler r2 object put` on flaky
+  // connections. The route requires the UPLOAD_TOKEN secret.
+  "r2_buckets": [
+    { "binding": "DOWNLOADS", "bucket_name": "safetylab-downloads" }
+  ],
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS",
+    // Phase 56.29 fix — without this flag, Cloudflare's Workers Static
+    // Assets serves any matching file (e.g. /index.html for "/") BEFORE
+    // invoking the Worker. That bypassed our routing logic entirely, so
+    // requests for "/" served the app instead of the landing page.
+    // Setting run_worker_first=true makes the Worker the front door and
+    // lets it decide which asset (if any) to serve.
+    "run_worker_first": true,
+    // Fallback only kicks in when the Worker delegates to
+    // env.ASSETS.fetch() and no asset matches — keeps SPA deep links
+    // working under /app/.
+    "not_found_handling": "single-page-application"
+  }
+}
