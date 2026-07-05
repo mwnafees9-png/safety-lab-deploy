@@ -1726,7 +1726,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                 <h3>🤖 AI Assistant <span style="font-size: 13px; font-weight: 500; color: var(--color-text-tertiary); margin-left: 8px;">— Claude integration, BYO API key</span></h3>
             </div>
             <div id="ai-locked-banner" style="display: none; padding: 14px 16px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.10), rgba(0, 122, 255, 0.10)); border: 1px solid rgba(99, 102, 241, 0.30); border-radius: var(--r-md); margin-bottom: 14px; font-size: 13px;">
-                <strong>🔒 AI features require Safety Lab Aero Pro+.</strong> The Pro+ tier unlocks the AI Assistant, architecture-to-fault-tree generation, FHA effects assist, requirement-quality critique, and the per-project learning memory. All AI calls route through Safety Lab Aero's hosted proxy (no API key management required). ITAR-controlled programs are automatically routed via Azure OpenAI (US-East private deployment).
+                <strong>🔒 AI features require Safety Lab Aero Pro+.</strong> The Pro+ tier unlocks the AI Assistant, architecture-to-fault-tree generation, FHA effects assist, requirement-quality critique, and the per-project learning memory. All AI calls route through Safety Lab Aero's hosted proxy (no API key management required). ITAR-controlled programs are never routed to public cloud AI endpoints — cloud AI calls are blocked server-side for ITAR projects until a US-sovereign deployment is provisioned; use self-hosted / air-gap mode for controlled programs today.
                 <button class="action-btn btn-cyan" style="margin-left: 12px;" onclick="openProUpgradeModal('AI Assistant (Pro+)')">Upgrade to Pro+</button>
             </div>
             <div id="ai-settings-block">
@@ -1760,7 +1760,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                         </div>
                     </div>
                     <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.22); border-radius: var(--r-md); padding: 10px 12px; margin-top: 12px; font-size: 12px;">
-                        <strong>How Pro+ works.</strong> All AI calls are routed through Safety Lab Aero's hosted proxy at <code style="background: var(--color-surface); padding: 1px 6px; border-radius: 3px;">api.safetylabaero.com/v1/ai</code>. The proxy authenticates your license token and forwards to Anthropic (or Azure OpenAI for ITAR projects). You don't manage API keys. Usage is metered in <em>Sonnet-equivalent</em> tokens for your summary — Opus counts 5×, Haiku 0.3×. AI calls are <strong>not capped</strong>; the figure above is an informational running total.
+                        <strong>How Pro+ works.</strong> All AI calls are routed through Safety Lab Aero's hosted proxy at <code style="background: var(--color-surface); padding: 1px 6px; border-radius: 3px;">api.safetylabaero.com/v1/ai</code>. The proxy authenticates your license token and forwards to Anthropic. ITAR-flagged projects are refused at the proxy rather than sent to any public-cloud model (a US-sovereign routing option is planned; use self-hosted mode for controlled programs today). You don't manage API keys. Usage is metered in <em>Sonnet-equivalent</em> tokens for your summary — Opus counts 5×, Haiku 0.3×. AI calls are <strong>not capped</strong>; the figure above is an informational running total.
                     </div>
                 </div>
 
@@ -1768,11 +1768,11 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                 <div class="controls" style="border-left-color: var(--color-warning, #ff9500); margin-top: 14px;">
                     <h5 style="margin: 0 0 10px 0; font-size: 13px; font-weight: 600;">Export-Controlled Program (ITAR / EAR)</h5>
                     <p style="margin: 0 0 10px 0; font-size: 12px; color: var(--color-text-secondary);">
-                        Flag this project if its content is subject to ITAR or EAR controls. When enabled, all AI calls auto-route through Safety Lab Aero's Azure OpenAI deployment in a US-only private region, with prompt + response logging held in US-only storage. BYO key mode is blocked for ITAR projects (prevents accidentally sending controlled content to public Anthropic / Voyage endpoints).
+                        Flag this project if its content is subject to ITAR or EAR controls. When enabled, cloud AI calls for this project are <strong>blocked at the server</strong> — controlled content is never forwarded to public Anthropic / Voyage endpoints, and BYO key mode is disabled. To use AI on a controlled program today, configure a self-hosted / air-gapped model endpoint below. A US-sovereign cloud routing option (Azure Government) is planned.
                     </p>
                     <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; text-transform: none; letter-spacing: 0; cursor: pointer;">
                         <input type="checkbox" id="ai-itar-toggle" onchange="toggleAiITAR()" style="width: 18px; height: 18px;">
-                        <span>This project is ITAR / EAR-controlled — route all AI calls via Azure OpenAI</span>
+                        <span>This project is ITAR / EAR-controlled — block cloud AI routing (self-hosted only)</span>
                     </label>
                     <div id="ai-itar-status" style="margin-top: 8px; font-size: 11.5px; color: var(--color-text-tertiary);"></div>
                 </div>
@@ -3811,7 +3811,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <script src="bindings_modules.js?v=1.0" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <script src="misc_fn_modules.js?v=1.1" defer></script>
-    <script src="safety_lab.js?v=65.30" defer></script>
+    <script src="safety_lab.js?v=65.31" defer></script>
     <script src="crdt_sync.js?v=1.3" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="assurance_modules.js?v=1.8" defer></script>
@@ -3925,7 +3925,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
     <script src="auth_gate.js?v=62.60" defer></script>
     <!-- One-time EULA acceptance modal (defines window.SafetyLab.checkEula; called from auth_gate liftGate). -->
-    <script src="eula_modal.js?v=1.0.6" defer></script>
+    <script src="eula_modal.js?v=1.0.7" defer></script>
     <!-- Software License & Subscription Agreement — a SECOND one-time acceptance shown right
          after the EULA on first sign-in. Must load AFTER eula_modal.js (it chains off checkEula). -->
     <script src="license_modal.js?v=1.0.4" defer></script>
