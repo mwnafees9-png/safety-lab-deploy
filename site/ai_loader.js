@@ -17,7 +17,7 @@
 (function () {
     'use strict';
 
-    const FILES = ['fta_kb_data.js?v=1.0', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.1', 'hf_kb_data.js?v=0.1', 'ai_assistant.js?v=67.6', 'ai_fidelity.js?v=65.24', 'ai_consistency.js?v=1.3'];
+    const FILES = ['fta_kb_data.js?v=1.0', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.1', 'hf_kb_data.js?v=0.1', 'ai_assistant.js?v=67.7', 'ai_fidelity.js?v=65.24', 'ai_consistency.js?v=1.3'];
     let _loading = null;
 
     window.slLoadAI = function () {

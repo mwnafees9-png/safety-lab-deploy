@@ -3770,6 +3770,7 @@
             { label: 'Generate FCIM', sub: 'Failure conditions per function', run: function () { return populateFcim(); } },
             { label: 'Draft FHA', sub: 'Effects on AC / crew / pax + severity', run: function () { return populateFha(); } },
             { label: 'Synthesize fault trees', sub: 'Structure only — you keep the numbers', run: function () { return synthesizeTree(); } },
+            { label: 'Draft STPA', sub: 'Spine + control structure seeds — engine derives UCAs, you disposition', run: function () { return draftStpa(); } },
             { label: 'Review fault trees', sub: 'Flag inconsistencies (advisory)', run: function () { return reviewTrees(); } },
             { label: 'Recommend requirements', sub: 'Derived safety requirements for gaps', run: function () { return recommendRequirements(); } },
             { label: 'Particular Risk Analysis (PRA)', sub: 'Bird strike, rotor burst, fire, HIRF…', run: function () { return draftPra(); } },
@@ -4664,6 +4665,53 @@
                     (reqs.length ? '<div class="aifh-eff"><strong>Separation/segregation/shielding requirements:</strong><br>' + reqs.map(function (q) { return '• ' + _esc(q); }).join('<br>') + '</div>' : '');
             },
             onAccept: _applyPra, doneMsg: 'particular risk(s) added' });
+    }
+
+    // ----- STPA (PRD-2 — governed drafting: the spine + control structure ONLY) -----
+    function _stpaSystemPrompt() {
+        return [
+            _standardsPreamble(), '',
+            'You draft the STARTING POINT of an STPA under SAE J3307 discipline (cite clauses; never reproduce standard text): the spine and the control structure. STPA hazards are SYSTEM STATES that, in worst-case environmental conditions, lead to losses — not component failures.',
+            'Do NOT write UCAs, causal scenarios, or dispositions: the tool derives UCA candidates MECHANICALLY from the control structure you propose (five-part phrasing by construction), and the analyst dispositions every one. Your job is the creative seed, not the analysis.',
+            'Return STRICT JSON only: { "losses":[{"text":"..."}], "hazards":[{"text":"...","lossRefs":[1]}], "constraints":[{"text":"...","hazardRefs":[1]}], "controllers":[{"name":"..."}], "processes":[{"name":"..."}], "actions":[{"name":"...","from":1,"to":1}], "feedbacks":[{"name":"...","from":1,"to":1}] } — refs are 1-based indexes into THIS draft. actions go controller->process; feedbacks go process->controller.'
+        ].join('\n');
+    }
+    function draftStpa() {
+        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        const sd = (typeof stpaData !== 'undefined') ? stpaData : null;
+        if (!sd || !sd.cs) { _toast('The STPA lane is opt-in — turn it on first: Program Planning → Program scope.', 'warning'); return; }
+        if ((sd.losses || []).length || (sd.hazards || []).length) { _toast('This analysis already has content — the AI draft seeds an EMPTY analysis; extending a living one stays human.', 'warning'); return; }
+        _runStpaDraft(sd);
+    }
+    async function _runStpaDraft(sd) {
+        const s = snapshot();
+        const ctxObj = { certBasis: _certBasis(), aircraft: _aircraftName(),
+            functions: (s.acFunctionsData || []).map(function (f) { return f.subName; }).filter(Boolean).slice(0, 30),
+            worstFcs: (s.acFhaData || []).filter(function (f) { return /Catastrophic|Hazardous/.test(f.severity || ''); }).map(function (f) { return f.fcId + ' ' + (f.fcDesc || '') + ' (' + f.severity + ')'; }).slice(0, 20),
+            mission: (sd.meta && sd.meta.mission) || '' };
+        _toast('Drafting STPA spine + control structure…', 'info');
+        let r; try { r = await Provider.complete({ feature: 'stpa.draft', model: MODELS.reason, system: _stpaSystemPrompt(), messages: [{ role: 'user', content: 'Program context for the STPA seed:\n' + JSON.stringify(ctxObj, null, 1) }], maxTokens: 6000 }); }
+        catch (e) { _toast('STPA draft failed: ' + ((e && e.message) || e), 'warning'); return; }
+        let parsed = null;
+        try { const t = String(r.text || ''); parsed = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch (_) {}
+        if (!parsed || !Array.isArray(parsed.losses)) { _toast('STPA draft did not parse — retry.', 'warning'); return; }
+        const one = { _k: 'aistpa-' + Date.now(), parsed: parsed, _model: r.model || MODELS.reason };
+        _makeReviewPanel({ id: 'ai-rev-panel-stpa', title: '✨ STPA seed · review', disclaimer: 'Advisory draft. Accept seeds the spine + control structure WITH provenance; UCA candidates then derive mechanically in the walkthrough — the model never writes a UCA; you disposition every one.', items: [one], getKey: function (x) { return x._k; },
+            cardHtml: function (x) {
+                const p2 = x.parsed;
+                const li = function (arr, f) { return (arr || []).map(function (v) { return '• ' + _esc(f(v)); }).join('<br>'); };
+                return '<h4>STPA seed — ' + (p2.losses || []).length + ' losses · ' + (p2.hazards || []).length + ' hazards · ' + (p2.constraints || []).length + ' constraints</h4>' +
+                    '<div class="aifh-eff"><strong>Losses:</strong><br>' + li(p2.losses, function (v) { return v.text; }) + '</div>' +
+                    '<div class="aifh-eff"><strong>Hazards (system states):</strong><br>' + li(p2.hazards, function (v) { return v.text + '  [L:' + (v.lossRefs || []).join(',') + ']'; }) + '</div>' +
+                    '<div class="aifh-eff"><strong>Control structure:</strong><br>' + li(p2.controllers, function (v) { return 'Controller — ' + v.name; }) + '<br>' + li(p2.processes, function (v) { return 'Process — ' + v.name; }) + '<br>' + li(p2.actions, function (v) { return 'CA — ' + v.name + ' (C' + v.from + '→P' + v.to + ')'; }) + '<br>' + li(p2.feedbacks, function (v) { return 'FB — ' + v.name + ' (P' + v.from + '→C' + v.to + ')'; }) + '</div>';
+            },
+            onAccept: function (item) {
+                const res = (typeof window !== 'undefined' && window.STPA_AI_APPLY) ? window.STPA_AI_APPLY.apply(sd, item.parsed, { model: item._model, at: new Date().toISOString() }) : { ok: false, reason: 'stpa_ai_apply.js not loaded' };
+                if (!res.ok) { _toast(res.reason, 'warning'); return false; }
+                try { if (typeof saveState === 'function') saveState(); } catch (_) {}
+                _toast(res.note, 'success');
+                return true;
+            }, doneMsg: 'STPA seed applied' });
     }
 
     // ----- ZSA -----
