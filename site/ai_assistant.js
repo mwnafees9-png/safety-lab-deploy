@@ -129,6 +129,14 @@
                 if (_gt) opts.system = opts.system + '\n\n' + _gt;
                 const _dc = _projectDocContext(opts.feature, opts);      // persisted source document(s) — upload once, every feature sees them
                 if (_dc) opts.system = opts.system + '\n\n' + _dc;
+                // E2.8 — tenant exemplars: the program's own manual/signed rows as
+                // few-shot style anchors (learning loop 1: retrieval, never weights).
+                try {
+                    if (typeof window !== 'undefined' && window.AiFidelity && window.AiFidelity.exemplarsFor) {
+                        const _ex = window.AiFidelity.exemplarsFor(String(opts.feature || ''), { controlled: _CONTROLLED_CLASS.test(String(opts.data_classification || '')) });
+                        if (_ex) opts.system = opts.system + '\n\n' + _ex;
+                    }
+                } catch (_) {}
                 if (_ZONAL_FEATURES[opts.feature] === 1) {                // structured zonal layer — CCA features only (PRA/ZSA/CMA)
                     const _zc = _zonalContext(opts.feature, opts);
                     if (_zc) opts.system = opts.system + '\n\n' + _zc;
@@ -229,14 +237,51 @@
         });
         return { approved: approved, excluded: excluded };
     }
+    // Per-system export-control taint (SPP declaration, toolchain_plan.js): if the
+    // request payload mentions a system whose technical data is declared
+    // export-controlled, the request IS controlled — regardless of whether the
+    // caller remembered to classify it. Jurisdiction-aware: US regimes (itar/ear)
+    // may run on the US controlled backend (Azure Gov); OTHER national regimes
+    // ('natl' — UK ML, EU dual-use, national rules) must NOT be sent to a US
+    // government cloud — local/on-prem only. Deterministic, conservative match.
+    function _payloadTaint(request) {
+        try {
+            if (typeof window === 'undefined' || typeof window.exportControlSystems !== 'function') return '';
+            const hot = window.exportControlSystems().filter(s => ['itar', 'ear', 'natl'].indexOf(s.exportControl) !== -1);
+            if (!hot.length) return '';
+            const hay = (String(request.user_prompt || '') + ' ' + String(request.system_instruction || '') + ' ' +
+                JSON.stringify(request.retrieved_context || '')).toLowerCase();
+            let found = '';
+            for (const s of hot) {
+                if ((s.id && hay.indexOf(String(s.id).toLowerCase()) !== -1) ||
+                    (s.name && s.name.length > 3 && hay.indexOf(String(s.name).toLowerCase()) !== -1)) {
+                    if (s.exportControl === 'natl') return 'natl';   // strictest routing wins
+                    found = found || s.exportControl;
+                }
+            }
+            return found;
+        } catch (_) {}
+        return '';
+    }
     const AIGateway = {
         // Policy decision (not preference): where a request is ALLOWED to run.
         route(request) {
             request = request || {};
             const mode = Provider.mode;
-            const controlled = _CONTROLLED_CLASS.test(String(request.data_classification || ''));
+            let controlled = _CONTROLLED_CLASS.test(String(request.data_classification || ''));
+            let why = String(request.data_classification || '');
+            let taint = '';
+            if (!controlled) {
+                taint = _payloadTaint(request);
+                if (taint) { controlled = true; why = (taint === 'natl' ? 'export-controlled, non-US jurisdiction' : taint.toUpperCase()) + ' (per-system SPP declaration)'; }
+            }
+            // non-US regimes: a US government cloud is NOT an approved destination —
+            // local/on-prem is the only permitted backend.
+            if ((taint === 'natl' || /jurisdiction|uk ml|dual-use/i.test(why)) && mode !== 'local') {
+                return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run on ' + (mode === 'itar-cloud' ? 'a US government cloud' : 'the public cloud') + ' — this jurisdiction requires the local/on-prem backend.' };
+            }
             if (controlled && mode === 'cloud') {
-                return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + request.data_classification + ') cannot run on the public-cloud backend — switch to ITAR (Azure Gov) or a local/on-prem model.' };
+                return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run on the public-cloud backend — switch to ITAR (Azure Gov) or a local/on-prem model.' };
             }
             return { allowed: true, mode: mode, controlled: controlled, reason: (controlled ? 'controlled → ' : 'standard → ') + mode };
         },
@@ -911,6 +956,8 @@
             'STANDARDS & TERMINOLOGY — write every suggestion in the vocabulary and structure of the governing aerospace systems-safety standards, never informal prose:',
             '• ARP 4761A — safety assessment process & methods (FHA, PASA/PSSA/SSA, CCA: ZSA/PRA/CMA). Use the formal term "failure condition" and its severity classification.',
             '• ARP 4754B — development of civil aircraft & systems; functions + Development Assurance Level allocation (FDAL/IDAL).',
+            '• SAE J3307 (MAR2025) — the STPA standard, where the work is System-Theoretic Process Analysis. Four steps / fourteen sub-steps / 27 numbered work products, roughly half of which are TRACEABILITY LINKS rather than content. Use its exact vocabulary: LOSS (stakeholder harm), SYSTEM-LEVEL HAZARD (a system state, never a cause, always inside the boundary), SYSTEM-LEVEL CONSTRAINT, CONTROL STRUCTURE (controllers / control actions / feedback / other inputs-outputs / controlled processes), UNSAFE CONTROL ACTION, CONTROLLER CONSTRAINT, LOSS SCENARIO. Every UCA is written in the mandated five-part form <source controller><one of the four types><control action><context><link to hazard>, and the context states the ACTUAL TRUE process state — a controller\'s mistaken belief is a Step 4 causal factor, never a UCA context. The four UCA types are: not provided causes a hazard / providing causes a hazard / provided too early, too late or out of order / stopped too soon or applied too long (the fourth applies only to continuous actions). J3307 does NOT define severity, likelihood or risk — risk estimation is out of its scope; never present an STPA output as a risk ranking. STPA COMPLEMENTS the ARP 4761A spine (it catches interaction and requirements hazards where every component works as specified) and never replaces it; its outputs land as derived requirements and as hazards feeding the FHA. J3307 is a method standard, not an accepted means of compliance in its own right — never claim it satisfies §__.1309.',
+            '• HUMAN FACTORS — NASA HIDH (NASA/SP-2010-3407 Rev 1) and NASA-HFACS (NASA-HDBK-8709.25 V1.4) ground the crew-performance lane; ISO 9241 and MIL-STD-1472 sit on the ergonomics spine as CITE-AND-POINT references (designation + title + role — never reproduce their text; the NASA documents are US Gov public domain and short cited quotes are lawful). HONEST LIMITS you must carry into every answer: the HIDH is a design handbook, NOT an accepted means of compliance; HIDH presets SEED and never FILL a field, and a preset never flips a credit or assumption to Validated/Verified; every HIDH value carries an applicability tag (aircraft | spaceflight | general) — spaceflight-flavoured values are reference points, NOT aircraft requirements, and you must say so when citing one; NASA-HFACS is a mishap-classification taxonomy, NOT a predictive model — never turn nanocode frequencies into failure rates; Fitts-Law coefficients are empirical and must be CITED — no uncited defaults, ever. Workload claims check against the 80% time-occupancy red line (HIDH §5.7.5.1) and the AC 25.1309 workload↔severity ladder (INV-35 hard, INV-36 and INV-HFW advisory).',
             'FUNCTION vs RESOURCE vs STRUCTURE (modeling rule — apply to decomposition, FHA, FCIM and every analysis): a FUNCTION is a behavior / abstract output — what the aircraft or system ACCOMPLISHES. Do NOT author the following as functions or as failure conditions: (a) RESOURCES — electrical power, hydraulic power, pneumatic power and fuel are RESOURCES that systems PROVIDE and functions CONSUME, never functions in their own right; capture them in the Resources model and trace functions to the resources they consume, rather than creating "provide electrical/hydraulic/pneumatic power" functions; (b) STRUCTURAL SUPPORT / structural integrity — a physical property substantiated through structural analysis and Particular Risk Analysis, not a functional-FHA item. Functions are behaviors like "control aircraft trajectory", "decelerate on the ground", "provide flight-crew indication" — not power supplies or structure.',
             '• §__.1309 + ' + acFor + ' — map each failure-condition severity to its safety objective: Catastrophic ↔ Extremely Improbable, Hazardous (Severe-Major) ↔ Extremely Remote, Major ↔ Remote, Minor ↔ Probable, No Safety Effect ↔ no objective.',
             (light ? '• ASTM F3230 — safety assessment for small / light aircraft (the Part 23 analog to ARP 4761A).' : '• DO-178C (software) / DO-254 (airborne electronic hardware) — development-assurance terminology where relevant.'),
@@ -1233,7 +1280,9 @@
     // (rows/findings/trees/etc.) is unchanged; an empty array is returned when none.
     function _withAssumptionsClause(system) {
         return String(system || '') + '\n\n' +
-            'ASSUMPTIONS CONTRACT — IMPORTANT: In ADDITION to your normal JSON output, include a top-level "assumptions" array that declares EVERY load-bearing assumption you relied on, rather than burying it inside the analysis. A load-bearing assumption is one that, if wrong, would change a failure condition, a severity/classification, an independence claim, a target/allocation, a requirement, or a tree\'s structure. Each entry MUST be: {"text":"<the assumption, one sentence>","type":"independence"|"data"|"architecture"|"operational"|"other","status":"Open"}. Use "independence" for assumed separation/redundancy/no-common-cause, "data" for assumed failure rates / exposure / missing inputs, "architecture" for assumed design/allocation/configuration, "operational" for assumed crew action / flight phase / procedure, "other" otherwise. Always set status to "Open" (the engineer confirms). If you genuinely relied on no assumptions, return an empty array: "assumptions": []. Do NOT remove or alter the rest of your output to make room for this — keep all existing fields exactly as specified above.';
+            'ASSUMPTIONS CONTRACT — IMPORTANT: In ADDITION to your normal JSON output, include a top-level "assumptions" array that declares EVERY load-bearing assumption you relied on, rather than burying it inside the analysis. A load-bearing assumption is one that, if wrong, would change a failure condition, a severity/classification, an independence claim, a target/allocation, a requirement, or a tree\'s structure. Each entry MUST be: {"text":"<the assumption, one sentence>","type":"independence"|"data"|"architecture"|"operational"|"other","status":"Open","rationale":"<1-2 sentences: what gap in the provided inputs FORCED this assumption>","ifWrong":"<one sentence: which part of your output changes, and how, if this assumption is false>","usedFor":"<the specific output rows/gates/failure conditions that lean on it, by id or name>","citations":[{"doc":"<EXACT source-document name as provided>","quote":"<VERBATIM quote of 25 words or fewer copied character-for-character from that document>","where":"<section / page / table if visible>"}]}. ' +
+            'CITATION RULES (strict): quotes MUST be copied verbatim from the source documents supplied in this conversation — never paraphrase, never quote from memory, never cite a document you were not given. Every citation is machine-verified against the actual document text; a quote that does not match verbatim is flagged as unverified to the engineer. If NO supplied document supports the assumption, return "citations": [] — an honestly uncited assumption is correct and expected; a fabricated citation is a serious failure. ' +
+            'Use "independence" for assumed separation/redundancy/no-common-cause, "data" for assumed failure rates / exposure / missing inputs, "architecture" for assumed design/allocation/configuration, "operational" for assumed crew action / flight phase / procedure, "other" otherwise. Always set status to "Open" (the engineer confirms). If you genuinely relied on no assumptions, return an empty array: "assumptions": []. Do NOT remove or alter the rest of your output to make room for this — keep all existing fields exactly as specified above.';
     }
     function _detectInsufficient(text) {
         const p = _safeParseJson(text);
@@ -1302,7 +1351,17 @@
             if (!txt) return null;
             let type = String((a && a.type) || 'other').trim().toLowerCase();
             if (_ASSUMPTION_TYPES.indexOf(type) === -1) type = 'other';
-            return { text: txt, type: type, status: 'Open' };
+            // #1b — walkthrough fields + document citations (all optional; length-capped).
+            const rationale = String((a && a.rationale) || '').trim().slice(0, 500);
+            const ifWrong = String((a && (a.ifWrong || a.if_wrong)) || '').trim().slice(0, 500);
+            const usedFor = String((a && (a.usedFor || a.used_for)) || '').trim().slice(0, 300);
+            const citations = (Array.isArray(a && a.citations) ? a.citations : []).map(function (c) {
+                if (!c || typeof c !== 'object') return null;
+                const quote = String(c.quote || '').trim().slice(0, 400);
+                if (!quote) return null;
+                return { doc: String(c.doc || c.document || '').trim().slice(0, 200), quote: quote, where: String(c.where || c.page || c.section || '').trim().slice(0, 160) };
+            }).filter(Boolean).slice(0, 8);
+            return { text: txt, type: type, status: 'Open', rationale: rationale, ifWrong: ifWrong, usedFor: usedFor, citations: citations };
         }).filter(Boolean);
         // Additive (F6 ledger): also persist each parsed assumption to the SEPARATE AI
         // assumptions store, grouped per analysis. Guarded — only if the host API exists;
@@ -1321,7 +1380,11 @@
                             text: a.text,
                             type: a.type,
                             status: 'Open',
-                            at: now
+                            at: now,
+                            // #1b — walkthrough + citation payload (the store runs the
+                            // deterministic verifier against the source-doc texts).
+                            rationale: a.rationale, ifWrong: a.ifWrong, usedFor: a.usedFor,
+                            citations: a.citations
                         });
                     } catch (_) {}
                 });
@@ -1335,14 +1398,22 @@
     function _assumptionsSectionHtml(assumptions) {
         if (!assumptions || !assumptions.length) return '';
         const rows = assumptions.map(function (a) {
+            // #1b — citation posture chip: cited (n docs) vs UNCITED (model prior).
+            const nCit = (Array.isArray(a.citations) ? a.citations.length : 0);
+            const citChip = nCit
+                ? '<span style="font-size:10px;font-weight:700;color:#0b8043;">📄 ' + nCit + ' cited</span>'
+                : '<span style="font-size:10px;font-weight:700;color:#b45309;">UNCITED</span>';
             return '<div class="aifh-eff" style="margin:3px 0">' +
                 '<span class="aifh-sev" style="color:#a16207">OPEN</span> ' +
                 '<span style="font-size:11px;opacity:.7">[' + _esc(a.type || 'other') + ']</span> ' +
-                _esc(a.text) + '</div>';
+                citChip + ' ' +
+                _esc(a.text) +
+                (a.rationale ? '<div style="font-size:11px;opacity:.65;margin-top:2px;">why: ' + _esc(a.rationale) + '</div>' : '') +
+                '</div>';
         }).join('');
         return '<div class="aifh-card" style="border-style:dashed">' +
             '<h4>Assumptions (confirm)</h4>' +
-            '<div class="aifh-meta">Load-bearing assumptions the model declared — confirm or reject each (all flagged Open).</div>' +
+            '<div class="aifh-meta">Load-bearing assumptions the model declared — confirm or reject each in the AI Assumptions tab (walkthrough available there; citations are machine-verified against your source documents).</div>' +
             rows + '</div>';
     }
 
@@ -2251,7 +2322,28 @@
     // retrieved text guides HOW to build; tree DEPTH and CONTENT come solely from the
     // user's architecture. Graceful no-op if the asset isn't present (older bundle).
     const _FTAKB_STOP = new Set(('the a an and or of to in for on with is are be as at by from that this it its into over under not no any all each per via use used using must should may can will would every also between within while when where which what how because so such only more most less then their there these those one two both with into').split(' '));
-    function _ftaKbChunks() { try { return (typeof window !== 'undefined' && window.SL_FTA_KB && Array.isArray(window.SL_FTA_KB.chunks)) ? window.SL_FTA_KB.chunks : []; } catch (_) { return []; } }
+    function _ftaKbChunks() {
+        try {
+            var fta = (typeof window !== 'undefined' && window.SL_FTA_KB && Array.isArray(window.SL_FTA_KB.chunks)) ? window.SL_FTA_KB.chunks : [];
+            // #-SORA — the SORA/SAIL/OSO spine joins the same retrievable corpus
+            // (sora_kb_data.js). Factual only; Annex E criteria prose is never stored.
+            var sora = (typeof window !== 'undefined' && window.SL_SORA_KB && Array.isArray(window.SL_SORA_KB.chunks)) ? window.SL_SORA_KB.chunks : [];
+            // #-STPA — SAE J3307 (STPA) joins the same retrievable corpus
+            // (stpa_kb_data.js). Original factual prose only; J3307 is copyrighted
+            // and none of its text is stored. Cite and point, never paste.
+            var stpa = (typeof window !== 'undefined' && window.SL_STPA_KB && Array.isArray(window.SL_STPA_KB.chunks)) ? window.SL_STPA_KB.chunks : [];
+            // #-HF — the NASA human-factors corpus (hf_kb_data.js) joins the same
+            // retrievable corpus. Split copyright posture: NASA HIDH/HFACS chunks may
+            // carry short cited quotes (US Gov public domain); ISO 9241 and
+            // MIL-STD-1472 chunks are cite-and-point only, no clause prose.
+            var hf = (typeof window !== 'undefined' && window.SL_HF_KB && Array.isArray(window.SL_HF_KB.chunks)) ? window.SL_HF_KB.chunks : [];
+            var out = fta;
+            if (sora.length) out = out.concat(sora);
+            if (stpa.length) out = out.concat(stpa);
+            if (hf.length) out = out.concat(hf);
+            return out;
+        } catch (_) { return []; }
+    }
     function _ftaKbTok(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(function (w) { return w.length > 2 && !_FTAKB_STOP.has(w); }); }
     // #257 — BM25 index: per-term DF, per-chunk TF maps + lengths, and average length.
     let _ftaKbDf = null, _ftaKbTokCache = null, _ftaKbTfCache = null, _ftaKbLen = null, _ftaKbAvgLen = 0;
@@ -2279,8 +2371,40 @@
         cca:['common','cause','analysis'], zsa:['zonal','safety','analysis'], pra:['particular','risk','analysis'], cma:['common','mode','analysis'],
         inhibit:['conditional','enabling'], dependent:['common','cause','dependency'], dependency:['common','cause','dependent'],
         redundant:['redundancy','independent'], redundancy:['redundant','independent'], independence:['independent','separation'],
+        sora:['specific','operations','risk','assessment'], sail:['specific','assurance','integrity','level'],
+        oso:['operational','safety','objective'], osos:['operational','safety','objective'],
+        grc:['ground','risk','class'], arc:['air','risk','class'], robustness:['integrity','assurance','level'],
         leaf:['basic','event'], undesired:['top','event'], contributor:['cause','input','contributor'],
-        propagation:['propagate','effect'], immediate:['necessary','sufficient'], decompose:['develop','expand','resolve']
+        propagation:['propagate','effect'], immediate:['necessary','sufficient'], decompose:['develop','expand','resolve'],
+        // #-STPA — J3307 vocabulary. "UCA" must reach chunks that spell it out, and the
+        // standard's own words (controller, feedback, scenario, constraint) must reach the
+        // J3307 chunks without dragging every FTA chunk along, so expansions stay tight.
+        stpa:['system','theoretic','process','analysis','control'],
+        j3307:['stpa','j3307','control','structure','unsafe'],
+        uca:['unsafe','control','action'], ucas:['unsafe','control','action'],
+        controller:['control','structure','process','model'], controllers:['control','structure','process','model'],
+        feedback:['feedback','process','model','controller'],
+        losses:['loss','stakeholder','harm'], loss:['loss','stakeholder','harm'],
+        scenario:['loss','scenario','causal'], scenarios:['loss','scenario','causal'],
+        constraint:['constraint','controller','system'], constraints:['constraint','controller','system'],
+        traceability:['trace','link','work','product'], deliverable:['work','product'], deliverables:['work','product'],
+        mental:['process','model','operator'], archetype:['scenario','archetype','coverage'],
+        openloop:['feedback','control','loop'], leveson:['stpa','system','theoretic'],
+        // #-HF — human-factors vocabulary. Acronyms must reach the chunks that
+        // spell them out; expansions stay tight so "crew" alone does not drag the
+        // whole HF lane into a classical FHA question.
+        hidh:['human','integration','design','handbook'],
+        hfacs:['human','factors','analysis','classification'],
+        hfa:['human','factors','assessment'],
+        nanocode:['hfacs','taxonomy','tier'], nanocodes:['hfacs','taxonomy','tier'],
+        workload:['workload','crew','saturation','occupancy'],
+        ergonomic:['ergonomics','human','interaction'], ergonomics:['ergonomic','human','interaction'],
+        anthropometry:['anthropometric','human','dimensions'], anthropometric:['anthropometry','human','dimensions'],
+        fitts:['movement','time','pointing','coefficients'],
+        salience:['display','legibility','attention'], legibility:['display','contrast','luminance'],
+        luminance:['display','contrast','brightness'], decibel:['auditory','noise','acoustic'], dba:['auditory','noise','acoustic'],
+        channel:['visual','auditory','cognitive','psychomotor','verbal'], channels:['visual','auditory','cognitive','psychomotor','verbal'],
+        coactivation:['channel','simultaneous','workload']
     };
     function _ftaKbExpandQ(qTokens) {
         const w = {};
@@ -2291,12 +2415,34 @@
         });
         return w;
     }
+    // #-STPA — cross-lane damping. J3307 speaks the same words the classical lane
+    // speaks ("process", "control", "FHA", "FTA", "FMEA"), and at 23 chunks it can
+    // out-score the ARP/NASA material on a question that never mentioned STPA —
+    // "what is the FHA process" was answered by the STPA-vs-FHA chunk. So unless the
+    // query carries a J3307 signal, the STPA lane is DAMPED, not removed: it still
+    // surfaces when it is genuinely the best answer, but it is never the default
+    // voice on a classical-lane question. The signal list is the standard's own
+    // vocabulary — the words a user only says when they mean STPA.
+    const _STPA_SIGNAL = /\b(stpa|j3307|system[- ]theoretic|leveson|unsafe control|ucas?|control structure|control action|controllers?|loss scenarios?|process model|mental model|controlled process|work products?)\b/i;
+    const _STPA_DAMP = 0.45;
+    // #-HF — same cross-lane failure mode, same cure. HF chunks legitimately say
+    // "crew", "severity", "AC 25.1309", "failure condition"; at 24 chunks they can
+    // outrank the ARP/NASA-FTH material on a plain FHA question. Unless the query
+    // carries HF-only vocabulary, the HF lane is DAMPED, not removed. The signal
+    // list is words a user only says when they mean human factors — it must never
+    // contain a classical-lane word (asserted mechanically in the HF KB tests).
+    // DECISION: kept as a second explicit pair rather than generalising both into
+    // a prefix-keyed table — the STPA regression locks its damping line verbatim.
+    const _HF_SIGNAL = /\b(hidh|hfacs|hfa|3407|8709|workload|ergonomics?|anthropometr\w+|fitts|9241|1472|nanocodes?|dirty dozen|human factors|crew task\w*|time occupancy|situational awareness|salience|legibility)\b/i;
+    const _HF_DAMP = 0.45;
     // BM25 retrieval (k1=1.5, b=0.75) over the method corpus + synonym-expanded query.
     function _ftaKbRetrieve(query, k) {
         const chunks = _ftaKbChunks(); if (!chunks.length) return [];
         _ftaKbIndex();
         const qTok = _ftaKbTok(query); if (!qTok.length) return [];
         const qw = _ftaKbExpandQ(qTok);
+        const damp = _STPA_SIGNAL.test(String(query || '')) ? 1 : _STPA_DAMP;
+        const dampHf = _HF_SIGNAL.test(String(query || '')) ? 1 : _HF_DAMP;
         const N = chunks.length, k1 = 1.5, b = 0.75, avg = _ftaKbAvgLen || 1;
         const scored = chunks.map(function (c, i) {
             const tf = _ftaKbTfCache[i], len = _ftaKbLen[i] || 1;
@@ -2310,15 +2456,24 @@
             });
             const topic = String(c.topic || '').toLowerCase();
             Object.keys(qw).forEach(function (w0) { if (qw[w0] >= 1 && topic.indexOf(w0) !== -1) s += 0.8; }); // literal-term topic boost
+            if (damp !== 1 && /^stpa-/.test(String(c.id || ''))) s *= damp;   // #-STPA cross-lane damping
+            if (dampHf !== 1 && /^hf-/.test(String(c.id || ''))) s *= dampHf;  // #-HF cross-lane damping
             return { c: c, s: s };
         }).filter(function (x) { return x.s > 0; }).sort(function (a, b2) { return b2.s - a.s; });
         return scored.slice(0, k || 6).map(function (x) { return x.c; });
     }
-    function _ftaKbBlock(query, k) {
+    // mode 'tree' (default) — the FTA-synthesis framing: method only, never content.
+    // mode 'chat' — the conversational framing: the retrieved chunks ARE the encoded
+    // standard, so answer FROM them and name the standard, but they are still method
+    // and never a substitute for the project's own model.
+    function _ftaKbBlock(query, k, mode) {
         const hits = _ftaKbRetrieve(query, k || 6);
         if (!hits.length) return '';
         const lines = hits.map(function (c) { return '• [' + (c.source || 'ref') + ' · ' + (c.topic || '') + '] ' + (c.text || ''); });
-        return '\n\nREFERENCE METHOD (canonical FTA method retrieved for THIS task — apply the METHOD only; NEVER copy any of it into the tree as content; tree depth and content come SOLELY from the provided architecture):\n' + lines.join('\n');
+        const head = (mode === 'chat')
+            ? '\n\nREFERENCE METHOD (encoded standards material retrieved for THIS question — ARP 4761A/4754B & NASA FTH method, JARUS SORA, SAE J3307 STPA, and NASA HIDH & NASA-HFACS human factors). Answer method questions FROM this material and NAME the standard and clause area you are drawing on; if it does not cover the question, say so rather than filling the gap from memory. It is METHOD only — never treat it as project content, and never let it substitute for the ids and data in CURRENT PROJECT STATE:\n'
+            : '\n\nREFERENCE METHOD (canonical FTA method retrieved for THIS task — apply the METHOD only; NEVER copy any of it into the tree as content; tree depth and content come SOLELY from the provided architecture):\n';
+        return head + lines.join('\n');
     }
 
     function _reviewSystemPrompt() {
@@ -6305,8 +6460,26 @@
 
     function _chatRunActions(actions, model, modality) {
         const results = [];
+        // ABSOLUTE CONSISTENCY (TOR-GRD-005 hardening): the deterministic checks run
+        // BEFORE apply and BLOCK — an AI action that fails validation never touches
+        // the model. (Previously validation ran after apply and attached a warning.)
+        function _preflightAction(a) {
+            const errs = (_validateArtifact(a) || []).slice();
+            try {
+                if (typeof window !== 'undefined' && window.AiFidelity && window.AiFidelity.checkClaims) {
+                    const txt = [a.fcDesc, a.text, a.rationale, a.severityRationale, a.effAc, a.effCrew, a.effPax, a.localEffect, a.nextEffect, a.endEffect, a.remarks]
+                        .filter(Boolean).join(' · ');
+                    if (txt) window.AiFidelity.checkClaims(txt, {}).forEach(function (f) {
+                        if (f.kind === 'id') errs.push('references ' + f.token + ' — ' + f.why);
+                    });
+                }
+            } catch (_) {}
+            return errs;
+        }
         (actions || []).forEach(function (a) {
             if (!a || !a.op) { results.push({ ok: false, error: 'missing op' }); return; }
+            const pre = _preflightAction(a);
+            if (pre.length) { results.push({ ok: false, blocked: true, error: 'blocked by consistency check — ' + pre.join('; ') }); return; }
             try {
                 const sysName = a.systemId ? ((_chatSysById(a.systemId) || {}).name || a.systemId) : '';
                 switch (a.op) {
@@ -6430,7 +6603,23 @@
         // longer prefill "{". Instead we instruct strict-JSON output and rely on the hardened parser
         // (_safeParseJson: balanced extraction + truncation repair) plus the one-shot retry in
         // _anemRun. The conversation now always ends with a user message, as those models require.
+        // #-STPA — the chat surface now retrieves from the same method corpus the FTA
+        // lanes use (FTA + SORA + J3307). Grounded on the LAST user turn, so an STPA
+        // question pulls the J3307 chunks and the model answers from the encoded
+        // standard rather than from its priors. Empty string when nothing scores.
+        var _lastUser = '';
+        try {
+            for (var _i = (messages || []).length - 1; _i >= 0; _i--) {
+                if (messages[_i] && messages[_i].role === 'user') {
+                    var _c = messages[_i].content;
+                    _lastUser = (typeof _c === 'string') ? _c
+                        : (Array.isArray(_c) ? _c.map(function (p) { return (p && p.text) || ''; }).join(' ') : '');
+                    break;
+                }
+            }
+        } catch (_) {}
         const sys = _chatSystemPrompt() + (systemExtra || '')
+            + (_lastUser ? _ftaKbBlock(_lastUser.slice(0, 4000), 5, 'chat') : '')
             + '\n\nOUTPUT FORMAT: reply with ONLY the strict JSON object (start with { and end with }). No preamble, no explanation, no markdown code fences.';
         const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, messages: messages, maxTokens: 8000 });
         return { rr: rr, parsed: _safeParseJson(String(rr.text || '')) };
@@ -6487,7 +6676,7 @@
         const actions = Array.isArray(parsed.actions) ? parsed.actions : [];
         try {
             const asmp = Array.isArray(parsed.assumptions) ? parsed.assumptions : [];
-            if (asmp.length && window.SafetyLabAiAssumptions && typeof window.SafetyLabAiAssumptions.add === 'function') asmp.forEach(function (as) { if (as && as.text) window.SafetyLabAiAssumptions.add({ analysis: cfg.analysis || 'ai.batch', analysisLabel: cfg.title || 'AI', text: String(as.text), type: as.type || 'other', status: 'Open', at: Date.now() }); });
+            if (asmp.length && window.SafetyLabAiAssumptions && typeof window.SafetyLabAiAssumptions.add === 'function') asmp.forEach(function (as) { if (as && as.text) window.SafetyLabAiAssumptions.add({ analysis: cfg.analysis || 'ai.batch', analysisLabel: cfg.title || 'AI', text: String(as.text), type: as.type || 'other', status: 'Open', at: Date.now(), rationale: as.rationale, ifWrong: as.ifWrong, usedFor: as.usedFor, citations: as.citations }); });
         } catch (_) {}
         if (!actions.length) { _toast(parsed.reply ? String(parsed.reply).slice(0, 160) : 'No changes proposed for that request.', 'info'); return; }
         const items = actions.map(function (a, i) { a._k = 'anemb-' + Date.now() + '-' + i; return a; });
@@ -6567,7 +6756,19 @@
             }
             // STRICT-JSON reliability (prefill "{" + hardened parse + one retry on fail) is now
             // owned by the shared unified engine (_anemRun), used by both chat and batch surfaces.
-            const attempt = await _anemRun(msgs);   // #270 — unified engine core
+            // #101 cert-basis grounding — the router pins regulatory questions to
+            // the verified spine + PROB_TARGETS before the model answers.
+            // Fail-open by design: no router / no match -> empty extra, the chat
+            // proceeds exactly as before.
+            let _cbGround = '';
+            try {
+                if (typeof CERT_BASIS_ROUTER !== 'undefined' && CERT_BASIS_ROUTER && typeof CERT_BASIS_ROUTER.ground === 'function') {
+                    const _g = CERT_BASIS_ROUTER.ground(text, (typeof PROB_TARGETS !== 'undefined' ? PROB_TARGETS : null),
+                                                       (typeof CERT_BASIS !== 'undefined' ? CERT_BASIS : null));
+                    if (_g && _g.matched && _g.block) _cbGround = _g.block;
+                }
+            } catch (_) { _cbGround = ''; }
+            const attempt = await _anemRun(msgs, _cbGround);   // #270 — unified engine core (+#101 grounding)
             r = attempt.rr; parsed = attempt.parsed;
         } catch (e) {
             _chatBusy = false;
@@ -6609,7 +6810,7 @@
         const asmp = (parsed && Array.isArray(parsed.assumptions)) ? parsed.assumptions : [];
         try {
             if (!_heldImg && asmp.length && window.SafetyLabAiAssumptions && typeof window.SafetyLabAiAssumptions.add === 'function') {   // #260 — don't log assumptions for edits that were held
-                asmp.forEach(function (as) { if (as && as.text) window.SafetyLabAiAssumptions.add({ analysis: 'chat.edit', analysisLabel: 'AI Chat', text: String(as.text), type: as.type || 'other', status: 'Open', at: Date.now() }); });
+                asmp.forEach(function (as) { if (as && as.text) window.SafetyLabAiAssumptions.add({ analysis: 'chat.edit', analysisLabel: 'AI Chat', text: String(as.text), type: as.type || 'other', status: 'Open', at: Date.now(), rationale: as.rationale, ifWrong: as.ifWrong, usedFor: as.usedFor, citations: as.citations }); });
             }
         } catch (_) {}
         const _replyOut = reply + (_heldImg ? ('\n\n⚠ I held ' + actions.length + ' diagram-derived edit' + (actions.length === 1 ? '' : 's') + ' — nothing was applied. Verify against your actual model, then tell me to apply them.') : '');   // #260
@@ -6620,14 +6821,28 @@
     }
 
     // ---- chat UI (its own full tab, mounted into #view-aichat) ----------------
+    // ANEM brand: the blue→purple gradient (#0A84FF → #AF52DE) carries identity — the
+    // wordmark, suggestion chips, links, diffs, and the send button wear it. Result
+    // chips stay green/red: those are STATUS colors (applied/failed), never brand.
+    const _ANEM_A = '#0A84FF', _ANEM_B = '#AF52DE';
+    const _ANEM_GRAD = 'linear-gradient(120deg,' + _ANEM_A + ',' + _ANEM_B + ')';
     function _chatPalette() {
         const dark = (typeof _isDarkTheme === 'function') ? _isDarkTheme() : false;
+        // Surfaces ride the site's digital-paper tokens (Phase 62 paper+ink) so the
+        // panel sits on the SAME warm paper as the app — fallbacks mirror safety_lab.css.
         return dark
-            ? { userBg: '#1e3a5f', userFg: '#eaf2ff', botBg: '#1f2430', botFg: '#e9ecf2', chip: '#16351f', chipFg: '#bff0c8', err: '#3f1d1d', errFg: '#ffd4d4', warnBg: 'rgba(245,158,11,.15)', warnFg: '#f0bf72', border: 'rgba(255,255,255,.13)', sub: '#9aa3b2', input: '#11151c' }
-            : { userBg: '#e8f0ff', userFg: '#0b2a55', botBg: '#f5f6f8', botFg: '#1a1f29', chip: '#e7f6ec', chipFg: '#14633a', err: '#fdecec', errFg: '#9b1c1c', warnBg: '#fff4e0', warnFg: '#8a5a00', border: 'rgba(0,0,0,.10)', sub: '#667085', input: '#ffffff' };
+            ? { userBg: 'var(--color-surface-3, #20252F)', userFg: '#e9ecf2', botBg: 'var(--color-surface-2, #171B24)', botFg: '#e9ecf2', chip: '#16351f', chipFg: '#bff0c8', err: '#3f1d1d', errFg: '#ffd4d4', warnBg: 'rgba(245,158,11,.15)', warnFg: '#f0bf72', border: 'rgba(255,255,255,.13)', sub: '#9aa3b2', input: 'var(--color-surface-2, #171B24)',
+                eg: 'rgba(142,92,240,.18)', egFg: '#cdb4f7', link: '#c9a6f2', cardBd: 'rgba(175,82,222,.42)', cardBg: 'rgba(142,92,240,.09)' }
+            : { userBg: 'var(--color-surface-3, #E5E0D1)', userFg: '#1a1f29', botBg: 'var(--color-surface-2, #F2EEE1)', botFg: '#1a1f29', chip: '#e7f6ec', chipFg: '#14633a', err: '#fdecec', errFg: '#9b1c1c', warnBg: '#fff4e0', warnFg: '#8a5a00', border: 'rgba(0,0,0,.10)', sub: '#667085', input: 'var(--color-surface-2, #F2EEE1)',
+                eg: '#EDDFFB', egFg: '#5B21B6', link: '#7A3EA8', cardBd: '#DCC8F5', cardBg: 'rgba(142,92,240,.06)' };
+    }
+    // The cursive gradient wordmark — named for Anya and Emma.
+    function _anemWordmark(px) {
+        return '<span title="Named for Anya and Emma" style="font-family:\'Brush Script MT\',\'Segoe Script\',\'Snell Roundhand\',cursive;font-size:' + (px || 26) + 'px;line-height:1;font-weight:400;letter-spacing:.5px;display:inline-block;transform:rotate(-2deg);padding-right:2px;background:' + _ANEM_GRAD + ';-webkit-background-clip:text;background-clip:text;color:transparent;">anem</span>';
     }
     function _chatExample(t) {
-        return '<div class="ai-chat-eg" data-q="' + _esc(t) + '" style="cursor:pointer;margin:6px 8px 0 0;padding:7px 10px;border:1px solid ' + _chatPalette().border + ';border-radius:8px;display:inline-block;font-size:12.5px;">“' + _esc(t) + '”</div>';
+        const pal = _chatPalette();
+        return '<div class="ai-chat-eg" data-q="' + _esc(t) + '" style="cursor:pointer;margin:8px 8px 0 0;padding:9px 15px;border:none;background:' + pal.eg + ';color:' + pal.egFg + ';border-radius:22px;display:inline-block;font-size:12.5px;line-height:1.35;">' + _esc(t) + '</div>';
     }
     // ---- #39 — visible BEFORE→AFTER diff on every ANEM edit -------------------
     // ANEM applies live (no staging), so the trust surface is review-after: each
@@ -6657,10 +6872,10 @@
                 + '<span style="display:flex;gap:5px;align-items:baseline;flex-wrap:wrap;min-width:0;">'
                 +   '<span style="font-size:11.5px;color:' + pal.sub + ';text-decoration:line-through;opacity:.65;word-break:break-word;">' + _esc(_chatClipVal(d.from)) + '</span>'
                 +   '<span style="font-size:10px;color:' + pal.sub + ';flex-shrink:0;">→</span>'
-                +   '<span style="font-size:11.5px;font-weight:600;color:var(--color-accent,#007aff);word-break:break-word;">' + _esc(_chatClipVal(d.to)) + '</span>'
+                +   '<span style="font-size:11.5px;font-weight:600;color:' + _ANEM_A + ';word-break:break-word;">' + _esc(_chatClipVal(d.to)) + '</span>'
                 + '</span></div>';
         }).join('');
-        return '<div style="margin:2px 0 1px 14px;padding:4px 9px;border-left:2px solid var(--color-accent,#007aff);background:' + pal.botBg + ';border-radius:0 6px 6px 0;">'
+        return '<div style="margin:2px 0 1px 14px;padding:4px 9px;border-left:2px solid ' + _ANEM_A + ';background:' + pal.botBg + ';border-radius:0 6px 6px 0;">'
             + '<div style="font-size:9.5px;font-weight:700;letter-spacing:.06em;color:' + pal.sub + ';margin-bottom:2px;">BEFORE → AFTER</div>'
             + inner + '</div>';
     }
@@ -6669,8 +6884,12 @@
         if (!box) return;
         const pal = _chatPalette();
         if (!_chatHistory.length) {
-            box.innerHTML = '<div style="color:' + pal.sub + ';font-size:13px;line-height:1.7;">'
-                + '<div style="font-weight:600;margin-bottom:8px;">Talk to your safety model — it edits live across the golden thread, grounded in ARP 4761A / 4754B.</div>Try:<div>'
+            box.innerHTML = ''
+                + '<div style="border:1.5px solid ' + pal.cardBd + ';background:' + pal.cardBg + ';border-radius:12px;padding:12px 14px;margin:2px 0 16px;font-size:13px;line-height:1.55;color:' + pal.botFg + ';">'
+                +   '<div style="font-weight:700;font-size:14.5px;margin-bottom:3px;">Welcome!</div>'
+                +   'I’m ANEM — talk to your safety model and I edit it live across the golden thread, grounded in ARP 4761A / 4754B. I log every assumption and never set λ, DAL, or severity as fact. <b>Undo</b> rolls a turn back.'
+                + '</div>'
+                + '<div style="color:' + pal.sub + ';font-size:13px;line-height:1.7;">Try:<div style="display:flex;flex-direction:column;align-items:flex-start;">'
                 + _chatExample('Draft AFHA failure conditions for the “Provide fuel jettison” function')
                 + _chatExample('For the FUEL system, draft SFHA rows and trace them to the aircraft fuel FCs')
                 + _chatExample('Tighten the severity rationale on every Hazardous AFHA row')
@@ -6682,9 +6901,11 @@
         let html = '';
         _chatHistory.forEach(function (m, i) {
             if (m.role === 'user') {
-                html += '<div style="display:flex;justify-content:flex-end;margin:8px 0;"><div style="max-width:78%;background:' + pal.userBg + ';color:' + pal.userFg + ';padding:9px 12px;border-radius:12px 12px 3px 12px;font-size:14px;white-space:pre-wrap;word-break:break-word;">' + _esc(m.content) + '</div></div>';
+                // Alexa-pattern: the user's words in a quiet gray pill, right-aligned.
+                html += '<div style="display:flex;justify-content:flex-end;margin:14px 0;"><div style="max-width:82%;background:' + pal.userBg + ';color:' + pal.userFg + ';padding:9px 15px;border-radius:20px;font-size:14px;white-space:pre-wrap;word-break:break-word;">' + _esc(m.content) + '</div></div>';
             } else {
-                html += '<div style="display:flex;justify-content:flex-start;margin:8px 0;"><div style="max-width:86%;background:' + pal.botBg + ';color:' + pal.botFg + ';padding:10px 13px;border-radius:12px 12px 12px 3px;font-size:14px;white-space:pre-wrap;word-break:break-word;">' + _esc(m.content);
+                // Alexa-pattern: ANEM answers in document flow — no bubble.
+                html += '<div style="margin:12px 0 6px;color:' + pal.botFg + ';font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word;">' + _esc(m.content);
                 const act = _chatActivity[i];
                 if (act && act.results && act.results.length) {
                     html += '<div style="margin-top:9px;display:flex;flex-direction:column;gap:4px;">';
@@ -6712,17 +6933,17 @@
                         if (!c || !c.label) return;
                         const rec = !!c.recommended;
                         const send = String(c.label) + (c.detail ? (' — ' + c.detail) : '');
-                        html += '<button class="anem-choice" data-choice="' + _esc(send) + '" style="text-align:left;padding:8px 11px;border:' + (rec ? '1.5px solid var(--color-accent,#007aff)' : '1px solid ' + pal.border) + ';border-radius:9px;background:transparent;color:inherit;cursor:pointer;font:inherit;font-size:13px;">'
-                            + '<b>' + _esc(c.label) + '</b>' + (rec ? ' <span style="font-size:10px;color:var(--color-accent,#007aff);font-weight:700;letter-spacing:.03em;">★ RECOMMENDED</span>' : '')
+                        html += '<button class="anem-choice" data-choice="' + _esc(send) + '" style="display:block;width:100%;text-align:left;padding:8px 13px;border:' + (rec ? '1.5px solid ' + _ANEM_B : '1px solid ' + pal.border) + ';border-radius:16px;background:' + (rec ? pal.eg : 'transparent') + ';color:' + (rec ? pal.egFg : 'inherit') + ';cursor:pointer;font:inherit;font-size:13px;">'
+                            + '<b>' + _esc(c.label) + '</b>' + (rec ? ' <span style="font-size:10px;color:' + _ANEM_B + ';font-weight:700;letter-spacing:.03em;">★ RECOMMENDED</span>' : '')
                             + (c.detail ? ('<div style="font-size:12px;color:' + pal.sub + ';margin-top:2px;line-height:1.4;">' + _esc(c.detail) + '</div>') : '')
                             + '</button>';
                     });
                     html += '</div>';
                 }
-                html += '</div></div>';
+                html += '</div>';
             }
         });
-        if (_chatBusy) html += '<div style="display:flex;justify-content:flex-start;margin:8px 0;"><div style="background:' + pal.botBg + ';color:' + pal.sub + ';padding:10px 13px;border-radius:12px;font-size:13px;">⋯ thinking</div></div>';
+        if (_chatBusy) html += '<div style="margin:12px 0;color:' + pal.sub + ';font-size:13px;">⋯ thinking</div>';
         box.innerHTML = html;
         try { box.scrollTop = box.scrollHeight; } catch (_) {}
     }
@@ -6739,7 +6960,8 @@
     function _anemOpen() {
         if (document.getElementById('anem-panel')) return;            // already open
         const pal = _chatPalette();
-        const surface = (typeof _isDarkTheme === 'function' && _isDarkTheme()) ? '#0e1219' : '#ffffff';
+        // Digital paper: the panel wears the app's card surface, not raw white/black.
+        const surface = (typeof _isDarkTheme === 'function' && _isDarkTheme()) ? 'var(--color-surface-1, #10131A)' : 'var(--color-surface-1, #FAF7F0)';
         const p = document.createElement('div');
         p.id = 'anem-panel';
         p.setAttribute('role', 'complementary');
@@ -6747,16 +6969,18 @@
         p.style.cssText = 'position:fixed;top:0;right:0;height:100vh;width:min(440px,96vw);z-index:99996;display:flex;flex-direction:column;background:' + surface + ';color:inherit;border-left:1px solid ' + pal.border + ';box-shadow:-10px 0 32px rgba(0,0,0,.22);font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
         const available = (typeof Provider !== 'undefined' && Provider.available && Provider.available());
         if (!available) {
-            p.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid ' + pal.border + ';"><div style="font-size:16px;font-weight:700;">✦ ANEM</div><button id="anem-x" title="Close" style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:' + pal.sub + ';">×</button></div>'
+            p.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid ' + pal.border + ';"><div>' + _anemWordmark(26) + '</div><button id="anem-x" title="Close" style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:' + pal.sub + ';">×</button></div>'
                 + '<div style="padding:20px;color:' + pal.sub + ';font-size:13px;line-height:1.6;">ANEM needs the AI backend (Pro+). Open <b>AI Tools → AI Assistant → AI Settings</b> to configure it, then reopen ANEM.</div>';
             document.body.appendChild(p);
             const x0 = document.getElementById('anem-x'); if (x0) x0.onclick = _anemClose;
             return;
         }
         p.innerHTML = ''
-            + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:13px 14px 11px;border-bottom:1px solid ' + pal.border + ';">'
-            +   '<div style="min-width:0;"><div style="font-size:16px;font-weight:700;" title="Named for Anya and Emma">✦ ANEM <span style="font-size:10.5px;font-weight:600;color:' + pal.sub + ';letter-spacing:.04em;">· LIVE EDITOR · BETA</span></div>'
-            +     '<div style="font-size:11.5px;color:' + pal.sub + ';margin-top:2px;line-height:1.45;">Edits apply live across the golden thread. ARP 4761A/4754B-grounded; logs assumptions, never fixes λ/DAL/severity as fact. <b>Undo</b> rolls a turn back.</div></div>'
+            + '<div style="display:flex;align-items:center;gap:9px;padding:13px 14px 11px;border-bottom:1px solid ' + pal.border + ';">'
+            +   _anemWordmark(27)
+            +   '<span style="font-size:14.5px;color:' + pal.sub + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">for safety engineering</span>'
+            +   '<span title="Live editor — edits apply to the model as you talk" style="font-size:9px;font-weight:700;color:' + pal.sub + ';letter-spacing:.06em;border:1px solid ' + pal.border + ';border-radius:6px;padding:2px 6px;flex-shrink:0;">BETA</span>'
+            +   '<span style="flex:1;"></span>'
             +   '<button id="anem-x" title="Close (Esc)" style="border:none;background:transparent;font-size:24px;line-height:.8;cursor:pointer;color:' + pal.sub + ';flex-shrink:0;">×</button>'
             + '</div>'
             + '<div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid ' + pal.border + ';">'
@@ -6766,11 +6990,11 @@
             + '<div id="ai-chat-scroll" style="flex:1;overflow:auto;padding:14px;"></div>'
             + '<div style="border-top:1px solid ' + pal.border + ';">'
             +   '<div id="ai-chat-attach-row" style="display:none;flex-wrap:wrap;gap:6px;padding:8px 12px 0;"></div>'
-            +   '<div style="display:flex;gap:8px;padding:10px 12px;align-items:stretch;">'
-            +     '<button id="ai-chat-attach" title="Attach images or documents (diagrams, SDDs, specs)" aria-label="Attach images or documents" style="width:42px;flex-shrink:0;border:1px solid ' + pal.border + ';border-radius:10px;background:transparent;color:inherit;font-size:17px;cursor:pointer;">📎</button>'
+            +   '<div style="display:flex;gap:8px;padding:10px 12px;align-items:flex-end;">'
+            +     '<button id="ai-chat-attach" title="Attach images or documents (diagrams, SDDs, specs)" aria-label="Attach images or documents" style="width:40px;height:40px;flex-shrink:0;border:1px solid ' + pal.border + ';border-radius:50%;background:transparent;color:inherit;font-size:16px;cursor:pointer;">📎</button>'
             +     '<input id="ai-chat-file" type="file" multiple accept="image/*,.pdf,.docx,.txt,.md,.csv,.json,.xml,.log" style="display:none;">'
-            +     '<textarea id="ai-chat-input" rows="2" placeholder="Ask ANEM for edits, or attach a doc / diagram…" style="flex:1;margin:0;resize:none;min-height:44px;max-height:150px;padding:9px 11px;border:1px solid ' + pal.border + ';border-radius:10px;font:inherit;font-size:13.5px;background:' + pal.input + ';color:inherit;"></textarea>'
-            +     '<button id="ai-chat-send" style="padding:0 16px;border:none;border-radius:10px;background:var(--color-accent,#007aff);color:#fff;font:inherit;font-weight:600;cursor:pointer;">Send</button>'
+            +     '<textarea id="ai-chat-input" rows="1" placeholder="Ask ANEM for edits…" style="flex:1;margin:0;resize:none;min-height:40px;max-height:150px;padding:10px 16px;border:1.5px solid ' + pal.border + ';border-radius:22px;font:inherit;font-size:13.5px;background:' + pal.input + ';color:inherit;outline:none;"></textarea>'
+            +     '<button id="ai-chat-send" title="Send" aria-label="Send" style="width:40px;height:40px;flex-shrink:0;border:none;border-radius:50%;background:' + _ANEM_GRAD + ';color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">➤</button>'
             +   '</div>'
             +   '<div style="padding:2px 12px 9px;font-size:10.5px;color:' + pal.sub + ';text-align:center;line-height:1.4;">ANEM is powered by ' + ((typeof Provider !== 'undefined' && Provider.describe && Provider.describe().mode === 'local') ? 'your configured model' : 'Claude') + ' and can make mistakes. Review every edit — it never sets λ, DAL, or severity as fact.</div>'
             + '</div>';
@@ -6781,6 +7005,10 @@
         if (x) x.onclick = _anemClose;
         if (sendBtn) sendBtn.onclick = function () { const v = ta ? ta.value : ''; if (ta) ta.value = ''; _chatSend(v); };
         if (ta) ta.onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const v = ta.value; ta.value = ''; _chatSend(v); } };
+        if (ta) {   // purple focus ring on the rounded input (inline styles have no :focus-within)
+            ta.onfocus = function () { ta.style.borderColor = _ANEM_B; ta.style.boxShadow = '0 0 0 3px rgba(175,82,222,.14)'; };
+            ta.onblur = function () { ta.style.borderColor = ''; ta.style.boxShadow = 'none'; ta.style.border = '1.5px solid ' + pal.border; };
+        }
         const undoBtn = document.getElementById('ai-chat-undo');
         if (undoBtn) undoBtn.onclick = function () { try { if (typeof undo === 'function') undo(); else if (typeof window.undo === 'function') window.undo(); } catch (_) {} try { _toast('Rolled back the last change.', 'info'); } catch (_) {} _chatRenderTranscript(); };
         const clrBtn = document.getElementById('ai-chat-clear');
@@ -6939,6 +7167,12 @@
         runDeployGate:   _aiGateRun,               // #256 — pre-deploy AI quality gate (PASS/FAIL vs saved baseline)
         setAiQualityBaseline: _aiGateBaselineSet,  // #256 — capture the current build as the known-good baseline
         runRedTeamSuite: runRedTeamSuite,          // #261 — standing adversarial red-team (safeguard hold-rate, delta vs last)
+        // #-STPA — read-only retrieval probe over the shipped method corpus
+        // (FTA + SORA + J3307). Debug/QA hook, same posture as lastRaw(): it
+        // calls no model, writes nothing, and returns the chunks a query would
+        // ground on — so "is the standard actually reachable?" is checkable
+        // rather than assumed.
+        kbRetrieve: function (q, k) { try { return _ftaKbRetrieve(String(q || ''), k || 6); } catch (_) { return []; } },
         // Features get added here, each returning SUGGESTED artifacts for review:
         //   AI.draftReport()    — Feature 1 (#47)
         //   AI.populateFha()    — Feature 2 (#48)
