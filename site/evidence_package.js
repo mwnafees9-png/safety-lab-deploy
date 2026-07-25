@@ -100,8 +100,31 @@
         pkg.aiProvenance = (projectConfig.aiProvenance || []).slice(-200);
         pkg.aiDrafts = Object.keys(projectConfig.aiDrafts || {}).map(k => {
             const d = projectConfig.aiDrafts[k];
-            return { key: k, state: d.state, heading: d.heading || '', model: d.model || '', promptHash: d.promptHash || '', inputFp: d.inputFp || '', flags: d.flags || 0, by: d.by || '', overrideNote: d.overrideNote || '' };
+            // Backlog #1 — deterministic confidence verdict (tier + input-fidelity
+            // grade) travels with every draft record in the package.
+            let conf = null;
+            try {
+                if (typeof window !== 'undefined' && window.AiBadges && typeof window.AiBadges.draftConfidence === 'function') {
+                    const c = window.AiBadges.draftConfidence(d);
+                    if (c) conf = { tier: c.tier, grade: c.grade, label: c.label };
+                }
+            } catch (_) {}
+            return { key: k, state: d.state, heading: d.heading || '', model: d.model || '', promptHash: d.promptHash || '', inputFp: d.inputFp || '', flags: d.flags || 0, by: d.by || '', overrideNote: d.overrideNote || '', confidence: conf };
         });
+
+        // 6b. AI assumption ledger (#1b) — every premise the AI declared, its
+        // document citations (machine-verified), and the engineer's disposition
+        try {
+            if (typeof window !== 'undefined' && window.SafetyLabAiAssumptions && typeof window.SafetyLabAiAssumptions.list === 'function') {
+                pkg.aiAssumptions = window.SafetyLabAiAssumptions.list().map(a => ({
+                    analysis: a.analysisLabel || a.analysis || '', text: a.text, type: a.type || 'other',
+                    basis: a.basis || ((a.citations && a.citations.length) ? 'cited' : 'uncited (pre-capture)'),
+                    citations: (a.citations || []).map(c => (c.verified ? 'VERIFIED — ' : 'UNVERIFIED — ') + (c.doc || c.matchedDoc || 'doc') + (c.where ? ' (' + c.where + ')' : '') + ': "' + c.quote + '"'),
+                    rationale: a.rationale || '', ifWrong: a.ifWrong || '', usedFor: a.usedFor || '',
+                    status: a.status || 'Open', note: a.note || '', promotedTo: a.promotedTo || '',
+                }));
+            }
+        } catch (_) {}
 
         // 7. golden thread — the certification trace incl. R&M evidence + gaps
         try {
@@ -131,6 +154,93 @@
                 msg3RedesignFlags: ((projectConfig.msg3 || {}).msis || []).reduce((a, m) => a + (m.ffs || []).filter(f => (typeof msg3Disposition === 'function') && msg3Disposition(f).state === 'redesign').length, 0),
             };
         } catch (_) { pkg.ram = null; }
+
+        // 9s. STPA — J3307 clause-9 conformance, RE-RUN FRESH at package build
+        // (W5). The 27 Table 1 work products with live statuses, the spine
+        // counts, and Step 4 cause coverage — the demonstration ships WITH the
+        // evidence instead of being asserted beside it.
+        try {
+            if (typeof STPA !== 'undefined' && STPA.conformance && typeof stpaData !== 'undefined' && stpaData) {
+                const sd = stpaData;
+                const anything = (sd.losses || []).length + (sd.hazards || []).length +
+                    (sd.cs && sd.cs.controllers ? sd.cs.controllers.length : 0) + Object.keys(sd.dispositions || {}).length;
+                if (anything) {
+                    let approved = false;
+                    try { approved = !!(typeof Review !== 'undefined' && Review.getApproval && (Review.getApproval({ kind: 'stpaScope', id: 'STPA-SCOPE' }) || {}).approvedBy); } catch (_) {}
+                    const reqRows = ((typeof acReqData !== 'undefined' && acReqData) || []).filter(r => r && r.uca);
+                    const conf = STPA.conformance(
+                        { cs: sd.cs, dispositions: sd.dispositions, causeDismissals: sd.causeDismissals,
+                          spine: { losses: sd.losses || [], hazards: sd.hazards || [], constraints: sd.constraints || [] },
+                          responsibilities: sd.responsibilities || [], meta: sd.meta || {}, csState: sd.csState },
+                        { scopeApproved: approved, reqRows: reqRows });
+                    pkg.stpa = {
+                        csState: sd.csState || 'initial',
+                        losses: (sd.losses || []).length, hazards: (sd.hazards || []).length,
+                        constraints: (sd.constraints || []).length,
+                        responsibilities: (sd.responsibilities || []).length,
+                        tally: conf.tally,
+                        deliverables: conf.deliverables.map(x => ({ id: x.id, title: x.title, status: x.status, evidence: x.evidence }))
+                    };
+                    // W6 — Appendix C exit criterion + optional SIP, both computed fresh
+                    try {
+                        const am = STPA.archetypeMatrix(sd.cs, sd.dispositions, sd.causeDismissals,
+                            { losses: sd.losses || [], hazards: sd.hazards || [], constraints: sd.constraints || [] });
+                        pkg.stpa.archetypes = { exit: am.exit, openCells: am.openCells };
+                    } catch (_) {}
+                    try { pkg.stpa.sip = STPA.sipSummary(sd.sip); } catch (_) {}
+                }
+            }
+        } catch (_) { pkg.stpa = null; }
+
+        // 9q. G.11.1.3 exposure cases — every Cat/Haz basic event's named
+        // at-risk basis, RE-SWEPT at package build (ARP-EXP).
+        try {
+            if (typeof EXPOSURE_CASE !== 'undefined' && EXPOSURE_CASE.sweep) {
+                const rows = EXPOSURE_CASE.sweep();
+                if (rows.length) pkg.exposureCases = {
+                    events: rows.length,
+                    named: rows.filter(r => r.sel).length,
+                    consistent: rows.filter(r => r.consistent).length,
+                    rows: rows.map(r => ({ page: r.page, severity: r.severity, event: r.name, lid: String(r.lid),
+                        caseId: r.sel ? r.sel.caseId : null, clause: r.sel ? r.sel.def.clause : null,
+                        T: r.T, source: r.source, consistent: r.consistent,
+                        issues: r.issues || [] }))
+                };
+            }
+        } catch (_) {}
+
+        // 9r. B.4.3.2 Common Resource Analysis — matrix tallies + independence
+        // findings, RE-COMPUTED at package build (ARP-CRA).
+        try {
+            if (typeof CRA !== 'undefined' && CRA.model) {
+                const cm = CRA.model();
+                if (cm.rows.length) pkg.cra = {
+                    rows: cm.rows.length, cellsTotal: cm.cellsTotal, cellsDisposed: cm.cellsDisposed,
+                    seedRowsOpen: cm.seedRowsOpen,
+                    findings: CRA.findings().map(f => ({ resId: f.resId, mode: f.mode, principle: f.principle, detail: f.detail })),
+                    detail: cm.rows.map(x => ({ resId: x.resId, mode: x.mode, seed: !!x.seed,
+                        consumers: x.cols.length, disposed: x.disposed, fcs: x.fcs.map(f => f.fcId) }))
+                };
+            }
+        } catch (_) {}
+
+        // 9t. G.12 failure frequency — w(top) = Σ IB·w over the SAME exact BDD
+        // as the probability lane, RE-COMPUTED at package build (ARP-G12).
+        try {
+            if (typeof FTA_FREQ !== 'undefined' && FTA_FREQ.sweep) {
+                const fr = FTA_FREQ.sweep();
+                if (fr.length) pkg.freq = fr.map(t => ({
+                    page: t.page, severity: t.severity,
+                    ok: t.res.ok, reason: t.res.ok ? null : t.res.reason,
+                    wTop: t.res.ok ? t.res.wTop : null, pTop: t.res.ok ? t.res.pTop : null,
+                    nPerFlight: t.res.ok ? t.res.nPerFlight : null, T: t.res.ok ? t.res.T : null,
+                    lowerBound: t.res.ok ? t.res.lowerBound : false,
+                    flags: t.res.ok ? t.res.flags : null,
+                    rows: t.res.ok ? t.res.rows.map(x => ({ name: x.name, cls: x.cls, q: x.p, IB: x.IB,
+                        lambda: x.lambda, w: x.w, contrib: x.contrib, share: x.share, note: x.note })) : []
+                }));
+            }
+        } catch (_) {}
 
         // 9b. problem reports — the open-problem register with deferral rationales
         try {
@@ -304,8 +414,18 @@
         b += '<h2>7 · AI provenance (' + pkg.aiProvenance.length + ' act(s), last 200) & draft states</h2>' +
             _tbl(['When', 'Kind', 'Feature / Section', 'Model', 'Prompt', 'Flags', 'By'],
                 pkg.aiProvenance.slice(-40).reverse().map(r => [_esc(String(r.at || '').slice(0, 16).replace('T', ' ')), _esc(r.kind || ''), _esc(r.section || r.heading || r.group || r.feature || ''), _esc(String(r.model || '—').slice(0, 22)), _esc(r.promptHash || '—'), _esc(r.flags != null ? String(r.flags) : '—'), _esc(r.by || '')])) +
-            _tbl(['Draft', 'State', 'Model', 'Checker flags', 'Accepted by'],
-                pkg.aiDrafts.map(d => [_esc(d.key + ' — ' + d.heading), stamp(d.state), _esc(d.model), _esc(String(d.flags) + (d.overrideNote ? ' (override: ' + d.overrideNote + ')' : '')), _esc(d.by)]));
+            _tbl(['Draft', 'State', 'Confidence', 'Model', 'Checker flags', 'Accepted by'],
+                pkg.aiDrafts.map(d => [_esc(d.key + ' — ' + d.heading), stamp(d.state),
+                    d.confidence ? '<span style="color:' + (d.confidence.tier === 'green' ? '#1D6E3E' : d.confidence.tier === 'amber' ? '#9A6200' : '#8E2A2A') + '; font-family:\'IBM Plex Mono\',monospace; font-size:10px; font-weight:600;">' + _esc(d.confidence.label + ' · ' + d.confidence.grade) + '</span>' : '<span class="dim">—</span>',
+                    _esc(d.model), _esc(String(d.flags) + (d.overrideNote ? ' (override: ' + d.overrideNote + ')' : '')), _esc(d.by)]));
+        if (pkg.aiAssumptions && pkg.aiAssumptions.length) {
+            b += '<h2>7b · AI assumption ledger (' + pkg.aiAssumptions.length + ' premise(s), citations machine-verified)</h2>' +
+                _tbl(['Analysis', 'Assumption', 'Basis', 'Citations (verified against source documents)', 'If wrong', 'Status', 'Disposition note', 'Promoted'],
+                    pkg.aiAssumptions.map(a => [_esc(a.analysis), _esc(a.text) + (a.rationale ? '<br><span class="dim">why: ' + _esc(a.rationale) + '</span>' : ''),
+                        stamp(a.basis === 'cited' ? 'cited' : 'UNCITED'),
+                        a.citations.length ? a.citations.map(c => (/^VERIFIED/.test(c) ? '<span style="color:#1D6E3E;">' : '<span style="color:#8E2A2A;">') + _esc(c) + '</span>').join('<br>') : '<span class="dim">—</span>',
+                        _esc(a.ifWrong), stamp(a.status), _esc(a.note), _esc(a.promotedTo || '—')]));
+        }
         b += '<h2>8 · Golden thread</h2>';
         if (pkg.goldenThread && pkg.goldenThread.rows) {
             const cols = pkg.goldenThread.rows.length ? Object.keys(pkg.goldenThread.rows[0]) : [];
@@ -318,6 +438,44 @@
             b += '<h2>10 · R&M posture</h2>' +
                 _tbl(['Maintenance tasks', 'Model-derived', 'FRACAS records', 'Open findings', 'MSG-3 MSIs', 'Redesign flags'],
                     [[pkg.ram.maintenanceTasks, pkg.ram.derivedTasks, pkg.ram.fracasRecords, pkg.ram.openFindings, pkg.ram.msg3Msis, pkg.ram.msg3RedesignFlags].map(String)]);
+        }
+        if (pkg.stpa) {
+            b += '<h2>10s · STPA — J3307 conformance (clause 9, re-run at build)</h2>' +
+                '<p class="mono dim">' + _esc('structure: ' + pkg.stpa.csState + ' · ' + pkg.stpa.losses + ' losses · ' + pkg.stpa.hazards + ' hazards · ' + pkg.stpa.constraints + ' constraints · ' + pkg.stpa.responsibilities + ' responsibilities — ' + (pkg.stpa.tally.satisfied + (pkg.stpa.tally.na || 0)) + '/27 satisfied, ' + (pkg.stpa.tally.partial || 0) + ' partial, ' + (pkg.stpa.tally.missing || 0) + ' missing' +
+                (pkg.stpa.archetypes ? ' · Appendix C exit: ' + (pkg.stpa.archetypes.exit ? 'MET' : pkg.stpa.archetypes.openCells + ' cell(s) open') : '') +
+                (pkg.stpa.sip && pkg.stpa.sip.assessed ? ' · SIP (optional): ' + pkg.stpa.sip.assessed + '/25 assessed' : '')) + '</p>' +
+                _tbl(['WP', 'Work product', 'Status', 'Evidence'],
+                    pkg.stpa.deliverables.map(x => [_esc(x.id), _esc(x.title), stamp(x.status), _esc(x.evidence)]));
+        }
+        if (pkg.exposureCases) {
+            b += '<h2>10q · G.11.1.3 exposure cases (re-swept at build)</h2>' +
+                '<p class="mono dim">' + _esc(pkg.exposureCases.events + ' Cat/Haz basic events · ' + pkg.exposureCases.named + ' named · ' + pkg.exposureCases.consistent + ' consistent') + '</p>' +
+                _tbl(['Tree', 'Sev', 'Event', 'Case', 'T', 'Source', 'Consistency'],
+                    pkg.exposureCases.rows.map(r => [_esc(r.page), _esc(r.severity), _esc(r.event),
+                        _esc(r.caseId ? (r.caseId.toUpperCase() + ' · ' + r.clause) : 'NOT NAMED'),
+                        _esc(r.T != null ? String(r.T) + ' FH' : '—'), _esc(r.source),
+                        r.consistent ? stamp('pass') : _esc(r.issues.join(' · '))]));
+        }
+        if (pkg.cra) {
+            b += '<h2>10r · Common Resource Analysis — B.4.3.2 (re-computed at build)</h2>' +
+                '<p class="mono dim">' + _esc(pkg.cra.rows + ' resource-mode rows · ' + pkg.cra.cellsDisposed + '/' + pkg.cra.cellsTotal + ' cells disposed · ' + pkg.cra.seedRowsOpen + ' seed row(s) open · ' + pkg.cra.findings.length + ' independence finding(s)') + '</p>' +
+                _tbl(['Resource', 'Mode', 'Seed', 'Consumers', 'Disposed', 'Feeds FCs'],
+                    pkg.cra.detail.map(x => [_esc(x.resId), _esc(x.mode), x.seed ? 'seed' : 'authored', String(x.consumers), String(x.disposed), _esc(x.fcs.join(', '))])) +
+                (pkg.cra.findings.length ? _tbl(['Independence finding'], pkg.cra.findings.map(f => [_esc(f.detail)])) : '');
+        }
+        if (pkg.freq) {
+            b += '<h2>10t · Failure frequency — G.12 (re-computed at build)</h2>';
+            pkg.freq.forEach(t => {
+                b += '<p class="mono dim">' + _esc(t.page + (t.severity ? ' · ' + t.severity : '') + ' — ' +
+                    (t.ok ? 'w(top) = ' + t.wTop.toExponential(3) + ' /FH · Q(top) = ' + t.pTop.toExponential(3) +
+                        ' · N/flight ≈ ' + t.nPerFlight.toExponential(3) + ' (T = ' + t.T + ' FH)' +
+                        (t.lowerBound ? ' · LOWER BOUND — ' + t.flags.ccfGroups + ' CCF group row(s) not decomposed' : '')
+                        : 'REFUSED — ' + t.reason)) + '</p>' +
+                    (t.ok ? _tbl(['Event', 'Class', 'q', 'IB (exact)', '\u03bb /FH', 'w /FH', 'IB\u00b7w', 'Share'],
+                        t.rows.map(x => [_esc(x.name), _esc(x.cls), x.q.toExponential(2), x.IB.toExponential(2),
+                            x.lambda ? x.lambda.toExponential(2) : '\u2014', x.w.toExponential(2),
+                            x.contrib.toExponential(2), (x.share * 100).toFixed(1) + '%'])) : '');
+            });
         }
         if (pkg.journal) {
             b += '<h2>10k · Hash-chained journal</h2>' +

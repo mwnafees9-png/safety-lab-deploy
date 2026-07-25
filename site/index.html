@@ -30,7 +30,7 @@
     <!-- Phase 53.8 — cache-busting query string. Chrome caches file:// resources
          aggressively even with DevTools "Disable cache" on; bumping this string
          forces a re-fetch. Update the number when CSS/JS changes need to land. -->
-    <link rel="stylesheet" href="safety_lab.css?v=65.34">
+    <link rel="stylesheet" href="safety_lab.css?v=65.38">
     <!-- Phase 56.30 — Boot splash. Hides the app shell behind a brand-mark
          overlay until auth_gate.js (or safety_lab.js, for already-signed-in
          users) calls window.__slDismissBootSplash(). Prevents the app from
@@ -123,51 +123,102 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                     <div class="asb-lbl" style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.55; padding:7px 12px 2px;">Ground rules</div>
                     <a class="asb-item sub" id="snav-defs" onclick="switchTab('defs')" role="button" tabindex="0"><span class="asb-lbl">Certification basis (AC 1309)</span></a>
                     <a class="asb-item sub" id="snav-arp-process" onclick="switchTab('arp-process')" role="button" tabindex="0"><span class="asb-lbl">Safety process map (ARP 4761A)</span></a>
-                    <a class="asb-item sub" id="snav-spp" onclick="switchTab('spp')" role="button" tabindex="0"><span class="asb-lbl">Safety Program Plan</span></a>
+                    <a class="asb-item sub" id="snav-spp" onclick="switchTab('spp')" role="button" tabindex="0"><span class="asb-lbl">Program Planning</span></a>
                     <a class="asb-item sub" id="snav-phases" onclick="switchTab('phases')" role="button" tabindex="0"><span class="asb-lbl">Flight Phases</span></a>
                 </div>
             </details>
             <details class="asb-grp" id="asb-grp-sys">
                 <summary><span class="asb-ico">🔎</span><span class="asb-lbl">Analyze</span><span class="asb-chev">›</span></summary>
                 <div class="asb-sub">
-                    <div class="asb-lbl" style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.55; padding:7px 12px 2px;">Aircraft analyses</div>
-                    <details class="asb-grp asb-nested" id="asb-grp-afha">
-                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Aircraft hazards (AFHA)</span><span class="asb-chev">›</span></summary>
+                    <details class="asb-grp asb-cat" open><summary><span class="asb-lbl asb-cat-lbl">Safety</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
+                    <details class="asb-grp asb-nested" id="asb-grp-aircraft" open>
+                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Aircraft analyses</span><span class="asb-chev">›</span></summary>
                         <div class="asb-sub2">
                             <a class="asb-item sub" id="snav-ac-func" onclick="switchTab('ac-func')" role="button" tabindex="0"><span class="asb-lbl">1 · Aircraft functions</span></a>
                             <a class="asb-item sub" id="snav-ac-fcim" onclick="switchTab('ac-fcim')" role="button" tabindex="0"><span class="asb-lbl">2 · Failure condition matrix (FCIM)</span></a>
                             <a class="asb-item sub" id="snav-ac-fha" onclick="switchTab('ac-fha')" role="button" tabindex="0"><span class="asb-lbl">3 · Hazard assessment (AFHA)</span></a>
                             <a class="asb-item sub" id="snav-ac-req" onclick="switchTab('ac-req')" role="button" tabindex="0"><span class="asb-lbl">Requirements — aircraft</span></a>
                             <a class="asb-item sub" id="snav-ac-asm" onclick="switchTab('ac-asm')" role="button" tabindex="0"><span class="asb-lbl">Assumptions — aircraft analyses</span></a>
+                            <a class="asb-item sub" id="snav-pasa" onclick="switchTab('pasa')" role="button" tabindex="0"><span class="asb-lbl">Aircraft safety analysis (PASA)</span></a>
                         </div>
                     </details>
-                    <a class="asb-item sub" id="snav-pasa" onclick="switchTab('pasa')" role="button" tabindex="0"><span class="asb-lbl">Aircraft safety analysis (PASA)</span></a>
-                    <div class="asb-lbl" style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.55; padding:7px 12px 2px;">Systems analyses</div>
-                    <a class="asb-item sub" id="snav-sys-dir" onclick="switchTab('sys-dir')" role="button" tabindex="0"><span class="asb-lbl">System workspaces — SFHA · trees · reqs</span></a>
-                    <div class="asb-sub" id="asb-sys-list"></div>
-                    <a class="asb-item sub" id="snav-pssa" onclick="openCockpitModal('PSSA')" role="button" tabindex="0"><span class="asb-lbl">System safety — planned (PSSA)</span></a>
-                    <div class="asb-lbl" style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.55; padding:7px 12px 2px;">Verification</div>
-                    <a class="asb-item sub" id="snav-ssa" onclick="openCockpitModal('SSA')" role="button" tabindex="0"><span class="asb-lbl">System safety — as-built (SSA)</span></a>
-                    <a class="asb-item sub" id="snav-asa" onclick="switchTab('asa')" role="button" tabindex="0"><span class="asb-lbl">In-service safety (ASA)</span></a>
-                    
-                    <div class="asb-lbl" style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.55; padding:7px 12px 2px;">Trees &amp; models</div>
-                    <details class="asb-grp asb-nested" id="asb-grp-fta">
-                        <summary id="snav-fta" class="sub" onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open; if(d.open) switchTab('fta');"><span class="asb-lbl">Fault Tree Analysis</span><span class="asb-chev">›</span></summary>
-                        <div class="asb-sub2" id="asb-fta-list"></div>
+                    <details class="asb-grp asb-nested" id="asb-grp-systems" open>
+                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Systems analyses</span><span class="asb-chev">›</span></summary>
+                        <div class="asb-sub2">
+                            <a class="asb-item sub" id="snav-sys-dir" onclick="switchTab('sys-dir')" role="button" tabindex="0"><span class="asb-lbl">System workspaces — SFHA · trees · reqs</span></a>
+                            <div class="asb-sub" id="asb-sys-list"></div>
+                            <a class="asb-item sub" id="snav-pssa" onclick="openCockpitModal('PSSA')" role="button" tabindex="0"><span class="asb-lbl">System safety — planned (PSSA)</span></a>
+                        </div>
                     </details>
-                    <a class="asb-item sub" id="snav-markov" onclick="switchTab('markov')" role="button" tabindex="0"><span class="asb-lbl">Markov Models</span></a>
-                    <a class="asb-item sub" id="snav-eta" onclick="switchTab('eta')" role="button" tabindex="0"><span class="asb-lbl">Event Trees</span></a>
-                    <a class="asb-item sub" id="snav-library" onclick="switchTab('library')" role="button" tabindex="0"><span class="asb-lbl">Component Library</span></a>
-                    <a class="asb-item sub" id="snav-items" onclick="switchTab('items')" role="button" tabindex="0"><span class="asb-lbl">Items &amp; LRUs — master list</span></a>
-                    <a class="asb-item sub" id="snav-ccmr" onclick="switchTab('ccmr')" role="button" tabindex="0"><span class="asb-lbl">Latent failures (CCMR)</span></a>
-                    <a class="asb-item sub" id="snav-fmes" onclick="switchTab('fmes')" role="button" tabindex="0"><span class="asb-lbl">Failure modes summary (FMES)</span></a>
-                    <div class="asb-lbl" style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; opacity:0.55; padding:7px 12px 2px;">Common cause</div>
-                    <a class="asb-item sub" id="snav-pra" onclick="switchTab('pra')" role="button" tabindex="0"><span class="asb-lbl">Particular Risk (PRA)</span></a>
-                    <a class="asb-item sub" id="snav-zsa" onclick="switchTab('zsa')" role="button" tabindex="0"><span class="asb-lbl">Zonal Safety (ZSA)</span></a>
-                    <a class="asb-item sub" id="snav-cma" onclick="switchTab('cma')" role="button" tabindex="0"><span class="asb-lbl">Common modes (CMA)</span></a>
-                    <a class="asb-item sub" id="snav-cea" onclick="switchTab('cea')" role="button" tabindex="0"><span class="asb-lbl">Cascading effects &amp; fault injection</span></a>
-                    <a class="asb-item sub" id="snav-routing" onclick="switchTab('routing')" role="button" tabindex="0"><span class="asb-lbl">Routing / Zone-Spanning</span></a>
-                    <a class="asb-item sub" id="snav-ipledger" onclick="switchTab('ipledger')" role="button" tabindex="0"><span class="asb-lbl">Principle Ledger</span></a>
+                    <details class="asb-grp asb-nested" id="asb-grp-verification" open>
+                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Verification</span><span class="asb-chev">›</span></summary>
+                        <div class="asb-sub2">
+                            <a class="asb-item sub" id="snav-ssa" onclick="openCockpitModal('SSA')" role="button" tabindex="0"><span class="asb-lbl">System Safety Assessment (SSA)</span></a>
+                            <a class="asb-item sub" id="snav-asa" onclick="switchTab('asa')" role="button" tabindex="0"><span class="asb-lbl">Aircraft Safety Assessment (ASA)</span></a>
+                        </div>
+                    </details>
+                    <details class="asb-grp asb-nested" id="asb-grp-trees" open>
+                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Trees &amp; models</span><span class="asb-chev">›</span></summary>
+                        <div class="asb-sub2">
+                            <details class="asb-grp asb-nested asb-deep" id="asb-grp-fta">
+                                <summary id="snav-fta" class="sub" onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open; if(d.open) switchTab('fta');"><span class="asb-lbl">Fault Tree Analysis</span><span class="asb-chev">›</span></summary>
+                                <div class="asb-sub2" id="asb-fta-list"></div>
+                            </details>
+                            <a class="asb-item sub" id="snav-markov" onclick="switchTab('markov')" role="button" tabindex="0"><span class="asb-lbl">Markov Models</span></a>
+                            <a class="asb-item sub" id="snav-eta" onclick="switchTab('eta')" role="button" tabindex="0"><span class="asb-lbl">Event Trees</span></a>
+                            <a class="asb-item sub" id="snav-items" onclick="switchTab('items')" role="button" tabindex="0"><span class="asb-lbl">Items &amp; LRUs — master list</span></a>
+                            <a class="asb-item sub" id="snav-ccmr" onclick="switchTab('ccmr')" role="button" tabindex="0"><span class="asb-lbl">Latent failures (CCMR)</span></a>
+                            <a class="asb-item sub" id="snav-fmes" onclick="switchTab('fmes')" role="button" tabindex="0"><span class="asb-lbl">Failure modes summary (FMES)</span></a>
+                        </div>
+                    </details>
+                    <details class="asb-grp asb-nested" id="asb-grp-commoncause" open>
+                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Common cause</span><span class="asb-chev">›</span></summary>
+                        <div class="asb-sub2">
+                            <a class="asb-item sub" id="snav-pra" onclick="switchTab('pra')" role="button" tabindex="0"><span class="asb-lbl">Particular Risk (PRA)</span></a>
+                            <a class="asb-item sub" id="snav-zsa" onclick="switchTab('zsa')" role="button" tabindex="0"><span class="asb-lbl">Zonal Safety (ZSA)</span></a>
+                            <a class="asb-item sub" id="snav-cma" onclick="switchTab('cma')" role="button" tabindex="0"><span class="asb-lbl">Common modes (CMA)</span></a>
+                            <a class="asb-item sub" id="snav-cea" onclick="switchTab('cea')" role="button" tabindex="0"><span class="asb-lbl">Cascading effects &amp; fault injection</span></a>
+                            <a class="asb-item sub" id="snav-routing" onclick="switchTab('routing')" role="button" tabindex="0"><span class="asb-lbl">Routing / Zone-Spanning</span></a>
+                            <a class="asb-item sub" id="snav-ipledger" onclick="switchTab('ipledger')" role="button" tabindex="0"><span class="asb-lbl">Principle Ledger</span></a>
+                        </div>
+                    </details>
+                    </div></details><details class="asb-grp asb-cat" open><summary><span class="asb-lbl asb-cat-lbl">Human factors</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
+                    <a class="asb-item sub" id="snav-hfa" onclick="switchTab('hfa')" role="button" tabindex="0"><span class="asb-lbl">Human Factors Analysis (HFA)</span></a>
+                    <a class="asb-item sub" id="snav-hfa-task" onclick="switchTab('hfa-task')" role="button" tabindex="0"><span class="asb-lbl">Task Analysis</span></a>
+                    <a class="asb-item sub" id="snav-hfa-ergo" onclick="switchTab('hfa-ergo')" role="button" tabindex="0"><span class="asb-lbl">Ergonomics</span></a></div></details><details class="asb-grp asb-cat" open><summary><span class="asb-lbl asb-cat-lbl">System lane</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
+                    <a class="asb-item sub" id="snav-stpa" onclick="switchTab('stpa')" role="button" tabindex="0"><span class="asb-lbl">STPA — interaction hazards</span></a></div></details><details class="asb-grp asb-cat" open><summary><span class="asb-lbl asb-cat-lbl">R&amp;M</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
+                    <details class="asb-grp asb-nested" id="asb-grp-rel">
+                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Reliability</span><span class="asb-chev">›</span></summary>
+                        <div class="asb-sub2">
+                            <a class="asb-item sub" id="snav-library" onclick="switchTab('library')" role="button" tabindex="0"><span class="asb-lbl">Component Library</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-rel" style="display:none;" onclick="switchTab('ram-rel')" role="button" tabindex="0"><span class="asb-lbl">Reliability Prediction &amp; FRACAS</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-predict" style="display:none;" onclick="switchTab('ram-predict')" role="button" tabindex="0"><span class="asb-lbl">Parts Count (217F)</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-rbd" style="display:none;" onclick="switchTab('ram-rbd')" role="button" tabindex="0"><span class="asb-lbl">Block Diagrams (RBD)</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-weibull" style="display:none;" onclick="switchTab('ram-weibull')" role="button" tabindex="0"><span class="asb-lbl">Weibull · Life Data</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-growth" style="display:none;" onclick="switchTab('ram-growth')" role="button" tabindex="0"><span class="asb-lbl">Growth · Crow-AMSAA</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-alloc" style="display:none;" onclick="switchTab('ram-alloc')" role="button" tabindex="0"><span class="asb-lbl">Allocation · Spares · Demo</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-tol" style="display:none;" onclick="switchTab('ram-tol')" role="button" tabindex="0"><span class="asb-lbl">Tolerance · Derating</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-rbd-mc" style="display:none;" onclick="switchTab('rbd-mc')" role="button" tabindex="0"><span class="asb-lbl">Monte Carlo (Standby · Phases)</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-rel-frameworks" style="display:none;" onclick="switchTab('rel-frameworks')" role="button" tabindex="0"><span class="asb-lbl">Frameworks · Test Factors</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-swrel" style="display:none;" onclick="switchTab('swrel')" role="button" tabindex="0"><span class="asb-lbl">Software Reliability</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-sneak" style="display:none;" onclick="switchTab('sneak')" role="button" tabindex="0"><span class="asb-lbl">Sneak Circuit</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-lcc" style="display:none;" onclick="switchTab('lcc')" role="button" tabindex="0"><span class="asb-lbl">Life-Cycle Cost</span></a>
+                            <a class="asb-item sub ram-proplus" id="snav-ram-settings" style="display:none;" onclick="switchTab('ram-settings')" role="button" tabindex="0"><span class="asb-lbl">RAM Settings</span></a>
+                        </div>
+                    </details>
+                    <details class="asb-grp asb-nested" id="asb-grp-ram-mx" style="display: none;">
+                        <summary onclick="event.preventDefault(); var d=this.parentElement; d.open=!d.open;"><span class="asb-lbl">Maintainability</span><span class="asb-chev">›</span></summary>
+                        <div class="asb-sub2">
+                            <a class="asb-item sub" id="snav-ram-mx" onclick="switchTab('ram-mx')" role="button" tabindex="0"><span class="asb-lbl">MTTR / MDT Task Ledger</span></a>
+                            <a class="asb-item sub" id="snav-ram-msg3" onclick="switchTab('ram-msg3')" role="button" tabindex="0"><span class="asb-lbl">MSG-3 Analysis</span></a>
+                            <a class="asb-item sub" id="snav-msg3x" onclick="switchTab('msg3x')" role="button" tabindex="0"><span class="asb-lbl">MSG-3 Structures · Zonal · L/HIRF</span></a>
+                            <a class="asb-item sub" id="snav-mmel" onclick="switchTab('mmel')" role="button" tabindex="0"><span class="asb-lbl">Dispatch relief (MMEL / TLD)</span></a>
+                            <a class="asb-item sub" id="snav-ram-pmopt" onclick="switchTab('ram-pmopt')" role="button" tabindex="0"><span class="asb-lbl">PM Interval Optimizer</span></a>
+                            <a class="asb-item sub" id="snav-ram-test" onclick="switchTab('ram-test')" role="button" tabindex="0"><span class="asb-lbl">Testability &amp; Diagnostics</span></a>
+                            <a class="asb-item sub" id="snav-ram-lora" onclick="switchTab('ram-lora')" role="button" tabindex="0"><span class="asb-lbl">LORA — Level of Repair</span></a>
+                        </div>
+                    </details>
+                    </div></details>
                 </div>
             </details>
             <details class="asb-grp">
@@ -183,46 +234,10 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                 </div>
             </details>
             <details class="asb-grp">
-                <summary><span class="asb-ico">🔧</span><span class="asb-lbl">R&amp;M</span><span class="asb-chev">›</span></summary>
-                <div class="asb-sub">
-                    <details class="asb-grp" id="asb-grp-rel">
-                <summary><span class="asb-ico">📈</span><span class="asb-lbl">Reliability</span><span class="asb-chev">›</span></summary>
-                <div class="asb-sub">
-                    <a class="asb-item sub" id="snav-library" onclick="switchTab('library')" role="button" tabindex="0"><span class="asb-lbl">Component Library</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-ram-rel" style="display:none;" onclick="switchTab('ram-rel')" role="button" tabindex="0"><span class="asb-lbl">Reliability Prediction</span></a>
-                    <a class="asb-item sub ram-proplus" style="display:none;" onclick="switchTab('ram-rel'); setTimeout(function(){var e=document.getElementById('ram-dispatch-sec'); if(e) e.scrollIntoView({behavior:'smooth'});}, 80);" role="button" tabindex="0"><span class="asb-lbl">Dispatch Reliability &amp; FRACAS</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-ram-rbd" style="display:none;" onclick="switchTab('ram-rbd')" role="button" tabindex="0"><span class="asb-lbl">Block Diagrams (RBD)</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-ram-weibull" style="display:none;" onclick="switchTab('ram-weibull')" role="button" tabindex="0"><span class="asb-lbl">Weibull · Life Data</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-ram-growth" style="display:none;" onclick="switchTab('ram-growth')" role="button" tabindex="0"><span class="asb-lbl">Growth · Crow-AMSAA</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-ram-alloc" style="display:none;" onclick="switchTab('ram-alloc')" role="button" tabindex="0"><span class="asb-lbl">Allocation · Spares · Demo</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-ram-tol" style="display:none;" onclick="switchTab('ram-tol')" role="button" tabindex="0"><span class="asb-lbl">Tolerance · Derating</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-rbd-mc" style="display:none;" onclick="switchTab('rbd-mc')" role="button" tabindex="0"><span class="asb-lbl">Monte Carlo (Standby · Phases)</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-rel-frameworks" style="display:none;" onclick="switchTab('rel-frameworks')" role="button" tabindex="0"><span class="asb-lbl">Frameworks · Test Factors</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-swrel" style="display:none;" onclick="switchTab('swrel')" role="button" tabindex="0"><span class="asb-lbl">Software Reliability</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-sneak" style="display:none;" onclick="switchTab('sneak')" role="button" tabindex="0"><span class="asb-lbl">Sneak Circuit</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-lcc" style="display:none;" onclick="switchTab('lcc')" role="button" tabindex="0"><span class="asb-lbl">Life-Cycle Cost</span></a>
-                    <a class="asb-item sub ram-proplus" id="snav-ram-settings" style="display:none;" onclick="switchTab('ram-settings')" role="button" tabindex="0"><span class="asb-lbl">RAM Settings</span></a>
-                </div>
-            </details>
-                    <details class="asb-grp" id="asb-grp-ram-mx" style="display: none;">
-                <summary><span class="asb-ico">🛠</span><span class="asb-lbl">Maintainability</span><span class="asb-chev">›</span></summary>
-                <div class="asb-sub">
-                    <a class="asb-item sub" id="snav-ram-mx" onclick="switchTab('ram-mx')" role="button" tabindex="0"><span class="asb-lbl">MTTR / MDT Task Ledger</span></a>
-                    <a class="asb-item sub" onclick="switchTab('ram-mx')" role="button" tabindex="0"><span class="asb-lbl">PM Intervals → CCMR (τ)</span></a>
-                    <a class="asb-item sub" id="snav-ram-msg3" onclick="switchTab('ram-msg3')" role="button" tabindex="0"><span class="asb-lbl">MSG-3 Analysis</span></a>
-                    <a class="asb-item sub" id="snav-msg3x" onclick="switchTab('msg3x')" role="button" tabindex="0"><span class="asb-lbl">MSG-3 Structures · Zonal · L/HIRF</span></a>
-                    <a class="asb-item sub" id="snav-mmel" onclick="switchTab('mmel')" role="button" tabindex="0"><span class="asb-lbl">Dispatch relief (MMEL / TLD)</span></a>
-                    <a class="asb-item sub" id="snav-ram-pmopt" onclick="switchTab('ram-pmopt')" role="button" tabindex="0"><span class="asb-lbl">PM Interval Optimizer</span></a>
-                    <a class="asb-item sub" id="snav-ram-test" onclick="switchTab('ram-test')" role="button" tabindex="0"><span class="asb-lbl">Testability &amp; Diagnostics</span></a>
-                    <a class="asb-item sub" id="snav-ram-lora" onclick="switchTab('ram-lora')" role="button" tabindex="0"><span class="asb-lbl">LORA — Level of Repair</span></a>
-                </div>
-            </details>
-                </div>
-            </details>
-            <details class="asb-grp">
                 <summary><span class="asb-ico">✅</span><span class="asb-lbl">Prove</span><span class="asb-chev">›</span></summary>
                 <div class="asb-sub">
                     <a class="asb-item sub" id="snav-golden-thread" onclick="switchTab('golden-thread')" role="button" tabindex="0"><span class="asb-lbl">Golden Thread</span></a>
+                    <a class="asb-item sub" id="snav-sora-thread" onclick="switchTab('sora-thread')" role="button" tabindex="0"><span class="asb-lbl">SORA Thread</span></a>
                     <a class="asb-item sub" id="snav-trace" onclick="switchTab('trace')" role="button" tabindex="0"><span class="asb-lbl">Traceability Matrix</span></a>
                     <a class="asb-item sub" id="snav-gt-integrity" onclick="switchTab('gt-integrity')" role="button" tabindex="0"><span class="asb-lbl">Thread Integrity</span></a>
                     <a class="asb-item sub" id="snav-evpkg" onclick="switchTab('evpkg')" role="button" tabindex="0"><span class="asb-lbl">Evidence Package</span></a>
@@ -309,7 +324,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                     <div class="nav-dropdown-content" style="right: 0; left: auto; min-width: 280px;">
                         <div onclick="createNewProject()">＋  New Project</div>
                         <div onclick="document.getElementById('load-file').click()">↑  Load Project</div>
-                        <div onclick="saveProject()">↓  Save Project (.json)</div>
+                        <div onclick="saveProject()">↓  Save Project (.sl)</div>
                         <div onclick="exportProjectBundle()">📦  Export bundle (.slproj)</div>
                         <div onclick="importProjectBundle()">📂  Import bundle (.slproj)…</div>
                         <div onclick="saveProjectToFolder()">🗂  Save as project folder…</div>
@@ -332,12 +347,12 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                         <div onclick="document.getElementById('import-xmi-file').click()">📐  Import SysML model (XMI)…</div>
                         <div onclick="window.JamaConnect && window.JamaConnect.openImportModal()">🔗  Import from Jama Connect…</div>
                         <hr style="border:none; border-top:1px solid var(--color-border-hair); margin:4px 0;">
-                        <div onclick="loadSampleProject()">★  Load Sample Project</div>
+                        <div onclick="openDemoPicker()">★  Load Demo Project…</div>
                         <div onclick="showWelcomeModal()">？  Show Welcome Screen</div>
                     </div>
                 </div>
 
-                <input type="file" id="load-file" style="display:none" accept=".json" onchange="loadProject(event)">
+                <input type="file" id="load-file" style="display:none" accept=".sl,.json" onchange="loadProject(event)">
                 <input type="file" id="import-xlsx-file" style="display:none" accept=".xlsx,.xls,.xlsm" onchange="ExcelImport.onFilePicked(event)">
                 <!-- Phase 56.32a — SysML XMI file input. -->
                 <input type="file" id="import-xmi-file" style="display:none" accept=".xmi,.xml,.uml" onchange="window.SysMLImport && window.SysMLImport.onFilePicked(event)">
@@ -818,10 +833,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
 
             <div class="controls" style="border-left-color: #0284c7;">
                 <h4 style="color: var(--header-color); margin-top: 0;">Project Safety Targets</h4>
-                <p style="font-size: 0.85em; color: var(--text-secondary); margin-top: 0;">
-                    Selecting the applicable certification basis drives the auto-derived top-event probability target and required DAL
-                    for any Fault Tree linked to a Hazard.
-                </p>
+                <p class="cfg-hint" title="Selecting the applicable certification basis drives the auto-derived top-event probability target and required DAL for any fault tree linked to a hazard.">Cert basis drives auto-derived P targets and DAL for linked trees.</p>
                 <div class="grid-2-col">
                     <div>
                         <label>Certification Basis</label>
@@ -904,10 +916,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
             </table>
 
             <h4 style="color: var(--header-color); border-bottom: 1px solid var(--border-primary); padding-bottom: 5px;">Applicable Quantitative Targets</h4>
-            <p style="font-size: 0.85em; color: var(--text-secondary); margin-top: 0;">
-                Targets shown below reflect the selection above. Probabilities are upper bounds (failures per flight hour);
-                the design must demonstrate &lt; target. DAL per SAE ARP4754A.
-            </p>
+            <p class="cfg-hint" title="Targets reflect the selection above. Probabilities are upper bounds (failures per flight hour); the design must demonstrate < target. DAL per SAE ARP4754A.">Upper bounds per flight hour · design must show &lt; target · DAL per ARP4754A.</p>
             <div id="prob-table-container"></div>
 
         </div>
@@ -1050,7 +1059,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 6px 0;">The default profile is your project baseline. Add a <strong>special mission profile</strong> (e.g. Long-haul) to analyse extended-exposure / latent-failure risk — same phases, different durations — then a fault tree picks which profile it's built for.</p>
             <div id="phases-profile-bar" style="display:flex; align-items:center; gap:10px; margin:6px 0 12px; flex-wrap:wrap;"></div>
             <table id="phases-table">
-                <thead><tr><th>Phase of Flight</th><th>Altitude From</th><th>Unit</th><th>Altitude To</th><th>Unit</th><th>Duration</th><th>Unit</th><th></th></tr></thead>
+                <thead><tr><th>Phase of Flight</th><th>Altitude From</th><th>Unit</th><th>Altitude To</th><th>Unit</th><th>Duration</th><th>Unit</th><th title="HF response window (seconds) — the time the crew actually has to respond in this phase. Feeds INV-36 workload saturation (HIDH §5.7.5.1, 80% red line). Duration is exposure; it is never read as a response window.">HF window (s)</th><th></th></tr></thead>
                 <tbody id="phases-body"></tbody>
             </table>
             <div style="margin-top: 10px;"><button type="button" class="action-btn" onclick="addPhaseRow()">+ Add phase</button></div>
@@ -1295,9 +1304,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                 </div>
             </div>
             <div class="controls" style="border-left-color: #9d174d; background: var(--bg-container);">
-                <p style="font-size: 0.85em; color: var(--text-secondary); margin-top: 0; font-weight: 600;">
-                    Note: The purpose of the Particular Risk Assessment is explicitly to gauge and protect against external impacts to <span style="color: #ef4444;">Continued Safe Flight and Landing (CSFL)</span>.
-                </p>
+                <p class="cfg-hint" title="The purpose of the Particular Risk Assessment is explicitly to gauge and protect against external impacts to Continued Safe Flight and Landing (CSFL).">PRA protects <span style="color: #ef4444;">CSFL</span> against external threats.</p>
                 <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
                     <button type="button" class="btn-cyan" onclick="openPRCatalogueBrowser()" title="Browse the ARP 4761A particular-risk catalog and pre-fill the form">📖 Browse Catalog</button>
                 </div>
@@ -1368,9 +1375,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                 </div>
             </div>
             <div class="controls" style="border-left-color: #c2410c;">
-                <p style="font-size: 0.85em; color: var(--text-secondary); margin-top: 0; font-weight: 600;">
-                    Note: Rigorous physical, spatial, and installation separations are mandated for <span style="color: #ef4444;">Catastrophic</span> threats. Major/Hazardous functional failures generally do not require independent spatial separation in this context.
-                </p>
+                <p class="cfg-hint" title="Rigorous physical, spatial and installation separations are mandated for Catastrophic threats. Major/Hazardous functional failures generally do not require independent spatial separation in this context.">Spatial separation mandated for <span style="color: #ef4444;">Catastrophic</span> only. Hover for detail.</p>
                 <div class="grid-2-col">
                     <div>
                         <label>Zone ID</label><input type="text" id="zsa-zone-id" placeholder="e.g., Zone 110 (Lower Half Fuselage)">
@@ -1699,6 +1704,10 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
             </table>
         </div>
 
+        <div id="view-hfa" style="display: none;"></div>
+        <div id="view-hfa-task" style="display: none;"></div>
+        <div id="view-hfa-ergo" style="display: none;"></div>
+        <div id="view-stpa" style="display: none;"></div>
         <div id="view-ac-asm" style="display: none;">
             <div class="header-with-export">
                 <h3>Aircraft Assumptions Log</h3>
@@ -2045,6 +2054,8 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                         <div onclick="exportData('HW_FMEA', 'excel')">Export Excel</div>
                         <div onclick="exportData('HW_FMEA', 'pdf')">Export PDF</div>
                         <div onclick="openTemplateEditor()">🧩 Templates…</div>
+                        <div onclick="Reports.open('FMEA', { systemId: (typeof activeSystemId !== 'undefined' ? activeSystemId : null) })">Generate FMEA Report…</div>
+                        <div onclick="Reports.open('FMES', { systemId: (typeof activeSystemId !== 'undefined' ? activeSystemId : null) })">Generate FMES Report…</div>
                     </div>
                 </div>
             </div>
@@ -2388,6 +2399,12 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                                 <!-- Phase 32a — derived P at t shows the BE probability at the active tree's exposure time, so the user can see λ + P side by side. -->
                                 <div id="config-lambda-derived" style="font-size: 11px; color: var(--color-text-tertiary); font-family: var(--font-mono); margin-top: 4px; line-height: 1.4;"></div>
                             </div>
+                            <!-- Backlog #4 — ARP 4761A 4.1.1.1: development errors are QUALITATIVE, never quantified. Own container (the λ container is hidden for leaf events that use the input-mode block); selectNode toggles visibility for basic/undeveloped events. -->
+                            <div style="flex: 2; display:none;" id="config-dev-error-container">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--color-text-secondary); font-weight:600; cursor:pointer; margin-bottom:0;" title="ARP 4761A 4.1.1.1 — development errors are never given probabilities. The event participates in tree structure, cut sets, FFS generation and DAL allocation; the quantified P(top) becomes explicitly conditional on no development error.">
+                                    <input type="checkbox" id="config-dev-error" onchange="updateNodeData()" style="margin:0;width:auto;"> &#9671; Qualitative development error (never quantified)
+                                </label>
+                            </div>
                             <div style="flex: 2; display:none;" id="config-weight-container">
                                 <label>Weight (% of parent apportionment)</label>
                                 <div style="display:flex;align-items:center;gap:8px;">
@@ -2407,7 +2424,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                             <div style="flex: 1 1 100px;"><label title="Fraction of failures that are common-cause (affecting ≥2 group members).">β (2-of-n)</label><input type="number" id="config-beta" step="0.01" min="0" max="1" value="0" oninput="updateNodeData()"></div>
                             <div style="flex: 1 1 100px;"><label title="MGL: fraction of CCF events that affect ≥3 group members. Leave 0 for pure β-factor model.">γ (3-of-n)</label><input type="number" id="config-gamma" step="0.01" min="0" max="1" value="0" oninput="updateNodeData()"></div>
                             <div style="flex: 1 1 100px;"><label title="MGL: fraction of ≥3-component CCF events that affect ≥4 group members. Leave 0 unless modeling quadruple-redundant subsystems.">δ (4-of-n)</label><input type="number" id="config-delta" step="0.01" min="0" max="1" value="0" oninput="updateNodeData()"></div>
-                            <div style="flex: 2 1 280px;"><p style="font-size: 0.8em; color: var(--text-secondary); margin: 18px 0 0 0;"><strong>CCF (β / MGL):</strong> β-only is the legacy decomposition. Setting γ &gt; 0 enables the Multiple Greek Letter model so cutset expansion produces 2-of-n, 3-of-n (and 4-of-n with δ) CCF rows.</p></div>
+                            <div style="flex: 1 1 100%;"><p class="cfg-hint" title="β-only is the classic decomposition. Setting γ > 0 enables the Multiple Greek Letter model so cutset expansion produces 2-of-n, 3-of-n (and 4-of-n with δ) CCF rows.">β only = classic split · γ&gt;0 = MGL (3-of-n) · δ = 4-of-n. Hover for detail.</p></div>
                         </div>
 
                         <div style="display: none; gap: 15px; margin-top: 15px; border-top: 1px dashed var(--border-primary); padding-top: 15px;" id="config-dal-container">
@@ -2431,13 +2448,8 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                                 <label>DAL Carrier Child (Option 1)</label>
                                 <select id="config-dal-carrier" onchange="updateNodeData()"></select>
                             </div>
-                            <div style="flex: 2;">
-                                <p style="font-size: 0.85em; color: var(--text-secondary); margin: 20px 0 0 0;">
-                                    <strong>DALgebra (ARP4754B §5.2.3 / ARP4761A Table P2):</strong> a reduction below the top DAL
-                                    requires functional independence between members, substantiated by Common Mode Analysis. Without it,
-                                    members hold the top DAL. A compromised claim reverts the reduction and flags the probability product
-                                    (a common-cause term is then required). Floor: Catastrophic → C, Hazardous → D.
-                                </p>
+                            <div style="flex: 1 1 100%;">
+                                <p class="cfg-hint" title="ARP4754B §5.2.3 / ARP4761A Table P2: a reduction below the top DAL requires functional independence between members, substantiated by Common Mode Analysis. Without it, members hold the top DAL. A compromised claim reverts the reduction and flags the probability product (a common-cause term is then required).">DAL reduction needs independent members (CMA). Compromised = reverted. Non-carriers drop 2 levels (Opt 1) or the pair drops 1 (Opt 2), relative to the top DAL · floor E. Hover for detail.</p>
                             </div>
                         </div>
 
@@ -2451,12 +2463,8 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                                     <option value="IDAL">IDAL — Item DAL</option>
                                 </select>
                             </div>
-                            <div style="flex: 3;">
-                                <p style="font-size: 0.85em; color: var(--text-secondary); margin: 20px 0 0 0;">
-                                    <strong>FDAL vs IDAL:</strong> by default, gates and undeveloped events get FDAL, basic events get IDAL.
-                                    Use this override when a node's intended discipline differs from its tree-type — e.g., a basic event that
-                                    represents a function awaiting decomposition (FDAL), or a gate whose children are all hardware items (IDAL).
-                                </p>
+                            <div style="flex: 1 1 100%;">
+                                <p class="cfg-hint" title="By default, gates and undeveloped events get FDAL, basic events get IDAL. Override when a node's intended discipline differs from its tree-type — e.g., a basic event representing a function awaiting decomposition (FDAL), or a gate whose children are all hardware items (IDAL).">Default: gates = FDAL · basic events = IDAL. Override only if the discipline differs. Hover for detail.</p>
                             </div>
                         </div>
 
@@ -2470,7 +2478,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                                     <input type="checkbox" id="config-prescribed-rate" onchange="updateNodeData()" style="margin:0;width:auto;">
                                     Use prescribed rate for this gate (skip top-down apportionment)
                                 </label>
-                                <p style="font-size:11px;color:var(--color-text-tertiary);margin:6px 0 0 26px;line-height:1.5;">When on, the gate's probability is set verbatim from the value below. Children remain in the tree and are still calculated bottom-up — a divergence flag appears if their math doesn't match the prescribed value.</p>
+                                <p class="cfg-hint" style="margin-left:26px;" title="When on, the gate's probability is set verbatim from the value below. Children remain in the tree and are still calculated bottom-up — a divergence flag appears if their math doesn't match the prescribed value.">Gate P set verbatim · children still compute · mismatch raises a divergence flag.</p>
                             </div>
                             <div style="flex: 1 1 200px;" id="config-prescribed-value-row">
                                 <label>Prescribed P (at exposure)</label>
@@ -2854,7 +2862,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
 
         <div id="view-mac" style="display: none;">
             <div class="header-with-export">
-                <h3>MAC Model — Minimum Acceptable Control</h3>
+                <h3>MAC Model — Minimum Acceptable Configuration</h3>
                 <div class="action-group">
                     <button class="btn-cyan" onclick="renderMacPage()" title="Recompile breach sets from the rules">↻ Recompile</button>
                 </div>
@@ -2896,6 +2904,18 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
             </div>
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">The Failure Modes and Effects Summary, derived live from the FMEA (ARP4761A §4.2, J.4.2). Rows group by <strong>(end effect, detection means)</strong> — the equivalence class at which a fault-tree basic event is defined — and each group's summed λ is what its linked basic event owes. Nothing here is hand-maintained; edit the FMEA and re-derive.</p>
             <div id="fmes-host"></div>
+        </div>
+
+        <div id="view-ram-predict" style="display: none;">
+            <div class="header-with-export">
+                <h3>Parts-Count Prediction — MIL-HDBK-217F</h3>
+            </div>
+            <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-4) 0; max-width: 800px;">
+                Early-stage reliability prediction: λ = Σ N·λg·πQ from the handbook's parts-count tables, every value
+                carrying its citation. This is the <strong>predicted</strong> lane — the FRACAS ledger is the
+                <strong>demonstrated</strong> lane, and the drift between them is shown, never hidden.
+            </p>
+            <div id="ram-predict-host"></div>
         </div>
 
         <div id="view-ram-rel" style="display: none;">
@@ -3056,7 +3076,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
 
         <div id="view-spp" style="display: none;">
             <div class="header-with-export">
-                <h3>Safety Program Plan</h3>
+                <h3>Program Planning</h3>
             </div>
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">The program's methodology record (ARP4754B planning / ARP4761A §1.3): which method fills each objective slot, which checklist items were tailored out (signed, with rationale), and the depth-of-analysis defaults the certification basis drives. Gates check objectives; methods are this program's choice.</p>
             <div id="spp-host"></div>
@@ -3124,6 +3144,15 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
         </div>
 
         <!-- Phase 50.5 — consolidated review tab with per-assessment-type buckets -->
+        <div id="view-sora-thread" style="display: none;">
+            <div class="header-with-export">
+                <h3>🛡️ SORA Thread</h3>
+            </div>
+            <p style="font-size:12.5px; color:var(--color-text-secondary); margin:2px 0 12px; max-width:900px;">
+                The JARUS SORA v2.5 Specific-category thread, computed live from the operation: intrinsic Ground Risk Class &rarr; ground-risk mitigations &rarr; final GRC, Air Risk Class &rarr; SAIL, the SAIL&rsquo;s Operational Safety Objectives with compliance, and containment. The engine owns every number.
+            </p>
+            <div id="sora-thread-host"></div>
+        </div>
         <div id="view-golden-thread" style="display: none;">
             <div class="header-with-export">
                 <h3>🧵 Golden Thread</h3>
@@ -3135,6 +3164,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
                 <label for="gt-func-pick" style="font-size:12px; color:var(--color-text-secondary); font-weight:600;">Function</label>
                 <select id="gt-func-pick" style="min-width:250px; padding:6px 10px; font-size:13px; border:1px solid var(--color-border-hair); border-radius:var(--r-sm); background:var(--color-surface-1); color:var(--color-text-primary);"></select>
                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--color-text-secondary); font-weight:600; cursor:pointer;" title="Dim everything except threads that contain a compromised, stale, or obsolete node"><input type="checkbox" id="gt-only-flagged" onchange="toggleGtvFlagged(this)"> Only compromised / stale</label>
+                <button class="ckpt-m-btn" style="font-size:12px; padding:4px 12px;" onclick="gtvToggleFullscreen()" title="Monarch-display mode — the golden thread at full screen height">⛶ Full screen</button>
                 <div style="display:flex; flex-wrap:wrap; gap:11px; align-items:center; font-size:11px; color:var(--color-text-secondary); margin-left:6px;">
                     <span style="display:flex; align-items:center; gap:5px;"><span style="width:11px; height:11px; border-radius:3px; background:#2E6FB0;"></span>Function</span>
                     <span style="display:flex; align-items:center; gap:5px;"><span style="width:11px; height:11px; border-radius:3px; background:#1D9E75;"></span>System</span>
@@ -3786,50 +3816,94 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- IDs & Numbering engine — must load BEFORE safety_lab.js so window.SafetyLabNumbering exists. -->
     <script src="numbering.js?v=1.0.1" defer></script>
-    <script src="demo_showcase.js?v=65.38" defer></script>
+    <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
+         so it stays off the critical path for real users. It self-installs (SL_SHOWCASE) on execution. -->
+    <script>window.SL_SHOWCASE_SRC = 'demo_showcase.js?v=65.39';</script>
+    <script>window.SL_SHOWCASE_SORA_SRC = 'demo_showcase_sora.js?v=1';</script>
+    <script>window.SL_SHOWCASE_KESTREL25_SRC = 'demo_showcase_kestrel25.js?v=1';</script>
+    <!-- MFA enforcement master switch — set false to drop MFA (no challenge, no forced enrollment). -->
+    <script>window.SL_MFA_REQUIRED = false;</script>
     <!-- #19 — shared cut-set engine (single source for the page + the cut-set Web Worker). Must load before safety_lab.js. -->
-    <script src="fta_engine.js?v=1.1" defer></script>
+    <!-- ENG-2 phase 1 — shared table pagination (50/page default; honesty label; display-lane only). Loads before every consumer. -->
+    <!-- ENG-4 — SLIdle: time-sliced background work (idle-frame autosave writes + integrity sweeps; born modular, no wraps). -->
+    <script src="idle_scheduler.js?v=1.0" defer></script>
+    <!-- ENG-5 — SLStream: staged project load with flush-on-entry (born modular; additive switchTab wrap). -->
+    <script src="streaming_load.js?v=1.0" defer></script>
+    <!-- ASR-1 — SLReplay: deterministic replay verification (integrity + engine re-derivation + journaled lineage; born modular). -->
+    <script src="replay_verify.js?v=1.1" defer></script>
+    <!-- ASR-2 — SLFuzz: seeded fuzzing bot, replayable robustness evidence (5 properties vs mathematical laws; journaled; born modular). -->
+    <script src="fuzz_bot.js?v=1.0" defer></script>
+    <!-- COL-1 — SLPresence: teammate presence + live cursors over Supabase Realtime (display lane; ITAR-guarded; born modular). -->
+    <script src="presence.js?v=1.0" defer></script>
+    <!-- DIF-1 — SLDiff: revision diff, git-diff for safety models (display lane; identity-matched; born modular). -->
+    <script src="rev_diff.js?v=1.0" defer></script>
+    <!-- TRD-1 — SLTrade: trade-study mode, two candidates engine-computed side by side (display lane; born modular). -->
+    <script src="trade_study.js?v=1.0" defer></script>
+    <!-- LOD-1 — SLLod: semantic zoom, map-tile aggregation below the zoom threshold (display lane; born modular). -->
+    <script src="lod_zoom.js?v=1.0" defer></script>
+    <!-- DSV-1 — SLDissimilar: dissimilar verification, direct gate-logic MC cross-checks the exact engine (display lane; seeded; journaled). -->
+    <script src="mc_crosscheck.js?v=1.0" defer></script>
+    <!-- UNC-1 — SLUnc: P05-P95 uncertainty bands on the budget ledger (user-entered EFs only; idle-computed; display lane). -->
+    <script src="unc_bands.js?v=1.0" defer></script>
+    <script src="paginate.js?v=1.2" defer></script>
+    <script src="fta_engine.js?v=1.3" defer></script>
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
-    <script src="safety_targets.js?v=1.2" defer></script>
-    <script src="reliability_data.js?v=1.0" defer></script>
-    <script src="catalogue_data.js?v=1.0" defer></script>
+    <script src="safety_targets.js?v=1.4" defer></script>
+    <script src="reliability_data.js?v=1.1" defer></script>
+    <script src="catalogue_data.js?v=1.1" defer></script>
     <script src="ui_constants.js?v=1.0" defer></script>
     <script src="config_data.js?v=1.0" defer></script>
     <script src="ai_memory.js?v=1.0" defer></script>
-    <script src="importers.js?v=1.0" defer></script>
-    <script src="core_modules.js?v=1.0" defer></script>
+    <script src="importers.js?v=1.4" defer></script>
+    <script src="core_modules.js?v=1.1" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
-    <script src="fta_quant_modules.js?v=1.1" defer></script>
+    <script src="fta_quant_modules.js?v=66.9" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
-    <script src="fta_view_modules.js?v=1.0" defer></script>
-    <script src="data_ops_modules.js?v=1.0" defer></script>
+    <script src="fta_view_modules.js?v=66.20" defer></script>
+    <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
+    <script src="gt_thread.js?v=0.4" defer></script>
+    <script src="data_ops_modules.js?v=66.3" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=1.0" defer></script>
+    <script src="support_modules.js?v=66.14" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=1.1" defer></script>
+    <script src="helpers_modules.js?v=2.9" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.0" defer></script>
+    <script src="bindings_modules.js?v=1.5" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=1.1" defer></script>
-    <script src="safety_lab.js?v=65.31" defer></script>
+    <script src="misc_fn_modules.js?v=66.12" defer></script>
+    <script src="safety_lab.js?v=65.36" defer></script>
     <script src="crdt_sync.js?v=1.3" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
-    <script src="assurance_modules.js?v=1.8" defer></script>
-    <script src="engine_modules.js?v=1.0" defer></script>
-    <script src="reports.js?v=65.11" defer></script>
+    <script src="assurance_modules.js?v=1.9" defer></script>
+    <script src="engine_modules.js?v=1.2" defer></script>
+    <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
+    <script src="ai_badges.js?v=1.1" defer></script>
+    <script src="reports.js?v=66.8" defer></script>
     <!-- Phase F — R&M module (born modular; wraps switchTab, zero monolith edits). Pro+ gated. -->
     <script src="ram_modules.js?v=1.7" defer></script>
+    <!-- FRACAS-2 — the incident ledger (case manager) under the statistical FRACAS;
+         events feed failure counts, closure requires a named effectiveness verifier. -->
+    <script src="fracas_ledger.js?v=0.1" defer></script>
+    <!-- OPS-MC — operational forecast Monte Carlo fed by the ledger's own empirical data
+         (seeded per MC-SEED). A forecast, not a demonstration: claimed-lane by construction. -->
+    <script src="ops_mc.js?v=0.2" defer></script>
     <!-- Phase F4 — MSG-3 scheduled-maintenance analysis (born modular; pushes into the RAM ledger). Pro+ gated. -->
     <script src="msg3_module.js?v=1.2" defer></script>
     <!-- Phase F5-F7 — the complete R&M analytics suite (born modular). Pro+ gated. -->
-    <script src="rel_analytics.js?v=1.1" defer></script>
+    <script src="rel_analytics.js?v=1.2" defer></script>
     <script src="mx_analytics.js?v=1.0" defer></script>
     <script src="rbd_module.js?v=1.0" defer></script>
     <script src="tol_derate_module.js?v=1.0" defer></script>
     <!-- Phase F9 — deterministic derivation engine (zero AI; wraps renders, edits nothing). -->
     <script src="ram_derive.js?v=1.0" defer></script>
+    <!-- Backlog #8 — closed-form steady-state availability (labeled ESTIMATE lane; wraps the Ai/Ao ledger + RBD renders, edits nothing). -->
+    <script src="avail_closedform.js?v=1.0" defer></script>
+    <!-- WS-C — R&M ↔ AI wiring (text-only drafting: FRACAS narratives, MSG-3 rationale; review-gated; wraps renders, edits nothing). -->
+    <script src="ram_ai.js?v=1.0" defer></script>
+    <!-- Phase D gap 4 (D1) — Interdependence AI sweep: proposals over EMPTY cells only, engineer signature decides (born modular). -->
+    <script src="interdep_ai.js?v=1.0" defer></script>
     <!-- Phase P1 — evidence package export (born modular). -->
-    <script src="evidence_package.js?v=1.8" defer></script>
+    <script src="evidence_package.js?v=2.4" defer></script>
     <!-- Phase P3 — 4754B App A objectives matrix (born modular; paraphrased summaries, live evidence). -->
     <script src="objectives_matrix.js?v=1.0" defer></script>
     <!-- Phase P2 — problem reports / OPRs (born modular; upgrades the SSA E.4.d gate at runtime). -->
@@ -3837,7 +3911,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <!-- Phase P7 — MMEL/TLD dispatch analysis (born modular; evaluated through the live trees). Pro+ gated. -->
     <script src="mmel_module.js?v=1.0" defer></script>
     <!-- Phase P6 — modification impact wizard (born modular; deterministic closure). -->
-    <script src="mod_impact.js?v=1.6" defer></script>
+    <script src="mod_impact.js?v=1.7" defer></script>
     <!-- Phase P4 — validation-vs-verification split (born modular; §5.4 discipline). -->
     <script src="vv_validation.js?v=1.0" defer></script>
     <!-- Phase P5 — CEA dependency graph (born modular; graph vs interdependence reconciliation). -->
@@ -3857,12 +3931,32 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <script src="ram_settings.js?v=1.0" defer></script>
     <!-- RAM cockpit — seventh dashboard card (continuous track; feeds the gates). -->
     <script src="ram_cockpit.js?v=1.0" defer></script>
+    <!-- Phase D gap 3 (§3.6) — Budget Ledger: allocated vs achieved as a first-class object (born modular; self-registering page). -->
+    <script src="budget_ledger.js?v=1.1" defer></script>
+    <!-- UX-1 — importance heatmap overlay: FV heat on basic events, display lane only (born modular; toolbar toggle injection). -->
+    <script src="importance_heat.js?v=2.0" defer></script>
+    <!-- UX-4 — leading-indicators strip on the dashboard: early warnings, display + routing only (born modular; counts from invRun / etaCouplingFindings / the engine's feasibility lane). -->
+    <script src="ux_leading.js?v=1.1" defer></script>
+    <!-- UX-2 — contextual micro-tours: per-surface first-visit orientation (born modular; pill invite, never a takeover; concepts only). -->
+    <script src="micro_tours.js?v=1.0" defer></script>
+    <!-- UX-3 — K350 exercise track: six hands-on drills with read-only deterministic completion checks (born modular; Getting Started card trigger). -->
+    <script src="k350_exercises.js?v=1.1" defer></script>
+    <!-- Backlog #7a — Scale & Performance benchmark page: the real engine timed on deterministic synthetic trees (born modular; self-registering page). -->
+    <script src="perf_bench.js?v=1.0" defer></script>
+    <!-- Backlog #6b — K350 guided tour: spotlight walkthrough of the golden thread over the showcase (born modular; on-ramp trigger injection). -->
+    <script src="onboarding_tour.js?v=1.0" defer></script>
+    <!-- Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1): FFS lane surface (born modular; self-registering page + {{ffs_table}} token source). -->
+    <script src="ffs_module.js?v=1.1" defer></script>
+    <!-- Phase D gap 1 (§3.5) — ASA working surface: deterministic triage + measured MF&MS re-run (born modular; upgrades the ASA F.4 gate). -->
+    <script src="asa_triage.js?v=1.0" defer></script>
     <!-- Golden Thread integrity sweep + link bindings (born modular). -->
-    <script src="gt_integrity.js?v=1.0" defer></script>
+    <script src="gt_integrity.js?v=1.1" defer></script>
     <!-- Delete guard — referential integrity at the write + SSA thread gate. -->
     <script src="delete_guard.js?v=1.0" defer></script>
     <!-- Recovery ring + session resume (born modular; rides the autosave cadence). -->
     <script src="session_resume.js?v=1.2" defer></script>
+    <!-- Continuous cloud autosave + first-edit project provisioning (born modular; wraps _writeAutosave). -->
+    <script src="cloud_sync.js?v=1.0" defer></script>
     <!-- ReqIF import — Polarion et al. (born modular; own XML parser; idempotent). -->
     <script src="reqif_import.js?v=1.2" defer></script>
     <!-- M8 — status-back: verdicts return to Jama/Polarion/DOORS via ReqIF. -->
@@ -3877,24 +3971,83 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <!-- AL1 — signed system aliases (user-entered only; feeds the lookalike detector). -->
     <script src="alias_registry.js?v=1.1" defer></script>
     <script src="rename_guard.js?v=1.1" defer></script>
-    <script src="invariants.js?v=1.1" defer></script>
+    <script src="invariants.js?v=1.2" defer></script>
+    <!-- RBD-XCHECK — every RBD figure computed twice (minimal tie-sets vs minimal cut-sets),
+         agreement asserted (INV-33, hard) before anything shows. Disagreement = refusal.
+         MUST load after invariants.js (invRegister) and after rbd_module.js (_rbdR/_rbdParseDsl);
+         belt-and-braces retry inside the module besides. -->
+    <script src="rbd_xcheck.js?v=0.2" defer></script>
+    <!-- MARKOV-NDF — the 3-state Normal/Degraded/Failed discrete template on the Markov page:
+         rows must sum to 1, steady state solved twice (elimination + power iteration), worked
+         receipt printed. Degraded = dispatch thinking; the rate models stay the cert path. -->
+    <script src="markov_ndf.js?v=0.1" defer></script>
+    <!-- RAM-PREDICT — MIL-HDBK-217F parts-count prediction (PREDICTED lane; FRACAS demonstrates).
+         Data lives in ram_predict_data.js, generated ONLY from the staged handbook PDF with
+         per-table citations; the engine refuses without it. -->
+    <script src="ram_predict_data.js?v=0.1" defer></script>
+    <script src="ram_predict.js?v=0.3" defer></script>
     <script src="engine_selftest.js?v=1.0" defer></script>
     <script src="ram_trace.js?v=1.1" defer></script>
     <script src="model_checks.js?v=1.0" defer></script>
-    <script src="fault_sim.js?v=1.1" defer></script>
+    <script src="fault_sim.js?v=1.2" defer></script>
     <script src="tab_guard.js?v=1.0" defer></script>
     <script src="journal.js?v=1.0" defer></script>
     <script src="pssa_ssa_pages.js?v=1.0" defer></script>
     <script src="nav_sfha_tree.js?v=1.3" defer></script>
     <script src="assumption_moat.js?v=1.0" defer></script>
-    <script src="mbsa_schema.js?v=1.0" defer></script>
+    <script src="hf_ergo.js?v=0.1" defer></script>
+    <script src="hf_assumptions.js?v=0.5" defer></script>
+    <script src="hf_register_panel.js?v=0.7" defer></script>
+    <!-- INV-HFW — crew workload ↔ FHA severity consistency (born modular; registers into the invariants sweep). -->
+    <script src="hf_severity_check.js?v=1.1" defer></script>
+    <script src="hf_severity_badge.js?v=1.0" defer></script>
+    <!-- STPA system lane — engine (deployed inert since v0.1) + the walkthrough panel that
+         makes it user-visible. Registers INV-32 into the invariant sweep. -->
+    <script src="stpa_core.js?v=1.0" defer></script>
+    <!-- SORA 2.5 engine (EU 2019/947 Specific category) — deployed INERT like stpa_core
+         was: verified calculators (iGRC / mitigations / SAIL / adjacent area) + honest
+         refusals for the not-yet-verified tables. Panel/walkthrough is the next increment.
+         v0.2 — the Annex E OSO×SAIL robustness matrix is now VERIFIED and shipped as data
+         (sora_annex_e_data.js, loaded first so the engine can read it). -->
+    <script src="sora_annex_e_data.js?v=0.1" defer></script>
+    <script src="sora_core.js?v=0.2" defer></script>
+    <script src="sora_showcase_view.js?v=0.1" defer></script>
+    <!-- Kestrel RJ (Part 25 transport) showcase loader — born-modular; lazy-loads
+         demo_showcase_kestrel25.js and applies it (window.loadKestrelRj). -->
+    <script src="kestrel_showcase.js?v=1" defer></script>
+    <!-- Demo-project picker — one chooser routing to every showcase loader. -->
+    <script src="demo_picker.js?v=1" defer></script>
+    <script src="stpa_panel.js?v=1.1" defer></script>
+    <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
+         Loads after the panels whose tabs it gates; wraps switchTab last-ish so its guard
+         sits outermost on the chain. -->
+    <script src="program_plan.js?v=0.7" defer></script>
+    <!-- Mass actions for tabulated analyses — selection layer over the worksheet tables;
+         every write routes through each worksheet's own helpers. -->
+    <script src="mass_actions.js?v=0.6" defer></script>
+    <script src="mbsa_schema.js?v=1.1" defer></script>
+    <script src="zonal_model.js?v=1.1" defer></script>
+    <script src="physical_independence.js?v=1.1" defer></script>
+    <script src="independence_claims.js?v=1.0" defer></script>
+    <script src="physical_crosscheck.js?v=1.1" defer></script>
+    <script src="zonal_ui.js?v=1.6" defer></script>
+    <script src="equipment_hazards.js?v=1.0" defer></script>
+    <script src="beta_scoring.js?v=1.0" defer></script>
+    <script src="zsa_walkthrough.js?v=1.0" defer></script>
+    <script src="cma_walkthrough.js?v=1.0" defer></script>
+    <script src="pra_library.js?v=1.0" defer></script>
+    <script src="pra_canvas.js?v=1.0" defer></script>
+    <script src="msg3_zonal.js?v=1.0" defer></script>
     <script src="mac_l3.js?v=1.0" defer></script>
     <!-- M1 phase 2 — L3 cockpit: flow editor, per-deviation BDD corroboration, FMEA sign desk. -->
-    <script src="mac_flows.js?v=1.0" defer></script>
+    <script src="mac_flows.js?v=1.1" defer></script>
     <!-- M2 — modes & reconfiguration: fallback chains, named switch failures, MC-corroborated standby. -->
     <script src="mac_modes.js?v=1.0" defer></script>
     <!-- MBSA gate items — M-series machinery joins the PASA/SSA cockpit checklists. -->
     <script src="mbsa_cockpit.js?v=1.1" defer></script>
+    <!-- MBSA Model Cockpit on the Executive Dashboard. Born-modular; reads the same
+         engines as the PASA/SSA gate checks (schema, l3 lanes, m2 modes, INV-12 coverage). -->
+    <script src="mbsa_dashboard.js?v=1.2" defer></script>
     <script src="ckpt_captions.js?v=1.0" defer></script>
     <!-- Live activity ticker — who · what · when, from the journal & change log. -->
     <script src="activity_ticker.js?v=1.3" defer></script>
@@ -3914,25 +4067,81 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <script src="do_credit.js?v=1.0" defer></script>
     <script src="do160_ledger.js?v=1.0" defer></script>
     <script src="ewis_lane.js?v=1.0" defer></script>
-    <script src="event_trees.js?v=1.0" defer></script>
+    <script src="event_trees.js?v=1.2" defer></script>
+    <!-- Bow-Tie Analysis — unified FTA↔ETA. Born-modular: creates its own view + nav,
+         joins the fault tree's BDD-exact top probability to the event tree initiator,
+         checks cross-side common cause against cut sets, lints generic barriers. -->
+    <script src="bowtie.js?v=2.2" defer></script>
+    <!-- Global UI text-size control (A−/A/A+, Ctrl±). Born-modular; scales the whole
+         app via body zoom, persisted. Addresses the "text too small" default. -->
+    <script src="text_scale.js?v=2.2" defer></script>
+    <!-- Monitors & Coverage — M7 (D.4.3.1 / G.11.1.3.4). Born-modular: monitor spec
+         records on credit-taking events, imperfect-coverage split, monitor-channel
+         independence checks feeding the IP ledger, stats tile on the MBSA cockpit. -->
+    <script src="monitor_spec.js?v=1.1" defer></script>
+    <script src="exposure_case.js?v=1.0" defer></script>
+    <script src="cra_matrix.js?v=1.0" defer></script>
+    <script src="fta_freq.js?v=1.0" defer></script>
+    <!-- Jama live bridge — push FCs into Jama as items, pull the relationship
+         graph back; humans assert the links in Jama, we automate the rest. -->
+    <script src="jama_bridge.js?v=1.7" defer></script>
+    <script src="reqif_bridge.js?v=1.3" defer></script>
+    <!-- SPP toolchain declarations — the plan names the tools, interfaces wire themselves. -->
+    <script src="toolchain_plan.js?v=1.4" defer></script>
+    <!-- Combined & conditioned FCs — M6 (A.8.3-5). Born-modular: combined-FC rows,
+         operational/environmental tags, coupling-derived candidates, INV-29/30. -->
+    <script src="fc_variants.js?v=1.0" defer></script>
     <script src="fc_tree_flow.js?v=1.0" defer></script>
     <script src="cca_models.js?v=1.0" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=1.2" defer></script>
+    <script src="ai_loader.js?v=1.9" defer></script>
     <script src="config_management.js?v=1.8" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.1" defer></script>
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
-    <script src="auth_gate.js?v=62.60" defer></script>
-    <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; injects the
-         "Sign in with Microsoft" button into #signup-modal and drives Supabase Azure OAuth.
+    <script src="auth_gate.js?v=62.64" defer></script>
+    <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
+         Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the
+         auth gate itself (auth_gate.js ssoBlockHTML) and calls window.signInWithMicrosoft.
          Tenant restriction enforced server-side (approved_tenants + before-user-created hook). -->
     <script src="ms_sso.js?v=1.0" defer></script>
+    <!-- Two-factor authentication (TOTP). Born-modular; adds a 2FA section to the
+         account panel and a sign-in step-up (AAL2) consumed by auth_gate.js. -->
+    <script src="mfa.js?v=1.1" defer></script>
     <!-- One-time EULA acceptance modal (defines window.SafetyLab.checkEula; called from auth_gate liftGate). -->
-    <script src="eula_modal.js?v=1.0.7" defer></script>
+    <script src="eula_modal.js?v=1.0.8" defer></script>
     <!-- Software License & Subscription Agreement — a SECOND one-time acceptance shown right
          after the EULA on first sign-in. Must load AFTER eula_modal.js (it chains off checkEula). -->
-    <script src="license_modal.js?v=1.0.4" defer></script>
+    <script src="license_modal.js?v=1.0.5" defer></script>
+    <!-- THE LABS golden-thread bus (estate lane) — restored 20 Jul 2026 after the 19 Jul
+         index ship unknowingly clobbered the wiring (the trio + suite lived only on the
+         Desktop; the container mirror predated them — see HANDOFF lesson). Order matters:
+         SDK (line ~3777) → config → client → bridge. Degrades gracefully if config absent. -->
+    <script src="labs_thread_config.js?v=1.0" defer></script>
+    <script src="thread_client.js?v=1.1" defer></script>
+    <script src="thread_bridge.js?v=1.0" defer></script>
+    <!-- Easter egg (cosmetic; outside the qualified tool boundary — no engine/data/report contact). -->
+    <script src="ynwa.js?v=1.3" defer></script>
     <script>(function(){var y=document.getElementById('footer-year');if(y)y.textContent=new Date().getFullYear();})();</script>
+<script>
+(function(){
+  function initCats(){
+    var cats=document.querySelectorAll('.asb-grp.asb-cat');
+    if(!cats.length) return false;
+    var KEY='sla_nav_cats_collapsed', saved={};
+    try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')||{};}catch(_){ }
+    cats.forEach(function(d){
+      var el=d.querySelector('.asb-cat-lbl'); var lbl=el?el.textContent:'';
+      if(saved[lbl]===true) d.open=false;
+      d.addEventListener('toggle',function(){
+        try{var s=JSON.parse(localStorage.getItem(KEY)||'{}')||{}; s[lbl]=!d.open; localStorage.setItem(KEY,JSON.stringify(s));}catch(_){ }
+      });
+    });
+    return true;
+  }
+  function boot(){ if(!initCats()){var n=0,t=setInterval(function(){ if(initCats()||++n>20) clearInterval(t); },250);} }
+  if(document.readyState!=='loading') boot(); else document.addEventListener('DOMContentLoaded',boot);
+})();
+</script>
 </body>
 </html>
