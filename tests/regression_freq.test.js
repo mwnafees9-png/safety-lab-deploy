@@ -14,6 +14,12 @@
  *       CCF group rows → stated LOWER BOUND
  *   [5] plumbing: N/flight = w·T, shares sum to 1 and sort desc, refusals
  *       are named, sweep() walks ftaPages with FHA severity, page wiring.
+ *   [6] LANE DISCIPLINE: frequency computes on VERIFICATION trees only
+ *       (p.verifies || mode 'bottom-up' — the house test). Top-down
+ *       allocation trees carry probability budgets with λ stripped by
+ *       design; they are listed with a NAMED skip (pointing at the
+ *       verification mirror when one exists), never computed as a wall of
+ *       w=0 "enablers".
  *
  * Run:  node tests/regression_freq.test.js
  */
@@ -130,13 +136,37 @@ console.log('\n[5] refusals, sweep, page wiring');
 check('empty tree → named refusal, never a zero', F.computeFrequency(null).ok === false && /empty tree/.test(F.computeFrequency(null).reason));
 globalThis.acFhaData = [{ internalId: 'FC9', fcId: 'FC-009', severity: 'Catastrophic' }];
 globalThis.ftaPages = [
-  { id: 'p1', name: 'Cat tree', linkedFhaIds: ['FC9'], root: GATE('OR', [BE({ name: 'X', probability: q1, lambda: l1 })]) },
+  { id: 'p1', name: 'Cat tree (verif)', mode: 'bottom-up', linkedFhaIds: ['FC9'], root: GATE('OR', [BE({ name: 'X', probability: q1, lambda: l1 })]) },
   { id: 'p2', name: 'empty page', root: null }];
 const sw = F.sweep();
 check('sweep walks ftaPages (null roots skipped) and carries FHA severity',
   sw.length === 1 && sw[0].pageId === 'p1' && sw[0].severity === 'Catastrophic' && sw[0].res.ok && sw[0].res.wTop > 0);
 
+// ---- [6] lane discipline: allocation vs verification trees ------------------
+console.log('\n[6] allocation trees are SKIPPED BY NAME, never computed as enabler walls');
+globalThis.ftaPages = [
+  // allocation tree WITH a verification mirror
+  { id: 'a1', name: 'PASA · Loss of pitch', mode: 'top-down',
+    root: GATE('OR', [BE({ name: 'budget', probability: q1 })]) },
+  { id: 'v1', name: 'Pitch verification tree', verifies: 'a1',
+    root: GATE('OR', [BE({ name: 'X', probability: q1, lambda: l1 })]) },
+  // allocation tree with NO mirror yet (default mode = top-down, the house default)
+  { id: 'a2', name: 'PASA · Erroneous thrust',
+    root: GATE('OR', [BE({ name: 'budget2', probability: q2 })]) }];
+const sw2 = F.sweep();
+const rA1 = sw2.find(t => t.pageId === 'a1'), rV1 = sw2.find(t => t.pageId === 'v1'), rA2 = sw2.find(t => t.pageId === 'a2');
+check('allocation tree listed but NOT computed — named skip, allocation flag set',
+  rA1 && rA1.res.ok === false && rA1.res.allocation === true && rA1.verification === false &&
+  /top-down allocation/.test(rA1.res.reason) && /allocator strips λ by design/.test(rA1.res.reason));
+check('the skip POINTS AT the verification mirror by name', /see Pitch verification tree/.test(rA1.res.reason));
+check('no mirror yet → the skip says so instead of inventing one', rA2 && rA2.res.allocation === true && /no verification mirror yet/.test(rA2.res.reason));
+check('mirror page (p.verifies) IS computed — same house test as helpers',
+  rV1 && rV1.verification === true && rV1.res.ok && approx(rV1.res.wTop, l1 * (1 - q1) * 1, 1e-15));
+check('a bare page defaults to top-down (the house default) — never silently computed', rA2.verification === false);
+
 const src = S('fta_freq.js');
+check('render distinguishes ALLOCATION (quiet) from REFUSED (loud)',
+  /ALLOCATION — no frequency lane/.test(src) && /REFUSED/.test(src));
 check('born-modular page: view-freq + snav-freq + wrapped switchTab, zero index surgery',
   /view-freq/.test(src) && /snav-freq/.test(src) && /_freqWrapped/.test(src) && /switchTab\('freq'\)/.test(src));
 check('module never writes a store (display-lane discipline)',

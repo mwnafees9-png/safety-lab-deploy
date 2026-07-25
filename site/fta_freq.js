@@ -1,5 +1,5 @@
 // ============================================================================
-// fta_freq.js — v1.0 — ARP-G12: failure FREQUENCY alongside unavailability.
+// fta_freq.js — v1.1 — ARP-G12: failure FREQUENCY alongside unavailability.
 //
 // G.11 quantifies the probability of BEING failed (unavailability, Q).
 // G.12 quantifies the rate of BECOMING failed (failure frequency, w) — the
@@ -36,6 +36,14 @@
 // Conversion (the honest, stated kind): expected failures per flight
 // N ≈ w_top · T_mission, and w_top itself is the per-FH figure. No
 // frequency is ever invented for an event that lacks a rate.
+//
+// LANE DISCIPLINE (v1.1): frequency is a VERIFICATION-tree question. Top-down
+// allocation trees carry probability BUDGETS only — the allocator strips λ by
+// design (helpers: top-down mode deletes n.lambda) — so sweeping them would
+// class every budget as an "enabler", which is noise wearing a receipt. The
+// sweep computes on verification trees (p.verifies || mode 'bottom-up', the
+// same test the rest of the house uses) and names the skip on allocation
+// trees, pointing at the verification mirror when one exists.
 //
 // Display-lane: pure computation + a born-modular page ('Frequency (G.12)'
 // under Trees & models). Zero store writes. Loads in any order; without the
@@ -136,11 +144,22 @@
     }
     function sweep() {
         const out = [];
-        ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).forEach(function (p) {
+        const pages = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []);
+        pages.forEach(function (p) {
             if (!p || !p.root) return;
+            // The house test for a verification tree (same as helpers/fta_view):
+            // a mirror page (p.verifies) or an explicitly bottom-up page.
+            const isVerification = !!p.verifies || (p.mode === 'bottom-up');
             let r;
-            try { r = computeFrequency(p.root); } catch (e) { r = { ok: false, reason: String((e && e.message) || e) }; }
-            out.push({ pageId: p.id, page: p.name || ('FT-' + p.id), severity: _sevOfPage(p), res: r });
+            if (!isVerification) {
+                const mirror = pages.find(function (x) { return x && x.verifies === p.id; });
+                r = { ok: false, allocation: true,
+                      reason: 'top-down allocation — probability budgets only (the allocator strips λ by design); the frequency question belongs to the verification tree' +
+                              (mirror ? ' — see ' + (mirror.name || ('FT-' + mirror.id)) : ' (no verification mirror yet)') };
+            } else {
+                try { r = computeFrequency(p.root); } catch (e) { r = { ok: false, reason: String((e && e.message) || e) }; }
+            }
+            out.push({ pageId: p.id, page: p.name || ('FT-' + p.id), severity: _sevOfPage(p), verification: isVerification, res: r });
         });
         return out;
     }
@@ -171,7 +190,7 @@
         const chip = function (txt, col) { return '<span class="u-mono" style="font-size:9.5px; font-weight:700; color:' + col + '; border:1px solid ' + col + '55; background:' + col + '0D; border-radius:4px; padding:1px 7px;">' + esc(txt) + '</span>'; };
         host.innerHTML =
             '<div class="header-with-export"><h3>Failure frequency <span class="u-mono" style="font-size:10.5px; font-weight:700; color:#6D28D9; border:1px solid #6D28D955; background:#6D28D90D; border-radius:5px; padding:2px 8px; vertical-align:3px;">ARP4761A G.12</span></h3></div>' +
-            '<p style="font-size:12.5px; color:var(--color-text-secondary); max-width:980px;">G.11 answers the probability of BEING failed; G.12 answers the rate of BECOMING failed — the quantity supplier trees and frequency-domain objectives speak. Computed as w = Σ IB·w over the SAME exact BDD as the probability run, so the two lanes can never quietly disagree. An event with no rate contributes no frequency: enablers are named, Markov attachments are refused, CCF group rows make the figure a stated LOWER BOUND — never a silent one.</p>' +
+            '<p style="font-size:12.5px; color:var(--color-text-secondary); max-width:980px;">G.11 answers the probability of BEING failed; G.12 answers the rate of BECOMING failed — the quantity supplier trees and frequency-domain objectives speak. Computed as w = Σ IB·w over the SAME exact BDD as the probability run, so the two lanes can never quietly disagree. An event with no rate contributes no frequency: enablers are named, Markov attachments are refused, CCF group rows make the figure a stated LOWER BOUND — never a silent one. Frequency is a VERIFICATION-tree question: top-down allocation trees carry probability budgets only (the allocator strips λ by design), so they are listed but never computed — their frequency lives on the verification mirror.</p>' +
             (!trees.length ? '<div style="font-size:12px; color:var(--color-text-tertiary); padding:14px;">No fault trees yet.</div>' :
              trees.map(function (t) {
                 const r = t.res;
@@ -179,8 +198,8 @@
                     '<div style="display:flex; justify-content:space-between; align-items:center;">' +
                     '<b style="font-size:12.5px;">' + esc(t.page) + '</b><span>' +
                     (t.severity ? chip(t.severity.toUpperCase(), t.severity === 'Catastrophic' ? '#B91C1C' : '#B7791F') + ' ' : '') +
-                    (r.ok ? chip('w = ' + fmt(r.wTop) + ' /FH', '#1F3A5F') : chip('REFUSED', '#B91C1C')) + '</span></div>' +
-                    (!r.ok ? '<div style="font-size:11.5px; color:#B91C1C; margin-top:4px;">' + esc(r.reason) + '</div>' :
+                    (r.ok ? chip('w = ' + fmt(r.wTop) + ' /FH', '#1F3A5F') : (r.allocation ? chip('ALLOCATION — no frequency lane', '#7C8797') : chip('REFUSED', '#B91C1C'))) + '</span></div>' +
+                    (!r.ok ? '<div style="font-size:11.5px; color:' + (r.allocation ? 'var(--color-text-tertiary)' : '#B91C1C') + '; margin-top:4px;">' + esc(r.reason) + '</div>' :
                         '<div class="u-mono" style="font-size:11px; color:var(--color-text-secondary); margin-top:4px;">Q(top) = ' + fmt(r.pTop) + ' · w(top) = ' + fmt(r.wTop) + ' /FH · expected failures per flight ≈ ' + fmt(r.nPerFlight) + ' (T = ' + r.T + ' FH)' + (r.lowerBound ? ' · <b style="color:#B7791F;">LOWER BOUND — ' + r.flags.ccfGroups + ' CCF group row(s) not decomposed</b>' : '') + '</div>' +
                         ((r.flags.markovRefused || r.flags.enablers || r.flags.suppliers) ?
                             '<div style="font-size:10.5px; color:var(--color-text-tertiary); margin-top:2px;">' +

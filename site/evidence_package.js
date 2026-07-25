@@ -231,7 +231,7 @@
                 const fr = FTA_FREQ.sweep();
                 if (fr.length) pkg.freq = fr.map(t => ({
                     page: t.page, severity: t.severity,
-                    ok: t.res.ok, reason: t.res.ok ? null : t.res.reason,
+                    ok: t.res.ok, allocation: !!t.res.allocation, reason: t.res.ok ? null : t.res.reason,
                     wTop: t.res.ok ? t.res.wTop : null, pTop: t.res.ok ? t.res.pTop : null,
                     nPerFlight: t.res.ok ? t.res.nPerFlight : null, T: t.res.ok ? t.res.T : null,
                     lowerBound: t.res.ok ? t.res.lowerBound : false,
@@ -470,7 +470,7 @@
                     (t.ok ? 'w(top) = ' + t.wTop.toExponential(3) + ' /FH · Q(top) = ' + t.pTop.toExponential(3) +
                         ' · N/flight ≈ ' + t.nPerFlight.toExponential(3) + ' (T = ' + t.T + ' FH)' +
                         (t.lowerBound ? ' · LOWER BOUND — ' + t.flags.ccfGroups + ' CCF group row(s) not decomposed' : '')
-                        : 'REFUSED — ' + t.reason)) + '</p>' +
+                        : (t.allocation ? 'allocation tree — ' + t.reason : 'REFUSED — ' + t.reason))) + '</p>' +
                     (t.ok ? _tbl(['Event', 'Class', 'q', 'IB (exact)', '\u03bb /FH', 'w /FH', 'IB\u00b7w', 'Share'],
                         t.rows.map(x => [_esc(x.name), _esc(x.cls), x.q.toExponential(2), x.IB.toExponential(2),
                             x.lambda ? x.lambda.toExponential(2) : '\u2014', x.w.toExponential(2),
