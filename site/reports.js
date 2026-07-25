@@ -23,6 +23,15 @@ const Reports = (function() {
         PRA:  { name: 'Particular Risk Analysis',                       scope: 'aircraft', allowedAppendices: [] },
         CMA:  { name: 'Common Mode Analysis',                           scope: 'aircraft', allowedAppendices: [] },
         GTT:  { name: 'Golden Thread Trace Report',                     scope: 'aircraft', allowedAppendices: [] },
+        // WS-B (2026-07-11) — report coverage for every analysis surface.
+        FMEA: { name: 'Failure Modes and Effects Analysis',             scope: 'system',   allowedAppendices: [] },
+        FMES: { name: 'Failure Modes and Effects Summary',              scope: 'system',   allowedAppendices: [] },
+        RAM:  { name: 'R&M Program Report',                             scope: 'aircraft', allowedAppendices: [] },
+        MSG3: { name: 'MSG-3 Scheduled Maintenance Analysis',           scope: 'aircraft', allowedAppendices: [] },
+        MMEL: { name: 'MMEL / TLD Dispatch Analysis',                   scope: 'aircraft', allowedAppendices: [] },
+        ETBT: { name: 'Event Tree & Bow-Tie Analysis',                  scope: 'aircraft', allowedAppendices: ['fta'] },
+        CCMR: { name: 'Candidate Certification Maintenance Requirements', scope: 'aircraft', allowedAppendices: [] },
+        IPL:  { name: 'Independence Principles Report',                 scope: 'aircraft', allowedAppendices: ['cma'] },
     };
 
     // ------------------------------------------------------------------------
@@ -108,6 +117,10 @@ const Reports = (function() {
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
             '',
+            '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
+            'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
+            '{{ffs_table}}',
+            '',
             '## 9. Appendices',
             '{{appendix:fta}}',
             '{{appendix:zsa}}',
@@ -122,7 +135,7 @@ const Reports = (function() {
             'Recorded effects of resource loss or malfunction on each failure condition’s contributing systems, with the combined aircraft-level effect (B.4.3.2 step d).',
             '{{common_resource_table}}',
             '',
-            '## 12. Minimum Acceptable Control Model',
+            '## 12. Minimum Acceptable Configuration Model',
             'Minimum-equipment floors per aircraft function. Each rule is recorded as an assumption routed to design until substantiated against the SDD. Minimal breach combinations are enumerated exactly and drive the compiled MF&MS trees.',
             '{{mac_table}}',
             '',
@@ -140,6 +153,10 @@ const Reports = (function() {
             '',
             '## 16. Methodology (Safety Program Plan)',
             '{{spp_summary}}',
+            '',
+            '### Program Scope - the plan drives the tool',
+            'Analysis lanes selected into this program. A lane out of program is hidden from the tool with its data retained; removing a basis-expected lane carries a signed tailoring rationale, recorded here. The nav, the plan, and this report are projections of the same record.',
+            '{{program_scope_table}}',
             '',
             '## 17. Completion Checklist (ARP 4761A B.5)',
             '{{checklist_summary}}',
@@ -255,6 +272,10 @@ const Reports = (function() {
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
             '',
+            '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
+            'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
+            '{{ffs_table}}',
+            '',
             '## 9. Appendices',
             '{{appendix:fta}}',
             '{{appendix:cma}}',
@@ -281,11 +302,18 @@ const Reports = (function() {
             '## 2. Compliance to SFHA Objectives',
             '{{fha_table}}',
             '',
+            '### Budget vs Achieved (G.13 data summary — from the Budget Ledger)',
+            '{{budget_ledger_table}}',
+            '',
             '## 3. Verified System Requirements',
             '{{requirements_table}}',
             '',
             '## 4. Quantitative Evidence',
             '{{fta_summary}}',
+            '',
+            '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
+            'Minimal cut sets containing a development error are never quantified — every P(top) above is explicitly conditional on no development error. Each scenario is addressed by process assurance (the allocated DAL) and derived requirements, not by the probability budget.',
+            '{{ffs_table}}',
             '',
             '## 5. Common-Mode Verification',
             'Each CMA subject linked to this system has been evaluated and dispositioned. See the CMA appendix for details.',
@@ -386,6 +414,185 @@ const Reports = (function() {
             '{{checklist_summary}}',
             '{{checklist_table}}',
         ].join('\n'),
+
+        // ------------------------------------------------------------------
+        // WS-B (2026-07-11) — report coverage for every analysis surface.
+        // Same discipline as the six assessments: original prose skeletons,
+        // every number/table rendered live from the model via tokens.
+        // ------------------------------------------------------------------
+        FMEA: [
+            '# Failure Modes and Effects Analysis',
+            '**Project:** {{project_name}}  ',
+            '**System:** {{system_name}}  ',
+            '**Certification Basis:** {{cert_basis}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose',
+            'This Failure Modes and Effects Analysis (FMEA) systematically postulates failure modes of {{system_name}} and evaluates their local, next-higher-level, and end effects, together with the means of detection and compensating provisions, per ARP 4761A Appendix J. It supports the PSSA/SSA quantitative analyses and sources the FMES grouping.',
+            '',
+            '## 2. Ground Rules and Assumptions',
+            'Failure modes are postulated at the level of resolution the current design phase supports. Effects are assessed with the aircraft in the most critical relevant flight phase unless noted per-row. Detection means are as designed, not as hoped.',
+            '{{assumptions_list}}',
+            '',
+            '## 3. Functional FMEA',
+            '{{fmea_functional_table}}',
+            '',
+            '## 4. Piece-Part (Hardware) FMEA',
+            '{{fmea_piecepart_table}}',
+            '',
+            '## 5. Failure Modes and Effects Summary',
+            'The FMES below is a derived grouping of the rows above by identical end effect and detection means — generated live, never hand-maintained.',
+            '{{fmes_table}}',
+        ].join('\n'),
+
+        FMES: [
+            '# Failure Modes and Effects Summary',
+            '**Project:** {{project_name}}  ',
+            '**System:** {{system_name}}  ',
+            '**Certification Basis:** {{cert_basis}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose',
+            'This Failure Modes and Effects Summary (FMES) groups the FMEA failure modes of {{system_name}} by identical effect and detection means, with summed failure rates, per ARP 4761A Appendix J and §4.2. FMES groups are the intended source for fault-tree basic events, closing the rate-provenance chain from piece-part data to the quantitative analyses.',
+            '',
+            '## 2. Summary Groups',
+            '{{fmes_table}}',
+            '',
+            '## 3. Traceability Note',
+            'Each group is linked to its constituent FMEA rows and, where bound, to the fault-tree basic events that consume its summed rate. Groupings regenerate from the live FMEA on every render and cannot drift from their source.',
+        ].join('\n'),
+
+        RAM: [
+            '# R&M Program Report',
+            '**Project:** {{project_name}}  ',
+            '**Aircraft:** {{aircraft_name}}  ',
+            '**Certification Basis:** {{cert_basis}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose and Scope',
+            'This report documents the Reliability & Maintainability program posture for {{aircraft_name}}: the as-built reliability prediction, reliability allocation, maintainability ledger with inherent and operational availability, spares provisioning, reliability growth and demonstration status, and the FRACAS field-data lane. All rates are user-entered or model-derived; every availability figure states its formula and fidelity.',
+            '',
+            '## 2. Reliability Prediction (as-built rollup)',
+            '{{ram_prediction_table}}',
+            '',
+            '## 3. Reliability Allocation',
+            '{{ram_alloc_table}}',
+            '',
+            '## 4. Maintainability Ledger — Ai / Ao',
+            'Inherent availability Ai = MTBF/(MTBF+MTTR) uses active repair time only; operational Ao uses MDT (active + logistics + administrative), per MIL-HDBK-338B §10. System-level closed-form availability is a clearly-labeled independent-repair estimate; Markov models own shared-repair dynamics.',
+            '{{ram_availability_summary}}',
+            '{{ram_ledger_table}}',
+            '',
+            '## 5. Spares Provisioning',
+            '{{ram_spares_table}}',
+            '',
+            '## 6. Life Data (Weibull)',
+            '{{ram_weibull_table}}',
+            '',
+            '## 7. Reliability Growth (Crow-AMSAA)',
+            '{{ram_growth_table}}',
+            '',
+            '## 8. FRACAS — Field Data vs Prediction',
+            'FRACAS is reporting AND corrective action: every finding carries a disposition, and observed rates are confronted with the model\'s predictions rather than filed beside them.',
+            '{{fracas_table}}',
+            '',
+            '## 9. Life-Cycle Cost',
+            '{{lcc_table}}',
+            '',
+            '## 10. Sneak Circuit Analysis',
+            '{{sneak_table}}',
+            '',
+            '## 11. Software Reliability',
+            '{{swrel_table}}',
+            '',
+            '## 12. Tolerance and Derating',
+            '{{tol_derate_table}}',
+        ].join('\n'),
+
+        MSG3: [
+            '# MSG-3 Scheduled Maintenance Analysis',
+            '**Project:** {{project_name}}  ',
+            '**Aircraft:** {{aircraft_name}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose',
+            'This report documents the MSG-3 systems/powerplant analysis: Maintenance Significant Item (MSI) selection, functional-failure evaluation, and the resulting scheduled-maintenance task set. Selection answers derived from the safety model (hidden-function exposure, membership on a Catastrophic/Hazardous golden thread) are marked with their derivation provenance; operational and economic answers are engineer-elicited.',
+            '',
+            '## 2. MSI Register and Dispositions',
+            '{{msg3_table}}',
+            '',
+            '## 3. Interfaces to the Safety Analysis',
+            'Tasks selected here should own the periodic-test intervals (τ) claimed by latent events in the quantitative analyses; the CCMR list is reported separately and cross-checked against this task set.',
+            '{{ccmr_table}}',
+        ].join('\n'),
+
+        MMEL: [
+            '# MMEL / TLD Dispatch Analysis',
+            '**Project:** {{project_name}}  ',
+            '**Aircraft:** {{aircraft_name}}  ',
+            '**Certification Basis:** {{cert_basis}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose',
+            'This report documents dispatch-with-inoperative-equipment candidacy: for each proposed MMEL item, the protection check against the safety analysis, the quantitative dispatch-configuration evaluation against the applicable target, and any time-limited-dispatch (TLD) bound.',
+            '',
+            '## 2. MMEL / TLD Register',
+            '{{mmel_table}}',
+            '',
+            '## 3. Basis',
+            'Dispatch-configuration probabilities are computed by the deterministic engine on the affected trees with the inoperative item(s) set failed; "within target" verdicts compare against the failure-condition objective, never a fleet-average argument. TLD hours bound the exposure required to hold the objective.',
+        ].join('\n'),
+
+        ETBT: [
+            '# Event Tree & Bow-Tie Analysis',
+            '**Project:** {{project_name}}  ',
+            '**Aircraft:** {{aircraft_name}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose',
+            'This report documents the event-sequence analyses: each initiating event developed through its mitigation barriers to end states, and the bow-tie joins that connect fault-tree causes (left side) to consequence sequences (right side) around a top event.',
+            '',
+            '## 2. Event Trees',
+            '{{et_table}}',
+            '',
+            '## 3. Bow-Ties',
+            'Bow-tie initiators are sourced from the BDD-exact top probability of the compiled fault tree; cross-side common cause is detected via cut-set intersection and registers defeated Independence Principles rather than being averaged away.',
+            '{{bowtie_table}}',
+        ].join('\n'),
+
+        CCMR: [
+            '# Candidate Certification Maintenance Requirements',
+            '**Project:** {{project_name}}  ',
+            '**Aircraft:** {{aircraft_name}}  ',
+            '**Certification Basis:** {{cert_basis}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose',
+            'This report lists the Candidate Certification Maintenance Requirements harvested from significant latent failures in the Catastrophic and Hazardous fault trees (ARP 4761A E.3.2.4), with the failure condition each protects, the detection means, and the not-to-exceed interval derived by τ-bisection against the quantitative objective, together with the wear-out candidate list (E.3.2.5).',
+            '',
+            '## 2. CCMR Candidates',
+            '{{ccmr_table}}',
+            '',
+            '## 3. Wear-Out Candidates',
+            '{{wearout_table}}',
+        ].join('\n'),
+
+        IPL: [
+            '# Independence Principles Report',
+            '**Project:** {{project_name}}  ',
+            '**Aircraft:** {{aircraft_name}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Purpose',
+            'This report presents the Independence Principle ledger: every independence claim relied upon by the safety analyses, deduplicated by member set, with its claim sources, common-cause contradiction status, disposition, and lifecycle state (Identified → Evaluated → Requirement → Verified).',
+            '',
+            '## 2. Principle Ledger',
+            '{{ip_ledger_table}}',
+            '',
+            '## 3. Evaluation Basis',
+            'Principles are identified automatically from minimal cut sets (order ≥ 2 on Catastrophic/Hazardous conditions) and DAL-algebra independence-gated reductions; CMA/PRA/ZSA findings challenge them, and a defeated principle cascades a compromise flag to every dependent claim.',
+            '{{cma_table}}',
+        ].join('\n'),
     };
 
     // ------------------------------------------------------------------------
@@ -429,6 +636,77 @@ const Reports = (function() {
             if (activeSys) return systemsData.find(s => s.id === activeSys) || null;
         } catch (_) {}
         return null;
+    }
+
+    // ---------------------------------------------------------------------
+    // Backlog #1 — AI provenance in FINAL OUTPUTS. Every table whose source
+    // rows can be AI-drafted gains an 'Origin' column (only when at least one
+    // AI row exists — clean tables stay clean). Label text comes from the
+    // deterministic confidence engine (ai_badges.js): tier from human-review
+    // state, grade from input fidelity L0..L2. Guarded — reports render
+    // identically if the badge module is absent.
+    // ---------------------------------------------------------------------
+    function _aiOriginRows(built, src, kind, sysId) {
+        try {
+            const rows = Array.isArray(src) ? src : [];
+            if (!rows.some(r => r && (r.aiGenerated || r.aiModel))) return built;
+            const AB = (typeof window !== 'undefined') ? window.AiBadges : null;
+            (built || []).forEach((o, i) => {
+                const r = rows[i];
+                const lab = (AB && typeof AB.reportLabel === 'function' && r) ? AB.reportLabel(r, kind, sysId)
+                    : ((r && (r.aiGenerated || r.aiModel)) ? 'AI-drafted' : '');
+                o['Origin'] = lab || 'Manual';
+            });
+        } catch (_) {}
+        return built;
+    }
+
+    // Backlog #1 — engine self-test attestation stamped into every export.
+    // Runs the 25 published-reference benchmarks FRESH at export time when the
+    // suite is loaded (same discipline as the evidence package §10j); falls
+    // back to the last stamped run, and says so honestly when never run.
+    function _engineAttestationText() {
+        try {
+            if (typeof window !== 'undefined' && typeof window.engineSelfTest === 'function') {
+                const r = window.engineSelfTest();
+                return r.ok
+                    ? 'Engine self-test: VERIFIED — ' + r.pass + '/' + r.total + ' published-reference benchmarks passed at export time (' + r.ms + ' ms, ' + r.browser + ', ' + String(r.at).slice(0, 16).replace('T', ' ') + ').'
+                    : 'Engine self-test: FAILED at export time — ' + r.fails.slice(0, 3).join('; ') + '. Do not release this report until resolved.';
+            }
+        } catch (_) {}
+        try {
+            const last = (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.engineSelfTest) || null;
+            if (last) return 'Engine self-test (last stamped run ' + String(last.at).slice(0, 16).replace('T', ' ') + '): ' + (last.ok ? 'VERIFIED ' + last.pass + '/' + last.total + ' benchmarks' : 'FAILED — ' + last.fails.slice(0, 2).join('; ')) + '.';
+        } catch (_) {}
+        return 'Engine self-test: not run this session — run "Verify engine" (Thread Integrity) to stamp a fresh attestation.';
+    }
+
+    // Backlog #1 — locate the E2 draft record for a section id (draft keys are
+    // reportType[:systemId]:sectionId; systemId is optional at render time).
+    function _sectionDraftRec(reportType, secId) {
+        try {
+            const s = (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.aiDrafts) || {};
+            const exact = s[String(reportType) + ':' + String(secId)];
+            if (exact) return exact;
+            const pre = String(reportType) + ':';
+            const suf = ':' + String(secId);
+            for (const k of Object.keys(s)) {
+                if (k.indexOf(pre) === 0 && k.slice(-suf.length) === suf) return s[k];
+            }
+        } catch (_) {}
+        return null;
+    }
+    // → { text, color } for the section-heading pill in final outputs, or null.
+    function _sectionDraftPill(reportType, secId) {
+        const rec = _sectionDraftRec(reportType, secId);
+        if (!rec || rec.state === 'discarded') return null;
+        const AB = (typeof window !== 'undefined') ? window.AiBadges : null;
+        if (AB && typeof AB.draftConfidence === 'function') {
+            const c = AB.draftConfidence(rec);
+            if (!c) return null;
+            return { text: '  [' + c.label + ' · ' + c.grade + ']', color: c.tier === 'green' ? '1D6E3E' : c.tier === 'amber' ? '9A6200' : '8E2A2A' };
+        }
+        return { text: '  [AI-drafted · ' + (rec.state || 'drafted') + ']', color: rec.state === 'drafted' ? '8E2A2A' : '9A6200' };
     }
 
     // ------------------------------------------------------------------------
@@ -483,7 +761,7 @@ const Reports = (function() {
             date:          _todayISO(),
 
             // Tables (POJOs; renderers format them)
-            fha_table: fhaSource.map(f => ({
+            fha_table: _aiOriginRows(fhaSource.map(f => ({
                 'FC ID':    f.fcId || '',
                 'Function': (function() {
                     const fid = f.subId || (Array.isArray(f.subIds) && f.subIds[0]) || '';
@@ -496,16 +774,16 @@ const Reports = (function() {
                 'Effect (Crew)':     f.effCrew || '',
                 'Effect (Pax)':      f.effPax || '',
                 'Phases': Array.isArray(f.phases) ? f.phases.join(', ') : (f.phases || ''),
-            })),
+            })), fhaSource, sys ? 'sysFha' : 'acFha', sys ? sys.id : null),
 
-            requirements_table: reqSource.map(r => ({
+            requirements_table: _aiOriginRows(reqSource.map(r => ({
                 'Req ID':     r.id || ('REQ-' + (r.internalId || '')),
                 'Level':      r.level || '',
                 'Type':       r.type || '',
                 'Requirement': r.text || '',
                 'Rationale':  r.rat || '',
                 'Verification': r.verifStatus || r.vvStatus || 'Pending',
-            })),
+            })), reqSource, sys ? 'sysReq' : 'acReq', sys ? sys.id : null),
 
             assumptions_list: asmSource.map(a => ({
                 'ID':       a.asmId || '',
@@ -514,49 +792,49 @@ const Reports = (function() {
                 'Strategy': a.valStrategy || '',
             })),
 
-            component_list: items.map(it => ({
+            component_list: _aiOriginRows(items.map(it => ({
                 'Item ID': it.itemId || '',
                 'Name':    it.name || '',
                 'Type':    it.type || '',
                 'DAL':     it.dal || '',
                 'DA Kind': it.daType || '',
                 'Description': it.description || '',
-            })),
+            })), items, 'item', sys ? sys.id : null),
 
-            fta_summary: ftaPagesScoped.map(p => ({
+            fta_summary: _aiOriginRows(ftaPagesScoped.map(p => ({
                 'Tree':   p.name || p.id,
                 'Level':  p.treeLevel || 'standalone',
                 'Mode':   p.mode || 'top-down',
                 'Top Event': (p.root && p.root.name) ? p.root.name : '(empty)',
                 'Linked Failure Condition(s)': Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds.join(', ') : (p.linkedFhaId || ''),
-            })),
+            })), ftaPagesScoped, 'ftaPage', sys ? sys.id : null),
 
-            pra_table: pra.map(p => ({
+            pra_table: _aiOriginRows(pra.map(p => ({
                 'ID':        p.praId || '',
                 'Threat':    p.threat || '',
                 'Description': p.desc || '',
                 'Affected Systems': Array.isArray(p.systems) ? p.systems.join(', ') : (p.systems || ''),
                 'CSFL':      p.csfl || '',
                 'Mitigation': p.mitigation || '',
-            })),
+            })), pra, 'pra', null),
 
-            zsa_table: zsa.map(z => ({
+            zsa_table: _aiOriginRows(zsa.map(z => ({
                 'Zone':     z.zoneId || '',
                 'Description': z.desc || '',
                 'Equipment': z.equip || '',
                 'Severity': z.severity || '',
                 'Interference': z.interference || '',
                 'Mitigation': z.mitigation || '',
-            })),
+            })), zsa, 'zsa', null),
 
-            cma_table: cma.map(c => ({
+            cma_table: _aiOriginRows(cma.map(c => ({
                 'ID':       c.cmaId || '',
                 'Subject':  c.subject || '',
                 'Claim':    c.claim || '',
                 'Status':   c.status || '',
                 'Findings': c.findings || '',
                 'Mitigation': c.mitigation || '',
-            })),
+            })), cma, 'cma', null),
 
             // Appendix metadata — drives renderFTAAppendix() and similar
             _ftaPagesForAppendix: ftaPagesScoped,
@@ -583,8 +861,8 @@ const Reports = (function() {
 
                     return {
                         // #145 prescribed grids
-                        afha_worksheet:    _buildFhaWorksheet(fhaSource, funcSource),
-                        sfha_worksheet:    _buildFhaWorksheet(fhaSource, funcSource),
+                        afha_worksheet:    _aiOriginRows(_buildFhaWorksheet(fhaSource, funcSource), fhaSource, sys ? 'sysFha' : 'acFha', sys ? sys.id : null),
+                        sfha_worksheet:    _aiOriginRows(_buildFhaWorksheet(fhaSource, funcSource), fhaSource, sys ? 'sysFha' : 'acFha', sys ? sys.id : null),
                         fta_summary_grid:  _buildFtaSummaryGrid(fhaSource, scope, sys, asmSource),
                         cma_grid:          _buildCmaGrid(cma),
                         coffe_table:       _buildCoffeTableV2(fhaSource, scope, sys, asmSource),
@@ -602,6 +880,7 @@ const Reports = (function() {
                         fmes_table:            _buildFmesTable(sys),
                         checklist_table:       _buildChecklistTable(reportType),
                         tailoring_table:       _buildTailoringTable(),
+                        program_scope_table:   _buildProgramScopeTable(),
                         checklist_summary:     _checklistSummary(reportType),
                         spp_summary:           _sppSummary(),
 
@@ -636,7 +915,7 @@ const Reports = (function() {
                         coffe_table: [], validation_matrix: [], verification_matrix: [],
                         interdep_table: [], common_resource_table: [], mac_table: [], mfms_table: [],
                         ip_ledger_table: [], ccmr_table: [], wearout_table: [], fmes_table: [],
-                        checklist_table: [], tailoring_table: [], checklist_summary: '', spp_summary: '',
+                        checklist_table: [], tailoring_table: [], program_scope_table: [], checklist_summary: '', spp_summary: '',
                         compliance_posture: [], compliance_summary: 'Compliance posture unavailable (advisory layer error); see model directly.',
                         fc_evaluations: [], fc_eval_narrative: 'Per-failure-condition evaluation unavailable (advisory layer error).',
                         gaps_table: [], gaps_summary: 'Gap surfacing unavailable (advisory layer error).',
@@ -644,6 +923,331 @@ const Reports = (function() {
                     };
                 }
             })(),
+
+            // ----------------------------------------------------------------
+            // WS-B (2026-07-11) — deterministic builders for the new report
+            // family (FMEA/FMES, R&M suite, MSG-3, MMEL, event-tree/bow-tie).
+            // Same discipline: read live stores + call existing compute
+            // primitives; never mutate; empty store ⇒ empty table, never a
+            // throw out of extractData.
+            // ----------------------------------------------------------------
+            ...(function () {
+                try { return _buildWsbTokens(sys); }
+                catch (e) {
+                    try { if (typeof console !== 'undefined') console.warn('Reports WS-B layer failed (non-fatal):', e); } catch (_) {}
+                    return {
+                        fmea_functional_table: [], fmea_piecepart_table: [],
+                        ram_prediction_table: [], ram_alloc_table: [], ram_ledger_table: [],
+                        ram_spares_table: [], ram_weibull_table: [], ram_growth_table: [],
+                        fracas_table: [], lcc_table: [], sneak_table: [], swrel_table: [],
+                        tol_derate_table: [], msg3_table: [], mmel_table: [], et_table: [], bowtie_table: [],
+                        budget_ledger_table: [], ffs_table: [],
+                        ram_availability_summary: 'R&M layer unavailable (builder error); see the R&M pages directly.',
+                    };
+                }
+            })(),
+        };
+    }
+
+    // ------------------------------------------------------------------------
+    // _buildWsbTokens(sys) — WS-B token builders. Every guard is typeof-based
+    // so a build without a given module simply yields empty tables.
+    // ------------------------------------------------------------------------
+    function _buildWsbTokens(sys) {
+        const pc = (typeof projectConfig !== 'undefined' && projectConfig) || {};
+        const _exp = v => (v > 0 && isFinite(v)) ? Number(v).toExponential(2) : (v === 0 ? '0' : '—');
+        const _num = (v, d) => (v == null || !isFinite(v)) ? '—' : Number(v).toFixed(d == null ? 2 : d);
+
+        // ---- FMEA (system-scoped when sys, else all rows) -------------------
+        const fmeaAll = (typeof fmeaData !== 'undefined' && Array.isArray(fmeaData)) ? fmeaData : [];
+        const fmeaRows = sys ? fmeaAll.filter(r => String(r.owningSystemId || '') === String(sys.id)) : fmeaAll;
+        const FML = (typeof FMEA_FUNC_MODE_LABELS !== 'undefined') ? FMEA_FUNC_MODE_LABELS : {};
+        const fmeaFunc = fmeaRows.filter(r => r.fmeaType === 'functional');
+        const fmeaPp = fmeaRows.filter(r => (r.fmeaType || 'piece-part') === 'piece-part');
+        const fmea_functional_table = _aiOriginRows(fmeaFunc.map(r => ({
+            'FMEA ID': r.fmeaId || '', 'Function': r.funcSubId || '', 'Failure Mode': FML[r.funcMode] || r.funcMode || '',
+            'Local Effect': r.localEffect || '', 'Next Higher Effect': r.nextEffect || '', 'End Effect': r.endEffect || '',
+            'Detection': r.detection || '', 'Severity': r.severity || '', 'Compensating Provisions': r.compensating || '', 'Phase': r.phase || '',
+        })), fmeaFunc, 'fmea', null);
+        const fmea_piecepart_table = _aiOriginRows(fmeaPp.map(r => ({
+            'FMEA ID': r.fmeaId || '', 'Part': r.part || '', 'Failure Mode': r.mode || '',
+            'Local Effect': r.localEffect || '', 'Next Higher Effect': r.nextEffect || '', 'End Effect': r.endEffect || '',
+            'Detection': r.detection || '', 'Severity': r.severity || '',
+            'λ (/FH)': _exp(parseFloat(r.rate)), 'Exposure (h)': r.time != null ? String(r.time) : '—',
+            'Probability': _exp(parseFloat(r.prob)),
+        })), fmeaPp, 'fmea', null);
+
+        // ---- R&M: prediction / allocation / ledger / availability ----------
+        const ram_prediction_table = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window._ramPredictionRows === 'function') {
+                window._ramPredictionRows().forEach((list, sysName) => {
+                    const sub = list.reduce((a, r) => a + (r.lambda || 0), 0);
+                    list.forEach(r => ram_prediction_table.push({
+                        'System': sysName, 'Basic Event': r.event || '', 'Name': r.name || '', 'Tree': r.page || '',
+                        'λ (/FH)': _exp(r.lambda), 'Source': r.source || '',
+                    }));
+                    ram_prediction_table.push({ 'System': sysName + ' — TOTAL', 'Basic Event': '', 'Name': '', 'Tree': '', 'λ (/FH)': _exp(sub), 'Source': 'Σ as-built rollup' });
+                });
+            }
+        } catch (_) {}
+        const alloc = (pc.relAnalytics && pc.relAnalytics.alloc) || null;
+        const ram_alloc_table = alloc ? (alloc.rows || []).map(r => ({
+            'System': r.name || '', 'Weight (%)': _num(r.weight, 1), 'λ share (/FH)': _exp(r.lambda),
+            'Basis': alloc.origin || ('target ' + _exp(alloc.target)),
+        })) : [];
+        const ram_ledger_table = [];
+        const _ledgerItems = [];
+        try {
+            const store = (typeof window !== 'undefined' && typeof window._ramStore === 'function') ? window._ramStore() : null;
+            const find = (typeof window !== 'undefined' && typeof window._fmesFindBe === 'function') ? window._fmesFindBe : null;
+            ((store && store.tasks) || []).forEach(t => {
+                let lam = null;
+                try {
+                    const h = t.beRef && find ? find(t.beRef) : null;
+                    if (h) lam = (typeof getEffectiveLambda === 'function' ? getEffectiveLambda(h.node) : h.node.lambda) || 0;
+                } catch (_) {}
+                const mttr = parseFloat(t.activeRepair) || 0;
+                const mdt = mttr + (parseFloat(t.logistics) || 0) + (parseFloat(t.admin) || 0);
+                const m = lam > 0 ? 1 / lam : null;
+                const ai = (m != null && mttr > 0) ? m / (m + mttr) : null;
+                const ao = (m != null && mdt > 0) ? m / (m + mdt) : null;
+                if (lam > 0 && mttr > 0) _ledgerItems.push({ lambda: lam, mttr });
+                ram_ledger_table.push({
+                    'Task': t.name || '', 'LRU': t.itemId || '', 'Basic Event': t.beRef || '',
+                    'λ (/FH)': lam != null ? _exp(lam) : '—', 'MTTR (h)': _num(mttr, 1), 'MDT (h)': _num(mdt, 1),
+                    'Ai': ai != null ? (ai * 100).toFixed(4) + '%' : '—', 'Ao (est)': ao != null ? (ao * 100).toFixed(4) + '%' : '—',
+                    'Interval (FH)': t.interval ? String(t.interval) : '—', 'Demonstrated (h)': t.demonstrated != null ? String(t.demonstrated) : '—',
+                    'Origin': t.origin || (t.msg3 ? 'MSG-3 ' + t.msg3 : 'manual'),
+                });
+            });
+        } catch (_) {}
+        let ram_availability_summary = 'No ledger-linked repair data yet — link maintenance tasks to basic events (λ + MTTR) to compute system availability.';
+        try {
+            if (_ledgerItems.length) {
+                const asExact = _ledgerItems.reduce((a, it) => a * (1 / (1 + it.lambda * it.mttr)), 1);
+                const qApprox = _ledgerItems.reduce((a, it) => a + it.lambda * it.mttr, 0);
+                ram_availability_summary = 'System steady-state availability, CLOSED-FORM ESTIMATE over ' + _ledgerItems.length +
+                    ' ledger-linked item(s), series success logic, independent repair: As = Π Aᵢ = Π μᵢ/(λᵢ+μᵢ) = ' + (asExact * 100).toFixed(asExact > 0.99 ? 5 : 3) + '% · Qs = 1−As = ' + _exp(1 - asExact) +
+                    ' · μ≫λ shortcut (approximation only): Qs ≈ Σ λᵢ·MTTRᵢ = ' + _exp(qApprox) +
+                    '. Exact per-item Aᵢ appears in the ledger table; Markov models own shared-repair and dependency dynamics.';
+            }
+        } catch (_) {}
+        const ram_spares_table = ((pc.relAnalytics && pc.relAnalytics.spares) || []).map(s => {
+            let rec = '—';
+            try {
+                if (typeof window !== 'undefined' && typeof window.sparesLevel === 'function' && s.lambda > 0 && s.units > 0 && s.tat > 0) {
+                    const r = window.sparesLevel(s.lambda * s.units * s.tat, s.pl || 0.95);
+                    if (r && r.s != null) rec = r.s + ' (achieves ' + ((r.achieved || 0) * 100).toFixed(1) + '%)';
+                }
+            } catch (_) {}
+            return { 'Item': s.name || '', 'λ (/FH)': _exp(s.lambda), 'Units': String(s.units || ''), 'Turnaround (h)': String(s.tat || ''), 'Protection Level': _num((s.pl || 0) * 100, 0) + '%', 'Recommended Spares': rec };
+        });
+        const ram_weibull_table = ((pc.relAnalytics && pc.relAnalytics.lifeData) || []).map(d => {
+            try {
+                if (typeof window !== 'undefined' && typeof window.weibullMrr === 'function') {
+                    const pts = (d.failures || []).map(t => ({ t, suspended: false })).concat((d.suspensions || []).map(t => ({ t, suspended: true })));
+                    const w = window.weibullMrr(pts);
+                    if (w) return { 'Dataset': d.name || '', 'Failures': String((d.failures || []).length), 'Suspensions': String((d.suspensions || []).length), 'β (shape)': _num(w.beta), 'η (scale, h)': _num(w.eta, 0), 'B10 (h)': _num(w.b10, 0), 'MTBF (h)': _num(w.mtbf, 0), 'R²': _num(w.r2, 3), 'Regime': w.regime || '' };
+                }
+            } catch (_) {}
+            return { 'Dataset': d.name || '', 'Failures': String((d.failures || []).length), 'Suspensions': String((d.suspensions || []).length), 'β (shape)': '—', 'η (scale, h)': '—', 'B10 (h)': '—', 'MTBF (h)': '—', 'R²': '—', 'Regime': 'fit unavailable' };
+        });
+        const ram_growth_table = ((pc.relAnalytics && pc.relAnalytics.growth) || []).map(g => {
+            try {
+                if (typeof window !== 'undefined' && typeof window.crowAmsaa === 'function') {
+                    const c = window.crowAmsaa(g.times || [], g.T);
+                    if (c) return { 'Program': g.name || '', 'Failures': String(c.n), 'Test Time (h)': _num(c.T, 0), 'β (growth)': _num(c.beta), 'Growth Rate': _num(c.growthRate), 'Cum. MTBF (h)': _num(c.cumMtbf, 0), 'Inst. MTBF (h)': _num(c.instMtbf, 0), 'Goodness of Fit': c.gofPass ? 'pass (CvM)' : 'FAIL (CvM)', 'Verdict': c.verdict || '' };
+                }
+            } catch (_) {}
+            return { 'Program': g.name || '', 'Failures': String((g.times || []).length), 'Test Time (h)': _num(g.T, 0), 'β (growth)': '—', 'Growth Rate': '—', 'Cum. MTBF (h)': '—', 'Inst. MTBF (h)': '—', 'Goodness of Fit': '—', 'Verdict': 'fit unavailable' };
+        });
+        const fracas_table = [];
+        const _fracasSrc = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window.ramFieldRows === 'function') {
+                window.ramFieldRows().forEach(x => {
+                    _fracasSrc.push(x.f || {});
+                    fracas_table.push({
+                        'Record': (x.f && x.f.id) || '', 'Basic Event': (x.f && x.f.beRef) || '',
+                        'Observed': x.point ? ('MTBF ' + _num(x.f.observedMtbf, 0) + ' h (point)') : ((x.f && x.f.hours != null) ? (x.f.hours + ' h / ' + x.f.failures + ' failure(s)') : '—'),
+                        'MTBF LCB (h)': x.lcb != null ? _num(x.lcb, 0) : '—', 'Predicted MTBF (h)': x.predicted != null ? _num(x.predicted, 0) : '—',
+                        'Verdict': x.verdict || '',
+                        'Finding Narrative': (x.f && x.f.narrative) || '—',
+                        'Corrective Action': (x.f && x.f.action) ? (x.f.action + (x.f.actionClosed ? ' — CLOSED' : ' — OPEN')) : '—',
+                    });
+                });
+                _aiOriginRows(fracas_table, _fracasSrc, null, null);
+            }
+        } catch (_) {}
+
+        // ---- LCC / Sneak / SWRel / Tolerance-derating ------------------------
+        const lcc_table = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window.lccTotals === 'function' && pc.lcc && (pc.lcc.items || []).length) {
+                const t = window.lccTotals();
+                (t.rows || []).forEach(r => lcc_table.push({
+                    'Item': (r.it && r.it.name) || '', 'λ (/FH)': _exp(r.it && r.it.lambda), 'Failures / yr': _num(r.c && r.c.failYr),
+                    'Yearly Cost': '$' + _num(r.c && r.c.yearly, 0), 'NPV': '$' + _num(r.c && r.c.npv, 0),
+                    'Spares': '$' + _num(r.c && r.c.spares, 0), 'Acquisition': '$' + _num(r.c && r.c.acquisition, 0),
+                }));
+                if (t.totals) lcc_table.push({ 'Item': 'TOTAL', 'λ (/FH)': '', 'Failures / yr': '', 'Yearly Cost': '$' + _num(t.totals.yearly, 0), 'NPV': '$' + _num(t.totals.npv, 0), 'Spares': '$' + _num(t.totals.spares, 0), 'Acquisition': '$' + _num(t.totals.acquisition, 0) });
+            }
+        } catch (_) {}
+        const sneak_table = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window.sneakCandidates === 'function') {
+                const disp = (pc.sneak && pc.sneak.dispositions) || {};
+                window.sneakCandidates().forEach(c => {
+                    const d = disp[c.id];
+                    sneak_table.push({ 'Pattern': c.pattern || '', 'Subject': c.subject || '', 'Why Flagged': c.why || '', 'Clue': c.clue || '',
+                        'Disposition': d ? (d.verdict + (d.note ? ' — ' + d.note : '') + (d.by ? ' · ' + d.by : '')) : 'unexamined' });
+                });
+            }
+        } catch (_) {}
+        const swrel_table = ((pc.swrel && pc.swrel.cscis) || []).map(c => {
+            try {
+                if (typeof window !== 'undefined' && typeof window.goMle === 'function') {
+                    const g = window.goMle(c.times || [], c.T);
+                    if (g) return { 'CSCI': c.name || '', 'Failures': String(g.n), 'Exec Time (h)': _num(g.T, 0), 'Current Intensity (/h)': _exp(g.intensity), 'Est. Residual Faults': _num(g.residual, 1), 'Confidence': g.lowConfidence ? 'LOW (sparse data)' : 'adequate' };
+                }
+            } catch (_) {}
+            return { 'CSCI': c.name || '', 'Failures': String((c.times || []).length), 'Exec Time (h)': _num(c.T, 0), 'Current Intensity (/h)': '—', 'Est. Residual Faults': '—', 'Confidence': 'fit unavailable' };
+        });
+        const tol_derate_table = [];
+        try {
+            ((pc.tolDerate && pc.tolDerate.stacks) || []).forEach(s => {
+                const nominal = (s.contributors || []).reduce((a, c) => a + (parseFloat(c.nominal) || 0), 0);
+                const wc = (s.contributors || []).reduce((a, c) => a + Math.abs(parseFloat(c.tol) || 0), 0);
+                const lo = s.limits && s.limits.lower != null ? s.limits.lower : null;
+                const hi = s.limits && s.limits.upper != null ? s.limits.upper : null;
+                const inside = (lo == null || nominal - wc >= lo) && (hi == null || nominal + wc <= hi);
+                tol_derate_table.push({ 'Kind': 'Tolerance stack', 'Name': s.name || '', 'Value': _num(nominal, 3) + ' (WC ±' + _num(wc, 3) + ')',
+                    'Limit / Guideline': (lo != null ? lo : '−∞') + ' … ' + (hi != null ? hi : '+∞'), 'Verdict': inside ? 'inside limits (worst case)' : 'EXCEEDS limits (worst case)' });
+            });
+            ((pc.tolDerate && pc.tolDerate.derate) || []).forEach(d => {
+                const ratio = (parseFloat(d.rated) > 0) ? (parseFloat(d.applied) || 0) / parseFloat(d.rated) : null;
+                const g = parseFloat(d.guideline);
+                tol_derate_table.push({ 'Kind': 'Derating', 'Name': (d.part || '') + ' (' + (d.category || '') + ')', 'Value': ratio != null ? (ratio * 100).toFixed(0) + '% of rated' : '—',
+                    'Limit / Guideline': isFinite(g) ? (g * 100).toFixed(0) + '% guideline' : '—', 'Verdict': (ratio != null && isFinite(g)) ? (ratio <= g ? 'pass' : 'EXCEEDS guideline') : '—' });
+            });
+        } catch (_) {}
+
+        // ---- MSG-3 / MMEL ----------------------------------------------------
+        const msg3_table = [];
+        const _msg3Src = [];
+        try {
+            (((pc.msg3 || {}).msis) || []).forEach(m => {
+                const selTxt = ['hidden', 'safety', 'ops', 'econ'].filter(k => m.sel && m.sel[k]).join(' + ') || 'none';
+                if (!(m.ffs || []).length) {
+                    _msg3Src.push(m);
+                    msg3_table.push({ 'MSI': m.name || '', 'LRU': m.itemId || '', 'Selection': selTxt, 'Functional Failure': '(none recorded)', 'Category': '—', 'Disposition': '—', 'Tasks': '—', 'Rationale': '—' });
+                    return;
+                }
+                (m.ffs || []).forEach(ff => {
+                    let cat = null, dis = null;
+                    try { if (typeof window !== 'undefined' && typeof window.msg3Category === 'function') cat = window.msg3Category(ff); } catch (_) {}
+                    try { if (typeof window !== 'undefined' && typeof window.msg3Disposition === 'function') dis = window.msg3Disposition(ff); } catch (_) {}
+                    _msg3Src.push(ff);
+                    msg3_table.push({
+                        'MSI': m.name || '', 'LRU': m.itemId || '', 'Selection': selTxt,
+                        'Functional Failure': (ff.func || '') + ' — ' + (ff.failure || ''),
+                        'Category': cat != null ? String(cat) : '—', 'Disposition': dis ? dis.label : '—',
+                        'Tasks': (ff.tasks || []).map(t => (t.type || '') + ' · ' + (t.desc || '') + (t.interval ? ' @ ' + t.interval : '')).join('; ') || '—',
+                        'Rationale': ff.rationale || '—',
+                    });
+                });
+            });
+            _aiOriginRows(msg3_table, _msg3Src, null, null);
+        } catch (_) {}
+        const mmel_table = (((pc.mmel || {}).items) || []).map(it => ({
+            'Item': it.id || '', 'Equipment': it.title || '', 'ATA': it.ata || '', 'Installed / Required': (it.installed != null ? it.installed : '?') + ' / ' + (it.required != null ? it.required : '?'),
+            'Category': (it.category || '') + (it.catDays != null ? ' (' + it.catDays + 'd)' : ''),
+            'Protection Check': it.protection ? ((it.protection.ok === false ? 'NO DISPATCH — ' : '') + (it.protection.verdict || '')) : 'not analyzed',
+            'Quantitative': (it.quant && it.quant.base != null) ? ('base ' + _exp(it.quant.base) + ' → dispatched ' + _exp(it.quant.dispatched) + (it.quant.withinTarget != null ? (it.quant.withinTarget ? ' (≤ target)' : ' (EXCEEDS target)') : '')) : '—',
+            'TLD max (FH)': (it.quant && it.quant.tldMaxFH != null) ? String(Math.round(it.quant.tldMaxFH)) : '—',
+            'State': it.state || '',
+        }));
+
+        // ---- Event trees / bow-ties ------------------------------------------
+        const et_table = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window.etaEvaluate === 'function') {
+                (pc.eventTrees || []).forEach(t => {
+                    const ev = window.etaEvaluate(t);
+                    ((ev && ev.outcomes) || []).forEach(o => et_table.push({
+                        'Tree': (t.id || '') + ' — ' + (t.name || ''), 'Initiator (/FH)': _exp(t.initiator && t.initiator.freq),
+                        'Sequence': (o.seq || []).join(' → '), 'P(path)': _exp(o.prob), 'Frequency (/FH)': _exp(o.freq),
+                        'Severity': o.severity || 'UNASSESSED', 'Linked FC': o.linkedFcId || '—',
+                        'Coupling': (ev && ev.coupled) ? 'common-cause coupled' : 'independent',
+                    }));
+                });
+            }
+        } catch (_) {}
+        const bowtie_table = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window.bowtieEvaluate === 'function') {
+                (pc.bowties || []).forEach(bt => {
+                    const ev = window.bowtieEvaluate(bt);
+                    if (!ev) return;
+                    bowtie_table.push({
+                        'Bow-Tie': (bt.id || '') + ' — ' + (bt.name || ''), 'Top Event': ev.critLabel || bt.ftaPageId || '',
+                        'P(top) BDD-exact': _exp(ev.pCritical),
+                        'Preventive Barriers': (ev.preventive || []).length ? (ev.preventive || []).map(b => b.name || '').join('; ') : '—',
+                        'Mitigative Barriers': (ev.mitigative || []).length ? (ev.mitigative || []).map(b => b.name || '').join('; ') : '—',
+                        'Single-Point Failure': ev.spf ? 'YES' : 'no',
+                        'Findings': (ev.findings || []).length ? (ev.findings || []).map(f => f.text || f.kind).join('; ') : 'none',
+                        'ETA Closure': ev.etaLinked ? (ev.etaClosed ? 'closed' : 'NOT CLOSED') : 'no ETA linked',
+                    });
+                });
+            }
+        } catch (_) {}
+
+        // ---- Budget ledger (Phase D §3.6) — allocated vs achieved, one source
+        const budget_ledger_table = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window.budgetLedgerRows === 'function') {
+                window.budgetLedgerRows().forEach(r => {
+                    if (sys && r.systemId && String(r.systemId) !== String(sys.id)) return;   // system-scope reports show their own budgets
+                    budget_ledger_table.push({
+                        'FC': r.fcId, 'Scope': r.scope, 'Severity': r.severity,
+                        'Objective (/FH)': _exp(r.objective), 'Allocated': _exp(r.allocated), 'Achieved (mirror)': _exp(r.achieved),
+                        'Margin': r.margin != null ? '×' + Number(r.margin).toPrecision(2) : '—',
+                        'Posture (advisory)': r.status.replace(/-/g, ' '),
+                        'Trees': (r.allocPage ? r.allocPage.name : '') + (r.mirrorPage ? ' ⇄ ' + r.mirrorPage.name : ''),
+                    });
+                });
+            }
+        } catch (_) {}
+
+        // ---- Qualitative FFS lane (Backlog #4 — ARP 4761A 4.1.1.1): every
+        // minimal cut set containing a ◇ development error. Never quantified.
+        const ffs_table = [];
+        try {
+            if (typeof window !== 'undefined' && typeof window.ffsRows === 'function') {
+                window.ffsRows().forEach(r => {
+                    if (r.tooComplex) {
+                        ffs_table.push({ 'Fault Tree': r.pageName, 'Failure Condition': '—', 'Severity': '—', 'Order': '—', 'Scenario (minimal cut set)': 'cut-set enumeration refused (explosion guard)', '◇ Development Error(s)': '—' });
+                        return;
+                    }
+                    ffs_table.push({
+                        'Fault Tree': r.pageName,
+                        'Failure Condition': r.fcs.length ? r.fcs.map(f => f.fcId + ' (' + f.scope + ')').join('; ') : 'unlinked',
+                        'Severity': r.fcs.length ? r.fcs.map(f => f.severity).join('; ') : '—',
+                        'Order': String(r.order),
+                        'Scenario (minimal cut set)': r.members.map(m => (m.devError ? '◇ ' : '') + m.displayId + (m.name ? ' — ' + String(m.name).slice(0, 50) : '')).join(' AND '),
+                        '◇ Development Error(s)': r.devMembers.join(', '),
+                    });
+                });
+            }
+        } catch (_) {}
+
+        return {
+            fmea_functional_table, fmea_piecepart_table,
+            ram_prediction_table, ram_alloc_table, ram_ledger_table, ram_availability_summary,
+            ram_spares_table, ram_weibull_table, ram_growth_table, fracas_table,
+            lcc_table, sneak_table, swrel_table, tol_derate_table,
+            msg3_table, mmel_table, et_table, bowtie_table, budget_ledger_table, ffs_table,
         };
     }
 
@@ -1369,14 +1973,27 @@ const Reports = (function() {
         try {
             if (typeof _macStore !== 'function' || typeof macBreachSets !== 'function') return [];
             return _macStore().map(r => {
-                const clauses = (r.clauses || []).map(c => '≥' + (c.min || 1) + ' of {' + (c.of || []).map(_e1SysName).join(', ') + '}').join(' AND ');
+                // D2 fidelity ladder (F0 Counted / F1 Weighted / F2 Measured) —
+                // weighted clauses render as capacity-vs-floor; degraded events by name.
+                const weightedFn = (typeof macClauseWeighted === 'function') ? macClauseWeighted : null;
+                const clauses = (r.clauses || []).map(c => {
+                    if (weightedFn && weightedFn(r, c)) {
+                        const floor = c.floor != null ? c.floor : (c.min || 1);
+                        return 'capacity ≥ ' + floor + ' from {' + (c.of || []).map(m => _e1SysName(m) + ((c.weights && +c.weights[m] > 0 && +c.weights[m] !== 1) ? ' ×' + c.weights[m] : '')).join(', ') + '}';
+                    }
+                    return '≥' + (c.min || 1) + ' of {' + (c.of || []).map(_e1SysName).join(', ') + '}';
+                }).join(' AND ');
                 const breach = macBreachSets(r);
-                const bTxt = breach.slice(0, 8).map(b => b.map(_e1SysName).join(' + ')).join(' ; ') + (breach.length > 8 ? ' ; … (' + breach.length + ' total)' : '');
+                const bName = k => String(k).indexOf('deg:') === 0 ? String(k).slice(4).replace(':', ' degraded: ') : _e1SysName(k);
+                const bTxt = breach.slice(0, 8).map(b => b.map(bName).join(' + ')).join(' ; ') + (breach.length > 8 ? ' ; … (' + breach.length + ' total)' : '');
                 const sub = r.substantiation || {};
                 const tree = (typeof macTreeStatus === 'function') ? macTreeStatus(r) : '—';
+                const lvl = (typeof macRuleLevel === 'function') ? macRuleLevel(r) : (r.level || 0);
+                const fidAssumed = (typeof macFidAssumed === 'function') ? macFidAssumed(r).length : 0;
                 return {
                     'Function': _e1FuncLabel(r.subId),
                     'Phase': r.phase || 'All phases',
+                    'Fidelity': 'F' + lvl + (lvl === 0 ? ' (counted)' : lvl === 1 ? ' (weighted)' : ' (measured)') + (fidAssumed ? ' — ' + fidAssumed + ' value(s) ASSUMED' : ''),
                     'Minimum Acceptable Configuration': clauses,
                     'Substantiation': sub.kind === 'sdd'
                         ? ('SDD — ' + (sub.ref || '') + (sub.by ? ' · ' + sub.by : ''))
@@ -1597,6 +2214,30 @@ const Reports = (function() {
     }
 
     // Safety Program Plan — method-slot declarations + intake line.
+    // Program scope - the plan-driven lane register (program_plan v0.2+): every
+    // catalogue lane, in or out, with signed tailoring inline. The printed SSPP
+    // and the nav are projections of the same record - this is the audit face.
+    function _buildProgramScopeTable() {
+        try {
+            if (typeof PROGRAM_PLAN === 'undefined') return [];
+            const tail = PROGRAM_PLAN.tailoring().filter(t => !t.cleared);
+            return PROGRAM_PLAN.CATALOGUE.map(l => {
+                const on = PROGRAM_PLAN.laneOn(l.id);
+                const exp = PROGRAM_PLAN.isExpected(l.id);
+                const t = tail.find(x => x.laneId === l.id);
+                const n = PROGRAM_PLAN.laneData(l.id);
+                return {
+                    'Analysis lane': l.name,
+                    'Standard': l.std,
+                    'Basis posture': l.optIn ? 'Opt-in (system lane)' : (exp ? 'Expected - ' + PROGRAM_PLAN.basisNow() : 'Optional'),
+                    'In program': on ? 'IN PROGRAM' : (t ? 'TAILORED OUT (signed)' : 'OUT'),
+                    'Authored items': n ? String(n) + ' (retained)' : '-',
+                    'Tailoring rationale / signature': t ? (t.rationale + ' - ' + t.sig + ' - ' + String(t.at || '').slice(0, 10)) : ''
+                };
+            });
+        } catch (_) { return []; }
+    }
+
     function _sppSummary() {
         try {
             if (typeof _sppStore !== 'function' || typeof SPP_SLOTS === 'undefined') return '';
@@ -1606,6 +2247,7 @@ const Reports = (function() {
                 return s.label + ': ' + (s.options[idx] || s.options[s.dflt]);
             });
             let line = 'Methods per the Safety Program Plan — ' + parts.join(' · ') + '.';
+            try { if (typeof PROGRAM_PLAN !== 'undefined') { const c = PROGRAM_PLAN.CATALOGUE; const onN = c.filter(l => PROGRAM_PLAN.laneOn(l.id)).length; const tN = PROGRAM_PLAN.tailoring().filter(t => !t.cleared).length; line += ' Program scope: ' + onN + ' of ' + c.length + ' analysis lanes in program' + (tN ? ', ' + tN + ' tailored out with signature' : '') + ' - see Program Scope table.'; } } catch (_) {}
             if (spp.intake) line += ' Project intake ' + String(spp.intake.at || '').slice(0, 10) + ' (basis: ' + (spp.intake.basis || '—') + ' · route: ' + (spp.intake.route || '—') + ').';
             return line;
         } catch (_) { return ''; }
@@ -1624,7 +2266,7 @@ const Reports = (function() {
         const lines = tpl.split(/\r?\n/);
         for (let i = 0; i < lines.length; i++) {
             const ln = lines[i];
-            const tab = ln.match(/^\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|goldenthread_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table)\}\}$/);
+            const tab = ln.match(/^\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|goldenthread_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|budget_ledger_table|ffs_table)\}\}$/);
             const list = ln.match(/^\{\{(assumptions_list)\}\}$/);
             const appx = ln.match(/^\{\{appendix:(fta|zsa|pra|cma)\}\}$/);
             const h    = ln.match(/^(#{1,4})\s+(.*)$/);
@@ -1780,6 +2422,9 @@ const Reports = (function() {
             }
         }
 
+        // Backlog #1 — engine self-test attestation stamped into every export.
+        children.push(new Paragraph({ spacing: { before: 320 }, children: [new TextRun({ text: _engineAttestationText(), italics: true, size: 18, color: '666666' })] }));
+
         const doc = new Document({
             creator: 'Safety Lab Aero, Inc.',
             title: REPORT_DEFS[reportType].name,
@@ -1924,6 +2569,14 @@ const Reports = (function() {
             }
         }
 
+        // Backlog #1 — engine self-test attestation stamped into every export.
+        (function () {
+            doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
+            const attLines = _wrap(_engineAttestationText(), W - 2*M, 8);
+            attLines.forEach(ln => { _need(11); doc.text(ln, M, y); y += 11; });
+            doc.setTextColor(0); doc.setFont('helvetica', 'normal');
+        })();
+
         // Page numbers
         const total = doc.internal.getNumberOfPages();
         for (let p = 1; p <= total; p++) {
@@ -1964,7 +2617,8 @@ const Reports = (function() {
         // Substitute table tokens with simple "one row per paragraph" text.
         const tableTokens = ['fha_table','requirements_table','assumptions_list','component_list','fta_summary','pra_table','zsa_table','cma_table',
             'afha_worksheet','sfha_worksheet','fta_summary_grid','cma_grid','coffe_table','validation_matrix','verification_matrix','compliance_posture','fc_evaluations','gaps_table','goldenthread_table',
-            'interdep_table','common_resource_table','mac_table','mfms_table','ip_ledger_table','ccmr_table','wearout_table','fmes_table','checklist_table','tailoring_table'];
+            'interdep_table','common_resource_table','mac_table','mfms_table','ip_ledger_table','ccmr_table','wearout_table','fmes_table','checklist_table','tailoring_table','program_scope_table',
+            'fmea_functional_table','fmea_piecepart_table','ram_prediction_table','ram_alloc_table','ram_ledger_table','ram_spares_table','ram_weibull_table','ram_growth_table','fracas_table','lcc_table','sneak_table','swrel_table','tol_derate_table','msg3_table','mmel_table','et_table','bowtie_table','stpa_losses_table','stpa_hazards_table','stpa_constraints_table','stpa_cs_table','stpa_resp_table','stpa_uca_table','stpa_scenario_table','stpa_test_table','stpa_archetype_table','stpa_conformance_table','budget_ledger_table','ffs_table'];
         tableTokens.forEach(name => {
             const rows = data[name] || [];
             const text = rows.length === 0
@@ -2197,10 +2851,18 @@ const Reports = (function() {
     }
 
     return { open, close, generate, extractData, _submit, REPORT_DEFS,
+             // WS-B fix — v1's template dictionary, exported so the v2 layer can
+             // MERGE any type it doesn't define (the new FMEA/RAM/MSG3/… family
+             // and GTT) instead of silently dropping them from the editor path.
+             _V1_TEMPLATES: DEFAULT_TEMPLATES,
              // Advisory analysis engines (builds #144/#146/#147) — READ-ONLY
              // consumers of the FTA/engine compute. Exposed for the section
              // path, tests, and future wiring. None mutate the model.
-             evaluateFcQualitative, complianceRiskForReport, surfaceGaps };
+             evaluateFcQualitative, complianceRiskForReport, surfaceGaps,
+             // Exposed so the v2 section renderer (separate IIFE below) can reach
+             // these v1-scope helpers: the AI-draft confidence pill on headings,
+             // and the engine attestation text for the Assurance Attestation section.
+             _sectionDraftPill, _engineAttestationText };
 })();
 window.Reports = Reports;
 
@@ -2227,6 +2889,13 @@ window.Reports = Reports;
 (function() {
     'use strict';
     if (typeof window === 'undefined' || !window.Reports) return; // not in browser, or v1 not loaded
+    // The AI-draft pill helper lives in the v1 IIFE above; alias it here (this is a
+    // separate scope). Fail-safe to a no-op so a missing export can never break a render.
+    const _sectionDraftPill = (window.Reports && typeof window.Reports._sectionDraftPill === 'function')
+        ? window.Reports._sectionDraftPill : function () { return null; };
+    // Same cross-scope story for the engine-attestation footer line.
+    const _engineAttestationText = (window.Reports && typeof window.Reports._engineAttestationText === 'function')
+        ? window.Reports._engineAttestationText : function () { return ''; };
 
     // ------------------------------------------------------------------------
     // State — per-project section edits, keyed [reportType][sectionId] = prose.
@@ -2498,10 +3167,14 @@ window.Reports = Reports;
                     customDocxInfo = { mode: 'sectioned', file: customFile, parsed };
                 }
             } else {
-                const defaultMd = window.Reports.DEFAULT_TEMPLATES ? window.Reports.DEFAULT_TEMPLATES[reportType] : null;
+                // WS-A — a saved PROGRAM template (authored in this editor, kept on the
+                // project) takes precedence over the built-in default.
+                const progT = _wsaProgramTemplate(reportType);
+                const defaultMd = progT ? progT.markdown : (window.Reports.DEFAULT_TEMPLATES ? window.Reports.DEFAULT_TEMPLATES[reportType] : null);
                 // The v1 closure holds DEFAULT_TEMPLATES privately. We exported them onto Reports
                 // in the monkey-patch below.
                 sections = parseMarkdownToSections(defaultMd || ('# ' + def.name));
+                if (progT) customDocxInfo = { mode: 'program-template', banner: 'Program template in use (saved ' + String(progT.at || '').slice(0, 10) + (progT.by ? ' by ' + progT.by : '') + '). "Reset program template" in the toolbar restores the Safety Lab default.' };
             }
 
             _modalState = { reportType, format, systemId, appendices, customDocxFile: customFile, sections, customDocxInfo, data };
@@ -2516,6 +3189,91 @@ window.Reports = Reports;
     }
 
     // ------------------------------------------------------------------------
+    // WS-A — FULL AUTHORING: program template library + section structure ops.
+    // The editor is no longer bound to the fixed template skeleton: sections
+    // can be added, removed, renamed, and reordered, and the resulting
+    // structure (with its prose) saves back to the project as the PROGRAM
+    // template for that report type — used automatically on every next open.
+    // ------------------------------------------------------------------------
+    function _wsaProgramTemplate(reportType) {
+        try {
+            const t = (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.reportTemplates) || {};
+            return (t[reportType] && t[reportType].markdown) ? t[reportType] : null;
+        } catch (_) { return null; }
+    }
+    // Serialize the CURRENT editor state (structure + live textarea prose)
+    // back to template markdown. Prose comes from the DOM when present so
+    // what you see is exactly what saves.
+    function _wsaSerializeEditor(st) {
+        const host = document.getElementById('rpt-section-editor');
+        const lines = [];
+        (st.sections || []).forEach(sec => {
+            if (sec.level > 0) lines.push('#'.repeat(Math.min(6, sec.level)) + ' ' + (sec.heading || 'Untitled'));
+            else if (sec.heading && sec.heading.charAt(0) !== '(') lines.push('# ' + sec.heading);
+            let prose = null;
+            try {
+                const ta = host && host.querySelector('textarea[data-section-id="' + sec.id + '"]');
+                if (ta) prose = ta.value;
+            } catch (_) {}
+            if (prose == null) prose = sec.prose || '';
+            if (String(prose).trim()) lines.push(String(prose).trim());
+            lines.push('');
+        });
+        return lines.join('\n').trim() + '\n';
+    }
+    function _wsaSaveTemplate() {
+        try {
+            const st = _modalState; if (!st) return;
+            if (typeof projectConfig === 'undefined' || !projectConfig) return;
+            if (!projectConfig.reportTemplates) projectConfig.reportTemplates = {};
+            let by = '';
+            try { if (typeof activeReviewerName !== 'undefined') by = activeReviewerName || ''; } catch (_) {}
+            projectConfig.reportTemplates[st.reportType] = { markdown: _wsaSerializeEditor(st), at: new Date().toISOString(), by };
+            try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+            try { if (typeof showToast === 'function') showToast('Saved as the program template for ' + st.reportType + ' — every future ' + st.reportType + ' report opens with this structure and prose.', 'success', 5000); } catch (_) {}
+            _buildSectionEditor();
+        } catch (e) { try { if (typeof showToast === 'function') showToast('Template save failed: ' + (e && e.message || e), 'error', 4000); } catch (_) {} }
+    }
+    function _wsaResetTemplate() {
+        try {
+            const st = _modalState; if (!st) return;
+            if (projectConfig && projectConfig.reportTemplates) delete projectConfig.reportTemplates[st.reportType];
+            try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+            const md = (window.Reports.DEFAULT_TEMPLATES && window.Reports.DEFAULT_TEMPLATES[st.reportType]) || ('# ' + window.Reports.REPORT_DEFS[st.reportType].name);
+            st.sections = parseMarkdownToSections(md);
+            if (st.customDocxInfo && st.customDocxInfo.mode === 'program-template') st.customDocxInfo = null;
+            try { if (typeof showToast === 'function') showToast('Program template cleared — back to the Safety Lab default for ' + st.reportType + '.', 'info', 3500); } catch (_) {}
+            _buildSectionEditor();
+        } catch (_) {}
+    }
+    function _wsaAddSection(idx) {
+        const st = _modalState; if (!st) return;
+        const sec = { id: 'sec_u' + Date.now() + '_' + Math.floor(Math.random() * 1e4), level: 2, heading: 'New section', prose: '' };
+        st.sections.splice(idx + 1, 0, sec);
+        _buildSectionEditor();
+        try {
+            const host = document.getElementById('rpt-section-editor');
+            const inp = host && host.querySelector('input[data-heading-for="' + sec.id + '"]');
+            if (inp) { inp.focus(); inp.select(); }
+        } catch (_) {}
+    }
+    function _wsaRemoveSection(idx) {
+        const st = _modalState; if (!st) return;
+        const sec = st.sections[idx]; if (!sec) return;
+        if (!confirm('Remove section "' + (sec.heading || 'Untitled') + '" from this report?\n(The template default is unaffected unless you save the program template.)')) return;
+        st.sections.splice(idx, 1);
+        _buildSectionEditor();
+    }
+    function _wsaMoveSection(idx, delta) {
+        const st = _modalState; if (!st) return;
+        const j = idx + delta;
+        if (j < 0 || j >= st.sections.length) return;
+        const [sec] = st.sections.splice(idx, 1);
+        st.sections.splice(j, 0, sec);
+        _buildSectionEditor();
+    }
+
+    // ------------------------------------------------------------------------
     // _buildSectionEditor — renders one card per parsed section. The textarea
     // is prefilled with the saved edit (if any) OR the token-resolved
     // template prose. A "Reset to template default" link clears the saved
@@ -2524,9 +3282,10 @@ window.Reports = Reports;
     function _buildSectionEditor() {
         const host = document.getElementById('rpt-section-editor');
         const st = _modalState;
+        if (!host || !st) return;   // WS-A — structure ops are safe headless / pre-modal
         host.innerHTML = '';
 
-        // Banner for special cases (token-only fallback).
+        // Banner for special cases (token-only fallback / program template in use).
         if (st.customDocxInfo && st.customDocxInfo.banner) {
             const banner = document.createElement('div');
             banner.style.cssText = 'padding:10px 12px;background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.35);border-radius:var(--r-md);font-size:12px;color:var(--color-text-secondary);margin-bottom:12px;';
@@ -2534,16 +3293,80 @@ window.Reports = Reports;
             host.appendChild(banner);
         }
 
+        // WS-A — authoring toolbar. Structure editing applies to built-in /
+        // program templates; uploaded .docx templates keep their structure
+        // (their headings are OOXML anchors — edit prose only).
+        const _structural = !(st.customDocxInfo && (st.customDocxInfo.mode === 'sectioned' || st.customDocxInfo.mode === 'token-only'));
+        {
+            const bar = document.createElement('div');
+            bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;';
+            if (_structural) {
+                const save = document.createElement('button');
+                save.type = 'button'; save.className = 'ckpt-m-btn';
+                save.style.cssText = 'font-size:11.5px;padding:4px 12px;font-weight:700;';
+                save.textContent = '💾 Save as program template';
+                save.title = 'Saves this exact structure + prose on the project as the ' + st.reportType + ' template — used automatically every time this report opens.';
+                save.onclick = _wsaSaveTemplate;
+                bar.appendChild(save);
+                if (_wsaProgramTemplate(st.reportType)) {
+                    const rst = document.createElement('button');
+                    rst.type = 'button'; rst.className = 'ckpt-m-btn';
+                    rst.style.cssText = 'font-size:11.5px;padding:4px 12px;';
+                    rst.textContent = '↺ Reset program template';
+                    rst.onclick = _wsaResetTemplate;
+                    bar.appendChild(rst);
+                }
+                const hint = document.createElement('span');
+                hint.style.cssText = 'font-size:11px;color:var(--color-text-tertiary);';
+                hint.textContent = 'Rename headings inline · ↑↓ reorder · ＋ add · 🗑 remove — the report renders exactly this structure.';
+                bar.appendChild(hint);
+            }
+            host.appendChild(bar);
+        }
+
         st.sections.forEach((sec, idx) => {
             const card = document.createElement('div');
             card.style.cssText = 'border:1px solid var(--color-border-hair);border-radius:var(--r-md);padding:12px 14px;margin-bottom:10px;background:var(--color-surface-2);';
             const head = document.createElement('div');
             head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;';
-            const title = document.createElement('label');
-            const prefix = sec.level > 0 ? ('H' + sec.level + ' · ') : '';
-            title.textContent = prefix + (sec.heading || '(Untitled)');
-            title.style.cssText = 'font-size:13px;font-weight:600;color:var(--color-text-primary);margin:0;text-transform:none;letter-spacing:0;';
+            let title;
+            if (_structural && sec.level > 0) {
+                // WS-A — heading is editable in place.
+                title = document.createElement('div');
+                title.style.cssText = 'display:flex;align-items:center;gap:6px;flex:1;min-width:0;';
+                const lv = document.createElement('span');
+                lv.textContent = 'H' + sec.level;
+                lv.style.cssText = 'font-size:10px;font-weight:700;color:var(--color-text-tertiary);flex-shrink:0;';
+                const inp = document.createElement('input');
+                inp.type = 'text';
+                inp.value = sec.heading || '';
+                inp.setAttribute('data-heading-for', sec.id);
+                inp.style.cssText = 'flex:1;min-width:0;font-size:13px;font-weight:600;color:var(--color-text-primary);background:transparent;border:none;border-bottom:1px dashed var(--color-border-hair);padding:2px 4px;';
+                inp.onchange = function () { sec.heading = this.value; };
+                title.appendChild(lv); title.appendChild(inp);
+            } else {
+                title = document.createElement('label');
+                const prefix = sec.level > 0 ? ('H' + sec.level + ' · ') : '';
+                title.textContent = prefix + (sec.heading || '(Untitled)');
+                title.style.cssText = 'font-size:13px;font-weight:600;color:var(--color-text-primary);margin:0;text-transform:none;letter-spacing:0;';
+            }
             head.appendChild(title);
+            if (_structural) {
+                const ops = document.createElement('span');
+                ops.style.cssText = 'display:inline-flex;gap:2px;flex-shrink:0;';
+                const mk = (txt, tip, fn, dis) => {
+                    const b = document.createElement('button');
+                    b.type = 'button'; b.textContent = txt; b.title = tip;
+                    b.style.cssText = 'background:transparent;border:1px solid var(--color-border-hair);border-radius:var(--r-sm);color:var(--color-text-secondary);font-size:11px;cursor:pointer;padding:1px 7px;' + (dis ? 'opacity:0.35;cursor:default;' : '');
+                    if (!dis) b.onclick = fn;
+                    return b;
+                };
+                ops.appendChild(mk('↑', 'Move section up', () => _wsaMoveSection(idx, -1), idx === 0));
+                ops.appendChild(mk('↓', 'Move section down', () => _wsaMoveSection(idx, 1), idx === st.sections.length - 1));
+                ops.appendChild(mk('＋', 'Add a new section below', () => _wsaAddSection(idx), false));
+                ops.appendChild(mk('🗑', 'Remove this section from the report', () => _wsaRemoveSection(idx), sec.level === 0));
+                head.appendChild(ops);
+            }
             const resetBtn = document.createElement('button');
             resetBtn.type = 'button';
             resetBtn.textContent = '↺ Reset to template default';
@@ -2709,7 +3532,7 @@ window.Reports = Reports;
 
         function _emitProse(text) {
             // Split prose by table / appendix tokens; render text as paragraphs and tokens as their content.
-            const re = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
+            const re = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|budget_ledger_table|ffs_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
             let lastIdx = 0; let m;
             const out = [];
             while ((m = re.exec(text)) !== null) {
@@ -2728,10 +3551,14 @@ window.Reports = Reports;
                 const heading = sec.level === 1 ? HeadingLevel.HEADING_1
                               : sec.level === 2 ? HeadingLevel.HEADING_2
                               : HeadingLevel.HEADING_3;
+                // Backlog #1 — AI-drafted prose carries its pill + confidence in the final output.
+                const _pill = _sectionDraftPill(reportType, sec.id);
+                const _headRuns = [new TextRun({ text: sec.heading, bold: true })];
+                if (_pill) _headRuns.push(new TextRun({ text: _pill.text, bold: false, size: 16, color: _pill.color }));
                 children.push(new Paragraph({
                     heading,
                     spacing: { before: sec.level === 1 ? 320 : 200, after: 120 },
-                    children: [new TextRun({ text: sec.heading, bold: true })],
+                    children: _headRuns,
                 }));
             }
             // Emit prose, splitting on token markers
@@ -2777,6 +3604,9 @@ window.Reports = Reports;
                 }
             }
         }
+
+        // Backlog #1 — engine self-test attestation stamped into every export.
+        children.push(new Paragraph({ spacing: { before: 320 }, children: [new TextRun({ text: _engineAttestationText(), italics: true, size: 18, color: '666666' })] }));
 
         const doc = new Document({
             creator: 'Safety Lab Aero, Inc.',
@@ -2852,7 +3682,7 @@ window.Reports = Reports;
         doc.setFontSize(20); doc.setFont('helvetica', 'bold');
         doc.text(REPORT_DEFS[reportType].name, M, y); y += 28;
 
-        const tokenRe = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
+        const tokenRe = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|budget_ledger_table|ffs_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
 
         for (const sec of sections) {
             const edited = (editedSections && editedSections[sec.id] != null) ? editedSections[sec.id] : _initialProseForSection(sec, reportType, data);
@@ -2861,6 +3691,14 @@ window.Reports = Reports;
                 _need(fs + 12);
                 doc.setFontSize(fs); doc.setFont('helvetica', 'bold');
                 doc.text(sec.heading, M, y); y += fs + 6;
+                // Backlog #1 — AI-drafted prose carries its pill + confidence in the final output.
+                const _pill = _sectionDraftPill(reportType, sec.id);
+                if (_pill) {
+                    const rgb = _pill.color === '1D6E3E' ? [29, 110, 62] : _pill.color === '9A6200' ? [154, 98, 0] : [142, 42, 42];
+                    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+                    _need(11); doc.text(_pill.text.trim(), M, y); y += 11;
+                    doc.setTextColor(0); doc.setFont('helvetica', 'normal');
+                }
             }
             // Walk prose with token splits
             let lastIdx = 0; let m; tokenRe.lastIndex = 0;
@@ -2916,6 +3754,13 @@ window.Reports = Reports;
                 y += 4;
             }
         }
+
+        // Backlog #1 — engine self-test attestation stamped into every export.
+        (function () {
+            doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
+            _wrap(_engineAttestationText(), W - 2*M, 8).forEach(ln => { _need(11); doc.text(ln, M, y); y += 11; });
+            doc.setTextColor(0); doc.setFont('helvetica', 'normal');
+        })();
 
         // Page numbers footer
         const total = doc.internal.getNumberOfPages();
@@ -3180,6 +4025,11 @@ window.Reports = Reports;
     v1._submit = _generateFinal;
     v1._back = _back;
     v1.parseMarkdownToSections = parseMarkdownToSections;
+    // WS-A — full-authoring surface (structure ops + program template library),
+    // exported for tests and future cockpit wiring.
+    v1._wsa = { serialize: _wsaSerializeEditor, programTemplate: _wsaProgramTemplate, save: _wsaSaveTemplate,
+                reset: _wsaResetTemplate, add: _wsaAddSection, remove: _wsaRemoveSection, move: _wsaMoveSection,
+                state: function () { return _modalState; }, setState: function (s) { _modalState = s; } };
     v1.parseDocxToSections = parseDocxToSections;
     v1.renderDocxFromSections = renderDocxFromSections;
     v1.renderPdfFromSections = renderPdfFromSections;
@@ -3268,6 +4118,10 @@ window.Reports = Reports;
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
             '',
+            '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
+            'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
+            '{{ffs_table}}',
+            '',
             '## 9. Appendices',
             '{{appendix:fta}}',
             '{{appendix:zsa}}',
@@ -3307,7 +4161,7 @@ window.Reports = Reports;
             'Recorded effects of resource loss or malfunction on each failure condition’s contributing systems, with the combined aircraft-level effect (B.4.3.2 step d).',
             '{{common_resource_table}}',
             '',
-            '## 18. Minimum Acceptable Control Model',
+            '## 18. Minimum Acceptable Configuration Model',
             'Minimum-equipment floors per aircraft function. Each rule is recorded as an assumption routed to design until substantiated against the SDD. Minimal breach combinations are enumerated exactly and drive the compiled MF&MS trees.',
             '{{mac_table}}',
             '',
@@ -3321,6 +4175,10 @@ window.Reports = Reports;
             '',
             '## 21. Methodology (Safety Program Plan)',
             '{{spp_summary}}',
+            '',
+            '### Program Scope - the plan drives the tool',
+            'Analysis lanes selected into this program, with signed tailoring for any basis-expected lane removed. The nav, the plan, and this report are projections of the same record.',
+            '{{program_scope_table}}',
             '',
             '## 22. Completion Checklist (ARP 4761A B.5)',
             '{{checklist_summary}}',
@@ -3371,6 +4229,10 @@ window.Reports = Reports;
             '## 10. Compliance Posture (Advisory)',
             '{{compliance_summary}}',
             '{{compliance_posture}}',
+            '',
+            '## 10a. Budget vs Achieved Roll-Up (G.13 — from the Budget Ledger)',
+            'Every published allocation against its verified result, aircraft and system scope, from the single cross-cutting Budget Ledger.',
+            '{{budget_ledger_table}}',
             '',
             '## 11. Validation & Verification Status (ARP 4754B §5.4.7 / §5.5.6)',
             'V&V status for the aircraft-level safety requirements, including assigned development assurance levels and verification conclusions.',
@@ -3462,6 +4324,10 @@ window.Reports = Reports;
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
             '',
+            '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
+            'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
+            '{{ffs_table}}',
+            '',
             '## 9. Appendices',
             '{{appendix:fta}}',
             '{{appendix:cma}}',
@@ -3512,11 +4378,18 @@ window.Reports = Reports;
             '## 2. Compliance to SFHA Objectives',
             '{{fha_table}}',
             '',
+            '### Budget vs Achieved (G.13 data summary — from the Budget Ledger)',
+            '{{budget_ledger_table}}',
+            '',
             '## 3. Verified System Requirements',
             '{{requirements_table}}',
             '',
             '## 4. Quantitative Evidence',
             '{{fta_summary}}',
+            '',
+            '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
+            'Minimal cut sets containing a development error are never quantified — every P(top) above is explicitly conditional on no development error. Each scenario is addressed by process assurance (the allocated DAL) and derived requirements, not by the probability budget.',
+            '{{ffs_table}}',
             '',
             '## 5. Common-Mode Verification',
             'Each CMA subject linked to this system has been evaluated and dispositioned. See the CMA appendix for details.',
@@ -3668,6 +4541,19 @@ window.Reports = Reports;
             '{{checklist_table}}',
         ].join('\n'),
     };
+})();
+
+/* WS-B fix — whichever dictionary won above, MERGE in every v1 template the
+ * active dictionary lacks (the FMEA/FMES/RAM/MSG3/MMEL/ETBT/CCMR/IPL family and
+ * GTT). Without this, the section editor opened new report types with a
+ * title-only skeleton while the direct docx/pdf path had the full template. */
+(function () {
+    if (typeof window === 'undefined' || !window.Reports) return;
+    try {
+        const active = window.Reports.DEFAULT_TEMPLATES = window.Reports.DEFAULT_TEMPLATES || {};
+        const v1 = window.Reports._V1_TEMPLATES || {};
+        Object.keys(v1).forEach(k => { if (!active[k]) active[k] = v1[k]; });
+    } catch (_) {}
 })();
 
 /* ============================================================================
@@ -3901,6 +4787,10 @@ window.Reports = Reports;
                 AF.noteDrafted(key, {
                     heading: section.heading, model: out.model,
                     promptHash: out.promptHash, inputFp: out.inputFp, flags: out.review.total,
+                    // Backlog #1 — input-fidelity evidence for the confidence badge:
+                    // what the closed-world manifest declared cut from this section's context.
+                    truncated: Object.keys((manifest && manifest.truncated) || {}).length,
+                    omitted: ((manifest && manifest.omitted) || []).length,
                 });
                 AF.recordProvenance({
                     kind: 'draft', feature: 'report.section.draft', reportType,
@@ -4019,7 +4909,10 @@ window.Reports = Reports;
                     customDocxInfo = { mode: 'sectioned', file: customFile, parsed };
                 }
             } else {
-                const md = (R.DEFAULT_TEMPLATES && R.DEFAULT_TEMPLATES[reportType]) || ('# ' + def.name);
+                // WS-A — the saved program template drives the AI-assisted flow too.
+                let _pt = null;
+                try { _pt = (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.reportTemplates && projectConfig.reportTemplates[reportType]) || null; } catch (_) {}
+                const md = (_pt && _pt.markdown) || (R.DEFAULT_TEMPLATES && R.DEFAULT_TEMPLATES[reportType]) || ('# ' + def.name);
                 sections = R.parseMarkdownToSections(md);
             }
 
