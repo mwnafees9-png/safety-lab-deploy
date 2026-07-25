@@ -332,6 +332,7 @@
                 const p = window.vvProgramPosture();
                 pkg.validation = {
                     total: p.total, valid: p.valid, awaiting: p.awaiting, flagged: p.flagged, open: p.open,
+                    authored: p.authored, judgedSets: p.judgedSets,
                     sets: p.sets.map(s => ({ name: s.name, reqCount: s.reqCount, complete: s.pass,
                         checks: s.checks.map(c => (c.pass ? '✓ ' : '✗ ') + c.label + ' — ' + c.detail) })),
                 };
@@ -526,6 +527,7 @@
         if (pkg.validation) {
             b += '<h2>10d · Requirement validation posture</h2>' +
                 '<p class="mono">' + pkg.validation.valid + '/' + pkg.validation.total + ' valid · ' +
+                (pkg.validation.authored != null ? pkg.validation.authored + '/' + pkg.validation.total + ' §5.4.3 authored · ' + pkg.validation.judgedSets + ' set(s) judged (§5.4.4) · ' : '') +
                 pkg.validation.awaiting + ' awaiting attestation · ' + pkg.validation.flagged + ' flagged · ' + pkg.validation.open + ' open</p>' +
                 _tbl(['Set', 'Requirements', 'Completeness', 'Checks'],
                     pkg.validation.sets.map(s => [_esc(s.name), String(s.reqCount), stamp(s.complete ? 'complete' : 'incomplete'),
