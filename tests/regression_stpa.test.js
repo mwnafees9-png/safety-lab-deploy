@@ -491,6 +491,19 @@ check('R2: panel authors the disposition on the worksheet row — non-critical R
   check('BRIDGE panel: Step-3 card carries the computed rollup (and surfaces engine refusals)',
     /bm\.rollup\.bridged \+ ' bridged to the classical lanes/.test(panel) && /Bridge: REFUSED — /.test(panel));
   check('BRIDGE: engine exports bridgeMap in the API', typeof E.bridgeMap === 'function');
+  // Back-half surfaces: the seam visible from BOTH ends.
+  const fvSrc = S('fta_view_modules.js');
+  const repSrc = S('stpa_report.js');
+  check('BRIDGE fta: node drawer renders the reverse backlink chip (read-only, best-effort)',
+    /config-stpa-bridge-hint/.test(fvSrc) && /declared failure-mode counterpart/.test(fvSrc) && /backlink chip is best-effort/.test(fvSrc));
+  check('BRIDGE thread: hazard pulls a ribbon to the bridged fault tree, interaction-pure marked on the card',
+    /bridgedPageIds/.test(fvSrc) && /interaction-pure ×/.test(fvSrc) && /bx\.bridge\.declared/.test(fvSrc));
+  check('BRIDGE report: rollup summary + per-UCA table tokens, computed fresh, refusals REPORTED',
+    /stpa_bridge_summary/.test(repSrc) && /stpa_bridge_table/.test(repSrc) && /Bridge: REFUSED — /.test(repSrc));
+  check('BRIDGE report: template carries the bridge section (rollup line + table token)',
+    /UCA ↔ FTA\/FMEA Bridge/.test(repSrc) && /\{\{stpa_bridge_summary\}\}/.test(repSrc) && /\{\{stpa_bridge_table\}\}/.test(repSrc));
+  check('BRIDGE report: whitelist — stpa_bridge_table registered in reports.js table regexes (×3)',
+    (S('reports.js').match(/stpa_bridge_table/g) || []).length >= 3);
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

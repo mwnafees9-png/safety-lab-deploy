@@ -3859,7 +3859,7 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
     <script src="fta_quant_modules.js?v=66.9" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
-    <script src="fta_view_modules.js?v=66.20" defer></script>
+    <script src="fta_view_modules.js?v=66.21" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.4" defer></script>
     <script src="data_ops_modules.js?v=66.3" defer></script>
@@ -4022,7 +4022,8 @@ function toggleNavRail(){ try{ var on=document.body.classList.toggle('nav-rail')
     <!-- Demo-project picker — one chooser routing to every showcase loader. -->
     <script src="demo_picker.js?v=1" defer></script>
     <script src="stpa_panel.js?v=1.2" defer></script>
-    <script src="stpa_report.js?v=1.0" defer></script>\n    <script src="stpa_ai_apply.js?v=0.1" defer></script>
+    <script src="stpa_report.js?v=1.1" defer></script>
+    <script src="stpa_ai_apply.js?v=0.1" defer></script>
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
          Loads after the panels whose tabs it gates; wraps switchTab last-ish so its guard
          sits outermost on the chain. -->

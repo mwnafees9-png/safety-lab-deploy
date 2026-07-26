@@ -237,10 +237,14 @@ function renderFTASidebar() {
         // over treeLevel; otherwise show the page's treeLevel.
         const isVerification = !!page.verifies;
         const lvl = isVerification ? 'verification' : (isSubtree ? 'subtree' : (page.treeLevel || 'standalone'));
-        const c = TREE_LEVEL_COLORS[lvl];
+        // v66.14 — fallback for unknown treeLevel values: an unmapped level used
+        // to throw ("reading 'bg'") and abort the ENTIRE sidebar render (seen in
+        // live console history against scratch/test pages). Unknown levels now
+        // render a neutral badge with the raw value instead.
+        const c = TREE_LEVEL_COLORS[lvl] || TREE_LEVEL_COLORS['standalone'] || { bg: '#E2E8F0', fg: '#334155' };
         const lvlBadge = document.createElement('span');
         lvlBadge.style.cssText = `display: inline-block; padding: 1px 7px; font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; background: ${c.bg}; color: ${c.fg}; border-radius: 999px; align-self: flex-start;`;
-        lvlBadge.innerText = TREE_LEVEL_LABELS[lvl];
+        lvlBadge.innerText = TREE_LEVEL_LABELS[lvl] || String(lvl);
         left.appendChild(lvlBadge);
         // Cascade obsolescence — OBSOLETE badge next to the level badge.
         if (page.obsolete) {
@@ -251,9 +255,29 @@ function renderFTASidebar() {
             obsBadge.title = page.obsoleteReason || 'Obsolete — parent function removed';
             left.appendChild(obsBadge);
         }
+        // Backlog #1 — AI-synthesized trees carry the confidence pill (deterministic
+        // verdict from recorded provenance + review state; ai_badges.js, guarded).
+        try {
+            if (page.aiGenerated && typeof window !== 'undefined' && window.AiBadges) {
+                const _conf = window.AiBadges.confidence(page, { kind: 'ftaPage', id: page.id });
+                if (_conf) {
+                    const aiBadge = document.createElement('span');
+                    aiBadge.className = 'ai-conf-pill ai-conf-' + _conf.tier;
+                    aiBadge.style.cssText = 'align-self: flex-start; margin-right: 0;';
+                    aiBadge.innerText = _conf.label + ' ' + _conf.grade;
+                    aiBadge.title = _conf.why.join('\n');
+                    left.appendChild(aiBadge);
+                }
+            }
+        } catch (_) {}
         left.onclick = () => {
             activeFTAPageId = page.id;
             if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
+            // Phase 66 — page switch is a render path: re-derive this page's target
+            // from its linked FHA and re-run the allocator BEFORE painting, so
+            // budgets are always live, never whatever the save happened to hold.
+            try { if (typeof refreshFTARequiredTarget === 'function') refreshFTARequiredTarget(); } catch(_) {}
+            try { calculateAllProbabilities(); } catch(_) {}
             // If this tree was surfaced by a node match (not its name), land on that node:
             // reveal collapsed ancestors, select it, and center the canvas on it.
             const nodeHit = qLower ? _pageNodeHit(page) : null;
@@ -499,6 +523,79 @@ function _renderFtaConfigSummary() {
     sumEl.style.display = 'inline';
     sumEl.textContent = '· ' + parts.join(' · ');
 }
+// ============================================================================
+// ENG-2 phase 2 — FTA canvas viewport culling (game-engine frustum culling,
+// applied to display only). Engages above _FTA_CULL_MIN_NODES; small trees
+// keep the identical full-render path. Opt out: ?cull=0 or SLA_FTA_CULL='0'.
+// ============================================================================
+const _FTA_CULL_MIN_NODES = 300;
+function _ftaCullActive(n) {
+    try {
+        if (/[?&]cull=0/.test(location.search)) return false;
+        if (localStorage.getItem('SLA_FTA_CULL') === '0') return false;
+    } catch (_) {}
+    return n > _FTA_CULL_MIN_NODES;
+}
+// Visible world-rect from the current zoom transform, padded by one full
+// viewport on every side (generous margin → smooth panning, rare remounts).
+function _ftaCullRect() {
+    try {
+        const el = document.getElementById('fta-svg');
+        if (!el || typeof svg === 'undefined' || !svg || !svg.node()) return null;
+        const w = el.clientWidth, h = el.clientHeight;
+        if (!w || !h) return null;
+        const t = d3.zoomTransform(svg.node());
+        const x0 = (0 - t.x) / t.k, y0 = (0 - t.y) / t.k;
+        const x1 = (w - t.x) / t.k, y1 = (h - t.y) / t.k;
+        const mx = (x1 - x0), my = (y1 - y0);
+        return { x0: x0 - mx, y0: y0 - my, x1: x1 + mx, y1: y1 + my };
+    } catch (_) { return null; }
+}
+function _ftaNodeInRect(d, r) { return d.x >= r.x0 && d.x <= r.x1 && d.y >= r.y0 && d.y <= r.y1; }
+function _ftaLinkCrossesRect(l, r) {
+    const ax = Math.min(l.source.x, l.target.x), bx = Math.max(l.source.x, l.target.x);
+    const ay = Math.min(l.source.y, l.target.y), by = Math.max(l.source.y, l.target.y);
+    return bx >= r.x0 && ax <= r.x1 && by >= r.y0 && ay <= r.y1;
+}
+// Re-render (throttled, trailing) after pan/zoom so newly-visible regions
+// mount. Small trees never re-render here — their zoom stays pure-transform.
+// Never fires while an inline editor inside the canvas holds focus (a cull
+// remount would yank the field out from under the user's cursor).
+let _ftaCullTimer = null;
+function _ftaCullOnZoom() {
+    try {
+        const rootNode = (typeof getActiveFTARoot === 'function') ? getActiveFTARoot() : null;
+        if (!rootNode) return;
+        if (!_ftaCullActive(typeof _countTreeNodes === 'function' ? _countTreeNodes(rootNode) : 0)) return;
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'TEXTAREA' || ae.tagName === 'INPUT') && ae.closest && ae.closest('#fta-svg')) return;
+        clearTimeout(_ftaCullTimer);
+        _ftaCullTimer = setTimeout(function () { try { updateD3(); } catch (_) {} }, 160);
+    } catch (_) {}
+}
+// Honesty pill — bottom-left of the canvas while culling is active: display
+// windowing must never read as "that's the whole tree".
+function _ftaCullPill(shown, total, capped) {
+    try {
+        const el = document.getElementById('fta-svg');
+        if (!el || !el.parentElement) return;
+        let pill = document.getElementById('fta-cull-pill');
+        if (shown == null) { if (pill) pill.style.display = 'none'; return; }
+        if (!pill) {
+            pill = document.createElement('div');
+            pill.id = 'fta-cull-pill';
+            pill.style.cssText = 'position:absolute; left:14px; bottom:14px; z-index:5; padding:3px 10px; font-size:11px; font-family:var(--font-mono, monospace); color:var(--color-text-secondary,#4A5568); background:var(--color-surface-1,#fff); border:1px solid var(--color-border-strong,#B9C2D0); border-radius:4px; pointer-events:none;';
+            const host = el.parentElement;
+            if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+            host.appendChild(pill);
+        }
+        pill.style.display = 'block';
+        pill.textContent = 'viewport rendering: ' + shown.toLocaleString() + ' of ' + total.toLocaleString() + ' nodes mounted' +
+            (capped ? ' (zoomed out — nearest to view centre; zoom in for full local detail)' : '') +
+            ' — layout and math cover the full tree';
+    } catch (_) {}
+}
+
 function updateD3() {
     try {
         try { _renderFtaLinkedChip(); } catch (_) {}
@@ -531,7 +628,46 @@ function updateD3() {
             try { _ftaCcfRenderSuggestPill(); } catch (_) {}   // #7 — surface CCF candidates as a canvas pill
         } catch (_) {}
 
-        const links = g.selectAll('.link').data(root.links(), d => d.target.data.id);
+        // ENG-2 phase 2 — VIEWPORT CULLING (big trees only). Above the threshold,
+        // only nodes inside the visible world-rect (padded by one full viewport
+        // on every side, so ordinary panning never shows a blank frame) are
+        // mounted; links render when either endpoint is visible OR the link's
+        // bounding box crosses the rect (long vertical connectors). The
+        // selected node is always mounted. Below the threshold nothing changes:
+        // the filter is the identity, byte-for-byte the old render. DISPLAY
+        // ONLY — layout, math, and every store are computed over the full tree.
+        // Known ephemeral-class limitation: highlight classes (cut set / search
+        // hit) live on mounted DOM and don't survive a cull remount of far
+        // off-screen nodes; both flows zoom their targets into view first, so
+        // the highlighted nodes are mounted where it matters.
+        const _allDesc = root.descendants();
+        const _cullRect = _ftaCullActive(_allDesc.length) ? _ftaCullRect() : null;
+        let _descList = _allDesc, _linkList = root.links(), _cullCapped = false;
+        if (_cullRect) {
+            const _selId = (typeof selectedNodeData !== 'undefined' && selectedNodeData) ? selectedNodeData.id : null;
+            _descList = _allDesc.filter(d => d.data.id === _selId || _ftaNodeInRect(d, _cullRect));
+            // MOUNT CAP (live-test finding): zoomed far out, the rect covers the
+            // whole forest and a full remount pins the main thread for seconds —
+            // exactly what culling exists to prevent. Above the cap, mount the
+            // nodes nearest the view centre and say so on the pill; node detail
+            // is unreadable at that zoom anyway, and zooming in remounts the
+            // local neighborhood in full.
+            const _CULL_MOUNT_CAP = 350;   // live-tuned: 600 cost ~5s on full zoom-out; at that zoom nodes are dots anyway
+            if (_descList.length > _CULL_MOUNT_CAP) {
+                const cx = (_cullRect.x0 + _cullRect.x1) / 2, cy = (_cullRect.y0 + _cullRect.y1) / 2;
+                _descList = _descList
+                    .map(d => [(d.x - cx) * (d.x - cx) + (d.y - cy) * (d.y - cy), d])
+                    .sort((a, b) => a[0] - b[0])
+                    .slice(0, _CULL_MOUNT_CAP)
+                    .map(p => p[1]);
+                _cullCapped = true;
+            }
+            const _visIds = new Set(_descList.map(d => d.data.id));
+            _linkList = root.links().filter(l => _visIds.has(l.source.data.id) || _visIds.has(l.target.data.id) || (!_cullCapped && _ftaLinkCrossesRect(l, _cullRect)));
+        }
+        _ftaCullPill(_cullRect ? _descList.length : null, _allDesc.length, _cullCapped);
+
+        const links = g.selectAll('.link').data(_linkList, d => d.target.data.id);
         links.enter().append('path').attr('class', 'link').merge(links).transition().duration(180)
             .attr('d', d => {
                 // Phase 49 — per-node descBoxHeight; falls back to 90 (legacy fixed value) for nodes
@@ -571,7 +707,7 @@ function updateD3() {
                 });
         });
 
-        const nodes = g.selectAll('.node').data(root.descendants(), d => d.data.id);
+        const nodes = g.selectAll('.node').data(_descList, d => d.data.id);
         const nodeEnter = nodes.enter().append('g').attr('class', d => `node ${selectedNodeData && selectedNodeData.id === d.data.id ? 'selected' : ''}`)
             .attr('transform', d => `translate(${d.x},${d.y})`)
             .on('click', (event, d) => {
@@ -604,7 +740,7 @@ function updateD3() {
         // Phase 38 — restored 3 px gap. Content stack 46+3+20+3+18 = 90 px = foreignObject height.
         const container = fo.append('xhtml:div').attr('xmlns', 'http://www.w3.org/1999/xhtml').style('display', 'flex').style('flex-direction', 'column').style('gap', '3px').style('width', '100%').style('height', '100%').style('justify-content', 'flex-end');
         
-        container.append('xhtml:textarea').attr('class', 'inline-desc').attr('placeholder', 'Description').attr('data-gramm', 'false').attr('data-gramm_editor', 'false').attr('data-enable-grammarly', 'false').on('input', function(e, d) {
+        container.append('xhtml:textarea').attr('class', 'inline-desc').attr('placeholder', 'Description').attr('spellcheck', 'false').attr('autocorrect', 'off').attr('data-gramm', 'false').attr('data-gramm_editor', 'false').attr('data-enable-grammarly', 'false').on('input', function(e, d) {
             d.data.name = this.value;
             // Phase 49 — auto-size the foreignObject + redraw the parent→this-node link so
             // the layout follows the description as it grows / shrinks.
@@ -639,6 +775,27 @@ function updateD3() {
         // as a quick hint for users who try to click in.
         container.append('xhtml:input').attr('class', 'inline-metrics').attr('readonly', 'readonly').attr('tabindex', '-1').attr('placeholder', 'λ / P (select node to edit)').attr('title', 'Failure rate and probability are read-only on the canvas — select the node to edit in the properties panel.');
 
+        // v66.15 — inline CCF tag as an IN-FLOW flex child at the BOTTOM of the
+        // stack, under the λ/P metrics line (Waqas's placement). v66.12
+        // absolute-positioned it at bottom:44px, but the flex stack's real
+        // rendered metrics differ from the layout constants (the textarea
+        // shrinks below its pinned height), so the tag landed on the ID text
+        // (live finding). Normal flow can't overlap: description → ID → λ/P →
+        // CCF tag, each consuming its own height from the flex-end stack.
+        // Still the clickable entry to the CCF group manager popover (#5).
+        container.append('xhtml:div').attr('class', 'ccf-inline-tag')
+            .attr('title', 'Common-cause group — click to manage')
+            // v66.16 — 8px bottom margin lifts the tag clear of the DAL badge
+            // that overlaps the container's bottom edge (live finding).
+            .style('flex', '0 0 14px').style('height', '14px').style('line-height', '14px').style('margin-bottom', '8px')
+            .style('font-size', '9px').style('text-align', 'center')
+            .style('color', '#8b5cf6').style('font-weight', '700')
+            .style('text-decoration', 'underline').style('cursor', 'pointer')
+            .style('pointer-events', 'auto').style('display', 'none')
+            .on('mousedown', e => e.stopPropagation())
+            .on('dblclick', e => e.stopPropagation())
+            .on('click', function (event, d) { try { event.stopPropagation(); _ftaCcfPopover(d.data, event); } catch (_) {} });
+
         // Phase 56.42 — Actual line for top-down + shared events. The inline-metrics
         // foreignObject is only 160px wide, so the combined "Target: ... Actual: ..."
         // string gets truncated. Render the Actual on a second line as a native SVG
@@ -662,6 +819,18 @@ function updateD3() {
             .style('font-size', '14px')
             .style('font-family', 'system-ui, sans-serif')
             .style('fill', '#ff453a')
+            .style('font-weight', '700')
+            .style('cursor', 'help');
+
+        // Backlog #4 — ◇ mark on qualitative development-error events
+        // (ARP 4761A 4.1.1.1). Top-left of the shape, opposite the ⚠ mark.
+        nodeEnter.append('text')
+            .attr('class', 'node-dev-error-mark')
+            .attr('x', -78).attr('y', -32)
+            .attr('text-anchor', 'start')
+            .style('font-size', '12px')
+            .style('font-family', 'system-ui, sans-serif')
+            .style('fill', '#0E7490')
             .style('font-weight', '700')
             .style('cursor', 'help');
 
@@ -693,12 +862,16 @@ function updateD3() {
                 deleteSelectedNode();
             });
 
-        nodeEnter.append('text').attr('class', 'ccf-tag').attr('y', -130).attr('text-anchor', 'middle').attr('fill', '#8b5cf6').attr('font-weight', 'bold').attr('font-size', '10px')
-            .attr('cursor', 'pointer').style('pointer-events', 'all').style('text-decoration', 'underline')   // #5 — CCF tag is a clickable pill → group manager popover
-            .on('click', function (event, d) { try { event.stopPropagation(); _ftaCcfPopover(d.data, event); } catch (_) {} });
+        // v66.12 — the CCF tag lives INSIDE the description box now (bottom strip,
+        // created with the foreignObject stack above; the name text is pushed up
+        // by autoSizeNodeDescription's reserve). The old floating SVG ccf-tag is
+        // gone — it collided with wrapped names after the desc box grew to 100px.
         nodeEnter.each(function(d) { d3.select(this).append('path').attr('d', getShapePath(d)).attr('fill', getNodeColors(d).fill).attr('stroke', getNodeColors(d).stroke); });
         nodeEnter.append('text').attr('class', 'transfer-tag').attr('y', 35).attr('text-anchor', 'middle').attr('fill', '#7e22ce').attr('font-weight', 'bold').attr('font-size', '10px');
-        nodeEnter.append('text').attr('class', 'collapse-tag').attr('y', -130).attr('text-anchor', 'middle').attr('fill', '#f59e0b').attr('font-weight', 'bold').attr('font-size', '18px');
+        // v66.11 — collapse/transfer-in y restored above the description box (the
+        // box grew to _FTA_DESC_BOX_HEIGHT=100, top now −174; the old fixed y
+        // landed inside the wrapped text). Original clearance preserved.
+        nodeEnter.append('text').attr('class', 'collapse-tag').attr('y', -184).attr('text-anchor', 'middle').attr('fill', '#f59e0b').attr('font-weight', 'bold').attr('font-size', '18px');
         // Transfer-out indicator (▽) below a logical gate whose subtree has been extracted to its own page.
         nodeEnter.append('text').attr('class', 'transfer-out-indicator').attr('y', 42).attr('text-anchor', 'middle').attr('fill', '#7e22ce').attr('font-weight', 'bold').attr('font-size', '11px').attr('cursor', 'pointer').attr('pointer-events', 'all')
             .on('click', function(event, d) {
@@ -710,7 +883,7 @@ function updateD3() {
                 renderFTASidebar(); updateD3(); fitToScreen();
             });
         // Transfer-in indicator (△) above the root of a page that was extracted from elsewhere.
-        nodeEnter.append('text').attr('class', 'transfer-in-indicator').attr('y', -150).attr('text-anchor', 'middle').attr('fill', '#7e22ce').attr('font-weight', 'bold').attr('font-size', '11px').attr('cursor', 'pointer').attr('pointer-events', 'all')
+        nodeEnter.append('text').attr('class', 'transfer-in-indicator').attr('y', -204).attr('text-anchor', 'middle').attr('fill', '#7e22ce').attr('font-weight', 'bold').attr('font-size', '11px').attr('cursor', 'pointer').attr('pointer-events', 'all')
             .on('click', function(event, d) {
                 event.stopPropagation();
                 const page = ftaPages.find(p => p.id === activeFTAPageId);
@@ -762,6 +935,9 @@ function updateD3() {
                 if (newMode !== 'library') {
                     d.data.lambda = lambdaFromInputMode(newMode, d.data.inputValue, d.data.libraryKey, t);
                 }
+                // Backlog #4 — a dev-error event never carries a number,
+                // whatever input mode the user switches to.
+                if (d.data.eventClass === 'dev-error') { d.data.lambda = 0; d.data.inputValue = 0; }
                 propagateRepeatedEventEdit(d.data);
                 calculateAllProbabilities();
                 updateD3();
@@ -836,6 +1012,23 @@ function updateD3() {
                 this.style.display = 'none';
             }
         });
+        // Backlog #4 — ◇ marker sync on qualitative development-error events.
+        nodeUpdate.select('.node-dev-error-mark').each(function(d) {
+            const node = d.data;
+            if (node && node.type !== 'gate' && node.eventClass === 'dev-error') {
+                this.textContent = '◇ DEV ERROR';
+                this.style.display = '';
+                let titleEl = this.querySelector('title');
+                if (!titleEl) {
+                    titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                    this.appendChild(titleEl);
+                }
+                titleEl.textContent = 'Qualitative development error (ARP 4761A 4.1.1.1) — never quantified. λ and P are forced to 0; cut sets containing this event are reported as qualitative failure scenarios and the quantified P(top) is explicitly conditional on no development error.';
+            } else {
+                this.textContent = '';
+                this.style.display = 'none';
+            }
+        });
         // Sync inline mode dropdown. Visible for leaf events with λ semantics (basic + undeveloped).
         nodeUpdate.select('.node-input-mode-fo').style('display', d => (d.data.type === 'basic' || d.data.type === 'undeveloped') ? 'block' : 'none');
         nodeUpdate.select('.inline-mode').each(function(d) {
@@ -843,7 +1036,9 @@ function updateD3() {
         });
         
         nodeUpdate.each(function(d) { d3.select(this).select('path').transition().duration(120).attr('d', getShapePath(d)).attr('fill', getNodeColors(d).fill).attr('stroke', getNodeColors(d).stroke); });
-        nodeUpdate.select('.ccf-tag').text(d => (d.data.ccfGroup && d.data.beta > 0) ? `(CCF: ${d.data.ccfGroup})` : "");
+        nodeUpdate.select('.ccf-inline-tag')
+            .style('display', d => (d.data.ccfGroup && d.data.beta > 0) ? 'block' : 'none')
+            .text(d => (d.data.ccfGroup && d.data.beta > 0) ? `(CCF: ${d.data.ccfGroup})` : "");
         // Compute the per-render repeated map. Used to amber-tint the inline-id and to set the SVG group's title.
         const _repeatMap = repeatedEventGroups();
         nodeUpdate.each(function(d) {
@@ -1010,6 +1205,30 @@ function selectNode(dataNode) {
                 : '';
         }
     } catch (e) { /* drawer hint is best-effort */ }
+    // STPA-BRIDGE — the reverse view: if any assessed UCA declares THIS node as
+    // its failure-mode counterpart, say so in the drawer. Read-only backlink;
+    // the bridge is authored on the STPA lane (Step 3), refs validated there.
+    try {
+        let _sbHint = document.getElementById('config-stpa-bridge-hint');
+        if (!_sbHint && _hint && _hint.parentNode) {
+            _sbHint = document.createElement('span');
+            _sbHint.id = 'config-stpa-bridge-hint';
+            _sbHint.style.cssText = 'font-size: 0.75em; color: #6D28D9; font-weight: 600; margin-left: 6px;';
+            _hint.parentNode.appendChild(_sbHint);
+        }
+        if (_sbHint) {
+            const _ucas = [];
+            const _disp = (typeof stpaData !== 'undefined' && stpaData && stpaData.dispositions) ? stpaData.dispositions : {};
+            Object.keys(_disp).forEach(k => {
+                const x = _disp[k];
+                if (!x || x.status !== 'assessed' || !x.bridge || !x.bridge.declared) return;
+                const refs = (x.bridge.ftaRefs || []).map(String);
+                if (refs.indexOf(String(dataNode.displayId)) >= 0 || refs.indexOf(String(dataNode.id)) >= 0) _ucas.push('UCA-' + k);
+            });
+            _sbHint.textContent = _ucas.length ? ('⛓ STPA: ' + _ucas.join(', ')) : '';
+            _sbHint.title = _ucas.length ? ('This node is the declared failure-mode counterpart of ' + _ucas.length + ' unsafe control action(s) — the bridge is authored on the STPA lane, Step 3. The classical lane quantifies the counterpart; STPA keeps the context that makes it unsafe.') : '';
+        }
+    } catch (e) { /* backlink chip is best-effort */ }
     let typeVal = dataNode.type === 'gate' ? dataNode.gateType : dataNode.type; document.getElementById('config-node-type').value = typeVal;
     document.getElementById('config-name-container').style.display = (dataNode.gateType === 'TRANSFER') ? 'none' : 'block';
     document.getElementById('config-transfer-container').style.display = (dataNode.gateType === 'TRANSFER') ? 'flex' : 'none';
@@ -1068,6 +1287,21 @@ function selectNode(dataNode) {
     // Legacy "Failure Rate (λ/hr)" field hidden for leaf events that now use the input-mode block.
     const lambdaContainer = document.getElementById('config-lambda-container');
     if (lambdaContainer) lambdaContainer.style.display = showInputMode ? 'none' : 'block';
+
+    // Backlog #4 — qualitative development-error checkbox (ARP 4761A 4.1.1.1).
+    // Leaf events only (basic + undeveloped). Sync checked state from the node
+    // and mirror the disabled state onto both value inputs (λ + input-mode).
+    const devContainer = document.getElementById('config-dev-error-container');
+    if (devContainer) {
+        devContainer.style.display = showInputMode ? 'flex' : 'none';
+        const devChk = document.getElementById('config-dev-error');
+        const isDev = showInputMode && dataNode.eventClass === 'dev-error';
+        if (devChk) devChk.checked = isDev;
+        const lamInp = document.getElementById('config-lambda');
+        const valInp = document.getElementById('config-input-value');
+        if (lamInp) lamInp.disabled = isDev;
+        if (valInp) valInp.disabled = isDev;
+    }
 
     // Phase 56.45 — Achievable λ container (basic / undeveloped events only).
     // Auto-populate from library when input mode is library and field is empty.
@@ -1673,7 +1907,20 @@ function _quantCacheStore(canon, field, val) {
     _quantCache.delete(key); _quantCache.set(key, e);   // move-to-end (LRU)
     while (_quantCache.size > _QUANT_CACHE_CAP) _quantCache.delete(_quantCache.keys().next().value);
 }
+// #7b — one-shot prefetch handoff from the worker path. The async orchestrator
+// computes cut sets + importance OFF-THREAD, parks them here, then calls the
+// unchanged synchronous renderer — which consumes the prefetch instead of
+// recomputing. Works whether or not the LRU quant cache is enabled. Consumed
+// (cleared) on first read so a stale prefetch can never serve a mutated tree —
+// the canon check makes even that impossible, belt and braces.
+var _ftaPrefetch = { canon: null, cutsets: undefined, bdd: undefined };
+var _ftaComputeSeq = 0;
 function _quantCachedCutsets(root) {
+    try {
+        if (_ftaPrefetch.cutsets !== undefined && _ftaPrefetch.canon === _quantCanon(root)) {
+            var pv = _ftaPrefetch.cutsets; _ftaPrefetch.cutsets = undefined; return pv;
+        }
+    } catch (_) {}
     if (!_quantCacheEnabled()) return getCutsets(root);
     var canon = _quantCanon(root), hit = _quantCacheGet(canon, 'cutsets');
     if (hit !== undefined) return hit;
@@ -1682,6 +1929,11 @@ function _quantCachedCutsets(root) {
     return v;
 }
 function _quantCachedImportance(root) {
+    try {
+        if (_ftaPrefetch.bdd !== undefined && _ftaPrefetch.canon === _quantCanon(root)) {
+            var pb = _ftaPrefetch.bdd; _ftaPrefetch.bdd = undefined; return pb;
+        }
+    } catch (_) {}
     if (!_quantCacheEnabled()) return computeImportanceMeasures(root);
     var canon = _quantCanon(root), hit = _quantCacheGet(canon, 'bdd');
     if (hit !== undefined) return hit;
@@ -1690,8 +1942,72 @@ function _quantCachedImportance(root) {
     return v;
 }
 
+// #7b — dispatcher. Small trees (or a warm cache/prefetch) take the synchronous
+// path exactly as before — zero behavior change, zero added latency. Big trees
+// route through the Web Worker with a progress line + working Cancel, so the
+// page never freezes while the engine grinds. The worker runs the SAME
+// fta_engine.js (single source), so results are identical by construction; on
+// any worker failure the async wrappers fall back to the synchronous engine —
+// to correctness, never to approximation.
 function generateCutsetReport() {
     const rootNode = getActiveFTARoot(); if (!rootNode) return alert("Tree is empty.");
+    try {
+        const big = (typeof _countTreeNodes === 'function') && (typeof _CUTSET_WORKER_MIN_NODES !== 'undefined') && _countTreeNodes(rootNode) >= _CUTSET_WORKER_MIN_NODES;
+        const workerOk = (typeof enumerateCutsetsAsync === 'function') && (typeof _cutsetWorkerEnabled === 'function') && _cutsetWorkerEnabled() && (typeof Worker !== 'undefined');
+        const warm = (_ftaPrefetch.cutsets !== undefined && _ftaPrefetch.canon === _quantCanon(rootNode)) || _quantCacheGet(_quantCanon(rootNode), 'cutsets') !== undefined;
+        if (big && workerOk && !warm) return _generateCutsetReportAsync(rootNode);
+    } catch (_) { /* the dispatcher must never block the sync path */ }
+    return _generateCutsetReportSync(rootNode);
+}
+function _ftaComputeStale(token) { return token !== _ftaComputeSeq; }
+function _ftaComputeProgress(msg, showCancel) {
+    const summary = document.getElementById('cutset-summary');
+    if (summary) summary.innerHTML = '<div style="padding:12px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; display:flex; align-items:center; gap:12px;">' +
+        '<span class="u-mono" style="font-size:12px;">⏳ ' + esc(msg) + '</span>' +
+        '<span style="font-size:11px; color:var(--text-secondary);">computing off-thread — the page stays responsive</span>' +
+        (showCancel !== false ? '<button class="action-btn btn-red" style="margin-left:auto;" onclick="ftaCancelCompute()">Cancel</button>' : '') + '</div>';
+    const tbody = document.getElementById('cutset-body');
+    if (tbody) tbody.innerHTML = '';
+    const tbl = document.getElementById('cutset-table'); if (tbl) tbl.style.display = 'none';
+}
+window.ftaCancelCompute = function () {
+    _ftaComputeSeq++;   // orphan any in-flight run
+    // Terminate the worker so the computation actually stops (not just the UI);
+    // the next request spawns a fresh one.
+    try { if (typeof _cutsetWorker !== 'undefined' && _cutsetWorker) { _cutsetWorker.terminate(); _cutsetWorker = null; } } catch (_) {}
+    const summary = document.getElementById('cutset-summary');
+    if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:var(--text-secondary);">Computation cancelled. Nothing was rendered — run Calculate Minimal Cutsets again when ready.</div>';
+};
+function _generateCutsetReportAsync(rootNode) {
+    const token = ++_ftaComputeSeq;
+    _ftaComputeProgress('Enumerating minimal cut sets…');
+    enumerateCutsetsAsync(rootNode).then(function (raw) {
+        if (_ftaComputeStale(token)) return;
+        _ftaComputeProgress('Cut sets done (' + raw.length.toLocaleString() + '). Computing BDD-exact P(top) + importance…');
+        return computeImportanceAsync(rootNode).then(function (bdd) {
+            if (_ftaComputeStale(token)) return;
+            _ftaPrefetch.canon = _quantCanon(rootNode);
+            _ftaPrefetch.cutsets = raw;
+            _ftaPrefetch.bdd = bdd || undefined;
+            _generateCutsetReportSync(rootNode);
+        }, function () {
+            // Importance failed off-thread — render with cut sets prefetched;
+            // the sync path recomputes importance (or reports its absence).
+            if (_ftaComputeStale(token)) return;
+            _ftaPrefetch.canon = _quantCanon(rootNode);
+            _ftaPrefetch.cutsets = raw;
+            _ftaPrefetch.bdd = undefined;
+            _generateCutsetReportSync(rootNode);
+        });
+    }, function (err) {
+        if (_ftaComputeStale(token)) return;
+        if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err);
+        const summary = document.getElementById('cutset-summary');
+        if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:#b91c1c;">Cut-set computation failed: ' + esc((err && err.message) || String(err)) + '</div>';
+    });
+}
+
+function _generateCutsetReportSync(rootNode) {
     let raw;
     try { raw = _perfTime('fta.cutsets', function () { return _quantCachedCutsets(rootNode); }); }
     catch (err) { if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err); throw err; }
@@ -1709,9 +2025,18 @@ function generateCutsetReport() {
     const finalCutsets = expandCCFCutsets(min);
     const tbody = document.getElementById('cutset-body'); tbody.innerHTML = '';
 
+    // Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1). A cut set
+    // containing a dev-error member is a qualitative Functional Failure Scenario:
+    // it is ALWAYS displayed (never truncated), never carries a number, and the
+    // quantified P(top) becomes explicitly P(top | no development error).
+    const _csEvP = e => (e && e.eventClass === 'dev-error') ? 0 : ((e && e.probability) || 0);
+    const _csIsQual = cs => cs.some(e => e && e.eventClass === 'dev-error');
+    const qualCount = finalCutsets.reduce((n, cs) => n + (_csIsQual(cs) ? 1 : 0), 0);
+
     // MCS upper bound: Σ P(cutset_i) over ALL cut sets — the complete bound, unaffected by display.
+    // Dev-error members enter at p = 0, so qualitative sets contribute nothing to the bound.
     let mcsSum = 0;
-    finalCutsets.forEach(cs => { mcsSum += cs.reduce((acc, e) => acc * (e.probability || 0), 1); });
+    finalCutsets.forEach(cs => { mcsSum += cs.reduce((acc, e) => acc * _csEvP(e), 1); });
 
     // Exact P(top) + importance via BDD (independent of cut-set enumeration). Computed once here so the
     // display cutoff + per-row contribution can use it; reused by the summary below.
@@ -1723,36 +2048,82 @@ function generateCutsetReport() {
     // DISPLAY truncation — Isograph-style probability cutoff. Orders 1–3 are ALWAYS shown (single-point /
     // dual / triple failures are reviewed on structure, not magnitude); order ≥4 is shown only if it
     // contributes ≥ _CUTSET_CONTRIB_FLOOR of P(top). DISPLAY ONLY — mcsSum, P(top) and the CSV export
-    // cover every cut set, so the assessed probability is unchanged. _CUTSET_ROW_BACKSTOP is pure DOM safety.
+    // cover every cut set, so the assessed probability is unchanged. (The old 20k-row DOM backstop is
+    // retired by ENG-2 pagination — at most one page of rows is mounted at a time.)
     const _CUTSET_CONTRIB_FLOOR = 1e-3;                        // 0.1% of P(top)
     const _CUTSET_SHOW_FLOOR = pRef * _CUTSET_CONTRIB_FLOOR;
-    const _CUTSET_ROW_BACKSTOP = 20000;
-    let rendered = 0, hiddenImmaterial = 0, hiddenBackstop = 0;
+    // ENG-2 phase 1 — PAGINATION. Pass 1 collects the MATERIAL rows (same
+    // materiality rule as before — order ≤3 always, qualitative always,
+    // order ≥4 only if it contributes ≥ the floor); pass 2 renders one page
+    // (50/page default) through SLPaginate. Every Σ / P(top) / importance
+    // figure below stays computed over ALL cut sets — the pager windows the
+    // DISPLAY only, and its bar says so. The old 20k-row DOM backstop is
+    // retired: every material row is now reachable via pages, with at most
+    // one page of rows mounted at a time.
+    let hiddenImmaterial = 0;
+    const materialRows = [];
     finalCutsets.forEach(cutset => {
         const order = cutset.length;
-        const rel = cutset.reduce((acc, event) => acc * (event.probability || 0), 1);
-        const material = (order <= 3) || (rel >= _CUTSET_SHOW_FLOOR);
+        const isQual = _csIsQual(cutset);
+        const rel = cutset.reduce((acc, event) => acc * _csEvP(event), 1);
+        // Qualitative FFS sets are ALWAYS material — structure is the finding; magnitude is undefined.
+        const material = isQual || (order <= 3) || (rel >= _CUTSET_SHOW_FLOOR);
         if (!material) { hiddenImmaterial++; return; }
-        if (rendered >= _CUTSET_ROW_BACKSTOP) { hiddenBackstop++; return; }
-        rendered++;
+        materialRows.push({ cutset, order, isQual, rel });
+    });
+    function _cutsetRowHtml(m, rowNo) {
+        const { cutset, order, isQual, rel } = m;
         const contribPct = pRef > 0 ? (rel / pRef * 100) : 0;
-        const contribCell = (contribPct >= 0.01) ? (contribPct.toFixed(2) + '%') : (contribPct > 0 ? contribPct.toExponential(1) + '%' : '—');
-        const eventIds = cutset.map(e => e.displayId).join(', ');
+        const contribCell = isQual ? '—' : ((contribPct >= 0.01) ? (contribPct.toFixed(2) + '%') : (contribPct > 0 ? contribPct.toExponential(1) + '%' : '—'));
+        const eventIds = cutset.map(e => (e.eventClass === 'dev-error' ? '◇ ' : '') + e.displayId).join(', ');
         const desc = cutset.map(e => e.name).join(' AND ');
         const rawIds = cutset.map(e => { if (e.isCCF) return ""; return (e.displayId || '').replace(' (Ind)', ''); }).filter(id => id !== "").join(',');
-        let rowStyle = cutset.some(e => e.isCCF) ? "background-color: #f3e8ff; border-left: 3px solid #8b5cf6;" : "";
+        // v66.12 — CCF tint via class, not a hardcoded light lavender: #f3e8ff
+        // under dark mode left near-white text on a light row (live finding).
+        // .cutset-row-ccf carries a theme-aware background in safety_lab.css.
+        const rowClass = cutset.some(e => e.isCCF) ? "cutset-row-ccf" : "";
+        let rowStyle = "";
+        if (isQual) rowStyle = "background-color: rgba(14,116,144,0.08); border-left: 3px solid #0E7490;";
         if (cutset.dynamicOrigin) rowStyle += " border-right: 3px solid #be185d;";
         const ccfSource = cutset.some(e => e.isCCF) ? cutset.find(e => e.isCCF).sourceGroup : '';
         const dynBadge = cutset.dynamicOrigin
             ? `<div style="font-size: 0.75em; color: #be185d; font-weight: bold; margin-top: 2px;">${esc(cutset.dynamicOrigin)}: ${esc(cutset.dynamicOrder || '')}</div>`
             : '';
-        tbody.insertAdjacentHTML('beforeend', `<tr style="${rowStyle}"><td><button class="action-btn btn-amber" onclick="highlightCutset('${esc(rawIds)}', '${esc(ccfSource)}')">Show</button></td><td>${rendered}</td><td>${order}</td><td>${esc(eventIds)}${dynBadge}</td><td>${esc(desc)}</td><td><strong>${rel.toExponential(4).toUpperCase()}</strong></td><td>${contribCell}</td></tr>`);
-    });
-    if (hiddenImmaterial > 0 || hiddenBackstop > 0) {
-        const noteParts = [];
-        if (hiddenImmaterial > 0) noteParts.push(`${hiddenImmaterial.toLocaleString()} higher-order cut set${hiddenImmaterial === 1 ? '' : 's'} (order ≥4 contributing <0.1% of P(top)) hidden`);
-        if (hiddenBackstop > 0) noteParts.push(`${hiddenBackstop.toLocaleString()} beyond the ${_CUTSET_ROW_BACKSTOP.toLocaleString()}-row display limit`);
-        tbody.insertAdjacentHTML('beforeend', `<tr><td colspan="7" style="padding:10px;color:var(--text-secondary);font-style:italic;">${noteParts.join('; ')}. The P(top) bound and importance measures are computed over all ${finalCutsets.length.toLocaleString()} cut sets; export for the full list.</td></tr>`);
+        const qualBadge = isQual
+            ? `<div style="font-size: 0.75em; color: #0E7490; font-weight: bold; margin-top: 2px;" title="ARP 4761A 4.1.1.1 — contains a qualitative development error; this scenario is never quantified.">◇ Qualitative FFS — development error</div>`
+            : '';
+        const probCell = isQual
+            ? `<span style="color:#0E7490;font-weight:700;" title="Development errors are never given probabilities (ARP 4761A 4.1.1.1).">qualitative</span>`
+            : `<strong>${rel.toExponential(4).toUpperCase()}</strong>`;
+        return `<tr class="${rowClass}" style="${rowStyle}"><td><button class="action-btn btn-amber" onclick="highlightCutset('${esc(rawIds)}', '${esc(ccfSource)}')">Show</button></td><td>${rowNo}</td><td>${order}</td><td>${esc(eventIds)}${dynBadge}${qualBadge}</td><td>${esc(desc)}</td><td>${probCell}</td><td>${contribCell}</td></tr>`;
+    }
+    // Pager bar host — created once, sits directly above the table.
+    let pagerHost = document.getElementById('cutset-pager');
+    if (!pagerHost) {
+        pagerHost = document.createElement('div');
+        pagerHost.id = 'cutset-pager';
+        const tbl = document.getElementById('cutset-table');
+        if (tbl && tbl.parentNode) tbl.parentNode.insertBefore(pagerHost, tbl);
+    }
+    const _renderCutsetPage = (from, to) => {
+        let html = '';
+        for (let i = from; i < to; i++) html += _cutsetRowHtml(materialRows[i], i + 1);
+        if (hiddenImmaterial > 0 && to >= materialRows.length) {
+            html += `<tr><td colspan="7" style="padding:10px;color:var(--text-secondary);font-style:italic;">${hiddenImmaterial.toLocaleString()} higher-order cut set${hiddenImmaterial === 1 ? '' : 's'} (order ≥4 contributing <0.1% of ${_pTopLabelShort()}) hidden. The P(top) bound and importance measures are computed over all ${finalCutsets.length.toLocaleString()} cut sets; export for the full list.</td></tr>`;
+        }
+        tbody.innerHTML = html;
+    };
+    function _pTopLabelShort() { return qualCount > 0 ? 'P(top | no dev error)' : 'P(top)'; }
+    if (typeof SLPaginate !== 'undefined' && pagerHost) {
+        SLPaginate.reset('cutsets');   // new report run → back to page 1
+        SLPaginate.attach({
+            key: 'cutsets', host: pagerHost, total: materialRows.length,
+            label: (f, t, n) => 'cut sets ' + f.toLocaleString() + '–' + t.toLocaleString() + ' of ' + n.toLocaleString() + ' material' + (hiddenImmaterial ? ' (+' + hiddenImmaterial.toLocaleString() + ' immaterial hidden)' : '') + ' — Σ, P(top) and importance computed over all ' + finalCutsets.length.toLocaleString(),
+            renderPage: _renderCutsetPage,
+        });
+    } else {
+        // Pager unavailable (module not loaded) — render everything, as before.
+        _renderCutsetPage(0, materialRows.length);
     }
     document.getElementById('cutset-table').style.display = 'table';
 
@@ -1761,17 +2132,25 @@ function generateCutsetReport() {
     if (summary) {
         const repeats = repeatedEventGroups();
 
-        let html = `<div style="font-size:0.9em;color:var(--text-secondary);margin-bottom:6px;">Minimal cut sets for top event: <strong>${esc(_cutsetScopeLabel())}</strong> <span style="opacity:.85;">— this fault tree only, not the whole project. Table shows order ≤3 plus any order ≥4 contributing ≥0.1% of P(top); export for the full list.</span></div><div style="padding: 10px; background: var(--bg-control); border: 1px solid var(--border-primary); border-radius: 4px;">
-            <div><strong>Minimum Cutset Upper Bound on P(top):</strong>
+        // Backlog #4 — with qualitative FFS sets present, every quantified figure
+        // is explicitly conditional on no development error.
+        const _pTopLabel = qualCount > 0 ? 'P(top | no development error)' : 'P(top)';
+        let html = `<div style="font-size:0.9em;color:var(--text-secondary);margin-bottom:6px;">Minimal cut sets for top event: <strong>${esc(_cutsetScopeLabel())}</strong> <span style="opacity:.85;">— this fault tree only, not the whole project. Table shows order ≤3 plus any order ≥4 contributing ≥0.1% of ${esc(_pTopLabel)}; export for the full list.</span></div><div style="padding: 10px; background: var(--bg-control); border: 1px solid var(--border-primary); border-radius: 4px;">
+            <div><strong>Minimum Cutset Upper Bound on ${esc(_pTopLabel)}:</strong>
                 <span style="font-family: monospace; font-size: 1.1em; color: var(--header-color);">${mcsSum.toExponential(4).toUpperCase()}</span>
                 <span style="color: var(--text-secondary); font-size: 0.85em;">(Σ over ${finalCutsets.length} minimal cutsets)</span>
             </div>`;
         if (bddResult) {
             const delta = bddResult.pTop > 0 ? Math.abs(mcsSum - bddResult.pTop) / bddResult.pTop : 0;
             const deltaTxt = delta > 0.01 ? ` (MCS bound is +${(delta * 100).toFixed(1)}% above exact)` : ' (matches MCS bound — no significant common-mode tightening)';
-            html += `<div style="margin-top: 6px;"><strong>Exact P(top) via BDD:</strong>
+            html += `<div style="margin-top: 6px;"><strong>Exact ${esc(_pTopLabel)} via BDD:</strong>
                 <span style="font-family: monospace; font-size: 1.1em; color: #059669;">${bddResult.pTop.toExponential(4).toUpperCase()}</span>
                 <span style="color: var(--text-secondary); font-size: 0.85em;">${esc(deltaTxt)} · BDD size: ${bddResult.bddSize} nodes</span>
+            </div>`;
+        }
+        if (qualCount > 0) {
+            html += `<div style="margin-top: 6px; color: #0E7490; font-size: 0.9em;">
+                <strong>◇ ${qualCount} qualitative Functional Failure Scenario${qualCount === 1 ? '' : 's'}</strong> — cut set${qualCount === 1 ? '' : 's'} containing a development error (ARP 4761A 4.1.1.1). Development errors are never given probabilities: these scenarios are excluded from every number above, which is therefore conditional on no development error. They are addressed by process assurance (DAL) and the derived requirements, not by the probability budget.
             </div>`;
         }
         // Failure frequency w_TE — unconditional (Vesely–Goldberg; ARP4761A App G Eq G32–34).
@@ -2012,7 +2391,10 @@ function _renderGoldenThread(fha, domain, highlight){
 
 function openGoldenThreadModal(internalId, domain, highlight) {
     const sourceArray = domain === 'AC' ? acFhaData : getAllSysFha();
-    const fha = sourceArray.find(x => x.internalId === internalId);
+    // internalId may arrive as a string (from the FHA-row button's HTML onclick) or a
+    // number (from the artifact/data path). Coerce both sides so the match never fails
+    // on type — this is what made the AFHA/SFHA "Golden Thread" button silently do nothing.
+    const fha = sourceArray.find(x => String(x.internalId) === String(internalId));
     if(!fha) return;
     const host = document.getElementById('gt-thread');
     if(host){ try { host.innerHTML = _renderGoldenThread(fha, domain, highlight || null); } catch(e){ host.innerHTML = '<div style="color:var(--color-danger);">Thread render error: ' + esc(String(e)) + '</div>'; } }
@@ -2113,7 +2495,32 @@ function _gtvBuildGraph(opts){
         const ftaKeys = [];
         linkedPages.forEach(p => { const k = addNode('fta', p.id, (p.name || ('Tree ' + p.id)), 'Fault tree', { kind: 'ftaPage', id: p.id }, p.obsolete ? 'obsolete' : null, p.obsoleteReason || ''); ftaKeys.push(k); addLink(fcKey, k); });
 
-        (cmaData||[]).forEach(c => { if((c.linkedGateIds||[]).some(k => pageIds.includes(String(k).split(':')[0]))){ const k = addNode('cca', 'cma:' + c.internalId, ('CMA ' + (c.cmaId || '')).trim(), c.subject || 'Common mode', { kind: 'cma', id: c.internalId }); if(ftaKeys.length) ftaKeys.forEach(fk => addLink(fk, k)); else addLink(fcKey, k); } });
+        (cmaData||[]).forEach(c => { if((c.linkedGateIds||[]).some(k => pageIds.includes(String(k).split(':')[0]))){ const k = addNode('cca', 'cma:' + c.internalId, ('CMA ' + (c.cmaId || '')).trim(), c.subject || 'Common mode', { kind: 'cma', id: c.internalId }, c.ipCompromised ? 'compromised' : null, c.ipCompromised ? ('Independence compromised — ' + c.ipCompromised.principle) : ''); if(ftaKeys.length) ftaKeys.forEach(fk => addLink(fk, k)); else addLink(fcKey, k); } });
+
+        // C1 (gap 5) — Independence Principles as first-class thread nodes: the
+        // deduped claims this FC's trees rely on, coloured by lifecycle state and
+        // flagged when compromised. Links: tree → principle → its requirements.
+        try {
+            if(typeof ipLedger === 'function' && pageIds.length){
+                ipLedger().forEach(p => {
+                    if(!(p.sources || []).some(sc => sc && pageIds.includes(String(sc.pageId)))) return;
+                    const flag = p.state === 'compromised' ? 'compromised' : null;
+                    const why = p.contradiction ? 'CCF contradiction' : p.gateCompromised ? 'gate independence compromised' : p.bowtieCC ? 'bow-tie cross-side common cause' : p.monitorCC ? 'monitor shares its target' : (flag ? 'open CMA finding' : '');
+                    const ipKey = addNode('ip', p.key, p.members.map(m => m.label).join(' ⊥ '), 'Independence · ' + (p.state || 'identified'), { kind: 'principle', id: p.key }, flag, why);
+                    if(ftaKeys.length) ftaKeys.forEach(fk => addLink(fk, ipKey)); else addLink(fcKey, ipKey);
+                    (p.reqs || []).forEach(r => {
+                        const isAc = (acReqData || []).indexOf(r) !== -1;
+                        const owner = isAc ? null : (systemsData || []).find(ss => (ss.req || []).indexOf(r) !== -1);
+                        const kind = isAc ? 'acReq' : 'sysReq';
+                        let rf = null, rr = '';
+                        if(r.compromised){ rf = 'compromised'; }
+                        else if(r.ipCompromised){ rf = 'compromised'; rr = 'Independence principle compromised — ' + r.ipCompromised.principle + ' (' + r.ipCompromised.why + ')'; }
+                        const rk = addNode('req', kind + ':' + r.internalId, (r.traceId || r.id || ('REQ-' + r.internalId)), r.type || 'Independence', { kind, id: r.internalId, systemId: owner ? owner.id : null }, rf, rr);
+                        addLink(ipKey, rk);
+                    });
+                });
+            }
+        } catch(e){}
         (zsaData||[]).forEach(z => { if((z.housedFunctions||[]).includes(subId)){ const k = addNode('cca', 'zsa:' + z.internalId, ('ZSA ' + (z.zoneId || '')).trim(), z.desc || 'Zonal', { kind: 'zsa', id: z.internalId }); addLink(fcKey, k); } });
         (praData||[]).forEach(p => { const exposes = (p.affectedZones||[]).some(zid => { const z = (zsaData||[]).find(zz => zz.zoneId === zid); return z && (z.housedFunctions||[]).includes(subId); }); if(exposes){ const k = addNode('cca', 'pra:' + p.internalId, ('PRA ' + (p.praId || '')).trim(), p.threat || 'Particular risk', { kind: 'pra', id: p.internalId }); addLink(fcKey, k); } });
 
@@ -2126,6 +2533,7 @@ function _gtvBuildGraph(opts){
             let reqFlag = null, reqReason = '';
             if(req){
                 if(req.compromised){ reqFlag = 'compromised'; reqReason = (Array.isArray(req.compromiseReasons) && req.compromiseReasons.length) ? req.compromiseReasons.map(x => (x && (x.detail || x.kind)) || '').filter(Boolean).join(' · ') : ''; }
+                else if(req.ipCompromised){ reqFlag = 'compromised'; reqReason = 'Independence principle compromised — ' + req.ipCompromised.principle + ' (' + req.ipCompromised.why + ')'; }
                 else if(req.reqSource && req.reqSource.obsolete){ reqFlag = 'obsolete'; reqReason = (req.reqSource.obsolete && req.reqSource.obsolete.reason) || ''; }
                 else if(req.reqSource && req.reqSource.stale){ reqFlag = 'stale'; reqReason = 'Upstream source changed since this requirement was generated.'; }
             }
@@ -2146,6 +2554,7 @@ function _gtvBuildGraph(opts){
             if(!pageIds.includes(String(pageId))) return;
             let gf = null, gr = '';
             if(req.compromised){ gf = 'compromised'; gr = (Array.isArray(req.compromiseReasons) && req.compromiseReasons.length) ? req.compromiseReasons.map(x => (x && (x.detail || x.kind)) || '').filter(Boolean).join(' · ') : ''; }
+            else if(req.ipCompromised){ gf = 'compromised'; gr = 'Independence principle compromised — ' + req.ipCompromised.principle + ' (' + req.ipCompromised.why + ')'; }
             else if(req.reqSource && req.reqSource.obsolete){ gf = 'obsolete'; gr = (req.reqSource.obsolete && req.reqSource.obsolete.reason) || ''; }
             else if(req.reqSource && req.reqSource.stale){ gf = 'stale'; }
             const gk = addNode('req', kind + ':' + req.internalId, (req.traceId || req.id || ('REQ-' + req.internalId)), req.type || 'Independence', { kind: kind, id: req.internalId, systemId: systemId }, gf, gr);
@@ -2153,6 +2562,102 @@ function _gtvBuildGraph(opts){
             const gst = req.verifStatus || req.vvStatus || 'Planned';
             addLink(gk, addNode('vv', 'st:' + gst, gst, 'Verification', null));
         });
+
+        // ---- Authored requirements linked by traceId to this FC (+ verification) ----
+        // The FHA-referrer index misses reqs that trace by fcId string; join them
+        // directly so every requirement and its verification status reach the thread.
+        (function(){
+            const list = (domain === 'AC')
+                ? (acReqData || []).map(r => ({ r: r, kind: 'acReq', systemId: null }))
+                : (((system && system.req) || []).map(r => ({ r: r, kind: 'sysReq', systemId: system ? system.id : null })));
+            list.filter(x => x.r && String(x.r.traceId) === String(fha.fcId)).forEach(x => {
+                const r = x.r;
+                let rf = null, rr = '';
+                if(r.compromised){ rf = 'compromised'; rr = (Array.isArray(r.compromiseReasons) && r.compromiseReasons.length) ? r.compromiseReasons.map(y => (y && (y.detail || y.kind)) || '').filter(Boolean).join(' · ') : ''; }
+                else if(r.ipCompromised){ rf = 'compromised'; rr = 'Independence principle compromised — ' + r.ipCompromised.principle; }
+                else if(r.reqSource && r.reqSource.stale){ rf = 'stale'; rr = 'Upstream source changed since this requirement was generated.'; }
+                const rk = addNode('req', x.kind + ':' + r.internalId, (r.id || ('REQ-' + r.internalId)), r.type || 'Requirement', { kind: x.kind, id: r.internalId, systemId: x.systemId }, rf, rr);
+                addLink(fcKey, rk);
+                const st = r.verifStatus || r.vvStatus || 'Planned';
+                addLink(rk, addNode('vv', 'st:' + st, st, 'Verification', null));
+            });
+        })();
+        // ---- RAM: reliability-bearing items for this function feed its trees ----
+        // Reliability sets the fault-tree numbers, so items linked to this
+        // function connect INTO its trees (or the FC when no tree exists yet).
+        (typeof itemsData !== 'undefined' ? (itemsData || []) : []).forEach(it => {
+            if(!(it.traceIds || []).includes(subId)) return;
+            const rk = addNode('ram', 'item:' + (it.itemId || it.internalId), (it.itemId || 'ITEM'),
+                (it.name || '') + (it.dal ? ' · DAL ' + it.dal : ''), { kind: 'item', id: it.internalId, systemId: it.owningSystemId || null });
+            if(ftaKeys.length) ftaKeys.forEach(fk => addLink(rk, fk)); else addLink(rk, fcKey);
+        });
+        // ---- HF: human-factors assumptions inform which failure conditions are credible ----
+        // Anchored to the aircraft-level FCs (once), flagged when not yet validated.
+        if(domain === 'AC'){
+            try {
+                if(typeof HF_ASSUMPTIONS !== 'undefined' && HF_ASSUMPTIONS.asmAllTyped){
+                    HF_ASSUMPTIONS.asmAllTyped().filter(a => a && a.type === 'hf').forEach(a => {
+                        const st = String(a.state || '').toLowerCase();
+                        const hfFlag = (st.indexOf('validat') < 0 && st.indexOf('verif') < 0) ? 'stale' : null;
+                        const hk = addNode('hf', 'hf:' + a.asmId, a.asmId, 'HF · ' + (a.state || 'assumption'),
+                            { kind: 'assumption', id: a.asmId }, hfFlag, hfFlag ? 'HF assumption not yet validated' : '');
+                        addLink(hk, fcKey);
+                    });
+                }
+            } catch(e){}
+        }
+        // ---- STPA (W5): spine hazards imported from this FC join the thread ----
+        // The system lane's hazard object anchors to the FC it was created from
+        // (fromFcId); its STPA-derived requirements ride the standard req column.
+        // Flagged 'stale' when the hazard is not yet traced to a loss — an
+        // untraced hazard in evidence is a claim nobody finished.
+        try {
+            if(typeof stpaData !== 'undefined' && stpaData && Array.isArray(stpaData.hazards)){
+                stpaData.hazards.filter(h => h && h.fromFcId && h.fromFcId === fha.fcId).forEach(h => {
+                    const untraced = !(h.lossIds || []).length;
+                    // STPA-BRIDGE — scan this hazard's citing UCAs for declared
+                    // bridges: refs pull a ribbon to the fault tree that carries
+                    // the counterpart; declared-empty marks interaction-pure.
+                    const bridgedPageIds = new Set(); let interactionN = 0;
+                    Object.keys(stpaData.dispositions || {}).forEach(bk => {
+                        const bx = stpaData.dispositions[bk];
+                        if(!bx || bx.status !== 'assessed' || (bx.hazardIds || []).indexOf(h.id) < 0) return;
+                        if(!bx.bridge || !bx.bridge.declared) return;
+                        const brefs = (bx.bridge.ftaRefs || []).map(String);
+                        if(!brefs.length && !(bx.bridge.fmeaRefs || []).length){ interactionN++; return; }
+                        brefs.forEach(ref => {
+                            (ftaPages || []).some(bp => {
+                                let hitP = false;
+                                (function bw(n){ if(!n || hitP) return; if(String(n.displayId || '') === ref || String(n.id) === ref){ hitP = true; return; } (n.children || []).forEach(bw); })(bp.root);
+                                if(hitP) bridgedPageIds.add(String(bp.id));
+                                return hitP;
+                            });
+                        });
+                    });
+                    const sk = addNode('stpa', 'h:' + h.id, h.id,
+                        'STPA hazard' + ((h.group || '') ? ' · ' + h.group : '') + (interactionN ? ' · interaction-pure ×' + interactionN : ''),
+                        { kind: 'stpaHazard', id: h.id },
+                        untraced ? 'stale' : null, untraced ? 'STPA hazard not yet traced to a loss (1b)' : '');
+                    addLink(sk, fcKey);
+                    bridgedPageIds.forEach(pid => {
+                        const bp = (ftaPages || []).find(p => String(p.id) === pid);
+                        addLink(sk, addNode('fta', pid, (bp && bp.name) || ('Tree ' + pid), 'Fault tree', { kind: 'ftaPage', id: pid }));
+                    });
+                    // drafted requirements whose UCA cites this hazard → req column
+                    Object.keys(stpaData.dispositions || {}).forEach(k => {
+                        const x = stpaData.dispositions[k];
+                        if(!x || x.status !== 'assessed' || (x.hazardIds || []).indexOf(h.id) < 0) return;
+                        (acReqData || []).forEach(r => {
+                            if(!r || r.uca !== ('UCA-' + k)) return;
+                            const rk = addNode('req', 'acReq:' + r.internalId, ('STPA · ' + (r.uca || '')),
+                                r.type || 'Safety', { kind: 'acReq', id: r.internalId });
+                            addLink(fcKey, rk);
+                            addLink(rk, addNode('vv', 'st:' + (r.verifStatus || 'Planned'), (r.verifStatus || 'Planned'), 'Verification', null));
+                        });
+                    });
+                });
+            }
+        } catch(e){}
     });
     return { nodes: Array.from(nodes.values()), links };
 }
@@ -2161,14 +2666,16 @@ function _gtvBuildGraph(opts){
 // ribbon width scale with connection count. Mutates _x/_y/_w/_h on nodes and
 // _x0/_y0/_x1/_y1/_th on links.
 function _gtvLayout(graph, W, H){
-    const pad = { top: 34, bottom: 16, left: 12, right: 14 };
+    // Monarch-display pass: taller header band, fatter node bars, more breathing
+    // room between bars — the thread should read across a room, not a loupe.
+    const pad = { top: 42, bottom: 18, left: 12, right: 14 };
     const colNodes = {}; _GTV_LAYERS.forEach(l => colNodes[l] = []);
     graph.nodes.forEach(n => { if(colNodes[n.kind]) colNodes[n.kind].push(n); });
     const active = _GTV_LAYERS.filter(l => colNodes[l].length);
     const nCol = active.length;
     const innerW = W - pad.left - pad.right;
     const colGap = nCol > 1 ? innerW / (nCol - 1) : 0;
-    const nodeW = 13, vGap = 4;
+    const nodeW = 18, vGap = 6;
     // Monarch-style flow, biased toward the source. Inject one unit at every sink (V&V / dead-end)
     // and push it LEFTWARD. A node's flow is split among its parents with a SOFTENED divisor
     // (inDeg^ALPHA, ALPHA<1) instead of a strict ÷inDeg — so upstream columns accumulate more
@@ -2237,6 +2744,9 @@ function _gtvLayout(graph, W, H){
 }
 
 // Ecosystem panel: closure over up + down neighbours, grouped by layer.
+// The panel is a movable, scrollable card — drag its handle to reposition so a
+// long thread never clips — and every pill that maps to a real item is
+// double-clickable to jump straight to that tree / function / requirement / etc.
 function _gtvShowEco(key, graph){
     const eco = document.getElementById('gt-eco'); if(!eco) return;
     const byKey = {}; graph.nodes.forEach(n => byKey[n.key] = n);
@@ -2247,16 +2757,37 @@ function _gtvShowEco(key, graph){
     const reach = {}; reach[key] = 1; closure(key, out).forEach(k => reach[k] = 1); closure(key, inc).forEach(k => reach[k] = 1);
     const groups = {}; _GTV_LAYERS.forEach(l => groups[l] = []);
     Object.keys(reach).forEach(k => { const m = byKey[k]; if(m && m.key !== key && groups[m.kind]) groups[m.kind].push(m); });
-    let html = '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">'
+    // Drag handle header (the panel becomes a floating, scrollable card on drag).
+    let html = '<div id="gt-eco-drag" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:-6px -8px 8px; padding:5px 8px; cursor:move; border-bottom:1px solid var(--color-border-hair); background:var(--color-surface-3, rgba(127,127,127,0.06)); border-radius:var(--r-md) var(--r-md) 0 0;">'
+        + '<span style="font-size:13px; color:var(--color-text-tertiary); letter-spacing:1px; user-select:none;">⠿</span>'
         + '<span style="font-size:11px; padding:2px 9px; border-radius:999px; color:#fff; font-weight:600; background:' + _GTV_COLOR[n.kind] + ';">' + _GTV_LNAME[n.kind] + '</span>'
-        + '<span style="font-size:15px; font-weight:600; color:var(--color-text-primary);">' + esc(n.label) + '</span></div>'
-        + '<div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:8px;">Threads through ' + (Object.keys(reach).length - 1) + ' linked item' + (Object.keys(reach).length - 1 === 1 ? '' : 's') + '</div>'
+        + '<span style="font-size:15px; font-weight:600; color:var(--color-text-primary);">' + esc(n.label) + '</span>'
+        + '<span style="flex:1;"></span>'
+        + '<span style="font-size:10.5px; color:var(--color-text-tertiary); user-select:none;">drag to move</span>'
+        + '<button id="gt-eco-close" title="Close" aria-label="Close" style="margin-left:4px; background:transparent; border:none; font-size:19px; line-height:1; cursor:pointer; color:var(--color-text-secondary); padding:0 3px;">×</button></div>'
+        + '<div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:8px;">Threads through ' + (Object.keys(reach).length - 1) + ' linked item' + (Object.keys(reach).length - 1 === 1 ? '' : 's') + ' · click any pill to open it</div>'
         + (n.flag ? '<div style="margin:4px 0 8px; padding:8px 11px; border-radius:7px; border:1px solid ' + _GTV_FLAGC[n.flag] + '; background:var(--color-surface-1); font-size:12px; color:' + _GTV_FLAGC[n.flag] + ';"><strong>' + n.flag.toUpperCase() + '</strong>' + (n.flagReason ? ' — ' + esc(n.flagReason) : '') + '</div>' : '');
-    function chips(arr){ return '<div style="display:flex; flex-wrap:wrap; gap:6px;">' + arr.map(m => { const fc = m.flag ? _GTV_FLAGC[m.flag] : _GTV_COLOR[m.kind]; const tag = m.flag ? '<span style="margin-left:4px; font-size:10px; font-weight:700; color:' + fc + ';">' + m.flag.toUpperCase() + '</span>' : ''; return '<span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 9px; border-radius:6px; border:1px solid ' + (m.flag ? fc : 'var(--color-border-hair)') + '; background:var(--color-surface-1); color:var(--color-text-primary);"><span style="width:8px; height:8px; border-radius:2px; background:' + fc + ';"></span>' + esc(m.label) + tag + '</span>'; }).join('') + '</div>'; }
+    function chips(arr){ return '<div style="display:flex; flex-wrap:wrap; gap:6px;">' + arr.map(m => {
+        const fc = m.flag ? _GTV_FLAGC[m.flag] : _GTV_COLOR[m.kind];
+        const tag = m.flag ? '<span style="margin-left:4px; font-size:10px; font-weight:700; color:' + fc + ';">' + m.flag.toUpperCase() + '</span>' : '';
+        const nav = !!m.ref && m.kind !== 'vv';
+        const arrow = nav ? '<span style="margin-left:4px; opacity:.4; font-size:12px;">↗</span>' : '';
+        return '<span class="gte-pill"' + (nav ? (' data-navkey="' + esc(m.key) + '" role="button" tabindex="0" title="Open ' + esc(m.label) + '"') : '')
+            + ' style="display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 9px; border-radius:6px; border:1px solid ' + (m.flag ? fc : 'var(--color-border-hair)') + '; background:var(--color-surface-1); color:var(--color-text-primary); cursor:' + (nav ? 'pointer' : 'default') + '; transition:background .12s, box-shadow .12s;">'
+            + '<span style="width:8px; height:8px; border-radius:2px; background:' + fc + '; flex:none;"></span>' + esc(m.label) + tag + arrow + '</span>'; }).join('') + '</div>'; }
     _GTV_LAYERS.forEach(l => { if(groups[l].length){ html += '<div style="margin-top:11px;"><div style="font-size:12px; font-weight:600; color:var(--color-text-secondary); margin-bottom:6px;">' + _GTV_LNAME[l] + ' (' + groups[l].length + ')</div>' + chips(groups[l]) + '</div>'; } });
     if(n.kind === 'func'){ html += '<button class="action-btn" id="gt-eco-report" style="margin-top:14px; background:var(--color-accent);" data-sub="' + esc(n.id) + '">📄 Generate trace report for ' + esc(n.id) + '</button>'; }
-    html += '<div style="margin-top:12px; font-size:11px; color:var(--color-text-tertiary); border-top:1px dashed var(--color-border-hair); padding-top:8px;">Tip: double-click any node in the thread to open its full trace with clickable links.</div>';
+    html += '<div style="margin-top:12px; font-size:11px; color:var(--color-text-tertiary); border-top:1px dashed var(--color-border-hair); padding-top:8px;">Tip: click any pill to jump to that tree, function, requirement or HF item. Drag the ⠿ handle to move; × to close.</div>';
     eco.innerHTML = html;
+    // Wire pill navigation — single-click opens the item; Enter for keyboard users.
+    eco.querySelectorAll('.gte-pill[data-navkey]').forEach(el => {
+        el.addEventListener('mouseenter', () => { el.style.background = 'var(--color-surface-3, #eef1f7)'; el.style.boxShadow = '0 1px 4px rgba(0,0,0,.12)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = 'var(--color-surface-1)'; el.style.boxShadow = 'none'; });
+        const go = () => { const m = byKey[el.getAttribute('data-navkey')]; if(!m) return; const ok = (typeof _gtvNavigateTo === 'function') && _gtvNavigateTo(m); if(ok && window.showToast) showToast('Opened ' + m.label, 'info', 1600); };
+        el.addEventListener('click', go);
+        el.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); go(); } });
+    });
+    try { _gtvEcoMakeDraggable(eco); } catch(_){}
     const rb = document.getElementById('gt-eco-report');
     if(rb) rb.addEventListener('click', function(){
         const sub = this.getAttribute('data-sub'); this.disabled = true; this.textContent = 'Generating…';
@@ -2267,6 +2798,55 @@ function _gtvShowEco(key, graph){
                 .then(() => { rb.disabled = false; rb.textContent = '📄 Generate trace report for ' + sub; });
         }
     });
+}
+
+// Make the golden-thread ecosystem panel a movable, scrollable floating card so a
+// long thread never clips. Grab the handle to drag; double-click the handle to dock
+// it back into the page flow. Document-level listeners are attached once.
+let _gtvEcoDragState = null;
+function _gtvEcoMakeDraggable(eco){
+    if(!eco) return;
+    const handle = eco.querySelector('#gt-eco-drag'); if(!handle) return;
+    // Float the panel into the viewport so it's immediately visible and never
+    // clips — the docked in-flow position sits far below the diagram, off-screen.
+    if(getComputedStyle(eco).position !== 'fixed'){
+        eco.style.position = 'fixed';
+        eco.style.top = '92px';
+        eco.style.right = '22px';
+        eco.style.left = 'auto';
+        eco.style.width = '400px';
+        eco.style.maxWidth = '92vw';
+        eco.style.maxHeight = '78vh';
+        eco.style.overflow = 'auto';
+        eco.style.zIndex = '100001';
+        eco.style.margin = '0';
+        eco.style.boxShadow = '0 22px 60px rgba(0,0,0,.34)';
+    }
+    // Close — clear content and return the (empty) div to the normal flow.
+    const closeBtn = eco.querySelector('#gt-eco-close');
+    if(closeBtn) closeBtn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        ['position','top','right','left','width','maxWidth','maxHeight','overflow','zIndex','margin','boxShadow'].forEach(k => { eco.style[k] = ''; });
+        eco.innerHTML = '';
+    });
+    // Drag by the handle (works from any current position; no transformed ancestor here).
+    handle.addEventListener('mousedown', function(ev){
+        if(ev.button !== 0) return;
+        if(ev.target && ev.target.id === 'gt-eco-close') return;
+        const r = eco.getBoundingClientRect();
+        eco.style.left = r.left + 'px'; eco.style.top = r.top + 'px'; eco.style.right = 'auto';
+        _gtvEcoDragState = { eco: eco, x: ev.clientX, y: ev.clientY, l: r.left, t: r.top };
+        ev.preventDefault();
+    });
+    if(!_gtvEcoMakeDraggable._wired){
+        _gtvEcoMakeDraggable._wired = true;
+        document.addEventListener('mousemove', function(ev){
+            const s = _gtvEcoDragState; if(!s) return;
+            s.eco.style.left = (s.l + ev.clientX - s.x) + 'px';
+            s.eco.style.top  = (s.t + ev.clientY - s.y) + 'px';
+        });
+        document.addEventListener('mouseup', function(){ _gtvEcoDragState = null; });
+    }
 }
 
 function _findPageContainingLogicalId(lid) {

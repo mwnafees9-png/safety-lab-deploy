@@ -1,5 +1,7 @@
 // ============================================================================
 // stpa_report.js — v1.0 — WSB-STPA: the STPA analysis as a WS-B report type —
+// (BRIDGE: §6 gains the UCA↔FTA/FMEA bridge — rollup + per-UCA table, computed
+// fresh at build via STPA.bridgeMap; refusals reported, never hidden.)
 // the J3307 27/27 story as a document you hand to a reviewer.
 //
 // Born-modular registration against the exported Reports surface:
@@ -51,6 +53,8 @@
             stpa_cs_table: [], stpa_resp_table: [], stpa_uca_table: [],
             stpa_scenario_table: [], stpa_test_table: [], stpa_archetype_table: [],
             stpa_conformance_table: [],
+            stpa_bridge_summary: 'STPA engine or model not loaded — bridge not evaluated.',
+            stpa_bridge_table: [],
         };
         if (!sd) return out;
         const meta = sd.meta || {};
@@ -187,6 +191,39 @@
                     ' (evaluated fresh at report build — never a cached verdict).';
             }
         } catch (_) {}
+        // ---- STPA-BRIDGE (cf. doi:10.1177/1748006X261465051) ----------------
+        // Computed fresh at report build; resolver-checked; a refusal is
+        // REPORTED, never hidden — the reader sees the same truth the panel does.
+        try {
+            if (S && typeof S.bridgeMap === 'function' && sd.cs) {
+                const _rFta = function (ref) {
+                    const pages = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : [];
+                    let hit = null;
+                    const walk = n => { if (!n || hit) return; if (String(n.displayId || '') === String(ref) || String(n.id) === String(ref)) { hit = n; return; } (n.children || []).forEach(walk); };
+                    pages.forEach(p => { if (!hit) walk(p.root); });
+                    return hit;
+                };
+                const _rFmea = function (ref) {
+                    const rows = (typeof fmeaData !== 'undefined' && fmeaData) ? fmeaData : [];
+                    return rows.find(r => r && (String(r.internalId) === String(ref) || String(r.id || '') === String(ref))) || null;
+                };
+                const bm = S.bridgeMap(sd.cs, sd.dispositions || {}, { fta: _rFta, fmea: _rFmea }, _spine(sd));
+                out.stpa_bridge_summary = bm.rollup.assessed
+                    ? (bm.rollup.bridged + ' bridged to the classical lanes · ' + bm.rollup.interaction +
+                       ' interaction-pure (first-class, STPA-owned — no component-failure counterpart exists) · ' +
+                       bm.rollup.undeclared + ' undeclared (the bridge question not yet answered)')
+                    : 'No assessed UCAs yet — the bridge question arises at assessment.';
+                out.stpa_bridge_table = bm.entries.map(e => ({
+                    'UCA': e.ucaId,
+                    'Bridge': e.kind,
+                    'Counterparts': e.ftaRefs.map(h => 'FTA ' + (h.displayId || h.id)).concat(e.fmeaRefs.map(h => 'FMEA ' + h.id)).join(', ') || '—',
+                    'Statement': e.statement
+                }));
+            }
+        } catch (be) {
+            out.stpa_bridge_summary = 'Bridge: REFUSED — ' + String((be && be.message) || be).replace(/^stpa: /, '');
+            out.stpa_bridge_table = [];
+        }
         return out;
     }
 
@@ -228,6 +265,10 @@
         '## 6. Unsafe Control Actions',
         'Five-part phrasing throughout (source · type · control action · context · linked hazards); every UCA carries its disposition.',
         '{{stpa_uca_table}}',
+        '',
+        '### UCA ↔ FTA/FMEA Bridge',
+        'Every assessed UCA answers the bridge question: its failure-mode counterparts on the fault trees and FMEA are named, or the UCA is declared a pure interaction hazard — first-class and owned by this lane, the failure the classical lanes structurally cannot see. **{{stpa_bridge_summary}}**',
+        '{{stpa_bridge_table}}',
         '',
         '## 7. Causal Scenarios',
         'Scenario classes follow the controller (4a) and control-path/process (4b) factor families; coverage is computed from the scenario class tags, and dismissals carry rationale in the model.',
