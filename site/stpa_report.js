@@ -53,7 +53,7 @@
             stpa_cs_table: [], stpa_resp_table: [], stpa_uca_table: [],
             stpa_scenario_table: [], stpa_test_table: [], stpa_archetype_table: [],
             stpa_conformance_table: [],
-            stpa_bridge_summary: 'STPA engine or model not loaded — bridge not evaluated.',
+            stpa_bridge_summary: 'No STPA control structure authored yet — the bridge question arises with the first assessed UCA.',
             stpa_bridge_table: [],
         };
         if (!sd) return out;
@@ -195,7 +195,7 @@
         // Computed fresh at report build; resolver-checked; a refusal is
         // REPORTED, never hidden — the reader sees the same truth the panel does.
         try {
-            if (S && typeof S.bridgeMap === 'function' && sd.cs) {
+            if (S && typeof S.bridgeMap === 'function' && sd.cs && ((sd.cs.actions || []).length)) {
                 const _rFta = function (ref) {
                     const pages = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : [];
                     let hit = null;
