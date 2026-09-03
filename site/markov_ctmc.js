@@ -1,8 +1,47 @@
 // ============================================================================
-// markov_ctmc.js — v1.0 — ARP-G3: full CTMC — transient solution, refusals,
+// markov_ctmc.js — v1.1 — ARP-G3: full CTMC — transient solution, refusals,
 // cited benchmarks — on top of the editor + steady-state lane that already
 // ship (fta_quant_modules: solveMarkovModel, model CRUD, closed-form card;
 // markov_ndf.js: the 3-state N/D/F discrete template).
+//
+// v1.1 (4 Aug 2026) — PHASED MISSIONS, ARP4761A App I §I.2.9 "Phased Mission
+// Systems" (clause number + title only — SAE posture; the description below
+// is our own). What that clause covers, in our words: a mission runs in
+// distinct phases, the architecture answering a failure can differ between
+// them, and failure rates can differ too because the environment does. The
+// method is to solve each phase as its own transient problem and to start
+// each phase from the state probabilities the previous phase ended with —
+// integrating the same differential equations one segment at a time. Until
+// now this lane did ONE (Q, t) solve for the whole mission: one
+// configuration, one stress level, every phase of flight.
+//
+//   · solveMarkovPhased(model, opts) — the chain. Phase sequence comes from
+//     the PROJECT PHASE TABLE (flightPhasesData, table order) — the same
+//     single source the exposure engine reads — with contingency phases
+//     EXCLUDED and named in the receipt (they hold r = 1 by the §4.1 ruling;
+//     folding them into a mission chain would double-count them). Per-phase
+//     overrides on the model: a failure-rate multiplier (the environmental
+//     -stress case) and/or a different model (the reconfiguration case).
+//   · Carry-over maps π across a phase boundary BY STATE NAME. Structural,
+//     not numeric: the same pair of models always maps or always refuses,
+//     independent of the rates, so a refusal can never appear only at some
+//     numbers. Failed states carry into the next phase's failed set
+//     automatically (§I.4.11.11: failed in a phase = failed for the whole
+//     mission — absorbing across the boundary). Any OTHER unmapped state
+//     REFUSES by name: probability mass that quietly vanishes understates
+//     failure, and a wrong number wearing a green tick is the failure mode
+//     this project keeps finding (INV-44's unlinked transfers, most recently).
+//   · Cited benchmark — §I.4.11.11's two-equipment worked example, whose
+//     closed form is exact: two units, both needed in phase 1, one needed in
+//     phase 2, failure in phase 1 absorbing ⇒
+//         P(fail) = 1 − e^{−2λT₁}·(2e^{−λT₂} − e^{−2λT₂}).
+//     The example is the standard's; the algebra is mathematics, stated here
+//     in original wording (clause number + title only, per the SAE posture).
+//   · OPT-IN, per the module's own doctrine that numbers never change
+//     silently: an event quantifies phased only when its model carries
+//     phasePlan.enabled. Without it, every figure is byte-identical to v1.0,
+//     and a phased solve that REFUSES falls back to the single-(Q,t) answer
+//     with the refusal named in the panel.
 //
 // THE GAP THIS CLOSES: a Markov-attached basic event was quantified at
 // STEADY STATE (t → ∞), but the mission question is P(failed at t = T).
@@ -98,13 +137,28 @@
         if (!(isFinite(t) && t >= 0)) return { ok: false, reason: 'mission time t must be a finite number ≥ 0 (got ' + t + ')' };
         const n = model.states.length;
         // initial distribution
-        let init = 0;
-        const wanted = opts.initial != null ? opts.initial : model.initialState;
-        if (wanted != null) {
-            init = model.states.findIndex(s => s.name === wanted);
-            if (init < 0) return { ok: false, reason: 'initial state "' + wanted + '" is not a state of this model' };
+        let pi0;
+        if (opts.pi0 != null) {
+            // v1.1 — an arbitrary initial DISTRIBUTION (what a phased chain
+            // carries across a boundary). Refused, never repaired, when it is
+            // not a distribution over exactly this model's states.
+            if (!Array.isArray(opts.pi0) || opts.pi0.length !== n) return { ok: false, reason: 'initial distribution has ' + (Array.isArray(opts.pi0) ? opts.pi0.length : 'no') + ' entries for a ' + n + '-state model' };
+            let tot = 0;
+            for (const x of opts.pi0) {
+                if (!isFinite(x) || x < 0) return { ok: false, reason: 'initial distribution holds a negative or non-finite entry (' + x + ')' };
+                tot += x;
+            }
+            if (Math.abs(tot - 1) > 1e-9) return { ok: false, reason: 'initial distribution sums to ' + tot + ', not 1 — REFUSED rather than renormalized, because silently renormalizing hides lost probability mass' };
+            pi0 = opts.pi0.slice();
+        } else {
+            let init = 0;
+            const wanted = opts.initial != null ? opts.initial : model.initialState;
+            if (wanted != null) {
+                init = model.states.findIndex(s => s.name === wanted);
+                if (init < 0) return { ok: false, reason: 'initial state "' + wanted + '" is not a state of this model' };
+            }
+            pi0 = Array(n).fill(0); pi0[init] = 1;
         }
-        let pi0 = Array(n).fill(0); pi0[init] = 1;
 
         const Q = _buildQ(model);
         let Lambda = 0;
@@ -172,6 +226,146 @@
                  receipt: { method: 'uniformization (mode-centred Poisson weights)', Lambda, t, terms: R - L + 1, kRange: [L, R], tol } };
     }
 
+    // ========================================================================
+    // v1.1 — PHASED MISSIONS (ARP4761A App I §I.2.9)
+    // ========================================================================
+    // The phase sequence is the PROJECT PHASE TABLE, in table order — the same
+    // single source of truth the exposure engine reads (§4.1 unified three
+    // disagreeing lists into it; a fourth would restart that disease).
+    // Contingency phases (`special: true` — Go-around, Rejected Takeoff) are
+    // EXCLUDED and named: they are held at r = 1 rather than sized to their
+    // duration, so threading them into a mission chain would model them as a
+    // guaranteed leg of every flight.
+    // A phase row is { phase, duration, durationUnit, special?, … } — the NAME
+    // field is `phase`, and durations are STRINGS in mixed units ('4'/'hours',
+    // '15'/'mins'). This module therefore owns NO parsing and NO contingency
+    // list of its own: it routes through `parseDurationToHours` and
+    // `isSpecialPhase`, the same functions the exposure engine reads, so the
+    // two surfaces cannot drift apart (HANDOFF §8 — one field, one vocabulary).
+    // Absent helpers REFUSE rather than guess: a local unit table that fell out
+    // of step would silently resize every mission.
+    function _phaseTable() {
+        // A tree's own mission profile drives its phase table where one is set
+        // — the convention every FTA-side exposure read already follows.
+        try { if (typeof _activeTreeMissionPhases === 'function') { const t = _activeTreeMissionPhases(); if (Array.isArray(t) && t.length) return t; } } catch (_) {}
+        if (typeof flightPhasesData !== 'undefined' && Array.isArray(flightPhasesData)) return flightPhasesData;
+        if (typeof window !== 'undefined' && Array.isArray(window.flightPhasesData)) return window.flightPhasesData;
+        return [];
+    }
+    function phaseSequence() {
+        const seq = [], excluded = [];
+        if (typeof parseDurationToHours !== 'function' || typeof isSpecialPhase !== 'function') {
+            return { seq, excluded, refuse: 'the shared phase helpers (parseDurationToHours / isSpecialPhase) are not loaded — REFUSED rather than parsing durations with a private unit table that could drift from the exposure engine' };
+        }
+        _phaseTable().forEach(p => {
+            const nm = p && p.phase;
+            if (!nm) return;
+            if (isSpecialPhase(p)) { excluded.push(nm + ' (contingency — held at r = 1, never sized into the mission)'); return; }
+            const h = parseDurationToHours(p.duration, p.durationUnit);
+            if (!(h > 0)) { excluded.push(nm + ' (no positive duration)'); return; }
+            seq.push({ name: nm, duration: h });
+        });
+        return { seq, excluded };
+    }
+
+    // A phase's failure-rate multiplier scales every transition EXCEPT repairs
+    // (failed → non-failed). §I.2.9's stated cause is environmental STRESS,
+    // which raises failure rates; restoration rate is a maintenance property,
+    // not a stress one. Named in the receipt — an engineer who wants something
+    // else authors a per-phase model, which the plan also supports.
+    function _scaleModel(model, mult) {
+        if (!(mult > 0) || mult === 1) return model;
+        const failed = new Set((model.states || []).filter(s => s && s.isFailed).map(s => s.name));
+        return Object.assign({}, model, {
+            transitions: (model.transitions || []).map(t => {
+                const isRepair = failed.has(String(t.from)) && !failed.has(String(t.to));
+                return isRepair ? t : Object.assign({}, t, { rate: (parseFloat(t.rate) || 0) * mult });
+            })
+        });
+    }
+
+    // Carry π across a phase boundary BY STATE NAME. Structural: decided by the
+    // two models' state names alone, never by the current numbers, so a given
+    // pair always maps or always refuses.
+    function mapDistribution(fromModel, toModel, pi) {
+        const to = toModel.states.map(s => s.name);
+        const toIdx = new Map(to.map((nm, i) => [nm, i]));
+        const toFailed = toModel.states.map(s => !!s.isFailed);
+        const firstFailed = toFailed.indexOf(true);
+        const out = Array(to.length).fill(0);
+        const notes = [];
+        for (let i = 0; i < fromModel.states.length; i++) {
+            const st = fromModel.states[i];
+            const j = toIdx.get(st.name);
+            if (j != null) { out[j] += pi[i]; continue; }
+            if (st.isFailed) {
+                // §I.4.11.11 — failed in a phase is failed for the whole mission.
+                if (firstFailed < 0) return { ok: false, reason: 'phase carry-over: "' + st.name + '" is a failed state with no counterpart in the next phase, and the next phase declares NO failed state to absorb it' };
+                out[firstFailed] += pi[i];
+                notes.push('"' + st.name + '" → "' + to[firstFailed] + '" (failed carries forward, absorbing)');
+                continue;
+            }
+            return { ok: false, reason: 'phase carry-over: state "' + st.name + '" has no counterpart in the next phase\'s model and is not a failed state — REFUSED rather than dropping its probability mass, which would understate failure. Give the next phase a state of the same name, or mark this one failed if that is what a reconfiguration means here.' };
+        }
+        return { ok: true, pi0: out, notes };
+    }
+
+    // solveMarkovPhased(model, opts)
+    //   opts.plan     — { enabled, overrides: { '<phase name>': { mult, modelId | model } } }
+    //                   (defaults to model.phasePlan)
+    //   opts.phases   — explicit [{ name, duration }] instead of the phase table
+    //                   (used by the cited benchmark; the product path uses the table)
+    function solveMarkovPhased(model, opts) {
+        opts = opts || {};
+        const plan = opts.plan || (model && model.phasePlan) || {};
+        const overrides = plan.overrides || {};
+        const excluded = [];
+        let seq;
+        if (Array.isArray(opts.phases) && opts.phases.length) seq = opts.phases;
+        else {
+            const ps = phaseSequence();
+            if (ps.refuse) return { ok: false, reason: ps.refuse, excluded };
+            seq = ps.seq; excluded.push(...ps.excluded);
+        }
+        if (!seq.length) return { ok: false, reason: 'no flight phases with a positive duration to sequence (contingency phases are excluded by design) — the phase table drives the chain', excluded };
+
+        const legs = [];
+        let pi = null, prevModel = null, missionHours = 0;
+        for (const ph of seq) {
+            const ov = overrides[ph.name] || {};
+            let m = model;
+            if (ov.model) m = ov.model;
+            else if (ov.modelId) {
+                const alt = (typeof getMarkovModel === 'function') ? getMarkovModel(ov.modelId) : null;
+                if (!alt) return { ok: false, reason: 'phase "' + ph.name + '" names a model that no longer exists (' + ov.modelId + ') — REFUSED rather than silently falling back to the base model', excluded };
+                m = alt;
+            }
+            const v = validateMarkovModel(m);
+            if (!v.ok) return { ok: false, reason: 'phase "' + ph.name + '": model refused — ' + v.errors[0], excluded };
+            const mult = (parseFloat(ov.mult) > 0) ? parseFloat(ov.mult) : 1;
+            const scaled = _scaleModel(m, mult);
+
+            let pi0 = null, carryNotes = [];
+            if (pi !== null) {
+                const mapped = mapDistribution(prevModel, m, pi);
+                if (!mapped.ok) return { ok: false, reason: 'entering phase "' + ph.name + '" — ' + mapped.reason, excluded };
+                pi0 = mapped.pi0; carryNotes = mapped.notes;
+            }
+            const r = solveMarkovTransient(scaled, ph.duration, { tol: opts.tol, maxTerms: opts.maxTerms, pi0: pi0, initial: pi0 ? null : opts.initial });
+            if (!r.ok) return { ok: false, reason: 'phase "' + ph.name + '": ' + r.reason, excluded };
+            missionHours += ph.duration;
+            legs.push({ phase: ph.name, hours: ph.duration, mult, model: m.name || '(base)',
+                        reconfigured: m !== model, pFailedAtEnd: r.pFailed, carry: carryNotes, receipt: r.receipt });
+            pi = r.pi; prevModel = m;
+        }
+        const last = legs[legs.length - 1];
+        return { ok: true, pFailed: last.pFailedAtEnd, pi, legs, excluded, missionHours,
+                 receipt: { method: 'phased mission — piecewise transient, initial condition carried across each boundary (App I §I.2.9)',
+                            phases: legs.length, missionHours,
+                            multipliers: 'failure-rate multipliers scale every transition except repairs (failed → non-failed)',
+                            excluded } };
+    }
+
     // ---- cited benchmarks ---------------------------------------------------
     // Closed forms are mathematics; the wording is original. Cite-and-point:
     // any standard reliability text derives both (e.g., the constant-rate
@@ -194,6 +388,40 @@
                           transitions: [{ from: 'Up', to: 'Down', rate: lam }, { from: 'Down', to: 'Up', rate: mu }] };
               const r = solveMarkovTransient(m, t);
               return { got: r.ok ? r.pFailed : NaN, want: (lam / (lam + mu)) * (1 - Math.exp(-(lam + mu) * t)), tol: 1e-12 };
+          } },
+        // v1.1 — ARP4761A App I §I.4.11.11 "Phased Mission System". Two units:
+        // both required in phase 1, one required in phase 2, and failure in
+        // phase 1 is failure for the whole mission. The example is the
+        // standard's; the algebra below is mathematics, in original wording.
+        //   phase 1: p(both up, T₁) = e^{−2λT₁}
+        //   phase 2 from that initial condition:
+        //     p(fail) = 1 − e^{−2λT₁}·(2e^{−λT₂} − e^{−2λT₂})
+        { id: 'phased-I.4.11.11', name: 'Phased mission, two equipment (App I §I.4.11.11): P = 1 − e^{−2λT₁}(2e^{−λT₂} − e^{−2λT₂})',
+          cite: 'ARP4761A Appendix I §I.4.11.11 "Phased Mission System" — worked example; closed form is standard mathematics',
+          run: function () {
+              const lam = 2e-4, T1 = 1.2, T2 = 5.13;
+              const ph1 = { name: 'Phase 1 — both required',
+                            states: [{ name: 'Both up' }, { name: 'Failed', isFailed: true }],
+                            transitions: [{ from: 'Both up', to: 'Failed', rate: 2 * lam }] };
+              const ph2 = { name: 'Phase 2 — one sufficient',
+                            states: [{ name: 'Both up' }, { name: 'One up' }, { name: 'Failed', isFailed: true }],
+                            transitions: [{ from: 'Both up', to: 'One up', rate: 2 * lam }, { from: 'One up', to: 'Failed', rate: lam }] };
+              const r = solveMarkovPhased(ph1, {
+                  phases: [{ name: 'P1', duration: T1 }, { name: 'P2', duration: T2 }],
+                  plan: { overrides: { P2: { model: ph2 } } }
+              });
+              return { got: r.ok ? r.pFailed : NaN,
+                       want: 1 - Math.exp(-2 * lam * T1) * (2 * Math.exp(-lam * T2) - Math.exp(-2 * lam * T2)),
+                       tol: 1e-12 };
+          } },
+        { id: 'phased-degenerate', name: 'one phase, no reconfiguration ⇒ the phased chain equals the plain transient',
+          cite: 'internal cross-check — the chain must add nothing when there is nothing to chain',
+          run: function () {
+              const m = { states: [{ name: 'Up' }, { name: 'Down', isFailed: true }],
+                          transitions: [{ from: 'Up', to: 'Down', rate: 3.1e-4 }, { from: 'Down', to: 'Up', rate: 0.08 }] };
+              const one = solveMarkovPhased(m, { phases: [{ name: 'Only', duration: 6.33 }] });
+              const flat = solveMarkovTransient(m, 6.33);
+              return { got: one.ok ? one.pFailed : NaN, want: flat.ok ? flat.pFailed : NaN, tol: 1e-15 };
           } },
         { id: 'steady-agreement', name: 't → ∞ agreement with the steady-state solver',
           cite: 'internal cross-check — two independent methods, one figure',
@@ -229,6 +457,14 @@
             try {
                 if (node && node.markovModelId && typeof getMarkovModel === 'function') {
                     const model = getMarkovModel(node.markovModelId);
+                    // v1.1 — OPT-IN phased mission (§I.2.9). Only a model that
+                    // declares a plan quantifies phased; a refused chain falls
+                    // through to the single-(Q,t) answer (named in the panel)
+                    // so numbers never change silently under an error.
+                    if (model && model.phasePlan && model.phasePlan.enabled && validateMarkovModel(model).ok) {
+                        const ph = solveMarkovPhased(model);
+                        if (ph.ok) return ph.pFailed;
+                    }
                     if (model && validateMarkovModel(model).ok) {
                         let t = exposureTime;
                         try { if (typeof _nodeExposureTime === 'function') t = _nodeExposureTime(node, exposureTime); } catch (_) {}
@@ -261,7 +497,17 @@
                     if (!v.ok) return '<tr><td><b>' + esc(m.name) + '</b></td><td colspan="3" style="color:#B91C1C; font-size:11px;">REFUSED — ' + esc(v.errors.join(' · ')) + '</td></tr>';
                     const tr = solveMarkovTransient(m, T);
                     const ss = (typeof solveMarkovModel === 'function') ? solveMarkovModel(m) : { ok: false };
-                    return '<tr><td><b>' + esc(m.name) + '</b>' + (v.warnings.length ? '<br><span style="font-size:10px; color:#9A6200;">' + esc(v.warnings.join(' · ')) + '</span>' : '') + '</td>' +
+                    // v1.1 — phased line, only for models that opted in (§I.2.9).
+                    let phLine = '';
+                    if (m.phasePlan && m.phasePlan.enabled) {
+                        const ph = solveMarkovPhased(m);
+                        phLine = ph.ok
+                            ? '<br><span style="font-size:10px; color:#6D28D9;">phased (§I.2.9): <b class="u-mono">' + ph.pFailed.toExponential(4) + '</b> over ' + ph.legs.length + ' phases / ' + ph.missionHours.toFixed(2) + ' FH — ' +
+                              esc(ph.legs.map(l => l.phase + ' ' + l.hours + 'h' + (l.mult !== 1 ? ' ×' + l.mult : '') + (l.reconfigured ? ' → ' + l.model : '')).join(' · ')) +
+                              (ph.excluded.length ? '<br>excluded: ' + esc(ph.excluded.join(' · ')) : '') + '</span>'
+                            : '<br><span style="font-size:10px; color:#B91C1C;">phased REFUSED — ' + esc(ph.reason) + ' (this model keeps its single-interval figure until fixed)</span>';
+                    }
+                    return '<tr><td><b>' + esc(m.name) + '</b>' + (v.warnings.length ? '<br><span style="font-size:10px; color:#9A6200;">' + esc(v.warnings.join(' · ')) + '</span>' : '') + phLine + '</td>' +
                         '<td class="u-mono">' + (tr.ok ? tr.pFailed.toExponential(4) : esc(tr.reason)) + '</td>' +
                         '<td class="u-mono">' + (ss.ok ? ss.pFailed.toExponential(4) : '—') + '</td>' +
                         '<td style="font-size:10px; color:var(--color-text-tertiary, var(--text-secondary));">' + (tr.ok ? esc(tr.receipt.method) + ' · Λ=' + tr.receipt.Lambda.toExponential(2) + ' · ' + tr.receipt.terms + ' terms · tol ' + tr.receipt.tol : '') + '</td></tr>';
@@ -286,11 +532,12 @@
     })();
 
     // ------------------------------------------------------------ exports
-    const API = { validateMarkovModel, solveMarkovTransient, runMarkovBenchmarks, BENCHMARKS };
+    const API = { validateMarkovModel, solveMarkovTransient, solveMarkovPhased, mapDistribution, phaseSequence, runMarkovBenchmarks, BENCHMARKS };
     if (typeof window !== 'undefined') {
         window.MARKOV_CTMC = API;
         window.validateMarkovModel = validateMarkovModel;
         window.solveMarkovTransient = solveMarkovTransient;
+        window.solveMarkovPhased = solveMarkovPhased;
         window.runMarkovBenchmarks = runMarkovBenchmarks;
     }
     if (typeof module !== 'undefined') module.exports = API;

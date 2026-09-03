@@ -149,7 +149,7 @@
              'Open <b style="margin-left:6px;' + (open ? ' color:#8E2A2A;' : '') + '">' + open + '</b>']
             .map(c => '<div style="height:32px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--color-border-strong); font-family:var(--font-mono); font-size:12px;">' + c + '</div>').join('') + '</div>';
 
-        html += '<div style="border:1px solid var(--color-border-hair); border-left:3px solid var(--color-text-primary); background:var(--color-surface-2); padding:10px 14px; font-size:12px; color:var(--color-text-secondary); margin-bottom:14px; max-width:860px;">' +
+        html += '<div style="border:1px solid var(--color-border-hair); border-left:3px solid var(--color-text-primary); background:var(--color-surface-2); padding:10px 14px; font-size:12px; color:var(--color-text-secondary); margin-bottom:14px; ">' +
             'Objective summaries are ORIGINAL paraphrases keyed to the ARP4754B Appendix A table structure — the standard\'s own tables remain the authoritative wording and level-applicability. ' +
             'AUTO rows are computed from the live model and cannot be attested over; ATTEST rows are the judgments only a human can sign.</div>';
 

@@ -9,24 +9,24 @@
  * now runs the EULA gate and then this License gate in sequence — without editing the
  * auto-generated eula_modal.js or the auth gate.
  *
- * NOTE: the agreement text below is a FIRST-PASS DRAFT (Rev A), supplementary to the
- * EULA, and is pending review by counsel. Swap final text + bump LICENSE_VERSION when
- * the reviewed copy is ready.
+ * Text is at Rev C, supplementary to the EULA (SL-EULA-0003). Counsel review still
+ * pending — swap final text + bump LICENSE_VERSION when the reviewed copy is ready.
  */
 (function () {
   'use strict';
-  var LICENSE_VERSION = 'SL-LICENSE-0001-B';
+  var LICENSE_VERSION = 'SL-LICENSE-0001-C';
   var LS_KEY = 'safetyLab.licenseAgreement.acceptedVersion';
   var OVERLAY_ID = 'sl-license-overlay';
 
-  // EULA constants (must match eula_modal.js) — used only to confirm the EULA was
-  // ACCEPTED (not declined) before advancing to the license gate.
+  // The EULA acceptance check reads the CURRENT version from window.SL_EULA at
+  // decision time (3 Aug 2026 fix) — a duplicated constant here went stale twice
+  // and silently stopped the license gate from advancing after a fresh EULA
+  // acceptance (the localStorage value never matched the outdated copy).
   var EULA_LS_KEY = 'safetyLab.eula.acceptedVersion';
-  var EULA_VERSION = 'SL-EULA-0001-B';
 
   var LICENSE_HTML = ""
-    + "<p><em>Draft v0.1 &mdash; first-pass terms, supplementary to the End User License Agreement, subject to revision and pending review by counsel. Not legal advice.</em></p>"
-    + "<p>This Software License &amp; Subscription Agreement (the &quot;License Agreement&quot;) governs your subscription to and use of the Safety Lab Aero hosted software service made available at safetylabaero.com (the &quot;Service&quot;) by the individual or entity identified by the account under which you sign in (the &quot;Licensee,&quot; &quot;you,&quot; or &quot;your&quot;). The Service is licensed, not sold, by Safety Lab Aero, Inc., a Delaware corporation (&quot;Licensor,&quot; &quot;we,&quot; or &quot;us&quot;). This License Agreement supplements, and is in addition to, the Safety Lab Aero End User License Agreement (SL-EULA-0001), which you also accept; in the event of a conflict regarding subscription, seats, billing, or hosted-service operation, this License Agreement controls.</p>"
+    + "<p><em>SL-LICENSE-0001, Rev C &mdash; supplementary to the Safety Lab Aero End User License Agreement (SL-EULA-0003).</em></p>"
+    + "<p>This Software License &amp; Subscription Agreement (the &quot;License Agreement&quot;) governs your subscription to and use of the Safety Lab Aero hosted software service made available at safetylabaero.com (the &quot;Service&quot;) by the individual or entity identified by the account under which you sign in (the &quot;Licensee,&quot; &quot;you,&quot; or &quot;your&quot;). The Service is licensed, not sold, by Safety Lab Aero, Inc., a Delaware corporation (&quot;Licensor,&quot; &quot;we,&quot; or &quot;us&quot;). This License Agreement supplements, and is in addition to, the Safety Lab Aero End User License Agreement (SL-EULA-0003), which you also accept; in the event of a conflict regarding subscription, seats, billing, or hosted-service operation, this License Agreement controls.</p>"
     + "<h4>1. License Grant</h4>"
     + "<p>Subject to your continuous compliance with this License Agreement and the EULA, and to your payment of all applicable fees, Licensor grants Licensee a limited, non-exclusive, non-transferable, non-sublicensable, revocable license, during the subscription term, to access and use the Service solely for Licensee&#x27;s internal engineering and certification work, and limited to the number of seats and the subscription tier for which Licensee has paid.</p>"
     + "<h4>2. Accounts and Seats</h4>"
@@ -36,9 +36,9 @@
     + "<h4>4. Fees and Payment</h4>"
     + "<p>Fees, seat counts, and the subscription tier are set out in the pricing published at safetylabaero.com or in the applicable order and are incorporated by reference. All fees are stated in United States dollars and are exclusive of taxes, duties, and bank-transfer fees, for which Licensee is responsible (other than taxes on Licensor&#x27;s net income). Payments are processed by Licensor&#x27;s payment processor (currently Stripe) and are non-refundable except as expressly stated herein or as required by applicable law.</p>"
     + "<h4>5. Hosted Data Handling; Confidentiality</h4>"
-    + "<p>To provide the Service, Licensor hosts, stores, processes, and transmits the project data, files, analyses, and outputs that Licensee submits to or generates within the Service (&quot;Customer Data&quot;). Licensee retains all right, title, and interest in its Customer Data. Licensor will treat Customer Data as confidential, will not use it to train any machine-learning model, and will access it only as necessary to provide and secure the Service, to respond to support requests, or to comply with applicable law. Upon termination, Licensor will retain Customer Data for ninety (90) days to permit export, after which it may be deleted. Licensee is solely responsible for the accuracy, legality, and content of its Customer Data.</p>"
+    + "<p>To provide the Service, Licensor hosts, stores, processes, and transmits the project data, files, analyses, and outputs that Licensee submits to or generates within the Service (&quot;Customer Data&quot;). Licensee retains all right, title, and interest in its Customer Data. Licensor will treat Customer Data as confidential, and will access and use it only as necessary to provide and secure the Service, to respond to support requests, to comply with applicable law, or to develop, train, evaluate, and improve Licensor&#x27;s machine-learning models and AI-assisted features as described in the EULA. Customer Data from projects flagged as export-controlled is excluded from model development, Licensor will not disclose one licensee&#x27;s Customer Data to another, and Licensee may withdraw its Customer Data from model development at any time. Upon termination, Licensor will retain Customer Data for ninety (90) days to permit export, after which it may be deleted. Licensee is solely responsible for the accuracy, legality, and content of its Customer Data.</p>"
     + "<h4>6. AI-Assisted Features</h4>"
-    + "<p>Where enabled, AI-assisted features route requests through Licensor&#x27;s hosted proxy to identified language-model providers on a stateless, per-request basis. AI output is advisory and non-deterministic; it does not compute or alter the deterministic quantitative safety results produced by the Service, and the Service constrains the AI from fabricating safety-critical claims (failure conditions, severity classifications, Development Assurance Level allocations, quantitative reliability values, or regulatory citations) not present in Licensee&#x27;s project data. <strong>Human verification by qualified personnel is required before final approval of all AI-generated artifacts: no AI-assisted output &mdash; including any analysis, computed or suggested value, severity classification, Development Assurance Level, safety requirement, fault-tree structure, or report &mdash; may be finalized, approved, released, or relied upon for any engineering, safety, or certification purpose until a qualified human engineer has independently reviewed, verified, and accepted it and assumed professional responsibility for it.</strong> Licensee is solely responsible for ensuring the fidelity, accuracy, completeness, and suitability of all AI-generated output, and Licensor shall not be responsible or liable for any data, analysis, classification, or other content produced by the AI features, or for any decision made or action taken in reliance on it. Licensor disclaims any warranty regarding the accuracy of AI-generated content.</p>"
+    + "<p>Where enabled, AI-assisted features route requests through Licensor&#x27;s hosted proxy to identified language-model providers on a per-request basis. AI output is advisory and non-deterministic; it does not compute or alter the deterministic quantitative safety results produced by the Service, and the Service constrains the AI from fabricating safety-critical claims (failure conditions, severity classifications, Development Assurance Level allocations, quantitative reliability values, or regulatory citations) not present in Licensee&#x27;s project data. <strong>Human verification by qualified personnel is required before final approval of all AI-generated artifacts: no AI-assisted output &mdash; including any analysis, computed or suggested value, severity classification, Development Assurance Level, safety requirement, fault-tree structure, or report &mdash; may be finalized, approved, released, or relied upon for any engineering, safety, or certification purpose until a qualified human engineer has independently reviewed, verified, and accepted it and assumed professional responsibility for it.</strong> Licensee is solely responsible for ensuring the fidelity, accuracy, completeness, and suitability of all AI-generated output, and Licensor shall not be responsible or liable for any data, analysis, classification, or other content produced by the AI features, or for any decision made or action taken in reliance on it. Licensor disclaims any warranty regarding the accuracy of AI-generated content.</p>"
     + "<h4>7. Export Control and ITAR</h4>"
     + "<p>The Service may be subject to United States export-control laws, including the Export Administration Regulations (EAR) and the International Traffic in Arms Regulations (ITAR). For any project flagged by Licensee as ITAR-controlled, the Service routes associated AI invocations through a United-States-only inference path; Licensee is solely responsible for accurately designating ITAR-controlled projects and for not transmitting controlled technical data to any non-United-States person through the Service. Licensor is not a registered exporter of defense articles or services, and the Service is not authorized as a means of exporting controlled data.</p>"
     + "<h4>8. Intellectual Property</h4>"
@@ -47,13 +47,19 @@
     + "<p>THE SERVICE AND ALL OUTPUT ARE PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE,&quot; WITHOUT WARRANTY OF ANY KIND, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. LICENSOR DOES NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED OR ERROR-FREE, OR THAT THE OUTPUT IS SUITABLE FOR SUBMISSION TO ANY REGULATORY AUTHORITY WITHOUT INDEPENDENT REVIEW BY QUALIFIED HUMAN PERSONNEL.</p>"
     + "<h4>10. Limitation of Liability</h4>"
     + "<p>TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, LICENSOR SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, GOODWILL, OR DATA. LICENSOR&#x27;S TOTAL CUMULATIVE LIABILITY ARISING OUT OF OR RELATED TO THE SERVICE SHALL NOT EXCEED THE TOTAL FEES PAID BY LICENSEE TO LICENSOR DURING THE TWELVE (12) MONTHS IMMEDIATELY PRECEDING THE EVENT GIVING RISE TO THE LIABILITY.</p>"
+    + "<p>The foregoing limitations apply to Licensor and its affiliates and their respective officers, directors, employees, agents, and licensors (the &quot;Licensor Parties&quot;), and to all claims including those relating to any Output or safety-critical use; for any access provided at no charge, the Licensor Parties&#x27; aggregate liability shall not exceed one hundred United States dollars (US$100).</p>"
+    + "<h4>10A. Assumption of Risk; Indemnification</h4>"
+    + "<p>The Service is a decision-support and drafting aid only; it is not a certifying authority, a Designated Engineering Representative, or professional advice, and no Output is a determination of safety, airworthiness, or regulatory compliance. Licensee is solely responsible for all engineering, safety, airworthiness, and certification decisions, for the independent human verification of all Output, and for compliance with all applicable regulations. To the maximum extent permitted by law, Licensee assumes all risk arising from its use of the Service and any Output, including any use in or affecting the design, certification, manufacture, operation, or maintenance of any aircraft, system, product, or process, and the Licensor Parties shall not be liable for any decision made or action taken in reliance on the Service or Output, or for any death, personal injury, property damage, loss, or certification or regulatory consequence arising therefrom.</p>"
+    + "<p>Licensee shall indemnify, defend, and hold harmless the Licensor Parties from and against any and all claims, losses, liabilities, damages, costs, and expenses (including reasonable attorneys&#x27; fees) arising out of or relating to (a) Licensee&#x27;s use of the Service or any Output; (b) any engineering, safety, airworthiness, or certification decision or action by Licensee or any third party; (c) any death, personal injury, or property damage connected to any aircraft, system, product, or process that Licensee or a third party designed, certified, operated, or maintained; (d) Licensee&#x27;s Customer Data or its violation of any law or third-party right; or (e) Licensee&#x27;s breach of this License Agreement or the EULA. This indemnity is in addition to the indemnity in Section 8 and survives termination.</p>"
     + "<h4>11. Term and Termination</h4>"
-    + "<p>This License Agreement is effective upon your first access to the Service and continues for so long as your subscription remains active. Either party may terminate as provided in the EULA. Licensor may suspend or terminate access immediately for non-payment or for any material breach of this License Agreement or the EULA. Upon termination, Licensee&#x27;s right to access the Service ceases; Sections 4 through 10 survive termination.</p>"
+    + "<p>This License Agreement is effective upon your first access to the Service and continues for so long as your subscription remains active. Either party may terminate as provided in the EULA. Licensor may suspend or terminate access immediately for non-payment or for any material breach of this License Agreement or the EULA. Upon termination, Licensee&#x27;s right to access the Service ceases; Sections 4 through 10A survive termination.</p>"
     + "<h4>12. General</h4>"
     + "<p>This License Agreement is governed by the laws of the State of Colorado, without regard to its conflict-of-laws principles, and any dispute shall be brought exclusively in the state or federal courts located in El Paso County, Colorado. Licensee may not assign this License Agreement without Licensor&#x27;s prior written consent; Licensor may assign freely. If any provision is held unenforceable, the remainder remains in full force and effect. This License Agreement, together with the EULA and the applicable order, constitutes the entire agreement between the parties regarding Licensee&#x27;s subscription to the Service.</p>"
     + "<h4>Contact</h4>"
     + "<p>Safety Lab Aero, Inc. &middot; waqas.nafees@safetylabaero.com &middot; https://safetylabaero.com</p>"
     + "<p>*By clicking &quot;Agree &amp; continue,&quot; you acknowledge that you have read, understood, and agreed to be bound by this Software License &amp; Subscription Agreement.*</p>";
+  var LICENSE_DOC_LABEL = LICENSE_VERSION.replace(/-([A-Z0-9]+)$/, ' Rev $1');
+  try { if (typeof window !== 'undefined') window.SL_LICENSE = { html: LICENSE_HTML, rev: 'C', version: LICENSE_VERSION }; } catch (e) {}
 
   function getSb() {
     try { return (typeof window.getSupabaseClient === 'function') ? window.getSupabaseClient() : null; }
@@ -110,7 +116,7 @@
     ov.innerHTML =
       '<div class="sl-eula-card" role="dialog" aria-modal="true" aria-label="Software License and Subscription Agreement">'
       + '<div class="sl-eula-head"><h2>Software License &amp; Subscription Agreement</h2>'
-      + '<div class="sl-eula-meta">Safety Lab Aero &middot; SL-LICENSE-0001 Rev B &middot; please review before continuing</div></div>'
+      + '<div class="sl-eula-meta">Safety Lab Aero &middot; ' + LICENSE_DOC_LABEL + ' &middot; please review before continuing</div></div>'
       + '<div class="sl-eula-body">' + LICENSE_HTML + '</div>'
       + '<div class="sl-eula-foot">'
       + '<label class="sl-eula-agree"><input type="checkbox" id="sl-license-cb"><span>I have read and agree to the Safety Lab Aero Software License &amp; Subscription Agreement.</span></label>'
@@ -162,7 +168,11 @@
         if (document.getElementById('sl-eula-overlay')) return;        // still showing
         obs.disconnect();
         var eulaAccepted = false;
-        try { eulaAccepted = localStorage.getItem(EULA_LS_KEY) === EULA_VERSION; } catch (_) {}
+        try {
+          var _expect = (typeof window !== 'undefined' && window.SL_EULA && window.SL_EULA.version) || null;
+          var _got = localStorage.getItem(EULA_LS_KEY);
+          eulaAccepted = !!_got && (!_expect || _got === _expect);
+        } catch (_) {}
         if (eulaAccepted) setTimeout(checkLicense, 80);                 // accepted -> license gate
       });
       obs.observe(document.body, { childList: true });

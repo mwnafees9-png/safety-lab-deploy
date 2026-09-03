@@ -50,7 +50,10 @@
         if (!controllers.length || !processes.length) return _bad('a control structure needs at least one controller and one controlled process');
 
         prov = prov || {};
-        const stamp = { aiGenerated: true, aiFeature: 'stpa.draft', aiModel: prov.model || null, aiAt: prov.at || new Date().toISOString() };
+        const stamp = { aiGenerated: true, aiFeature: 'stpa.draft',
+            // Skills V1.1 - separate module, so the registry is reached via window (guarded)
+            aiSkill: (typeof window !== 'undefined' && window.SLABSkills && window.SLABSkills.stampFor) ? (window.SLABSkills.stampFor('stpa.draft') || null) : null,
+            aiModel: prov.model || null, aiAt: prov.at || new Date().toISOString() };
 
         // ---- validate refs BEFORE writing anything (all-or-nothing) ---------
         for (let i = 0; i < hazards.length; i++) {

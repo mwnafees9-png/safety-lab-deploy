@@ -28,7 +28,7 @@
     }
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _access() { return (typeof window._ramHasAccess === 'function') ? window._ramHasAccess() : true; }
-    const _gate = host => { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; max-width:640px;"><h3 style="margin:0 0 10px; border:none; padding:0;">Maintainability analytics is a Pro+ capability</h3><p style="font-size:13px; color:var(--color-text-secondary);">PM interval optimization against the CCMR bounds, testability coverage, and level-of-repair economics.</p></div>'; };
+    const _gate = host => { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; "><h3 style="margin:0 0 10px; border:none; padding:0;">Maintainability analytics is a Pro+ capability</h3><p style="font-size:13px; color:var(--color-text-secondary);">PM interval optimization against the CCMR bounds, testability coverage, and level-of-repair economics.</p></div>'; };
     const _chip = (l, v, warn) => '<div style="height:32px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--color-border-strong); font-family:var(--font-mono); font-size:12px;">' + l + ' <b style="margin-left:6px;' + (warn ? ' color:#B45309;' : '') + '">' + v + '</b></div>';
 
     // ====================================================== PM optimizer
@@ -132,7 +132,7 @@
             _chip('Overall λ-weighted coverage', totLam > 0 ? (detLam / totLam * 100).toFixed(1) + '%' : '—', totLam > 0 && detLam / totLam < 0.9) +
             _chip('Failure modes', String(rows.reduce((a, g) => a + g.modes, 0))) +
             _chip('Undetected modes', String(rows.reduce((a, g) => a + g.undetected.length, 0)), rows.some(g => g.undetected.length)) + '</div>';
-        html += '<table class="data-table" style="width:100%; max-width:880px; font-size:12.5px;"><thead><tr>' +
+        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr>' +
             '<th>System</th><th>Modes</th><th>Σλ (/h)</th><th>Detected λ</th><th>Coverage (λ-wt)</th><th>Undetected modes</th></tr></thead><tbody>';
         if (!rows.length) html += '<tr><td colspan="6" style="color:var(--color-text-tertiary);">No piece-part FMEA rows yet — coverage computes from each mode\'s detection means and rate.</td></tr>';
         rows.forEach(g => {
@@ -193,7 +193,7 @@
             const r = loraEvaluate(c);
             html += '<h3>' + _esc(c.name) + ' <a href="#" style="font-size:11px;" onclick="loraDelete(\'' + c.id + '\'); return false;">remove</a></h3>' +
                 '<p style="font-size:12px; font-family:var(--font-mono); color:var(--color-text-secondary);">Fleet demand: ' + r.demand.toFixed(2) + ' events/yr (' + c.units + ' units × ' + c.lambda.toExponential(1) + ' /h × ' + c.annualFH + ' FH)</p>' +
-                '<table class="data-table" style="width:100%; max-width:680px; font-size:12.5px;"><thead><tr><th>Level</th><th>Variable $/yr</th><th>Fixed $/yr</th><th>Total $/yr</th><th></th></tr></thead><tbody>' +
+                '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Level</th><th>Variable $/yr</th><th>Fixed $/yr</th><th>Total $/yr</th><th></th></tr></thead><tbody>' +
                 r.levels.map(l => '<tr' + (l === r.best ? ' style="font-weight:600;"' : '') + '><td>' + _esc(l.level) + '</td>' +
                     '<td class="u-mono">' + Math.round(l.annual).toLocaleString() + '</td>' +
                     '<td class="u-mono">' + Math.round(l.fixed).toLocaleString() + '</td>' +

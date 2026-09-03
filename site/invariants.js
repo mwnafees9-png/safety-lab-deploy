@@ -316,6 +316,76 @@
                 });
                 return { checked, fails };
             }
+        },
+        {
+            // ABSOLUTE AI CONSISTENCY — audit every AI-origin row in the model
+            // against the same deterministic rules the apply-time preflight uses.
+            // Lives HERE (always loaded) because the AI lane is lazy: the audit
+            // must run even in sessions that never invoke AI. Hard by design —
+            // an AI-authored row that fails validation is a defect, not advice.
+            id: 'INV-31', name: 'AI-authored rows pass deterministic artifact validation', sev: 'hard',
+            run: () => {
+                const fails = []; let checked = 0;
+                const SEVS = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'No Safety Effect'];
+                const SEVWORD = /\b(catastrophic|hazardous|major|minor|no safety effect)\b|\bseverity\b/i;
+                const isAi = r => r && (r.aiGenerated || r.aiModel || String(r.origin || '').indexOf('AI') === 0);
+                const chkFha = (f, scope) => {
+                    if (!isAi(f)) return;
+                    checked++;
+                    if (f.severity && SEVS.indexOf(f.severity) === -1)
+                        fails.push(scope + ' ' + (f.fcId || f.internalId) + ' [AI]: invalid severity "' + f.severity + '"');
+                    if (!f.aiModel && !f.aiAt && f.aiGenerated)
+                        fails.push(scope + ' ' + (f.fcId || f.internalId) + ' [AI]: missing model/timestamp provenance stamp');
+                };
+                ((typeof acFhaData !== 'undefined' ? acFhaData : []) || []).forEach(f => chkFha(f, 'AFHA'));
+                ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => {
+                    (s.fha || []).forEach(f => chkFha(f, 'SFHA ' + (s.name || s.id)));
+                    (s.fcim || []).forEach(c => {
+                        if (!isAi(c)) return;
+                        checked++;
+                        ['tlDesc', 'plDesc', 'mDesc'].forEach(k => {
+                            if (c[k] && SEVWORD.test(String(c[k])))
+                                fails.push('FCIM ' + (c.subId || c.internalId) + ' [AI]: severity word in ' + k + ' — severity belongs in the FHA');
+                        });
+                    });
+                });
+                // AI must never author a rate — trees force λ=0 on apply; verify none slipped.
+                ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).forEach(p => {
+                    (function walk(n, seen) {
+                        if (!n || seen.has(n.id)) return; seen.add(n.id);
+                        if (n.type !== 'gate' && isAi(n)) {
+                            checked++;
+                            if (typeof n.lambda === 'number' && n.lambda > 0 && !n.lambdaSource)
+                                fails.push('FTA ' + (n.displayId || n.id) + ' [AI]: carries an AI-era λ with no provenance — the deterministic engine owns all rates');
+                        }
+                        (n.children || n._children || []).forEach(c => walk(c, seen));
+                    })(p.root, new Set());
+                });
+                // The nine HF lanes. Added 2 Sep 2026 with the lane drafters — Waqas: "same
+                // rigor in review and sign offs will be required as is the case with other
+                // AI drafted analyses." The rigor an AI-authored row is held to here is
+                // that it declares WHO wrote it and WHEN, and that it asserts nothing the
+                // lane has no business asserting. An HF row carrying a severity word is the
+                // same defect as an FCIM row carrying one: classification is the FHA's, and
+                // a severity that appears in two places is a severity that can disagree
+                // with itself.
+                try {
+                    const HA = (typeof window !== 'undefined') ? window.HF_ANALYSES : null;
+                    if (HA && typeof HA.aiRows === 'function') {
+                        HA.aiRows().forEach(e => {
+                            const r = e.row || {};
+                            checked++;
+                            if (!r.aiModel && !r.aiAt)
+                                fails.push('HF ' + e.lane + ' ' + e.id + ' [AI]: missing model/timestamp provenance stamp');
+                            ['finding', 'effect', 'taskDef', 'rationale'].forEach(k => {
+                                if (r[k] && SEVWORD.test(String(r[k])))
+                                    fails.push('HF ' + e.lane + ' ' + e.id + ' [AI]: severity word in ' + k + ' — severity belongs in the FHA');
+                            });
+                        });
+                    }
+                } catch (_) {}
+                return { checked, fails };
+            }
         }
     ];
 
@@ -340,7 +410,13 @@
                 id: inv.id, name: inv.name, sev: inv.sev,
                 checked: r.checked, failCount: r.fails.length,
                 failures: r.fails.slice(0, 10),
-                pass: r.fails.length === 0
+                pass: r.fails.length === 0,
+                // HF-2 (2 Sep 2026) — a check that could not run says so. `checked: 0`
+                // alone reads as "nothing to check"; the note says WHY, and `skipped`
+                // lets a reader tell a skip from a pass. Additive; absent on the
+                // built-ins, which never skip.
+                note: r.note || '', skipped: !!r.skipped,
+                advisory: Array.isArray(r.advisory) ? r.advisory.slice(0, 10) : []
             };
         });
         const hardFails = results.filter(r => !r.pass && r.sev === 'hard');

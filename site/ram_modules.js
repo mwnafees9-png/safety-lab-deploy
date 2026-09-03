@@ -28,7 +28,7 @@
         } catch (_) { return true; }
     }
     function _ramGateHtml() {
-        return '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; max-width:640px;">' +
+        return '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; ">' +
             '<h3 style="margin:0 0 10px; border:none; padding:0;">R&amp;M — Dispatch &amp; Maintainability is a Pro+ capability</h3>' +
             '<p style="font-size:13.5px; color:var(--color-text-secondary); line-height:1.6; margin:0 0 14px;">' +
             'The RAM module adds the maintenance program to the safety model: MTTR/MDT task ledger linked to your LRUs and fault-tree events, ' +
@@ -317,7 +317,7 @@
                 const sub = rows.reduce((a, r) => a + r.lambda, 0);
                 html += '<h4 style="font-size:12px; font-family:var(--font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--color-text-secondary); margin:14px 0 6px;">' + _esc(sysName) +
                     ' — Σλ ' + sub.toExponential(2) + ' /FH · MTBF ' + Math.round(1 / sub).toLocaleString() + ' h</h4>';
-                html += '<table class="data-table" style="width:100%; max-width:880px; font-size:12.5px;"><thead><tr><th>Basic event</th><th>Tree</th><th style="width:110px">λ (/FH)</th><th style="width:110px">MTBF (h)</th><th style="width:170px">Source</th><th style="width:110px">Share</th></tr></thead><tbody>' +
+                html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Basic event</th><th>Tree</th><th style="width:110px">λ (/FH)</th><th style="width:110px">MTBF (h)</th><th style="width:170px">Source</th><th style="width:110px">Share</th></tr></thead><tbody>' +
                     rows.sort((a, b) => b.lambda - a.lambda).map(r =>
                         '<tr><td class="u-mono">' + _esc(r.event) + '</td><td style="color:var(--color-text-tertiary);">' + _esc(r.page) + '</td>' +
                         '<td class="u-mono">' + r.lambda.toExponential(2) + '</td>' +
@@ -335,7 +335,7 @@
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="ramAddDispatchRecord()">+ Monthly record</button> ' +
             '<button class="btn-cyan" onclick="ramSetDispatchTarget()">Set target</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">from operations records — the computed lane never fills this</span></div>';
-        html += '<table class="data-table" style="width:100%; max-width:720px; font-size:12.5px;"><thead><tr><th>Month</th><th>Departures</th><th>Tech delays &gt;15 min</th><th>Cancellations</th><th>DR %</th></tr></thead><tbody>';
+        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Month</th><th>Departures</th><th>Tech delays &gt;15 min</th><th>Cancellations</th><th>DR %</th></tr></thead><tbody>';
         if (!S.dispatch.records.length) html += '<tr><td colspan="5" style="color:var(--color-text-tertiary);">No dispatch records yet.</td></tr>';
         S.dispatch.records.slice(-12).forEach(rr => {
             const dr = rr.cycles > 0 ? (1 - (rr.delays + rr.cancellations) / rr.cycles) * 100 : null;
@@ -353,7 +353,7 @@
         html += '<h3 style="margin-top:var(--s-5);">FRACAS — field lane vs prediction (MIL-HDBK-781A)</h3>' +
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="ramAddField()">+ Field record</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">verified = 60% lower confidence bound clears the prediction; field below prediction = finding, never averaged in</span></div>';
-        html += '<table class="data-table" style="width:100%; max-width:980px; font-size:12.5px;"><thead><tr><th>Basic event</th><th>Predicted MTBF</th><th>Field data (window)</th><th>MTBF LCB (60%)</th><th>Verdict</th><th>Corrective action</th><th>By</th></tr></thead><tbody>';
+        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Basic event</th><th>Predicted MTBF</th><th>Field data (window)</th><th>MTBF LCB (60%)</th><th>Verdict</th><th>Corrective action</th><th>By</th></tr></thead><tbody>';
         if (!field.length) html += '<tr><td colspan="6" style="color:var(--color-text-tertiary);">No field data yet.</td></tr>';
         field.forEach(x => {
             const dataTxt = x.statistical

@@ -628,7 +628,7 @@
         var reqHtml = Object.keys(grp).map(function (k) { var gr = sc.requirements.filter(function (r) { return r.kind === k; }); if (!gr.length) return ''; return '<h4>' + grp[k] + '</h4><ul>' + gr.map(function (r) { return '<li><code>' + e(r.id) + '</code> <span class="st ' + e(r.status) + '">' + e(r.status.toUpperCase()) + '</span> ' + e(r.text) + '</li>'; }).join('') + '</ul>'; }).join('');
         var reasons = (sc.verdict.reasons && sc.verdict.reasons.length) ? '<p>Outstanding items:</p><ul>' + sc.verdict.reasons.map(function (r) { return '<li>' + e(r.problem || '') + '</li>'; }).join('') + '</ul>' : '';
         return '<!doctype html><html><head><meta charset="utf-8"><title>OOS Independence Safety Case</title><style>'
-            + 'body{font:13px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;color:#15181d;max-width:760px;margin:30px auto;padding:0 24px;}'
+            + 'body{font:13px/1.55 -apple-system,Segoe UI,Roboto,sans-serif;color:#15181d;margin:30px auto;padding:0 24px;}'
             + 'h1{font-size:22px;margin:0 0 4px;}h2{font-size:16px;margin:22px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px;}h4{font-size:13px;margin:12px 0 4px;}'
             + '.sub{color:#667085;font-size:11.5px;margin-bottom:14px;}'
             + 'table{border-collapse:collapse;width:100%;font-size:12px;margin:8px 0;}th,td{border:1px solid #e5e7eb;padding:5px 8px;text-align:left;vertical-align:top;}th{background:#f7f8fa;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;}'

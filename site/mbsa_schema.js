@@ -65,6 +65,33 @@
             if (!cl || !Array.isArray(cl.of) || !cl.of.length) { issues.push(where + ' clause ' + i + ': empty member list'); return; }
             if (!(cl.min >= 1) || cl.min > cl.of.length) issues.push(where + ' clause ' + i + ': min ' + cl.min + ' outside 1..' + cl.of.length);
             cl.of.forEach(m => { if (sysIds.size && !sysIds.has(m)) issues.push(where + ' clause ' + i + ': member "' + m + '" is not a live system'); });
+            // D2 L1/L2 additions (all OPTIONAL; absence ⇒ exact L0 behavior)
+            if (cl.weights !== undefined) {
+                if (!cl.weights || typeof cl.weights !== 'object' || Array.isArray(cl.weights)) issues.push(where + ' clause ' + i + ': weights must be an object {sysId: number}');
+                else Object.keys(cl.weights).forEach(k => {
+                    if (!(+cl.weights[k] > 0)) issues.push(where + ' clause ' + i + ': weight for "' + k + '" must be > 0');
+                    if (cl.of.indexOf(k) === -1) issues.push(where + ' clause ' + i + ': weight for "' + k + '" which is not a clause member');
+                });
+            }
+            if (cl.floor !== undefined && cl.floor !== null) {
+                const wsum = cl.of.reduce((a, m) => a + ((cl.weights && +cl.weights[m] > 0) ? +cl.weights[m] : 1), 0);
+                if (!(+cl.floor > 0)) issues.push(where + ' clause ' + i + ': floor must be > 0');
+                else if (+cl.floor > wsum + 1e-12) issues.push(where + ' clause ' + i + ': floor ' + cl.floor + ' exceeds total capacity ' + wsum + ' — unsatisfiable even with everything intact');
+            }
+        });
+        // D2 degraded states (OPTIONAL)
+        (rule.degraded || []).forEach((d, i) => {
+            const dw = where + ' degraded ' + i;
+            if (!d || !d.sysId) { issues.push(dw + ': missing sysId'); return; }
+            if (!String(d.label || '').trim()) issues.push(dw + ': missing label');
+            if (!(+d.weight >= 0)) issues.push(dw + ': retained weight must be ≥ 0');
+            const inAnyClause = (rule.clauses || []).some(c => c && Array.isArray(c.of) && c.of.indexOf(d.sysId) !== -1);
+            if (!inAnyClause) issues.push(dw + ': "' + d.sysId + '" is not a member of any clause');
+            (rule.clauses || []).forEach((c, ci) => {
+                if (!c || !Array.isArray(c.of) || c.of.indexOf(d.sysId) === -1) return;
+                const w = (c.weights && +c.weights[d.sysId] > 0) ? +c.weights[d.sysId] : 1;
+                if (+d.weight >= w) issues.push(dw + ': retained weight ' + d.weight + ' must be < the member\'s full capacity ' + w + ' (clause ' + ci + ')');
+            });
         });
         // L3 lanes (optional)
         if (rule.lanes !== undefined) {

@@ -153,6 +153,9 @@ function isElectraEmail(email) {
 function isCompedEmail(email) {
     if (!email || typeof email !== 'string') return false;
     const e = email.trim().toLowerCase();
+    // Explicit block overrides everything below (domain comp included) — paywalls a
+    // specific address even at a comped partner domain.
+    try { if (typeof COMPED_BLOCKED_EMAILS !== 'undefined' && COMPED_BLOCKED_EMAILS.indexOf(e) >= 0) return false; } catch(_) {}
     // Per-email comp first (covers founder/advisor/beta-evaluator addresses on any provider).
     for (let i = 0; i < COMPED_FREE_EMAILS.length; i++) {
         const entry = COMPED_FREE_EMAILS[i];
@@ -196,9 +199,10 @@ function getLicenseToken() {
 }
 
 function certBasisDisplayLabel() {
-    const reg = (projectConfig && projectConfig.regulation) || 'Part 25';
+    const reg = (typeof canonRegulation === 'function') ? canonRegulation((projectConfig && projectConfig.regulation) || 'Part 25') : ((projectConfig && projectConfig.regulation) || 'Part 25');
     if (reg === 'Part 23')  return 'Part 23 Class ' + (projectConfig.part23Class || 'IV');
-    if (reg === 'SC-VTOL')  return 'SC-VTOL ' + (projectConfig.scvtolCategory || 'Enhanced');
+    if (reg === 'Part 27')  return 'Part 27' + ((typeof part27IsLegacy === 'function' && part27IsLegacy(projectConfig.part27Class)) ? ' (legacy — pick a class)' : ' Class ' + projectConfig.part27Class);
+    if (reg === 'SC-VTOL')  return 'SC-VTOL ' + (projectConfig.scvtolCategory || 'Enhanced') + ((typeof scvtolIsLegacyBasic === 'function' && scvtolIsLegacyBasic(projectConfig.scvtolCategory)) ? ' (legacy — confirm seat band)' : '');
     if (reg === 'Custom')   return (projectConfig.customCertBasis && projectConfig.customCertBasis.name) || 'Custom Cert Basis';
     return reg;
 }
@@ -800,7 +804,10 @@ function _rerenderAffectedTable() {
         pra:    () => (typeof renderPRA === 'function' ? renderPRA() : null),
         zsa:    () => (typeof renderZSA === 'function' ? renderZSA() : null),
         cma:    () => (typeof renderCMA === 'function' ? renderCMA() : null),
-        fmea:   () => (typeof renderFMEA === 'function' ? renderFMEA() : null)
+        // 2 Aug 2026 — the fmea template schema split into the two rendered
+        // modes (Table J1 / J2); both re-render the same worksheet.
+        fmeaFunctional: () => (typeof renderFMEA === 'function' ? renderFMEA() : null),
+        fmeaPiecePart:  () => (typeof renderFMEA === 'function' ? renderFMEA() : null)
     };
     try { KIND_RENDERER[_activeTemplateKind] && KIND_RENDERER[_activeTemplateKind](); } catch(_) {}
     try { _injectCustomColumnHeaders(); } catch(_) {}
@@ -809,7 +816,7 @@ function _rerenderAffectedTable() {
 function rerenderAllTemplateDrivenTables() {
     // Called after load or reset so every visible table picks up the latest template state.
     try { _injectCustomColumnHeaders(); } catch(_) {}
-    ['acFha','acFunc','acFcim','acReq','acAsm','sysFha','sysFunc','sysFcim','sysReq','sysAsm','pra','zsa','cma','fmea'].forEach(k => {
+    ['acFha','acFunc','acFcim','acReq','acAsm','sysFha','sysFunc','sysFcim','sysReq','sysAsm','pra','zsa','cma','fmeaFunctional','fmeaPiecePart'].forEach(k => {
         const prev = _activeTemplateKind;
         _activeTemplateKind = k;
         _rerenderAffectedTable();
@@ -825,13 +832,41 @@ function kebabMenu(itemsHtml) {
 function reviewCellHtml(kind, internalId, systemId) {
     if (!kind || internalId == null) return '<td class="review-col"></td>';
     const sysId = systemId || null;
+    // Artifact identity stamp — the ONLY place rows get data-artifact-kind/id, so
+    // _highlightArtifactRow (golden thread / backref / palette "jump here") can find
+    // the row. Before this stamp existed the highlight selector matched NOTHING —
+    // the flash was dead code from birth (found 15 Aug 2026). Keep kind names in
+    // step with the Review kinds; the GT navigator maps onto these.
+    const artAttrs = ' data-artifact-kind="' + String(kind).replace(/"/g, '&quot;') + '"'
+        + ' data-artifact-id="' + String(internalId).replace(/"/g, '&quot;') + '"'
+        + (sysId ? ' data-artifact-sys="' + String(sysId).replace(/"/g, '&quot;') + '"' : '');
     let cmt = '';
     if (typeof commentTriggerHtml === 'function' && typeof Review !== 'undefined') {
         // commentTriggerHtml already gates on its own commentable-kind set.
         cmt = commentTriggerHtml({ kind, id: internalId, systemId: sysId });
     }
     const apv = APPROVABLE_KINDS.has(kind) ? _approvalControlHtml(kind, internalId, sysId) : '';
-    return '<td class="review-col"><span class="review-cell-group">' + cmt + apv + '</span></td>';
+    if (!cmt && !apv) return '<td class="review-col"' + artAttrs + '></td>';
+    // Consolidated into the house kebab (matches the Actions column): one ⋮
+    // trigger, the comment + approval + sign controls live in the dropdown.
+    // A green dot on the trigger keeps sign-off state visible at a glance.
+    let dot = '';
+    try {
+        // 2 Sep 2026 — this was calling Review.isApproved(kind, id, sysId) POSITIONALLY.
+        // Review.isApproved takes ONE argument, a target object (arity 1), so the call
+        // returned false for every kind on every row and the green dot has never drawn
+        // since it was written. Found by approving an HF row in prod and watching the
+        // store say approved while the closed kebab stayed blank. _approvalControlHtml a
+        // few lines down had the object form right all along.
+        if (APPROVABLE_KINDS.has(kind) && typeof Review !== 'undefined' && typeof Review.isApproved === 'function' && Review.isApproved({ kind: kind, id: internalId, systemId: sysId })) {
+            dot = '<span style="position:absolute; top:1px; right:1px; width:6px; height:6px; border-radius:50%; background:#1D9E75;"></span>';
+        }
+    } catch (_) {}
+    return '<td class="review-col"' + artAttrs + '><div class="row-actions">' +
+        '<button type="button" class="row-kebab" style="position:relative;" aria-label="Review actions" aria-haspopup="true" onclick="toggleRowMenu(event)">⋮' + dot + '</button>' +
+        '<div class="row-action-menu" role="menu">' +
+        '<span class="review-cell-group" style="display:flex; align-items:center; gap:8px; padding:6px 10px;">' + cmt + apv + '</span>' +
+        '</div></div></td>';
 }
 
 function _injectReviewColumnHeaders() {
@@ -871,13 +906,61 @@ async function _refreshSaveFolderMenu() {
 }
 
 function initNewProjectState() {
+    // 20 Aug 2026 — DERIVED. Every project store, its reset value, and its window mirror
+    // now come from project_stores.js. This function used to clear ~25 stores by hand and
+    // the list went stale twice with real cost: flightPhasesData was missed until 1 Aug
+    // 2026 (a year of exposure ratios computed against the previous aircraft's mission
+    // length), and itemsData / projectBaselines / autoReqTemplateOverrides /
+    // projectReportEdits were missed until today — a blank project came up on production
+    // holding 16 LRUs from the Aeolus demo.
+    //
+    // What stays here is everything that is NOT a project store: the numbering engine,
+    // the UI cursor, and the panel that must be closed.
+    if (typeof window !== 'undefined' && window.SLStores) {
+        window.SLStores.reset();
+    } else {
+        initNewProjectStateLegacy();   // project_stores.js failed to load — clear SOMETHING
+    }
+    _slResetNumbering();               // fresh numbering scheme + empty counter store
+    if (typeof _refreshProjectNameUI === 'function') _refreshProjectNameUI();
+    selectedNodeData = null;
+    try { document.getElementById('node-config-panel').style.display = 'none'; } catch (_) {}
+    if (typeof _phasesProfileId !== 'undefined') { try { _phasesProfileId = ''; } catch (_) {} }
+}
+
+// The pre-20-Aug body, kept ONLY as a fallback for a failed project_stores.js load. The
+// wall asserts it still covers every declared store, so it cannot rot into a different
+// answer than the declaration gives.
+function initNewProjectStateLegacy() {
     acFunctionsData = []; acFcimData = []; acExtractedFCs = []; acFhaData = []; acReqData = []; acAssumptionsData = []; acAsmCounter = 1; 
     systemsData = []; activeSystemId = null;
     praData = []; zsaData = []; cmaData = []; routingData = []; resourcesData = []; projectSourceDocs = []; aiAssumptions = []; fmeaData = []; fmeaCounter = 1; internalIdCounter = 1; typeCounters = { gate: 1, basic: 1, undeveloped: 1, conditioning: 1, house: 1 };
     _slResetNumbering(); // fresh numbering scheme + empty counter store for a new project
     reviewCommentsData = []; reviewCounter = 1;
     reviewApprovalsData = [];
+    // ---------------------------------------------------------------------------------
+    // 20 Aug 2026 — FOUR stores that _snapshotProject() saves were never cleared here, so
+    // a brand-new project inherited them from whatever was open before. Confirmed live on
+    // production: a blank project came up carrying 16 itemsData rows from the Aeolus demo
+    // (LRU-FCS-01 "Elevator servo channel A" and friends), offered in the item-failure
+    // declaration picker under another programme's part numbers.
+    //
+    // The invariant this function has to satisfy is simply: CLEAR EVERY KEY
+    // _snapshotProject() CAPTURES. It is not a judgement call and it should not be
+    // maintained by eye — tests/regression_new_project_reset diffs the two lists and fails
+    // when they drift, which is what would have caught flightPhasesData in 2025 and these
+    // four this year. See the flightPhasesData note below: same bug, same cause, and it
+    // took a year of wrong exposure denominators to notice.
+    itemsData = [];
+    projectBaselines = [];
+    autoReqTemplateOverrides = {};
+    try { if (typeof window !== 'undefined') window.autoReqTemplateOverrides = autoReqTemplateOverrides; } catch (_) {}
+    projectReportEdits = {};
+    try { if (typeof window !== 'undefined') window.projectReportEdits = projectReportEdits; } catch (_) {}
+    // ---------------------------------------------------------------------------------
     // Phase 54 — reset project-level template overrides on new project.
+    // NOTE: projectTemplates and autoReqTemplateOverrides are DIFFERENT stores despite the
+    // similar names; resetting this one was never resetting the other.
     projectTemplates = (typeof emptyTemplateOverrides === 'function') ? emptyTemplateOverrides() : {};
     window.projectTemplates = projectTemplates;
     projectName = 'Untitled Project';
@@ -887,6 +970,19 @@ function initNewProjectState() {
     activeFTAPageId = ftaPages[0].id; selectedNodeData = null; document.getElementById('node-config-panel').style.display = 'none';
     projectConfig = { regulation: 'Part 25', part23Class: 'IV', override: false, customLibrary: {}, piQ: 1, piE: 1, markovModels: [], libraryStandard: 'MIL-HDBK-217F', libraryEnv: 'GB', libraryQuality: 'B2', useStressPrediction: false, operatingTempC: 25, activationEnergyEv: 0.4 };
     ftaConfig = { mode: 'bottom-up', apportion: 'equal', targetP: 0.00001, linkedFhaId: '', exposureTime: 1, exposureSource: 'auto' };
+    // Flight phases were NOT reset here until 1 Aug 2026. Every other store was, so
+    // a new project started with the previous project's phase table — an eVTOL's
+    // Hover/Transition, or a UAS profile's Launch/Task/Recovery, silently became the
+    // phase vocabulary of a Part 25 project. The FHA form then offered those phases
+    // and the mission duration behind every exposure ratio was the wrong aircraft's.
+    // The seed is a deep copy: nominal mission + the two contingency phases.
+    flightPhasesData = (typeof newDefaultPhaseTable === 'function')
+        ? newDefaultPhaseTable()
+        : (flightPhasesData || []);
+    if (typeof _phasesProfileId !== 'undefined') { try { _phasesProfileId = ''; } catch (_) {} }
+    // STPA lane starts empty on a new project.
+    mlData = { constituents: [], odd: [], datasets: [], monitors: [], capture: [], captureEnabled: false, counter: 1 };
+    stpaData = { cs: { controllers: [], processes: [], actions: [], feedbacks: [], others: [], precedence: [] }, dispositions: {}, causeDismissals: {}, scopeFcIds: [], meta: { mission: '', scope: '', boundary: '', abstractionLevel: '' }, losses: [], hazards: [], constraints: [], responsibilities: [], csState: 'initial', sip: {} };
 }
 
 function createNewProject() {
@@ -897,8 +993,42 @@ function createNewProject() {
     _createNewProjectBlank();
 }
 function _createNewProjectBlank() {
+    // 31 Aug 2026 — a new project must not wear the OUTGOING project's cloud
+    // identity. Without this detach, the first autosave after New Project
+    // renamed and overwrote the previous cloud project (de27b117 was renamed
+    // "g5 t3 fullsession" and its content replaced this way). Same posture as
+    // the demo/sample loaders; inline fallback if cloud_sync isn't loaded.
+    try {
+        if (typeof window.__slCloudSyncDetach === 'function') window.__slCloudSyncDetach();
+        else { _activeCloudProjectId = null; _activeCloudDocVersion = null; _dirtySinceSave = false; }
+    } catch (_) {}
     initNewProjectState();
     ['ac-func-body','ac-fcim-body','ac-fha-body','ac-req-body','ac-asm-body','sys-func-body','sys-fcim-body','sys-fha-body','sys-req-body','sys-asm-body','pra-body','zsa-body','cma-body','routing-body','resources-body','fmea-body','trace-body','cutset-body'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+    // BLANKING A TBODY IS NOT THE SAME AS RE-RENDERING A TAB — 1 Aug 2026.
+    //
+    // The list above empties 18 <tbody> elements, which is why the tables look
+    // right. But modules that inject their own panel by WRAPPING a render
+    // function only rebuild when that function is called, and this path called
+    // none of them. fc_variants.js wraps renderACFHA to redraw #fcv-panel; on a
+    // new project nothing called renderACFHA, so the panel kept showing the
+    // PREVIOUS project's FC-01…FC-30. Navigating to the tab did not heal it
+    // either — switchTab('ac-fha') repopulates that tab's dropdowns, not its
+    // table (streaming_load.js says so in its header), so the stale list
+    // survived for the whole life of the new project.
+    //
+    // Re-rendering instead of blanking fixes the class, not just this panel: it
+    // restores the invariant every load path already keeps — a new project
+    // re-renders every project-data table — which is what any future wrapper
+    // module will rely on. On a blank project all of these are free; there are
+    // no rows to draw.
+    // By NAME, not by reference: an array literal of bare identifiers evaluates
+    // every one of them before the loop's try/catch can protect anything, so a
+    // single renderer that is not declared in this build would throw here and
+    // take new-project creation down with it.
+    ['renderACFunctions', 'renderACFCIM', 'renderACFHA', 'renderACReq', 'renderACAssumptions',
+     'renderPRA', 'renderZSA', 'renderCMA', 'renderFMEA','renderFlightPhases','refreshFhaPhaseGrids'].forEach(function (name) {
+        try { const fn = window[name]; if (typeof fn === 'function') fn(); } catch (_) {}
+    });
     Object.keys(formConfigs).forEach(mod => cancelEdit(mod)); switchTab('dashboard'); renderFTASidebar(); updateD3();
 }
 
@@ -914,7 +1044,7 @@ function openNewProjectWizard() {
     ov.id = 'ckpt-modal-overlay';
     const baseOpts = _NPW_BASES.map((b, i) => '<option value="' + esc(b.v) + '"' + (i === 0 ? ' selected' : '') + '>' + esc(b.label) + ' — ' + esc(b.sub) + '</option>').join('');
     const slotRows = SPP_SLOTS.map(s =>
-        '<div class="ckpt-m-row"><span>' + esc(s.label) + '</span><span><select class="state-select" id="npw-slot-' + esc(s.id) + '" style="max-width:280px;">' +
+        '<div class="ckpt-m-row"><span title="' + esc(s.help || '') + '" style="cursor:help;border-bottom:1px dotted var(--color-text-tertiary);">' + esc(s.label) + (s.help ? ' <span style="font-size:10px;opacity:.6;">&#9432;</span>' : '') + '</span><span><select class="state-select" id="npw-slot-' + esc(s.id) + '" style="max-width:280px;">' +
         s.options.map((o, i) => '<option value="' + i + '"' + (i === s.dflt ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></span></div>').join('');
     ov.innerHTML =
         '<div class="ckpt-modal" role="dialog" aria-modal="true" style="max-width: 820px;">' +
@@ -925,53 +1055,107 @@ function openNewProjectWizard() {
         '<div class="ckpt-m-sec">Project</div>' +
         '<input type="text" id="npw-name" placeholder="Project name (e.g., HX-1 Hydrogen Demonstrator)" style="width:100%; margin-bottom:12px;">' +
         '<div class="ckpt-m-sec">Certification basis — drives every target, DAL floor, and depth-of-analysis default</div>' +
-        '<select class="state-select" id="npw-basis" style="width:100%; margin-bottom:8px;" onchange="var v=this.value; document.getElementById(\'npw-p23\').style.display = v===\'Part 23\'?\'\':\'none\'; document.getElementById(\'npw-vtol\').style.display = v===\'sc-vtol\'?\'\':\'none\';">' + baseOpts + '</select>' +
+        '<select class="state-select" id="npw-basis" style="width:100%; margin-bottom:8px;" onchange="var v=this.value; document.getElementById(\'npw-p23\').style.display = v===\'Part 23\'?\'\':\'none\'; document.getElementById(\'npw-p27\').style.display = v===\'Part 27\'?\'\':\'none\'; document.getElementById(\'npw-vtol\').style.display = v===\'sc-vtol\'?\'\':\'none\'; try{PROGRAM_PLAN.renderWizardScope(\'npw-scope\', v);}catch(_){}">' + baseOpts + '</select>' +
         '<select class="state-select" id="npw-p23" style="width:100%; margin-bottom:8px; display:none;">' +
         '<option value="I">Class I — single recip ≤6,000 lb</option><option value="II">Class II — multi recip / single turboprop</option><option value="III">Class III — turbojets, ≥6,000 lb</option><option value="IV" selected>Class IV — commuter</option></select>' +
+        '<select class="state-select" id="npw-p27" style="width:100%; margin-bottom:8px; display:none;">' +
+        '<option value="I">Class I — reciprocating, ≤5 occupants</option><option value="II">Class II — single turbine, ≤5 occupants, ≤4,000 lb</option><option value="III" selected>Class III — single turbine, ≥6 occupants, 4,001–7,000 lb</option><option value="IV">Class IV — twin turbine</option></select>' +
         '<select class="state-select" id="npw-vtol" style="width:100%; margin-bottom:8px; display:none;">' +
-        '<option value="Basic">Category Basic — non-congested, no CSFL requirement</option><option value="Enhanced" selected>Category Enhanced — CSFL required, commercial pax</option></select>' +
+        '<option value="Basic 1">Category Basic 1 — 0–1 passengers (controlled emergency landing)</option><option value="Basic 2">Category Basic 2 — 2–6 passengers</option><option value="Basic 3">Category Basic 3 — 7–9 passengers</option><option value="Enhanced" selected>Category Enhanced — CSFL required, congested-area / commercial pax</option></select>' +
         '<div class="ckpt-m-row"><span>Certification mission duration (h) — sets t_mission for phase normalization; use the shortest binding mission</span>' +
         '<span><input type="number" id="npw-mission" step="0.1" min="0" placeholder="e.g., 1.5" style="width:110px;"></span></div>' +
         '<div class="ckpt-m-sec" style="margin-top:14px;">Methodology — fixed objectives, your methods (changeable later in the Safety Program Plan)</div>' +
         slotRows +
+        '<div class="ckpt-m-sec" style="margin-top:14px;">Program scope — what your basis expects, preselected. THE PLAN DRIVES THE NAV.</div>' +
+        '<div id="npw-scope"></div>' +
         '<div class="ckpt-m-sec" style="margin-top:14px;">Starting route</div>' +
         '<div class="ckpt-m-row" style="border:none;"><label style="display:flex; gap:8px; cursor:pointer;"><input type="radio" name="npw-route" value="blank" checked> <span><b>Blank program</b> — define aircraft functions, run the AFHA, and let the PASA workspace build outward. The full ARP4761A spine from scratch.</span></label></div>' +
         '<div class="ckpt-m-row" style="border:none;"><label style="display:flex; gap:8px; cursor:pointer;"><input type="radio" name="npw-route" value="sample"> <span><b>Sample project</b> — a pre-built program with FHA, trees, CCA and requirements populated. Best for exploring the workflow.</span></label></div>' +
         '<div class="ckpt-m-row" style="border:none;"><label style="display:flex; gap:8px; cursor:pointer;"><input type="radio" name="npw-route" value="import"> <span><b>Import</b> — bring existing work: Excel/CSV worksheets, a SysML (XMI) model, or Jama Connect requirements. Lands you in the import dialogs.</span></label></div>' +
         '</div>' +
-        '<div class="ckpt-m-foot"><span class="ckpt-m-outputs">Selections are recorded as the initial SSPP — reviewable and changeable under Certification &amp; Config → Safety Program Plan</span>' +
+        '<div class="ckpt-m-foot"><span class="ckpt-m-outputs">Selections are recorded as the initial SSPP — reviewable and changeable under Define → Program Planning</span>' +
         '<span class="ckpt-m-actions"><button class="ckpt-m-btn" onclick="closeCockpitModal()">Cancel</button>' +
         '<button class="ckpt-m-btn ckpt-m-btn-primary" onclick="npwCreate()">Create project</button></span></div></div>';
     ov.addEventListener('click', e => { if (e.target === ov) closeCockpitModal(); });
     document.addEventListener('keydown', _ckptEsc, true);
     document.body.appendChild(ov);
+    // Program-scope checklist rides the chosen basis from the first paint.
+    try { if (typeof PROGRAM_PLAN !== 'undefined') PROGRAM_PLAN.renderWizardScope('npw-scope', (document.getElementById('npw-basis') || {}).value || 'Part 25'); } catch (_) {}
 }
 
-function npwCreate() {
+// 2 Sep 2026 (Waqas: "require the user to specify a save location") — the New Project
+// wizard now binds a durable save location at creation, where a real user gesture exists
+// (the Create-project click). A bound folder means every committed change also writes the
+// per-project .sl file via _writeAutosaveToDisk — the project is no longer hostage to the
+// shared, un-keyed browser slot. async so the picker can be awaited; the picker is the
+// FIRST await after the synchronous setup, so the click's user activation still covers it.
+async function npwCreate() {
     const name = (document.getElementById('npw-name') || {}).value || '';
     const basis = (document.getElementById('npw-basis') || {}).value || 'Part 25';
     const p23 = (document.getElementById('npw-p23') || {}).value || 'IV';
+    const p27 = (document.getElementById('npw-p27') || {}).value || 'III';
     const vtol = (document.getElementById('npw-vtol') || {}).value || 'Enhanced';
     const mission = parseFloat((document.getElementById('npw-mission') || {}).value) || 0;
     const route = (document.querySelector('input[name="npw-route"]:checked') || {}).value || 'blank';
     const slots = {};
     SPP_SLOTS.forEach(s => { const el = document.getElementById('npw-slot-' + s.id); slots[s.id] = el ? (parseInt(el.value) || 0) : s.dflt; });
+    // Capture the program-scope checklist BEFORE the modal (and its boxes) go away.
+    const laneSel = {};
+    document.querySelectorAll('input.npw-lane[data-lane]').forEach(b => { laneSel[b.dataset.lane] = !!b.checked; });
     closeCockpitModal();
     _createNewProjectBlank();
     if (name.trim()) { try { projectName = name.trim(); const chip = document.querySelector('#project-name-chip .project-name-chip-label'); if (chip) chip.textContent = projectName; } catch (_) {} }
-    projectConfig.regulation = basis;
+    // 31 Aug 2026 — the wizard's basis id for eVTOL is 'sc-vtol'; the engine's key is
+    // 'SC-VTOL'. Store the canonical form so getSafetyTarget() never falls back to Part 25.
+    projectConfig.regulation = (basis === 'sc-vtol') ? 'SC-VTOL' : basis;
     if (basis === 'Part 23') projectConfig.part23Class = p23;
+    if (basis === 'Part 27') projectConfig.part27Class = p27;
     if (basis === 'sc-vtol') projectConfig.scvtolCategory = vtol;
     if (mission > 0) projectConfig.missionDuration = mission;
     _sppStore().slots = slots;
     projectConfig.safetyProgramPlan.intake = { at: new Date().toISOString(), basis, route };
+    // THE PLAN DRIVES THE NAV — scope from the wizard's checklist (falls back
+    // to pure basis defaults when the checklist didn't render). New project =
+    // no data, so every deselection here is free and unsigned.
+    try {
+        if (typeof PROGRAM_PLAN !== 'undefined') {
+            if (Object.keys(laneSel).length) PROGRAM_PLAN.applyWizardScope(basis, laneSel);
+            else PROGRAM_PLAN.initScope(basis);
+        }
+    } catch (_) {}
     try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
     if (route === 'sample') { try { loadSampleProject(); } catch (_) {} }
     else if (route === 'import') {
         switchTab('ac-func');
         if (typeof showToast === 'function') showToast('Import route: use Data Actions ▾ → Import from Excel/CSV on any worksheet, or Project ▾ → Import SysML / Jama.', 'info', 7000);
     }
-    if (typeof showToast === 'function') showToast('Project created — SSPP recorded (' + basis + '). Review it under Certification & Config → Safety Program Plan.', 'success', 5000);
+    if (typeof showToast === 'function') showToast('Project created — SSPP recorded (' + basis + '). Review it under Define → Program Planning.', 'success', 5000);
+    // REQUIRE A SAVE LOCATION — last, so the project already exists and the picker is the
+    // sole await under the click's activation.
+    try { await _requireSaveLocation(); } catch (_) {}
+}
+
+// Bind a durable per-project save folder on browsers that support it. Best-effort and
+// honest: on Safari/Firefox (no persistent handle) it defers to IndexedDB + cloud silently;
+// if the user cancels the picker it does not block them out of their own project, it warns
+// plainly that the project is browser-only until they choose one. A folder already bound is
+// reused — we don't re-prompt every New Project.
+async function _requireSaveLocation() {
+    try {
+        if (typeof SaveFs === 'undefined' || !SaveFs.isSupported || !SaveFs.isSupported()) return;
+        // #2Sep2026 — showDirectoryPicker needs the click's transient user
+        // activation, and ANY await before it can burn that activation, so the
+        // picker must be the FIRST await. Read the already-bound folder from the
+        // SYNCHRONOUS localStorage hint instead of awaiting getDefaultDirName()
+        // (an IndexedDB read that was the activation killer).
+        var existing = ''; try { existing = localStorage.getItem('safetyLab.saveDir.name') || ''; } catch (_) {}
+        if (existing) { try { scheduleAutosave(); } catch (_) {} return; }   // reuse the bound folder
+        var handle = await SaveFs.chooseDefaultDir();
+        if (handle) { try { scheduleAutosave(); } catch (_) {} }             // write the first .sl now
+        else if (typeof showToast === 'function') {
+            showToast('No save folder chosen — this project is kept in your browser only and can be lost if browser data is cleared. Set one any time from Save \u25b8 Save Folder.', 'warning', 7000);
+        }
+    } catch (_) {}
 }
 
 function _safeFileName(s, fallback) {
@@ -989,7 +1173,7 @@ function _slabBuildProjectExport() {
         exportedAt: new Date().toISOString(),
         appVersion: 'Safety Lab Aero beta'
     };
-    return { projectName, _betaBuild, acFunctionsData, acFcimData, acExtractedFCs, acFhaData, acReqData, acAssumptionsData, acAsmCounter, systemsData, activeSystemId, praData, zsaData, cmaData, routingData, resourcesData, projectSourceDocs: _slabSerializeSourceDocs(), aiAssumptions, fmeaData, fmeaCounter, itemsData, flightPhasesData, ftaPages, activeFTAPageId, internalIdCounter, typeCounters, ftaConfig, projectConfig, projectBaselines, reviewCommentsData, reviewCounter, reviewApprovalsData, projectTemplates,
+    return { projectName, _betaBuild, acFunctionsData, acFcimData, acExtractedFCs, acFhaData, acReqData, acAssumptionsData, acAsmCounter, systemsData, activeSystemId, praData, zsaData, cmaData, routingData, resourcesData, projectSourceDocs: _slabSerializeSourceDocs(), aiAssumptions, fmeaData, fmeaCounter, itemsData, flightPhasesData, stpaData, mlData, ftaPages, activeFTAPageId, internalIdCounter, typeCounters, ftaConfig, projectConfig, projectBaselines, reviewCommentsData, reviewCounter, reviewApprovalsData, projectTemplates,
         // IDs & Numbering — active scheme + immutable counter store travel with the project
         numberingScheme: slNumberingScheme, numberingStore: slNumberingStore,
         // Phase 56.9 — Per-project report-section edits
@@ -1062,7 +1246,7 @@ function renderPostureMetrics() {
     }
     const notStarted = 6 - ready - inwork - handed - reopened;
     host.innerHTML =
-        tile('Assessments', handed + ' handed off',
+        tile('Assessments', handed + ' baselined',
              (reopened ? reopened + ' reopened · ' : '') + ready + ' ready · ' + inwork + ' in work · ' + notStarted + ' not started',
              reopened ? 'danger' : (handed === 6 ? 'ok' : '')) +
         tile('Cat / Haz failure conditions', crit, 'aircraft + systems') +
@@ -1173,7 +1357,7 @@ async function ckptHandOff(key) {
     projectBaselines.push(baseline);
     if (!projectConfig.ckptHandoffs) projectConfig.ckptHandoffs = {};
     projectConfig.ckptHandoffs[key] = { at: baseline.timestamp, by, fp: _ckptFingerprint(key), baselineId: baseline.id, hash };
-    if (typeof showToast === 'function') showToast(key + ' handed off — baseline ' + hash.slice(0, 12) + '… captured. Downstream trays stamped fresh.', 'success', 4000);
+    if (typeof showToast === 'function') showToast(key + ' baselined. Baseline ' + hash.slice(0, 12) + '… captured; downstream trays stamped fresh.', 'success', 4000);
     try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
     try { updateDashboard(); } catch (_) {}
     _ckptRefresh(key);
@@ -1237,6 +1421,17 @@ function fmesGroups() {
     const groups = new Map();
     const incomplete = [];
     (fmeaData || []).forEach(r => {
+        // Piece-part rows only. The FMES here is the RATE rollup that feeds
+        // fault-tree basic events (fmesAdopt sums λ over beIds) — a functional
+        // (Table J1) row carries neither a rate nor a basic-event link, so a
+        // functional group would be an adoption candidate that adopts nothing.
+        // This filter did not exist before 5 Aug 2026 because it never needed
+        // to: _pruneFmeaToPerSystem deleted every functional row before this
+        // code could see one. The prune was fixed to let functional rows
+        // PERSIST (Waqas's ruling — honour the ffmea lane), which made every
+        // consumer's implicit "all rows are piece-part" assumption live; this
+        // is the one place that assumption carried rate semantics.
+        if ((r.fmeaType || 'piece-part') !== 'piece-part') return;
         const eff = _fmesNorm(r.endEffect);
         const det = _fmesNorm(r.detection);
         if (!eff || !det) { incomplete.push(r); return; }
@@ -1286,21 +1481,71 @@ function fmesExportCsv() {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+// C1 (gap 5) — the REAL disposition questionnaire (ARP 4761A App M / Table M2
+// discipline): the engineer walks every common-mode category and records a
+// per-category verdict, mitigation prose, and a signature — replacing the old
+// single-prompt enum. Existing single-prompt dispositions render unchanged.
 async function ipDisposition(key) {
     if (!projectConfig.ipDispositions) projectConfig.ipDispositions = {};
     const existing = projectConfig.ipDispositions[key];
     if (existing) {
-        const yes = await (typeof slConfirm === 'function' ? slConfirm('Clear disposition signed by ' + (existing.by || '?') + ' (' + (existing.susceptible || '') + ')?') : Promise.resolve(confirm('Clear disposition?')));
-        if (yes) delete projectConfig.ipDispositions[key];
-    } else {
-        const by = (await slPrompt('Disposition — sign with your name:', _signoffReviewerName() || '')) || '';
-        if (!by.trim()) return;
-        const sus = (await slPrompt('Susceptibility per CMA questionnaire — one of: none / failure / error / both:', 'none')) || 'none';
-        projectConfig.ipDispositions[key] = { by: by.trim(), at: new Date().toISOString(), susceptible: sus.trim().toLowerCase() };
+        const summary = existing.answers
+            ? Object.keys(existing.answers).filter(k => existing.answers[k] !== 'independent').map(k => k + ': ' + existing.answers[k]).join(', ') || 'independent in every category'
+            : (existing.susceptible || '');
+        const yes = await (typeof slConfirm === 'function' ? slConfirm('Clear disposition signed by ' + (existing.by || '?') + ' (' + summary + ')?') : Promise.resolve(confirm('Clear disposition?')));
+        if (yes) { delete projectConfig.ipDispositions[key]; try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} ipLedger(true); renderIpLedgerPage(); }
+        return;
     }
+    _ipDispModal(key);
+}
+function _ipDispModal(key) {
+    const old = document.getElementById('ip-disp-modal'); if (old) old.remove();
+    const cats = (typeof CMA_MODE_LABELS !== 'undefined') ? CMA_MODE_LABELS : { design: 'Design', manufacturing: 'Manufacturing', installation: 'Installation', environment: 'Environment', maintenance: 'Maintenance' };
+    const p = (typeof ipLedger === 'function' ? ipLedger() : []).find(x => x.key === key);
+    const label = p ? p.members.map(m => m.label).join(' ⊥ ') : key;
+    const opt = ['independent', 'susceptible-failure', 'susceptible-error', 'susceptible-both'];
+    const optLabel = { independent: 'Independent', 'susceptible-failure': 'Susceptible — common FAILURE', 'susceptible-error': 'Susceptible — common ERROR', 'susceptible-both': 'Susceptible — BOTH' };
+    const ov = document.createElement('div');
+    ov.id = 'ip-disp-modal';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99996;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+    ov.innerHTML = '<div style="background:var(--color-surface-1,#fff);color:var(--color-text-primary,#111);max-width:640px;width:100%;max-height:88vh;overflow:auto;border:1px solid var(--color-border-strong,#333);padding:16px 20px;" onclick="event.stopPropagation()">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--color-text-primary,#111);padding-bottom:8px;"><b style="font-size:13.5px;">Independence disposition — App M questionnaire</b>' +
+        '<button class="ckpt-m-btn" style="font-size:11px;padding:2px 10px;" onclick="document.getElementById(\'ip-disp-modal\').remove()">✕</button></div>' +
+        '<div style="font-size:12px;color:var(--color-text-secondary);margin:8px 0 4px;"><b>' + esc(label) + '</b></div>' +
+        '<p style="font-size:11px;color:var(--color-text-tertiary);margin:0 0 10px;">Challenge the claim in every common-mode category. Any category marked susceptible should carry a CMA row and a mitigation; the ledger cross-checks CCF declarations regardless of what you answer.</p>' +
+        Object.keys(cats).map(c =>
+            '<div style="display:flex;align-items:center;gap:10px;margin:4px 0;font-size:12px;"><span style="width:170px;flex-shrink:0;">' + esc(cats[c]) + '</span>' +
+            '<select class="state-select" data-ipq="' + esc(c) + '" style="flex:1;font-size:11.5px;">' + opt.map(o => '<option value="' + o + '">' + optLabel[o] + '</option>').join('') + '</select></div>').join('') +
+        '<div style="font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--color-text-tertiary);margin:12px 0 3px;">Mitigation / justification</div>' +
+        '<textarea id="ip-disp-mit" style="width:100%;min-height:60px;padding:8px 10px;font-size:12px;box-sizing:border-box;border:1px solid var(--color-border-hair);background:var(--color-surface-2);color:var(--color-text-primary);" placeholder="Separation, dissimilarity, process controls… (what keeps the members independent, or what mitigates the susceptibility)"></textarea>' +
+        '<div style="display:flex;gap:8px;align-items:center;margin-top:12px;">' +
+        '<input type="text" id="ip-disp-by" placeholder="Sign with your name" value="' + esc((typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '') + '" style="flex:1;padding:6px 9px;font-size:12px;">' +
+        '<button class="ckpt-m-btn" style="font-size:12px;padding:6px 16px;color:#166534;font-weight:700;" onclick="ipDispSubmit(' + JSON.stringify(key).replace(/"/g, '&quot;') + ')">✓ Sign disposition</button></div></div>';
+    document.body.appendChild(ov);
+}
+function ipDispSubmit(key) {
+    const ov = document.getElementById('ip-disp-modal'); if (!ov) return;
+    const by = (document.getElementById('ip-disp-by') || {}).value || '';
+    if (!by.trim()) { try { showToast('A disposition needs a signature.', 'warning', 3000); } catch (_) {} return; }
+    const answers = {};
+    ov.querySelectorAll('select[data-ipq]').forEach(s => { answers[s.getAttribute('data-ipq')] = s.value; });
+    const worst = Object.values(answers).reduce((w, v) => {
+        if (v === 'susceptible-both') return 'both';
+        if (v === 'susceptible-failure') return w === 'error' || w === 'both' ? 'both' : 'failure';
+        if (v === 'susceptible-error') return w === 'failure' || w === 'both' ? 'both' : 'error';
+        return w;
+    }, 'none');
+    if (!projectConfig.ipDispositions) projectConfig.ipDispositions = {};
+    projectConfig.ipDispositions[key] = {
+        by: by.trim(), at: new Date().toISOString(), susceptible: worst,
+        answers, mitigation: ((document.getElementById('ip-disp-mit') || {}).value || '').trim(),
+    };
+    ov.remove();
     try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
     ipLedger(true);
     renderIpLedgerPage();
+    try { showToast('Disposition signed — worst-case susceptibility: ' + worst.toUpperCase() + '. Susceptible categories should carry CMA rows.', worst === 'none' ? 'success' : 'warning', 5000); } catch (_) {}
 }
 
 function renderIpLedgerPage() {
@@ -1315,48 +1560,111 @@ function renderIpLedgerPage() {
         '<div class="ckpt-tile"><div class="ckpt-tile-label">Verified</div><div class="ckpt-tile-value">' + count('verified') + '</div><div class="ckpt-tile-sub">CMA closed + requirement</div></div>' +
         '<div class="ckpt-tile' + (count('compromised') ? ' ckpt-tile-danger' : ' ckpt-tile-ok') + '"><div class="ckpt-tile-label">Compromised</div><div class="ckpt-tile-value">' + count('compromised') + '</div><div class="ckpt-tile-sub">' + (count('compromised') ? 'claims defeated — rework' : 'no defeated claims') + '</div></div></div>';
 
+    // App M launchers (4 Aug build): the global questionnaire at aircraft AND
+    // system level (M.3.2 / M.3.3) — per-principle passes launch from each row.
+    const sysOpts = (systemsData || []).map(s => '<option value="' + esc(s.id) + '">' + esc(s.name || s.id) + '</option>').join('');
+    html += '<div style="display:flex; align-items:center; gap:8px; margin:6px 0 10px; flex-wrap:wrap; font-size:12px;">' +
+        '<button class="ckpt-m-btn" style="font-size:11.5px; padding:3px 10px;" onclick="cmaWalkthrough(\'aircraft\',\'Aircraft-level\')" title="Global Table M1 pass at aircraft level (M.3.2)">CMA questionnaire — aircraft</button>' +
+        (sysOpts ? '<span>· system level (M.3.3):</span><select id="ip-cma-sys" style="font-size:11.5px; padding:2px 4px;">' + sysOpts + '</select>' +
+            '<button class="ckpt-m-btn" style="font-size:11.5px; padding:3px 10px;" onclick="cmaWalkthroughSys(document.getElementById(\'ip-cma-sys\').value)">Run</button>' : '') +
+        '<span style="color: var(--color-text-tertiary);">per-principle passes (Table M2) launch from each row below</span></div>';
+
     if (!list.length) {
-        html += '<p style="color: var(--color-text-tertiary); font-size: 13px;">No independence principles identified yet. Principles derive automatically from minimal cut sets of order ≥2 in Catastrophic/Hazardous trees and from AND/INHIBIT gates carrying DALgebra independence claims.</p>';
+        html += '<p style="color: var(--color-text-tertiary); font-size: 13px;">No independence principles identified yet. Principles derive automatically from minimal cut sets of order ≥2 in Catastrophic/Hazardous trees, from AND/INHIBIT gates carrying DALgebra independence claims, and from bow-tie cross-side common-cause findings.</p>';
     } else {
         html += '<table class="data-table" style="width:100%; font-size:12.5px;"><thead><tr><th>Members</th><th>Claim</th><th>Sources</th><th>CMA evidence</th><th>Reqs</th><th>State</th><th>Disposition</th></tr></thead><tbody>';
         list.sort((a, b) => (a.state === 'compromised' ? -1 : 1) - (b.state === 'compromised' ? -1 : 1)).forEach(p => {
             const m = _IP_STATE_META[p.state];
             const chips = p.members.map(x => '<span class="u-mono" style="display:inline-block; border:1px solid var(--color-border-thin); padding:1px 6px; margin:1px 2px 1px 0; font-size:11px;">' + esc(x.label) + '</span>').join('');
             const claims = [...p.claims].map(c => c === 'failure' ? 'P-credit' : 'DAL-credit').join(' + ');
-            const srcs = p.sources.filter(s => s.type === 'cutset').length + ' cutsets · ' + p.sources.filter(s => s.type === 'gate').length + ' gates';
-            const cma = p.cma.length ? p.cma.map(c => esc(c.cmaId) + ' (' + esc(c.status) + ')').join('<br>') : '—';
+            const btN = p.sources.filter(s => s.type === 'bowtie').length;
+            const monN = p.sources.filter(s => s.type === 'monitor').length;
+            const srcs = p.sources.filter(s => s.type === 'cutset').length + ' cutsets · ' + p.sources.filter(s => s.type === 'gate').length + ' gates' + (btN ? ' · ' + btN + ' bow-tie' : '') + (monN ? ' · ' + monN + ' monitor' : '');
+            // Per-principle questionnaire affordance + coverage (M.3.2.1.3); the
+            // walkthrough files rows against this principle's key, and phase
+            // tags feed the ASA marker.
+            const w = p.walk || { devRun: false, verRun: false, devConcerns: 0, verConcerns: 0 };
+            const cov = (w.devRun ? 'dev ✓' + (w.devConcerns ? ' (' + w.devConcerns + ' concern' + (w.devConcerns === 1 ? '' : 's') + ')' : '') : 'dev —') +
+                        ' · ' + (w.verRun ? 'ASA ✓' + (w.verConcerns ? ' (' + w.verConcerns + ')' : '') : 'ASA —');
+            const cma = (p.cma.length ? p.cma.map(c => esc(c.cmaId) + ' (' + esc(c.status) + (c.phase === 'verification' ? ' · ver' : '') + ')').join('<br>') : '—') +
+                '<div style="margin-top:2px;"><button class="ckpt-m-btn" style="font-size:10.5px; padding:1px 7px;" onclick="cmaWalkthroughIp(\'' + esc(p.key) + '\')" title="Run the tailored Table M1 questionnaire against THIS principle (M.3.2.1.3 / Table M2)">Questionnaire →</button> <span class="u-mono" style="font-size:10px; color: var(--color-text-tertiary);">' + cov + '</span></div>';
             const dispBtn = p.disposition
                 ? '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="ipDisposition(\'' + esc(p.key) + '\')" title="signed ' + esc(p.disposition.at.slice(0, 10)) + '">✍ ' + esc(p.disposition.by) + ' · ' + esc(p.disposition.susceptible) + '</button>'
                 : '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="ipDisposition(\'' + esc(p.key) + '\')">Sign disposition</button>';
             html += '<tr' + (p.state === 'compromised' ? ' style="background: var(--sev-cat-bg);"' : '') + '>' +
-                '<td>' + chips + (p.contradiction ? '<div style="color:var(--color-danger); font-size:11px; font-weight:600;">⚠ members share a CCF group (β&gt;0)</div>' : '') + '</td>' +
+                '<td>' + chips + (p.contradiction ? '<div style="color:var(--color-danger); font-size:11px; font-weight:600;">⚠ members share a CCF group (β&gt;0)</div>' : '') +
+                (p.bowtieCC ? '<div style="color:var(--color-danger); font-size:11px; font-weight:600;">⚠ mitigation barrier shares a cause cut-set element (' + esc([...new Set(p.sources.filter(s => s.type === 'bowtie').map(s => s.btId + ' · ' + s.sharedLid))].join(', ')) + ')</div>' : '') +
+                (p.monitorCC ? '<div style="color:var(--color-danger); font-size:11px; font-weight:600;">⚠ monitor channel not independent of the monitored event (' + esc([...new Set(p.sources.filter(s => s.type === 'monitor').map(s => s.monitorLid + ' watches ' + s.lid))].join(', ')) + ')</div>' : '') + '</td>' +
                 '<td>' + esc(claims) + '</td>' +
                 '<td class="u-mono" style="font-size:11px;">' + esc(srcs) + '</td>' +
                 '<td class="u-mono" style="font-size:11px;">' + cma + '</td>' +
                 '<td class="u-mono" style="text-align:center;">' + p.reqs.length + '</td>' +
-                '<td><span class="sla-stamp" style="color:' + m.color + ';">' + m.label + '</span></td>' +
+                '<td><span class="sla-stamp" style="color:' + m.color + ';">' + m.label + '</span>' +
+                (p.asaAdvisory ? '<div style="font-size:10px; color:#B7791F; font-weight:600;" title="Verified on development-phase evidence; the M.3.2.2 as-built examination (ASA checklist pass) has not been run against this principle. Advisory only — the state stands.">⚠ development evidence only — ASA pass not run</div>' : '') + '</td>' +
                 '<td>' + dispBtn + '</td></tr>';
         });
         html += '</tbody></table>';
-        html += '<p style="font-size: 11.5px; color: var(--color-text-tertiary); font-family: var(--font-mono);">One record per unique member-set — every gate, cut set, and DAL reduction relying on the same claim attaches here, so a CMA finding or CCF contradiction flips them all at once. Lifecycle: Identified → Evaluated (signed / CMA) → Requirement → Verified.</p>';
+        html += '<p class="cfg-hint" title="One record per unique member-set — every gate, cut set, and DAL reduction relying on the same claim attaches here, so a CMA finding or CCF contradiction flips them all at once.">One record per member-set · a finding flips every dependent claim. Lifecycle: Identified → Evaluated → Requirement → Verified.</p>';
     }
     host.innerHTML = html;
 }
 
-async function idpCycleCell(fcInternalId, sysId) {
+// 21 Aug 2026 (A10) — cells are FUNCTION columns ('fn:<funcId>') at Q.4-1
+// granularity. A legacy SYSTEM-LEVEL column never takes a NEW review: clicking
+// it refines the existing system-level review onto one of the system's
+// functions (signed), or lifts it — legacy data can only shrink.
+async function idpCycleCell(fcInternalId, colId) {
     const fc = (acFhaData || []).find(f => String(f.internalId) === String(fcInternalId));
     if (!fc) return;
     const store = _idpStore();
-    const key = _idpCellKey(fcInternalId, sysId);
+    const key = _idpCellKey(fcInternalId, colId);
     const manual = store.cells[key];
-    const derived = _idpDerived(fc, sysId);
+    const isFn = String(colId).indexOf('fn:') === 0;
+    const funcId = isFn ? String(colId).slice(3) : null;
+    const colLabel = isFn
+        ? ((typeof window !== 'undefined' && window.SLFnResolve) ? SLFnResolve.label(funcId) : funcId)
+        : ((((systemsData || []).find(s => s.id === colId)) || {}).name || String(colId));
+    const derived = isFn ? _idpDerivedFn(fc, funcId) : _idpDerivedSysOnly(fc, colId);
+    if (!isFn) {
+        if (!manual) {
+            if (derived) { if (typeof showToast === 'function') showToast('System-level derived fact — ' + derived.why, 'info', 5000); return; }
+            if (typeof showToast === 'function') showToast('This is the system-level (legacy) column — assert on one of ' + colLabel + '\u2019s FUNCTION columns instead.', 'info', 4500);
+            return;
+        }
+        const fns = (typeof window !== 'undefined' && window.SLFnResolve) ? SLFnResolve.functionsOf(colId) : [];
+        const menu = fns.map((f, i) => (i + 1) + '. ' + (f.funcName || f.funcId)).join('\n');
+        const pick = await slPrompt('System-level review on ' + colLabel + ' (' + manual.state + (manual.by ? ', ' + manual.by : '') + ').\n\nRefine it onto a FUNCTION — type its number:\n' + menu + '\n\n0 = remove this legacy review \u00b7 blank = cancel', '');
+        if (pick === null || String(pick).trim() === '') return;
+        const n = parseInt(pick, 10);
+        if (n === 0) { delete store.cells[key]; }
+        else if (n >= 1 && n <= fns.length) {
+            const by = (await slPrompt('Sign the refinement (moves this ' + manual.state + ' review to ' + (fns[n - 1].funcName || fns[n - 1].funcId) + '):', manual.by || _signoffReviewerName() || '')) || '';
+            if (!by.trim()) return;
+            store.cells[_idpCellKey(fcInternalId, 'fn:' + fns[n - 1].funcId)] = { state: manual.state, by: by.trim(), at: new Date().toISOString(), note: 'refined from system-level review' + (manual.note ? ' \u2014 ' + manual.note : '') };
+            delete store.cells[key];
+        } else { return; }
+        try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+        renderInterdepPage();
+        return;
+    }
     if (!manual) {
         if (derived) { if (typeof showToast === 'function') showToast('Derived contribution — ' + derived.why + '. Derivations are facts; adjust the trace/resource data to change them.', 'info', 4000); return; }
-        const by = (await slPrompt('Assert: this system contributes to ' + fc.fcId + ' (normal op or malfunction). Sign with your name:', _signoffReviewerName() || '')) || '';
+        const by = (await slPrompt('Assert: ' + colLabel + ' contributes to ' + fc.fcId + ' (normal op or malfunction). Sign with your name:', _signoffReviewerName() || '')) || '';
         if (!by.trim()) return;
         store.cells[key] = { state: 'asserted', by: by.trim(), at: new Date().toISOString() };
+    } else if (manual.state === 'proposed') {
+        // D1 (gap 4) — dispositioning an AI proposal. The signature is the review;
+        // the proposal itself never decides anything.
+        const dirTxt = (manual.dir === 'clear') ? 'NO contribution' : 'a contribution';
+        const by = (await slPrompt('AI proposed ' + dirTxt + ' of ' + colLabel + ' to ' + fc.fcId + ' — "' + (manual.why || '') + '".\n\nSign to ACCEPT as ' + (manual.dir === 'clear' ? 'CLEARED (reviewed, none)' : 'ASSERTED (contributes)') + ' — or leave blank, then click again to dismiss the proposal:', _signoffReviewerName() || '')) || '';
+        if (by.trim()) {
+            store.cells[key] = { state: manual.dir === 'clear' ? 'cleared' : 'asserted', by: by.trim(), at: new Date().toISOString(), note: 'AI-proposed, engineer-accepted: ' + (manual.why || '') };
+        } else {
+            delete store.cells[key];   // dismissed — back to unreviewed
+            if (typeof showToast === 'function') showToast('Proposal dismissed — cell is unreviewed again.', 'info', 2500);
+        }
     } else if (manual.state === 'asserted') {
-        const by = (await slPrompt('Clear: reviewed, no contribution of this system to ' + fc.fcId + '. Sign with your name:', manual.by || _signoffReviewerName() || '')) || '';
+        const by = (await slPrompt('Clear: reviewed, no contribution of ' + colLabel + ' to ' + fc.fcId + '. Sign with your name:', manual.by || _signoffReviewerName() || '')) || '';
         if (!by.trim()) return;
         store.cells[key] = { state: 'cleared', by: by.trim(), at: new Date().toISOString() };
     } else {
@@ -1364,6 +1672,28 @@ async function idpCycleCell(fcInternalId, sysId) {
     }
     try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
     renderInterdepPage();
+}
+
+// 21 Aug 2026 (A10) — declare WHICH of a provider system's functions provides a
+// resource (resource system functions — chain step 5, Q.4-2 granularity). Until
+// declared, the resource stays a coarse system-level fact in the tables.
+async function idpDeclareResProviderFn(resId, sysId) {
+    const r = (resourcesData || []).find(x => String(x.internalId || x.resId) === String(resId));
+    const s = (systemsData || []).find(x => x.id === sysId);
+    if (!r || !s) return;
+    const fns = (s.functions || []).filter(f => f && f.funcId);
+    if (!fns.length) { if (typeof showToast === 'function') showToast('Declare functions on ' + (s.name || s.id) + ' first.', 'warning', 3500); return; }
+    if (!Array.isArray(r.providedByFunctions)) r.providedByFunctions = [];
+    const menu = fns.map((f, i) => (i + 1) + '. ' + (f.funcName || f.funcId) + (r.providedByFunctions.indexOf(f.funcId) !== -1 ? '  \u2713' : '')).join('\n');
+    const pick = await slPrompt('Which of ' + (s.name || s.id) + '\u2019s functions PROVIDES ' + (r.name || r.resId) + '?\n\nType a number to toggle:\n' + menu + '\n\nblank = done', '');
+    if (pick === null || String(pick).trim() === '') { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} renderInterdepPage(); return; }
+    const n = parseInt(pick, 10);
+    if (n >= 1 && n <= fns.length) {
+        const fid = fns[n - 1].funcId;
+        const at = r.providedByFunctions.indexOf(fid);
+        if (at === -1) r.providedByFunctions.push(fid); else r.providedByFunctions.splice(at, 1);
+    }
+    return idpDeclareResProviderFn(resId, sysId);
 }
 
 async function craEditCell(fcId, resKey, sysId) {
@@ -1438,18 +1768,81 @@ function _macStore() {
     return projectConfig.macModels;
 }
 
-// Minimal breach sets for one L0 rule. Returns array of arrays of sysIds.
-function macBreachSets(rule) {
+// ============================================================================
+// Phase D2 (L1/L2) — the MAC fidelity ladder. A clause generalizes from
+// "≥min of n members survive" (L0, counting) to "surviving CAPACITY ≥ floor"
+// (L1 multipliers / L2 scalar floors), with optional DEGRADED states that
+// retain part of a member's contribution. Damage per member is the level it
+// is assigned (loss dominates degraded — levels are exclusive, never summed);
+// an unmodeled state is a full loss (conservative by default). A clause with
+// none of the new fields takes the ORIGINAL k-subset path — L0 breach sets
+// are byte-identical to every prior release.
+//   Breach-set element naming: '<sysId>' = full loss (unchanged);
+//   'deg:<sysId>:<label>' = degraded-state event.
+// ============================================================================
+function _macDegFor(rule, sysId) {
+    return (Array.isArray(rule && rule.degraded) ? rule.degraded : []).filter(d => d && d.sysId === sysId && String(d.label || '').trim());
+}
+function macClauseWeighted(rule, cl) {
+    if (!cl) return false;
+    if (cl.floor != null) return true;
+    if (cl.weights && Object.keys(cl.weights).some(k => +cl.weights[k] > 0 && +cl.weights[k] !== 1)) return true;
+    return (cl.of || []).some(m => _macDegFor(rule, m).length);
+}
+// Derived fidelity level: L2 = scalar floor present; L1 = weights/degraded; L0 otherwise.
+function macRuleLevel(rule) {
+    if (!rule) return 0;
+    if ((rule.clauses || []).some(c => c && c.floor != null)) return 2;
+    if ((rule.clauses || []).some(c => macClauseWeighted(rule, c))) return 1;
+    return 0;
+}
+const MAC_COMBO_CAP = 50000;   // explosion guard — refuse, never approximate
+// Minimal breach sets. Returns { sets, error } — error only from the guard.
+function macBreachSetsChecked(rule) {
     const out = [];
+    let error = null;
     (rule.clauses || []).forEach(cl => {
         const members = cl.of || [];
-        const need = members.length - (cl.min || 1) + 1;   // fail this many → clause violated
-        if (need <= 0 || need > members.length) return;
-        // all `need`-subsets of members
-        (function pick(start, cur) {
-            if (cur.length === need) { out.push(cur.slice()); return; }
-            for (let i = start; i < members.length; i++) { cur.push(members[i]); pick(i + 1, cur); cur.pop(); }
-        })(0, []);
+        if (!members.length || error) return;
+        if (!macClauseWeighted(rule, cl)) {
+            // ---- L0 path — UNCHANGED original combinatorics ----
+            const need = members.length - (cl.min || 1) + 1;   // fail this many → clause violated
+            if (need <= 0 || need > members.length) return;
+            (function pick(start, cur) {
+                if (cur.length === need) { out.push(cur.slice()); return; }
+                for (let i = start; i < members.length; i++) { cur.push(members[i]); pick(i + 1, cur); cur.pop(); }
+            })(0, []);
+            return;
+        }
+        // ---- L1/L2 path — weighted capacity vs scalar floor ----
+        const w = m => (cl.weights && +cl.weights[m] > 0) ? +cl.weights[m] : 1;
+        const total = members.reduce((a, m) => a + w(m), 0);
+        const floor = cl.floor != null ? +cl.floor : (cl.min || 1);
+        // Damage levels per member: intact · each valid degraded state · full loss.
+        const levels = members.map(m => {
+            const L = [{ key: null, dmg: 0 }];
+            _macDegFor(rule, m).forEach(d => {
+                const wd = +d.weight;
+                if (wd >= 0 && wd < w(m)) L.push({ key: 'deg:' + m + ':' + d.label, dmg: w(m) - wd });
+            });
+            L.push({ key: m, dmg: w(m) });
+            return L;
+        });
+        const comboCount = levels.reduce((a, L) => a * L.length, 1);
+        if (comboCount > MAC_COMBO_CAP) { error = 'clause over ' + members.length + ' members exceeds the ' + MAC_COMBO_CAP + '-combination enumeration cap — split the clause'; return; }
+        // Breach when surviving < floor ⇔ damage > total − floor (strict, ε-guarded).
+        // Prune on first crossing: any extension is a superset; cross-branch
+        // non-minimal sets are removed by the subsumption reduce below.
+        const thresh = total - floor + 1e-12;
+        (function walk(i, dmg, keys) {
+            if (dmg > thresh) { if (keys.length) out.push(keys.slice()); return; }
+            if (i >= levels.length) return;
+            for (const lv of levels[i]) {
+                if (lv.key) keys.push(lv.key);
+                walk(i + 1, dmg + lv.dmg, keys);
+                if (lv.key) keys.pop();
+            }
+        })(0, 0, []);
     });
     // subsumption-reduce (a breach set containing another is non-minimal)
     const sets = out.map(a => [...new Set(a)].sort()).sort((a, b) => a.length - b.length);
@@ -1458,7 +1851,10 @@ function macBreachSets(rule) {
         const sub = min.some(m => m.every(x => s.indexOf(x) !== -1));
         if (!sub && !min.some(m => m.length === s.length && m.every((x, i) => x === s[i]))) min.push(s);
     });
-    return min;
+    return { sets: min, error };
+}
+function macBreachSets(rule) {
+    return macBreachSetsChecked(rule).sets;
 }
 
 function macStats() {
@@ -1514,6 +1910,12 @@ function coffeCases(fc) {
         const key = _coffeCaseKey(parts);
         const v = V[fc.internalId + '§' + key];
         if (v && v.verdict === 'yes') yesSingles.add(sysId + '=' + state);
+        // 21 Aug 2026 (B4) — CoFFE consumes MAC: a single the MODEL computes as
+        // YES prunes its supersets too. Previously only a SIGNED yes pruned, and
+        // with 0 signed the prune never fired — measured 92 of 676 wasted cases
+        // on Aeolus. A signed NO stays authoritative: the disagreement is
+        // already a finding, and the pairs stay elicitable.
+        else if (!v && coffeComputed(fc, { parts, key }) === 'yes') yesSingles.add(sysId + '=' + state);
         out.push({ parts, key });
     }));
     for (let i = 0; i < systems.length; i++) for (let j = i + 1; j < systems.length; j++) {
@@ -1532,12 +1934,165 @@ function _coffeBreachSetsForFc(fc) {
     rules.forEach(r => { sets = sets.concat(macBreachSets(r)); });
     return sets;
 }
+// ---------------------------------------------------------------------------
+// Phase 66.28 — the computed (MAC) lane, corrected and widened.
+//
+// ONE REAL GAP, plus a correctness property that gap forced us to state.
+//
+// HONESTY NOTE, 19 Aug 2026. The first draft of this comment claimed a live bug: that
+// the old exact-string comparison could never match a `deg:<sys>:<label>` token, so
+// weighted/floored (L1/L2) clauses computed 'no' where they should compute 'yes'.
+// Waqas said check it against the real thing before building. Executed old and new
+// side by side against a real weighted clause — IT DOES NOT REPRODUCE. Whenever a
+// `deg:` breach set is coverable by total losses, the walk also emits the equivalent
+// bare-token set, so the old code found that one and answered correctly. The claim was
+// wrong and is recorded here rather than quietly deleted.
+//
+// MONOTONICITY is still a property worth stating, because it only starts to matter now
+// that partial loss exists: total loss of A is at least as damaging as A degraded, so a
+// total-loss part must satisfy a `deg:A:*` requirement. Previously unreachable, since
+// no case could carry a degraded state at all.
+//
+// GAP (the real one) — partial loss. _COFFE_STATES carried only 'total loss' and 'malfunction', so
+// the state the whole ARP Q.4-6 example turns on (cases 2, 5, 8, 11 are D, not F)
+// could not be expressed at all — even though the FCIM has spoken TL/PL/M since
+// forever, and MAC already models named degraded levels with weights.
+//
+// WHAT STAYS null. Malfunction. MAC's clause arithmetic is about AVAILABILITY — how
+// much capability survives — and an adverse action such as "uncommanded high thrust"
+// is not a loss of capability. That is precisely why FF5.3 hangs outside the AND
+// branch in the ARP tree. Judgement is genuinely required there, and the panel now
+// says so rather than rendering a blank.
+//
+// PARTIAL LOSS IS DELIBERATELY COARSER THAN MAC. CoFFE says "degraded"; MAC names a
+// level with a weight. A partial-loss part therefore satisfies `deg:<sys>:<any>`, i.e.
+// the lane answers "there EXISTS a degradation of this system that breaches". That is
+// the conservative direction for a cross-check: it raises the question and lets the
+// engineer rule it out, rather than staying silent.
+// ---------------------------------------------------------------------------
+function _coffeDegSys(tok) {
+    // 'deg:<sysId>:<label>' → sysId. Labels may contain ':', ids may not.
+    if (String(tok).indexOf('deg:') !== 0) return null;
+    const rest = String(tok).slice(4);
+    const i = rest.indexOf(':');
+    return i < 0 ? rest : rest.slice(0, i);
+}
 function coffeComputed(fc, kase) {
-    if (kase.parts.some(p => p.state !== 'total loss')) return null;   // malfunction residue
+    // Malfunction has no computed lane — see the note above.
+    if (kase.parts.some(p => p.state === 'malfunction')) return null;
     const sets = _coffeBreachSetsForFc(fc);
     if (!sets.length) return null;   // no MAC model → no computed lane
-    const failed = kase.parts.map(p => p.sysId);
-    return sets.some(b => b.every(x => failed.indexOf(x) !== -1)) ? 'yes' : 'no';
+    const covers = tok => {
+        const degSys = _coffeDegSys(tok);
+        if (degSys !== null) {
+            // A degraded requirement is met by degradation OR by outright loss.
+            return kase.parts.some(p => p.sysId === degSys &&
+                (p.state === 'partial loss' || p.state === 'total loss'));
+        }
+        // A full-loss requirement is met only by full loss.
+        return kase.parts.some(p => p.sysId === tok && p.state === 'total loss');
+    };
+    return sets.some(b => b.every(covers)) ? 'yes' : 'no';
+}
+
+// Which MAC breach set (if any) this case covers — so a finding can name it rather
+// than just asserting a disagreement.
+function coffeMatchedBreachSet(fc, kase) {
+    if (kase.parts.some(p => p.state === 'malfunction')) return null;
+    const sets = _coffeBreachSetsForFc(fc);
+    const covers = tok => {
+        const degSys = _coffeDegSys(tok);
+        if (degSys !== null) return kase.parts.some(p => p.sysId === degSys && (p.state === 'partial loss' || p.state === 'total loss'));
+        return kase.parts.some(p => p.sysId === tok && p.state === 'total loss');
+    };
+    return sets.find(b => b.every(covers)) || null;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 66.28 — SHORTEST ROUTE. Waqas: "which combination gets you to the
+// catastrophic effect the fastest".
+//
+// The answer is the lowest-order set that still produces the condition. Order 1 on a
+// Catastrophic or Hazardous condition is not a ranking — it is a single failure
+// causing that condition, which §xx.1309 does not permit — so it is returned as a
+// HARD finding, not a table row.
+//
+// Both lanes are searched: signed verdicts (authoritative) and the MAC model's own
+// minimal breach sets (which may be shorter than anything anyone has signed yet).
+// ---------------------------------------------------------------------------
+function coffeShortestRoute(fc) {
+    const V = _coffeStore().verdicts;
+    const out = { order: null, cases: [], source: null, modelOrder: null, hard: false };
+    let best = Infinity;
+    coffeCases(fc).forEach(kase => {
+        const v = V[fc.internalId + '\u00a7' + kase.key];
+        const yes = (v && v.verdict === 'yes') || (!v && coffeComputed(fc, kase) === 'yes');
+        if (!yes) return;
+        const n = kase.parts.length;
+        if (n < best) { best = n; out.cases = [kase]; out.source = v ? 'signed' : 'model'; }
+        else if (n === best) out.cases.push(kase);
+    });
+    if (best !== Infinity) out.order = best;
+    const sets = _coffeBreachSetsForFc(fc);
+    if (sets.length) out.modelOrder = sets.reduce((m, b) => Math.min(m, b.length), Infinity);
+    if (out.modelOrder === Infinity) out.modelOrder = null;
+    // CRY-WOLF GUARD — caught by testing against Aeolus, 19 Aug. An order-1 route from a
+    // SINGLE-MEMBER clause reads "this function is required", i.e. the redundancy has not
+    // been modelled yet. That is not a discovered single point of failure. Without this,
+    // 17 of Aeolus's 22 rules raise a hard finding on day one and everyone learns to
+    // ignore the flag. Same rule SLMacLanes.lanes() applies; kept in step deliberately.
+    const rules = _macStore().filter(r => r.subId === fc.subId);
+    out.singleMemberClause = rules.some(r => (r.clauses || []).some(cl => (cl && cl.of || []).length <= 1));
+    out.unmodelled = (out.order === 1 || out.modelOrder === 1) && out.singleMemberClause;
+    const sev = String(fc && fc.severity || '');
+    out.hard = (out.order === 1 || out.modelOrder === 1) &&
+               !out.singleMemberClause &&
+               /Catastrophic|Hazardous/i.test(sev);
+    return out;
+}
+
+// Contributing systems (per the interdependence table) that no MAC clause mentions.
+// Their availability cases cannot be computed, so they genuinely need elicitation —
+// and that is worth saying out loud rather than leaving as a blank column.
+function coffeUnmodelledSystems(fc) {
+    const rules = _macStore().filter(r => r.subId === fc.subId);
+    const covered = new Set();
+    rules.forEach(r => (r.clauses || []).forEach(cl => (cl.of || []).forEach(m => covered.add(m))));
+    return idpContributors(fc).filter(id => !covered.has(id));
+}
+
+// Enumeration coverage, stated. The walk is singles + pairs; triples and beyond are
+// NOT enumerated. House rule: a bounded sweep says what it left out.
+function coffeCoverage(fc) {
+    const systems = idpContributors(fc);
+    const st = _COFFE_STATES.length;
+    return {
+        systems: systems.length,
+        states: st,
+        singles: systems.length * st,
+        pairs: (systems.length * (systems.length - 1) / 2) * st * st,
+        depth: 2,
+        higherOrderNotEnumerated: systems.length > 2
+    };
+}
+
+// Accept the model's answer as the determination, recorded as DERIVED rather than
+// independently judged. Inverts the burden: a signature is spent where the engineer
+// disagrees with the model or where no model exists, not on confirming arithmetic.
+async function coffeConfirmDerived(fcInternalId, caseKey) {
+    const fc = (acFhaData || []).find(f => String(f.internalId) === String(fcInternalId));
+    if (!fc) return;
+    const parts = caseKey.split('\u2227').map(seg => { const i = seg.lastIndexOf('='); return { sysId: seg.slice(0, i), state: seg.slice(i + 1) }; });
+    const c = coffeComputed(fc, { parts, key: caseKey });
+    if (c === null) { if (typeof showToast === 'function') showToast('No computed lane for this case — it needs a judgement.', 'warning', 3200); return; }
+    const by = (await slPrompt('Confirm the model\u2019s answer (' + c.toUpperCase() + ') and sign:', _signoffReviewerName() || '')) || '';
+    if (!by.trim()) return;
+    const store = _coffeStore();
+    store.verdicts[String(fcInternalId) + '\u00a7' + caseKey] = {
+        verdict: c, by: by.trim(), at: new Date().toISOString(), derived: true
+    };
+    try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+    renderCoffePanel();
 }
 
 async function coffeVerdict(fcInternalId, caseKey) {
@@ -1581,8 +2136,23 @@ function coffeGraft(fcInternalId, caseKey) {
     const mkEvent = p => {
         const s = (systemsData || []).find(x => x.id === p.sysId) || { name: p.sysId };
         const mal = p.state === 'malfunction';
+        // Phase 66.28 — Waqas: "we dont need to call them FF nodes, let the user define
+        // their numbering schema." The displayId comes from the project's numbering
+        // scheme (shared, so the same system reuses one id across grafts); the old
+        // hardcoded 'MAC\u00b7' / 'MAL\u00b7' prefixes are the fallback only when the engine
+        // is unavailable.
+        let did = null;
+        try {
+            const N = window.SafetyLabNumbering;
+            if (N && typeof slNumberingScheme !== 'undefined' && slNumberingScheme) {
+                did = N.makeSharedId(slNumberingScheme, 'basicEvent',
+                    (mal ? 'macmal:' : 'macsys:') + p.sysId,
+                    Object.assign(typeof _slNumberCtx === 'function' ? _slNumberCtx() : {}, { SYS: s.name }),
+                    slNumberingStore);
+            }
+        } catch (_) {}
         return { id: internalIdCounter++, logicalId: (mal ? 'macmal:' : 'macsys:') + p.sysId,
-                 displayId: (mal ? 'MAL·' : 'MAC·') + s.name.slice(0, 14),
+                 displayId: did || ((mal ? 'MAL\u00b7' : 'MAC\u00b7') + s.name.slice(0, 14)),
                  name: s.name + (mal ? ' malfunction (adverse action)' : ' failed / unavailable'),
                  type: 'basic', probability: 0, children: [], _macProvenance: 'authored-malfunction' };
     };
@@ -1691,7 +2261,7 @@ async function wsPssaNewTree() {
     const rootId = internalIdCounter++;
     const page = {
         id: 'pssa-' + s.id + '-' + Date.now(),
-        name: 'PSSA · ' + s.name + (linkedFhaId ? ' · ' + ((rows.find(f => f.internalId === linkedFhaId) || {}).fcId || '') : ''),
+        name: 'PSSA · ' + s.name + (linkedFhaId ? ' · ' + ((rows.find(f => String(f.internalId) === String(linkedFhaId)) || {}).fcId || '') : ''),
         treeLevel: 'system', systemId: s.id, mode: 'top-down',
         linkedFhaId: linkedFhaId || undefined,
         root: { id: rootId, logicalId: rootId, displayId: 'TOP', name: 'System failure condition', type: 'gate', gateType: 'OR', probability: 0, children: [] },
@@ -1897,22 +2467,83 @@ function _fcimRenderCells(row, actions) {
         ? '<span class="slab-obsolete-badge" title="' + esc(row.obsoleteReason || 'Obsolete') + '">OBSOLETE</span>'
         : '';
     const subCell = `<td>${obsBadge}<strong>${esc(row.subId)}</strong></td>`;
-    if (row && row.awareness === 'N/A') {
-        const awareCell = '<td><span style="color: var(--color-text-tertiary); font-style: italic;" title="Documentation only — this crew-unaware case is inapplicable and does not trace into the FHA.">N/A <span style="font-size: 11px;">(non-tracing)</span></span></td>';
-        const rationaleCell = `<td style="color: var(--color-text-tertiary); font-style: italic;">⊘ Crew-unaware inapplicable — ${esc(row.rationale || '')}</td>`;
-        return `<td>${actions}</td>${subCell}${awareCell}${rationaleCell}<td></td><td></td>`;
-    }
-    return `<td>${actions}</td>${subCell}<td>${esc(row.awareness)}</td><td><strong>${esc(row.tlId)}</strong><br>${esc(row.tlDesc)}</td><td><strong>${esc(row.plId)}</strong><br>${esc(row.plDesc)}</td><td><strong>${esc(row.mId)}</strong><br>${esc(row.mDesc)}</td>`;
+    // N/A used to blank the TL/PL/M columns and replace them with the rationale. That read
+    // on screen as "nothing was drafted here" rather than "the crew-unaware VARIANT does not
+    // apply", and it matched a trace path that dropped the conditions outright. Corrected
+    // 1 Aug 2026: the failure conditions are shown like any other row, and the N/A marker
+    // carries its rationale in the awareness cell where it belongs — the marker is about
+    // awareness, so it lives in the awareness column.
+    const isNA = !!(row && row.awareness === 'N/A');
+    // 2 Aug 2026 — aware/unaware PAIRING (Waqas's ruling: a standalone Unaware is
+    // legitimate; where awareness affects severity, both scenarios are captured
+    // and linked). The badge names the pair and which risk the engineer chose to
+    // govern; taking the aware (lower) credit owes the monitoring requirement the
+    // fcim-monitor generator emits.
+    const pairBadge = (row && row.pairId)
+        ? `<br><span style="font-size:10px;border:1px solid var(--color-accent);color:var(--color-accent);border-radius:999px;padding:0 6px;" title="Aware/Unaware pair ${esc(row.pairId)} — ${esc(row.pairGoverns || 'governing risk not yet chosen')}${row.pairGoverns === 'aware' ? ' governs: annunciation credit taken, monitoring requirement owed (see AutoReq)' : (row.pairGoverns === 'unaware' ? ' governs: no credit taken, none owed' : '')}">paired · ${esc(row.pairGoverns ? row.pairGoverns + ' governs' : 'undecided')}</span>`
+        : '';
+    const awareCell = isNA
+        ? `<td><span style="color: var(--color-text-tertiary); font-style: italic;" title="${esc(row.rationale || 'The crew-unaware case is inapplicable — this failure is intrinsically evident.')}">N/A <span style="font-size: 11px;">(no unaware case)</span></span>${row.rationale ? `<br><span style="font-size: 11px; color: var(--color-text-tertiary); font-style: italic;">${esc(row.rationale)}</span>` : ''}${pairBadge}</td>`
+        : `<td>${esc(row.awareness)}${pairBadge}</td>`;
+    // 2 Aug 2026 — COMBINED failure conditions column (ARP4761A §A.3, Table A3
+    // text: related sub-functions should yield conditions combining their
+    // failures). Waqas's ruling: a dedicated column, not a separate block. Each
+    // entry names its partner sub-functions; editing happens in the FCIM_COMBINED
+    // modal (born-modular) because the entry is an array, which the CRUD factory's
+    // flat form fields cannot carry.
+    const combos = Array.isArray(row && row.combined) ? row.combined : [];
+    const comboHtml = combos.map(c =>
+        `<div><strong>${esc(c.cbId || '')}</strong> ${esc(c.cbDesc || '')}<br><span style="font-size:10.5px;color:var(--color-text-tertiary);">with ${esc((c.withSubIds || []).join(', ') || '—')}</span></div>`
+    ).join('');
+    const comboCell = `<td>${comboHtml}<button type="button" data-fcim-combined="${esc(row.internalId)}" title="Combined failure conditions across related sub-functions (ARP4761A Table A3) — edit" style="font-size:10px;padding:0 5px;border-radius:999px;border:1px dashed var(--color-border-strong);background:transparent;cursor:pointer;color:var(--color-text-secondary);">${combos.length ? 'edit' : '+ combined'}</button></td>`;
+    // 2 Aug 2026 — Table A3 multiplicity: additional distinct conditions beyond
+    // the primary render stacked in the same cell, each with its own FC id
+    // (plExtra: the within-MAC / outside-MAC split under a complete-loss TL;
+    // mExtra: MF2…MFn). Additive — rows without extras render exactly as before.
+    const _extraHtml = list => (Array.isArray(list) ? list : []).map(e =>
+        `<div style="margin-top:3px;border-top:1px dashed var(--color-border-hair);padding-top:2px;"><strong>${esc(e.id || '')}</strong><br>${esc(e.desc || '')}</div>`).join('');
+    return `<td>${actions}</td>${subCell}${awareCell}<td><strong>${esc(row.tlId)}</strong><br>${esc(row.tlDesc)}</td><td><strong>${esc(row.plId)}</strong><br>${esc(row.plDesc)}${_extraHtml(row.plExtra)}</td><td><strong>${esc(row.mId)}</strong><br>${esc(row.mDesc)}${_extraHtml(row.mExtra)}</td>${comboCell}`;
 }
 
-// FCIM "N/A" entries document an inapplicable crew-unaware case — they are NOT failure
-// conditions and must never trace forward, so they are skipped when building extractedFCs.
+// FCIM "N/A" marks a sub-function whose crew-UNAWARE case is inapplicable — the failure is
+// intrinsically evident, so the crew can never miss it. It does NOT mean the sub-function
+// has no failure conditions.
+//
+// CORRECTED 1 Aug 2026. This function used to skip N/A rows entirely, on the reading that
+// they were "documentation only". The consequence was that the total-loss, partial-loss and
+// malfunction conditions of every intrinsically evident failure never reached extractedFCs,
+// so they were absent from the FHA's FC dropdown and invisible to the AI drafting the FHA.
+// Those are frequently the SEVERE ones — the prompt's own examples of intrinsic evidence are
+// yaw, roll, asymmetry and deceleration. The negative finding N/A records is about the
+// awareness dimension only.
+// 20 Aug 2026 — every extracted FC now carries the `subId` of the FCIM row it came from.
+// It always knew this by construction and simply threw it away, which is why the FHA form
+// could offer SF-001's failure conditions while SF-002 was selected and then SAVE the pair:
+// measured live, submitACFHA accepted { subId: 'SF-002', fcId: 'SF-001-TL' } with the
+// pitch-axis description auto-filled from the wrong sub-function, no alert, no finding. The
+// scope key, requirement bucket, tree ownership and every report inherit that contradiction
+// and nothing downstream can recover from it.
+// `combined: true` marks Table A3 combined conditions, which span related sub-functions BY
+// DEFINITION — those are legitimately cross-sub-function and the guard must not reject them.
 function _pushExtractedFCs(fcimArr, out) {
     (fcimArr || []).forEach(d => {
-        if (!d || d.awareness === 'N/A') return;
-        if (d.tlId) out.push({ id: d.tlId, desc: d.tlDesc });
-        if (d.plId) out.push({ id: d.plId, desc: d.plDesc });
-        if (d.mId)  out.push({ id: d.mId,  desc: d.mDesc  });
+        if (!d) return;
+        if (d.tlId) out.push({ id: d.tlId, desc: d.tlDesc, subId: d.subId });
+        if (d.plId) out.push({ id: d.plId, desc: d.plDesc, subId: d.subId });
+        if (d.mId)  out.push({ id: d.mId,  desc: d.mDesc,  subId: d.subId });
+        // 2 Aug 2026 — combined failure conditions (Table A3's related-sub-
+        // functions rule) trace forward like every other condition: an FHA row
+        // can be built on a combined condition, and the AI drafting the FHA sees
+        // it. Same lesson as the N/A fix above — a condition the matrix holds
+        // but the FHA cannot see is a condition that silently never happened.
+        (Array.isArray(d.combined) ? d.combined : []).forEach(c => {
+            if (c && c.cbId) out.push({ id: c.cbId, desc: c.cbDesc, subId: d.subId, combined: true });
+        });
+        // 2 Aug 2026 — Table A3 multiplicity: every additional distinct condition
+        // traces forward exactly like the primaries. A condition held by the
+        // matrix but invisible to the FHA silently never happened.
+        (Array.isArray(d.plExtra) ? d.plExtra : []).forEach(e => { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId }); });
+        (Array.isArray(d.mExtra)  ? d.mExtra  : []).forEach(e => { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId }); });
     });
 }
 
@@ -2067,7 +2698,10 @@ function updateFMEABasicEvents() {
     if (rateEl && !rateEl.dataset.calcWired) { rateEl.addEventListener('input', calcFMEAProb); rateEl.dataset.calcWired = '1'; }
     if (timeEl && !timeEl.dataset.calcWired) { timeEl.addEventListener('input', calcFMEAProb); timeEl.dataset.calcWired = '1'; }
 }
-// ---------- FMEA per ARP 4761A §5.1.3 + Appendix B ----------
+// ---------- FMEA per ARP4761A Appendix J ----------
+// Corrected 1 Aug 2026: this said "§5.1.3 + Appendix B", which was wrong twice.
+// 4761A §5 is Safety-Related Maintenance Tasks (only §5.1 and §5.2 exist), and
+// Appendix B is the Preliminary Aircraft Safety Assessment. FMEA is Appendix J.
 // Two modes share one fmeaData array, discriminated by row.fmeaType:
 //   'functional'  — top-down, function-level. Linked to acFunctionsData via funcSubId.
 //   'piece-part'  — bottom-up, component-level. Quantitative via λ × t + linked to FTA basic event.
@@ -2160,9 +2794,32 @@ function autoSizeNodeDescription(textarea, datum) {
     if (!textarea || !datum) return;
     const ID_H = 20, METRIC_H = 18, GAP = 3;
     const descHeight = _FTA_DESC_BOX_HEIGHT;
-    // Pin the textarea height; shrink the font so content always fits inside the fixed box.
+    // Pin the textarea height; shrink the font so content always fits inside the box.
+    // setProperty(..., 'important') so the pick beats theme-level !important rules.
     textarea.style.height = descHeight + 'px';
-    textarea.style.fontSize = _pickDescFontSize(textarea.value || '') + 'px';
+    textarea.style.setProperty('font-size', _pickDescFontSize(textarea.value || '') + 'px', 'important');
+    // Center vertically in the box AS ACTUALLY RENDERED — the flex stack may
+    // shrink the textarea below descHeight, so measure clientHeight, never the
+    // constant. Never clip: shrink the font until content fits, then split the
+    // remaining slack into top padding. (Horizontal centering is CSS text-align.)
+    try {
+        textarea.style.paddingTop = '4px';
+        // v66.5 — the inline CCF tag is a normal flex sibling now (fta_view
+        // v66.15), so it consumes its own stack height; no reserve needed —
+        // clientHeight already reflects the squeezed textarea.
+        const boxH = textarea.clientHeight || descHeight;   // rendered box (flex-final)
+        let fs = parseFloat(getComputedStyle(textarea).fontSize) || 12;
+        textarea.style.height = 'auto';
+        let contentH = textarea.scrollHeight;
+        while (contentH > boxH && fs > 9) {
+            fs -= 0.5;
+            textarea.style.setProperty('font-size', fs + 'px', 'important');
+            contentH = textarea.scrollHeight;
+        }
+        textarea.style.height = descHeight + 'px';
+        const slack = boxH - contentH;
+        textarea.style.paddingTop = slack > 2 ? (4 + slack / 2) + 'px' : '4px';
+    } catch (_) { textarea.style.height = descHeight + 'px'; }
     const totalH = descHeight + GAP + ID_H + GAP + METRIC_H;
     const fo = textarea.closest('foreignObject');
     if (fo) {
@@ -2209,7 +2866,7 @@ function reconfigureActiveTreeLayout() {
 }
 
 function _authSendLabel() { return 'Email me a code'; }
-function _authSendBlurb() { return 'We&rsquo;ll email you a 6-digit code to sign in.'; }
+function _authSendBlurb() { return 'We&rsquo;ll email you a sign-in code.'; }
 
 // Public: send a sign-in email. On the WEB this is a magic LINK — the click lands back on
 // the page and detectSessionInUrl finishes sign-in. On DESKTOP we deliberately omit
@@ -2233,9 +2890,18 @@ async function sendMagicLink(email) {
 }
 
 function _parseAuthInput(raw) {
-    raw = String(raw || '').trim();
+    // Strip whitespace AND the invisible characters that ride along when a code is
+    // copied out of a styled HTML email — a non-breaking or zero-width space makes
+    // "123456" fail a digit test while looking perfectly correct on screen. .trim()
+    // does not remove those.
+    raw = String(raw || '').replace(/[\s\u00A0\u200B-\u200D\uFEFF]/g, '');
     if (!raw) return null;
-    if (/^\d{6}$/.test(raw)) return { kind: 'code', token: raw, type: 'email' };
+    // Supabase's email OTP length is a PROJECT SETTING (6-10 digits), not a constant.
+    // This was pinned at exactly 6 while the project issued 8 — so the app rejected
+    // its own emails and no email sign-in could complete. Found 7 Aug 2026 on a live
+    // code: 29215973. Do not narrow this back to a fixed length; read the setting if
+    // you need to know, do not assume it.
+    if (/^\d{6,10}$/.test(raw)) return { kind: 'code', token: raw, type: 'email' };
     let token = null, type = null;
     try {
         const u = new URL(raw);
@@ -2257,7 +2923,7 @@ async function verifyEmailOtp(email, input) {
     const client = _initSupabaseClient();
     if (!client) throw new Error('Supabase client not available');
     const parsed = _parseAuthInput(input);
-    if (!parsed) throw new Error('Enter the 6-digit code, or paste the sign-in link from your email.');
+    if (!parsed) throw new Error('Enter the sign-in code from your email, or paste the sign-in link.');
     let res;
     if (parsed.kind === 'code') {
         res = await client.auth.verifyOtp({ email: String(email).trim().toLowerCase(), token: parsed.token, type: 'email' });
@@ -2293,14 +2959,14 @@ async function _autoSendAndEnterCode(email) {
     const intro = document.getElementById('signup-intro');
     const emailEl = document.getElementById('signup-email');
     if (emailEl) emailEl.value = email;
-    if (intro) intro.innerHTML = 'Sending a 6-digit sign-in code to <code>' + esc(email) + '</code>…';
+    if (intro) intro.innerHTML = 'Sending a sign-in code to <code>' + esc(email) + '</code>…';
     try {
         await sendMagicLink(email);
         try { localStorage.setItem('safetyLab.desktop.codeSentAt', String(Date.now())); } catch (_) {}
         _showSignupEnterCodeState(email);
     } catch (e) {
         // Offline / rate-limited — fall back to the manual email step.
-        if (intro) intro.innerHTML = 'Connect to your Safety Lab Aero workspace. Enter your email and we&rsquo;ll send you a 6-digit code.';
+        if (intro) intro.innerHTML = 'Connect to your Safety Lab Aero workspace. Enter your email and we&rsquo;ll send you a sign-in code.';
         if (emailEl) { try { emailEl.removeAttribute('readonly'); emailEl.focus(); } catch (_) {} }
         try { if (typeof showToast === 'function') showToast('Could not send the code automatically — press “' + _authSendLabel() + '”.', 'warning', 5000); } catch (_) {}
     }
@@ -2325,8 +2991,8 @@ function _signupUseDifferentEmail() {
     if (emailEl) { emailEl.removeAttribute('readonly'); emailEl.value = ''; try { emailEl.focus(); } catch (_) {} }
     if (submitBtn) { submitBtn.textContent = 'Continue'; submitBtn.disabled = false; }
     if (intro) intro.innerHTML = _isDesktopAuth()
-        ? 'Connect to your Safety Lab Aero workspace to sync projects and collaborate. Enter your email and we&rsquo;ll send you a 6-digit code.'
-        : 'Enter your email to sign in. We&rsquo;ll email you a 6-digit code.';
+        ? 'Connect to your Safety Lab Aero workspace to sync projects and collaborate. Enter your email and we&rsquo;ll send you a sign-in code.'
+        : 'Enter your email to sign in. We&rsquo;ll email you a sign-in code.';
     try { onSignupEmailChange(); } catch (_) {}
 }
 
@@ -2525,10 +3191,29 @@ async function refreshWorkspaceChip() {
     }
     // Load (or reload) workspaces.
     _workspaces = await fetchWorkspaces();
-    // If no active workspace is selected yet, default to Personal (or the first).
+    // If no valid active workspace is selected yet, default to where the user's
+    // work actually lives — the workspace holding their most recently touched
+    // project — instead of blindly Personal (which is often empty and reads as
+    // "I lost everything"). Falls back to Personal/first on any hiccup.
     if (!getActiveWorkspaceId() || !_workspaces.find(w => w.id === getActiveWorkspaceId())) {
-        const personal = _workspaces.find(w => w.is_personal) || _workspaces[0];
-        if (personal) setActiveWorkspaceId(personal.id);
+        let chosen = null;
+        try {
+            const client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
+            if (client) {
+                const { data: recent } = await client
+                    .from('projects')
+                    .select('workspace_id, updated_at, created_at')
+                    .is('deleted_at', null)
+                    .order('updated_at', { ascending: false, nullsFirst: false })
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                if (recent && recent[0] && _workspaces.find(w => w.id === recent[0].workspace_id)) {
+                    chosen = recent[0].workspace_id;
+                }
+            }
+        } catch (_) { /* non-fatal — fall through to Personal */ }
+        if (!chosen) { const p = _workspaces.find(w => w.is_personal) || _workspaces[0]; chosen = p && p.id; }
+        if (chosen) setActiveWorkspaceId(chosen);
     }
     const active = getActiveWorkspace();
     wrap.style.display = 'inline-block';
@@ -2599,7 +3284,7 @@ async function _loadCloudProject(projectId) {
     try {
         const { data, error } = await client
             .from('project_documents')
-            .select('data, updated_at')
+            .select('data, version, updated_at')
             .eq('project_id', projectId)
             .maybeSingle();
         if (error) throw error;
@@ -2609,6 +3294,20 @@ async function _loadCloudProject(projectId) {
         }
         _restoreProjectSnapshot(data.data);
         _activeCloudProjectId = projectId;
+        // 31 Aug 2026 — open-from-cloud must adopt the document's identity the way
+        // _applyServerRestore always has. This function used to set the project id
+        // and LEAVE _activeCloudDocVersion at whatever it was: null in a fresh tab
+        // (next save wrote version 1 over version N — reproduced live, v3 -> v1 on
+        // f7a7bda2), stale from the previous project otherwise (next save raised a
+        // spurious "changed by someone else" conflict whose Cancel branch reloaded
+        // the cloud copy over the engineer's in-memory work — the 30 Aug 124-row
+        // wipe). The loaded snapshot is now the authoritative working copy:
+        // version token synced, dirty cleared, shrink baseline rebased, and the
+        // CRDT doc told to mirror the model rather than union stale rows back in.
+        _activeCloudDocVersion = (data.version != null) ? data.version : null;
+        try { _dirtySinceSave = false; } catch (_) {}
+        try { if (typeof window.__slCloudSyncRebase === 'function') window.__slCloudSyncRebase(); } catch (_) {}
+        try { if (window.SafetyLabCRDT && typeof window.SafetyLabCRDT.adoptModel === 'function') window.SafetyLabCRDT.adoptModel(); } catch (_) {}
         try { if (typeof _rtUpdatePresenceProject === 'function') _rtUpdatePresenceProject(); } catch (_) {}
         closeCloudProjectsModal();
         if (typeof showToast === 'function') showToast('Loaded project from cloud.', 'success', 4000);
@@ -2654,41 +3353,73 @@ function closeVersionHistory() {
     const ov = document.getElementById('version-history-panel'); if (ov) ov.remove();
 }
 
-async function restoreSavedVersion(id) {
+// 21 Aug 2026 — restores are SERVER-SIDE now, via the 20 Aug recovery RPCs.
+// The old path here fetched the snapshot and pushed it back through
+// saveProjectToCloud(), which the anti-wipe trigger refuses whenever the
+// snapshot being restored is much smaller than the live document — a deliberate
+// rollback is indistinguishable from the wipe the guard exists to stop. The
+// RPCs authorise, BANK THE CURRENT STATE FIRST (so every restore is undoable
+// via the returned undo_version), and write under the guard's one-statement
+// sl.restore flag. The client's only jobs are to call them and reload.
+async function _applyServerRestore(client, projectId, res) {
+    // Pull the fresh document the server just wrote and make it the working copy.
+    const { data, error } = await client.from('project_documents')
+        .select('data, version').eq('project_id', projectId).maybeSingle();
+    if (error) throw error;
+    if (!data || !data.data) throw new Error('Restored, but the document could not be re-read.');
+    _restoreProjectSnapshot(data.data);
+    try { _activeCloudProjectId = projectId; } catch (_) {}
+    try { _activeCloudDocVersion = (res && res.new_version != null) ? res.new_version : data.version; } catch (_) {}
+    try { _dirtySinceSave = false; } catch (_) {}
+    // Drop cloud_sync's shrink baseline — a deliberate rollback to a smaller
+    // snapshot must not pause autosave as a suspected wipe.
+    try { if (typeof window.__slCloudSyncRebase === 'function') window.__slCloudSyncRebase(); } catch (_) {}
+    // 31 Aug 2026 — and the CRDT doc must mirror the restored model, or the
+    // per-project IndexedDB doc unions the pre-restore rows straight back in
+    // (the same resurrection _loadCloudProject suffered).
+    try { if (window.SafetyLabCRDT && typeof window.SafetyLabCRDT.adoptModel === 'function') window.SafetyLabCRDT.adoptModel(); } catch (_) {}
+}
+
+async function restoreSavedVersion(version) {
     const client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
-    if (!client || !id) return;
+    if (!client || version == null) return;
+    const projectId = (typeof _activeCloudProjectId !== 'undefined') ? _activeCloudProjectId : null;
+    if (!projectId) { if (typeof showToast === 'function') showToast('Open the cloud project first.', 'warning', 4000); return; }
     if (typeof window.confirm === 'function' &&
-        !window.confirm('Restore this save as your current working copy? It becomes a new version — older versions are kept.')) return;
+        !window.confirm('Restore version ' + version + ' as your current working copy? Your current state is banked first, so this can be undone.')) return;
     try {
-        const { data, error } = await client.from('project_document_versions').select('data').eq('id', id).maybeSingle();
+        const { data, error } = await client.rpc('sl_restore_project_version', { p_project: projectId, p_version: Number(version) });
         if (error) throw error;
-        if (!data || !data.data) { if (typeof showToast === 'function') showToast('That version has no data.', 'warning', 4000); return; }
-        _restoreProjectSnapshot(data.data);
-        await saveProjectToCloud();
+        await _applyServerRestore(client, projectId, data);
         await _renderVersionHistory();
-        if (typeof showToast === 'function') showToast('Restored — saved as the latest version.', 'success', 4500);
+        if (typeof showToast === 'function') showToast(
+            'Restored version ' + version + ' (' + ((data && data.items_after) != null ? data.items_after + ' items' : 'done') + '). '
+            + 'To undo, restore version ' + (data && data.undo_version) + ' from the list.', 'success', 8000);
     } catch (e) {
         console.error('[Safety Lab Aero] restore version failed:', e);
-        if (typeof showToast === 'function') showToast('Restore failed: ' + (e.message || 'unknown'), 'warning', 5000);
+        if (typeof showToast === 'function') showToast('Restore failed: ' + (e.message || 'unknown'), 'warning', 6000);
     }
 }
 
 async function restoreRevision(id) {
     const client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
     if (!client || !id) return;
+    const projectId = (typeof _activeCloudProjectId !== 'undefined') ? _activeCloudProjectId : null;
+    if (!projectId) { if (typeof showToast === 'function') showToast('Open the cloud project first.', 'warning', 4000); return; }
     if (typeof window.confirm === 'function' &&
-        !window.confirm('Restore this revision as your current working copy? It becomes a new version; the sealed revision itself is unchanged.')) return;
+        !window.confirm('Restore this revision as your current working copy? Your current state is banked first, so this can be undone; the sealed revision itself is unchanged.')) return;
     try {
-        const { data, error } = await client.from('project_baselines').select('data').eq('id', id).maybeSingle();
+        const { data, error } = await client.rpc('sl_restore_project_baseline', { p_project: projectId, p_baseline: id });
         if (error) throw error;
-        if (!data || !data.data) { if (typeof showToast === 'function') showToast('That revision has no data.', 'warning', 4000); return; }
-        _restoreProjectSnapshot(data.data);
-        await saveProjectToCloud();
+        await _applyServerRestore(client, projectId, data);
         await _renderVersionHistory();
-        if (typeof showToast === 'function') showToast('Revision restored — saved as the latest version.', 'success', 4500);
+        if (typeof showToast === 'function') showToast(
+            'Restored Rev ' + ((data && data.revision_no) != null ? data.revision_no : '?')
+            + ((data && data.revision_label) ? ' — ' + data.revision_label : '') + '. '
+            + 'To undo, restore version ' + (data && data.undo_version) + ' from the list.', 'success', 8000);
     } catch (e) {
         console.error('[Safety Lab Aero] restore revision failed:', e);
-        if (typeof showToast === 'function') showToast('Restore failed: ' + (e.message || 'unknown'), 'warning', 5000);
+        if (typeof showToast === 'function') showToast('Restore failed: ' + (e.message || 'unknown'), 'warning', 6000);
     }
 }
 
@@ -2957,7 +3688,7 @@ async function openSignatureCertificate(reviewId) {
         const w = window.open('', '_blank');
         if (!w) { if (typeof showToast === 'function') showToast('Allow pop-ups to view the certificate.', 'warning', 4000); return; }
         w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Signature Certificate</title>' +
-            '<style>body{font-family:-apple-system,Arial,sans-serif;color:#111;max-width:840px;margin:40px auto;padding:0 20px;}h1{font-size:20px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;font-size:13px;margin-top:16px;}th{text-align:left;padding:6px 10px;border-bottom:2px solid #333;font-size:11px;text-transform:uppercase;color:#555;}</style>' +
+            '<style>body{font-family:-apple-system,Arial,sans-serif;color:#111;margin:40px auto;padding:0 20px;}h1{font-size:20px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;font-size:13px;margin-top:16px;}th{text-align:left;padding:6px 10px;border-bottom:2px solid #333;font-size:11px;text-transform:uppercase;color:#555;}</style>' +
             '</head><body>' +
             '<h1>Safety Lab Aero — Signature Certificate</h1>' +
             '<div style="color:#555;font-size:13px;">Review: <strong>' + esc(review.title || '') + '</strong> &middot; Status: ' + esc(review.status || '') + '</div>' +
@@ -3012,9 +3743,10 @@ async function openWorkspaceSettings() {
     if (roleEl) roleEl.textContent = ws.myRole || '—';
     const statusEl = document.getElementById('ws-invite-status');
     if (statusEl) statusEl.textContent = '';
-    const emailEl = document.getElementById('ws-invite-email');
-    if (emailEl) emailEl.value = '';
+    // 31 Aug 2026 — the single email input became a repeatable row; seed one empty row.
+    try { wsResetInviteRows(); } catch (_) {}
     await _renderWorkspaceMembers();
+    try { await _renderPendingInvitations(); } catch (_) {}   // 31 Aug 2026 — outstanding invites
 }
 
 function closeWorkspaceSettings() {
@@ -3074,8 +3806,13 @@ function _markStructureChangeObsolete(reason) {
     function flag(req) {
         if (!req || !req.reqSource || req.status === 'archived') return;
         // Only flag generators whose targets depend on FTA structure.
-        const g = req.reqSource.generator;
-        if (g !== 'fta-event' && g !== 'dalgebra' && g !== 'gate-independence' && g !== 'fha' && g !== 'fha-quant' && g !== 'fha-similarity') return;
+        // 8 Aug 2026 (SL-ARC-0001 §20 D4): this list previously named three ids
+        // NOTHING emits (gate-independence, fha, fha-quant — plus fha-similarity,
+        // a label-table phantom), so structural edits never immediately staled
+        // the gate-independence and FHA-target families; the gap closed only on
+        // the next AutoReq run. These are the ids the generators actually write.
+        const g = String(req.reqSource.generator || '');
+        if (g !== 'fta-event' && g !== 'fta-interval' && g !== 'dalgebra' && g !== 'dalgebra-default' && g.indexOf('gate-indep') !== 0 && g !== 'fha-prob' && g !== 'fha-dal') return;
         req.reqSource.stale = true;
         req.reqSource.staleReason = reason || 'FTA structure changed; regenerate AutoReq to refresh targets.';
         touched++;
@@ -3158,32 +3895,63 @@ function _syncMirrorOwnershipFromSource(sourcePage) {
 }
 
 function propagateDalFromTrueRoot() {
-    const rootPage = getRootAncestorPageOfActive();
-    if (!rootPage || !rootPage.root) return;
-    // Resolve seed from the root page's linked FHA. The root page stores linkedFhaId via the
-    // wizard; if absent, fall back to the global ftaConfig.linkedFhaId (legacy single-page case).
-    const linkedFhaId = (rootPage.linkedFhaId
-        ? (Array.isArray(rootPage.linkedFhaIds) && rootPage.linkedFhaIds[0]) || rootPage.linkedFhaId
-        : ftaConfig.linkedFhaId) || '';
-    if (!linkedFhaId) return;   // No seed — leave existing DALs untouched.
-    const isAC = String(linkedFhaId).startsWith('AC_');
-    const realId = String(linkedFhaId).replace('AC_', '').replace('SYS_', '');
-    // #51 — string-coerced compare (FHA internalId is numeric in many projects/demos; realId is a
-    // string from the prefix-strip). Without this the reactive auto-allocation silently finds no FHA.
-    const fha = isAC
-        ? (acFhaData || []).find(x => String(x.internalId) === String(realId))
-        : (typeof getAllSysFha === 'function' ? getAllSysFha() : []).find(x => String(x.internalId) === String(realId));
-    if (!fha) return;
-    const topDal = (typeof getSafetyTarget === 'function') ? getSafetyTarget(fha.severity).dal : null;
-    if (!topDal) return;
-    // Clear stale allocations across all pages, then propagate fresh from the true root.
+    // A5 (22 Aug 2026) — the reactive sweep is ALL ROOT FAMILIES now. The old body
+    // cleared EVERY page's DALs and then allocated only the ACTIVE family, so at any
+    // instant the in-memory project carried exactly one family's derivations — the
+    // register (genDALgebra) could never see two trees disagree, and non-active
+    // families showed stale or empty DAL badges until visited. Measured live on the
+    // K350 before this change: 34 pages, DALs present on ONE (the last family swept),
+    // which was not the active page's family. One code path for canvas and register.
+    propagateDalAllRoots();
+}
+
+// A5 — allocate every seeded root family in one pass. Per family the derivation is
+// exactly the old propagateDalFromTrueRoot (same allocateDAL, same strictest-lid
+// smoothing INSIDE the family); families remain separate derivations — nothing here
+// merges reduction arguments across trees. That register-side max is genDALgebra's.
+// The legacy ftaConfig.linkedFhaId fallback still applies — but only to the ACTIVE
+// family's root, exactly the page the legacy channel was scoped to.
+function propagateDalAllRoots() {
+    if (typeof ftaPages === 'undefined' || !Array.isArray(ftaPages)) return 0;
+    const activeRoot = (typeof getRootAncestorPageOfActive === 'function') ? getRootAncestorPageOfActive() : null;
+    // Resolve each root family's seed FIRST: if nothing is seeded, leave existing
+    // DALs untouched (the old "No seed" early-return, kept project-wide).
+    const jobs = [];
+    ftaPages.forEach(p => {
+        if (!p || !p.root || p.verifies) return;
+        if (typeof getRootAncestorPage === 'function' && getRootAncestorPage(p) !== p) return;   // roots only
+        // A11 (22 Aug 2026, live-found during the A5 verify, parked then unparked):
+        // a page linked ONLY via linkedFhaIds[] (the newer multi-FHA UI) never
+        // seeded — the old expression read the array only when the LEGACY field
+        // was also set. The array is a first-class seed source now; the legacy
+        // scalar remains the fallback.
+        let linkedFhaId = ((Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length ? p.linkedFhaIds[0] : null)
+            || p.linkedFhaId || '') || '';
+        // Legacy single-page channel: ftaConfig seeds the active family only.
+        if (!linkedFhaId && activeRoot && p.id === activeRoot.id && typeof ftaConfig === 'object' && ftaConfig) {
+            linkedFhaId = ftaConfig.linkedFhaId || '';
+        }
+        if (!linkedFhaId) return;
+        // 20 Aug 2026 ruling preserved: both id forms go through the one resolver
+        // (AC first, then every system, string-coerced compare — see #51).
+        const fha = (typeof _resolveLinkedFha === 'function') ? _resolveLinkedFha(linkedFhaId) : null;
+        if (!fha) return;
+        const topDal = (typeof getSafetyTarget === 'function') ? getSafetyTarget(fha.severity).dal : null;
+        if (!topDal) return;
+        jobs.push({ page: p, topDal: topDal });
+    });
+    if (!jobs.length) return 0;   // No seed anywhere — leave existing DALs untouched.
     clearAllAllocations();
-    allocateDAL(rootPage.root, topDal, new Set());
-    // Phase 56.48a — propagate strictest DAL across all instances of each
-    // shared logicalId. Without this, shared events can end up with different
-    // DALs at different tree positions, which is physically wrong (one
-    // component must satisfy the strictest position).
-    _propagateStrictestDALAcrossSharedEvents(rootPage.root);
+    // A6 — one failed-pair index for the whole pass (open CMA common modes are global).
+    const cmaSet = (typeof _cmaCompromisedIndex === 'function') ? _cmaCompromisedIndex()
+                 : ((typeof _cmaCompromisedGateIdSet === 'function') ? _cmaCompromisedGateIdSet() : null);
+    jobs.forEach(j => {
+        allocateDAL(j.page.root, j.topDal, new Set(), cmaSet);
+        // Phase 56.48a — strictest DAL across shared logicalIds WITHIN the family
+        // (one component must satisfy its strictest position in this derivation).
+        _propagateStrictestDALAcrossSharedEvents(j.page.root);
+    });
+    return jobs.length;
 }
 
 function _propagateStrictestDALAcrossSharedEvents(rootNode) {
@@ -3364,8 +4132,21 @@ function _computeBirnbaumPerVariable(rootNode, uniqueVars) {
 
 // [OPT-1] CutsetExplosionError — deduped; single source: fta_engine.js (identical, incl. Error prototype wiring).
 
-function _cutsetWorkerEnabled() { try { if (/[?&]cutsetWorker=1/.test(location.search)) return true; return localStorage.getItem('SLA_CUTSET_WORKER') === '1'; } catch (_) { return false; } }
-function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
+// #7b — the worker offload is now ON BY DEFAULT (it had shipped dark behind an
+// opt-in flag). Opt OUT with ?cutsetWorker=0 or localStorage SLA_CUTSET_WORKER='0'.
+// The legacy opt-in tokens ('1') remain accepted. Same engine either way —
+// fta_worker.js importScripts the SAME fta_engine.js the page runs.
+function _cutsetWorkerEnabled() {
+    try {
+        if (/[?&]cutsetWorker=0/.test(location.search)) return false;
+        if (localStorage.getItem('SLA_CUTSET_WORKER') === '0') return false;
+        return typeof Worker !== 'undefined';
+    } catch (_) { return typeof Worker !== 'undefined'; }
+}
+// Versioned spawn — same cache-busting discipline as the page's <script> tags,
+// so a deploy can never pair a fresh page with a stale cached worker. Bump this
+// (and the importScripts version inside fta_worker.js) whenever the engine bumps.
+function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.4'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
 function _countTreeNodes(node, seen) { if (!node) return 0; seen = seen || new Set(); if (seen.has(node.id)) return 0; seen.add(node.id); var n = 1; var kids = node.children || node._children; if (kids) for (var i = 0; i < kids.length; i++) n += _countTreeNodes(kids[i], seen); return n; }
 function _reconstructCutsets(encoded, index) {
     return encoded.map(function (c) {
@@ -3619,24 +4400,16 @@ function _slInjectViewSaveButtons() {
 }
 
 function _renderWorkflowStepper(activeTab) {
-    let host = document.getElementById('wf-stepper-host');
-    if (!host) {
-        const container = document.querySelector('.container');
-        const header = container && container.querySelector('.global-header');
-        if (!container || !header) return;
-        host = document.createElement('div');
-        host.id = 'wf-stepper-host';
-        host.className = 'wf-stepper';
-        host.setAttribute('aria-label', 'ARP 4761A safety process');
-        header.insertAdjacentElement('afterend', host);
-    }
-    const activeIdx = _WF_STEPS.findIndex(s => s.tabs.indexOf(activeTab) >= 0);
-    host.innerHTML = _WF_STEPS.map((s, i) => {
-        const cls = (i === activeIdx) ? 'wf-step active' : 'wf-step';
-        const arrow = i < _WF_STEPS.length - 1 ? '<span class="wf-step-arrow" aria-hidden="true">›</span>' : '';
-        return `<span class="${cls}" title="${s.key}">${s.key}</span>${arrow}`;
-    }).join('');
-    host.style.display = (activeIdx >= 0) ? 'flex' : 'none';
+    // 23 Aug 2026 (3) — THE STRIP IS GONE (Waqas: "this is useless" / "remove
+    // the pills we have the vertical nav options"). The horizontal spine
+    // experiment ended the same day it shipped: the vertical rail is the
+    // navigation, and the Prove pages present as tabs inside the Prove area
+    // (prove_tabs.js). This function stays because support_modules calls it
+    // lexically on every switchTab — it now only clears any residue host so
+    // stale DOM can never linger. The catalogue-residue lesson: no dead
+    // artifact survives on a timer.
+    var host = document.getElementById('wf-stepper-host');
+    if (host && host.parentNode) host.parentNode.removeChild(host);
 }
 
 function _maybeShowGettingStarted() {
@@ -3745,6 +4518,25 @@ function _ftaGoToSearchHit(hit) {
     setTimeout(() => _ftaCenterOnNode(hit.node), 60);   // let updateD3 lay out before centering
 }
 
+// PER-CHANGE IMMEDIATE SAVE (2 Sep 2026, Waqas: "I want saving per change").
+//
+// WHAT CHANGED, AND WHY. This used to arm a 2-SECOND debounce: an edit made and a tab
+// closed within those two seconds was gone. That window was the loss, and combined with a
+// recovery gate blind to HF data it is what ate a full session. There is no reason to wait
+// — every committed change now writes IMMEDIATELY.
+//
+// "Immediate" without melting the browser. Almost every edit funnels through this one
+// function (a field commit, a row add, an accepted AI draft), so it is the natural
+// "a change happened" signal — and it is per COMMITTED change, not per keystroke. The one
+// hazard is a synchronous BURST: accepting 44 drafted rows calls this 44 times in one
+// stack, and 44 full-document writes would be waste. So the write is queued on a single
+// MICROTASK: the burst sets the flag 44 times, queues once, and the flush runs once the
+// stack unwinds — one write, the instant the batch finishes, zero human-perceptible delay
+// and zero unsaved window. localStorage lands synchronously inside _writeAutosave (the
+// zero-loss guarantee); IndexedDB and the per-project .sl disk file follow fire-and-forget.
+//
+// _flushAutosave (pagehide/beforeunload/visibilitychange) stays as the synchronous belt-
+// and-braces for the rare case the microtask has not run yet; it is idempotent with this.
 function scheduleAutosave() {
     if(_autosaveSuspended) return;
     try { _quantClearCache(); } catch(_) {}   // #45 — any edit invalidates cached quant results (keeps cached refs valid)
@@ -3753,20 +4545,18 @@ function scheduleAutosave() {
     _autosavePending = true;  // there is now an unwritten change (flushed on tab hide/close)
     try { _wsTrackActivity(); } catch(_) {}   // attributed change log (coalesced ≤1/area/90s)
     _updateSaveIndicator('saving');
-    clearTimeout(_autosaveDebounceTimer);
-    _autosaveDebounceTimer = setTimeout(() => {
-        _writeAutosave();
-        clearTimeout(_autosaveMaxWaitTimer);
-        _autosaveMaxWaitTimer = null;
-    }, 2000);
-    // Force a write at most every 30s of continuous editing.
-    if(!_autosaveMaxWaitTimer) {
-        _autosaveMaxWaitTimer = setTimeout(() => {
-            _writeAutosave();
-            clearTimeout(_autosaveDebounceTimer);
-            _autosaveMaxWaitTimer = null;
-        }, 30000);
-    }
+    if (_autosaveFlushQueued) return;   // a write for this synchronous burst is already queued
+    _autosaveFlushQueued = true;
+    var _flush = function () {
+        _autosaveFlushQueued = false;
+        try { _writeAutosave(); } catch(_) {}
+    };
+    // Microtask = end of the current synchronous burst, before any timer or paint. rAF
+    // (which waits ~16ms for a frame) is the fallback where queueMicrotask is absent.
+    if (typeof queueMicrotask === 'function') queueMicrotask(_flush);
+    else if (typeof Promise !== 'undefined') Promise.resolve().then(_flush);
+    else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_flush);
+    else setTimeout(_flush, 0);
 }
 // Flush a pending debounced autosave SYNCHRONOUSLY before the tab is hidden/closed, so an
 // edit made inside the 2s debounce window can't be lost. localStorage writes are synchronous,
@@ -3777,6 +4567,9 @@ function _flushAutosave() {
         if (_autosaveSuspended || !_autosavePending) return;
         clearTimeout(_autosaveDebounceTimer); _autosaveDebounceTimer = null;
         clearTimeout(_autosaveMaxWaitTimer); _autosaveMaxWaitTimer = null;
+        _autosaveFlushQueued = false;   // per-change: this synchronous flush satisfies any queued microtask
+        // ENG-4 — a pending idle-scheduled write must not be lost on tab hide.
+        try { if (typeof SLIdle !== 'undefined' && SLIdle) SLIdle.cancel('autosave'); } catch (_) {}
         _writeAutosave();
     } catch (_) {}
 }
@@ -3900,16 +4693,108 @@ function renderBetaBuildInfo() {
         '</span>';
 }
 
-function _highlightArtifactRow(kind, id) {
-    // Look for any element with data-artifact-id matching this id + kind.
-    const sel = '[data-artifact-kind="' + kind + '"][data-artifact-id="' + String(id).replace(/"/g, '\\"') + '"]';
+// Phase 66.11 — LANDING HIGHLIGHT ENGINE.
+// A jump that lands silently reads as a jump that did not happen. Everything that
+// navigates on the user's behalf marks its destination through here: the mark is
+// strong, it carries a badge naming WHY it is marked, and it PERSISTS until the
+// user does something (pointer, key, wheel) or 14s passes — the old 1.6s flash
+// regularly finished before the smooth-scroll did.
+var _slLandingTimer = null, _slLandingDismiss = null, _slLandingArmedAt = 0;
+
+function _slClearLanding() {
+    try {
+        document.querySelectorAll('.sl-landed').forEach(el => {
+            el.classList.remove('sl-landed');
+            if (el.dataset && el.dataset._hlPrevBg != null) { el.style.background = el.dataset._hlPrevBg; delete el.dataset._hlPrevBg; }
+        });
+        document.querySelectorAll('.sl-landed-badge').forEach(b => b.remove());
+        document.querySelectorAll('.node.landed-highlight').forEach(n => n.classList.remove('landed-highlight'));
+    } catch (_) {}
+    if (_slLandingTimer) { clearTimeout(_slLandingTimer); _slLandingTimer = null; }
+    if (_slLandingDismiss) {
+        // keep this list identical to the one _slArmLandingDismiss registers —
+        // wheel came off both on 25 Aug 2026, and an asymmetric remove-list is
+        // how the next reader ends up believing wheel is still wired.
+        ['pointerdown', 'keydown'].forEach(ev => { try { document.removeEventListener(ev, _slLandingDismiss, true); } catch (_) {} });
+        _slLandingDismiss = null;
+    }
+}
+
+function _slArmLandingDismiss() {
+    // 25 Aug 2026 — Waqas: "the item i clicked highlighting needs to be for 10
+    // seconds not a flash". The timer was never the problem (it was already
+    // 14s). Two other things made it read as a flash:
+    //   · the CSS pulsed only 3 times (~3.45s) and then went static — fixed in
+    //     safety_lab.css, which now pulses for the whole 10 seconds;
+    //   · WHEEL was a dismiss trigger, so the moment you scrolled to look at
+    //     the row you had just been sent to, the highlight died. Scrolling to
+    //     read the thing is not "I have moved on" — it is the opposite. Wheel
+    //     is gone from the dismiss set.
+    // A deliberate click or keypress still dismisses it, but only after a
+    // grace window, so the tail of the interaction that CAUSED the landing
+    // cannot kill the landing it just produced.
+    if (_slLandingTimer) clearTimeout(_slLandingTimer);
+    _slLandingTimer = setTimeout(_slClearLanding, 10000);
+    _slLandingArmedAt = Date.now();
+    if (_slLandingDismiss) return;
+    _slLandingDismiss = function () {
+        if (Date.now() - (_slLandingArmedAt || 0) < 1200) return;   // grace
+        setTimeout(_slClearLanding, 60);
+    };
+    ['pointerdown', 'keydown'].forEach(ev => { try { document.addEventListener(ev, _slLandingDismiss, true); } catch (_) {} });
+}
+
+function _slLandingBadge(label) {
+    const b = document.createElement('span');
+    b.className = 'sl-landed-badge';
+    b.textContent = label || '\u25c0 THE ITEM YOU CLICKED';
+    return b;
+}
+
+// Mark a fault-tree node on the canvas. Used when a jump lands on a tree rather
+// than a table — a transfer-gate hop, a golden-thread pill pointing at a tree.
+function _slHighlightFtaNode(nodeId, label) {
+    if (nodeId == null) return false;
+    let hit = null;
+    try {
+        document.querySelectorAll('g.node').forEach(g => {
+            if (hit) return;
+            const d = g.__data__;
+            if (d && d.data && String(d.data.id) === String(nodeId)) hit = g;
+        });
+    } catch (_) { return false; }
+    if (!hit) return false;
+    hit.classList.add('landed-highlight');
+    try {
+        const idField = hit.querySelector('.inline-id');
+        if (idField && idField.parentNode && !idField.parentNode.querySelector('.sl-landed-badge')) {
+            idField.parentNode.insertBefore(_slLandingBadge(label), idField);
+        }
+    } catch (_) {}
+    _slArmLandingDismiss();
+    return true;
+}
+
+function _highlightArtifactRow(kind, id, label) {
+    // Find the element stamped by reviewCellHtml (the review <td>) and mark its
+    // whole ROW — the td alone is a sliver nobody sees. Attribute values are
+    // written HTML-escaped, so match with CSS.escape / quote-escaping.
+    const idStr = String(id).replace(/"/g, '\\"');
+    const sel = '[data-artifact-kind="' + String(kind).replace(/"/g, '\\"') + '"][data-artifact-id="' + idStr + '"]';
     const el = document.querySelector(sel);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.style.transition = 'background 600ms ease-out';
-    const old = el.style.background;
-    el.style.background = 'rgba(0, 122, 255, 0.18)';
-    setTimeout(() => { el.style.background = old; }, 1400);
+    if (!el) return false;
+    const row = (el.closest && el.closest('tr')) || el;
+    _slClearLanding();
+    try { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) { }
+    const cells = row.tagName === 'TR' ? Array.from(row.children) : [row];
+    row.classList.add('sl-landed');
+    cells.forEach(c => c.classList.add('sl-landed'));
+    try {
+        const first = cells[0];
+        if (first && !first.querySelector('.sl-landed-badge')) first.insertBefore(_slLandingBadge(label), first.firstChild);
+    } catch (_) {}
+    _slArmLandingDismiss();
+    return true;
 }
 
 // Helper for row renderers to drop the back-ref trigger icon.
@@ -3967,6 +4852,10 @@ function _renderReviewComment(c, depth) {
     return '<div class="' + cls + '" data-comment-id="' + esc(c.commentId) + '">' +
         '<div class="review-comment-meta">' +
             '<span class="review-comment-author">' + esc(c.authorName) + '</span>' +
+            // 8 Aug 2026 (SL-ARC-0001 §20 D6): AI-filed comments are badged in the
+            // meta line — the byline alone must never read as an engineer's judgement.
+            (c.aiGenerated ? '<span class="review-comment-ai-badge" title="Drafted by the AI assistant' + (c.aiModel ? ' (' + esc(c.aiModel) + ')' : '') + ' — advisory, not an engineer\'s judgement" style="font-size:9px; font-weight:700; letter-spacing:0.4px; padding:1px 5px; border-radius:3px; border:1px solid var(--color-border-hair); color:var(--color-text-tertiary); cursor:help;">AI</span>' : '') +
+            (c.aiGenerated && c.filedBy ? '<span style="font-size:10px; color:var(--color-text-tertiary);">· filed by ' + esc(c.filedBy) + '</span>' : '') +
             '<span>· ' + esc(Review.relTime(c.timestamp)) + '</span>' +
             statusTag +
         '</div>' +

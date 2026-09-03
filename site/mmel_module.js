@@ -241,7 +241,7 @@
     function renderMmelPage() {
         const host = document.getElementById('mmel-host');
         if (!host) return;
-        if (!_access()) { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; max-width:640px;"><h3 style="margin:0 0 10px; border:none; padding:0;">MMEL / TLD analysis is a Pro+ capability</h3><p style="font-size:13px; color:var(--color-text-secondary);">Dispatch candidacy evaluated through the live fault trees: protection retained, quantitative margin, rectification intervals, time-limited dispatch.</p></div>'; return; }
+        if (!_access()) { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; "><h3 style="margin:0 0 10px; border:none; padding:0;">MMEL / TLD analysis is a Pro+ capability</h3><p style="font-size:13px; color:var(--color-text-secondary);">Dispatch candidacy evaluated through the live fault trees: protection retained, quantitative margin, rectification intervals, time-limited dispatch.</p></div>'; return; }
         const S = _store();
         const rejected = S.items.filter(i => i.protection && i.protection.ok === false).length;
         const approved = S.items.filter(i => i.state === 'approved').length;
@@ -249,13 +249,15 @@
         const fhPerDay = annualFH / 365;
         const derivable = mmelDerive(false).length;
 
-        let html = '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">' +
+        let html = '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center;">' +
             ['Items <b style="margin-left:6px;">' + S.items.length + '</b>',
              'Approved <b style="margin-left:6px; color:#1D6E3E;">' + approved + '</b>',
              'No-dispatch (protection) <b style="margin-left:6px;' + (rejected ? ' color:#8E2A2A;' : '') + '">' + rejected + '</b>',
              'Utilization <b style="margin-left:6px;">' + annualFH + ' FH/yr (' + fhPerDay.toFixed(1) + ' FH/day)</b>',
              'TLD budget share <b style="margin-left:6px;">' + (S.budgetShare * 100).toFixed(0) + '%</b>']
-            .map(c => '<div style="height:32px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--color-border-strong); font-family:var(--font-mono); font-size:12px;">' + c + '</div>').join('') + '</div>';
+            .map(c => '<div style="height:32px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--color-border-strong); font-family:var(--font-mono); font-size:12px;">' + c + '</div>').join('') +
+            // 30 Aug 2026 - export parity batch 2b
+            '<button class="btn-cyan" style="font-size:11px; margin-left:auto;" onclick="exportData(&quot;MMEL_MLAS&quot;, &quot;csv&quot;)" title="Export the MMEL/TLD analysis table as CSV">&#8595; Export CSV</button>' + '</div>';
 
         html += '<div style="margin:0 0 12px;"><button class="btn-cyan" onclick="mmelAdd()">+ MMEL item</button> ' +
             '<button class="btn-cyan" onclick="const n = mmelDerive(true).length; showToast(n ? n + \' candidate(s) derived from ledger-linked LRUs, each pre-screened through the protection check.\' : \'No new derivable candidates.\', \'info\', 4500); renderMmelPage();">⚙ Derive candidates' + (derivable ? ' (' + derivable + ')' : '') + '</button> ' +

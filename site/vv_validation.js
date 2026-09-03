@@ -117,11 +117,35 @@
             return hits.length ? { pass: false, detail: 'vague wording: "' + hits.slice(0, 3).join('", "') + '"' }
                 : { pass: true, detail: 'no vague-term hits' };
         } },
+        { id: 'atomic', label: 'Atomic', run: (r) => {
+            // The one _SPEC_REQ syntax rule nothing checked (closed 2 Aug 2026):
+            // "each requirement is ATOMIC (one characteristic), uses a SINGLE
+            // shall". Imperatives are counted OUTSIDE quoted spans, because
+            // §5.3.1.4 operational requirements quote the credited action
+            // statement VERBATIM — a "shall" inside the quotation belongs to the
+            // quoted procedure, not to this requirement, and failing those rows
+            // would punish the verbatim-quoting rule that generator exists to keep.
+            // KNOWN TRUE FINDING: the CCMR monitoring-interval generators append
+            // "The monitoring function shall satisfy: …", so those rows carry two
+            // imperatives and will fail here. That is the lint doing its job —
+            // the wording split is a generator decision, recorded in the wall
+            // (regression_atomicity_lint.test.js) so it cannot be a surprise.
+            const t = String(r.text || '').replace(/"[^"]*"|“[^”]*”/g, '""');
+            const n = (t.match(/\bshall\b|\bmust\b/gi) || []).length;
+            if (n > 1) return { pass: false, detail: n + ' imperative statements in one requirement — split into one per characteristic' };
+            return { pass: true, detail: n === 1 ? 'single imperative' : 'no imperative (see Stated)' };
+        } },
         { id: 'verifiable', label: 'Verifiable', run: (r) => {
             const hasMethod = !!(r.verifMethod || '').trim();
             const quantified = /\d/.test(r.text || '');
             if (hasMethod) return { pass: true, detail: 'verification method: ' + r.verifMethod };
-            if ((r.type || '') === 'Quantitative' && !quantified) return { pass: false, detail: 'quantitative type with no number in text' };
+            // Keyed on `analysis`, not on the legacy type string. This read
+            // `type === 'Quantitative'` until 1 Aug 2026; the §5.3.1 split maps
+            // Quantitative onto type 'Safety' + analysis 'Probabilistic', so the
+            // branch became unreachable the moment the migration ran — a lint that
+            // cannot fire looks exactly like a lint that passes.
+            const numeric = (r.analysis || '') === 'Probabilistic' || (r.type || '') === 'Quantitative';
+            if (numeric && !quantified) return { pass: false, detail: 'probabilistic requirement with no number in text' };
             return { pass: quantified, detail: quantified ? 'quantified in text (no method yet)' : 'no verification method and no quantification' };
         } },
         { id: 'traceable', label: 'Traceable', run: (r) => {
@@ -131,7 +155,13 @@
             return { pass: true, detail: traces.join(', ') + (resolved ? ' (resolves to ' + resolved + ' FC(s))' : ' (not an FC reference)') };
         } },
         { id: 'rationale', label: 'Rationale', run: (r) => {
-            const derived = (r.level || '') === 'Derived' || !!r.derivationType;
+            // 'Derived' is a §5.3.1.10 TYPE now, not a level — the level axis is
+            // L1/L2/L3. The old `level === 'Derived'` test only ever caught
+            // imported rows, and after the split it catches nothing: a requirement
+            // marked Derived on the entry form carries type 'Derived' and level
+            // 'L1'. Without the type arm, that requirement is not asked for the
+            // rationale §5.3.1.10 exists to demand.
+            const derived = (r.type || '') === 'Derived' || (r.level || '') === 'Derived' || !!r.derivationType;
             const has = !!(r.rat || '').trim();
             if (derived && !has) return { pass: false, detail: 'derived requirement without rationale' };
             return { pass: true, detail: has ? 'recorded' : 'not derived — rationale optional' };
@@ -405,7 +435,7 @@
         }
         const seedRows = c.rows.map(x => '<span class="u-mono" title="' + _esc(x.detail) + '" style="font-size:9.5px; margin-right:8px; color:' + (x.pass ? 'var(--color-text-tertiary)' : '#8E2A2A') + ';">' + (x.pass ? '✓' : '✗') + ' ' + _esc(x.label) + '</span>').join('');
         div.innerHTML =
-            '<div style="background:var(--color-surface-1,#fff); border:1px solid var(--color-border-strong,#c9d1dc); border-radius:10px; max-width:640px; width:94%; max-height:86vh; overflow:auto; padding:16px 20px; box-shadow:0 12px 40px rgba(0,0,0,.25);">' +
+            '<div style="background:var(--color-surface-1,#fff); border:1px solid var(--color-border-strong,#c9d1dc); border-radius:10px;  width:94%; max-height:86vh; overflow:auto; padding:16px 20px; box-shadow:0 12px 40px rgba(0,0,0,.25);">' +
             '<div style="display:flex; justify-content:space-between; align-items:center;">' +
             '<b style="font-size:13.5px;">§5.4.3 correctness — ' + _esc(r.id || r.traceId || ('#' + r.internalId)) + '</b>' +
             '<button style="font-size:12px; border:1px solid var(--color-border,#dde3ea); background:none; border-radius:4px; cursor:pointer; padding:2px 9px;" onclick="vv543Close()">✕</button></div>' +

@@ -63,7 +63,7 @@
         const host = document.getElementById('ram-settings-host');
         if (!host) return;
         const s = _store();
-        let html = '<table class="data-table" style="width:100%; max-width:860px; font-size:12.5px;"><thead><tr><th>Setting</th><th>Value</th><th>What it drives</th><th></th></tr></thead><tbody>' +
+        let html = '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Setting</th><th>Value</th><th>What it drives</th><th></th></tr></thead><tbody>' +
             FIELDS.map(([key, label, drives]) =>
                 '<tr><td><b>' + label + '</b></td>' +
                 '<td class="u-mono" style="font-size:13px;"><b>' + s[key] + '</b></td>' +

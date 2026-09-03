@@ -76,6 +76,28 @@ const AiFidelity = (function () {
         PRA: [{ ref: 'ARP 4761A App L', note: 'particular risk analysis — external threats striking multiple systems' }],
         CMA: [{ ref: 'ARP 4761A App M / Table M2', note: 'common mode analysis — independence-claim challenge worksheet' }],
         GTT: [],
+        // WS-B — new report families (2026-07-11).
+        FMEA: [
+            { ref: 'ARP 4761A App J', note: 'FMEA process — functional and piece-part failure modes, local/next/end effects, detection' },
+            { ref: 'ARP 4761A §4.2', note: 'FMEA/FMES supporting role to PSSA/SSA quantitative analyses' },
+        ],
+        FMES: [{ ref: 'ARP 4761A App J / §4.2', note: 'FMES — failure modes grouped by identical effect and detection, with summed rates, feeding FTA basic events' }],
+        RAM: [
+            { ref: 'MIL-HDBK-338B §10', note: 'maintainability and availability — inherent Ai = MTBF/(MTBF+MTTR), operational Ao with MDT' },
+            { ref: 'MIL-HDBK-781A', note: 'reliability demonstration — chi-square lower confidence bound on MTBF' },
+            { ref: 'MIL-HDBK-189C', note: 'reliability growth — Crow-AMSAA model' },
+        ],
+        MSG3: [{ ref: 'ATA MSG-3', note: 'scheduled-maintenance development — MSI selection (hidden/safety/ops/econ), functional-failure logic, task selection' }],
+        MMEL: [{ ref: 'ARP 4761A §6/§7', note: 'dispatch with inoperative equipment — MMEL candidacy, protection checks, time-limited dispatch' }],
+        ETBT: [
+            { ref: 'ARP 4761A App G', note: 'event sequences from an initiator through mitigation barriers to end states' },
+            { ref: 'bow-tie', note: 'compiled FTA⇄ETA join — initiator from BDD-exact P(top), cross-side common cause via cut-set intersection' },
+        ],
+        CCMR: [
+            { ref: 'ARP 4761A E.3.2.4', note: 'candidate certification maintenance requirements from significant latent failures' },
+            { ref: 'ARP 4761A E.3.2.5', note: 'wear-out / non-constant failure-rate considerations' },
+        ],
+        IPL: [{ ref: 'ARP 4754B §5.4 / ARP 4761A App M', note: 'independence principles — identified, evaluated, converted to requirement, verified' }],
     };
     function clausesFor(reportType) {
         return (CLAUSES._generic || []).concat(CLAUSES[reportType] || []);
@@ -104,6 +126,23 @@ const AiFidelity = (function () {
         [/compliance|posture/i,                   ['compliance_posture']],
         [/quantitative|probability|budget|evidence|summary/i, ['fta_summary_grid', 'fta_summary']],
         [/method/i,                               []],
+        // WS-B — new report tokens.
+        [/fmea/i,                                 ['fmea_functional_table', 'fmea_piecepart_table']],
+        [/maintainability|availability|mttr|ai\/ao/i, ['ram_ledger_table']],
+        [/prediction|as-built/i,                  ['ram_prediction_table']],
+        [/allocation/i,                           ['ram_alloc_table']],
+        [/spares|provisioning/i,                  ['ram_spares_table']],
+        [/weibull|life data/i,                    ['ram_weibull_table']],
+        [/growth|crow|amsaa/i,                    ['ram_growth_table']],
+        [/fracas|field data|corrective/i,         ['fracas_table']],
+        [/msg-?3|scheduled maintenance/i,         ['msg3_table']],
+        [/mmel|dispatch|inoperative/i,            ['mmel_table']],
+        [/event tree|sequence/i,                  ['et_table']],
+        [/bow-?tie/i,                             ['bowtie_table']],
+        [/life.?cycle cost|\blcc\b/i,             ['lcc_table']],
+        [/sneak/i,                                ['sneak_table']],
+        [/software reliability/i,                 ['swrel_table']],
+        [/tolerance|derat/i,                      ['tol_derate_table']],
     ];
     const CORE_TABLES = ['fha_table'];   // always present (small cap) — the FC list anchors everything
 
@@ -321,6 +360,14 @@ const AiFidelity = (function () {
     function acceptDraft(key, opts) {
         opts = opts || {};
         const rec = _draftStore()[key] || {};
+        // ABSOLUTE: checker flags cannot be accepted silently — a signed override
+        // (name + rationale) is REQUIRED at acceptance time, not merely caught
+        // later by the hand-off gate.
+        if ((rec.flags || 0) > 0 && !(String(opts.overrideNote || '').trim() && String(opts.by || '').trim())) {
+            try { if (typeof showToast === 'function') showToast('This draft carries ' + rec.flags + ' consistency flag(s) — acceptance requires a signed override (name + rationale).', 'warn', 5000); } catch (_) {}
+            recordProvenance({ kind: 'accept-refused', key, heading: rec.heading || '', flags: rec.flags || 0 });
+            return false;
+        }
         setDraftState(key, opts.edited ? 'edited' : 'accepted', {
             by: opts.by || '', overrideNote: opts.overrideNote || '',
         });
@@ -346,6 +393,7 @@ const AiFidelity = (function () {
             flags: rec.flags || 0, overrideNote: opts.overrideNote || '', by: opts.by || '', edited: !!opts.edited,
         });
         try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+        return true;
     }
 
     // Hand-off gate eval — plugged into every completion checklist.
@@ -365,6 +413,73 @@ const AiFidelity = (function () {
             if (badOverride) return { pass: false, detail: badOverride + ' accepted with unresolved checker flags' };
             return { pass: true, detail: accepted + ' accepted · ' + edited + ' edited, provenance logged' };
         } catch (_) { return { pass: true, detail: 'n/a' }; }
+    }
+
+    // ==================================================================
+    // E2.8 — TENANT EXEMPLAR RETRIEVAL (learning loop 1).
+    // The org's own MANUAL and engineer-edited rows are the best possible
+    // few-shot exemplars of how THIS program writes. Retrieval, not weights:
+    // nothing trains, nothing leaves the tenancy — the model is simply shown
+    // the program's own signed style at draft time. Deterministic selection
+    // (manual first, then engineer-edited AI; quality-filtered; capped) so
+    // the same project state always yields the same exemplar block — which
+    // keeps the C2 memoization cache meaningful.
+    // Export-control aware: rows tainted ITAR/EAR (per the SPP system
+    // declaration) are EXCLUDED unless the request is already on a
+    // controlled route — exemplars must never smuggle controlled technical
+    // data onto the public-cloud path.
+    // ==================================================================
+    const _SEV_OK = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'No Safety Effect'];
+    function _isManual(r) { return !(r && (r.aiGenerated || r.aiModel)); }
+    // Exemplars must be HUMAN-corrected. Reading the old ambiguous flag fed the
+    // model its own unreviewed chat edits back as expert examples.
+    function _isEditedAi(r) {
+        if (!(r && (r.aiGenerated || r.aiModel))) return false;
+        const he = (typeof window !== 'undefined' && window.slHumanEdited) || function (r) { if (!r) return false; if (r.humanEdited === true) return true; if (r.aiChatEdited === true) return false; if (r.aiEdited === true) return !r.aiEditModel && !r.aiEditedAt; return false; };
+        return he(r);
+    }
+    function _fcTaint(f) {
+        try { if (typeof window !== 'undefined' && typeof window.exportControlForFc === 'function') return window.exportControlForFc(f) || ''; } catch (_) {}
+        return '';
+    }
+    function exemplarsFor(feature, opts) {
+        opts = opts || {};
+        const cap = opts.cap || 6;
+        const allowControlled = !!opts.controlled;
+        const out = [];
+        const take = (rows, fmt, taintOf) => {
+            const pool = (rows || []).filter(Boolean);
+            const ok = r => {
+                if (!allowControlled) { const t = taintOf ? taintOf(r) : ''; if (t === 'itar' || t === 'ear' || t === 'natl') return false; }
+                return true;
+            };
+            pool.filter(r => _isManual(r) && ok(r)).concat(pool.filter(r => _isEditedAi(r) && ok(r)))
+                .slice(0, cap - out.length).forEach(r => { const s = fmt(r); if (s) out.push(s); });
+        };
+        try {
+            if (/fha/.test(feature)) {
+                take((typeof acFhaData !== 'undefined' ? acFhaData : []),
+                    f => (f.fcDesc && f.severity && _SEV_OK.indexOf(f.severity) !== -1 && f.effAc)
+                        ? f.fcId + ' [' + f.severity + '] ' + f.fcDesc + ' — AC: ' + String(f.effAc).slice(0, 140) + (f.phases ? ' (phases: ' + f.phases + ')' : '')
+                        : null,
+                    _fcTaint);
+            } else if (/fcim/.test(feature)) {
+                const rows = [];
+                ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => (s.fcim || []).forEach(c => rows.push(c)));
+                take(rows, c => (c.tlDesc || c.plDesc) ? (c.subId || '?') + ' — TL: ' + String(c.tlDesc || '—').slice(0, 90) + ' · PL: ' + String(c.plDesc || '—').slice(0, 90) : null, null);
+            } else if (/fmea/.test(feature)) {
+                const rows = [];
+                ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => (s.fmea || []).forEach(m => rows.push(m)));
+                take(rows, m => (m.mode && m.endEffect) ? String(m.mode).slice(0, 60) + ' → ' + String(m.endEffect).slice(0, 110) + (m.detection ? ' [det: ' + String(m.detection).slice(0, 40) + ']' : '') : null, null);
+            } else if (/req/.test(feature)) {
+                const rows = [].concat((typeof acReqData !== 'undefined' ? acReqData : []) || []);
+                ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => (s.req || []).forEach(r => rows.push(r)));
+                take(rows, r => (r.text && String(r.text).length > 20) ? (r.id || 'REQ') + ': ' + String(r.text).slice(0, 160) : null, null);
+            }
+        } catch (_) {}
+        if (!out.length) return '';
+        return '--- Program exemplars (this program\'s own signed/manual rows — MATCH their style, structure, phrasing discipline and severity register; do not copy content) ---\n' +
+            out.map((s, i) => (i + 1) + '. ' + s).join('\n');
     }
 
     // ==================================================================
@@ -495,6 +610,7 @@ const AiFidelity = (function () {
         draftKey, draftStore: _draftStore, noteDrafted, setDraftState, clearUnaccepted, acceptDraft, gateEval,
         FUNCTION_VERBS, lintFunctionName, lintFunctions,
         adversarialReview,
+        exemplarsFor,
     };
 })();
 if (typeof window !== 'undefined') window.AiFidelity = AiFidelity;

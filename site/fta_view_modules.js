@@ -146,6 +146,14 @@ function renderFTASidebar() {
         sections.push({ id: 'aircraft', label: 'Aircraft Fault Trees', pages: aircraftRoots });
     }
     sysList.forEach(s => {
+        // 23 Aug 2026 — an EXISTING system's trees live in that system's folder
+        // in the rail (Waqas: "why are system fault trees showing in the
+        // PASA?"). They leave this aircraft-level browser — except while
+        // searching, which stays level-blind so any node id or name surfaces
+        // its tree no matter where it lives. Trees whose system no longer
+        // resolves keep their section here: a folder that does not exist
+        // cannot carry them.
+        if (s.exists && !isSearching) return;
         const pages = rootPages.filter(p => p.systemId === s.id && (!isSearching || subtreeMatches(p)));
         if (pages.length) {
             sections.push({ id: 'sys-' + s.id, label: 'System · ' + s.name, pages });
@@ -715,6 +723,13 @@ function updateD3() {
                 // clears any selection and opens the properties modal as before.
                 if (event.shiftKey && d.data && d.data.type === 'basic') { event.stopPropagation(); _ftaCcfToggleMulti(d.data, event.currentTarget); return; }
                 if (_ftaCcfMultiSel && _ftaCcfMultiSel.size) _ftaCcfClearMulti();
+                // Phase 66.11 — a second click on a transfer gate hops to its target.
+                // Checked BEFORE the properties panel opens, because opening the panel
+                // re-renders the canvas and kills the native dblclick pairing.
+                if (_ftaClickIsTransferDouble(d.data, Date.now())) {
+                    event.stopPropagation();
+                    if (ftaOpenTransferTarget(d.data)) return;
+                }
                 openNodePropertiesModal(d.data);
             })
             .on('dblclick', (event, d) => {
@@ -722,14 +737,9 @@ function updateD3() {
                 // properties modal. Gate collapse/expand on dblclick was retired here
                 // so double-click consistently means "open properties." (Use Alt/Option
                 // + click on a gate to collapse if we re-add that gesture later.)
-                if (d.data.gateType === 'TRANSFER' && d.data.linkedPageId) {
-                    activeFTAPageId = d.data.linkedPageId; selectedNodeData = null;
-                    document.getElementById('node-config-panel').style.display = 'none';
-                    renderFTASidebar(); updateD3(); fitToScreen();
-                } else if (d.data.transferOutTo) {
-                    activeFTAPageId = d.data.transferOutTo; selectedNodeData = null;
-                    document.getElementById('node-config-panel').style.display = 'none';
-                    renderFTASidebar(); updateD3(); fitToScreen();
+                if ((d.data.gateType === 'TRANSFER' && d.data.linkedPageId) || d.data.transferOutTo) {
+                    // Phase 66.11 — one implementation, shared with the click-count route.
+                    ftaOpenTransferTarget(d.data);
                 } else {
                     openNodePropertiesModal(d.data);
                 }
@@ -1124,21 +1134,52 @@ function openNodePropertiesModal(dataNode) {
     setTimeout(() => { try { _ftaRevealNodeBesidePanel(dataNode); } catch (_) {} }, 80);
 }
 
-function _nodeDrawerMaxW() { return Math.min(960, Math.round((window.innerWidth || 1200) * 0.96)); }
+// Phase 66.18 — ceiling raised 960 -> 1200 to match the wider default (760); on a
+// large display the drawer can now be dragged genuinely wide for a long standards
+// block. The 96%-of-viewport clamp still stops it swallowing the canvas entirely.
+function _nodeDrawerMaxW() { return Math.min(1200, Math.round((window.innerWidth || 1200) * 0.96)); }
 function _applyNodeDrawerWidth() {
     const panel = document.getElementById('node-config-panel');
     if (!panel) return;
     let w;
     try { w = parseInt(localStorage.getItem(NODE_DRAWER_WIDTH_KEY), 10); } catch (_) { w = NaN; }
-    if (!isFinite(w) || w <= 0) return;   // no saved preference → CSS default (520px) applies
+    if (!isFinite(w) || w <= 0) return;   // no saved preference -> CSS default applies
+    // Phase 66.18 — a width saved while the default was 520 would otherwise pin the
+    // drawer at the old narrow size forever. Anything at or under the old default is
+    // treated as "never deliberately widened" and dropped, so the new default shows.
+    if (w <= 520) { try { localStorage.removeItem(NODE_DRAWER_WIDTH_KEY); } catch (_) {} return; }
     w = Math.max(NODE_DRAWER_MIN_W, Math.min(_nodeDrawerMaxW(), w));
     panel.style.width = w + 'px';
+}
+// Phase 66.24 — publish the drawer's rendered width as --drawer-w so the drag handle,
+// which is now pinned to the viewport (it used to scroll off the top of a tall drawer),
+// can sit exactly on the drawer's left edge. Guarded on w > 0 so a measurement taken
+// while the panel is display:none does not wipe the last good value.
+function _syncNodeDrawerWidthVar() {
+    const panel = document.getElementById('node-config-panel');
+    if (!panel) return;
+    // offsetWidth, NOT getBoundingClientRect().width. The app runs under a desktop scale
+    // factor, so the rect is in scaled pixels while a CSS `right:` value is resolved in
+    // layout pixels — measured live on 19 Aug the rect said 684 where the layout width
+    // was 759, which would have parked the handle ~75px inside the drawer.
+    const w = panel.offsetWidth;
+    if (w > 0) document.documentElement.style.setProperty('--drawer-w', w + 'px');
 }
 function _initNodeDrawerResize() {
     const panel = document.getElementById('node-config-panel');
     const handle = document.getElementById('node-drawer-resize');
     if (!panel || !handle || handle._resizeWired) return;
     handle._resizeWired = true;
+    // One observer covers every path that changes the width: the CSS default, a width
+    // restored from localStorage, a live drag, and a viewport resize.
+    try {
+        if (typeof ResizeObserver === 'function') {
+            new ResizeObserver(_syncNodeDrawerWidthVar).observe(panel);
+        } else {
+            window.addEventListener('resize', _syncNodeDrawerWidthVar);
+        }
+    } catch (_) { window.addEventListener('resize', _syncNodeDrawerWidthVar); }
+    _syncNodeDrawerWidthVar();
     let dragging = false;
     const onMove = (e) => {
         if (!dragging) return;
@@ -1147,6 +1188,7 @@ function _initNodeDrawerResize() {
         let w = (window.innerWidth || 1200) - clientX;
         w = Math.max(NODE_DRAWER_MIN_W, Math.min(_nodeDrawerMaxW(), w));
         panel.style.width = w + 'px';
+        _syncNodeDrawerWidthVar();
         e.preventDefault();
     };
     const onUp = () => {
@@ -1176,6 +1218,10 @@ function _initNodeDrawerResize() {
 function selectNode(dataNode) {
     selectedNodeData = dataNode; document.getElementById('config-node-id').innerText = dataNode.displayId; document.getElementById('config-name').value = dataNode.name;
     if (typeof refreshBasicEventDerived === 'function') refreshBasicEventDerived();
+    // Phase 66.33 — "what is this node?" renders first in the drawer. Guarded: the
+    // identity editor is additive, and a node with no coordinate is still perfectly
+    // editable — it just cannot be owned, shared or traced until someone declares it.
+    try { if (typeof slRenderNodeIdentity === 'function') slRenderNodeIdentity(); } catch (_) {}
     // Subtle common-mode hint next to the node ID — only shown if this logicalId appears elsewhere.
     const _hint = document.getElementById('config-common-mode-hint');
     const _miBtn = document.getElementById('btn-make-independent');
@@ -1234,8 +1280,24 @@ function selectNode(dataNode) {
     document.getElementById('config-transfer-container').style.display = (dataNode.gateType === 'TRANSFER') ? 'flex' : 'none';
     document.getElementById('config-ccf-container').style.display = (dataNode.type === 'basic') ? 'flex' : 'none';
     if(dataNode.gateType === 'TRANSFER') { const linkSel = document.getElementById('config-transfer-link'); linkSel.innerHTML = '<option value="">-- Select Tree to Link --</option>'; ftaPages.forEach(p => { if(p.id !== activeFTAPageId) linkSel.innerHTML += `<option value="${esc(p.id)}" ${dataNode.linkedPageId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`; }); }
-    if (dataNode.type !== 'gate' && dataNode.gateType !== 'TRANSFER') { document.getElementById('config-lambda').value = dataNode.lambda || 0; document.getElementById('config-weight').value = dataNode.weight || 1; if(dataNode.type === 'basic') { document.getElementById('config-ccf-group').value = dataNode.ccfGroup || ''; document.getElementById('config-beta').value = dataNode.beta || 0; document.getElementById('config-gamma').value = dataNode.gamma || 0; document.getElementById('config-delta').value = dataNode.delta || 0; } }
+    if (dataNode.type !== 'gate' && dataNode.gateType !== 'TRANSFER') { document.getElementById('config-lambda').value = dataNode.lambda || 0; /* Phase 66.10 — the weight slider is a PERCENTAGE control; seeding it with the raw `weight || 1` wrote 1% onto any node that had no weight yet. syncWeightSliderFromNode() owns it and defaults to the node's equal share. */ if (typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); if (typeof slRenderEventReuse === 'function') slRenderEventReuse(); if(dataNode.type === 'basic') { document.getElementById('config-ccf-group').value = dataNode.ccfGroup || ''; document.getElementById('config-beta').value = dataNode.beta || 0; document.getElementById('config-gamma').value = dataNode.gamma || 0; document.getElementById('config-delta').value = dataNode.delta || 0; } }
     if (dataNode.gateType === 'VOTING') document.getElementById('config-voting-k').value = dataNode.votingK || 2;
+
+    // --- DFT-WARM: spare dormancy + switch reliability (SPARE gates only) ---
+    const spareContainer = document.getElementById('config-spare-container');
+    if (spareContainer) {
+        const isSpare = dataNode.gateType === 'SPARE';
+        spareContainer.style.display = isSpare ? 'flex' : 'none';
+        if (isSpare) {
+            const wkEl = document.getElementById('config-spare-warmk');
+            const spEl = document.getElementById('config-spare-switchp');
+            // Absent = the historical cold / perfect-switch model. Show the defaults
+            // explicitly rather than leaving the fields blank, so the model actually
+            // in force is never something the reader has to guess at.
+            if (wkEl) wkEl.value = isFinite(parseFloat(dataNode.spareWarmK)) ? parseFloat(dataNode.spareWarmK) : 0;
+            if (spEl) spEl.value = isFinite(parseFloat(dataNode.spareSwitchP)) ? parseFloat(dataNode.spareSwitchP) : 1;
+        }
+    }
 
     // --- DAL allocation panel (AND / INHIBIT gates only) ---
     const dalContainer = document.getElementById('config-dal-container');
@@ -1435,8 +1497,170 @@ function refreshLibraryDependentNodes() {
     if (typeof updateD3 === 'function') updateD3();
 }
 
+// Phase 66.11 — TRANSFER HOP. Double-click on a transfer gate is supposed to open
+// the tree it transfers to (another system's tree, or a sub-tree of this one). The
+// d3 'dblclick' binding alone was UNRELIABLE in practice: the first click opens the
+// properties panel, that re-renders the canvas, and the second click lands on a
+// freshly-created element — so the pair never completes and nothing happens. We now
+// detect the second click ourselves, keyed on the NODE id rather than the DOM node,
+// which survives the re-render. The dblclick binding is kept as well: both routes
+// funnel into this one function so the behaviour cannot drift apart again.
+function ftaOpenTransferTarget(nodeData) {
+    if (!nodeData) return false;
+    const targetId = nodeData.linkedPageId || nodeData.transferOutTo;
+    if (!targetId) return false;
+    const target = (typeof ftaPages !== 'undefined') ? ftaPages.find(p => p.id === targetId) : null;
+    if (!target) {
+        if (typeof showToast === 'function') showToast('That transfer points at a tree that no longer exists.', 'warning', 5000);
+        return false;
+    }
+    activeFTAPageId = targetId;
+    selectedNodeData = null;
+    const cfg = document.getElementById('node-config-panel');
+    if (cfg) cfg.style.display = 'none';
+    if (typeof renderFTASidebar === 'function') renderFTASidebar();
+    if (typeof updateD3 === 'function') updateD3();
+    if (typeof fitToScreen === 'function') fitToScreen();
+    // You have just been moved to a different tree — say so, and mark what you
+    // arrived at, or the hop is indistinguishable from a mis-click.
+    if (typeof showToast === 'function') showToast('Transferred to: ' + (target.name || targetId), 'info', 4200);
+    setTimeout(() => {
+        try {
+            if (target.root && typeof _slHighlightFtaNode === 'function') {
+                _slHighlightFtaNode(target.root.id, '\u25c0 TRANSFERRED HERE');
+            }
+        } catch (_) {}
+    }, 320);
+    return true;
+}
+
+// Second click on the SAME transfer gate within the double-click window.
+var _ftaLastNodeClick = null;
+function _ftaClickIsTransferDouble(nodeData, nowMs) {
+    if (!nodeData || !(nodeData.linkedPageId || nodeData.transferOutTo)) { _ftaLastNodeClick = null; return false; }
+    const prev = _ftaLastNodeClick;
+    _ftaLastNodeClick = { id: nodeData.id, t: nowMs };
+    return !!(prev && prev.id === nodeData.id && (nowMs - prev.t) < 450);
+}
+
+// Phase 66.17 — EVENT REUSE / CROSS-TREE AWARENESS panel block.
+// Answers Paganini's two questions in the one place where a user names an event:
+//   "is this event used elsewhere?"  -> the usage line, with click-through
+//   "does this event already exist?" -> suggestions + the consumable-here menu
+// Read-only until clicked. Adoption copies IDENTITY only — never a probability:
+// _propagateStrictestAcrossSharedEvents already makes the strictest instance win
+// across every tree, so the conservative tree wins by construction.
+function slRenderEventReuse() {
+    const usageEl = document.getElementById('config-event-usage');
+    const sugEl = document.getElementById('config-event-suggest');
+    if (!usageEl || !sugEl) return;
+    const node = (typeof selectedNodeData !== 'undefined') ? selectedNodeData : null;
+    const RU = window.SLEventReuse;
+    if (!node || !RU || node.type === 'gate' || node.gateType === 'TRANSFER') {
+        usageEl.innerHTML = ''; sugEl.innerHTML = ''; return;
+    }
+    let html = '';
+    // Phase 66.19 — held at the strictest allocation across trees? Say so FIRST: it is
+    // the reason this node's number does not match what this tree would apportion.
+    try {
+        const info = (typeof slSharedStrictestInfo === 'function') ? slSharedStrictestInfo(node) : null;
+        if (info && info.held) {
+            const h = info.held;
+            html += '<div style="color:#b45309;"><b>&#9888; Held at the strictest allocation:</b> P=' +
+                    esc(Number(h.prob).toExponential(3)) + ' (&asymp;' + esc(Number(h.rate).toExponential(2)) + '/FH)' +
+                    ' &mdash; this tree would have apportioned ' + esc(Number(h.naturalProb).toExponential(3)) +
+                    '. The stricter requirement comes from <b>' + esc(h.fromPageName) + '</b> (' + h.instances +
+                    ' instances across the model). <span style="color:var(--color-text-tertiary);">One physical item carries one requirement; the released budget goes to this gate&rsquo;s other children.</span></div>';
+        }
+        if (info && info.conflict) {
+            html += '<div style="color:#b45309;"><b>&#9888; Shared across trees with DIFFERENT exposure models</b> (' +
+                    esc(info.conflict.modes.join(', ')) + ') &mdash; the budgets are not comparable, so no strictest requirement ' +
+                    'has been applied. Reconcile the exposure model, or model these as separate events.</div>';
+        }
+    } catch (_) {}
+    try {
+        const u = RU.usage(node);
+        if (u.elsewhere.length) {
+            const links = u.elsewhere.map(function (e) {
+                return '<a href="#" class="sl-ev-jump" data-page="' + esc(String(e.pageId)) + '" data-node="' + esc(String(e.nodeId)) +
+                       '" style="color:var(--color-purple,#7247B1); text-decoration:underline;">' + esc(e.pageName) + '</a>';
+            }).join(', ');
+            html += '<div><b style="color:var(--color-purple,#7247B1);">&#8646; Also used in ' + u.elsewhere.length + ' other tree' +
+                    (u.elsewhere.length === 1 ? '' : 's') + ':</b> ' + links +
+                    ' <span style="color:var(--color-text-tertiary);">&mdash; one physical event; the strictest allocation across all of them wins</span></div>';
+        }
+        if (u.mirrors.length) {
+            html += '<div style="color:var(--color-text-tertiary);">&#8596; mirrored in its verification twin (by design, not a common-mode finding)</div>';
+        }
+    } catch (_) {}
+    usageEl.innerHTML = html;
+    let sug = '';
+    try {
+        const myLid = (node.logicalId != null ? node.logicalId : node.id);
+        const matches = RU.nameMatches(node.name || '', undefined, 4)
+            .filter(function (m) { return String(m.lid) !== String(myLid); });
+        if (matches.length) {
+            sug += '<div style="color:#b45309;"><b>Already in the model:</b> ' + matches.map(function (m) {
+                return '<a href="#" class="sl-ev-adopt" data-lid="' + esc(String(m.lid)) + '" data-name="' + esc(m.name) +
+                       '" title="Reuse this as the same physical event" style="text-decoration:underline;">' + esc(m.name) +
+                       ' <span style="opacity:.7;">(' + esc(m.pageName) + ')</span></a>';
+            }).join(' &middot; ') + ' <span style="color:var(--color-text-tertiary);">&mdash; click to reuse as the same event</span></div>';
+        }
+        const cons = RU.consumableHere();
+        if (cons.length) {
+            sug += '<details style="margin-top:3px;"><summary style="cursor:pointer; color:var(--color-text-tertiary);">' +
+                   'Consumable here &mdash; ' + cons.length + ' event' + (cons.length === 1 ? '' : 's') +
+                   ' from this system and the systems that contribute to it</summary>' +
+                   '<div style="max-height:150px; overflow:auto; margin-top:4px;">' +
+                   cons.slice(0, 60).map(function (c) {
+                       return '<div><a href="#" class="sl-ev-adopt" data-lid="' + esc(String(c.lid)) + '" data-name="' + esc(c.name) +
+                              '" style="text-decoration:underline;">' + esc(c.name) + '</a> ' +
+                              '<span style="color:var(--color-text-tertiary);">&middot; ' + esc(c.pageName) + ' &middot; ' + esc(c.reason) + '</span></div>';
+                   }).join('') +
+                   (cons.length > 60 ? '<div style="color:var(--color-text-tertiary);">&hellip;' + (cons.length - 60) + ' more</div>' : '') +
+                   '</div></details>';
+        }
+    } catch (_) {}
+    sugEl.innerHTML = sug;
+    usageEl.querySelectorAll('.sl-ev-jump').forEach(function (a) {
+        a.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            const pid = a.getAttribute('data-page'), nid = a.getAttribute('data-node');
+            try {
+                if (typeof openFTAPageById === 'function') openFTAPageById(pid);
+                setTimeout(function () {
+                    try { if (typeof _slHighlightFtaNode === 'function') _slHighlightFtaNode(nid, '◀ SAME EVENT'); } catch (_) {}
+                }, 320);
+            } catch (_) {}
+        });
+    });
+    sugEl.querySelectorAll('.sl-ev-adopt').forEach(function (a) {
+        a.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            const lidRaw = a.getAttribute('data-lid'), nm = a.getAttribute('data-name');
+            const asNum = Number(lidRaw);
+            const lid = (isFinite(asNum) && String(asNum) === lidRaw) ? asNum : lidRaw;
+            if (!RU.adopt(selectedNodeData, lid, nm)) return;
+            try { document.getElementById('config-name').value = selectedNodeData.name || ''; } catch (_) {}
+            if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities();
+            if (typeof updateD3 === 'function') updateD3();
+            if (typeof showToast === 'function') showToast('Reused as the same physical event — the strictest allocation now applies to every instance.', 'info', 5200);
+            slRenderEventReuse();
+            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        });
+    });
+}
+try { window.slRenderEventReuse = slRenderEventReuse; } catch (_) {}
+
 function syncFTAConfig() {
     ftaConfig.mode = document.getElementById('fta-calc-mode').value;
+    // Phase 66.10 — switching a bottom-up tree into top-down used to leave every
+    // node without a weight; the first config save then stamped 1% onto one child
+    // and the allocator handed its sibling the rest. Seed equal shares up front.
+    if (ftaConfig.mode === 'top-down' && typeof seedTopDownWeights === 'function'
+        && typeof getActiveFTARoot === 'function') {
+        try { seedTopDownWeights(getActiveFTARoot()); } catch (_) {}
+    }
     // Phase 53.45 — remember the user's mode choice across reloads.
     try { localStorage.setItem(_UI_FTA_MODE_KEY, ftaConfig.mode); } catch(_) {}
     // Phase 53.46 — keep per-page mode in step with the toolbar.
@@ -1845,6 +2069,28 @@ function _renderEventAllocBasisPanel(fha) {
         parent.parentNode.insertBefore(host, parent.nextSibling);
     }
     const exp = getPhaseExposureRatio(fha.phases);
+    // A contingency phase holds r at 1 deliberately (support_modules.js). Falling
+    // through to the r >= 0.999 hide would leave the engineer looking at a hazard
+    // scoped to a go-around with no exposure panel at all, and no way to tell
+    // "held at 1 on purpose" from "the phase matched nothing".
+    if (fha.phases && (exp.specialPhases || []).length) {
+        host.style.display = 'block';
+        host.innerHTML =
+            `<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-text-tertiary); font-weight: 600; margin-bottom: 4px;">Exposure Window &mdash; contingency phase</div>` +
+            `<div style="font-size: 13px; color: var(--color-text-primary);">` +
+                `This hazard is scoped to <em>${esc((exp.specialPhases || []).join(', '))}</em>, which is outside the nominal mission. ` +
+                `The exposure window is held at the <strong>full ${exp.totalHours.toFixed(2)} h flight</strong> (r = 100%), not the manoeuvre's own duration.` +
+            `</div>` +
+            `<div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px;">` +
+                `The function had to survive the whole flight to be available when the contingency was flown, so the failure accrues across the flight and is revealed at the demand. ` +
+                `Scaling t down to the manoeuvre would understate the probability by roughly two orders of magnitude. ` +
+                `A tighter figure needs P(demand) × duration; there is no occurrence-frequency field yet, so the conservative bound is held rather than a frequency assumed.` +
+            `</div>` +
+            (exp.unmatchedPhases.length
+                ? `<div style="margin-top: 6px; font-size: 11px; color: var(--sev-haz-fg);">⚠ Unmatched phases: ${esc(exp.unmatchedPhases.join(', '))} — add them to the Flight Phases tab to include in the exposure window.</div>`
+                : '');
+        return;
+    }
     if (!fha.phases || !exp.matchedPhases.length || exp.ratio >= 0.999) {
         host.style.display = 'none';
         return;
@@ -2263,7 +2509,7 @@ function _renderGoldenThread(fha, domain, highlight){
     window._gtJumps = [];
     const isAC = domain === 'AC';
     let systemId = null;
-    if(!isAC){ (systemsData||[]).forEach(s => { if((s.fha||[]).some(f => f.internalId === fha.internalId)) systemId = s.id; }); }
+    if(!isAC){ (systemsData||[]).forEach(s => { if((s.fha||[]).some(f => String(f.internalId) === String(fha.internalId))) systemId = s.id; }); }
     const target = { kind: isAC ? 'acFha' : 'sysFha', id: fha.internalId, systemId: systemId };
     let refs = [];
     try { if(typeof Traceability !== 'undefined') refs = Traceability.getReferrers(target) || []; } catch(e){ refs = []; }
@@ -2435,7 +2681,7 @@ function _gtvTrunc(s, n){ s = String(s == null ? '' : s); return s.length > n ? 
 function _gtvSystemsForFc(fha, domain){
     const out = [];
     if(domain === 'SYS'){
-        (systemsData||[]).forEach(s => { if((s.fha||[]).some(f => f.internalId === fha.internalId)) out.push({ id: s.id, name: s.name || s.id }); });
+        (systemsData||[]).forEach(s => { if((s.fha||[]).some(f => String(f.internalId) === String(fha.internalId))) out.push({ id: s.id, name: s.name || s.id }); });
     } else {
         (systemsData||[]).forEach(s => {
             const has = (s.functions||[]).some(fn => (Array.isArray(fn.traceIds) && fn.traceIds.includes(fha.subId)) || fn.subId === fha.subId);
@@ -2466,6 +2712,48 @@ function _gtvBuildGraph(opts){
         linkSet.add(id); links.push({ s: sKey, t: tKey });
         const a = nodes.get(sKey), b = nodes.get(tKey); if(a) a.deg++; if(b) b.deg++;
     }
+    // ---- CEA-derived supporting-system expansion --------------------------
+    // Reuse the project's cascade graph (systems + resources + declared
+    // interfaces) so a function's RESOURCE dependencies — power, avionics data,
+    // sensor excitation — join its System lane as pills, no separate lane.
+    // Reverse-BFS finds every system whose failure cascades INTO a primary
+    // system; bounded hop-depth keeps a busy platform readable.
+    const _CEA_SYS_HOP_CAP = 3;   // system-to-system distance, resources don't count
+    let _ceaRev = null; const _ceaSysName = {};
+    try {
+        if(typeof window !== 'undefined' && typeof window.ceaGraph === 'function'){
+            const _cg = window.ceaGraph();
+            _ceaRev = {};
+            _cg.nodes.forEach(nd => { if(nd.kind === 'system') _ceaSysName[String(nd.id)] = nd.name || nd.id; });
+            (_cg.edges || []).forEach(e => { (_ceaRev[e.to] = _ceaRev[e.to] || []).push({ from: String(e.from), label: e.label || '' }); });
+        }
+    } catch(_){ _ceaRev = null; }
+    const _ceaMemo = {};
+    function _ceaUpstreamSystems(sysId){
+        if(!_ceaRev) return [];
+        const sid = String(sysId);
+        if(_ceaMemo[sid]) return _ceaMemo[sid];
+        const found = {}; const seen = new Set([sid]);
+        let frontier = [{ id: sid, via: '', shop: 0 }];   // shop = system hops from the primary
+        while(frontier.length){
+            const next = [];
+            frontier.forEach(cur => {
+                if(cur.shop >= _CEA_SYS_HOP_CAP) return;   // bound by SYSTEM distance, not raw graph depth
+                (_ceaRev[cur.id] || []).forEach(e => {
+                    if(seen.has(e.from)) return; seen.add(e.from);
+                    const isSys = Object.prototype.hasOwnProperty.call(_ceaSysName, e.from);
+                    const via = cur.via || e.label || '';   // resource/medium closest to the primary
+                    const shop = cur.shop + (isSys ? 1 : 0);
+                    if(isSys && e.from !== sid && !found[e.from])
+                        found[e.from] = { id: e.from, name: _ceaSysName[e.from], via: via, hops: shop };
+                    next.push({ id: e.from, via: via, shop: shop });
+                });
+            });
+            frontier = next;
+        }
+        return (_ceaMemo[sid] = Object.keys(found).map(k => found[k]));
+    }
+
     const rows = [];
     (acFhaData||[]).forEach(f => rows.push({ fha: f, domain: 'AC', system: null }));
     (systemsData||[]).forEach(s => (s.fha||[]).forEach(f => rows.push({ fha: f, domain: 'SYS', system: s })));
@@ -2473,14 +2761,37 @@ function _gtvBuildGraph(opts){
     rows.forEach(({ fha, domain, system }) => {
         const subId = fha.subId;
         if(scopeSub && subId !== scopeSub) return;
-        const fn = (acFunctionsData||[]).find(f => f.subId === subId) || (system && (system.functions||[]).find(f => f.subId === subId));
+        // 21 Aug 2026 (L1) — SFHA rows key to SYSTEM functions (funcId); resolve those too.
+        const fn = (acFunctionsData||[]).find(f => f.subId === subId) || (system && (system.functions||[]).find(f => f.subId === subId || f.funcId === subId));
 
         let funcKey = null;
-        if(subId){ funcKey = addNode('func', subId, subId + (fn && fn.subName ? ' · ' + fn.subName : ''), 'Function', { kind: 'acFunc', id: subId }); }
+        if(subId){ const _fnNm = fn && (fn.subName || fn.funcName); funcKey = addNode('func', subId, subId + (_fnNm ? ' · ' + _fnNm : ''), 'Function', { kind: 'acFunc', id: subId }); }
 
         const syss = _gtvSystemsForFc(fha, domain);
         const sysKeys = [];
-        if(syss.length){ syss.forEach(s => sysKeys.push(addNode('sys', s.id, s.name, 'System', { kind: 'system', id: s.id }))); }
+        // 21 Aug 2026 (A10/L1) — the SYSTEM lane names the FUNCTION where the
+        // thread knows it: an SFHA row's own function key, or (aircraft rows)
+        // the specific system function tracing to this sub-function. A node
+        // first drawn with the generic 'System' subtitle upgrades in place.
+        if(syss.length){ syss.forEach(s => {
+            let fnName = null;
+            try {
+                if (domain === 'SYS' && system && s.id === system.id && typeof _sysFhaFuncKey === 'function') {
+                    const key = _sysFhaFuncKey(system, fha);
+                    if (key) { const f = (system.functions || []).find(x => x && String(x.funcId) === String(key)); fnName = f ? (f.funcName || key) : key; }
+                }
+                if (!fnName && subId) {
+                    // _gtvSystemsForFc returns shallow {id,name} shapes — resolve
+                    // the full system record for its declared functions.
+                    const full = (systemsData || []).find(x => x && x.id === s.id);
+                    const tf = ((full && full.functions) || []).find(x => x && (Array.isArray(x.traceIds) ? x.traceIds : []).indexOf(subId) !== -1);
+                    if (tf) fnName = tf.funcName || tf.funcId;
+                }
+            } catch (_) {}
+            const sk = addNode('sys', s.id, s.name, fnName ? ('Fn · ' + fnName) : 'System', { kind: 'system', id: s.id });
+            if (fnName) { const nn = nodes.get(sk); if (nn && (nn.sub === 'System' || !nn.sub)) nn.sub = 'Fn · ' + fnName; }
+            sysKeys.push(sk);
+        }); }
         else { sysKeys.push(addNode('sys', '_aircraft', 'Aircraft level', 'System', null)); }
 
         const fcKey = addNode('fc', domain + ':' + fha.internalId, (fha.fcId || ('FC#' + fha.internalId)),
@@ -2489,6 +2800,22 @@ function _gtvBuildGraph(opts){
             fha.obsolete ? 'obsolete' : null, fha.obsoleteReason || '');
 
         sysKeys.forEach(sk => { if(funcKey) addLink(funcKey, sk); addLink(sk, fcKey); });
+        // One lane, two roles: tag the systems that realize the function PRIMARY,
+        // then fold in each primary's CEA-upstream supporting systems as RESOURCE
+        // pills, linked to the same failure condition (their loss reaches it).
+        sysKeys.forEach(sk => {
+            const pn = nodes.get(sk); if(!pn) return;
+            const pid = String(pn.id);
+            if(pid === '_aircraft') return;
+            if(!pn.role) pn.role = 'primary';
+            _ceaUpstreamSystems(pid).forEach(u => {
+                const rk = addNode('sys', u.id, u.name, 'via ' + (u.via || 'shared resource'), { kind: 'system', id: u.id });
+                const rn = nodes.get(rk);
+                if(rn && rn.role !== 'primary'){ rn.role = 'resource'; rn.via = u.via || ''; rn.hops = u.hops; rn.path = u.name + ' → … → ' + (_ceaSysName[pid] || pn.label); }
+                if(funcKey) addLink(funcKey, rk);   // every system connects back to the function
+                addLink(rk, fcKey);
+            });
+        });
 
         const linkedPages = (ftaPages||[]).filter(p => { const L = (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds : (p.linkedFhaId ? [p.linkedFhaId] : []); return L.includes(fha.internalId); });
         const pageIds = linkedPages.map(p => String(p.id));
@@ -2527,8 +2854,8 @@ function _gtvBuildGraph(opts){
         let refs = [];
         try { if(typeof Traceability !== 'undefined') refs = Traceability.getReferrers({ kind: domain === 'AC' ? 'acFha' : 'sysFha', id: fha.internalId, systemId: system ? system.id : null }) || []; } catch(e){}
         refs.filter(r => r.kind === 'acReq' || r.kind === 'sysReq').forEach(r => {
-            const req = (r.kind === 'acReq') ? (acReqData||[]).find(x => x.internalId === r.id)
-                      : (function(){ const s = (systemsData||[]).find(ss => ss.id === r.systemId); return s ? (s.req||[]).find(x => x.internalId === r.id) : null; })();
+            const req = (r.kind === 'acReq') ? (acReqData||[]).find(x => String(x.internalId) === String(r.id))
+                      : (function(){ const s = (systemsData||[]).find(ss => ss.id === r.systemId); return s ? (s.req||[]).find(x => String(x.internalId) === String(r.id)) : null; })();
             const label = (req && (req.traceId || req.id)) || r.label || ('REQ-' + r.id);
             let reqFlag = null, reqReason = '';
             if(req){
@@ -2592,15 +2919,25 @@ function _gtvBuildGraph(opts){
             if(ftaKeys.length) ftaKeys.forEach(fk => addLink(rk, fk)); else addLink(rk, fcKey);
         });
         // ---- HF: human-factors assumptions inform which failure conditions are credible ----
-        // Anchored to the aircraft-level FCs (once), flagged when not yet validated.
+        // Anchored to the aircraft-level FCs, flagged when not yet validated.
+        // Bonded INTO the thread (not floating): aircraft-level HF hangs off the
+        // function; system-level HF hangs off its system. Scoped so a thread only
+        // shows aircraft-wide HF plus HF authored against a system it contains —
+        // assumptions carry no per-function trace, so aircraft-level are global by design.
         if(domain === 'AC'){
             try {
                 if(typeof HF_ASSUMPTIONS !== 'undefined' && HF_ASSUMPTIONS.asmAllTyped){
-                    HF_ASSUMPTIONS.asmAllTyped().filter(a => a && a.type === 'hf').forEach(a => {
+                    const _thrSys = (syss || []).map(s => ({ id: s.id, name: String(s.name || s.id) }));
+                    const _thrNames = new Set(_thrSys.map(s => s.name));
+                    HF_ASSUMPTIONS.asmAllTyped()
+                        .filter(a => a && a.type === 'hf' && (a.scope === 'Aircraft' || _thrNames.has(String(a.scope))))
+                        .forEach(a => {
                         const st = String(a.state || '').toLowerCase();
                         const hfFlag = (st.indexOf('validat') < 0 && st.indexOf('verif') < 0) ? 'stale' : null;
                         const hk = addNode('hf', 'hf:' + a.asmId, a.asmId, 'HF · ' + (a.state || 'assumption'),
                             { kind: 'assumption', id: a.asmId }, hfFlag, hfFlag ? 'HF assumption not yet validated' : '');
+                        const owner = (a.scope !== 'Aircraft') ? _thrSys.find(s => s.name === String(a.scope)) : null;
+                        if(owner) addLink('sys:' + owner.id, hk); else if(funcKey) addLink(funcKey, hk);
                         addLink(hk, fcKey);
                     });
                 }
@@ -2659,6 +2996,16 @@ function _gtvBuildGraph(opts){
             }
         } catch(e){}
     });
+    // ---- Physical hazards (8 Aug 2026) — the twelfth node kind ----
+    // A CCA-found physical hazard is NOT a functional hazard (ruling): it joins
+    // the graph as its own object — source CCA artifact → hazard → its
+    // requirements → verification — rendered beside the failure conditions.
+    // The pass lives in phys_hazards.js (PHYS_HAZARDS._graphPass) so the store
+    // knowledge stays with the module; this is only the seam.
+    try {
+        if(typeof window !== 'undefined' && window.PHYS_HAZARDS && typeof window.PHYS_HAZARDS._graphPass === 'function')
+            window.PHYS_HAZARDS._graphPass(addNode, addLink, scopeSub);
+    } catch(e){}
     return { nodes: Array.from(nodes.values()), links };
 }
 
@@ -2766,6 +3113,24 @@ function _gtvShowEco(key, graph){
         + '<span style="font-size:10.5px; color:var(--color-text-tertiary); user-select:none;">drag to move</span>'
         + '<button id="gt-eco-close" title="Close" aria-label="Close" style="margin-left:4px; background:transparent; border:none; font-size:19px; line-height:1; cursor:pointer; color:var(--color-text-secondary); padding:0 3px;">×</button></div>'
         + '<div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:8px;">Threads through ' + (Object.keys(reach).length - 1) + ' linked item' + (Object.keys(reach).length - 1 === 1 ? '' : 's') + ' · click any pill to open it</div>'
+        // 25 Aug 2026 — reviewer feedback (nav_feedback_1.pptx, slide 1): "From
+        // golden thread I want to see this FC, but it opens a window instead …
+        // I cant click on the FC. I figured it out by going through the
+        // Function, then Failure condition."
+        // The cause is one line above the groups build: `m.key !== key` excludes
+        // the CLICKED node from its own pill list, so the panel could open
+        // everything the node threads through EXCEPT the node itself. The
+        // destination already worked (_gtvNavigateTo routes acFha/sysFha) — it
+        // simply had no door. This is that door. It carries the same
+        // .gte-pill[data-navkey] contract, so the existing wiring loop picks it
+        // up with no new event code, and it sits BELOW the drag header rather
+        // than inside it, so the click can never be eaten by a drag.
+        + ((!!n.ref && n.kind !== 'vv')
+            ? '<div style="margin:-2px 0 9px;"><span class="gte-pill gte-self" data-navkey="' + esc(n.key) + '" role="button" tabindex="0" title="Open ' + esc(n.label) + '"'
+              + ' style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:5px 11px; border-radius:6px; border:1px solid ' + _GTV_COLOR[n.kind] + '; background:var(--color-surface-1); color:var(--color-text-primary); cursor:pointer; transition:background .12s, box-shadow .12s;">'
+              + '<span style="width:8px; height:8px; border-radius:2px; background:' + _GTV_COLOR[n.kind] + '; flex:none;"></span>Open ' + esc(n.label)
+              + '<span style="opacity:.45; font-size:12px;">↗</span></span></div>'
+            : '')
         + (n.flag ? '<div style="margin:4px 0 8px; padding:8px 11px; border-radius:7px; border:1px solid ' + _GTV_FLAGC[n.flag] + '; background:var(--color-surface-1); font-size:12px; color:' + _GTV_FLAGC[n.flag] + ';"><strong>' + n.flag.toUpperCase() + '</strong>' + (n.flagReason ? ' — ' + esc(n.flagReason) : '') + '</div>' : '');
     function chips(arr){ return '<div style="display:flex; flex-wrap:wrap; gap:6px;">' + arr.map(m => {
         const fc = m.flag ? _GTV_FLAGC[m.flag] : _GTV_COLOR[m.kind];
@@ -2776,6 +3141,18 @@ function _gtvShowEco(key, graph){
             + ' style="display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 9px; border-radius:6px; border:1px solid ' + (m.flag ? fc : 'var(--color-border-hair)') + '; background:var(--color-surface-1); color:var(--color-text-primary); cursor:' + (nav ? 'pointer' : 'default') + '; transition:background .12s, box-shadow .12s;">'
             + '<span style="width:8px; height:8px; border-radius:2px; background:' + fc + '; flex:none;"></span>' + esc(m.label) + tag + arrow + '</span>'; }).join('') + '</div>'; }
     _GTV_LAYERS.forEach(l => { if(groups[l].length){ html += '<div style="margin-top:11px;"><div style="font-size:12px; font-weight:600; color:var(--color-text-secondary); margin-bottom:6px;">' + _GTV_LNAME[l] + ' (' + groups[l].length + ')</div>' + chips(groups[l]) + '</div>'; } });
+    if(n.kind === 'sys'){
+        const sid = esc(String(n.id));
+        const btn = 'font-size:11.5px; padding:6px 11px; border-radius:6px; border:1px solid var(--color-border-strong); background:var(--color-surface-1); color:var(--color-text-primary); cursor:pointer;';
+        html += '<div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">'
+            + '<button class="gte-route" data-route="cea" data-sid="' + sid + '" style="' + btn + '">Cascading Effects Analysis \u2197</button>'
+            + '<button class="gte-route" data-route="interdep" data-sid="' + sid + '" style="' + btn + '">Interdependence \u2197</button></div>';
+        if(n.role === 'resource'){
+            html += '<div style="margin-top:6px; font-size:11px; color:var(--color-text-tertiary);">Supporting dependency' + (n.via ? ' \u00b7 via ' + esc(n.via) : '') + (n.hops ? ' \u00b7 ' + n.hops + ' hop' + (n.hops === 1 ? '' : 's') + ' upstream' : '') + (n.path ? '<br>' + esc(n.path) : '') + '</div>';
+        } else if(n.role === 'primary'){
+            html += '<div style="margin-top:6px; font-size:11px; color:var(--color-text-tertiary);">Primary system \u2014 realizes this function.</div>';
+        }
+    }
     if(n.kind === 'func'){ html += '<button class="action-btn" id="gt-eco-report" style="margin-top:14px; background:var(--color-accent);" data-sub="' + esc(n.id) + '">📄 Generate trace report for ' + esc(n.id) + '</button>'; }
     html += '<div style="margin-top:12px; font-size:11px; color:var(--color-text-tertiary); border-top:1px dashed var(--color-border-hair); padding-top:8px;">Tip: click any pill to jump to that tree, function, requirement or HF item. Drag the ⠿ handle to move; × to close.</div>';
     eco.innerHTML = html;
@@ -2786,6 +3163,17 @@ function _gtvShowEco(key, graph){
         const go = () => { const m = byKey[el.getAttribute('data-navkey')]; if(!m) return; const ok = (typeof _gtvNavigateTo === 'function') && _gtvNavigateTo(m); if(ok && window.showToast) showToast('Opened ' + m.label, 'info', 1600); };
         el.addEventListener('click', go);
         el.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); go(); } });
+    });
+    eco.querySelectorAll('.gte-route').forEach(el => {
+        el.addEventListener('mouseenter', () => { el.style.background = 'var(--color-surface-3, #eef1f7)'; });
+        el.addEventListener('mouseleave', () => { el.style.background = 'var(--color-surface-1)'; });
+        el.addEventListener('click', () => {
+            const r = el.getAttribute('data-route'), sid = el.getAttribute('data-sid');
+            try {
+                if(r === 'cea'){ if(typeof switchTab === 'function') switchTab('cea'); if(typeof window.ceaSelect === 'function') window.ceaSelect(sid); if(window.showToast) showToast('Opened Cascading Effects Analysis', 'info', 1600); }
+                else { if(typeof switchTab === 'function') switchTab('interdep'); if(window.showToast) showToast('Opened Interdependence', 'info', 1600); }
+            } catch(_){}
+        });
     });
     try { _gtvEcoMakeDraggable(eco); } catch(_){}
     const rb = document.getElementById('gt-eco-report');
@@ -2970,8 +3358,8 @@ function getAutoReqVerificationEvidence(row) {
                 const isAC = String(id).startsWith('AC_');
                 const realId = String(id).replace('AC_', '').replace('SYS_', '');
                 const fha = isAC
-                    ? (acFhaData || []).find(x => x.internalId === realId)
-                    : (typeof getAllSysFha === 'function' ? getAllSysFha() : []).find(x => x.internalId === realId);
+                    ? (acFhaData || []).find(x => String(x.internalId) === String(realId))
+                    : (typeof getAllSysFha === 'function' ? getAllSysFha() : []).find(x => String(x.internalId) === String(realId));
                 return fha && fha.fcId === fcId;
             });
         });

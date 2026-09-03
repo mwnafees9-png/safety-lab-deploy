@@ -32,6 +32,10 @@ const Reports = (function() {
         ETBT: { name: 'Event Tree & Bow-Tie Analysis',                  scope: 'aircraft', allowedAppendices: ['fta'] },
         CCMR: { name: 'Candidate Certification Maintenance Requirements', scope: 'aircraft', allowedAppendices: [] },
         IPL:  { name: 'Independence Principles Report',                 scope: 'aircraft', allowedAppendices: ['cma'] },
+        // v0.3 SORA bridge (6 Aug 2026) — Step 10 "Portfolio Compilation" of
+        // the JARUS SORA v2.5 wizard (sora_showcase_view.js). Aircraft-scope:
+        // SORA assesses the operation, not a single system.
+        SORA: { name: 'SORA Portfolio Compilation',                     scope: 'aircraft', allowedAppendices: ['fta', 'pra', 'cma'] },
     };
 
     // ------------------------------------------------------------------------
@@ -593,6 +597,25 @@ const Reports = (function() {
             'Principles are identified automatically from minimal cut sets (order ≥ 2 on Catastrophic/Hazardous conditions) and DAL-algebra independence-gated reductions; CMA/PRA/ZSA findings challenge them, and a defeated principle cascades a compromise flag to every dependent claim.',
             '{{cma_table}}',
         ].join('\n'),
+        SORA: [
+            '# SORA Portfolio Compilation',
+            '**Project:** {{project_name}}  ',
+            '**Operation:** {{sora_operation}}  ',
+            '**Date:** {{date}}',
+            '',
+            '## 1. Concept of Operations',
+            '{{sora_conops}}',
+            '',
+            '## 2. Computed thread summary',
+            'The full JARUS SORA v2.5 process, computed by the deterministic SORA engine (sora_core.js) from the ConOps parameters — intrinsic Ground Risk Class through ground-risk mitigations to final GRC, Initial Air Risk Class, SAIL (final GRC × residual ARC per Main Body Table 7), and containment. Each result below carries its own source citation; results computed at single-source confidence are labeled explicitly and should be cross-checked by the analyst, the same way a declared value would be.',
+            '{{sora_summary_table}}',
+            '',
+            '## 3. Operational Safety Objectives at SAIL',
+            'Robustness objectives (Low/Medium/High integrity + assurance) required at this operation’s SAIL, per JARUS SORA v2.5 Annex E. Criteria text is copyrighted and never reproduced — each row cites the Annex E page. A required robustness is a claim until its evidence is validated.',
+            '{{sora_oso_table}}',
+            '',
+            '*Generated from the Safety Lab project model’s SORA thread (Reports → SORA Portfolio). Single-source-confidence results (Initial ARC, containment) are flagged inline — see sora_core.js’s sourcing record for the full citation chain.*',
+        ].join('\n'),
     };
 
     // ------------------------------------------------------------------------
@@ -835,6 +858,60 @@ const Reports = (function() {
                 'Findings': c.findings || '',
                 'Mitigation': c.mitigation || '',
             })), cma, 'cma', null),
+
+            // ----------------------------------------------------------------
+            // SORA tokens (v0.3, 6 Aug 2026) — Step 10 Portfolio Compilation.
+            // Reads projectConfig.sora + the verified engine (window.SORA);
+            // computes the SAME thread sora_showcase_view.js renders live, so
+            // the report and the wizard can never silently disagree. Confidence
+            // tier (two-source / single-source) rides every row that carries
+            // one, same discipline as everywhere else in this file.
+            // ----------------------------------------------------------------
+            ...(function() {
+                try {
+                    const s = (typeof projectConfig === 'object' && projectConfig && projectConfig.sora) || null;
+                    const SORA = (typeof window !== 'undefined') ? window.SORA : null;
+                    if (!s || !SORA) return { sora_operation: '—', sora_conops: '—', sora_summary_table: [], sora_oso_table: [] };
+                    const igrcIn = { dimM: s.dimM, speedMps: s.speedMps };
+                    if (s.controlledGroundArea) igrcIn.controlledGroundArea = true; else igrcIn.density = s.density;
+                    const igrc = SORA.igrc(igrcIn);
+                    const fin = SORA.finalGrc(igrc, s.mitigations || {});
+                    const sail = SORA.sail(fin.finalGrc, s.residualArc);
+                    const osoRob = SORA.osoRobustness(sail.sail);
+                    const adj = SORA.adjacentAreaKm(s.speedMps);
+                    let arcCalc = null;
+                    if (s.airspaceCriteria) { try { arcCalc = SORA.arcInitial(s.airspaceCriteria); } catch (e) {} }
+                    let contCalc = null;
+                    if (s.containmentCriteria) { try { contCalc = SORA.containment(Object.assign({ dimM: s.dimM, speedMps: s.speedMps, sail: sail.sail }, s.containmentCriteria)); } catch (e) {} }
+                    const comp = s.osoCompliance || {};
+                    return {
+                        sora_operation: s.operation || '—',
+                        sora_conops: s.conops || '—',
+                        sora_summary_table: [
+                            { 'Parameter': 'Intrinsic GRC',    'Value': String(igrc.igrc) + ' — ' + (igrc.row || ''), 'Confidence': 'two-source', 'Source': igrc.basis || '' },
+                            { 'Parameter': 'Final GRC',         'Value': String(fin.finalGrc), 'Confidence': 'two-source', 'Source': fin.basis || '' },
+                            { 'Parameter': 'Initial ARC',       'Value': arcCalc ? arcCalc.arc + ' (AEC ' + arcCalc.aec + ')' : (s.initialArc ? ('ARC-' + s.initialArc).toUpperCase() + ' (declared)' : '—'),
+                              'Confidence': arcCalc ? arcCalc.confidence : 'declared', 'Source': arcCalc ? arcCalc.basis : 'Analyst-declared per ConOps rationale' },
+                            { 'Parameter': 'Residual ARC',      'Value': (sail.residualArc || '').toUpperCase(), 'Confidence': 'declared', 'Source': 'Tactical mitigation rationale' },
+                            { 'Parameter': 'SAIL',              'Value': sail.sail, 'Confidence': 'two-source', 'Source': sail.basis || '' },
+                            { 'Parameter': 'Adjacent-area buffer', 'Value': adj.km + ' km', 'Confidence': 'two-source', 'Source': adj.basis || '' },
+                            { 'Parameter': 'Containment robustness (1 m class)', 'Value': contCalc ? contCalc.robustness : '—',
+                              'Confidence': contCalc ? contCalc.confidence : 'n/a', 'Source': contCalc ? contCalc.basis : 'Tables 9-13 not yet sourced, or 1 m/25 m/s criteria not entered' },
+                            { 'Parameter': 'OSOs required',     'Value': String(osoRob.requiredCount) + ' (High ' + osoRob.counts.High + ' · Medium ' + osoRob.counts.Medium + ' · Low ' + osoRob.counts.Low + ')', 'Confidence': 'two-source', 'Source': osoRob.basis || '' },
+                        ],
+                        sora_oso_table: osoRob.objectives.filter(o => o.robustness !== 'None').map(o => ({
+                            'OSO': o.id,
+                            'Objective': o.title,
+                            'Robustness': o.robustness,
+                            'Status': ((comp[o.id] || {}).status) || 'open',
+                            'Evidence note': (comp[o.id] || {}).note || '—',
+                            'Citation': o.cite,
+                        })),
+                    };
+                } catch (e) {
+                    return { sora_operation: '—', sora_conops: '—', sora_summary_table: [], sora_oso_table: [] };
+                }
+            })(),
 
             // Appendix metadata — drives renderFTAAppendix() and similar
             _ftaPagesForAppendix: ftaPagesScoped,
@@ -1409,9 +1486,9 @@ const Reports = (function() {
         const acReqs = (typeof acReqData !== 'undefined' && Array.isArray(acReqData)) ? acReqData : [];
         reqRefs.forEach(r => {
             let reqObj = null;
-            if (r.kind === 'acReq') reqObj = acReqs.find(x => x.internalId === r.id);
+            if (r.kind === 'acReq') reqObj = acReqs.find(x => String(x.internalId) === String(r.id));
             else if (r.kind === 'sysReq' && typeof systemsData !== 'undefined') {
-                (systemsData || []).some(s => { const f = (s.req || []).find(x => x.internalId === r.id); if (f) { reqObj = f; return true; } return false; });
+                (systemsData || []).some(s => { const f = (s.req || []).find(x => String(x.internalId) === String(r.id)); if (f) { reqObj = f; return true; } return false; });
             }
             const moc = (reqObj && Array.isArray(reqObj.mocEntries)) ? reqObj.mocEntries : [];
             const status = _rollupMocStatus(moc);
@@ -1453,7 +1530,7 @@ const Reports = (function() {
         const ids = Array.isArray(fcRow.assumptionIds) ? fcRow.assumptionIds : [];
         const src = Array.isArray(asmSource) ? asmSource : [];
         ids.forEach(aid => {
-            const a = src.find(x => x.asmId === aid || x.internalId === aid);
+            const a = src.find(x => x.asmId === aid || String(x.internalId) === String(aid));
             out.push({
                 asmId: aid,
                 statement: (a && (a.text || a.statement)) || '',
@@ -2186,9 +2263,9 @@ const Reports = (function() {
             const cl = ph.checklist || evalCkptChecklist(key, phases);
             const items = cl.items || [];
             const done = items.filter(i => i.state !== 'fail' && i.state !== 'open').length;
-            let line = 'Completion gate: ' + done + ' of ' + items.length + ' objectives satisfied — ' + (cl.ready ? 'READY to baseline and hand off.' : 'not yet ready.');
-            if (ph.status === 'handed-off' && ph.handoff) line += ' Handed off by ' + (ph.handoff.by || '?') + ' on ' + String(ph.handoff.at || '').slice(0, 10) + '.';
-            else if (ph.status === 'reopened') line += ' REOPENED — inputs have drifted since the last hand-off.';
+            let line = 'Completion gate: ' + done + ' of ' + items.length + ' objectives satisfied — ' + (cl.ready ? 'READY to baseline.' : 'not yet ready.');
+            if (ph.status === 'handed-off' && ph.handoff) line += ' Baselined by ' + (ph.handoff.by || '?') + ' on ' + String(ph.handoff.at || '').slice(0, 10) + '.';
+            else if (ph.status === 'reopened') line += ' REOPENED — inputs have drifted since the last baseline.';
             return line;
         } catch (_) { return ''; }
     }
@@ -2266,7 +2343,7 @@ const Reports = (function() {
         const lines = tpl.split(/\r?\n/);
         for (let i = 0; i < lines.length; i++) {
             const ln = lines[i];
-            const tab = ln.match(/^\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|goldenthread_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table)\}\}$/);
+            const tab = ln.match(/^\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|goldenthread_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|sora_summary_table|sora_oso_table)\}\}$/);
             const list = ln.match(/^\{\{(assumptions_list)\}\}$/);
             const appx = ln.match(/^\{\{appendix:(fta|zsa|pra|cma)\}\}$/);
             const h    = ln.match(/^(#{1,4})\s+(.*)$/);
@@ -2618,7 +2695,7 @@ const Reports = (function() {
         const tableTokens = ['fha_table','requirements_table','assumptions_list','component_list','fta_summary','pra_table','zsa_table','cma_table',
             'afha_worksheet','sfha_worksheet','fta_summary_grid','cma_grid','coffe_table','validation_matrix','verification_matrix','compliance_posture','fc_evaluations','gaps_table','goldenthread_table',
             'interdep_table','common_resource_table','mac_table','mfms_table','ip_ledger_table','ccmr_table','wearout_table','fmes_table','checklist_table','tailoring_table','program_scope_table',
-            'fmea_functional_table','fmea_piecepart_table','ram_prediction_table','ram_alloc_table','ram_ledger_table','ram_spares_table','ram_weibull_table','ram_growth_table','fracas_table','lcc_table','sneak_table','swrel_table','tol_derate_table','msg3_table','mmel_table','et_table','bowtie_table','stpa_losses_table','stpa_hazards_table','stpa_constraints_table','stpa_cs_table','stpa_resp_table','stpa_uca_table','stpa_scenario_table','stpa_test_table','stpa_archetype_table','stpa_conformance_table','budget_ledger_table','ffs_table'];
+            'fmea_functional_table','fmea_piecepart_table','ram_prediction_table','ram_alloc_table','ram_ledger_table','ram_spares_table','ram_weibull_table','ram_growth_table','fracas_table','lcc_table','sneak_table','swrel_table','tol_derate_table','msg3_table','mmel_table','et_table','bowtie_table','stpa_losses_table','stpa_hazards_table','stpa_constraints_table','stpa_cs_table','stpa_resp_table','stpa_uca_table','stpa_scenario_table','stpa_test_table','stpa_archetype_table','stpa_conformance_table','budget_ledger_table','ffs_table','sora_summary_table','sora_oso_table'];
         tableTokens.forEach(name => {
             const rows = data[name] || [];
             const text = rows.length === 0
@@ -3532,7 +3609,7 @@ window.Reports = Reports;
 
         function _emitProse(text) {
             // Split prose by table / appendix tokens; render text as paragraphs and tokens as their content.
-            const re = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
+            const re = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|sora_summary_table|sora_oso_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
             let lastIdx = 0; let m;
             const out = [];
             while ((m = re.exec(text)) !== null) {
@@ -3682,7 +3759,7 @@ window.Reports = Reports;
         doc.setFontSize(20); doc.setFont('helvetica', 'bold');
         doc.text(REPORT_DEFS[reportType].name, M, y); y += 28;
 
-        const tokenRe = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
+        const tokenRe = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|sora_summary_table|sora_oso_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
 
         for (const sec of sections) {
             const edited = (editedSections && editedSections[sec.id] != null) ? editedSections[sec.id] : _initialProseForSection(sec, reportType, data);

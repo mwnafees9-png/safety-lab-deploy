@@ -98,6 +98,8 @@
               'Reversion to radio navigation and vectors.', 'Workload increase.', 'None direct.', []),
             F(1015, 'FC-15', 'SF-07', 'Loss of ground steering', 'Major', 'Taxi, Takeoff, Landing',
               'Directional control by differential braking and thrust only.', 'Increased workload during rollout.', 'None direct.', []),
+            F(1016, 'FC-16', 'SF-02', 'Erroneous roll response to crew command', 'Hazardous', 'Takeoff, Approach, Landing',
+              'Uncommanded bank away from the intended flight path near the ground.', 'Opposite-sense correction required at low altitude.', 'Serious injuries possible.', []),
         ];
 
         // ---- FCIM: the identification matrix the FHA rows were drawn from ----
@@ -144,6 +146,7 @@
             R(1112, 'REQ-AC-012', 'FC-15', 'L1', 'Functional', 'Directional control on the ground shall remain available by differential braking after loss of nosewheel steering.', 'Alternate means for the Major steering-loss condition.', 'Analysis', 'Pending'),
             R(1113, 'REQ-AC-013', 'FC-02', 'L1', 'Quantitative', 'The probability of erroneous pitch response to crew command during Takeoff, Approach, Landing shall not exceed 1E-7 per flight hour.', 'Hazardous classification per AC 23.1309-1E Class III; phase-limited exposure.', 'Analysis', 'Pending'),
             R(1114, 'REQ-AC-014', 'FC-05', 'L1', 'Quantitative', 'The probability of total loss of forward thrust during Takeoff, Climb, Cruise shall not exceed 1E-9 per flight hour.', 'Catastrophic classification per AC 23.1309-1E Class III.', 'Analysis', 'Pending'),
+            R(1115, 'REQ-AC-015', 'FC-16', 'L1', 'Quantitative', 'The probability of erroneous roll response to crew command during Takeoff, Approach, Landing shall not exceed 1E-7 per flight hour.', 'Hazardous classification per AC 23.1309-1E Class III; phase-limited exposure near the ground.', 'Analysis', 'Pending'),
         ];
 
         // ---- aircraft assumptions -------------------------------------------
@@ -152,7 +155,12 @@
             origin: 'AC FHA', routeTo: route,
         });
         const acAssumptionsData = [
-            A('ASM-AC-001', 'The flight crew recognizes and reacts to an annunciated pitch or display failure within 3 seconds in the landing configuration.', 'Validated', 'Simulator campaign K350-SIM-014, 12 crews.', 'Ops — AFM procedure'),
+            Object.assign(A('ASM-AC-001', 'The flight crew recognizes and reacts to an annunciated pitch or display failure within 3 seconds in the landing configuration.', 'Validated', 'Simulator campaign K350-SIM-014, 12 crews.', 'Ops — AFM procedure'),
+                { type: 'Human Factors', hf: { direction: 'recovery', responsePhase: 'Landing', crewmember: 'PF', taskTimeS: 3, taskTimeBasis: 'Sim K350-SIM-014', coActivation: [], channels: ['visual', 'cognitive', 'motor'] } }),
+            Object.assign(A('ASM-AC-014', 'The pilot flying can arrest an uncommanded pitch excursion manually within 4 seconds before exceeding the structural envelope.', 'Proposed', 'Handling-quality assessment — sim campaign pending.', 'Design — handling qualities'),
+                { type: 'Human Factors', hf: { direction: 'recovery', responsePhase: 'Approach', crewmember: 'PF', taskTimeS: 4, taskTimeBasis: 'HQ assessment (pending)', coActivation: ['manual trim'], channels: ['visual', 'cognitive', 'motor'] } }),
+            Object.assign(A('ASM-AC-015', 'Crew workload during a pitch-channel reversion stays within the 80% time-occupancy red line through the approach.', 'Validated', 'Task analysis over the approach phase, 8 crews.', 'HFA — task analysis'),
+                { type: 'Human Factors', hf: { direction: 'workload', responsePhase: 'Approach', crewmember: 'PM', taskTimeS: 12, taskTimeBasis: 'Task analysis', coActivation: ['ATC comms', 'config change'], channels: ['visual', 'auditory', 'cognitive'] } }),
             A('ASM-AC-002', 'Icing exposure per encounter does not exceed 45 minutes within the App C envelope for the design mission.', 'Validated', 'Route and season analysis over the launch network.', 'Ops — route analysis'),
             A('ASM-AC-003', 'Dispatch with one ice-protection channel inoperative is limited by MEL to 25 flight hours of exposure.', 'Proposed', 'MEL rationale to be agreed with the authority.', 'Ops — MEL'),
             A('ASM-AC-004', 'Wet-runway braking coefficient is not less than 0.30 on the certified surfaces at the design landing weight.', 'Validated', 'Flight-test braking campaign K350-FT-BRK-02.', 'Design — performance'),
@@ -184,9 +192,13 @@
                  sf(['SF-03'], 'SFN-FCS3', 'Control yaw and sideslip'), sf(['SF-06'], 'SFN-FCS4', 'Decelerate on the ground')],
                 [sysFha(2001, 'FC-FCS01', 'SF-01', 'Loss of pitch control output', 'Catastrophic', 1001),
                  sysFha(2002, 'FC-FCS02', 'SF-01', 'Uncommanded or reversed pitch output', 'Hazardous', 1002, 'Takeoff, Approach, Landing'),
-                 sysFha(2003, 'FC-FCS03', 'SF-06', 'Loss of lift-dump contribution to deceleration', 'Major', 1007, 'Landing')],
+                 sysFha(2003, 'FC-FCS03', 'SF-06', 'Loss of lift-dump contribution to deceleration', 'Major', 1007, 'Landing'),
+                 sysFha(2201, 'FC-FCS04', 'SF-02', 'Loss of roll control output', 'Catastrophic', 1003),
+                 sysFha(2202, 'FC-FCS05', 'SF-02', 'Uncommanded or reversed roll output', 'Hazardous', 1016, 'Takeoff, Approach, Landing')],
                 [sysReq(2101, 'FC-FCS01', 'Independence', 'Elevator servo channels A and B shall be physically separated and powered from different buses.', 'Supports the AND-claim on the pitch loss gate.', 'Passed'),
-                 sysReq(2102, 'FC-FCS02', 'Monitor', 'A command-vs-surface monitor shall annunciate pitch miscompare within 0.5 s.', 'Detects erroneous output before divergence near the ground.', 'Pending')],
+                 sysReq(2102, 'FC-FCS02', 'Monitor', 'A command-vs-surface monitor shall annunciate pitch miscompare within 0.5 s.', 'Detects erroneous output before divergence near the ground.', 'Pending'),
+                 sysReq(2301, 'FC-FCS04', 'Independence', 'Aileron servo channels A and B shall be physically separated and powered from different buses.', 'Supports the AND-claim on the roll loss gate.', 'Passed'),
+                 sysReq(2302, 'FC-FCS05', 'Monitor', 'A command-vs-surface monitor shall annunciate roll miscompare within 0.5 s.', 'Detects erroneous roll output before divergence near the ground.', 'Pending')],
                 [sysAsm('ASM-FCS-001', 'Servo channel dissimilarity (vendor A / vendor B) is maintained through the production life.', 'Validated', 'Design — configuration control')]),
             mkSys('sys-prl', 'Left Powerplant', 'both',
                 [sf(['SF-04'], 'SFN-PRL1', 'Generate forward thrust'), sf(['SF-05'], 'SFN-PRL2', 'Manage thrust symmetry'), sf(['SF-06'], 'SFN-PRL3', 'Decelerate on the ground')],
@@ -248,6 +260,8 @@
               providedBy: ['sys-fue'], consumedBy: [], consumedBySystems: ['sys-prl', 'sys-prr'] },
             { internalId: id(), resId: 'RES-04', name: 'Engine bleed air', type: 'Pneumatic',
               providedBy: ['sys-prl', 'sys-prr'], consumedBy: [], consumedBySystems: ['sys-ips'] },
+            { internalId: id(), resId: 'RES-05', name: 'Attitude / air data (ARINC 429)', type: 'Data',
+              providedBy: ['sys-avi'], consumedBy: [], consumedBySystems: ['sys-fcs'] },
         ];
 
         // ---- items / LRUs ----------------------------------------------------
@@ -259,6 +273,10 @@
             item('LRU-FCS-01', 'Elevator servo channel A', 'Electromechanical', 'A', 'Hardware', 'sys-fcs', 'Vendor A rotary servo, left elevator segment.', ['SF-01']),
             item('LRU-FCS-02', 'Elevator servo channel B', 'Electromechanical', 'A', 'Hardware', 'sys-fcs', 'Vendor B linear servo, right elevator segment (dissimilar).', ['SF-01']),
             item('LRU-FCS-03', 'Flight control computer', 'Computing', 'A', 'Software', 'sys-fcs', 'Dual-lane command/monitor FCC.', ['SF-01', 'SF-02', 'SF-03']),
+            // Aileron servos — fixed internalIds (4801/4802) so the roll BEs can
+            // name them via realizedByItemId without consuming the id() counter.
+            { internalId: 4801, itemId: 'LRU-FCS-04', name: 'Aileron servo channel A', type: 'Electromechanical', dal: 'A', daType: 'Hardware', owningSystemId: 'sys-fcs', description: 'Vendor A rotary servo, left aileron segment.', traceIds: ['SF-02'] },
+            { internalId: 4802, itemId: 'LRU-FCS-05', name: 'Aileron servo channel B', type: 'Electromechanical', dal: 'A', daType: 'Hardware', owningSystemId: 'sys-fcs', description: 'Vendor B linear servo, right aileron segment (dissimilar).', traceIds: ['SF-02'] },
             item('LRU-PRL-01', 'Left FADEC', 'Computing', 'B', 'Software', 'sys-prl', 'Full-authority engine control, left.', ['SF-04', 'SF-05']),
             item('LRU-PRR-01', 'Right FADEC', 'Computing', 'B', 'Software', 'sys-prr', 'Full-authority engine control, right.', ['SF-04', 'SF-05']),
             item('LRU-EPS-01', 'Starter-generator 1', 'Electrical', 'C', 'Hardware', 'sys-eps', '300 A engine-driven starter-generator.'),
@@ -284,6 +302,19 @@
         page('pg-fcs-pitch', 'PSSA · FCS loss of pitch output', {
             treeLevel: 'system', systemId: 'sys-fcs', mode: 'top-down', linkedFhaIds: [2001],
             root: seal(gate('OR', 'Loss of pitch control output', [fcsAnd, fcsColumn], { allocatedDAL: 'A' })),
+        });
+
+        // == system PSSA roll tree (mirrors pitch: dissimilar aileron servos in
+        // an AND with the shared FCC roll-lane as the OR residue). FIXED ids in
+        // the 34xx band — must NOT consume the shared id() counter, exactly as
+        // the pg-ac-fc03 nodes below. Aileron BEs name their LRUs (4801/4802).
+        const fcsRailA = { id: 3401, name: 'Aileron servo channel A fails', type: 'basic', lambda: 0, probability: 3e-5, inputMode: 'probability', children: [], realizedByItemId: 4801 };
+        const fcsRailB = { id: 3402, name: 'Aileron servo channel B fails', type: 'basic', lambda: 0, probability: 3e-5, inputMode: 'probability', children: [], realizedByItemId: 4802 };
+        const fcsRailAnd = { id: 3403, name: 'Loss of both aileron servo channels', type: 'gate', gateType: 'AND', probability: 0, children: [fcsRailA, fcsRailB], dalIndependence: 'option-1' };
+        const fcsRollCmd = { id: 3404, name: 'Roll command/monitor lane lost in the FCC', type: 'basic', lambda: 0, probability: 1e-6, inputMode: 'probability', children: [] };
+        page('pg-fcs-roll', 'PSSA · FCS loss of roll output', {
+            treeLevel: 'system', systemId: 'sys-fcs', mode: 'top-down', linkedFhaIds: [2201],
+            root: seal({ id: 3405, name: 'Loss of roll control output', type: 'gate', gateType: 'OR', probability: 0, children: [fcsRailAnd, fcsRollCmd], allocatedDAL: 'A' }),
         });
 
         page('pg-prl-thrust', 'PSSA · Left powerplant thrust loss', {
@@ -384,13 +415,13 @@
         });
         // FC-03 tree — FIXED node ids (3301+): these nodes must NOT consume the
         // shared id() counter or every downstream BE displayId would shift.
-        const fc03AilA = { id: 3301, name: 'Aileron actuation channel A fails', type: 'basic', lambda: 0, probability: 3e-5, inputMode: 'probability', children: [] };
-        const fc03AilB = { id: 3302, name: 'Aileron actuation channel B fails', type: 'basic', lambda: 0, probability: 3e-5, inputMode: 'probability', children: [] };
+        // Mirrors FC-01: the aircraft PASA transfers the roll-output loss down to
+        // the FCS system PSSA (pg-fcs-roll) and ORs in the structural path.
+        const fc03Xfer = { id: 3306, name: 'FCS fails to provide roll control', type: 'gate', gateType: 'TRANSFER', linkedPageId: 'pg-fcs-roll', probability: 0, children: [] };
         const fc03Struct = { id: 3303, name: 'Roll control structural path failure', type: 'basic', lambda: 0, probability: 1e-10, inputMode: 'probability', children: [] };
-        const fc03And = { id: 3304, name: 'Independent loss of both aileron actuation channels', type: 'gate', gateType: 'AND', probability: 0, children: [fc03AilA, fc03AilB], dalIndependence: 'option-1' };
         page('pg-ac-fc03', 'PASA · FC-03 loss of roll control', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [1003],
-            root: seal({ id: 3305, name: 'Loss of roll attitude control', type: 'gate', gateType: 'OR', probability: 0, children: [fc03And, fc03Struct], allocatedDAL: 'A' }),
+            root: seal({ id: 3305, name: 'Loss of roll attitude control', type: 'gate', gateType: 'OR', probability: 0, children: [fc03Xfer, fc03Struct], allocatedDAL: 'A' }),
         });
         page('pg-ac-fc12', 'PASA · FC-12 dual fuel starvation', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [1012],
@@ -414,6 +445,16 @@
                     vTrimLatent,
                 ]),
             ])),
+        });
+        // Roll as-built mirror — fixed ids (34xx) with the aileron servos in a
+        // β-model CCF group, verifying the pg-fcs-roll allocation bottom-up.
+        const vRailA = { id: 3411, name: 'Aileron servo channel A fails', type: 'basic', lambda: 2e-5, probability: 0, inputMode: 'lambda', children: [], ccfGroup: 'ccf-ail-servo', beta: 0.05 };
+        const vRailB = { id: 3412, name: 'Aileron servo channel B fails', type: 'basic', lambda: 2e-5, probability: 0, inputMode: 'lambda', children: [], ccfGroup: 'ccf-ail-servo', beta: 0.05 };
+        const vRailAnd = { id: 3413, name: 'Loss of both aileron servo channels', type: 'gate', gateType: 'AND', probability: 0, children: [vRailA, vRailB] };
+        const vRollCmd = { id: 3415, name: 'Roll command/monitor lane lost in the FCC', type: 'basic', lambda: 8e-7, probability: 0, inputMode: 'lambda', children: [] };
+        page('pg-fcs-roll-v', 'SSA · FCS roll — as-built verification', {
+            treeLevel: 'system', systemId: 'sys-fcs', mode: 'bottom-up', verifies: 'pg-fcs-roll', linkedFhaIds: [2201],
+            root: seal({ id: 3414, name: 'Loss of roll control output (as-built)', type: 'gate', gateType: 'OR', probability: 0, children: [vRailAnd, vRollCmd] }),
         });
         const vTieWeld = be('Bus tie contactor welded closed (undetected)', 3e-6, { repairModel: 'periodic', tau: 400 });
         page('pg-eps-bus-v', 'SSA · EPS generation — as-built verification', {
@@ -465,6 +506,8 @@
             fmeaRow('FM-FCS-01', 'sys-fcs', 'Elevator servo A', 'Jam (mechanical seizure)', 'Channel A output frozen', 'Loss of channel A pitch authority', 'Miscompare monitor + surface position', 'Hazardous', 8e-6, vServoA.id, 'Channel B carries full authority'),
             fmeaRow('FM-FCS-02', 'sys-fcs', 'Elevator servo A', 'Hardover (runaway output)', 'Uncommanded surface deflection', 'Erroneous pitch response', 'Miscompare monitor within 0.5 s', 'Hazardous', 4e-6, vServoA.id, 'Monitor disengages faulty channel'),
             fmeaRow('FM-FCS-03', 'sys-fcs', 'Elevator servo B', 'Loss of output (electrical)', 'Channel B output absent', 'Loss of channel B pitch authority', 'Continuous wrap-around test', 'Hazardous', 8e-6, vServoB.id, 'Channel A carries full authority'),
+            fmeaRow('FM-FCS-04', 'sys-fcs', 'Aileron servo A', 'Jam (mechanical seizure)', 'Channel A output frozen', 'Loss of channel A roll authority', 'Miscompare monitor + surface position', 'Hazardous', 8e-6, vRailA.id, 'Channel B carries full authority'),
+            fmeaRow('FM-FCS-05', 'sys-fcs', 'Aileron servo B', 'Hardover (runaway output)', 'Uncommanded aileron deflection', 'Erroneous roll response to crew command', 'Command-vs-surface monitor within 0.5 s', 'Hazardous', 4e-6, vRailB.id, 'Monitor disengages the faulty channel'),
             fmeaRow('FM-EPS-01', 'sys-eps', 'Starter-generator 1', 'Bearing seizure', 'Channel 1 generation lost', 'Loss of one generation channel', 'GEN 1 caution + load meter', 'Major', 6e-5, 0, 'Channel 2 carries essential load'),
             fmeaRow('FM-EPS-02', 'sys-eps', 'Bus tie contactor', 'Contacts welded closed', 'Bus isolation lost', 'Loss of channel independence', 'Periodic functional test (400 FH)', 'Major', 3e-6, vTieWeld.id, 'Detected at the 400 FH test'),
             fmeaRow('FM-LDG-01', 'sys-ldg', 'Brake shuttle valve', 'Internal leakage past the seat', 'Accumulator pressure decays', 'Loss of emergency braking reserve', 'Pre-flight accumulator pressure check', 'Major', 5e-6, vShuttle.id, 'Normal channel unaffected'),
@@ -490,13 +533,33 @@
             { internalId: id(), zoneId: 'Z-MLGW', desc: 'Main landing gear wheel well', equip: 'Brake lines A/B, shuttle valve, squat switch harness', severity: 'Hazardous', interference: 'Tire burst trajectory crosses both brake channels', mitigation: 'Channel B rerouted (PRA-004); guards on the squat harness', housedFunctions: ['SF-06', 'SF-12'] },
             { internalId: id(), zoneId: 'Z-NACL', desc: 'Left nacelle', equip: 'FADEC L, fuel feed L, bleed duct L, fire loop', severity: 'Hazardous', interference: 'Bleed duct proximity to FADEC harness', mitigation: 'Thermal blanket + duct burst detection', housedFunctions: ['SF-04', 'SF-10'] },
         ];
+
+        // The ZSA covers the aircraft, not the four zones that happened to be
+        // interesting. A nine-seat twin has fewer zones than a freighter, not
+        // fewer KINDS of zone: both nacelles, both wing boxes, both wheel wells,
+        // the battery bay, the tail cone and the cabin all carry either
+        // flight-critical content or an energy source.
+        zsaData.push(
+            { internalId: id(), zoneId: 'Z-NACR', desc: 'Right nacelle', equip: 'Engine 2, prop control, generator 2, fuel shut-off, fire loop', severity: 'Catastrophic', interference: 'Generator feeder and the engine fire loop share the firewall penetration', mitigation: 'Fire-rated penetration seal; feeder routed on the cold side of the firewall', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-FDCK', desc: 'Flight deck and instrument panel', equip: 'PFD 1/2, standby instrument, engine controls, both audio panels', severity: 'Catastrophic', interference: 'Primary and standby display power feeders run behind the same panel structure', mitigation: 'Feeders separated across the panel centreline; standby carries its own battery lane', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-WBXL', desc: 'Left wing box and fuel bay', equip: 'Left tank, boost pump, crossfeed valve, aileron and flap runs', severity: 'Catastrophic', interference: 'Flight-control runs pass through a flammable-fluid zone', mitigation: 'Runs sealed and drained; no electrical connector inside the tank bay', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-WBXR', desc: 'Right wing box and fuel bay', equip: 'Right tank, boost pump, crossfeed valve, aileron and flap runs', severity: 'Catastrophic', interference: 'Flight-control runs pass through a flammable-fluid zone', mitigation: 'Runs sealed and drained; no electrical connector inside the tank bay', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-MLGR', desc: 'Right main landing gear wheel well', equip: 'Right brake lines, gear actuator, squat switch, wheel and tyre', severity: 'Hazardous', interference: 'Both brake supply lines to this wheel run through one wheel plane', mitigation: 'Wheel-plane fragment envelope applied; lines routed to opposite sides of the strut', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-NLGB', desc: 'Nose landing gear bay', equip: 'Nose gear actuator, steering unit, taxi light, squat switch', severity: 'Hazardous', interference: 'Steering and gear-position sensing share the bay with the taxi-light feeder', mitigation: 'Sensing harness shielded and separated from the lighting feeder', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-BATT', desc: 'Battery and hot-battery bus bay', equip: 'Main battery, standby battery, hot bus, external power receptacle', severity: 'Catastrophic', interference: 'Two energy stores and the hot bus in one compartment', mitigation: 'Vented enclosure with overboard drainage; thermal detection with a flight-deck annunciation', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-CABIN', desc: 'Passenger cabin and pressure vessel', equip: 'Cabin ECS distribution, oxygen distribution, emergency exits, cabin wiring trunk', severity: 'Hazardous', interference: 'Oxygen distribution runs alongside the cabin wiring trunk', mitigation: 'Oxygen line separated and unbroken through the cabin; no connector above the headliner', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-AFTE', desc: 'Aft fuselage equipment bay', equip: 'Static inverter, ELT, oxygen bottle, aft junction box', severity: 'Hazardous', interference: 'Pressurised oxygen bottle adjacent to the aft junction box', mitigation: 'Bottle relief piped overboard; junction box relocated forward of the relief path', housedFunctions: [] },
+            { internalId: id(), zoneId: 'Z-TCONE', desc: 'Tail cone and empennage runs', equip: 'Elevator and rudder runs, trim actuator, static ports, aft antennas', severity: 'Catastrophic', interference: 'Elevator and trim runs converge at the aft pressure bulkhead penetration', mitigation: 'Convergence length limited; trim actuator and elevator run on opposite sides of the keel', housedFunctions: [] }
+        );
+
         // ---- system FCIMs (per system function, referencing the SFHA ids) ----
         let _sfcimId = 3101;
         const SM = (subId, aw, tlId, tlDesc, plId, plDesc, mId, mDesc) => ({
             internalId: _sfcimId++, subId, awareness: aw, tlId, tlDesc, plId, plDesc, mId, mDesc,
         });
         const _fcimFor = {
-            'sys-fcs': [SM('SFN-FCS1', 'Aware', 'FC-FCS01', 'Loss of pitch control output', 'FCS1-PL', 'Single servo channel loss — Minor, screened: dual-channel architecture', 'FC-FCS02', 'Uncommanded or reversed pitch output')],
+            'sys-fcs': [SM('SFN-FCS1', 'Aware', 'FC-FCS01', 'Loss of pitch control output', 'FCS1-PL', 'Single servo channel loss — Minor, screened: dual-channel architecture', 'FC-FCS02', 'Uncommanded or reversed pitch output'),
+                        SM('SFN-FCS2', 'Aware', 'FC-FCS04', 'Loss of roll control output', 'FCS2-PL', 'Single aileron servo channel loss — Minor, screened: dual-channel architecture', 'FC-FCS05', 'Uncommanded or reversed roll output')],
             'sys-prl': [SM('SFN-PRL1', 'Aware', 'FC-PRL01', 'Loss of left powerplant thrust', 'PRL1-PL', 'Thrust limited below rating — Minor, screened', 'FC-PRL02', 'Uncommanded reverse or beta transition')],
             'sys-eps': [SM('SFN-EPS1', 'Both', 'FC-EPS01', 'Loss of both generation channels', 'EPS1-PL', 'Single generation channel loss — Minor, screened: full essential-bus capacity retained', 'FC-EPS02', 'Main bus voltage transient beyond equipment limits')],
             'sys-avi': [SM('SFN-AVI1', 'Both', 'FC-AVI01', 'Blank primary displays', 'AVI1-PL', 'Single sensor source loss — Minor, screened: miscompare monitoring retained', 'FC-AVI02', 'Misleading primary display data')],
@@ -510,11 +573,41 @@
             if (sysRow) sysRow.fcim = _fcimFor[sid];
         });
 
+        // The ARP4761A App L.1.3 set, now that the catalogue offers it. A
+        // pressurised twin with two energy stores, a bleed-air system and
+        // retractable gear meets every one of these; they were absent because
+        // nothing proposed them, not because they did not apply.
+        praData.push(
+            { internalId: id(), praId: 'PRA-005', threat: 'Fuel tank or line leakage', desc: 'Escape of fuel from a tank boundary, boost pump seal or crossfeed line into the wing box or the gallery.', systems: 'Fuel System, Electrical Power System', csfl: 'Flammable fluid reaching a compartment containing flight-control runs and an electrical connector', mitigation: 'Wing box declared a flammable-fluid leakage zone with drainage and ventilation; no electrical connector inside the tank bay', affectedZones: ['Z-WBXL', 'Z-WBXR', 'Z-CWG'] },
+            { internalId: id(), praId: 'PRA-006', threat: 'Battery leakage, fire or thermal runaway', desc: 'A cell vents or enters self-sustaining thermal runaway in the battery bay, propagating to the adjacent store.', systems: 'Electrical Power System, Standby Instrument', csfl: 'Loss of both the main and standby energy stores from one event, with the standby lane assumed independent', mitigation: 'Vented enclosure with overboard drainage; thermal detection annunciated to the crew; stores separated within the bay', affectedZones: ['Z-BATT'] },
+            { internalId: id(), praId: 'PRA-007', threat: 'High-pressure duct rupture', desc: 'Failure of an engine bleed duct releasing gas at delivery temperature into the nacelle or the wing root.', systems: 'Ice Protection System, Environmental Control, Propulsion', csfl: 'Sustained heating of control runs and wiring qualified for a much lower environment', mitigation: 'Compartment relief sized for the burst case; impingement envelope cleared of flight-control runs; overheat detection independent of the duct', affectedZones: ['Z-NACL', 'Z-NACR', 'Z-CWG'] },
+            { internalId: id(), praId: 'PRA-008', threat: 'Wheel flange or hub fragment release', desc: 'Liberation of a metallic wheel flange or hub fragment on a wheel-plane trajectory, distinct from tyre burst.', systems: 'Landing Gear & Braking, Hydraulic Power System', csfl: 'Both brake supply lines to one wheel inside a single fragment plane', mitigation: 'Wheel-plane envelope applied alongside the tyre-burst envelope; lines routed to opposite sides of the strut; fuse-plug behaviour demonstrated', affectedZones: ['Z-MLGW', 'Z-MLGR'] },
+            { internalId: id(), praId: 'PRA-009', threat: 'Hazardous chemical container rupture', desc: 'Rupture of a pressurised oxygen bottle or of a fire-extinguishing container carried in the type design.', systems: 'Environmental Control, Fire Protection', csfl: 'A pressure and chemical environment in a compartment assessed for neither, with occupant exposure governing', mitigation: 'Bottle relief piped overboard; the relief path assessed as a zone; adjacent equipment relocated out of it', affectedZones: ['Z-AFTE', 'Z-CABIN'] },
+            { internalId: id(), praId: 'PRA-010', threat: 'Pressure bulkhead rupture', desc: 'Failure of the aft pressure boundary between the cabin and the tail cone.', systems: 'Environmental Control, Flight Control System', csfl: 'Decompression plus a differential load case on the elevator and trim runs crossing the boundary', mitigation: 'Boundary demonstrated against the rupture case; control runs shown to survive the release path; venting sized for the differential', affectedZones: ['Z-TCONE', 'Z-CABIN'] },
+            { internalId: id(), praId: 'PRA-011', threat: 'Ice shedding from the propeller and airframe', desc: 'Ice released from a propeller blade or the airframe striking the fuselage or the opposite nacelle.', systems: 'Ice Protection System, Propulsion', csfl: 'Structural damage to the pressure vessel opposite the propeller plane', mitigation: 'Ice-impact doubler in the propeller plane; de-ice cycling sequenced so both propellers do not shed together', affectedZones: ['Z-CABIN', 'Z-NACL', 'Z-NACR'] },
+            { internalId: id(), praId: 'PRA-012', threat: 'Hail and heavy precipitation', desc: 'Hail encounter damaging the radome, air-data probes and the propeller leading edges.', systems: 'Avionics & Display, Propulsion', csfl: 'Loss of air data on both sides from a single encounter', mitigation: 'Probe heating and the declared hail envelope; alternate static source available to the crew', affectedZones: ['Z-NOSE', 'Z-NACL', 'Z-NACR'] }
+        );
+
         const cmaData = [
             { internalId: id(), cmaId: 'CMA-001', subject: 'Elevator servo channel dissimilarity', claim: 'Servo channels A and B fail independently (option-1 claim on the pitch AND gate).', modes: ['design-error', 'manufacturing'], linkedGateIds: ['pg-fcs-pitch:' + fcsAnd.id], findings: 'Dissimilar vendors and technologies; common installation torque procedure identified and revised.', mitigation: 'Separate installation task cards; β=5% residual commonality retained in the quantitative model.', status: 'Closed — Accepted', scope: 'system', owningSystemId: 'sys-fcs' },
             { internalId: id(), cmaId: 'CMA-002', subject: 'Shared pitot mast heritage between primary and standby air data', claim: 'Standby indication is independent of the primary display chain (AND claim on FC-09).', modes: ['shared-resource', 'environment'], linkedGateIds: ['pg-ac-fc09:' + acDispAnd.id], findings: 'Standby probe is a different part number but shares the heated-mast design; a common icing susceptibility cannot yet be excluded within the App C envelope. Owns the model block claim sys-avi → sys-fcs (erroneous lane): control-law air-data miscompare rejection.', mitigation: '', status: 'Open', scope: 'aircraft', owningSystemId: '' },
             { internalId: id(), cmaId: 'CMA-003', subject: 'Maintenance error — brake channel cross-connection', claim: 'Brake channels A and B remain independent through maintenance.', modes: ['maintenance'], linkedGateIds: ['pg-ldg-brakes:' + ldgAnd.id], findings: 'Fittings were size-identical; cross-connection was credible at wheel change.', mitigation: 'Different fitting sizes introduced on channel B (mod K350-32-017).', status: 'Mitigated', scope: 'system', owningSystemId: 'sys-ldg' },
+            { internalId: id(), cmaId: 'CMA-004', subject: 'Aileron servo channel dissimilarity', claim: 'Aileron servo channels A and B fail independently (option-1 claim on the roll AND gate).', modes: ['design-error', 'manufacturing'], linkedGateIds: ['pg-fcs-roll:' + fcsRailAnd.id], findings: 'Dissimilar vendors and technologies (rotary vs linear); the shared FCC roll-command lane is screened separately as FC-FCS05 with a 0.5 s command-vs-surface monitor.', mitigation: 'Separate installation task cards; β=5% residual commonality retained in the quantitative model (ccf-ail-servo).', status: 'Closed — Accepted', scope: 'system', owningSystemId: 'sys-fcs' },
         ];
+
+        // One row per independence claim the model makes. The four MAC rules
+        // are claims; so is every zone whose mitigation says "separated"; so is
+        // the standby lane. A common-mode analysis that only examines the
+        // claims somebody already doubted is not an analysis, it is a list.
+        cmaData.push(
+            { internalId: id(), cmaId: 'CMA-005', subject: 'Standby lane independence from the main electrical system', claim: 'The standby instrument and its battery lane are independent of both generation channels.', modes: ['zonal', 'design-error'], linkedGateIds: [], findings: 'Both stores sit in Z-BATT, and the standby feeder runs behind the same panel structure as the primary display feeder.', mitigation: 'Feeders separated across the panel centreline; a thermal event in the battery bay is carried as an open particular risk (PRA-006).', status: 'Open', scope: 'aircraft', owningSystemId: '' },
+            { internalId: id(), cmaId: 'CMA-006', subject: 'Propeller de-ice cycling as a common cause', claim: 'Ice shedding from the two propellers is independent.', modes: ['operational'], linkedGateIds: [], findings: 'The de-ice controller cycles both propellers on a shared timer, so both shed into the fuselage in the same window.', mitigation: 'Cycling sequenced so the two propeller planes do not shed together; ice-impact doubler retained.', status: 'Mitigated', scope: 'aircraft', owningSystemId: '' },
+            { internalId: id(), cmaId: 'CMA-007', subject: 'Engine-driven accessory commonality across both nacelles', claim: 'Generation channel 1 and channel 2 fail independently.', modes: ['manufacturing', 'maintenance'], linkedGateIds: [], findings: 'Same generator part number, same production lot, and both are changed at the same scheduled visit.', mitigation: 'Staggered replacement across the two sides; a lot-commonality factor retained in the quantitative model.', status: 'Mitigated', scope: 'aircraft', owningSystemId: '' },
+            { internalId: id(), cmaId: 'CMA-008', subject: 'Flammable-fluid zone shared with flight-control runs', claim: 'A fuel leak does not affect flight-control continuity.', modes: ['zonal'], linkedGateIds: [], findings: 'Aileron and flap runs pass through both wing-box fuel bays; the leakage-zone drainage assessment (PRA-005) is not yet complete.', mitigation: 'Runs sealed and drained; no electrical connector inside the tank bay; drainage substantiation outstanding.', status: 'Open', scope: 'aircraft', owningSystemId: '' },
+            { internalId: id(), cmaId: 'CMA-009', subject: 'Wheel-plane commonality on the brake supply', claim: 'The two brake supply paths to a wheel are independent.', modes: ['zonal'], linkedGateIds: [], findings: 'Both lines to each main wheel lie inside a single wheel-plane fragment envelope (PRA-008).', mitigation: 'Lines routed to opposite sides of the strut; envelope re-run after the routing change.', status: 'Open', scope: 'system', owningSystemId: 'sys-ldg' },
+            { internalId: id(), cmaId: 'CMA-010', subject: 'Air-data source independence under a single environmental encounter', claim: 'The two air-data sources fail independently.', modes: ['environmental'], linkedGateIds: [], findings: 'Both probes sit in the same hail and icing exposure on the nose, and share the probe-heat supply.', mitigation: 'Probe heat split across both electrical channels; alternate static source available to the crew.', status: 'Closed — Accepted', scope: 'aircraft', owningSystemId: '' }
+        );
+
 
         // ---- flight phases (1.5 FH design mission) -----------------------------
         const ph = (phase, dur) => ({ phase, altFrom: '', altFromUnit: 'AGL', altTo: '', altToUnit: 'AGL', duration: String(dur), durationUnit: 'hours' });
@@ -764,12 +857,31 @@
         };
 
         // ---- sign-offs: approve the reviewed baseline ---------------------------
+        // ====================================================================
+        // VERIFICATION MIRRORS — the as-built twin of every allocation tree.
+        //
+        // Without these the SSA question cannot be asked at all: an allocation
+        // page's root probability is the severity-derived TARGET, not a rollup,
+        // so nothing compares the achieved figure against the budget and INV-03
+        // has an empty denominator — which reads exactly like a pass. The shared
+        // helper does the copying (demo_kit.js), because the part that is easy to
+        // get wrong is not the arithmetic, it is rewriting a TRANSFER to point at
+        // the MIRROR of its target rather than at the allocation page.
+        //
+        // REFUSE rather than build half a showcase if the helper is absent.
+        (function buildMirrors() {
+            var fn = (typeof slDemoMirror === 'function') ? slDemoMirror
+                : (typeof require === 'function' ? (function () { try { return require('./demo_kit.js').slDemoMirror; } catch (_) { return null; } })() : null);
+            if (!fn) throw new Error('demo_kit.js is not loaded — refusing to build a showcase whose allocation trees have no verification mirrors');
+            fn(pages, { nextId: id, factor: 0.8 });
+        })();
+
         const reviewApprovalsData = [];
         const approve = (kind, iid, systemId, who, daysAgo) => reviewApprovalsData.push({
             kind, id: iid, systemId: systemId || null, approvedBy: who,
             approvedAt: T0 + (12 - (daysAgo || 0)) * 86400000, note: '',
         });
-        acFhaData.forEach(f => { if (f.internalId !== 1014 && f.internalId !== 1015) approve('acFha', f.internalId, null, 'R. Váldez', 10); });
+        acFhaData.forEach(f => { if (String(f.internalId) !== String(1014) && String(f.internalId) !== String(1015)) approve('acFha', f.internalId, null, 'R. Váldez', 10); });
         acReqData.forEach(r => { if (r.verifStatus === 'Passed') approve('acReq', r.internalId, null, 'M. Chen', 6); });
         systemsData.forEach(s => {
             (s.fha || []).forEach(f => approve('sysFha', f.internalId, s.id, 'J. Okafor', 8));
@@ -780,6 +892,56 @@
         zsaData.forEach(r => approve('zsa', r.internalId, null, 'J. Okafor', 7));
         cmaData.forEach(r => { if (r.status !== 'Open') approve('cma', r.internalId, null, 'M. Chen', 3); });
         fmeaData.forEach(r => { if (r.detection) approve('fmea', r.internalId, r.owningSystemId, 'J. Okafor', 2); });
+
+        // ------------------------------------------------------------------
+        // PROGRAMME STATE. Concerns raised against artifacts that were signed
+        // last month, and problem reports at several stages of disposition —
+        // two of them without a signature the process requires. Nothing here is
+        // annotated as a demonstration case: the approval state, the trace and
+        // the invariants sweep are what surface it.
+        // ------------------------------------------------------------------
+        let _cmt = 800;
+        const _fcIid = fid => (acFhaData.find(f => f.fcId === fid) || {}).internalId;
+        const _reqIid = rid => (acReqData.find(r => r.id === rid) || {}).internalId;
+        const comment = (kind, iid, systemId, author, text, resolved) => ({
+            commentId: _cmt++, target: { kind, id: iid, systemId: systemId || null },
+            authorName: author, timestamp: T0 + 6 * 86400000, text,
+            status: resolved ? 'resolved' : 'open', parentId: null,
+            resolvedAt: resolved ? T0 + 9 * 86400000 : null, resolvedBy: resolved || null,
+            resolutionNote: resolved ? 'Accepted — the probe-heat split closes it.' : '',
+        });
+        const reviewCommentsData = [
+            comment('acFha', _fcIid('FC-03'), null, 'M. Chen',
+                'This is carried Catastrophic on the assumption that the standby lane survives a battery-bay event. PRA-006 now says that is exactly what may not survive. Either the standby lane moves or this classification is resting on the wrong assumption.'),
+            comment('acFha', _fcIid('FC-06'), null, 'J. Okafor',
+                'The asymmetric-thrust case was written before the de-ice cycling finding (CMA-006). If both propellers can shed in the same window, the shed case and the asymmetry case are not independent and this row needs re-reading.'),
+            comment('acReq', _reqIid('REQ-AC-004'), null, 'R. Váldez',
+                'Verification evidence cites the analysis issued against the pre-ECN routing. The Passed state is not supported by current evidence until the report is reissued.'),
+            comment('cma', (cmaData.find(c => /pitot mast/i.test(c.subject || '')) || {}).internalId, null, 'M. Chen',
+                'Heritage is being used as the independence argument here. Common heritage is a coupling factor, not a mitigation — this needs a positive separation claim or it stays open.'),
+            comment('zsa', (zsaData.find(z => z.zoneId === 'Z-BATT') || {}).internalId, null, 'J. Okafor',
+                'Two energy stores and the hot bus in one bay. The mitigation says vented and drained, which addresses the fire but not the loss of both stores from one event.'),
+            comment('acFha', _fcIid('FC-01'), null, 'R. Váldez',
+                'Raised when the probe-heat supply was still single-channel, and closed once it was split across both electrical channels.', 'M. Chen'),
+        ].filter(c => c.target.id != null);
+
+        _problemReports.push(
+            { id: 'PR-003', title: 'Battery bay temperature excursion during a ground power transfer', description: 'Bay temperature exceeded the declared limit for eleven minutes during an extended external-power session.', safetyRelated: true, source: 'Ground test GT-EPS-014', linked: 'FC-03', state: 'analyzed', raisedBy: 'J. Okafor', raisedAt: '2026-06-22T09:00:00.000Z', deferral: null, disposition: '', history: [ { state: 'open', by: 'J. Okafor', at: '2026-06-22T09:00:00.000Z', note: 'raised from ground test' }, { state: 'analyzed', by: 'M. Chen', at: '2026-06-29T09:00:00.000Z', note: 'ventilation path restricted by the harness bundle' } ] },
+            { id: 'PR-004', title: 'Aileron run chafing witness mark inside the left wing box', description: 'Witness mark found on the aileron run where it passes the tank rib during a scheduled inspection.', safetyRelated: true, source: 'Scheduled inspection SI-0117', linked: 'FC-01', state: 'closed', raisedBy: 'Line maintenance', raisedAt: '2026-07-01T09:00:00.000Z', deferral: null, disposition: 'Clamp added at the rib; run re-rigged.', history: [ { state: 'open', by: 'Line maintenance', at: '2026-07-01T09:00:00.000Z', note: 'raised on inspection' }, { state: 'analyzed', by: 'J. Okafor', at: '2026-07-06T09:00:00.000Z', note: 'clearance below limit at full deflection' }, { state: 'closed', by: '', at: '2026-07-10T09:00:00.000Z', note: 'closed at the review; signature not captured' } ] },
+            { id: 'PR-005', title: 'De-ice controller cycles both propellers on one timer', description: 'Both propeller de-ice cycles are driven from a shared timer, so shedding is not independent between sides.', safetyRelated: true, source: 'Design review finding DR-0208', linked: 'FC-06', state: 'deferred', raisedBy: 'M. Chen', raisedAt: '2026-07-03T09:00:00.000Z', deferral: null, disposition: '', history: [ { state: 'open', by: 'M. Chen', at: '2026-07-03T09:00:00.000Z', note: 'raised at design review' }, { state: 'deferred', by: 'J. Okafor', at: '2026-07-09T09:00:00.000Z', note: 'held pending the controller software drop' } ] }
+        );
+
+        // A requirement superseded at the routing revision, still carried with
+        // its trail so the trace shows what downstream work is building to.
+        (function () {
+            const loser = acReqData.find(r => r.id === 'REQ-AC-009');
+            const winner = acReqData.find(r => r.id === 'REQ-AC-010');
+            if (!loser || !winner) return;
+            loser.reqSource = Object.assign({}, loser.reqSource, {
+                generator: 'fha-prob', sourceId: 'ac:fha:prob:' + (_fcIid('FC-03') || 0),
+                obsolete: { supersededBy: winner.id, reason: 'Superseded at the routing revision — the separation this requirement was written against no longer describes the installation.', taggedAt: '2026-07-12T09:00:00.000Z' },
+            });
+        })();
 
         return {
             projectName: 'K350 Kestrel · Program Showcase',
@@ -794,7 +956,7 @@
             typeCounters: { gate: 1, basic: 1, undeveloped: 1, conditioning: 1, house: 1 },
             ftaConfig: { mode: 'top-down', apportion: 'equal', targetP: 1e-5, linkedFhaId: '', exposureTime: 1.5, exposureSource: 'manual' },
             projectConfig,
-            reviewApprovalsData, reviewCommentsData: [], reviewCounter: 1,
+            reviewApprovalsData, reviewCommentsData, reviewCounter: 1,
         };
     }
 

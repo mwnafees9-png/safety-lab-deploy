@@ -251,7 +251,7 @@
             ['Critical', 'High', 'Medium', 'Low'].map(s => ' · ' + s + ' <input id="fsla-' + s + '" type="number" min="1" max="730" value="' + p.closeDays[s] + '" style="width:58px;">d').join('') +
             ' <input id="fsla-by" placeholder="adopted by (name)" style="width:150px;">' +
             ' <button class="ckpt-m-btn" style="font-size:10.5px;" onclick="FRACAS_SLA.uiAdopt()">adopt / update policy</button></div>' +
-            '<div style="font-size:10px; color:var(--color-text-tertiary); margin-top:6px;">Exceptions only — the compliant majority stays quiet. KPIs are computed from the ledger, never stored. INV-41 watches the same three disciplines in the invariant sweep.</div>' +
+            '<div style="font-size:10px; color:var(--color-text-tertiary); margin-top:6px;">Exceptions only — the compliant majority stays quiet. KPIs are computed from the ledger, never stored. The Thread Integrity sweep watches the same three disciplines (overdue triage, overdue closure, repeat modes).</div>' +
             '</div></div>';
     }
 

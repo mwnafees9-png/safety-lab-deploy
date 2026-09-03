@@ -115,7 +115,7 @@
     function renderRamTolPage() {
         const host = document.getElementById('ram-tol-host');
         if (!host) return;
-        if (!_access()) { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; max-width:640px;"><h3 style="margin:0 0 10px; border:none; padding:0;">Tolerance &amp; derating analysis is a Pro+ capability</h3></div>'; return; }
+        if (!_access()) { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; "><h3 style="margin:0 0 10px; border:none; padding:0;">Tolerance &amp; derating analysis is a Pro+ capability</h3></div>'; return; }
         const S = _store();
         const failsWc = S.stacks.filter(st => { const r = tolStack(st.contributors, st.limits); return r.wcInside === false; }).length;
         const failsDr = S.derate.filter(d => !derateVerdict(d).pass).length;
@@ -132,7 +132,7 @@
             const r = tolStack(st.contributors, st.limits);
             html += '<h4 style="font-size:12px; font-family:var(--font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--color-text-secondary); margin:12px 0 6px;">' + _esc(st.name) +
                 ' <a href="#" style="font-size:11px; text-transform:none;" onclick="tolDeleteStack(\'' + st.id + '\'); return false;">remove</a></h4>' +
-                '<table class="data-table" style="width:100%; max-width:560px; font-size:12px;"><thead><tr><th>Contributor</th><th>Nominal</th><th>± tol</th></tr></thead><tbody>' +
+                '<table class="data-table" style="width:100%;  font-size:12px;"><thead><tr><th>Contributor</th><th>Nominal</th><th>± tol</th></tr></thead><tbody>' +
                 st.contributors.map(c => '<tr><td>' + _esc(c.name) + '</td><td class="u-mono">' + c.nominal + '</td><td class="u-mono">' + c.tol + '</td></tr>').join('') +
                 '</tbody></table>' +
                 '<div style="display:flex; gap:10px; flex-wrap:wrap; margin:8px 0;">' +
@@ -147,7 +147,7 @@
         html += '<h3 style="margin-top:var(--s-5);">Derating audit — applied vs rated stress</h3>' +
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="derateAdd()">+ Derating row</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">guidelines shown are TYPICAL practice — confirm each against the program\'s derating standard</span></div>';
-        html += '<table class="data-table" style="width:100%; max-width:880px; font-size:12.5px;"><thead><tr>' +
+        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr>' +
             '<th>Part</th><th>Category</th><th>Rated</th><th>Applied</th><th>Ratio</th><th>Guideline</th><th>Verdict</th><th></th></tr></thead><tbody>';
         if (!S.derate.length) html += '<tr><td colspan="8" style="color:var(--color-text-tertiary);">No derating rows yet.</td></tr>';
         S.derate.forEach(d => {

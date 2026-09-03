@@ -218,9 +218,14 @@ const Review = (function() {
         pra:    'Particular Risks',
         zsa:    'Zonal Safety',
         cma:    'Common Mode',
-        fmea:   'FMEA'
+        fmea:   'FMEA',
+        stpaScope: 'STPA Scope',     // W1 1a-2 — stakeholder confirmation of mission/scope/boundary rides the SAME approvals rail
+        sourceDoc: 'Source Documents', // FIG3-4 — document-level compliance-review findings comment ON the document
+        // 1 Sep 2026 — HF lanes get the same review/commenting treatment (Waqas). One kind per lane; id = the row's own id.
+        hfAlloc: 'HF Function Allocation', hfTask: 'HF Task Analysis', hfHea: 'HF Human Error Analysis', hfAlerts: 'HF Crew Alerting',
+        hfTid: 'HF Task Identification', hfErgo: 'HF Ergonomics', hfCd: 'HF Controls & Displays', hfSa: 'HF Situation Awareness', hfMfc: 'HF Minimum Flight Crew'
     };
-    const KIND_ORDER = ['acFunc', 'sysFunc', 'acFcim', 'sysFcim', 'acFha', 'sysFha', 'pra', 'zsa', 'cma', 'fmea', 'acReq', 'sysReq', 'acAsm', 'sysAsm'];
+    const KIND_ORDER = ['acFunc', 'sysFunc', 'acFcim', 'sysFcim', 'acFha', 'sysFha', 'pra', 'zsa', 'cma', 'fmea', 'acReq', 'sysReq', 'acAsm', 'sysAsm', 'stpaScope', 'sourceDoc', 'hfAlloc', 'hfTid', 'hfTask', 'hfHea', 'hfAlerts', 'hfErgo', 'hfCd', 'hfSa', 'hfMfc'];
     function kindLabel(k) { return KIND_LABELS[k] || k; }
 
     // Phase 53.71 — Approval records. Approval is an explicit reviewer action distinct
@@ -296,6 +301,19 @@ const Review = (function() {
     };
 })();
 
+// AutoReq candidate rows carry THREE separate fields, split apart on 1 Aug 2026:
+//
+//   type      — the ARP4754B §5.3.1 class of requirement (Safety, Functional,
+//               Operational, Maintainability, …). See req_taxonomy.js.
+//   analysis  — which analysis produced it (Probabilistic, Design Assurance,
+//               Independence, Maintenance). This is what USED to sit in `type`.
+//   level     — L1 aircraft / L2 system / L3 item.
+//
+// They were one field until the split, and "Probabilistic" was never a peer of
+// "Safety": a probabilistic requirement IS a safety requirement, derived from the
+// FHA. The requirements page filtered on the §5.3.1 vocabulary while every
+// generator wrote the analysis vocabulary, so four of the five filter chips
+// returned an empty list on the shipped Kestrel showcase.
 const AutoReq = (function(){
     // Tiny non-crypto hash (DJB2) for fingerprinting.
     function hashStr(s){ let h=5381; for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))|0; return (h>>>0).toString(36); }
@@ -310,6 +328,186 @@ const AutoReq = (function(){
             (function walk(node){
                 if(!node) return;
                 cb(node, page);
+                const kids = node.children || node._children;
+                if(kids) kids.forEach(walk);
+            })(page.root);
+        });
+    }
+
+    // ---------------------------------------------------------------------
+    // Phase 66.27 — WHICH REQUIREMENT BUCKET DOES A FAULT-TREE PAGE BELONG TO?
+    //
+    // Waqas, 19 Aug 2026, looking at the live build: "why are showing L3 auto req
+    // requirements at the aircraft level shouldnt they be in their respective system
+    // buckets?"
+    //
+    // The defect: generate() takes a scope and hands it to every generator, but the
+    // FTA-derived ones used it ONLY to prefix reqSource.sourceId and to pick the
+    // destination store. The traversal was walkAllPages() — every page in the project,
+    // with no test on treeLevel or systemId. So:
+    //   - generating at aircraft scope emitted an L3 for every basic event on EVERY
+    //     tree, system trees included;
+    //   - generating at each system scope emitted the SAME events again into that
+    //     system's store, the two rows differing only by the `ac:` vs `sys-<id>:`
+    //     prefix;
+    //   - the seenLids dedupe is per-run and cannot see the other bucket.
+    //
+    // FAIL-SAFE RULE. A page is attributed to a system only when its systemId RESOLVES
+    // to a system that actually exists. A dangling systemId, or a page declaring
+    // treeLevel 'system' without one, falls back to the aircraft bucket rather than
+    // matching no scope at all — because the failure mode of a strict rule here is
+    // that requirements silently STOP being generated, which is far worse than the
+    // duplication we are fixing. Those pages are reported by unownedPages() so the
+    // fallback is visible rather than quiet (spec item B4: "unowned is a finding, not
+    // a fallback bucket").
+    // ---------------------------------------------------------------------
+    function _pageScopeKey(page){
+        if(!page) return 'ac';
+        if(page.systemId){
+            const known = (typeof systemsData !== 'undefined' && systemsData || [])
+                .some(s => s && s.id === page.systemId);
+            return known ? ('sys-' + page.systemId) : 'ac';
+        }
+        return 'ac';
+    }
+    function pageInScope(page, scope){ return _pageScopeKey(page) === scope; }
+
+    // Same walk as walkAllPages, restricted to the pages that belong to `scope`.
+    function walkPagesInScope(scope, cb){
+        (ftaPages || []).forEach(page => {
+            if(!pageInScope(page, scope)) return;
+            (function walk(node){
+                if(!node) return;
+                cb(node, page);
+                const kids = node.children || node._children;
+                if(kids) kids.forEach(walk);
+            })(page.root);
+        });
+    }
+
+    // Pages whose ownership could not be resolved and which therefore fell back to the
+    // aircraft bucket. Surfaced so the fallback is a visible finding.
+    function unownedPages(){
+        return (ftaPages || []).filter(p => {
+            if(!p || p.verifies) return false;
+            if(p.systemId){
+                return !((typeof systemsData !== 'undefined' && systemsData || [])
+                    .some(s => s && s.id === p.systemId));
+            }
+            return p.treeLevel === 'system';
+        }).map(p => ({
+            id: p.id,
+            name: p.name || 'Untitled',
+            treeLevel: p.treeLevel || 'standalone',
+            systemId: p.systemId || null,
+            reason: p.systemId
+                ? 'systemId "' + p.systemId + '" does not resolve to a known system'
+                : 'declared a system tree but no system is set',
+            bucket: 'ac'
+        }));
+    }
+
+    // ---------------------------------------------------------------------
+    // Phase 66.36 — A2. BUCKET BY THE DECLARED OWNER, NOT BY THE PAGE.
+    //
+    // U-2 / BUILD_SPEC §B2: the owner of an L3 is the system that PERFORMS THE
+    // FUNCTION, not the one that houses the part and not whichever page the node
+    // happens to be drawn on. C1 shipped the declaration (`node.identity`); this
+    // is the first consumer of it.
+    //
+    // The rules live in node_identity.js and are NOT reimplemented here — this
+    // file only adapts the tree shape into the ctx that SLNodeIdentity.resolveOwner
+    // expects, and then applies two things resolveOwner deliberately does not:
+    //
+    //   1. THE EXISTENCE CHECK. resolveOwner returns whatever systemId it is given.
+    //      _pageScopeKey additionally requires the id to resolve to a system that
+    //      actually exists, and falls back to the aircraft bucket when it does not.
+    //      That fail-safe is load-bearing: the failure mode of a strict rule here is
+    //      that requirements silently STOP being generated, which is far worse than
+    //      the duplication being fixed. Keep it.
+    //   2. THE PAGE FALLBACK. An UNOWNED node is not filed into a void — it falls
+    //      back to its page's bucket, exactly as before this change, and the page is
+    //      still reported by unownedPages(). Unowned is a finding, not a bucket (U-4).
+    //
+    // MEASURED ON AEOLUS HL-1, 19 Aug 2026, BEFORE THIS WAS WRITTEN: 182 nodes, 0
+    // carrying node.identity, 0 transfer gates. So on today's real data every node
+    // resolves through the page fallback and this change moves NOTHING. That is the
+    // intended blast radius — it is an enabling change, not a re-filing event. Rows
+    // begin to move only as the drawer is used to declare identity, which is why A4
+    // (the in-place migration) had to land in the same build.
+    // ---------------------------------------------------------------------
+
+    // A transfer gate's destination page. The codebase has accumulated four shapes for
+    // this (type 'transfer', gateType 'TRANSFER', transferTo, transferRef) and a fifth
+    // field for the destination (transferOutTo vs linkedPageId); accept the union rather
+    // than assume, because guessing wrong here silently mis-buckets a whole branch.
+    function _transferTargetPage(node){
+        if(!node) return null;
+        const isTransfer = node.type === 'transfer'
+            || (node.type === 'gate' && node.gateType === 'TRANSFER')
+            || !!node.transferTo || !!node.transferRef || !!node.transferOutTo;
+        if(!isTransfer) return null;
+        const pid = node.transferOutTo || node.linkedPageId || node.transferTo || node.transferRef;
+        if(!pid) return null;
+        return (ftaPages || []).find(p => p && String(p.id) === String(pid)) || null;
+    }
+
+    // Build the ctx resolveOwner needs for one page: parent lookup, page lookup and
+    // transfer resolution. Parents are mapped once per page rather than re-walked per
+    // node — genFTAEvents calls this for every leaf on the page.
+    function _ownerCtx(page){
+        const parents = new Map();
+        (function walk(n){
+            if(!n) return;
+            const kids = n.children || n._children;
+            if(kids) kids.forEach(c => { if(c){ parents.set(c, n); walk(c); } });
+        })(page && page.root);
+        return {
+            parentOf: n => parents.get(n) || null,
+            pageOf:   () => page,
+            transferTarget: n => _transferTargetPage(n)
+        };
+    }
+
+    function _systemExists(sysId){
+        return !!sysId && (typeof systemsData !== 'undefined' && systemsData || [])
+            .some(s => s && s.id === sysId);
+    }
+
+    // The bucket a single NODE belongs to. Falls back to the page's bucket whenever the
+    // declaration is absent or does not resolve — never to a void.
+    function _nodeScopeKey(node, page, ctx){
+        const fallback = _pageScopeKey(page);
+        const NI = (typeof window !== 'undefined' && window.SLNodeIdentity)
+            || (typeof SLNodeIdentity !== 'undefined' ? SLNodeIdentity : null);
+        if(!NI || typeof NI.resolveOwner !== 'function') return fallback;
+        let owner = null;
+        try { owner = NI.resolveOwner(node, ctx || _ownerCtx(page)); } catch(_) { return fallback; }
+        if(!owner || owner.unowned || !owner.systemId) return fallback;
+        // A resource node's PROVIDER owns the probabilistic requirement, once, at the
+        // strictest value (U-2 / A3 — BUILT 22 Aug 2026: genFTAEvents collapses the
+        // provider rows per resourceId and emits the per-consumer L2 interface
+        // requirements). resolveOwner already returns the provider as `systemId` with
+        // role 'provider'; honour it rather than second-guessing it.
+        return _systemExists(owner.systemId) ? ('sys-' + owner.systemId) : fallback;
+    }
+
+    // Every allocation page, with its ctx built once. Verification mirrors are excluded:
+    // requirements are generated from allocation trees only (Phase 61).
+    function _allocationPages(){
+        return (ftaPages || []).filter(p => p && !p.verifies);
+    }
+
+    // Walk every allocation page and hand back only the nodes whose OWNER puts them in
+    // `scope`. Replaces walkPagesInScope for the FTA-event generator; the page-level walk
+    // is kept for the DALgebra and gate-independence generators, which allocate against a
+    // page's logic rather than against a node's owner (deliberate boundary — see HANDOFF).
+    function walkNodesInScope(scope, cb){
+        _allocationPages().forEach(page => {
+            const ctx = _ownerCtx(page);
+            (function walk(node){
+                if(!node) return;
+                if(_nodeScopeKey(node, page, ctx) === scope) cb(node, page);
                 const kids = node.children || node._children;
                 if(kids) kids.forEach(walk);
             })(page.root);
@@ -331,14 +529,26 @@ const AutoReq = (function(){
     // OR-family compromise checks work on system-level trees too (Phase 27 audit A6).
     function pageTopSeverity(page){
         if (!page) return null;
-        // 1. Direct page.linkedFhaId (raw internalId stored on the page object).
-        if (page.linkedFhaId) {
-            const acHit = (acFhaData || []).find(f => f.internalId === page.linkedFhaId);
-            if (acHit) return acHit.severity || null;
-            for (const s of (systemsData || [])) {
-                const sysHit = (s.fha || []).find(f => f.internalId === page.linkedFhaId);
-                if (sysHit) return sysHit.severity || null;
-            }
+        // 1. The page's linked FHA rows. 8 Aug 2026 (SL-ARC-0001 §20 D2): every
+        //    seeded page carries ONLY the plural linkedFhaIds[] — reading the
+        //    legacy scalar alone returned null on non-active pages, which
+        //    SUPPRESSED gate-indep-phys and the OR-gate NSPF requirement there.
+        //    Array first, scalar fallback, strictest severity wins — the same
+        //    resolution _governingFhaForPage and _ccmrPageFha use.
+        const linkIds = (Array.isArray(page.linkedFhaIds) && page.linkedFhaIds.length) ? page.linkedFhaIds : (page.linkedFhaId ? [page.linkedFhaId] : []);
+        if (linkIds.length) {
+            let best = null;
+            linkIds.forEach(id => {
+                let hit = (acFhaData || []).find(f => String(f.internalId) === String(id)) || null;
+                if (!hit) {
+                    for (const s of (systemsData || [])) {
+                        const m = (s.fha || []).find(f => String(f.internalId) === String(id));
+                        if (m) { hit = m; break; }
+                    }
+                }
+                if (hit && hit.severity) best = moreRestrictiveSev(best, hit.severity);
+            });
+            if (best) return best;
         }
         // 2. Fall back to ftaConfig's prefixed id when this is the active page. Use the same
         //    AC_/SYS_ resolver the toolbar uses so sys-FHA links are honored.
@@ -603,6 +813,64 @@ const AutoReq = (function(){
         return n.slice(0, -1).join(', ') + ', and ' + n[n.length - 1];
     }
 
+    // ---------------------------------------------------------------------
+    // CCMR pair-trace (Waqas's ruling, 3 Aug 2026 — §1b "CCMR τ vs the NTE
+    // bound", REFINED same day; behavior calls ruled 4 Aug). The repair-credit
+    // row (periodic τ / monitored μ) is a MAINTAINABILITY requirement that
+    // IMPLEMENTS and VERIFIES the governing probabilistic SAFETY requirement —
+    // the fha-prob row of the FC linked to the tree page. NO new requirement
+    // text is emitted in either direction: the safety requirement keeps its
+    // original probabilistic wording, the NTE stays a derived quantity on the
+    // CCMR page, and τ over the bound surfaces as a trace-level conflict
+    // (INV-46, ADVISORY — his call, 4 Aug), never a rewrite of either number.
+    // Governing = the most-restrictive linked FHA row, the same resolution
+    // the CCMR latent sweep uses (_ccmrPageFha).
+    function _governingFhaForPage(page){
+        if (!page) return null;
+        const ids = (Array.isArray(page.linkedFhaIds) && page.linkedFhaIds.length) ? page.linkedFhaIds : (page.linkedFhaId ? [page.linkedFhaId] : []);
+        let best = null;
+        ids.forEach(id => {
+            let fha = (acFhaData || []).find(x => x && String(x.internalId) === String(id));
+            let home = 'ac';
+            if (!fha) {
+                for (const s of (systemsData || [])) {
+                    const m = ((s && s.fha) || []).find(x => x && String(x.internalId) === String(id));
+                    if (m) { fha = m; home = 'sys-' + s.id; break; }
+                }
+            }
+            if (fha && fha.severity && (!best || (SEV_ORDER[fha.severity] || 0) > (SEV_ORDER[best.fha.severity] || 0))) best = { fha, home };
+        });
+        if (!best) return null;
+        // Effective severity mirrors genFHA's linkage rule (more restrictive wins),
+        // so the pair-trace gates on the same target the safety requirement carries.
+        let effSev = best.fha.severity;
+        try {
+            if (best.home === 'ac' && typeof findLinkedSysFhaForAcFc === 'function') {
+                const ls = findLinkedSysFhaForAcFc(best.fha);
+                if (ls && ls.severity && typeof moreRestrictiveSev === 'function') effSev = moreRestrictiveSev(effSev, ls.severity);
+            }
+        } catch (_) {}
+        let prob = null;
+        try { const t = getSafetyTarget(effSev); if (t && t.prob != null) prob = t.prob; } catch (_) {}
+        return {
+            fha: best.fha, home: best.home, effSev, prob,
+            fcId: best.fha.fcId || ('#' + best.fha.internalId),
+            sourceId: best.home + ':fha:prob:' + best.fha.internalId
+        };
+    }
+    // Is the governing safety requirement ACCEPTED into its home register, or
+    // still preview-only? (HL-1 today: 0 of 30 fha-prob rows accepted.) Ruling
+    // 4 Aug: trace ANYWAY — the governing FHA ROW exists either way — name the
+    // gap in the rationale, and carry the register state in the fingerprint so
+    // accepting the safety requirement re-flags the pair updated (self-heals).
+    function _govSafetyAccepted(gov){
+        if (!gov) return false;
+        try {
+            const st = storeForScope(gov.home) || [];
+            return st.some(r => r && !r.deleted && r.reqSource && r.reqSource.sourceId === gov.sourceId);
+        } catch (_) { return false; }
+    }
+
     function genFHA(fhaArr, scopeKey){
         const out = [];
         const isAcScope = scopeKey === 'ac';
@@ -612,6 +880,33 @@ const AutoReq = (function(){
         const groups = _groupFhaByFcId(fhaArr);
         const canonicals = [];
         groups.forEach(members => canonicals.push(_canonicalizeFhaGroup(members)));
+
+        // Reverse side of the CCMR pair-trace: which repair-credit maintenance
+        // requirements implement each FHA row's probabilistic safety requirement.
+        // Walked over ALLOCATION pages only (mirrors are evidence sinks), keyed
+        // by the governing row's internalId, deduped across common-mode repeats.
+        const implBySafety = new Map();   // fha.internalId → [fta-interval sourceIds]
+        (ftaPages || []).forEach(p => {
+            if (!p || !p.root || p.verifies) return;
+            // Phase 66.27 — this builds sourceIds with the scope prefix, so it must only
+            // walk pages that belong to this scope, or an aircraft-scope run claims the
+            // maintenance requirements of every system's trees.
+            if (!pageInScope(p, scopeKey)) return;
+            const gov = _governingFhaForPage(p);
+            if (!gov) return;
+            (function walk(n){
+                if (!n) return;
+                if ((n.type === 'basic' || n.type === 'undeveloped') &&
+                    ((n.repairModel === 'periodic' && n.tau) || (n.repairModel === 'monitored' && n.mu))) {
+                    const lid = n.logicalId != null ? n.logicalId : n.id;
+                    const sid = `${scopeKey}:fta-interval:${lid}`;
+                    const arr = implBySafety.get(gov.fha.internalId) || [];
+                    if (arr.indexOf(sid) < 0) arr.push(sid);
+                    implBySafety.set(gov.fha.internalId, arr);
+                }
+                (n.children || n._children || []).forEach(walk);
+            })(p.root);
+        });
 
         // ----- Per-hazard safety reqs (probabilistic + qualitative), with linkage dedup -----
         // Chart-aware: severity + chartProps drive which req types are emitted.
@@ -688,14 +983,29 @@ const AutoReq = (function(){
             try { if (typeof _missionHoursForNormalization === 'function') mhFc = _missionHoursForNormalization() || 0; } catch (_) {}
             if (!mhFc && t.totalHours) mhFc = t.totalHours;
             const pFc = mhFc ? -Math.expm1(-t.prob * mhFc) : null;
+            // CCMR pair-trace, reverse direction (3 Aug ruling): name the
+            // repair-credit maintenance requirements that implement this safety
+            // requirement. Rationale + context + fingerprint only — the
+            // probabilistic wording above is UNTOUCHED (his refinement: no new
+            // requirement text; dwell-time imperatives have no testability).
+            // Tokens join the fingerprint only when the list is non-empty, so
+            // projects with no repair-model events see zero re-stale churn.
+            const implIds = [];
+            ((fha._contributingIds && fha._contributingIds.length) ? fha._contributingIds : [fha.internalId]).forEach(cid => {
+                (implBySafety.get(cid) || []).forEach(s => { if (implIds.indexOf(s) < 0) implIds.push(s); });
+            });
+            implIds.sort();
+            const implRat = implIds.length
+                ? ` Implemented and verified by the repair-credit maintenance requirement(s) ${implIds.join(', ')} (CCMR pair-trace); an authored interval over the CCMR not-to-exceed bound surfaces as a trace conflict — INV-46 — never as a rewrite of this target.`
+                : '';
             out.push({
                 text: pFc != null
                     ? `The probability of ${fcSubject}${phaseClause} shall not exceed ${pFc.toExponential(2)} per flight.`
                     : `The probability of ${fcSubject}${phaseClause} shall not exceed ${t.prob.toExponential(2)} per flight hour.`,
                 rat: `${fha.fcId ? fha.fcId + ' — ' : ''}${effSev} per ${certBasis.acRef}.` +
                      (pFc != null ? ` Equivalent to ≤ ${t.prob.toExponential(2)} per flight hour averaged over the ${mhFc.toFixed(2)} h flight envelope (cert-basis form).` : '') +
-                     `${linkRat} Phase: ${phaseLabel}.${exposureRat}`,
-                level: 'L1', type: 'Probabilistic',
+                     `${linkRat} Phase: ${phaseLabel}.${exposureRat}${implRat}`,
+                level: 'L1', type: 'Safety', analysis: 'Probabilistic',
                 verifMethod: 'Analysis',
                 traceId: fha.subId || '',
                 reqSource: {
@@ -713,7 +1023,9 @@ const AutoReq = (function(){
                         totalHours:      t.totalHours,
                         matchedPhases:   t.matchedPhases,
                         phaseActiveProb: t.phaseActiveProb,
-                        missionProb:     t.missionProb
+                        missionProb:     t.missionProb,
+                        // CCMR pair-trace — the maintenance requirements that implement this one.
+                        implementedBy:   implIds
                     },
                     fingerprint: fp('fha-prob', 'v2', fha.severity, fha.phases, fha.fcId, fha.fcDesc,
                                     t.dal, t.prob, t.scope,
@@ -723,7 +1035,9 @@ const AutoReq = (function(){
                                     Math.round(t.exposureRatio * 1e6) / 1e6,
                                     t.matchedPhases.slice().sort(),
                                     // Sorted contributing internalIds so edits to any duplicate re-stale.
-                                    fha._contributingIds || []),
+                                    fha._contributingIds || [],
+                                    // CCMR pair-trace tokens ride only when a pair exists (no global churn).
+                                    ...(implIds.length ? ['impl'].concat(implIds) : [])),
                     generatedAt: Date.now()
                 }
             });
@@ -784,7 +1098,7 @@ const AutoReq = (function(){
             out.push({
                 text: `${funcSubject} shall be developed to FDAL ${t.dal}.`,
                 rat: `Function ${subId}. FDAL allocated per ${t.scope}: maximum across the hazards this function contributes to (${hazList}). Effective severity ${ent.effSev}.${linkRat}`,
-                level: 'L1', type: 'Design Assurance',
+                level: 'L1', type: 'Safety', analysis: 'Design Assurance',
                 verifMethod: 'Inspection',
                 traceId: subId,
                 reqSource: {
@@ -810,6 +1124,24 @@ const AutoReq = (function(){
     function genFTAEvents(scopeKey){
         const out = [];
         const seenLids = new Set();
+        // ------------------------------------------------------------------ A3
+        // Declared common resources (node.identity.kind === 'resource'). The
+        // provider owns ONE probabilistic L3 per resource, at the strictest
+        // allocated value across every consuming tree; each consuming system owns
+        // an L2 interface requirement pinning the assumption ITS trees make.
+        // Collected during the walk, emitted after it. A resource node whose
+        // provider does not resolve to a real system keeps the legacy per-node
+        // path below — the fail-safe posture of this generator (a strict rule
+        // whose failure mode is requirements silently NOT generated is worse
+        // than the duplication A3 removes).
+        const _resUses = new Map();   // resourceId → [{ node, page, lid, p, consumerSystemId }]
+        const _resDeclared = (node) => node.identity && node.identity.kind === 'resource'
+            && node.identity.resourceId != null && String(node.identity.resourceId).trim() !== ''
+            && node.identity.providerSystemId && _systemExists(node.identity.providerSystemId);
+        const _sysLabel = id => {
+            const s = (systemsData || []).find(x => x && x.id === id);
+            return s ? (s.name || String(id)) : String(id);
+        };
         // Resolve the page's linked-FHA exposure once per page so we don't recompute on every event.
         const pageExposure = new Map();   // pageId → { exposureRatio, exposedHours, totalHours, matchedPhases, fhaFcId }
         (ftaPages || []).forEach(p => {
@@ -819,10 +1151,10 @@ const AutoReq = (function(){
             if (!ids.length) return;
             let f = null;
             for (const lid of ids) {
-                let cand = (acFhaData || []).find(x => x.internalId === lid);
+                let cand = (acFhaData || []).find(x => String(x.internalId) === String(lid));
                 if (!cand) {
                     for (const s of (systemsData || [])) {
-                        const m = (s.fha || []).find(x => x.internalId === lid);
+                        const m = (s.fha || []).find(x => String(x.internalId) === String(lid));
                         if (m) { cand = m; break; }
                     }
                 }
@@ -834,7 +1166,21 @@ const AutoReq = (function(){
             pageExposure.set(p.id, Object.assign({}, exp, { fhaFcId: f.fcId, fhaSeverity: f.severity }));
         });
 
-        walkAllPages((node, page) => {
+        // CCMR pair-trace, forward direction (3 Aug ruling): resolve each
+        // allocation page's GOVERNING probabilistic safety requirement once.
+        const pageGoverning = new Map();   // pageId → { sourceId, fcId, effSev, prob, accepted }
+        (ftaPages || []).forEach(p => {
+            if (!p || p.verifies) return;
+            const gov = _governingFhaForPage(p);
+            if (gov) pageGoverning.set(p.id, Object.assign({}, gov, { accepted: _govSafetyAccepted(gov) }));
+        });
+
+        // Phase 66.36 (A2) — was walkPagesInScope: every node on a page inherited the
+        // page's bucket. Now each NODE is filed by its own resolved owner, so a branch
+        // declared to FCS on an aircraft PASA page files into the FCS bucket instead of
+        // sitting at aircraft level. Nodes with no declaration still resolve to the
+        // page's bucket, so this is behaviour-preserving on undeclared trees.
+        walkNodesInScope(scopeKey, (node, page) => {
             if(!node || (node.type !== 'basic' && node.type !== 'undeveloped')) return;
             // Phase 61 — requirements are generated from ALLOCATION trees only. Verification
             // mirrors are evidence sinks, not requirement sources (generating from them would
@@ -849,6 +1195,24 @@ const AutoReq = (function(){
             // where getAutoReqVerificationEvidence compares computed P against this budget.
             const pAllocated = parseFloat(node.probability) || 0;
             if(pAllocated <= 0) return;
+
+            // A3 — a declared resource with a resolving provider is NOT a per-node
+            // requirement: collect the use; the collapsed provider row (and the
+            // consumers' interface rows) are emitted after the walk.
+            if (_resDeclared(node)) {
+                const NI = (typeof window !== 'undefined' && window.SLNodeIdentity)
+                    || (typeof SLNodeIdentity !== 'undefined' ? SLNodeIdentity : null);
+                let consumer = null;
+                try {
+                    const own = NI && NI.resolveOwner ? NI.resolveOwner(node, _ownerCtx(page)) : null;
+                    consumer = own && own.consumerSystemId && _systemExists(own.consumerSystemId)
+                        ? own.consumerSystemId : null;
+                } catch (_) { consumer = null; }
+                const rid = String(node.identity.resourceId);
+                if (!_resUses.has(rid)) _resUses.set(rid, []);
+                _resUses.get(rid).push({ node, page, lid, p: pAllocated, consumerSystemId: consumer });
+                return;
+            }
 
             // Phase 56.50 — repair/monitoring credit and library provenance are NOT
             // part of the probability requirement's normative text. The repair model
@@ -930,7 +1294,7 @@ const AutoReq = (function(){
                         ? `The probability of ${_midSentence(subjName)} shall not exceed ${pStr} per flight.`
                         : `The probability of failure of ${_midSentence(subjName)} shall not exceed ${pStr} per flight.`),
                 rat: `Allocated from the fault tree on page ${page.name}.${phaseRat}${repairRat}${libRat}${extRat}`,
-                level: 'L3', type: 'Probabilistic',
+                level: 'L3', type: 'Safety', analysis: 'Probabilistic',
                 verifMethod: 'Analysis',
                 traceId: node.displayId || '',
                 reqSource: {
@@ -965,38 +1329,295 @@ const AutoReq = (function(){
             // not a subordinate clause. A periodic-test interval on a latent
             // event is a candidate CMR; monitored repair is a design claim the
             // safety case depends on. Singular, separately verifiable.
+            // M7 (D.4.3.1) — if a monitor spec record exists for this event, the
+            // requirement carries the full attribute set (threshold, cycle time,
+            // coverage, scrub interval, independent channel) and re-fingerprints on
+            // spec changes so regeneration flags stale requirements.
+            const mSpec = (typeof window !== 'undefined' && typeof window.monitorSpecFor === 'function') ? window.monitorSpecFor(lid) : null;
+            const mAttrs = mSpec ? [
+                mSpec.threshold ? `detection threshold: ${mSpec.threshold}` : '',
+                mSpec.cycleSec ? `monitor cycle ≤ ${mSpec.cycleSec} s` : '',
+                (isFinite(+mSpec.coverage) && +mSpec.coverage < 1) ? `coverage ≥ ${Math.round(+mSpec.coverage * 100)}% with the undetected fraction inspected at intervals not exceeding ${mSpec.scrubFH || 'the declared dormancy'} flight hours` : '',
+                mSpec.monitorLid ? `implemented in a channel (${mSpec.monitorLid}) independent of the monitored element` : ''
+            ].filter(Boolean) : [];
+            // Ruling 2 Aug 2026 (decision slate #6): the monitor attribute set is
+            // NOT appended to the interval/monitored text as a second "shall" —
+            // it is emitted as a SECOND, cross-traced atomic requirement below.
+            // One imperative per requirement; the atomicity lint's known CCMR
+            // finding resolves here.
+            const mFpTokens = mSpec ? [mSpec.threshold, mSpec.cycleSec, mSpec.coverage, mSpec.scrubFH, mSpec.monitorLid] : [];
+            // The CCMR latent sweep computes a NOT-TO-EXCEED interval for latent
+            // events in Catastrophic/Hazardous trees: the longest test interval at
+            // which the top event still meets its severity target, given the
+            // measured lambda. Until 1 Aug 2026 that bound was computed and shown
+            // on the CCMR page and never reached the requirement engine — so the
+            // requirements register could read "shall be tested at intervals not
+            // exceeding tau" while the CCMR lane was simultaneously flagging that
+            // same tau as over the safety-derived bound. Two views of one model
+            // disagreeing, with nothing to reconcile them.
+            //
+            // This attaches the bound to the requirement's RATIONALE only. It does
+            // NOT rewrite the interval: tau is the analyst's committed value, and
+            // silently substituting nte would change a maintenance commitment
+            // without anyone deciding to. Whether nte should govern is a safety
+            // call for the engineer, and the requirement now carries what they
+            // need to make it.
+            let nteRat = '';
+            let nteFpTokens = [];
+            try {
+                if (typeof ccmrLatentSweep === 'function') {
+                    const evKey = node.displayId || node.name || ('node ' + node.id);
+                    // Mirror-aware (3 Aug pair-trace build): the NTE is computed on
+                    // the VERIFICATION tree (λ lives there) while requirements
+                    // generate from the ALLOCATION tree. Match this event's sweep
+                    // row on either page of the pair — logicalId survives the
+                    // mirror clone — preferring a row with a computed bound.
+                    const sweptAll = (ccmrLatentSweep() || []).filter(function (r) {
+                        if (!r) return false;
+                        if (r.pageId !== page.id && r.verifies !== page.id) return false;
+                        return (r.lid != null && r.lid === lid) || r.event === evKey;
+                    });
+                    const swept = sweptAll.filter(function (r) {
+                        return r.nte != null && isFinite(r.nte) && r.nte < 1e6;
+                    })[0] || sweptAll[0];
+                    if (swept && swept.nte != null && isFinite(swept.nte) && swept.nte < 1e6) {
+                        nteFpTokens = [swept.nte, swept.exceeds ? 'over' : 'within'];
+                        nteRat = swept.exceeds
+                            ? ` CCMR CONFLICT: the latent sweep computes a not-to-exceed interval of ${(+swept.nte).toPrecision(3)} h for this event (severity ${swept.severity}, lambda ${(+swept.lambda).toExponential(2)}); the authored interval exceeds it, so this requirement as written does not meet the safety target. Reconcile on the CCMR page before baselining.`
+                            : ` CCMR: within the not-to-exceed bound of ${(+swept.nte).toPrecision(3)} h computed by the latent sweep (severity ${swept.severity}).`;
+                    } else if (swept && swept.note) {
+                        nteRat = ` CCMR: no not-to-exceed bound available (${swept.note}).`;
+                    }
+                }
+            } catch (_) { nteRat = ''; }
+            // CCMR pair-trace, forward direction. Ruling 4 Aug on preview-only:
+            // trace ANYWAY against the DERIVED sourceId (the governing FHA row
+            // exists even when its fha-prob requirement is not yet accepted),
+            // name the gap in the rationale, and carry the register state in
+            // the fingerprint so accepting the safety requirement re-flags this
+            // row updated and the caveat self-heals.
+            const gov = pageGoverning.get(page.id) || null;
+            let govRat = '', govFpTokens = [], govCtx = null;
+            if (gov && gov.prob != null) {
+                govRat = ` Implements and verifies the governing probabilistic safety requirement for ${gov.fcId} (${gov.effSev}) — ${gov.sourceId} (CCMR pair-trace).` +
+                    (gov.accepted ? '' : ` That safety requirement is not yet in the register (fha-prob preview only) — run AutoReq with the FHA generator and accept it to complete the pair.`);
+                govFpTokens = [gov.sourceId, gov.accepted ? 'gov-accepted' : 'gov-preview'];
+                govCtx = { governedBy: gov.sourceId, governingFcId: gov.fcId, governingSeverity: gov.effSev, governingAccepted: !!gov.accepted };
+            }
+            // App I fold-in (his call, 4 Aug): when this event also appears in a
+            // Markov model, the interval requirement's rationale carries the
+            // interval↔rate equivalence receipt so the FTA's periodic-test credit
+            // and the Markov repair representation tell one story. Cites
+            // ARP4761A App I §I.3.3.2 by clause number and title only; the math
+            // below is stated in our own words: with constant λ and inspection
+            // interval τ, the mean time a failure sits undetected before the
+            // inspection that finds it is T_TSF = τ/(1 − e^(−λτ)) − 1/λ, which
+            // tends to τ/2 as λτ → 0, and a continuous repair transition standing
+            // in for the discrete inspection (§I.3.3.3 form) uses μ_eq = 1/T_TSF.
+            let bridgeRat = '', bridgeFpTokens = [];
+            if (node.repairModel === 'periodic' && node.tau && node.markovModelId && typeof getMarkovModel === 'function') {
+                try {
+                    const mdl = getMarkovModel(node.markovModelId);
+                    if (mdl) {
+                        const lamB = (typeof getEffectiveLambda === 'function') ? (getEffectiveLambda(node) || 0) : (parseFloat(node.lambda) || 0);
+                        const tauB = +node.tau;
+                        let tsf, basis;
+                        if (lamB > 0) {
+                            const x = lamB * tauB;
+                            tsf = (x > 1e-12) ? (tauB / (1 - Math.exp(-x)) - 1 / lamB) : tauB / 2;
+                            basis = `exact for constant λ = ${lamB.toExponential(2)}/h`;
+                        } else {
+                            tsf = tauB / 2;
+                            basis = 'τ/2 first-order form — no λ entered on this allocation node';
+                        }
+                        const muEq = tsf > 0 ? (1 / tsf) : null;
+                        const repairs = ((mdl.transitions || [])).filter(function (t) {
+                            const fromS = (mdl.states || []).find(s => s && s.name === t.from);
+                            const toS = (mdl.states || []).find(s => s && s.name === t.to);
+                            return fromS && toS && fromS.isFailed && !toS.isFailed;
+                        });
+                        bridgeRat = ` Interval↔rate equivalence receipt (ARP4761A App I §I.3.3.2, "The Relationship Between TSF and Periodic Inspection/Repair Times" — this event also appears in Markov model "${mdl.name}"): mean undetected dwell T_TSF ≈ ${(+tsf).toPrecision(3)} h (${basis})` +
+                            (muEq ? `, equivalent continuous repair rate μ_eq ≈ ${muEq.toExponential(2)}/h (§I.3.3.3 form)` : '') + '.' +
+                            (repairs.length
+                                ? ` The model's repair transition(s) ${repairs.map(t => `${t.from}→${t.to} @ ${(+t.rate).toExponential(2)}/h`).join(', ')} and this interval must tell one story — reconcile if they diverge.`
+                                : ' The model declares no repair transition out of a failed state — if it is meant to represent this periodic inspection, add one at μ_eq.');
+                        bridgeFpTokens = ['appI', node.markovModelId, Math.round(tsf * 1e6) / 1e6]
+                            .concat(repairs.map(t => t.from + '>' + t.to + ':' + t.rate));
+                    }
+                } catch (_) { bridgeRat = ''; bridgeFpTokens = []; }
+            }
+            let intervalEmitted = '';   // which branch pushed the base requirement (gates the monitor split)
             if (node.repairModel === 'periodic' && node.tau) {
+                intervalEmitted = 'periodic';
                 out.push({
                     text: `${subjName} shall be tested for undetected failure at intervals not exceeding ${node.tau} hours.`,
-                    rat: `The fault-tree allocation for this event on page ${page.name} takes latent-failure detection credit (periodic test, τ ≤ ${node.tau} h); without the interval the allocated probability is invalid. Candidate CMR — coordinate the interval with the scheduled-maintenance program.`,
-                    level: 'L3', type: 'Maintenance',
+                    rat: `The fault-tree allocation for this event on page ${page.name} takes latent-failure detection credit (periodic test, τ ≤ ${node.tau} h); without the interval the allocated probability is invalid. Candidate CMR — coordinate the interval with the scheduled-maintenance program.` + (mSpec ? ` Monitor spec ${mSpec.id} (D.4.3.1) attributes are carried by the linked monitoring-function requirement (${scopeKey}:fta-interval-monitor:${lid}).` : '') + nteRat + govRat + bridgeRat,
+                    level: 'L3', type: 'Maintainability', analysis: 'Maintenance',
                     verifMethod: 'Inspection',
                     traceId: node.displayId || '',
                     reqSource: {
                         generator: 'fta-interval',
                         sourceId: `${scopeKey}:fta-interval:${lid}`,
-                        context: { repairModel: 'periodic', tau: node.tau },
-                        fingerprint: fp('fta-interval', 'periodic', node.tau),
+                        context: Object.assign({ repairModel: 'periodic', tau: node.tau, monitorSpecId: mSpec ? mSpec.id : '' }, govCtx || {}),
+                        fingerprint: fp('fta-interval', 'periodic', node.tau, mSpec ? mSpec.id : '', ...nteFpTokens, ...govFpTokens, ...bridgeFpTokens),
                         generatedAt: Date.now()
                     }
                 });
             } else if (node.repairModel === 'monitored' && node.mu) {
+                intervalEmitted = 'monitored';
                 out.push({
                     text: `${subjName} shall provide continuous failure monitoring achieving a mean repair rate of at least ${(+node.mu).toExponential(2)} per hour.`,
-                    rat: `The fault-tree allocation for this event on page ${page.name} takes credit for monitored repair (μ ≥ ${(+node.mu).toExponential(2)}/h); the monitoring and restoration path is part of the safety case for the allocated probability.`,
-                    level: 'L3', type: 'Maintenance',
+                    rat: `The fault-tree allocation for this event on page ${page.name} takes credit for monitored repair (μ ≥ ${(+node.mu).toExponential(2)}/h); the monitoring and restoration path is part of the safety case for the allocated probability.` + (mSpec ? ` Monitor spec ${mSpec.id} (D.4.3.1) attributes are carried by the linked monitoring-function requirement (${scopeKey}:fta-interval-monitor:${lid}).` : '') + govRat,
+                    level: 'L3', type: 'Maintainability', analysis: 'Maintenance',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
                     reqSource: {
                         generator: 'fta-interval',
                         sourceId: `${scopeKey}:fta-interval:${lid}`,
-                        context: { repairModel: 'monitored', mu: node.mu },
-                        fingerprint: fp('fta-interval', 'monitored', node.mu),
+                        context: Object.assign({ repairModel: 'monitored', mu: node.mu, monitorSpecId: mSpec ? mSpec.id : '' }, govCtx || {}),
+                        fingerprint: fp('fta-interval', 'monitored', node.mu, mSpec ? mSpec.id : '', ...govFpTokens),
+                        generatedAt: Date.now()
+                    }
+                });
+            }
+            // Second requirement of the split — the monitor attribute set, atomic,
+            // cross-traced to the interval/monitored requirement it backs. Same
+            // generator key ('fta-interval') so the orphan sweep (exact-match
+            // branch under opts.ftaEvent) covers it: when the monitor spec is
+            // removed the candidate stops being generated and the stored row is
+            // flagged orphaned, same as any other auto-req. Distinct sourceId so
+            // the merge never confuses the pair.
+            if (intervalEmitted && mAttrs.length) {
+                const intervalRef = intervalEmitted === 'periodic'
+                    ? `the periodic-test interval requirement (${scopeKey}:fta-interval:${lid}, τ ≤ ${node.tau} h)`
+                    : `the monitored-repair requirement (${scopeKey}:fta-interval:${lid}, μ ≥ ${(+node.mu).toExponential(2)}/h)`;
+                out.push({
+                    text: `The monitoring function for ${subjName} shall satisfy: ${mAttrs.join('; ')}.`,
+                    rat: `Monitor spec ${mSpec.id} (D.4.3.1) attribute set, split from ${intervalRef} so each requirement carries a single imperative. The detection credit taken by the fault-tree allocation on page ${page.name} is valid only if the monitoring function meets these attributes.`,
+                    level: 'L3', type: 'Maintainability', analysis: 'Maintenance',
+                    verifMethod: 'Analysis',
+                    traceId: node.displayId || '',
+                    reqSource: {
+                        generator: 'fta-interval',
+                        sourceId: `${scopeKey}:fta-interval-monitor:${lid}`,
+                        context: { repairModel: intervalEmitted, monitorSpecId: mSpec.id, pairsWith: `${scopeKey}:fta-interval:${lid}` },
+                        fingerprint: fp('fta-interval', 'monitor', ...mFpTokens),
                         generatedAt: Date.now()
                     }
                 });
             }
         });
+
+        // ------------------------------------------------------------------ A3
+        // Provider rows: ONE per resource, in the PROVIDER's bucket, at the
+        // strictest value. walkNodesInScope only yields resource nodes whose
+        // provider bucket IS this scope, so everything collected above belongs
+        // here. Tie/govern rule: the strictest use governs; first-walked wins a
+        // tie, so agreeing projects never churn.
+        _resUses.forEach((uses, rid) => {
+            let gov = uses[0];
+            uses.forEach(u => { if (u.p < gov.p) gov = u; });
+            const providerId = gov.node.identity.providerSystemId;
+            const consumers = [];
+            uses.forEach(u => {
+                const label = u.consumerSystemId ? _sysLabel(u.consumerSystemId) : '(unresolved consumer)';
+                if (consumers.indexOf(label) < 0) consumers.push(label);
+            });
+            const pStr = gov.p.toExponential(2);
+            const subj = gov.node.name || ('resource ' + rid);
+            // Same three-way phrasing as the per-node fta-event text (live-found
+            // 22 Aug: "probability of X fails" read wrong for verb-phrased names).
+            const failurePhrased = /(fail|loss|lost|erroneous|inadvertent|jam|rupture|leak|inoperative|unavailable)/i.test(subj);
+            const verbPhrased = /(fails?|failed|jams?|jammed|ruptures?|ruptured|leaks?|leaked|sticks?|stuck|opens?|closes?|disconnects?|activates?|deploys?|bursts?)$/i.test(subj.trim());
+            out.push({
+                text: verbPhrased
+                    ? `The probability that ${_midSentence(subj)} shall not exceed ${pStr} per flight.`
+                    : (failurePhrased
+                        ? `The probability of ${_midSentence(subj)} shall not exceed ${pStr} per flight.`
+                        : `The probability of loss of ${_midSentence(subj)} shall not exceed ${pStr} per flight.`),
+                rat: `Common resource ${rid}, provided by ${_sysLabel(providerId)}. ONE provider requirement at the strictest value across every consumer (A3 / U-2): ` +
+                     uses.map(u => `${u.page.name} allocates ${u.p.toExponential(2)}`).join('; ') +
+                     `. The strictest consumer governs (${gov.page.name}); each consuming system carries its own L2 interface requirement pinning the assumption its trees make.`,
+                level: 'L3', type: 'Safety', analysis: 'Probabilistic',
+                verifMethod: 'Analysis',
+                traceId: gov.node.displayId || '',
+                reqSource: {
+                    generator: 'fta-resource',
+                    sourceId: `${scopeKey}:fta-resource:${rid}`,
+                    context: { resourceId: rid, providerSystemId: providerId, pAllocated: gov.p,
+                               consumers: consumers.slice(),
+                               uses: uses.map(u => ({ page: u.page.id, lid: u.lid, p: u.p, consumer: u.consumerSystemId })) },
+                    fingerprint: fp('fta-resource', rid, gov.p,
+                                    uses.map(u => String(u.lid) + ':' + u.p).sort(),
+                                    consumers.slice().sort()),
+                    generatedAt: Date.now()
+                }
+            });
+        });
+
+        // Consumer interface rows: this scope is a CONSUMER of resources whose
+        // provider (and therefore provider row) lives elsewhere. Walk every
+        // allocation page for declared-resource uses consumed by THIS system;
+        // one L2 per resource, at that consumer's own strictest assumption.
+        if (scopeKey !== 'ac') {
+            const _ifaceUses = new Map();   // resourceId → [{ node, page, lid, p }]
+            _allocationPages().forEach(page => {
+                const ctx = _ownerCtx(page);
+                (function walk(node) {
+                    if (!node) return;
+                    if ((node.type === 'basic' || node.type === 'undeveloped') && _resDeclared(node)) {
+                        const p = parseFloat(node.probability) || 0;
+                        if (p > 0) {
+                            const NI = (typeof window !== 'undefined' && window.SLNodeIdentity)
+                                || (typeof SLNodeIdentity !== 'undefined' ? SLNodeIdentity : null);
+                            let consumer = null;
+                            try {
+                                const own = NI && NI.resolveOwner ? NI.resolveOwner(node, ctx) : null;
+                                consumer = own && own.consumerSystemId ? own.consumerSystemId : null;
+                            } catch (_) { consumer = null; }
+                            if (consumer && ('sys-' + consumer) === scopeKey) {
+                                const rid = String(node.identity.resourceId);
+                                if (!_ifaceUses.has(rid)) _ifaceUses.set(rid, []);
+                                _ifaceUses.get(rid).push({ node, page, lid: node.logicalId != null ? node.logicalId : node.id, p });
+                            }
+                        }
+                    }
+                    (node.children || node._children || []).forEach(walk);
+                })(page.root);
+            });
+            _ifaceUses.forEach((uses, rid) => {
+                let gov = uses[0];
+                uses.forEach(u => { if (u.p < gov.p) gov = u; });
+                const providerId = gov.node.identity.providerSystemId;
+                const consumerName = _sysLabel(scopeKey.slice(4));
+                const pStr = gov.p.toExponential(2);
+                const iSubj = gov.node.name || ('resource ' + rid);
+                const iFail = /(fail|loss|lost|erroneous|inadvertent|jam|rupture|leak|inoperative|unavailable)/i.test(iSubj);
+                const iVerb = /(fails?|failed|jams?|jammed|ruptures?|ruptured|leaks?|leaked|sticks?|stuck|opens?|closes?|disconnects?|activates?|deploys?|bursts?)$/i.test(iSubj.trim());
+                const iClause = iVerb ? `${_midSentence(iSubj)}`
+                              : iFail ? `${_midSentence(iSubj)} occurs`
+                              : `failure of ${_midSentence(iSubj)} occurs`;
+                out.push({
+                    text: `${consumerName} shall assume that ${iClause} with a probability no greater than ${pStr} per flight, per the interface with ${_sysLabel(providerId)}.`,
+                    rat: `Interface assumption on common resource ${rid} (provider: ${_sysLabel(providerId)}). This system's trees take credit for the resource at: ` +
+                         uses.map(u => `${u.page.name} (${u.p.toExponential(2)})`).join('; ') +
+                         `. The strictest of this system's own uses governs. The provider carries the single probabilistic L3 for the resource (${'sys-' + providerId}:fta-resource:${rid}); this row is the consumer-side contract against it (ARP4754B §5.3.1.8).`,
+                    level: 'L2', type: 'Interface', analysis: 'Probabilistic',
+                    verifMethod: 'Analysis',
+                    traceId: gov.node.displayId || '',
+                    reqSource: {
+                        generator: 'fta-resource-iface',
+                        sourceId: `${scopeKey}:fta-resource-iface:${rid}`,
+                        context: { resourceId: rid, providerSystemId: providerId, pAssumed: gov.p,
+                                   pairsWith: 'sys-' + providerId + ':fta-resource:' + rid,
+                                   uses: uses.map(u => ({ page: u.page.id, lid: u.lid, p: u.p })) },
+                        fingerprint: fp('fta-resource-iface', rid, gov.p,
+                                        uses.map(u => String(u.lid) + ':' + u.p).sort()),
+                        generatedAt: Date.now()
+                    }
+                });
+            });
+        }
         return out;
     }
 
@@ -1013,7 +1634,6 @@ const AutoReq = (function(){
     // Toggle stored on projectConfig.autoreqDalMode (default 'compressed').
     function genDALgebra(scopeKey){
         const out = [];
-        const seen = new Set();
         // Option-based DALgebra rationale (ARP4754B §5.2.3 / ARP4761A Table P2). The standards define
         // no marked "carrier"; the explanation of how each member's DAL was derived lives here — in the
         // requirement's rationale — keyed to the option the engineer chose and the independence basis.
@@ -1025,7 +1645,7 @@ const AutoReq = (function(){
                 : 'functional independence';
             if (d.basis === 'option1') return d.role === 'top'
                 ? a.kind + ' ' + a.dal + ' held at the failure condition’s top level under ' + tp2 + ' Option 1 (one member retains the top DAL), predicated on ' + indepTxt + ' between the members.'
-                : a.kind + ' ' + a.dal + ' reduced to the Option 1 floor under ' + tp2 + ' (additional members no lower than the per-severity floor: Cat→C, Haz→D), predicated on ' + indepTxt + ' between the members.';
+                : a.kind + ' ' + a.dal + ' reduced under ' + tp2 + ' Option 1 (additional members two development-assurance levels below the failure condition DAL, floored at DAL E), predicated on ' + indepTxt + ' between the members.';
             if (d.basis === 'option2') return d.role === 'upper'
                 ? a.kind + ' ' + a.dal + ' set one level below the top under ' + tp2 + ' Option 2 (at least two members one level below the FC DAL), predicated on ' + indepTxt + ' between the members.'
                 : a.kind + ' ' + a.dal + ' reduced to the Option 2 floor under ' + tp2 + ', predicated on ' + indepTxt + ' between the members.';
@@ -1040,16 +1660,12 @@ const AutoReq = (function(){
         // scope. We then either emit them all (explicit) or compute the
         // modal default and emit the exceptions (compressed).
         const allocations = [];   // { node, page, lid, kind, dal, opt }
-        walkAllPages((node, page) => {
+        walkPagesInScope(scopeKey, (node, page) => {
             // Every node that received an allocated DAL gets a requirement — including the REDUCED
             // members (not just the former "carriers"), so the option-based reduction is explained
             // in each member's rationale rather than implied by a canvas symbol.
             if(!node.allocatedDAL) return;
             const lid = node.logicalId != null ? node.logicalId : node.id;
-            // Phase 56.49c — dedup by logicalId only (not per-page:per-logicalId).
-            // Shared events represent one physical item; emit one DAL requirement.
-            if(seen.has(lid)) return;
-            seen.add(lid);
 
             const opt = (node._dalDerivation && node._dalDerivation.option) || (node.dalOption === 'opt1' ? '1' : '2');
             // FDAL vs IDAL routing — authoritative when page.treeLevel is declared:
@@ -1074,20 +1690,64 @@ const AutoReq = (function(){
             allocations.push({ node, page, lid, kind, dal: node.allocatedDAL, opt, level });
         });
 
+        // A5 (22 Aug 2026) — ONE requirement per logicalId, at the MAX of the
+        // resulting DALs across every tree that derives one (a shared event is one
+        // physical item; it must satisfy its strictest position, ARP4754B §5.2.3).
+        // The derivations are NOT merged: tree A reducing under Option 1 and tree B
+        // under Option 2 are different arguments, and the rationale cites only the
+        // GOVERNING tree's — the others are named as disagreeing derivations.
+        // Until now this dedupe was first-seen-wins (Phase 56.49c), which made the
+        // register's DAL an accident of page walk order whenever trees disagreed.
+        // Tie rule: same DAL from several trees → the first-walked page governs, so
+        // sourceIds (which carry the page id) do not churn on agreeing projects.
+        const _dalStricter = (a, b) => {
+            // dalMax (helpers) when present; A < B < … < E fallback keeps tests pure.
+            if (typeof dalMax === 'function') return dalMax(a, b) === a;
+            return String(a) <= String(b);
+        };
+        const _byLid = new Map();   // lid → { governing allocation, others: [{page, dal}] }
+        allocations.forEach(a => {
+            const g = _byLid.get(a.lid);
+            if (!g) { _byLid.set(a.lid, { gov: a, others: [] }); return; }
+            if (_dalStricter(a.dal, g.gov.dal) && a.dal !== g.gov.dal) {
+                g.others.push({ page: g.gov.page, dal: g.gov.dal });
+                g.gov = a;
+            } else if (a.dal !== g.gov.dal) {
+                g.others.push({ page: a.page, dal: a.dal });
+            }
+            // equal DAL on another page: first-walked keeps governing; nothing to record
+        });
+        const perLid = [];
+        _byLid.forEach(g => {
+            // Disagreement note + fingerprint tokens ONLY when trees actually disagree —
+            // single-derivation (and agreeing) events keep byte-identical output.
+            const distinct = [];
+            g.others.forEach(o => {
+                const label = (o.page && o.page.name ? o.page.name : String(o.page && o.page.id)) + ' derives ' + o.dal;
+                if (distinct.indexOf(label) < 0) distinct.push(label);
+            });
+            perLid.push(Object.assign({}, g.gov, { _disagree: distinct }));
+        });
+        const _disagreeRat = a => a._disagree && a._disagree.length
+            ? ` Strictest across trees: ${a._disagree.join('; ')} for this same event — the max of the resulting DALs governs, and reduction arguments are not merged across derivations (each tree's argument stands alone, ARP4754B §5.2.3). Governing derivation: ${a.page.name || a.page.id}.`
+            : '';
+        const _disagreeFpTokens = a => a._disagree && a._disagree.length
+            ? ['a5-strictest', a._disagree.slice().sort()] : [];
+
         // Phase 56.49f — emit per mode.
         if (mode === 'explicit') {
-            allocations.forEach(a => {
+            perLid.forEach(a => {
                 out.push({
                     text: `${a.node.name || a.node.displayId || 'Item'} shall be developed to ${a.kind} ${a.dal}.`,
-                    rat: _dalgebraRat(a),
-                    level: 'L2', type: 'Design Assurance',
+                    rat: _dalgebraRat(a) + _disagreeRat(a),
+                    level: 'L2', type: 'Safety', analysis: 'Design Assurance',
                     verifMethod: 'Inspection',
                     traceId: a.node.displayId || '',
                     reqSource: {
                         generator: 'dalgebra',
                         sourceId: `${scopeKey}:dalgebra:${a.page.id}:${a.lid}`,
-                        context: { dal: a.dal, dalOption: a.opt, kind: a.kind, type: a.node.type, treeLevel: a.level },
-                        fingerprint: fp('dalgebra', a.dal, a.opt, a.kind, a.node.type, a.level),
+                        context: { dal: a.dal, dalOption: a.opt, kind: a.kind, type: a.node.type, treeLevel: a.level, disagree: a._disagree.length ? a._disagree : undefined },
+                        fingerprint: fp('dalgebra', a.dal, a.opt, a.kind, a.node.type, a.level, ...(_disagreeFpTokens(a))),
                         generatedAt: Date.now()
                     }
                 });
@@ -1095,11 +1755,11 @@ const AutoReq = (function(){
             return out;
         }
 
-        // Compressed mode: compute modal (kind, dal) combo across all allocations.
-        // Default = the most common pair. Exceptions = everything else.
-        if (allocations.length === 0) return out;
+        // Compressed mode: compute modal (kind, dal) combo across all per-lid
+        // governing allocations (A5 — one physical item, one strictest DAL).
+        if (perLid.length === 0) return out;
         const tally = new Map();   // "kind|dal" → count
-        allocations.forEach(a => {
+        perLid.forEach(a => {
             const k = a.kind + '|' + a.dal;
             tally.set(k, (tally.get(k) || 0) + 1);
         });
@@ -1113,15 +1773,15 @@ const AutoReq = (function(){
             const scopeLabel = scopeKey === 'ac' ? 'aircraft' : 'system';
             out.push({
                 text: `Each ${defaultKind === 'FDAL' ? 'function' : 'item'} within ${scopeLabel} scope shall be developed to ${defaultKind} ${defaultDal} unless a ${defaultKind === 'FDAL' ? 'function' : 'item'}-specific allocation requirement states otherwise.`,
-                rat: `Default applies to ${defaultCount} of ${allocations.length} ${defaultKind === 'FDAL' ? 'functions' : 'items'} in scope; the exceptions are stated as individual allocation requirements. Per ARP4754B §5.2.3 / ARP4761A Table P2.`,
-                level: 'L2', type: 'Design Assurance',
+                rat: `Default applies to ${defaultCount} of ${perLid.length} ${defaultKind === 'FDAL' ? 'functions' : 'items'} in scope; the exceptions are stated as individual allocation requirements. Per ARP4754B §5.2.3 / ARP4761A Table P2.`,
+                level: 'L2', type: 'Safety', analysis: 'Design Assurance',
                 verifMethod: 'Inspection',
                 traceId: '',
                 reqSource: {
                     generator: 'dalgebra-default',
                     sourceId: `${scopeKey}:dalgebra-default:${defaultKey}`,
-                    context: { defaultDal, defaultKind, defaultCount, totalCount: allocations.length },
-                    fingerprint: fp('dalgebra-default', 'v2', defaultDal, defaultKind, defaultCount, allocations.length),
+                    context: { defaultDal, defaultKind, defaultCount, totalCount: perLid.length },
+                    fingerprint: fp('dalgebra-default', 'v2', defaultDal, defaultKind, defaultCount, perLid.length),
                     generatedAt: Date.now()
                 }
             });
@@ -1131,20 +1791,20 @@ const AutoReq = (function(){
         // (Or if defaultCount < 2, every allocation becomes an "exception" — same
         // output as explicit mode, which is fine.)
         const emitAll = defaultCount < 2;
-        allocations.forEach(a => {
+        perLid.forEach(a => {
             const aKey = a.kind + '|' + a.dal;
             if (!emitAll && aKey === defaultKey) return;
             out.push({
                 text: `${a.node.name || a.node.displayId || 'Item'} shall be developed to ${a.kind} ${a.dal}.`,
-                rat: 'Exception to default. ' + _dalgebraRat(a),
-                level: 'L2', type: 'Design Assurance',
+                rat: 'Exception to default. ' + _dalgebraRat(a) + _disagreeRat(a),
+                level: 'L2', type: 'Safety', analysis: 'Design Assurance',
                 verifMethod: 'Inspection',
                 traceId: a.node.displayId || '',
                 reqSource: {
                     generator: 'dalgebra',
                     sourceId: `${scopeKey}:dalgebra:${a.page.id}:${a.lid}`,
-                    context: { dal: a.dal, dalOption: a.opt, kind: a.kind, type: a.node.type, treeLevel: a.level, isException: !emitAll },
-                    fingerprint: fp('dalgebra', a.dal, a.opt, a.kind, a.node.type, a.level, defaultKey),
+                    context: { dal: a.dal, dalOption: a.opt, kind: a.kind, type: a.node.type, treeLevel: a.level, isException: !emitAll, disagree: a._disagree.length ? a._disagree : undefined },
+                    fingerprint: fp('dalgebra', a.dal, a.opt, a.kind, a.node.type, a.level, defaultKey, ...(_disagreeFpTokens(a))),
                     generatedAt: Date.now()
                 }
             });
@@ -1180,14 +1840,33 @@ const AutoReq = (function(){
         if(kids.length < 2) return reasons;
 
         // Shared logicalId — same physical event used twice in an AND.
+        // A7 (22 Aug 2026, ruled: suppress + note) — when the shared event is a
+        // DECLARED resource (macres:/macsys: lid, MAC/lane provenance, resource
+        // identity), the sharing is STRUCTURAL: the model states it and the BDD
+        // quantifies it exactly. It is noted, never counted as a compromise —
+        // common resource ≠ common cause. An UNDECLARED shared lid keeps the
+        // warning verbatim (an engineer reusing an event without declaring a
+        // resource is exactly the case the old text exists for).
+        const _sharedIsDeclared = (lid, nodes) => {
+            const s = String(lid);
+            if (s.indexOf('macres:') === 0 || s.indexOf('macsys:') === 0) return true;
+            return nodes.every(c => c && (c._macProvenance || c._macGraft || c._laneProv
+                || (c.identity && c.identity.kind === 'resource')));
+        };
         const lidMap = new Map();
         kids.forEach(c => {
             const lid = c.logicalId != null ? c.logicalId : c.id;
             if(!lidMap.has(lid)) lidMap.set(lid, []);
-            lidMap.get(lid).push(c.displayId || String(c.id));
+            lidMap.get(lid).push(c);
         });
-        lidMap.forEach((displays, lid) => {
-            if(displays.length > 1) reasons.push({
+        lidMap.forEach((nodes, lid) => {
+            if(nodes.length < 2) return;
+            const displays = nodes.map(c => c.displayId || String(c.id));
+            if(_sharedIsDeclared(lid, nodes)) reasons.push({
+                kind: 'shared-resource-structural', structural: true,
+                detail: `Children ${displays.join(' and ')} share declared resource ${lid} — structural sharing, modeled exactly in the quantification (shared logicalId). Not a common-cause finding: the independence claimed at this gate applies to the remaining, unmodeled couplings (the CRA and CMA lanes own this resource).`
+            });
+            else reasons.push({
                 kind: 'shared-logical-id',
                 detail: `Children ${displays.join(' and ')} share logicalId ${lid} — same physical event used twice (common-mode).`
             });
@@ -1247,6 +1926,32 @@ const AutoReq = (function(){
             if (hasFindings) parts.push(`findings: ${c.findings}`);
             reasons.push({ kind: 'cma', detail: parts.join(' — ') });
         });
+        // A6 (22 Aug 2026) — failures of independence are GLOBAL, claims are LOCAL.
+        // The loop above reports CMAs LINKED to this gate. But an open common-mode
+        // finding is a fact about the member PAIR it couples: if this gate's children
+        // include a pair some other gate's open CMA identified, the independence
+        // claimed here is compromised too — the coupling does not care which gate the
+        // analyst happened to record it against. (The reverse stays false: closing or
+        // substantiating a claim elsewhere validates nothing here.)
+        try {
+            const _idx = (typeof _cmaCompromisedIndex === 'function') ? _cmaCompromisedIndex()
+                       : (typeof window !== 'undefined' && typeof window._cmaCompromisedIndex === 'function' ? window._cmaCompromisedIndex() : null);
+            if (_idx && _idx.pairs && _idx.pairs.size) {
+                const _kids = gate.children || [];
+                const _lids = _kids.map(c => String(c.logicalId != null ? c.logicalId : c.id));
+                const _seenPk = new Set();
+                for (let i = 0; i < _lids.length; i++) for (let j = i + 1; j < _lids.length; j++) {
+                    const pk = [_lids[i], _lids[j]].sort().join('|');
+                    if (_seenPk.has(pk)) continue;
+                    _seenPk.add(pk);
+                    const rec = _idx.pairs.get(pk);
+                    if (!rec) continue;
+                    if (rec.key === page.id + ':' + gate.id) continue;   // linked HERE — already reported above
+                    reasons.push({ kind: 'cma-global',
+                        detail: `CMA ${rec.cma} (recorded at gate ${rec.gate} on ${rec.page}) identifies an open common mode coupling ${_lids[i]}/${_lids[j]} — the same member pair sits under this gate. A failure of independence is global; the claim here cannot stand while that CMA is open.` });
+                }
+            }
+        } catch (e) { /* fail open */ }
         return reasons;
     }
 
@@ -1279,7 +1984,7 @@ const AutoReq = (function(){
 
     function genGateIndependence(scopeKey){
         const out = [];
-        walkAllPages((node, page) => {
+        walkPagesInScope(scopeKey, (node, page) => {
             if(!node || node.type !== 'gate') return;
             // Skip pure TRANSFER pointers and transferred-out stubs (destination root carries the children).
             if(node.gateType === 'TRANSFER' || node.transferOutTo) return;
@@ -1338,6 +2043,9 @@ const AutoReq = (function(){
             if(isAndFamily(node)){
                 if (kids.length < 2) return;   // independence needs ≥2 members
                 const reasons = checkANDCompromise(node).concat(checkCMACompromise(node, page));
+                // A7 — structural notes travel with the reasons but never
+                // compromise the requirement on their own.
+                const _compromising = reasons.filter(r => !r.structural);
                 // Phase 56.50 — independence is TYPED, one claim per requirement:
                 //   (a) functional independence — the AND gate's standing claim;
                 //   (b) development independence — only when a DAL reduction is
@@ -1350,7 +2058,7 @@ const AutoReq = (function(){
                 out.push({
                     text: `${childAssetSubject} shall be functionally independent.`,
                     rat: `Required by AND-family gate ${gateLabel} per ARP 4754A §5.4.1 — the gate's probability product assumes no common cause couples its members. Children: ${childLabels}.${rebalRat}${irNote}`,
-                    level: 'L2', type: 'Independence',
+                    level: 'L2', type: 'Safety', analysis: 'Independence',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
                     reqSource: {
@@ -1363,7 +2071,7 @@ const AutoReq = (function(){
                             ...rebalFingerprintTokens),
                         generatedAt: Date.now()
                     },
-                    compromised: reasons.length > 0,
+                    compromised: _compromising.length > 0,
                     compromiseReasons: reasons
                 });
 
@@ -1377,7 +2085,7 @@ const AutoReq = (function(){
                     out.push({
                         text: `${childAssetSubject} shall be developed with ${kw} development independence.`,
                         rat: `The DAL reduction at gate ${gateLabel} (ARP4754B §5.2.3 / ARP4761A Table P2, Option ${opt}) is predicated on development independence between the members. CMA substantiation (ARP4761A App M) ${_ir.status === 'substantiated' ? 'is recorded' : 'is REQUIRED to validate the reduction'}. Children: ${childLabels}.`,
-                        level: 'L2', type: 'Independence',
+                        level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Analysis',
                         traceId: node.displayId || '',
                         reqSource: {
@@ -1395,7 +2103,7 @@ const AutoReq = (function(){
                     out.push({
                         text: `${childAssetSubject} shall be physically separated.`,
                         rat: `Members of AND-family gate ${gateLabel} protect a Catastrophic top event; installation separation (location, routing, power sources) is required so a single physical event cannot fail more than one member. Coverage is corroborated by ZSA/PRA. Children: ${childLabels}.`,
-                        level: 'L2', type: 'Independence',
+                        level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Inspection',
                         traceId: node.displayId || '',
                         reqSource: {
@@ -1421,7 +2129,7 @@ const AutoReq = (function(){
                     out.push({
                         text: `${subj} shall not be implemented with components of a common part number or design family.`,
                         rat: `Members of AND-family gate ${gateLabel} reference the same component library entry "${key}"; a shared design family defeats the independence claimed at this gate (common-mode susceptibility, ARP4761A App M). Members: ${members.map(c => c.displayId || String(c.id)).join(', ')}.`,
-                        level: 'L2', type: 'Independence',
+                        level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Inspection',
                         traceId: node.displayId || '',
                         reqSource: {
@@ -1447,7 +2155,7 @@ const AutoReq = (function(){
                     out.push({
                         text: `A single common cause shall not fail more than one of ${subj}.`,
                         rat: `Members of AND-family gate ${gateLabel} are declared members of CCF group "${grp}". The independence claimed at this gate requires the declared coupling to be controlled by segregation and its residual contribution bounded (β term) in the gate's quantification (ARP4761A App M). Members: ${members.map(c => c.displayId || String(c.id)).join(', ')}.`,
-                        level: 'L2', type: 'Independence',
+                        level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Analysis',
                         traceId: node.displayId || '',
                         reqSource: {
@@ -1478,7 +2186,7 @@ const AutoReq = (function(){
                         out.push({
                             text: `The design shall preclude ${_midSentence(label)} from affecting more than one of ${childAssetSubject}.`,
                             rat: `Derived from ${cmaIdStr} (status: ${status}), which identifies this common mode across the members of AND-family gate ${gateLabel}. CMA closure (Mitigated / Closed — Accepted) is the substantiating evidence.${c.findings ? ' Findings: ' + c.findings : ''}`,
-                            level: 'L2', type: 'Independence',
+                            level: 'L2', type: 'Safety', analysis: 'Independence',
                             verifMethod: 'Analysis',
                             traceId: node.displayId || '',
                             reqSource: {
@@ -1508,8 +2216,8 @@ const AutoReq = (function(){
                     : (_rawFc.charAt(0).toLowerCase() + _rawFc.slice(1));
                 out.push({
                     text: `No single failure shall result in ${fcSubject}.`,
-                    rat: `Required for ${topSev} failure conditions per 14 CFR 25.1309(b) / AC 25.1309-1A. Top: ${gateLabel}.${rebalRat}`,
-                    level: 'L2', type: 'Independence',
+                    rat: `Required for ${topSev} failure conditions per 14 CFR 25.1309(b) / AC 25.1309-1B §4.1. Top: ${gateLabel}.${rebalRat}`,
+                    level: 'L2', type: 'Safety', analysis: 'Independence',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
                     reqSource: {
@@ -1557,8 +2265,8 @@ const AutoReq = (function(){
             const retainStr = exposedList.length ? exposedList.join(', ') : 'the aircraft sub-functions housed in those zones';
             out.push({
                 text: `If the particular risk "${p.threat || 'unspecified threat'}" occurs within zone(s) ${zonesStr}, the aircraft shall retain ${retainStr}.`,
-                rat: `Derived from PRA ${p.praId || ''}: "${p.desc || ''}". Threat: ${p.threat || '—'}. Zones affected: ${zonesStr}. Exposed sub-functions (via zone housing): ${exposedStr}. Retention may be met by protection of the installation or by an accepted compensating means — either way the exposed functions survive the postulated event.${mitRat} Per ARP 4761A §5.1.2.4 / 14 CFR 25.1309.`,
-                level: 'L2', type: 'Independence',
+                rat: `Derived from PRA ${p.praId || ''}: "${p.desc || ''}". Threat: ${p.threat || '—'}. Zones affected: ${zonesStr}. Exposed sub-functions (via zone housing): ${exposedStr}. Retention may be met by protection of the installation or by an accepted compensating means — either way the exposed functions survive the postulated event.${mitRat} Per ARP4761A App L / 14 CFR 25.1309.`,
+                level: 'L2', type: 'Safety', analysis: 'Independence',
                 verifMethod: 'Analysis',
                 traceId: p.praId || '',
                 reqSource: {
@@ -1599,8 +2307,8 @@ const AutoReq = (function(){
             const sourceKey = z.zoneId;
             out.push({
                 text: `A single zonal event within zone ${z.zoneId} shall not compromise more than one of ${housedStr}.`,
-                rat: `Derived from ZSA zone ${z.zoneId} (${z.desc || 'no description'}). Severity: ${z.severity || '—'}. Equipment: ${z.equip || '—'}. Environmental, electrical, mechanical, and installation separation of the housed sub-functions is the design means.${strictRat}${mitRat} Per ARP 4761A §5.1.2.4 / AC 25.1309-1B Zonal Safety Analysis.`,
-                level: 'L2', type: 'Independence',
+                rat: `Derived from ZSA zone ${z.zoneId} (${z.desc || 'no description'}). Severity: ${z.severity || '—'}. Equipment: ${z.equip || '—'}. Environmental, electrical, mechanical, and installation separation of the housed sub-functions is the design means.${strictRat}${mitRat} Per ARP4761A App K / AC 25.1309-1B Zonal Safety Analysis.`,
+                level: 'L2', type: 'Safety', analysis: 'Independence',
                 verifMethod: 'Analysis',
                 traceId: z.zoneId || '',
                 reqSource: {
@@ -1615,7 +2323,7 @@ const AutoReq = (function(){
                 out.push({
                     text: `The aircraft sub-functions housed in zone ${z.zoneId} shall be physically separated.`,
                     rat: `Zone ${z.zoneId} is classified Catastrophic; separation must be physical, not merely logical. Housed sub-functions: ${housedStr}. Verified by inspection of the installation and by analysis (ZSA).`,
-                    level: 'L2', type: 'Independence',
+                    level: 'L2', type: 'Safety', analysis: 'Independence',
                     verifMethod: 'Inspection',
                     traceId: z.zoneId || '',
                     reqSource: {
@@ -1632,6 +2340,248 @@ const AutoReq = (function(){
     }
 
     // Resolve target store + helper for scope key 'ac' or 'sys-<id>'.
+    // ----- Generator 7: HF register -> ARP4754B §5.3.1.4 operational requirements -----
+    //
+    // WHY THIS EXISTS. ARP4754B §5.1.8 is the mandate: where human-performed tasks
+    // or limitations are relied on to ensure safety or to form part of the
+    // certification substantiation, they should be identified and recorded in the
+    // certification data. The HF register already IDENTIFIES them — that is what a
+    // typed Human Factors assumption is. Nothing was RECORDING them as requirements,
+    // so the crew credit lived only as an assumption and never became something with
+    // a verification method against it.
+    //
+    // §5.3.1.4 names four things as the bulk of an operational requirement: actions,
+    // decisions, information requirements, and timing. Three of those are derivable
+    // from what the register actually holds. The fourth is not, and this generator
+    // does not invent it:
+    //
+    //   ACTIONS      — hf.crewmember + hf.direction + the assumption statement.
+    //                  The statement is QUOTED, never paraphrased. Every other
+    //                  generator in this file builds text from structured fields
+    //                  (a probability, a DAL, an interval); the action exists only
+    //                  as the analyst's prose, and rewriting an engineer's words
+    //                  into an imperative is how meaning gets quietly changed.
+    //
+    //   TIMING       — hf.taskTimeS with hf.taskTimeBasis. The strongest of the
+    //                  three: a measured number with a stated provenance.
+    //
+    //   INFORMATION  — hf.channels, but ONLY the sensory ones. The channel pack
+    //                  mixes input channels (visual, auditory) with response and
+    //                  resource channels (psychomotor, verbal, cognitive). A
+    //                  requirement on what the aircraft must PRESENT can only be
+    //                  built from the input side; "presented via the cognitive
+    //                  channel" is not a sentence about a display.
+    //
+    //   DECISIONS    — NOT GENERATED. There is no decision field on the register.
+    //                  Deriving one from direction or workload band would be
+    //                  invention dressed as derivation. Logged as an open item.
+    //
+    // §5.3.1.4 also requires normal AND non-normal circumstances to be considered.
+    // The register's `direction` carries that distinction (prevention tasks run in
+    // normal operation; recovery and non-recovery are by definition non-normal), so
+    // it is stated in the rationale rather than turned into a separate requirement.
+    function genHfOperational(scopeKey){
+        const out = [];
+        const A = (typeof window !== 'undefined') ? window.HF_ASSUMPTIONS : null;
+        if (!A || typeof A.asmAllTyped !== 'function') return out;
+
+        // An assumption's scope is 'Aircraft' or the system's display name; the
+        // generator's scopeKey is 'ac' or 'sys-<id>'. Resolve one to the other, and
+        // fall back to the id, because a system with no name still owns its rows.
+        let wantScope = 'Aircraft';
+        if (scopeKey !== 'ac') {
+            const sysId = scopeKey.replace(/^sys-/, '');
+            const sys = (systemsData || []).find(x => x.id === sysId);
+            wantScope = sys ? (sys.name || sys.id) : sysId;
+        }
+
+        // Failure conditions resting on this assumption — the reason the crew credit
+        // is load-bearing, and what makes the requirement traceable.
+        const fhaArr = fhaArrForScope(scopeKey) || [];
+        const fcsFor = asmId => fhaArr.filter(f => (f.assumptionIds || []).indexOf(asmId) >= 0);
+
+        const SENSORY = { visual: 1, auditory: 1, tactile: 1 };
+        const phaseNames = (typeof A.phasesNormalized === 'function') ? A.phasesNormalized() : [];
+        const phaseOf = n => phaseNames.find(p => String(p.name).toLowerCase() === String(n || '').toLowerCase()) || null;
+
+        (A.asmAllTyped() || []).forEach(a => {
+            if (!a || a.type !== 'hf' || !a.hf) return;
+            if (String(a.scope) !== String(wantScope)) return;
+            const h = a.hf;
+            const crew = (h.crewmember || '').trim();
+            if (!crew) return;   // without a responsible party there is no operational requirement to write
+
+            const stmt = String(a.text || '').trim();
+            if (!stmt) return;
+
+            const fcs = fcsFor(a.asmId);
+            const fcRat = fcs.length
+                ? ` Relied on by ${fcs.map(f => f.fcId || ('#' + f.internalId)).join(', ')}` +
+                  (fcs.some(f => /^(Catastrophic|Hazardous)$/i.test(f.severity || '')) ? ' (includes a Catastrophic/Hazardous condition)' : '') + '.'
+                : ' Not yet linked to a failure condition — the credit is recorded but nothing rests on it.';
+            const stateRat = A.isValidated(a.state)
+                ? ` Assumption ${a.asmId} is ${a.state}, so the credited posture holds.`
+                : ` Assumption ${a.asmId} is ${a.state} — the credit is NOT yet validated, so the conservative posture governs until it is (INV-35).`;
+            const dir = (h.direction || 'recovery');
+            const circumstance = (dir === 'prevention')
+                ? 'normal operation (the task prevents the condition arising)'
+                : (dir === 'workload' ? 'normal and non-normal operation' : 'non-normal operation (the condition has arisen)');
+            const ph = h.responsePhase ? phaseOf(h.responsePhase) : null;
+            const phaseClause = h.responsePhase ? ` during ${h.responsePhase}` : '';
+            const mandate = 'ARP4754B §5.1.8 — a human-performed task relied on to ensure safety is to be identified and recorded in the certification data; §5.3.1.4 is the class it is recorded as.';
+            // A basis naming a simulator or a trial IS test evidence; anything else
+            // is task analysis until somebody says otherwise.
+            const basis = String(h.taskTimeBasis || '').trim();
+            const byTest = /\b(sim|simulator|trial|flight test|test|measured|observed)\b/i.test(basis);
+
+            // ---- ACTION -------------------------------------------------------
+            out.push({
+                text: `The ${crew} shall perform the ${dir} task credited by ${a.asmId}${phaseClause}: "${stmt}"`,
+                rat: `${mandate} Circumstance: ${circumstance}.${fcRat}${stateRat} The task statement is reproduced verbatim from the assumption — it is the analyst's wording, not a restatement.`,
+                level: 'L1', type: 'Operational', analysis: 'Human Factors',
+                verifMethod: 'Analysis',
+                traceId: fcs.length ? (fcs[0].fcId || '') : '',
+                reqSource: {
+                    generator: 'hf-op-action',
+                    sourceId: `${scopeKey}:hf-op-action:${a.asmId}`,
+                    context: { asmId: a.asmId, crewmember: crew, direction: dir, state: a.state,
+                               responsePhase: h.responsePhase || '', fcIds: fcs.map(f => f.fcId || '') },
+                    fingerprint: fp('hf-op-action', a.asmId, stmt, crew, dir, a.state, h.responsePhase || '',
+                                    fcs.map(f => f.fcId || '').slice().sort()),
+                    generatedAt: Date.now()
+                }
+            });
+
+            // ---- TIMING -------------------------------------------------------
+            if (h.taskTimeS != null && h.taskTimeS > 0) {
+                const win = ph && ph.windowS ? ph.windowS : 0;
+                const util = win ? (h.taskTimeS / win) : 0;
+                const winRat = win
+                    ? ` The ${h.responsePhase} response window is ${win} s, so this task alone occupies ${Math.round(util * 100)}% of it` +
+                      (util > (A.TIME_OCCUPANCY_RED_LINE || 0.8) ? ` — already past the ${Math.round((A.TIME_OCCUPANCY_RED_LINE || 0.8) * 100)}% time-occupancy red line before any co-activated task is counted (INV-36).` : '.')
+                    : ` No response window is authored for ${h.responsePhase || 'this phase'}, so INV-36 saturation is silent here and this time is unbounded by anything.`;
+                out.push({
+                    text: `The ${crew} shall complete the task credited by ${a.asmId} within ${h.taskTimeS} seconds${phaseClause}.`,
+                    rat: `${mandate} Timing is the element of §5.3.1.4 the register holds most firmly.` +
+                         (basis ? ` Basis: ${basis}.` : ' No basis is recorded for this task time — it is an assumed number until one is.') +
+                         winRat + stateRat,
+                    level: 'L1', type: 'Operational', analysis: 'Human Factors',
+                    verifMethod: byTest ? 'Test' : 'Analysis',
+                    traceId: fcs.length ? (fcs[0].fcId || '') : '',
+                    reqSource: {
+                        generator: 'hf-op-timing',
+                        sourceId: `${scopeKey}:hf-op-timing:${a.asmId}`,
+                        context: { asmId: a.asmId, taskTimeS: h.taskTimeS, basis, windowS: win,
+                                   utilization: win ? Math.round(util * 100) / 100 : null, crewmember: crew },
+                        fingerprint: fp('hf-op-timing', a.asmId, h.taskTimeS, basis, win, crew, a.state),
+                        generatedAt: Date.now()
+                    }
+                });
+            }
+
+            // ---- INFORMATION --------------------------------------------------
+            const sensory = (h.channels || []).filter(c => SENSORY[String(c).toLowerCase()]);
+            if (sensory.length) {
+                out.push({
+                    text: `The information the ${crew} requires to perform the task credited by ${a.asmId} shall be presented via the ${sensory.join(' and ')} channel${sensory.length > 1 ? 's' : ''}${phaseClause}.`,
+                    rat: `${mandate} §5.3.1.4 defines operational requirements as the interface between the flight crew and the functional system; the declared sensory channels ARE that interface.` +
+                         ((h.channels || []).length > sensory.length
+                            ? ` The assumption also declares ${(h.channels || []).filter(c => !SENSORY[String(c).toLowerCase()]).join(', ')} — those describe what the crew does with the information, not what the system must present, so they are deliberately not requirements here.`
+                            : '') + stateRat,
+                    level: 'L1', type: 'Operational', analysis: 'Human Factors',
+                    verifMethod: 'Inspection',
+                    traceId: fcs.length ? (fcs[0].fcId || '') : '',
+                    reqSource: {
+                        generator: 'hf-op-info',
+                        sourceId: `${scopeKey}:hf-op-info:${a.asmId}`,
+                        context: { asmId: a.asmId, sensoryChannels: sensory, allChannels: h.channels || [], crewmember: crew },
+                        fingerprint: fp('hf-op-info', a.asmId, sensory.slice().sort(), crew, a.state),
+                        generatedAt: Date.now()
+                    }
+                });
+            }
+        });
+        return out;
+    }
+
+    // ----- Generator 8: interface register -> ARP4754B §5.3.1.8 interface requirements -----
+    //
+    // §5.3.1.8 asks for the interconnections plus the relevant characteristics of
+    // the information communicated; every input with a source and every output
+    // destination defined; and descriptions that fully describe signal behaviour.
+    // projectConfig.interfaces holds exactly those fields — fromSystemId,
+    // fromFuncId, toSystemId, toFuncId, kind, medium, direction, icdRef,
+    // resourceId — and is already read by cea_graph, sneak_module,
+    // oos_independence and gt_integrity. Nothing was turning it into requirements.
+    //
+    // The clause's own completeness conditions are checkable, so an incomplete
+    // edge produces a requirement that SAYS what is missing rather than a tidy
+    // sentence that implies the interface is defined when it is not. That is the
+    // whole value here: a silent gap in an interface register is invisible, and
+    // the requirement register is where it becomes somebody's problem.
+    function genInterface(scopeKey){
+        const out = [];
+        // Interfaces are aircraft-level architecture: system-to-system edges. A
+        // system scope would be claiming ownership of the far end too.
+        if (scopeKey !== 'ac') return out;
+        const edges = (typeof projectConfig === 'object' && projectConfig && Array.isArray(projectConfig.interfaces))
+            ? projectConfig.interfaces : [];
+        if (!edges.length) return out;
+        const sysName = id => {
+            const s = (systemsData || []).find(x => x.id === id);
+            return s ? (s.name || s.id) : (id || '(undefined endpoint)');
+        };
+        const DIR = { a_to_b: 'unidirectional', b_to_a: 'unidirectional', bidirectional: 'bidirectional' };
+
+        edges.forEach(e => {
+            if (!e) return;
+            const from = sysName(e.fromSystemId), to = sysName(e.toSystemId);
+            const eid = e.id || (String(e.fromSystemId) + '->' + String(e.toSystemId) + ':' + String(e.kind || ''));
+            const arrow = (e.direction === 'b_to_a') ? (to + ' to ' + from) : (from + ' to ' + to);
+            const both  = e.direction === 'bidirectional';
+
+            // What the clause requires, and whether this edge supplies it.
+            const missing = [];
+            if (!e.fromSystemId || !e.toSystemId) missing.push('an endpoint is undefined, so the input has no source or the output no destination');
+            if (!String(e.medium || '').trim())   missing.push('no medium or signal set is recorded, so the characteristics of the information communicated are undefined');
+            if (!e.direction)                     missing.push('no direction is recorded');
+            if (!String(e.icdRef || '').trim())   missing.push('no ICD reference, so nothing fully describes the behaviour of the signals');
+
+            const mediumClause = String(e.medium || '').trim() ? ` carrying ${e.medium}` : '';
+            const dirClause = both ? ', in both directions' : '';
+            const icdClause = String(e.icdRef || '').trim() ? ` in accordance with ${e.icdRef}` : '';
+            const kindNote = e.kind === 'resource'
+                ? ' This is a SHARED RESOURCE edge — it is a common-cause candidate, and the CMA evaluates whether it defeats an independence claim resting on these two systems.'
+                : (e.kind === 'functional'
+                    ? ' This is a FUNCTIONAL dependency — the far system relies on this interface to deliver its function, so a loss here propagates as a functional failure rather than only a data one.'
+                    : '');
+
+            out.push({
+                text: `The interface from ${arrow}${mediumClause}${dirClause} shall be defined${icdClause}, with the source of every input, the destination of every output, and the behaviour of the signals fully described.`,
+                rat: `ARP4754B §5.3.1.8 — interface requirements cover the interconnections and the relevant characteristics of the information communicated; inputs are to have a defined source and outputs a defined destination, and the descriptions are to fully describe signal behaviour.` +
+                     ` Derived from the project interface register (${e.kind || 'interface'} edge${e.id ? ' ' + e.id : ''}).` + kindNote +
+                     (missing.length
+                        ? ` INCOMPLETE against the clause: ${missing.join('; ')}. The requirement is generated anyway — an interface the safety case leans on that nobody has defined is exactly the gap this class exists to surface.`
+                        : ` The register supplies endpoints, medium, direction and an ICD reference, so the clause's completeness conditions are met.`),
+                level: 'L2', type: 'Interface', analysis: 'Interface register',
+                verifMethod: 'Inspection',
+                traceId: '',
+                reqSource: {
+                    generator: 'iface-def',
+                    sourceId: `${scopeKey}:iface-def:${eid}`,
+                    context: { from: e.fromSystemId || '', to: e.toSystemId || '', kind: e.kind || '',
+                               medium: e.medium || '', direction: e.direction || '', icdRef: e.icdRef || '',
+                               resourceId: e.resourceId || '', incomplete: missing },
+                    fingerprint: fp('iface-def', e.fromSystemId || '', e.toSystemId || '', e.kind || '',
+                                    e.medium || '', e.direction || '', e.icdRef || '', e.resourceId || '',
+                                    missing.slice().sort()),
+                    generatedAt: Date.now()
+                }
+            });
+        });
+        return out;
+    }
+
     function storeForScope(scope){
         if(scope === 'ac') return acReqData;
         const sysId = scope.replace(/^sys-/, '');
@@ -1643,6 +2593,150 @@ const AutoReq = (function(){
         const sysId = scope.replace(/^sys-/, '');
         const s = systemsData.find(x => x.id === sysId);
         return s ? s.fha : [];
+    }
+
+    // =====================================================================
+    // Phase 66.36 — A4. THE IN-PLACE RE-BUCKETING MIGRATION.
+    //
+    // U-6 / BUILD_SPEC §B6. A2 changes which bucket a node belongs to. The bucket is
+    // encoded TWICE — by which array the row physically lives in (acReqData vs
+    // system.req) and by the `ac:` / `sys-<id>:` prefix on reqSource.sourceId, which
+    // _scopeOf() reads back. Both must move together:
+    //
+    //   - rewrite the prefix only  → the row stays in acReqData while _scopeOf reports
+    //     sys-fcs; the next generate() cannot find it in storeForScope('sys-fcs'),
+    //     creates a duplicate there and orphans the original.
+    //   - move the row only        → _scopeOf reports the old owner forever.
+    //
+    // So this is one operation, or it is a corruption. And it MIGRATES rather than
+    // regenerating: a regenerate mints a new internalId and loses verification status,
+    // verification evidence and every manual edit on the row.
+    //
+    // fta-interval (the companion maintenance requirement) shares the lid keyspace and
+    // moves with its event — leaving it behind would strand it in a bucket whose tree no
+    // longer contains the node it refers to.
+    //
+    // POSTURE, ruled by Waqas 19 Aug 2026: previewed and confirmed, never silent. This
+    // module only PLANS the migration; nothing here writes until applyBucketMigration is
+    // called from an explicit user action, and the decision is recorded as provenance in
+    // an attributed sentence. Same posture as the rebalance flow in BUILD_SPEC §D: a tool
+    // that moves a safety requirement's owner without a human deciding is making the
+    // decision itself.
+    // =====================================================================
+
+    const _REBUCKETABLE = { 'fta-event': true, 'fta-interval': true };
+
+    // '<scope>:<generator>:<lid>' — the lid may itself contain colons, so match rather
+    // than split. Returns null for any sourceId that is not a re-bucketable FTA row.
+    function _parseFtaSourceId(sid){
+        const m = String(sid || '').match(/^(ac|sys-[^:]+):(fta-event|fta-interval):(.+)$/);
+        return m ? { scope: m[1], generator: m[2], lid: m[3] } : null;
+    }
+
+    // Every requirement row in the project, tagged with the bucket it physically sits in.
+    function _allReqRows(){
+        const rows = [];
+        (acReqData || []).forEach(r => rows.push({ req: r, bucket: 'ac', store: acReqData }));
+        (systemsData || []).forEach(s => {
+            if(!s || !Array.isArray(s.req)) return;
+            s.req.forEach(r => rows.push({ req: r, bucket: 'sys-' + s.id, store: s.req }));
+        });
+        return rows;
+    }
+
+    // lid → the bucket its node belongs to NOW, by declared owner. First occurrence wins,
+    // matching the seenLids dedupe in genFTAEvents so the plan and the generator agree.
+    function _bucketByLid(){
+        const map = new Map();
+        _allocationPages().forEach(page => {
+            const ctx = _ownerCtx(page);
+            (function walk(node){
+                if(!node) return;
+                if(node.type === 'basic' || node.type === 'undeveloped'){
+                    const lid = String(node.logicalId != null ? node.logicalId : node.id);
+                    if(!map.has(lid)) map.set(lid, { scope: _nodeScopeKey(node, page, ctx), node, page });
+                }
+                const kids = node.children || node._children;
+                if(kids) kids.forEach(walk);
+            })(page.root);
+        });
+        return map;
+    }
+
+    // What WOULD move, and what it costs. Pure — reads only.
+    function planBucketMigration(){
+        const want = _bucketByLid();
+        const moves = [], unresolved = [];
+        _allReqRows().forEach(row => {
+            const r = row.req;
+            if(!r || r.deleted || !r.reqSource) return;
+            if(!_REBUCKETABLE[r.reqSource.generator]) return;
+            const parsed = _parseFtaSourceId(r.reqSource.sourceId);
+            if(!parsed) return;
+            const target = want.get(String(parsed.lid));
+            // The node is gone — that is an ORPHAN, which generate() already reports.
+            // Silently re-filing a requirement whose source no longer exists would hide it.
+            if(!target){ unresolved.push({ req: r, from: row.bucket, lid: parsed.lid, reason: 'no node with this logical id on any allocation page' }); return; }
+            if(target.scope === row.bucket && parsed.scope === row.bucket) return;   // already correct
+            const destStore = storeForScope(target.scope);
+            if(!destStore){ unresolved.push({ req: r, from: row.bucket, lid: parsed.lid, reason: 'destination bucket ' + target.scope + ' has no requirement store' }); return; }
+            moves.push({
+                req: r,
+                lid: parsed.lid,
+                generator: parsed.generator,
+                from: row.bucket,
+                to: target.scope,
+                prefixWas: parsed.scope,
+                // The two facts that decide whether this is cheap or expensive, per §D:
+                // a draft costs nothing to move; an issued, evidenced requirement does not.
+                hasVerificationStatus: !!(r.verifStatus || r.verificationStatus),
+                hasEvidence: !!(r.verifEvidence || (Array.isArray(r.evidence) && r.evidence.length)),
+                userOverridden: !!(r.reqSource && r.reqSource.userOverridden),
+                traceId: r.traceId || r.id || ('REQ-' + r.internalId),
+                text: r.text || ''
+            });
+        });
+        return { moves, unresolved };
+    }
+
+    function _bucketLabel(scope){
+        if(scope === 'ac') return 'Aircraft';
+        const s = (systemsData || []).find(x => x && ('sys-' + x.id) === scope);
+        return s ? (s.name || s.id) : scope;
+    }
+
+    // Apply a plan. Writes. Only ever called from an explicit user action.
+    function applyBucketMigration(plan, opts){
+        opts = opts || {};
+        if(!plan || !Array.isArray(plan.moves) || !plan.moves.length) return 0;
+        let who = opts.by || '';
+        if(!who){ try { who = (typeof window !== 'undefined' && typeof window._signoffReviewerName === 'function') ? (window._signoffReviewerName() || '') : ''; } catch(_) { who = ''; } }
+        const when = new Date();
+        let n = 0;
+        plan.moves.forEach(mv => {
+            const src = storeForScope(mv.from);
+            const dst = storeForScope(mv.to);
+            if(!src || !dst) return;
+            const i = src.indexOf(mv.req);
+            if(i < 0) return;
+            const preSnap = (typeof ReqHistory !== 'undefined' && ReqHistory.snapshot) ? (function(){ try { return ReqHistory.snapshot(mv.req); } catch(_) { return null; } })() : null;
+            // Move the row, then rewrite the key. Order matters only for readability —
+            // both land before anything else can observe the store.
+            src.splice(i, 1);
+            dst.push(mv.req);
+            mv.req.reqSource.sourceId = mv.to + ':' + mv.generator + ':' + mv.lid;
+            // Provenance, in the active voice and naming a person. "budgets updated" is
+            // exactly what this must never say (§D).
+            const sentence = (who || 'An analyst') + ' moved ' + mv.traceId + ' from the '
+                + _bucketLabel(mv.from) + ' register to ' + _bucketLabel(mv.to) + ' on '
+                + when.toLocaleDateString() + ', because the fault-tree node it is allocated from '
+                + 'is declared to ' + _bucketLabel(mv.to) + '.';
+            const log = mv.req.reqSource.rebucketed || (mv.req.reqSource.rebucketed = []);
+            log.push({ from: mv.from, to: mv.to, at: when.toISOString(), by: who || null, sentence: sentence });
+            try { if (typeof ReqHistory !== 'undefined' && ReqHistory.record) ReqHistory.record(mv.req, 'rebucket', preSnap, { note: sentence }); } catch(_) {}
+            n++;
+        });
+        return n;
     }
 
     // ---------------------------------------------------------------------
@@ -1735,7 +2829,8 @@ const AutoReq = (function(){
         'gate-indep-or':  { text: '${text}', rat: '${rat}' },
         'pra-zonal':      { text: '${text}', rat: '${rat}' },
         'zsa-separation': { text: '${text}', rat: '${rat}' },
-        'zsa-phys':       { text: '${text}', rat: '${rat}' }
+        'zsa-phys':       { text: '${text}', rat: '${rat}' },
+        'fcim-monitor':   { text: '${text}', rat: '${rat}' }
     };
 
     // Diff a previous req against the live generated candidate to figure out what changed.
@@ -1753,11 +2848,57 @@ const AutoReq = (function(){
         return changes;
     }
 
+    // ----- Generator 9: FCIM aware/unaware pair -> crew-awareness monitoring requirement -----
+    //
+    // Decided 2 Aug 2026 (Waqas). The recorded awareness doctrine: when awareness
+    // affects severity, the sub-function carries an Aware and an Unaware row,
+    // paired (pairId, set in the FCIM_COMBINED desk), and the engineer records
+    // which risk governs. Choosing 'aware' takes credit for crew awareness — a
+    // credit that exists only if the crew is actually made aware. This generator
+    // emits the annunciation/monitoring requirement that credit owes. 'unaware'
+    // governing (no credit taken) or an undecided pair emits NOTHING; a
+    // standalone Unaware row is legitimate and emits nothing (Waqas's ruling).
+    // AC scope only for now — the pairing desk writes acFcimData; extend with
+    // the system desk when it exists. Per ARP4761A §A.3 awareness distinction
+    // and the §xx.1309 warning-information expectation.
+    function genFcimMonitoring(scopeKey){
+        if (scopeKey !== 'ac') return [];
+        const out = [];
+        const rows = (typeof acFcimData !== 'undefined' ? acFcimData : []) || [];
+        const seen = new Set();
+        rows.forEach(r => {
+            if (!r || !r.pairId || r.pairGoverns !== 'aware' || seen.has(r.pairId)) return;
+            const partner = rows.find(x => x && x !== r && x.pairId === r.pairId);
+            if (!partner) return;   // half a pair is a standalone row — legitimate, nothing owed
+            seen.add(r.pairId);
+            const unaware = (r.awareness === 'Unaware') ? r : (partner.awareness === 'Unaware' ? partner : null);
+            if (!unaware) return;   // no unaware half — nothing to annunciate
+            const fcIds = [unaware.tlId, unaware.plId, unaware.mId].filter(Boolean);
+            if (!fcIds.length) return;
+            const subId = unaware.subId || r.subId || '';
+            out.push({
+                text: `Failure conditions ${fcIds.join(', ')} of ${subId} shall be annunciated to the flight crew.`,
+                rat: `Derived from FCIM aware/unaware pair ${r.pairId} on ${subId}: the AWARE (lower-risk) classification was chosen to govern, which takes credit for crew awareness. The credit holds only if the crew is made aware, so annunciation of the otherwise-unaware condition(s) is required. Per ARP4761A §A.3 crew-awareness distinction and the §xx.1309 warning-information expectation. Unpairing the rows or choosing the unaware risk to govern withdraws this requirement on the next generate.`,
+                level: 'L1', type: 'Safety', analysis: 'Human Factors',
+                verifMethod: 'Test',
+                traceId: subId,
+                reqSource: {
+                    generator: 'fcim-monitor',
+                    sourceId: `${scopeKey}:fcim-monitor:${r.pairId}`,
+                    context: { pairId: r.pairId, subId, fcIds, governs: r.pairGoverns },
+                    fingerprint: fp('fcim-monitor', 'v1', r.pairId, subId, fcIds, r.pairGoverns),
+                    generatedAt: Date.now()
+                }
+            });
+        });
+        return out;
+    }
+
     // ----- Public API -----
     // generate({ fha, ftaEvent, dalgebra, gateIndependence }, scope) → preview merge
     function generate(opts, scope){
         scope = scope || 'ac';
-        opts = opts || { fha:true, ftaEvent:true, dalgebra:true, gateIndependence:true, praZonal:true, zsaSeparation:true };
+        opts = opts || { fha:true, ftaEvent:true, dalgebra:true, gateIndependence:true, praZonal:true, zsaSeparation:true, hfOperational:true, iface:true, fcimMonitor:true };
 
         const candidates = [];
         if(opts.fha) candidates.push(...genFHA(fhaArrForScope(scope), scope));
@@ -1766,6 +2907,9 @@ const AutoReq = (function(){
         if(opts.gateIndependence) candidates.push(...genGateIndependence(scope));
         if(opts.praZonal) candidates.push(...genPRA(scope));
         if(opts.zsaSeparation) candidates.push(...genZSA(scope));
+        if(opts.hfOperational) candidates.push(...genHfOperational(scope));
+        if(opts.iface) candidates.push(...genInterface(scope));
+        if(opts.fcimMonitor) candidates.push(...genFcimMonitoring(scope));
 
         // Phase 55.0.8 — apply per-org template overrides to every candidate.
         // The override gets a snapshot of the default text+rat as ${text}/${rat}
@@ -1776,10 +2920,27 @@ const AutoReq = (function(){
         const existing = new Map();
         store.forEach(r => { if(r.reqSource && r.reqSource.sourceId) existing.set(r.reqSource.sourceId, r); });
 
+        // Phase 66.36 (A4) — a row whose node has been re-declared to another system is
+        // NOT new here and NOT an orphan there; it is a pending move awaiting the
+        // analyst's decision. Without this the preview would report the same requirement
+        // twice — once as a fresh row in the new bucket, once as an orphan in the old —
+        // and accepting both would destroy the verification status on the original.
+        const migration = planBucketMigration();
+        const pendingIntoThisScope = new Set();
+        const pendingOutOfThisScope = new Set();
+        migration.moves.forEach(mv => {
+            if(mv.to === scope) pendingIntoThisScope.add(String(mv.lid));
+            if(mv.from === scope) pendingOutOfThisScope.add(mv.req);
+        });
+
         const isNew = [], isUpdated = [], unchanged = [];
         candidates.forEach(cand => {
             const prev = existing.get(cand.reqSource.sourceId);
-            if(!prev) isNew.push(cand);
+            if(!prev){
+                const parsed = _parseFtaSourceId(cand.reqSource.sourceId);
+                if(parsed && pendingIntoThisScope.has(String(parsed.lid))) return;   // arrives by migration, not by creation
+                isNew.push(cand);
+            }
             else if(prev.reqSource.fingerprint !== cand.reqSource.fingerprint) isUpdated.push({ prev, next: cand, diff: describeDiff(prev, cand) });
             else unchanged.push({ prev, next: cand });
         });
@@ -1792,16 +2953,24 @@ const AutoReq = (function(){
             const g = r.reqSource.generator || '';
             const inScope = (
                 (g.startsWith('fha') && opts.fha) ||
-                ((g === 'fta-event' || g === 'fta-interval') && opts.ftaEvent) ||
+                ((g === 'fta-event' || g === 'fta-interval' || g === 'fta-resource' || g === 'fta-resource-iface') && opts.ftaEvent) ||
                 (g.startsWith('dalgebra') && opts.dalgebra) ||
                 (g.startsWith('gate-indep') && opts.gateIndependence) ||
                 (g === 'pra-zonal' && opts.praZonal) ||
-                (g.startsWith('zsa') && opts.zsaSeparation)
+                (g.startsWith('zsa') && opts.zsaSeparation) ||
+                (g.startsWith('hf-op') && opts.hfOperational) ||
+                (g.startsWith('iface') && opts.iface) ||
+                (g === 'fcim-monitor' && opts.fcimMonitor)
             );
+            // Pending a move out of this bucket — its source still exists, it just belongs
+            // to someone else now. Reporting it as an orphan would invite the analyst to
+            // delete a live requirement.
+            if(pendingOutOfThisScope.has(r)) return;
             if(inScope && !candIds.has(r.reqSource.sourceId)) orphaned.push(r);
         });
 
-        return { scope, isNew, isUpdated, unchanged, orphaned };
+        return { scope, isNew, isUpdated, unchanged, orphaned,
+                 migrations: migration.moves, migrationUnresolved: migration.unresolved };
     }
 
     // Apply a merge to the store. Choices control what gets written.
@@ -1837,6 +3006,7 @@ const AutoReq = (function(){
                 prev.rat = next.rat;
                 prev.level = next.level;
                 prev.type = next.type;
+                prev.analysis = next.analysis;
                 prev.traceId = next.traceId || prev.traceId;
                 prev.compromised = !!next.compromised;
                 prev.compromiseReasons = next.compromiseReasons || [];
@@ -1906,7 +3076,8 @@ const AutoReq = (function(){
         'gate-indep-or':    'Gate → No-single-failure check',
         'pra-zonal':        'PRA → Zonal protection',
         'zsa-separation':   'ZSA → Housed-function separation',
-        'zsa-phys':         'ZSA → Physical separation (Cat zone)'
+        'zsa-phys':         'ZSA → Physical separation (Cat zone)',
+        'fcim-monitor':     'FCIM pair → Crew-awareness monitoring (annunciation credit)'
     };
 
     // ========================================================================
@@ -1947,12 +3118,12 @@ const AutoReq = (function(){
                 const scope = m[1];
                 const ref = m[3];
                 if (scope === 'ac') {
-                    const f = (acFhaData || []).find(x => x.internalId === ref);
+                    const f = (acFhaData || []).find(x => String(x.internalId) === String(ref));
                     return f ? f.fcId : null;
                 } else {
                     const sys = systemsData.find(s => 'sys-' + s.id === scope);
                     if (!sys) return null;
-                    const f = (sys.fha || []).find(x => x.internalId === ref);
+                    const f = (sys.fha || []).find(x => String(x.internalId) === String(ref));
                     if (!f) return null;
                     // For sys-side, the FC is normalized to the linked AC FC if traced; otherwise the sys fcId.
                     return f.acTrace || f.fcId;
@@ -2040,12 +3211,127 @@ const AutoReq = (function(){
         return n;
     }
 
+    // ------------------------------------------------------------- INV-46
+    // CCMR pair-trace conflict (Waqas's rulings: 3 Aug — τ > NTE is a
+    // trace-level conflict between the maintainability row and the governing
+    // probabilistic safety row, never a rewrite of either number; 4 Aug —
+    // gating severity ADVISORY). Reads the same latent sweep the CCMR page
+    // renders, so the two surfaces cannot disagree; checked = rows with a
+    // computed bound, fails = exceedances, each naming BOTH sides of the pair
+    // and whether each is in the register or still preview-only.
+    // assurance_modules loads BEFORE invariants.js (index ~3949 vs ~4048), so
+    // registration retries — same net as INV-45 in fcim_combined.
+    if (typeof window !== 'undefined') {
+        (function regInv46(tries) {
+            if (typeof window.invRegister === 'function') {
+                window.invRegister({
+                    id: 'INV-46', sev: 'advisory',
+                    name: 'Authored maintenance intervals within their CCMR not-to-exceed bounds (τ ≤ NTE — pair-trace conflict)',
+                    run: function () {
+                        var rows = [];
+                        try { rows = (typeof ccmrLatentSweep === 'function') ? (ccmrLatentSweep() || []) : []; } catch (_) { rows = []; }
+                        var bounded = rows.filter(function (r) { return r && r.nte != null && isFinite(r.nte) && r.nte < 1e6; });
+                        var fails = [];
+                        bounded.forEach(function (r) {
+                            if (!r.exceeds) return;
+                            var allocPageId = r.verifies || r.pageId;
+                            var page = null;
+                            try { page = (ftaPages || []).find(function (p) { return p && p.id === allocPageId; }) || null; } catch (_) {}
+                            var gov = page ? _governingFhaForPage(page) : null;
+                            var govIn = gov ? _govSafetyAccepted(gov) : false;
+                            var mnt = null;
+                            if (r.lid != null) {
+                                try {
+                                    var scopes = ['ac'].concat(((typeof systemsData !== 'undefined' ? systemsData : []) || []).map(function (s) { return 'sys-' + s.id; }));
+                                    for (var i = 0; i < scopes.length && !mnt; i++) {
+                                        var st = storeForScope(scopes[i]) || [];
+                                        mnt = st.find(function (q) { return q && !q.deleted && q.reqSource && q.reqSource.sourceId === scopes[i] + ':fta-interval:' + r.lid; }) || null;
+                                    }
+                                } catch (_) {}
+                            }
+                            fails.push(
+                                r.system + ' FTA ' + r.event + ' [' + r.severity + (r.fcId ? ', ' + r.fcId : '') + ']: authored ' + r.detection +
+                                ' interval ' + r.interval + ' h exceeds the CCMR not-to-exceed bound ' + (+r.nte).toPrecision(3) + ' h — pair state: maintainability requirement ' +
+                                (mnt ? mnt.reqSource.sourceId + ' in the register' : 'not yet in the register (run AutoReq → FTA events)') +
+                                '; governing safety requirement ' +
+                                (gov ? (govIn ? gov.sourceId + ' in the register' : 'derived only — fha-prob preview (' + gov.sourceId + ')') : 'unresolved (no linked FHA row)') +
+                                '. Reconcile the interval or the design on the CCMR page — never rewrite the safety target.'
+                            );
+                        });
+                        return { checked: bounded.length, fails: fails };
+                    }
+                });
+                return;
+            }
+            if (tries > 0) setTimeout(function () { regInv46(tries - 1); }, 300);
+        })(25);
+    }
+
+    // ---------------------------------------------------------------------
+    // Phase 66.38 — A1. UNOWNED IS A FINDING, NOT A FALLBACK BUCKET (U-4).
+    //
+    // unownedPages() has been computed and exported since 66.27 and reported to
+    // NOBODY — reachable from the console and nowhere else, which is the same as
+    // not existing. This registers it as a cross-artifact invariant, so it renders
+    // in the integrity panel with everything else and is stamped into the evidence
+    // package. No new UI, no new data model: the finding already existed, it just
+    // had no way of reaching a person.
+    //
+    // WHY 'hard'. A page whose systemId does not resolve still generates
+    // requirements — they file into the AIRCRAFT bucket by fallback, silently, and
+    // that fallback is deliberate (a strict rule would make requirements stop being
+    // generated, which is worse). The consequence is a real mis-filing with no
+    // outward sign, which is the same class as INV-44's unresolved transfer
+    // silently zeroing a branch. Detection has to be loud precisely because the
+    // handling is forgiving.
+    //
+    // WHAT THIS DELIBERATELY DOES NOT REPORT — and it is the whole scoping
+    // decision. Since A2, a NODE can also fall back: no declared identity means
+    // resolveOwner returns UNOWNED and the node inherits its page's bucket. Every
+    // node on every existing project is in that state today (measured on Aeolus
+    // HL-1: 0 of 182 carry node.identity), so an invariant that flagged it would
+    // report ~51 failures on a healthy project on day one and train everyone to
+    // ignore the panel. That is the cry-wolf failure the MAC guard exists to
+    // prevent and the reason C4 is parked. An undeclared node is a MIGRATION state,
+    // not a defect. A dangling systemId is a defect.
+    // ---------------------------------------------------------------------
+    if (typeof window !== 'undefined') {
+        (function regInv49(tries) {
+            if (typeof window.invRegister === 'function') {
+                window.invRegister({
+                    id: 'INV-49', sev: 'hard',
+                    name: 'Every allocation fault-tree page resolves to an owner (an unresolved page files its requirements into the aircraft bucket silently)',
+                    run: function () {
+                        var checked = 0, fails = [];
+                        try {
+                            checked = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || [])
+                                .filter(function (p) { return p && !p.verifies; }).length;
+                            (unownedPages() || []).forEach(function (u) {
+                                fails.push('"' + (u.name || 'Untitled') + '" (' + (u.treeLevel || 'standalone') +
+                                           ') — ' + u.reason + '; its requirements are filing into the aircraft bucket');
+                            });
+                        } catch (_) {}
+                        return { checked: checked, fails: fails };
+                    }
+                });
+                return;
+            }
+            if (tries > 0) setTimeout(function () { regInv49(tries - 1); }, 300);
+        })(25);
+    }
+
     return { generate, applyMerge, recomputeFlags, describeDiff, GEN_LABELS, findDuplicates, applyObsoleteTags,
              decideAnalysisDepth, certBasisForChart,
              // Phase 55.0.8 — template overrides API
              DEFAULT_AR_TEMPLATES,
              applyTemplateOverride: _applyTemplateOverride,
-             substituteTemplate: _arSubstitute };
+             substituteTemplate: _arSubstitute,
+             // Phase 66.27 — bucket attribution, exposed so the UI can flag unowned pages
+             // and so the wall can assert the scoping rule directly.
+             pageScopeKey: _pageScopeKey, pageInScope, walkPagesInScope, unownedPages,
+             // Phase 66.36 — A2 / A4.
+             nodeScopeKey: _nodeScopeKey, walkNodesInScope, ownerCtx: _ownerCtx,
+             planBucketMigration, applyBucketMigration, bucketLabel: _bucketLabel };
 })();
 
 const Traceability = (function(){
@@ -2061,7 +3347,18 @@ const Traceability = (function(){
         pra:    'PRA',         zsa:     'ZSA',
         cma:    'CMA',         fmea:    'FMEA',
         library:'Library Entry',
-        item:   'Item / LRU'      // Phase 53.61
+        item:   'Item / LRU',     // Phase 53.61
+        // HF lanes — 2 Sep 2026. Registered so the Traces panel opens with the lane's real
+        // name instead of a raw kind string. The REFERRER RESOLVER for these is not written
+        // yet: getReferrers has no hf* case, so the panel opens honestly empty rather than
+        // pretending. The joins that will fill it (an FHA row crediting an HF assumption, a
+        // task promoted into the register, an alert cited by a failure condition) are real
+        // and already in the data — they are the next piece, not a missing one here.
+        hfAlloc: 'HF Function Allocation', hfTid: 'HF Task Identification',
+        hfTask:  'HF Task Analysis',       hfHea: 'HF Human Error Analysis',
+        hfAlerts:'HF Crew Alerting',       hfErgo: 'HF Ergonomics',
+        hfCd:    'HF Controls & Displays', hfSa:  'HF Situation Awareness',
+        hfMfc:   'HF Minimum Flight Crew'
     };
 
     // Map of kind → tab id (used by the navigation jumper).
@@ -2074,7 +3371,9 @@ const Traceability = (function(){
         ftaPage:'fta', ftaNode: 'fta',
         pra:'pra', zsa:'zsa', cma:'cma', fmea:'fmea',
         library:'library',
-        item:   'items'           // Phase 53.61
+        item:   'items',          // Phase 53.61
+        hfAlloc:'hfa-alloc', hfTid:'hfa-tid', hfTask:'hfa-task', hfHea:'hfa-hea',
+        hfAlerts:'hfa-alerts', hfErgo:'hfa-ergo', hfCd:'hfa-cd', hfSa:'hfa-sa', hfMfc:'hfa-mfc'
     };
 
     // Tiny helper: shorten long labels for chip display.
@@ -2214,7 +3513,7 @@ const Traceability = (function(){
 
         case 'acFha': {
             // Find by internalId or fcId
-            const fha = (acFhaData || []).find(f => f.internalId === target.id || f.fcId === target.id);
+            const fha = (acFhaData || []).find(f => String(f.internalId) === String(target.id) || f.fcId === target.id);
             if (!fha) return [];
             const fcId = fha.fcId;
             // Sys FHAs that trace up to this AC FC via acTraces[] (legacy acTrace still honored) — Phase 28 item 1.
@@ -2256,7 +3555,7 @@ const Traceability = (function(){
         case 'sysFunc': {
             const sys = (systemsData || []).find(s => s.id === target.systemId);
             if (!sys) return [];
-            const f = (sys.functions || []).find(x => x.funcId === target.id || x.internalId === target.id);
+            const f = (sys.functions || []).find(x => x.funcId === target.id || String(x.internalId) === String(target.id));
             if (!f) return [];
             // AC functions this system function traces to (1-to-many).
             const traces = Array.isArray(f.traceIds) ? f.traceIds : (f.traceId ? [f.traceId] : []);
@@ -2289,7 +3588,7 @@ const Traceability = (function(){
         case 'sysFha': {
             const sys = (systemsData || []).find(s => s.id === target.systemId);
             if (!sys) return [];
-            const fha = (sys.fha || []).find(f => f.internalId === target.id || f.fcId === target.id);
+            const fha = (sys.fha || []).find(f => String(f.internalId) === String(target.id) || f.fcId === target.id);
             if (!fha) return [];
             // AC FHAs this sys FHA traces to (acTraces[] with legacy acTrace fallback) — Phase 28 item 1.
             const traces = (Array.isArray(fha.acTraces) && fha.acTraces.length) ? fha.acTraces : (fha.acTrace ? [fha.acTrace] : []);
@@ -2324,12 +3623,12 @@ const Traceability = (function(){
             // FHAs this page links to (linkedFhaIds[] with legacy linkedFhaId fallback) — Phase 28 item 4.
             const pageLinks = (Array.isArray(page.linkedFhaIds) && page.linkedFhaIds.length) ? page.linkedFhaIds : (page.linkedFhaId ? [page.linkedFhaId] : []);
             pageLinks.forEach(lid => {
-                const acFha = (acFhaData || []).find(f => f.internalId === lid);
+                const acFha = (acFhaData || []).find(f => String(f.internalId) === String(lid));
                 if (acFha) {
                     out.push(descriptor('acFha', acFha.internalId, acFha.fcId + ': ' + trim(acFha.fcDesc), { detail: 'Top hazard' }));
                 } else {
                     (systemsData || []).forEach(s => {
-                        const sf = (s.fha || []).find(f => f.internalId === lid);
+                        const sf = (s.fha || []).find(f => String(f.internalId) === String(lid));
                         if (sf) out.push(descriptor('sysFha', sf.internalId, sf.fcId + ': ' + trim(sf.fcDesc), { systemId: s.id, sysSubtab: 'sys-fha', detail: 'Top hazard' }));
                     });
                 }
@@ -2392,7 +3691,7 @@ const Traceability = (function(){
         }
 
         case 'pra': {
-            const pra = (praData || []).find(p => p.internalId === target.id);
+            const pra = (praData || []).find(p => String(p.internalId) === String(target.id));
             if (!pra) return [];
             // Zones it affects
             (pra.affectedZones || []).forEach(zid => {
@@ -2411,7 +3710,7 @@ const Traceability = (function(){
         }
 
         case 'zsa': {
-            const zsa = (zsaData || []).find(z => z.internalId === target.id);
+            const zsa = (zsaData || []).find(z => String(z.internalId) === String(target.id));
             if (!zsa) return [];
             // PRAs whose affectedZones include this zone
             (praData || []).forEach(p => {
@@ -2434,7 +3733,7 @@ const Traceability = (function(){
         }
 
         case 'cma': {
-            const cma = (cmaData || []).find(c => c.internalId === target.id);
+            const cma = (cmaData || []).find(c => String(c.internalId) === String(target.id));
             if (!cma) return [];
             // Linked gates
             (cma.linkedGateIds || []).forEach(key => {
@@ -2492,7 +3791,7 @@ const Traceability = (function(){
         }
 
         case 'fmea': {
-            const m = (fmeaData || []).find(r => r.internalId === target.id);
+            const m = (fmeaData || []).find(r => String(r.internalId) === String(target.id));
             if (!m) return [];
             if (m.fmeaType === 'functional' && m.funcSubId) {
                 const f = (acFunctionsData || []).find(x => x.subId === m.funcSubId);
@@ -2521,7 +3820,7 @@ const Traceability = (function(){
         case 'sysReq': {
             // Reqs are leaves — what they reference is already encoded in their reqSource. Surface the source artifact as a referrer (inverse).
             const list = target.kind === 'acReq' ? (acReqData || []) : (((systemsData || []).find(s => s.id === target.systemId) || {}).req || []);
-            const req = list.find(r => r.internalId === target.id);
+            const req = list.find(r => String(r.internalId) === String(target.id));
             if (!req || !req.reqSource) return [];
             const sid = req.reqSource.sourceId || '';
             const ctx = req.reqSource.context || {};
@@ -2530,12 +3829,12 @@ const Traceability = (function(){
                 const m = sid.match(/^(ac|sys-[^:]+):fha:(?:prob|dal(?::func)?):(.+)$/);
                 if (m) {
                     if (m[1] === 'ac') {
-                        const f = (acFhaData || []).find(x => x.internalId === m[2] || x.fcId === m[2]);
+                        const f = (acFhaData || []).find(x => String(x.internalId) === String(m)[2] || x.fcId === m[2]);
                         if (f) out.push(descriptor('acFha', f.internalId, f.fcId + ': ' + trim(f.fcDesc), { detail: 'Source FHA' }));
                     } else {
                         const sysId = m[1].replace(/^sys-/, '');
                         const s = (systemsData || []).find(x => x.id === sysId);
-                        const f = s && (s.fha || []).find(x => x.internalId === m[2] || x.fcId === m[2]);
+                        const f = s && (s.fha || []).find(x => String(x.internalId) === String(m)[2] || x.fcId === m[2]);
                         if (f) out.push(descriptor('sysFha', f.internalId, f.fcId + ': ' + trim(f.fcDesc), { systemId: sysId, sysSubtab: 'sys-fha', detail: 'Source FHA' }));
                     }
                 }
@@ -2583,7 +3882,7 @@ const Traceability = (function(){
                 const supId = req.reqSource.obsolete.supersededBy;
                 // Find the superseding req across all stores
                 const all = allReqsWithScope();
-                const sup = all.find(({ req: r }) => r.internalId === supId);
+                const sup = all.find(({ req: r }) => String(r.internalId) === String(supId));
                 if (sup) {
                     const k = sup.scope === 'ac' ? 'acReq' : 'sysReq';
                     out.push(descriptor(k, sup.req.internalId, trim(sup.req.text), { systemId: sup.systemId, sysSubtab: sup.scope === 'ac' ? null : 'sys-req', detail: 'This req is superseded by' }));

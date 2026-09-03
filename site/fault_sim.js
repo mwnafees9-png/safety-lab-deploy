@@ -145,14 +145,29 @@
         rules.forEach(rule => {
             (rule.clauses || []).forEach(cl => {
                 const members = cl.of || [];
-                const avail = members.filter(m => !downSystems.has(m));
-                if (avail.length >= (cl.min || 1)) return;
+                let detail;
+                // D2 (L1/L2) — weighted clauses evaluate surviving CAPACITY vs the
+                // scalar floor. The what-if lens toggles whole systems, so a toggled
+                // system contributes 0 (full loss — conservative; degraded states
+                // are not simulated here, they live in the compiled BDDs).
+                if (typeof macClauseWeighted === 'function' && macClauseWeighted(rule, cl)) {
+                    const w = m => (cl.weights && +cl.weights[m] > 0) ? +cl.weights[m] : 1;
+                    const floor = cl.floor != null ? +cl.floor : (cl.min || 1);
+                    const total = members.reduce((a, m) => a + w(m), 0);
+                    const surviving = members.reduce((a, m) => a + (downSystems.has(m) ? 0 : w(m)), 0);
+                    if (surviving >= floor - 1e-12) return;
+                    detail = 'capacity floor ' + floor + ' over [' + members.map(sysName).join(', ') + '] — ' + surviving + ' of ' + total + ' surviving';
+                } else {
+                    const avail = members.filter(m => !downSystems.has(m));
+                    if (avail.length >= (cl.min || 1)) return;
+                    detail = 'min ' + (cl.min || 1) + ' of [' + members.map(sysName).join(', ') + '] — ' + avail.length + ' available';
+                }
                 const fcs = fhaAll
                     .filter(f => f.subId === rule.subId || (Array.isArray(f.subIds) && f.subIds.indexOf(rule.subId) >= 0))
                     .map(f => ({ fcId: f.fcId || '', severity: f.severity || '' }));
                 breaches.push({
                     ruleId: rule.id, subId: rule.subId, phase: rule.phase || '',
-                    detail: 'min ' + (cl.min || 1) + ' of [' + members.map(sysName).join(', ') + '] — ' + avail.length + ' available',
+                    detail: detail,
                     fcs
                 });
             });

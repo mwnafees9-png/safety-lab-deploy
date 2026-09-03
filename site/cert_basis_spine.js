@@ -48,13 +48,68 @@
             id: 'ARP4761A', title: 'Guidelines for Conducting the Safety Assessment Process on Civil Aircraft, Systems, and Equipment',
             publisher: 'SAE International', licensed: true, kind: 'methods',
             rev: 'A', issued: '1996-12', revised: '2023-12', supersedes: 'ARP4761',
-            equivalents: ['EUROCAE ED-135'], recognizedBy: ['FAA AC 25.1309-1A', 'FAA AC 23.1309-1E'],
+            equivalents: ['EUROCAE ED-135'], recognizedBy: ['FAA AC 25.1309-1B', 'FAA AC 23.1309-1E'],
             context: ['14 CFR 25.1309', 'CS 25.1309', 'ARP4754B'],
             purchase: 'https://www.sae.org/standards/content/ARP4761A/',
             note: 'Safety-assessment methods toolbox: the FHA→PASA→PSSA→SSA→ASA process, plus FTA/DD/MA/MBSA, FMEA/FMES, CCA (ZSA/PRA/CMA), CEA, and FDAL/IDAL assignment. Feeds ARP4754B.'
+        },
+        // ---- DO-178C / DO-254 — where ARP4754B §5.2 FDAL/IDAL actually flows
+        // to. Registered 6 Aug 2026: real, well-published structure (level table,
+        // process areas), but Safety Lab runs neither software nor hardware V&V —
+        // pointer-only, same honesty as Part 450 FSA above.
+        'DO-178C': {
+            id: 'DO-178C', title: 'Software Considerations in Airborne Systems and Equipment Certification',
+            publisher: 'RTCA', licensed: true, kind: 'process',
+            rev: 'C', issued: '2011-12', supersedes: 'DO-178B',
+            equivalents: ['EUROCAE ED-12C'], recognizedBy: ['FAA AC 20-115D'],
+            context: ['ARP4754B §5.2', '14 CFR §25.1309'],
+            purchase: 'https://www.rtca.org/content/standards-guidance-materials',
+            note: 'Software development-assurance guidance, five levels A–E by failure-condition severity, each with a growing objective set (verified count: 71/69/62/26/0 across Annex A Tables A-3–A-7) spanning planning, development, verification, configuration management, quality assurance and certification-liaison. Receives FDAL from ARP4754B §5.2 (F44.50-adjacent on the small-aircraft side via ASTM F3230); Safety Lab does not run software V&V — pointer-only.'
+        },
+        'DO-254': {
+            id: 'DO-254', title: 'Design Assurance Guidance for Airborne Electronic Hardware',
+            publisher: 'RTCA', licensed: true, kind: 'process',
+            rev: '', issued: '2000-04',
+            equivalents: ['EUROCAE ED-80'], recognizedBy: ['FAA AC 20-152A'],
+            context: ['ARP4754B §5.2', '14 CFR §25.1309'],
+            purchase: 'https://www.rtca.org/content/standards-guidance-materials',
+            note: 'DO-178C\'s hardware analogue: five levels A–E across planning, conceptual/detailed design, implementation, production transition, verification/validation, configuration management, process assurance and certification-liaison. Receives IDAL from ARP4754B §5.2; Safety Lab does not run hardware V&V — pointer-only.'
+        },
+        // ---- MIL-STD-882E — DoD system safety. Registered 6 Aug 2026: PUBLIC
+        // DOMAIN (US Government work, distribution unlimited), verified directly
+        // against a fetched copy of Table I/II, not reconstructed from memory.
+        // A DIFFERENT vocabulary from the 14 CFR §1309 continuum below — flagged
+        // explicitly so ANEM never conflates the two severity/probability scales.
+        'MIL-STD-882E': {
+            id: 'MIL-STD-882E', title: 'Department of Defense Standard Practice: System Safety',
+            publisher: 'US DoD', licensed: false, kind: 'methods',
+            rev: 'w/Change 1', issued: '2012-05', revised: '2023-09', supersedes: 'MIL-STD-882D',
+            equivalents: [], recognizedBy: [],
+            context: ['defense/DoD programs', 'UAS programs with a DoD customer'],
+            purchase: 'https://quicksearch.dla.mil/',
+            note: 'Hazard identification → risk assessment (severity × probability → risk index) → mishap risk mitigation/acceptance. Its severity (I–IV, casualty/environmental/dollar-threshold based) and probability (A–F, likelihood-over-item-life) codes are NOT the same scale as the aviation Catastrophic/Hazardous/Major/Minor/NSE + per-flight-hour continuum — do not map one onto the other. Safety Lab runs the aviation continuum, not a DoD mishap risk index — pointer-only.'
+        },
+        // ---- ASTM F3230 — Part 23 small-aircraft means of compliance. Registered
+        // 6 Aug 2026, ask from 6 Aug session: verified SCOPE + real F44.50 family
+        // cross-links (F3061/F3309/F3233/F3367/F3060), all confirmed via ASTM's own
+        // published scope statement and a second independent catalog (GlobalSpec) —
+        // but its internal section numbering sits behind the paywall past the
+        // abstract, so this tool does NOT carry clause-level depth for it the way
+        // ARP4761A does. Building that requires the owned copy; flagged honestly
+        // rather than invented.
+        'ASTM F3230': {
+            id: 'ASTM F3230', title: 'Standard Practice for Safety Assessment of Systems and Equipment in Small Aircraft',
+            publisher: 'ASTM International', licensed: true, kind: 'methods',
+            rev: '21a', issued: '2017', revised: '2025',
+            equivalents: [], recognizedBy: ['FAA AC 23.1309-1E (accepted MoC for §23.2510)'],
+            context: ['14 CFR §23.2510', 'AC 23.1309-1E', 'ASTM F44.50'],
+            purchase: 'https://store.astm.org/f3230-21a.html',
+            note: 'Internationally-accepted small-aircraft safety-assessment methods, a §23.2510 means of compliance alongside AC 23.1309-1E. Real F44.50 family (verified, not guessed): F3061 systems/equipment spec, F3309 simplified safety assessment, F3233 flight/nav instrumentation, F3367 HIRF/lightning effects, F3060 terminology. This tool holds the scope + family map, NOT F3230\'s internal sections — see the clause note.'
         }
-        // NEXT: 14 CFR Part 23 + AC 23.1309-1E (public), Part 25/AC 25.1309,
-        //       CS-27/29 + AC 27-1B/29-2C, Part 33/35, SC-VTOL, Part 450 — each from a verified source.
+        // NEXT: EUROCAE ED-79B/ED-135 as their own citable advisory entries (currently
+        // only "equivalents" pointers on ARP4754B/4761A); ARP5150/5151 (rotorcraft
+        // safety assessment) and DO-330/ED-215 (tool qualification) — genuinely not
+        // held/sourced yet, do not add without a verified copy (see HANDOFF §"not held").
     };
 
     // ---- clause index: our summaries + pointers + discharge mapping ----------
@@ -71,7 +126,7 @@
           dischargedBy: ['ac-func', 'ac-fcim', 'sys-dir'], related: [] },
         { id: '4754B-5.1', fw: 'ARP4754B', ref: 'ARP4754B §5.1', title: 'Safety Assessment',
           objective: 'The integral safety assessment feeding development: AFHA → PASA → SFHA → PSSA → SSA → ASA, plus the safety program plan.',
-          dischargedBy: ['ac-fha', 'pasa', 'pssa', 'ssa', 'asa'], related: ['ARP4761A §5'] },
+          dischargedBy: ['ac-fha', 'pasa', 'pssa', 'ssa', 'asa'], related: ['ARP4761A §3'] },
         { id: '4754B-5.1.1', fw: 'ARP4754B', ref: 'ARP4754B §5.1.1', title: 'Aircraft Functional Hazard Assessment (AFHA)',
           objective: 'Identify aircraft-level failure conditions and classify their severity — the entry point of the safety process.',
           dischargedBy: ['ac-fha'], related: ['ARP4761A (FHA method)', 'AC 25.1309'] },
@@ -112,7 +167,7 @@
           dischargedBy: ['arp-process', 'spp'], related: ['ARP4754B §5.1'] },
         { id: '4761A-3.2', fw: 'ARP4761A', ref: 'ARP4761A §3.2', title: 'Aircraft Functional Hazard Assessment (AFHA)',
           objective: 'Identify aircraft-level functions, their failure conditions, and severity classifications — the top of the safety process.',
-          dischargedBy: ['ac-fha'], related: ['ARP4754B §5.1.1', 'AC 25.1309-1A'] },
+          dischargedBy: ['ac-fha'], related: ['ARP4754B §5.1.1', 'AC 25.1309-1B'] },
         { id: '4761A-3.3', fw: 'ARP4761A', ref: 'ARP4761A §3.3', title: 'Preliminary Aircraft Safety Assessment (PASA)',
           objective: 'Show the proposed aircraft-level architecture can meet AFHA safety objectives, before system requirements are fixed.',
           dischargedBy: ['pasa', 'fta'], related: ['ARP4754B §5.1'] },
@@ -127,7 +182,7 @@
           dischargedBy: ['ssa', 'fta', 'fmes'], related: ['ARP4754B §5.1.5'] },
         { id: '4761A-3.7', fw: 'ARP4761A', ref: 'ARP4761A §3.7', title: 'Aircraft Safety Assessment (ASA)',
           objective: 'Roll system assessments back up to confirm aircraft-level safety objectives are met across the integrated aircraft.',
-          dischargedBy: ['asa'], related: ['AC 25.1309-1A'] },
+          dischargedBy: ['asa'], related: ['AC 25.1309-1B'] },
         { id: '4761A-3.9', fw: 'ARP4761A', ref: 'ARP4761A §3.9', title: 'FDAL / IDAL Assignment',
           objective: 'Assign development assurance levels from failure-condition severity, with independence-based reduction — the ARP4754B handshake.',
           dischargedBy: ['dal-ref'], related: ['ARP4754B §5.2'] },
@@ -153,15 +208,48 @@
           objective: 'Confirm redundant elements do not share a common failure mode — design, manufacturing, maintenance, or environmental.',
           dischargedBy: ['cma'], related: ['ARP4761A §4.3'] },
 
+        // ---- DO-178C / DO-254 — where ARP4754B §5.2's FDAL/IDAL actually lands.
+        // Pointer-only: real, verified structure, but Safety Lab does not run SW/HW
+        // V&V itself — never claims tool coverage it doesn't have.
+        { id: 'do178c-levels', fw: 'DO-178C', ref: 'DO-178C Table A-3–A-7', title: 'Software level objective counts (DAL A-E)',
+          objective: 'The objective count scales with software level: 71 (A) / 69 (B) / 62 (C) / 26 (D) / none (E) — our paraphrase of the published counts, not the objectives themselves.',
+          coverage: 'pointer-only', dischargedBy: [], related: ['ARP4754B §5.2', 'DO-254'] },
+        { id: 'do178c-process', fw: 'DO-178C', ref: 'DO-178C §4-§8', title: 'Software lifecycle processes',
+          objective: 'Planning, development (requirements/design/code/integration), verification, configuration management, quality assurance and certification-liaison — the process set a level\'s objectives are drawn from.',
+          coverage: 'pointer-only', dischargedBy: [], related: ['DO-178C Table A-3–A-7'] },
+        { id: 'do254-levels', fw: 'DO-254', ref: 'DO-254', title: 'Hardware design assurance levels (A-E)',
+          objective: 'DO-178C\'s hardware analogue: five levels A-E by failure-condition severity, across planning, conceptual/detailed design, implementation, production transition, and verification/validation.',
+          coverage: 'pointer-only', dischargedBy: [], related: ['DO-178C Table A-3–A-7', 'ARP4754B §5.2'] },
+
+        // ---- MIL-STD-882E — DoD system safety. A different severity/probability
+        // vocabulary from the aviation continuum below; kept pointer-only so ANEM
+        // never blends a MIL-STD-882E risk index with a per-flight-hour target.
+        { id: 'mil882e-severity', fw: 'MIL-STD-882E', ref: 'MIL-STD-882E Table I', title: 'Severity categories',
+          objective: 'Four consequence-based categories — Catastrophic (I), Critical (II), Marginal (III), Negligible (IV) — by casualty/injury/environmental/monetary threshold, NOT failure-condition class.',
+          coverage: 'pointer-only', dischargedBy: [], related: ['MIL-STD-882E Table II'] },
+        { id: 'mil882e-probability', fw: 'MIL-STD-882E', ref: 'MIL-STD-882E Table II', title: 'Probability levels',
+          objective: 'Six qualitative levels — Frequent (A) through Improbable (E), plus Eliminated (F) — describing likelihood over an item\'s life, not a per-flight-hour rate.',
+          coverage: 'pointer-only', dischargedBy: [], related: ['MIL-STD-882E Table I'] },
+        { id: 'mil882e-process', fw: 'MIL-STD-882E', ref: 'MIL-STD-882E §4', title: 'System safety engineering process',
+          objective: 'Hazard identification, risk assessment (severity × probability → risk index), and mishap risk mitigation/acceptance by the responsible authority — the DoD analogue of FHA→PSSA→SSA.',
+          coverage: 'pointer-only', dischargedBy: [], related: ['ARP4761A §3.1'] },
+
+        // ---- ASTM F3230 — Part 23 means of compliance. Scope + real F44.50 family
+        // verified; internal sections are not (paywalled) — one representative
+        // clause, same treatment IEC 61508-6's Annex D gets above.
+        { id: 'astmf3230-method', fw: 'ASTM F3230', ref: 'ASTM F3230', title: 'Safety-assessment method for small aircraft',
+          objective: 'A §23.2510 means of compliance alongside AC 23.1309-1E, sized for small/normal-category aircraft. Method + family reference only; internal sections not reproduced (not sourced beyond the published scope).',
+          coverage: 'pointer-only', dischargedBy: [], related: ['14 CFR §23.2510', 'AC 23.1309-1E', 'ASTM F3061', 'ASTM F3309', 'ASTM F3233', 'ASTM F3367', 'ASTM F3060'] },
+
         // ---- 14 CFR regulatory anchors (public domain) — the rule the safety
         // assessment is COMPLIANCE EVIDENCE for. Numeric targets are NOT stored
         // here; targetFor() injects them from the tool's verified PROB_TARGETS.
         { id: 'far-25.1309b', fw: 'Part 25', ref: '14 CFR §25.1309(b)', title: 'Equipment, systems & installations — safety objectives (transport airplanes)',
           objective: 'The rule the whole safety case answers to: failure-condition probability must be inversely related to severity. Shown via the FHA→PSSA→SSA chain.',
-          dischargedBy: ['ac-fha', 'pssa', 'ssa', 'fta'], related: ['AC 25.1309-1A', 'ARP4761A §3', 'CS 25.1309'] },
+          dischargedBy: ['ac-fha', 'pssa', 'ssa', 'fta'], related: ['AC 25.1309-1B', 'ARP4761A §3', 'CS 25.1309'] },
         { id: 'far-25.1309c', fw: 'Part 25', ref: '14 CFR §25.1309(c)', title: 'Independence & crew warning',
           objective: 'Requires independence between redundant elements and warning of unsafe conditions — the claim the golden thread and CCA must actually verify.',
-          dischargedBy: ['cea', 'zsa', 'pra', 'cma', 'gt-integrity', 'oos'], related: ['ARP4761A §4.3', 'AC 25.1309-1A'] },
+          dischargedBy: ['cea', 'zsa', 'pra', 'cma', 'gt-integrity', 'oos'], related: ['ARP4761A §4.3', 'AC 25.1309-1B'] },
         { id: 'far-23.2510', fw: 'Part 23', ref: '14 CFR §23.2510', title: 'Equipment, systems & installations — safety objectives (normal airplanes)',
           objective: 'The performance-based Part 23 (Amdt 23-64) system-safety rule; severity↔probability targets graduate by airplane Class I–IV.',
           dischargedBy: ['ac-fha', 'pssa', 'ssa', 'fta'], related: ['AC 23.1309-1E', '14 CFR §23.2010', 'ASTM F3230'] },
@@ -198,18 +286,23 @@
           coverage: 'partial', dischargedBy: ['fta'], related: ['14 CFR §450.107'] },
 
         // ---- EASA SC-VTOL (eVTOL) — a full cert basis in the tool -----------
-        { id: 'scvtol-2510', fw: 'SC-VTOL', ref: 'SC-VTOL.2510', title: 'Continued Safe Flight & Landing (CS&FL)',
-          objective: 'Enhanced category must survive any single failure and remain able to continue safe flight and landing — the eVTOL analogue of transport-level integrity.',
-          dischargedBy: ['ac-fha', 'asa', 'fta'], related: ['SC-VTOL.2511', 'AMC SC-VTOL'] },
-        { id: 'scvtol-2511', fw: 'SC-VTOL', ref: 'SC-VTOL.2511', title: 'Aircraft-level safety objectives (Basic vs Enhanced)',
-          objective: 'Sets the failure-condition probability objectives per category — Enhanced at Part 25 stringency, Basic one-to-two orders less; the entry point for the SC-VTOL target ladder.',
-          dischargedBy: ['ac-fha', 'pssa', 'ssa'], related: ['SC-VTOL.2510', 'SC-VTOL.2526'] },
-        { id: 'scvtol-2521', fw: 'SC-VTOL', ref: 'SC-VTOL.2521', title: 'System safety analysis methodology (eVTOL)',
-          objective: 'The safety-assessment method for SC-VTOL systems — FHA/PSSA/SSA plus common-cause, tailored to distributed electric propulsion and novel architectures.',
-          dischargedBy: ['pssa', 'ssa', 'fta', 'cea'], related: ['ARP4761A', 'SC-VTOL.2511'] },
-        { id: 'scvtol-2526', fw: 'SC-VTOL', ref: 'SC-VTOL.2526', title: 'Failure-condition severity classification (eVTOL)',
-          objective: 'Severity classification for VTOL failure conditions across Basic and Enhanced ladders — the eVTOL FHA severity vocabulary.',
-          dischargedBy: ['ac-fha'], related: ['SC-VTOL.2511'] },
+        // 31 Aug 2026 RETRACTION — the four cards below previously cited paragraph
+        // numbers that do not exist in the Special Condition (".2511", ".2521", ".2526")
+        // and mislabelled VTOL.2510 as "Continued Safe Flight & Landing". Re-anchored on
+        // the fetched EASA texts: SC-VTOL-02 Issue 2 (10 June 2024) and MOC SC-VTOL Issue 2
+        // (12 May 2021). Card ids are unchanged so stored references keep resolving.
+        { id: 'scvtol-2510', fw: 'SC-VTOL', ref: 'VTOL.2510', title: 'Equipment, systems, and installations',
+          objective: 'SC-VTOL analogue of §25.1309(b): catastrophic extremely improbable and never from a single failure; hazardous extremely remote; major remote (VTOL.2510(a)). Enhanced adds in-service monitoring, VTOL.2510(c).',
+          dischargedBy: ['ac-fha', 'asa', 'fta'], related: ['MOC VTOL.2510', 'VTOL.2500', 'VTOL.2005'] },
+        { id: 'scvtol-2511', fw: 'SC-VTOL', ref: 'MOC VTOL.2510 §8 Table 1', title: 'Safety objectives per category (Enhanced · Basic 1/2/3)',
+          objective: 'The ladder behind VTOL.2510: per-flight-hour objective + FDAL per class — one row for Enhanced, three for Basic by passenger seats (Basic 1: 0–1, Basic 2: 2–6, Basic 3: 7–9). Numbers live in safety_targets.js.',
+          dischargedBy: ['ac-fha', 'pssa', 'ssa'], related: ['VTOL.2510', 'VTOL.2005', 'MOC VTOL.2510 §7'] },
+        { id: 'scvtol-2521', fw: 'SC-VTOL', ref: 'MOC VTOL.2510 §9–§10', title: 'Safety assessment and development assurance process (eVTOL)',
+          objective: 'MOC §9 accepts the ARP4754A + ARP4761 process (FHA → requirements → verification incl. single-failure → independence) with §9(b) CMA per ARP4761 App. K; §10 allocates FDAL/IDAL and recognises AMC 20-115/20-152/20-189.',
+          dischargedBy: ['pssa', 'ssa', 'fta', 'cea'], related: ['ARP4761A', 'MOC VTOL.2510 §8 Table 1'] },
+        { id: 'scvtol-2526', fw: 'SC-VTOL', ref: 'MOC VTOL.2510 §7(a)', title: 'Failure-condition classification (eVTOL — category-dependent Hazardous/Catastrophic)',
+          objective: 'MOC §7(a) five classes; Hazardous/Catastrophic depend on category — Enhanced: any fatality is Catastrophic, Hazardous excludes fatalities; Basic: tracks AC 23.1309-1E. Loss of CS&FL / controlled emergency landing is Catastrophic.',
+          dischargedBy: ['ac-fha'], related: ['MOC VTOL.2510 §8 Table 1', 'VTOL.2000'] },
 
         // ---- Cert-basis tailoring layer: special conditions & issue papers ---
         // How a novel design (eVTOL, hydrogen, high autonomy) gets its ACTUAL cert
@@ -228,8 +321,10 @@
           dischargedBy: ['ipledger'], related: ['14 CFR §21.16', 'AC 21-101'] },
         // ---- FAA Advisory Circulars (public domain) — the accepted means of
         // compliance / method guidance behind the rules above.
-        { id: 'ac-25.1309', fw: 'AC 25.1309-1A', ref: 'AC 25.1309-1A', title: 'System Design and Analysis (transport)',
-          objective: 'FAA guidance behind §25.1309: the probability↔severity continuum, quantitative FTA methods, and the safety-assessment process. (Draft 1B/"Arsenal" is widely used via issue papers but not formally released.)',
+        // 31 Aug 2026 — re-anchored on AC 25.1309-1B (issued 30 Aug 2024; the old
+        // "1B never formally released" note was wrong). Card id unchanged.
+        { id: 'ac-25.1309', fw: 'AC 25.1309-1B', ref: 'AC 25.1309-1B', title: 'System Design and Analysis (transport)',
+          objective: 'FAA guidance behind §25.1309 (30 Aug 2024, cancels 1A): five severity classes (§3.1), probability terms (§3.2–3.3), single-failure and SLF/CSL+1 rules (§4.3, §5.3.6), depth of analysis (§7.5), probability per flight hour (§7.6, App F).',
           dischargedBy: ['ac-fha', 'pssa', 'ssa', 'fta', 'pra'], related: ['ARP4761A', '14 CFR §25.1309'] },
         { id: 'ac-23.1309', fw: 'AC 23.1309-1E', ref: 'AC 23.1309-1E', title: 'System Safety Analysis & Assessment for Part 23 Airplanes',
           objective: 'FAA guidance behind §23.2510: graduated severity↔probability targets by Class I–IV, qualitative depth for Classes I/II and quantitative for III/IV.',
@@ -238,18 +333,26 @@
           objective: 'FAA acceptance of the ARP4754 development-assurance process as a means of compliance.',
           dischargedBy: ['arp-process', 'spp', 'dal-ref'], related: ['ARP4754B'] },
 
-        // ---- JARUS SORA (Part 107 / specific-category UAS) — pointer-only. The
-        // tool flags a SORA cert basis but does NOT compute GRC/ARC/SAIL, so we
-        // cite the method and never pretend to run it.
+        // ---- JARUS SORA (Part 107 / specific-category UAS). v0.3 (6 Aug 2026):
+        // GRC/mitigations/SAIL/OSOs are two-source verified and computed live.
+        // Initial ARC now COMPUTES too (AEC decision tree, Annex C Table 1) but
+        // at single-source confidence — flagged 'partial' here on purpose, not
+        // because it refuses anymore, but because it hasn't cleared the same
+        // two-source bar and residual ARC (post-tactical-mitigation) is still
+        // analyst-declared. Containment computes for the 1 m/25 m/s UA class
+        // only (two-source verified for that slice); larger classes refuse.
         { id: 'sora-grc', fw: 'Part 107', ref: 'SORA GRC', title: 'Ground Risk Class (GRC)',
           objective: 'Intrinsic ground risk from UAS dimension/speed and population density, cut by M1(A/B/C)/M2 credits with the column-floor rule. COMPUTED live by the SORA Thread (SORA 2.5 iGRC); grey/out-of-table points refuse to Certified.',
-          coverage: 'full', dischargedBy: ['sora-thread'], related: ['SORA ARC', 'JARUS SORA 2.5'] },
+          coverage: 'full', dischargedBy: ['sora-thread'], related: ['SORA ARC', 'SORA Containment', 'JARUS SORA 2.5'] },
         { id: 'sora-arc', fw: 'Part 107', ref: 'SORA ARC', title: 'Air Risk Class (ARC)',
-          objective: 'Traffic-encounter likelihood in the operational volume. DECLARED by the operator in the SORA Thread; initial-ARC derivation from AEC refuses pending verified encounter-class logic — the declared ARC feeds SAIL, never a guess.',
-          coverage: 'partial', dischargedBy: ['sora-thread'], related: ['SORA GRC', 'JARUS SORA 2.5'] },
+          objective: 'Traffic-encounter likelihood in the op volume. Initial ARC now COMPUTED from the AEC decision tree (Annex C Table 1, single-source) as a suggestion; residual ARC stays DECLARED by the operator and feeds SAIL.',
+          coverage: 'partial', dischargedBy: ['sora-thread'], related: ['SORA GRC', 'SORA Containment', 'JARUS SORA 2.5'] },
         { id: 'sora-sail', fw: 'Part 107', ref: 'SORA SAIL', title: 'Specific Assurance & Integrity Level (SAIL)',
           objective: 'Final GRC × ARC → SAIL (I–VI) via Table 7, setting the rigor of the 17 OSOs — the UAS DAL ladder. COMPUTED live by the SORA Thread; the OSO robustness matrix resolves from the verified Annex E module (cited, never invented).',
           coverage: 'full', dischargedBy: ['sora-thread'], related: ['SORA GRC', 'SORA ARC', 'JARUS SORA 2.5'] },
+        { id: 'sora-containment', fw: 'Part 107', ref: 'SORA Containment', title: 'Containment (Step 8 robustness)',
+          objective: 'Adjacent-area buffer plus required containment-robustness level (Annex B Table 8) the geofence/FTS must guarantee. COMPUTED for the 1 m/25 m/s class only, two-source verified; larger classes (Tables 9-13) NOT yet sourced — refuses.',
+          coverage: 'partial', dischargedBy: ['sora-thread'], related: ['SORA GRC', 'SORA SAIL', 'JARUS SORA 2.5'] },
 
         // ---- EASA CS-E / CS-P — public equivalents of Part 33 / Part 35 -------
         { id: 'cse-510', fw: 'CS-E', ref: 'CS-E 510', title: 'Safety analysis — engines (EASA)',
@@ -327,14 +430,16 @@
         { id: '14 CFR Part 29', title: 'Airworthiness Standards: Transport Category Rotorcraft', body: 'FAA', licensed: false },
         { id: '14 CFR Part 33', title: 'Airworthiness Standards: Aircraft Engines', body: 'FAA', licensed: false },
         { id: '14 CFR Part 35', title: 'Airworthiness Standards: Propellers', body: 'FAA', licensed: false },
-        { id: 'AC 25.1309-1A', title: 'System Design and Analysis', body: 'FAA', licensed: false },
+        { id: 'AC 25.1309-1B', title: 'System Design and Analysis', body: 'FAA', licensed: false },
         { id: 'AC 20-174', title: 'Development of Civil Aircraft and Systems', body: 'FAA', licensed: false },
         { id: 'DO-178C', title: 'Software Considerations in Airborne Systems and Equipment Certification', body: 'RTCA', licensed: true },
         { id: 'DO-254', title: 'Design Assurance Guidance for Airborne Electronic Hardware', body: 'RTCA', licensed: true },
         { id: 'CS-25', title: 'Certification Specifications for Large Aeroplanes', body: 'EASA', licensed: false },
         { id: 'IEC 61508-6', title: 'Functional Safety — Part 6 (Annex D β-factor CCF method)', body: 'IEC', licensed: true },
         { id: 'NUREG/CR-4780', title: 'Procedures for Treating Common Cause Failures in Safety and Reliability Studies', body: 'US NRC', licensed: false },
-        { id: 'NUREG/CR-5485', title: 'Guidelines on Modeling Common-Cause Failures in Probabilistic Risk Assessment', body: 'US NRC', licensed: false }
+        { id: 'NUREG/CR-5485', title: 'Guidelines on Modeling Common-Cause Failures in Probabilistic Risk Assessment', body: 'US NRC', licensed: false },
+        { id: 'MIL-STD-882E', title: 'Department of Defense Standard Practice: System Safety', body: 'US DoD', licensed: false },
+        { id: 'ASTM F3230', title: 'Standard Practice for Safety Assessment of Systems and Equipment in Small Aircraft', body: 'ASTM International', licensed: true }
     ];
 
     // ---- 14 CFR Parts (public domain — US Government works) -------------------
@@ -344,31 +449,40 @@
         'Part 21':  { id: 'Part 21',  cfr: '14 CFR Part 21',  title: 'Certification Procedures for Products and Articles', authority: 'FAA', kind: 'procedures', licensed: false, category: 'certification procedures', certBases: [], anchor: '§21.1 / Subpart D–E (changes, STC)', link: 'https://www.ecfr.gov/current/title-14/part-21', note: 'The procedural spine: how a type/production/airworthiness certificate is obtained and how changes are classified. Sits under every airworthiness Part below.' },
         'Part 23':  { id: 'Part 23',  cfr: '14 CFR Part 23',  title: 'Airworthiness Standards: Normal Category Airplanes', authority: 'FAA', kind: 'airworthiness', licensed: false, category: 'normal-category airplanes', certBases: ['Part 23 I', 'Part 23 II', 'Part 23 III', 'Part 23 IV'], anchor: '§23.2510 (safety objectives) · §23.2010 (aircraft-level SA)', link: 'https://www.ecfr.gov/current/title-14/part-23', note: 'Performance-based (Amdt 23-64+). Severity↔probability targets graduate by airplane Class I–IV; means of compliance via ASTM consensus standards + AC 23.1309-1E.' },
         'Part 25':  { id: 'Part 25',  cfr: '14 CFR Part 25',  title: 'Airworthiness Standards: Transport Category Airplanes', authority: 'FAA', kind: 'airworthiness', licensed: false, category: 'transport-category airplanes', certBases: ['Part 25'], anchor: '§25.1309', link: 'https://www.ecfr.gov/current/title-14/part-25', note: 'The flat transport ladder (Catastrophic→Extremely Improbable, etc.). The reference stringency other categories tailor down from.' },
-        'Part 27':  { id: 'Part 27',  cfr: '14 CFR Part 27',  title: 'Airworthiness Standards: Normal Category Rotorcraft', authority: 'FAA', kind: 'airworthiness', licensed: false, category: 'normal-category rotorcraft', certBases: ['Part 27'], anchor: '§27.1309', link: 'https://www.ecfr.gov/current/title-14/part-27', note: 'Small-rotorcraft system safety; FAA safety-continuum tailoring (PS-ASW-27-15) sets targets between Part 23 and Part 25.' },
+        'Part 27':  { id: 'Part 27',  cfr: '14 CFR Part 27',  title: 'Airworthiness Standards: Normal Category Rotorcraft', authority: 'FAA', kind: 'airworthiness', licensed: false, category: 'normal-category rotorcraft', certBases: ['Part 27 I', 'Part 27 II', 'Part 27 III', 'Part 27 IV'], anchor: '§27.1309 · AC 27-1B · PS-ASW-27-15 Classes I–IV', link: 'https://www.ecfr.gov/current/title-14/part-27', note: 'Small-rotorcraft system safety; AC 27-1B defines the five classes and probability terms; FAA policy PS-ASW-27-15 (30 June 2017) tiers the objectives by Class I–IV (engine type, occupants, weight). Objectives per class verified 1 Sep 2026 against EASA AMC1 27.1309 Table 2 (CS-27 Amdt 10); FAA class thresholds still from the 2017 draft.' },
         'Part 29':  { id: 'Part 29',  cfr: '14 CFR Part 29',  title: 'Airworthiness Standards: Transport Category Rotorcraft', authority: 'FAA', kind: 'airworthiness', licensed: false, category: 'transport-category rotorcraft', certBases: ['Part 29'], anchor: '§29.1309', link: 'https://www.ecfr.gov/current/title-14/part-29', note: 'Transport rotorcraft; targets align with Part 25 stringency.' },
         'Part 33':  { id: 'Part 33',  cfr: '14 CFR Part 33',  title: 'Airworthiness Standards: Aircraft Engines', authority: 'FAA', kind: 'airworthiness', licensed: false, category: 'aircraft engines', certBases: ['Part 33'], anchor: '§33.75 (safety analysis) · §33.28 (control systems)', link: 'https://www.ecfr.gov/current/title-14/part-33', note: 'Engine-level safety analysis; failure effects framed as Hazardous/Major Engine Effects per engine-flight-hour.' },
         'Part 35':  { id: 'Part 35',  cfr: '14 CFR Part 35',  title: 'Airworthiness Standards: Propellers', authority: 'FAA', kind: 'airworthiness', licensed: false, category: 'propellers', certBases: ['Part 35'], anchor: '§35.15 (safety analysis)', link: 'https://www.ecfr.gov/current/title-14/part-35', note: 'Propeller failure-condition analysis on the Part 25 severity ladder.' },
         'Part 450': { id: 'Part 450', cfr: '14 CFR Part 450', title: 'Launch and Reentry License Requirements (commercial space)', authority: 'FAA/AST', kind: 'operations', licensed: false, category: 'commercial space launch/reentry', certBases: ['Part 450'], anchor: '§450.101 (safety criteria) · §450.107 (flight safety analysis)', link: 'https://www.ecfr.gov/current/title-14/part-450', note: 'Mission-based public-risk regime — expected-casualty thresholds, not a per-flight-hour severity ladder. No DAL/probability ladder in the tool (targets null).' },
         'Part 107': { id: 'Part 107', cfr: '14 CFR Part 107', title: 'Small Unmanned Aircraft Systems', authority: 'FAA', kind: 'operations', licensed: false, category: 'small UAS', certBases: ['Part 107'], anchor: '§107 subparts · JARUS SORA (SAIL)', link: 'https://www.ecfr.gov/current/title-14/part-107', note: 'Operational rule; system-safety rigor scales by SORA SAIL rather than a per-flight-hour ladder.' },
         // EASA Special Condition — not a 14 CFR Part, but a first-class cert basis in the tool.
-        'SC-VTOL':  { id: 'SC-VTOL',  cfr: 'EASA SC-VTOL', title: 'Special Condition for Small-Category VTOL-Capable Aircraft', authority: 'EASA', kind: 'special-condition', licensed: false, category: 'eVTOL / powered-lift (Basic & Enhanced)', certBases: ['SC-VTOL Basic', 'SC-VTOL Enhanced'], anchor: 'SC-VTOL.2510 (CS&FL) · .2511 (safety objectives)', link: 'https://www.easa.europa.eu/en/document-library/product-certification-consultations/special-condition-vtol-capable-aircraft', note: 'Two categories: Enhanced (Continued Safe Flight & Landing, congested-area / commercial pax) at Part 25 stringency; Basic one-to-two orders less. Tailors the 1309 approach to eVTOL — no single-Part precedent.' },
+        'SC-VTOL':  { id: 'SC-VTOL',  cfr: 'EASA SC-VTOL', title: 'Special Condition for Small-Category VTOL-Capable Aircraft', authority: 'EASA', kind: 'special-condition', licensed: false, category: 'eVTOL / powered-lift (Basic & Enhanced)', certBases: ['SC-VTOL Basic 1', 'SC-VTOL Basic 2', 'SC-VTOL Basic 3', 'SC-VTOL Enhanced'], anchor: 'VTOL.2510 (equipment, systems, installations) · MOC VTOL.2510 §8 Table 1 (safety objectives)', link: 'https://www.easa.europa.eu/en/document-library/product-certification-consultations/special-condition-vtol', note: 'SC-VTOL-02 Issue 2 (10 June 2024): ≤9 passenger seats, MCTOM ≤5 700 kg. Two categories (VTOL.2005): Enhanced (continued safe flight and landing; mandatory for congested-area ops and commercial passenger transport) at Part 25 stringency; Basic (controlled emergency landing) split by seats into Basic 1/2/3 in MOC SC-VTOL Issue 2 Table 1. Tailors the 1309 approach to eVTOL — no single-Part precedent.' },
         // EASA Certification Specifications — public equivalents to the FAA engine/propeller Parts.
         'CS-E':     { id: 'CS-E',     cfr: 'EASA CS-E', title: 'Certification Specifications for Engines', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'aircraft engines (EU)', certBases: ['Part 33'], anchor: 'CS-E 510 (safety analysis)', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 33; CS-E 510 mirrors §33.75 engine safety analysis, CS-E 810 fan blade containment.' },
-        'CS-P':     { id: 'CS-P',     cfr: 'EASA CS-P', title: 'Certification Specifications for Propellers', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'propellers (EU)', certBases: ['Part 35'], anchor: 'CS-P 70 (safety analysis)', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 35; CS-P 70 mirrors §35.15 propeller failure-condition safety analysis.' }
+        'CS-P':     { id: 'CS-P',     cfr: 'EASA CS-P', title: 'Certification Specifications for Propellers', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'propellers (EU)', certBases: ['Part 35'], anchor: 'CS-P 70 (safety analysis)', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 35; CS-P 70 mirrors §35.15 propeller failure-condition safety analysis.' },
+        // Registered 6 Aug 2026 — were "related:" name-drops on far-25.1309b/27.1309/29.1309
+        // for a while without their own citable card; now first-class like CS-E/CS-P.
+        'CS-25':    { id: 'CS-25',    cfr: 'EASA CS-25', title: 'Certification Specifications for Large Aeroplanes', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'transport-category aeroplanes (EU)', certBases: ['Part 25'], anchor: 'CS 25.1309', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 25; CS 25.1309 mirrors §25.1309, the reference stringency other categories tailor down from.' },
+        'CS-27':    { id: 'CS-27',    cfr: 'EASA CS-27', title: 'Certification Specifications for Small Rotorcraft', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'normal-category rotorcraft (EU)', certBases: ['Part 27'], anchor: 'CS 27.1309', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 27; CS 27.1309 mirrors §27.1309.' },
+        'CS-29':    { id: 'CS-29',    cfr: 'EASA CS-29', title: 'Certification Specifications for Large Rotorcraft', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'transport-category rotorcraft (EU)', certBases: ['Part 29'], anchor: 'CS 29.1309', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 29; CS 29.1309 mirrors §29.1309.' }
     };
 
     // ---- FAA Advisory Circulars (public domain) — accepted MoC / method guidance
     const ADVISORY = {
-        'AC 25.1309-1A': { id: 'AC 25.1309-1A', title: 'System Design and Analysis', advisesOn: 'Part 25', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Guidance behind §25.1309: probability↔severity continuum + quantitative FTA. Draft 1B ("Arsenal") is widely used via issue papers but was never formally released.' },
+        // 31 Aug 2026 RETRACTION: the earlier note said 1B "was never formally released" —
+        // FAA issued AC 25.1309-1B on 30 Aug 2024 (AIR-600), concurrent with amendment
+        // 25-152, cancelling 1A of 21 June 1988. Verified against the fetched PDF.
+        'AC 25.1309-1B': { id: 'AC 25.1309-1B', title: 'System Design and Analysis', advisesOn: 'Part 25', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_25.1309-1B.pdf', note: 'Issued 30 Aug 2024, cancels AC 25.1309-1A (1988). Five classes incl. Hazardous (amendment 25-152), §3.3 quantitative ranges, §5.3.6 significant latent failures / CSL+1 latency and residual-risk criteria, §7.5 depth of analysis, App E accepted probabilities, App F average probability per flight hour. Numbers live in safety_targets.js and the corpus, never here.', supersedes: 'AC 25.1309-1A' },
+        'AC 25.1309-1A': { id: 'AC 25.1309-1A', title: 'System Design and Analysis (CANCELLED 30 Aug 2024 — superseded by AC 25.1309-1B)', advisesOn: 'Part 25', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars/index.cfm/go/document.information/documentid/22680', note: 'Historical (21 June 1988). Kept so older references resolve; cite AC 25.1309-1B for any current showing.', cancelled: true, supersededBy: 'AC 25.1309-1B' },
         'AC 23.1309-1E': { id: 'AC 23.1309-1E', title: 'System Safety Analysis and Assessment for Part 23 Airplanes', advisesOn: 'Part 23', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Class I–IV graduated targets; qualitative depth acceptable for Classes I/II, quantitative expected for III/IV.' },
         'AC 27-1B':      { id: 'AC 27-1B',      title: 'Certification of Normal Category Rotorcraft', advisesOn: 'Part 27', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Rotorcraft §27.1309 means of compliance; MG-series guidance material.' },
         'AC 29-2C':      { id: 'AC 29-2C',      title: 'Certification of Transport Category Rotorcraft', advisesOn: 'Part 29', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Transport rotorcraft §29.1309 means of compliance.' },
-        'AC 20-174':     { id: 'AC 20-174',     title: 'Development of Civil Aircraft and Systems', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'FAA acceptance of the ARP4754 development-assurance process as a means of compliance.' },
-        'AC 20-115D':    { id: 'AC 20-115D',    title: 'Airborne Software Development Assurance Using RTCA DO-178C', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'FAA recognition of RTCA DO-178C for software.' },
-        'AC 20-152A':    { id: 'AC 20-152A',    title: 'Airborne Electronic Hardware Design Assurance Using RTCA DO-254', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'FAA recognition of RTCA DO-254 for airborne electronic hardware.' },
+        'AC 20-174':     { id: 'AC 20-174',     title: 'Development of Civil Aircraft and Systems', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-174.pdf', note: '09/30/2011. FAA recognition of ARP 4754A as the development-assurance process (Parts 23/25/27/29/33/35). Precedence: FDAL/IDAL assignments in the basis ACs (23.1309-1, etc.) override ARP 4754A §5.2 — never allocate below the AC floor.' },
+        'AC 20-115D':    { id: 'AC 20-115D',    title: 'Airborne Software Development Assurance Using EUROCAE ED-12( ) and RTCA DO-178( )', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-115D.pdf', note: '07/21/2017, cancels 20-115C. Recognises DO-178C/ED-12C, DO-330/ED-215 tool qualification (TQL-1..5) and the DO-331/332/333 supplements; legacy DO-178/A/B reuse rules; harmonised with EASA AMC 20-115D.' },
+        'AC 20-152A':    { id: 'AC 20-152A',    title: 'Development Assurance for Airborne Electronic Hardware', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-152A.pdf', note: '10/7/22, cancels AC 20-152. Recognises DO-254/ED-80 for AEH at DAL A/B/C (not required for DAL D) and adds objectives CD-i (custom devices), IP-i (COTS IP), COTS-i (COTS devices), CBA-i (circuit boards); COTS-6 feeds device failure modes and common modes to the SSA.' },
         'AC 23.2010-1':  { id: 'AC 23.2010-1',  title: 'Aircraft-Level Safety Assessment (Part 23)', advisesOn: 'Part 23', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Performance-based aircraft-level safety-assessment methodology for the amended Part 23.' },
         'AC 21-101':     { id: 'AC 21-101',     title: 'Establishing the Certification Basis of Changed Aeronautical Products', advisesOn: 'Part 21', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'The changed-product rule + how a per-applicant cert basis (special conditions, issue papers) is assembled and recorded.' },
-        'JARUS SORA 2.5': { id: 'JARUS SORA 2.5', title: 'Specific Operations Risk Assessment (SORA) — GRC/ARC/SAIL methodology', advisesOn: 'Part 107', authority: 'JARUS', licensed: false, link: 'http://jarus-rpas.org/publications/', note: 'Operational-risk method for specific-category UAS: Ground Risk Class × Air Risk Class → SAIL → Operational Safety Objectives. Safety Lab flags the SORA cert basis but does NOT compute GRC/ARC/SAIL.' }
+        'JARUS SORA 2.5': { id: 'JARUS SORA 2.5', title: 'Specific Operations Risk Assessment (SORA) — GRC/ARC/SAIL methodology', advisesOn: 'Part 107', authority: 'JARUS', licensed: false, link: 'http://jarus-rpas.org/publications/', note: 'Operational-risk method for specific-category UAS: Ground Risk Class × Air Risk Class → SAIL → Operational Safety Objectives → containment. The SORA Thread computes GRC, mitigations, SAIL, and the OSO robustness matrix live (two-source verified); initial ARC and containment (1 m UA class) also compute, each carrying its own confidence tag (single-source / two-source) rather than being presented as equal to the rest — see sora-arc / sora-containment above.' }
     };
 
     // ---- cert-basis probability targets: POINTER + INJECTION, never stored ----
@@ -378,20 +492,28 @@
     // source of truth: the spine can never drift from the tool's verified continuum,
     // because it holds no numbers of its own.
     const CERT_BASES = ['Part 25', 'Part 23 I', 'Part 23 II', 'Part 23 III', 'Part 23 IV',
-                        'Part 27', 'Part 29', 'Part 33', 'Part 35',
-                        'SC-VTOL Basic', 'SC-VTOL Enhanced', 'Part 450', 'Part 107'];
+                        'Part 27 I', 'Part 27 II', 'Part 27 III', 'Part 27 IV', 'Part 27', 'Part 29', 'Part 33', 'Part 35',
+                        'SC-VTOL Basic 1', 'SC-VTOL Basic 2', 'SC-VTOL Basic 3', 'SC-VTOL Basic', 'SC-VTOL Enhanced',
+                        'Part 450', 'Part 107'];
     const TARGET_CITE = {
-        'Part 25': 'AC 25.1309-1A · 14 CFR §25.1309(b)',
+        'Part 25': 'AC 25.1309-1B §3.3 / Table 4-1 · 14 CFR §25.1309(b)',
         'Part 23 I': 'AC 23.1309-1E (Class I) · 14 CFR §23.2510',
         'Part 23 II': 'AC 23.1309-1E (Class II) · 14 CFR §23.2510',
         'Part 23 III': 'AC 23.1309-1E (Class III) · 14 CFR §23.2510',
         'Part 23 IV': 'AC 23.1309-1E (Class IV) · 14 CFR §23.2510',
-        'Part 27': 'AC 27-1B (safety continuum) · 14 CFR §27.1309',
-        'Part 29': 'AC 29-2C · 14 CFR §29.1309',
-        'Part 33': '14 CFR §33.75',
-        'Part 35': '14 CFR §35.15',
-        'SC-VTOL Basic': 'EASA SC-VTOL.2510/.2511 (Basic)',
-        'SC-VTOL Enhanced': 'EASA SC-VTOL.2510/.2511 (Enhanced)',
+        'Part 27 I': 'AC 27-1B §27.1309 · PS-ASW-27-15 Class I (FAA thresholds: 2017 draft) · EASA AMC1 27.1309 Table 2 Class I (verified) · 14 CFR §27.1309',
+        'Part 27 II': 'AC 27-1B §27.1309 · PS-ASW-27-15 Class II (FAA thresholds: 2017 draft) · EASA AMC1 27.1309 Table 2 Class II (verified) · 14 CFR §27.1309',
+        'Part 27 III': 'AC 27-1B §27.1309 · PS-ASW-27-15 Class III (FAA thresholds: 2017 draft) · EASA AMC1 27.1309 Table 2 Class III (verified) · 14 CFR §27.1309',
+        'Part 27 IV': 'AC 27-1B §27.1309 · PS-ASW-27-15 Class IV (FAA thresholds: 2017 draft) · EASA AMC1 27.1309 Table 2 Class IV (verified) · 14 CFR §27.1309',
+        'Part 27': 'AC 27-1B §27.1309 · PS-ASW-27-15 / EASA AMC1 27.1309 (legacy row = Class III) · 14 CFR §27.1309',
+        'Part 29': 'AC 29-2C §29.1309 Figure AC 29.1309-2 · 14 CFR §29.1309',
+        'Part 33': '14 CFR §33.75(a)(3)–(4) · AC 33.75-1A ¶8–¶9',
+        'Part 35': '14 CFR §35.15(a)(3) · (g)',
+        'SC-VTOL Basic 1': 'EASA VTOL.2510 · MOC VTOL.2510 §8 Table 1 (Basic 1, 0–1 pax)',
+        'SC-VTOL Basic 2': 'EASA VTOL.2510 · MOC VTOL.2510 §8 Table 1 (Basic 2, 2–6 pax)',
+        'SC-VTOL Basic 3': 'EASA VTOL.2510 · MOC VTOL.2510 §8 Table 1 (Basic 3, 7–9 pax)',
+        'SC-VTOL Basic': 'EASA VTOL.2510 · MOC VTOL.2510 §8 Table 1 (legacy Basic = Basic 1 row)',
+        'SC-VTOL Enhanced': 'EASA VTOL.2510 · MOC VTOL.2510 §8 Table 1 (Enhanced)',
         'Part 450': '14 CFR §450.101/§450.107 (mission-based risk)',
         'Part 107': 'JARUS SORA (SAIL) — no per-FH ladder'
     };

@@ -2,6 +2,13 @@
 // (COMPONENT_LIBRARY, FAILURE_MODE_DISTRIBUTIONS, STANDARD_ENVIRONMENTS, STANDARD_QUALITIES),
 // extracted verbatim from safety_lab.js (Phase 76). Pure data, classic script, loaded FIRST
 // so every bare-name reference resolves in the shared lexical scope. Byte-identical.
+//
+// v1.1 (REL-1) — public-domain tranche 2: NUREG-CR-6928 deepened (+HVAC group),
+// WSRC-TR-93-262 DOE generic data, NUREG-CR-1278 THERP HEPs (per demand),
+// MIL-HDBK-217F Tubes, NASA PRA spacecraft + pyrotechnic (per demand), NSWC-11
+// control-run elements, Marine/Undersea, Power Electronics, 338B avionics LRUs.
+// All U.S. Government sources; representative rounded values; the cited original
+// document remains the authority — verify against it before certification use.
 
 const COMPONENT_LIBRARY = {
     // ============ MIL-HDBK-217F Notice 2 — Microcircuits (§5) ============
@@ -524,6 +531,179 @@ const COMPONENT_LIBRARY = {
     'nrc_heat_exchanger':       { name: 'Heat exchanger / cooler',                            lambda: 4.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Mechanical',     category: 'Subassembly' },
     'nrc_strainer':             { name: 'Strainer / filter (mechanical)',                     lambda: 8.0e-7, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Mechanical',     category: 'Filter' },
     'nrc_tank':                 { name: 'Tank / vessel (passive)',                            lambda: 3.0e-7, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Mechanical',     category: 'Subassembly' },
+
+    // ============================================================================
+    // REL-1 expansion (v1.1) — PUBLIC-DOMAIN tranche 2. Every entry below is
+    // transcribed from U.S. Government publications not subject to commercial
+    // copyright (NRC NUREG series, DOE/Savannah River WSRC-TR-93-262, NASA PRA
+    // guidance, DoD MIL handbooks, Navy NSWC-11). Values are representative
+    // rounded point estimates at nominal conditions; the original document
+    // remains the authority — verify against it before certification use.
+    // House rules hold: these are OFFERED as starting points, never imposed;
+    // per-demand probabilities are labeled "(per demand)" and must not be
+    // mixed with per-hour rates without an exposure/demand conversion.
+    // NO licensed data (NPRD/EPRD, Telcordia, SN 29500, IEC 62380, OREDA,
+    // FIDES) appears here — those remain Pro · BYOL via customer CSV import.
+    // ============================================================================
+
+    // ============ NUREG-CR-6928 — Electrical (deepened) ============
+    'nrc_relay_protective':     { name: 'Relay — protective (spurious operation)',            lambda: 3.0e-7, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Relay' },
+    'nrc_load_sequencer':       { name: 'Load sequencer (automatic)',                         lambda: 1.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Subsystem' },
+    'nrc_bus_ac':               { name: 'Bus — AC electrical (per bus)',                      lambda: 5.0e-8, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Other' },
+    'nrc_bus_dc':               { name: 'Bus — DC electrical (per bus)',                      lambda: 5.0e-8, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Other' },
+    'nrc_motor_generator':      { name: 'Motor-generator set',                                lambda: 3.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Subsystem' },
+    'nrc_gas_turbine_gen':      { name: 'Gas-turbine generator (standby, run)',               lambda: 3.0e-4, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Subsystem' },
+    'nrc_ups':                  { name: 'Uninterruptible power supply (UPS)',                 lambda: 2.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Subassembly' },
+    'nrc_static_xfer_switch':   { name: 'Static transfer switch',                             lambda: 5.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Switch' },
+    'nrc_dist_panel':           { name: 'Distribution panel (per panel)',                     lambda: 1.0e-7, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Other' },
+    'nrc_cable_circuit':        { name: 'Cable — power/control (per circuit)',                lambda: 5.0e-8, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Electrical',     category: 'Interconnect' },
+
+    // ============ NUREG-CR-6928 — HVAC (new) ============
+    'nrc_fan_supply':           { name: 'Fan — motor-driven (supply/exhaust), run',           lambda: 1.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Motor' },
+    'nrc_chiller':              { name: 'Chiller (mechanical refrigeration), run',            lambda: 4.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Subsystem' },
+    'nrc_air_handler':          { name: 'Air handling unit (AHU)',                            lambda: 2.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Subsystem' },
+    'nrc_damper_mod':           { name: 'Damper — motor-operated',                            lambda: 3.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Valve' },
+    'nrc_damper_aod':           { name: 'Damper — air-operated',                              lambda: 4.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Valve' },
+    'nrc_cooling_coil':         { name: 'Cooling coil (passive heat transfer)',               lambda: 1.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Subassembly' },
+    'nrc_air_compressor':       { name: 'Air compressor (instrument air), run',               lambda: 8.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Pump' },
+    'nrc_air_dryer':            { name: 'Air dryer (instrument air)',                         lambda: 1.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — HVAC',           category: 'Filter' },
+
+    // ============ NUREG-CR-6928 — Valves (deepened) ============
+    'nrc_valve_hov':            { name: 'Valve — hydraulic-operated (HOV)',                   lambda: 4.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Valves',         category: 'Valve' },
+    'nrc_valve_vacuum_brk':     { name: 'Valve — vacuum breaker',                             lambda: 2.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Valves',         category: 'Valve' },
+    'nrc_valve_pcv':            { name: 'Valve — pressure control (PCV)',                     lambda: 5.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Valves',         category: 'Valve' },
+    'nrc_valve_purge':          { name: 'Valve — purge / vent',                               lambda: 3.0e-6, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Valves',         category: 'Valve' },
+
+    // ============ NUREG-CR-6928 — Pumps / Mechanical (deepened) ============
+    'nrc_pump_sump':            { name: 'Pump — sump (motor-driven), run',                    lambda: 8.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Pumps',          category: 'Pump' },
+    'nrc_pump_diesel_driven':   { name: 'Pump — diesel-driven (fire/service water), run',     lambda: 2.0e-4, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Pumps',          category: 'Pump' },
+    'nrc_expansion_joint':      { name: 'Expansion joint / bellows',                          lambda: 3.0e-7, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Mechanical',     category: 'Subassembly' },
+    'nrc_orifice':              { name: 'Orifice — flow restrictor (passive)',                lambda: 1.0e-7, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Mechanical',     category: 'Other' },
+    'nrc_pipe_section':         { name: 'Pipe — rupture (per section)',                       lambda: 1.0e-9, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Mechanical',     category: 'Subassembly' },
+    'nrc_traveling_screen':     { name: 'Traveling screen (intake)',                          lambda: 2.0e-5, source: 'NUREG-CR-6928',          group: 'NUREG-CR-6928 — Mechanical',     category: 'Subassembly' },
+
+    // ============ WSRC-TR-93-262 — DOE Generic Data (Savannah River, public domain) ============
+    'srs_agitator':             { name: 'Agitator / mixer (motor-driven)',                    lambda: 3.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Motor' },
+    'srs_blower':               { name: 'Blower / industrial fan, run',                       lambda: 2.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Motor' },
+    'srs_boiler':               { name: 'Boiler (package, steam)',                            lambda: 1.0e-4, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subsystem' },
+    'srs_compressor_recip':     { name: 'Compressor — reciprocating, run',                    lambda: 2.0e-4, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Pump' },
+    'srs_compressor_centrif':   { name: 'Compressor — centrifugal, run',                      lambda: 1.0e-4, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Pump' },
+    'srs_crane_hoist':          { name: 'Crane / hoist (per operating hour)',                 lambda: 1.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subsystem' },
+    'srs_duct_segment':         { name: 'Duct — ventilation (per segment)',                   lambda: 1.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_damper_manual':        { name: 'Damper — manual (passive)',                          lambda: 5.0e-7, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Valve' },
+    'srs_heater_electric':      { name: 'Heater — electric (process/space)',                  lambda: 1.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_evaporator':           { name: 'Evaporator (process)',                               lambda: 5.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subsystem' },
+    'srs_hepa_filter':          { name: 'Filter — HEPA (plugging/rupture)',                   lambda: 5.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Filter' },
+    'srs_flame_arrestor':       { name: 'Flame arrestor',                                     lambda: 1.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_analyzer_gas':         { name: 'Analyzer — gas / continuous monitor',                lambda: 1.0e-4, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_annunciator':          { name: 'Annunciator module',                                 lambda: 3.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_mcc':                  { name: 'Motor control center (MCC)',                         lambda: 5.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_switchgear':           { name: 'Switchgear — 480 V bus section',                     lambda: 2.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_xfmr_dist':            { name: 'Transformer — distribution',                         lambda: 2.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Magnetic' },
+    'srs_rectifier':            { name: 'Rectifier (battery charger class)',                  lambda: 5.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_inverter':             { name: 'Inverter (DC→AC)',                                   lambda: 2.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_ups':                  { name: 'UPS (facility class)',                               lambda: 3.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_relay_control':        { name: 'Relay — control (industrial)',                       lambda: 1.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Relay' },
+    'srs_breaker_480v':         { name: 'Circuit breaker — 480 V',                            lambda: 1.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Switch' },
+    'srs_cable_power':          { name: 'Cable — power (per 1000 ft)',                        lambda: 3.0e-7, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Interconnect' },
+    'srs_pipe_100ft':           { name: 'Pipe — process (leak, per 100 ft)',                  lambda: 1.0e-8, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_valve_manual':         { name: 'Valve — manual (industrial)',                        lambda: 1.0e-7, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Valve' },
+    'srs_valve_control':        { name: 'Valve — control (modulating)',                       lambda: 1.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Valve' },
+    'srs_valve_relief':         { name: 'Valve — relief (industrial)',                        lambda: 5.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Valve' },
+    'srs_rupture_disc':         { name: 'Rupture disc',                                       lambda: 1.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_valve_solenoid':       { name: 'Valve — solenoid (industrial)',                      lambda: 3.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Valve' },
+    'srs_scrubber':             { name: 'Scrubber (off-gas treatment)',                       lambda: 5.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subsystem' },
+    'srs_demineralizer':        { name: 'Demineralizer / ion exchanger',                      lambda: 2.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subsystem' },
+    'srs_tank_atm':             { name: 'Tank — atmospheric storage',                         lambda: 5.0e-7, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_pressure_vessel':      { name: 'Pressure vessel',                                    lambda: 1.0e-7, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subassembly' },
+    'srs_heat_tracing':         { name: 'Heat tracing (per circuit)',                         lambda: 5.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_xmtr_flow':            { name: 'Transmitter — flow (industrial)',                    lambda: 4.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_xmtr_level':           { name: 'Transmitter — level (industrial)',                   lambda: 3.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_xmtr_pressure':        { name: 'Transmitter — pressure (industrial)',                lambda: 2.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_xmtr_temp':            { name: 'Transmitter — temperature (industrial)',             lambda: 2.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_controller_loop':      { name: 'Controller — single-loop process',                   lambda: 3.0e-6, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Other' },
+    'srs_control_loop_full':    { name: 'Control loop — complete (sensor+controller+FCE)',    lambda: 1.0e-5, source: 'WSRC-TR-93-262',         group: 'WSRC-TR-93-262 — DOE Generic',   category: 'Subsystem' },
+
+    // ============ NUREG-CR-1278 (THERP) — Human Error Probabilities (per demand) ============
+    // THERP HEPs are PER-DEMAND probabilities, not per-hour rates. Use with an
+    // exposure/demand model; do not multiply by flight hours directly.
+    'therp_omit_short_list':    { name: 'HEP — omit step, short procedure, no checkoff (per demand)',   lambda: 3.0e-3, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_omit_long_list':     { name: 'HEP — omit step, long procedure (>10 items) (per demand)',     lambda: 1.0e-2, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_omit_with_checkoff': { name: 'HEP — omit step, checkoff provisions used (per demand)',       lambda: 1.0e-3, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_read_analog':        { name: 'HEP — misread analog meter (per demand)',                      lambda: 3.0e-3, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_read_digital':       { name: 'HEP — misread digital display (per demand)',                   lambda: 1.0e-3, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_read_chart':         { name: 'HEP — misread chart recorder (per demand)',                    lambda: 6.0e-3, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_select_control':     { name: 'HEP — select wrong control among similar, labeled (per demand)', lambda: 3.0e-3, source: 'NUREG-CR-1278 (THERP)', group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_valve_restore':      { name: 'HEP — valve left mispositioned after maintenance, no recheck (per demand)', lambda: 1.0e-2, source: 'NUREG-CR-1278 (THERP)', group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_annunciator':        { name: 'HEP — fail to respond to single annunciator (per demand)',     lambda: 1.0e-4, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_checker_miss':       { name: 'HEP — checker fails to detect error (routine verification) (per demand)', lambda: 1.0e-1, source: 'NUREG-CR-1278 (THERP)', group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_log_entry':          { name: 'HEP — recording / log entry error (per demand)',               lambda: 3.0e-3, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+    'therp_high_stress':        { name: 'HEP — dynamic task under extremely high stress (per demand)',  lambda: 2.5e-1, source: 'NUREG-CR-1278 (THERP)',  group: 'NUREG-CR-1278 (THERP) — Human Error', category: 'Other' },
+
+    // ============ MIL-HDBK-217F — Tubes (§7) ============
+    'mil217_tube_crt':          { name: 'Tube — CRT display',                                 lambda: 2.0e-5, source: 'MIL-HDBK-217F N2 §7',   group: 'MIL-HDBK-217F — Tubes',          category: 'Other' },
+    'mil217_tube_twt':          { name: 'Tube — traveling-wave tube (TWT)',                   lambda: 4.0e-5, source: 'MIL-HDBK-217F N2 §7',   group: 'MIL-HDBK-217F — Tubes',          category: 'Other' },
+    'mil217_tube_magnetron':    { name: 'Tube — magnetron',                                   lambda: 6.0e-5, source: 'MIL-HDBK-217F N2 §7',   group: 'MIL-HDBK-217F — Tubes',          category: 'Other' },
+    'mil217_tube_klystron':     { name: 'Tube — klystron',                                    lambda: 5.0e-5, source: 'MIL-HDBK-217F N2 §7',   group: 'MIL-HDBK-217F — Tubes',          category: 'Other' },
+    'mil217_tube_thyratron':    { name: 'Tube — thyratron / gas switch',                      lambda: 3.0e-5, source: 'MIL-HDBK-217F N2 §7',   group: 'MIL-HDBK-217F — Tubes',          category: 'Other' },
+
+    // ============ NASA PRA — Spacecraft generic (deepened) ============
+    'nasa_battery_liion':       { name: 'Battery — Li-ion pack with BMS (PRA generic)',       lambda: 5.0e-6, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Battery' },
+    'nasa_solar_string':        { name: 'Solar array — per string (PRA generic)',             lambda: 1.0e-6, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Other' },
+    'nasa_reaction_wheel':      { name: 'Reaction wheel assembly',                            lambda: 2.0e-5, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Motor' },
+    'nasa_cmg':                 { name: 'Control moment gyro (CMG)',                          lambda: 3.0e-5, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Motor' },
+    'nasa_star_tracker':        { name: 'Star tracker',                                       lambda: 1.0e-5, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Other' },
+    'nasa_sun_sensor':          { name: 'Sun sensor',                                         lambda: 3.0e-6, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Other' },
+    'nasa_imu_space':           { name: 'IMU / gyro assembly (space)',                        lambda: 2.0e-5, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Other' },
+    'nasa_gps_space':           { name: 'GPS receiver (space-qualified)',                     lambda: 8.0e-6, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Subsystem' },
+    'nasa_transponder_comm':    { name: 'Comm transponder (S/X-band)',                        lambda: 1.0e-5, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Subsystem' },
+    'nasa_twta':                { name: 'TWT amplifier (TWTA)',                               lambda: 2.0e-5, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Subsystem' },
+    'nasa_heater_survival':     { name: 'Heater — survival / patch',                          lambda: 1.0e-6, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Other' },
+    'nasa_cryocooler':          { name: 'Cryocooler (mechanical)',                            lambda: 5.0e-5, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Generic Events',      category: 'Subsystem' },
+
+    // ============ NASA PRA — Pyrotechnic / EED (per demand) ============
+    'nasa_eed_initiator':       { name: 'EED / NASA-std initiator (per demand)',              lambda: 1.0e-4, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Pyrotechnic (per demand)', category: 'Other' },
+    'nasa_pyro_valve':          { name: 'Pyro valve — normally closed (per demand)',          lambda: 3.0e-4, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Pyrotechnic (per demand)', category: 'Valve' },
+    'nasa_pyro_cutter':         { name: 'Pyro cable/bolt cutter (per demand)',                lambda: 3.0e-4, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Pyrotechnic (per demand)', category: 'Actuator' },
+    'nasa_separation_nut':      { name: 'Separation nut (per demand)',                        lambda: 2.0e-4, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Pyrotechnic (per demand)', category: 'Actuator' },
+    'nasa_mortar_deploy':       { name: 'Mortar deployment (chute/antenna) (per demand)',     lambda: 5.0e-4, source: 'NASA SP-2011-3421',     group: 'NASA PRA — Pyrotechnic (per demand)', category: 'Actuator' },
+
+    // ============ NSWC-11 — Control-run / mechanism elements (deepened) ============
+    'nswc_hinge':               { name: 'Hinge — mechanical (NSWC-11)',                       lambda: 1.0e-6, source: 'NSWC-11',               group: 'NSWC-11 — Mechanical',           category: 'Other' },
+    'nswc_control_cable':       { name: 'Control cable — stranded (NSWC-11)',                 lambda: 1.0e-6, source: 'NSWC-11',               group: 'NSWC-11 — Mechanical',           category: 'Other' },
+    'nswc_pulley':              { name: 'Pulley — control run (NSWC-11)',                     lambda: 5.0e-7, source: 'NSWC-11',               group: 'NSWC-11 — Mechanical',           category: 'Other' },
+    'nswc_pushrod':             { name: 'Push-pull rod / linkage (NSWC-11)',                  lambda: 3.0e-7, source: 'NSWC-11',               group: 'NSWC-11 — Mechanical',           category: 'Other' },
+    'nswc_bellcrank':           { name: 'Bellcrank (NSWC-11)',                                lambda: 2.0e-7, source: 'NSWC-11',               group: 'NSWC-11 — Mechanical',           category: 'Other' },
+    'nswc_turnbuckle':          { name: 'Turnbuckle / cable fitting (NSWC-11)',               lambda: 1.0e-7, source: 'NSWC-11',               group: 'NSWC-11 — Mechanical',           category: 'Other' },
+
+    // ============ Marine / Undersea (deepened, NSWC-11 basis) ============
+    'marine_conn_wetmate':      { name: 'Connector — underwater wet-mate',                    lambda: 5.0e-6, source: 'NSWC-11',               group: 'Marine / Undersea',              category: 'Connector' },
+    'marine_penetrator':        { name: 'Hull penetrator (electrical)',                       lambda: 1.0e-6, source: 'NSWC-11',               group: 'Marine / Undersea',              category: 'Connector' },
+    'marine_housing_seal':      { name: 'Pressure housing seal (static)',                     lambda: 5.0e-7, source: 'NSWC-11 §5',            group: 'Marine / Undersea',              category: 'Seal' },
+    'marine_sonar_xducer':      { name: 'Sonar transducer',                                   lambda: 1.0e-5, source: 'NSWC-11',               group: 'Marine / Undersea',              category: 'Other' },
+    'marine_umbilical':         { name: 'Umbilical / tether (per 100 m)',                     lambda: 2.0e-6, source: 'NSWC-11',               group: 'Marine / Undersea',              category: 'Interconnect' },
+    'marine_slip_ring':         { name: 'Slip ring assembly',                                 lambda: 8.0e-6, source: 'NSWC-11',               group: 'Marine / Undersea',              category: 'Other' },
+    'marine_valve_subsea':      { name: 'Valve — subsea hydraulic',                           lambda: 5.0e-6, source: 'NSWC-11 §7',            group: 'Marine / Undersea',              category: 'Valve' },
+    'marine_gearbox':           { name: 'Gearbox — marine propulsion',                        lambda: 2.0e-5, source: 'NSWC-11 §9',            group: 'Marine / Undersea',              category: 'Gear' },
+
+    // ============ Power Electronics (deepened) ============
+    'pwr_sspc':                 { name: 'Solid-state power controller (SSPC)',                lambda: 2.0e-6, source: 'MIL-HDBK-338B §7',      group: 'Power Electronics',              category: 'Switch' },
+    'pwr_dcdc_brick':           { name: 'DC-DC converter — brick module',                     lambda: 5.0e-6, source: 'MIL-HDBK-338B §7',      group: 'Power Electronics',              category: 'Subassembly' },
+    'pwr_hall_sensor':          { name: 'Current sensor — Hall effect',                       lambda: 5.0e-7, source: 'MIL-HDBK-217F N2 §6.4', group: 'Power Electronics',              category: 'Other' },
+    'pwr_cap_bank_film':        { name: 'Bus capacitor bank — film',                          lambda: 2.0e-7, source: 'MIL-HDBK-217F N2 §10.2',group: 'Power Electronics',              category: 'Capacitor' },
+    'pwr_chopper_igbt':         { name: 'Braking chopper module (IGBT)',                      lambda: 1.0e-6, source: 'MIL-HDBK-217F N2 §6.3', group: 'Power Electronics',              category: 'Semiconductor' },
+
+    // ============ MIL-HDBK-338B — System rollups (deepened avionics LRUs) ============
+    'h338_lru_ahrs':            { name: 'LRU — AHRS',                                          lambda: 2.0e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_fms':             { name: 'LRU — Flight management computer (FMS)',              lambda: 2.5e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_tcas':            { name: 'LRU — TCAS / traffic computer',                       lambda: 2.0e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_dme':             { name: 'LRU — DME interrogator',                              lambda: 1.5e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_wx_radar':        { name: 'LRU — Weather radar (R/T + antenna)',                 lambda: 4.0e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_audio':           { name: 'LRU — Audio control panel',                           lambda: 8.0e-6, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_elt':             { name: 'LRU — Emergency locator transmitter (ELT)',           lambda: 1.0e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_cvr':             { name: 'LRU — Cockpit voice recorder (CVR)',                  lambda: 6.0e-6, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_taws':            { name: 'LRU — TAWS / EGPWS computer',                         lambda: 1.5e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
+    'h338_lru_satcom':          { name: 'LRU — SATCOM transceiver',                            lambda: 3.0e-5, source: 'MIL-HDBK-338B §7',      group: 'MIL-HDBK-338B — System Rollups', category: 'Subsystem' },
 };
 
 // ============================================================================
@@ -652,6 +832,24 @@ const FAILURE_MODE_DISTRIBUTIONS = {
         { mode: 'Fails open',                  alphaFm: 0.45, source: 'NASA SP-2011-3421' },
         { mode: 'Fails closed (welded)',       alphaFm: 0.40, source: 'NASA SP-2011-3421' },
         { mode: 'Intermittent contact',        alphaFm: 0.15, source: 'NASA SP-2011-3421' }
+    ],
+
+    // ===== REL-1 (v1.1) — patterns for new public-domain entries =====
+    'nrc_fan_supply': [
+        { mode: 'Bearing / blade seizure',     alphaFm: 0.45, source: 'NUREG-CR-6928' },
+        { mode: 'Motor winding failure',       alphaFm: 0.35, source: 'NUREG-CR-6928' },
+        { mode: 'Degraded flow (imbalance)',   alphaFm: 0.20, source: 'NUREG-CR-6928' }
+    ],
+    'nrc_diesel_gen': [
+        { mode: 'Fails to run (engine/mechanical)',   alphaFm: 0.45, source: 'NUREG-CR-6928' },
+        { mode: 'Fails to start on demand',           alphaFm: 0.35, source: 'NUREG-CR-6928' },
+        { mode: 'Output breaker / excitation failure', alphaFm: 0.20, source: 'NUREG-CR-6928' }
+    ],
+    'srs_valve_control': [
+        { mode: 'Fails to move / stuck',       alphaFm: 0.40, source: 'WSRC-TR-93-262' },
+        { mode: 'Fails full open',             alphaFm: 0.20, source: 'WSRC-TR-93-262' },
+        { mode: 'Fails full closed',           alphaFm: 0.20, source: 'WSRC-TR-93-262' },
+        { mode: 'Seat / packing leak',         alphaFm: 0.20, source: 'WSRC-TR-93-262' }
     ]
 };
 

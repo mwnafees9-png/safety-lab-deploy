@@ -197,7 +197,7 @@
         const host = document.getElementById('ram-msg3-host');
         if (!host) return;
         if (!_access()) {
-            host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; max-width:640px;">' +
+            host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; ">' +
                 '<h3 style="margin:0 0 10px; border:none; padding:0;">MSG-3 analysis is a Pro+ capability</h3>' +
                 '<p style="font-size:13px; color:var(--color-text-secondary);">Scheduled-maintenance development per the MSG-3 logic, feeding the task ledger, the CCMR τ bridge, and the golden thread.</p></div>';
             return;
@@ -263,7 +263,7 @@
         const scr = S.screened || [];
         if (scr.length) {
             html += '<h3 style="margin-top:var(--s-4);">Screened out — selection questions all NO (auditable register)</h3>' +
-                '<table class="data-table" style="width:100%; max-width:640px; font-size:12px;"><tbody>' +
+                '<table class="data-table" style="width:100%;  font-size:12px;"><tbody>' +
                 scr.map(x => '<tr><td>' + _esc(x.name) + '</td><td class="u-mono" style="width:160px;">' + _esc(x.itemId || '—') + '</td><td class="prov" style="width:140px;">' + _esc(String(x.at).slice(0, 10)) + '</td></tr>').join('') +
                 '</tbody></table>';
         }

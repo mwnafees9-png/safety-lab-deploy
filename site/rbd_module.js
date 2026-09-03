@@ -227,7 +227,7 @@
     function renderRamRbdPage() {
         const host = document.getElementById('ram-rbd-host');
         if (!host) return;
-        if (!_access()) { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; max-width:640px;"><h3 style="margin:0 0 10px; border:none; padding:0;">Reliability Block Diagrams are a Pro+ capability</h3></div>'; return; }
+        if (!_access()) { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; "><h3 style="margin:0 0 10px; border:none; padding:0;">Reliability Block Diagrams are a Pro+ capability</h3></div>'; return; }
         const S = _store();
         let html = '<div style="margin:0 0 12px;"><button class="btn-cyan" onclick="rbdAddFromTree()">⚙ Derive from fault tree</button> ' +
             '<button class="btn-cyan" onclick="rbdAddManual()">+ Manual RBD (DSL)</button> ' +

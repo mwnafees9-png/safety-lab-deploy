@@ -296,12 +296,12 @@ const AiClient = (function(){
         }
         if (opts.system) body.system = opts.system;
         const startedAt = Date.now();
-        let response;
-        try {
+        // One request send (proxy or BYO). Extracted so we can retry cleanly.
+        async function _send(b) {
             if (proxy) {
                 // Route via Safety Lab Aero proxy. Proxy handles Anthropic vs Azure OpenAI
                 // routing based on the isITAR flag we pass through.
-                response = await fetch(AI_PROXY_BASE_URL + '/anthropic/messages', {
+                return fetch(AI_PROXY_BASE_URL + '/anthropic/messages', {
                     method: 'POST',
                     headers: {
                         'content-type': 'application/json',
@@ -309,32 +309,49 @@ const AiClient = (function(){
                         'x-safetylab-itar': itar ? '1' : '0',
                         'x-safetylab-feature': opts.feature || 'messages'
                     },
-                    body: JSON.stringify(body)
+                    body: JSON.stringify(b)
                 });
-            } else {
-                // BYO Anthropic key path.
-                const key = getAnthropicKey();
-                if (!key) throw new Error('No AI credentials configured. Either upgrade to Pro+ or paste a BYO Anthropic key in Advanced.');
-                response = await fetch('https://api.anthropic.com/v1/messages', {
-                    method: 'POST',
-                    headers: {
-                        'content-type': 'application/json',
-                        'x-api-key': key,
-                        'anthropic-version': '2023-06-01',
-                        'anthropic-dangerous-direct-browser-access': 'true'
-                    },
-                    body: JSON.stringify(body)
-                });
+            }
+            // BYO Anthropic key path.
+            const key = getAnthropicKey();
+            if (!key) throw new Error('No AI credentials configured. Either upgrade to Pro+ or paste a BYO Anthropic key in Advanced.');
+            return fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'x-api-key': key,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true'
+                },
+                body: JSON.stringify(b)
+            });
+        }
+        let response, _preErr = null;   // _preErr: error already read off the first response (body is single-use)
+        try {
+            response = await _send(body);
+            // Self-heal: newer models (Opus 4.7+ and reasoning/extended-thinking models)
+            // reject `temperature` with a 400 "temperature is deprecated for this model".
+            // _modelAcceptsTemperature already strips it for known ids; this catches the
+            // case where an unrecognized model id (codename/date-suffix) slipped through —
+            // retry ONCE without temperature so a chat turn never dies on a sampling param.
+            if (!response.ok && body.temperature !== undefined) {
+                let ej = {}; try { ej = await response.json(); } catch (_) {}
+                const em = (ej.error && ej.error.message) || ('HTTP ' + response.status);
+                if (response.status === 400 && /temperature/i.test(em)) {
+                    delete body.temperature;
+                    response = await _send(body);   // retry once, without the sampling param
+                } else {
+                    _preErr = em;   // real error — hand to the throw block below (body already consumed)
+                }
             }
         } catch (e) {
             _logCall({ feature: opts.feature || 'messages', model, ok: false, error: String(e), startedAt, proxy, itar });
             throw e;
         }
-        if (!response.ok) {
+        if (_preErr || !response.ok) {
             // Errors (401/402/503/5xx) come back as JSON even when we asked for a stream.
-            let errJson = {};
-            try { errJson = await response.json(); } catch (_) {}
-            const emsg = (errJson.error && errJson.error.message) || ('HTTP ' + response.status);
+            let emsg = _preErr;
+            if (!emsg) { let errJson = {}; try { errJson = await response.json(); } catch (_) {} emsg = (errJson.error && errJson.error.message) || ('HTTP ' + response.status); }
             _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar });
             throw new Error(emsg);
         }
@@ -518,6 +535,7 @@ const SaveFs = (function() {
         try {
             const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
             await _idbPut(KEY_DEFAULT_DIR, handle);
+            try { localStorage.setItem('safetyLab.saveDir.name', handle.name || ''); } catch (_) {}   // #2Sep2026 synchronous hint so _requireSaveLocation skips re-prompt WITHOUT an await before the picker
             showToast('Save folder set: ' + handle.name, 'success', 3000);
             if (typeof _refreshSaveFolderMenu === 'function') _refreshSaveFolderMenu();
             return handle;
@@ -530,6 +548,7 @@ const SaveFs = (function() {
 
     async function clearDefaultDir() {
         await _idbDel(KEY_DEFAULT_DIR);
+        try { localStorage.removeItem('safetyLab.saveDir.name'); } catch (_) {}   // #2Sep2026 clear the synchronous hint
         showToast('Save folder cleared. Files will download to the browser default.', 'info', 3000);
         if (typeof _refreshSaveFolderMenu === 'function') _refreshSaveFolderMenu();
     }
@@ -592,6 +611,7 @@ const SaveFs = (function() {
     function _typesForName(name) {
         const ext = (name.split('.').pop() || '').toLowerCase();
         const map = {
+            sl:   { description: 'Safety Lab project', accept: { 'application/json': ['.sl'] } },
             json: { description: 'JSON project', accept: { 'application/json': ['.json'] } },
             pdf:  { description: 'PDF',           accept: { 'application/pdf':  ['.pdf']  } },
             csv:  { description: 'CSV',           accept: { 'text/csv':         ['.csv']  } },

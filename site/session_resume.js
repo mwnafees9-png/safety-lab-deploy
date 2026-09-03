@@ -86,6 +86,13 @@
         } catch (e) { console.warn('[recovery-ring] capture failed:', e); }
     }
 
+    // 31 Aug 2026 — a forced generation for moments that must not lose to the
+    // 5-minute throttle (the save-conflict bank). Same trick ringRestore uses.
+    window._ringCaptureForce = async function () {
+        _sessionRingDone = false;
+        return _ringCapture();
+    };
+
     window.ringRestore = async function (slot) {
         const db = _sldb();
         if (!db) { alert('IndexedDB unavailable — the ring needs it.'); return; }
@@ -114,6 +121,11 @@
             return r;
         };
         wrapped._ringWrapped = true;
+        // 20 Aug 2026 — carry every prior wrapper's idempotence marker across. Three
+        // modules wrap _writeAutosave (this ring, cloud_sync's push, tab_guard's lease)
+        // and each used to keep only its own flag, so the last one to install erased the
+        // other two. Measured on production: _writeAutosave carried ONLY _tgWrapped.
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window._writeAutosave = wrapped;
     })();
 

@@ -18,6 +18,18 @@
 (function () {
     'use strict';
 
+    // ── PROVIDER GATE — added 13 Aug 2026 ──────────────────────────────────
+    // The Azure provider is NOT enabled on the Supabase project, so every click
+    // returned 400 "provider is not enabled". Auth logs for 13 Aug show 5 such
+    // failures from 4 distinct visitors — every Microsoft attempt on the site.
+    // A visible button that always fails is worse than no button.
+    // TURN IT ON: Supabase → Authentication → Providers → Azure (client id +
+    // secret, callback https://<ref>.supabase.co/auth/v1/callback), then either
+    // flip the default below to true or set window.SL_MS_SSO_ENABLED = true.
+    // Read the flag at call time, not load time — auth_gate.js reads the very
+    // same global, so one switch turns both buttons on together.
+    function MS_SSO_ENABLED() { try { return window.SL_MS_SSO_ENABLED === true; } catch (_) { return false; } }
+
     var MS_LOGO =
         '<svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true" style="flex:0 0 auto;">' +
         '<rect x="1" y="1" width="9" height="9" fill="#f25022"/>' +
@@ -68,7 +80,13 @@
         }
         try {
             var res = await sb.auth.signInWithOAuth(opts);
-            if (res && res.error) { _toast('Microsoft sign-in failed: ' + res.error.message, 'error'); return; }
+            if (res && res.error) {
+                var m = String(res.error.message || '');
+                _toast(/not enabled|unsupported provider/i.test(m)
+                    ? 'Microsoft sign-in is not switched on yet — please use the email option below.'
+                    : 'Microsoft sign-in failed: ' + m, 'error');
+                return;
+            }
             if (opts.options.skipBrowserRedirect && res && res.data && res.data.url) {
                 window.safetyLabDesktop.openOAuth(res.data.url); // native handler completes the loop
             }
@@ -82,6 +100,7 @@
     function _injectButton() {
         var modalBody = document.querySelector('#signup-modal .signup-modal-body');
         var intro = document.getElementById('signup-intro');
+        if (!MS_SSO_ENABLED()) return;   // provider gate — see top of file
         if (!modalBody || !intro || document.getElementById('ms-sso-btn')) return;
 
         var wrap = document.createElement('div');

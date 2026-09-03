@@ -108,6 +108,9 @@
             return orig.apply(this, arguments);
         };
         wrapped._tgWrapped = true;
+        // 20 Aug 2026 — this module wrapped LAST and so was the one erasing _ringWrapped
+        // and _cloudWrapped, leaving the recovery ring and the cloud push both un-guarded.
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window._writeAutosave = wrapped;
     })();
 

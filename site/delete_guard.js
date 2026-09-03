@@ -90,6 +90,8 @@
             return r;
         };
         wrapped._delGuardWrapped = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window[fnName] = wrapped;
     }
 

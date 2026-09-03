@@ -116,7 +116,7 @@
 
       // Brand pane (left) — gradient stays for the marketing-side feel; theme adjusts the
       // overlay strength so the contrast holds in both modes.
-      '#' + GATE_ID + ' .sl-brand-pane { flex: 0 0 44%; background: linear-gradient(155deg, #1F3A5F 0%, #007aff 60%, #af52de 100%); color: #fff; padding: 56px 56px 40px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }',
+      '#' + GATE_ID + ' .sl-brand-pane { flex: 0 0 44%; background: linear-gradient(155deg, #14224A 0%, #3457A2 45%, #7247B1 85%, #9B55BE 100%); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.45), 0 0 1px rgba(0,0,0,0.30); padding: 56px 56px 40px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }',
       '#' + GATE_ID + ' .sl-brand-pane::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.12), transparent 60%); pointer-events: none; }',
 
       // Brand mark — matches safety_lab.css .brand-mark (gradient square with white triangle).
@@ -132,7 +132,7 @@
       '#' + GATE_ID + ' .sl-brand-logos { position: relative; z-index: 1; }',
       '#' + GATE_ID + ' .sl-brand-logos-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.6; margin-bottom: 14px; }',
       '#' + GATE_ID + ' .sl-brand-logos-row { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }',
-      '#' + GATE_ID + ' .sl-brand-logo-pill { padding: 7px 14px; border-radius: 999px; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.20); font-size: 13px; font-weight: 500; letter-spacing: 0.2px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }',
+      '#' + GATE_ID + ' .sl-brand-logo-pill { padding: 7px 14px; border-radius: 999px; background: rgba(0,0,0,0.22); border: 1px solid rgba(0,0,0,0.60); font-size: 13px; font-weight: 500; letter-spacing: 0.2px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }',
       '#' + GATE_ID + ' .sl-brand-logo-pill.placeholder { opacity: 0.55; font-style: italic; }',
 
       // Form pane (right) — uses theme-aware tokens
@@ -219,6 +219,35 @@
   }
 
   // -------------------------------------------------------------------------
+  // Microsoft SSO block — a "Sign in with Microsoft" button + an "or use email"
+  // divider, shown above the email form on the signin/signup screens. The button
+  // drives Supabase's Azure OAuth provider via window.signInWithMicrosoft
+  // (ms_sso.js). Tenant access is enforced server-side (approved_tenants hook).
+  // Set window.SL_MS_SSO_ENABLED = false to hide it (e.g. before the Azure
+  // provider is configured); it defaults to HIDDEN — see the flag below.
+  // -------------------------------------------------------------------------
+  function ssoBlockHTML() {
+    // OPT-IN, 13 Aug 2026. The Azure provider is not enabled on the project, so
+    // this button 400s for every visitor. It stays hidden until someone sets
+    // window.SL_MS_SSO_ENABLED = true — the same flag ms_sso.js reads, so the
+    // gate button and the signup-modal button can never disagree again.
+    try { if (window.SL_MS_SSO_ENABLED !== true) return ''; } catch (_) { return ''; }
+    var MS_LOGO = '<svg width="17" height="17" viewBox="0 0 21 21" aria-hidden="true" style="flex:0 0 auto;">' +
+      '<rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/>' +
+      '<rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>';
+    return [
+      '  <button type="button" id="sl-ms-sso" onclick="try{window.signInWithMicrosoft&&window.signInWithMicrosoft()}catch(e){}"',
+      '    style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px;',
+      '    border:1px solid var(--color-border-hair,rgba(127,127,127,0.35));border-radius:9px;',
+      '    background:var(--color-surface-2,#fff);color:var(--color-text-primary,inherit);font:inherit;font-size:14px;font-weight:600;cursor:pointer;">',
+      '    ' + MS_LOGO + '<span>Sign in with Microsoft</span></button>',
+      '  <div style="display:flex;align-items:center;gap:10px;margin:16px 0 4px;color:var(--color-text-tertiary,rgba(127,127,127,0.8));font-size:12px;">',
+      '    <span style="flex:1;height:1px;background:var(--color-border-hair,rgba(127,127,127,0.25));"></span>or use email',
+      '    <span style="flex:1;height:1px;background:var(--color-border-hair,rgba(127,127,127,0.25));"></span></div>',
+    ].join('');
+  }
+
+  // -------------------------------------------------------------------------
   // Form pane HTML — content varies by mode
   // -------------------------------------------------------------------------
   function formPaneHTML() {
@@ -226,10 +255,16 @@
       return [
         '<div class="sl-form-pane"><div class="sl-form-pane-inner">',
         '  <h1 class="sl-form-title">Check your email</h1>',
-        '  <p class="sl-form-sub">We sent a verification link to <strong id="sl-verify-email-display">your inbox</strong>. Click it to activate your account and start your 10-day trial. The link expires in 24 hours.</p>',
+        '  <p class="sl-form-sub">We sent a verification link to <strong id="sl-verify-email-display">your inbox</strong>. Click it to activate your account and start your 10-day trial.</p>',
         '  <button class="sl-primary" type="button" onclick="window.SafetyLab._authBackToSignIn()">Back to sign in</button>',
         '  <div class="sl-msg" id="sl-msg"></div>',
-        '  <div class="sl-foot">Didn\'t receive it? Check spam, or <button class="sl-link" onclick="window.SafetyLab._authResendVerification()">resend the link</button>.</div>',
+        // If the link is reported invalid or expired, the usual cause on a corporate
+        // mailbox is Microsoft 365 Defender Safe Links opening it in transit — the
+        // link is single use, so the scan spends it. Proven in the auth log 13 Aug
+        // 2026 (electra.aero, twice). Policy is to have the customer\'s IT allow
+        // safetylabaero.com during setup; this copy is the fallback for everyone
+        // who hits it before that conversation happens. Never a dead end: resend.
+        '  <div class="sl-foot">Didn\'t receive it, or told the link is invalid? <button class="sl-link" onclick="window.SafetyLab._authResendVerification()">Send a new link</button>. Some corporate mail filters open links automatically, which can use one up — a fresh link normally works.</div>',
         '</div></div>',
       ].join('');
     }
@@ -286,11 +321,12 @@
       '  <p class="sl-form-sub">' + (isSignup
               ? 'Start a 10-day trial. No credit card required. Email verification is required to activate the trial.'
               : 'Sign in to continue with Safety Lab Aero.') + '</p>',
+      ssoBlockHTML(),
       '  <form id="sl-auth-form" autocomplete="on" novalidate>',
       (isSignup ? '    <div class="sl-field"><label for="sl-name">Full name</label><input id="sl-name" type="text" required autocomplete="name" autofocus placeholder="Jane Doe"></div>' : ''),
       '    <div class="sl-field"><label for="sl-email">Email</label><input id="sl-email" type="email" required spellcheck="false" autocomplete="email" autocapitalize="off"' + (isSignup ? '' : ' autofocus') + ' placeholder="you@example.com"></div>',
       (isSignup ? '    <div class="sl-field"><label for="sl-org">Organization</label><input id="sl-org" type="text" required autocomplete="organization" placeholder="Company or institution"></div>' : ''),
-      '    <div class="sl-field"><label for="sl-password">Password</label><input id="sl-password" type="password" required autocomplete="' + (isSignup ? 'new-password' : 'current-password') + '" minlength="8" placeholder="' + (isSignup ? 'At least 8 characters' : '') + '"></div>',
+      '    <div class="sl-field"><label for="sl-password">Password</label><input id="sl-password" type="password" required autocomplete="' + (isSignup ? 'new-password' : 'current-password') + '" minlength="8" placeholder="' + (isSignup ? '8+ chars, with a capital and a number' : '') + '"></div>',
       (isSignup ? '    <div class="sl-field"><label for="sl-password-confirm">Confirm password</label><input id="sl-password-confirm" type="password" required autocomplete="new-password" minlength="8" placeholder="Re-enter password"></div>' : ''),
       (isSignup ? '' : '<div class="sl-row-between"><span></span><button type="button" class="sl-link" onclick="window.SafetyLab._authSetMode(\'forgot\')">Forgot password?</button></div>'),
       '    <button class="sl-primary" type="submit" id="sl-submit">' + (isSignup ? 'Create account' : 'Sign in') + '</button>',
@@ -314,7 +350,32 @@
   const BUSY_MAX_MS = 15 * 60 * 1000;     // safety cap: a long op marked 'busy' longer than this is treated as leaked/hung and ignored
   const IDLE_EVENTS = ['mousedown', 'mousemove', 'keydown', 'wheel', 'scroll', 'touchstart', 'click'];
   const WARN_ID = 'sl-idle-warning', WARN_STYLE_ID = 'sl-idle-warning-style', WARN_COUNT_ID = 'sl-idle-warning-count', WARN_BTN_ID = 'sl-idle-warning-btn';
+  // Phase 66.12 — THE IDLE CLOCK IS SHARED ACROSS TABS.
+  // It used to be a per-tab variable while sign-out was global, so a SECOND tab
+  // left open reached 20 minutes on its own clock and signed out the tab the user
+  // was actually working in — with the warning banner rendering in the idle tab
+  // where nobody saw it. Waqas, 18 Aug: "if someone is actively using the app they
+  // should never be timed out." Activity in ANY tab now resets the clock for ALL of
+  // them: every bump writes the timestamp to localStorage (throttled), every check
+  // reads the newest of (this tab, storage), and a storage event bumps us live.
+  const IDLE_LS_KEY = 'safetyLab.idle.lastActivity';
+  const IDLE_LS_THROTTLE_MS = 4000;
   let _idleLast = 0, _idleInterval = null, _idleArmed = false, _idleLockMessage = '';
+  let _idleLastWrite = 0;
+  function _idleReadShared() {
+    try { const v = parseInt(localStorage.getItem(IDLE_LS_KEY) || '0', 10); return isFinite(v) ? v : 0; } catch (_) { return 0; }
+  }
+  function _idleWriteShared(now) {
+    if ((now - _idleLastWrite) < IDLE_LS_THROTTLE_MS) return;
+    _idleLastWrite = now;
+    try { localStorage.setItem(IDLE_LS_KEY, String(now)); } catch (_) {}
+  }
+  function _idleNewest() { const shared = _idleReadShared(); return shared > _idleLast ? shared : _idleLast; }
+  function _idleStorageEvent(e) {
+    if (!e || e.key !== IDLE_LS_KEY) return;
+    const v = parseInt(e.newValue || '0', 10);
+    if (isFinite(v) && v > _idleLast) { _idleLast = v; if (_idleWarnShown) hideIdleWarning(); }
+  }
   let _idleWarnShown = false, _idleCountdownTimer = null;       // option 2 — pre-logout warning toast
   let _busyCount = 0, _busySince = 0;                           // option 3 — long-running ops (AI/compute/export) hold the idle clock
   function _busyActive() {                                      // is a user-initiated long op currently holding the session open?
@@ -322,13 +383,20 @@
     if ((Date.now() - _busySince) >= BUSY_MAX_MS) { _busyCount = 0; return false; }   // stale/leaked → self-heal so logout still works
     return true;
   }
-  function _idleBump() { _idleLast = Date.now(); if (_idleWarnShown) hideIdleWarning(); }
+  function _idleBump() {
+    const now = Date.now();
+    _idleLast = now;
+    _idleWriteShared(now);
+    if (_idleWarnShown) hideIdleWarning();
+  }
   function _idleCheck() {
     if (!_idleArmed) return;
     if (_busyActive()) { _idleBump(); return; }                 // a long op the user kicked off is running → treat as active
-    const idleFor = Date.now() - _idleLast;
+    const idleFor = Date.now() - _idleNewest();   // newest activity across every open tab
     if (idleFor >= IDLE_MS) { onIdleTimeout(); return; }
-    if (idleFor >= (IDLE_MS - IDLE_WARN_MS)) showIdleWarning();  // entered the final ~2 min → warn, don't sign out yet
+    // Warn only where somebody can actually read it. A banner rendered in a hidden
+    // tab is the reason these sign-outs arrived with no warning at all.
+    if (idleFor >= (IDLE_MS - IDLE_WARN_MS) && document.visibilityState === 'visible') showIdleWarning();
   }
   function _idleVis() { if (document.visibilityState === 'visible') _idleCheck(); }
   function armIdleTimeout() {
@@ -337,6 +405,7 @@
     _idleArmed = true; _idleBump();
     IDLE_EVENTS.forEach(function (ev) { try { document.addEventListener(ev, _idleBump, { passive: true, capture: true }); } catch (_) { try { document.addEventListener(ev, _idleBump, true); } catch (_) {} } });
     try { document.addEventListener('visibilitychange', _idleVis, true); } catch (_) {}
+    try { window.addEventListener('storage', _idleStorageEvent); } catch (_) {}
     if (_idleInterval) { try { clearInterval(_idleInterval); } catch (_) {} }
     _idleInterval = setInterval(_idleCheck, IDLE_TICK_MS);
   }
@@ -344,6 +413,7 @@
     _idleArmed = false;
     IDLE_EVENTS.forEach(function (ev) { try { document.removeEventListener(ev, _idleBump, true); } catch (_) {} });
     try { document.removeEventListener('visibilitychange', _idleVis, true); } catch (_) {}
+    try { window.removeEventListener('storage', _idleStorageEvent); } catch (_) {}
     if (_idleInterval) { try { clearInterval(_idleInterval); } catch (_) {} _idleInterval = null; }
     try { hideIdleWarning(); } catch (_) {}                     // gate going up / signed out → drop any pending warning
   }
@@ -351,7 +421,16 @@
     disarmIdleTimeout();
     _idleLockMessage = 'Signed out after 20 minutes of inactivity. Please sign in again.';
     try { renderGate(); } catch (_) {}                                                          // lock immediately, don't wait on the network
-    try { const sb = getSupabase(); if (sb && sb.auth && typeof sb.auth.signOut === 'function') sb.auth.signOut(); } catch (_) {}
+    // Phase 66.12 — LOCAL scope. supabase-js v2 defaults signOut() to 'global',
+    // which revokes the refresh token server-side for every session of this user —
+    // so an idle tab on the laptop was also signing the user out on their phone and
+    // any other machine. An inactivity lock is about THIS browser.
+    try {
+      const sb = getSupabase();
+      if (sb && sb.auth && typeof sb.auth.signOut === 'function') {
+        try { sb.auth.signOut({ scope: 'local' }); } catch (_) { sb.auth.signOut(); }
+      }
+    } catch (_) {}
   }
 
   // -------------------------------------------------------------------------
@@ -401,7 +480,11 @@
         '<button type="button" class="sl-idle-warn-btn" id="' + WARN_BTN_ID + '">Stay signed in</button>';
       document.body.appendChild(el);
       const btn = document.getElementById(WARN_BTN_ID);
-      if (btn) btn.addEventListener('click', function () { _idleBump(); });   // resets clock + hides (via _idleBump)
+      if (btn) btn.addEventListener('click', function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (_) {}
+        _idleBump();          // reset the idle clock (extend the session)
+        hideIdleWarning();    // force-dismiss directly — never rely only on state flags
+      });
     }
     requestAnimationFrame(function () { try { el.classList.add('show'); } catch (_) {} });
     updateIdleCountdown();
@@ -412,7 +495,10 @@
     _idleWarnShown = false;
     if (_idleCountdownTimer) { try { clearInterval(_idleCountdownTimer); } catch (_) {} _idleCountdownTimer = null; }
     const el = document.getElementById(WARN_ID);
-    if (el) el.classList.remove('show');
+    // Remove the element outright (not just the .show class) so it can never linger
+    // visible due to a transition, stacking-context, or re-show race. showIdleWarning
+    // recreates it (with a fresh button handler) the next time a warning is needed.
+    if (el) { el.classList.remove('show'); try { el.remove(); } catch (_) { if (el.parentNode) el.parentNode.removeChild(el); } }
   }
 
   // -------------------------------------------------------------------------
@@ -435,6 +521,55 @@
       isBusy: function () { try { return _busyActive(); } catch (_) { return false; } }
     };
   } catch (_) {}
+  // Phase 66.12 — LONG LOCAL COMPUTE HOLDS THE SESSION OPEN.
+  // The fetch hook below only ever counted AI endpoints, and nothing else in the
+  // codebase called SafetyLabActivity.begin(). So a user could click Run Uncertainty
+  // Analysis, watch a Monte-Carlo run for twenty minutes without touching the mouse,
+  // and be signed out for inactivity BY THE TOOL THEY WERE WATCHING WORK. These are
+  // all user-clicked, genuinely long operations; each one now holds the idle clock
+  // for its duration (BUSY_MAX_MS still caps a hung op so the lock can't be disabled
+  // forever). Wrapped by NAME at load so the compute modules stay untouched.
+  const HEAVY_OPS = [
+    'runUncertaintyDisplay',      // Monte Carlo over lognormal basic-event lambdas
+    'runDFTMonteCarlo',           // dynamic fault tree simulation
+    'generateCutsetReport',       // minimal cut set enumeration
+    'exportProjectAsPDF',         // whole-project PDF build
+    'exportTabAsPDF',             // per-tab PDF build
+    'calculateAllProbabilities'   // full re-allocation across every page
+  ];
+  function _wrapHeavyOps() {
+    HEAVY_OPS.forEach(function (name) {
+      try {
+        const fn = window[name];
+        if (typeof fn !== 'function' || fn.__slIdleWrapped) return;
+        const wrapped = function () {
+          _activityBegin();
+          let out;
+          try { out = fn.apply(this, arguments); }
+          catch (e) { _activityEnd(); throw e; }
+          if (out && typeof out.then === 'function') {
+            try { out.then(function () { _activityEnd(); }, function () { _activityEnd(); }); }
+            catch (_) { _activityEnd(); }
+          } else {
+            _activityEnd();
+          }
+          return out;
+        };
+        wrapped.__slIdleWrapped = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        // 21 Aug 2026 — this line said preserve(orig, wrapped); `orig` does not exist in
+        // this scope (the local is `fn`), so the ReferenceError was silently swallowed
+        // and prior wrappers' markers were never preserved here.
+        try { if (window.SLWrap) SLWrap.preserve(fn, wrapped); } catch (_) {}
+        window[name] = wrapped;
+      } catch (_) {}
+    });
+  }
+  try {
+    if (document.readyState === 'complete') setTimeout(_wrapHeavyOps, 0);
+    else window.addEventListener('load', function () { setTimeout(_wrapHeavyOps, 0); });
+  } catch (_) {}
+
   try {
     if (typeof window !== 'undefined' && typeof window.fetch === 'function' && !window.__slIdleFetchHook) {
       window.__slIdleFetchHook = true;
@@ -586,6 +721,12 @@
         if (!fullName)           { showMessage('Please enter your full name.', 'error'); if (nameEl) nameEl.focus(); return; }
         if (!org)                { showMessage('Please enter your organization.', 'error'); if (orgEl) orgEl.focus(); return; }
         if (pass !== confirmVal) { showMessage('Passwords do not match.', 'error'); if (confirmEl) confirmEl.focus(); return; }
+        // Supabase rejects weak passwords with a 422 the user only sees after a
+        // round trip (it caught a real tester on 13 Aug). Check it here instead.
+        if (!/[a-z]/.test(pass) || !/[A-Z]/.test(pass) || !/[0-9]/.test(pass)) {
+          showMessage('Password needs at least one lowercase letter, one capital letter and one number.', 'error');
+          if (passEl) passEl.focus(); return;
+        }
         const redirect = window.location.origin + window.location.pathname;
         const { data, error } = await sb.auth.signUp({
           email,
@@ -648,9 +789,9 @@
     try {
       const { error } = await sb.auth.resend({ type: 'signup', email });
       if (error) throw error;
-      showMessage('Verification link sent again to ' + email + '.', 'success');
+      showMessage('A new verification link is on its way to ' + email + '.', 'success');
     } catch (err) {
-      showMessage((err && err.message) || 'Could not resend the link.', 'error');
+      showMessage((err && err.message) || 'Could not send a new link.', 'error');
     }
   }
 
@@ -670,6 +811,47 @@
       }
     } catch (_) {}
     try { _idleLockMessage = ''; armIdleTimeout(); } catch (_) {}   // signed in → start/refresh the 20-min idle clock (every session, no exemption)
+  }
+
+  // Phase 62.62 — Two-factor step-up. If the account has a verified TOTP factor,
+  // a password sign-in only reaches AAL1; require the 6-digit code to reach AAL2
+  // BEFORE lifting the gate. Accounts with no factor are unaffected (needsChallenge
+  // returns false → onLift runs immediately, exactly as before). If the module is
+  // absent or the check throws, we fail OPEN to the prior behavior so a transient
+  // error can never lock out a non-MFA user; a cancelled mandatory challenge signs
+  // the user back out so an un-stepped-up session never proceeds.
+  async function _mfaGateThenLift(sb, onLift) {
+    const _signOutToGate = async function () {
+      try { if (sb && sb.auth && typeof sb.auth.signOut === 'function') await sb.auth.signOut(); } catch (_) {}
+      try { renderGate(); } catch (_) {}
+    };
+    try {
+      // Master switch: window.SL_MFA_REQUIRED === false drops MFA entirely (no
+      // step-up challenge and no forced enrollment). Defaults ON when unset.
+      const _mfaOn = (typeof window.SL_MFA_REQUIRED === 'undefined') ? true : (window.SL_MFA_REQUIRED !== false);
+      if (_mfaOn && window.SafetyLabMFA) {
+        // (1) Account already has a factor → step up from AAL1 to AAL2.
+        if (typeof window.SafetyLabMFA.needsChallenge === 'function') {
+          const need = await window.SafetyLabMFA.needsChallenge();
+          if (need) {
+            const ok = await window.SafetyLabMFA.promptChallenge({ mandatory: true });
+            if (!ok) { await _signOutToGate(); return; }
+          }
+        }
+        // (2) An account with NO factor must enroll before the app opens ("grace
+        // enrollment"). promptEnroll fails OPEN if MFA infra is unavailable, so
+        // this can never lock everyone out.
+        if (typeof window.SafetyLabMFA.hasVerifiedFactor === 'function'
+                     && typeof window.SafetyLabMFA.promptEnroll === 'function') {
+          const has = await window.SafetyLabMFA.hasVerifiedFactor();
+          if (!has) {
+            const done = await window.SafetyLabMFA.promptEnroll({ mandatory: true });
+            if (!done) { await _signOutToGate(); return; }   // user declined to enroll → not signed in
+          }
+        }
+      }
+    } catch (_) { /* fail open to prior behavior */ }
+    try { onLift(); } catch (_) {}
   }
 
   // -------------------------------------------------------------------------
@@ -740,18 +922,22 @@
           try { console.log('[auth-gate] SIGNED_IN with potential-recovery URL; waiting 1500ms for PASSWORD_RECOVERY before lifting'); } catch (_) {}
           setTimeout(() => {
             if (_passwordRecoveryActive) return; // PASSWORD_RECOVERY fired, set-new-password already shown
-            try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
-            _syncLicenseTokenFromSupabase();
-            liftGate();
-            toast('Signed in as ' + session.user.email, 'success');
+            _mfaGateThenLift(sb, function () {
+              try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
+              _syncLicenseTokenFromSupabase();
+              liftGate();
+              toast('Signed in as ' + session.user.email, 'success');
+            });
           }, 1500);
           return;
         }
-        // Normal sign-in.
-        try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
-        _syncLicenseTokenFromSupabase();
-        liftGate();
-        toast('Signed in as ' + session.user.email, 'success');
+        // Normal sign-in — enforce the MFA step-up (if enrolled) before lifting.
+        _mfaGateThenLift(sb, function () {
+          try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
+          _syncLicenseTokenFromSupabase();
+          liftGate();
+          toast('Signed in as ' + session.user.email, 'success');
+        });
       } else if (event === 'SIGNED_OUT') {
         _passwordRecoveryActive = false;
         try { localStorage.removeItem('safetyLab.license.token'); } catch(_){}
@@ -784,8 +970,7 @@
           if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email);
           else localStorage.setItem('safetyLab.signup.email', String(session.user.email).toLowerCase());
         } catch (_) {}
-        _syncLicenseTokenFromSupabase();
-        liftGate();
+        _mfaGateThenLift(sb, function () { _syncLicenseTokenFromSupabase(); liftGate(); });
       } else {
         renderGate();
       }

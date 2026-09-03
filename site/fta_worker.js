@@ -12,7 +12,7 @@
  * The main thread reconstructs node objects from the ids, so the result is
  * identical to calling getCutsets() synchronously.
  * ========================================================================== */
-importScripts('fta_engine.js');
+importScripts('fta_engine.js?v=1.6');   // #7b — versioned, matching the page's tag: one engine, one version, both threads. FOUND STALE at 1.4 against a page on 1.5 (7 Aug) — pinned by regression_bdd_budget so the pair cannot separate again.
 self.onmessage = function (e) {
     var msg = e.data || {};
     try {

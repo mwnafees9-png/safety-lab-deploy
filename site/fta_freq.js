@@ -173,13 +173,7 @@
         }
         if (!document.getElementById('snav-freq')) {
             const prevNav = document.getElementById('snav-expcase') || document.getElementById('snav-monitors');
-            if (prevNav && prevNav.parentNode) {
-                const a = document.createElement('a');
-                a.className = prevNav.className; a.id = 'snav-freq'; a.setAttribute('role', 'button'); a.setAttribute('tabindex', '0');
-                a.setAttribute('onclick', "switchTab('freq')");
-                a.innerHTML = '<span class="asb-lbl">Frequency (G.12)</span>';
-                prevNav.parentNode.insertBefore(a, prevNav.nextSibling);
-            }
+            // 23 Aug 2026 — no nav row: a Fault-trees TAB now (prove_tabs.js), label clean of clause numbers.
         }
         return true;
     }
@@ -190,7 +184,7 @@
         const chip = function (txt, col) { return '<span class="u-mono" style="font-size:9.5px; font-weight:700; color:' + col + '; border:1px solid ' + col + '55; background:' + col + '0D; border-radius:4px; padding:1px 7px;">' + esc(txt) + '</span>'; };
         host.innerHTML =
             '<div class="header-with-export"><h3>Failure frequency <span class="u-mono" style="font-size:10.5px; font-weight:700; color:#6D28D9; border:1px solid #6D28D955; background:#6D28D90D; border-radius:5px; padding:2px 8px; vertical-align:3px;">ARP4761A G.12</span></h3></div>' +
-            '<p style="font-size:12.5px; color:var(--color-text-secondary); max-width:980px;">G.11 answers the probability of BEING failed; G.12 answers the rate of BECOMING failed — the quantity supplier trees and frequency-domain objectives speak. Computed as w = Σ IB·w over the SAME exact BDD as the probability run, so the two lanes can never quietly disagree. An event with no rate contributes no frequency: enablers are named, Markov attachments are refused, CCF group rows make the figure a stated LOWER BOUND — never a silent one. Frequency is a VERIFICATION-tree question: top-down allocation trees carry probability budgets only (the allocator strips λ by design), so they are listed but never computed — their frequency lives on the verification mirror.</p>' +
+            '<p style="font-size:12.5px; color:var(--color-text-secondary); ">G.11 answers the probability of BEING failed; G.12 answers the rate of BECOMING failed — the quantity supplier trees and frequency-domain objectives speak. Computed as w = Σ IB·w over the SAME exact BDD as the probability run, so the two lanes can never quietly disagree. An event with no rate contributes no frequency: enablers are named, Markov attachments are refused, CCF group rows make the figure a stated LOWER BOUND — never a silent one. Frequency is a VERIFICATION-tree question: top-down allocation trees carry probability budgets only (the allocator strips λ by design), so they are listed but never computed — their frequency lives on the verification mirror.</p>' +
             (!trees.length ? '<div style="font-size:12px; color:var(--color-text-tertiary); padding:14px;">No fault trees yet.</div>' :
              trees.map(function (t) {
                 const r = t.res;

@@ -124,10 +124,14 @@ function exportData(moduleName, format) {
                 return downloadCSV(file('AC_FCIM'),
                     ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
                     acFcimData.map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]));
-            case 'AC_FHA':
+            case 'AC_FHA': {
+                // 31 Aug 2026 — the CSV is the deliverable: same order as the
+                // worksheet (natural ascending fcId, phase groups clustered).
+                const _acOrd = (typeof _fhaGroupRows === 'function') ? _fhaGroupRows(acFhaData).ordered : acFhaData;
                 return downloadCSV(file('AC_FHA'),
-                    ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Severity','Assumption IDs','Comments'],
-                    acFhaData.map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.severity, (r.assumptionIds || []).join('; '), r.comments]));
+                    ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
+                    _acOrd.map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.effAcLevel || '', r.effCrewLevel || '', r.effPaxLevel || '', r.severity, (r.assumptionIds || []).join('; '), r.comments]));
+            }
             case 'AC_Requirements':
                 return downloadCSV(file('AC_Requirements'),
                     ['Trace','Level','Type','Requirement Statement','Rationale'],
@@ -156,9 +160,10 @@ function exportData(moduleName, format) {
             }
             case 'Sys_FHA': {
                 if (!sys()) return alert('Open a system folder first.');
+                const _sysOrd = (typeof _fhaGroupRows === 'function') ? _fhaGroupRows(sys().fha).ordered : sys().fha;
                 return downloadCSV(file(`${sys().name}_FHA`),
-                    ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Severity','Assumption IDs','Comments'],
-                    sys().fha.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.severity, (r.assumptionIds || []).join('; '), r.comments]));
+                    ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
+                    _sysOrd.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.effAcLevel || '', r.effCrewLevel || '', r.effPaxLevel || '', r.severity, (r.assumptionIds || []).join('; '), r.comments]));
             }
             case 'Sys_Requirements': {
                 if (!sys()) return alert('Open a system folder first.');
@@ -187,6 +192,19 @@ function exportData(moduleName, format) {
                 return downloadCSV(file('ZSA'),
                     ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Interference Profile','Separation & Mitigations'],
                     zsaData.map(r => [r.zoneId, r.desc, r.equip, r.severity, r.interference, r.mitigation]));
+            case 'CMA':
+                // 17 Aug 2026 — CSV export was missing for CMA (fell through to the
+                // "not yet implemented" default) while the PDF table provider below
+                // already defined the columns. This mirrors that provider exactly.
+                return downloadCSV(file('CMA'),
+                    ['Scope','CMA ID','Subject','Independence Claim','Linked Gates','Modes','Findings','Mitigation','Status'],
+                    (cmaData || []).map(c => [
+                        (c.scope === 'system') ? ('System: ' + ((systemsData.find(s => s.id === c.owningSystemId) || {}).name || c.owningSystemId || '')) : 'Aircraft',
+                        c.cmaId, c.subject, c.claim,
+                        (c.linkedGateIds || []).join(', '),
+                        (c.modes || []).join(', '),
+                        c.findings, c.mitigation, c.status
+                    ]));
             case 'HW_FMEA':
                 // Phase 68 — FMEA is per-system; this per-tab export matches the on-screen
                 // table (the open System Folder's rows), not every system at once.
@@ -243,7 +261,15 @@ function exportData(moduleName, format) {
                 const rows = [];
                 const allSysFhas = getAllSysFha();
                 acFhaData.forEach(ac => {
-                    const linkedSys = allSysFhas.filter(s => s.acTrace === ac.fcId || (s.acTrace && s.acTrace.includes(ac.fcId)));
+                    // 17 Aug 2026 — acTrace is not always a string (demo data carries
+                    // arrays / non-string values); coerce instead of assuming .includes.
+                    const linkedSys = allSysFhas.filter(s => {
+                        const t = s.acTrace;
+                        if (t == null || t === '') return false;
+                        if (t === ac.fcId) return true;
+                        if (Array.isArray(t)) return t.includes(ac.fcId);
+                        return String(t).includes(ac.fcId);
+                    });
                     if (linkedSys.length === 0) rows.push([ac.fcId, ac.severity, '(no system trace)', '', '']);
                     else linkedSys.forEach(s => rows.push([ac.fcId, ac.severity, s.fcId, s.severity, s.subId]));
                 });
@@ -261,6 +287,371 @@ function exportData(moduleName, format) {
                         ['Minor','Slight reduction in safety margins or functional capabilities.','Physical discomfort.','Slight increase in workload or use of emergency procedures.'],
                         ['No Safety Effect','No effect on operational capabilities or safety.','Inconvenience.','No effect on flight crew workload.']
                     ]);
+            // 30 Aug 2026 — EXPORT PARITY batch 1 (Waqas directive, 18 Aug: everything
+            // on offer can get exported). These three buttons existed and fell through
+            // to the "not yet implemented" alert. Each case MIRRORS ITS RENDERER'S
+            // COLUMNS (the 17 Aug rule: never invent a schema), coerces defensively,
+            // and exports FULL cell values — truncation is a screen affordance.
+            case 'All_Requirements': {
+                // Mirrors the Requirements repo table (renderReqsRepo): ID | System |
+                // Trace | Level | Type | From | Requirement Statement | Val | Ver.
+                // The export is always the ALL-scope view (System column included).
+                const rows = [];
+                const push = (r, sysName) => {
+                    if (!r) return;
+                    // defensive beyond the renderer (17 Aug lesson): demo data has
+                    // carried traceIds as a STRING — an export must surface it, not drop it
+                    const traceList = Array.isArray(r.traceIds) && r.traceIds.length ? r.traceIds
+                        : (typeof r.traceIds === 'string' && r.traceIds.trim() ? [r.traceIds]
+                        : (r.traceId ? [r.traceId] : []));
+                    rows.push([
+                        String(r.traceId || r.id || ('#' + (r.internalId || ''))),
+                        sysName,
+                        traceList.map(String).join(', '),
+                        String(r.level || ''), String(r.type || ''), String(r.analysis || ''),
+                        String(r.text || ''),
+                        String(r.valStatus || r.valStatusLabel || '—'),
+                        String(r.verStatus || r.verStatusLabel || '—')
+                    ]);
+                };
+                (acReqData || []).forEach(r => push(r, 'Aircraft'));
+                (systemsData || []).forEach(sy => (sy.req || []).forEach(r => push(r, String(sy.name || sy.id || ''))));
+                return downloadCSV(file('All_Requirements'),
+                    ['ID','System','Trace','Level','Type','From','Requirement Statement','Val Status','Ver Status'],
+                    rows);
+            }
+            case 'VV_Status': {
+                // Mirrors the V&V status roll-up (renderVVStatusPage): ID | Scope |
+                // Level | Type | From | Statement | Val Status | Ver Status — statuses
+                // NORMALIZED to the same three labels the page's badges show. Exports
+                // the full roll-up (the page's filter chips are a transient view).
+                const norm = (v) => {
+                    // the fallback REPLICATES _vvNormStatus (it must agree with the page
+                    // even in a context where helpers has not loaded)
+                    let k;
+                    if (typeof _vvNormStatus === 'function') k = _vvNormStatus(v);
+                    else {
+                        const t = (v || '').toString().toLowerCase().trim();
+                        if (!t || t === '—' || t === '-') k = 'open';
+                        else if (t.indexOf('complete') >= 0 || t.indexOf('closed') >= 0 || t.indexOf('verified') >= 0 || t.indexOf('validated') >= 0) k = 'closed';
+                        else if (t.indexOf('progress') >= 0 || t.indexOf('partial') >= 0 || t.indexOf('draft') >= 0) k = 'in-progress';
+                        else k = 'open';
+                    }
+                    return { 'open': 'Open', 'in-progress': 'In progress', 'closed': 'Closed' }[k] || 'Open';
+                };
+                const all = (typeof _vvAllRequirements === 'function') ? _vvAllRequirements() : (() => {
+                    const l = [];
+                    (acReqData || []).forEach(r => l.push({ ...r, __sysName: 'Aircraft' }));
+                    (systemsData || []).forEach(sy => (sy.req || []).forEach(r => l.push({ ...r, __sysName: String(sy.name || sy.id || '') })));
+                    return l;
+                })();
+                return downloadCSV(file('VV_Status'),
+                    ['ID','Scope','Level','Type','From','Statement','Val Status','Ver Status'],
+                    (all || []).map(r => [
+                        String(r.traceId || r.id || ('#' + (r.internalId || ''))),
+                        String(r.__sysName || ''),
+                        String(r.level || ''), String(r.type || ''), String(r.analysis || ''),
+                        String(r.text || ''),
+                        norm(r.valStatus), norm(r.verStatus)
+                    ]));
+            }
+            case 'Items': {
+                // Mirrors the Items register (renderItems, minus the Actions column):
+                // Item ID | Name | Failure Rate | Type | DAL | DA Type | Owning System |
+                // Zone | Functions | Description — with the renderer's own defaults
+                // (type 'HW+SW', DAL 'E', DA type 'IDAL', 'Aircraft-level' owner).
+                const sysName = (id) => {
+                    if (!id) return 'Aircraft-level';
+                    const sy = (systemsData || []).find(x => String(x.id) === String(id));
+                    return sy ? String(sy.name || sy.id) : String(id);
+                };
+                return downloadCSV(file('Items'),
+                    ['Item ID','Name','Failure Rate (per hr)','Type','DAL','DA Type','Owning System','Zone','Functions','Description'],
+                    (itemsData || []).map(r => [
+                        String(r.itemId || ''), String(r.name || ''),
+                        (Number(r.rate) > 0 ? Number(r.rate).toExponential(4) : ''),
+                        String(r.type || 'HW+SW'), String(r.dal || 'E'), String(r.daType || 'IDAL'),
+                        sysName(r.owningSystemId), String(r.zoneId || ''),
+                        (Array.isArray(r.traceIds) ? r.traceIds.map(String).join(', ') : String(r.traceIds || '')),
+                        String(r.description || '')
+                    ]));
+            }
+            // 30 Aug 2026 — EXPORT PARITY batch 2a: the R&M lane. Neither analysis had
+            // ANY export path (Waqas directive, 18 Aug). Both mirror their renderer's
+            // computed output and inherit the engines' own REFUSAL discipline — an
+            // export never invents what the engine would not show.
+            case 'RM_Predictions': {
+                // Mirrors RAM_PREDICT's computed output (ram_predict.js renderPage +
+                // compute): per-part rows with handbook citations, then the totals the
+                // page states. Refusals surface the ENGINE'S message verbatim.
+                const RP = (typeof window !== 'undefined' && window.RAM_PREDICT) || null;
+                if (!RP || typeof RP.predict !== 'function') return alert('Reliability prediction engine not loaded in this session.');
+                const st = (projectConfig && projectConfig.ram && projectConfig.ram.predict) || null;
+                if (!st || !Array.isArray(st.rows) || !st.rows.length) return alert('No parts in the prediction yet — add part categories on the R&M prediction page first.');
+                let r;
+                try { r = RP.predict(st.rows, st.env); }
+                catch (e) { return alert('Export refused, same as the engine: ' + e.message); }
+                const rows = r.rows.map(x => [
+                    String(x.name || ''), String(x.qty), String(x.lambdaG),
+                    String(x.quality || ''), String(x.piQ),
+                    Number(x.contrib).toFixed(4), String(x.cite || '')
+                ]);
+                rows.push(['TOTAL λ_EQUIP', '', '', '', '', Number(r.lambdaTotal).toFixed(4),
+                    'MTBF ' + (r.mtbfHrs ? Math.round(r.mtbfHrs).toLocaleString() + ' h' : '—')
+                    + ' · environment ' + r.env + ' (' + (r.envName || '') + ') · ' + (r.source || '')]);
+                return downloadCSV(file('RM_Predictions'),
+                    ['Part category','N','λg (/10⁶h)','Quality','πQ','Contribution (/10⁶h)','Handbook citation'],
+                    rows);
+            }
+            case 'Markov_Models': {
+                // Mirrors the mission-time answer table markov_ctmc.js appends to the
+                // Markov page: Model | P(failed at T) | P(failed, steady) | Receipt —
+                // plus a Notes column carrying what the renderer inlines in the Model
+                // cell (warnings, REFUSED reasons, the phased §I.2.9 line).
+                const models = (projectConfig && projectConfig.markovModels) || [];
+                if (!models.length) return alert('No Markov models in this project yet.');
+                const canSolve = (typeof window !== 'undefined') && typeof window.validateMarkovModel === 'function' && typeof window.solveMarkovTransient === 'function';
+                if (!canSolve) return alert('Markov solver not loaded in this session — open the Markov Models tab once, then export.');
+                const T = (typeof ftaConfig === 'object' && ftaConfig && parseFloat(ftaConfig.exposureTime)) || 1;
+                const rows = models.map(m => {
+                    const v = window.validateMarkovModel(m);
+                    if (!v.ok) return [String(m.name || ''), 'REFUSED', String(T), '', '', '', '', '', v.errors.join(' · ')];
+                    const tr = window.solveMarkovTransient(m, T);
+                    const ss = (typeof solveMarkovModel === 'function') ? solveMarkovModel(m) : { ok: false };
+                    const notes = [];
+                    if (v.warnings && v.warnings.length) notes.push(v.warnings.join(' · '));
+                    if (m.phasePlan && m.phasePlan.enabled && typeof window.solveMarkovPhased === 'function') {
+                        const ph = window.solveMarkovPhased(m);
+                        notes.push(ph.ok
+                            ? 'phased (§I.2.9): ' + ph.pFailed.toExponential(4) + ' over ' + ph.legs.length + ' phases / ' + ph.missionHours.toFixed(2) + ' FH'
+                                + (ph.excluded && ph.excluded.length ? ' · excluded: ' + ph.excluded.join(' · ') : '')
+                            : 'phased REFUSED — ' + ph.reason);
+                    }
+                    return [
+                        String(m.name || ''), 'OK', String(T),
+                        (tr.ok ? tr.pFailed.toExponential(4) : String(tr.reason || '')),
+                        (ss.ok ? ss.pFailed.toExponential(4) : '—'),
+                        (tr.ok ? String(tr.receipt.method) : ''),
+                        (tr.ok ? tr.receipt.Lambda.toExponential(2) : ''),
+                        (tr.ok ? String(tr.receipt.terms) + ' terms · tol ' + tr.receipt.tol : ''),
+                        notes.join(' | ')
+                    ];
+                });
+                return downloadCSV(file('Markov_Models'),
+                    ['Model','Status','T (FH)','P(failed at T)','P(failed, steady)','Method','Λ','Receipt','Notes'],
+                    rows);
+            }
+            // 30 Aug 2026 — EXPORT PARITY batch 2b: the last four no-path analyses
+            // (HF register, event trees, STPA UCAs, MMEL/MLAS). Same rules: mirror
+            // the renderer, coerce defensively, inherit each engine's refusals.
+            case 'HF_Register': {
+                // Mirrors the typed-assumptions register (hf_register_panel.js):
+                // Assumption | Type | credited/uncredited lanes | Holds now | State,
+                // plus Scope and the HFA task detail the hf rows expose.
+                const HF = (typeof window !== 'undefined' && window.HF_ASSUMPTIONS) || null;
+                if (!HF || typeof HF.asmAllTyped !== 'function') return alert('HF register engine not loaded in this session — open the Human Factors page once, then export.');
+                const all = HF.asmAllTyped().filter(a => a.type || a.credited != null || a.uncredited != null);
+                if (!all.length) return alert('No typed assumptions in the HF register yet.');
+                return downloadCSV(file('HF_Register'),
+                    ['Scope','Assumption','Type','Credited lane','Uncredited lane','Holds now','State','HFA detail'],
+                    all.map(a => {
+                        const validated = (typeof HF.isValidated === 'function') ? HF.isValidated(a.state) : /validated|verified/i.test(String(a.state || ''));
+                        const holds = validated ? 'credited' : 'uncredited (conservative)';
+                        const h = a.hf || null;
+                        const det = (a.type === 'hf' && h)
+                            ? ['direction ' + (h.direction || '—'), 'phase ' + (h.responsePhase || '—'), 'crew ' + (h.crewmember || '—'),
+                               (h.taskTimeS != null ? 'task ' + h.taskTimeS + 's (' + (h.taskTimeBasis || 'unstated basis') + ')' : 'task time unstated')].join(' · ')
+                            : '';
+                        return [String(a.scope || ''), String(a.text || ''), String(a.typeLabel || a.type || ''),
+                                String(a.credited == null ? '' : a.credited), String(a.uncredited == null ? '' : a.uncredited),
+                                holds, String(a.state || 'Open'), det];
+                    }));
+            }
+            // 30 Aug 2026 — HF's OWN ANALYSES (Waqas: "human factors is not just
+            // about assumptions"). Same rules as every export: mirror the module's
+            // renderer, inherit its refusal posture, invent nothing.
+            case 'HF_Allocation': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Function Allocation page once, then export.');
+                const fns = (typeof acFunctionsData !== 'undefined' && Array.isArray(acFunctionsData)) ? acFunctionsData : [];
+                if (!fns.length) return alert('No functions to allocate yet — build the Functions lane first.');
+                const byKey = {};
+                HX._read('alloc').rows.forEach(r => { byKey[String(r.key)] = r; });
+                return downloadCSV(file('HF_Allocation'),
+                    ['Sub-function','Name','Allocated to','Rationale'],
+                    fns.map(f => {
+                        const r = byKey[String(f.internalId)] || {};
+                        return [String(f.subId || ''), String(f.subName || ''), String(r.allocation || 'UNALLOCATED'), String(r.rationale || '')];
+                    }));
+            }
+            case 'HF_HEA': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Human Error Analysis page once, then export.');
+                const rows = HX._read('hea').rows;
+                if (!rows.length) return alert('No error rows in the human error analysis yet.');
+                return downloadCSV(file('HF_HEA'),
+                    ['ID','Task assumption','Task','Error mode (NUREG/CR-1278)','Effect','Detection','Recovery','Feeds FC'],
+                    rows.map(r => [String(r.heaId || ''), String(r.asmId || ''), String(r.task || ''), String(r.errorMode || ''),
+                                   String(r.effect || ''), String(r.detection || ''), String(r.recovery || ''), String(r.fcIds || '')]));
+            }
+            case 'HF_Alerts': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Crew Alerting page once, then export.');
+                const rows = HX._read('alerts').rows;
+                if (!rows.length) return alert('No alerts in the crew alerting inventory yet.');
+                return downloadCSV(file('HF_Alerts'),
+                    ['ID','Alert','Priority (25.1322)','Modality','Cited by FC','Notes'],
+                    rows.map(r => [String(r.alertId || ''), String(r.name || ''), String(r.priority || ''), String(r.modality || ''),
+                                   String(r.fcIds || ''), String(r.notes || '')]));
+            }
+            case 'HF_Tasks': {
+                // 30 Aug 2026 — task-first task analysis (Waqas: "it does not
+                // start with just an assumption"). Authored crew tasks; the
+                // credited link (asmId) shows which earned register places.
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Task Analysis page once, then export.');
+                const rows = HX._read('tasks').rows;
+                if (!rows.length) return alert('No crew tasks authored yet.');
+                return downloadCSV(file('HF_Tasks'),
+                    ['ID','Phases','Crewmember','Task','Reaction (s)','Execution (s)','Response (s)','Time basis','Channels (HIDH)','Credited as','Notes'],
+                    rows.map(r => [String(r.taskId || ''), String(r.phase || ''), String(r.crewmember || ''), String(r.task || ''),
+                                   String(r.reactionS || ''), String(r.execS || ''), String((HX.taskResponseS ? HX.taskResponseS(r) : r.timeS) || ''), String(r.basis || ''), String(r.channels || ''), String(r.asmId || 'not credited'), String(r.notes || '')]));
+            }
+            case 'HF_Ergo': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Ergonomics page once, then export.');
+                const rows = HX._read('ergo').rows;
+                if (!rows.length) return alert('No ergonomics evaluations authored yet.');
+                return downloadCSV(file('HF_Ergo'),
+                    ['ID','Item','Criterion (cite)','Finding','Status','Notes'],
+                    rows.map(r => [String(r.ergoId || ''), String(r.item || ''), String(r.clause || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
+            }
+            case 'HF_ControlsDisplays': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Controls & Displays page once, then export.');
+                const rows = HX._read('cd').rows;
+                if (!rows.length) return alert('No controls & displays evaluations authored yet.');
+                return downloadCSV(file('HF_ControlsDisplays'),
+                    ['ID','Item','Kind','§25.1302 consideration','Supports','Finding','Status','Notes'],
+                    rows.map(r => [String(r.cdId || ''), String(r.item || ''), String(r.kind || ''), String(r.consideration || ''), String(r.supports || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
+            }
+            case 'HF_FunctionAllocation': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function' || typeof HX._functions !== 'function') return alert('HF analyses module not loaded in this session \u2014 open the Function Allocation page once, then export.');
+                const fns = HX._functions();
+                if (!fns.length) return alert('No aircraft sub-functions defined yet \u2014 allocation is keyed to the functions lane.');
+                const byKey = {};
+                HX._read('alloc').rows.forEach(r => { byKey[String(r.key)] = r; });
+                // Every sub-function is a line, allocated or not: an unallocated row exporting
+                // as blank IS the finding, and dropping it would hide the gap the lane exists for.
+                return downloadCSV(file('HF_FunctionAllocation'),
+                    ['Sub-function','Name','Allocated to','Rationale'],
+                    fns.map(f => { const r = byKey[String(f.internalId)] || {}; return [String(f.subId || ''), String(f.subName || ''), String(r.allocation || ''), String(r.rationale || '')]; }));
+            }
+            case 'HF_TaskIdentification': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session \u2014 open the Task Identification page once, then export.');
+                const rows = HX._read('tid').rows;
+                if (!rows.length) return alert('No task steps identified yet.');
+                return downloadCSV(file('HF_TaskIdentification'),
+                    ['Task ID','Proc ID','Procedure','Mode','Phase','Task step','Definition','Crew','Trigger','Source','Notes'],
+                    rows.map(r => [String(r.taskId || ''), String(r.procId || ''), String(r.procName || ''), String(r.opsMode || ''), String(r.phase || ''), String(r.taskName || ''), String(r.taskDef || ''), String(r.crew || ''), String(r.trigger || ''), String(r.source || ''), String(r.notes || '')]));
+            }
+            case 'HF_SituationAwareness': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Situation Awareness page once, then export.');
+                const rows = HX._read('sa').rows;
+                if (!rows.length) return alert('No situation-awareness elements authored yet.');
+                return downloadCSV(file('HF_SituationAwareness'),
+                    ['ID','SA element','Level','Cue / source','Phase','Finding','Status','Notes'],
+                    rows.map(r => [String(r.saId || ''), String(r.element || ''), String(r.level || ''), String(r.cue || ''), String(r.phase || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
+            }
+            case 'HF_MFC': {
+                const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Minimum Flight Crew page once, then export.');
+                const st = HX._read('mfc') || {};
+                const fnRows = st.rows || [], factors = st.factors || {}, concl = st.conclusion || {};
+                const byKey = {}; fnRows.forEach(r => { byKey[String(r.key)] = r; });
+                const FN = HX.MFC_FUNCTIONS || [], FAC = HX.MFC_FACTORS || [];
+                const anyFn = fnRows.some(r => r.role || r.bedford || r.note);
+                const anyFac = Object.keys(factors).some(k => String(factors[k] || '').trim());
+                if (!anyFn && !anyFac && !concl.minCrew && !concl.rationale) return alert('No minimum-flight-crew determination authored yet.');
+                const out = [];
+                FN.forEach(f => { const r = byKey[f.key] || {}; out.push(['Basic workload function', String(f.label || ''), String(r.role || ''), 'Bedford ' + String(r.bedford || '') + (r.note ? (' — ' + r.note) : '')]); });
+                FAC.forEach((f, i) => { out.push(['Workload factor', '(' + (i + 1) + ') ' + String(f), String(factors[i] || ''), '']); });
+                out.push(['Determination', 'Minimum flight crew (§25.1523)', String(concl.minCrew || ''), String(concl.rationale || '')]);
+                return downloadCSV(file('HF_MFC'),
+                    ['Section','Item','Assignment / disposition','Bedford / note / rationale'],
+                    out);
+            }
+            case 'Event_Trees': {
+                // Mirrors the ETA outcome enumeration (event_trees.js etaEvaluate):
+                // one row per OUTCOME with the full barrier sequence, path probability,
+                // frequency, assessed severity and FHA link. A tree the engine REFUSES
+                // (2^n outcome budget) exports as one REFUSED row carrying the
+                // engine's own message — never a partial enumeration.
+                const trees = (typeof window !== 'undefined' && typeof window.etaStore === 'function') ? window.etaStore() : ((projectConfig && projectConfig.eventTrees) || []);
+                if (!trees.length) return alert('No event trees in this project yet.');
+                if (typeof window === 'undefined' || typeof window.etaEvaluate !== 'function') return alert('Event-tree engine not loaded in this session — open the Event Trees page once, then export.');
+                const rows = [];
+                trees.forEach(t => {
+                    let ev;
+                    try { ev = window.etaEvaluate(t); }
+                    catch (e) { rows.push([String(t.id || ''), String(t.name || ''), 'REFUSED', '', '', '', '', '', '', String(e.message || e)]); return; }
+                    ev.outcomes.forEach(o => rows.push([
+                        String(t.id || ''), String(t.name || ''), 'OK',
+                        String((t.initiator && t.initiator.desc) || ''),
+                        (ev.freq ? Number(ev.freq).toExponential(3) : ''),
+                        (o.seq || []).join(' → '),
+                        Number(o.prob).toExponential(4),
+                        Number(o.freq).toExponential(4),
+                        String(o.severity || ''), String(o.linkedFcId || '') + (o.note ? (' · ' + o.note) : '')
+                    ]));
+                    if (!ev.closed) rows.push([String(t.id || ''), String(t.name || ''), 'CHECK', '', '', 'Σp over outcomes', Number(ev.sum).toPrecision(6), '', '', 'path probabilities do not sum to 1 — barrier probability out of range']);
+                });
+                return downloadCSV(file('Event_Trees'),
+                    ['Tree','Name','Status','Initiator','Initiator freq (/FH)','Sequence','P(path)','Frequency (/FH)','Severity','Linked FC / note'],
+                    rows);
+            }
+            case 'STPA_UCAs': {
+                // Mirrors the UCA discipline in stpa_core.ucaSeeds: every control
+                // action × guide phrase, with disposition, J3307 context clause and
+                // spine links. The ENGINE'S refusals (silent dismissal, assessed
+                // without context, dangling hazard link) surface VERBATIM — an export
+                // must not launder a register the engine itself rejects.
+                const ENG2 = (typeof window !== 'undefined' && window.STPA) || null;
+                if (!ENG2 || typeof ENG2.ucaSeeds !== 'function') return alert('STPA engine not loaded in this session — open the STPA page once, then export.');
+                const sd = (typeof stpaData !== 'undefined' && stpaData) || null;
+                if (!sd || !sd.cs || !(sd.cs.actions || []).length) return alert('No STPA control structure yet — author control actions on the STPA page first.');
+                let seeds;
+                try { seeds = ENG2.ucaSeeds(sd.cs, sd.dispositions || {}, sd); }
+                catch (e) { return alert('Export refused, same as the engine: ' + e.message); }
+                return downloadCSV(file('STPA_UCAs'),
+                    ['UCA ID','Controller','Control action','Guide phrase','Status','Context (J3307 §7.3.1.2)','Hazard links','FC links (legacy)','Rationale','UCA statement'],
+                    seeds.map(u => [
+                        String(u.ucaId || ''), String(u.controller || ''), String(u.action || ''), String(u.phrase || ''),
+                        String(u.status || 'open'), String(u.context || ''),
+                        (u.hazardIds || []).join(', '), (u.fcIds || []).join(', '),
+                        String(u.rationale || ''), String(u.text || '')
+                    ]));
+            }
+            case 'MMEL_MLAS': {
+                // Mirrors the MMEL/MLAS table (mmel_module.js): Item | Equipment |
+                // ATA | Inst/Req | Category | Protection check | Quantitative |
+                // TLD max | (m)/(o) procedures | State.
+                const mm = (projectConfig && projectConfig.mmel) || null;
+                const items = (mm && Array.isArray(mm.items)) ? mm.items : [];
+                if (!items.length) return alert('No MMEL/MLAS items in this project yet.');
+                return downloadCSV(file('MMEL_MLAS'),
+                    ['Item','Equipment','ATA','Installed','Required','Category','TLD max (days)','Protection check','Quantitative (dispatched)','(m) procedure','(o) procedure','State'],
+                    items.map(it => [
+                        String(it.id || ''), String(it.title || ''), String(it.ata || ''),
+                        String(it.installed == null ? '' : it.installed), String(it.required == null ? '' : it.required),
+                        String(it.category || ''), String(it.catDays == null ? '' : it.catDays),
+                        String(it.protection || ''), String(it.quant || ''),
+                        String(it.mProc || ''), String(it.oProc || ''), String(it.state || '')
+                    ]));
+            }
             default:
                 alert(`Export for "${moduleName}" is not yet implemented.`);
         }
@@ -285,6 +676,25 @@ function importTabularCSV(text, moduleName) {
     const getColIndex = (names) => { for(let n of names) { const idx = headers.indexOf(n.toUpperCase()); if(idx > -1) return idx; } return -1; };
     const getValue = (row, names) => { const idx = getColIndex(names); return idx > -1 ? row[idx].trim() : ''; };
 
+    // HF lanes import into projectConfig.hf.<key>.rows (their own module store), not a global array.
+    const _allocMisses = [];
+    const _HF_IMPORT_KEY = { 'HF_HEA':'hea', 'HF_Alerts':'alerts', 'HF_Tasks':'tasks', 'HF_Ergo':'ergo', 'HF_ControlsDisplays':'cd', 'HF_SituationAwareness':'sa', 'HF_TaskIdentification':'tid' }[moduleName];   // NOTE: HF_FunctionAllocation is deliberately absent — its rows are keyed to the live functions lane and are set, never appended.
+    let _hfBase = 0, _hfRows = null;
+    if (_HF_IMPORT_KEY && typeof projectConfig !== 'undefined' && projectConfig) {
+        if (!projectConfig.hf) projectConfig.hf = {};
+        if (!projectConfig.hf[_HF_IMPORT_KEY] || !Array.isArray(projectConfig.hf[_HF_IMPORT_KEY].rows)) projectConfig.hf[_HF_IMPORT_KEY] = { rows: [] };
+        _hfRows = projectConfig.hf[_HF_IMPORT_KEY].rows;
+        _hfBase = _hfRows.reduce((m, r) => { const idf = r.cdId||r.saId||r.ergoId||r.heaId||r.alertId||r.taskId||''; const x = parseInt(String(idf).replace(/^\D+/, ''), 10); return isNaN(x) ? m : Math.max(m, x); }, 0);
+    }
+    const _hfId = (prefix, i, provided) => provided || (prefix + String(_hfBase + i).padStart(3, '0'));
+    let _mfcStore = null;
+    if (moduleName === 'HF_MFC' && typeof projectConfig !== 'undefined' && projectConfig) {
+        if (!projectConfig.hf) projectConfig.hf = {};
+        _mfcStore = { rows: [], factors: {}, conclusion: { minCrew: '', rationale: '' } };
+        projectConfig.hf.mfc = _mfcStore;   // import REPLACES the determination (fixed Appendix D structure)
+    }
+    const _MFC_FN = (typeof window !== 'undefined' && window.HF_ANALYSES && window.HF_ANALYSES.MFC_FUNCTIONS) || [];
+
     for(let i=1; i<arr.length; i++) {
         const row = arr[i]; const newId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
 
@@ -301,7 +711,7 @@ function importTabularCSV(text, moduleName) {
             const assumptionIds = asmIdsRaw
                 ? asmIdsRaw.split(';').map(s => s.trim()).filter(Boolean)
                 : (parseAssumptionField(legacyAsm).id ? [parseAssumptionField(legacyAsm).id] : []);
-            acFhaData.push({ internalId: newId, subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) });
+            acFhaData.push({ internalId: newId, subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) });
         } else if(moduleName === 'AC_Requirements') {
             acReqData.push({ internalId: newId, traceId: getValue(row, ['Trace']), level: getValue(row, ['Level']), type: getValue(row, ['Type']), text: getValue(row, ['Requirement Statement']), rat: getValue(row, ['Rationale']) });
         } else if(moduleName === 'Sys_Functions') {
@@ -327,7 +737,7 @@ function importTabularCSV(text, moduleName) {
             const assumptionIds = asmIdsRaw
                 ? asmIdsRaw.split(';').map(s => s.trim()).filter(Boolean)
                 : (parseAssumptionField(legacyAsm).id ? [parseAssumptionField(legacyAsm).id] : []);
-            sys().fha.push({ internalId: newId, acTrace: getValue(row, ['AC Trace']), subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) });
+            sys().fha.push({ internalId: newId, acTrace: getValue(row, ['AC Trace']), subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) });
         } else if(moduleName === 'Sys_Requirements') {
             sys().req.push({ internalId: newId, traceId: getValue(row, ['Trace']), level: getValue(row, ['Level']), type: getValue(row, ['Type']), text: getValue(row, ['Requirement Statement']), rat: getValue(row, ['Rationale']) });
         } else if(moduleName === 'PRA') {
@@ -340,7 +750,47 @@ function importTabularCSV(text, moduleName) {
         } else if(moduleName === 'Flight_Phases') {
             if(i===1) flightPhasesData = [];
             flightPhasesData.push({ phase: getValue(row, ['Phase of Flight']), altFrom: getValue(row, ['Altitude From']), altFromUnit: getValue(row, ['Unit From', 'Unit']), altTo: getValue(row, ['Altitude To']), altToUnit: getValue(row, ['Unit To', 'Unit']), duration: getValue(row, ['Duration']), durationUnit: getValue(row, ['Duration Unit', 'Unit']) });
+        } else if(moduleName === 'HF_HEA' && _hfRows) {
+            _hfRows.push({ heaId: _hfId('HEA-', i, getValue(row, ['ID'])), asmId: getValue(row, ['Task assumption','Assumption']), task: getValue(row, ['Task']), errorMode: getValue(row, ['Error mode (NUREG/CR-1278)','Error mode','Error Mode']), effect: getValue(row, ['Effect']), detection: getValue(row, ['Detection']), recovery: getValue(row, ['Recovery']), fcIds: getValue(row, ['Feeds FC','Cited by FC']) });
+        } else if(moduleName === 'HF_Alerts' && _hfRows) {
+            _hfRows.push({ alertId: _hfId('ALR-', i, getValue(row, ['ID'])), name: getValue(row, ['Alert','Name']), priority: getValue(row, ['Priority (25.1322)','Priority']), modality: getValue(row, ['Modality']), fcIds: getValue(row, ['Cited by FC']), notes: getValue(row, ['Notes']) });
+        } else if(moduleName === 'HF_Tasks' && _hfRows) {
+            const _cr = getValue(row, ['Credited as']);
+            _hfRows.push({ taskId: _hfId('TASK-', i, getValue(row, ['ID'])), phase: getValue(row, ['Phases','Phase']), crewmember: getValue(row, ['Crewmember']), task: getValue(row, ['Task']), reactionS: getValue(row, ['Reaction (s)','Reaction']), execS: getValue(row, ['Execution (s)','Execution']), timeS: getValue(row, ['Time (s)','Time']), basis: getValue(row, ['Time basis','Basis']), channels: getValue(row, ['Channels (HIDH)','Channels']), asmId: (_cr && _cr !== 'not credited') ? _cr : '', notes: getValue(row, ['Notes']) });
+        } else if(moduleName === 'HF_Ergo' && _hfRows) {
+            _hfRows.push({ ergoId: _hfId('ERG-', i, getValue(row, ['ID'])), item: getValue(row, ['Item']), clause: getValue(row, ['Criterion (cite)','Criterion','Clause']), finding: getValue(row, ['Finding']), status: getValue(row, ['Status']) || 'Open', notes: getValue(row, ['Notes']) });
+        } else if(moduleName === 'HF_ControlsDisplays' && _hfRows) {
+            _hfRows.push({ cdId: _hfId('CD-', i, getValue(row, ['ID'])), item: getValue(row, ['Item']), kind: getValue(row, ['Kind']) || 'Control', consideration: getValue(row, ['\u00a725.1302 consideration','Consideration']), supports: getValue(row, ['Supports']), finding: getValue(row, ['Finding']), status: getValue(row, ['Status']) || 'Open', notes: getValue(row, ['Notes']) });
+        } else if(moduleName === 'HF_FunctionAllocation') {
+            const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
+            const sub = getValue(row, ['Sub-function','SubId','Sub function']);
+            const alloc = String(getValue(row, ['Allocated to','Allocation']) || '').toLowerCase();
+            if (HX && typeof HX.setAllocBySubId === 'function' && sub) {
+                if (!HX.setAllocBySubId(sub, alloc, getValue(row, ['Rationale']))) _allocMisses.push(sub);
+            }
+        } else if(moduleName === 'HF_TaskIdentification' && _hfRows) {
+            _hfRows.push({ taskId: _hfId('TSK-', i, getValue(row, ['Task ID','ID'])), procId: getValue(row, ['Proc ID','Procedure ID']), procName: getValue(row, ['Procedure']), opsMode: getValue(row, ['Mode','Operating mode']) || 'Normal', phase: getValue(row, ['Phase']), taskName: getValue(row, ['Task step','Task']), taskDef: getValue(row, ['Definition']), crew: getValue(row, ['Crew','Crewmember']), trigger: getValue(row, ['Trigger']), source: getValue(row, ['Source']), notes: getValue(row, ['Notes']) });
+        } else if(moduleName === 'HF_SituationAwareness' && _hfRows) {
+            _hfRows.push({ saId: _hfId('SA-', i, getValue(row, ['ID'])), element: getValue(row, ['SA element','Element']), level: getValue(row, ['Level']) || 'L1 Perception', cue: getValue(row, ['Cue / source','Cue']), phase: getValue(row, ['Phase']), finding: getValue(row, ['Finding']), status: getValue(row, ['Status']) || 'Open', notes: getValue(row, ['Notes']) });
+        } else if(moduleName === 'HF_MFC' && _mfcStore) {
+            const section = getValue(row, ['Section']); const item = getValue(row, ['Item']); const val = getValue(row, ['Assignment / disposition','Assignment']); const extra = getValue(row, ['Bedford / note / rationale','Bedford / note','Rationale']);
+            if (/workload function/i.test(section)) {
+                const fn = _MFC_FN.find(f => String(f.label) === item); if (fn) { const m = /Bedford\s*([0-9]+)/i.exec(extra || ''); const note = String(extra || '').split('—').slice(1).join('—').trim(); _mfcStore.rows.push({ key: fn.key, role: val || '', bedford: m ? m[1] : '', note: note }); }
+            } else if (/workload factor/i.test(section)) {
+                const mi = /^\((\d+)\)/.exec(item || ''); if (mi) { _mfcStore.factors[String(parseInt(mi[1], 10) - 1)] = val || ''; }
+            } else if (/determination/i.test(section)) {
+                _mfcStore.conclusion.minCrew = val || ''; _mfcStore.conclusion.rationale = extra || '';
+            }
         }
+    }
+
+    if(moduleName === 'HF_FunctionAllocation') {
+        try {
+            const HX = (typeof window !== 'undefined') ? window.HF_ANALYSES : null;
+            if (HX && typeof HX.renderAlloc === 'function') HX.renderAlloc();
+            if (typeof scheduleAutosave === 'function') scheduleAutosave();
+            if (_allocMisses.length) alert('Imported. ' + _allocMisses.length + ' row(s) named a sub-function that is not in the functions lane and were refused rather than orphaned: ' + _allocMisses.slice(0, 8).join(', ') + (_allocMisses.length > 8 ? '\u2026' : ''));
+        } catch(_) {}
     }
 
     // Sync Extractors
@@ -350,6 +800,8 @@ function importTabularCSV(text, moduleName) {
     if(moduleName.startsWith('AC_')) { renderACFunctions(); renderACFCIM(); renderACFHA(); renderACReq(); renderACAssumptions(); }
     if(moduleName.startsWith('Sys_')) { renderSysFunctions(); renderSysFCIM(); renderSysFHA(); renderSysReq(); renderSysAssumptions(); }
     if(moduleName === 'PRA') renderPRA(); if(moduleName === 'ZSA') renderZSA(); if(moduleName === 'HW_FMEA') renderFMEA(); if(moduleName === 'Flight_Phases') renderFlightPhases();
+    if(_HF_IMPORT_KEY) { try { const HX = (typeof window !== 'undefined') ? window.HF_ANALYSES : null; const fn = { hea:'renderHea', alerts:'renderAlerts', tasks:'renderTasks', ergo:'renderErgo', cd:'renderCd', sa:'renderSa', tid:'renderTid' }[_HF_IMPORT_KEY]; if (HX && typeof HX[fn] === 'function') HX[fn](); if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_) {} }
+    if(moduleName === 'HF_MFC') { try { const HX = (typeof window !== 'undefined') ? window.HF_ANALYSES : null; if (HX && typeof HX.renderMfc === 'function') HX.renderMfc(); if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_) {} }
 }
 
 // Minimal CSV importer for a fault tree page. Accepts the column layout produced by
@@ -431,6 +883,19 @@ function migrateFHAAssumptions(fhaArr) {
 function migrateAllFHAAssumptions() {
     migrateFHAAssumptions(acFhaData);
     systemsData.forEach(s => migrateFHAAssumptions(s.fha));
+    // 28 Aug 2026 — heal the phase-shape split (see _applyFhaSuggestion's note in
+    // ai_assistant.js). AI-accepted rows stored row.phases as an ARRAY; the project
+    // vocabulary is a comma string and the readers assume it. The write side now
+    // joins at birth; this heals every row already saved with the array shape —
+    // 63 live on Aeolus alone when found. Idempotent: a string passes through.
+    migrateFhaPhaseShape();
+}
+function migrateFhaPhaseShape() {
+    const heal = rows => (rows || []).forEach(r => {
+        if (r && Array.isArray(r.phases)) r.phases = r.phases.filter(Boolean).join(', ');
+    });
+    heal(typeof acFhaData !== 'undefined' ? acFhaData : []);
+    (typeof systemsData !== 'undefined' ? systemsData : []).forEach(s => heal(s && s.fha));
 }
 
 // Phase 28 — promote legacy scalar trace fields to arrays so a single record can carry
@@ -477,12 +942,30 @@ function migrateLegacyMultiTraces() {
     _pruneFmeaToPerSystem();
 }
 
-// Phase 68 — FMEA moved to a per-system, item-level-only model (no aircraft-level FMEA,
-// functional mode dropped). Discard any row that is untagged (no owning system) or
-// functional so stale rows don't linger in the file. Beta: confirmed no production data.
+// Phase 68 dropped functional FMEA here ("Beta: confirmed no production data") —
+// and then the rest of the product kept treating it as first-class: ffmea is a
+// committable Program-Planning lane, the worksheet has a live functional mode,
+// the fmeaFunctional template schema shipped 2 Aug, the golden thread and the
+// reports both branch on fmeaType === 'functional'. Measured live 5 Aug on HL-1:
+// laneOn('ffmea') = true while this filter deleted every hand-authored
+// functional row on EVERY load path — including restoring a saved revision —
+// with no message. The l3Source wrapper in mac_flows.js existed precisely
+// because generated functional rows were being destroyed; it saved the
+// machine's rows and left the user's dead.
+//
+// RULED 5 Aug (Waqas): honour the lane. Functional rows PERSIST. A functional
+// row authored at aircraft scope carries owningSystemId '' by design
+// (_readFmeaForm), so the owner requirement applies to piece-part only —
+// piece-part remains a per-system, item-level model. Untagged rows with
+// neither an owner nor a function link are stale and still dropped.
 function _pruneFmeaToPerSystem() {
     if (Array.isArray(fmeaData)) {
-        fmeaData = fmeaData.filter(m => m && (m.fmeaType || 'piece-part') === 'piece-part' && m.owningSystemId);
+        fmeaData = fmeaData.filter(m => {
+            if (!m) return false;
+            const t = m.fmeaType || (m.funcSubId ? 'functional' : 'piece-part');
+            if (t === 'functional') return true;
+            return !!m.owningSystemId;
+        });
     }
 }
 
@@ -574,6 +1057,11 @@ function renderLinkedFHAsHtml(asmId) {
 }
 
 // Render the assumption IDs linked to an FHA row as compact chips for the FHA table cell.
+// 3 Sep 2026 — FHA CSV round-trip carries the three effect levels (closed
+// vocabulary via severity_axes.js; an off-list cell imports as empty, never a guess).
+function _axisLvl(axis, v) {
+    try { return (window.SLSeverityAxes && typeof SLSeverityAxes.normLevel === 'function') ? SLSeverityAxes.normLevel(axis, v) : String(v || '').trim(); } catch (_) { return ''; }
+}
 function renderFhaAsmLinksHtml(asmIds) {
     if (!asmIds || !asmIds.length) return '<span class="u-muted-italic">None</span>';
     return asmIds.map(id => {
@@ -711,10 +1199,103 @@ function _acFuncRenderRows(arr, ctx) {
     return html;
 }
 
+// E1 — 26 Aug 2026. THE RECOVERY WINDOW IS NOW CLOSED TO AUTOSAVE.
+//
+// Reproduced live on the deployed build: a reload came back to a blank project
+// and within seconds BOTH local copies had been overwritten with that blank
+// state. localStorage 4,823 B / all counts 0; IndexedDB 5,056 B, blank, and
+// stamped LATER than the mirror — so IDB was not lagging behind holding good
+// data, it had been overwritten too. The session immediately before: 19
+// functions · 32 FCIM rows · 114 extracted conditions · 38 FHA rows · 11 fault
+// trees. Recoverable only from the cloud.
+//
+// The asymmetry that allowed it: _autosaveHasContent() is consulted on the way
+// OUT (below, twice — an empty snapshot is correctly refused as not worth
+// restoring) and NEVER on the way in. _writeAutosave's only guard was
+// `if (_autosaveSuspended) return;`, and _autosaveSuspended was set for project
+// load and sample load — not for recovery. safety_lab.js runs
+// checkAutosaveRecovery() and then _wrapForUndoAndAutosave() immediately after,
+// so from that moment any tracked call could schedule a write of whatever was
+// on screen. The IDB branch here is `.then()`-async, so it can still be in
+// flight at that point: the blank-state write lands first and destroys the very
+// payload the pending restore was about to read.
+//
+// So the window is held shut against exactly one thing: an EMPTY write. The
+// window opens at entry and closes when recovery has RESOLVED — synchronous
+// path and IndexedDB fallback both — with a timeout backstop so it cannot stay
+// open if the promise never settles.
+//
+// WHAT THIS DOES NOT DO, on purpose. It does not touch _autosaveSuspended, and
+// it does not block writes generally. Two reasons, both learned by trying the
+// blunter version first:
+//   · _applyProjectData sets and clears _autosaveSuspended in its own
+//     try/finally and schedules a write from that finally to persist the
+//     migrations it just ran. Reusing the same flag here means the restore's
+//     finally re-opens the window early, and — when SLIdle is absent and the
+//     write runs synchronously inside the finally — that legitimate write is
+//     swallowed by the very hold meant to protect it.
+//   · A suspended-forever autosave is a worse bug than the one being fixed. A
+//     guard that only ever refuses ONE specific write cannot strand the feature.
+// So the rule is narrow: during the recovery window, refuse to write a snapshot
+// that has NO content over a stored one that HAS content. Content-bearing
+// writes go through untouched, on every path, at all times.
+//
+// Deliberately NOT built tonight (E1 part 3): a separate last-good slot. It
+// would double the write cost of every autosave on projects up to 4.5 MB to
+// protect against content→content regressions, which is not what happened here.
+// Refusing the empty overwrite keeps the good copy in the primary slot, which
+// is the whole of the value at a fraction of the cost.
+//
+// The window is bounded in BOTH directions: it opens at recovery and closes
+// when recovery resolves, or after the backstop, whichever comes first. Outside
+// it, behaviour is byte-for-byte what shipped — createNewProject and any other
+// deliberate blanking still persist exactly as they do today, because they
+// happen long after boot.
+const _RECOVERY_RELEASE_MS = 12000;
+
+function _recoveryHoldBegin() {
+    _autosaveRecoveryPending = true;
+    try { clearTimeout(_autosaveRecoveryTimer); } catch (_) {}
+    _autosaveRecoveryTimer = setTimeout(function () {
+        console.warn('[E1] autosave recovery did not resolve in ' + _RECOVERY_RELEASE_MS + 'ms — closing the window.');
+        _recoveryHoldEnd();
+    }, _RECOVERY_RELEASE_MS);
+}
+
+function _recoveryHoldEnd() {
+    _bootRecoveryHasRun = true;              // #2Sep2026 boot durability: recovery has now RUN — empty writes may persist again
+    if (!_autosaveRecoveryPending) return;   // idempotent — both paths may call it
+    _autosaveRecoveryPending = false;
+    try { clearTimeout(_autosaveRecoveryTimer); } catch (_) {}
+    _autosaveRecoveryTimer = null;
+}
+
+// 31 Aug 2026 — session resume restores the DATA but used to drop the cloud
+// identity: the resumed tab came up with _activeCloudProjectId null, so the
+// first autosave push PROVISIONED A DUPLICATE project row (db0b5a9e), and the
+// save paths ran with a null version token. The identity now rides in the
+// autosave META (written atomically with the payload in _writeAutosave); after
+// a successful restore we adopt it. Guards: never clobber a live identity, and
+// only accept a plausible id string.
+function _adoptCloudIdentityFromMeta(m) {
+    try {
+        if (!m || typeof m !== 'object') return;
+        if (typeof _activeCloudProjectId === 'undefined') return;
+        if (_activeCloudProjectId) return;                      // a live identity always wins
+        if (typeof m.cloudProjectId === 'string' && m.cloudProjectId.length >= 8) {
+            _activeCloudProjectId = m.cloudProjectId;
+            _activeCloudDocVersion = (typeof m.cloudDocVersion === 'number') ? m.cloudDocVersion : null;
+            try { if (typeof _rtUpdatePresenceProject === 'function') _rtUpdatePresenceProject(); } catch (_) {}
+        }
+    } catch (_) {}
+}
+
 function checkAutosaveRecovery() {
     // Phase 57 — auto-recover the latest autosave on refresh (silent, no banner). The localStorage
     // path stays synchronous so the common case has zero behaviour change and no welcome-flash.
     let recovered = false;
+    let _recoveredTs = 0;   // ts of the copy applied from localStorage, so IndexedDB can newest-win
+    _recoveryHoldBegin();
     try {
         const meta = localStorage.getItem(AUTOSAVE_META_KEY);
         if (meta) {
@@ -722,22 +1303,141 @@ function checkAutosaveRecovery() {
             const payload = localStorage.getItem(AUTOSAVE_KEY);
             if (m && m.ts && payload) {
                 let parsed; try { parsed = JSON.parse(payload); } catch(e) { parsed = null; }
-                if (_autosaveHasContent(parsed)) {
-                    try { _applyProjectData(parsed); recovered = true; } catch (e) { console.warn('Auto-recover failed:', e); }
+                // E1 — record what the STORED copy is worth, so _writeAutosave can
+                // refuse to overwrite a good one with an empty one without having to
+                // re-read and re-parse the whole payload on every single write.
+                _autosaveStoredHasContent = _autosaveHasContent(parsed);
+                if (_autosaveStoredHasContent) {
+                    try { _applyProjectData(parsed); recovered = true; _recoveredTs = (m && m.ts) || 0; _adoptCloudIdentityFromMeta(m); } catch (e) { console.warn('Auto-recover failed:', e); }
                 }
             }
         }
     } catch(e){ console.warn('Recovery check failed:', e); }
-    // #14 — fallback: a project too large for the localStorage quota lives ONLY in IndexedDB.
-    // Recover it asynchronously, and dismiss the welcome modal if it flashed up meanwhile.
-    if (!recovered && SLDB.available()) {
-        SLDB.get(AUTOSAVE_KEY).then(_maybeDecompress).then(function (payload) {   // #44 — auto-detect compressed/plain
-            if (!payload) return;
-            let parsed; try { parsed = JSON.parse(payload); } catch(e) { return; }
-            if (!_autosaveHasContent(parsed)) return;
-            try { _applyProjectData(parsed); _dismissWelcomeIfOpen(); } catch(e){ console.warn('IDB auto-recover failed:', e); }
-        }).catch(function (e) { console.warn('IDB recovery check failed:', e); });
+    // #14 / 2 Sep 2026 NEWEST-WINS — the durable copy, not merely the first one found.
+    // A project too large for the localStorage quota lives ONLY in IndexedDB, and even when
+    // both stores hold the project a torn write (localStorage quota-failed while IndexedDB
+    // succeeded) leaves localStorage STALE. So IndexedDB is ALWAYS consulted — not only when
+    // localStorage recovered nothing — and its copy is applied when localStorage recovered
+    // nothing OR when IndexedDB is newer than the copy we applied. localStorage still runs
+    // first and synchronously for a flash-free common case; this only re-applies when the
+    // durable store is genuinely fresher.
+    if (SLDB.available()) {
+        Promise.all([ SLDB.get(AUTOSAVE_KEY).then(_maybeDecompress).catch(function(){return null;}),
+                      SLDB.get(AUTOSAVE_META_KEY).catch(function(){return null;}) ])
+        .then(function (pair) {
+            var payload = pair[0];
+            var idbMeta = pair[1];
+            if (typeof idbMeta === 'string') { try { idbMeta = JSON.parse(idbMeta); } catch (_) { idbMeta = null; } }
+            var idbTs = (idbMeta && idbMeta.ts) || 0;
+            if (!payload) return false;
+            let parsed; try { parsed = JSON.parse(payload); } catch(e) { return false; }
+            if (!_autosaveHasContent(parsed)) return false;
+            // Prefer IndexedDB only if nothing was recovered, or it is strictly newer than
+            // what localStorage gave us. Equal timestamps => keep the sync apply, no churn.
+            if (recovered && !(idbTs > _recoveredTs)) return false;
+            _autosaveStoredHasContent = true;
+            try {
+                _applyProjectData(parsed); _dismissWelcomeIfOpen();
+                // fire-and-forget: adopt the cloud identity from the IDB meta copy
+                try {
+                    SLDB.get(AUTOSAVE_META_KEY).then(function (mm) {
+                        if (typeof mm === 'string') { try { mm = JSON.parse(mm); } catch (_) { mm = null; } }
+                        _adoptCloudIdentityFromMeta(mm);
+                    }).catch(function () {});
+                } catch (_) {}
+                return true;
+            }
+            catch(e){ console.warn('IDB auto-recover failed:', e); return false; }
+        }).catch(function (e) { console.warn('IDB recovery check failed:', e); return false; })
+          // The .catch above turns a rejection into `false`, so this single
+          // handler covers BOTH outcomes — restored, empty, or IndexedDB down.
+          // An onRejected arm here would be dead code; the behavioural check
+          // "a REJECTED IndexedDB read still closes the recovery window" is what
+          // proves the coverage, rather than a second handler that never runs.
+          .then(function (ok) { _recoveryHoldEnd(); if (!ok && !recovered) _offerLastGoodIfAny(); });
+        return;
     }
+    _recoveryHoldEnd();
+    if (!recovered) _offerLastGoodIfAny();
+}
+
+// E1 part 3 — when the CURRENT snapshot has nothing to give, say that an older
+// one exists. Deliberately an OFFER, never a silent restore: the current slot
+// being empty is also what a genuinely new project looks like, and quietly
+// resurrecting the previous project on top of one would be its own data-loss
+// story — the user's new work replaced by old work, which is exactly the shape
+// of bug this item exists to close. So it surfaces through the recovery banner
+// that has been built and unreachable since the silent-recovery path landed,
+// and nothing happens until someone clicks.
+function _offerLastGoodIfAny() {
+    const consider = function (payload, ts) {
+        if (!payload) return false;
+        let parsed; try { parsed = JSON.parse(payload); } catch (_) { return false; }
+        if (!_autosaveHasContent(parsed)) return false;
+        try { _showLastGoodBanner(ts); } catch (_) {}
+        return true;
+    };
+    try {
+        let ts = 0;
+        try { const m = JSON.parse(localStorage.getItem(LASTGOOD_META_KEY) || 'null'); ts = (m && m.ts) || 0; } catch (_) {}
+        if (consider(localStorage.getItem(LASTGOOD_KEY), ts)) return;
+    } catch (_) {}
+    try {
+        if (!SLDB.available()) return;
+        SLDB.get(LASTGOOD_KEY).then(_maybeDecompress).then(function (payload) {
+            return SLDB.get(LASTGOOD_META_KEY).then(function (m) { consider(payload, (m && m.ts) || 0); });
+        }).catch(function () {});
+    } catch (_) {}
+}
+
+function _showLastGoodBanner(ts) {
+    const host = document.querySelector('.container');
+    if (!host || document.querySelector('.recovery-banner')) return;
+    const banner = document.createElement('div');
+    banner.className = 'recovery-banner';
+    let ago = '';
+    if (ts) {
+        const age = Math.round((Date.now() - ts) / 1000);
+        ago = age < 60 ? age + 's ago' : age < 3600 ? Math.round(age / 60) + ' min ago' : Math.round(age / 3600) + ' hr ago';
+    }
+    banner.innerHTML =
+        '<div class="recovery-banner-text"><strong>This project is empty, but an earlier snapshot exists' +
+        (ago ? ' from ' + ago : '') + '.</strong> Restore it, or dismiss to keep working in the blank project.</div>' +
+        '<div class="recovery-banner-actions">' +
+          '<button onclick="recoverLastGood()">Restore it</button>' +
+          '<button class="btn-ghost" onclick="discardLastGood()">Dismiss</button>' +
+        '</div>';
+    const header = host.querySelector('.global-header');
+    if (header && header.nextSibling) host.insertBefore(banner, header.nextSibling);
+    else host.insertBefore(banner, host.firstChild);
+}
+
+function recoverLastGood() {
+    const apply = function (payload) {
+        let parsed; try { parsed = JSON.parse(payload); } catch (_) { return false; }
+        if (!_autosaveHasContent(parsed)) return false;
+        _applyProjectData(parsed);
+        _dismissRecoveryBanner();
+        showToast('Project restored from the earlier snapshot.', 'success');
+        return true;
+    };
+    try {
+        const p = localStorage.getItem(LASTGOOD_KEY);
+        if (p && apply(p)) return;
+        if (SLDB.available()) {
+            SLDB.get(LASTGOOD_KEY).then(_maybeDecompress).then(function (q) {
+                if (!q || !apply(q)) showToast('Nothing to restore.', 'warning');
+            }).catch(function (e) { showToast('Restore failed: ' + ((e && e.message) || e), 'error'); });
+            return;
+        }
+        showToast('Nothing to restore.', 'warning');
+    } catch (e) { showToast('Restore failed: ' + e.message, 'error'); }
+}
+
+// Dismiss the OFFER without destroying the snapshot. The banner is advisory; a
+// user who clicks Dismiss is saying "not now", not "delete my only other copy".
+function discardLastGood() {
+    _dismissRecoveryBanner();
 }
 function _showRecoveryBanner(ts) {
     const host = document.querySelector('.container');
@@ -780,6 +1480,10 @@ function recoverAutosave() {
     } catch(e){ showToast('Recovery failed: ' + e.message, 'error'); }
 }
 function discardAutosave() {
+    // E1 — the user has said, in as many words, that the stored copy is not worth
+    // keeping. Clear the cached judgement with it, or the refusal in _writeAutosave
+    // would go on protecting a slot that no longer exists.
+    _autosaveStoredHasContent = false;
     try { localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(AUTOSAVE_META_KEY); } catch(e){}
     try { if (SLDB.available()) { SLDB.del(AUTOSAVE_KEY); SLDB.del(AUTOSAVE_META_KEY); } } catch(_){}   // #14 — clear IndexedDB copy too
     _dismissRecoveryBanner();
@@ -794,42 +1498,29 @@ function _applyProjectData(data) {
     _autosaveSuspended = true;
     try { _quantClearCache(); } catch(_) {}   // #45 — new project ⇒ drop any cached quant results
     try {
-        acFunctionsData = data.acFunctionsData || [];
-        acFcimData = data.acFcimData || [];
-        acExtractedFCs = data.acExtractedFCs || [];
-        acFhaData = data.acFhaData || [];
-        acReqData = data.acReqData || [];
-        acAssumptionsData = data.acAssumptionsData || [];
-        acAsmCounter = data.acAsmCounter || 1;
-        systemsData = data.systemsData || [];
-        activeSystemId = null;
-        praData = data.praData || []; zsaData = data.zsaData || []; cmaData = data.cmaData || []; routingData = Array.isArray(data.routingData) ? data.routingData : []; resourcesData = Array.isArray(data.resourcesData) ? data.resourcesData : []; projectSourceDocs = Array.isArray(data.projectSourceDocs) ? data.projectSourceDocs : []; aiAssumptions = Array.isArray(data.aiAssumptions) ? data.aiAssumptions : []; fmeaData = data.fmeaData || []; fmeaCounter = data.fmeaCounter || 1; itemsData = data.itemsData || [];
-        projectBaselines = Array.isArray(data.projectBaselines) ? data.projectBaselines : [];
-        // Phase 55.0.8 — AutoReq template overrides (per-project)
-        autoReqTemplateOverrides = (data.autoReqTemplateOverrides && typeof data.autoReqTemplateOverrides === 'object') ? data.autoReqTemplateOverrides : {};
-        try { if (typeof window !== 'undefined') window.autoReqTemplateOverrides = autoReqTemplateOverrides; } catch(_) {}
-        // Phase 56.9 — per-project report-section edits
-        projectReportEdits = (data.projectReportEdits && typeof data.projectReportEdits === 'object') ? data.projectReportEdits : {};
-        try { if (typeof window !== 'undefined') window.projectReportEdits = projectReportEdits; } catch(_) {}
-        reviewCommentsData = Array.isArray(data.reviewCommentsData) ? data.reviewCommentsData : [];
-        reviewCounter = (typeof data.reviewCounter === 'number' && data.reviewCounter > 0) ? data.reviewCounter : (reviewCommentsData.length + 1);
-        // Phase E3 — sample projects ship signed line-item approvals; without this
-        // restore the cockpits would show an unreviewed program.
-        reviewApprovalsData = Array.isArray(data.reviewApprovalsData) ? data.reviewApprovalsData : [];
-        projectName = (typeof data.projectName === 'string' && data.projectName.trim()) ? data.projectName : (projectName || 'Untitled Project');
+        // 20 Aug 2026 — DERIVED. This block used to assign ~35 stores by hand, and it is
+        // the exact code that turns a PARTIAL payload into a wipe: every key it does not
+        // find becomes empty, and `ftaPages = data.ftaPages || [one blank page]` is the
+        // 84-byte fingerprint found on four destroyed customer projects. Deriving does not
+        // change that semantics — a load must apply what it is given — but it guarantees
+        // this path and the cloud/local snapshots agree on the SET of stores, which they
+        // did not: projectTemplates was saved by everything and read back only by
+        // open-from-cloud, so undo, autosave recovery, session resume and the multi-tab
+        // guard all silently dropped it.
+        //
+        // The defence against a partial payload lives where it belongs: cloud_sync's shrink
+        // guard and the sl_guard_project_document trigger in the database.
+        if (typeof window !== 'undefined' && window.SLStores) {
+            window.SLStores.restore(data);
+        } else {
+            _applyProjectDataLegacyAssign(data);
+        }
+        // The old block ended with this, and lifting the assignments out took it with them.
+        // Caught on production, not by the wall: state was correct — projectName really was
+        // "Aeolus HL-1 · Outsized Freighter" — while the browser tab still read "Untitled
+        // Project". SLStores.restore() sets the BINDING; repainting what depends on it is
+        // this function's job, and a store's UI side effect is not the declaration's business.
         if (typeof _refreshProjectNameUI === 'function') _refreshProjectNameUI();
-        if(data.flightPhasesData) flightPhasesData = data.flightPhasesData;
-        ftaPages = data.ftaPages || [{ id: 'page-' + Date.now(), name: 'Untitled Fault Tree', root: null }];
-        activeFTAPageId = data.activeFTAPageId || ftaPages[0].id;
-        internalIdCounter = data.internalIdCounter || 1;
-        typeCounters = data.typeCounters || { gate: 1, basic: 1, undeveloped: 1, conditioning: 1, house: 1 };
-        ftaConfig = data.ftaConfig || { mode: 'bottom-up', apportion: 'equal', targetP: 0.00001, linkedFhaId: '', exposureTime: 1, exposureSource: 'auto' };
-        projectConfig = data.projectConfig || { regulation: 'Part 25', part23Class: 'IV', override: false, customLibrary: {}, piQ: 1, piE: 1, markovModels: [], libraryStandard: 'MIL-HDBK-217F', libraryEnv: 'GB', libraryQuality: 'B2', useStressPrediction: false, operatingTempC: 25, activationEnergyEv: 0.4 };
-        if(!projectConfig.customLibrary) projectConfig.customLibrary = {};
-        if(projectConfig.piQ == null) projectConfig.piQ = 1;
-        if(projectConfig.piE == null) projectConfig.piE = 1;
-        if(!Array.isArray(projectConfig.markovModels)) projectConfig.markovModels = [];
-        if(!Array.isArray(projectConfig.interfaces)) projectConfig.interfaces = [];   // #IFACE migration-safe default
         migrateAllFHAAssumptions();
         migrateSysSubFunctionsToFunctions();
         migrateLegacyMultiTraces();
@@ -840,8 +1531,6 @@ function _applyProjectData(data) {
         selectedNodeData = null;
         const ncp = document.getElementById('node-config-panel'); if(ncp) ncp.style.display = 'none';
         Object.keys(formConfigs).forEach(mod => cancelEdit(mod));
-        renderACFunctions(); renderACFCIM(); renderACFHA(); renderACReq(); renderACAssumptions();
-        renderPRA(); renderZSA(); renderFMEA(); renderFlightPhases();
         renderProjectConfigUI();
         // Phase 53.47 — honor the persisted last tab + FTA mode on recovery, instead of forcing
         // dashboard. Recovery is "pick up where I left off" — sending the user back to dashboard
@@ -865,10 +1554,29 @@ function _applyProjectData(data) {
                 if (aSel) aSel.value = savedApportion;
             }
         } catch(_) {}
-        switchTab(_recoveryTab); renderFTASidebar(); calculateAllProbabilities(); updateD3();
+        // ENG-5 — staged load: the recovery tab's tables render synchronously
+        // (that's what the user sees); the other module tables stream through
+        // idle slices with a flush-on-entry guarantee (streaming_load.js).
+        // Fallback: legacy inline renders, identical to the pre-ENG-5 path.
+        if (typeof SLStream !== 'undefined' && SLStream && SLStream.stageLoadRenders) {
+            SLStream.stageLoadRenders(_recoveryTab);
+        } else {
+            renderACFunctions(); renderACFCIM(); renderACFHA(); renderACReq(); renderACAssumptions();
+            renderPRA(); renderZSA(); renderFMEA(); renderFlightPhases();
+        }
+        switchTab(_recoveryTab); renderFTASidebar();
+        // Phase 66 — allocations are derived state: re-derive per-page targets and
+        // re-run the allocator on EVERY load (all pages, not just the active one),
+        // so a save captured mid-state can never surface as P=0.
+        if (typeof bakeAllAllocations === 'function') bakeAllAllocations(); else calculateAllProbabilities();
+        updateD3();
     } finally {
         _autosaveSuspended = false;
-        _writeAutosave();
+        // ENG-5 — the load-end persistence write (full-project stringify; it
+        // records the migrations) prefers an idle frame; _autosavePending +
+        // the flush-on-hide path guarantee it can never be lost.
+        if (typeof SLIdle !== 'undefined' && SLIdle) { _autosavePending = true; SLIdle.schedule('autosave', _writeAutosave, { timeout: 2500 }); }
+        else _writeAutosave();
     }
 }
 
@@ -1156,8 +1864,8 @@ function _pdfDataForModule(moduleName) {
                 rows: (acFcimData || []).map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]) };
         case 'AC_FHA':
             return { title: 'Aircraft FHA',
-                headers: ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Severity','Assumption IDs','Comments'],
-                rows: (acFhaData || []).map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.severity, (r.assumptionIds || []).join('; '), r.comments]) };
+                headers: ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
+                rows: (acFhaData || []).map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.effAcLevel || '', r.effCrewLevel || '', r.effPaxLevel || '', r.severity, (r.assumptionIds || []).join('; '), r.comments]) };
         case 'AC_Requirements':
             return { title: 'Aircraft Safety Requirements',
                 headers: ['Trace','Level','Type','Requirement Statement','Rationale'],
@@ -1187,8 +1895,8 @@ function _pdfDataForModule(moduleName) {
         case 'Sys_FHA': {
             if (!sys()) { alert('Open a system folder first.'); return null; }
             return { title: sName + ' FHA',
-                headers: ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Severity','Assumption IDs','Comments'],
-                rows: sys().fha.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.severity, (r.assumptionIds || []).join('; '), r.comments]) };
+                headers: ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
+                rows: sys().fha.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.effAcLevel || '', r.effCrewLevel || '', r.effPaxLevel || '', r.severity, (r.assumptionIds || []).join('; '), r.comments]) };
         }
         case 'Sys_Requirements': {
             if (!sys()) { alert('Open a system folder first.'); return null; }
@@ -1602,11 +2310,33 @@ async function exportTabAsPDF(moduleName) {
     }
 }
 
-function loadSampleProject() {
+// Lazy-load the showcase bundle (demo_showcase.js, ~88KB) on first use so it stays off the
+// critical path for real users. The module self-installs window.SL_SHOWCASE synchronously on
+// execution (its install() runs immediately, not on a future window 'load' event).
+function _ensureShowcaseLoaded() {
+    return new Promise(function (resolve, reject) {
+        if (window.SL_SHOWCASE && typeof window.SL_SHOWCASE.build === 'function') return resolve();
+        var existing = document.getElementById('sl-showcase-lazy');
+        if (existing) {
+            existing.addEventListener('load', function () { resolve(); });
+            existing.addEventListener('error', function () { reject(new Error('showcase load failed')); });
+            return;
+        }
+        var s = document.createElement('script');
+        s.id = 'sl-showcase-lazy';
+        s.src = window.SL_SHOWCASE_SRC || 'demo_showcase.js?v=2';
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error('showcase load failed')); };
+        document.head.appendChild(s);
+    });
+}
+
+async function loadSampleProject() {
     // Phase E3 — the K350 Kestrel program showcase (demo_showcase.js) replaces
     // the SV-7 / ES-9 pair: one comprehensive worked example threading all six
     // assessments and every method surface. The MAC rules are compiled to
     // MF&MS trees by the LIVE engine at load (postLoad), not shipped as data.
+    try { await _ensureShowcaseLoaded(); } catch (_) {}
     if (!(window.SL_SHOWCASE && typeof window.SL_SHOWCASE.build === 'function')) {
         showToast('The sample project is unavailable in this build.', 'error', 3500); return;
     }
@@ -1888,16 +2618,20 @@ function _buildSampleProject() {
     // PRA — Particular Risk Analysis
     // ----------------------------------------------------------------------------
     // riskType uses the canonical enum (matches the PRA form dropdown).
-    // affectedZones[] references the ZSA internalIds above; exposedFunctions[]
-    // is derived from those zones' housedFunctions, but also captured explicitly
-    // so the table renders correctly without needing to recompute the join.
+    // affectedZones[] references the ZSA zoneIds above — the join key EVERY
+    // consumer uses (_exposedFunctionsForZones, praDynamicModel, the sweep).
+    // 8 Aug 2026 (SL-ARC-0001 §20 D1): the seed previously wrote internalIds
+    // here, so the join silently returned [] and the retention check reported
+    // "no Catastrophic consequence" — a silent false negative. exposedFunctions[]
+    // is the derived join result, captured explicitly so the table renders
+    // without recomputing it; it must stay consistent with the join.
     // ============================================================================
     const praData = [
-        { internalId: 'pra-1', praId: 'PRA-BIRD',      riskType: 'Bird Strike', threat: 'Bird Strike',                description: 'Engine ingestion or windshield impact during low-altitude operations (≤ 3000 ft AGL).', desc: 'Engine ingestion or windshield impact during low-altitude operations (≤ 3000 ft AGL).', systems: 'Propulsion, Windshield, Airframe', csfl: 'Thrust loss, crew visibility loss',          affectedZones: ['zsa-1'],          exposedFunctions: ['SF-THRUST','SF-FUEL'],                                        mitigation: 'Twin-engine redundancy; bird-strike certified windshield; pilot procedure for bird-prone aerodromes.', comments: '' },
-        { internalId: 'pra-2', praId: 'PRA-LIGHTNING', riskType: 'Lightning',   threat: 'Lightning Strike',           description: 'Direct or swept lightning attachment to airframe during convective weather.',           desc: 'Direct or swept lightning attachment to airframe during convective weather.',           systems: 'Avionics, EPS, Airframe',          csfl: 'Avionics upset, electrical transient',       affectedZones: ['zsa-2','zsa-3'],  exposedFunctions: ['SF-PFD','SF-NAV','SF-GEN','SF-DIST'],                         mitigation: 'Lightning protection per DO-160G §22/23; bonding paths verified; transient suppression on EPS.', comments: '' },
-        { internalId: 'pra-3', praId: 'PRA-ICE',       riskType: 'Ice',         threat: 'Ice Ingestion / Accretion', description: 'Airframe and engine inlet ice in icing conditions.',                                   desc: 'Airframe and engine inlet ice in icing conditions.',                                   systems: 'Propulsion, Airframe, Pitot',      csfl: 'Engine flameout, lift loss, airspeed error', affectedZones: ['zsa-1'],          exposedFunctions: ['SF-THRUST','SF-FUEL'],                                        mitigation: 'Engine inlet anti-ice; pitot heat; airframe de-ice boots; AFM icing procedures.', comments: '' },
-        { internalId: 'pra-4', praId: 'PRA-DEBRIS',    riskType: 'Tire Burst',  threat: 'Runway Debris (FOD)',        description: 'Foreign object damage during takeoff or landing rollout.',                              desc: 'Foreign object damage during takeoff or landing rollout.',                              systems: 'Propulsion, Tires, Hydraulics',    csfl: 'Engine damage, tire burst, hyd line damage', affectedZones: ['zsa-1','zsa-4'],  exposedFunctions: ['SF-THRUST','SF-LGS','SF-DIST'],                              mitigation: 'High wing layout (engine clearance); tire pressure monitoring; pre-flight runway inspection.', comments: '' },
-        { internalId: 'pra-5', praId: 'PRA-TBATT',     riskType: 'Cabin Fire',  threat: 'Lithium Battery Thermal Runaway', description: 'Avionics lithium battery cell venting causing fire / smoke in battery bay.', desc: 'Avionics lithium battery cell venting causing fire / smoke in battery bay.',          systems: 'EPS, Cabin',                       csfl: 'Smoke in cabin, loss of standby power',      affectedZones: ['zsa-3'],          exposedFunctions: ['SF-GEN','SF-DIST'],                                          mitigation: 'Sealed battery bay; thermal sensor + CAS alert; battery cells per RTCA DO-311A.', comments: '' }
+        { internalId: 'pra-1', praId: 'PRA-BIRD',      riskType: 'Bird Strike', threat: 'Bird Strike',                description: 'Engine ingestion or windshield impact during low-altitude operations (≤ 3000 ft AGL).', desc: 'Engine ingestion or windshield impact during low-altitude operations (≤ 3000 ft AGL).', systems: 'Propulsion, Windshield, Airframe', csfl: 'Thrust loss, crew visibility loss',          affectedZones: ['Z-ENG-NACELLE'],          exposedFunctions: ['SF-THRUST','SF-FUEL'],                                        mitigation: 'Twin-engine redundancy; bird-strike certified windshield; pilot procedure for bird-prone aerodromes.', comments: '' },
+        { internalId: 'pra-2', praId: 'PRA-LIGHTNING', riskType: 'Lightning',   threat: 'Lightning Strike',           description: 'Direct or swept lightning attachment to airframe during convective weather.',           desc: 'Direct or swept lightning attachment to airframe during convective weather.',           systems: 'Avionics, EPS, Airframe',          csfl: 'Avionics upset, electrical transient',       affectedZones: ['Z-AVIONICS-BAY','Z-BATTERY-BAY'],  exposedFunctions: ['SF-PFD','SF-NAV','SF-GEN','SF-DIST'],                         mitigation: 'Lightning protection per DO-160G §22/23; bonding paths verified; transient suppression on EPS.', comments: '' },
+        { internalId: 'pra-3', praId: 'PRA-ICE',       riskType: 'Ice',         threat: 'Ice Ingestion / Accretion', description: 'Airframe and engine inlet ice in icing conditions.',                                   desc: 'Airframe and engine inlet ice in icing conditions.',                                   systems: 'Propulsion, Airframe, Pitot',      csfl: 'Engine flameout, lift loss, airspeed error', affectedZones: ['Z-ENG-NACELLE'],          exposedFunctions: ['SF-THRUST','SF-FUEL'],                                        mitigation: 'Engine inlet anti-ice; pitot heat; airframe de-ice boots; AFM icing procedures.', comments: '' },
+        { internalId: 'pra-4', praId: 'PRA-DEBRIS',    riskType: 'Tire Burst',  threat: 'Runway Debris (FOD)',        description: 'Foreign object damage during takeoff or landing rollout.',                              desc: 'Foreign object damage during takeoff or landing rollout.',                              systems: 'Propulsion, Tires, Hydraulics',    csfl: 'Engine damage, tire burst, hyd line damage', affectedZones: ['Z-ENG-NACELLE','Z-CABIN-FLOOR'],  exposedFunctions: ['SF-THRUST','SF-FUEL','SF-PITCH','SF-ROLL','SF-YAW','SF-DIST'],                              mitigation: 'High wing layout (engine clearance); tire pressure monitoring; pre-flight runway inspection.', comments: '' },
+        { internalId: 'pra-5', praId: 'PRA-TBATT',     riskType: 'Cabin Fire',  threat: 'Lithium Battery Thermal Runaway', description: 'Avionics lithium battery cell venting causing fire / smoke in battery bay.', desc: 'Avionics lithium battery cell venting causing fire / smoke in battery bay.',          systems: 'EPS, Cabin',                       csfl: 'Smoke in cabin, loss of standby power',      affectedZones: ['Z-BATTERY-BAY'],          exposedFunctions: ['SF-GEN','SF-DIST'],                                          mitigation: 'Sealed battery bay; thermal sensor + CAS alert; battery cells per RTCA DO-311A.', comments: '' }
     ];
 
     // ============================================================================
@@ -2102,20 +2836,83 @@ function _buildSampleProject() {
 
 // Wrap key mutating actions so they push to the undo stack and trigger autosave.
 // We do this via function-name wrapping after the originals are defined.
+// 20 Aug 2026 — this list was SHORT, and short here is silent. Measured on production
+// against the live autosave timestamp (safetyLab.autosave.meta.v1), 4s settle per action:
+// submitACFHA saved; submitACFunction, submitACFCIM and submitSysFunction did NOT. Every
+// artifact on the left-hand side of the V above the AFHA — the aircraft function register,
+// both FCIMs — plus EVERY system-level artifact was outside the list, so an hour of
+// authoring functions and system FHAs was neither undoable nor written to the autosave
+// snapshot. Close the tab and recovery restores a project with none of it. The snapshot
+// PAYLOAD was always complete (_snapshotProject captures all of these); only the trigger
+// was missing, which is why this stayed invisible — the data was durable the instant you
+// happened to touch an FHA row, and gone if you didn't.
+//
+// The list stays EXPLICIT rather than derived, deliberately: auto-wrapping everything
+// matching /^(submit|delete)/ would have wrapped submitSignup and pushed an undo snapshot
+// around an auth call. But an explicit list that nobody notices going stale is the actual
+// defect, so _UNDO_EXEMPT below names every project-mutating candidate we are deliberately
+// NOT wrapping, and tests/regression_undo_autosave_coverage asserts that every global
+// submit*/delete* is in exactly one of the two lists. A new artifact now fails the wall
+// instead of silently not saving.
+const _UNDO_TARGETS = [
+    // --- fault tree structure -------------------------------------------------------
+    'addTopEvent', 'addNewFTAPage', 'addSelectedGate', 'addSelectedEvent',
+    'deleteSelectedNode', 'pasteAsChild', 'transferOutSelectedGate',
+    'runDALAllocation', 'clearAndRedraw',
+    // --- aircraft level -------------------------------------------------------------
+    'submitACFunction', 'deleteACFunction',      // added 20 Aug — was not saving
+    'submitACFCIM',     'deleteACFCIM',          // added 20 Aug — was not saving
+    'submitACFHA',      'deleteACFHA',
+    'submitACReq',      'deleteACReq',
+    // --- system level (NONE of these were wrapped before 20 Aug) ---------------------
+    'submitSysFunction', 'deleteSysFunction',
+    'submitSysFCIM',     'deleteSysFCIM',
+    'submitSysFHA',      'deleteSysFHA',
+    'submitSysReq',      'deleteSysReq',
+    // --- cross-cutting analyses -----------------------------------------------------
+    'submitPRA', 'deletePRA',
+    'submitZSA', 'deleteZSA',
+    'submitFMEA', 'deleteFMEA',
+    'submitCMA', 'deleteCMA',                    // added 20 Aug
+    'submitRouting', 'deleteRouting',            // added 20 Aug
+    'submitResource', 'deleteResource',          // added 20 Aug
+    'submitItem', 'deleteItem',                  // added 20 Aug
+    // --- exposure basis. deletePhaseRow / deleteMissionProfile change t_mission, which
+    //     is the denominator behind every top-down apportionment. Losing a phase edit
+    //     silently re-bases the whole allocation. --------------------------------------
+    'deletePhaseRow', 'deleteMissionProfile',    // added 20 Aug
+    'deleteBaseline'                             // added 20 Aug
+];
+
+// Deliberately NOT wrapped. Each needs a reason; the coverage test reads this list.
+const _UNDO_EXEMPT = {
+    submitSignup:        'auth, not project data — never snapshot around a credential flow',
+    submitSignoff:       'signoff ledger is append-only and legally distinct from project edits; undoing a signature is not a thing',
+    submitReviewCompose: 'review comments are their own audit trail — see submitSignoff',
+    submitReviewRequest: 'review comments are their own audit trail — see submitSignoff',
+    deleteReviewComment: 'review comments are their own audit trail — see submitSignoff',
+    deleteCustomColumn:  'view/layout preference, not project data',
+    deleteLibraryEntry:  'edits the shared component library, not this project',
+    deleteMarkovModel:   'markov editor manages its own undo within projectConfig.markovModels',
+    deleteMarkovState:   'markov editor manages its own undo within projectConfig.markovModels',
+    deleteMarkovTransition: 'markov editor manages its own undo within projectConfig.markovModels',
+    deleteNodeRecursive: 'internal helper of deleteSelectedNode, which IS wrapped — wrapping both would double-push'
+};
+if (typeof window !== 'undefined') { window._UNDO_TARGETS = _UNDO_TARGETS; window._UNDO_EXEMPT = _UNDO_EXEMPT; }
+
 function _wrapForUndoAndAutosave() {
     // copySelectedBranch isn't included — it only writes to the clipboard, no project state mutation.
-    const targets = ['addTopEvent', 'addNewFTAPage', 'addSelectedGate', 'addSelectedEvent',
-                     'deleteSelectedNode', 'pasteAsChild', 'transferOutSelectedGate',
-                     'runDALAllocation', 'clearAndRedraw',
-                     'submitACFHA', 'deleteACFHA',
-                     'submitACReq', 'deleteACReq',
-                     'submitPRA', 'deletePRA',
-                     'submitZSA', 'deleteZSA',
-                     'submitFMEA', 'deleteFMEA'];
+    const targets = _UNDO_TARGETS;
+    // A name that does not resolve here (rename, load-order change, typo) used to `return`
+    // silently, leaving an action unsaved and looking exactly like an action that was never
+    // meant to be covered. Record the misses so the runtime smoke gate can fail on them —
+    // this is the same failure shape as the list being short in the first place.
+    const unresolved = [];
+    const wrappedNames = [];
     targets.forEach(name => {
         const fn = window[name];
-        if(typeof fn !== 'function') return;
-        if(fn._wrappedForUndo) return;
+        if(typeof fn !== 'function') { unresolved.push(name); return; }
+        if(fn._wrappedForUndo) { wrappedNames.push(name); return; }
         const wrapped = function(){
             pushUndo(name);
             const r = fn.apply(this, arguments);
@@ -2123,8 +2920,84 @@ function _wrapForUndoAndAutosave() {
             return r;
         };
         wrapped._wrappedForUndo = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        // 21 Aug 2026 — this line said preserve(orig, wrapped); `orig` does not exist in
+        // this scope (the local is `fn`), so the ReferenceError was silently swallowed
+        // and prior wrappers' markers were never preserved here.
+        try { if (window.SLWrap) SLWrap.preserve(fn, wrapped); } catch (_) {}
         window[name] = wrapped;
+        wrappedNames.push(name);
     });
+    try {
+        window._UNDO_UNRESOLVED = unresolved;
+        // Coverage is recorded HERE, not read back off the function later, because
+        // window[name] is contested: nine modules in this codebase monkey-patch functions by
+        // name (auth_gate, avail_closedform, cloud_sync, delete_guard, notify_agents, ram_ai,
+        // ram_derive, this one, and the edit-modal block in safety_lab), each rebinding
+        // window[name] around whatever it found and none of them carrying the others' flags.
+        // Behaviour composes fine — every one of them calls through, so the undo push and the
+        // autosave still happen — but the _wrappedForUndo MARKER gets dropped by whoever wraps
+        // last, which made coverage unverifiable: submitACFHA read as unwrapped on production
+        // while demonstrably saving. This list is the truthful record of what we wrapped, and
+        // nothing downstream can erase it.
+        window._UNDO_WRAPPED = wrappedNames;
+        if (unresolved.length) console.warn('[undo/autosave] not wrapped — these actions will NOT save:', unresolved);
+    } catch (_) {}
+}
+
+// The pre-20-Aug assignment block, kept ONLY for a failed project_stores.js load.
+// The wall asserts it still covers every declared store.
+function _applyProjectDataLegacyAssign(data) {
+        acFunctionsData = data.acFunctionsData || [];
+        acFcimData = data.acFcimData || [];
+        acExtractedFCs = data.acExtractedFCs || [];
+        acFhaData = data.acFhaData || [];
+        acReqData = data.acReqData || [];
+        acAssumptionsData = data.acAssumptionsData || [];
+        acAsmCounter = data.acAsmCounter || 1;
+        systemsData = data.systemsData || [];
+        activeSystemId = null;
+        praData = data.praData || []; zsaData = data.zsaData || []; cmaData = data.cmaData || []; routingData = Array.isArray(data.routingData) ? data.routingData : []; resourcesData = Array.isArray(data.resourcesData) ? data.resourcesData : []; projectSourceDocs = Array.isArray(data.projectSourceDocs) ? data.projectSourceDocs : []; aiAssumptions = Array.isArray(data.aiAssumptions) ? data.aiAssumptions : []; fmeaData = data.fmeaData || []; fmeaCounter = data.fmeaCounter || 1; itemsData = data.itemsData || [];
+        projectBaselines = Array.isArray(data.projectBaselines) ? data.projectBaselines : [];
+        // Phase 55.0.8 — AutoReq template overrides (per-project)
+        autoReqTemplateOverrides = (data.autoReqTemplateOverrides && typeof data.autoReqTemplateOverrides === 'object') ? data.autoReqTemplateOverrides : {};
+        try { if (typeof window !== 'undefined') window.autoReqTemplateOverrides = autoReqTemplateOverrides; } catch(_) {}
+        // Phase 56.9 — per-project report-section edits
+        projectReportEdits = (data.projectReportEdits && typeof data.projectReportEdits === 'object') ? data.projectReportEdits : {};
+        try { if (typeof window !== 'undefined') window.projectReportEdits = projectReportEdits; } catch(_) {}
+        // 20 Aug 2026 — projectTemplates was SAVED by every snapshot builder and read
+        // back by _restoreProjectSnapshot (open-from-cloud) but never here. This is the
+        // path taken by undo, autosave recovery, session resume and the multi-tab guard,
+        // so a user's per-project AutoReq template customisation survived a cloud reopen
+        // and was silently dropped by a refresh or a Ctrl-Z. Found by the derived test
+        // asserting _applyProjectData reads back everything _snapshotProject writes.
+        projectTemplates = (data.projectTemplates && typeof data.projectTemplates === 'object')
+            ? data.projectTemplates
+            : ((typeof emptyTemplateOverrides === 'function') ? emptyTemplateOverrides() : {});
+        try { if (typeof window !== 'undefined') window.projectTemplates = projectTemplates; } catch(_) {}
+        reviewCommentsData = Array.isArray(data.reviewCommentsData) ? data.reviewCommentsData : [];
+        reviewCounter = (typeof data.reviewCounter === 'number' && data.reviewCounter > 0) ? data.reviewCounter : (reviewCommentsData.length + 1);
+        // Phase E3 — sample projects ship signed line-item approvals; without this
+        // restore the cockpits would show an unreviewed program.
+        reviewApprovalsData = Array.isArray(data.reviewApprovalsData) ? data.reviewApprovalsData : [];
+        projectName = (typeof data.projectName === 'string' && data.projectName.trim()) ? data.projectName : (projectName || 'Untitled Project');
+        if (typeof _refreshProjectNameUI === 'function') _refreshProjectNameUI();
+        if(data.flightPhasesData) flightPhasesData = data.flightPhasesData;
+        // STPA lane — older saves predate it; default to an empty structure.
+        // AI/ML lane — older saves predate it; default to an empty register.
+        mlData = (data.mlData && Array.isArray(data.mlData.constituents)) ? data.mlData : { constituents: [], odd: [], datasets: [], monitors: [], capture: [], captureEnabled: false, counter: 1 };
+        stpaData = (data.stpaData && data.stpaData.cs) ? data.stpaData : { cs: { controllers: [], processes: [], actions: [], feedbacks: [], others: [], precedence: [] }, dispositions: {}, causeDismissals: {}, scopeFcIds: [], meta: { mission: '', scope: '', boundary: '', abstractionLevel: '' }, losses: [], hazards: [], constraints: [], responsibilities: [], csState: 'initial', sip: {} };
+        ftaPages = data.ftaPages || [{ id: 'page-' + Date.now(), name: 'Untitled Fault Tree', root: null }];
+        activeFTAPageId = data.activeFTAPageId || ftaPages[0].id;
+        internalIdCounter = data.internalIdCounter || 1;
+        typeCounters = data.typeCounters || { gate: 1, basic: 1, undeveloped: 1, conditioning: 1, house: 1 };
+        ftaConfig = data.ftaConfig || { mode: 'bottom-up', apportion: 'equal', targetP: 0.00001, linkedFhaId: '', exposureTime: 1, exposureSource: 'auto' };
+        projectConfig = data.projectConfig || { regulation: 'Part 25', part23Class: 'IV', override: false, customLibrary: {}, piQ: 1, piE: 1, markovModels: [], libraryStandard: 'MIL-HDBK-217F', libraryEnv: 'GB', libraryQuality: 'B2', useStressPrediction: false, operatingTempC: 25, activationEnergyEv: 0.4 };
+        if(!projectConfig.customLibrary) projectConfig.customLibrary = {};
+        if(projectConfig.piQ == null) projectConfig.piQ = 1;
+        if(projectConfig.piE == null) projectConfig.piE = 1;
+        if(!Array.isArray(projectConfig.markovModels)) projectConfig.markovModels = [];
+        if(!Array.isArray(projectConfig.interfaces)) projectConfig.interfaces = [];   // #IFACE migration-safe default
 }
 
 function runOneBenchmark(b) {
@@ -2318,7 +3191,7 @@ function _buildBenchmarkSteps(r) {
             break;
         case 'B20-targets-part25':
             s.push({ label: 'Inputs',     value: 'Regulation = 14 CFR Part 25,  Severity = Catastrophic' });
-            s.push({ label: 'Reference',  value: 'AC 25.1309-1A safety-target table' });
+            s.push({ label: 'Reference',  value: 'AC 25.1309-1B §3.3 / Table 4-1 safety-target table' });
             s.push({ label: 'Lookup',     value: 'Catastrophic → P ≤ 1e-9 / FH,  FDAL A' });
             s.push({ label: 'Result',     value: '(1e-9, A)' });
             break;

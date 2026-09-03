@@ -32,6 +32,174 @@ function onAiAsmStatusChange(id, status) {
 function onAiAsmNoteChange(id, note) {
     try { if (window.SafetyLabAiAssumptions) window.SafetyLabAiAssumptions.setNote(id, note); } catch (_) {}
 }
+// ============================================================================
+// #1b — AI-assumption walkthrough: citations from documents + a structured,
+// step-through review of every thought the AI logged as an assumption.
+// Citations are verified by the deterministic core (ai_badges.js) against the
+// project's own source documents — a quote either matches verbatim (✓) or is
+// flagged (✗). The AI never certifies its own quotes.
+// ============================================================================
+function _aiAsmConf(r) {
+    try { if (window.AiBadges && typeof window.AiBadges.assumptionConfidence === 'function') return window.AiBadges.assumptionConfidence(r); } catch (_) {}
+    return null;
+}
+function _aiAsmPillHtml(r) {
+    const c = _aiAsmConf(r);
+    if (!c) return '';
+    const _e = (typeof esc === 'function') ? esc : String;
+    return '<span class="ai-conf-pill ai-conf-' + c.tier + '" style="margin:0 6px 0 0;" title="' + _e(c.why.join('\n')) + '">' + _e(c.label) + ' <b>' + _e(c.grade) + '</b></span>';
+}
+function _aiAsmCitationsHtml(r) {
+    const _e = (typeof esc === 'function') ? esc : String;
+    const cits = Array.isArray(r.citations) ? r.citations : [];
+    const legacy = (r.basis == null && !cits.length && r.rationale == null);
+    if (legacy) return '<div style="font-size:12px; color:var(--color-text-tertiary);">Recorded before citation capture — re-run the analysis to get cited grounds for this assumption.</div>';
+    if (!cits.length) return '<div style="font-size:12px; font-weight:600; color:#b45309;">UNCITED — the model declared this from its prior, not from a project document. Treat as engineer-must-confirm; add the substantiating document to AI Inputs and re-run to ground it.</div>';
+    return cits.map(function (c) {
+        const mark = c.verified
+            ? '<span style="color:#166534; font-weight:700;">✓ verified</span>'
+            : (c.docFound
+                ? '<span style="color:#991b1b; font-weight:700;">✗ quote NOT FOUND in document — do not trust without checking</span>'
+                : '<span style="color:#b45309; font-weight:700;">✗ document not on file' + (c.matchedDoc ? '' : ' (and no document contains this quote)') + '</span>');
+        const docLabel = c.doc || c.matchedDoc || 'document';
+        return '<div style="font-size:12px; margin:4px 0; padding:6px 9px; border-left:3px solid ' + (c.verified ? '#166534' : '#b45309') + '; background:var(--color-surface-2);">'
+            + '📄 <b>' + _e(docLabel) + '</b>' + (c.where ? ' · ' + _e(c.where) : '') + (c.verified && !c.doc && c.matchedDoc ? ' <span style="color:var(--color-text-tertiary);">(located by the verifier)</span>' : '') + ' — ' + mark
+            + '<div style="font-style:italic; margin-top:2px; color:var(--color-text-secondary);">“' + _e(c.quote) + '”</div>'
+            + '</div>';
+    }).join('');
+}
+// The structured walkthrough card for one ledger entry (used by the expandable
+// detail row AND the step-through modal).
+function _aiAsmDetailHtml(r, opts) {
+    opts = opts || {};
+    const _e = (typeof esc === 'function') ? esc : String;
+    const block = function (label, body, muted) {
+        return '<div style="margin:8px 0;"><div style="font-size:10px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:var(--color-text-tertiary); margin-bottom:2px;">' + label + '</div>'
+            + '<div style="font-size:12.5px;' + (muted ? ' color:var(--color-text-tertiary); font-style:italic;' : '') + '">' + body + '</div></div>';
+    };
+    let h = '';
+    h += block('The assumption', _aiAsmPillHtml(r) + _e(r.text));
+    h += block('Why the model needed it', r.rationale ? _e(r.rationale) : 'not recorded (pre-walkthrough entry)', !r.rationale);
+    h += block('What changes if it is wrong', r.ifWrong ? _e(r.ifWrong) : 'not recorded', !r.ifWrong);
+    h += block('Where it is used', r.usedFor ? _e(r.usedFor) : (r.analysisLabel || r.analysis || '—'), !r.usedFor);
+    h += block('Grounds — citations from your documents (machine-verified)', _aiAsmCitationsHtml(r));
+    if (r.promotedTo) h += block('Promoted', 'Confirmed and promoted to the engineer assumptions register as <b>' + _e(r.promotedTo) + '</b> (this ledger row is the audit copy).');
+    if (!opts.noActions && r.status === 'Confirmed' && !r.promotedTo) {
+        h += '<div style="margin:10px 0 2px;"><button class="ckpt-m-btn" style="font-size:11.5px; padding:4px 12px;" onclick="aiAsmPromote(' + JSON.stringify(r.id).replace(/"/g, '&quot;') + ')">⬆ Promote to assumptions register</button>'
+            + '<span style="font-size:11px; color:var(--color-text-tertiary); margin-left:8px;">creates a normal ASM row (origin: AI-declared) that participates in routing and gates</span></div>';
+    }
+    return h;
+}
+function aiAsmToggleDetail(id) {
+    try {
+        const tr = document.getElementById('aiasm-detail-' + id);
+        if (tr) tr.style.display = (tr.style.display === 'none') ? '' : 'none';
+        const btn = document.getElementById('aiasm-dbtn-' + id);
+        if (btn && tr) btn.textContent = (tr.style.display === 'none') ? 'Walkthrough ▾' : 'Walkthrough ▴';
+    } catch (_) {}
+}
+// Promotion — Confirmed ledger entries can cross into the engineer-managed
+// register as a first-class assumption row (Waqas 2026-07-11: offer on Confirm).
+function aiAsmPromote(id) {
+    try {
+        const row = (window.SafetyLabAiAssumptions && window.SafetyLabAiAssumptions.list() || []).find(function (a) { return a && a.id === id; });
+        if (!row) return;
+        if (row.status !== 'Confirmed') { try { showToast('Confirm the assumption first — only engineer-confirmed premises are promoted.', 'warning', 4000); } catch (_) {} return; }
+        if (row.promotedTo) { try { showToast('Already promoted as ' + row.promotedTo + '.', 'info', 3000); } catch (_) {} return; }
+        // Same ASM-AI-### counter the E2 fidelity layer uses — one namespace for AI-origin rows.
+        const n = ((projectConfig && projectConfig.aiAsmCounter) || 0) + 1;
+        if (typeof projectConfig !== 'undefined' && projectConfig) projectConfig.aiAsmCounter = n;
+        const asmId = 'ASM-AI-' + String(n).padStart(3, '0');
+        const cits = Array.isArray(row.citations) ? row.citations : [];
+        const citNote = cits.length
+            ? (' Grounds: ' + cits.map(function (c) { return (c.verified ? '✓ ' : '✗ ') + (c.doc || c.matchedDoc || 'doc') + (c.where ? ' (' + c.where + ')' : ''); }).join('; ') + '.')
+            : ' Uncited (model prior) — confirmed by engineer review.';
+        const rec = {
+            asmId: asmId,
+            text: row.text + ' [AI-declared during ' + (row.analysisLabel || row.analysis || 'AI analysis') + '; confirmed via walkthrough.' + citNote + ']',
+            state: 'Validated',
+            valStrategy: 'Engineer confirmation of AI-declared assumption (walkthrough + machine-verified citations)',
+            valArtifact: '', verArtifact: '',
+            origin: 'AI ledger ' + row.id
+        };
+        let target = null, refresh = null;
+        if (row.scope === 'system' && row.systemId && typeof systemsData !== 'undefined') {
+            const s = (systemsData || []).find(function (x) { return x && String(x.id) === String(row.systemId); });
+            if (s) { if (!Array.isArray(s.asm)) s.asm = []; target = s.asm; refresh = (typeof renderSysAssumptions === 'function') ? renderSysAssumptions : null; }
+        }
+        if (!target && typeof acAssumptionsData !== 'undefined' && Array.isArray(acAssumptionsData)) {
+            target = acAssumptionsData; refresh = (typeof renderACAssumptions === 'function') ? renderACAssumptions : null;
+        }
+        if (!target) { try { showToast('No assumptions register available to promote into.', 'error', 4000); } catch (_) {} return; }
+        target.push(rec);
+        try { if (window.SafetyLabAiAssumptions.markPromoted) window.SafetyLabAiAssumptions.markPromoted(id, asmId); } catch (_) {}
+        try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+        try { if (refresh) refresh(); } catch (_) {}
+        try { showToast(asmId + ' created in the assumptions register (origin: AI-declared). The ledger keeps the audit copy.', 'success', 5000); } catch (_) {}
+        try { renderAiAssumptions(); } catch (_) {}
+        try { _aiAsmWalkRerender(); } catch (_) {}
+    } catch (_) {}
+}
+// ---- Step-through walkthrough modal ----------------------------------------
+var _aiAsmWalk = null;   // { ids: [], i: 0 }
+function aiAsmWalkStart() {
+    try {
+        const open = (window.SafetyLabAiAssumptions && window.SafetyLabAiAssumptions.list() || []).filter(function (r) { return r && (r.status || 'Open') === 'Open'; });
+        if (!open.length) { try { showToast('No open AI assumptions — everything is dispositioned.', 'info', 3000); } catch (_) {} return; }
+        _aiAsmWalk = { ids: open.map(function (r) { return r.id; }), i: 0 };
+        _aiAsmWalkRerender();
+    } catch (_) {}
+}
+function aiAsmWalkClose() {
+    try { const m = document.getElementById('aiasm-walk-modal'); if (m) m.remove(); } catch (_) {}
+    _aiAsmWalk = null;
+    try { renderAiAssumptions(); } catch (_) {}
+}
+function aiAsmWalkNav(delta) {
+    if (!_aiAsmWalk) return;
+    _aiAsmWalk.i = Math.max(0, Math.min(_aiAsmWalk.ids.length - 1, _aiAsmWalk.i + delta));
+    _aiAsmWalkRerender();
+}
+function aiAsmWalkSetStatus(status) {
+    try {
+        if (!_aiAsmWalk) return;
+        const id = _aiAsmWalk.ids[_aiAsmWalk.i];
+        if (window.SafetyLabAiAssumptions) window.SafetyLabAiAssumptions.setStatus(id, status);
+        if (_aiAsmWalk.i < _aiAsmWalk.ids.length - 1) { _aiAsmWalk.i++; _aiAsmWalkRerender(); }
+        else { try { showToast('Walkthrough complete — every AI assumption is dispositioned.', 'success', 4000); } catch (_) {} aiAsmWalkClose(); }
+    } catch (_) {}
+}
+function _aiAsmWalkRerender() {
+    if (!_aiAsmWalk) return;
+    const _e = (typeof esc === 'function') ? esc : String;
+    const all = (window.SafetyLabAiAssumptions && window.SafetyLabAiAssumptions.list()) || [];
+    const id = _aiAsmWalk.ids[_aiAsmWalk.i];
+    const r = all.find(function (x) { return x && x.id === id; });
+    if (!r) { aiAsmWalkClose(); return; }
+    let m = document.getElementById('aiasm-walk-modal');
+    if (!m) {
+        m = document.createElement('div');
+        m.id = 'aiasm-walk-modal';
+        m.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;';
+        m.addEventListener('click', function (e) { if (e.target === m) aiAsmWalkClose(); });
+        document.body.appendChild(m);
+    }
+    const cur = r.status || 'Open';
+    m.innerHTML = '<div style="background:var(--color-surface-1, #fff); color:var(--color-text-primary, #111);  width:100%; max-height:88vh; overflow:auto; border:1px solid var(--color-border-strong, #333); padding:18px 22px;" onclick="event.stopPropagation()">'
+        + '<div style="display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:2px solid var(--color-text-primary, #111); padding-bottom:8px; margin-bottom:6px;">'
+        + '<b style="font-size:14px;">AI assumption walkthrough — ' + (_aiAsmWalk.i + 1) + ' of ' + _aiAsmWalk.ids.length + ' open</b>'
+        + '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 10px;" onclick="aiAsmWalkClose()">Close ✕</button></div>'
+        + '<div style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono); margin-bottom:4px;">' + _e(r.analysisLabel || r.analysis || 'AI analysis') + ' · [' + _e(r.type || 'other') + ']' + (r.systemName ? ' · ' + _e(r.systemName) : '') + ' · currently <b>' + _e(cur) + '</b></div>'
+        + _aiAsmDetailHtml(r, { noActions: false })
+        + '<div style="margin-top:10px;"><input type="text" value="' + _e(r.note || '') + '" placeholder="Triage note (kept with the disposition)…" onchange="onAiAsmNoteChange(' + JSON.stringify(r.id).replace(/"/g, '&quot;') + ', this.value)" style="width:100%; padding:6px 9px; font-size:12px; box-sizing:border-box;"></div>'
+        + '<div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;">'
+        + '<button class="ckpt-m-btn" style="font-size:12px; padding:6px 16px; color:#166534; font-weight:700;" onclick="aiAsmWalkSetStatus(\'Confirmed\')">✓ Confirm</button>'
+        + '<button class="ckpt-m-btn" style="font-size:12px; padding:6px 16px; color:#991b1b; font-weight:700;" onclick="aiAsmWalkSetStatus(\'Rejected\')">✗ Reject</button>'
+        + '<span style="flex:1;"></span>'
+        + '<button class="ckpt-m-btn" style="font-size:12px; padding:6px 12px;" onclick="aiAsmWalkNav(-1)"' + (_aiAsmWalk.i === 0 ? ' disabled' : '') + '>◂ Back</button>'
+        + '<button class="ckpt-m-btn" style="font-size:12px; padding:6px 12px;" onclick="aiAsmWalkNav(1)"' + (_aiAsmWalk.i >= _aiAsmWalk.ids.length - 1 ? ' disabled' : '') + '>Skip ▸</button>'
+        + '</div></div>';
+}
 function renderAiAssumptions() {
     const host = document.getElementById('view-assumptions');
     if (!host) return;
@@ -88,6 +256,10 @@ function renderAiAssumptions() {
         + '<span style="margin-left:auto;font-size:12px;color:var(--color-text-tertiary);">'
         + filtered.length + ' of ' + rows.length + ' assumption' + (rows.length === 1 ? '' : 's')
         + '</span>'
+        + (function () {   // #1b — step-through walkthrough of every open premise
+            const nOpen = rows.filter(function (r) { return r && (r.status || 'Open') === 'Open'; }).length;
+            return nOpen ? '<button class="ckpt-m-btn" style="font-size:11.5px; padding:3px 12px; margin-left:10px; font-weight:700;" onclick="aiAsmWalkStart()">▶ Walk through ' + nOpen + ' open</button>' : '';
+        })()
         + '</div>';
 
     // Empty state — no rows at all, or none matching the filter.
@@ -152,14 +324,21 @@ function renderAiAssumptions() {
             const note = '<input type="text" value="' + _e(r.note || '') + '" placeholder="Triage note…" '
                 + 'onchange="onAiAsmNoteChange(' + JSON.stringify(r.id).replace(/"/g, '&quot;') + ', this.value)" '
                 + 'style="width:100%; min-width:120px; padding:4px 7px; font-size:11.5px; box-sizing:border-box;">';
+            // #1b — pill + expandable walkthrough card per entry.
+            const idJson = JSON.stringify(r.id).replace(/"/g, '&quot;');
             html += '<tr>'
-                + '<td><span style="font-size:12.5px;">' + _e(r.text) + '</span></td>'
+                + '<td>' + _aiAsmPillHtml(r) + '<span style="font-size:12.5px;">' + _e(r.text) + '</span>'
+                + '<div style="margin-top:3px;"><button id="aiasm-dbtn-' + _e(r.id) + '" class="ckpt-m-btn" style="font-size:10.5px; padding:1px 9px;" onclick="aiAsmToggleDetail(' + idJson + ')">Walkthrough ▾</button>'
+                + ((Array.isArray(r.citations) && r.citations.length) ? ' <span style="font-size:10.5px; color:' + (r.citations.every(function (c) { return c.verified; }) ? '#166534' : '#b45309') + '; font-weight:700;">📄 ' + r.citations.filter(function (c) { return c.verified; }).length + '/' + r.citations.length + ' verified</span>' : (r.basis === 'uncited' ? ' <span style="font-size:10.5px; color:#b45309; font-weight:700;">UNCITED</span>' : ''))
+                + (r.promotedTo ? ' <span style="font-size:10.5px; color:var(--color-text-tertiary); font-family:var(--font-mono);">→ ' + _e(r.promotedTo) + '</span>' : '')
+                + '</div></td>'
                 + '<td>' + typeChip + '</td>'
                 + '<td>' + scopeCell + '</td>'
                 + '<td>' + metaCell + '</td>'
                 + '<td>' + sel + '</td>'
                 + '<td>' + note + '</td>'
-                + '</tr>';
+                + '</tr>'
+                + '<tr id="aiasm-detail-' + _e(r.id) + '" style="display:none;"><td colspan="6" style="background:var(--color-surface-2); border-left:3px solid var(--color-text-primary); padding:10px 16px;">' + _aiAsmDetailHtml(r) + '</td></tr>';
         });
         html += '</tbody></table></div>';
     });
@@ -226,6 +405,11 @@ function transferOutSelectedGate() {
         gateType: sourceGate.gateType,
         probability: 0,
         votingK: sourceGate.votingK,
+        // DFT-WARM — the spare model travels with the gate. A SPARE that loses its
+        // dormancy factor on transfer would silently revert to cold and read better
+        // than it is.
+        spareWarmK: sourceGate.spareWarmK,
+        spareSwitchP: sourceGate.spareSwitchP,
         children: movedChildren
     };
     const newPageId = 'page-' + Date.now();
@@ -450,6 +634,52 @@ function _cmaCompromisedGateIdSet() {
     return set;
 }
 
+// A6 (22 Aug 2026) — FAILURES OF INDEPENDENCE ARE GLOBAL, CLAIMS ARE LOCAL.
+// An open CMA common-mode finding is a fact about the MEMBER PAIR it couples, not
+// about the gate it happens to be linked to. This index turns every open, signal-
+// carrying CMA's linked gates into a set of failed pairs keyed by the members'
+// logicalIds — so ANY gate anywhere whose children include a failed pair loses its
+// reduction, even though the CMA was recorded elsewhere. The reverse is deliberately
+// NOT true: substantiating a claim at one gate substantiates nothing anywhere else —
+// each gate's dalIndependence stays its own local claim.
+function _cmaCompromisedIndex() {
+    const ids = _cmaCompromisedGateIdSet();
+    const pairs = new Map();   // 'lidA|lidB' (sorted) → { cma, gate, page, key }
+    try {
+        (typeof cmaData !== 'undefined' ? cmaData : []).forEach(c => {
+            if (!c || c.suggested) return;
+            const open = c.status !== 'Mitigated' && c.status !== 'Closed — Accepted';
+            const hasSignal = (Array.isArray(c.modes) && c.modes.length > 0) || (c.findings && String(c.findings).trim());
+            if (!open || !hasSignal) return;
+            (Array.isArray(c.linkedGateIds) ? c.linkedGateIds : []).forEach(key => {
+                const k = String(key);
+                const cut = k.lastIndexOf(':');
+                const pageId = k.slice(0, cut), nid = k.slice(cut + 1);
+                const page = (typeof ftaPages !== 'undefined' ? ftaPages : []).find(p => p && String(p.id) === pageId);
+                if (!page || !page.root) return;
+                let gate = null;
+                (function find(n) {
+                    if (!n || gate) return;
+                    if (String(n.id) === nid) { gate = n; return; }
+                    (n.children || n._children || []).forEach(find);
+                })(page.root);
+                if (!gate) return;
+                const lids = (gate.children || gate._children || []).map(ch => String(ch.logicalId != null ? ch.logicalId : ch.id));
+                for (let i = 0; i < lids.length; i++) for (let j = i + 1; j < lids.length; j++) {
+                    const pk = [lids[i], lids[j]].sort().join('|');
+                    if (!pairs.has(pk)) pairs.set(pk, {
+                        cma: c.cmaId || ('CMA#' + c.internalId),
+                        gate: gate.displayId || String(gate.id),
+                        page: page.name || String(page.id),
+                        key: k
+                    });
+                }
+            });
+        });
+    } catch (e) { /* fail open — no auto-compromise */ }
+    return { ids: ids, pairs: pairs };
+}
+
 // Recursive DAL allocator. Mutates `allocatedDAL` on every node walked.
 // `visited` tracks page IDs across TRANSFERs to prevent infinite recursion on cycles.
 // `cmaSet` (computed once at the top-level call) lets an open CMA common-mode finding drive a
@@ -457,7 +687,8 @@ function _cmaCompromisedGateIdSet() {
 function allocateDAL(node, parentDal, visited, cmaSet) {
     if (!node || !parentDal) return;
     visited = visited || new Set();
-    if (cmaSet === undefined) cmaSet = (typeof _cmaCompromisedGateIdSet === 'function') ? _cmaCompromisedGateIdSet() : null;
+    if (cmaSet === undefined) cmaSet = (typeof _cmaCompromisedIndex === 'function') ? _cmaCompromisedIndex()
+        : ((typeof _cmaCompromisedGateIdSet === 'function') ? _cmaCompromisedGateIdSet() : null);
     // Phase 56.38 — conservative-merge for cross-tree paste. If the node carries
     // a snapshot DAL from its source tree (and the user hasn't overridden it),
     // the effective inherited DAL is the stricter of (propagated parent, snapshot).
@@ -516,13 +747,29 @@ function allocateDAL(node, parentDal, visited, cmaSet) {
     // which the probability path consumes to require a common-cause (CCF) term.
     let indep = node.dalIndependence || 'claimed';
     // Auto-drive (connected thread): an OPEN, linked CMA common-mode finding overrides the claim.
-    const cmaHit = !!(cmaSet && cmaSet.has(String(node.id)));
+    // A6 — the index carries {ids, pairs}; a bare Set (legacy callers / tests) still works.
+    const _cmaIds = cmaSet ? (cmaSet.ids || (typeof cmaSet.has === 'function' ? cmaSet : null)) : null;
+    const _cmaPairs = (cmaSet && cmaSet.pairs && cmaSet.pairs.size) ? cmaSet.pairs : null;
+    let cmaHit = !!(_cmaIds && _cmaIds.has(String(node.id)));
+    let _globalHit = null;
+    if (!cmaHit && _cmaPairs) {
+        // Failures are global: this gate's members include a pair an open CMA
+        // couples — the reduction here cannot stand, wherever the CMA is linked.
+        const _lids = kids.map(ch => String(ch.logicalId != null ? ch.logicalId : ch.id));
+        for (let i = 0; i < _lids.length && !_globalHit; i++) for (let j = i + 1; j < _lids.length; j++) {
+            const rec = _cmaPairs.get([_lids[i], _lids[j]].sort().join('|'));
+            if (rec) { _globalHit = { cma: rec.cma, gate: rec.gate, page: rec.page, lidA: _lids[i], lidB: _lids[j] }; cmaHit = true; break; }
+        }
+    }
     if (cmaHit) indep = 'compromised';
     node._cmaCompromised = cmaHit;
+    node._cmaCompromisedGlobal = _globalHit;
     node._dalProvisional = (indep === 'claimed');
     node._dalCompromised = (indep === 'compromised');
     node._dalCompromiseReason = node._dalCompromised
-        ? (cmaHit
+        ? (_globalHit
+            ? 'CMA ' + _globalHit.cma + ' (recorded at gate ' + _globalHit.gate + ' on ' + _globalHit.page + ') identifies an open common mode coupling members ' + _globalHit.lidA + '/' + _globalHit.lidB + ' — the same pair sits under this gate. A failure of independence is global: the DAL reduction here is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause (β) term until that CMA closes (ARP4761A App M).'
+            : cmaHit
             ? 'CMA identified an open common-mode coupling these members. The DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause (β) term (ARP4761A App M).'
             : 'Functional independence between members not substantiated by CMA. DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause term.')
         : null;
@@ -562,7 +809,7 @@ function allocateDAL(node, parentDal, visited, cmaSet) {
     };
     const opt = node.dalOption || 'opt2';
     const oneDown  = dalDecrement(propagateDal, 1);   // top - 1
-    const floorDal = dalDecrement(propagateDal, 2);   // Table P2 floor for additional members (Cat->C, Haz->D, clamp)
+    const floorDal = dalDecrement(propagateDal, 2);   // ARP4754A Table 5-2: additional members TWO DAL levels below the FC DAL (relative; floored only at E). NOT an absolute Cat->C/Haz->D floor — those coincide only under Part 25 (A-2=C, B-2=D); e.g. Part 23 III Cat top B -> D.
     if (opt === 'opt1') {
         // Option 1: one carrier member at the top DAL; additional members at the floor.
         const carrierId = node.dalCarrierChildId || (kids[0] && kids[0].id);
@@ -667,13 +914,55 @@ function lambdaFromInputMode(mode, value, libraryKey, exposureTime) {
 // Phase 53.55 — recognizes Part 25, Part 23 (Class I-IV), Part 27/29 rotorcraft, Part 33/35
 // engines/propellers, SC-VTOL (Basic/Enhanced), Part 450 commercial space, Part 107 UAS,
 // and Custom cert basis (Pro feature) where the user supplies their own severity ladder.
+// 31 Aug 2026 — the regulation string arrives in two dialects: the AC 1309 tab writes
+// 'Part 23' / 'SC-VTOL', while the new-project wizard wrote 'sc-vtol' and the showcase
+// files carry 'part-23'. Before this helper, an unrecognised dialect fell through to
+// PROB_TARGETS[key] || PROB_TARGETS['Part 25'] — i.e. a wizard-built SC-VTOL Basic
+// project was SILENTLY given Part 25 numbers. Canonicalise once, here, for every reader.
+function canonRegulation(reg) {
+    const k = String(reg || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const M = { part25: 'Part 25', part23: 'Part 23', part27: 'Part 27', part29: 'Part 29',
+                part33: 'Part 33', part35: 'Part 35', scvtol: 'SC-VTOL', part450: 'Part 450',
+                part107: 'Part 107', custom: 'Custom' };
+    return M[k] || String(reg || '');
+}
+// SC-VTOL sub-category → PROB/DAL_TARGETS key. Accepts the post-split values
+// ('Basic 1' | 'Basic 2' | 'Basic 3' | 'Enhanced') and the pre-split legacy 'Basic',
+// which resolves to the alias row (= Basic 1 numbers) — see safety_targets.js.
+function scvtolTargetKey(cat) {
+    const c = String(cat || 'Enhanced').trim();
+    if (/^enhanced$/i.test(c)) return 'SC-VTOL Enhanced';
+    const m = c.match(/^basic\s*([123])$/i);
+    if (m) return 'SC-VTOL Basic ' + m[1];
+    return 'SC-VTOL Basic';
+}
+function scvtolIsLegacyBasic(cat) { return /^basic$/i.test(String(cat || '').trim()); }
+// Part 27 class → PROB/DAL_TARGETS key (31 Aug 2026 split, PS-ASW-27-15 four classes).
+// No class stored (pre-split project) → the legacy alias row (= Class III) and a banner.
+function part27TargetKey(cls) {
+    const c = String(cls || '').trim().toUpperCase();
+    return /^(I|II|III|IV)$/.test(c) ? ('Part 27 ' + c) : 'Part 27';
+}
+function part27IsLegacy(cls) { return !/^(I|II|III|IV)$/.test(String(cls || '').trim().toUpperCase()); }
+// THE one resolver "what PROB_TARGETS key is this project" for every caller that holds a
+// projectConfig-shaped object (the AC 1309 tab, ai_assistant._certBasisKey, ai_skills.basisFrom).
+function certBasisKeyFor(cfg) {
+    const c = cfg || {};
+    const reg = canonRegulation(c.regulation || 'Part 25');
+    if (reg === 'Part 23') return 'Part 23 ' + (c.part23Class || 'IV');
+    if (reg === 'Part 27') return part27TargetKey(c.part27Class);
+    if (reg === 'SC-VTOL') return scvtolTargetKey(c.scvtolCategory);
+    return reg;
+}
 function getSafetyTarget(severity) {
-    const reg = (projectConfig && projectConfig.regulation) || 'Part 25';
+    const reg = canonRegulation((projectConfig && projectConfig.regulation) || 'Part 25');
     let key;
     if (reg === 'Part 23') {
         key = 'Part 23 ' + (projectConfig.part23Class || 'IV');
+    } else if (reg === 'Part 27') {
+        key = part27TargetKey(projectConfig.part27Class);
     } else if (reg === 'SC-VTOL') {
-        key = 'SC-VTOL ' + (projectConfig.scvtolCategory || 'Enhanced');
+        key = scvtolTargetKey(projectConfig.scvtolCategory);
     } else if (reg === 'Custom') {
         // Pro-gated. If the project carries a custom cert-basis definition, read from it;
         // otherwise return null (UI will prompt the user to define the custom ladder).
@@ -740,9 +1029,28 @@ function _activeTreeMissionPhases() {
     return _missionProfilePhases((typeof ftaConfig === 'object' && ftaConfig) ? ftaConfig.missionProfileId : '');
 }
 
+// Safe wrapper — isSpecialPhase lives in bindings_modules.js, which executes AFTER
+// this file. Every call site here runs long after load, but a typeof guard costs
+// nothing and keeps a load-order change from turning a contingency phase back into
+// mission time without anyone noticing.
+function _phaseIsSpecial(p) {
+    try { return (typeof isSpecialPhase === 'function') ? isSpecialPhase(p) : false; }
+    catch (_) { return false; }
+}
+
+// The NOMINAL mission only. Contingency phases (rejected take-off, go-around) are
+// excluded: they are flown on a small fraction of departures, so summing them into
+// t_mission would dilute every exposure ratio in the project by time most flights
+// never spend. See the phase-vocabulary note in bindings_modules.js.
 function getTotalFlightDuration(phaseTable) {
     const tbl = phaseTable || flightPhasesData || [];
-    return tbl.reduce((acc, p) => acc + parseDurationToHours(p.duration, p.durationUnit), 0);
+    return tbl.reduce((acc, p) => acc + (_phaseIsSpecial(p) ? 0 : parseDurationToHours(p.duration, p.durationUnit)), 0);
+}
+
+// Sum of the contingency rows — reported for display only. Nothing divides by it.
+function getContingencyDuration(phaseTable) {
+    const tbl = phaseTable || flightPhasesData || [];
+    return tbl.reduce((acc, p) => acc + (_phaseIsSpecial(p) ? parseDurationToHours(p.duration, p.durationUnit) : 0), 0);
 }
 
 // Parse the FHA "phases" field into an array of phase names. Accepts comma or semicolon
@@ -765,10 +1073,14 @@ function getPhaseExposureRatio(phasesStr, phaseTable) {
     const total = getTotalFlightDuration(tbl);
     const list = parsePhaseList(phasesStr);
     if (!list.length || total <= 0) {
-        return { ratio: 1, exposedHours: total, totalHours: total, matchedPhases: [], unmatchedPhases: list };
+        // specialPhases is on EVERY return path. A caller reading
+        // .specialPhases.length to decide whether r=1 is deliberate must never
+        // hit undefined on the quiet paths.
+        return { ratio: 1, exposedHours: total, totalHours: total, matchedPhases: [], unmatchedPhases: list, specialPhases: [] };
     }
     const matched = [];
     const unmatched = [];
+    const special = [];
     let exposed = 0;
     const lcMap = new Map();
     (tbl || []).forEach(p => lcMap.set(String(p.phase || '').toLowerCase(), p));
@@ -776,17 +1088,36 @@ function getPhaseExposureRatio(phasesStr, phaseTable) {
         const p = lcMap.get(name.toLowerCase());
         if (p) {
             matched.push(p.phase);
-            exposed += parseDurationToHours(p.duration, p.durationUnit);
+            if (_phaseIsSpecial(p)) special.push(p.phase);
+            else exposed += parseDurationToHours(p.duration, p.durationUnit);
         } else {
             unmatched.push(name);
         }
     });
     // If nothing matched, leave r = 1 (fail-open) — caller can still show "unmatched phases" warning.
     if (!matched.length) {
-        return { ratio: 1, exposedHours: total, totalHours: total, matchedPhases: [], unmatchedPhases: unmatched };
+        return { ratio: 1, exposedHours: total, totalHours: total, matchedPhases: [], unmatchedPhases: unmatched, specialPhases: [] };
+    }
+    // CONTINGENCY PHASES HOLD r AT 1 (1 Aug 2026).
+    //
+    // A failure condition exposed during a go-around or a rejected take-off is not
+    // exposed "for three minutes". The function had to survive the whole preceding
+    // flight to be there when the contingency was flown: the failure accrues across
+    // the flight and is REVEALED at the demand. Scaling t down to the manoeuvre's own
+    // duration would understate the probability by about two orders of magnitude —
+    // and in the unconservative direction, which is the one that does not announce
+    // itself in review.
+    //
+    // The defensible number is P(demand) x duration, and there is no
+    // occurrence-frequency field in the tool to hold P(demand). So this returns the
+    // conservative bound — the full flight — rather than a frequency nobody entered.
+    // The caller gets `specialPhases` so it can say WHY r is 1 instead of leaving the
+    // engineer to conclude the normalisation simply failed.
+    if (special.length) {
+        return { ratio: 1, exposedHours: total, totalHours: total, matchedPhases: matched, unmatchedPhases: unmatched, specialPhases: special };
     }
     const ratio = Math.max(1e-6, Math.min(1, exposed / total));
-    return { ratio, exposedHours: exposed, totalHours: total, matchedPhases: matched, unmatchedPhases: unmatched };
+    return { ratio, exposedHours: exposed, totalHours: total, matchedPhases: matched, unmatchedPhases: unmatched, specialPhases: [] };
 }
 
 // Apply phase-exposure normalization on top of the regulation/severity safety target.
@@ -810,9 +1141,21 @@ function getNormalizedSafetyTarget(severity, phasesStr) {
 
 // Pretty key used in summaries and FTA badges (e.g. "Part 23 Class IV").
 function projectScopeLabel() {
-    return projectConfig.regulation === 'Part 23'
-        ? `Part 23 Class ${projectConfig.part23Class || 'IV'}`
-        : 'Part 25 Transport';
+    const reg = canonRegulation((projectConfig && projectConfig.regulation) || 'Part 25');
+    switch (reg) {
+        case 'Part 23':   return `Part 23 Class ${projectConfig.part23Class || 'IV'}`;
+        case 'Part 25':   return 'Part 25 Transport';
+        case 'Part 27':   return 'Part 27 Rotorcraft (Normal)' + (part27IsLegacy(projectConfig.part27Class) ? ' (legacy — pick a class)' : ' Class ' + projectConfig.part27Class);
+        case 'Part 29':   return 'Part 29 Rotorcraft (Transport)';
+        case 'Part 33':   return 'Part 33 Engines';
+        case 'Part 35':   return 'Part 35 Propellers';
+        case 'SC-VTOL':   return `EASA SC-VTOL ${projectConfig.scvtolCategory || 'Enhanced'}` + (scvtolIsLegacyBasic(projectConfig.scvtolCategory) ? ' (legacy — confirm seat band)' : '');
+        case 'Part 450':  return 'Part 450 Launch/Reentry';
+        case 'Part 107':  return 'Part 107 + SORA (Small UAS)';
+        case 'specific-sora': return 'SORA Specific Category';
+        case 'Custom':    return (projectConfig.customCertBasis && projectConfig.customCertBasis.name) || 'Custom Cert Basis';
+        default:          return reg;
+    }
 }
 
 // Set the AC 1309 tab dropdowns from current state and render the summary line + applicable table.
@@ -822,16 +1165,23 @@ function renderProjectConfigUI() {
     const classContainer = document.getElementById('proj-class-container');
     const scvtolContainer = document.getElementById('proj-scvtol-container');
     const scvtolSel = document.getElementById('proj-scvtol-category');
+    const p27Container = document.getElementById('proj-part27-container');
+    const p27Sel = document.getElementById('proj-part27-class');
     const customContainer = document.getElementById('proj-custom-container');
     const customContent = document.getElementById('proj-custom-content');
     const missionNote = document.getElementById('proj-mission-based-note');
     const summary = document.getElementById('proj-config-summary');
     if (!regSel || !classSel) return;
-    regSel.value = projectConfig.regulation;
+    // 31 Aug 2026 — canonicalise the dialect ('sc-vtol' / 'part-23') so the picker,
+    // the sub-category selector and the summary all agree with getSafetyTarget().
+    const reg = canonRegulation(projectConfig.regulation);
+    if (reg !== projectConfig.regulation && reg) projectConfig.regulation = reg;
+    regSel.value = reg;
     classSel.value = projectConfig.part23Class || 'IV';
     if (scvtolSel) scvtolSel.value = projectConfig.scvtolCategory || 'Enhanced';
+    if (p27Sel) p27Sel.value = part27IsLegacy(projectConfig.part27Class) ? '' : projectConfig.part27Class;
+    if (p27Container) p27Container.style.display = reg === 'Part 27' ? 'block' : 'none';
     // Phase 53.55 — show the right sub-category selector per cert basis.
-    const reg = projectConfig.regulation;
     if (classContainer)  classContainer.style.display  = reg === 'Part 23'  ? 'block' : 'none';
     if (scvtolContainer) scvtolContainer.style.display = reg === 'SC-VTOL'  ? 'block' : 'none';
     if (customContainer) customContainer.style.display = reg === 'Custom'   ? 'block' : 'none';
@@ -846,6 +1196,16 @@ function renderProjectConfigUI() {
         } else if (reg === 'Part 107') {
             missionNote.style.display = 'block';
             missionNote.innerHTML = '⚠ <strong>Part 107 / UAS uses SORA methodology</strong> — risk-class-driven (SAIL 1-6 per JARUS SORA 2.5) rather than per-flight-hour severity. The per-FH severity ladder is hidden. System-level safety analysis still applies; the MoC catalog shows the relevant Part 107 and SORA paragraphs.';
+        } else if (reg === 'Part 27' && part27IsLegacy(projectConfig.part27Class)) {
+            // 31 Aug 2026 — pre-split project. PS-ASW-27-15 splits Part 27 by class; the
+            // legacy row resolves to Class III (never looser than the old row).
+            missionNote.style.display = 'block';
+            missionNote.innerHTML = '⚠ <strong>Part 27 needs a class.</strong> FAA policy PS-ASW-27-15 (safety continuum) sets different objectives for Class I (reciprocating, ≤5 occupants), Class II (single turbine, ≤5 occupants, ≤4,000 lb), Class III (single turbine, ≥6 occupants, 4,001–7,000 lb) and Class IV (twin turbine). This project was saved before the split and is using the Class III row (Cat ≤1×10⁻⁸/fh, DAL B). Pick the class above. The objectives per class are verified against EASA AMC1 27.1309 Table 2 (CS-27 Amdt 10); the FAA class thresholds shown are from the 2017 draft of PS-ASW-27-15 — EASA\'s own class definitions are Category A (IV), Category B ≥6 occupants or >1 814 kg (III), ≤5 occupants ≤1 814 kg (II), ≤2 occupants ≤1 814 kg VFR-only (I).';
+        } else if (reg === 'SC-VTOL' && scvtolIsLegacyBasic(projectConfig.scvtolCategory)) {
+            // 31 Aug 2026 — pre-split project. MOC SC-VTOL Issue 2 Table 1 splits Category
+            // Basic by maximum passenger seating; the legacy row resolves to Basic 1 (0–1 pax).
+            missionNote.style.display = 'block';
+            missionNote.innerHTML = '⚠ <strong>SC-VTOL Category Basic needs a seat band.</strong> MOC SC-VTOL Issue 2 (MOC VTOL.2510 §8 Table 1) sets different objectives for Basic 1 (0–1 passengers), Basic 2 (2–6) and Basic 3 (7–9). This project was saved before the split and is currently using the Basic 1 row (Cat ≤1×10⁻⁷/fh, FDAL C). Pick the band above — Basic 2 (Cat ≤1×10⁻⁸, FDAL B) and Basic 3 (Cat ≤1×10⁻⁹, FDAL A) are stricter.';
         } else {
             missionNote.style.display = 'none';
         }
@@ -898,7 +1258,42 @@ function onCustomCertBasisFieldChange(field, severity, value) {
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
 }
 
-function _virtualizeEnabled() { try { if (/[?&]virtualize=1/.test(location.search)) return true; return localStorage.getItem('SLA_VIRTUALIZE') === '1'; } catch (_) { return false; } }
+// Windowed virtualization gate.
+//
+// DEFAULT ON IN THE DESKTOP SHELL, still opt-in in a browser. The reason for the
+// split is measurement, not preference: virtualization needs a row height, and in an
+// unknown browser at an unknown zoom the estimate can be wrong enough to misplace the
+// scroll window. The desktop build is a known Chromium at a known zoom AND measures
+// the height off a real rendered row (see _rowHeight), so the reason it was held back
+// does not apply there.
+//
+// Note what this does and does not buy: it removes RENDER cost, not memory cost. The
+// rows still live in the model either way. Bigger projects are a heap/storage
+// question; this is only about a worksheet staying responsive.
+function _slIsDesktopShell() {
+    try { return !!(window.__slabDesktop || (navigator.userAgent || '').indexOf('Electron') >= 0); } catch (_) { return false; }
+}
+function _virtualizeEnabled() {
+    try {
+        if (/[?&]virtualize=0/.test(location.search)) return false;   // explicit off wins everywhere
+        if (/[?&]virtualize=1/.test(location.search)) return true;
+        if (localStorage.getItem('SLA_VIRTUALIZE') === '0') return false;
+        if (localStorage.getItem('SLA_VIRTUALIZE') === '1') return true;
+        return _slIsDesktopShell();
+    } catch (_) { return false; }
+}
+// Measure a real row rather than trusting the ~34px estimate. Falls back to the
+// estimate when there is nothing rendered yet to measure, and refuses a nonsense
+// reading (a collapsed or display:none row) rather than propagating it into the
+// scroll maths.
+function _rowHeight(tbody) {
+    try {
+        const r = tbody && tbody.querySelector && tbody.querySelector('tr');
+        const h = r && r.getBoundingClientRect ? r.getBoundingClientRect().height : 0;
+        if (h >= 12 && h <= 200) return h;
+    } catch (_) {}
+    return _VIRTUAL_ROW_H;
+}
 // Pure: which row slice is visible + the spacer pad heights for the off-screen rows. (Testable.)
 function _visibleWindow(scrollTop, viewportH, rowH, total, buffer) {
     buffer = buffer || 0;
@@ -913,7 +1308,7 @@ function _virtualRender(tbody, total, rowHtmlAt) {
     if (!viewport.style.maxHeight) viewport.style.maxHeight = '70vh';
     try { const thead = tbody.closest('table') && tbody.closest('table').querySelector('thead'); if (thead) thead.querySelectorAll('th').forEach(function (th) { th.style.position = 'sticky'; th.style.top = '0'; th.style.zIndex = '1'; }); } catch (_) {}
     function paint() {
-        const w = _visibleWindow(viewport.scrollTop, viewport.clientHeight || 600, _VIRTUAL_ROW_H, total, 8);
+        const w = _visibleWindow(viewport.scrollTop, viewport.clientHeight || 600, _rowHeight(tbody), total, 8);
         let html = '';
         if (w.topPad > 0) html += '<tr style="height:' + w.topPad + 'px"><td colspan="99" style="padding:0;border:none;"></td></tr>';
         for (let i = w.start; i < w.end; i++) html += rowHtmlAt(i);
@@ -954,6 +1349,39 @@ function _crudEmptyRowHtml() {
         +   '<div class="crud-empty-tip">Tip — press <kbd>⌘K</kbd> <span style="opacity:.6">(Ctrl K)</span> to jump to any view.</div>'
         + '</div></td></tr>';
 }
+// A14b (2 Aug 2026, Waqas: "make sure the model is learning from these edits").
+// THE FINDING: after months in production the correction store held 533 records
+// and ZERO edits — the house-style retrieval (_memoryExemplars) learns only from
+// action:'edit' diffs, but those were captured ONLY inside the review panel, and
+// real usage is accept-all followed by corrections in the WORKSHEET. The loop
+// read from an empty well. This captures the place corrections actually happen:
+// a worksheet edit of an AI-drafted row records drafted→engineer-wrote diffs in
+// the same corr.v1 shape _logDelta writes. Pure + exported for the test wall.
+function _slCaptureAiEdit(oldRow, newRow, crudKey) {
+    try {
+        if (!oldRow || !newRow || !oldRow.aiGenerated) return null;
+        if (!(typeof window !== 'undefined' && window.AiMemory && typeof window.AiMemory.add === 'function')) return null;
+        const SKIP = /^(internalId|aiGenerated|aiFeature|aiModel|aiInputScope|aiAt)$|Id$/;
+        const diff = [];
+        const keys = Object.keys(Object.assign({}, oldRow, newRow));
+        keys.forEach(function (k) {
+            if (SKIP.test(k)) return;
+            const a = oldRow[k], b = newRow[k];
+            if (typeof a !== 'string' && typeof b !== 'string') return;
+            const from = String(a == null ? '' : a).trim(), to = String(b == null ? '' : b).trim();
+            if (from && to && from !== to) diff.push({ field: k, from: from.slice(0, 400), to: to.slice(0, 400) });
+        });
+        if (!diff.length) return null;
+        const meta = { schema: 'corr.v1', source: 'worksheet-edit', crud: crudKey || null };
+        try { meta.controlled = !!(typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled); } catch (_) { meta.controlled = true; }
+        const rec = { kind: 'delta', feature: oldRow.aiFeature || ('worksheet.' + (crudKey || 'row')), action: 'edit', item: { diff: diff }, meta: meta, ts: Date.now() };
+        window.AiMemory.add(rec);
+        // keep the retrieval cache current if the AI lane is loaded
+        try { if (window.SafetyLabAI && typeof window.SafetyLabAI.memoryRefresh === 'function') window.SafetyLabAI.memoryRefresh(); } catch (_) {}
+        return rec;
+    } catch (_) { return null; }
+}
+window._slCaptureAiEdit = _slCaptureAiEdit;
 function makeCRUD(config) {
     const { key, store, formIds, submitBtn, cancelBtn, defaultText, tableBody,
             renderCells, renderRows, afterChange, validate, transform, storePrecondition,
@@ -973,7 +1401,23 @@ function makeCRUD(config) {
     function writeForm(data) {
         for (const [k, id] of Object.entries(formIds)) {
             const el = document.getElementById(id);
-            if (el) el.value = data[k] == null ? '' : data[k];
+            if (!el) continue;
+            const v = data[k] == null ? '' : data[k];
+            // ORPHAN GUARD (Waqas ruling, 2 Aug): a SELECT whose stored value is
+            // no longer among its options (deleted/renamed owner, imported data)
+            // used to silently coerce to '' — and submit then saved the blank,
+            // severing the link without anyone deciding to. Inject the orphaned
+            // value as a flagged option instead, so the edit round-trip
+            // preserves it and the engineer SEES the state.
+            if (el.tagName === 'SELECT') [...el.querySelectorAll('option[data-sl-orphan]')].forEach(o => { if (o.value !== String(v)) o.remove(); });
+            if (el.tagName === 'SELECT' && v !== '' && ![...el.options].some(o => o.value === String(v))) {
+                const opt = document.createElement('option');
+                opt.value = String(v);
+                opt.textContent = String(v) + ' (unregistered)';
+                opt.dataset.slOrphan = '1';
+                el.appendChild(opt);
+            }
+            el.value = v;
         }
     }
     function submit() {
@@ -991,7 +1435,11 @@ function makeCRUD(config) {
             if (err) return alert(err);
         }
         if (editId) {
-            const idx = arr.findIndex(i => i.internalId === editId);
+            const idx = arr.findIndex(i => String(i.internalId) === String(editId));
+            // A14b — an engineer editing an AI-drafted row IS the correction
+            // signal the house-style memory was starved of. Captured before the
+            // row is replaced; never blocks the save.
+            if (idx >= 0) { try { _slCaptureAiEdit(arr[idx], data, key); } catch (_) {} }
             if (idx >= 0) arr[idx] = data; else arr.push(data);
         } else {
             arr.push(data);
@@ -1016,7 +1464,7 @@ function makeCRUD(config) {
     }
     function edit(internalId) {
         const arr = store(); if (!arr) return;
-        const item = arr.find(x => x.internalId === internalId);
+        const item = arr.find(x => String(x.internalId) === String(internalId));
         if (!item) return;
         writeForm(item);
         editStates[key] = internalId;
@@ -1026,7 +1474,7 @@ function makeCRUD(config) {
     }
     function deleteItem(internalId) {
         const arr = store(); if (!arr) return;
-        const idx = arr.findIndex(x => x.internalId === internalId);
+        const idx = arr.findIndex(x => String(x.internalId) === String(internalId));
         if (idx >= 0) arr.splice(idx, 1);
         if (afterChange) afterChange();
         // #46 — surgical row removal (opt-in; falls back to full render when unsafe).
@@ -1071,6 +1519,40 @@ function makeCRUD(config) {
         }
         // #15b — windowed virtualization for large standard tables (opt-in; default = full render).
         const rowHtmlAt = (i) => rowTr(arr[i]);   // #46 — single source; carries data-iid for surgical patches
+        // ENG-2 phase 1b — every standard CRUD worksheet paginates through the
+        // shared pager once it exceeds one page (50 rows). Precedence: custom
+        // renderRows (merged-cell tables — returned above, unpaged) → pagination
+        // → legacy opt-in virtualization → full render. The pager windows the
+        // DISPLAY only; every count, gate and rollup reads the full store. The
+        // surgical row-patch fast path self-disables while paginated (its
+        // shown-vs-total eligibility check fails), falling back to this render —
+        // which is cheap again, because it's one page.
+        if (typeof SLPaginate !== 'undefined' && arr.length > 50) {
+            let pager = document.getElementById('crud-pager-' + tableBody);
+            if (!pager) {
+                pager = document.createElement('div');
+                pager.id = 'crud-pager-' + tableBody;
+                const tbl = tbody.closest ? tbody.closest('table') : null;
+                if (tbl && tbl.parentNode) tbl.parentNode.insertBefore(pager, tbl);
+                else pager = null;   // detached tbody — fall through to legacy paths
+            }
+            if (pager) {
+                SLPaginate.attach({
+                    key: 'crud:' + key, host: pager, total: arr.length,
+                    label: (f, t, n) => 'rows ' + f.toLocaleString() + '–' + t.toLocaleString() + ' of ' + n.toLocaleString() + ' — counts, gates and rollups computed over the full set',
+                    renderPage: (from, to) => {
+                        let h = '';
+                        for (let i = from; i < to; i++) h += rowHtmlAt(i);
+                        tbody.innerHTML = h;
+                    },
+                });
+                return;
+            }
+        } else {
+            // Shrunk back under one page — retire a stale pager bar if present.
+            const stale = document.getElementById('crud-pager-' + tableBody);
+            if (stale) stale.innerHTML = '';
+        }
         if (_virtualizeEnabled() && arr.length > _VIRTUALIZE_MIN_ROWS) {
             _virtualRender(tbody, arr.length, rowHtmlAt);
         } else {
@@ -1158,7 +1640,16 @@ function switchTab(tabId) {
         // navigation (restored last-tab, command palette, stray link) lands on the Sankey so
         // nobody hits a dead view.
         if (tabId === 'graph') { tabId = 'golden-thread'; }
-        const tabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'pasa', 'asa', 'spp'];
+        const tabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'mlas', 'pasa', 'asa', 'spp', 'hfa', 'hfa-tid', 'hfa-alloc', 'hfa-hea', 'hfa-alerts', 'hfa-task', 'hfa-cd', 'hfa-sa', 'hfa-mfc', 'hfa-ergo', 'stpa', 'interdep'];
+        // 2 Sep 2026 — the seven HF sub-lanes added after hfa-task/hfa-ergo were never
+        // registered here. Their own module hid and showed them, so the views did not
+        // stack, but the sidebar active state, the last-tab memory and the stepper all
+        // read THIS list and knew nothing about them. regression_hf_nav now pins every
+        // snav-hfa-* id in index.html to an entry here, so the next lane cannot be missed.
+        // NOTE (20 Jul 2026): 'interdep' was MISSING from this list — so once the
+        // interdependency view was shown, switchTab never hid it and it stacked onto
+        // every other lane (found live). A view not in this array is a view switchTab
+        // cannot hide; any future full-screen lane MUST be registered here.
         // Phase 53.45 — remember the last tab so reloads land here, not back on dashboard.
         try { if (tabs.indexOf(tabId) >= 0) localStorage.setItem(_UI_LAST_TAB_KEY, tabId); } catch(_) {}
         try { window._slCurrentTab = tabId; } catch(_) {}
@@ -1191,7 +1682,7 @@ function switchTab(tabId) {
         if (tabId === 'routing') { _populateRoutingMultiselects({}); renderRouting(); }
         if (tabId === 'resources') { _populateResourceMultiselects({}); renderResources(); }
         if (tabId === 'ac-fcim') populateDropdowns('ac-fcim-subfunc', acFunctionsData, 'subId', 'subName');
-        if (tabId === 'ac-fha') { populateDropdowns('ac-fha-subfunc', acFunctionsData, 'subId', 'subName'); populateDropdowns('ac-fha-fcid', acExtractedFCs, 'id', 'id', true); populateFhaAsmDropdown('ac'); }
+        if (tabId === 'ac-fha') { populateDropdowns('ac-fha-subfunc', acFunctionsData, 'subId', 'subName'); populateDropdowns('ac-fha-fcid', acExtractedFCs, 'id', 'id', true); if (typeof _refreshFhaFcOptions === 'function') _refreshFhaFcOptions('ac'); populateFhaAsmDropdown('ac'); }
         if (tabId === 'ac-req') { populateDropdowns('ac-req-trace', acFunctionsData, 'subId', 'subName'); _populateReqParentPicker('ac'); }
         if (tabId === 'phases') renderFlightPhases(); 
         if (tabId === 'sys-dir') renderSystemDirectory();
@@ -1232,6 +1723,9 @@ function switchTab(tabId) {
             renderFTASidebar();
             if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
             updateFTAConfigUI(); refreshTreeLevelDropdown(); refreshFTARequiredTarget();
+            // Phase 66 — derive-then-calc on tab entry: the target set above must
+            // flow into node budgets before the canvas paints.
+            try { calculateAllProbabilities(); } catch(_) {}
             if (typeof _renderFtaLinkedChip === 'function') _renderFtaLinkedChip();
             if(typeof d3 !== 'undefined' && svg) updateD3();
             // Phase 56.47 — auto-fit the canvas on FTA tab entry. Without this the
@@ -1478,7 +1972,8 @@ function renderSysAssumptions() {
     if (!sys()) return;
     const tbody = document.getElementById('sys-asm-body'); tbody.innerHTML = '';
     const activeSysId = sys().id;
-    sys().asm.forEach(row => {
+    // ENG-2 phase 1c — paginated via the shared pager (>50 rows).
+    const _sysAsmRowHtml = row => {
         let dynFields = _asmRouteSelect('sys', row.asmId, row);
         if (row.state === 'Validated' || row.state === 'Verified') {
             dynFields += `<input type="text" placeholder="Validation Strategy" value="${esc(row.valStrategy||'')}" onchange="updateSysAsmText('${esc(row.asmId)}', 'valStrategy', this.value)"><input type="text" placeholder="Validation Artifacts" value="${esc(row.valArtifact||'')}" onchange="updateSysAsmText('${esc(row.asmId)}', 'valArtifact', this.value)">`;
@@ -1488,8 +1983,14 @@ function renderSysAssumptions() {
         }
         const commentBtn = (typeof commentTriggerHtml === 'function')
             ? commentTriggerHtml({ kind: 'sysAsm', id: row.asmId, systemId: activeSysId }) : '';
-        tbody.insertAdjacentHTML('beforeend', `<tr><td><div style="display:flex; align-items:center; gap:6px;"><strong>${esc(row.asmId)}</strong>${commentBtn}</div></td><td>${esc(row.origin)}</td><td>${esc(row.text)}</td><td>${renderLinkedFHAsHtml(row.asmId)}</td><td style="width: 140px;"><select class="state-select" onchange="updateSysAsmState('${esc(row.asmId)}', this.value)"><option value="Proposed" ${row.state==='Proposed'?'selected':''}>Proposed</option><option value="Validated" ${row.state==='Validated'?'selected':''}>Validated</option><option value="Verified" ${row.state==='Verified'?'selected':''}>Verified</option></select></td><td><div class="asm-dynamic-fields">${dynFields}</div></td></tr>`);
-    });
+        return `<tr><td><div style="display:flex; align-items:center; gap:6px;"><strong>${esc(row.asmId)}</strong>${commentBtn}</div></td><td>${esc(row.origin)}</td><td>${esc(row.text)}</td><td>${renderLinkedFHAsHtml(row.asmId)}</td><td style="width: 140px;"><select class="state-select" onchange="updateSysAsmState('${esc(row.asmId)}', this.value)"><option value="Proposed" ${row.state==='Proposed'?'selected':''}>Proposed</option><option value="Validated" ${row.state==='Validated'?'selected':''}>Validated</option><option value="Verified" ${row.state==='Verified'?'selected':''}>Verified</option><option value="Invalidated" ${row.state==='Invalidated'?'selected':''}>Invalidated</option></select></td><td><div class="asm-dynamic-fields">${dynFields}</div></td></tr>`;
+    };
+    if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
+        SLPaginate.pageTbody({ key: 'asm-sys', tbody, rows: sys().asm, rowHtml: _sysAsmRowHtml,
+            label: (f, t, n) => 'assumptions ' + f + '–' + t + ' of ' + n + ' — validation gates computed over the full register' });
+    } else {
+        sys().asm.forEach(row => tbody.insertAdjacentHTML('beforeend', _sysAsmRowHtml(row)));
+    }
 }
 
 
@@ -1896,7 +2397,13 @@ function _setFmeaTableHead() {
         head.innerHTML = '<tr>' +
             '<th>Actions</th><th>Scope</th><th>ID</th><th>FTA Link</th><th>Component</th><th>Failure Mode</th>' +
             '<th>Local Effect</th><th>Next-Higher Effect</th><th>End Effect</th>' +
-            '<th>Detection</th><th>Severity</th><th>λ (/hr)</th><th>t (hr)</th><th>P</th>' +
+            // Phase was CAPTURED and never shown. The FMEA form has one shared field
+            // list for both modes (safety_lab.js), including fmea-phase, so a
+            // piece-part row stored a flight phase that no column rendered — the
+            // analyst records a judgement and it disappears, which is the same
+            // shape as the HF workloadBand bug. ARP4761A Table J2 carries Flight
+            // Phase, so the standard wants the column too.
+            '<th>Detection</th><th>Severity</th><th>Phase</th><th>λ (/hr)</th><th>t (hr)</th><th>P</th>' +
         '</tr>';
     }
     // Rebuilding this thead wipes the injected Review column while the body
@@ -2066,7 +2573,18 @@ function updateNodeData() {
         const wEl = document.getElementById('config-weight');
         if (wEl) {
             const w = parseFloat(wEl.value);
-            if (isFinite(w) && w >= 0 && w <= 100) selectedNodeData.weight = w;
+            if (isFinite(w) && w >= 0 && w <= 100) {
+                // Phase 66.10 — a sibling group must always sum to 100. Writing the
+                // slider straight onto the node left the group unnormalised, so the
+                // allocator saw mixed scales and handed out the wrong shares. Route
+                // every write through the same rebalancer the slider drag uses.
+                const _wInfo = (typeof _findParentAndSiblings === 'function') ? _findParentAndSiblings(selectedNodeData) : null;
+                if (_wInfo && _wInfo.siblings && _wInfo.siblings.length > 1 && typeof _rebalanceSiblingWeights === 'function') {
+                    _rebalanceSiblingWeights(selectedNodeData, _wInfo.siblings, w);
+                } else {
+                    selectedNodeData.weight = w;
+                }
+            }
         }
         const lockEl = document.getElementById('config-weight-lock');
         if (lockEl) selectedNodeData.weightLocked = !!lockEl.checked;
@@ -2174,10 +2692,49 @@ function updateNodeData() {
             const lam = parseFloat(document.getElementById('config-lambda').value) || 0;
             selectedNodeData.lambda = Math.max(0, lam);
         }
+        // Backlog #4 — qualitative development error (ARP 4761A 4.1.1.1). The
+        // class is set/cleared here AFTER every λ-reading branch above, so the
+        // forced zero can never be overwritten by the input-mode/λ fields —
+        // the event never carries a number. The event still participates in
+        // tree structure, cut sets, FFS generation and DAL allocation; the
+        // quantified P(top) becomes explicitly conditional on no dev error.
+        const devEl = document.getElementById('config-dev-error');
+        if (devEl) {
+            const lamEl = document.getElementById('config-lambda');
+            const valEl2 = document.getElementById('config-input-value');
+            if (devEl.checked) {
+                selectedNodeData.eventClass = 'dev-error';
+                selectedNodeData.lambda = 0;
+                selectedNodeData.probability = 0;
+                selectedNodeData.inputValue = 0;
+                if (lamEl)  { lamEl.value = '';  lamEl.disabled = true; }
+                if (valEl2) { valEl2.value = ''; valEl2.disabled = true; }
+            } else if (selectedNodeData.eventClass === 'dev-error') {
+                delete selectedNodeData.eventClass;
+                if (lamEl)  lamEl.disabled = false;
+                if (valEl2) valEl2.disabled = false;
+            }
+        }
     }
     if (selectedNodeData.gateType === 'VOTING') {
         const k = parseInt(document.getElementById('config-voting-k').value) || 2;
         selectedNodeData.votingK = Math.max(1, k);
+    }
+    // DFT-WARM — spare dormancy factor α and switch success probability (SPARE only).
+    // Clamped to [0,1] on the way in; the defaults (α=0, p=1) are stored as the
+    // literal cold / perfect-switch model rather than left undefined, so a tree
+    // saved from this build says out loud which spare model it was quantified under.
+    if (selectedNodeData.gateType === 'SPARE') {
+        const wkEl = document.getElementById('config-spare-warmk');
+        const spEl = document.getElementById('config-spare-switchp');
+        if (wkEl) {
+            const wk = parseFloat(wkEl.value);
+            selectedNodeData.spareWarmK = isFinite(wk) ? Math.min(1, Math.max(0, wk)) : 0;
+        }
+        if (spEl) {
+            const sp = parseFloat(spEl.value);
+            selectedNodeData.spareSwitchP = isFinite(sp) ? Math.min(1, Math.max(0, sp)) : 1;
+        }
     }
     // DAL allocation option (AND / INHIBIT gates only).
     if (selectedNodeData.gateType === 'AND' || selectedNodeData.gateType === 'INHIBIT') {
@@ -2219,6 +2776,105 @@ function refreshBasicEventDerived() {
     if (host) host.innerHTML = '';
 }
 
+// Monarch-display full screen: the Sankey takes the whole panel and re-lays
+// out at screen height. Re-renders on every fullscreen transition.
+function gtvToggleFullscreen(){
+    const host = document.getElementById('gt-sankey-host');
+    if (!host) return;
+    try {
+        if (document.fullscreenElement === host) { document.exitFullscreen(); return; }
+        if (!host.dataset.fsWired) {
+            document.addEventListener('fullscreenchange', () => {
+                try {
+                    host.style.background = 'var(--color-surface-1)';
+                    host.style.padding = document.fullscreenElement === host ? '14px 18px' : '';
+                    renderGoldenThreadView();
+                } catch (_) {}
+            });
+            host.dataset.fsWired = '1';
+        }
+        const p = host.requestFullscreen && host.requestFullscreen();
+        if (p && p.catch) p.catch(() => { try { showToast('Full screen not available in this browser context.', 'info', 2500); } catch (_) {} });
+    } catch (_) {}
+}
+// Grab-to-pan AND zoom the (wide) Golden Thread diagram.
+//
+// Pan: drag empty space to scroll the whole flow, so columns that run off-screen
+// right — common cause, requirements, verification — are reachable without
+// hunting for a scrollbar. Node clicks are preserved: panning only starts on
+// empty diagram space, never on a node.
+//
+// Zoom (#14, the half of that card that was missing): GT_THREAD renders an
+// <svg viewBox="0 0 W H" width="W"> with NO height attribute, so the viewBox
+// governs the aspect ratio and the rendered size follows the width attribute
+// alone. Scaling is therefore one attribute write — no transform wrapper, no
+// re-render, and crucially no re-layout, so node hit-boxes and the modal wiring
+// keep working untouched. The one d3.zoom() in this file belongs to the dead
+// legacy Sankey fallback and never runs on the shipping path.
+//
+// Ctrl/⌘ + wheel zooms and a plain wheel scrolls, which is the platform
+// convention — a bare wheel that zoomed would fight the scroll people expect on
+// a diagram this wide.
+function _gtZoomApply(host, scale, anchor){
+    const svg = host.querySelector('svg');
+    if(!svg) return;
+    const base = parseFloat(host.dataset.gtBaseW || '0');
+    if(!base) return;
+    const prev = parseFloat(host.dataset.gtScale || '1');
+    const next = Math.max(0.4, Math.min(3, scale));
+    if(Math.abs(next - prev) < 0.001) return;
+    // Keep the point under the cursor (or the viewport centre) still. Without
+    // this, zooming walks the diagram away from whatever you were looking at.
+    const ax = anchor ? anchor.x : host.clientWidth / 2;
+    const ay = anchor ? anchor.y : host.clientHeight / 2;
+    const cx = host.scrollLeft + ax, cy = host.scrollTop + ay;
+    const r = next / prev;
+    svg.setAttribute('width', String(base * next));
+    host.dataset.gtScale = String(next);
+    host.scrollLeft = cx * r - ax;
+    host.scrollTop  = cy * r - ay;
+    const lbl = document.getElementById('gt-zoom-label');
+    if(lbl) lbl.textContent = Math.round(next * 100) + '%';
+}
+function gtZoomIn(){ const h = document.getElementById('gt-sankey-host'); if(h) _gtZoomApply(h, parseFloat(h.dataset.gtScale || '1') * 1.25, null); }
+function gtZoomOut(){ const h = document.getElementById('gt-sankey-host'); if(h) _gtZoomApply(h, parseFloat(h.dataset.gtScale || '1') / 1.25, null); }
+function gtZoomFit(){
+    const h = document.getElementById('gt-sankey-host'); if(!h) return;
+    const base = parseFloat(h.dataset.gtBaseW || '0');
+    if(!base) return;
+    // Fit the full width of the thread into the viewport, never magnifying past 1:1.
+    _gtZoomApply(h, Math.min(1, (h.clientWidth - 16) / base), null);
+    h.scrollLeft = 0;
+}
+function gtZoomReset(){ const h = document.getElementById('gt-sankey-host'); if(h) _gtZoomApply(h, 1, null); }
+function _gtEnablePan(host){
+    if(!host || host.dataset.panWired) return;
+    host.dataset.panWired = '1';
+    host.style.cursor = 'grab';
+    let pan = null;
+    host.addEventListener('wheel', function(ev){
+        if(!(ev.ctrlKey || ev.metaKey)) return;          // plain wheel keeps scrolling
+        ev.preventDefault();
+        const r = host.getBoundingClientRect();
+        const cur = parseFloat(host.dataset.gtScale || '1');
+        _gtZoomApply(host, cur * (ev.deltaY < 0 ? 1.1 : 1 / 1.1),
+                     { x: ev.clientX - r.left, y: ev.clientY - r.top });
+    }, { passive: false });
+    host.addEventListener('mousedown', function(ev){
+        if(ev.button !== 0) return;
+        const t = ev.target;
+        if(t && t.closest && t.closest('g[data-key], button, a, [role="button"], [data-navkey], input, select')) return;
+        pan = { x: ev.clientX, y: ev.clientY, sl: host.scrollLeft, st: host.scrollTop };
+        host.style.cursor = 'grabbing';
+        ev.preventDefault();
+    });
+    document.addEventListener('mousemove', function(ev){
+        if(!pan) return;
+        host.scrollLeft = pan.sl - (ev.clientX - pan.x);
+        host.scrollTop  = pan.st - (ev.clientY - pan.y);
+    });
+    document.addEventListener('mouseup', function(){ if(pan){ pan = null; host.style.cursor = 'grab'; } });
+}
 function renderGoldenThreadView(){
     const host = document.getElementById('gt-sankey-host');
     const eco = document.getElementById('gt-eco');
@@ -2226,10 +2882,39 @@ function renderGoldenThreadView(){
     const pick = document.getElementById('gt-func-pick');
     if(pick){
         const cur = pick.value;
-        pick.innerHTML = ['<option value="">All aircraft functions</option>'].concat((acFunctionsData||[]).map(f => '<option value="' + esc(f.subId) + '">' + esc(f.subId + ' · ' + (f.subName || '')) + '</option>')).join('');
+        pick.innerHTML = ['<option value="" disabled' + (cur ? '' : ' selected') + '>Select an aircraft function…</option>'].concat((acFunctionsData||[]).map(f => '<option value="' + esc(f.subId) + '">' + esc(f.subId + ' · ' + (f.subName || '')) + '</option>')).join('');
         if((acFunctionsData||[]).some(f => f.subId === cur)) pick.value = cur;
         if(!pick.dataset.wired){ pick.addEventListener('change', renderGoldenThreadView); pick.dataset.wired = '1'; }
     }
+    // v0.1 — the branded Golden Thread (gt_thread.js) replaces the Sankey: pick a
+    // function → its whole thread renders as the Defense-Lab chain of custody.
+    {
+        const _scope = pick ? pick.value : '';
+        // No "all functions" firehose — the thread is per-function. Empty scope → prompt.
+        const _graph = (_scope && typeof _gtvBuildGraph === 'function') ? _gtvBuildGraph({ functionSubId: _scope }) : { nodes: [], links: [] };
+        if(typeof window !== 'undefined' && window.GT_THREAD && typeof GT_THREAD.render === 'function'){
+            GT_THREAD.render(host, _graph);
+            try {
+                // GT_THREAD rewrites host.innerHTML, so the natural width has to be
+                // re-read and the user's zoom re-applied on every render — otherwise
+                // changing the function selection silently resets it to 100%.
+                const _svg = host.querySelector('svg');
+                if(_svg){
+                    host.dataset.gtBaseW = _svg.getAttribute('width') || '';
+                    const _keep = parseFloat(host.dataset.gtScale || '1');
+                    if(Math.abs(_keep - 1) > 0.001){
+                        host.dataset.gtScale = '1';
+                        _gtZoomApply(host, _keep, null);
+                    }
+                }
+            } catch(_){}
+            try { _gtEnablePan(host); } catch(_){}
+            if(eco) eco.innerHTML = '';
+            try { if(typeof renderInterfaces === 'function') renderInterfaces(); } catch(_){}   // function-scoped system-interface panel
+            return;
+        }
+    }
+    // Legacy Sankey fallback (only if the thread module failed to load):
     if(typeof d3 === 'undefined'){ host.innerHTML = '<div style="padding:30px; color:var(--color-text-tertiary);">Visualization library unavailable.</div>'; return; }
     const scope = pick ? pick.value : '';
     const graph = _gtvBuildGraph({ functionSubId: scope || null });
@@ -2239,10 +2924,15 @@ function renderGoldenThreadView(){
     }
     const counts = {}; _GTV_LAYERS.forEach(l => counts[l] = 0); graph.nodes.forEach(n => counts[n.kind]++);
     const maxCol = Math.max.apply(null, _GTV_LAYERS.map(l => counts[l]));
-    const W = Math.max(940, host.clientWidth || 1100);
-    // Compact: cap the layout height so a busy project doesn't balloon to ~1500px and then get
-    // scaled down (which halved the ribbons). Height is rendered 1:1 below — no down-scaling.
-    const H = Math.max(340, Math.min(700, maxCol * 34 + 70));
+    const W = Math.max(1100, host.clientWidth || 1200);
+    // Monarch-display sizing: use the screen. Row pitch 48px; the cap follows
+    // the viewport (and the whole screen in full-screen mode) instead of a
+    // fixed 700px. Height renders 1:1 — no down-scaling of ribbons.
+    const _fsOn = (typeof document !== 'undefined') && document.fullscreenElement === host;
+    const _viewCap = _fsOn
+        ? Math.max(600, (window.innerHeight || 900) - 70)
+        : Math.max(760, (window.innerHeight || 900) - 290);
+    const H = Math.max(480, Math.min(_viewCap, maxCol * 48 + 90));
     _gtvLayout(graph, W, H);
 
     host.innerHTML = '';
@@ -2255,7 +2945,9 @@ function renderGoldenThreadView(){
 
     const layerX = {}; graph.nodes.forEach(n => { if(layerX[n.kind] === undefined) layerX[n.kind] = n._x; });
     _GTV_LAYERS.filter(l => counts[l]).forEach(l => {
-        g.append('text').attr('x', layerX[l]).attr('y', 18).style('fill', _GTV_COLOR[l]).attr('font-size', 12.5).attr('font-weight', 600).attr('font-family', 'inherit').text(_GTV_LNAME[l] + ' (' + counts[l] + ')');
+        g.append('text').attr('x', layerX[l]).attr('y', 22).style('fill', _GTV_COLOR[l]).attr('font-size', 15).attr('font-weight', 700).attr('font-family', 'inherit')
+            .style('letter-spacing', '0.06em').style('text-transform', 'uppercase')
+            .text(_GTV_LNAME[l] + ' (' + counts[l] + ')');
     });
     const byKey = {}; graph.nodes.forEach(n => byKey[n.key] = n);
     // Gradient defs — each ribbon blends its source-column colour → target-column colour (target design).
@@ -2269,7 +2961,7 @@ function renderGoldenThreadView(){
     });
     const linkSel = g.append('g').attr('fill', 'none').selectAll('path').data(graph.links).enter().append('path')
         .attr('d', L => { const dx = (L._x1 - L._x0) * 0.5; return 'M' + L._x0 + ',' + L._y0 + 'C' + (L._x0 + dx) + ',' + L._y0 + ' ' + (L._x1 - dx) + ',' + L._y1 + ' ' + L._x1 + ',' + L._y1; })
-        .attr('stroke', L => 'url(#gtvg-' + byKey[L.s].kind + '-' + byKey[L.t].kind + ')').attr('stroke-width', L => L._th).attr('stroke-opacity', 0.45);
+        .attr('stroke', L => 'url(#gtvg-' + byKey[L.s].kind + '-' + byKey[L.t].kind + ')').attr('stroke-width', L => L._th).attr('stroke-opacity', 0.55);
     const nodeG = g.append('g').selectAll('g').data(graph.nodes).enter().append('g').attr('cursor', 'pointer')
         .on('click', (ev, n) => _gtvShowEco(n.key, graph))
         .on('dblclick', (ev, n) => { try { ev.preventDefault(); ev.stopPropagation(); } catch(_){} _gtvShowEcoModal(n.key, graph); });
@@ -2278,10 +2970,16 @@ function renderGoldenThreadView(){
         .attr('stroke', n => n.flag === 'compromised' ? '#7a1f1f' : (n.flag ? '#33373d' : 'none'))
         .attr('stroke-width', n => n.flag ? 1.4 : 0);
     nodeG.append('title').text(n => n.label + (n.sub ? ' — ' + n.sub : '') + (n.flag ? ('  [' + n.flag.toUpperCase() + (n.flagReason ? ': ' + n.flagReason : '') + ']') : ''));
-    nodeG.append('text').attr('x', n => n._x + n._w + 5).attr('y', n => n._y + n._h / 2).attr('dy', '0.35em').attr('font-size', 11).attr('font-family', 'inherit')
-        .style('fill', n => n.flag === 'compromised' ? '#d35450' : (n.flag ? '#9aa0a6' : 'var(--color-text-secondary)'))
+    // Monarch-display labels: bigger, bolder, with a surface-colour halo so
+    // text stays legible where ribbons run underneath it.
+    nodeG.append('text').attr('x', n => n._x + n._w + 6).attr('y', n => n._y + n._h / 2).attr('dy', '0.35em').attr('font-size', 13.5).attr('font-weight', 600).attr('font-family', 'inherit')
+        .style('fill', n => n.flag === 'compromised' ? '#d35450' : (n.flag ? '#9aa0a6' : 'var(--color-text-primary)'))
+        .style('paint-order', 'stroke')
+        .style('stroke', 'var(--color-surface-1)')
+        .style('stroke-width', '3.5px')
+        .style('stroke-linejoin', 'round')
         .style('text-decoration', n => n.flag === 'obsolete' ? 'line-through' : 'none')
-        .text(n => (n.flag ? _GTV_FLAGM[n.flag] : '') + _gtvTrunc(n.label, 24));
+        .text(n => (n.flag ? _GTV_FLAGM[n.flag] : '') + _gtvTrunc(n.label, 34));
 
     // #50 — hover a node to spotlight its full upstream+downstream thread; sync + apply the flag filter.
     nodeG.on('mouseover', (ev, n) => { try { _gtvHighlightThread(graph, linkSel, nodeG, n.key); } catch (_) {} })
@@ -2337,7 +3035,7 @@ function _gtvReportRows(functionSubId){
         let refs = []; try { refs = Traceability.getReferrers({ kind: domain === 'AC' ? 'acFha' : 'sysFha', id: fha.internalId, systemId: system ? system.id : null }) || []; } catch(e){}
         const reqLabels = [], verifs = [];
         refs.filter(r => r.kind === 'acReq' || r.kind === 'sysReq').forEach(r => {
-            const req = (r.kind === 'acReq') ? (acReqData||[]).find(x => x.internalId === r.id) : (function(){ const s = (systemsData||[]).find(ss => ss.id === r.systemId); return s ? (s.req||[]).find(x => x.internalId === r.id) : null; })();
+            const req = (r.kind === 'acReq') ? (acReqData||[]).find(x => String(x.internalId) === String(r.id)) : (function(){ const s = (systemsData||[]).find(ss => ss.id === r.systemId); return s ? (s.req||[]).find(x => String(x.internalId) === String(r.id)) : null; })();
             reqLabels.push((req && (req.traceId || req.id)) || r.label || ('REQ-' + r.id));
             if(req) verifs.push(req.verifStatus || req.vvStatus || 'Planned');
         });
@@ -2351,6 +3049,14 @@ function _gtvReportRows(functionSubId){
             'DAL': (sevTarget && sevTarget.dal) || '',
             'Fault Tree(s)': linkedPages.map(p => p.name || ('Tree ' + p.id)).join('; ') || '—',
             'Common Cause': cc.join('; ') || '—',
+            // C1 (gap 5) — principles are part of the thread record, not a side table.
+            'Independence Principles': (function(){
+                try {
+                    if(typeof ipLedger !== 'function' || !pageIds.length) return '—';
+                    const hits = ipLedger().filter(p => (p.sources||[]).some(sc => sc && pageIds.includes(String(sc.pageId))));
+                    return hits.length ? hits.map(p => p.members.map(m => m.label).join(' ⊥ ') + ' [' + (p.state || 'identified').toUpperCase() + ']').join('; ') : '—';
+                } catch(e){ return '—'; }
+            })(),
             'Requirement(s)': reqLabels.join('; ') || '—',
             'Verification': verifs.length ? Array.from(new Set(verifs)).join(', ') : '—',
         });

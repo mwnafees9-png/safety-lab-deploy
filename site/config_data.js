@@ -65,6 +65,9 @@ const TEMPLATE_SCHEMAS = {
             { id: 'rationale',   label: 'Rationale',     type: 'longtext', builtIn: true, required: false, width: 240 },
             { id: 'state',       label: 'State',         type: 'enum',     options: ['Open','Validated','Invalidated','Closed'], builtIn: true, required: false, width: 120 },
             { id: 'linkedFunctions', label: 'Linked Functions', type: 'multiselect', refKind: 'acFunc', builtIn: true, required: false, width: 200 },
+            { id: 'type',        label: 'Type',          type: 'enum',     options: ['Human Factors','Design','Regulatory','Operational','Maintenance','Environmental','Software','Hardware','Reliability data'], builtIn: true, required: false, width: 140 },
+            { id: 'credited',    label: 'Credited posture',   type: 'text', builtIn: true, required: false, width: 150 },
+            { id: 'uncredited',  label: 'Uncredited posture', type: 'text', builtIn: true, required: false, width: 160 },
             { id: 'comments',    label: 'Comments',      type: 'longtext', builtIn: true, required: false, width: 180 }
         ]
     },
@@ -127,6 +130,9 @@ const TEMPLATE_SCHEMAS = {
             { id: 'statement',   label: 'Statement',     type: 'longtext', builtIn: true, required: true,  width: 320 },
             { id: 'rationale',   label: 'Rationale',     type: 'longtext', builtIn: true, required: false, width: 240 },
             { id: 'state',       label: 'State',         type: 'enum',     options: ['Open','Validated','Invalidated','Closed'], builtIn: true, required: false, width: 120 },
+            { id: 'type',        label: 'Type',          type: 'enum',     options: ['Human Factors','Design','Regulatory','Operational','Maintenance','Environmental','Software','Hardware','Reliability data'], builtIn: true, required: false, width: 140 },
+            { id: 'credited',    label: 'Credited posture',   type: 'text', builtIn: true, required: false, width: 150 },
+            { id: 'uncredited',  label: 'Uncredited posture', type: 'text', builtIn: true, required: false, width: 160 },
             { id: 'comments',    label: 'Comments',      type: 'longtext', builtIn: true, required: false, width: 180 }
         ]
     },
@@ -168,19 +174,49 @@ const TEMPLATE_SCHEMAS = {
             { id: 'comments',       label: 'Comments',     type: 'longtext', builtIn: true, required: false, width: 180 }
         ]
     },
-    fmea: {
-        name: 'FMEA',
-        description: 'Failure Modes and Effects Analysis (functional or piece-part).',
+    // Split 2 Aug 2026. The single `fmea` schema described a THIRD column set
+    // (item / effect / mitigation) matching neither rendered mode — the template
+    // editor was describing a table nobody has. These two mirror what the
+    // worksheet actually renders (bindings_modules.js `_fmeaRowHtml` /
+    // support_modules.js `_setFmeaTableHead`), which follows ARP4761A App J.
+    // Column ids ARE the row fields the renderer reads — the wall pins that
+    // correspondence (regression_fmea_lanes.test.js).
+    // Legacy note: overrides saved under the old `fmea` key are ignored by
+    // emptyTemplateOverrides/getEffectiveTemplate (unknown key → no-op). Nothing
+    // is lost that ever rendered: the worksheet never consumed that schema.
+    fmeaFunctional: {
+        name: 'FMEA — Functional (Table J1)',
+        description: 'Functional FMEA per ARP4761A App J Table J1 — one row per function failure mode, local → next-higher → end effect chain.',
         columns: [
-            { id: 'fmeaId',         label: 'FMEA ID',       type: 'text',     builtIn: true, required: true,  width: 110 },
-            { id: 'item',           label: 'Item / Function', type: 'text',  builtIn: true, required: true,  width: 200 },
-            { id: 'failureMode',    label: 'Failure Mode',  type: 'longtext', builtIn: true, required: true,  width: 240 },
-            { id: 'effect',         label: 'Effect',        type: 'longtext', builtIn: true, required: true,  width: 240 },
-            { id: 'detection',      label: 'Detection',     type: 'longtext', builtIn: true, required: false, width: 180 },
-            { id: 'severity',       label: 'Severity',      type: 'enum',     options: ['Catastrophic','Hazardous','Major','Minor','Negligible'], builtIn: true, required: false, width: 120 },
-            { id: 'lambda',         label: 'λ (/hr)',       type: 'number',   builtIn: true, required: false, width: 110 },
-            { id: 'mitigation',     label: 'Mitigation',    type: 'longtext', builtIn: true, required: false, width: 220 },
-            { id: 'comments',       label: 'Comments',      type: 'longtext', builtIn: true, required: false, width: 180 }
+            { id: 'fmeaId',       label: 'FMEA ID',                type: 'text',      builtIn: true, required: true,  width: 110 },
+            { id: 'funcSubId',    label: 'Sub-Function',           type: 'reference', refKind: 'acFunc', builtIn: true, required: true, width: 180 },
+            { id: 'funcMode',     label: 'Function Failure Mode',  type: 'enum',      options: ['loss','loss-of-integrity','inadvertent','degraded','loss-and-erroneous'], builtIn: true, required: true, width: 170 },
+            { id: 'localEffect',  label: 'Local Effect',           type: 'longtext',  builtIn: true, required: true,  width: 220 },
+            { id: 'nextEffect',   label: 'Next-Higher Effect',     type: 'longtext',  builtIn: true, required: false, width: 220 },
+            { id: 'endEffect',    label: 'End Effect',             type: 'longtext',  builtIn: true, required: true,  width: 220 },
+            { id: 'detection',    label: 'Detection',              type: 'longtext',  builtIn: true, required: false, width: 180 },
+            { id: 'severity',     label: 'Severity',               type: 'enum',      options: ['Catastrophic','Hazardous','Major','Minor','Negligible'], builtIn: true, required: false, width: 120 },
+            { id: 'compensating', label: 'Compensating Provision', type: 'longtext',  builtIn: true, required: false, width: 220 },
+            { id: 'phase',        label: 'Phase',                  type: 'text',      builtIn: true, required: false, width: 130 }
+        ]
+    },
+    fmeaPiecePart: {
+        name: 'FMEA — Piece-Part (Table J2)',
+        description: 'Piece-part (hardware) FMEA per ARP4761A App J Table J2 — one row per component failure mode, linked to its fault-tree basic event, with λ apportionment.',
+        columns: [
+            { id: 'fmeaId',      label: 'FMEA ID',            type: 'text',     builtIn: true, required: true,  width: 110 },
+            { id: 'beId',        label: 'FTA Link',           type: 'text',     builtIn: true, required: true,  width: 130 },
+            { id: 'part',        label: 'Component',          type: 'text',     builtIn: true, required: true,  width: 180 },
+            { id: 'mode',        label: 'Failure Mode',       type: 'longtext', builtIn: true, required: true,  width: 220 },
+            { id: 'localEffect', label: 'Local Effect',       type: 'longtext', builtIn: true, required: true,  width: 220 },
+            { id: 'nextEffect',  label: 'Next-Higher Effect', type: 'longtext', builtIn: true, required: false, width: 220 },
+            { id: 'endEffect',   label: 'End Effect',         type: 'longtext', builtIn: true, required: true,  width: 220 },
+            { id: 'detection',   label: 'Detection',          type: 'longtext', builtIn: true, required: false, width: 180 },
+            { id: 'severity',    label: 'Severity',           type: 'enum',     options: ['Catastrophic','Hazardous','Major','Minor','Negligible'], builtIn: true, required: false, width: 120 },
+            { id: 'phase',       label: 'Phase',              type: 'text',     builtIn: true, required: false, width: 130 },
+            { id: 'rate',        label: 'λ (/hr)',            type: 'number',   builtIn: true, required: false, width: 110 },
+            { id: 'time',        label: 't (hr)',             type: 'number',   builtIn: true, required: false, width: 100 },
+            { id: 'prob',        label: 'P',                  type: 'number',   builtIn: true, required: false, width: 110 }
         ]
     }
 };

@@ -283,12 +283,15 @@
         if (!ext()) { let tries = 20; const t = setInterval(() => { if (ext() || --tries <= 0) clearInterval(t); }, 300); }
     })();
 
-    // INV-28 (advisory): open mods whose blast radius has drifted since assessment
+    // INV-34 (advisory): open mods whose blast radius has drifted since assessment.
+    // (Was INV-28 — collided with event_trees.js's INV-28 barrier-independence check;
+    // invRegister replaces by id so this one was silently overwritten and never ran.
+    // Renumbered 20 Jul 2026; ids are a shared namespace — see the registry integrity test.)
     (function registerInv() {
         function reg() {
             if (typeof window.invRegister !== 'function') return false;
             window.invRegister({
-                id: 'INV-28', name: 'Assessed modifications still match the live model (no blast-radius drift)', sev: 'advisory',
+                id: 'INV-34', name: 'Assessed modifications still match the live model (no blast-radius drift)', sev: 'advisory',
                 run: () => {
                     const fails = []; let checked = 0;
                     _store().forEach(m => {
@@ -385,7 +388,7 @@
             im.counts.reqs + ' requirement(s) · ' + im.counts.cca + ' CCA row(s) · ' + im.counts.macRules + ' MAC rule(s) · ' +
             im.counts.principles + ' principle(s) · ' + (im.counts.ramTasks + im.counts.mmel + im.counts.msis) + ' R&amp;M artifact(s)' +
             '<div style="margin-top:6px;' + (reopen.length ? ' color:#8E2A2A; font-weight:600;' : ' color:var(--color-text-secondary);') + '">' +
-            (reopen.length ? '⚠ ' + reopen.length + ' hand-off(s) will reopen: ' + reopen.join(', ') : 'No handed-off gates intersect this scope.') + '</div>';
+            (reopen.length ? '⚠ ' + reopen.length + ' baselined gate(s) will reopen: ' + reopen.join(', ') : 'No baselined gates intersect this scope.') + '</div>';
     };
 
     function modWizard(seed) {
@@ -489,7 +492,7 @@
                  ['Principles', c.principles], ['Maint tasks', c.ramTasks], ['MMEL', c.mmel], ['MSIs', c.msis]]
                     .map(([l, v]) => '<span class="u-mono" style="font-size:11px; border:1px solid var(--color-border-hair); padding:2px 8px;' + (v ? '' : ' color:var(--color-text-tertiary);') + '">' + l + ' ' + v + '</span>').join('') + '</div>';
             if ((m.impact.gates || []).length) {
-                html += '<div style="padding:0 14px 10px;"><table class="data-table" style="width:100%; max-width:720px; font-size:11.5px;"><thead><tr><th>Gate</th><th>Status at assessment</th><th>Prediction</th></tr></thead><tbody>' +
+                html += '<div style="padding:0 14px 10px;"><table class="data-table" style="width:100%;  font-size:11.5px;"><thead><tr><th>Gate</th><th>Status at assessment</th><th>Prediction</th></tr></thead><tbody>' +
                     m.impact.gates.map(g => '<tr><td class="u-mono">' + _esc(g.assessment) + '</td><td>' + _esc(g.status) + '</td>' +
                         '<td style="color:' + (g.willReopen ? '#8E2A2A' : 'var(--color-text-secondary)') + ';">' + _esc(g.note) + '</td></tr>').join('') +
                     '</tbody></table></div>';

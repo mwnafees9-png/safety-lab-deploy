@@ -1,5 +1,10 @@
 // ============================================================================
-// ccf_similarity.js — v1.2 — "Confirm independence" flags for lookalike
+// ccf_similarity.js — v1.3 — "Confirm independence" flags for lookalike
+// v1.3 (A7, 22 Aug 2026): common resource ≠ common cause — a pair of
+// COMPILED/DECLARED structural events (MAC/lane provenance, macsys:/macres:
+// lids, declared resource identity) is never a lookalike finding: their
+// coupling is stated by the model and quantified exactly. Authored twins,
+// and authored-vs-compiled mixes, still flag.
 // FTA events (CCF candidate detection with engineer disposition).
 // v1.2 (AL1): signed alias canonicalization — cross-tool naming variance
 // ("EPS" carried from Jama vs "Electrical Power System" typed here) stops
@@ -91,6 +96,17 @@
         return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
     function _isLeaf(n) { return n && (n.type === 'basic' || n.type === 'undeveloped'); }
+    // A7 — an event the MODEL created or that carries a declared-resource
+    // identity. Its couplings are declared facts (MAC clauses, CRA cells),
+    // not similarity discoveries.
+    function _isStructural(n) {
+        if (!n) return false;
+        var lid = String(n.logicalId || '');
+        if (lid.indexOf('macsys:') === 0 || lid.indexOf('macres:') === 0) return true;
+        if (n._macProvenance || n._macGraft || n._laneProv) return true;
+        if (n.identity && n.identity.kind === 'resource') return true;
+        return false;
+    }
     function _lid(n) { return n.logicalId != null ? n.logicalId : n.id; }
     function _isAndFamily(n) {
         if (!n || n.type !== 'gate') return false;
@@ -123,6 +139,10 @@
             for (let j = i + 1; j < kids.length; j++) {
                 const a = kids[i], b = kids[j];
                 if (_lid(a) === _lid(b)) continue;   // same physical event = common-mode, flagged elsewhere
+                // A7 — both members compiled/declared: the model already states
+                // what couples them (or that nothing does). Demanding a signed
+                // disposition here manufactures findings from structure.
+                if (_isStructural(a) && _isStructural(b)) continue;
                 let score = 0;
                 const signals = [];
                 const na = ccfNormName(a.name), nb = ccfNormName(b.name);
@@ -411,6 +431,7 @@
     window.ccfPairs = ccfPairs;
     window.ccfPairsForNode = ccfPairsForNode;
     window.ccfNormName = ccfNormName;
+    window._ccfIsStructural = _isStructural;
     window.ccfCanonName = ccfCanonName;
     window._ccfRefreshPanel = _refreshPanel;
 })();

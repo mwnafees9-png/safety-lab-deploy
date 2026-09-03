@@ -31,6 +31,19 @@
   var Y = null, ydoc = null, chan = null, _client = null, _idb = null;
   var _started = false, _applying = false, _wsId = null, _projId = null;
   var _saveTimer = null, _pushTimer = null;
+  // 31 Aug 2026 — adopt-model posture. An AUTHORITATIVE load (open-from-cloud,
+  // server version restore) replaces the model wholesale; the CRDT doc must
+  // MIRROR that model, not union stale local/server rows back into it. Without
+  // this, the per-project IndexedDB doc resurrected a previous session's FHA
+  // rows ~6s after a cloud load (reproduced live, 31 Aug: 0 -> 193 rows).
+  // _adoptProj arms the NEXT start()-reconcile for that project (start is
+  // async: Yjs load + idb whenSynced + server state); _adoptUntil turns any
+  // pullToModel inside the window into a pushLocal, so the server-state merge
+  // and early peer broadcasts cannot undo the adoption. Yjs tombstones the
+  // deletes, so later merges of the same stale items stay deleted; items a
+  // live peer creates AFTER the window merge normally.
+  var ADOPT_WINDOW_MS = 15000;
+  var _adoptProj = null, _adoptUntil = 0;
   var _tok = (function () { try { return (crypto.randomUUID ? crypto.randomUUID() : 'c' + Math.random().toString(36).slice(2)).slice(0, 8); } catch (_) { return 'c' + Date.now().toString(36).slice(-6); } })();
 
   // Default ON (further gated by _ready: signed-in + active cloud project + not ITAR). Kill-switch:
@@ -49,6 +62,21 @@
   function _ws()        { try { return (typeof window.getActiveWorkspaceId === 'function' && window.getActiveWorkspaceId()) || null; } catch (_) { return null; } }
   function _ready()     { return flagOn() && !_itar() && _signedIn() && !!_proj() && !!_ws(); }
 
+  // H-5 (31 Aug 2026) — THE PROJECT-SWITCH WINDOW. refresh() polls every 6s, so
+  // between the moment the app adopts a different project and the next tick,
+  // _started is still true and ydoc is still bound to the PREVIOUS project's
+  // IndexedDB store (slab-crdt-<oldId>) and Realtime channel. Anything that
+  // fires in that window crosses the streams: a debounced pushLocal writes the
+  // NEW project's rows into the OLD project's doc — and broadcasts them to
+  // whoever is editing that project — while a pullToModel applies the OLD
+  // project's rows onto the NEW model. adoptModel() now collapses the window to
+  // zero for the paths that cause it, but the invariant is cheap and belongs at
+  // the two functions that move data, because any future caller can re-open it.
+  // Reads as stale when the doc's project is not the app's current project,
+  // INCLUDING when the app has no cloud project at all (closing a project must
+  // not flush the local model into the doc it just left).
+  function _docStale()  { return _projId != null && _proj() !== _projId; }
+
   // base64 <-> Uint8Array (chunked so big updates don't blow the call stack)
   function b64enc(u8) { var s = '', C = 0x8000; for (var i = 0; i < u8.length; i += C) s += String.fromCharCode.apply(null, u8.subarray(i, i + C)); return btoa(s); }
   function b64dec(b)  { var s = atob(b), u8 = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i); return u8; }
@@ -65,6 +93,7 @@
   // ---- model <-> Y.Doc -------------------------------------------------------
   function pushLocal() {
     if (!ydoc || _applying) return;
+    if (_docStale()) return;                          // H-5: never write this model into another project's doc
     var cap; try { cap = window.__crdtCapture ? window.__crdtCapture() : null; } catch (_) { cap = null; }
     if (!cap) return;
     ydoc.transact(function () {
@@ -88,6 +117,8 @@
 
   function pullToModel() {
     if (!ydoc) return;
+    if (_docStale()) return;                          // H-5: never apply another project's rows onto this model
+    if (_adoptUntil && Date.now() < _adoptUntil) { try { pushLocal(); } catch (_) {} return; }   // adopt window: model is authoritative
     var partial = {};
     COLLECTIONS.forEach(function (c) {
       var map = ydoc.getMap('col:' + c.name);
@@ -121,6 +152,11 @@
         if (origin === 'local') _broadcast('yupdate', { u: b64enc(update), t: _tok });
         else if (origin !== _idb) pullToModel();   // idb-origin updates reconciled once after load
         if (origin !== _idb) _scheduleSave();       // don't re-save what we just read back from idb
+        // H-1 (31 Aug 2026) — the GC ledger. `t` is the last time this project's
+        // local doc changed; crdt_gc will not retire a doc unless the server is
+        // confirmed to have caught up with this mark. Cheap, and it is the only
+        // evidence that distinguishes "synced and idle" from "holds offline work".
+        try { if (window.SafetyLabCRDTGC) window.SafetyLabCRDTGC.note(_projId, 't'); } catch (_) {}
       });
       _started = true;
 
@@ -130,14 +166,18 @@
       try { if (Y.IndexeddbPersistence) _idb = new Y.IndexeddbPersistence('slab-crdt-' + _projId, ydoc); } catch (_) { _idb = null; }
 
       var afterLocal = function () {
+        // adopt-model: this start follows an authoritative load of _projId — the
+        // MODEL is the working copy; the idb/server docs get mirrored to it.
+        var adopt = (_adoptProj != null && _adoptProj === _projId);
+        if (adopt) { _adoptProj = null; _adoptUntil = Date.now() + ADOPT_WINDOW_MS; }
         if (_docHasContent()) {
           // we have a local offline copy → it's the working doc; merge the server on top if online
-          pullToModel();
+          if (adopt) pushLocal(); else pullToModel();
           if (_online()) _goOnline();
         } else if (_online()) {
           // nothing local yet, online → let the server doc be authoritative (don't seed stale local)
           _loadState(function (had) {
-            if (had) pullToModel(); else pushLocal();
+            if (adopt || !had) pushLocal(); else pullToModel();
             if (!chan) _openChannel();
           });
         } else {
@@ -216,7 +256,14 @@
         var state = b64enc(Y.encodeStateAsUpdate(ydoc));
         _client.from('project_crdt')
           .upsert({ project_id: _projId, state: state, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
-          .then(function () {}).catch(function () {});
+          .then(function (res) {
+            // Only a resolved upsert with no error marks the server as caught up.
+            // supabase-js resolves on a REST error too, so `res.error` is the check.
+            if (res && res.error) return;
+            var pid = _projId;
+            try { if (window.SafetyLabCRDTGC) window.SafetyLabCRDTGC.note(pid, 's'); } catch (_) {}
+          })
+          .catch(function () {});
       } catch (_) {}
     }, 5000);
   }
@@ -246,8 +293,27 @@
     if (!_started && _ready()) start();
   }
 
+  // Called by _loadCloudProject / _applyServerRestore the moment they have
+  // replaced the model: if CRDT is already live on that project, mirror NOW;
+  // otherwise arm the next start()-reconcile. Either way the adopt window
+  // covers the merges that follow.
+  function adoptModel() {
+    var p = _proj();
+    if (!p) return;
+    _adoptUntil = Date.now() + ADOPT_WINDOW_MS;
+    if (_started && ydoc && _projId === p) { try { pushLocal(); } catch (_) {} _adoptProj = null; }
+    else {
+      _adoptProj = p;
+      // H-5 — armed BEFORE refresh(), because refresh() stops the stale doc and
+      // starts the new one, and start()'s reconcile reads _adoptProj to decide
+      // mirror-vs-merge. Synchronous so the switch costs 0ms instead of up to
+      // one 6s poll; refresh() is idempotent and no-ops when nothing changed.
+      if (_started && _projId !== p) { try { refresh(); } catch (_) {} }
+    }
+  }
+
   window.SafetyLabCRDT = {
-    start: start, stop: stop, refresh: refresh, onLocalChange: onLocalChange, enabled: flagOn,
+    start: start, stop: stop, refresh: refresh, onLocalChange: onLocalChange, enabled: flagOn, adoptModel: adoptModel,
     status: function () { return { flag: flagOn(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId }; },
     _doc: function () { return ydoc; }
   };

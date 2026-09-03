@@ -392,7 +392,7 @@
         }
         b += '<h2>2 · Completion gates</h2>';
         (Array.isArray(pkg.gates) ? pkg.gates : []).forEach(g => {
-            b += '<h3>' + _esc(g.assessment) + ' — ' + stamp(g.status || 'in work') + ' <span class="mono dim">fp ' + _esc(g.inputFingerprint) + (g.handoff ? ' · handed off by ' + _esc(g.handoff.by) + ' ' + _esc(String(g.handoff.at).slice(0, 10)) : '') + '</span></h3>' +
+            b += '<h3>' + _esc(g.assessment) + ' — ' + stamp(g.status || 'in work') + ' <span class="mono dim">fp ' + _esc(g.inputFingerprint) + (g.handoff ? ' · baselined by ' + _esc(g.handoff.by) + ' ' + _esc(String(g.handoff.at).slice(0, 10)) : '') + '</span></h3>' +
                 _tbl(['Ref', 'Objective', 'State', 'Evidence'], g.items.map(i => [_esc(i.ref), _esc(i.objective), stamp(i.state), _esc(i.detail)]));
         });
         b += '<h2>3 · Sign-off chains</h2>';
@@ -557,7 +557,7 @@
             _tbl(['Section', 'SHA-256'], Object.keys(pkg.manifest.sections).map(k => [_esc(k), '<span class="mono">' + _esc(pkg.manifest.sections[k]) + '</span>']));
 
         return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Evidence Package — ' + _esc(pkg.meta.project) + '</title><style>' +
-            'body{font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;color:#0B0B0C;background:#fff;margin:34px auto;max-width:1060px;font-size:13px;line-height:1.5;}' +
+            'body{font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;color:#0B0B0C;background:#fff;margin:34px auto;font-size:13px;line-height:1.5;}' +
             '.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;} .dim{color:#8A8B90;}' +
             '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0B0B0C;padding-bottom:14px;gap:20px;}' +
             '.ttl{font-size:22px;font-weight:700;letter-spacing:0.04em;} .sub{font-size:14px;color:#45464A;margin-top:4px;}' +
@@ -605,11 +605,11 @@
         const hist = _log();
         host.innerHTML =
             '<div style="margin:0 0 14px;"><button class="btn-cyan" onclick="evpkgGenerate()" style="font-size:14px; padding:10px 18px;">⬇ Generate evidence package</button></div>' +
-            '<div style="border:1px solid var(--color-border-hair); border-left:3px solid var(--color-text-primary); background:var(--color-surface-2); padding:12px 16px; font-size:12.5px; color:var(--color-text-secondary); max-width:760px;">' +
+            '<div style="border:1px solid var(--color-border-hair); border-left:3px solid var(--color-text-primary); background:var(--color-surface-2); padding:12px 16px; font-size:12.5px; color:var(--color-text-secondary); ">' +
             'One self-contained, print-ready HTML file assembled from the live model at the moment of export: project baseline (SHA-256), every completion gate with its input fingerprint and hand-off, every sign-off with its hash chain re-verified, the tailoring register, the assumptions register, the full AI provenance ledger and draft states, the golden thread with R&amp;M evidence, the independence-principle ledger, and a manifest with per-section hashes plus an overall package hash. ' +
             'The machine-readable JSON is embedded in the same file — the human and the tool read one artifact, and altering any byte breaks the hash.</div>' +
             '<h3 style="margin-top:var(--s-5);">Generation log</h3>' +
-            '<table class="data-table" style="width:100%; max-width:820px; font-size:12.5px;"><thead><tr><th>Generated</th><th>Package hash</th><th>Gates</th><th>Sign-offs</th><th>File</th></tr></thead><tbody>' +
+            '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Generated</th><th>Package hash</th><th>Gates</th><th>Sign-offs</th><th>File</th></tr></thead><tbody>' +
             (hist.length ? hist.slice().reverse().map(h =>
                 '<tr><td class="u-mono">' + _esc(String(h.at).slice(0, 16).replace('T', ' ')) + '</td><td class="u-mono">' + _esc(String(h.hash).slice(0, 16)) + '…</td>' +
                 '<td class="u-mono">' + h.gates + '</td><td class="u-mono">' + h.signoffs + '</td><td style="font-size:11px;">' + _esc(h.file) + '</td></tr>').join('')

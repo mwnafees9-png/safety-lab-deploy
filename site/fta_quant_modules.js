@@ -7,6 +7,20 @@
 //   - cutset engine wrappers (getCutsets, multiplyCutsets, ...)
 //   - effectiveProb / repair models / DFT Monte Carlo / uncertainty display
 // Verified: node --check, name-uniqueness sweep, DO-330 benchmark suite.
+// Phase 66.10 — apportionment weight, read safely.
+// `weight` is a PERCENTAGE of the parent budget and a sibling group is kept
+// summed to 100 by the UI. The old `(c.weight || 1)` fallback mixed scales: a
+// node that arrived without a weight (every node in a tree authored bottom-up)
+// counted as 1 against siblings holding 50, so it drew ~2% of the budget instead
+// of its equal share — and a legitimate 0% weight was silently promoted to 1.
+// A missing weight now defaults to the equal share of its own group.
+function _apportionWeight(child, siblingCount, strategy) {
+    if (strategy !== 'weighted') return 1;
+    const w = parseFloat(child && child.weight);
+    if (isFinite(w) && w >= 0) return w;
+    return 100 / Math.max(1, siblingCount || 1);
+}
+
 function allocateTopDown(node, target, strategy, visited) {
     // Phase 56.18c/d — external-source handling. When a node carries an
     // externalSource link, the inherited target P_ext is treated as a hard
@@ -59,9 +73,18 @@ function allocateTopDown(node, target, strategy, visited) {
         if (typeof _getPasteOriginTarget === 'function' && node._pasteOrigin) {
             paste = _getPasteOriginTarget(node);
         }
-        if (extSrc !== null && paste !== null) extTarget = Math.min(extSrc, paste);
-        else if (extSrc !== null) extTarget = extSrc;
-        else if (paste !== null) extTarget = paste;
+        // Phase 66.19 — a shared event's strictest requirement, computed across every
+        // allocation tree by slSharedStrictestPass(), arrives on the SAME channel as an
+        // external link or a paste snapshot. Deliberate: that branch already holds the
+        // constrained child verbatim and redistributes the remaining budget across the
+        // FREE siblings by gate logic, which is exactly "loosen it for the others".
+        // No new redistribution code, and the rebalancer is untouched.
+        let shared = null;
+        if (typeof slSharedStrictestTarget === 'function' && node._sharedStrictest) {
+            shared = slSharedStrictestTarget(node);
+        }
+        const _caps = [extSrc, paste, shared].filter(function (v) { return v !== null && isFinite(v); });
+        if (_caps.length) extTarget = Math.min.apply(null, _caps);
     } catch (e) { extTarget = null; }
     if (extTarget !== null && isFinite(extTarget)) {
         const effective = Math.min(apportionedTarget, extTarget);
@@ -71,7 +94,11 @@ function allocateTopDown(node, target, strategy, visited) {
             external:    extTarget,
             effective:   effective,
             overrun:     apportionedTarget > extTarget * 1.0001,   // 0.01% tolerance
-            headroom:    apportionedTarget < extTarget * 0.9999
+            headroom:    apportionedTarget < extTarget * 0.9999,
+            // Phase 66.19 — which constraint won, so the panel can name it rather than
+            // showing a number with no explanation.
+            source:      (node._sharedStrictest && extTarget === slSharedStrictestTarget(node)) ? 'shared-strictest'
+                       : (node._pasteOrigin ? 'paste-origin' : (node.externalSource ? 'external-source' : 'cap'))
         };
         target = effective;  // children apportion from the conservative budget
     } else {
@@ -130,10 +157,19 @@ function allocateTopDown(node, target, strategy, visited) {
                 const pp = _getPasteOriginTarget(c);
                 if (pp !== null && isFinite(pp)) paste = pp;
             }
+            // Phase 66.19 — the strictest-across-trees cap is a child constraint too.
+            // THIS is the line that makes "loosen it for the others" actually happen:
+            // a child listed here is held verbatim and its siblings absorb the released
+            // budget through the redistribute math below. Without it the capped child
+            // was simply reduced and its budget was left on the table.
+            let shared = null;
+            if (typeof slSharedStrictestTarget === 'function' && c._sharedStrictest) {
+                const sp = slSharedStrictestTarget(c);
+                if (sp !== null && isFinite(sp)) shared = sp;
+            }
             if (prescr !== null) return prescr;  // verbatim — overrides min
-            if (extSrc !== null && paste !== null) return Math.min(extSrc, paste);
-            if (extSrc !== null) return extSrc;
-            if (paste !== null) return paste;
+            const caps = [extSrc, paste, shared].filter(function (v) { return v !== null && isFinite(v); });
+            if (caps.length) return Math.min.apply(null, caps);
         } catch (e) { /* fall through */ }
         return null;
     });
@@ -158,52 +194,116 @@ function allocateTopDown(node, target, strategy, visited) {
                 freeIdx.push(i);
             }
         });
-        let wSumFree = 0;
-        freeChildren.forEach(c => wSumFree += (strategy === 'weighted' ? (c.weight || 1) : 1));
-        let remaining;
-        if (isAndFamily) {
-            remaining = fixedFactor > 0 ? target / fixedFactor : 0;
-            if (remaining > 1) remaining = 1;
-        } else {
-            remaining = fixedFactor > 0 ? (1 - target) / fixedFactor : 0;
-            if (remaining < 0) remaining = 0;
-            if (remaining > 1) remaining = 1;
-        }
-        actualChildren.forEach((child, i) => {
-            if (childExt[i] !== null) {
-                allocateTopDown(child, childExt[i], strategy, visited);
-                return;
+        // ------------------------------------------------------------- A9
+        // 21 Aug 2026 — THE AUTOMATIC LOOSEN STOPS (OPEN_ITEMS A9, ruled:
+        // "a budget that got EASIER needs no action; a budget that got HARDER
+        // does"). Until 66.12 the free siblings silently absorbed whatever a
+        // cap released. Now the default is: constrained children take their
+        // caps verbatim, free children keep the NATURAL apportionment the
+        // no-constraint path would give them, and the difference lives on the
+        // gate as _budgetMargin — a third budget state (over-committed RED /
+        // exact / under-allocated AMBER / signed reserve). The absorb still
+        // exists as an OFFERED rebalance: a signed, reversible decision in
+        // projectConfig.budgetDecisions (SLBudgetDecisions), consulted here,
+        // never applied silently.
+        let _a9Decision = null;
+        try {
+            const _BD = (typeof SLBudgetDecisions !== 'undefined') ? SLBudgetDecisions
+                      : (typeof window !== 'undefined' ? window.SLBudgetDecisions : null);
+            if (_BD && typeof _BD.decisionFor === 'function') _a9Decision = _BD.decisionFor(node.id) || null;
+        } catch (e) { _a9Decision = null; }
+
+        if (_a9Decision && _a9Decision.kind === 'absorb') {
+            // The accepted rebalance — the pre-A9 redistribute, now opt-in.
+            let wSumFree = 0;
+            freeChildren.forEach(c => wSumFree += _apportionWeight(c, freeChildren.length, strategy));
+            let remaining;
+            if (isAndFamily) {
+                remaining = fixedFactor > 0 ? target / fixedFactor : 0;
+                if (remaining > 1) remaining = 1;
+            } else {
+                remaining = fixedFactor > 0 ? (1 - target) / fixedFactor : 0;
+                if (remaining < 0) remaining = 0;
+                if (remaining > 1) remaining = 1;
             }
-            if (freeChildren.length === 0) return;
-            const w = (strategy === 'weighted') ? (child.weight || 1) : 1;
-            const ratio = wSumFree > 0 ? w / wSumFree : 0;
-            let childTarget = 0;
-            if (ratio > 0) {
-                if (isAndFamily) {
-                    childTarget = Math.pow(Math.max(0, Math.min(1, remaining)), ratio);
-                } else {
-                    childTarget = 1 - Math.pow(Math.max(0, Math.min(1, remaining)), ratio);
+            actualChildren.forEach((child, i) => {
+                if (childExt[i] !== null) {
+                    allocateTopDown(child, childExt[i], strategy, visited);
+                    return;
                 }
-            }
-            if (!isFinite(childTarget) || childTarget < 0) childTarget = 0;
-            if (childTarget > 1) childTarget = 1;
-            allocateTopDown(child, childTarget, strategy, visited);
+                if (freeChildren.length === 0) return;
+                const w = _apportionWeight(child, freeChildren.length, strategy);
+                const ratio = wSumFree > 0 ? w / wSumFree : 0;
+                let childTarget = 0;
+                if (ratio > 0) {
+                    if (isAndFamily) {
+                        childTarget = Math.pow(Math.max(0, Math.min(1, remaining)), ratio);
+                    } else {
+                        childTarget = 1 - Math.pow(Math.max(0, Math.min(1, remaining)), ratio);
+                    }
+                }
+                if (!isFinite(childTarget) || childTarget < 0) childTarget = 0;
+                if (childTarget > 1) childTarget = 1;
+                allocateTopDown(child, childTarget, strategy, visited);
+            });
+            // Flag the gate so the canvas + AutoReq know this gate's children
+            // were rebalanced — by an accepted decision, with its id.
+            node._externalRebalance = {
+                constrainedCount: actualChildren.length - freeChildren.length,
+                freeCount: freeChildren.length,
+                mode: isAndFamily ? 'AND' : 'OR'
+            };
+            node._budgetMargin = { state: 'absorbed-by-decision', decisionId: _a9Decision.id,
+                target: target, mode: isAndFamily ? 'AND' : 'OR',
+                constrainedCount: actualChildren.length - freeChildren.length, freeCount: freeChildren.length };
+            return;
+        }
+
+        // Default — no accepted absorb: caps verbatim, free children NATURAL.
+        let wSumAll = 0;
+        actualChildren.forEach(c => wSumAll += _apportionWeight(c, actualChildren.length, strategy));
+        const _naturalFor = (child) => {
+            const w = _apportionWeight(child, actualChildren.length, strategy);
+            const ratio = wSumAll > 0 ? w / wSumAll : 0;
+            let t = 0;
+            if (ratio > 0) t = isAndFamily ? Math.pow(Math.max(0, Math.min(1, target)), ratio)
+                                           : 1 - Math.pow(Math.max(0, Math.min(1, 1 - target)), ratio);
+            if (!isFinite(t) || t < 0) t = 0;
+            if (t > 1) t = 1;
+            return t;
+        };
+        let achievedFactor = 1;
+        const _a9Assigned = actualChildren.map((child, i) => {
+            const t = childExt[i] !== null ? childExt[i] : _naturalFor(child);
+            achievedFactor *= isAndFamily ? Math.max(1e-18, t) : Math.max(1e-18, 1 - t);
+            return t;
         });
-        // Flag the gate so the canvas + AutoReq know this gate's children were
-        // rebalanced because of an external constraint.
-        node._externalRebalance = {
+        const _a9Achieved = isAndFamily ? achievedFactor : 1 - achievedFactor;
+        actualChildren.forEach((child, i) => allocateTopDown(child, _a9Assigned[i], strategy, visited));
+        const _A9_TOL = 1e-4;
+        const _a9State = _a9Achieved > target * (1 + _A9_TOL) ? 'over-committed'
+                       : _a9Achieved < target * (1 - _A9_TOL) ? ((_a9Decision && _a9Decision.kind === 'reserve') ? 'reserve' : 'under-allocated')
+                       : 'exact';
+        node._budgetMargin = {
+            state: _a9State, target: target, achieved: _a9Achieved,
+            mode: isAndFamily ? 'AND' : 'OR',
             constrainedCount: actualChildren.length - freeChildren.length,
             freeCount: freeChildren.length,
-            mode: isAndFamily ? 'AND' : 'OR'
+            decisionId: _a9Decision ? _a9Decision.id : null
         };
+        // The gate is not force-closed on its target any more, so the old
+        // rebalance flag would be a lie here — it survives on the absorb path only.
+        if (node._externalRebalance) delete node._externalRebalance;
         return;
     }
 
     // No external constraints among children (or gate type doesn't have a clean
     // redistribute recipe) — original logic.
     if (node._externalRebalance) delete node._externalRebalance;
+    if (node._budgetMargin) delete node._budgetMargin;
+    const _a9VotingMargin = hasExtChild && node.gateType === 'VOTING';
     let wSum = 0;
-    actualChildren.forEach(c => wSum += (strategy === 'weighted' ? (c.weight || 1) : 1));
+    actualChildren.forEach(c => wSum += _apportionWeight(c, actualChildren.length, strategy));
     // Phase 45 — VOTING gates use the K-of-N binomial inverse so a top-down + bottom-up
     // round-trip closes the loop. For rare events P_top ≈ C(N,K) × p_child^K, so
     // p_child = (P_top / C(N,K))^(1/K). Weighted apportionment for VOTING is treated as
@@ -220,7 +320,7 @@ function allocateTopDown(node, target, strategy, visited) {
         if (votingChildP > 1) votingChildP = 1;
     }
     actualChildren.forEach(child => {
-        const w = (strategy === 'weighted') ? (child.weight || 1) : 1;
+        const w = _apportionWeight(child, actualChildren.length, strategy);
         const ratio = wSum > 0 ? w / wSum : 0;
         let childTarget = 0;
         if (ratio > 0) {
@@ -242,6 +342,46 @@ function allocateTopDown(node, target, strategy, visited) {
         }
         allocateTopDown(child, childTarget, strategy, visited);
     });
+    // ---------------------------------------------------------------- A9
+    // 21 Aug 2026 — margin for VOTING gates too (live-found on K350: every
+    // constrained gate on the flagship data is a MAC-generated k-of-N, which
+    // the redistribute recipe above never covered — so caps were honored at
+    // the node level, siblings stayed natural, and the freed budget was
+    // invisible). The assignment is already the A9 default; this records the
+    // honest tri-state: exact P(≥k of N) over the children's ASSIGNED
+    // probabilities by DP, compared to the gate's target.
+    if (_a9VotingMargin) {
+        try {
+            const ps = actualChildren.map(function (c) { const v = c.probability; return isFinite(v) ? Math.max(0, Math.min(1, v)) : 0; });
+            const kk = Math.max(1, Math.min(node.votingK || 2, ps.length));
+            let dist = [1];
+            ps.forEach(function (p) {
+                const nd = new Array(dist.length + 1).fill(0);
+                dist.forEach(function (q, di) { nd[di] += q * (1 - p); nd[di + 1] += q * p; });
+                dist = nd;
+            });
+            let achieved = 0;
+            dist.forEach(function (q, di) { if (di >= kk) achieved += q; });
+            // The VOTING inverse is the rare-event C(N,K)·p^k approximation, so
+            // the exact DP sits O(k·p_child) off a "perfect" allocation — a 1%
+            // band keeps that noise quiet; real caps move the number by factors.
+            const TOLV = 1e-2;
+            const decV = (function () { try {
+                const B = (typeof SLBudgetDecisions !== 'undefined') ? SLBudgetDecisions
+                        : (typeof window !== 'undefined' ? window.SLBudgetDecisions : null);
+                return (B && typeof B.decisionFor === 'function') ? (B.decisionFor(node.id) || null) : null;
+            } catch (e) { return null; } })();
+            node._budgetMargin = {
+                state: achieved > target * (1 + TOLV) ? 'over-committed'
+                     : achieved < target * (1 - TOLV) ? ((decV && decV.kind === 'reserve') ? 'reserve' : 'under-allocated')
+                     : 'exact',
+                target: target, achieved: achieved, mode: 'VOTING',
+                constrainedCount: childExt.filter(function (e) { return e !== null; }).length,
+                freeCount: childExt.filter(function (e) { return e === null; }).length,
+                decisionId: decV ? decV.id : null
+            };
+        } catch (e) { /* margin is advisory — never break allocation */ }
+    }
 }
 
 function calcBottomUp(node, visited = new Set()) {
@@ -394,8 +534,65 @@ function _propagateStrictestAcrossSharedEvents(rootNode) {
     return touched;
 }
 
+// Phase 66.19 — PROJECT-WIDE STRICTEST-ACROSS-TREES ROUND.
+// Two allocation rounds: the first gives every root tree its NATURAL apportionment
+// (all shared-strictest marks cleared first, so the pass can never ratchet on its own
+// output), the pass then computes the strictest rate per shared event and caps the
+// looser instances, and the second round re-allocates with those caps in place — which
+// is where the free siblings pick up the released budget, through the external-rebalance
+// branch that already existed.
+//
+// Only ROOT pages are allocated here. A page reached through a transfer gate is
+// allocated by its parent's recursion; allocating it independently would overwrite the
+// seed it inherits from the parent stub.
+let _slStrictestBusy = false;
+function _slRootAllocationPages() {
+    if (typeof ftaPages === 'undefined' || !Array.isArray(ftaPages)) return [];
+    const transferTargets = new Set();
+    ftaPages.forEach(function (p) {
+        if (!p || !p.root) return;
+        (function walk(n) {
+            if (!n) return;
+            const t = n.transferOutTo || (n.gateType === 'TRANSFER' ? n.linkedPageId : null);
+            if (t) transferTargets.add(t);
+            (n.children || n._children || []).forEach(walk);
+        })(p.root);
+    });
+    return ftaPages.filter(function (p) {
+        if (!p || !p.root || p.verifies) return false;        // allocation pages only
+        if (p.mode === 'bottom-up') return false;             // verification-side pages allocate nothing
+        if (transferTargets.has(p.id)) return false;          // reached from a parent stub
+        const t = parseFloat(p.targetP);
+        return isFinite(t) && t > 0;
+    });
+}
+function _slAllocateRootPages(pages) {
+    pages.forEach(function (p) {
+        try { allocateTopDown(p.root, parseFloat(p.targetP), ftaConfig.apportion, new Set()); } catch (_) {}
+    });
+}
+function _slSharedStrictestRound() {
+    if (_slStrictestBusy) return null;
+    if (typeof slSharedStrictestPass !== 'function' || typeof slClearSharedStrictest !== 'function') return null;
+    const pages = _slRootAllocationPages();
+    if (pages.length < 2) return null;                        // nothing to share between
+    _slStrictestBusy = true;
+    try {
+        slClearSharedStrictest();
+        _slAllocateRootPages(pages);                          // natural apportionment
+        const res = slSharedStrictestPass();
+        if (res && res.capped) _slAllocateRootPages(pages);   // re-allocate under the caps
+        return res;
+    } catch (_) { return null; }
+    finally { _slStrictestBusy = false; }
+}
+try { window._slSharedStrictestRound = _slSharedStrictestRound; } catch (_) {}
+
 function calculateAllProbabilities() {
     if (ftaConfig.mode === 'top-down') {
+        // Phase 66.19 — resolve shared events across every tree BEFORE this page is
+        // apportioned, so the active tree already sees any cap its events carry.
+        try { _slSharedStrictestRound(); } catch (_) {}
         // Phase 53.43 — apportion from the TRUE ROOT of the transfer chain so subtree roots
         // inherit their seed from the parent stub. allocateTopDown follows transferOutTo.
         const rootPage = (typeof getRootAncestorPageOfActive === 'function')
@@ -420,13 +617,23 @@ function calculateAllProbabilities() {
                 && _hasRepeatedLogicalIds(rootPage.root)
                 && typeof mcsAwareRebalance === 'function'
                 && typeof computeExactProbability === 'function') {
-                rebalanced = mcsAwareRebalance(rootPage.root, tc.topProbAtExposure);
-                // Phase 56.46 — After uniform-scale rebalance closes the budget,
-                // redistribute by Birnbaum importance so dominant cutset members
-                // carry tighter rates while marginal contributors relax. Skips
-                // for trees with >30 unique variables (latency guard).
-                if (rebalanced && typeof mcsAwareImportanceRedistribute === 'function') {
-                    mcsAwareImportanceRedistribute(rootPage.root, tc.topProbAtExposure);
+                // ENG-1 — BDD-aware rebalance is an ENHANCEMENT over strictest-
+                // propagation. If the BDD refuses (node budget on adversarial
+                // repeated-event structure), fall back to the same documented
+                // path used when the BDD engine is unavailable — never let an
+                // allocation render die on a refusal.
+                try {
+                    rebalanced = mcsAwareRebalance(rootPage.root, tc.topProbAtExposure);
+                    // Phase 56.46 — After uniform-scale rebalance closes the budget,
+                    // redistribute by Birnbaum importance so dominant cutset members
+                    // carry tighter rates while marginal contributors relax. Skips
+                    // for trees with >30 unique variables (latency guard).
+                    if (rebalanced && typeof mcsAwareImportanceRedistribute === 'function') {
+                        mcsAwareImportanceRedistribute(rootPage.root, tc.topProbAtExposure);
+                    }
+                } catch (e) {
+                    if (!(e && e.name === 'BDDExplosionError')) throw e;
+                    rebalanced = false;   // → strictest-propagation fallback below
                 }
             }
             if (!rebalanced) {
@@ -700,7 +907,22 @@ function bddCutsets(bdd, current, result) {
     current = current || [];
     result = result || [];
     if (bdd === BDD.T0) return result;
-    if (bdd === BDD.T1) { result.push([...current]); return result; }
+    if (bdd === BDD.T1) {
+        result.push([...current]);
+        // #7b hardening — the BDD 1-path enumeration had NO budget guard, so a
+        // compact BDD (thousands of nodes) with combinatorially many paths could
+        // grind the main thread indefinitely (ipLedger calls this on every Cat/Haz
+        // tree). Same discipline as the classic enumerator: ABORT deterministically
+        // at the budget, never truncate — an incomplete cut-set list would silently
+        // under-report failure combinations. P(top) is unaffected (BDD.probability
+        // never enumerates paths).
+        const _budget = (typeof _CUTSET_BUDGET !== 'undefined') ? _CUTSET_BUDGET : 200000;
+        if (result.length > _budget) {
+            if (typeof CutsetExplosionError === 'function') throw new CutsetExplosionError(result.length);
+            const e = new Error('BDD cut-set enumeration exceeds ' + _budget.toLocaleString() + ' sets.'); e.name = 'CutsetExplosionError'; e.count = result.length; throw e;
+        }
+        return result;
+    }
     // Low branch — variable is false; do not add it.
     bddCutsets(bdd.low, current, result);
     // High branch — variable is true; add it to the current cutset.
@@ -738,19 +960,25 @@ function bddMinimalCutsets(rootNode) {
 // q·β·γ·(1−δ) for tier 3, q·β·γ·δ for tier 4. Falls back to plain q when varMeta isn't passed.
 function _probMapFor(varOrder, varMeta) {
     const map = new Map();
+    // Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1) enter the
+    // BDD at p = 0, whatever λ/P a stale field might carry: the quantified
+    // P(top) is explicitly P(top | no development error). The variables still
+    // exist in the BDD so cut-set structure (and the qualitative-FFS partition)
+    // is untouched.
+    const _q = n => (n && n.eventClass === 'dev-error') ? 0 : (n && n.probability) || 0;
     if (!varMeta || !varMeta.length) {
-        varOrder.forEach((node, varIdx) => map.set(varIdx, node.probability || 0));
+        varOrder.forEach((node, varIdx) => map.set(varIdx, _q(node)));
         return map;
     }
     varMeta.forEach((meta, varIdx) => {
         if (meta.type === 'indep') {
             const n = meta.node;
-            const q = n.probability || 0;
+            const q = _q(n);
             const b = (n.ccfGroup && n.beta > 0) ? n.beta : 0;
             map.set(varIdx, q * (1 - b));
         } else if (meta.type === 'group') {
             const r = meta.refNode;
-            const q = r.probability || 0;
+            const q = _q(r);
             const beta  = r.beta  || 0;
             const gamma = r.gamma || 0;
             const delta = r.delta || 0;
@@ -773,23 +1001,64 @@ function computeExactProbability(rootNode) {
 
 // Top-level wrappers invoked by the toolbar buttons. They render results into the dedicated
 // summary divs without disturbing the main cutset summary.
+// MC-SEED — every Monte Carlo in this file is SEEDED (mulberry32, same discipline as
+// rbd_mc.js and mc_crosscheck.js). A safety figure that changes on refresh is not
+// evidence; same seed + same tree ⇒ same figure, and the seed is shown on the result.
+// Math.random() is BANNED in this file (regression-checked).
+function _mcMulberry(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+// DFT-WARM — SPARE gate parameters. Both defaults reproduce the historical
+// cold-spare / perfect-switch model EXACTLY, so an existing tree's numbers do
+// not move when this ships.
+//   spareWarmK   — dormancy factor α. A spare waiting its turn accrues failure
+//                  at λ·α: 0 = cold (no exposure while dormant — the old
+//                  model), 1 = hot (same rate standing by as carrying load),
+//                  in between = warm. Same meaning as warmK in rbd_mc.js.
+//   spareSwitchP — probability that a takeover succeeds when it is demanded.
+//                  1 = perfect switch (the old model). A failed takeover fails
+//                  the gate at the instant of the demand.
+function _spareWarmK(node) {
+    const k = parseFloat(node && node.spareWarmK);
+    return (isFinite(k) && k > 0) ? k : 0;
+}
+function _spareSwitchP(node) {
+    const p = parseFloat(node && node.spareSwitchP);
+    return (isFinite(p) && p >= 0 && p < 1) ? p : 1;
+}
+
 // Monte-Carlo simulator for Dynamic Fault Trees. Per trial:
 //   1. Sample failure time t_i ~ Exponential(λ_i) for each unique logicalId (repeated events share).
 //   2. Apply FDEP modifications: trigger fail → dependent events fail at trigger time.
 //   3. Evaluate the tree recursively with time-ordered semantics for PAND / SPARE.
-// Returns the empirical P(top fails by mission time T).
-function simulateDFT(rootNode, missionTime, N) {
+// Returns the empirical P(top fails by mission time T). Seeded: default seed 42.
+function simulateDFT(rootNode, missionTime, N, seed) {
     N = N || 20000;
-    if (!rootNode) return { p: 0, stderr: 0, N: 0, dynGateCount: 0 };
+    const usedSeed = (seed == null ? 42 : seed) >>> 0;
+    const rng = _mcMulberry(usedSeed);
+    if (!rootNode) return { p: 0, stderr: 0, N: 0, dynGateCount: 0, warmSpares: 0, imperfectSwitches: 0, seed: usedSeed };
     const eventMap = new Map(); // logicalId → representative node (for λ lookups)
     let dynGateCount = 0;
     const fdepGates = [];
+    const imperfectSpares = []; // SPARE gates with switchP < 1 — these need a coin per demand
+    let warmSpareCount = 0, imperfectSwitchCount = 0; // receipts for the result card
     (function walk(n, visited) {
         if (!n || visited.has(n.id)) return;
         visited.add(n.id);
         if (n.type === 'gate') {
             if (n.gateType === 'PAND' || n.gateType === 'SPARE' || n.gateType === 'FDEP') dynGateCount++;
             if (n.gateType === 'FDEP') fdepGates.push(n);
+            if (n.gateType === 'SPARE') {
+                if (_spareWarmK(n) > 0) warmSpareCount++;
+                if (_spareSwitchP(n) < 1) { imperfectSwitchCount++; imperfectSpares.push(n); }
+            }
             if (n.gateType === 'TRANSFER' || n.transferOutTo) {
                 const linkedId = n.transferOutTo || n.linkedPageId;
                 if (linkedId) {
@@ -805,6 +1074,13 @@ function simulateDFT(rootNode, missionTime, N) {
             if (!eventMap.has(lid)) eventMap.set(lid, n);
         }
     })(rootNode, new Set());
+
+    // Per-trial switch coins, keyed by SPARE gate id → one uniform per takeover
+    // demand. Drawn up front rather than inside evalGate so the value a given
+    // demand sees does not depend on the order the tree happens to be walked,
+    // and so a gate reached twice (shared subtree) sees the SAME switch — one
+    // physical changeover, one outcome.
+    let switchCoins = null;
 
     // Evaluate the gate's "fail time" given a snapshot of basic-event failure times.
     // Returns Infinity if the gate does not fail within finite time given the sample.
@@ -838,11 +1114,45 @@ function simulateDFT(rootNode, missionTime, N) {
             return times[times.length - 1];
         }
         if (node.gateType === 'SPARE') {
-            // Cold spare model: first child is the main; subsequent are spares activated
-            // in sequence. Each spare's sampled time IS the time-to-fail once activated.
-            const times = kids.map(c => evalGate(c, failTimes, visited));
-            let cum = times[0];
-            for (let i = 1; i < times.length; i++) cum += times[i];
+            // Spare pool: kids[0] is the primary, kids[1..] are spares taken in
+            // declared order. A spare accrues failure at λ·warmK while it waits
+            // and at λ once it carries the load; each takeover succeeds with
+            // probability switchP. warmK = 0 and switchP = 1 is the cold-spare,
+            // perfect-switch model this gate has always had — and that path
+            // touches neither the arithmetic nor the random stream below, which
+            // is why existing trees reproduce bit-for-bit.
+            const warmK = _spareWarmK(node);
+            const switchP = _spareSwitchP(node);
+            const coins = (switchP < 1 && switchCoins) ? switchCoins.get(node.id) : null;
+            let cum = evalGate(kids[0], failTimes, visited);
+            if (!isFinite(cum)) return Infinity;
+            for (let i = 1; i < kids.length; i++) {
+                const spare = kids[i];
+                let life = evalGate(spare, failTimes, visited); // time-to-fail at full rate
+                if (!isFinite(life)) return Infinity;           // a spare that never fails ⇒ gate never fails
+                // Dormancy. The sampled life is an Exp(λ) draw, so λ·life is this
+                // spare's unit-exponential quantile; subtract the hazard λ·warmK·cum
+                // it burned through while dormant. Exact, and it consumes no extra
+                // random numbers — which is what keeps the cold path identical.
+                if (warmK > 0 && spare.type !== 'gate') {
+                    const lam = getEffectiveLambda(spare);
+                    if (lam > 0) {
+                        const dormantHazard = lam * warmK * cum;
+                        const totalHazard = lam * life;
+                        // Died in standby: it is not there when demanded, so it adds
+                        // no load-carrying life. The next spare in line is tried at
+                        // the same instant (same as rbd_mc.js).
+                        if (totalHazard <= dormantHazard) continue;
+                        life = (totalHazard - dormantHazard) / lam;
+                    }
+                    // A spare that is itself a gate keeps full-rate life — a subtree's
+                    // hazard cannot be rescaled from one sampled time. Logged, not faked.
+                }
+                // Takeover demand. A spare already dead in standby is never demanded,
+                // so it never spends a coin — the `continue` above ran first.
+                if (coins && coins[i - 1] >= switchP) return cum;
+                cum += life;
+            }
             return cum;
         }
         if (node.gateType === 'FDEP')   return Infinity; // FDEPs are modifiers, never fail themselves.
@@ -866,9 +1176,22 @@ function simulateDFT(rootNode, missionTime, N) {
         eventMap.forEach((node, lid) => {
             const lambda = getEffectiveLambda(node);
             if (lambda <= 0) { failTimes.set(lid, Infinity); return; }
-            const u = Math.max(Math.random(), 1e-12);
+            const u = Math.max(rng(), 1e-12);
             failTimes.set(lid, -Math.log(u) / lambda);
         });
+        // Draw this trial's switch coins — one per takeover demand, only for gates
+        // that actually declare an imperfect switch. When no gate does, the random
+        // stream is untouched and the run is identical to the pre-DFT-WARM engine.
+        if (imperfectSpares.length) {
+            switchCoins = new Map();
+            for (const sg of imperfectSpares) {
+                const sk = sg.children || sg._children;
+                const demands = sk ? Math.max(0, sk.length - 1) : 0;
+                const arr = new Array(demands);
+                for (let i = 0; i < demands; i++) arr[i] = rng();
+                switchCoins.set(sg.id, arr);
+            }
+        }
         // Apply FDEP modifications: each trigger that fails before T forces its dependents.
         for (const fdep of fdepGates) {
             const kids = fdep.children || fdep._children;
@@ -891,7 +1214,7 @@ function simulateDFT(rootNode, missionTime, N) {
     }
     const p = failCount / N;
     const stderr = Math.sqrt(p * (1 - p) / N);
-    return { p, stderr, N, dynGateCount };
+    return { p, stderr, N, dynGateCount, warmSpares: warmSpareCount, imperfectSwitches: imperfectSwitchCount, seed: usedSeed };
 }
 
 // ==========================================
@@ -1021,6 +1344,41 @@ function setMarkovTransition(id, idx, field, val) {
     else m.transitions[idx][field] = val;
     renderMarkovModels();
 }
+// Backlog #8 — closed-form steady-state availability NEXT TO the exact Markov
+// result, clearly labeled as the estimate lane. For a single 2-state model the
+// identity A = μ/(λ+μ) is EXACT — rendered as a live cross-check of the solver.
+// The μ≫λ form (Q ≈ λ/μ) is shown only as the approximation, never the result.
+// Multi-state models get no closed-form line: the exact solver is the only lane.
+function markovClosedForm(m) {
+    if (!m || !Array.isArray(m.states) || m.states.length !== 2) return null;
+    const failedIdx = m.states.map((s, i) => s.isFailed ? i : -1).filter(i => i >= 0);
+    if (failedIdx.length !== 1) return null;
+    const bad = m.states[failedIdx[0]].name;
+    const ok = m.states[1 - failedIdx[0]].name;
+    let lam = 0, mu = 0;
+    (m.transitions || []).forEach(t => {
+        const r = parseFloat(t.rate) || 0;
+        if (r <= 0) return;
+        if (t.from === ok && t.to === bad) lam += r;
+        if (t.from === bad && t.to === ok) mu += r;
+    });
+    if (!(lam > 0 && mu > 0)) return null;
+    return { lambda: lam, mu: mu, A: mu / (lam + mu), Q: lam / (lam + mu), Qapprox: lam / mu };
+}
+function _markovClosedFormHtml(m, result) {
+    try {
+        const cf = markovClosedForm(m);
+        if (!cf) return '';
+        const match = result && result.ok && Math.abs(cf.Q - result.pFailed) <= Math.max(1e-15, Math.abs(result.pFailed) * 1e-9);
+        const tip = 'Closed-form steady state for a single 2-state repairable unit: A = μ/(λ+μ), Q = λ/(λ+μ) — exact here, so it cross-checks the solver. The μ≫λ form is an approximation only and never the result. λ and μ are the user-entered transition rates.';
+        return `<div style="font-family: monospace; font-size: 0.78em; color: var(--text-secondary); margin: -4px 0 10px;" title="${esc(tip)}">
+            closed-form steady state: A = μ/(λ+μ) = ${cf.A.toPrecision(6)} · Q = λ/(λ+μ) = ${cf.Q.toExponential(4)}
+            ${match ? '<span style="color:#1D6E3E; font-weight:600;">— matches exact solver ✓</span>' : '<span style="color:#8E2A2A; font-weight:600;">— differs from exact solver (check transitions)</span>'}
+            · μ≫λ approximation only: Q ≈ λ/μ = ${cf.Qapprox.toExponential(4)}
+            <span class="ai-est-pill" style="display:inline-block; font-size:9.5px; font-weight:600; padding:1px 7px; margin-left:6px; border-radius:999px; box-shadow:inset 0 0 0 1.5px currentColor; color:#9A6200; cursor:help;">CLOSED FORM · 2-STATE EXACT</span>
+        </div>`;
+    } catch (_) { return ''; }
+}
 function renderMarkovModels() {
     const container = document.getElementById('markov-models-container');
     if (!container) return;
@@ -1050,6 +1408,7 @@ function renderMarkovModels() {
                 <code style="font-size:0.75em; color: var(--text-secondary);">${esc(m.id)}</code>
                 <button class="action-btn btn-red" onclick="deleteMarkovModel('${esc(m.id)}')">Delete Model</button>
             </div>
+            ${_markovClosedFormHtml(m, result)}
             <div class="grid-2-col">
                 <div>
                     <h5 style="margin:0 0 6px 0; color: var(--header-color);">States</h5>
@@ -1074,10 +1433,10 @@ function getEffectiveLambda(node) {
     if (!node.lambdaByPhase || !ftaConfig.linkedFhaId) return flat;
     const isAC = ftaConfig.linkedFhaId.startsWith('AC_');
     const realId = ftaConfig.linkedFhaId.replace('AC_', '').replace('SYS_', '');
-    const fha = isAC ? acFhaData.find(x => x.internalId === realId)
-                     : getAllSysFha().find(x => x.internalId === realId);
+    const fha = isAC ? acFhaData.find(x => String(x.internalId) === String(realId))
+                     : getAllSysFha().find(x => String(x.internalId) === String(realId));
     if (!fha || !fha.phases) return flat;
-    const phases = fha.phases.split(',').map(s => s.trim()).filter(Boolean);
+    const phases = String(fha.phases).split(',').map(s => s.trim()).filter(Boolean);   // 28 Aug 2026 — array-tolerant; this reader threw inside selectNode and killed the drawer on AI trees
     let totalT = 0, weighted = 0;
     const _mpTbl = _activeTreeMissionPhases() || [];
     for (const phaseName of phases) {
@@ -1131,8 +1490,8 @@ function _activeExposurePhases(node) {
         if (ftaConfig && ftaConfig.linkedFhaId) {
             const isAC = ftaConfig.linkedFhaId.startsWith('AC_');
             const realId = ftaConfig.linkedFhaId.replace('AC_', '').replace('SYS_', '');
-            const fha = isAC ? acFhaData.find(x => x.internalId === realId)
-                             : getAllSysFha().find(x => x.internalId === realId);
+            const fha = isAC ? acFhaData.find(x => String(x.internalId) === String(realId))
+                             : getAllSysFha().find(x => String(x.internalId) === String(realId));
             if (fha && fha.phases) return norm(fha.phases);
         }
     } catch (e) { /* ignore */ }
@@ -1206,6 +1565,15 @@ function runDFTMonteCarlo() {
     const r = simulateDFT(root, ftaConfig.exposureTime || 1, 20000);
     if (!out) return;
     const dynCount = r.dynGateCount || 0;
+    // DFT-WARM receipt — a warm spare or an imperfect switch changes what the number
+    // MEANS, so the result says which spare model produced it rather than leaving the
+    // reader to open the gate and check.
+    const spareBits = [];
+    if (r.warmSpares) spareBits.push(`${r.warmSpares} warm spare gate(s) (dormant exposure charged)`);
+    if (r.imperfectSwitches) spareBits.push(`${r.imperfectSwitches} imperfect switch(es) (takeover can fail on demand)`);
+    const spareNote = spareBits.length
+        ? `<div style="margin-top:4px; color: var(--text-secondary); font-size: 0.8em;">Spare model: ${spareBits.join(' · ')}. Cold spares with a perfect switch are the default and are not listed.</div>`
+        : '';
     const note = dynCount === 0
         ? '<div style="margin-top:6px; padding:8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; color:#78350f; font-size:0.85em;">No dynamic gates (PAND / SPARE / FDEP) in this tree — Monte Carlo just confirms the BDD result. Add a dynamic gate to exercise time-ordered semantics.</div>'
         : `<div style="margin-top:6px; color: var(--text-secondary); font-size: 0.85em;">Tree contains ${dynCount} dynamic gate(s); Monte Carlo is the authoritative result for these.</div>`;
@@ -1213,7 +1581,8 @@ function runDFTMonteCarlo() {
         <strong>DFT Simulation (Monte Carlo, N = ${r.N.toLocaleString()}, mission t = ${(ftaConfig.exposureTime || 1).toFixed(3)} hr):</strong>
         <div style="margin-top:6px; font-family: monospace; font-size: 0.95em; color: #be185d;">
             P(top) ≈ ${r.p.toExponential(4)}  ±${r.stderr.toExponential(2)} (1σ)
-        </div>${note}
+        </div>
+        <div style="margin-top:4px; color: var(--text-secondary); font-size: 0.8em;">Seed ${r.seed} (mulberry32) — same seed, same tree ⇒ same figure. Reproducible by construction.</div>${spareNote}${note}
     </div>`;
 }
 
@@ -1228,7 +1597,13 @@ function runUncertaintyDisplay() {
         const kids = n.children || n._children;
         return kids ? kids.some(check) : false;
     })(root);
-    const r = runUncertaintyAnalysis(root, 10000);
+    let r;
+    try { r = runUncertaintyAnalysis(root, 10000); }
+    catch (e) {
+        // ENG-1 — BDD refusal surfaces as a message, not a dead button.
+        if (out) out.innerHTML = '<div style="padding:10px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; color:#b91c1c; font-size:0.9em;">' + esc((e && e.message) || String(e)) + '</div>';
+        return;
+    }
     if (!out) return;
     const pad = anyEF ? '' : '<div style="margin-top:6px; padding:8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; color:#78350f; font-size:0.85em;">No basic events carry an Error Factor &gt; 1 — every sample reduces to the point estimate. Set <code>lambdaEF</code> on basic events (e.g., 3 or 10) for meaningful uncertainty.</div>';
     out.innerHTML = `<div style="padding: 10px; background: var(--bg-control); border: 1px solid var(--border-primary); border-radius: 4px;">
@@ -1239,24 +1614,28 @@ function runUncertaintyDisplay() {
             5%-ile  : ${r.p05.toExponential(4)}<br>
             95%-ile : ${r.p95.toExponential(4)}<br>
             90% CI  : [${r.p05.toExponential(2)}, ${r.p95.toExponential(2)}]
-        </div>${pad}
+        </div>
+        <div style="margin-top:4px; color: var(--text-secondary); font-size: 0.8em;">Seed ${r.seed} (mulberry32) — same seed, same tree ⇒ same figure. Reproducible by construction.</div>${pad}
     </div>`;
 }
 
-// Box-Muller standard normal sample. One call returns one z ~ N(0, 1).
-function _normSample() {
-    const u1 = Math.max(Math.random(), 1e-12);
-    const u2 = Math.random();
+// Box-Muller standard normal sample from the SUPPLIED seeded rng. One call → one z ~ N(0, 1).
+// MC-SEED: no rng, no sample — Math.random() is banned in this file.
+function _normSample(rng) {
+    const u1 = Math.max(rng(), 1e-12);
+    const u2 = rng();
     return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 }
 
 // Monte-Carlo uncertainty propagation. Each basic event's λ is sampled from a lognormal
 // distribution defined by (median = node.lambda, error factor EF = node.lambdaEF or 1).
 // The BDD is built once and probMap is re-sampled every trial.
-function runUncertaintyAnalysis(rootNode, N) {
+function runUncertaintyAnalysis(rootNode, N, seed) {
     N = N || 10000;
+    const usedSeed = (seed == null ? 42 : seed) >>> 0;
+    const rng = _mcMulberry(usedSeed);
     const { bdd, varOrder, varMeta } = buildBDDFromFT(rootNode);
-    if (!varOrder.length) return { samples: [], mean: 0, median: 0, p05: 0, p95: 0, N: 0 };
+    if (!varOrder.length) return { samples: [], mean: 0, median: 0, p05: 0, p95: 0, N: 0, seed: usedSeed };
     const exposure = ftaConfig.exposureTime || 1;
     // Pre-compute σ_ln per variable: σ = ln(EF) / 1.645 (since EF = exp(1.645·σ) for 90% CI).
     // The median λ here already accounts for phase-of-flight weighting if the event uses it.
@@ -1295,7 +1674,7 @@ function runUncertaintyAnalysis(rootNode, N) {
         const probMap = new Map();
         for (let v = 0; v < meta.length; v++) {
             const m = meta[v];
-            const z = m.sigma > 0 ? _normSample() : 0;
+            const z = m.sigma > 0 ? _normSample(rng) : 0;
             const lambdaSampled = m.median * Math.exp(m.sigma * z);
             // Phase 61 — leaves without rate data (probability-only allocation budgets)
             // contribute their stored probability; there is no λ to sample.
@@ -1304,11 +1683,11 @@ function runUncertaintyAnalysis(rootNode, N) {
                 : (m.node.probability || 0);
             probMap.set(v, m.factor * q);
         }
-        samples[i] = BDD.probability(bdd, probMap, new Map());
+        samples[i] = BDD.probability(bdd, probMap);
     }
     samples.sort((a, b) => a - b);
     return {
-        samples, N,
+        samples, N, seed: usedSeed,
         mean:   samples.reduce((a, b) => a + b, 0) / N,
         median: samples[Math.floor(N * 0.5)],
         p05:    samples[Math.floor(N * 0.05)],
@@ -1333,8 +1712,8 @@ function computeImportanceMeasures(rootNode) {
         if (meta && meta.type === 'group') return; // CCF group rows are derived — skip from the per-event ranking
         const m1 = new Map(probMap); m1.set(varIdx, 1);
         const m0 = new Map(probMap); m0.set(varIdx, 0);
-        const pX1 = BDD.probability(bdd, m1, new Map());
-        const pX0 = BDD.probability(bdd, m0, new Map());
+        const pX1 = BDD.probability(bdd, m1);
+        const pX0 = BDD.probability(bdd, m0);
         const p   = probMap.get(varIdx) || 0;
         const birnbaum = pX1 - pX0;
         const fv       = pTop > 0 ? (pTop - pX0) / pTop : 0;
@@ -1437,7 +1816,9 @@ function _cutsetScopeLabel() {
 // surface the BDD-exact P(top) — quantification is independent of the cut-set listing.
 function _renderCutsetTooComplex(rootNode, err) {
     const tbody = document.getElementById('cutset-body');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="padding:12px;color:var(--text-secondary);">Cut-set enumeration aborted — this fault tree exceeds ${_CUTSET_BUDGET.toLocaleString()} combinations. Simplify deep AND nesting / large voting gates, or split the tree with transfer gates. The exact P(top) below is computed by the BDD engine and is unaffected.</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="padding:12px;color:var(--text-secondary);">
+        <b>Cut-set enumeration refused</b> — the deterministic budget guard (cap: ${_CUTSET_BUDGET.toLocaleString()} combinations${err && err.count ? '; this tree reached ' + err.count.toLocaleString() + '+' : ''}) aborted rather than truncate: an incomplete cut-set list would silently under-report failure combinations.
+        <div style="margin-top:6px;">Your options: <b>partition the tree with transfer gates</b> (each partition enumerates within its own budget); <b>reduce large VOTING gate spans</b> (k-of-n over many inputs is the classic combinatorial source); or <b>review deep AND nesting</b> — each AND level multiplies the set count. The exact P(top) below is computed by the BDD engine and is unaffected by this refusal.</div></td></tr>`;
     const tbl = document.getElementById('cutset-table'); if (tbl) tbl.style.display = 'table';
     const summary = document.getElementById('cutset-summary');
     if (summary) {
@@ -1454,3 +1835,36 @@ function _renderCutsetTooComplex(rootNode, err) {
         summary.innerHTML = html;
     }
 }
+
+// Phase 66 — ALLOCATION SELF-HEAL. Top-down budgets are DERIVED state: they must
+// never depend on what a save happened to capture. This re-derives each root
+// page's target from its linked FHA severity (cert-basis ladder) and re-runs the
+// allocator, so every consumer (canvas, bow-ties, reports, AutoReq) reads fresh
+// numbers on load and on page switch — stale or zeroed saves can no longer
+// surface as P=0 on the moat surface.
+function bakeAllAllocations() {
+    if (typeof ftaPages === 'undefined' || !Array.isArray(ftaPages)) return 0;
+    const keep = (typeof activeFTAPageId !== 'undefined') ? activeFTAPageId : null;
+    let baked = 0;
+    ftaPages.forEach(function (p) {
+        if (!p || !p.root) return;
+        // transfer-chain subtrees are seeded from their root ancestor's pass
+        if (p.transferInFrom && p.transferInFrom.sourcePageId) return;
+        try {
+            activeFTAPageId = p.id;
+            if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
+            if (typeof refreshFTARequiredTarget === 'function') refreshFTARequiredTarget();
+            calculateAllProbabilities();
+            baked++;
+        } catch (_) {}
+    });
+    try {
+        if (keep != null) {
+            activeFTAPageId = keep;
+            if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
+            if (typeof refreshFTARequiredTarget === 'function') refreshFTARequiredTarget();
+        }
+    } catch (_) {}
+    return baked;
+}
+try { window.bakeAllAllocations = bakeAllAllocations; } catch (_) {}

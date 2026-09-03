@@ -154,7 +154,45 @@
         if (e) { ix = ix.filter(function (x) { return x.h !== h; }); e.at = Date.now(); ix.push(e); _saveIdx(ix); }
     }
 
-    var _stats = { hits: 0, misses: 0, lastHash: null };
+    var _stats = { hits: 0, misses: 0, remoteHits: 0, lastHash: null };
+
+    // -------------------------------------------------- Tier-1 remote memory
+    // Org-scoped cross-device cache (Supabase, RLS owner-only — see migration
+    // ai_org_cache_tier1_memory). Best-effort and fire-and-forget throughout:
+    // offline, signed-out, or errored → the local cache carries on unchanged.
+    // Export-control: requests whose payload is taint-classified controlled
+    // never leave the browser (local cache only).
+    function _sb() {
+        try { return (typeof window !== 'undefined' && typeof window.getSupabaseClient === 'function') ? window.getSupabaseClient() : null; } catch (_) { return null; }
+    }
+    function _reqControlled(req) {
+        try {
+            if (/(controlled|itar|ear|cui|restricted)/i.test(String(req.data_classification || ''))) return true;
+            if (typeof window !== 'undefined' && typeof window.exportControlSystems === 'function') {
+                var hot = window.exportControlSystems();
+                if (hot.length) {
+                    var hay = (String(req.system || '') + ' ' + String(req.prompt || '') + ' ' + String(req.user || '')).toLowerCase();
+                    for (var i = 0; i < hot.length; i++) {
+                        var s = hot[i];
+                        if ((s.id && hay.indexOf(String(s.id).toLowerCase()) !== -1) ||
+                            (s.name && s.name.length > 3 && hay.indexOf(String(s.name).toLowerCase()) !== -1)) return true;
+                    }
+                }
+            }
+        } catch (_) {}
+        return false;
+    }
+    async function _remoteGet(h) {
+        var sb = _sb(); if (!sb) return null;
+        try {
+            var r = await sb.from('ai_org_cache').select('body').eq('h', h).maybeSingle();
+            return (r && r.data && r.data.body) || null;
+        } catch (_) { return null; }
+    }
+    function _remotePut(h, rec, feature) {
+        var sb = _sb(); if (!sb) return;
+        try { sb.from('ai_org_cache').upsert({ h: h, feature: feature || '', body: rec, at: new Date().toISOString() }).then(function () {}, function () {}); } catch (_) {}
+    }
 
     // ------------------------------------------------------ the provider wrap
     function _wrap() {
@@ -169,8 +207,18 @@
             var canon = canonicalRequest(req);
             var h = _sha256hex(canon);
             _stats.lastHash = h;
+            var controlled = _reqControlled(req);
             if (!req.noCache) {
                 var hit = _get(h);
+                // Tier-1: local miss → try the org's cross-device memory (never for controlled payloads)
+                if (!(hit && typeof hit.text === 'string') && !controlled) {
+                    var remote = await _remoteGet(h);
+                    if (remote && typeof remote.text === 'string') {
+                        hit = remote;
+                        _put(h, remote, req.feature);   // warm the local cache
+                        _stats.remoteHits++;
+                    }
+                }
                 if (hit && typeof hit.text === 'string') {
                     _stats.hits++;
                     _touch(h);
@@ -198,8 +246,12 @@
                     // noCache asks (probes, explicit fresh takes) are non-canonical:
                     // never let them overwrite the recorded draft; unparseable
                     // structured responses are never recorded either
-                    if (!req.noCache && !r.jsonError) _put(h, { text: r.text, model: r.model || '', at: new Date().toISOString(),
-                        params: { temperature: (typeof req.temperature === 'number') ? req.temperature : null, maxTokens: req.maxTokens || null } }, req.feature);
+                    if (!req.noCache && !r.jsonError) {
+                        var rec = { text: r.text, model: r.model || '', at: new Date().toISOString(),
+                            params: { temperature: (typeof req.temperature === 'number') ? req.temperature : null, maxTokens: req.maxTokens || null } };
+                        _put(h, rec, req.feature);
+                        if (!controlled) _remotePut(h, rec, req.feature);   // Tier-1: fire-and-forget, controlled stays local
+                    }
                     r.provenance = { promptHash: h, model: r.model || '', at: new Date().toISOString() };
                 }
             } catch (_) {}
@@ -216,7 +268,7 @@
     function aiCacheStats() {
         var ix = _idx();
         return { entries: ix.length, bytes: ix.reduce(function (a, e) { return a + (e.bytes || 0); }, 0),
-            hits: _stats.hits, misses: _stats.misses, lastHash: _stats.lastHash };
+            hits: _stats.hits, misses: _stats.misses, remoteHits: _stats.remoteHits, lastHash: _stats.lastHash };
     }
     function aiCacheClear() {
         _idx().forEach(function (e) { try { localStorage.removeItem(PREFIX + e.h); } catch (_) {} });

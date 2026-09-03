@@ -1,0 +1,114 @@
+// ============================================================================
+// zsa_walkthrough.js — v1.0 — ZSA-B: guided per-zone ZSA walkthrough (ARP4761A
+// Appendix K, Table K1 checkpoints + §K.4.5.1 inspection points). BORN MODULAR:
+// new file, opens a modal from the Zonal Model page; writes standard zsaData
+// rows (so findings also appear in the ZSA tab and feed the physical cross-check).
+//
+// The "Housed-equipment inherent hazards" checkpoint is auto-seeded from
+// EQUIP_HAZARDS.zoneHazards(zoneId) — the inherent hazards of every box in the
+// zone — so the analyst dispositions real candidates instead of a blank page.
+//
+// Checkpoint labels are paraphrased from ARP4761A Table K1 / §K.4.5.1 (facts/
+// methodology, our words). Rows are tagged zsaCheckpoint + origin:'walkthrough'.
+// ============================================================================
+(function () {
+    'use strict';
+    function _esc(s) { if (typeof esc === 'function') return esc(s); return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function _zsa() { if (typeof zsaData === 'undefined') { window.zsaData = window.zsaData || []; return window.zsaData; } return zsaData; }
+    function _save() { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} try { if (typeof renderZSA === 'function') renderZSA(); } catch (_) {} }
+    function _rowId() { return (typeof newRowId === 'function') ? newRowId() : ('zw-' + Date.now() + Math.random().toString(36).slice(2, 6)); }
+
+    // ARP4761A Table K1 + §K.4.5.1 checkpoint categories
+    var CHECKPOINTS = [
+        { id: 'sep',       label: 'Separations & clearances',            desc: 'Redundancy independence and physical clearances between systems, routes, moving parts, cables and harnesses.' },
+        { id: 'maint',     label: 'Maintenance & servicing',            desc: 'Fool-proofing/keying, chafing prevention, accessibility, servicing damage, hazards with power on.' },
+        { id: 'drain',     label: 'Drainage',                            desc: 'Incorrect drainage, accumulation where dangerous, leak paths crossing ignition sources, outlet re-ingestion.' },
+        { id: 'mat',       label: 'Materials compatibility',             desc: 'Compatibility of materials exposed to system fluids.' },
+        { id: 'failcons',  label: 'Failure consequences (secondary damage)', desc: 'Flailing shafts, jams, rotating debris, HP/HT leaks, shorting, burst, stored-energy release, thermal, flammable leaks near heat.' },
+        { id: 'chafe',     label: 'Mechanical clearance / chafing',      desc: 'Abrasion/interference with moving parts accounting for assembly variability and flex.' },
+        { id: 'envcompat', label: 'Environmental & material compatibility', desc: 'Zone temperature, humidity, contamination vs. equipment qualification.' },
+        { id: 'access',    label: 'Accessibility & maintenance-error',   desc: 'Damage from tools/GSE, incorrect reinstallation, use of structure as hand/footholds.' },
+        { id: 'install',   label: 'Installation-guideline conformance',  desc: 'Correct fixtures, routing to avoid condensation tracking, adequate bend radii.' },
+        { id: 'housed',    label: 'Housed-equipment inherent hazards',   desc: 'Physical hazards inherent to the boxes in this zone (failed and unfailed) that threaten neighbours.' },
+        { id: 'intrazone', label: 'Intra-zone interactions (EM etc.)',   desc: 'Undesirable interactions, e.g. an emitter next to equipment sensitive to that spectrum.' },
+        { id: 'crosszone', label: 'Cross-zonal interactions',           desc: 'Effects propagating across zone boundaries, especially where boundaries don’t follow structure.' }
+    ];
+
+    function _zone(zoneId) { return (window.ZONES && window.ZONES.get(zoneId)) || null; }
+    function _findings(zoneId, cpId) { return _zsa().filter(function (r) { return r && r.zoneId === zoneId && r.zsaCheckpoint === cpId; }); }
+
+    window._zsaRecordFinding = function (zoneId, cpId) {
+        var cp = CHECKPOINTS.find(function (c) { return c.id === cpId; });
+        var desc = prompt('Finding / threat — ' + (cp ? cp.label : cpId) + ':'); if (desc === null || !desc.trim()) return;
+        var mit = prompt('Mitigation / disposition (optional):', '') || '';
+        _zsa().push({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: cpId, origin: 'walkthrough',
+            desc: desc.trim(), equip: '', severity: (typeof normSeverity === 'function') ? normSeverity('Major') : 'Major',
+            interference: '', mitigation: mit.trim() });
+        _save(); _renderModal(zoneId);
+    };
+    window._zsaRecordHazard = function (zoneId, hazId) {
+        var hz = (window.EQUIP_HAZARDS ? window.EQUIP_HAZARDS.zoneHazards(zoneId) : []).find(function (h) { return h.id === hazId; });
+        if (!hz) return;
+        var from = hz.from.map(function (f) { return f.name; }).join(', ');
+        _zsa().push({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: 'housed', origin: 'walkthrough',
+            desc: hz.name + ' (' + hz.mechanism + ', ' + hz.state + ')', equip: from,
+            severity: (typeof normSeverity === 'function') ? normSeverity('Major') : 'Major',
+            interference: hz.threat, mitigation: '' });
+        _save(); _renderModal(zoneId);
+    };
+    window._zsaDeleteFinding = function (zoneId, internalId) {
+        var a = _zsa(); var i = a.findIndex(function (r) { return r && String(r.internalId) === String(internalId); }); if (i >= 0) a.splice(i, 1);
+        _save(); _renderModal(zoneId);
+    };
+    window._zsaCloseModal = function () { var m = document.getElementById('zsa-wt-modal'); if (m) m.remove(); };
+
+    function _renderModal(zoneId) {
+        var m = document.getElementById('zsa-wt-modal'); if (!m) return;
+        var z = _zone(zoneId) || { code: '', name: '' };
+        var hazards = (window.EQUIP_HAZARDS ? window.EQUIP_HAZARDS.zoneHazards(zoneId) : []);
+        var recordedHaz = _findings(zoneId, 'housed').map(function (r) { return r.desc; });
+        var body = CHECKPOINTS.map(function (cp) {
+            var fs = _findings(zoneId, cp.id);
+            var seeded = '';
+            if (cp.id === 'housed' && hazards.length) {
+                seeded = '<div style="margin:4px 0 6px;">' + hazards.map(function (h) {
+                    var already = recordedHaz.some(function (d) { return d.indexOf(h.name) === 0; });
+                    return '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:2px 0;">' +
+                        '<span style="color:#8E2A2A;">⚠</span><span>' + _esc(h.name) + ' <i style="color:#55555C;">(' + _esc(h.mechanism) + ' • ' + _esc(h.from.map(function (f) { return f.name; }).join(', ')) + ')</i></span>' +
+                        (already ? '<span style="color:#1E7A34;margin-left:auto;">recorded ✓</span>'
+                                 : '<button onclick="_zsaRecordHazard(\'' + zoneId + '\',\'' + h.id + '\')" style="margin-left:auto;font-size:10.5px;padding:1px 7px;border:1px solid #D8DEE9;border-radius:5px;background:transparent;color:#0B2545;cursor:pointer;">record</button>') +
+                        '</div>'; }).join('') + '</div>';
+            }
+            var findings = fs.map(function (r) {
+                return '<div style="font-size:11.5px;padding:2px 0;display:flex;gap:8px;">' +
+                    '<span>• ' + _esc(r.desc) + (r.mitigation ? ' — <i style="color:#55555C;">' + _esc(r.mitigation) + '</i>' : '') + '</span>' +
+                    '<button onclick="_zsaDeleteFinding(\'' + zoneId + '\',\'' + r.internalId + '\')" style="margin-left:auto;color:#8E2A2A;border:none;background:transparent;cursor:pointer;font-size:12px;">×</button></div>';
+            }).join('');
+            return '<div style="border-bottom:1px solid #EEF2F8;padding:8px 0;">' +
+                '<div style="display:flex;align-items:center;gap:8px;">' +
+                  '<b style="font-size:12.5px;color:#0B2545;">' + _esc(cp.label) + '</b>' +
+                  (fs.length ? '<span style="font-size:10.5px;color:#1E7A34;">' + fs.length + ' finding(s)</span>' : '') +
+                  '<button onclick="_zsaRecordFinding(\'' + zoneId + '\',\'' + cp.id + '\')" style="margin-left:auto;font-size:10.5px;padding:1px 8px;border:1px solid #007AFF;border-radius:5px;background:transparent;color:#007AFF;cursor:pointer;">+ finding</button>' +
+                '</div>' +
+                '<div style="font-size:11px;color:#55555C;margin-top:2px;">' + _esc(cp.desc) + '</div>' +
+                seeded + findings + '</div>';
+        }).join('');
+        m.querySelector('#zsa-wt-body').innerHTML = body;
+    }
+
+    window.zsaWalkthrough = function (zoneId) {
+        window._zsaCloseModal();
+        var z = _zone(zoneId) || { code: '', name: '' };
+        var ov = document.createElement('div'); ov.id = 'zsa-wt-modal';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:2147483601;display:flex;align-items:center;justify-content:center;background:rgba(8,12,20,.5);padding:24px;';
+        ov.innerHTML = '<div style="background:#fff;color:#202024;border-radius:14px;max-width:640px;width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.32);">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #EEF2F8;">' +
+              '<div><div style="font-weight:700;color:#0B2545;">ZSA walkthrough — zone ' + _esc(z.code) + ' ' + _esc(z.name) + '</div>' +
+              '<div style="font-size:11.5px;color:#55555C;">ARP4761A Appendix K — walk each checkpoint; housed-equipment hazards are pre-listed.</div></div>' +
+              '<button onclick="_zsaCloseModal()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#888;">&times;</button></div>' +
+            '<div id="zsa-wt-body" style="padding:12px 18px;overflow:auto;"></div></div>';
+        ov.addEventListener('mousedown', function (e) { if (e.target === ov) ov.remove(); });
+        document.body.appendChild(ov);
+        _renderModal(zoneId);
+    };
+})();

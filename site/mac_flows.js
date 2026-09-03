@@ -191,7 +191,7 @@
                 html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th style="width:80px;">Lane</th><th>From</th><th style="width:90px;"></th><th>To</th><th>Note</th><th style="width:50px;"></th></tr></thead><tbody>' +
                     _flowRows(rule) + _addRow(rule) + '</tbody></table>';
             } else {
-                html += '<div style="font-size:11px; color:var(--color-text-tertiary);">Availability-only (L0–L2). Switch on a lane to type deviations.</div>';
+                html += '<div style="font-size:11px; color:var(--color-text-tertiary);">Availability-only (fidelity F0–F2). Switch on a lane to type deviations.</div>';
             }
             html += '</div>';
         });

@@ -539,7 +539,7 @@
         let missing = [];
         try { if (!e.validate(cs).length) missing = e.inv18(cs).findings; } catch (_) {}
         const missSet = new Set(missing.map(f => f.actionId));
-        let svg = '<svg viewBox="0 0 680 300" style="width:100%; max-width:720px; display:block; margin:0 auto; font-family:inherit;">' +
+        let svg = '<svg viewBox="0 0 680 300" style="width:100%;  display:block; margin:0 auto; font-family:inherit;">' +
             '<defs>' +
             '<marker id="stpa-arr-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="' + NAVY + '"/></marker>' +
             '<marker id="stpa-arr-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="' + GREEN + '"/></marker>' +
@@ -1080,7 +1080,7 @@
     function _card(title, sub, body) {
         return '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); margin-bottom:16px;">' +
             '<div style="padding:9px 14px; border-bottom:2px solid var(--color-text-primary);"><b>' + esc(title) + '</b></div>' +
-            '<div style="padding:8px 14px 4px; font-size:12px; color:var(--color-text-secondary); max-width:980px;">' + sub + '</div>' +
+            '<div style="padding:8px 14px 4px; font-size:12px; color:var(--color-text-secondary); ">' + sub + '</div>' +
             '<div style="padding:8px 14px 14px;">' + body + '</div></div>';
     }
     function _refuseCard(title, errs) {
@@ -1200,8 +1200,10 @@
         else if (_step === 5) body = stepConstraints();
         else body = stepConformance();
         view.innerHTML =
-            '<div class="header-with-export"><h3>STPA — system lane <span class="u-mono" style="font-size:10.5px; font-weight:700; color:' + VIOLET + '; border:1px solid ' + VIOLET + '55; background:' + VIOLET + '0D; border-radius:5px; padding:2px 8px; vertical-align:3px;">INTERACTION HAZARDS</span></h3></div>' +
-            '<p style="font-size:12.5px; color:var(--color-text-secondary); max-width:980px;">System-Theoretic Process Analysis — the lane <b>above</b> the component lanes: FMEA is the bottom feed, FHA/FTA the classical spine, STPA catches what they structurally miss — hazards where every component works and the system still fails. Complements, never replaces.</p>' +
+            '<div class="header-with-export"><h3>STPA — system lane <span class="u-mono" style="font-size:10.5px; font-weight:700; color:' + VIOLET + '; border:1px solid ' + VIOLET + '55; background:' + VIOLET + '0D; border-radius:5px; padding:2px 8px; vertical-align:3px;">INTERACTION HAZARDS</span></h3>' +
+            // 30 Aug 2026 - export parity batch 2b
+            '<button class="btn-cyan" style="font-size:11px;" onclick="exportData(&quot;STPA_UCAs&quot;, &quot;csv&quot;)" title="Export the UCA register (dispositions, J3307 context clauses, spine links) as CSV">&#8595; Export CSV</button></div>' +
+            '<p style="font-size:12.5px; color:var(--color-text-secondary); ">System-Theoretic Process Analysis — the lane <b>above</b> the component lanes: FMEA is the bottom feed, FHA/FTA the classical spine, STPA catches what they structurally miss — hazards where every component works and the system still fails. Complements, never replaces.</p>' +
             stepRail(c) + body;
     }
 

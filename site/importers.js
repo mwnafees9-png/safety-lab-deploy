@@ -781,11 +781,10 @@ const ExcelImport = (function() {
                 // Phase 53.42 — mirror what {ac,sys}FcimCRUD.afterChange does so the FHA tab's
                 // FC-ID dropdown can find these IDs. The sysFcim branch was missing before,
                 // which made imported sys-FCIM IDs invisible to the SFHA edit form.
-                // "N/A" rows document an inapplicable crew-unaware case and must not trace
-                // forward, so skip the mirror for them (consistent with _pushExtractedFCs).
-                if (rec.awareness === 'N/A') {
-                    // non-tracing: documentation only
-                } else if (kind === 'acFcim') {
+                // "N/A" marks an inapplicable crew-UNAWARE case, not an absent failure
+                // condition — so imported N/A rows trace forward like any other.
+                // Corrected 1 Aug 2026 alongside _pushExtractedFCs, which this mirrors.
+                if (kind === 'acFcim') {
                     if (tl.id) acExtractedFCs.push({ id: tl.id, desc: tl.desc });
                     if (pl.id) acExtractedFCs.push({ id: pl.id, desc: pl.desc });
                     if (mm.id) acExtractedFCs.push({ id: mm.id, desc: mm.desc });
@@ -1429,6 +1428,14 @@ const JamaConnect = (function() {
         try { if (typeof renderRequirementsRepository === 'function') renderRequirementsRepository(); } catch (_) {}
         try { if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) {}
         if (typeof showToast === 'function') showToast('Imported ' + added + ' requirement' + (added === 1 ? '' : 's') + ' from Jama.', 'success', 3500);
+        // Bow-ties auto-complete their evidence from newly imported requirements
+        // (barrier ↔ requirement auto-linking, incl. Jama document keys).
+        try {
+            if (typeof window.btAutoLinkAll === 'function') {
+                const n = window.btAutoLinkAll();
+                if (n && typeof showToast === 'function') showToast('Bow-tie barriers auto-linked to ' + n + ' imported requirement' + (n === 1 ? '' : 's') + '.', 'info', 3500);
+            }
+        } catch (_) {}
     }
 
     function close() {
@@ -1437,6 +1444,56 @@ const JamaConnect = (function() {
         _state = { projects: [], itemTypes: [], items: [], selectedProjectId: '', selectedItemTypeId: '' };
     }
 
-    return { openImportModal, connect, loadItems, commit, close, _renderStep, _setProject, _setItemType, _toggleItem };
+    // ---- public API — used by the bow-tie enrichment and the live bridge
+    // (jama_bridge.js). Saved config, no modal.
+    function isConfigured() { _loadConfig(); return !!(_config.baseUrl && _config.username && _config.password); }
+    function _requireConfig() { _loadConfig(); if (!isConfigured()) throw new Error('Jama is not connected — open Import from Jama and connect first.'); }
+    async function searchItems(query, max) {
+        _requireConfig();
+        const res = await _apiGet('/rest/v1/abstractitems?contains=' + encodeURIComponent(String(query || '')) + '&maxResults=' + Math.min(50, max || 20));
+        return (res && res.data) || [];
+    }
+    async function _apiPost(path, body) {
+        _requireConfig();
+        const url = (_config.baseUrl || '').replace(/\/$/, '') + path;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Authorization': _basicAuthHeader(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            mode: 'cors',
+            body: JSON.stringify(body)
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error('Jama API ' + res.status + ': ' + (JSON.stringify(json).slice(0, 200) || res.statusText));
+        return json;
+    }
+    async function getProjects() { _requireConfig(); const r = await _apiGet('/rest/v1/projects?maxResults=50'); return (r && r.data) || []; }
+    async function getItemTypes() { _requireConfig(); const r = await _apiGet('/rest/v1/itemtypes?maxResults=50'); return (r && r.data) || []; }
+    // Create an item. parentItemId (a set/folder) is strongly recommended — many
+    // Jama instances refuse item creation at project root.
+    async function createItem(projectId, itemTypeId, name, description, parentItemId) {
+        const body = {
+            project: Number(projectId), itemType: Number(itemTypeId),
+            location: { parent: parentItemId ? { item: Number(parentItemId) } : { project: Number(projectId) } },
+            fields: { name: String(name || '').slice(0, 254), description: String(description || '') }
+        };
+        const r = await _apiPost('/rest/v1/items', body);
+        return (r && r.meta && (r.meta.id != null ? r.meta.id : (r.meta.location || '').split('/').pop())) || null;
+    }
+    // Everything the program traced to this item, both directions — the tier-3 graph.
+    async function getRelated(itemId) {
+        _requireConfig();
+        const out = [];
+        for (const dir of ['upstreamrelated', 'downstreamrelated']) {
+            try { const r = await _apiGet('/rest/v1/items/' + Number(itemId) + '/' + dir + '?maxResults=50'); ((r && r.data) || []).forEach(x => x && out.push(x)); } catch (_) {}
+        }
+        return out;
+    }
+    async function getItem(itemId) { _requireConfig(); const r = await _apiGet('/rest/v1/items/' + Number(itemId)); return (r && r.data) || null; }
+
+    function getBaseUrl() { _loadConfig(); return (_config.baseUrl || '').replace(/\/$/, ''); }
+
+    return { openImportModal, connect, loadItems, commit, close, isConfigured, searchItems,
+        getProjects, getItemTypes, createItem, getRelated, getItem, getBaseUrl,
+        _renderStep, _setProject, _setItemType, _toggleItem };
 })();
 window.JamaConnect = JamaConnect;

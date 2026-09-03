@@ -143,11 +143,45 @@ window.SafetyLabAiAssumptions = {
             const text = String(entry.text == null ? '' : entry.text).trim();
             if (!text) return null;
             const analysis = String(entry.analysis || '').trim();
+            // #1b — sanitize walkthrough fields + citations, then let the deterministic
+            // core VERIFY every citation quote against the project's source documents
+            // (ai_badges.js verifier; the AI never certifies its own quotes). Guarded —
+            // absent verifier ⇒ citations stored unverified, still visible.
+            const _rat1b = String(entry.rationale || '').trim().slice(0, 500);
+            const _ifw1b = String(entry.ifWrong || '').trim().slice(0, 500);
+            const _use1b = String(entry.usedFor || '').trim().slice(0, 300);
+            let _cits1b = (Array.isArray(entry.citations) ? entry.citations : []).map(function (c) {
+                if (!c || typeof c !== 'object') return null;
+                const q = String(c.quote || '').trim().slice(0, 400);
+                if (!q) return null;
+                return { doc: String(c.doc || '').trim().slice(0, 200), quote: q, where: String(c.where || '').trim().slice(0, 160),
+                         verified: false, docFound: false, matchedDoc: '' };
+            }).filter(Boolean).slice(0, 8);
+            try {
+                if (_cits1b.length && window.AiBadges && typeof window.AiBadges.verifyCitations === 'function') {
+                    const _docs1b = (window.SafetyLabSourceDocs && typeof window.SafetyLabSourceDocs.list === 'function') ? window.SafetyLabSourceDocs.list() : [];
+                    _cits1b = window.AiBadges.verifyCitations(_cits1b, _docs1b);
+                }
+            } catch (_) {}
+            const _basis1b = _cits1b.length ? 'cited' : 'uncited';
             const key = analysis + '\u0000' + _aiAsmNormText(text);
             const existing = aiAssumptions.find(function (a) {
                 return a && (String(a.analysis || '') + '\u0000' + _aiAsmNormText(a.text)) === key;
             });
-            if (existing) return existing;  // keep — don't duplicate on re-runs
+            if (existing) {
+                // keep — don't duplicate on re-runs; but if a re-run supplies the RICHER
+                // record (citations / rationale) an older row lacks, carry it forward.
+                // Triage (status / note) is never touched.
+                try {
+                    if ((!Array.isArray(existing.citations) || !existing.citations.length) && _cits1b.length) existing.citations = _cits1b;
+                    if (!existing.rationale && _rat1b) existing.rationale = _rat1b;
+                    if (!existing.ifWrong && _ifw1b) existing.ifWrong = _ifw1b;
+                    if (!existing.usedFor && _use1b) existing.usedFor = _use1b;
+                    if (existing.basis == null) existing.basis = (Array.isArray(existing.citations) && existing.citations.length) ? 'cited' : 'uncited';
+                    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+                } catch (_) {}
+                return existing;
+            }
             let type = String(entry.type || 'other').trim().toLowerCase();
             if (_AI_ASM_TYPES.indexOf(type) === -1) type = 'other';
             let status = String(entry.status || 'Open').trim();
@@ -165,13 +199,46 @@ window.SafetyLabAiAssumptions = {
                 type: type,
                 status: status,
                 model: String(entry.model || ''),
+                // Skills V1 (29 Aug 2026) — which drafting instructions were live
+                // when the model declared this premise (skillId@vN#hash from the
+                // ai_skills.js registry, resolved via the entry's analysis key —
+                // '' when the registry is absent or the analysis has no skill).
+                skill: (function () {
+                    try {
+                        if (typeof window !== 'undefined' && window.SLABSkills && typeof window.SLABSkills.stampFor === 'function') {
+                            // V2 — basis-aware: a Part 23 project's variant (when one
+                            // exists) stamps distinctly. basisFrom is the registry's
+                            // single implementation of the basis key.
+                            const _bk = (typeof window.SLABSkills.basisFrom === 'function')
+                                ? window.SLABSkills.basisFrom(typeof projectConfig !== 'undefined' ? projectConfig : null) : '';
+                            return window.SLABSkills.stampFor(analysis, _bk) || '';
+                        }
+                    } catch (_) {}
+                    return '';
+                })(),
                 at: (typeof entry.at === 'number') ? entry.at : Date.now(),
-                note: String(entry.note || '')
+                note: String(entry.note || ''),
+                // #1b — walkthrough + verified-citation payload.
+                rationale: _rat1b, ifWrong: _ifw1b, usedFor: _use1b,
+                citations: _cits1b, basis: _basis1b, promotedTo: ''
             };
             aiAssumptions.push(stamped);
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
             _aiAsmRerenderIfOpen();
             return stamped;
+        } catch (_) { return null; }
+    },
+    // #1b — record that a Confirmed entry was promoted into the engineer-managed
+    // assumptions register (the ledger keeps the audit copy; asmId links them).
+    markPromoted: function (id, asmId) {
+        try {
+            if (!Array.isArray(aiAssumptions)) return null;
+            const row = aiAssumptions.find(function (a) { return a && a.id === id; });
+            if (!row) return null;
+            row.promotedTo = String(asmId || '');
+            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+            _aiAsmRerenderIfOpen();
+            return row;
         } catch (_) { return null; }
     },
     list: function () { try { return Array.isArray(aiAssumptions) ? aiAssumptions.slice() : []; } catch (_) { return []; } },
@@ -489,7 +556,7 @@ window.certBasisDisplayLabel = certBasisDisplayLabel;
 
 // ===========================================================================
 // Phase 30.1 — Particular Risk Catalog
-// Curated reference list of canonical particular risks per ARP 4761A §5.3.3,
+// Curated reference list of canonical particular risks per ARP4761A App L,
 // AC 25.1309-1B §12, AMC 25.1309 §8.2, and the threat-specific FAA/EASA ACs.
 // This is a *reference library*, not a propagation model — selecting an entry
 // pre-fills the PRA form with a typical threat description, default zones of
@@ -793,11 +860,11 @@ const formConfigs = {
     acFunc: { submitBtn: 'btn-submit-ac-func', cancelBtn: 'btn-cancel-ac-func', defaultText: 'Log Aircraft Function', fields: ['ac-func-id','ac-func-name','ac-func-def','ac-subfunc-id','ac-subfunc-name','ac-subfunc-def'] },
     acFcim: { submitBtn: 'btn-submit-ac-fcim', cancelBtn: 'btn-cancel-ac-fcim', defaultText: 'Log AC FCIM', fields: ['ac-fcim-subfunc','ac-fcim-crew','ac-fcim-tl-id','ac-fcim-tl-desc','ac-fcim-pl-id','ac-fcim-pl-desc','ac-fcim-m-id','ac-fcim-m-desc'] },
     acFha: { submitBtn: 'btn-submit-ac-fha', cancelBtn: 'btn-cancel-ac-fha', defaultText: 'Log Aircraft FHA', fields: ['ac-fha-subfunc','ac-fha-fcid','ac-fha-fcdesc','ac-fha-eff-ac','ac-fha-eff-crew','ac-fha-eff-pax','ac-fha-sev','ac-fha-asm','ac-fha-comments'], checkboxes: 'ac-fha-phases' },
-    acReq: { submitBtn: 'btn-submit-ac-req', cancelBtn: 'btn-cancel-ac-req', defaultText: 'Log Requirement', fields: ['ac-req-trace', 'ac-req-level','ac-req-type','ac-req-text','ac-req-rat'] },
+    acReq: { submitBtn: 'btn-submit-ac-req', cancelBtn: 'btn-cancel-ac-req', defaultText: 'Log Requirement', fields: ['ac-req-trace', 'ac-req-level','ac-req-type','ac-req-analysis','ac-req-text','ac-req-rat'] },
     sysFunc: { submitBtn: 'btn-submit-sys-func', cancelBtn: 'btn-cancel-sys-func', defaultText: 'Log System Function', fields: ['sys-func-id','sys-func-name','sys-func-def'] },
     sysFcim: { submitBtn: 'btn-submit-sys-fcim', cancelBtn: 'btn-cancel-sys-fcim', defaultText: 'Log System FCIM', fields: ['sys-fcim-subfunc','sys-fcim-crew','sys-fcim-tl-id','sys-fcim-tl-desc','sys-fcim-pl-id','sys-fcim-pl-desc','sys-fcim-m-id','sys-fcim-m-desc'] },
     sysFha: { submitBtn: 'btn-submit-sys-fha', cancelBtn: 'btn-cancel-sys-fha', defaultText: 'Log System FHA', fields: ['sys-fha-ac-trace','sys-fha-subfunc','sys-fha-fcid','sys-fha-fcdesc','sys-fha-eff-ac','sys-fha-eff-crew','sys-fha-eff-pax','sys-fha-sev','sys-fha-asm','sys-fha-comments'], checkboxes: 'sys-fha-phases' },
-    sysReq: { submitBtn: 'btn-submit-sys-req', cancelBtn: 'btn-cancel-sys-req', defaultText: 'Log Sys Requirement', fields: ['sys-req-trace', 'sys-req-level','sys-req-type','sys-req-text','sys-req-rat'] },
+    sysReq: { submitBtn: 'btn-submit-sys-req', cancelBtn: 'btn-cancel-sys-req', defaultText: 'Log Sys Requirement', fields: ['sys-req-trace', 'sys-req-level','sys-req-type','sys-req-analysis','sys-req-text','sys-req-rat'] },
     pra: { submitBtn: 'btn-submit-pra', cancelBtn: 'btn-cancel-pra', defaultText: 'Log PRA Evaluation', fields: ['pra-id','pra-threat','pra-desc','pra-systems','pra-csfl-impact','pra-mitigation'] },
     zsa: { submitBtn: 'btn-submit-zsa', cancelBtn: 'btn-cancel-zsa', defaultText: 'Log Zonal Analysis', fields: ['zsa-zone-id','zsa-desc','zsa-equip','zsa-severity','zsa-interference','zsa-mitigation'] },
     cma: { submitBtn: 'btn-submit-cma', cancelBtn: 'btn-cancel-cma', defaultText: 'Log CMA Entry', fields: ['cma-id','cma-subject','cma-claim','cma-status','cma-findings','cma-mitigation','cma-references'] },
@@ -1037,7 +1104,9 @@ window._injectReviewColumnHeaders = _injectReviewColumnHeaders;
 // Renders only the visible row slice + sized spacer rows, re-windowing on scroll, so a very large
 // worksheet costs the same to render as a small one. Pure rendering — no data / determinism / ITAR
 // impact. Applies ONLY to standard per-row tables (not the merged-cell decomposition table).
-// Enable with ?virtualize=1 or localStorage SLA_VIRTUALIZE='1'. Row height is estimated (tune in-browser).
+// Desktop: on by default. Browser: opt in with ?virtualize=1 or localStorage SLA_VIRTUALIZE='1';
+// force off anywhere with ?virtualize=0 or SLA_VIRTUALIZE='0'. _VIRTUAL_ROW_H is now only a
+// FALLBACK — _rowHeight() measures a real rendered row (support_modules.js).
 var _VIRTUALIZE_MIN_ROWS = 300;
 var _VIRTUAL_ROW_H = 34;
 // [P2 batch 3] L4164-4401 moved verbatim to support_modules.js
@@ -1305,7 +1374,7 @@ window.renderInterdepPage = renderInterdepPage;
 window.interdepExportCsv = interdepExportCsv;
 
 // ============================================================================
-// Phase 63.1 (D2) — MAC model: minimum acceptable control, fidelity L0→L2.
+// Phase 63.1 (D2) — MAC model: minimum acceptable configuration, fidelity L0→L2.
 //
 // A MAC rule defines, per aircraft function (and phase), the survival condition
 // as a conjunction of clauses: MAC holds when EVERY clause holds, and a clause
@@ -1635,7 +1704,9 @@ const acReqCRUD = makeCRUD({
     key: 'acReq',
     store: () => acReqData,
     formIds: {
-        traceId: 'ac-req-trace', level: 'ac-req-level', type: 'ac-req-type', text: 'ac-req-text', rat: 'ac-req-rat',
+        traceId: 'ac-req-trace', level: 'ac-req-level', type: 'ac-req-type', analysis: 'ac-req-analysis', text: 'ac-req-text', rat: 'ac-req-rat',
+        // `type` is the ARP4754B §5.3.1 class; `analysis` is which analysis produced
+        // it. They were one field until 1 Aug 2026 — see req_taxonomy.js.
         // Phase 29.1 — V&V fields per ARP 4754B §6.3 (validation) + §6.4 (verification).
         validationMethod: 'ac-req-val-method', validationStatus: 'ac-req-val-status', validationEvidence: 'ac-req-val-evidence',
         verifMethod:      'ac-req-ver-method', verifStatus:      'ac-req-ver-status', verifEvidence:      'ac-req-ver-evidence',
@@ -1659,7 +1730,7 @@ const _origSubmitACReq = acReqCRUD.submit;
 window.editACReq = acReqCRUD.edit;
 // Phase 53.56 — soft delete with history; physical delete is gated behind a separate purge action.
 window.deleteACReq = function(internalId){
-    const r = (acReqData || []).find(x => x.internalId === internalId);
+    const r = (acReqData || []).find(x => String(x.internalId) === String(internalId));
     if (!r) return;
     if (r.deleted) {
         // Already in the Deleted bin — offer to restore instead of double-deleting.
@@ -1725,7 +1796,7 @@ window.editSysFunction = function(iId) {
     _origSysFuncEdit(iId);
     const arr = sys() ? sys().functions : null;
     if (!arr) return;
-    const row = arr.find(r => r.internalId === iId);
+    const row = arr.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
     const traceIds = row && (Array.isArray(row.traceIds) ? row.traceIds : (row.traceId ? [row.traceId] : []));
     populateSysFuncTraceDropdown(traceIds || []);
 };
@@ -1916,7 +1987,7 @@ window.renderSysFunctions = sysFuncCRUD.render;
         } catch (e) { store = null; }
         if (!Array.isArray(store)) return;
 
-        const idx = store.findIndex(x => x && x.internalId === internalId);
+        const idx = store.findIndex(x => x && String(x.internalId) === String(internalId));
         if (idx < 0) return;
         const funcRow = store[idx];
 
@@ -2032,7 +2103,9 @@ const sysReqCRUD = makeCRUD({
     store: () => sys()?.req,
     storePrecondition: () => sys() ? null : 'Please open a system folder first.',
     formIds: {
-        traceId: 'sys-req-trace', level: 'sys-req-level', type: 'sys-req-type', text: 'sys-req-text', rat: 'sys-req-rat',
+        traceId: 'sys-req-trace', level: 'sys-req-level', type: 'sys-req-type', analysis: 'sys-req-analysis', text: 'sys-req-text', rat: 'sys-req-rat',
+        // `type` is the ARP4754B §5.3.1 class; `analysis` is which analysis produced
+        // it. They were one field until 1 Aug 2026 — see req_taxonomy.js.
         // Phase 29.1 — V&V fields per ARP 4754B §6.3 + §6.4.
         validationMethod: 'sys-req-val-method', validationStatus: 'sys-req-val-status', validationEvidence: 'sys-req-val-evidence',
         verifMethod:      'sys-req-ver-method', verifStatus:      'sys-req-ver-status', verifEvidence:      'sys-req-ver-evidence',
@@ -2050,7 +2123,7 @@ window.editSysReq = sysReqCRUD.edit;
 // Phase 53.56 — soft delete + restore for sys requirements.
 window.deleteSysReq = function(internalId){
     const s = sys(); if (!s) return;
-    const r = (s.req || []).find(x => x.internalId === internalId);
+    const r = (s.req || []).find(x => String(x.internalId) === String(internalId));
     if (!r) return;
     if (r.deleted) {
         if (confirm('This requirement is already deleted. Restore it?')) {
@@ -2126,7 +2199,7 @@ window.submitPRA = function(){
     // snapshot taken from the live form state.
     const modelSnap = _readPraModelForm();
     _origPraSubmit();
-    const target = editingId != null ? praData.find(r => r.internalId === editingId) : praData[praData.length - 1];
+    const target = editingId != null ? praData.find(r => String(r.internalId) === String(editingId)) : praData[praData.length - 1];
     if (target) {
         target.affectedZones = zones;
         if (pendingRef) target.prCatalogueRef = pendingRef;
@@ -2138,7 +2211,7 @@ window.submitPRA = function(){
 };
 window.editPRA = function(iId) {
     _origPraEdit(iId);
-    const row = praData.find(r => r.internalId === iId);
+    const row = praData.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
     populatePraAffectedZonesDropdown(row ? (row.affectedZones || []) : []);
     // Phase 30.1 — remember existing catalog ref so an edit that doesn't browse keeps it.
     window._pendingPrCatalogueRef = (row && row.prCatalogueRef) ? row.prCatalogueRef : null;
@@ -2199,7 +2272,7 @@ window.submitZSA = function(){
     // Phase 53.67 — snapshot adjacency hints BEFORE submit (cancelEdit may clear).
     const adjacency = _readZsaAdjacencyHints();
     _origZsaSubmit();
-    const target = editingId != null ? zsaData.find(r => r.internalId === editingId) : zsaData[zsaData.length - 1];
+    const target = editingId != null ? zsaData.find(r => String(r.internalId) === String(editingId)) : zsaData[zsaData.length - 1];
     if (target) {
         target.housedFunctions = housed;
         target.adjacency = adjacency;
@@ -2213,7 +2286,7 @@ window.submitZSA = function(){
 };
 window.editZSA = function(iId) {
     _origZsaEdit(iId);
-    const row = zsaData.find(r => r.internalId === iId);
+    const row = zsaData.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
     populateZsaHousedFunctionsDropdown(row ? (row.housedFunctions || []) : []);
     _writeZsaAdjacencyHints(row ? (row.adjacency || {}) : {});
 };
@@ -2228,7 +2301,7 @@ window.deleteZSA = function(iId) {
 };
 window.renderZSA = zsaCRUD.render;
 
-// ---------- Common Mode Analysis (CMA) — ARP 4761A §5.1.2.3 ----------
+// ---------- Common Mode Analysis (CMA) — ARP4761A App M ----------
 // Independence verification record. Common modes considered are stored as a string[].
 
 // CMA_MODE_LABELS — extracted to ui_constants.js (Phase 76; byte-identical, loaded BEFORE this file).
@@ -2280,7 +2353,7 @@ window.submitCMA = function() {
     // Capture editingId BEFORE _origCmaSubmit (the factory's cancelEdit clears editStates.cma).
     const editingId = editStates.cma;
     _origCmaSubmit();
-    const target = editingId != null ? cmaData.find(r => r.internalId === editingId) : cmaData[cmaData.length - 1];
+    const target = editingId != null ? cmaData.find(r => String(r.internalId) === String(editingId)) : cmaData[cmaData.length - 1];
     if (target) {
         target.modes = modes;
         target.linkedGateIds = linkedGateIds;
@@ -2302,7 +2375,7 @@ window.submitCMA = function() {
 };
 window.editCMA = function(iId) {
     _origCmaEdit(iId);
-    const row = cmaData.find(r => r.internalId === iId);
+    const row = cmaData.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
     const modes = (row && row.modes) || [];
     populateCmaModesCheckboxes(modes);
     // Restore linked-gates selection.
@@ -2397,11 +2470,11 @@ const _origRoutingEdit = routingCRUD.edit;
 // [P2 batch 5] L4993-5013 moved verbatim to bindings_modules.js
 window.editRouting = function (internalId) {
     _origRoutingEdit(internalId);
-    const row = (routingData || []).find(r => r.internalId === internalId);
+    const row = (routingData || []).find(r => String(r.internalId) === String(internalId));
     _populateRoutingMultiselects(row || {});
 };
 window.deleteRouting = function (internalId) {
-    const row = (routingData || []).find(r => r.internalId === internalId);
+    const row = (routingData || []).find(r => String(r.internalId) === String(internalId));
     if (row && typeof confirm === 'function' && !confirm('Delete routing ' + (row.routingId || internalId) + '?')) return;
     routingCRUD.deleteItem(internalId);
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -2469,11 +2542,11 @@ const _origResourceEdit = resourcesCRUD.edit;
 // [P2 batch 5] L5107-5130 moved verbatim to bindings_modules.js
 window.editResource = function (internalId) {
     _origResourceEdit(internalId);
-    const row = (resourcesData || []).find(r => r.internalId === internalId);
+    const row = (resourcesData || []).find(r => String(r.internalId) === String(internalId));
     _populateResourceMultiselects(row || {});
 };
 window.deleteResource = function (internalId) {
-    const row = (resourcesData || []).find(r => r.internalId === internalId);
+    const row = (resourcesData || []).find(r => String(r.internalId) === String(internalId));
     if (row && typeof confirm === 'function' && !confirm('Delete resource ' + (row.resId || internalId) + '?')) return;
     resourcesCRUD.deleteItem(internalId);
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -2748,7 +2821,7 @@ window.submitItem = function(){
     if (!data.name)   return alert('Display Name is required.');
     const editingId = editStates.item;
     if (editingId != null) {
-        const idx = itemsData.findIndex(r => r.internalId === editingId);
+        const idx = itemsData.findIndex(r => String(r.internalId) === String(editingId));
         if (idx >= 0) itemsData[idx] = Object.assign({ internalId: editingId, history: itemsData[idx].history || [] }, data);
     } else {
         itemsData.push(Object.assign({ internalId: newRowId(), history: [] }, data));
@@ -2762,7 +2835,7 @@ window.submitItem = function(){
 // [P2 batch 5] L5906-5910 moved verbatim to bindings_modules.js
 
 window.editItem = function(internalId){
-    const row = (itemsData || []).find(r => r.internalId === internalId);
+    const row = (itemsData || []).find(r => String(r.internalId) === String(internalId));
     if (!row) return;
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); };
     _populateItemOwningSystem();
@@ -2790,10 +2863,10 @@ window.editItem = function(internalId){
 };
 
 window.deleteItem = function(internalId){
-    const row = (itemsData || []).find(r => r.internalId === internalId);
+    const row = (itemsData || []).find(r => String(r.internalId) === String(internalId));
     if (!row) return;
     if (!confirm('Delete item ' + (row.itemId || internalId) + '? Any FTA basic events or FMEA rows that reference this item will lose the link.')) return;
-    const idx = itemsData.findIndex(r => r.internalId === internalId);
+    const idx = itemsData.findIndex(r => String(r.internalId) === String(internalId));
     if (idx >= 0) itemsData.splice(idx, 1);
     renderItems();
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -2820,7 +2893,7 @@ window.submitFMEA = function() {
     }
     const editingId = editStates.fmea;
     if (editingId != null) {
-        const idx = fmeaData.findIndex(r => r.internalId === editingId);
+        const idx = fmeaData.findIndex(r => String(r.internalId) === String(editingId));
         if (idx >= 0) fmeaData[idx] = Object.assign({ internalId: editingId }, data);
     } else {
         fmeaData.push(Object.assign({ internalId: newRowId() }, data));
@@ -2835,7 +2908,7 @@ window.submitFMEA = function() {
 };
 
 window.editFMEA = function(iId) {
-    const row = fmeaData.find(r => r.internalId === iId);
+    const row = fmeaData.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
     if (!row) return;
     editStates.fmea = iId;
     setEditMode('fmea');
@@ -3090,6 +3163,12 @@ window.supabaseSignOut = supabaseSignOut;
 document.addEventListener('DOMContentLoaded', () => {
     // Tiny defer so the supabase-js CDN script has a moment to register on window.
     setTimeout(() => { _initSupabaseClient(); }, 50);
+    // 31 Aug 2026 — an invitee arrives at /app/?invite=<token>. Read and STRIP the
+    // token immediately (it is a credential; it must not linger in the address bar,
+    // a screenshot or history), park it in sessionStorage, and redeem as soon as
+    // there is a session. Deliberately after client init, and _onSupabaseSignedIn
+    // calls _redeemPendingInvite() again for the sign-in-then-accept path.
+    setTimeout(() => { try { _consumeInviteFromUrl(); } catch (_) {} }, 400);
 });
 
 // ===========================================================================
@@ -3370,6 +3449,23 @@ window.closeWorkspaceSettings = closeWorkspaceSettings;
 
 // [P2 batch 4] L14095-14169 moved verbatim to helpers_modules.js
 window.inviteWorkspaceMember = inviteWorkspaceMember;
+// 31 Aug 2026 — the rest of the invitation feature (see helpers_modules.js).
+window.revokeInvitation = revokeInvitation;
+// H-7 (31 Aug 2026) — project archive/restore. Exported explicitly like every
+// other inline-onclick target in this file: helpers_modules is a classic script
+// so the declarations are already global, but the export list is what the
+// durability suite censuses, and a target that is only implicitly global is one
+// refactor away from being unreachable from the markup.
+window.archiveCloudProject   = archiveCloudProject;
+window.restoreCloudProject   = restoreCloudProject;
+window.toggleArchivedProjects = toggleArchivedProjects;
+window._renderArchivedProjects = _renderArchivedProjects;
+window._canAdminActiveWorkspace = _canAdminActiveWorkspace;
+window.wsAddInviteRow = wsAddInviteRow;
+window.wsResetInviteRows = wsResetInviteRows;
+window._renderPendingInvitations = _renderPendingInvitations;
+window._consumeInviteFromUrl = _consumeInviteFromUrl;
+window._redeemPendingInvite = _redeemPendingInvite;
 
 // Change an existing member's role. Admin-only in the UI; also enforced by RLS
 // (ws_members_admin_update). Owner role + self are not editable from here.
@@ -3504,10 +3600,10 @@ function _phasesForLinkedHazard() {
     if (!ftaConfig.linkedFhaId) return [];
     const isAC = ftaConfig.linkedFhaId.startsWith('AC_');
     const realId = ftaConfig.linkedFhaId.replace('AC_', '').replace('SYS_', '');
-    const fha = isAC ? acFhaData.find(x => x.internalId === realId)
-                     : getAllSysFha().find(x => x.internalId === realId);
+    const fha = isAC ? acFhaData.find(x => String(x.internalId) === String(realId))
+                     : getAllSysFha().find(x => String(x.internalId) === String(realId));
     if (!fha || !fha.phases) return [];
-    return fha.phases.split(',').map(s => s.trim()).filter(Boolean);
+    return String(fha.phases).split(',').map(s => s.trim()).filter(Boolean);   // 28 Aug 2026 — array-tolerant (String([..]) comma-joins); an unhealed AI row must not throw inside the node-click path
 }
 
 // Render the per-phase λ editor for the currently selected basic/undeveloped event.
@@ -3620,6 +3716,14 @@ if(isGateAny) { selectedNodeData.type = 'gate'; selectedNodeData.gateType = val;
     // Phase 44 — when switching INTO VOTING from another gate type, votingK may still be
     // undefined. Default to 2 so the gate computes as K=2-of-N (not K=1 = OR).
     if (val === 'VOTING' && !(selectedNodeData.votingK > 0)) selectedNodeData.votingK = 2;
+    // DFT-WARM — switching INTO SPARE seeds the cold / perfect-switch defaults, which
+    // is exactly what this gate has always meant. Changing them is a deliberate act.
+    if (val === 'SPARE') {
+        if (!isFinite(parseFloat(selectedNodeData.spareWarmK)))   selectedNodeData.spareWarmK = 0;
+        if (!isFinite(parseFloat(selectedNodeData.spareSwitchP))) selectedNodeData.spareSwitchP = 1;
+    }
+    const _spareCfg = document.getElementById('config-spare-container');
+    if (_spareCfg) _spareCfg.style.display = (val === 'SPARE') ? 'flex' : 'none';
     document.getElementById('config-name-container').style.display = (val === 'TRANSFER') ? 'none' : 'block';
     document.getElementById('config-transfer-container').style.display = (val === 'TRANSFER') ? 'flex' : 'none';
     document.getElementById('config-ccf-container').style.display = (selectedNodeData.type === 'basic') ? 'flex' : 'none';
@@ -4868,10 +4972,10 @@ window._bulkSel = new Set();
         // Verified .edu / .ac.* domain gating still applies on signup.
         edu:        { label: 'Education',  price: 0,   period: 'forever', desc: 'Verified .edu / academic — free, forever',
                       stripeId: null, cta: 'Sign up — Free' },
-        pro:        { label: 'Pro',        price: 500, period: 'month', desc: 'Working safety engineers — individual seat',
-                      stripeId: 'REPLACE_PRO_PAYMENT_LINK', cta: 'Subscribe — $500/mo' },
-        'pro-plus': { label: 'Pro+',       price: 1000, period: 'month', desc: 'AI assistant + DO-330 kit + everything in Pro',
-                      stripeId: 'REPLACE_PROPLUS_PAYMENT_LINK', cta: 'Subscribe — $1,000/mo' },
+        pro:        { label: 'Pro',        price: 1500, period: 'month', desc: 'Working safety engineers — individual seat',
+                      stripeId: '8x24gy2ZjeAP27n4xn93y00', cta: 'Subscribe — $1,500/mo' },
+        'pro-plus': { label: 'Pro+',       price: 2500, period: 'month', desc: 'AI assistant + DO-330 kit + everything in Pro',
+                      stripeId: 'bJe9AS8jD8crdQ5d3T93y01', cta: 'Subscribe — $2,500/mo' },
         enterprise: { label: 'Enterprise', price: null, period: 'custom', desc: 'Multi-seat, ITAR routing, on-prem deployment',
                       stripeId: null, cta: 'Contact sales' },
     };
@@ -5008,6 +5112,7 @@ window._bulkSel = new Set();
     window.SafetyLab._paywallSignOut = _signOut;
     window.SafetyLab._renderPaywall = _renderPaywallScreen;
     window.SafetyLab._renderTrialBanner = _renderTrialOrGrandfatherBanner;
+    window.SafetyLab._recheckPaywall = function () { try { _check(); } catch(_) {} };
 
     function _check() {
         if (typeof isPaywalled === 'function' && isPaywalled()) {
@@ -5321,6 +5426,8 @@ window._bulkSel = new Set();
             return result;
         };
         wrapped._slEditWrapped = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window.cancelEdit = wrapped;
     }
 
@@ -5338,6 +5445,22 @@ window._bulkSel = new Set();
             return result;
         };
         wrapped._slEditWrapped = true;
+        // 20 Aug 2026 — carry the undo/autosave marker across this wrap.
+        // This module installs on a setTimeout, i.e. AFTER _wrapForUndoAndAutosave has run at
+        // DOMContentLoaded, so `orig` here is usually the undo wrapper. Behaviour was fine —
+        // calling through still pushes undo and schedules the autosave — but the FLAG was
+        // dropped, which broke two things:
+        //   • _wrapForUndoAndAutosave's idempotence guard is `if (fn._wrappedForUndo) return`.
+        //     With the marker gone, a second wrap pass would wrap the wrapper and every one of
+        //     these actions would push undo TWICE and autosave twice. Latent only because the
+        //     wrap currently runs once — and this module deliberately re-installs at 50ms,
+        //     500ms and 2000ms, so "runs once" is not a property anyone is maintaining.
+        //   • it made the coverage impossible to verify: submitACFHA read as unwrapped on
+        //     production while demonstrably still saving. Found by the runtime smoke gate;
+        //     none of the 159 static suites can see a function identity swapped at runtime.
+        if (orig._wrappedForUndo) wrapped._wrappedForUndo = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window[name] = wrapped;
     }
 
@@ -5923,7 +6046,7 @@ window._bulkSel = new Set();
     // currently being edited) and stamp the assumptionIds onto it.
     function _findRecentRecord(arr, editKey) {
         const editId = (typeof editStates !== 'undefined' && editStates) ? editStates[editKey] : null;
-        if (editId) return arr.find(r => r.internalId === editId);
+        if (editId) return arr.find(r => String(r.internalId) === String(editId));
         return arr[arr.length - 1] || null;
     }
 
@@ -5941,7 +6064,7 @@ window._bulkSel = new Set();
                 const arr = getArr();
                 let target;
                 if (editIdSnapshot) {
-                    target = (arr || []).find(r => r.internalId === editIdSnapshot);
+                    target = (arr || []).find(r => String(r.internalId) === String(editIdSnapshot));
                 }
                 if (!target) target = arr && arr[arr.length - 1];
                 if (target) {
@@ -5958,6 +6081,8 @@ window._bulkSel = new Set();
             return result;
         };
         wrapped._asmLinkWrapped = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window[name] = wrapped;
     }
 
@@ -5970,7 +6095,7 @@ window._bulkSel = new Set();
             const result = orig.apply(this, arguments);
             try {
                 const arr = getArr();
-                const row = (arr || []).find(r => r.internalId === internalId);
+                const row = (arr || []).find(r => String(r.internalId) === String(internalId));
                 const ids = (row && Array.isArray(row.assumptionIds)) ? row.assumptionIds : [];
                 // Defer so the existing edit handler finishes populating its own fields first.
                 setTimeout(() => populateFn(ids), 40);
@@ -5978,6 +6103,8 @@ window._bulkSel = new Set();
             return result;
         };
         wrapped._asmLinkWrapped = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window[name] = wrapped;
     }
 
@@ -6085,7 +6212,29 @@ window._bulkSel = new Set();
         { id: 'fta_summary',         label: 'FTA Summary' },
         { id: 'pra_table',           label: 'Particular Risk Table' },
         { id: 'zsa_table',           label: 'Zonal Safety Table' },
-        { id: 'cma_table',           label: 'Common Mode Table' }
+        { id: 'cma_table',           label: 'Common Mode Table' },
+        { id: 'fmea_functional_table', label: 'FMEA (Functional) Table' },
+        { id: 'fmea_piecepart_table',  label: 'FMEA (Piece-Part) Table' },
+        { id: 'fmes_table',          label: 'FMES Summary Table' },
+        { id: 'ram_ledger_table',    label: 'R&M Maintainability Ledger (Ai/Ao)' },
+        { id: 'ram_prediction_table', label: 'Reliability Prediction Rollup' },
+        { id: 'ram_alloc_table',     label: 'Reliability Allocation Table' },
+        { id: 'ram_spares_table',    label: 'Spares Provisioning Table' },
+        { id: 'ram_weibull_table',   label: 'Weibull Life-Data Table' },
+        { id: 'ram_growth_table',    label: 'Reliability Growth (Crow-AMSAA)' },
+        { id: 'fracas_table',        label: 'FRACAS Field-Data Table' },
+        { id: 'msg3_table',          label: 'MSG-3 MSI Register' },
+        { id: 'mmel_table',          label: 'MMEL / TLD Register' },
+        { id: 'et_table',            label: 'Event Tree Sequences' },
+        { id: 'bowtie_table',        label: 'Bow-Tie Register' },
+        { id: 'ccmr_table',          label: 'CCMR Candidates' },
+        { id: 'ip_ledger_table',     label: 'Independence Principles Ledger' },
+        { id: 'budget_ledger_table', label: 'Budget vs Achieved Ledger' },
+        { id: 'ffs_table',           label: 'Qualitative FFS (Dev Errors)' },
+        { id: 'lcc_table',           label: 'Life-Cycle Cost Table' },
+        { id: 'sneak_table',         label: 'Sneak Circuit Candidates' },
+        { id: 'swrel_table',         label: 'Software Reliability Table' },
+        { id: 'tol_derate_table',    label: 'Tolerance & Derating Table' }
     ];
     const APPENDIX_TOKENS = [
         { id: 'appendix:fta',  label: 'FTA Appendix (auto-render)' },
@@ -6921,12 +7070,24 @@ window._bulkSel = new Set();
     function _state() { try { return localStorage.getItem(ONRAMP_KEY) || ''; } catch (_) { return ''; } }
     function _setState(v) { try { localStorage.setItem(ONRAMP_KEY, v); } catch (_) {} }
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    // A page is not a tree until it has a top event. initNewProjectState() always
+    // seeds one blank page (root: null), so counting pages marks this step done
+    // before the user has drawn anything.
+    function _treeCount() {
+        try {
+            if (typeof ftaPages === 'undefined' || !ftaPages || !ftaPages.length) return 0;
+            var n = 0;
+            for (var i = 0; i < ftaPages.length; i++) if (ftaPages[i] && ftaPages[i].root) n++;
+            return n;
+        } catch (_) { return 0; }
+    }
+
     function _steps() {
         return [
             { label: 'Define aircraft functions', sub: 'What the aircraft must do — the top of the thread.', tab: 'ac-func', done: function () { return _len(typeof acFunctionsData !== 'undefined' && acFunctionsData) > 0; } },
             { label: 'Identify failure conditions', sub: 'Run the AFHA: hazards + severity, per ARP 4761A.', tab: 'ac-fha', done: function () { return _len(typeof acFhaData !== 'undefined' && acFhaData) > 0; } },
             { label: 'Add a system', sub: 'Allocate functions down to the systems that perform them.', tab: 'sys-dir', done: function () { return _len(typeof systemsData !== 'undefined' && systemsData) > 0; } },
-            { label: 'Build a fault tree', sub: 'Decompose a hazard to its causes — λ stays yours to set.', tab: 'fta', done: function () { return _len(typeof ftaPages !== 'undefined' && ftaPages) > 0; } },
+            { label: 'Build a fault tree', sub: 'Decompose a hazard to its causes — λ stays yours to set.', tab: 'fta', done: function () { return _treeCount() > 0; } },
             { label: 'Generate requirements', sub: 'Then open the Golden Thread to watch it all connect.', tab: 'ac-req', done: function () { return _len(typeof acReqData !== 'undefined' && acReqData) > 0; } }
         ];
     }

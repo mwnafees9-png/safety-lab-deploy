@@ -23,6 +23,16 @@
 //                     import with `evident` suggested from the detection field.
 //   fracasCandidates  ranked basic-event list (latents + FMEA-linked) for
 //                     field-record entry assistance.
+//   deriveRates       8 Aug 2026 (SL-ARC-0001 §22, the RAM gray bar): the two
+//                     writes the architecture document drew as wired. Ledger →
+//                     fmeaData[].rate keyed on the linked basic event (× α_FM
+//                     where the row apportions), and ledger → item.rate (Σλ of
+//                     the item's distinct linked events). Same shape as the τ
+//                     the ledger already writes onto a tree node (ramApplyTau).
+//                     A HAND-TYPED value is protected: once a written value has
+//                     been edited by hand (row.rate ≠ rateSource.written), the
+//                     derivation reports OVERRIDDEN and never re-writes it —
+//                     the same posture as reqSource.userOverridden.
 
 (function () {
     'use strict';
@@ -258,6 +268,111 @@
         return n;
     }
 
+    // ==================================================== 5b. rate writes
+    // The two edges SL-ARC-0001 Figure 1 draws and §22 names (8 Aug 2026):
+    // RAM ledger → FMEA rate, and RAM ledger → item failure rate. One-way,
+    // explicit, provenance-carried, override-protected. Nothing here is a
+    // second λ engine: the number written IS the linked basic event's λ
+    // (the same _beLambda the prediction rollup reads), apportioned by the
+    // row's own α_FM where one is declared.
+    function _rateLambda(node) {
+        try { if (typeof getEffectiveLambda === 'function') return getEffectiveLambda(node) || 0; } catch (_) {}
+        return (node && node.lambda) || 0;
+    }
+    // Overridden = a value this bridge wrote was later hand-edited. Protected.
+    function _rateOverridden(obj, field) {
+        return !!(obj && obj.rateSource && obj.rateSource.written != null && obj[field] !== obj.rateSource.written);
+    }
+    function deriveRates(apply) {
+        const S = _ledger();
+        const proposals = { fmea: [], items: [], skipped: [] };
+        const fmea = (typeof fmeaData !== 'undefined' ? fmeaData : []) || [];
+        const items = (typeof itemsData !== 'undefined' ? itemsData : []) || [];
+        // ---- per-item accumulation over DISTINCT linked events -------------
+        const itemLam = new Map();   // itemId -> Map(nodeId -> lambda)
+        S.tasks.forEach(t => {
+            if (!t || !t.beRef) return;
+            const hit = _find(t.beRef);
+            if (!hit) return;
+            const lam = _rateLambda(hit.node);
+            if (!(lam > 0)) return;
+            // ---- FMEA rows keyed on this basic event -----------------------
+            const rows = fmea.filter(r => r && (r.fmeaType || 'piece-part') === 'piece-part' && String(r.beId) === String(hit.node.id));
+            const noAlpha = rows.filter(r => !(parseFloat(r.alphaFm) > 0));
+            rows.forEach(r => {
+                if (r.parentLibKey) {
+                    proposals.skipped.push({ kind: 'fmea', ref: r.fmeaId || r.internalId, why: 'rate owned by the component library (parentLibKey ' + r.parentLibKey + ') — one owner per number' });
+                    return;
+                }
+                if (_rateOverridden(r, 'rate')) {
+                    proposals.skipped.push({ kind: 'fmea', ref: r.fmeaId || r.internalId, why: 'OVERRIDDEN by hand since the last write (' + r.rate + ' vs written ' + r.rateSource.written + ') — protected' });
+                    return;
+                }
+                const a = parseFloat(r.alphaFm);
+                let rate;
+                if (a > 0) rate = lam * a;
+                else if (noAlpha.length > 1) {
+                    proposals.skipped.push({ kind: 'fmea', ref: r.fmeaId || r.internalId, why: rows.length + ' rows share event ' + t.beRef + ' with no per-mode α_FM — apportion first (writing λ to each would over-count)' });
+                    return;
+                } else rate = lam;
+                if (r.rate === rate) return;   // idempotent — nothing to change
+                proposals.fmea.push({ row: r, ref: r.fmeaId || r.internalId, beRef: t.beRef, taskId: t.id, from: r.rate || 0, rate });
+            });
+            if (t.itemId) {
+                if (!itemLam.has(t.itemId)) itemLam.set(t.itemId, new Map());
+                itemLam.get(t.itemId).set(String(hit.node.id), lam);
+            }
+        });
+        itemLam.forEach((byNode, itemId) => {
+            const item = items.find(i => i && i.itemId === itemId);
+            if (!item) return;
+            let sum = 0; byNode.forEach(l => { sum += l; });
+            if (!(sum > 0)) return;
+            if (_rateOverridden(item, 'rate')) {
+                proposals.skipped.push({ kind: 'item', ref: itemId, why: 'OVERRIDDEN by hand since the last write — protected' });
+                return;
+            }
+            if (item.rate === sum) return;   // idempotent
+            proposals.items.push({ item, ref: itemId, from: item.rate, rate: sum, events: byNode.size });
+        });
+        if (apply) {
+            const at = new Date().toISOString();
+            proposals.fmea.forEach(p => {
+                p.row.rate = p.rate;
+                if (p.row.time > 0) p.row.prob = -Math.expm1(-p.rate * p.row.time);   // same formula as the form path
+                p.row.rateSource = { origin: 'ram-ledger', taskId: p.taskId, beRef: p.beRef, written: p.rate, prev: p.from, at };
+            });
+            proposals.items.forEach(p => {
+                p.item.rate = p.rate;
+                p.item.rateSource = { origin: 'ram-ledger', written: p.rate, prev: p.from == null ? null : p.from, events: p.events, at };
+            });
+            if (proposals.fmea.length || proposals.items.length) _save();
+        }
+        return proposals;
+    }
+    async function ramApplyRates() {
+        if (!_access()) { _toast('R&M derivation requires a Pro+ subscription.', 'warning', 3500); return; }
+        const p = deriveRates(false);
+        if (!p.fmea.length && !p.items.length) {
+            _toast(p.skipped.length
+                ? 'No rate writes — ' + p.skipped.length + ' target(s) skipped: ' + p.skipped.slice(0, 2).map(s => s.why).join(' · ')
+                : 'No rate writes derivable — link ledger tasks to basic events (and items) with λ first.', 'info', 5000);
+            return;
+        }
+        const lines = ['Rate writes from the ledger (one-way, override-protected):']
+            .concat(p.fmea.slice(0, 8).map(x => '  FMEA ' + x.ref + ': ' + (x.from || 0) + ' → ' + x.rate.toExponential(2) + ' /FH (event ' + x.beRef + ')'))
+            .concat(p.fmea.length > 8 ? ['  … +' + (p.fmea.length - 8) + ' more FMEA rows'] : [])
+            .concat(p.items.slice(0, 8).map(x => '  Item ' + x.ref + ': ' + (x.from == null ? '(none)' : x.from) + ' → ' + x.rate.toExponential(2) + ' /FH (Σλ over ' + x.events + ' event' + (x.events === 1 ? '' : 's') + ')'))
+            .concat(p.skipped.length ? ['', 'Skipped (protected / not derivable): ' + p.skipped.length] : [])
+            .concat(['', 'Apply? A value you later edit by hand is never re-written.']);
+        const yes = await (typeof slConfirm === 'function' ? slConfirm(lines.join('\n')) : Promise.resolve(confirm(lines.join('\n'))));
+        if (!yes) return;
+        const done = deriveRates(true);
+        _toast('Rates written: ' + done.fmea.length + ' FMEA row(s) · ' + done.items.length + ' item(s) — provenance on each (rateSource).', 'success', 5000);
+        try { if (typeof renderRamRelPage === 'function') renderRamRelPage(); } catch (_) {}
+        try { if (typeof renderItems === 'function') renderItems(); } catch (_) {}
+    }
+
     // ================================================ 6. FRACAS assistance
     function fracasCandidates() {
         const out = [];
@@ -319,10 +434,13 @@
         const orig = window[fnName];
         const wrapped = function () { const r = orig.apply(this, arguments); try { after(); } catch (_) {} return r; };
         wrapped._deriveWrapped = true;
+        // 20 Aug 2026 — keep every prior wrapper's idempotence marker (see fn_wrap.js).
+        try { if (window.SLWrap) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window[fnName] = wrapped;
     }
     _wrapRender('renderRamMxPage', () => _injectButton('ram-mx-host',
         '<button class="btn-cyan ram-derive-btn" onclick="ramDeriveAll()">⚙ Derive from model</button> ' +
+        '<button class="btn-cyan" onclick="ramApplyRates()" title="SL-ARC-0001 §22 — ledger → FMEA rate and ledger → item rate, override-protected">⚙ Write rates → FMEA &amp; items</button> ' +
         '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">deterministic sweep: latents → tasks · LRUs → spares · trees → RBDs · items → MSI candidates · zero AI, full provenance</span>'));
     _wrapRender('renderRamAllocPage', () => _injectButton('ram-alloc-host',
         '<button class="btn-cyan ram-derive-btn" onclick="(async () => { const a = deriveAlloc(true); const s = deriveSpares(true); showToast(a || s.length ? \'Seeded from the as-built model (provenance recorded).\' : \'Nothing derivable yet — populate trees/ledger links first.\', \'info\', 4000); renderRamAllocPage(); })()">⚙ Seed from as-built model</button>'));
@@ -359,4 +477,6 @@
     window.deriveMsg3 = deriveMsg3;
     window.msg3ImportFfs = msg3ImportFfs;
     window.fracasCandidates = fracasCandidates;
+    window.deriveRates = deriveRates;
+    window.ramApplyRates = ramApplyRates;
 })();

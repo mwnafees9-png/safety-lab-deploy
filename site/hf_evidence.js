@@ -45,7 +45,17 @@
     const _save = () => { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); else if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
     const _toast = (m, k) => { try { if (typeof showToast === 'function') showToast(m, k || 'info', 5600); } catch (_) {} };
 
-    function _asms() { try { return (typeof window !== 'undefined' && typeof window.asmAll === 'function') ? (window.asmAll() || []) : []; } catch (_) { return []; } }
+    // See the note in hf_severity_check.js: asmAll() carries neither `type` nor `hf`,
+    // so _isHf() was false for EVERY record and this lane refused all evidence in
+    // production. The suite passed because its stub returned rows richer than the
+    // real function — a stub more capable than the thing it stands in for cannot
+    // fail, and this one could not.
+    function _asms() {
+        try {
+            const A = (typeof window !== 'undefined') ? window.HF_ASSUMPTIONS : null;
+            return (A && typeof A.asmAllTyped === 'function') ? (A.asmAllTyped() || []) : [];
+        } catch (_) { return []; }
+    }
     const _isHf = a => !!a && (a.type === 'hf' || /human\s*factors/i.test(String(a.type || '')));
     function _asmById(id) { return _asms().find(a => a && String(a.asmId) === String(id)) || null; }
 

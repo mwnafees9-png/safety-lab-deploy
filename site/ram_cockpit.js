@@ -160,8 +160,8 @@
 
         let challenges = '';
         if (p.challenges.length) {
-            challenges = sec('⚠ Field findings challenging handed-off gates',
-                '<p style="font-size:12px; color:var(--color-text-secondary); margin:0 0 8px;">Service data disputes a failure rate a handed-off argument used. The gate\'s evidence stands on a number the field is contradicting — reopen or defend.</p>' +
+            challenges = sec('⚠ Field findings challenging baselined gates',
+                '<p style="font-size:12px; color:var(--color-text-secondary); margin:0 0 8px;">Service data disputes a failure rate a baselined argument used. The gate\'s evidence stands on a number the field is contradicting — reopen or defend.</p>' +
                 '<table class="data-table" style="width:100%; font-size:11.5px;"><thead><tr><th>Event</th><th>Tree</th><th>Gate</th><th>Predicted MTBF</th><th>Observed</th></tr></thead><tbody>' +
                 p.challenges.map(c => '<tr><td class="u-mono">' + _esc(c.beRef) + ' ' + _esc(c.name) + '</td><td>' + _esc(c.page) + '</td>' +
                     '<td class="u-mono">' + _esc(c.gate) + ' (' + _esc(c.status) + ')</td>' +
@@ -201,7 +201,7 @@
                 row('Tasks with provenance (τ → CCMR, MSG-3, derived)', p.feeds.taus) +
                 row('MMEL items on the dispatch analysis', p.feeds.mmel) +
                 row('Golden-thread R&M evidence column', p.feeds.evidence)) +
-            '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">R&amp;M never hands off — it feeds the gates. The one alarm that matters most here: a field finding on a rate a handed-off tree used. That is service data challenging the certification argument, and it surfaces on this card first.</p>' +
+            '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">R&amp;M is never baselined — it feeds the gates. The one alarm that matters most here: a field finding on a rate a baselined tree used. That is service data challenging the certification argument, and it surfaces on this card first.</p>' +
             '</div>';
         div.onclick = e => { if (e.target === div) div.remove(); };
         document.body.appendChild(div);

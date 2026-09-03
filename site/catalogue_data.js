@@ -1,5 +1,14 @@
 // catalogue_data.js — certification / MoC / particular-risk catalogue data, extracted verbatim
 // from safety_lab.js (Phase 76). Pure data, loaded FIRST so bare-name references resolve. Byte-identical.
+//
+// DECISION (#174, HF KB wiring — recorded the way #170 recorded the J3307 call):
+// the HF standards get NO new catalogue rows. Rationale: this catalogue is MoC
+// paragraphs and certification-basis material. AC 25.1309 is ALREADY here (its
+// §25.1309 and AC 25.1309-1B rows above cover the workload-language severity
+// ladder INV-HFW maps against). NASA HIDH, NASA-HFACS, ISO 9241 and MIL-STD-1472
+// are method and design references, not means-of-compliance paragraphs — they
+// live on the standards/ergonomics spine (hf_reference_data.js, hf_ergo.js,
+// hf_kb_data.js), same as SAE J3307, which likewise has no rows here.
 
 const COMPLIANCE_CATALOGUE = [
     // ----- 14 CFR Part 25 (US transport category) -----
@@ -12,12 +21,44 @@ const COMPLIANCE_CATALOGUE = [
     { regulation: '14 CFR Part 25', paragraph: '§25.1316',        title: 'Electrical and electronic system lightning protection', appliesTo: ['Part 25'] },
     { regulation: '14 CFR Part 25', paragraph: '§25.1317',        title: 'High-Intensity Radiated Fields (HIRF) protection', appliesTo: ['Part 25'] },
     // ----- AC 25.x (FAA advisory circulars for Part 25) -----
-    { regulation: 'AC 25.1309-1B',  paragraph: '§9.b',            title: 'Probability terms (Probable, Remote, Extremely Remote, Extremely Improbable)', appliesTo: ['Part 25'] },
-    { regulation: 'AC 25.1309-1B',  paragraph: '§10',             title: 'Quantitative analysis methods including FTA', appliesTo: ['Part 25'] },
-    { regulation: 'AC 25.1309-1B',  paragraph: '§11.b',           title: 'System safety assessment process', appliesTo: ['Part 25'] },
-    { regulation: 'AC 25.1309-1B',  paragraph: '§12',             title: 'Particular risks analysis', appliesTo: ['Part 25'] },
+    // 31 Aug 2026 — re-numbered to AC 25.1309-1B (30 Aug 2024): the earlier rows carried
+    // the 1988 AC 25.1309-1A paragraph numbers (§9.b / §10 / §11.b / §12) under the 1B label.
+    { regulation: 'AC 25.1309-1B',  paragraph: '§3.1 · Table 4-1', title: 'Failure condition classifications — No Safety Effect / Minor / Major / Hazardous / Catastrophic (verbatim in the severity rubric)', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: '§3.2 · §3.3',     title: 'Probability terms (Probable, Remote, Extremely Remote, Extremely Improbable) and the per-flight-hour ranges', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: '§4.3 · §7.3',     title: 'Catastrophic safety objective and single-failure considerations', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: '§5.3.6 · App. D', title: 'Significant latent failures, 1/1000 latency limit, CSL+1 residual risk', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: '§6.2 · §6.3',     title: 'FHA requirements and severity assessment factors (intensifying / alleviating)', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: '§7.5 · Fig. C-1', title: 'Depth of analysis — simple / conventional / complex per severity class', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: '§7.6 · App. F',   title: 'Average probability per flight hour — quantitative analysis including FTA', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: '§7.4 · App. B.1.6', title: 'Common cause sources; zonal safety, particular risk and common mode analyses', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: 'App. E',          title: 'Accepted probabilities for environmental and operational conditions (Tables E-1 to E-5)', appliesTo: ['Part 25'] },
+    { regulation: 'AC 25.1309-1B',  paragraph: 'App. C',          title: 'Safety assessment process overview (FHA → PSSA → SSA → ASA)', appliesTo: ['Part 25'] },
+    // ----- Rotorcraft ACs (31 Aug 2026, fetched from faa.gov) -----
+    { regulation: 'AC 29-2C',       paragraph: 'AC 29.1309 b.(1)', title: 'Probability classifications — Frequent / Reasonably Probable / Remote / Extremely Remote / Extremely Improbable with ranges', appliesTo: ['Part 29'] },
+    { regulation: 'AC 29-2C',       paragraph: 'AC 29.1309 b.(2)', title: 'Failure condition classifications — No Effect / Minor / Major / Hazardous or Severe-Major / Catastrophic (verbatim in the severity rubric)', appliesTo: ['Part 29'] },
+    { regulation: 'AC 29-2C',       paragraph: 'AC 29.1309 b.(3) · Fig. AC 29.1309-2', title: 'Safety objective — inverse relationship; table of categories, DO-178C level and quantitative probability', appliesTo: ['Part 29'] },
+    { regulation: 'AC 29-2C',       paragraph: 'AC 29.1309 b.(4) · Figs. 29.1309-4/-5', title: 'Safety assessment process overview and depth-of-analysis flowchart', appliesTo: ['Part 29'] },
+    { regulation: 'AC 29-2C',       paragraph: 'AC 29.1309 b.(5)', title: 'Assessment methods — appraisal, FMEA, FTA, Markov, CCA (ZSA / PRA / CMA)', appliesTo: ['Part 29'] },
+    { regulation: 'AC 27-1B',       paragraph: 'AC 27.1309 c. · d.', title: 'Failure analyses (ARP 926B) and the safety assessment (FHA → reliability analyses); five probability terms with ranges', appliesTo: ['Part 27'] },
+    { regulation: 'AC 27-1B',       paragraph: 'AC 27.1309 f.(1)', title: 'Five criticality categories — Catastrophic / Hazardous or Severe-Major / Major / Minor / No Effect (verbatim in the severity rubric)', appliesTo: ['Part 27'] },
+    { regulation: 'FAA PS-ASW-27-15', paragraph: 'Classes I–IV', title: 'Safety Continuum for Part 27 Normal Category Rotorcraft Systems and Equipment (30 June 2017) — tiered objectives by engine type, occupants, weight (objectives verified via EASA AMC1 27.1309 Table 2; FAA thresholds from the 2017 draft)', appliesTo: ['Part 27'] },
+    { regulation: 'EASA CS-27',     paragraph: 'CS 27.1309 · AMC1 27.1309 Tables 1–2', title: 'EASA small rotorcraft — four classes (Cat A; Cat B by occupants/1 814 kg) and the per-class objective + FDAL grid; AMC = FAA AC 27-1B Chg 7 + differences', appliesTo: ['Part 27'] },
+    { regulation: 'EASA CS-29',     paragraph: 'CS 29.1309 · AMC1 29.1309', title: 'EASA large rotorcraft — Category A loss of CS&FL is catastrophic by rule; AMC = FAA AC 29-2C Chg 7 + ARP4754A / AMC 20-115 / 20-152 / 20-189 / 20-170 recognitions', appliesTo: ['Part 29'] },
+    { regulation: 'EASA CS-E',      paragraph: 'CS-E 510 · AMC E 510', title: 'EASA engine safety analysis — hazardous < 10^-7/EFH (individual ≤ 10^-8), major < 10^-5; Engine Critical Parts via CS-E 515; mirrors §33.75 / AC 33.75-1A', appliesTo: ['Part 33'] },
+    // ----- Engines & propellers (31 Aug 2026, eCFR + AC 33.75-1A fetched) -----
+    { regulation: '14 CFR Part 33', paragraph: '§33.75(a)(3)–(4)', title: 'Hazardous engine effects extremely remote (10^-7..10^-9/EFH; individual ≤10^-8); major engine effects remote (10^-5..10^-7)', appliesTo: ['Part 33'] },
+    { regulation: '14 CFR Part 33', paragraph: '§33.75(c)–(e)',    title: 'Critical single elements via §§33.15/33.27/33.70; safety-system failure in combination; maintenance, checks, instrumentation and crew assumptions substantiated', appliesTo: ['Part 33'] },
+    { regulation: '14 CFR Part 33', paragraph: '§33.75(g)',        title: 'Engine effect definitions — minor (loss of thrust) / hazardous (seven listed effects) / major (between)', appliesTo: ['Part 33'] },
+    { regulation: 'AC 33.75-1A',    paragraph: '¶6 · ¶8 · ¶9',      title: 'Aircraft-level classes do not apply directly; per-effect summation ≤10^-7 or individual ≤10^-8; major ≤10^-5 no summation', appliesTo: ['Part 33'] },
+    { regulation: 'AC 33.75-1A',    paragraph: '¶19 · ¶20',         title: 'Scope of hazardous engine effects (high-energy debris, toxic bleed, reverse thrust, fire, mount, propeller release, shutdown) and the major-effects guide list', appliesTo: ['Part 33'] },
+    { regulation: '14 CFR Part 35', paragraph: '§35.15(a)(3) · (c)', title: 'Hazardous propeller effects ≤10^-7/PFH (individual ≤10^-8); propeller critical parts per §35.16', appliesTo: ['Part 35'] },
+    { regulation: '14 CFR Part 35', paragraph: '§35.15(g)',        title: 'Propeller effect definitions — hazardous (excessive drag, reverse thrust, release, unbalance) / major (feather, pitch, torque/speed)', appliesTo: ['Part 35'] },
     // ----- EASA CS-25 / AMC 25 (transport — EU equivalent) -----
-    { regulation: 'CS-25',          paragraph: 'CS 25.1309',      title: 'EASA equivalent — equipment, systems, and installations', appliesTo: ['Part 25'] },
+    { regulation: 'EASA CS-23',     paragraph: 'CS 23.2005 · CS 23.2510 · AMC1 23.2510', title: 'EASA normal-category aeroplanes — Levels 1–4 by seats; §23.2510 objective; ASTM F3264 §9.3 / F3309 / F3230 accepted with EASA variances (F3061 ¶4.4.2; F3230 Table 3 not yet for electric propulsion)', appliesTo: ['Part 23'] },
+    { regulation: 'CS-25',          paragraph: 'CS 25.1309',      title: 'EASA equivalent — equipment, systems, and installations (b)(1)–(5) incl. significant latent failures and the 1/1 000 latency sum', appliesTo: ['Part 25'] },
+    { regulation: 'AMC 25.1309',    paragraph: '§7 · §8 · Fig. 2a/2b', title: 'EASA classes, probability terms (Probable > 10^-5), allowable probabilities per class; architecture credit for FDAL/IDAL (§9.b(4))', appliesTo: ['Part 25'] },
+    { regulation: 'AMC 25.1309',    paragraph: '§9.b(6) · App. 5', title: 'Significant latent failures — limit latency (1/1 000, worst-case flight, P = λT ≤ 0.1) and limit residual probability (remote)', appliesTo: ['Part 25'] },
+    { regulation: 'AMC 25.1309',    paragraph: 'App. 4',          title: 'EASA allowable probabilities — sparser than FAA App. E (RTO, jettison, go-around, cabin fires: no accepted standard data)', appliesTo: ['Part 25'] },
     { regulation: 'CS-25',          paragraph: 'CS 25.671',       title: 'EASA — flight control system isolation and jamming', appliesTo: ['Part 25'] },
     { regulation: 'AMC 25.1309',    paragraph: 'AMC 25.1309 §6',  title: 'EASA Acceptable Means of Compliance — quantitative analysis', appliesTo: ['Part 25'] },
     { regulation: 'AMC 25.1309',    paragraph: 'AMC 25.1309 §8',  title: 'EASA AMC — common-cause analysis (PRA / ZSA / CMA)', appliesTo: ['Part 25'] },
@@ -61,16 +102,28 @@ const COMPLIANCE_CATALOGUE = [
     { regulation: '14 CFR Part 35', paragraph: '§35.23',          title: 'Propeller control system requirements', appliesTo: ['Part 35'] },
     { regulation: 'CS-P',           paragraph: 'CS-P 70',         title: 'EASA — Propeller safety analysis (equivalent to §35.15)', appliesTo: ['Part 35'] },
 
-    // Phase 53.55 — EASA SC-VTOL (eVTOL / AAM)
-    { regulation: 'SC-VTOL',        paragraph: 'SC-VTOL.2010',    title: 'Aircraft-level safety considerations', appliesTo: ['SC-VTOL'] },
-    { regulation: 'SC-VTOL',        paragraph: 'SC-VTOL.2300',    title: 'Equipment, systems and installations (eVTOL)', appliesTo: ['SC-VTOL'] },
-    { regulation: 'SC-VTOL',        paragraph: 'SC-VTOL.2305',    title: 'Safety assessment methodology', appliesTo: ['SC-VTOL'] },
-    { regulation: 'SC-VTOL',        paragraph: 'SC-VTOL.2510',    title: 'Continued Safe Flight and Landing (CS&FL) requirement — Enhanced category', appliesTo: ['SC-VTOL'] },
-    { regulation: 'SC-VTOL',        paragraph: 'SC-VTOL.2511',    title: 'Aircraft-level safety objectives (Basic vs Enhanced)', appliesTo: ['SC-VTOL'] },
-    { regulation: 'SC-VTOL',        paragraph: 'SC-VTOL.2521',    title: 'System safety analysis methodology — eVTOL-specific guidance', appliesTo: ['SC-VTOL'] },
-    { regulation: 'SC-VTOL',        paragraph: 'SC-VTOL.2526',    title: 'Failure-condition severity classification — Basic & Enhanced ladders', appliesTo: ['SC-VTOL'] },
-    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC-2',           title: 'Means of Compliance #2 — powered-lift application', appliesTo: ['SC-VTOL'] },
-    { regulation: 'AMC SC-VTOL',    paragraph: 'AMC SC-VTOL.2510', title: 'EASA AMC — Continued Safe Flight and Landing implementation', appliesTo: ['SC-VTOL'] },
+    // Phase 53.55 — EASA SC-VTOL (eVTOL / AAM). 31 Aug 2026: paragraph numbers and titles
+    // re-anchored on SC-VTOL-02 Issue 2 (10 June 2024) + MOC SC-VTOL Issue 2 (12 May 2021);
+    // the earlier rows cited paragraphs that do not exist in the Special Condition.
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2000',       title: 'Applicability and definitions (CS&FL, controlled emergency landing, congested area, vertiport)', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2005',       title: 'Certification of small-category VTOL-capable aircraft — Category Enhanced / Category Basic; ≤9 pax, MCTOM ≤5 700 kg', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2010',       title: 'Accepted means of compliance', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2250(c)',    title: 'Design and construction principles — no single failure may have a catastrophic effect', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2300',       title: 'Flight control systems (MOC VTOL.2300 — fly-by-wire likely-hazard protection)', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2430',       title: 'Lift/thrust system installation, energy storage and distribution systems', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2500',       title: 'General requirements on systems and equipment function', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2505',       title: 'General requirements on equipment installation', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2510',       title: 'Equipment, systems, and installations — catastrophic extremely improbable & no single failure; hazardous extremely remote; major remote; Enhanced in-service monitoring', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2515',       title: 'Electrical and electronic system lightning protection', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2517',       title: 'Electrical wiring interconnection system (EWIS) — new in Issue 2', appliesTo: ['SC-VTOL'] },
+    { regulation: 'SC-VTOL',        paragraph: 'VTOL.2520',       title: 'High-intensity radiated fields (HIRF) protection', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §7', title: 'Failure-condition classifications (category-dependent Hazardous/Catastrophic) and qualitative probability terms', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §8 Table 1', title: 'Safety objectives per flight hour + FDAL — Enhanced, Basic 1 (0–1 pax), Basic 2 (2–6), Basic 3 (7–9)', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §8(b)', title: 'Single failure and common-cause failure considerations', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §9', title: 'Safety assessment process (ARP4754A/4761) incl. §9(b) common mode analysis', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §10', title: 'Development assurance — FDAL/IDAL allocation; AMC 20-115 / 20-152 / 20-189 recognised', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §12', title: 'Latent failure considerations — significant latent failures to be avoided', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC-5 SC-VTOL',  paragraph: 'MOC VTOL.2510 (rev.)', title: 'Fifth MOC publication (public consultation, 18 July 2025) — references moved to ARP4754B/ED-79B and ARP4761A/ED-135; MOC VTOL.2517 EWIS', appliesTo: ['SC-VTOL'] },
 
     // Phase 53.55 — Part 450 (commercial space)
     { regulation: '14 CFR Part 450', paragraph: '§450.101',       title: 'Safety criteria — public risk thresholds (Eₓ ≤ 1×10⁻⁴ /mission)', appliesTo: ['Part 450'] },
@@ -78,6 +131,8 @@ const COMPLIANCE_CATALOGUE = [
     { regulation: '14 CFR Part 450', paragraph: '§450.107',       title: 'Flight safety analysis (FSA) — debris dispersion & casualty area modeling', appliesTo: ['Part 450'] },
     { regulation: '14 CFR Part 450', paragraph: '§450.108',       title: 'Flight termination system requirements', appliesTo: ['Part 450'] },
     { regulation: '14 CFR Part 450', paragraph: '§450.115',       title: 'Flight commit criteria', appliesTo: ['Part 450'] },
+    { regulation: '14 CFR Part 21', paragraph: '§21.16 · §21.17', title: 'Special conditions and designation of applicable regulations — incl. §21.17(b) special-class route (how SC-VTOL / powered-lift get a basis)', appliesTo: ['Part 25','Part 23','Part 27','Part 29','Part 33','Part 35','SC-VTOL'] },
+    { regulation: '14 CFR Part 21', paragraph: '§21.101', title: 'Changed Product Rule — the change and "areas affected by the change" re-open §__.1309 and its safety-assessment evidence', appliesTo: ['Part 25','Part 23','Part 27','Part 29','Part 33','Part 35','SC-VTOL'] },
     { regulation: 'AC 21-101',       paragraph: 'all',            title: 'FAA Special Conditions application (used for per-applicant special conditions)', appliesTo: ['Part 450', 'SC-VTOL'] },
 
     // Phase 53.55 — Part 107 / SORA (UAS)
@@ -87,9 +142,9 @@ const COMPLIANCE_CATALOGUE = [
     { regulation: 'FAA AC 91-57B',  paragraph: 'all',             title: 'Model aircraft + recreational UAS operating guidance', appliesTo: ['Part 107'] },
 
     // ----- Cross-cutting standards (apply to ALL certification categories) -----
-    { regulation: 'AC 20-174',      paragraph: '§5',              title: 'FAA acceptance of ARP4754A as means of compliance (systems development)', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
-    { regulation: 'AC 20-115D',     paragraph: 'all',             title: 'FAA recognition of RTCA DO-178C for software development assurance', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
-    { regulation: 'AC 20-152A',     paragraph: 'all',             title: 'FAA recognition of RTCA DO-254 for airborne electronic hardware', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
+    { regulation: 'AC 20-174',      paragraph: '¶1 · ¶3',         title: 'FAA recognition of ARP 4754A as the development-assurance process; FDAL/IDAL in the basis ACs take precedence over ARP 4754A §5.2', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
+    { regulation: 'AC 20-115D',     paragraph: '¶1 · ¶6 · ¶9 · ¶10', title: 'FAA recognition of DO-178C/ED-12C + DO-330 tool qualification + DO-331/332/333 supplements; legacy DO-178B reuse; TQL table', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
+    { regulation: 'AC 20-152A',     paragraph: '¶2 · ¶5 · ¶6 · ¶7', title: 'FAA recognition of DO-254/ED-80 for AEH (DAL A/B/C); custom-device, COTS IP, COTS-device and CBA objectives (CD-i / IP-i / COTS-i / CBA-i)', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
     { regulation: 'SAE ARP 4754B',  paragraph: 'all',             title: 'Guidelines for development of civil aircraft and systems (allocation, V&V, DAL)', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
     { regulation: 'SAE ARP 4761A',  paragraph: 'all',             title: 'Guidelines and methods for conducting the safety assessment process (FHA / PSSA / SSA, FTA, FMEA, PRA, ZSA, CMA)', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
     { regulation: 'RTCA DO-178C',   paragraph: 'Annex A',         title: 'Software considerations in airborne systems and equipment certification', appliesTo: ['Part 25', 'Part 23', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'SC-VTOL', 'Part 450', 'Part 107'] },
@@ -221,9 +276,74 @@ const PARTICULAR_RISK_CATALOGUE = [
       defaultDesc: 'Shedding of accreted ice from engine spinner, propeller blades, wing leading edge, or empennage. Impacts fuselage skin, engine inlets (potential ingestion), and adjacent structures.',
       defaultMitigation: 'Anti-/de-ice system per §25.1419. Engine ice-ingestion qualification per §33.68. Sacrificial impact-tolerant areas on fuselage; clear ingestion path during anti-ice cycling.'
     }
+,
+    // --- ARP4761A App L.1.3 gap closure, 5 Aug 2026 -------------------------
+    // The catalogue held fifteen of the App L.1.3 particular risks. These seven
+    // were the ones it did not, and their absence is the kind that hides: a risk
+    // that is not in the catalogue is simply never offered, so a PRA that omits
+    // it looks complete. Clause NUMBERS AND TITLES only from SAE material, per
+    // the standing copyright posture; the regulation cites are FAA/EASA.
+    { id: 'fuel-leakage',
+      name: 'Fuel tank or fuel line leakage',
+      category: 'Fluid Systems',
+      regulations: ['14 CFR §25.863', '14 CFR §25.981', '14 CFR §25.1185', 'AC 25.981-1D', 'CS 25.863', 'CS 25.981'],
+      typicalPhases: ['Standing', 'Taxi', 'Takeoff', 'Initial Climb', 'Climb', 'Cruise', 'Descent', 'Approach', 'Landing'],
+      defaultDesc: 'Escape of fuel from a tank, coupling, pump seal or transfer line into an adjacent zone. The hazard is rarely the loss of fuel itself: it is the flammable fluid arriving somewhere it was never assessed against — a bay containing an ignition source, a wire bundle, a hot bleed duct, or a compartment whose drainage was sized for condensation rather than for fuel.',
+      defaultMitigation: 'Establish flammable-fluid leakage zones and demonstrate drainage and ventilation for each. Keep ignition sources out of the leakage envelope, or show the ignition energy is below the threshold for the fluid at the zone temperature. Shroud lines that pass through, or over, a compartment containing electrical equipment. Verify by zone-by-zone flammable-fluid analysis rather than by line-by-line component qualification.'
+    },
+    { id: 'battery-thermal-runaway',
+      name: 'Battery leakage, fire or thermal runaway',
+      category: 'Fire',
+      regulations: ['14 CFR §25.1353(b)', '14 CFR §25.863', 'RTCA DO-311A', 'AC 20-184', 'CS 25.1353'],
+      typicalPhases: ['Standing', 'Taxi', 'Takeoff', 'Initial Climb', 'Climb', 'Cruise', 'Descent', 'Approach', 'Landing'],
+      defaultDesc: 'A cell vents, ignites, or enters self-sustaining thermal runaway, propagating to adjacent cells and releasing flammable and toxic gas at pressure. Distinct from a general fire threat in three ways that matter to the analysis: it carries its own oxidiser, so extinguishing agents that starve a fire do not stop it; it propagates cell to cell on a timescale set by the pack design, not by the compartment; and the vented gas is a hazard in its own right to any zone the enclosure vents into.',
+      defaultMitigation: 'Demonstrate single-cell containment and non-propagation at pack level, not cell level. Vent overboard, and assess the vent path as a zone in its own right. Provide state-of-charge and temperature monitoring with a crew annunciation whose timing is credited in the human-factors assessment. Where the pack is flight-critical, show the aircraft is controllable with the pack isolated for the remainder of the flight.'
+    },
+    { id: 'rat-burst',
+      name: 'Ram air turbine burst or uncommanded deployment',
+      category: 'High-Energy Devices',
+      regulations: ['14 CFR §25.1309', '14 CFR §25.901(c)', '14 CFR §25.671', 'CS 25.1309'],
+      typicalPhases: ['Takeoff', 'Initial Climb', 'Climb', 'Cruise', 'Descent', 'Approach'],
+      defaultDesc: 'Failure of the ram air turbine as a high-energy rotating device — blade or hub liberation with a debris envelope through the surrounding structure — or deployment when it was not commanded, which imposes drag and a structural load case at a speed the deployed configuration was not cleared for. The risk is easy to miss because the RAT only exists for the case where everything else has already failed, so it tends to be assessed as a mitigation rather than as a threat.',
+      defaultMitigation: 'Treat the deployed RAT as a rotating high-energy device and apply a debris envelope to the surrounding zone, keeping redundant channels out of it. Show the uplock cannot release under vibration or single electrical failure. Establish and publish a deployed-configuration speed limitation, and show the airframe tolerates deployment at the highest speed at which it can credibly occur.'
+    },
+    { id: 'hp-duct-rupture',
+      name: 'High-pressure duct rupture',
+      category: 'High-Energy Devices',
+      regulations: ['14 CFR §25.1103(d)', '14 CFR §25.365(e)', '14 CFR §25.1309', 'CS 25.1103', 'CS 25.365'],
+      typicalPhases: ['Takeoff', 'Initial Climb', 'Climb', 'Cruise', 'Descent', 'Approach', 'Landing'],
+      defaultDesc: 'Failure of a bleed-air or pneumatic duct, releasing gas at engine-delivery temperature and pressure into the surrounding compartment. Three effects arrive together and are usually assessed separately: the pressure load on adjacent structure and on the compartment itself, the jet impingement on whatever is in line with the rupture, and the sustained heating of equipment and wiring qualified for a much lower environment.',
+      defaultMitigation: 'Size compartment pressure relief for the burst case, not for normal operation. Apply an impingement envelope from every credible rupture location and keep flight-critical channels and flammable-fluid lines out of it, or shield them. Provide overheat detection with isolation that does not itself depend on the ruptured duct. Show the affected compartment tolerates the duct temperature for the time the isolation takes.'
+    },
+    { id: 'wheel-flange-release',
+      name: 'Wheel flange or hub fragment release',
+      category: 'Wheels/Tyres',
+      regulations: ['14 CFR §25.729', '14 CFR §25.734', '14 CFR §25.731', 'AC 25.734-1', 'CS 25.734'],
+      typicalPhases: ['Taxi', 'Takeoff', 'Rejected Takeoff', 'Landing'],
+      defaultDesc: 'Liberation of a wheel flange or hub fragment as a discrete high-energy projectile, distinct from tyre burst and from tread flail: the fragment is metallic, heavier, and departs on a trajectory set by the wheel plane rather than by the tread envelope. It threatens the gear bay contents, the adjacent structure, and anything routed through the plane of the wheel.',
+      defaultMitigation: 'Apply the wheel-plane fragment envelope alongside the tyre-burst envelope, and show they are assessed as separate cases. Keep both channels of any redundant pair out of a single wheel plane. Demonstrate overpressure and thermal fuse-plug behaviour so that a brake energy event relieves pressure before the flange is loaded. Verify hub inspection intervals against the crack growth assumed in the structural substantiation.'
+    },
+    { id: 'chemical-container-rupture',
+      name: 'Hazardous chemical container rupture',
+      category: 'Fluid Systems',
+      regulations: ['14 CFR §25.831(b)', '14 CFR §25.1309', '14 CFR §25.855', 'CS 25.831'],
+      typicalPhases: ['Standing', 'Taxi', 'Takeoff', 'Climb', 'Cruise', 'Descent', 'Approach', 'Landing'],
+      defaultDesc: 'Rupture or leakage of a pressurised or hazardous-fluid container carried as part of the aircraft — oxygen, extinguishing agent, hydraulic accumulator, potable or waste system chemistry, or dangerous goods carried as cargo. The consequence is a chemical and pressure environment in a compartment assessed for neither, and in an occupied aircraft the occupant exposure case usually governs rather than the equipment case.',
+      defaultMitigation: 'Identify every pressurised or hazardous container in the type design, including those installed for another system’s benefit. Assess release into the containing compartment for pressure, chemical attack on adjacent equipment, and occupant exposure. Provide relief and drainage sized for the release, and keep containers out of zones where a release would reach a flight-critical channel or an occupied space.'
+    },
+    { id: 'pressure-bulkhead-rupture',
+      name: 'Pressure bulkhead rupture',
+      category: 'Decompression',
+      regulations: ['14 CFR §25.365', '14 CFR §25.571', '14 CFR §25.841', '14 CFR §25.843', 'CS 25.365', 'CS 25.571'],
+      typicalPhases: ['Climb', 'Cruise', 'Descent'],
+      defaultDesc: 'Failure of a pressure boundary between the pressurised volume and an unpressurised one — an aft bulkhead, a door surround, a floor between compartments at different pressures. Beyond the decompression itself, the differential unloading applies a structural load case to surrounding structure and to anything mounted on the boundary, and the airflow can carry debris and displace equipment along the release path.',
+      defaultMitigation: 'Demonstrate the boundary against the §25.365(e) rupture case and show adjacent structure and control runs tolerate the resulting differential. Keep flight-critical control paths out of the release path, or show they survive it. Verify floor and partition venting is sized to prevent structural failure from a compartment-to-compartment differential. Establish the damage-tolerance inspection programme against the crack growth the substantiation assumes.'
+    }
 ];
 
-const PR_CATEGORIES = ['Engine', 'Environmental', 'Fire', 'Structural', 'Decompression', 'Wheels/Tyres', 'Other'];
+// Categories are the GROUPING the catalogue browser renders from, so an entry
+// whose category is not listed here is silently invisible — pinned by test.
+const PR_CATEGORIES = ['Engine', 'Environmental', 'Fire', 'Fluid Systems', 'High-Energy Devices', 'Structural', 'Decompression', 'Wheels/Tyres', 'Other'];
 
 const PARTICULAR_RISK_APPLICABILITY = [
     {
