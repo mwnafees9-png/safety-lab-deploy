@@ -780,7 +780,8 @@ this register — the ids below are this register's, and do not correspond.
   `_fmeaSystemPicker` (the sixth picker — the 76.38 sweep matched `_open*Picker` and missed it).
   99 toast-and-return guard clauses resolved no capture, so a lane refusing early hung a campaign
   for its full timeout: three FMEA runs burned 901 s each to report "no panel opened" when the lane
-  had already said "AI backend not ready" in milliseconds. `regression_capture_bail`, 30 checks,
+  had already refused, correctly and in milliseconds — `ppfmea` is not in that project's programme
+  scope, so the opt-in gate turned it away before any model call. `regression_capture_bail`, 30 checks,
   14 executed. Inert when no capture is armed.
 
 

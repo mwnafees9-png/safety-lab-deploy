@@ -18,7 +18,9 @@ Scoring per Waqas's ruling (3 Sep): **the bar is that the intent of the effect i
 
 **Scope adherence.** Opus produced exactly 85 rows in all three runs, and every one of the 85 conditions received the identical number of rows in all three — zero mismatches. Sonnet, given three conditions, returned 3 / 5 / 3, drafting rows for `SF-001-PL2` and `SF-001-M2`, which exist in the project but were not in the requested scope. Out-of-scope, not invented; the earlier session note calling them invented is wrong and is corrected here.
 
-**The FMEA runs cost 45 minutes and produced nothing.** Not a model failure: `Provider.available()` was false, `draftFmea` hit an early `_toast(...); return;` and bailed in milliseconds. The harness then waited out its full 900 s timeout three times. No credits were spent. See F3.
+**The FMEA runs cost 45 minutes and produced nothing, and the tool was right to refuse.** `ppfmea` appears nowhere in the project's saved config, so `draftFmea` hit its second guard — "Piece-part FMEA is opt-in and not in this programme's scope … ARP4761A J.3.2" — and returned in milliseconds, before any model call. No credits were spent. The project holds 21 systems and 65 fault trees, so there was ample material; the lane was simply not switched on. **The defect was never in FMEA — it was that a correct refusal was invisible to the harness**, which then waited out its full 900 s timeout three times. See F3.
+
+*(Correction, same session: this was first reported as `Provider.available()` returning false. That reading came from a console probe of `window.Provider`, which does not exist as a global — the check returned false whether the provider was down or merely out of scope, and could not tell the two apart. The scope-gate cause above is read from the saved project and is checkable.)*
 
 ## FHA classification — Opus, 85 conditions, n=3
 
