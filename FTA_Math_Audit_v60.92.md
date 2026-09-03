@@ -91,3 +91,16 @@ Implemented in `safety_lab.js` + `assurance_modules.js` (v61.00 / 1.5):
 - **Locking benchmarks** added to the DO-330 suite: B21 (INHIBIT allocation round-trip), B22 (probability-only allocation: no λ written, exact closure), B23 (CCF uncertainty median ≡ BDD-exact).
 
 Verification (Node harness running the actual production files): AND/OR/VOTING/XOR/INHIBIT/PAND/SPARE round-trips all close (worst case VOTING −0.04%, conservative); weighted INHIBIT closes; repair-model leaf keeps its budget with no λ (was ×10 over); verification trees still honor repair models (λτ/2 unchanged); CCF uncertainty ratio = 1.000 vs BDD-exact for both β-only and β+γ MGL (was ×9.9); shared-event rebalance converges λ-free; **benchmark suite 25/25 PASS**.
+
+
+---
+
+## Addendum — v66 (2026-07-05): event-tree, bow-tie join, monitor coverage
+
+New quantitative surfaces since v60.92, each verified live against the production build (evidence in DO-330 TVR v0.2):
+
+- **ETA sequence probabilities** (`event_trees.js`): 2^n exact products over ordered barriers; closure Σ = 1 checked on every evaluation (self-auditing arithmetic).
+- **Bow-tie join** (`bowtie.js`): initiator ≡ BDD-exact P(top) of the linked fault tree — the same engine as the cert numbers, no re-derivation, no hand entry. Verified: BT-005 all-success path 3.83e-4 = 3.87e-4 · Π(1−pFail).
+- **Cross-side common cause**: mitigative barrier trace ∩ cause cut sets under string-normalized identifiers (regression case: string trace vs numeric logicalId — a silent-miss bug found and fixed during verification). Fires → defeated Independence Principle {cut set ∪ barrier}.
+- **Monitor imperfect coverage** (`monitor_spec.js`, G.11.1.3.4): Q_true = 1−(1−Q_det)(1−Q_undet); Q_det = credited model at c·λ; Q_undet = 1−e^(−(1−c)·λ·τ_scrub). Verified on BE-5111: λτ/2 = 6.00e-4 exact; c = 0.9, τ_scrub = 500 → Q_true = 6.90e-4, factor ×1.15 flagged. Independence verdicts (same-element / joint-cut-set) are ledger defeats, not advisories.
+- **Two-lane knot**: allocation vs verification P computed by the same BDD path; LDG pair 3.87e-4 vs 1.65e-5 verified within budget.

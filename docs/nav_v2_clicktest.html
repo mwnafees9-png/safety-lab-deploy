@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nav v2 — click test · fully collapsed</title>
+<style>
+:root{
+  --navy:#14224A; --mid:#3457A2; --purple:#7247B1; --lav:#9B55BE;
+  --ink:#0a0d14; --panel:#161b28; --panel2:#0f131c; --border:rgba(255,255,255,.1);
+  --txt:#fff; --txt2:rgba(255,255,255,.72); --txt3:rgba(255,255,255,.45);
+  --green:#10b981; --amber:#f59e0b; --blue:#3b82f6; --red:#ef4444;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--txt);font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5}
+.top{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.top h1{font-size:18px}
+.top h1 span{background:linear-gradient(90deg,#9DC6FF,#EBC6FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.counter{margin-left:auto;font-size:15px;font-weight:700;background:var(--panel);border:1px solid var(--border);padding:8px 16px}
+.counter b{color:#9DC6FF;font-size:20px}
+.stage{display:grid;grid-template-columns:310px 1fr;margin:16px 24px 40px;border:1px solid var(--border);min-height:640px}
+@media(max-width:900px){.stage{grid-template-columns:1fr}}
+.rail{background:linear-gradient(175deg,var(--navy) 0%,var(--mid) 45%,var(--purple) 85%,var(--lav) 100%);padding:14px 0 20px;overflow-y:auto;max-height:820px}
+.rail *{text-shadow:0 1px 2px rgba(0,0,0,.45),0 0 1px rgba(0,0,0,.3)}
+.brand{padding:4px 16px 12px;font-weight:700;font-size:13px;letter-spacing:.4px;border-bottom:1px solid rgba(0,0,0,.25);margin-bottom:8px}
+.brand small{display:block;font-weight:600;font-size:9.5px;letter-spacing:2px;color:rgba(255,255,255,.65);text-transform:uppercase}
+.it{display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:12.8px;color:rgba(255,255,255,.92);cursor:pointer}
+.it:hover{background:rgba(0,0,0,.18)}
+.it.hit{background:rgba(16,185,129,.35)}
+.it .ico{width:16px;text-align:center;flex:none}
+.hd{padding:10px 16px 3px;font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700}
+.grp{margin:1px 0}
+.grp>summary{display:flex;align-items:center;gap:8px;padding:6px 16px;font-size:12.8px;font-weight:700;cursor:pointer;list-style:none}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary .chev{margin-left:auto;transition:transform .15s;color:rgba(255,255,255,.6)}
+.grp[open]>summary .chev{transform:rotate(90deg)}
+.grp>summary:hover{background:rgba(0,0,0,.18)}
+.sub{padding:1px 0 4px}
+.sub .it{padding-left:38px;font-size:12.3px}
+.sub .grp>summary{padding-left:38px}
+.sub .sub .it{padding-left:58px;font-size:12px}
+.badge{margin-left:auto;font-size:9.5px;padding:1px 6px;border:1px solid rgba(255,255,255,.45);color:rgba(255,255,255,.85);white-space:nowrap}
+.cat{margin:10px 12px 4px;padding:8px 12px;border:1px dashed rgba(255,255,255,.4);font-size:12.3px;color:rgba(255,255,255,.85);cursor:pointer}
+.cmdk{margin:6px 12px 0;padding:7px 12px;background:rgba(0,0,0,.28);border:1px solid rgba(0,0,0,.4);font-size:12px;color:rgba(255,255,255,.75);cursor:pointer;display:flex;gap:8px;align-items:center}
+.kbd{border:1px solid rgba(255,255,255,.4);padding:0 5px;font-size:10.5px;font-family:ui-monospace,Menlo,monospace}
+.right{background:var(--panel2);padding:22px 26px;overflow-y:auto;max-height:820px}
+.right h2{font-size:16px;margin-bottom:6px}
+.right p{color:var(--txt3);font-size:12.5px;margin-bottom:12px}
+.task{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);margin-bottom:6px;background:var(--panel)}
+.task .nm{font-size:13px;font-weight:600}
+.task button{margin-left:auto;background:transparent;border:1px solid var(--blue);color:#9DC6FF;padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}
+.task button:hover{background:var(--blue);color:#fff}
+.task .res{margin-left:auto;font-weight:700;font-size:13px}
+.task.active{border-color:var(--amber)}
+.task.done .res{color:var(--green)}
+.note{background:var(--panel);border:1px dashed var(--border);padding:10px 14px;color:var(--txt3);font-size:12px;margin:14px 0}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green);color:#04251a;font-weight:700;padding:10px 22px;display:none;z-index:60}
+#pal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:50}
+#pal.open{display:flex}
+.palbox{width:520px;background:var(--panel);border:1px solid rgba(255,255,255,.2)}
+.palbox input{width:100%;background:var(--panel2);border:none;border-bottom:1px solid var(--border);color:#fff;font:inherit;font-size:15px;padding:13px 16px;outline:none}
+.palrow{padding:9px 16px;font-size:13px;cursor:pointer;display:flex;gap:10px}
+.palrow:hover{background:var(--ink)}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1><span>Click test</span> — fully collapsed rail, Rev B structure</h1>
+  <div style="font-size:12px;color:var(--txt3)">Pick a task on the right, then navigate. Every click on the rail counts. ⌘K counts too (open = 1, pick = 1).</div>
+  <div class="counter">Clicks: <b id="cnt">0</b></div>
+</div>
+
+<div class="stage">
+  <nav class="rail" id="rail"></nav>
+  <div class="right">
+    <h2>Try these — typical engineer journeys</h2>
+    <p>Counter resets when you hit Start. Target flashes green when you land on it.</p>
+    <div id="tasks"></div>
+    <div class="note"><b>Reading the numbers:</b> collapsed-to-anything worst case in this structure is 3 clicks (group → system → item); most daily targets are 2. The same targets in today's rail are 1–2 clicks <i>plus scanning ~85 rows</i> — clicks were never the real cost, scanning was. ⌘K makes everything exactly 2 regardless of depth.</div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="pal" onclick="if(event.target===this){this.classList.remove('open')}">
+  <div class="palbox">
+    <input id="palin" placeholder="Type to find… (this one really filters)" oninput="palFilter()">
+    <div id="palrows"></div>
+  </div>
+</div>
+
+<script>
+let clicks=0, activeTask=null;
+const cnt=document.getElementById('cnt');
+function bump(){clicks++;cnt.textContent=clicks;}
+
+const TASKS=[
+ {id:'t1', nm:'Open the AFHA', target:'afha-main'},
+ {id:'t2', nm:'Open FCS — PSSA fault trees', target:'fcs-pssa'},
+ {id:'t3', nm:'Check the ASA close-out ledger', target:'asa-ledger'},
+ {id:'t4', nm:'Open EPS — FMEA', target:'eps-fmea'},
+ {id:'t5', nm:'Reliability for FUEL', target:'fuel-rel'},
+ {id:'t6', nm:'Add a lane from the Catalogue', target:'catalogue'},
+ {id:'t7', nm:'Budget handoffs ledger (PASA)', target:'pasa-handoffs'},
+ {id:'t8', nm:'Evidence Package', target:'evpkg'},
+];
+const results={};
+
+function renderTasks(){
+  document.getElementById('tasks').innerHTML=TASKS.map(t=>{
+    const r=results[t.id];
+    const cls=(activeTask===t.id?'active':'')+(r!=null?' done':'');
+    return `<div class="task ${cls}"><span class="nm">${t.nm}</span>`+
+      (r!=null?`<span class="res">✓ ${r} click${r===1?'':'s'}</span>`
+        :(activeTask===t.id?`<span class="res" style="color:var(--amber)">navigating…</span>`
+        :`<button onclick="startTask('${t.id}')">Start</button>`))+`</div>`;
+  }).join('');
+}
+function startTask(id){activeTask=id;clicks=0;cnt.textContent=0;renderTasks();}
+function hit(targetId,label,el){
+  bump();
+  if(el){el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),900);}
+  if(activeTask){
+    const t=TASKS.find(x=>x.id===activeTask);
+    if(t&&t.target===targetId){
+      results[activeTask]=clicks;
+      toast(`${t.nm} — ${clicks} click${clicks===1?'':'s'}`);
+      activeTask=null;
+    }
+  }
+  renderTasks();
+}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200);}
+
+const leaf=(label,target,badge)=>`<a class="it" onclick="hit('${target}','${label.replace(/'/g,'')}',this)">${label}${badge?`<span class="badge">${badge}</span>`:''}</a>`;
+const grp=(ico,label,inner,extra)=>`<details class="grp"${extra||''}><summary onclick="bump()"><span class="ico">${ico}</span>${label}<span class="chev">›</span></summary><div class="sub">${inner}</div></details>`;
+
+function sysDir(code,name){
+  return grp('▣',name,
+    leaf('Functions · FCIM · SFHA',code+'-sfha')+
+    leaf('Items & LRUs — this system',code+'-items')+
+    leaf('PSSA',code+'-pssa','trees · allocation')+
+    leaf('SSA',code+'-ssa','same trees · verification')+
+    leaf('FMEA / FMES',code+'-fmea')+
+    leaf('Reliability — this system',code+'-rel')+
+    leaf('Maintainability — this system',code+'-mx')+
+    leaf('Requirements · assumptions',code+'-req'));
+}
+
+document.getElementById('rail').innerHTML=
+`<div class="brand">Safety Lab Aero<small>System Safety Suite</small></div>`
++leaf('Dashboard — six cockpits','dash')
++leaf('Golden Thread · <b>live</b>','gt')
++`<div class="hd">The program — ARP4761A A→F</div>`
++grp('🗂','Program',
+  leaf('Safety Program Plan · scope','spp')+
+  leaf('Certification basis (AC 1309)','certbasis')+
+  leaf('Flight Phases','phases')+
+  leaf('References','refs'))
++grp('📐','Functional definition',
+  leaf('Functional breakdown — aircraft functions','func')+
+  leaf('Failure condition matrix (FCIM)','fcim'))
++grp('⚠️','AFHA',
+  leaf('Aircraft hazard assessment','afha-main')+
+  leaf('Assumptions','afha-asm')+
+  leaf('Requirements — aircraft','afha-req'))
++grp('🛫','PASA',
+  leaf('Fault trees','pasa-trees','allocation · top-down')+
+  leaf('DAL allocation — FDAL/IDAL','pasa-dal')+
+  leaf('Budget handoffs → systems','pasa-handoffs','ledger')+
+  leaf('Markov attachments','pasa-markov')+
+  leaf('Zonal Safety (ZSA)','zsa')+
+  leaf('Particular Risks (PRA)','pra')+
+  leaf('Common Modes (CMA)','cma')+
+  leaf('STPA — interaction hazards','stpa')+
+  leaf('Human factors set','hfa'))
++grp('🧩','Systems',
+  sysDir('eps','Electrical Power (EPS)')+
+  sysDir('fcs','Flight Controls (FCS)')+
+  sysDir('fuel','Fuel (FUEL)')+
+  leaf('All items & LRUs — cross-system view','items-all')+
+  leaf('＋ Add system','addsys'))
++grp('🛬','ASA',
+  leaf('Fault trees','asa-trees','verification vs PASA baseline')+
+  leaf('Close-out ledger — allocated vs demonstrated','asa-ledger')+
+  leaf('Latent failures (CCMR)','ccmr')+
+  leaf('Dispatch relief (MMEL / TLD)','mmel')+
+  leaf('In-service watch list (SSE)','sse'))
++grp('🧾','Verify & prove',
+  leaf('Requirements Repository','reqrepo')+
+  leaf('Validation Matrix · MoC · V&V roll-up','vv')+
+  leaf('DAL Credit (DO-178C / 254)','dalcred')+
+  leaf('Traceability · Thread Integrity','trace')+
+  leaf('Evidence Package','evpkg'))
++`<div class="hd">Program admin</div>`
++grp('⇄','Interoperability',
+  leaf('ReqIF · Jama · Polarion · DOORS','interop-req')+
+  leaf('Architecture import — Cameo · SysML','interop-xmi'))
++grp('🗃','Configuration',
+  leaf('Baselines & CM · Reviews · OPRs','cm')+
+  leaf('Modification Impact · Locks','mod'))
++leaf('ANEM — assistant & chat','anem')
++`<div class="cat" onclick="hit('catalogue','Catalogue',this)">＋ Catalogue — <b>7</b> lanes not in this program</div>`
++`<div class="cmdk" onclick="bump();openPal()"><span class="kbd">⌘K</span> Find anything…</div>`;
+
+// palette — actually filters, picking counts a click and can complete tasks
+const PALIDX=[
+ ['Aircraft hazard assessment (AFHA)','afha-main'],['FCS — PSSA fault trees','fcs-pssa'],
+ ['ASA close-out ledger','asa-ledger'],['EPS — FMEA','eps-fmea'],['FUEL — reliability','fuel-rel'],
+ ['Budget handoffs ledger','pasa-handoffs'],['Evidence Package','evpkg'],['Zonal Safety (ZSA)','zsa'],
+ ['Catalogue — add a lane','catalogue'],['Golden Thread','gt'],['STPA','stpa'],['Dispatch relief (MMEL)','mmel'],
+];
+function openPal(){document.getElementById('pal').classList.add('open');document.getElementById('palin').value='';palFilter();setTimeout(()=>document.getElementById('palin').focus(),50);}
+function palFilter(){
+  const q=(document.getElementById('palin').value||'').toLowerCase();
+  document.getElementById('palrows').innerHTML=PALIDX.filter(r=>r[0].toLowerCase().includes(q)).slice(0,7)
+    .map(r=>`<div class="palrow" onclick="document.getElementById('pal').classList.remove('open');hit('${r[1]}','${r[0]}')"><span>↳</span>${r[0]}</div>`).join('');
+}
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();bump();openPal();}});
+renderTasks();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The OG layout — what keeping it means</title>
+<style>
+:root{
+  --navy:#14224A; --mid:#3457A2; --purple:#7247B1; --lav:#9B55BE;
+  --ink:#0a0d14; --panel:#161b28; --panel2:#0f131c; --border:rgba(255,255,255,.1);
+  --txt:#fff; --txt2:rgba(255,255,255,.72); --txt3:rgba(255,255,255,.45);
+  --green:#10b981; --amber:#f59e0b; --blue:#3b82f6; --red:#ef4444;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--txt);font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5}
+.top{padding:16px 24px;border-bottom:1px solid var(--border)}
+.top h1{font-size:19px}
+.top h1 span{background:linear-gradient(90deg,#9DC6FF,#EBC6FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.top p{color:var(--txt3);font-size:12.5px;margin-top:4px;max-width:100ch}
+.mode{display:flex;gap:8px;padding:14px 24px 0;align-items:center;flex-wrap:wrap}
+.mode button{background:var(--panel);border:1px solid var(--border);color:var(--txt2);padding:8px 16px;font:inherit;font-weight:600;cursor:pointer}
+.mode button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.mode .lbl{font-size:12px;color:var(--txt3)}
+.stage{display:grid;grid-template-columns:310px 1fr;margin:16px 24px 40px;border:1px solid var(--border);min-height:640px}
+@media(max-width:900px){.stage{grid-template-columns:1fr}}
+.rail{background:linear-gradient(175deg,var(--navy) 0%,var(--mid) 45%,var(--purple) 85%,var(--lav) 100%);padding:14px 0 20px;overflow-y:auto;max-height:820px}
+.rail *{text-shadow:0 1px 2px rgba(0,0,0,.45),0 0 1px rgba(0,0,0,.3)}
+.brand{padding:4px 16px 12px;font-weight:700;font-size:13px;letter-spacing:.4px;border-bottom:1px solid rgba(0,0,0,.25);margin-bottom:8px}
+.brand small{display:block;font-weight:600;font-size:9.5px;letter-spacing:2px;color:rgba(255,255,255,.65);text-transform:uppercase}
+.it{display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:12.6px;color:rgba(255,255,255,.92);cursor:pointer}
+.it:hover{background:rgba(0,0,0,.18)}
+.hd2{padding:6px 16px 2px 34px;font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700}
+.grp{margin:1px 0}
+.grp>summary{display:flex;align-items:center;gap:8px;padding:6px 16px;font-size:12.8px;font-weight:700;cursor:pointer;list-style:none}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary .chev{margin-left:auto;transition:transform .15s;color:rgba(255,255,255,.6)}
+.grp[open]>summary .chev{transform:rotate(90deg)}
+.grp>summary:hover{background:rgba(0,0,0,.18)}
+.sub .it{padding-left:34px}
+.badge{margin-left:auto;font-size:9.5px;padding:1px 6px;border:1px solid rgba(255,255,255,.45);color:rgba(255,255,255,.85);white-space:nowrap}
+.cat{margin:10px 12px 4px;padding:8px 12px;border:1px dashed rgba(255,255,255,.4);font-size:12.3px;color:rgba(255,255,255,.85);cursor:pointer}
+.cmdk{margin:6px 12px 0;padding:7px 12px;background:rgba(0,0,0,.28);border:1px solid rgba(0,0,0,.4);font-size:12px;color:rgba(255,255,255,.75);cursor:pointer;display:flex;gap:8px;align-items:center}
+.kbd{border:1px solid rgba(255,255,255,.4);padding:0 5px;font-size:10.5px;font-family:ui-monospace,Menlo,monospace}
+.count-note{padding:10px 16px 0;font-size:11px;color:rgba(255,255,255,.65)}
+.right{background:var(--panel2);padding:22px 26px;overflow-y:auto;max-height:820px}
+.right h2{font-size:16px;margin-bottom:6px}
+.right h3{font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:var(--txt3);margin:16px 0 8px;font-weight:700}
+.right p{color:var(--txt2);font-size:13px;margin-bottom:10px;max-width:70ch}
+.card{background:var(--panel);border:1px solid var(--border);padding:14px 16px;margin:10px 0}
+.card b{color:#BFDBFF}
+ul{margin:4px 0 4px 18px;color:var(--txt2);font-size:13px}
+li{margin:4px 0}
+.g{color:var(--green);font-weight:700}
+.a{color:var(--amber);font-weight:700}
+.r{color:var(--red);font-weight:700}
+#pal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:50}
+#pal.open{display:flex}
+.palbox{width:520px;background:var(--panel);border:1px solid rgba(255,255,255,.2)}
+.palbox input{width:100%;background:var(--panel2);border:none;border-bottom:1px solid var(--border);color:#fff;font:inherit;font-size:15px;padding:13px 16px;outline:none}
+.palrow{padding:9px 16px;font-size:13px;cursor:pointer;display:flex;gap:10px;align-items:center}
+.palrow:hover{background:var(--ink)}
+.palrow .tag{margin-left:auto;font-size:10.5px;color:var(--amber);border:1px solid var(--amber);padding:1px 7px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1><span>The OG layout stays</span> — here's exactly what that decision means</h1>
+  <p>Same five groups, same item locations, zero relearning. What changes: the plan-gating you already shipped does the decluttering (toggle the presets below to watch), groups rest collapsed, a Catalogue entry makes absence legible, and ⌘K makes depth free. The cascade (PASA→PSSA→SSA→ASA handoffs, close-out ledger) ships as <b>pages inside existing tabs</b> — it never needed the nav moved.</p>
+</div>
+
+<div class="mode">
+  <span class="lbl">Declared program:</span>
+  <button id="p-full" class="on" onclick="setProg('full')">Part 25 — full</button>
+  <button id="p-lean" onclick="setProg('lean')">Part 23 — lean</button>
+  <button style="margin-left:auto" onclick="document.getElementById('pal').classList.add('open')">⌘K palette demo</button>
+</div>
+
+<div class="stage">
+  <nav class="rail" id="rail"></nav>
+  <div class="right">
+    <h2>The decision, itemized</h2>
+    <div class="card"><b>Kept (everything):</b>
+      <ul>
+        <li>Define · Analyze · Requirements · Prove · Admin &amp; AI — <span class="g">unchanged</span>. Every item where muscle memory expects it. Existing users, Clint, the testers: nothing moves.</li>
+        <li>All 76 tab ids, deep links, cockpit-modal links, pinned tests — <span class="g">untouched</span>.</li>
+      </ul>
+    </div>
+    <div class="card"><b>Added (small, additive, no relearning cost):</b>
+      <ul>
+        <li><span class="g">Plan-gating shows its work</span> — v1.1 already hides deselected lanes; the lean preset on the left is that, live. The only new bit is the <b>Catalogue — N lanes</b> entry so a hidden lane is discoverable, not mysterious. Same signed declare flow.</li>
+        <li><span class="g">Collapsed resting state</span> — groups start closed, state persisted. The 85-row wall becomes ~7 rows until you open what you need.</li>
+        <li><span class="g">⌘K palette</span> — every tab, system, and undeclared lane (labeled, routed through the signed flow), two keystrokes from anywhere. This is what makes keeping the deep OG tree cost nothing.</li>
+      </ul>
+    </div>
+    <div class="card"><b>The cascade ships anyway — as pages, not as nav:</b>
+      <ul>
+        <li><b>Budget handoffs ledger</b> → a section on the Fault Tree Analysis page (where apportionment already lives): allocated target · owning system · status (allocated → accepted → demonstrated → closed), staleness both ways.</li>
+        <li><b>PSSA trees inherit their targets from handoffs</b> — linked, never retyped — inside the existing system workspaces.</li>
+        <li><b>Close-out ledger</b> → the centerpiece of the existing ASA tab: allocated vs demonstrated per handoff, assumptions discharged, computable close-out.</li>
+        <li>One tree per level, two postures (ftaConfig mode + baselines) — data-model work, fully independent of where nav items sit. Nothing about keeping the OG layout costs you this.</li>
+      </ul>
+    </div>
+    <div class="card"><b>Consciously not taken (parked, on record):</b>
+      <ul>
+        <li><span class="a">Lifecycle spine</span> (AFHA→PASA→Systems→ASA rail) — parked in docs/nav_v2_mockup.html if it ever earns another look.</li>
+        <li><span class="a">Per-system nav housing</span> — the workspace chooser stays; ⌘K compensates ("fcs trees" = 2 keystrokes).</li>
+        <li><span class="a">References/interop consolidation</span> — items stay where they are.</li>
+      </ul>
+    </div>
+    <h3>Build list (short now)</h3>
+    <p>1 · Collapsed-default + persisted group state. &nbsp;2 · Catalogue entry + count. &nbsp;3 · nav_palette.js (⌘K). &nbsp;4 · The cascade feature (handoffs · posture baselines · close-out ledger) inside existing tabs. &nbsp;Tests pin all four; Oladele's fresh-eyes pass stays the acceptance gate.</p>
+  </div>
+</div>
+
+<div id="pal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="palbox">
+    <input placeholder="Find anything… (demo: 'fcs trees')" readonly>
+    <div class="palrow"><span>🌲</span> FCS — fault trees (system workspace) <span class="tag" style="color:var(--green);border-color:var(--green)">open</span></div>
+    <div class="palrow"><span>⚖</span> Budget handoffs ledger (FTA page) <span class="tag" style="color:var(--green);border-color:var(--green)">open</span></div>
+    <div class="palrow"><span>🗺</span> Routing / Zone-Spanning <span class="tag">in catalogue — add to program</span></div>
+  </div>
+</div>
+
+<script>
+let prog='full';
+function setProg(p){prog=p;
+ document.getElementById('p-full').classList.toggle('on',p==='full');
+ document.getElementById('p-lean').classList.toggle('on',p==='lean');
+ render();}
+// lean = lanes a Part 23 Class I program typically declares OFF (v1.1 gating, live today)
+const LEAN_OFF=['Markov Models','Event Trees','Particular Risk (PRA)','Zonal Safety (ZSA)','Cascading effects & fault injection','Routing / Zone-Spanning','Human Factors Analysis (HFA)','Task Analysis','Ergonomics','AI/ML learning assurance','STPA — interaction hazards','Software Reliability','Sneak Circuit','Life-Cycle Cost','MSG-3 Analysis','MSG-3 Structures · Zonal · L/HIRF','LORA — Level of Repair','PM Interval Optimizer','Monte Carlo (Standby · Phases)','Growth · Crow-AMSAA','Weibull · Life Data','SORA Thread','Latent failures (CCMR)'];
+const off=l=>prog==='lean'&&LEAN_OFF.includes(l);
+const leaf=(l,badge)=>off(l)?'':`<a class="it">${l}${badge?`<span class="badge">${badge}</span>`:''}</a>`;
+const hd2=t=>`<div class="hd2">${t}</div>`;
+const grp=(ico,l,inner)=>{const c=(inner.match(/class="it"/g)||[]).length;return c?`<details class="grp"><summary><span class="ico">${ico}</span>${l}<span class="chev">›</span><span class="badge" style="margin-left:6px">${c}</span></summary><div class="sub">${inner}</div></details>`:'';};
+
+function render(){
+ let offCount=prog==='lean'?LEAN_OFF.length:2;
+ document.getElementById('rail').innerHTML=
+ `<div class="brand">Safety Lab Aero<small>System Safety Suite</small></div>`
+ +`<a class="it"><span class="ico">▦</span>Dashboard</a>`
+ +grp('📐','Define',
+   leaf('Certification basis (AC 1309)')+leaf('Safety process map (ARP 4761A)')+leaf('Program Planning','drives this rail')+leaf('Flight Phases'))
+ +grp('🔬','Analyze',
+   hd2('Aircraft analyses')+leaf('1 · Aircraft functions')+leaf('2 · Failure condition matrix (FCIM)')+leaf('3 · Hazard assessment (AFHA)')+leaf('Requirements — aircraft')+leaf('Assumptions — aircraft analyses')+leaf('Aircraft safety analysis (PASA)')
+   +hd2('Systems analyses')+leaf('System workspaces — SFHA · trees · reqs')+leaf('System safety — planned (PSSA)','targets inherit from handoffs')
+   +hd2('Verification')+leaf('System Safety Assessment (SSA)')+leaf('Aircraft Safety Assessment (ASA)','+ close-out ledger')
+   +hd2('Trees & models')+leaf('Fault Tree Analysis','+ handoffs ledger')+leaf('Markov Models')+leaf('Event Trees')+leaf('Items & LRUs — master list')+leaf('Latent failures (CCMR)')+leaf('Failure modes summary (FMES)')
+   +hd2('Common cause')+leaf('Particular Risk (PRA)')+leaf('Zonal Safety (ZSA)')+leaf('Common modes (CMA)')+leaf('Cascading effects & fault injection')+leaf('Routing / Zone-Spanning')+leaf('Principle Ledger')
+   +leaf('Human Factors Analysis (HFA)')+leaf('Task Analysis')+leaf('Ergonomics')+leaf('AI/ML learning assurance')+leaf('STPA — interaction hazards')
+   +hd2('Reliability')+leaf('Component Library')+leaf('Reliability Prediction & FRACAS')+leaf('Parts Count (217F)')+leaf('Block Diagrams (RBD)')+leaf('Weibull · Life Data')+leaf('Growth · Crow-AMSAA')+leaf('Allocation · Spares · Demo')+leaf('Tolerance · Derating')+leaf('Monte Carlo (Standby · Phases)')+leaf('Frameworks · Test Factors')+leaf('Software Reliability')+leaf('Sneak Circuit')+leaf('Life-Cycle Cost')+leaf('RAM Settings')
+   +hd2('Maintainability')+leaf('MTTR / MDT Task Ledger')+leaf('MSG-3 Analysis')+leaf('MSG-3 Structures · Zonal · L/HIRF')+leaf('Dispatch relief (MMEL / TLD)')+leaf('PM Interval Optimizer')+leaf('Testability & Diagnostics')+leaf('LORA — Level of Repair'))
+ +grp('📋','Requirements',
+   leaf('Requirements Repository')+leaf('Validation Matrix')+leaf('Means of Compliance')+leaf('V&V Status Roll-up')+leaf('Requirements exchange — Jama · Polarion · DOORS')+leaf('Architecture import — Cameo · SysML')+leaf('DAL Credit (DO-178C / 254)'))
+ +grp('🧾','Prove',
+   leaf('Golden Thread')+leaf('SORA Thread')+leaf('Traceability Matrix')+leaf('Thread Integrity')+leaf('Evidence Package')+leaf('Objectives matrix (4754B App A)')+leaf('Math validation — benchmarks')+leaf('Baselines & configuration')+leaf('Reviews & Approvals')+leaf('Problem Reports (OPRs)')+leaf('Modification Impact')+leaf('In-service watch list'))
+ +grp('⚙︎','Admin & AI',
+   leaf('🔒 Workspaces & Locks')+leaf('AI Assistant')+leaf('ANEM — live chat')+leaf('AI Assumptions'))
+ +`<div class="cat">＋ Catalogue — <b>${offCount}</b> lanes not in this program</div>`
+ +`<div class="cmdk" onclick="document.getElementById('pal').classList.add('open')"><span class="kbd">⌘K</span> Find anything…</div>`
+ +`<div class="count-note">${prog==='lean'?'Lean program: v1.1 plan-gating (shipping today) removed '+LEAN_OFF.length+' lanes — same layout, shorter rail.':'Full Part 25 program: everything declared. Collapsed resting state = 7 rows.'}</div>`;
+}
+render();
+</script>
+</body>
+</html>

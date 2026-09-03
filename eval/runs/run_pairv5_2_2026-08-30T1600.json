@@ -1,0 +1,11 @@
+{
+ "meta": {
+  "name": "run_pairv5_2_2026-08-30T1600",
+  "model": "claude-opus-4-8",
+  "note": "pair v5 run 2 — shipped config: fha.draft@v2#0a2621d7, FCIM-carry (75.3). Decompose draw 2 (draw 1 = 9 fn, redrawn). Coverage 122/122 after 2 targeted passes; 40 rows initially dropped by AiFidelity id-check then recovered on redraft. sddSha256=994abde7693d30e7e1e0ae6813213c7dc7b1dad8a679a1b5001d6ff20cd7142f"
+ },
+ "functions": [],
+ "fcim": [],
+ "fha": [],
+ "assumptions": []
+}

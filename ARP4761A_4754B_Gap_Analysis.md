@@ -37,8 +37,8 @@
 | M3 | FMES — grouping FMEA modes by identical effect+detection, summed rates, FC-reference column; FTA basic events should source from FMES | App J, §4.2 |
 | M4 | CCMR/CMR derivation — significant-latent-failure sweep (>1 flight in Cat/Haz trees), wear-out list, not-to-exceed intervals → CCMR list linked to tree events | §5.1, E.3.2.4-6 |
 | M5 | Completion checklists as gates: PASA B.5 (a–m), PSSA D.5 (a–j), SSA E.4, ASA F.4 | App B/D/E/F |
-| M6 | Combined FCs: related-function combinations, operational events (RTO, diversion), environmental events — as first-class FC variants | A.3.1, A.8.3-5 |
-| M7 | Monitor/coverage modeling: monitor spec attributes (threshold, cycle time, scrub, coverage %, independence) + imperfect-coverage tree patterns | D.4.3.1, G.11.1.3.4 |
+| M6 | ~~Combined FCs: related-function combinations, operational events (RTO, diversion), environmental events — as first-class FC variants~~ **CLOSED 2026-07-05** — `fc_variants.js`: combined-FC rows (`combinedOf`, staleness), operational/environmental tags, coupling-derived candidates via shared implementing systems, INV-29 (hard, severity dilution) + INV-30 (advisory) | A.3.1, A.8.3-5 |
+| M7 | ~~Monitor/coverage modeling: monitor spec attributes (threshold, cycle time, scrub, coverage %, independence) + imperfect-coverage tree patterns~~ **CLOSED 2026-07-05** — `monitor_spec.js`: spec records on credit-taking events, Q_true split (G.11.1.3.4), independence verdicts feeding the IP ledger, AutoReq attribute emission, MBSA cockpit tile | D.4.3.1, G.11.1.3.4 |
 | M8 | Failure-frequency methodology (G.12) alongside unavailability, with conversion — needed to integrate supplier trees | G.11/G.12 |
 | M9 | Problem reports / OPRs as objects (CM ID, safety effect, deferral justification, interrelationships) feeding SSA/ASA | 4754B §4.7, E.2, F.3.5 |
 | M10 | 4754B Appendix A objectives matrix as a live compliance checklist (25 objectives × FDAL, R*/R/A/N, SC1/SC2 per artifact) | 4754B App A |
@@ -46,7 +46,7 @@
 | M12 | Modification impact analysis (New/Modified/Affected/Unmodified categories → Table 5 activity scoping) | 4754B §6.3 |
 | M13 | MMEL/dispatch-risk calculation mode (distinct from fleet-average) + TLD | §6/§7 |
 | M14 | Safety-significant events list export for in-service monitoring | §8 |
-| M15 | Assumption **routing** (up to aircraft / lateral to other systems / down) with owning-level confirmation loop — states exist, routing doesn't | C.6, D.4.3.2 |
+| M15 | ~~Assumption **routing** with owning-level confirmation loop~~ **CLOSED (verified 2026-07-05)** — routeTo/routeAt/routeBy live on all assumptions, A.6 + D.6.3 gates block on unrouted, free-text/imported routes preserved | C.6, D.4.3.2 |
 
 ---
 
@@ -135,3 +135,17 @@ ASA = triage + integration, not a re-analysis: pass 1 auto-classifies every AFHA
 
 ## 4. One-line verdict
 The quantitative core (FTA/BDD/Markov/DALgebra/budgets) is now standard-grade; what's missing is the **process layer** — the six assessments as live, gated workflows with the standard's connective tissue (Independence Principles, assumption routing, budget ledger, latent/CCMR sweep, FMES). The cockpit pattern in §3.1 delivers exactly the intuitiveness you asked about while closing the highest-value analytical gaps at the same time.
+
+
+---
+
+## Closure addendum — 2026-07-05
+
+Shipped and live-verified on production this date (see DO-330 TVR v0.2 addendum for executed verification cases):
+
+- **M6, M7, M15 closed** (rows struck above).
+- **Bow-tie analysis** (beyond the original gap list): compiled FTA⇄ETA join per the unified framework — initiator sourced from BDD-exact P(top), cross-side common-cause via cut-set intersection registering defeated Independence Principles, allocation⇄verification two-lane knot, event-tree consequence render, auto-build from existing trees.
+- **RM traceability round-trip**: FC push / relationship-graph pull (Jama live) and ReqIF exchange (DOORS / DOORS Next / Polarion / Codebeamer / Windchill), with provenance tiers (relationship / signed / candidate) on every barrier→requirement link.
+- **SPP toolchain declarations**: the program plan now declares the analysis/RM/MBSE toolchain as signed live data; interfaces adapt to the declaration.
+
+Remaining open from the original Tier lists: A6 at-risk/exposure named cases, A8 qualitative development-error events → FFS, M8 failure-frequency methodology, M9 OPRs, M13 MMEL/dispatch, M14 in-service export, M2/CEA graph propagation.

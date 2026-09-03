@@ -1,0 +1,6417 @@
+{
+ "meta": {
+  "name": "e1_wording_rig",
+  "at": "2026-08-30T18:53:16.026Z",
+  "baseSkillHash": "8c8977ea",
+  "v2BodyHash": "0d59d720",
+  "v2bAddHash": "ed801a00",
+  "v2bBodyHash": "a1046141",
+  "v2bAddText": "\nCANONICAL CONDITION PHRASING: word every condition, in 12 words or fewer, as \"<Loss-form> <capability>\" using EXACTLY these loss-forms: \"Complete loss of\", \"Partial loss of\", \"Erroneous\", \"Uncommanded\", \"Inadvertent\", \"Undetected\". <capability> is the sub-function's own name recast as the delivered capability, the SAME words every time (\"Provide wheel braking\" -> TL \"Complete loss of wheel braking\", PL \"Partial loss of wheel braking\", M \"Uncommanded wheel braking\"). Add at most ONE short qualifier, two words or fewer, and only where a cell holds two distinct conditions that need telling apart (\"— asymmetric\", \"— undetected\"). Never synonymise loss-forms (no \"total/full/gross loss\", no \"spurious/false\" where Erroneous applies), never restate the mechanism, never exceed 12 words in a cell.",
+  "blockedB1": 4,
+  "blockedB2": 1,
+  "blockedC": 0,
+  "c1xNote": "first C1 draw excluded — 9 actions dropped by executor (missing op), redraw per banner-gated protocol",
+  "b1BlockedCards": [
+   "⛔ Not applied — blocked by consistency check — Partial Loss too long (16 words — keep ≤12, name the capability only)",
+   "⛔ Not applied — blocked by consistency check — Partial Loss too long (19 words — keep ≤12, name the capability only)",
+   "⛔ Not applied — blocked by consistency check — Partial Loss too long (19 words — keep ≤12, name the capability only)",
+   "⛔ Not applied — blocked by consistency check — Partial Loss too long (19 words — keep ≤12, name the capability only)"
+  ],
+  "b2BlockedCards": [
+   "⛔ Not applied — blocked by consistency check — Malfunction too long (18 words — keep ≤12, name the capability only)FCIMsubId SF-011Total loss — not determinedPartial loss — not determinedAI confidence: medium · ✓ groundedSource: Aeolus_HL-1_Architect"
+  ],
+  "c1xBlockedCards": [
+   "⛔ Not applied — missing op?subId SF-011AI confidence: high · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “Lock status is displayed on the flight deck at all times”AI confidence: high · ✓ ",
+   "⛔ Not applied — missing op?subId SF-011AI confidence: medium · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “Lock engagement is sensed by two dissimilar and independently routed circuits”A",
+   "⛔ Not applied — missing op?subId SF-012AI confidence: high · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “loss on two adjacent stations is annunciated as a restraint condition requiring i",
+   "⛔ Not applied — missing op?subId SF-012AI confidence: medium · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “Loss of tension on any strap is annunciated in flight”AI confidence: medium · ✓",
+   "⛔ Not applied — missing op?subId SF-013AI confidence: high · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “A tension monitoring loop instruments every strap continuously”AI confidence: hig",
+   "⛔ Not applied — missing op?subId SF-013AI confidence: medium · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “The restraint tension monitoring loop is a single instrumented loop”AI confiden",
+   "⛔ Not applied — missing op?subId SF-014AI confidence: high · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “differential pressure and cabin altitude to the avionics and to the crew oxygen l",
+   "⛔ Not applied — missing op?subId SF-014AI confidence: low · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “differential pressure and cabin altitude to the avionics”AI confidence: low · ✓ gr",
+   "⛔ Not applied — missing op?subId SF-015AI confidence: medium · ✓ groundedSource: Aeolus_HL-1_Architecture_and_SDD.pdf — “conditions and distributes air to the flight deck and the hold”AI confidence: m"
+  ]
+ },
+ "draws": [
+  {
+   "tag": "A1",
+   "rows": [
+    {
+     "internalId": "1788115072500c0q97",
+     "subId": "SF-001",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-001-TL",
+     "tlDesc": "complete loss of forward thrust generation",
+     "plId": "SF-001-PL",
+     "plDesc": "thrust degraded within controllable margin",
+     "mId": "SF-001-M",
+     "mDesc": "uncommanded thrust change without crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.500Z",
+     "mExtra": [
+      {
+       "id": "SF-001-M2",
+       "desc": "erroneous thrust response to crew command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-001-PL2",
+       "desc": "asymmetric thrust within directional-control authority"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072502sexo6",
+     "subId": "SF-001",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-001-PL3",
+     "plDesc": "asymmetric thrust developing below crew detection threshold",
+     "mId": "SF-001-M3",
+     "mDesc": "slow uncommanded thrust drift without annunciation",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.502Z"
+    },
+    {
+     "internalId": "1788115072503l66u3",
+     "subId": "SF-002",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-002-TL",
+     "tlDesc": "complete loss of ground reverse thrust",
+     "plId": "SF-002-PL",
+     "plDesc": "reduced reverse-thrust deceleration on ground",
+     "mId": "SF-002-M",
+     "mDesc": "asymmetric reverse-thrust deployment on ground",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.503Z",
+     "mExtra": [
+      {
+       "id": "SF-002-M2",
+       "desc": "inadvertent reverse-thrust command on one side"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072504iezsd",
+     "subId": "SF-002",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-002-M3",
+     "mDesc": "undetected failure of reverser to deploy on selection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.504Z"
+    },
+    {
+     "internalId": "178811507250513d3u",
+     "subId": "SF-003",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-003-TL",
+     "tlDesc": "complete loss of roll control authority",
+     "plId": "SF-003-PL",
+     "plDesc": "roll authority degraded within MAC limits",
+     "mId": "SF-003-M",
+     "mDesc": "erroneous roll response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.505Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M2",
+       "desc": "uncommanded roll motion with no crew command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-003-PL2",
+       "desc": "roll authority degraded outside MAC limits"
+      }
+     ]
+    },
+    {
+     "internalId": "17881150725067q8a4",
+     "subId": "SF-003",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-003-PL3",
+     "plDesc": "roll authority degradation developing below crew detection threshold",
+     "mId": "SF-003-M3",
+     "mDesc": "slow uncommanded roll drift below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.506Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M4",
+       "desc": "erroneous roll response developing undetected"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072507qgago",
+     "subId": "SF-004",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-004-TL",
+     "tlDesc": "complete loss of pitch control authority",
+     "plId": "SF-004-PL",
+     "plDesc": "pitch authority degraded within MAC limits",
+     "mId": "SF-004-M",
+     "mDesc": "erroneous pitch response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.507Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M2",
+       "desc": "uncommanded pitch motion with no crew command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-004-PL2",
+       "desc": "pitch authority degraded outside MAC limits"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072508d0756",
+     "subId": "SF-004",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-004-PL3",
+     "plDesc": "pitch authority degradation developing below crew detection threshold",
+     "mId": "SF-004-M3",
+     "mDesc": "slow uncommanded pitch/trim drift below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.508Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M4",
+       "desc": "erroneous pitch response developing undetected"
+      }
+     ]
+    },
+    {
+     "internalId": "178811507251034b8y",
+     "subId": "SF-005",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-005-TL",
+     "tlDesc": "complete loss of yaw control authority",
+     "plId": "SF-005-PL",
+     "plDesc": "yaw authority degraded within MAC limits",
+     "mId": "SF-005-M",
+     "mDesc": "erroneous yaw response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.510Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M2",
+       "desc": "uncommanded yaw motion with no crew command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-005-PL2",
+       "desc": "yaw authority degraded outside MAC limits"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072511plolt",
+     "subId": "SF-005",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-005-PL3",
+     "plDesc": "yaw authority degradation developing below crew detection threshold",
+     "mId": "SF-005-M3",
+     "mDesc": "slow uncommanded yaw drift below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.511Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M4",
+       "desc": "erroneous yaw response developing undetected"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072513adkmi",
+     "subId": "SF-006",
+     "awareness": "Both",
+     "rationale": "",
+     "tlId": "SF-006-TL",
+     "tlDesc": "complete loss of high-lift configuration capability",
+     "plId": "SF-006-PL",
+     "plDesc": "asymmetric high-lift extension",
+     "mId": "SF-006-M",
+     "mDesc": "erroneous high-lift position versus commanded",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.513Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M2",
+       "desc": "uncommanded high-lift movement with no command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-006-PL2",
+       "desc": "loss of one high-lift power drive with degraded schedule"
+      },
+      {
+       "id": "SF-006-PL3",
+       "desc": "high-lift stuck at intermediate position"
+      }
+     ]
+    },
+    {
+     "internalId": "17881150725156w7c1",
+     "subId": "SF-007",
+     "awareness": "Both",
+     "rationale": "",
+     "tlId": "SF-007-TL",
+     "tlDesc": "complete loss of ground support / flotation capability",
+     "plId": "SF-007-PL",
+     "plDesc": "degraded flotation on semi-prepared surface",
+     "mId": "SF-007-M",
+     "mDesc": "erroneous gear position or downlock indication",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.515Z",
+     "plExtra": [
+      {
+       "id": "SF-007-PL2",
+       "desc": "partial loss of gear support at one unit"
+      }
+     ]
+    },
+    {
+     "internalId": "17881150725176mpeb",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-008-TL",
+     "tlDesc": "complete loss of wheel braking",
+     "plId": "SF-008-PL",
+     "plDesc": "braking limited to accumulator reserve",
+     "mId": "SF-008-M",
+     "mDesc": "inadvertent brake application",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.517Z",
+     "plExtra": [
+      {
+       "id": "SF-008-PL2",
+       "desc": "loss of anti-skid protection with braking retained"
+      },
+      {
+       "id": "SF-008-PL3",
+       "desc": "asymmetric braking capability"
+      }
+     ]
+    },
+    {
+     "internalId": "17881150725228lt52",
+     "subId": "SF-008",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-008-M2",
+     "mDesc": "undetected loss of anti-skid protection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.522Z"
+    },
+    {
+     "internalId": "17881150725252isxg",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-009-TL",
+     "tlDesc": "complete loss of nose-wheel steering",
+     "plId": "SF-009-PL",
+     "plDesc": "reduced steering authority",
+     "mId": "SF-009-M",
+     "mDesc": "erroneous steering response versus command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.525Z",
+     "mExtra": [
+      {
+       "id": "SF-009-M2",
+       "desc": "uncommanded nose-wheel steering deflection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072532w7ugm",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-010-TL",
+     "tlDesc": "loss of ability to open or close the nose door",
+     "plId": "SF-010-PL",
+     "plDesc": "door movement obstructed at intermediate position",
+     "mId": "SF-010-M",
+     "mDesc": "uncommanded door drive movement",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.532Z"
+    },
+    {
+     "internalId": "1788115072536g92d3",
+     "subId": "SF-010",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-010-M2",
+     "mDesc": "erroneous door-closed / lock-engaged indication with door not secured",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.536Z"
+    },
+    {
+     "internalId": "1788115072540991eo",
+     "subId": "SF-011",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-011-TL",
+     "tlDesc": "Complete loss of nose door locking capability",
+     "plId": "SF-011-PL",
+     "plDesc": "Partial loss of locking engagement (reduced latch/pin count)",
+     "mId": "SF-011-M",
+     "mDesc": "Erroneous indication of locked-and-confirmed when not fully locked",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.540Z",
+     "mExtra": [
+      {
+       "id": "SF-011-M2",
+       "desc": "Erroneous fault indication of locking when actually locked"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072543pf0pn",
+     "subId": "SF-011",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-011-M3",
+     "mDesc": "Erroneous indication of locked-and-confirmed when not fully locked",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.543Z"
+    },
+    {
+     "internalId": "1788115072547gb332",
+     "subId": "SF-012",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-012-TL",
+     "tlDesc": "Complete loss of longitudinal payload restraint",
+     "plId": "SF-012-PL",
+     "plDesc": "Partial loss of longitudinal restraint at one station",
+     "mId": "SF-012-M",
+     "mDesc": "Erroneous restraint state permitting undetected payload migration",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.547Z"
+    },
+    {
+     "internalId": "1788115072552yaoei",
+     "subId": "SF-012",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-012-M2",
+     "mDesc": "Progressive loss of restraint tension below annunciation threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.552Z"
+    },
+    {
+     "internalId": "1788115072557xfb0g",
+     "subId": "SF-013",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-013-TL",
+     "tlDesc": "Complete loss of restraint-tension monitoring",
+     "plId": "SF-013-PL",
+     "plDesc": "Partial loss of restraint-tension monitoring coverage",
+     "mId": "SF-013-M",
+     "mDesc": "Erroneous restraint-tension indication (false low)",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.557Z",
+     "mExtra": [
+      {
+       "id": "SF-013-M2",
+       "desc": "Erroneous restraint-tension indication (false normal)"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072564o8t05",
+     "subId": "SF-013",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-013-M3",
+     "mDesc": "Erroneous restraint-tension indication (false normal)",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.564Z"
+    },
+    {
+     "internalId": "1788115072570fvv30",
+     "subId": "SF-014",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-014-TL",
+     "tlDesc": "Complete loss of pressurisation control",
+     "plId": "SF-014-PL",
+     "plDesc": "Partial loss of pressurisation control (single-controller/valve degraded)",
+     "mId": "SF-014-M",
+     "mDesc": "Erroneous over-pressurisation command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.570Z",
+     "mExtra": [
+      {
+       "id": "SF-014-M2",
+       "desc": "Erroneous under-pressurisation / depressurisation command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072574m70g9",
+     "subId": "SF-014",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-014-M3",
+     "mDesc": "Slow erroneous drift of cabin/hold pressure below crew detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.574Z"
+    },
+    {
+     "internalId": "1788115072580oketm",
+     "subId": "SF-015",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-015-TL",
+     "tlDesc": "Complete loss of air conditioning and distribution",
+     "plId": "SF-015-PL",
+     "plDesc": "Partial loss of air conditioning (single-pack / reduced schedule)",
+     "mId": "SF-015-M",
+     "mDesc": "Erroneous air conditioning delivery (temperature/flow out of schedule)",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.580Z"
+    },
+    {
+     "internalId": "1788115072585ro3pf",
+     "subId": "SF-015",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-015-M2",
+     "mDesc": "Undetected contaminated / erroneous conditioned air delivery",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.585Z"
+    },
+    {
+     "internalId": "1788115072593a51ba",
+     "subId": "SF-016",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-016-TL",
+     "tlDesc": "Complete loss of airframe and inlet ice protection",
+     "plId": "SF-016-PL",
+     "plDesc": "Partial loss of ice protection coverage",
+     "mId": "SF-016-M",
+     "mDesc": "Erroneous ice protection response to demand",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.593Z",
+     "mExtra": [
+      {
+       "id": "SF-016-M2",
+       "desc": "Inadvertent/spurious ice protection activation"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-016-PL2",
+       "desc": "Loss of bleed-side ice protection to wings and inlets"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072599ka8na",
+     "subId": "SF-017",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-017-TL",
+     "tlDesc": "Complete loss of probe heat and icing detection",
+     "plId": "SF-017-PL",
+     "plDesc": "Loss of icing detection function",
+     "mId": "SF-017-M",
+     "mDesc": "Spurious ice detection advisory",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.599Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M2",
+       "desc": "Loss of individual heated probe/port monitoring"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-017-PL2",
+       "desc": "Loss of probe/static/windshield heating"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072607xdmf7",
+     "subId": "SF-017",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-017-M3",
+     "mDesc": "Failure to detect icing conditions with no advisory",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.607Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M4",
+       "desc": "Undetected loss of probe heating"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072613qzr7p",
+     "subId": "SF-018",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-018-TL",
+     "tlDesc": "Complete loss of flight and navigation information display",
+     "plId": "SF-018-PL",
+     "plDesc": "Partial loss of flight/navigation display",
+     "mId": "SF-018-M",
+     "mDesc": "Erroneous flight parameter display flagged as invalid",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.613Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M2",
+       "desc": "Erroneous navigation position display flagged as invalid"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-018-PL2",
+       "desc": "Loss of navigation information with attitude/air data retained"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072621yvd5i",
+     "subId": "SF-018",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-018-M3",
+     "mDesc": "Undetected misleading flight parameter display",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.621Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M4",
+       "desc": "Undetected misleading navigation information display"
+      }
+     ]
+    },
+    {
+     "internalId": "178811507262913xml",
+     "subId": "SF-019",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-019-TL",
+     "tlDesc": "Complete loss of crew alerting",
+     "plId": "SF-019-PL",
+     "plDesc": "Partial loss of crew alerting",
+     "mId": "SF-019-M",
+     "mDesc": "Spurious/nuisance crew alert",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.629Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M2",
+       "desc": "Misprioritised crew alert list"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-019-PL2",
+       "desc": "Loss of alert prioritisation with raw status retained"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072639gu1x6",
+     "subId": "SF-019",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-019-M3",
+     "mDesc": "Failure to annunciate a genuine failure condition",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.639Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M4",
+       "desc": "Suppressed or missing alert with no crew indication"
+      }
+     ]
+    },
+    {
+     "internalId": "17881150726505lw96",
+     "subId": "SF-020",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-020-TL",
+     "tlDesc": "Complete loss of fire and overheat detection",
+     "plId": "SF-020-PL",
+     "plDesc": "Partial loss of fire/overheat detection coverage",
+     "mId": "SF-020-M",
+     "mDesc": "Spurious fire or overheat warning",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.650Z",
+     "mExtra": [
+      {
+       "id": "SF-020-M2",
+       "desc": "Degraded single-loop detection annunciated"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-020-PL2",
+       "desc": "Loss of one detection loop reverting to single-loop logic"
+      }
+     ]
+    },
+    {
+     "internalId": "17881150726617pyui",
+     "subId": "SF-020",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-020-M3",
+     "mDesc": "Undetected dormant failure of both detection loops in a zone",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.661Z",
+     "mExtra": [
+      {
+       "id": "SF-020-M4",
+       "desc": "Failure to warn of an actual fire or overheat"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072671ak2lf",
+     "subId": "SF-021",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-021-TL",
+     "tlDesc": "complete loss of engine and APU fire extinguishing on demand",
+     "plId": "SF-021-PL",
+     "plDesc": "loss of extinguishing to one engine pair",
+     "mId": "SF-021-M",
+     "mDesc": "inadvertent extinguishant discharge into a nacelle",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.671Z",
+     "mExtra": [
+      {
+       "id": "SF-021-M2",
+       "desc": "failure of commanded discharge to reach the target zone"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-021-PL2",
+       "desc": "loss of independent APU extinguishing"
+      }
+     ]
+    },
+    {
+     "internalId": "17881150726772f9zs",
+     "subId": "SF-021",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-021-M3",
+     "mDesc": "depleted extinguishing capacity from undetected prior discharge or leakage",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.677Z"
+    },
+    {
+     "internalId": "1788115072685oa3c5",
+     "subId": "SF-022",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-022-TL",
+     "tlDesc": "complete loss of crew breathing oxygen supply on demand",
+     "plId": "SF-022-PL",
+     "plDesc": "reduced oxygen supply duration or reserve",
+     "mId": "SF-022-M",
+     "mDesc": "inadvertent overboard discharge of cylinder overpressure",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.685Z",
+     "plExtra": [
+      {
+       "id": "SF-022-PL2",
+       "desc": "loss of supply to one mask station"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115072694i6f5n",
+     "subId": "SF-022",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-022-PL3",
+     "plDesc": "undetected depletion of oxygen supply below required reserve",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:37:52.695Z"
+    }
+   ],
+   "cards": 41,
+   "leftover": 0,
+   "ms": 64993
+  },
+  {
+   "tag": "A2",
+   "rows": [
+    {
+     "internalId": "1788115167353ket0y",
+     "subId": "SF-001",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-001-TL",
+     "tlDesc": "complete loss of forward thrust generation",
+     "plId": "SF-001-PL",
+     "plDesc": "reduced available forward thrust",
+     "mId": "SF-001-M",
+     "mDesc": "asymmetric thrust across the aircraft",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.353Z",
+     "mExtra": [
+      {
+       "id": "SF-001-M2",
+       "desc": "uncommanded thrust change"
+      },
+      {
+       "id": "SF-001-M3",
+       "desc": "thrust not tracking commanded setting"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-001-PL2",
+       "desc": "asymmetric thrust distribution within controllable limits"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167354kjy5k",
+     "subId": "SF-001",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-001-PL3",
+     "plDesc": "reduced available forward thrust",
+     "mId": "SF-001-M4",
+     "mDesc": "thrust not tracking commanded setting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.354Z"
+    },
+    {
+     "internalId": "1788115167355b7g2k",
+     "subId": "SF-002",
+     "awareness": "Both",
+     "rationale": "",
+     "tlId": "SF-002-TL",
+     "tlDesc": "complete loss of ground reverse thrust",
+     "plId": "SF-002-PL",
+     "plDesc": "reduced reverse thrust effectiveness",
+     "mId": "SF-002-M",
+     "mDesc": "asymmetric reverse thrust on ground",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.355Z",
+     "mExtra": [
+      {
+       "id": "SF-002-M2",
+       "desc": "inadvertent reverse thrust deployment"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167355y4esg",
+     "subId": "SF-003",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-003-TL",
+     "tlDesc": "complete loss of roll control authority",
+     "plId": "SF-003-PL",
+     "plDesc": "reduced roll control authority",
+     "mId": "SF-003-M",
+     "mDesc": "erroneous roll response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.355Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M2",
+       "desc": "uncommanded roll motion with no command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-003-PL2",
+       "desc": "reduced roll control authority outside controllable limits"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167356ahbun",
+     "subId": "SF-003",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-003-PL3",
+     "plDesc": "reduced roll control authority",
+     "mId": "SF-003-M3",
+     "mDesc": "erroneous roll response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.356Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M4",
+       "desc": "uncommanded roll motion with no command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167357kqirv",
+     "subId": "SF-004",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-004-TL",
+     "tlDesc": "complete loss of pitch control authority",
+     "plId": "SF-004-PL",
+     "plDesc": "reduced pitch control authority",
+     "mId": "SF-004-M",
+     "mDesc": "erroneous pitch response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.357Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M2",
+       "desc": "uncommanded pitch motion with no command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-004-PL2",
+       "desc": "reduced pitch control authority outside controllable limits"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167357rw00r",
+     "subId": "SF-004",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-004-PL3",
+     "plDesc": "reduced pitch control authority",
+     "mId": "SF-004-M3",
+     "mDesc": "erroneous pitch response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.358Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M4",
+       "desc": "uncommanded pitch motion with no command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167358ubmh6",
+     "subId": "SF-005",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-005-TL",
+     "tlDesc": "complete loss of yaw control authority",
+     "plId": "SF-005-PL",
+     "plDesc": "reduced yaw control authority",
+     "mId": "SF-005-M",
+     "mDesc": "erroneous yaw response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.358Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M2",
+       "desc": "uncommanded yaw motion with no command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-005-PL2",
+       "desc": "reduced yaw control authority outside controllable limits"
+      }
+     ]
+    },
+    {
+     "internalId": "178811516735902a68",
+     "subId": "SF-005",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-005-PL3",
+     "plDesc": "reduced yaw control authority",
+     "mId": "SF-005-M3",
+     "mDesc": "erroneous yaw response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.359Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M4",
+       "desc": "uncommanded yaw motion with no command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167360ledae",
+     "subId": "SF-006",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-006-TL",
+     "tlDesc": "Complete loss of high-lift configuration capability",
+     "plId": "SF-006-PL",
+     "plDesc": "High-lift degraded but within controllable limits",
+     "mId": "SF-006-M",
+     "mDesc": "Erroneous high-lift position for commanded configuration",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.360Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M2",
+       "desc": "Uncommanded high-lift movement with no crew command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-006-PL2",
+       "desc": "Asymmetric high-lift with restraint by asymmetry protection"
+      }
+     ]
+    },
+    {
+     "internalId": "17881151673616vpus",
+     "subId": "SF-006",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-006-M3",
+     "mDesc": "Erroneous high-lift position developing below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.361Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M4",
+       "desc": "Slow asymmetric high-lift drift below annunciation threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167362a8hl6",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-007-TL",
+     "tlDesc": "Complete loss of ground support / flotation capability",
+     "plId": "SF-007-PL",
+     "plDesc": "Reduced flotation on semi-prepared surface",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.362Z",
+     "plExtra": [
+      {
+       "id": "SF-007-PL2",
+       "desc": "Partial loss of ground support at one support point"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167363i01zn",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-007-PL3",
+     "plDesc": "Failure of ground support surface to attain locked supporting configuration",
+     "mId": "SF-007-M",
+     "mDesc": "Loss of locked supporting configuration under ground load",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.363Z"
+    },
+    {
+     "internalId": "1788115167364f6roh",
+     "subId": "SF-007",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-007-M2",
+     "mDesc": "Support configuration indicated locked but not attained",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.364Z"
+    },
+    {
+     "internalId": "1788115167365w5d52",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-008-TL",
+     "tlDesc": "Complete loss of wheel braking capability",
+     "plId": "SF-008-PL",
+     "plDesc": "Reduced wheel braking capability / degraded deceleration",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.365Z",
+     "plExtra": [
+      {
+       "id": "SF-008-PL2",
+       "desc": "Loss of anti-skid protection with braking retained"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167365wst9m",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-008-M",
+     "mDesc": "Uncommanded / inadvertent wheel braking",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.365Z",
+     "mExtra": [
+      {
+       "id": "SF-008-M2",
+       "desc": "Asymmetric braking between wheel groups"
+      }
+     ]
+    },
+    {
+     "internalId": "17881151673667yb9t",
+     "subId": "SF-008",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-008-M3",
+     "mDesc": "Latent loss of braking capability undetected until brake demand",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.366Z"
+    },
+    {
+     "internalId": "1788115167367bnvdr",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-009-TL",
+     "tlDesc": "Complete loss of nose-wheel steering capability",
+     "plId": "SF-009-PL",
+     "plDesc": "Reduced nose-wheel steering authority",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.367Z"
+    },
+    {
+     "internalId": "1788115167368oqmxp",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-009-M",
+     "mDesc": "Erroneous steering response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.368Z",
+     "mExtra": [
+      {
+       "id": "SF-009-M2",
+       "desc": "Uncommanded nose-wheel steering deflection with no command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167369ey1cx",
+     "subId": "SF-009",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-009-M3",
+     "mDesc": "Steering runaway developing below crew detection threshold at low ground speed",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.369Z"
+    },
+    {
+     "internalId": "1788115167370vgk9u",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-010-TL",
+     "tlDesc": "Complete loss of nose door open/close capability",
+     "plId": "SF-010-PL",
+     "plDesc": "Nose door open/close capability degraded to backup means only",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.370Z"
+    },
+    {
+     "internalId": "1788115167371vik4b",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-010-M",
+     "mDesc": "Nose door opening command honoured with pressure interlock defeated",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.371Z",
+     "mExtra": [
+      {
+       "id": "SF-010-M2",
+       "desc": "Nose door movement against interlocked state"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167371q44h1",
+     "subId": "SF-010",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-010-M3",
+     "mDesc": "Nose door not fully closed while indicated closed",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.371Z",
+     "mExtra": [
+      {
+       "id": "SF-010-M4",
+       "desc": "Door drive active against a state indicated safe"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167372dkd6o",
+     "subId": "SF-011",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-011-TL",
+     "tlDesc": "Complete loss of nose door locking",
+     "plId": "SF-011-PL",
+     "plDesc": "Reduced lock engagement redundancy",
+     "mId": "SF-011-M",
+     "mDesc": "Unlock/unlatch when closure required",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.372Z"
+    },
+    {
+     "internalId": "1788115167374g63bk",
+     "subId": "SF-011",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-011-M2",
+     "mDesc": "Confirmation indicates locked when not locked",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.374Z"
+    },
+    {
+     "internalId": "1788115167376ojjgk",
+     "subId": "SF-012",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-012-TL",
+     "tlDesc": "Complete loss of longitudinal payload restraint",
+     "plId": "SF-012-PL",
+     "plDesc": "Degraded longitudinal restraint capacity",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.376Z"
+    },
+    {
+     "internalId": "1788115167378sk4z7",
+     "subId": "SF-012",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-012-PL2",
+     "plDesc": "Undetected single-strap restraint degradation",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.378Z"
+    },
+    {
+     "internalId": "1788115167380g3vs2",
+     "subId": "SF-013",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-013-TL",
+     "tlDesc": "Complete loss of restraint tension monitoring",
+     "plId": "SF-013-PL",
+     "plDesc": "Loss of tension monitoring coverage over part of hold",
+     "mId": "SF-013-M",
+     "mDesc": "Failure to annunciate an actual loss of tension",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.380Z"
+    },
+    {
+     "internalId": "1788115167382ei5rw",
+     "subId": "SF-013",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-013-M2",
+     "mDesc": "Erroneous tension indication of intact restraint",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.382Z"
+    },
+    {
+     "internalId": "178811516738473pu9",
+     "subId": "SF-014",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-014-TL",
+     "tlDesc": "Complete loss of pressurisation control",
+     "plId": "SF-014-PL",
+     "plDesc": "Degraded pressurisation control on backup schedule",
+     "mId": "SF-014-M",
+     "mDesc": "Commanded over-pressurisation of the fuselage",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.384Z",
+     "mExtra": [
+      {
+       "id": "SF-014-M2",
+       "desc": "Commanded under-pressurisation / failure to hold differential"
+      }
+     ]
+    },
+    {
+     "internalId": "178811516738529zw4",
+     "subId": "SF-014",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-014-M3",
+     "mDesc": "Slow uncommanded drift of cabin differential below alert threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.385Z"
+    },
+    {
+     "internalId": "1788115167387c1qe1",
+     "subId": "SF-015",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-015-TL",
+     "tlDesc": "Complete loss of air conditioning and distribution",
+     "plId": "SF-015-PL",
+     "plDesc": "Reduced conditioning on single-pack operation",
+     "mId": "SF-015-M",
+     "mDesc": "Erroneous air distribution to flight deck / hold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.387Z"
+    },
+    {
+     "internalId": "1788115167389kyxkn",
+     "subId": "SF-015",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-015-M2",
+     "mDesc": "Undetected degradation of air quality / contamination",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.389Z"
+    },
+    {
+     "internalId": "1788115167391h3x6y",
+     "subId": "SF-016",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-016-TL",
+     "tlDesc": "complete loss of airframe and inlet ice protection",
+     "plId": "SF-016-PL",
+     "plDesc": "partial loss of ice protection coverage across protected zones",
+     "mId": "SF-016-M",
+     "mDesc": "ice protection active without demand imposing performance penalty",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.391Z",
+     "mExtra": [
+      {
+       "id": "SF-016-M2",
+       "desc": "failure of protection to activate when ice accretion present"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-016-PL2",
+       "desc": "reduced protection capacity when protection demand competes with air-conditioning demand"
+      }
+     ]
+    },
+    {
+     "internalId": "17881151673936jzha",
+     "subId": "SF-016",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-016-PL3",
+     "plDesc": "undetected loss of protection on an individual zone",
+     "mId": "SF-016-M3",
+     "mDesc": "failure of protection to activate with ice accretion not yet manifest to crew",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.393Z"
+    },
+    {
+     "internalId": "1788115167395e0jcc",
+     "subId": "SF-017",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-017-TL",
+     "tlDesc": "complete loss of probe heating and icing detection",
+     "plId": "SF-017-PL",
+     "plDesc": "partial loss of probe heating or icing detection",
+     "mId": "SF-017-M",
+     "mDesc": "erroneous icing indication in the absence of icing conditions",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.395Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M2",
+       "desc": "failure to indicate icing when icing conditions present"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-017-PL2",
+       "desc": "loss of heating on an individual monitored element"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167398yve8u",
+     "subId": "SF-017",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-017-PL3",
+     "plDesc": "undetected loss of heating on an individual element",
+     "mId": "SF-017-M3",
+     "mDesc": "failure to indicate icing when icing conditions present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.398Z"
+    },
+    {
+     "internalId": "1788115167399bmzwo",
+     "subId": "SF-018",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-018-TL",
+     "tlDesc": "complete loss of flight and navigation information presentation",
+     "plId": "SF-018-PL",
+     "plDesc": "partial loss of flight and navigation information presentation",
+     "mId": "SF-018-M",
+     "mDesc": "erroneous flight or navigation information presented as valid",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.399Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M2",
+       "desc": "misleading presentation of navigation or attitude information"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-018-PL2",
+       "desc": "loss of a subset of presented formats or parameters"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167401cewqt",
+     "subId": "SF-018",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-018-M3",
+     "mDesc": "erroneous flight or navigation information presented as valid without crew recognition",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.401Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M4",
+       "desc": "undetected corruption of a presented parameter"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167403ojg3i",
+     "subId": "SF-019",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-019-TL",
+     "tlDesc": "complete loss of crew alerting",
+     "plId": "SF-019-PL",
+     "plDesc": "partial loss of crew alerting",
+     "mId": "SF-019-M",
+     "mDesc": "spurious alert presented in the absence of a fault",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.403Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M2",
+       "desc": "incorrect prioritisation of the consolidated alert list"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-019-PL2",
+       "desc": "loss of alerting for a subset of monitored systems"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167405226rv",
+     "subId": "SF-019",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-019-PL3",
+     "plDesc": "undetected suppression of alerting for a monitored condition",
+     "mId": "SF-019-M3",
+     "mDesc": "failure to annunciate an existing fault condition",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.405Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M4",
+       "desc": "erroneous suppression of a valid alert"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167407n1rvu",
+     "subId": "SF-020",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-020-TL",
+     "tlDesc": "complete loss of fire and overheat detection",
+     "plId": "SF-020-PL",
+     "plDesc": "partial loss of fire and overheat detection coverage",
+     "mId": "SF-020-M",
+     "mDesc": "spurious fire or overheat warning without a fire present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.407Z",
+     "mExtra": [
+      {
+       "id": "SF-020-M2",
+       "desc": "failure to warn when fire or overheat present"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-020-PL2",
+       "desc": "loss of detection in an individual monitored zone"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167410fcsyi",
+     "subId": "SF-020",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-020-PL3",
+     "plDesc": "undetected loss of detection in an individual zone",
+     "mId": "SF-020-M3",
+     "mDesc": "failure to warn when fire or overheat present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.410Z"
+    },
+    {
+     "internalId": "1788115167412p61ad",
+     "subId": "SF-021",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-021-TL",
+     "tlDesc": "complete loss of engine/APU fire extinguishing capability",
+     "plId": "SF-021-PL",
+     "plDesc": "loss of extinguishing to one protected zone",
+     "mId": "SF-021-M",
+     "mDesc": "inadvertent extinguishant discharge with no fire present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.412Z",
+     "mExtra": [
+      {
+       "id": "SF-021-M2",
+       "desc": "discharge into wrong zone of the engine pair"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-021-PL2",
+       "desc": "loss of independent APU fire extinguishing"
+      }
+     ]
+    },
+    {
+     "internalId": "178811516741434z2n",
+     "subId": "SF-021",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-021-PL3",
+     "plDesc": "bottle fails to discharge on crew demand with no discharge-status feedback",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.414Z"
+    },
+    {
+     "internalId": "1788115167416icxd6",
+     "subId": "SF-022",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-022-TL",
+     "tlDesc": "complete loss of crew breathing-oxygen supply",
+     "plId": "SF-022-PL",
+     "plDesc": "reduced oxygen reserve / duration below required diversion",
+     "mId": "SF-022-M",
+     "mDesc": "oxygen supply to a mask station lost with others available",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.416Z",
+     "mExtra": [
+      {
+       "id": "SF-022-M2",
+       "desc": "erroneous low-pressure indication with adequate supply present"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-022-PL2",
+       "desc": "loss of oxygen to a single mask station"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115167418snm4g",
+     "subId": "SF-022",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-022-PL3",
+     "plDesc": "slow depletion of oxygen reserve between pre-flight checks",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:39:27.418Z"
+    }
+   ],
+   "cards": 48,
+   "leftover": 0,
+   "ms": 82436
+  },
+  {
+   "tag": "B1",
+   "rows": [
+    {
+     "internalId": "1788115272354h1jie",
+     "subId": "SF-001",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-001-M",
+     "mDesc": "Uncommanded change in forward thrust — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.354Z"
+    },
+    {
+     "internalId": "17881152723551tggm",
+     "subId": "SF-002",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-002-TL",
+     "tlDesc": "Complete loss of reverse thrust on ground",
+     "plId": "SF-002-PL",
+     "plDesc": [
+      "Partial loss of reverse thrust on ground — asymmetric"
+     ],
+     "mId": "SF-002-M",
+     "mDesc": "Erroneous reverse thrust response to crew command on ground",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.355Z",
+     "mExtra": [
+      {
+       "id": "SF-002-M2",
+       "desc": "Inadvertent reverse thrust deployment"
+      },
+      {
+       "id": "SF-002-M3",
+       "desc": "Failure of reverse thrust to stow after use"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272356swrpj",
+     "subId": "SF-003",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-003-M",
+     "mDesc": "Erroneous roll response to crew command — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.356Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M2",
+       "desc": "Uncommanded roll motion — below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272357m1wa7",
+     "subId": "SF-004",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-004-M",
+     "mDesc": "Erroneous pitch response to crew command — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.357Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M2",
+       "desc": "Uncommanded pitch motion — below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272358not5p",
+     "subId": "SF-005",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-005-M",
+     "mDesc": "Erroneous yaw response to crew command — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.358Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M2",
+       "desc": "Uncommanded yaw motion — below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272358v16vc",
+     "subId": "SF-006",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-006-TL",
+     "tlDesc": "Complete loss of high-lift configuration capability",
+     "plId": "SF-006-PL",
+     "plDesc": "Partial loss of high-lift configuration capability",
+     "mId": "SF-006-M",
+     "mDesc": "Erroneous high-lift configuration response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.358Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M2",
+       "desc": "Asymmetric high-lift deployment — asymmetric"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-006-PL2",
+       "desc": "Uncommanded high-lift configuration change"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272359j7v3y",
+     "subId": "SF-006",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-006-M3",
+     "mDesc": "Asymmetric high-lift deployment — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.359Z"
+    },
+    {
+     "internalId": "17881152723601jgaw",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-007-TL",
+     "tlDesc": "Complete loss of ground support and flotation capability",
+     "plId": "SF-007-PL",
+     "plDesc": "Partial loss of ground support and flotation capability",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.360Z",
+     "plExtra": [
+      {
+       "id": "SF-007-PL2",
+       "desc": "Partial loss of flotation capability on semi-prepared surface — outside acceptable footprint"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272360g0aia",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-007-M",
+     "mDesc": "Uncommanded loss of gear down-and-locked state",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.360Z"
+    },
+    {
+     "internalId": "17881152723618f8ov",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-008-TL",
+     "tlDesc": "Complete loss of wheel braking capability",
+     "plId": "SF-008-PL",
+     "plDesc": "Partial loss of wheel braking capability",
+     "mId": "SF-008-M",
+     "mDesc": "Erroneous braking response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.361Z",
+     "mExtra": [
+      {
+       "id": "SF-008-M2",
+       "desc": "Inadvertent wheel braking"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-008-PL2",
+       "desc": "Asymmetric wheel braking — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272362d14dt",
+     "subId": "SF-008",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-008-M3",
+     "mDesc": "Asymmetric wheel braking — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.362Z"
+    },
+    {
+     "internalId": "178811527236383ou0",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-009-TL",
+     "tlDesc": "Complete loss of nose-wheel steering capability",
+     "plId": "SF-009-PL",
+     "plDesc": "Partial loss of nose-wheel steering capability",
+     "mId": "SF-009-M",
+     "mDesc": "Erroneous nose-wheel steering response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.363Z",
+     "mExtra": [
+      {
+       "id": "SF-009-M2",
+       "desc": "Uncommanded nose-wheel steering deflection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272364cyqzl",
+     "subId": "SF-009",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-009-M3",
+     "mDesc": "Uncommanded nose-wheel steering deflection — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.365Z"
+    },
+    {
+     "internalId": "1788115272366hg4u1",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-010-TL",
+     "tlDesc": "Complete loss of nose door open/close capability",
+     "plId": "SF-010-PL",
+     "plDesc": "Partial loss of nose door open/close capability",
+     "mId": "SF-010-M",
+     "mDesc": "Inadvertent nose door opening command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.366Z"
+    },
+    {
+     "internalId": "1788115272367e2h5p",
+     "subId": "SF-011",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-011-TL",
+     "tlDesc": "Complete loss of nose door lock confirmation",
+     "plId": "SF-011-PL",
+     "plDesc": "Partial loss of nose door lock confirmation — one sensing path lost",
+     "mId": "SF-011-M",
+     "mDesc": "Erroneous indication of nose door locked when unlocked",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.367Z",
+     "mExtra": [
+      {
+       "id": "SF-011-M2",
+       "desc": "Erroneous indication of nose door unlocked when locked"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272368quql8",
+     "subId": "SF-011",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-011-M3",
+     "mDesc": "Erroneous indication of nose door locked when unlocked — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.368Z"
+    },
+    {
+     "internalId": "1788115272368g27te",
+     "subId": "SF-012",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-012-TL",
+     "tlDesc": "Complete loss of longitudinal payload restraint",
+     "plId": "SF-012-PL",
+     "plDesc": "Partial loss of longitudinal payload restraint — single strap station",
+     "mId": "SF-012-M",
+     "mDesc": "Erroneous longitudinal restraint tension",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.368Z",
+     "plExtra": [
+      {
+       "id": "SF-012-PL2",
+       "desc": "Partial loss of longitudinal payload restraint — two adjacent stations"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272369e92m0",
+     "subId": "SF-012",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-012-M2",
+     "mDesc": "Undetected loss of longitudinal payload restraint — below monitoring coverage",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.369Z"
+    },
+    {
+     "internalId": "17881152723705m5ky",
+     "subId": "SF-013",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-013-TL",
+     "tlDesc": "Complete loss of restraint tension monitoring",
+     "plId": "SF-013-PL",
+     "plDesc": "Partial loss of restraint tension monitoring — reduced station coverage",
+     "mId": "SF-013-M",
+     "mDesc": "Erroneous restraint tension indication",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.370Z",
+     "mExtra": [
+      {
+       "id": "SF-013-M2",
+       "desc": "Undetected loss of restraint tension monitoring"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272371jtluj",
+     "subId": "SF-013",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-013-M3",
+     "mDesc": "Undetected loss of restraint tension monitoring — single loop failure not annunciated",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.371Z",
+     "mExtra": [
+      {
+       "id": "SF-013-M4",
+       "desc": "Erroneous restraint tension indication reading in-limits"
+      }
+     ]
+    },
+    {
+     "internalId": "17881152723725xsn3",
+     "subId": "SF-014",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-014-TL",
+     "tlDesc": "Complete loss of fuselage pressurisation control",
+     "plId": "SF-014-PL",
+     "plDesc": "Partial loss of fuselage pressurisation control — degraded conditioning schedule",
+     "mId": "SF-014-M",
+     "mDesc": "Erroneous fuselage differential pressure control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.372Z",
+     "mExtra": [
+      {
+       "id": "SF-014-M2",
+       "desc": "Uncommanded fuselage depressurisation"
+      },
+      {
+       "id": "SF-014-M3",
+       "desc": "Uncommanded overpressurisation of fuselage"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272373vwq4h",
+     "subId": "SF-014",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-014-M4",
+     "mDesc": "Erroneous fuselage differential pressure control — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.373Z",
+     "mExtra": [
+      {
+       "id": "SF-014-M5",
+       "desc": "Uncommanded fuselage depressurisation — slow, below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272374n1hxo",
+     "subId": "SF-015",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-015-TL",
+     "tlDesc": "Complete loss of air conditioning and distribution",
+     "plId": "SF-015-PL",
+     "plDesc": "Partial loss of air conditioning and distribution — single-pack operation",
+     "mId": "SF-015-M",
+     "mDesc": "Erroneous air conditioning temperature control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.374Z",
+     "mExtra": [
+      {
+       "id": "SF-015-M2",
+       "desc": "Loss of conditioned air distribution to one zone"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272375qge0l",
+     "subId": "SF-015",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-015-M3",
+     "mDesc": "Erroneous air conditioning temperature control — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.375Z"
+    },
+    {
+     "internalId": "178811527237620r0i",
+     "subId": "SF-016",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-016-TL",
+     "tlDesc": "Complete loss of airframe and inlet ice protection",
+     "plId": "SF-016-PL",
+     "plDesc": "Partial loss of airframe and inlet ice protection",
+     "mId": "SF-016-M",
+     "mDesc": "Undetected ice accretion on unprotected surface",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.376Z",
+     "mExtra": [
+      {
+       "id": "SF-016-M2",
+       "desc": "Erroneous ice protection distribution"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-016-PL2",
+       "desc": "Partial loss of airframe and inlet ice protection — bleed-side only"
+      }
+     ]
+    },
+    {
+     "internalId": "17881152723780p3re",
+     "subId": "SF-016",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-016-M3",
+     "mDesc": "Undetected loss of airframe and inlet ice protection — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.378Z"
+    },
+    {
+     "internalId": "17881152723806yo9g",
+     "subId": "SF-017",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-017-TL",
+     "tlDesc": "Complete loss of probe heating and icing detection",
+     "plId": "SF-017-PL",
+     "plDesc": "Partial loss of probe heating and icing detection",
+     "mId": "SF-017-M",
+     "mDesc": "Erroneous icing detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.380Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M2",
+       "desc": "Undetected loss of probe heating"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-017-PL2",
+       "desc": "Partial loss of icing detection — single detector"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272382r18eo",
+     "subId": "SF-017",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-017-M3",
+     "mDesc": "Undetected loss of icing detection — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.382Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M4",
+       "desc": "Undetected loss of probe heating — below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272384t6fgm",
+     "subId": "SF-018",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-018-TL",
+     "tlDesc": "Complete loss of flight and navigation information display",
+     "plId": "SF-018-PL",
+     "plDesc": "Partial loss of flight and navigation information display",
+     "mId": "SF-018-M",
+     "mDesc": "Erroneous flight and navigation information",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.384Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M2",
+       "desc": "Erroneous navigation information display — misleading"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-018-PL2",
+       "desc": "Partial loss of flight and navigation information — reversion to standby"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272386jh4kd",
+     "subId": "SF-018",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-018-M3",
+     "mDesc": "Undetected erroneous flight and navigation information — misleading, no discrepancy annunciation",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.386Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M4",
+       "desc": "Undetected erroneous navigation information — misleading, no discrepancy annunciation"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272388oqhza",
+     "subId": "SF-019",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-019-TL",
+     "tlDesc": "Complete loss of crew alerting",
+     "plId": "SF-019-PL",
+     "plDesc": "Partial loss of crew alerting",
+     "mId": "SF-019-M",
+     "mDesc": "Erroneous crew alerting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.388Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M2",
+       "desc": "Erroneous crew alerting — inhibited/missing alert for a real condition"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-019-PL2",
+       "desc": "Partial loss of crew alerting — mis-prioritised alert list"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272390r6v00",
+     "subId": "SF-019",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-019-M3",
+     "mDesc": "Undetected loss of crew alerting — no alert raised for a real condition",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.390Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M4",
+       "desc": "Undetected erroneous crew alerting — inhibited/missing alert, no annunciation"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272392565gx",
+     "subId": "SF-020",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-020-TL",
+     "tlDesc": "Complete loss of fire and overheat detection",
+     "plId": "SF-020-PL",
+     "plDesc": "Partial loss of fire and overheat detection",
+     "mId": "SF-020-M",
+     "mDesc": "Erroneous fire and overheat detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.392Z",
+     "mExtra": [
+      {
+       "id": "SF-020-M2",
+       "desc": "Undetected loss of fire and overheat detection in a monitored zone"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-020-PL2",
+       "desc": "Partial loss of fire and overheat detection — single zone"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272394cgnd0",
+     "subId": "SF-020",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-020-M3",
+     "mDesc": "Undetected loss of fire and overheat detection in a monitored zone — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.394Z"
+    },
+    {
+     "internalId": "1788115272396ia7ri",
+     "subId": "SF-021",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-021-TL",
+     "tlDesc": "Complete loss of fire extinguishing capability",
+     "plId": "SF-021-PL",
+     "plDesc": "Partial loss of fire extinguishing capability — one nacelle of a pair",
+     "mId": "SF-021-M",
+     "mDesc": "Inadvertent discharge of extinguishing agent",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.396Z",
+     "mExtra": [
+      {
+       "id": "SF-021-M2",
+       "desc": "Erroneous discharge into the wrong nacelle"
+      }
+     ]
+    },
+    {
+     "internalId": "17881152723984gbpu",
+     "subId": "SF-021",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-021-M3",
+     "mDesc": "Undetected unavailability of extinguishing agent — below crew detection threshold until demanded",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.398Z"
+    },
+    {
+     "internalId": "1788115272400f4275",
+     "subId": "SF-022",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-022-TL",
+     "tlDesc": "Complete loss of crew oxygen supply on demand",
+     "plId": "SF-022-PL",
+     "plDesc": "Partial loss of crew oxygen supply on demand — reduced reserve",
+     "mId": "SF-022-M",
+     "mDesc": "Erroneous crew oxygen delivery",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.400Z",
+     "mExtra": [
+      {
+       "id": "SF-022-M2",
+       "desc": "Inadvertent overpressure discharge overboard"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-022-PL2",
+       "desc": "Partial loss of crew oxygen supply — one mask station"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115272402vriml",
+     "subId": "SF-022",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-022-M3",
+     "mDesc": "Undetected degraded oxygen delivery at a mask station — below alerting threshold until demanded",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:41:12.402Z"
+    }
+   ],
+   "cards": 43,
+   "leftover": 5,
+   "ms": 128102
+  },
+  {
+   "tag": "B2",
+   "rows": [
+    {
+     "internalId": "1788115447341idk0b",
+     "subId": "SF-001",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-001-TL",
+     "tlDesc": "Complete loss of thrust generation",
+     "plId": "SF-001-PL",
+     "plDesc": "Partial loss of thrust generation — symmetric, degraded within performance limits",
+     "mId": "SF-001-M",
+     "mDesc": "Erroneous thrust response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.341Z",
+     "mExtra": [
+      {
+       "id": "SF-001-M2",
+       "desc": "Uncommanded thrust change — no crew command"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-001-PL2",
+       "desc": "Partial loss of thrust generation — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447342fcc1x",
+     "subId": "SF-001",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-001-PL3",
+     "plDesc": "Partial loss of thrust generation — asymmetric, below crew detection threshold",
+     "mId": "SF-001-M3",
+     "mDesc": "Uncommanded thrust change — no crew command, below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.342Z"
+    },
+    {
+     "internalId": "1788115447343dzg3d",
+     "subId": "SF-002",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-002-TL",
+     "tlDesc": "Complete loss of reverse thrust on ground",
+     "plId": "SF-002-PL",
+     "plDesc": "Partial loss of reverse thrust on ground — asymmetric",
+     "mId": "SF-002-M",
+     "mDesc": "Inadvertent reverse thrust deployment in flight",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.343Z",
+     "mExtra": [
+      {
+       "id": "SF-002-M2",
+       "desc": "Erroneous reverse thrust response to crew command"
+      }
+     ]
+    },
+    {
+     "internalId": "17881154473443se1y",
+     "subId": "SF-003",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-003-TL",
+     "tlDesc": "Complete loss of roll control",
+     "plId": "SF-003-PL",
+     "plDesc": "Partial loss of roll control authority",
+     "mId": "SF-003-M",
+     "mDesc": "Erroneous roll response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.344Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M2",
+       "desc": "Uncommanded roll motion — no crew command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447345yz82x",
+     "subId": "SF-003",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-003-M3",
+     "mDesc": "Erroneous roll response to crew command — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.345Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M4",
+       "desc": "Uncommanded roll motion — no crew command, below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447346x14x1",
+     "subId": "SF-004",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-004-TL",
+     "tlDesc": "Complete loss of pitch control",
+     "plId": "SF-004-PL",
+     "plDesc": "Partial loss of pitch control authority",
+     "mId": "SF-004-M",
+     "mDesc": "Erroneous pitch response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.346Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M2",
+       "desc": "Uncommanded pitch motion — no crew command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447347kkq63",
+     "subId": "SF-004",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-004-M3",
+     "mDesc": "Erroneous pitch response to crew command — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.347Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M4",
+       "desc": "Uncommanded pitch motion — no crew command, below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447347dw1lg",
+     "subId": "SF-005",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-005-TL",
+     "tlDesc": "Complete loss of yaw control",
+     "plId": "SF-005-PL",
+     "plDesc": "Partial loss of yaw control authority",
+     "mId": "SF-005-M",
+     "mDesc": "Erroneous yaw response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.347Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M2",
+       "desc": "Uncommanded yaw motion — no crew command"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447348exee6",
+     "subId": "SF-005",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-005-M3",
+     "mDesc": "Erroneous yaw response to crew command — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.348Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M4",
+       "desc": "Uncommanded yaw motion — no crew command, below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447349ks7fi",
+     "subId": "SF-006",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-006-TL",
+     "tlDesc": "Complete loss of high-lift configuration capability",
+     "plId": "SF-006-PL",
+     "plDesc": "Partial loss of high-lift configuration capability — one section jammed",
+     "mId": "SF-006-M",
+     "mDesc": "Erroneous high-lift response to crew configuration command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.349Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M2",
+       "desc": "Uncommanded high-lift surface motion"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-006-PL2",
+       "desc": "Partial loss of high-lift configuration capability — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447349cbhc9",
+     "subId": "SF-006",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-006-PL3",
+     "plDesc": "Partial loss of high-lift configuration capability — asymmetric, below annunciation threshold",
+     "mId": "SF-006-M3",
+     "mDesc": "Uncommanded high-lift surface motion — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.349Z"
+    },
+    {
+     "internalId": "1788115447350v69j7",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-007-TL",
+     "tlDesc": "Complete loss of ground support and flotation capability",
+     "plId": "SF-007-PL",
+     "plDesc": "Partial loss of ground support and flotation capability",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.350Z",
+     "plExtra": [
+      {
+       "id": "SF-007-PL2",
+       "desc": "Partial loss of flotation footprint on semi-prepared surface"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447353gr8ps",
+     "subId": "SF-007",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-007-PL3",
+     "plDesc": "Partial loss of flotation footprint on semi-prepared surface — below crew detection threshold",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.353Z"
+    },
+    {
+     "internalId": "1788115447354vowtw",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-008-TL",
+     "tlDesc": "Complete loss of wheel braking capability",
+     "plId": "SF-008-PL",
+     "plDesc": "Partial loss of wheel braking capability",
+     "mId": "SF-008-M",
+     "mDesc": "Erroneous wheel braking response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.354Z",
+     "mExtra": [
+      {
+       "id": "SF-008-M2",
+       "desc": "Uncommanded wheel braking application"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-008-PL2",
+       "desc": "Partial loss of wheel braking capability — asymmetric"
+      },
+      {
+       "id": "SF-008-PL3",
+       "desc": "Partial loss of anti-skid protection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447354j4zpi",
+     "subId": "SF-008",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-008-PL4",
+     "plDesc": "Partial loss of wheel braking capability — latent, below crew detection threshold",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.354Z"
+    },
+    {
+     "internalId": "1788115447355o5kg3",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-009-TL",
+     "tlDesc": "Complete loss of nose-wheel steering capability",
+     "plId": "SF-009-PL",
+     "plDesc": "Partial loss of nose-wheel steering authority",
+     "mId": "SF-009-M",
+     "mDesc": "Erroneous nose-wheel steering response to crew command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.355Z",
+     "mExtra": [
+      {
+       "id": "SF-009-M2",
+       "desc": "Uncommanded nose-wheel steering deflection"
+      }
+     ]
+    },
+    {
+     "internalId": "178811544735650kt4",
+     "subId": "SF-009",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-009-M3",
+     "mDesc": "Uncommanded nose-wheel steering deflection — below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.356Z"
+    },
+    {
+     "internalId": "1788115447357kjrp3",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-010-TL",
+     "tlDesc": "Complete loss of nose door open/close capability",
+     "plId": "SF-010-PL",
+     "plDesc": "Partial loss of nose door open/close capability",
+     "mId": "SF-010-M",
+     "mDesc": "Inadvertent nose door unlock command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.357Z",
+     "mExtra": [
+      {
+       "id": "SF-010-M2",
+       "desc": "Uncommanded nose door movement"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447358sgo22",
+     "subId": "SF-010",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-010-M3",
+     "mDesc": "Undetected loss of nose door lock integrity",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.358Z",
+     "mExtra": [
+      {
+       "id": "SF-010-M4",
+       "desc": "Erroneous nose door lock status indication"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447359y9uto",
+     "subId": "SF-011",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-011-TL",
+     "tlDesc": "Complete loss of nose door lock confirmation",
+     "plId": "SF-011-PL",
+     "plDesc": "Partial loss of nose door lock confirmation — one sensing path lost",
+     "mId": "SF-011-M",
+     "mDesc": "Erroneous confirmation of nose door closure — indicates locked when not fully engaged",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.359Z",
+     "mExtra": [
+      {
+       "id": "SF-011-M2",
+       "desc": "Inadvertent loss of nose door lock engagement in flight"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447360sr73i",
+     "subId": "SF-012",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-012-TL",
+     "tlDesc": "Complete loss of longitudinal payload restraint",
+     "plId": "SF-012-PL",
+     "plDesc": "Partial loss of longitudinal payload restraint — single station degraded",
+     "mId": "SF-012-M",
+     "mDesc": "Inadvertent release of longitudinal payload restraint",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.360Z"
+    },
+    {
+     "internalId": "1788115447361age3c",
+     "subId": "SF-012",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-012-PL2",
+     "plDesc": "Partial loss of longitudinal payload restraint — below tension-loop annunciation coverage",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.361Z"
+    },
+    {
+     "internalId": "1788115447362wlxhg",
+     "subId": "SF-013",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-013-TL",
+     "tlDesc": "Complete loss of restraint tension monitoring",
+     "plId": "SF-013-PL",
+     "plDesc": "Partial loss of restraint tension monitoring — reduced coverage",
+     "mId": "SF-013-M",
+     "mDesc": "Erroneous restraint tension indication",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.362Z"
+    },
+    {
+     "internalId": "1788115447364zwevj",
+     "subId": "SF-013",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-013-TL2",
+     "tlDesc": "Undetected loss of restraint tension monitoring",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-013-M2",
+     "mDesc": "Erroneous restraint tension indication — masks actual restraint loss, below crew detection threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.364Z"
+    },
+    {
+     "internalId": "1788115447366ms4uy",
+     "subId": "SF-014",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-014-TL",
+     "tlDesc": "Complete loss of fuselage pressurisation control",
+     "plId": "SF-014-PL",
+     "plDesc": "Partial loss of fuselage pressurisation control — reduced control capability",
+     "mId": "SF-014-M",
+     "mDesc": "Erroneous pressurisation control — overpressurisation",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.366Z",
+     "mExtra": [
+      {
+       "id": "SF-014-M2",
+       "desc": "Erroneous pressurisation control — underpressurisation / uncommanded depressurisation"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447367q6vn5",
+     "subId": "SF-014",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-014-M3",
+     "mDesc": "Erroneous pressurisation control — slow cabin-altitude drift below alerting threshold",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.367Z"
+    },
+    {
+     "internalId": "1788115447369a2k19",
+     "subId": "SF-015",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-015-TL",
+     "tlDesc": "Complete loss of air conditioning and distribution",
+     "plId": "SF-015-PL",
+     "plDesc": "Partial loss of air conditioning and distribution — single-pack operation with reduced schedule",
+     "mId": "SF-015-M",
+     "mDesc": "Erroneous air conditioning — out-of-limit temperature delivery",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.369Z"
+    },
+    {
+     "internalId": "1788115447371fn3sg",
+     "subId": "SF-015",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-015-M2",
+     "mDesc": "Erroneous air conditioning — undetected out-of-limit air delivery",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.371Z"
+    },
+    {
+     "internalId": "1788115447372q7xeq",
+     "subId": "SF-016",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-016-TL",
+     "tlDesc": "Complete loss of ice protection for airframe and inlets",
+     "plId": "SF-016-PL",
+     "plDesc": "Partial loss of ice protection coverage — one or more zones unprotected",
+     "mId": "SF-016-M",
+     "mDesc": "Erroneous protection activation — protection where not required",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.373Z",
+     "mExtra": [
+      {
+       "id": "SF-016-M2",
+       "desc": "Inadvertent bleed demand reducing pack capacity"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447374msfen",
+     "subId": "SF-016",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-016-PL2",
+     "plDesc": "Undetected loss of ice protection coverage — below crew detection threshold",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.374Z"
+    },
+    {
+     "internalId": "1788115447376spkrw",
+     "subId": "SF-017",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-017-TL",
+     "tlDesc": "Complete loss of probe heating and icing detection",
+     "plId": "SF-017-PL",
+     "plDesc": "Partial loss of probe heating — subset of heated elements",
+     "mId": "SF-017-M",
+     "mDesc": "Erroneous icing detection — indication with no icing present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.376Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M2",
+       "desc": "Undetected icing — no detection with icing present"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-017-PL2",
+       "desc": "Partial loss of icing detection capability"
+      }
+     ]
+    },
+    {
+     "internalId": "178811544737844n7s",
+     "subId": "SF-017",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-017-PL3",
+     "plDesc": "Undetected loss of probe heating — below crew detection threshold",
+     "mId": "SF-017-M3",
+     "mDesc": "Undetected icing — no detection with icing present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.378Z"
+    },
+    {
+     "internalId": "1788115447380yvcoq",
+     "subId": "SF-018",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-018-TL",
+     "tlDesc": "Complete loss of flight and navigation information display",
+     "plId": "SF-018-PL",
+     "plDesc": "Partial loss of flight and navigation information display",
+     "mId": "SF-018-M",
+     "mDesc": "Erroneous flight and navigation information — detectably inconsistent",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.380Z"
+    },
+    {
+     "internalId": "1788115447381fjstu",
+     "subId": "SF-018",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-018-M2",
+     "mDesc": "Undetected erroneous flight and navigation information — no detectable inconsistency",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.381Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M3",
+       "desc": "Undetected misleading flight and navigation information — below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447383skbaj",
+     "subId": "SF-019",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-019-TL",
+     "tlDesc": "Complete loss of crew alerting",
+     "plId": "SF-019-PL",
+     "plDesc": "Partial loss of crew alerting",
+     "mId": "SF-019-M",
+     "mDesc": "Erroneous crew alerting — nuisance alert with no fault present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.383Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M2",
+       "desc": "Erroneous alert prioritisation"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-019-PL2",
+       "desc": "Loss of alert prioritisation"
+      }
+     ]
+    },
+    {
+     "internalId": "17881154473855jq93",
+     "subId": "SF-019",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-019-M3",
+     "mDesc": "Undetected failure to annunciate an existing fault — no alert generated",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.385Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M4",
+       "desc": "Undetected suppression of a valid alert — below crew detection threshold"
+      }
+     ]
+    },
+    {
+     "internalId": "17881154473871lqs5",
+     "subId": "SF-020",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-020-TL",
+     "tlDesc": "Complete loss of fire and overheat detection",
+     "plId": "SF-020-PL",
+     "plDesc": "Partial loss of fire and overheat detection — subset of monitored zones",
+     "mId": "SF-020-M",
+     "mDesc": "Erroneous fire or overheat detection — warning with no fire present",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.387Z",
+     "plExtra": [
+      {
+       "id": "SF-020-PL2",
+       "desc": "Loss of dual-loop detection — degraded to single-loop logic"
+      }
+     ]
+    },
+    {
+     "internalId": "17881154473894kh1u",
+     "subId": "SF-020",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-020-PL3",
+     "plDesc": "Undetected loss of fire and overheat detection in one or more zones — below crew detection threshold",
+     "mId": "SF-020-M2",
+     "mDesc": "Undetected failure to detect an existing fire or overheat — no warning generated",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.389Z"
+    },
+    {
+     "internalId": "1788115447391s5beb",
+     "subId": "SF-021",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-021-TL",
+     "tlDesc": "Complete loss of engine/APU fire extinguishing capability",
+     "plId": "SF-021-PL",
+     "plDesc": "Partial loss of engine/APU fire extinguishing capability",
+     "mId": "SF-021-M",
+     "mDesc": "Inadvertent discharge of extinguishing agent",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.391Z",
+     "mExtra": [
+      {
+       "id": "SF-021-M2",
+       "desc": "Erroneous fire warning driving unnecessary discharge"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-021-PL2",
+       "desc": "Partial loss of engine/APU fire extinguishing capability — APU protection lost"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447393ca2j6",
+     "subId": "SF-021",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-021-PL3",
+     "plDesc": "Undetected loss of extinguishing agent availability — bottle not charged, below crew detection threshold",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.393Z"
+    },
+    {
+     "internalId": "1788115447395zza2o",
+     "subId": "SF-022",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-022-TL",
+     "tlDesc": "Complete loss of crew oxygen supply on demand",
+     "plId": "SF-022-PL",
+     "plDesc": "Partial loss of crew oxygen supply on demand — reduced reserve duration",
+     "mId": "SF-022-M",
+     "mDesc": "Inadvertent overboard discharge of oxygen supply",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.395Z",
+     "plExtra": [
+      {
+       "id": "SF-022-PL2",
+       "desc": "Partial loss of crew oxygen supply on demand — one mask station unavailable"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115447397nww8d",
+     "subId": "SF-022",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-022-PL3",
+     "plDesc": "Undetected loss of crew oxygen reserve below required demand duration — below crew detection threshold",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:44:07.397Z"
+    }
+   ],
+   "cards": 44,
+   "leftover": 2,
+   "ms": 186334
+  },
+  {
+   "tag": "C1x-defective-missing-op",
+   "rows": [
+    {
+     "internalId": "1788115703443w9iva",
+     "subId": "SF-001",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-001-TL",
+     "tlDesc": "Complete loss of forward thrust",
+     "plId": "SF-001-PL",
+     "plDesc": "Partial loss of forward thrust",
+     "mId": "SF-001-M",
+     "mDesc": "Uncommanded forward thrust — asymmetric",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.443Z",
+     "mExtra": [
+      {
+       "id": "SF-001-M2",
+       "desc": "Erroneous forward thrust"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703444ed3wz",
+     "subId": "SF-001",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-001-M3",
+     "mDesc": "Undetected partial loss of forward thrust",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.444Z"
+    },
+    {
+     "internalId": "1788115703444u02r0",
+     "subId": "SF-002",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-002-TL",
+     "tlDesc": "Complete loss of reverse thrust",
+     "plId": "SF-002-PL",
+     "plDesc": "Partial loss of reverse thrust — asymmetric",
+     "mId": "SF-002-M",
+     "mDesc": "Inadvertent reverse thrust",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.444Z"
+    },
+    {
+     "internalId": "1788115703445z0ko8",
+     "subId": "SF-003",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-003-TL",
+     "tlDesc": "Complete loss of roll control",
+     "plId": "SF-003-PL",
+     "plDesc": "Partial loss of roll control",
+     "mId": "SF-003-M",
+     "mDesc": "Erroneous roll response to command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.445Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M2",
+       "desc": "Uncommanded roll motion"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703445w8a84",
+     "subId": "SF-003",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-003-M3",
+     "mDesc": "Undetected erroneous roll response",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.445Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M4",
+       "desc": "Undetected uncommanded roll motion"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703446jxa7p",
+     "subId": "SF-004",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-004-TL",
+     "tlDesc": "Complete loss of pitch control",
+     "plId": "SF-004-PL",
+     "plDesc": "Partial loss of pitch control",
+     "mId": "SF-004-M",
+     "mDesc": "Erroneous pitch response to command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.446Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M2",
+       "desc": "Uncommanded pitch motion"
+      }
+     ]
+    },
+    {
+     "internalId": "17881157034465xaiu",
+     "subId": "SF-004",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-004-M3",
+     "mDesc": "Undetected erroneous pitch response",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.446Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M4",
+       "desc": "Undetected uncommanded pitch motion"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703447euqc1",
+     "subId": "SF-005",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-005-TL",
+     "tlDesc": "Complete loss of yaw control",
+     "plId": "SF-005-PL",
+     "plDesc": "Partial loss of yaw control",
+     "mId": "SF-005-M",
+     "mDesc": "Erroneous yaw response to command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.447Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M2",
+       "desc": "Uncommanded yaw motion"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703447s73w6",
+     "subId": "SF-005",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-005-M3",
+     "mDesc": "Undetected erroneous yaw response",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.447Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M4",
+       "desc": "Undetected uncommanded yaw motion"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703448ehsgk",
+     "subId": "SF-006",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-006-TL",
+     "tlDesc": "Complete loss of high-lift configuration",
+     "plId": "SF-006-PL",
+     "plDesc": "Partial loss of high-lift configuration",
+     "mId": "SF-006-M",
+     "mDesc": "Uncommanded high-lift movement",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.448Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M2",
+       "desc": "Erroneous high-lift configuration — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703448qwj1z",
+     "subId": "SF-006",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-006-M3",
+     "mDesc": "Undetected high-lift asymmetry",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.448Z"
+    },
+    {
+     "internalId": "17881157034494ip0n",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-007-TL",
+     "tlDesc": "Complete loss of ground support and flotation",
+     "plId": "SF-007-PL",
+     "plDesc": "Partial loss of ground support and flotation",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.449Z"
+    },
+    {
+     "internalId": "1788115703450rsw2b",
+     "subId": "SF-007",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-007-M",
+     "mDesc": "Undetected loss of downlock integrity",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.450Z"
+    },
+    {
+     "internalId": "1788115703450iqm3u",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-008-TL",
+     "tlDesc": "Complete loss of wheel braking",
+     "plId": "SF-008-PL",
+     "plDesc": "Partial loss of wheel braking",
+     "mId": "SF-008-M",
+     "mDesc": "Uncommanded wheel braking",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.450Z",
+     "mExtra": [
+      {
+       "id": "SF-008-M2",
+       "desc": "Asymmetric wheel braking"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-008-PL2",
+       "desc": "Partial loss of wheel braking — symmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703451av0xe",
+     "subId": "SF-008",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-008-M3",
+     "mDesc": "Undetected loss of anti-skid protection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.451Z"
+    },
+    {
+     "internalId": "17881157034520z41c",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-009-TL",
+     "tlDesc": "Complete loss of nose-wheel steering",
+     "plId": "SF-009-PL",
+     "plDesc": "Partial loss of nose-wheel steering",
+     "mId": "SF-009-M",
+     "mDesc": "Uncommanded nose-wheel steering",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.452Z",
+     "mExtra": [
+      {
+       "id": "SF-009-M2",
+       "desc": "Erroneous nose-wheel steering"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115703452x788g",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-010-TL",
+     "tlDesc": "Complete loss of nose door open/close",
+     "plId": "SF-010-PL",
+     "plDesc": "Partial loss of nose door open/close",
+     "mId": "SF-010-M",
+     "mDesc": "Inadvertent nose door movement",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.452Z"
+    },
+    {
+     "internalId": "1788115703453vgy3u",
+     "subId": "SF-010",
+     "awareness": "N/A",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.453Z"
+    },
+    {
+     "internalId": "1788115703454n6vll",
+     "subId": "SF-016",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-016-TL",
+     "tlDesc": "Complete loss of ice protection",
+     "plId": "SF-016-PL",
+     "plDesc": "Partial loss of ice protection",
+     "mId": "SF-016-M",
+     "mDesc": "Inadvertent ice protection activation",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.454Z"
+    },
+    {
+     "internalId": "1788115703455qzpd7",
+     "subId": "SF-016",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-016-PL2",
+     "plDesc": "Partial loss of ice protection — undetected",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.455Z"
+    },
+    {
+     "internalId": "1788115703456gx02p",
+     "subId": "SF-017",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-017-TL",
+     "tlDesc": "Complete loss of probe heating and icing detection",
+     "plId": "SF-017-PL",
+     "plDesc": "Partial loss of probe heating and icing detection",
+     "mId": "SF-017-M",
+     "mDesc": "Erroneous icing detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.456Z"
+    },
+    {
+     "internalId": "1788115703457fl6h0",
+     "subId": "SF-017",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-017-PL2",
+     "plDesc": "Undetected loss of probe heating",
+     "mId": "SF-017-M2",
+     "mDesc": "Undetected loss of icing detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.457Z"
+    },
+    {
+     "internalId": "1788115703458b676e",
+     "subId": "SF-018",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-018-TL",
+     "tlDesc": "Complete loss of flight and navigation information",
+     "plId": "SF-018-PL",
+     "plDesc": "Partial loss of flight and navigation information",
+     "mId": "SF-018-M",
+     "mDesc": "Erroneous flight and navigation information",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.458Z"
+    },
+    {
+     "internalId": "1788115703458gdrte",
+     "subId": "SF-018",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-018-M2",
+     "mDesc": "Undetected erroneous flight and navigation information",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.458Z"
+    },
+    {
+     "internalId": "1788115703459m27xa",
+     "subId": "SF-019",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-019-TL",
+     "tlDesc": "Complete loss of crew alerting",
+     "plId": "SF-019-PL",
+     "plDesc": "Partial loss of crew alerting",
+     "mId": "SF-019-M",
+     "mDesc": "Erroneous crew alerting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.459Z"
+    },
+    {
+     "internalId": "17881157034609oe1t",
+     "subId": "SF-019",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-019-TL2",
+     "tlDesc": "Undetected loss of crew alerting",
+     "plId": "SF-019-PL2",
+     "plDesc": "Undetected partial loss of crew alerting",
+     "mId": "SF-019-M2",
+     "mDesc": "Undetected missing crew alerting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.460Z"
+    },
+    {
+     "internalId": "1788115703461pbgs5",
+     "subId": "SF-020",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-020-TL",
+     "tlDesc": "Complete loss of fire and overheat detection",
+     "plId": "SF-020-PL",
+     "plDesc": "Partial loss of fire and overheat detection",
+     "mId": "SF-020-M",
+     "mDesc": "Erroneous fire and overheat warning",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.461Z"
+    },
+    {
+     "internalId": "1788115703462iwpqk",
+     "subId": "SF-020",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-020-TL2",
+     "tlDesc": "Undetected loss of fire and overheat detection",
+     "plId": "SF-020-PL2",
+     "plDesc": "Undetected partial loss of fire and overheat detection",
+     "mId": "SF-020-M2",
+     "mDesc": "Undetected fire and overheat",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.462Z"
+    },
+    {
+     "internalId": "1788115703465i7wlz",
+     "subId": "SF-021",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-021-TL",
+     "tlDesc": "Complete loss of engine and APU fire extinguishing",
+     "plId": "SF-021-PL",
+     "plDesc": "Partial loss of engine and APU fire extinguishing",
+     "mId": "SF-021-M",
+     "mDesc": "Inadvertent fire extinguishing discharge",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.465Z"
+    },
+    {
+     "internalId": "17881157034677keo3",
+     "subId": "SF-021",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-021-M2",
+     "mDesc": "Undetected loss of extinguishing availability",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.467Z"
+    },
+    {
+     "internalId": "1788115703469vrrmi",
+     "subId": "SF-022",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-022-TL",
+     "tlDesc": "Complete loss of crew oxygen supply",
+     "plId": "SF-022-PL",
+     "plDesc": "Partial loss of crew oxygen supply",
+     "mId": "SF-022-M",
+     "mDesc": "Undetected depletion of crew oxygen",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.469Z"
+    },
+    {
+     "internalId": "1788115703471va6dz",
+     "subId": "SF-022",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-022-M2",
+     "mDesc": "Undetected loss of on-demand oxygen delivery",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:48:23.471Z"
+    }
+   ],
+   "cards": 42,
+   "leftover": 10,
+   "ms": 136003
+  },
+  {
+   "tag": "C1",
+   "rows": [
+    {
+     "internalId": "1788115890861bexkv",
+     "subId": "SF-001",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-001-TL",
+     "tlDesc": "Complete loss of forward thrust",
+     "plId": "SF-001-PL",
+     "plDesc": "Partial loss of forward thrust — within MAC",
+     "mId": "SF-001-M",
+     "mDesc": "Erroneous forward thrust",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.861Z",
+     "mExtra": [
+      {
+       "id": "SF-001-M2",
+       "desc": "Uncommanded forward thrust"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-001-PL2",
+       "desc": "Partial loss of forward thrust — outside MAC"
+      },
+      {
+       "id": "SF-001-PL3",
+       "desc": "Partial loss of forward thrust — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "17881158908634ng2x",
+     "subId": "SF-001",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-001-PL4",
+     "plDesc": "Partial loss of forward thrust — undetected",
+     "mId": "SF-001-M3",
+     "mDesc": "Erroneous forward thrust — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.863Z"
+    },
+    {
+     "internalId": "1788115890863ti1xg",
+     "subId": "SF-002",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-002-TL",
+     "tlDesc": "Complete loss of reverse thrust",
+     "plId": "SF-002-PL",
+     "plDesc": "Partial loss of reverse thrust — asymmetric",
+     "mId": "SF-002-M",
+     "mDesc": "Inadvertent reverse thrust",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.863Z",
+     "mExtra": [
+      {
+       "id": "SF-002-M2",
+       "desc": "Uncommanded reverse thrust"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890864pguz6",
+     "subId": "SF-003",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-003-TL",
+     "tlDesc": "Complete loss of roll control",
+     "plId": "SF-003-PL",
+     "plDesc": "Partial loss of roll control authority",
+     "mId": "SF-003-M",
+     "mDesc": "Erroneous roll response to command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.864Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M2",
+       "desc": "Uncommanded roll motion"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890864ckhmf",
+     "subId": "SF-003",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-003-PL2",
+     "plDesc": "Partial loss of roll control authority — undetected",
+     "mId": "SF-003-M3",
+     "mDesc": "Erroneous roll response to command — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.864Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M4",
+       "desc": "Uncommanded roll motion — undetected"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890865jki56",
+     "subId": "SF-004",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-004-TL",
+     "tlDesc": "Complete loss of pitch control",
+     "plId": "SF-004-PL",
+     "plDesc": "Partial loss of pitch control authority",
+     "mId": "SF-004-M",
+     "mDesc": "Erroneous pitch response to command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.865Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M2",
+       "desc": "Uncommanded pitch motion"
+      }
+     ]
+    },
+    {
+     "internalId": "17881158908660ecje",
+     "subId": "SF-004",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-004-PL2",
+     "plDesc": "Partial loss of pitch control authority — undetected",
+     "mId": "SF-004-M3",
+     "mDesc": "Erroneous pitch response to command — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.866Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M4",
+       "desc": "Uncommanded pitch motion — undetected"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890866npjsc",
+     "subId": "SF-005",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-005-TL",
+     "tlDesc": "Complete loss of yaw control",
+     "plId": "SF-005-PL",
+     "plDesc": "Partial loss of yaw control authority",
+     "mId": "SF-005-M",
+     "mDesc": "Erroneous yaw response to command",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.866Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M2",
+       "desc": "Uncommanded yaw motion"
+      }
+     ]
+    },
+    {
+     "internalId": "17881158908678hvpb",
+     "subId": "SF-005",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-005-PL2",
+     "plDesc": "Partial loss of yaw control authority — undetected",
+     "mId": "SF-005-M3",
+     "mDesc": "Erroneous yaw response to command — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.867Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M4",
+       "desc": "Uncommanded yaw motion — undetected"
+      }
+     ]
+    },
+    {
+     "internalId": "17881158908682mr9v",
+     "subId": "SF-006",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-006-TL",
+     "tlDesc": "Complete loss of high-lift configuration",
+     "plId": "SF-006-PL",
+     "plDesc": "Partial loss of high-lift configuration",
+     "mId": "SF-006-M",
+     "mDesc": "Erroneous high-lift configuration",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.868Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M2",
+       "desc": "Uncommanded high-lift configuration"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-006-PL2",
+       "desc": "Partial loss of high-lift configuration — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890868svw5m",
+     "subId": "SF-006",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-006-M3",
+     "mDesc": "Undetected asymmetric high-lift configuration",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.868Z"
+    },
+    {
+     "internalId": "1788115890870dvqef",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-007-TL",
+     "tlDesc": "Complete loss of ground support and flotation",
+     "plId": "SF-007-PL",
+     "plDesc": "Partial loss of ground support and flotation",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.870Z"
+    },
+    {
+     "internalId": "1788115890871fj3ls",
+     "subId": "SF-007",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-007-PL2",
+     "plDesc": "Undetected loss of flotation margin",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.871Z"
+    },
+    {
+     "internalId": "1788115890872f0tss",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-008-TL",
+     "tlDesc": "Complete loss of wheel braking",
+     "plId": "SF-008-PL",
+     "plDesc": "Partial loss of wheel braking",
+     "mId": "SF-008-M",
+     "mDesc": "Uncommanded wheel braking",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.872Z",
+     "mExtra": [
+      {
+       "id": "SF-008-M2",
+       "desc": "Uncommanded wheel braking — asymmetric"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-008-PL2",
+       "desc": "Partial loss of wheel braking — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890873ldmuw",
+     "subId": "SF-008",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-008-PL3",
+     "plDesc": "Undetected partial loss of wheel braking",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.873Z"
+    },
+    {
+     "internalId": "1788115890873wj3sz",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-009-TL",
+     "tlDesc": "Complete loss of nose-wheel steering",
+     "plId": "SF-009-PL",
+     "plDesc": "Partial loss of nose-wheel steering",
+     "mId": "SF-009-M",
+     "mDesc": "Uncommanded nose-wheel steering",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.873Z",
+     "mExtra": [
+      {
+       "id": "SF-009-M2",
+       "desc": "Erroneous nose-wheel steering"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890874u6mhj",
+     "subId": "SF-009",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-009-M3",
+     "mDesc": "Undetected uncommanded nose-wheel steering",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.874Z"
+    },
+    {
+     "internalId": "1788115890875ryxr4",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-010-TL",
+     "tlDesc": "Complete loss of nose door open/close",
+     "plId": "SF-010-PL",
+     "plDesc": "Partial loss of nose door open/close",
+     "mId": "SF-010-M",
+     "mDesc": "Inadvertent nose door operation",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.875Z",
+     "mExtra": [
+      {
+       "id": "SF-010-M2",
+       "desc": "Erroneous nose door lock indication"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890876yhc91",
+     "subId": "SF-010",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-010-M3",
+     "mDesc": "Undetected loss of nose door lock integrity",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.876Z"
+    },
+    {
+     "internalId": "1788115890877x36wk",
+     "subId": "SF-011",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-011-TL",
+     "tlDesc": "Complete loss of nose door locking",
+     "plId": "SF-011-PL",
+     "plDesc": "Partial loss of nose door locking",
+     "mId": "SF-011-M",
+     "mDesc": "Erroneous nose door lock confirmation",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.877Z",
+     "mExtra": [
+      {
+       "id": "SF-011-M2",
+       "desc": "Uncommanded nose door unlock"
+      }
+     ]
+    },
+    {
+     "internalId": "17881158908784l8h1",
+     "subId": "SF-011",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-011-M3",
+     "mDesc": "Undetected loss of nose door locking",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.878Z"
+    },
+    {
+     "internalId": "17881158908792ally",
+     "subId": "SF-012",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-012-TL",
+     "tlDesc": "Complete loss of longitudinal payload restraint",
+     "plId": "SF-012-PL",
+     "plDesc": "Partial loss of longitudinal payload restraint",
+     "mId": "SF-012-M",
+     "mDesc": "Inadvertent longitudinal restraint release",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.879Z"
+    },
+    {
+     "internalId": "1788115890881fh0he",
+     "subId": "SF-012",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-012-TL2",
+     "tlDesc": "Undetected loss of longitudinal payload restraint",
+     "plId": "",
+     "plDesc": "",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.881Z"
+    },
+    {
+     "internalId": "17881158908826huwx",
+     "subId": "SF-013",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-013-TL",
+     "tlDesc": "Complete loss of restraint tension monitoring",
+     "plId": "SF-013-PL",
+     "plDesc": "Partial loss of restraint tension monitoring",
+     "mId": "SF-013-M",
+     "mDesc": "Erroneous restraint tension indication",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.882Z"
+    },
+    {
+     "internalId": "1788115890883k5y73",
+     "subId": "SF-013",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-013-TL2",
+     "tlDesc": "Undetected loss of restraint tension monitoring",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-013-M2",
+     "mDesc": "Undetected erroneous restraint tension indication",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.883Z"
+    },
+    {
+     "internalId": "1788115890884tzilk",
+     "subId": "SF-014",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-014-TL",
+     "tlDesc": "Complete loss of pressurisation control",
+     "plId": "SF-014-PL",
+     "plDesc": "Partial loss of pressurisation control",
+     "mId": "SF-014-M",
+     "mDesc": "Erroneous pressurisation control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.884Z",
+     "mExtra": [
+      {
+       "id": "SF-014-M2",
+       "desc": "Uncommanded depressurisation"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890885367ve",
+     "subId": "SF-014",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-014-M3",
+     "mDesc": "Undetected erroneous pressurisation control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.885Z"
+    },
+    {
+     "internalId": "1788115890886azf58",
+     "subId": "SF-015",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-015-TL",
+     "tlDesc": "Complete loss of air conditioning and distribution",
+     "plId": "SF-015-PL",
+     "plDesc": "Partial loss of air conditioning and distribution",
+     "mId": "SF-015-M",
+     "mDesc": "Erroneous air conditioning and distribution",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.886Z"
+    },
+    {
+     "internalId": "1788115890887khy72",
+     "subId": "SF-015",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-015-M2",
+     "mDesc": "Undetected erroneous air conditioning and distribution",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.887Z"
+    },
+    {
+     "internalId": "1788115890888hml30",
+     "subId": "SF-016",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-016-TL",
+     "tlDesc": "Complete loss of airframe and inlet ice protection",
+     "plId": "SF-016-PL",
+     "plDesc": "Partial loss of airframe and inlet ice protection",
+     "mId": "SF-016-M",
+     "mDesc": "Erroneous airframe and inlet ice protection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.888Z",
+     "mExtra": [
+      {
+       "id": "SF-016-M2",
+       "desc": "Inadvertent airframe and inlet ice protection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890889wi1zz",
+     "subId": "SF-016",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-016-TL2",
+     "tlDesc": "Undetected loss of airframe and inlet ice protection",
+     "plId": "SF-016-PL2",
+     "plDesc": "Undetected partial loss of airframe and inlet ice protection",
+     "mId": "SF-016-M3",
+     "mDesc": "Undetected erroneous airframe and inlet ice protection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.889Z"
+    },
+    {
+     "internalId": "1788115890891dtk2v",
+     "subId": "SF-017",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-017-TL",
+     "tlDesc": "Complete loss of probe heating and icing detection",
+     "plId": "SF-017-PL",
+     "plDesc": "Partial loss of probe heating and icing detection",
+     "mId": "SF-017-M",
+     "mDesc": "Erroneous icing detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.891Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M2",
+       "desc": "Inadvertent icing detection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890892pp7mc",
+     "subId": "SF-017",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-017-TL2",
+     "tlDesc": "Undetected loss of probe heating and icing detection",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-017-M3",
+     "mDesc": "Undetected erroneous icing detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.892Z"
+    },
+    {
+     "internalId": "1788115890893fnsrq",
+     "subId": "SF-018",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-018-TL",
+     "tlDesc": "Complete loss of flight and navigation information",
+     "plId": "SF-018-PL",
+     "plDesc": "Partial loss of flight and navigation information",
+     "mId": "SF-018-M",
+     "mDesc": "Erroneous flight and navigation information",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.893Z",
+     "mExtra": [
+      {
+       "id": "SF-018-M2",
+       "desc": "Inadvertent flight and navigation information"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890894yyqh4",
+     "subId": "SF-018",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-018-PL2",
+     "plDesc": "Undetected partial loss of flight and navigation information",
+     "mId": "SF-018-M3",
+     "mDesc": "Undetected erroneous flight and navigation information",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.894Z"
+    },
+    {
+     "internalId": "1788115890895h48wl",
+     "subId": "SF-019",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-019-TL",
+     "tlDesc": "Complete loss of crew alerting",
+     "plId": "SF-019-PL",
+     "plDesc": "Partial loss of crew alerting",
+     "mId": "SF-019-M",
+     "mDesc": "Erroneous crew alerting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.895Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M2",
+       "desc": "Inadvertent crew alerting"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890897ig8b6",
+     "subId": "SF-019",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-019-TL2",
+     "tlDesc": "Undetected loss of crew alerting",
+     "plId": "SF-019-PL2",
+     "plDesc": "Undetected partial loss of crew alerting",
+     "mId": "SF-019-M3",
+     "mDesc": "Undetected erroneous crew alerting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.897Z"
+    },
+    {
+     "internalId": "1788115890898moxu6",
+     "subId": "SF-020",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-020-TL",
+     "tlDesc": "Complete loss of fire and overheat detection",
+     "plId": "SF-020-PL",
+     "plDesc": "Partial loss of fire and overheat detection",
+     "mId": "SF-020-M",
+     "mDesc": "Erroneous fire and overheat detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.898Z",
+     "mExtra": [
+      {
+       "id": "SF-020-M2",
+       "desc": "Inadvertent fire and overheat detection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115890899pcum3",
+     "subId": "SF-020",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-020-TL2",
+     "tlDesc": "Undetected loss of fire and overheat detection",
+     "plId": "SF-020-PL2",
+     "plDesc": "Undetected partial loss of fire and overheat detection",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.899Z"
+    },
+    {
+     "internalId": "1788115890900d0uhx",
+     "subId": "SF-021",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-021-TL",
+     "tlDesc": "Complete loss of fire extinguishing",
+     "plId": "SF-021-PL",
+     "plDesc": "Partial loss of fire extinguishing",
+     "mId": "SF-021-M",
+     "mDesc": "Inadvertent fire extinguishing",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.900Z"
+    },
+    {
+     "internalId": "1788115890902ijaiy",
+     "subId": "SF-021",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-021-TL2",
+     "tlDesc": "Undetected loss of fire extinguishing",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-021-M2",
+     "mDesc": "Inadvertent fire extinguishing — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.902Z"
+    },
+    {
+     "internalId": "17881158909033t13k",
+     "subId": "SF-022",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-022-TL",
+     "tlDesc": "Complete loss of crew oxygen supply",
+     "plId": "SF-022-PL",
+     "plDesc": "Partial loss of crew oxygen supply",
+     "mId": "SF-022-M",
+     "mDesc": "Inadvertent crew oxygen discharge",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.903Z"
+    },
+    {
+     "internalId": "1788115890904aeazr",
+     "subId": "SF-022",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "SF-022-TL2",
+     "tlDesc": "Undetected loss of crew oxygen supply",
+     "plId": "",
+     "plDesc": "",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:51:30.904Z"
+    }
+   ],
+   "cards": 44,
+   "leftover": 0,
+   "ms": 66481
+  },
+  {
+   "tag": "C2",
+   "rows": [
+    {
+     "internalId": "1788115960945jd2f3",
+     "subId": "SF-001",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-001-TL",
+     "tlDesc": "Complete loss of forward thrust",
+     "plId": "SF-001-PL",
+     "plDesc": "Partial loss of forward thrust — symmetric",
+     "mId": "SF-001-M",
+     "mDesc": "Uncommanded forward thrust",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.945Z",
+     "mExtra": [
+      {
+       "id": "SF-001-M2",
+       "desc": "Erroneous forward thrust"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-001-PL2",
+       "desc": "Partial loss of forward thrust — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "17881159609461n807",
+     "subId": "SF-001",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-001-PL3",
+     "plDesc": "Undetected partial loss of forward thrust",
+     "mId": "SF-001-M3",
+     "mDesc": "Undetected erroneous forward thrust",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.947Z"
+    },
+    {
+     "internalId": "1788115960947e54s1",
+     "subId": "SF-002",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-002-TL",
+     "tlDesc": "Complete loss of reverse thrust",
+     "plId": "SF-002-PL",
+     "plDesc": "Partial loss of reverse thrust",
+     "mId": "SF-002-M",
+     "mDesc": "Uncommanded reverse thrust",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.947Z",
+     "mExtra": [
+      {
+       "id": "SF-002-M2",
+       "desc": "Erroneous reverse thrust"
+      }
+     ]
+    },
+    {
+     "internalId": "17881159609483javk",
+     "subId": "SF-003",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-003-TL",
+     "tlDesc": "Complete loss of roll control",
+     "plId": "SF-003-PL",
+     "plDesc": "Partial loss of roll control",
+     "mId": "SF-003-M",
+     "mDesc": "Erroneous roll control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.948Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M2",
+       "desc": "Uncommanded roll control"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960948lijim",
+     "subId": "SF-003",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-003-PL2",
+     "plDesc": "Undetected partial loss of roll control",
+     "mId": "SF-003-M3",
+     "mDesc": "Undetected erroneous roll control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.948Z",
+     "mExtra": [
+      {
+       "id": "SF-003-M4",
+       "desc": "Undetected uncommanded roll control"
+      }
+     ]
+    },
+    {
+     "internalId": "178811596094951x0t",
+     "subId": "SF-004",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-004-TL",
+     "tlDesc": "Complete loss of pitch control",
+     "plId": "SF-004-PL",
+     "plDesc": "Partial loss of pitch control",
+     "mId": "SF-004-M",
+     "mDesc": "Erroneous pitch control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.949Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M2",
+       "desc": "Uncommanded pitch control"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960949w386j",
+     "subId": "SF-004",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-004-PL2",
+     "plDesc": "Undetected partial loss of pitch control",
+     "mId": "SF-004-M3",
+     "mDesc": "Undetected erroneous pitch control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.949Z",
+     "mExtra": [
+      {
+       "id": "SF-004-M4",
+       "desc": "Undetected uncommanded pitch control"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960950a1207",
+     "subId": "SF-005",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-005-TL",
+     "tlDesc": "Complete loss of yaw control",
+     "plId": "SF-005-PL",
+     "plDesc": "Partial loss of yaw control",
+     "mId": "SF-005-M",
+     "mDesc": "Erroneous yaw control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.950Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M2",
+       "desc": "Uncommanded yaw control"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960950vandt",
+     "subId": "SF-005",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-005-PL2",
+     "plDesc": "Undetected partial loss of yaw control",
+     "mId": "SF-005-M3",
+     "mDesc": "Undetected erroneous yaw control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.950Z",
+     "mExtra": [
+      {
+       "id": "SF-005-M4",
+       "desc": "Undetected uncommanded yaw control"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960951vgz32",
+     "subId": "SF-006",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-006-TL",
+     "tlDesc": "Complete loss of high-lift configuration",
+     "plId": "SF-006-PL",
+     "plDesc": "Partial loss of high-lift configuration — symmetric",
+     "mId": "SF-006-M",
+     "mDesc": "Erroneous high-lift configuration",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.951Z",
+     "mExtra": [
+      {
+       "id": "SF-006-M2",
+       "desc": "Uncommanded high-lift configuration"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-006-PL2",
+       "desc": "Partial loss of high-lift configuration — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960952vyh14",
+     "subId": "SF-006",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-006-PL3",
+     "plDesc": "Partial loss of high-lift configuration — asymmetric — undetected",
+     "mId": "SF-006-M3",
+     "mDesc": "Erroneous high-lift configuration — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.952Z"
+    },
+    {
+     "internalId": "1788115960954uvjv6",
+     "subId": "SF-007",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-007-TL",
+     "tlDesc": "Complete loss of ground support and flotation",
+     "plId": "SF-007-PL",
+     "plDesc": "Partial loss of ground support and flotation",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.954Z"
+    },
+    {
+     "internalId": "1788115960955154eb",
+     "subId": "SF-007",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-007-PL2",
+     "plDesc": "Undetected partial loss of ground support and flotation",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.955Z"
+    },
+    {
+     "internalId": "1788115960956m3b44",
+     "subId": "SF-008",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-008-TL",
+     "tlDesc": "Complete loss of wheel braking",
+     "plId": "SF-008-PL",
+     "plDesc": "Partial loss of wheel braking — symmetric",
+     "mId": "SF-008-M",
+     "mDesc": "Uncommanded wheel braking",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.956Z",
+     "mExtra": [
+      {
+       "id": "SF-008-M2",
+       "desc": "Erroneous wheel braking — asymmetric"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-008-PL2",
+       "desc": "Partial loss of wheel braking — asymmetric"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960956q362v",
+     "subId": "SF-008",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-008-PL3",
+     "plDesc": "Undetected partial loss of wheel braking",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.956Z"
+    },
+    {
+     "internalId": "178811596095753cg0",
+     "subId": "SF-009",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-009-TL",
+     "tlDesc": "Complete loss of nose-wheel steering",
+     "plId": "SF-009-PL",
+     "plDesc": "Partial loss of nose-wheel steering",
+     "mId": "SF-009-M",
+     "mDesc": "Erroneous nose-wheel steering",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.957Z",
+     "mExtra": [
+      {
+       "id": "SF-009-M2",
+       "desc": "Uncommanded nose-wheel steering"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960958a9ei4",
+     "subId": "SF-009",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-009-M3",
+     "mDesc": "Uncommanded nose-wheel steering — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.958Z"
+    },
+    {
+     "internalId": "17881159609597j4ir",
+     "subId": "SF-010",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-010-TL",
+     "tlDesc": "Complete loss of nose door open/close",
+     "plId": "SF-010-PL",
+     "plDesc": "Partial loss of nose door open/close",
+     "mId": "SF-010-M",
+     "mDesc": "Inadvertent nose door opening",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.959Z"
+    },
+    {
+     "internalId": "1788115960960lzi27",
+     "subId": "SF-010",
+     "awareness": "N/A",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.960Z"
+    },
+    {
+     "internalId": "1788115960961jt45f",
+     "subId": "SF-011",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-011-TL",
+     "tlDesc": "Complete loss of nose door locking",
+     "plId": "SF-011-PL",
+     "plDesc": "Partial loss of nose door locking",
+     "mId": "SF-011-M",
+     "mDesc": "Inadvertent nose door unlocking",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.961Z"
+    },
+    {
+     "internalId": "17881159609625w6va",
+     "subId": "SF-011",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-011-M2",
+     "mDesc": "Erroneous locked confirmation — undetected",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.962Z"
+    },
+    {
+     "internalId": "1788115960963svn3y",
+     "subId": "SF-012",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-012-TL",
+     "tlDesc": "Complete loss of longitudinal payload restraint",
+     "plId": "SF-012-PL",
+     "plDesc": "Partial loss of longitudinal payload restraint",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.963Z",
+     "plExtra": [
+      {
+       "id": "SF-012-PL2",
+       "desc": "Partial loss of longitudinal payload restraint — outside limits"
+      }
+     ]
+    },
+    {
+     "internalId": "178811596096499xu8",
+     "subId": "SF-012",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-012-PL3",
+     "plDesc": "Partial loss of longitudinal payload restraint — undetected",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.965Z"
+    },
+    {
+     "internalId": "17881159609660e7x7",
+     "subId": "SF-013",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-013-TL",
+     "tlDesc": "Complete loss of restraint tension monitoring",
+     "plId": "SF-013-PL",
+     "plDesc": "Partial loss of restraint tension monitoring",
+     "mId": "",
+     "mDesc": "",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.966Z"
+    },
+    {
+     "internalId": "17881159609675smjf",
+     "subId": "SF-013",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-013-M",
+     "mDesc": "Erroneous restraint tension indication",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.967Z",
+     "mExtra": [
+      {
+       "id": "SF-013-M2",
+       "desc": "Undetected loss of restraint tension monitoring"
+      }
+     ]
+    },
+    {
+     "internalId": "17881159609680qfz7",
+     "subId": "SF-014",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-014-TL",
+     "tlDesc": "Complete loss of pressurisation control",
+     "plId": "SF-014-PL",
+     "plDesc": "Partial loss of pressurisation control",
+     "mId": "SF-014-M",
+     "mDesc": "Erroneous pressurisation control",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.968Z",
+     "mExtra": [
+      {
+       "id": "SF-014-M2",
+       "desc": "Uncommanded fuselage differential"
+      }
+     ]
+    },
+    {
+     "internalId": "17881159609698onpn",
+     "subId": "SF-014",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-014-M3",
+     "mDesc": "Undetected pressurisation control drift",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.969Z"
+    },
+    {
+     "internalId": "1788115960970y79b8",
+     "subId": "SF-015",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-015-TL",
+     "tlDesc": "Complete loss of air conditioning and distribution",
+     "plId": "SF-015-PL",
+     "plDesc": "Partial loss of air conditioning and distribution",
+     "mId": "SF-015-M",
+     "mDesc": "Erroneous air conditioning and distribution",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.970Z"
+    },
+    {
+     "internalId": "1788115960971wqa6v",
+     "subId": "SF-015",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-015-M2",
+     "mDesc": "Undetected erroneous air conditioning",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.971Z"
+    },
+    {
+     "internalId": "1788115960972dt5t0",
+     "subId": "SF-016",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-016-TL",
+     "tlDesc": "Complete loss of airframe/inlet ice protection",
+     "plId": "SF-016-PL",
+     "plDesc": "Partial loss of airframe/inlet ice protection",
+     "mId": "SF-016-M",
+     "mDesc": "Inadvertent airframe/inlet ice protection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.972Z",
+     "mExtra": [
+      {
+       "id": "SF-016-M2",
+       "desc": "Erroneous airframe/inlet ice protection"
+      }
+     ]
+    },
+    {
+     "internalId": "17881159609738makp",
+     "subId": "SF-016",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-016-PL2",
+     "plDesc": "Undetected loss of airframe/inlet ice protection",
+     "mId": "SF-016-M3",
+     "mDesc": "Undetected airframe/inlet ice protection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.973Z"
+    },
+    {
+     "internalId": "1788115960974dsdyn",
+     "subId": "SF-017",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-017-TL",
+     "tlDesc": "Complete loss of probe heat and icing detection",
+     "plId": "SF-017-PL",
+     "plDesc": "Partial loss of probe heat and icing detection",
+     "mId": "SF-017-M",
+     "mDesc": "Erroneous icing detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.974Z",
+     "mExtra": [
+      {
+       "id": "SF-017-M2",
+       "desc": "Inadvertent icing detection"
+      }
+     ],
+     "plExtra": [
+      {
+       "id": "SF-017-PL2",
+       "desc": "Partial loss of icing detection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960975gttqi",
+     "subId": "SF-017",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-017-PL3",
+     "plDesc": "Undetected loss of probe heat",
+     "mId": "SF-017-M3",
+     "mDesc": "Undetected erroneous icing detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.975Z",
+     "plExtra": [
+      {
+       "id": "SF-017-PL4",
+       "desc": "Undetected loss of icing detection"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960977h7bkc",
+     "subId": "SF-018",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-018-TL",
+     "tlDesc": "Complete loss of flight and navigation information",
+     "plId": "SF-018-PL",
+     "plDesc": "Partial loss of flight and navigation information",
+     "mId": "SF-018-M",
+     "mDesc": "Erroneous flight and navigation information",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.977Z"
+    },
+    {
+     "internalId": "1788115960978uu786",
+     "subId": "SF-018",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-018-M2",
+     "mDesc": "Undetected erroneous flight and navigation information",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.978Z"
+    },
+    {
+     "internalId": "1788115960979u9nd2",
+     "subId": "SF-019",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-019-TL",
+     "tlDesc": "Complete loss of crew alerting",
+     "plId": "SF-019-PL",
+     "plDesc": "Partial loss of crew alerting",
+     "mId": "SF-019-M",
+     "mDesc": "Erroneous crew alerting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.979Z",
+     "mExtra": [
+      {
+       "id": "SF-019-M2",
+       "desc": "Inadvertent crew alerting"
+      }
+     ]
+    },
+    {
+     "internalId": "178811596098090y51",
+     "subId": "SF-019",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-019-PL2",
+     "plDesc": "Undetected loss of crew alerting",
+     "mId": "SF-019-M3",
+     "mDesc": "Undetected erroneous crew alerting",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.980Z"
+    },
+    {
+     "internalId": "1788115960981wk0ic",
+     "subId": "SF-020",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-020-TL",
+     "tlDesc": "Complete loss of fire and overheat detection",
+     "plId": "SF-020-PL",
+     "plDesc": "Partial loss of fire and overheat detection",
+     "mId": "SF-020-M",
+     "mDesc": "Erroneous fire and overheat detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.982Z",
+     "mExtra": [
+      {
+       "id": "SF-020-M2",
+       "desc": "Inadvertent fire and overheat warning"
+      }
+     ]
+    },
+    {
+     "internalId": "1788115960983wvok5",
+     "subId": "SF-020",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "SF-020-PL2",
+     "plDesc": "Undetected loss of fire and overheat detection",
+     "mId": "SF-020-M3",
+     "mDesc": "Undetected erroneous fire and overheat detection",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.983Z"
+    },
+    {
+     "internalId": "1788115960984w4zz6",
+     "subId": "SF-021",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-021-TL",
+     "tlDesc": "Complete loss of fire extinguishing",
+     "plId": "SF-021-PL",
+     "plDesc": "Partial loss of fire extinguishing",
+     "mId": "SF-021-M",
+     "mDesc": "Inadvertent fire extinguishing",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.984Z"
+    },
+    {
+     "internalId": "1788115960985p82ak",
+     "subId": "SF-021",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-021-M2",
+     "mDesc": "Undetected loss of fire extinguishing",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.985Z"
+    },
+    {
+     "internalId": "17881159609863wlhf",
+     "subId": "SF-022",
+     "awareness": "Aware",
+     "rationale": "",
+     "tlId": "SF-022-TL",
+     "tlDesc": "Complete loss of crew oxygen supply",
+     "plId": "SF-022-PL",
+     "plDesc": "Partial loss of crew oxygen supply",
+     "mId": "SF-022-M",
+     "mDesc": "Inadvertent crew oxygen discharge",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.986Z"
+    },
+    {
+     "internalId": "1788115960988j24ks",
+     "subId": "SF-022",
+     "awareness": "Unaware",
+     "rationale": "",
+     "tlId": "",
+     "tlDesc": "",
+     "plId": "",
+     "plDesc": "",
+     "mId": "SF-022-M2",
+     "mDesc": "Undetected loss of crew oxygen supply",
+     "aiGenerated": true,
+     "aiFeature": "fcim.populate",
+     "aiSkill": "fcim.draft@v1#8c8977ea",
+     "aiModel": "claude-opus-4-8",
+     "aiInputScope": "Aircraft",
+     "aiAt": "2026-08-30T18:52:40.988Z"
+    }
+   ],
+   "cards": 44,
+   "leftover": 0,
+   "ms": 60472
+  }
+ ]
+}

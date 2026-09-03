@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nav v2 Mockup · Rev B — the plan drives the nav, the trees cascade</title>
+<style>
+:root{
+  --navy:#14224A; --mid:#3457A2; --purple:#7247B1; --lav:#9B55BE;
+  --ink:#0a0d14; --panel:#161b28; --panel2:#0f131c; --border:rgba(255,255,255,.1);
+  --txt:#fff; --txt2:rgba(255,255,255,.72); --txt3:rgba(255,255,255,.45);
+  --green:#10b981; --amber:#f59e0b; --blue:#3b82f6; --red:#ef4444;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--txt);font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5}
+.top{padding:18px 24px;border-bottom:1px solid var(--border)}
+.top h1{font-size:19px}
+.top h1 span{background:linear-gradient(90deg,#9DC6FF,#EBC6FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.top p{color:var(--txt3);font-size:12.5px;margin-top:4px;max-width:100ch}
+.mode{display:flex;gap:8px;padding:14px 24px 0}
+.mode button{background:var(--panel);border:1px solid var(--border);color:var(--txt2);padding:8px 16px;font:inherit;font-weight:600;cursor:pointer}
+.mode button.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.stage{display:grid;grid-template-columns:310px 1fr;gap:0;margin:16px 24px 40px;border:1px solid var(--border);min-height:640px}
+@media(max-width:900px){.stage{grid-template-columns:1fr}}
+.rail{background:linear-gradient(175deg,var(--navy) 0%,var(--mid) 45%,var(--purple) 85%,var(--lav) 100%);padding:14px 0 20px;overflow-y:auto;max-height:820px}
+.rail *{text-shadow:0 1px 2px rgba(0,0,0,.45),0 0 1px rgba(0,0,0,.3)}
+.brand{padding:4px 16px 12px;font-weight:700;font-size:13px;letter-spacing:.4px;border-bottom:1px solid rgba(0,0,0,.25);margin-bottom:8px}
+.brand small{display:block;font-weight:600;font-size:9.5px;letter-spacing:2px;color:rgba(255,255,255,.65);text-transform:uppercase}
+.it{display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:12.8px;color:rgba(255,255,255,.92);cursor:pointer}
+.it:hover{background:rgba(0,0,0,.18)}
+.it .ico{width:16px;text-align:center;flex:none}
+.hd{padding:10px 16px 3px;font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:700}
+.grp{margin:1px 0}
+.grp>summary{display:flex;align-items:center;gap:8px;padding:6px 16px;font-size:12.8px;font-weight:700;cursor:pointer;list-style:none}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary .chev{margin-left:auto;transition:transform .15s;color:rgba(255,255,255,.6)}
+.grp[open]>summary .chev{transform:rotate(90deg)}
+.grp>summary:hover{background:rgba(0,0,0,.18)}
+.sub{padding:1px 0 4px}
+.sub .it{padding-left:38px;font-size:12.3px}
+.sub .sub .it{padding-left:56px;font-size:12px}
+.sub .hd2{padding:5px 16px 2px 38px;font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700}
+.badge{margin-left:auto;font-size:9.5px;letter-spacing:.5px;padding:1px 6px;border:1px solid rgba(255,255,255,.45);color:rgba(255,255,255,.85);white-space:nowrap}
+.cat{margin:10px 12px 4px;padding:8px 12px;border:1px dashed rgba(255,255,255,.4);font-size:12.3px;color:rgba(255,255,255,.85);cursor:pointer}
+.cat:hover{background:rgba(0,0,0,.18)}
+.cmdk{margin:6px 12px 0;padding:7px 12px;background:rgba(0,0,0,.28);border:1px solid rgba(0,0,0,.4);font-size:12px;color:rgba(255,255,255,.75);cursor:pointer;display:flex;gap:8px;align-items:center}
+.kbd{border:1px solid rgba(255,255,255,.4);padding:0 5px;font-size:10.5px;font-family:ui-monospace,Menlo,monospace}
+.count-note{padding:10px 16px 0;font-size:11px;color:rgba(255,255,255,.65)}
+.right{background:var(--panel2);padding:22px 26px;overflow-y:auto;max-height:820px}
+.right h2{font-size:16px;margin-bottom:4px}
+.right h3{font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:var(--txt3);margin:18px 0 8px;font-weight:700}
+.right p.sub-p{color:var(--txt3);font-size:12.5px;margin-bottom:12px}
+.preset{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.preset button{background:var(--panel);border:1px solid var(--border);color:var(--txt2);padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer}
+.preset button:hover{border-color:var(--blue);color:#fff}
+.lane{display:flex;align-items:flex-start;gap:10px;padding:6px 10px;border:1px solid var(--border);margin-bottom:4px;background:var(--panel);cursor:pointer}
+.lane input{margin-top:3px;accent-color:var(--blue)}
+.lane .nm{font-size:12.8px;font-weight:600}
+.lane .std{font-size:10.5px;color:var(--txt3)}
+.note{background:var(--panel);border:1px dashed var(--border);padding:10px 14px;color:var(--txt3);font-size:12px;margin:12px 0}
+/* cascade */
+.cascade{background:var(--panel);border:1px solid var(--border);padding:16px}
+.crow{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:start;margin-bottom:2px}
+.cnode{font-weight:700;font-size:13px;padding:6px 10px;border:1px solid var(--border);text-align:center}
+.cnode.pasa{border-color:#9DC6FF;color:#9DC6FF}
+.cnode.pssa{border-color:var(--amber);color:var(--amber)}
+.cnode.ssa{border-color:var(--green);color:var(--green)}
+.cnode.asa{border-color:#EBC6FF;color:#EBC6FF}
+.cnode.afha{border-color:rgba(255,255,255,.5);color:#fff}
+.cdesc{font-size:12px;color:var(--txt2);padding-top:5px}
+.carrow{grid-column:1;text-align:center;color:var(--txt3);font-size:15px;line-height:1;padding:1px 0}
+.ledger{width:100%;border-collapse:collapse;font-size:11.8px;margin-top:8px}
+.ledger th{text-align:left;color:var(--txt3);font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:5px 8px;border-bottom:1px solid var(--border)}
+.ledger td{padding:5px 8px;border-bottom:1px solid var(--border);color:var(--txt2)}
+.ok{color:var(--green);font-weight:700}
+.bad{color:var(--red);font-weight:700}
+.stale{color:var(--amber);font-weight:700}
+#pal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:50}
+#pal.open{display:flex}
+.palbox{width:520px;background:var(--panel);border:1px solid rgba(255,255,255,.2);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.palbox input{width:100%;background:var(--panel2);border:none;border-bottom:1px solid var(--border);color:#fff;font:inherit;font-size:15px;padding:13px 16px;outline:none}
+.palrow{padding:9px 16px;font-size:13px;display:flex;gap:10px;align-items:center;cursor:pointer}
+.palrow:hover{background:var(--ink)}
+.palrow .tag{margin-left:auto;font-size:10.5px;color:var(--amber);border:1px solid var(--amber);padding:1px 7px;white-space:nowrap}
+.palrow .tag.ok{color:var(--green);border-color:var(--green)}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1><span>Nav v2 mockup · Rev B</span> — the spine reads as ARP4761A App A–F, and the trees cascade through it</h1>
+  <p>Waqas's restructure, 14 Aug: fault trees live under the assessments (PASA allocation → PSSA → SSA → ASA close-out, one tree per level in two postures — never copies); system directories house each system's PSSA · SSA · FMEA · FMES · system-scoped RAM; suffix labels dropped; AFHA + functional definition explicit. Right panel: tabs for the SPP scope (drives the rail) and the tree cascade mechanism.</p>
+</div>
+
+<div class="mode">
+  <button id="m-rail" class="on" onclick="setPanel('scope')">SPP scope panel</button>
+  <button id="m-casc" onclick="setPanel('cascade')">Tree cascade &amp; close-out</button>
+  <button style="margin-left:auto" onclick="document.getElementById('pal').classList.add('open')">⌘K palette demo</button>
+</div>
+
+<div class="stage">
+  <nav class="rail" id="rail"></nav>
+  <div class="right" id="right"></div>
+</div>
+
+<div id="pal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="palbox">
+    <input placeholder="Find anything… (demo: 'fcs tree')" readonly>
+    <div class="palrow"><span>🌲</span> FCS — PSSA tree · allocation posture <span class="tag ok">open</span></div>
+    <div class="palrow"><span>🌲</span> FCS — SSA (same tree · verification) <span class="tag ok">open</span></div>
+    <div class="palrow"><span>⚖</span> Handoff PASA → FCS · 4.2e-6 allocated <span class="tag ok">accepted</span></div>
+    <div class="palrow"><span>🗺</span> Routing / Zone-Spanning <span class="tag">in catalogue — add to program</span></div>
+  </div>
+</div>
+
+<script>
+const LANES=[
+ {id:'markov',nm:'Markov Models',std:'ARP4761A App I',on:1},
+ {id:'eta',nm:'Event Trees',std:'not a 4761A method',on:0},
+ {id:'ccmr',nm:'Latent failures (CCMR)',std:'',on:1},
+ {id:'zsa',nm:'CCA · Zonal Safety',std:'App K',on:1},
+ {id:'pra',nm:'CCA · Particular Risks',std:'App L',on:1},
+ {id:'cma',nm:'CCA · Common Modes',std:'App M',on:1},
+ {id:'cea',nm:'Cascading effects',std:'',on:0},
+ {id:'stpa',nm:'STPA — interaction hazards',std:'SAE J3307',on:1},
+ {id:'hfa',nm:'Human Factors set',std:'HFA · task · ergo · bow-tie',on:1},
+ {id:'ram-rel',nm:'Reliability set (per system)',std:'217F · RBD · Weibull · FRACAS',on:1},
+ {id:'ram-mx',nm:'Maintainability set (per system)',std:'MTTR · testability',on:1},
+ {id:'msg3',nm:'MSG-3 set',std:'aircraft-level — stays program-wide',on:0},
+ {id:'mmel',nm:'Dispatch relief (MMEL/TLD)',std:'aircraft-level — stays program-wide',on:1},
+ {id:'mlas',nm:'AI/ML learning assurance',std:'opt-in',on:0},
+ {id:'sora',nm:'SORA Thread',std:'basis thread',on:0},
+];
+let panel='scope';
+const has=id=>{const l=LANES.find(x=>x.id===id);return l&&l.on;};
+function tog(id){const l=LANES.find(x=>x.id===id);if(l){l.on=l.on?0:1;render();}}
+function setPanel(p){panel=p;
+ document.getElementById('m-rail').classList.toggle('on',p==='scope');
+ document.getElementById('m-casc').classList.toggle('on',p==='cascade');
+ renderRight();}
+
+const item=(t,ic,badge)=>`<a class="it">${ic?`<span class="ico">${ic}</span>`:''}${t}${badge?`<span class="badge">${badge}</span>`:''}</a>`;
+
+function sysDir(name,open){
+  let h=`<details class="grp" ${open?'open':''}><summary style="padding-left:38px"><span class="ico">▣</span>${name}<span class="chev">›</span></summary><div class="sub" style="padding-left:18px">`;
+  h+=item('Functions · FCIM · SFHA');
+  h+=item('Items & LRUs — this system');
+  h+=item('PSSA','', 'trees · allocation');
+  h+=item('SSA','', 'same trees · verification');
+  h+=item('FMEA / FMES');
+  if(has('ram-rel'))h+=item('Reliability — this system');
+  if(has('ram-mx'))h+=item('Maintainability — this system');
+  h+=item('Requirements · assumptions');
+  h+=`</div></details>`;
+  return h;
+}
+
+function renderRail(){
+  const off=LANES.filter(l=>!l.on);
+  let h=`<div class="brand">Safety Lab Aero<small>System Safety Suite</small></div>`;
+  h+=item('Dashboard — six cockpits','▦');
+  h+=item('Golden Thread · <b>live</b>','◆');
+  h+=`<div class="hd">The program — ARP4761A A→F</div>`;
+  h+=`<details class="grp"><summary><span class="ico">🗂</span>Program<span class="chev">›</span></summary><div class="sub">${item('Safety Program Plan · scope')+item('Certification basis (AC 1309)')+item('Flight Phases')+item('References — process map · DAL · App A · defs')}</div></details>`;
+  h+=`<details class="grp" open><summary><span class="ico">📐</span>Functional definition<span class="chev">›</span></summary><div class="sub">${item('Functional breakdown — aircraft functions')+item('Failure condition matrix (FCIM)')}</div></details>`;
+  h+=`<details class="grp" open><summary><span class="ico">⚠️</span>AFHA<span class="chev">›</span></summary><div class="sub">${item('Aircraft hazard assessment')+item('Assumptions')+item('Requirements — aircraft')}</div></details>`;
+  // PASA
+  let pasa=item('Fault trees','', 'allocation · top-down')+item('DAL allocation — FDAL/IDAL')+item('Budget handoffs → systems','','ledger');
+  if(has('markov'))pasa+=item('Markov attachments');
+  if(has('eta'))pasa+=item('Event trees');
+  if(has('zsa')||has('pra')||has('cma')){pasa+=`<div class="hd2">Common cause (aircraft-wide)</div>`;
+    if(has('zsa'))pasa+=item('Zonal Safety (ZSA)');
+    if(has('pra'))pasa+=item('Particular Risks (PRA)');
+    if(has('cma'))pasa+=item('Common Modes (CMA)');
+    if(has('cea'))pasa+=item('Cascading effects');}
+  if(has('stpa'))pasa+=item('STPA — interaction hazards');
+  if(has('hfa'))pasa+=item('Human factors set');
+  h+=`<details class="grp" open><summary><span class="ico">🛫</span>PASA<span class="chev">›</span></summary><div class="sub">${pasa}</div></details>`;
+  // Systems
+  h+=`<details class="grp" open><summary><span class="ico">🧩</span>Systems<span class="chev">›</span></summary><div class="sub">${sysDir('Electrical Power (EPS)',true)+sysDir('Flight Controls (FCS)',false)+sysDir('Fuel (FUEL)',false)+item('All items & LRUs — cross-system view')+item('＋ Add system')}</div></details>`;
+  // ASA
+  let asa=item('Fault trees','', 'verification vs PASA baseline')+item('Close-out ledger — allocated vs demonstrated');
+  if(has('ccmr'))asa+=item('Latent failures (CCMR)');
+  if(has('mmel'))asa+=item('Dispatch relief (MMEL / TLD)');
+  asa+=item('In-service watch list (SSE)');
+  h+=`<details class="grp" open><summary><span class="ico">🛬</span>ASA<span class="chev">›</span></summary><div class="sub">${asa}</div></details>`;
+  h+=`<details class="grp"><summary><span class="ico">🧾</span>Verify &amp; prove<span class="chev">›</span></summary><div class="sub">${item('Requirements Repository')+item('Validation Matrix · MoC · V&V roll-up')+item('DAL Credit (DO-178C / 254)')+item('Traceability · Thread Integrity')+item('Evidence Package')+(has('sora')?item('SORA Thread'):'')}</div></details>`;
+  h+=`<div class="hd">Program admin</div>`;
+  h+=`<details class="grp"><summary><span class="ico">⇄</span>Interoperability<span class="chev">›</span></summary><div class="sub">${item('ReqIF · Jama · Polarion · DOORS')+item('Architecture import — Cameo · SysML')}</div></details>`;
+  h+=`<details class="grp"><summary><span class="ico">🗃</span>Configuration<span class="chev">›</span></summary><div class="sub">${item('Baselines & CM · Reviews · OPRs')+item('Modification Impact · Locks')}</div></details>`;
+  h+=item('ANEM — assistant & chat','🤖');
+  h+=`<div class="cat">＋ Catalogue — <b>${off.length}</b> lanes not in this program</div>`;
+  h+=`<div class="cmdk" onclick="document.getElementById('pal').classList.add('open')"><span class="kbd">⌘K</span> Find anything…</div>`;
+  h+=`<div class="count-note">Aircraft-level program-wide lanes (MSG-3, MMEL, LCC, spares) stay at program level — they cut across systems by nature, as do the CCAs.</div>`;
+  document.getElementById('rail').innerHTML=h;
+}
+
+function renderRight(){
+  const R=document.getElementById('right');
+  if(panel==='scope'){
+    let h=`<h2>SPP — Program scope (drives the rail)</h2>
+    <p class="sub-p">Same v1.1 machinery: setLane · signed tailoring opt-outs · cert-basis defaults · deselect never deletes. Spine (functional definition · AFHA · PASA · Systems · ASA · Verify) is never gated. Tick lanes and watch the rail.</p>`;
+    LANES.forEach(l=>{
+      h+=`<label class="lane" onclick="event.preventDefault();tog('${l.id}')"><input type="checkbox" ${l.on?'checked':''}><span><span class="nm">${l.nm}</span><br><span class="std">${l.std||'&nbsp;'}</span></span></label>`;
+    });
+    h+=`<div class="note">Per-system housing: PSSA · SSA · FMEA/FMES · reliability · maintainability render inside each system directory. FMEA rows already carry <code>scope:'system'</code> + <code>owningSystemId</code>; legacy unassigned rows land in a flagged bucket.</div>`;
+    R.innerHTML=h;return;
+  }
+  R.innerHTML=`<h2>The tree cascade — one thread, four postures, computable close-out</h2>
+  <p class="sub-p">One failure-condition thread top to bottom. Never copied trees — postures and baselines of the same objects, joined by <b>budget handoffs</b>.</p>
+  <div class="cascade">
+    <div class="crow"><div class="cnode afha">AFHA</div><div class="cdesc">Failure condition classified → quantitative target set (e.g. Cat ≤ 1×10⁻⁹/FH)</div></div>
+    <div class="carrow">↓ <span style="font-size:10.5px">target</span></div>
+    <div class="crow"><div class="cnode pasa">PASA</div><div class="cdesc">Aircraft tree, <b>allocation posture</b> — top-down apportionment (equal/weighted) to the system interface points. Signed as the <b>PASA baseline</b>. Each system boundary mints a <b>budget handoff</b>: allocated target · owning system · status.</div></div>
+    <div class="carrow">↓ <span style="font-size:10.5px">handoff: allocated → accepted</span></div>
+    <div class="crow"><div class="cnode pssa">PSSA ×N</div><div class="cdesc">Each system's tree <b>inherits its top target from the handoff</b> — linked, never retyped. PASA reallocates → affected PSSA trees flag stale automatically. System develops its architecture against the budget.</div></div>
+    <div class="carrow">↓ <span style="font-size:10.5px">same tree · verification posture</span></div>
+    <div class="crow"><div class="cnode ssa">SSA ×N</div><div class="cdesc">The same system tree with <b>demonstrated</b> rates (test · field · FRACAS-fed prediction), BDD-exact roll-up vs the inherited target, evidence attached. Handoff status → <b>demonstrated</b>.</div></div>
+    <div class="carrow">↓ <span style="font-size:10.5px">roll-up</span></div>
+    <div class="crow"><div class="cnode asa">ASA</div><div class="cdesc">The aircraft tree again — system nodes now resolve to <b>demonstrated SSA values</b> instead of budgets, diffed against the PASA baseline. Close-out is computable: every handoff demonstrated ≤ allocated, every credited assumption discharged, aircraft roll-up meets the certified target.</div></div>
+  </div>
+  <h3>Close-out ledger (the ASA page's centerpiece)</h3>
+  <table class="ledger">
+    <tr><th>Handoff</th><th>Allocated</th><th>Demonstrated</th><th>Assumptions</th><th>Status</th></tr>
+    <tr><td>PASA → EPS</td><td>4.2×10⁻⁶</td><td>1.9×10⁻⁶</td><td>3/3 discharged</td><td class="ok">CLOSED</td></tr>
+    <tr><td>PASA → FCS</td><td>1.0×10⁻⁷</td><td>8.8×10⁻⁸</td><td>4/5 discharged</td><td class="stale">DEMONSTRATED — 1 assumption open</td></tr>
+    <tr><td>PASA → FUEL</td><td>2.5×10⁻⁶</td><td>3.1×10⁻⁶</td><td>2/2 discharged</td><td class="bad">EXCEEDS BUDGET</td></tr>
+    <tr><td>PASA → HYD <span class="stale">⚠ stale</span></td><td>6.0×10⁻⁶ → 4.0×10⁻⁶</td><td>5.2×10⁻⁶</td><td>—</td><td class="stale">REOPENED — PASA reallocated</td></tr>
+  </table>
+  <div class="note">Staleness flows both ways: a PASA reallocation reopens the downstream PSSA/SSA; a demonstrated value that degrades (FRACAS feed) reopens the ASA roll-up. No other tool knows when an allocation and a demonstration have drifted apart — this ledger is the pitch in one table.</div>
+  <h3>Build notes</h3>
+  <p class="sub-p" style="margin-bottom:4px">· Mechanism reuses what exists: ftaConfig top-down/bottom-up mode → posture switch; baselining → PASA/PSSA signed baselines; transfer gates → handoff boundary; FRACAS/prediction → demonstrated rates.<br>
+  · New objects: <b>budget handoff record</b> (allocated, owner, status, staleness both ways) + <b>owningSystemId on tree pages</b>.<br>
+  · Doctrine unchanged: one tree per level, postures not copies; data never deleted; signed transitions.</p>`;
+}
+function render(){renderRail();renderRight();}
+render();
+</script>
+</body>
+</html>

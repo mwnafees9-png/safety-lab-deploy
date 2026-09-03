@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nav Rev C — OG bones, lifecycle heart · + the SPP that drives it</title>
+<style>
+:root{
+  --navy:#14224A; --mid:#3457A2; --purple:#7247B1; --lav:#9B55BE;
+  --ink:#0a0d14; --panel:#161b28; --panel2:#0f131c; --border:rgba(255,255,255,.1);
+  --txt:#fff; --txt2:rgba(255,255,255,.72); --txt3:rgba(255,255,255,.45);
+  --green:#10b981; --amber:#f59e0b; --blue:#3b82f6; --red:#ef4444;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--txt);font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5}
+.top{padding:16px 24px;border-bottom:1px solid var(--border)}
+.top h1{font-size:19px}
+.top h1 span{background:linear-gradient(90deg,#9DC6FF,#EBC6FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.top p{color:var(--txt3);font-size:12.5px;margin-top:4px;max-width:110ch}
+.stage{display:grid;grid-template-columns:315px 1fr;margin:16px 24px 40px;border:1px solid var(--border);min-height:680px}
+@media(max-width:900px){.stage{grid-template-columns:1fr}}
+.rail{background:linear-gradient(175deg,var(--navy) 0%,var(--mid) 45%,var(--purple) 85%,var(--lav) 100%);padding:14px 0 20px;overflow-y:auto;max-height:850px}
+.rail *{text-shadow:0 1px 2px rgba(0,0,0,.45),0 0 1px rgba(0,0,0,.3)}
+.brand{padding:4px 16px 12px;font-weight:700;font-size:13px;letter-spacing:.4px;border-bottom:1px solid rgba(0,0,0,.25);margin-bottom:8px}
+.brand small{display:block;font-weight:600;font-size:9.5px;letter-spacing:2px;color:rgba(255,255,255,.65);text-transform:uppercase}
+.it{display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:12.6px;color:rgba(255,255,255,.92);cursor:pointer}
+.it:hover{background:rgba(0,0,0,.18)}
+.badge{margin-left:auto;font-size:9.5px;padding:1px 6px;border:1px solid rgba(255,255,255,.45);color:rgba(255,255,255,.85);white-space:nowrap}
+.grp{margin:1px 0}
+.grp>summary{display:flex;align-items:center;gap:8px;padding:6px 16px;font-size:12.9px;font-weight:700;cursor:pointer;list-style:none}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary .chev{margin-left:auto;transition:transform .15s;color:rgba(255,255,255,.6)}
+.grp[open]>summary .chev{transform:rotate(90deg)}
+.grp>summary:hover{background:rgba(0,0,0,.18)}
+.sub{padding:1px 0 4px}
+.sub .it{padding-left:38px;font-size:12.3px}
+.sub .grp>summary{padding-left:38px;font-size:12.4px;font-weight:600}
+.sub .sub .it{padding-left:58px;font-size:12px}
+.sub .sub .grp>summary{padding-left:58px;font-size:12px}
+.sub .sub .sub .it{padding-left:78px;font-size:11.7px}
+.cat{margin:10px 12px 4px;padding:8px 12px;border:1px dashed rgba(255,255,255,.4);font-size:12.3px;color:rgba(255,255,255,.85);cursor:pointer}
+.cmdk{margin:6px 12px 0;padding:7px 12px;background:rgba(0,0,0,.28);border:1px solid rgba(0,0,0,.4);font-size:12px;color:rgba(255,255,255,.75);display:flex;gap:8px;align-items:center}
+.kbd{border:1px solid rgba(255,255,255,.4);padding:0 5px;font-size:10.5px;font-family:ui-monospace,Menlo,monospace}
+.count-note{padding:10px 16px 0;font-size:11px;color:rgba(255,255,255,.65)}
+/* right: SPP page mock */
+.right{background:var(--panel2);padding:22px 26px;overflow-y:auto;max-height:850px}
+.right h2{font-size:16.5px;margin-bottom:2px}
+.right .sub-t{color:var(--txt3);font-size:12px;margin-bottom:14px}
+.sec{background:var(--panel);border:1px solid var(--border);margin-bottom:12px}
+.sec>header{padding:9px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.sec>header .n{width:22px;height:22px;border:1px solid var(--blue);color:#9DC6FF;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sec>header b{font-size:13px}
+.sec>header .st{margin-left:auto;font-size:10.5px;letter-spacing:.5px}
+.sec .body{padding:10px 14px}
+.row{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:12.5px;color:var(--txt2)}
+.row .pill{font-size:10px;padding:1px 8px;border:1px solid;white-space:nowrap}
+.pill.on{border-color:var(--green);color:var(--green)}
+.pill.off{border-color:var(--txt3);color:var(--txt3)}
+.pill.warn{border-color:var(--amber);color:var(--amber)}
+.pill.sig{border-color:#9DC6FF;color:#9DC6FF}
+.lane{display:flex;align-items:flex-start;gap:9px;padding:5px 8px;border:1px solid var(--border);margin:4px 0;cursor:pointer;background:var(--panel2)}
+.lane input{margin-top:3px;accent-color:var(--blue)}
+.lane .nm{font-size:12.3px;font-weight:600}
+.lane .std{font-size:10px;color:var(--txt3)}
+.lane .tail{margin-left:auto;font-size:9.5px;color:var(--amber);padding-top:2px;text-align:right}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+@media(max-width:1100px){.grid3{grid-template-columns:1fr}}
+.stage-chip{border:1px solid var(--border);padding:7px 10px;font-size:11.5px;color:var(--txt2)}
+.stage-chip b{display:block;font-size:12px;color:#BFDBFF}
+.adv{border-left:3px solid var(--amber);background:var(--panel2);padding:7px 11px;font-size:11.8px;color:var(--txt2);margin:6px 0}
+.note{border:1px dashed var(--border);padding:9px 12px;font-size:11.5px;color:var(--txt3);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1><span>Rev C proposal</span> — OG bones, lifecycle heart · and the SPP page that drives it</h1>
+  <p>The synthesis of everything we tested: the five OG groups stay (muscle memory intact), but <b>inside Analyze</b> the forty-item wall becomes your lifecycle — AFHA → PASA → Systems → ASA — with the trees living under the assessments, system directories housing their own PSSA/SSA/FMEA/items/RAM, and the cascade artifacts (handoffs, close-out) given real homes. Right panel: the redesigned Safety Program Plan page — the single place that drives the rail. Tick lanes there and watch the left side respond. Everything rests collapsed; ⌘K reaches anything.</p>
+</div>
+
+<div class="stage">
+  <nav class="rail" id="rail"></nav>
+  <div class="right" id="right"></div>
+</div>
+
+<script>
+const LANES=[
+ {id:'markov',nm:'Markov attachments',std:'ARP4761A App I',g:'Safety analyses',on:1},
+ {id:'eta',nm:'Event Trees',std:'not a 4761A method',g:'Safety analyses',on:0},
+ {id:'ccmr',nm:'Latent failures (CCMR)',std:'',g:'Safety analyses',on:1},
+ {id:'zsa',nm:'CCA · Zonal Safety',std:'App K',g:'Safety analyses',on:1},
+ {id:'pra',nm:'CCA · Particular Risks',std:'App L',g:'Safety analyses',on:1},
+ {id:'cma',nm:'CCA · Common Modes',std:'App M',g:'Safety analyses',on:1},
+ {id:'cea',nm:'Cascading effects',std:'',g:'Safety analyses',on:0},
+ {id:'stpa',nm:'STPA — interaction hazards',std:'SAE J3307',g:'Safety analyses',on:1},
+ {id:'hfa',nm:'Human factors set',std:'HFA · task · ergo · bow-tie',g:'Human factors',on:1},
+ {id:'ram-rel',nm:'Reliability (per system)',std:'217F · RBD · Weibull · FRACAS',g:'RAM',on:1},
+ {id:'ram-mx',nm:'Maintainability (per system)',std:'MTTR · testability',g:'RAM',on:1},
+ {id:'msg3',nm:'MSG-3 set (program-wide)',std:'analysis · structures/zonal/L-HIRF',g:'RAM',on:1},
+ {id:'mmel',nm:'Dispatch relief MMEL/TLD (program-wide)',std:'',g:'RAM',on:1},
+ {id:'lcc',nm:'Life-Cycle Cost (program-wide)',std:'',g:'RAM',on:0},
+ {id:'swrel',nm:'Software reliability',std:'IEEE 1633',g:'RAM',on:0},
+ {id:'mlas',nm:'AI/ML learning assurance',std:'ARP6983 / ED-324 · opt-in',g:'Assurance',on:0},
+ {id:'sora',nm:'SORA Thread',std:'basis thread',g:'Assurance',on:0},
+];
+const has=id=>{const l=LANES.find(x=>x.id===id);return l&&l.on;};
+function tog(id){const l=LANES.find(x=>x.id===id);if(l){l.on=l.on?0:1;render();}}
+
+const item=(t,badge)=>`<a class="it">${t}${badge?`<span class="badge">${badge}</span>`:''}</a>`;
+const grp=(ico,l,inner,open)=>`<details class="grp"${open?' open':''}><summary><span class="ico">${ico}</span>${l}<span class="chev">›</span></summary><div class="sub">${inner}</div></details>`;
+
+function sysDir(name,open){
+  let h=item('Functions · FCIM · SFHA')+item('Items & LRUs — this system');
+  h+=item('PSSA','trees · target inherited from handoff');
+  h+=item('SSA','same trees · verification');
+  h+=item('FMEA / FMES');
+  if(has('ram-rel'))h+=item('Reliability — this system');
+  if(has('ram-mx'))h+=item('Maintainability — this system');
+  h+=item('Requirements · assumptions');
+  return grp('▣',name,h,open);
+}
+
+function renderRail(){
+  const off=LANES.filter(l=>!l.on).length;
+  // AFHA — functional breakdown lives WITH the hazard assessment, not split from it
+  const afha=item('Functional breakdown — aircraft functions')+item('Failure condition matrix (FCIM)')+item('Hazard assessment (AFHA)')+item('Assumptions')+item('Requirements — aircraft');
+  // PASA
+  let pasa=item('Fault trees','allocation · top-down')+item('DAL allocation — FDAL/IDAL')+item('Budget handoffs → systems','ledger');
+  if(has('markov'))pasa+=item('Markov attachments');
+  if(has('eta'))pasa+=item('Event trees');
+  if(has('zsa'))pasa+=item('Zonal Safety (ZSA)');
+  if(has('pra'))pasa+=item('Particular Risks (PRA)');
+  if(has('cma'))pasa+=item('Common Modes (CMA)');
+  if(has('cea'))pasa+=item('Cascading effects');
+  if(has('stpa'))pasa+=item('STPA — interaction hazards');
+  if(has('hfa'))pasa+=item('Human factors set');
+  // ASA
+  let asa=item('Fault trees','verification vs PASA baseline')+item('Close-out ledger');
+  if(has('ccmr'))asa+=item('Latent failures (CCMR)');
+  if(has('mmel'))asa+=item('Dispatch relief (MMEL/TLD)');
+  asa+=item('In-service watch (SSE)');
+  // RAM program-wide
+  let ram='';
+  if(has('msg3'))ram+=item('MSG-3 — analysis · structures · zonal · L/HIRF');
+  if(has('lcc'))ram+=item('Life-Cycle Cost');
+  if(has('swrel'))ram+=item('Software reliability');
+  ram+=item('Component library · RAM settings');
+
+  let analyze =
+    grp('✈️','Aircraft',
+      grp('⚠️','AFHA',afha,false)+
+      grp('🛫','PASA',pasa,false)+
+      grp('🛬','ASA',asa,false),true)+
+    grp('🧩','Systems',sysDir('Electrical Power (EPS)',true)+sysDir('Flight Controls (FCS)',false)+sysDir('Fuel (FUEL)',false)+item('All items & LRUs — cross-system')+item('＋ Add system'),true)+
+    (ram?grp('🛠','RAM — program-wide',ram,false):'');
+
+  document.getElementById('rail').innerHTML=
+  `<div class="brand">Safety Lab Aero<small>System Safety Suite</small></div>`
+  +item('Dashboard — six cockpits')
+  +item('Golden Thread · <b>live</b>')
+  +grp('📐','Define',
+    item('Certification basis (AC 1309)')+
+    item('Program Planning — the SPP','drives this rail →')+
+    item('Flight Phases'),false)
+  +grp('🔬','Analyze',analyze,true)
+  +grp('📋','Requirements',
+    item('Requirements Repository')+item('Validation Matrix · MoC · V&V')+item('DAL Credit (DO-178C/254)')+item('Exchange — ReqIF · Jama · Polarion · DOORS')+item('Architecture import — Cameo · SysML'),false)
+  +grp('🧾','Prove',
+    item('Traceability · Thread Integrity')+item('Evidence Package')+(has('sora')?item('SORA Thread'):'')+item('Baselines & CM · Reviews · OPRs')+item('Modification Impact')+item('References — App A · DAL ref · process map · defs'),false)
+  +grp('⚙︎','Admin & AI',
+    item('Workspaces & Locks')+item('ANEM — assistant & live chat')+item('AI Assumptions'),false)
+  +`<div class="cat">＋ Catalogue — <b>${off}</b> lanes not in this program</div>`
+  +`<div class="cmdk"><span class="kbd">⌘K</span> Find anything…</div>`
+  +`<div class="count-note">Resting state ≈ 8 rows. OG group names intact — Define · Analyze · Requirements · Prove · Admin. Inside Analyze: the <b>Aircraft / Systems breakdown</b> — Aircraft holds the three aircraft-level assessments (AFHA · PASA · ASA) with trees, CCAs and ledgers under them; each system directory houses its own SFHA · items · PSSA · SSA · FMEA · RAM; program-wide RAM stays program-wide.</div>`;
+}
+
+function renderRight(){
+  const groups=[...new Set(LANES.map(l=>l.g))];
+  let lanes='';
+  groups.forEach(g=>{
+    lanes+=`<div style="font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--txt3);font-weight:700;margin:8px 0 2px">${g}</div>`;
+    LANES.filter(l=>l.g===g).forEach(l=>{
+      lanes+=`<label class="lane" onclick="event.preventDefault();tog('${l.id}')"><input type="checkbox" ${l.on?'checked':''}><span><span class="nm">${l.nm}</span><br><span class="std">${l.std||'&nbsp;'}</span></span>${!l.on&&['zsa','cma'].includes(l.id)?'<span class="tail">⚠ expected for basis —<br>opt-out needs rationale + signature</span>':''}</label>`;
+    });
+  });
+  document.getElementById('right').innerHTML=`
+  <h2>Safety Program Plan</h2>
+  <div class="sub-t">One page, five sections. This is the program's constitution — and the rail on the left is its projection. Everything here is signed data that prints into the SSPP.</div>
+
+  <div class="sec"><header><span class="n">1</span><b>Certification basis</b><span class="st" style="color:var(--green)">DECLARED · signed</span></header>
+    <div class="body">
+      <div class="row">14 CFR <b>Part 25</b> · AC 25.1309-1A <span class="pill sig">basis drives lane defaults & FHA targets</span></div>
+      <div class="row" style="color:var(--txt3);font-size:11.5px">Changing the basis re-proposes the default lane set — proposed, never silently applied.</div>
+    </div></div>
+
+  <div class="sec"><header><span class="n">2</span><b>Program scope — the lanes this program runs</b><span class="st" style="color:var(--amber)">DRIVES THE NAV</span></header>
+    <div class="body">${lanes}
+      <div class="note">Doctrine (v1.1, unchanged): deselect never deletes data · basis-expected lanes with authored data need a signed tailoring opt-out (recorded below) · grandfathered projects keep everything · per-system lanes render inside each system directory.</div>
+    </div></div>
+
+  <div class="sec"><header><span class="n">3</span><b>Assessment lifecycle & baselines</b><span class="st" style="color:#9DC6FF">THE CASCADE</span></header>
+    <div class="body">
+      <div class="grid3">
+        <div class="stage-chip"><b>AFHA</b>baselined 12 Aug · 8 FCs · 2 assumptions open</div>
+        <div class="stage-chip"><b>PASA</b>baseline v2 · 4 handoffs minted · 1 stale ⚠</div>
+        <div class="stage-chip"><b>PSSA ×3</b>EPS accepted · FCS accepted · FUEL <span style="color:var(--amber)">reopened</span></div>
+        <div class="stage-chip"><b>SSA ×3</b>EPS demonstrated · FCS 1 asm open · FUEL —</div>
+        <div class="stage-chip"><b>ASA</b>close-out 1/4 · <span style="color:var(--red)">FUEL exceeds budget</span></div>
+        <div class="stage-chip"><b>Policy</b>handoff acceptance: system lead signs · staleness: both directions</div>
+      </div>
+    </div></div>
+
+  <div class="sec"><header><span class="n">4</span><b>Toolchain declaration</b><span class="st" style="color:var(--green)">SIGNED</span></header>
+    <div class="body">
+      <div class="row">Safety & reliability analyses — <b>Safety Lab Aero</b> <span class="pill sig">version + DO-330 dossier ref</span></div>
+      <div class="row">Requirements management — <b>Jama</b> · exchange: live API <span class="pill on">exercised 14 Aug</span></div>
+      <div class="row">MBSE — <b>Cameo</b> · exchange: XMI import <span class="pill warn">declared, never exercised — advisory</span></div>
+    </div></div>
+
+  <div class="sec"><header><span class="n">5</span><b>Tailoring record & advisories</b><span class="st">PRINTS INTO THE SSPP</span></header>
+    <div class="body">
+      <div class="adv">⚠ <b>Event Trees:</b> content exists (3 trees) but lane is undeclared — declare it, or migrate the content. Data untouched either way.</div>
+      <div class="adv" style="border-color:#9DC6FF">✍ <b>Tailoring opt-out on record:</b> Cascading effects — "covered by CMA scope for this architecture" — signed W. Nafees, 11 Aug.</div>
+      <div class="row" style="font-size:11.5px;color:var(--txt3)">The SSPP chapter regenerates from this page: basis, scope with citations (corrected 4761A appendix letters), tailoring rationale, toolchain, lifecycle status. The nav and the plan cannot diverge — one is a projection of the other.</div>
+    </div></div>`;
+}
+function render(){renderRail();renderRight();}
+render();
+</script>
+</body>
+</html>

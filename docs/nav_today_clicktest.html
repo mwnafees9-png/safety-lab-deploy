@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Today's nav — click test · same journeys</title>
+<style>
+:root{
+  --navy:#14224A; --mid:#3457A2; --purple:#7247B1; --lav:#9B55BE;
+  --ink:#0a0d14; --panel:#161b28; --panel2:#0f131c; --border:rgba(255,255,255,.1);
+  --txt:#fff; --txt2:rgba(255,255,255,.72); --txt3:rgba(255,255,255,.45);
+  --green:#10b981; --amber:#f59e0b; --blue:#3b82f6; --red:#ef4444;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--txt);font-family:'IBM Plex Sans',-apple-system,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.5}
+.top{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.top h1{font-size:18px}
+.top h1 span{background:linear-gradient(90deg,#9DC6FF,#EBC6FF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.counter{margin-left:auto;font-size:15px;font-weight:700;background:var(--panel);border:1px solid var(--border);padding:8px 16px}
+.counter b{color:#9DC6FF;font-size:20px}
+.stage{display:grid;grid-template-columns:310px 1fr;margin:16px 24px 40px;border:1px solid var(--border);min-height:640px}
+@media(max-width:900px){.stage{grid-template-columns:1fr}}
+.rail{background:linear-gradient(175deg,var(--navy) 0%,var(--mid) 45%,var(--purple) 85%,var(--lav) 100%);padding:14px 0 20px;overflow-y:auto;max-height:820px}
+.rail *{text-shadow:0 1px 2px rgba(0,0,0,.45),0 0 1px rgba(0,0,0,.3)}
+.brand{padding:4px 16px 12px;font-weight:700;font-size:13px;letter-spacing:.4px;border-bottom:1px solid rgba(0,0,0,.25);margin-bottom:8px}
+.brand small{display:block;font-weight:600;font-size:9.5px;letter-spacing:2px;color:rgba(255,255,255,.65);text-transform:uppercase}
+.it{display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:12.6px;color:rgba(255,255,255,.92);cursor:pointer}
+.it:hover{background:rgba(0,0,0,.18)}
+.it.hit{background:rgba(16,185,129,.35)}
+.hd2{padding:6px 16px 2px 34px;font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:rgba(255,255,255,.5);font-weight:700}
+.grp{margin:1px 0}
+.grp>summary{display:flex;align-items:center;gap:8px;padding:6px 16px;font-size:12.8px;font-weight:700;cursor:pointer;list-style:none}
+.grp>summary::-webkit-details-marker{display:none}
+.grp>summary .chev{margin-left:auto;transition:transform .15s;color:rgba(255,255,255,.6)}
+.grp[open]>summary .chev{transform:rotate(90deg)}
+.grp>summary:hover{background:rgba(0,0,0,.18)}
+.sub .it{padding-left:34px}
+.right{background:var(--panel2);padding:22px 26px;overflow-y:auto;max-height:820px}
+.right h2{font-size:16px;margin-bottom:6px}
+.right p{color:var(--txt3);font-size:12.5px;margin-bottom:12px}
+.task{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);margin-bottom:6px;background:var(--panel)}
+.task .nm{font-size:13px;font-weight:600}
+.task .sub-nm{font-size:11px;color:var(--txt3)}
+.task button{margin-left:auto;background:transparent;border:1px solid var(--blue);color:#9DC6FF;padding:4px 12px;font:inherit;font-size:12px;cursor:pointer}
+.task button:hover{background:var(--blue);color:#fff}
+.task .res{margin-left:auto;font-weight:700;font-size:13px}
+.task.active{border-color:var(--amber)}
+.task.done .res{color:var(--green)}
+.note{background:var(--panel);border:1px dashed var(--border);padding:10px 14px;color:var(--txt3);font-size:12px;margin:14px 0}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--green);color:#04251a;font-weight:700;padding:10px 22px;display:none;z-index:60}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
+#ov.open{display:flex}
+.ovbox{width:380px;background:var(--panel);border:1px solid rgba(255,255,255,.2);padding:18px}
+.ovbox h3{font-size:14px;margin-bottom:10px}
+.ovrow{padding:8px 12px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer;font-size:13px}
+.ovrow:hover{background:var(--ink)}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1><span>Today's nav</span> — click test, same journeys, same rules</h1>
+  <div style="font-size:12px;color:var(--txt3)">Fully collapsed start, same 8 tasks. In-page steps (picking a system inside the workspace, filtering a table) count as clicks — because your finger makes them.</div>
+  <div class="counter">Clicks: <b id="cnt">0</b></div>
+</div>
+
+<div class="stage">
+  <nav class="rail" id="rail"></nav>
+  <div class="right">
+    <h2>Same journeys as the Rev B test</h2>
+    <p>Two of the eight have no home in today's structure — that result is data too.</p>
+    <div id="tasks"></div>
+    <div class="note"><b>Fair-play notes:</b> today FMEA and system trees live <i>inside</i> the System workspaces page, so reaching "EPS — FMEA" costs the nav click plus the in-page system and area picks (modeled here as the chooser). Reliability is program-wide — "FUEL reliability" is the prediction page plus a system filter. The close-out ledger and budget-handoff ledger don't exist today; their buttons record that honestly.</div>
+    <div style="font-size:12px;color:var(--txt3)">No ⌘K in today's build — there's nothing to race.</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="ov"><div class="ovbox" id="ovbox"></div></div>
+
+<script>
+let clicks=0, activeTask=null;
+const cnt=document.getElementById('cnt');
+function bump(){clicks++;cnt.textContent=clicks;}
+
+const TASKS=[
+ {id:'t1', nm:'Open the AFHA', target:'afha'},
+ {id:'t2', nm:'Open FCS — PSSA fault trees', target:'ws-fcs-trees', sub:'via System workspaces → pick system → pick area'},
+ {id:'t3', nm:'Check the ASA close-out ledger', target:null, sub:'no equivalent — closest is the ASA page, ledger doesn\'t exist'},
+ {id:'t4', nm:'Open EPS — FMEA', target:'ws-eps-fmea', sub:'via System workspaces chooser'},
+ {id:'t5', nm:'Reliability for FUEL', target:'rel-fuel', sub:'prediction page + system filter'},
+ {id:'t6', nm:'Add a lane from the Catalogue', target:'pp-scope', sub:'via Program Planning → scope section'},
+ {id:'t7', nm:'Budget handoffs ledger (PASA)', target:null, sub:'no equivalent — apportionment lives inside one tree'},
+ {id:'t8', nm:'Evidence Package', target:'evpkg'},
+];
+const results={};
+function renderTasks(){
+  document.getElementById('tasks').innerHTML=TASKS.map(t=>{
+    const r=results[t.id];
+    const cls=(activeTask===t.id?'active':'')+(r!=null?' done':'');
+    let right;
+    if(r==='n/a') right=`<span class="res" style="color:var(--red)">✗ doesn't exist today</span>`;
+    else if(r!=null) right=`<span class="res">✓ ${r} click${r===1?'':'s'}</span>`;
+    else if(activeTask===t.id) right=`<span class="res" style="color:var(--amber)">navigating…</span>`;
+    else right=`<button onclick="startTask('${t.id}')">Start</button>`;
+    return `<div class="task ${cls}"><span><span class="nm">${t.nm}</span>${t.sub?`<br><span class="sub-nm">${t.sub}</span>`:''}</span>${right}</div>`;
+  }).join('');
+}
+function startTask(id){
+  const t=TASKS.find(x=>x.id===id);
+  if(t&&t.target===null){results[id]='n/a';renderTasks();toast(t.nm+' — no home in today\'s structure');return;}
+  activeTask=id;clicks=0;cnt.textContent=0;renderTasks();
+}
+function hit(targetId,el){
+  bump();
+  if(el&&el.classList){el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),900);}
+  check(targetId);
+}
+function check(targetId){
+  if(activeTask){
+    const t=TASKS.find(x=>x.id===activeTask);
+    if(t&&t.target===targetId){
+      results[activeTask]=clicks;
+      toast(`${t.nm} — ${clicks} click${clicks===1?'':'s'}`);
+      activeTask=null;
+    }
+  }
+  renderTasks();
+}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2400);}
+
+// in-page choosers modelling today's System workspaces + reliability filter
+function openWs(){
+  bump();
+  ov(`<h3>System workspaces — pick a system (in-page)</h3>
+  ${['EPS — Electrical Power','FCS — Flight Controls','FUEL'].map(s=>`<div class="ovrow" onclick="wsArea('${s.slice(0,s.indexOf(' ')>0?s.indexOf(' '):4).toLowerCase().replace(/[^a-z]/g,'')}')">${s}</div>`).join('')}`);
+}
+function wsArea(sys){
+  bump();
+  ov(`<h3>${sys.toUpperCase()} workspace — pick an area (in-page)</h3>
+  ${[['SFHA','sfha'],['Fault trees','trees'],['FMEA','fmea'],['Requirements','req']].map(a=>`<div class="ovrow" onclick="closeOv();hit('ws-${sys}-${a[1]}')">${a[0]}</div>`).join('')}`);
+}
+function openRel(){
+  bump();
+  ov(`<h3>Reliability Prediction — filter by system (in-page)</h3>
+  ${['All systems','EPS','FCS','FUEL'].map(s=>`<div class="ovrow" onclick="closeOv();hit('rel-${s.toLowerCase().replace(/ .*/,'')}')">${s}</div>`).join('')}`);
+}
+function openPP(){
+  bump();
+  ov(`<h3>Program Planning — scroll to Program scope (in-page)</h3>
+  <div class="ovrow" onclick="closeOv();hit('pp-scope')">Program scope — lane switches</div>
+  <div class="ovrow" onclick="closeOv();hit('pp-toolchain')">Toolchain declaration</div>`);
+}
+function ov(html){document.getElementById('ovbox').innerHTML=html;document.getElementById('ov').classList.add('open');}
+function closeOv(){document.getElementById('ov').classList.remove('open');}
+
+const leaf=(label,target,fn)=>`<a class="it" onclick="${fn?fn:`hit('${target}',this)`}">${label}</a>`;
+const grp=(ico,label,inner)=>`<details class="grp"><summary onclick="bump()"><span class="ico">${ico}</span>${label}<span class="chev">›</span></summary><div class="sub">${inner}</div></details>`;
+const hd2=t=>`<div class="hd2">${t}</div>`;
+
+document.getElementById('rail').innerHTML=
+`<div class="brand">Safety Lab Aero<small>System Safety Suite</small></div>`
++leaf('Dashboard','dash')
++grp('📐','Define',
+  leaf('Certification basis (AC 1309)','certbasis')+
+  leaf('Safety process map (ARP 4761A)','procmap')+
+  leaf('Program Planning','pp','openPP()')+
+  leaf('Flight Phases','phases'))
++grp('🔬','Analyze',
+  hd2('Aircraft analyses')+
+  leaf('1 · Aircraft functions','func')+
+  leaf('2 · Failure condition matrix (FCIM)','fcim')+
+  leaf('3 · Hazard assessment (AFHA)','afha')+
+  leaf('Requirements — aircraft','acreq')+
+  leaf('Assumptions — aircraft analyses','acasm')+
+  leaf('Aircraft safety analysis (PASA)','pasa')+
+  hd2('Systems analyses')+
+  leaf('System workspaces — SFHA · trees · reqs','ws','openWs()')+
+  leaf('System safety — planned (PSSA)','pssa')+
+  hd2('Verification')+
+  leaf('System Safety Assessment (SSA)','ssa')+
+  leaf('Aircraft Safety Assessment (ASA)','asa')+
+  hd2('Trees & models')+
+  leaf('Fault Tree Analysis','fta')+
+  leaf('Markov Models','markov')+
+  leaf('Event Trees','eta')+
+  leaf('Items & LRUs — master list','items')+
+  leaf('Latent failures (CCMR)','ccmr')+
+  leaf('Failure modes summary (FMES)','fmes')+
+  hd2('Common cause')+
+  leaf('Particular Risk (PRA)','pra')+
+  leaf('Zonal Safety (ZSA)','zsa')+
+  leaf('Common modes (CMA)','cma')+
+  leaf('Cascading effects & fault injection','cea')+
+  leaf('Routing / Zone-Spanning','routing')+
+  leaf('Principle Ledger','ipl')+
+  leaf('Human Factors Analysis (HFA)','hfa')+
+  leaf('Task Analysis','hfatask')+
+  leaf('Ergonomics','hfaergo')+
+  leaf('AI/ML learning assurance','mlas')+
+  leaf('STPA — interaction hazards','stpa')+
+  hd2('Reliability')+
+  leaf('Component Library','lib')+
+  leaf('Reliability Prediction & FRACAS','rel','openRel()')+
+  leaf('Parts Count (217F)','parts')+
+  leaf('Block Diagrams (RBD)','rbd')+
+  leaf('Weibull · Life Data','weibull')+
+  leaf('Growth · Crow-AMSAA','growth')+
+  leaf('Allocation · Spares · Demo','alloc')+
+  leaf('Tolerance · Derating','tol')+
+  leaf('Monte Carlo (Standby · Phases)','mc')+
+  leaf('Frameworks · Test Factors','frame')+
+  leaf('Software Reliability','swrel')+
+  leaf('Sneak Circuit','sneak')+
+  leaf('Life-Cycle Cost','lcc')+
+  leaf('RAM Settings','ramset')+
+  hd2('Maintainability')+
+  leaf('MTTR / MDT Task Ledger','mttr')+
+  leaf('MSG-3 Analysis','msg3')+
+  leaf('MSG-3 Structures · Zonal · L/HIRF','msg3x')+
+  leaf('Dispatch relief (MMEL / TLD)','mmel')+
+  leaf('PM Interval Optimizer','pmopt')+
+  leaf('Testability & Diagnostics','test')+
+  leaf('LORA — Level of Repair','lora'))
++grp('📋','Requirements',
+  leaf('Requirements Repository','reqrepo')+
+  leaf('Validation Matrix','valmx')+
+  leaf('Means of Compliance','moc')+
+  leaf('V&V Status Roll-up','vv')+
+  leaf('Requirements exchange — Jama · Polarion · DOORS','reqif')+
+  leaf('Architecture import — Cameo · SysML','xmi')+
+  leaf('DAL Credit (DO-178C / 254)','dalcred'))
++grp('🧾','Prove',
+  leaf('Golden Thread','gt')+
+  leaf('SORA Thread','sora')+
+  leaf('Traceability Matrix','trace')+
+  leaf('Thread Integrity','gti')+
+  leaf('Evidence Package','evpkg')+
+  leaf('Objectives matrix (4754B App A)','appa')+
+  leaf('Math validation — benchmarks','math')+
+  leaf('Baselines & configuration','cm')+
+  leaf('Reviews & Approvals','review')+
+  leaf('Problem Reports (OPRs)','opr')+
+  leaf('Modification Impact','mod')+
+  leaf('In-service watch list','sse'))
++grp('⚙︎','Admin & AI',
+  leaf('🔒 Workspaces & Locks','locks')+
+  leaf('AI Assistant','ai')+
+  leaf('ANEM — live chat','anem')+
+  leaf('AI Assumptions','aiasm'));
+renderTasks();
+</script>
+</body>
+</html>
