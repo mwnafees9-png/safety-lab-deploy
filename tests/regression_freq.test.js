@@ -167,8 +167,10 @@ check('a bare page defaults to top-down (the house default) — never silently c
 const src = S('fta_freq.js');
 check('render distinguishes ALLOCATION (quiet) from REFUSED (loud)',
   /ALLOCATION — no frequency lane/.test(src) && /REFUSED/.test(src));
-check('born-modular page: view-freq + snav-freq + wrapped switchTab, zero index surgery',
-  /view-freq/.test(src) && /snav-freq/.test(src) && /_freqWrapped/.test(src) && /switchTab\('freq'\)/.test(src));
+// 23 Aug 2026 — SUPERSEDED half: the nav row is gone (Frequency is a
+// Fault-trees TAB, prove_tabs.js); the view + wrap remain born-modular.
+check('born-modular page: view-freq + wrapped switchTab, no nav row any more',
+  /view-freq/.test(src) && !/a\.id = 'snav-freq'/.test(src) && /_freqWrapped/.test(src));
 check('module never writes a store (display-lane discipline)',
   !/ftaPages\s*=[^=]|acFhaData\s*=[^=]|\.push\(/.test(src.replace(/out\.push|rows\.push/g, '')));
 check('index.html loads fta_freq.js', /fta_freq\.js\?v=/.test(S('index.html')));

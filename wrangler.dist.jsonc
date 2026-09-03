@@ -1,0 +1,25 @@
+// Safety Lab — MINIFIED deploy config.
+// Identical to wrangler.jsonc except it serves ./dist (the minified mirror of
+// ./site produced by ./build.sh) instead of ./site.
+//
+//   ./build.sh                              # build ./dist
+//   wrangler deploy -c wrangler.dist.jsonc  # ship the minified build
+//
+// Your default `wrangler deploy` (wrangler.jsonc) still serves readable ./site,
+// so this is fully opt-in — nothing changes until you use -c wrangler.dist.jsonc.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "black-recipe-1776",
+  "main": "./worker.js",
+  "compatibility_date": "2026-05-26",
+  "account_id": "1b4c03e0a52c2a7bda1953c365dc7f0f",
+  "r2_buckets": [
+    { "binding": "DOWNLOADS", "bucket_name": "safetylab-downloads" }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  }
+}

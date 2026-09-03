@@ -121,7 +121,11 @@ check('constraints step drafts for real — the old next-increment honesty note 
 // ---- [7] persistence ----------------------------------------------------------
 const bind = S('bindings_modules.js'), misc = S('misc_fn_modules.js'), dops = S('data_ops_modules.js'), help = S('helpers_modules.js');
 check('stpaData declared in bindings with full W1..W6 shape (spine + causes + structure + responsibilities + csState + sip)', /let stpaData = \{ cs: \{ controllers: \[\], processes: \[\], actions: \[\], feedbacks: \[\], others: \[\], precedence: \[\] \}, dispositions: \{\}, causeDismissals: \{\}, scopeFcIds: \[\], meta: \{ mission: '', scope: '', boundary: '', abstractionLevel: '' \}, losses: \[\], hazards: \[\], constraints: \[\], responsibilities: \[\], csState: 'initial', sip: \{\} \}/.test(bind));
-check('stpaData in the project export payload', /flightPhasesData, stpaData, ftaPages/.test(misc));
+// Pinned to an exact neighbour sequence, this broke the moment mlData was added
+// between stpaData and ftaPages — while stpaData was still very much in the
+// payload. Assert membership in the export object, not adjacency.
+check('stpaData in the project export payload',
+  /return \{ projectName[\s\S]{0,1200}?\bstpaData\b[\s\S]{0,1200}?\bftaPages\b/.test(misc));
 check('stpaData restored on BOTH load paths (data_ops + helpers legacy)',
   /stpaData = \(data\.stpaData && data\.stpaData\.cs\) \? data\.stpaData/.test(dops) &&
   /stpaData = \(data\.stpaData && data\.stpaData\.cs\) \? data\.stpaData/.test(help));
@@ -161,8 +165,10 @@ check('Step 1 authors the spine: meta rows + losses + hazards + constraints tabl
   /Mission statement/.test(panel) && /Boundary statement/.test(panel) && /addLossUi/.test(panel) && /addHazardUi/.test(panel) && /addConstraintUi/.test(panel));
 check('stakeholder confirmation RIDES the standard approvals rail (kind stpaScope), refuses on blank statements',
   /kind: 'stpaScope', id: 'STPA-SCOPE'/.test(panel) && /confirming a blank is not confirmation/.test(panel));
+// De-anchored 2 Aug (§7.3): 'stpaScope' was asserted as the LAST order entry and
+// broke when 'sourceDoc' joined the registry. Membership is the invariant.
 check("assurance KIND_LABELS/ORDER gained 'stpaScope' — one sign-off system, not two",
-  /stpaScope: 'STPA Scope'/.test(S('assurance_modules.js')) && /'sysAsm', 'stpaScope'\]/.test(S('assurance_modules.js')));
+  /stpaScope: 'STPA Scope'/.test(S('assurance_modules.js')) && /'sysAsm', 'stpaScope'[,\]]/.test(S('assurance_modules.js')));
 check('FHA import route: hazard CREATED FROM an FC with fromFcId, one per FC, lands UNTRACED honestly',
   /hazardFromFc/.test(panel) && /fromFcId === fcId/.test(panel) && /lands UNTRACED, honestly/.test(panel));
 check('spine removals refuse while cited (no dangling links, panel-side)',
@@ -352,9 +358,16 @@ check('INV-37 is silent when nothing is authored, and names every dangling-link 
 check('INV-37 id is unique across every site module', _all.every(f => {
   try { return S(f).indexOf("id: 'INV-37'") === -1; } catch (_) { return true; } }));
 const gtv = S('fta_view_modules.js'), gtt = S('gt_thread.js'), gti = S('gt_integrity.js');
-check('golden thread: STPA column exists in ORDER/CNAME/ACCENT and the layer list',
-  /'hf', 'stpa', 'fc'/.test(gtt) && /stpa: 'STPA'/.test(gtt) && /stpa: '#6D28D9'/.test(gtt) &&
-  /'sys','stpa','fc'/.test(S('bindings_modules.js')));
+// Assert MEMBERSHIP in the column list, not a neighbour. This pinned
+// `'hf', 'stpa', 'fc'` — but hf is a swim LANE (alongside RAM), never a spine
+// column, and the list reads `['func','sys','stpa','fc',...]`. Pinning the
+// neighbour made a correct renderer look broken. Whitespace is normalised so a
+// reformat can't fail this either.
+const _n = s => s.replace(/\s+/g, '');
+check('golden thread: STPA is a spine column, named and accented',
+  /\['func','sys','stpa','fc'/.test(_n(gtt)) &&
+  /stpa:'STPA'/.test(_n(gtt)) && /stpa:'#6D28D9'/.test(_n(gtt)) &&
+  /'sys','stpa','fc'/.test(_n(S('bindings_modules.js'))));
 check('graph builder anchors spine hazards to their source FC, flags untraced, rides drafted reqs',
   /STPA \(W5\): spine hazards/.test(gtv) && /h\.fromFcId === fha\.fcId/.test(gtv) &&
   /not yet traced to a loss/.test(gtv) && /r\.uca !== \('UCA-' \+ k\)/.test(gtv));

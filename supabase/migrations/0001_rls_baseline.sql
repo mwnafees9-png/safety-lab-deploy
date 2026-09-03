@@ -12,6 +12,29 @@
 -- The safety-analysis blob (project_documents / yjs_documents) inherits this via
 -- a join to projects. User / usage / license rows are self-only. Admin views go
 -- through is_safety_lab_admin().
+--
+-- -----------------------------------------------------------------------------
+-- SUPERSEDED IN PART — 31 Aug 2026 (H-8). READ THIS BEFORE RE-APPLYING.
+--
+-- The two claims above — that this file matches live, and that re-applying it is
+-- "idempotent and non-destructive" — were true on 21 Jun 2026 and are NOT true
+-- now. Since then the six helper functions below were moved out of `public` and
+-- into the `private` schema, and every live policy was repointed at
+-- `private.<helper>`. That move was made directly against the database and no
+-- migration on disk records it. Censused 31 Aug 2026: production has ZERO
+-- public.is_workspace_member, and ZERO unqualified helper calls in any policy.
+--
+-- So re-applying THIS FILE ALONE against production would create a second set
+-- of helpers in `public` — without the 0002/0005 anon-execute revokes — and
+-- repoint all 18 policies at the unqualified names, which resolve to those new
+-- copies. A silent authorization downgrade, invited by this file's own header.
+--
+-- 0008_rls_private_schema_sync_20260831.sql is the reconciliation and MUST be applied
+-- after this file on any rebuild. The function and policy statements below are
+-- left byte-unchanged deliberately: this file is the 21 Jun historical record,
+-- and rewriting history to look correct is how the drift went unnoticed in the
+-- first place. The sync file drops the public copies it creates.
+-- -----------------------------------------------------------------------------
 -- =============================================================================
 
 -- ---- Membership helper functions (SECURITY DEFINER so RLS can check membership

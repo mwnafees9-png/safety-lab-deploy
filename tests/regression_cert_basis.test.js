@@ -95,9 +95,12 @@ check('[6c] unknown clause refused', throws(() => C.cite('4754B-9.9')) && throws
 check('[7] the FAR parts are registered (21/23/25/27/29/33/35/450/107) with eCFR links, flagged public',
     ['Part 21', 'Part 23', 'Part 25', 'Part 27', 'Part 29', 'Part 33', 'Part 35', 'Part 450', 'Part 107']
         .every(id => { const r = C.reg(id); return r && r.licensed === false && /ecfr\.gov/.test(r.link); }));
-check('[7b] the AC family is registered (25.1309 · 23.1309 · 27-1B · 29-2C · 20-174 · 20-115D · 20-152A) with FAA links',
-    ['AC 25.1309-1A', 'AC 23.1309-1E', 'AC 27-1B', 'AC 29-2C', 'AC 20-174', 'AC 20-115D', 'AC 20-152A']
-        .every(id => { const a = C.advisory(id); return a && a.licensed === false && /faa\.gov/.test(a.link); }));
+// 31 Aug 2026 — superseded in place: AC 25.1309-1B (30 Aug 2024) is the current AC; 1A is
+// kept as a cancelled card so old references resolve. Both must be registered.
+check('[7b] the AC family is registered (25.1309-1B + cancelled 1A · 23.1309 · 27-1B · 29-2C · 20-174 · 20-115D · 20-152A) with FAA links',
+    ['AC 25.1309-1B', 'AC 25.1309-1A', 'AC 23.1309-1E', 'AC 27-1B', 'AC 29-2C', 'AC 20-174', 'AC 20-115D', 'AC 20-152A']
+        .every(id => { const a = C.advisory(id); return a && a.licensed === false && /faa\.gov/.test(a.link); }) &&
+    C.advisory('AC 25.1309-1A').cancelled === true && C.advisory('AC 25.1309-1A').supersededBy === 'AC 25.1309-1B');
 check('[7c] "part 33" and "AC 23.1309" RESOLVE to the reg/AC card (not just clauses)',
     C.resolve('part 33').regs.some(r => r.id === 'Part 33') && C.resolve('AC 23.1309').regs.some(r => r.id === 'AC 23.1309-1E'));
 // SINGLE SOURCE OF TRUTH — the spine stores NO probability numbers. It looks them
@@ -138,12 +141,25 @@ check('[8g] "SC-VTOL" and "special condition" RESOLVE to the tailoring material'
     C.resolve('SC-VTOL').regs.some(r => r.id === 'SC-VTOL') && C.resolve('special condition').hits.some(h => /Special conditions/.test(h.title)));
 
 // ---- [9] SORA (Part 107) · CS-E/CS-P equivalents · particular-risk cross-link ---
-check('[9] JARUS SORA registered + GRC/SAIL COMPUTED by the SORA Thread (reconciled 26 Jul — the engine is real now); ARC partial (declared, derivation refuses)',
+check('[9] JARUS SORA registered + GRC/SAIL COMPUTED by the SORA Thread (reconciled 26 Jul, engine real); ARC partial (v0.3: now computes, single-source, not yet two-source)',
     C.advisory('JARUS SORA 2.5') &&
     (function () { const g = C.clause('sora-grc'), a = C.clause('sora-arc'), sl = C.clause('sora-sail');
         return g && g.coverage === 'full' && g.dischargedBy.indexOf('sora-thread') >= 0 &&
                sl && sl.coverage === 'full' && sl.dischargedBy.indexOf('sora-thread') >= 0 &&
-               a && a.coverage === 'partial' && /refuses/.test(a.objective); })());
+               a && a.coverage === 'partial' && /single-source/.test(a.objective); })());
+// v0.3 (6 Aug 2026) — reconciled to the SORA wizard bridge: initial ARC and
+// containment now COMPUTE (arcInitial()/containment() no longer throw), each
+// tagged with its own confidence tier rather than presented as fully verified.
+check('[9e] sora-arc reconciled to v0.3 — now COMPUTES (AEC decision tree), still partial coverage, single-source language present, no stale "refuses" claim',
+    (function () { const a = C.clause('sora-arc');
+        return a && a.coverage === 'partial' && /COMPUTED/.test(a.objective) && /single-source/.test(a.objective) &&
+               !/derivation from AEC refuses/.test(a.objective); })());
+check('[9f] sora-containment registered — partial coverage (1 m class only), two-source verified for what it covers, Tables 9-13 named as unsourced',
+    (function () { const c = C.clause('sora-containment');
+        return c && c.coverage === 'partial' && c.dischargedBy.indexOf('sora-thread') >= 0 &&
+               /two-source verified/.test(c.objective) && /NOT yet sourced/.test(c.objective); })());
+check('[9g] the standalone JARUS SORA 2.5 standard note no longer contradicts the sora-grc/sora-sail entries ("does NOT compute" is gone)',
+    C.advisory('JARUS SORA 2.5') && !/does NOT compute GRC\/ARC\/SAIL/.test(SRC));
 check('[9b] EASA CS-E 510 / CS-P 70 equivalents indexed, fully covered, cross-referenced to §33.75 / §35.15',
     (function () { const e = C.clause('cse-510'), p = C.clause('csp-70');
         return e && p && C.reg('CS-E') && C.reg('CS-P') &&
@@ -171,6 +187,48 @@ check('[10d] with NO bands injected it falls back to the NUREG published anchors
     (function () { const g = C.betaGuidance(); return g.floor === 0.01 && g.ordinary === 0.1 && g.ceiling === 0.25 && /NUREG/.test(g.note); })());
 check('[10e] the β floor RULE is stated — a low β requires BOTH separation AND diversity (NUREG/CR-4780), with IEC + NUREG citation',
     (function () { const g = C.betaGuidance(); return /separation/i.test(g.rule) && /diversity/i.test(g.rule) && /IEC 61508-6 Annex D/.test(g.cite) && /NUREG/.test(g.cite); })());
+
+// ---- [11] 6 Aug (same session) — depth pass: DO-178C/DO-254, MIL-STD-882E, ASTM
+// F3230, CS-25/27/29. All pointer-only except the REGS entries (which follow the
+// existing CS-E/CS-P first-class-card pattern) — none of this claims tool coverage
+// Safety Lab doesn't have.
+check('[11] DO-178C/DO-254 registered, licensed, pointer-only, cross-linked to ARP4754B §5.2, verified objective counts stated',
+    (function () {
+        const sw = C.framework('DO-178C'), hw = C.framework('DO-254');
+        const swLevels = C.clause('do178c-levels'), swProc = C.clause('do178c-process'), hwLevels = C.clause('do254-levels');
+        return sw && sw.licensed === true && /^https?:\/\//.test(sw.purchase) &&
+               hw && hw.licensed === true && /^https?:\/\//.test(hw.purchase) &&
+               swLevels && swLevels.coverage === 'pointer-only' && swLevels.dischargedBy.length === 0 &&
+               /71.*69.*62.*26/.test(swLevels.objective) &&
+               swProc && swProc.coverage === 'pointer-only' &&
+               hwLevels && hwLevels.coverage === 'pointer-only' && /ARP4754B §5.2/.test(hwLevels.related.join(' '));
+    })());
+check('[11b] MIL-STD-882E registered PUBLIC (not licensed), Table I/II present, and explicitly flags its vocabulary as NOT the aviation continuum',
+    (function () {
+        const fw = C.framework('MIL-STD-882E');
+        const sev = C.clause('mil882e-severity'), prob = C.clause('mil882e-probability'), proc = C.clause('mil882e-process');
+        return fw && fw.licensed === false && /US DoD/.test(fw.publisher) &&
+               /NOT the same scale|do not map/.test(fw.note) &&
+               sev && sev.coverage === 'pointer-only' && /Catastrophic \(I\)/.test(sev.objective) && /NOT failure-condition class/.test(sev.objective) &&
+               prob && /Frequent \(A\)/.test(prob.objective) && /Improbable \(E\)/.test(prob.objective) &&
+               proc && proc.coverage === 'pointer-only';
+    })());
+check('[11c] ASTM F3230 registered with the REAL F44.50 family (F3061/F3309/F3233/F3367/F3060) and honestly flags no internal-section depth',
+    (function () {
+        const fw = C.framework('ASTM F3230'), c = C.clause('astmf3230-method');
+        const family = ['ASTM F3061', 'ASTM F3309', 'ASTM F3233', 'ASTM F3367', 'ASTM F3060'];
+        return fw && fw.licensed === true && /^https?:\/\//.test(fw.purchase) &&
+               family.every(id => c.related.indexOf(id) >= 0) &&
+               c.coverage === 'pointer-only' && /not sourced beyond the published scope|not reproduced/.test(c.objective);
+    })());
+check('[11d] CS-25/CS-27/CS-29 registered as first-class REGS cards (matching the existing CS-E/CS-P pattern) and resolve() finds them',
+    ['CS-25', 'CS-27', 'CS-29'].every(id => C.reg(id) && C.reg(id).authority === 'EASA') &&
+    C.resolve('CS-27').regs.some(r => r.id === 'CS-27') && C.resolve('CS-29').regs.some(r => r.id === 'CS-29'));
+check('[11e] MIL-STD-882E and ASTM F3230 are in the reference graph with correct licensed flags (public DoD work vs. paid ASTM standard)',
+    (function () {
+        const mil = C.REFERENCES.find(r => r.id === 'MIL-STD-882E'), astm = C.REFERENCES.find(r => r.id === 'ASTM F3230');
+        return mil && mil.licensed === false && astm && astm.licensed === true;
+    })());
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exitCode = fail ? 1 : 0;

@@ -1,0 +1,16 @@
+# A15 corpus retrieval worker — deploy from tools/a15/:  wrangler deploy
+name = "safetylab-corpus"
+main = "corpus_worker.js"
+compatibility_date = "2026-08-01"
+
+# CSP finding (4 Aug): the app's connect-src excludes workers.dev, so the corpus
+# rides the allowlisted api hostname on a path-scoped route (more specific than
+# the api worker's route → takes precedence). MUST sit ABOVE [[r2_buckets]]:
+# a top-level key after a [[table]] becomes a field of that table (TOML), and
+# wrangler silently ignores it with only a warning — cost one deploy cycle.
+routes = [{ pattern = "api.safetylabaero.com/v1/corpus/*", zone_name = "safetylabaero.com" }]
+
+[[r2_buckets]]
+binding = "CORPUS"
+bucket_name = "safetylab-corpus"
+

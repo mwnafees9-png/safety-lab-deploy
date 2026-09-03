@@ -31,12 +31,33 @@ const S = f => fs.readFileSync(path.join(__dirname, '..', 'site', f), 'utf8');
 
 globalThis.window = globalThis;
 globalThis.projectConfig = {};
-const ASMS = [
-  { asmId: 'AS-9', type: 'hf', state: 'Validated', statement: 'Crew workload in go-around is slight', hf: { workloadBand: 'slight' } },
-  { asmId: 'AS-10', type: 'hf', state: 'Proposed', statement: 'Recovery within 4 s', hf: {} },
-  { asmId: 'AS-11', type: 'Design', state: 'Proposed', statement: 'Not an HF assumption' },
+
+// ---------------------------------------------------------------------------
+// THE STUB THAT COULD NOT FAIL — 1 Aug 2026.
+//
+// This block used to be `globalThis.asmAll = () => ASMS` with rows carrying
+// `type` and `hf`. The real asmAll() (assumption_moat.js) returns
+// {asmId,text,state,scope,origin} — NEITHER of those fields. So _isHf() was
+// false for every record and this lane refused ALL evidence in production,
+// while every check below passed, because the stub was more capable than the
+// function it stood in for.
+//
+// A stub richer than the real thing is not a test double, it is a second
+// implementation that never ships. So the register is now built from REAL
+// project rows through the REAL projection: acAssumptionsData → the actual
+// assumption_moat + hf_assumptions modules. If asmAllTyped ever stops carrying
+// `type` or `hf.workloadBand`, these checks fail, which is the whole point.
+// ---------------------------------------------------------------------------
+globalThis.acAssumptionsData = [
+  { asmId: 'AS-9',  text: 'Crew workload in go-around is slight', state: 'Validated', type: 'Human Factors', hf: { workloadBand: 'slight' } },
+  { asmId: 'AS-10', text: 'Recovery within 4 s',                  state: 'Proposed',  type: 'Human Factors', hf: {} },
+  { asmId: 'AS-11', text: 'Not an HF assumption',                 state: 'Proposed',  type: 'Design' },
 ];
-globalThis.asmAll = () => ASMS;
+globalThis.systemsData = [];
+globalThis.aiAssumptions = [];
+globalThis.flightPhasesData = [];
+require('../site/assumption_moat.js');
+require('../site/hf_assumptions.js');
 const _inv = [];
 globalThis.invRegister = i => _inv.push(i);
 globalThis.commitSaveChanges = () => {};
@@ -73,11 +94,14 @@ check('no matching field → INFORMS, waiting for its question',
   H.asmRollup('AS-10').informs === 1 && /waiting for its question/.test(H.asmRollup('AS-10').rows[0].v.why));
 
 console.log('\n[3] no auto-validation');
-check('assumption states untouched by ingest', ASMS[0].state === 'Validated' && ASMS[1].state === 'Proposed');
+check('assumption states untouched by ingest',
+  acAssumptionsData[0].state === 'Validated' && acAssumptionsData[1].state === 'Proposed',
+  'asserted against the REAL store rows now, not a stub array');
 check('contradicted assumption gets NO validation seed', roll9.validationSeed === null);
 const roll10 = H.asmRollup('AS-10');
 check('informs-only gets no seed either (nothing supported yet)', roll10.validationSeed === null);
-ASMS[1].hf.workloadBand = 'significant';   // the assumption gains its band — now the evidence has a field to speak to
+acAssumptionsData[1].hf.workloadBand = 'significant';   // the assumption gains its band — now the evidence has a field to speak to
+// (this only works because _normHf carries workloadBand through — see [7])
 const e4 = H.addEvidence({ asmId: 'AS-10', kind: 'flight-test', metric: 'workloadBand', value: 'slight', n: 4,
   source: 'FT-12 crew debrief workload card, sortie 2026-07-18', date: '2026-07-18', by: 'B. Pilot' });
 check('supported-and-uncontradicted → seed that sends the human to the register',
@@ -100,7 +124,7 @@ let res = inv.run();
 check('Validated + contradicted → named (the credited lane stands on a disputed number)',
   res.fails.some(f => /AS-9 is Validated/.test(f) && /trials dispute/.test(f)));
 check('Proposed + contradiction-free stays silent for AS-10', !res.fails.some(f => /AS-10/.test(f)));
-ASMS.splice(1, 1);   // delete AS-10 → its evidence orphans
+acAssumptionsData.splice(1, 1);   // delete AS-10 → its evidence orphans
 res = inv.run();
 check('orphaned evidence named', res.fails.some(f => /AS-10 which no longer exists/.test(f)));
 
@@ -113,6 +137,26 @@ check('writes confined to projectConfig.hfEvidence',
   !/projectConfig\.(?!hfEvidence)\w+\s*=(?!=)/.test(src) && !/\ba\.state\s*=(?!=)/.test(src) && !/asm\.state\s*=(?!=)/.test(src));
 check('the doctrine is stated: uncited evidence is rumor, ingest never validates',
   /uncited evidence is rumor/.test(src) && /never validates by itself|NO AUTO-VALIDATION/.test(src));
+
+// ---- [7] the projection this lane depends on --------------------------------
+// These are the checks that would have caught the production outage. They assert
+// the SHAPE of what the module reads, not just what it does with a fixture.
+{
+  const src = S('hf_evidence.js');
+  const typed = globalThis.HF_ASSUMPTIONS.asmAllTyped();
+  const byId = {}; typed.forEach(a => { byId[a.asmId] = a; });
+  check('the register projection carries `type` — asmAll() never did',
+    byId['AS-9'] && byId['AS-9'].type === 'hf',
+    'without this every record is refused as "not an HF-typed assumption"');
+  check('and carries the authored workload band',
+    byId['AS-9'] && byId['AS-9'].hf && byId['AS-9'].hf.workloadBand === 'slight',
+    '_normHf dropped workloadBand until 1 Aug 2026, so the band was captured and then discarded');
+  check('a non-HF assumption is still correctly excluded',
+    byId['AS-11'] && byId['AS-11'].type !== 'hf');
+  check('the module reads asmAllTyped, NOT asmAll',
+    /asmAllTyped/.test(src) && !/window\.asmAll\b/.test(src),
+    'asmAll() cannot answer "is this HF-typed" — it returns neither field, so it always answered no');
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

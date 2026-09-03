@@ -42,7 +42,10 @@ const p23iii = {
   Catastrophic: { prob: 1e-8, dal: 'B' },
   Hazardous:    { prob: 1e-7, dal: 'C' },
   Major:        { prob: 1e-5, dal: 'C' },
-  Minor:        { prob: 1e-3, dal: 'E' }
+  // Minor → DAL D per AC 23.1309-1E Class III (safety_targets.js audit fix of
+  // 2026-07-06: "prior rows wrongly pushed Maj→D and Min→E for Classes I–III").
+  // This expectation was stale against the corrected table.
+  Minor:        { prob: 1e-3, dal: 'D' }
 };
 for (const sev of Object.keys(p23iii)) {
   const t = getSafetyTarget(sev, 'Part 23 III');

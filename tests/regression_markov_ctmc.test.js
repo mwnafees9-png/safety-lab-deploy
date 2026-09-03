@@ -110,8 +110,15 @@ check('per-event exposure honored (_nodeExposureTime path: manual override)',
 
 console.log('\n[5] benchmarks + wrap discipline');
 const bm = G.runMarkovBenchmarks();
-check('all cited benchmarks pass with the steady solver present (' + bm.map(b => b.id).join(', ') + ')',
-  bm.length === 3 && bm.every(b => b.pass), JSON.stringify(bm.filter(b => !b.pass).map(b => b.id)));
+// §7.3 — this was `bm.length === 3`, and it broke the moment v1.1 added the
+// two phased benchmarks. The invariant is MEMBERSHIP (the v1.0 closed forms
+// and the steady cross-check are still on the board) plus all-pass, never a
+// count that punishes adding evidence.
+const bmIds = bm.map(b => b.id);
+check('all cited benchmarks pass with the steady solver present (' + bmIds.join(', ') + ')',
+  bm.length >= 3 && bm.every(b => b.pass), JSON.stringify(bm.filter(b => !b.pass).map(b => b.id)));
+check('the founding benchmarks are still on the board (membership, not a count)',
+  ['pure-death', 'repairable', 'steady-agreement'].every(id => bmIds.indexOf(id) >= 0), JSON.stringify(bmIds));
 check('citations carried on every benchmark', bm.every(b => b.cite && b.cite.length > 10));
 check('effectiveProb wrapped exactly once (guard set)', G.effectiveProb._ctmcWrapped === true);
 check('renderMarkovModels wrapped (guard set)', G.renderMarkovModels._ctmcWrapped === true);
@@ -121,7 +128,19 @@ const src = S('markov_ctmc.js');
 check('index.html loads markov_ctmc.js AFTER fta_quant_modules (defer order)',
   (() => { const idx = S('index.html'); const a = idx.indexOf('fta_quant_modules.js'); const b = idx.indexOf('markov_ctmc.js?v=');
            return a >= 0 && b > a; })());
-check('module writes NOTHING to stores', !/projectConfig\.\w+\s*=|\.push\(/.test(src.replace(/wRight\.push|wLeft\.push|errors\.push|warnings\.push/g, '')));
+// §7.3 — this banned EVERY `.push(` and kept an allow-list of the module's own
+// local arrays, so it failed the moment v1.1 pushed to a new local (legs,
+// excluded, notes). The real invariant is that no STORE is written: name the
+// stores instead of policing a JS verb. Displayed lane, unchanged in force.
+const STORES = ['projectConfig', 'acReqData', 'cmaData', 'ftaPages', 'acFhaData', 'systemsData',
+                'flightPhasesData', 'zsaData', 'praData', 'itemsData', 'acFunctionsData'];
+const codeOnly = src.replace(/^\s*\/\/.*$/gm, '');
+check('module writes NOTHING to stores (no store assignment, no push onto a store)',
+  STORES.every(s => {
+    const assign = new RegExp('(^|[^.\\w])' + s + '(\\.\\w+)*\\s*=[^=]');
+    const push = new RegExp('(^|[^.\\w])' + s + '(\\.\\w+)*\\.(push|splice|pop|shift|unshift)\\s*\\(');
+    return !assign.test(codeOnly) && !push.test(codeOnly);
+  }), STORES.filter(s => new RegExp('(^|[^.\\w])' + s + '(\\.\\w+)*\\s*\\.(push|splice)\\s*\\(').test(codeOnly)).join(', '));
 check('the caveat it replaces is named in the header', /steady state only/.test(src) && /OVERSTATES/.test(src));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

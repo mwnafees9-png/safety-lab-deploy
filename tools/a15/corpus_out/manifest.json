@@ -1,0 +1,18 @@
+{
+ "corpus": "a15-wave1-14cfr",
+ "built": "2026-08-04T13:01:19.546555Z",
+ "issueDate": "2026-07-31",
+ "parts": "21,23,25,27,29,33,35,91",
+ "chunks": 1567,
+ "terms": 9780,
+ "avgdl": 220.4952137843012,
+ "k1": 1.2,
+ "b": 0.75,
+ "shards": [
+  {
+   "file": "chunks-00.json",
+   "count": 1567
+  }
+ ],
+ "license": "US Government work \u2014 public domain"
+}

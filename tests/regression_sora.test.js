@@ -6,12 +6,14 @@
  *       and beyond-bounds inputs refuse to Certified; density required.
  *   [2] mitigations: exact credits; invalid credit levels refused; the M1
  *       column-floor rule; overall never below 1.
- *   [3] SAIL: exact Table 7 rows; GRC>7 refuses; ARC validated; declared-ARC
- *       posture (arcInitial refuses).
+ *   [3] SAIL: exact Table 7 rows; GRC>7 refuses; ARC validated; arcInitial()
+ *       now COMPUTES (v0.3) from the AEC table, single-source confidence.
  *   [4] adjacent area: 3 min at max speed, clamped [5, 35] km.
  *   [5] OSO register: all 17 from the VERIFIED Annex E data (#99/#100);
  *       robustness matrix resolves per SAIL with citations; None carries the
- *       Table-14 road home; OSO#24 Low printed N/A; containment still REFUSED.
+ *       Table-14 road home; OSO#24 Low printed N/A; containment() now
+ *       COMPUTES Table 8 (1m UA class, two-source verified, v0.3) and still
+ *       REFUSES Tables 9-13.
  *   [6] spine discipline: citations ride every result; engine never mutates
  *       inputs; micro-UAS shortcut deliberately absent (conservative).
  *   [7] wiring: index.html ships sora_core.js inert (tag, no nav/tab), and
@@ -75,7 +77,22 @@ check('Table 7 row 7: VI everywhere', ['a', 'b', 'c', 'd'].every(a => E.sail(7, 
 check('GRC 1 uses the ≤2 row; ARC-B string forms accepted', E.sail(1, 'ARC-b').sail === 'II');
 check('GRC > 7 refuses to Certified', throws(() => E.sail(8, 'a'), /Certified/));
 check('unknown ARC refused with the declare-it road home', throws(() => E.sail(3, 'e'), /DECLARE|declare/i));
-check('arcInitial() refuses until AEC logic verified', throws(() => E.arcInitial(), /NOT yet verified/));
+check('arcInitial() computes from the AEC table (v0.3, single-sourced)', E.arcInitial({ altitude: 'below500', controlled: false, urban: false }).arc === 'ARC-b');
+check('arcInitial() flags its own confidence tier honestly', E.arcInitial({ atypical: true }).confidence === 'single-source');
+check('arcInitial() covers all 12 AEC rows against Annex C Table 1',
+  E.arcInitial({ airportEnv: true, airspaceClassBCD: true }).aec === 1 &&
+  E.arcInitial({ altitude: 'above500', tmz: true }).aec === 2 &&
+  E.arcInitial({ altitude: 'above500', controlled: true }).aec === 3 &&
+  E.arcInitial({ altitude: 'above500', controlled: false, urban: true }).aec === 4 &&
+  E.arcInitial({ altitude: 'above500', controlled: false, urban: false }).aec === 5 &&
+  E.arcInitial({ airportEnv: true, airspaceClassBCD: false }).aec === 6 &&
+  E.arcInitial({ altitude: 'below500', tmz: true }).aec === 7 &&
+  E.arcInitial({ altitude: 'below500', controlled: true }).aec === 8 &&
+  E.arcInitial({ altitude: 'below500', controlled: false, urban: true }).aec === 9 &&
+  E.arcInitial({ altitude: 'below500', controlled: false, urban: false }).aec === 10 &&
+  E.arcInitial({ altitude: 'aboveFL600' }).aec === 11 &&
+  E.arcInitial({ atypical: true }).aec === 12);
+check('arcInitial() still refuses without enough to bind the decision tree', throws(() => E.arcInitial(), /altitude required|input required/));
 
 // ---- [4] adjacent area --------------------------------------------------------
 check('3 min at 50 m/s = 9 km', Math.abs(E.adjacentAreaKm(50).km - 9) < 1e-9);
@@ -102,7 +119,14 @@ check('OSO#24 Low is structurally unavailable (printed N/A) and the row says so'
 check('every objective carries its Annex E citation with page (criteria prose never stored)',
   r4.objectives.every(o => /Annex E/.test(o.cite) && o.page > 0));
 check('osoRobustness refuses without a SAIL', throws(() => E.osoRobustness(), /SAIL required/));
-check('containment tables REFUSED until verified', throws(() => E.containment(), /Tables 8-13|NOT yet verified/));
+check('containment() computes Table 8 (1m UA class, two-source verified)',
+  E.containment({ dimM: 1, speedMps: 25, sail: 'I', assemblies: 'gt400k', shelteringApplicable: true }).robustness === 'High' &&
+  E.containment({ dimM: 1, speedMps: 25, sail: 'III', assemblies: '40kto400k', shelteringApplicable: true }).robustness === 'Low' &&
+  E.containment({ dimM: 1, speedMps: 25, sail: 'VI', assemblies: 'lt40k', shelteringApplicable: true }).robustness === 'Low');
+check('containment() flags Table 8 as two-source confidence', E.containment({ dimM: 1, speedMps: 25, sail: 'I', assemblies: 'gt400k', shelteringApplicable: true }).confidence === 'two-source');
+check('containment() still REFUSES Tables 9-13 (UA classes above 1m/25m/s)',
+  throws(() => E.containment({ dimM: 3, speedMps: 35, sail: 'I', assemblies: 'gt400k', shelteringApplicable: true }), /Tables 9-13|NOT yet sourced/));
+check('containment() refuses without the sheltering-applicable declaration', throws(() => E.containment({ dimM: 1, speedMps: 25, sail: 'I', assemblies: 'gt400k' }), /sheltering/i));
 
 // ---- [6] spine discipline -----------------------------------------------------
 check('citations ride every computed result',
@@ -123,8 +147,14 @@ const idx = S('index.html');
 check('index.html ships sora_core.js cache-busted with the Annex E data loaded FIRST',
   /sora_core\.js\?v=\d+\.\d/.test(idx) &&
   idx.indexOf('sora_annex_e_data.js') !== -1 && idx.indexOf('sora_annex_e_data.js') < idx.indexOf('sora_core.js?v='));
-check('the SORA Thread page is wired (nav + view — the inert era ended with #103)',
-  idx.indexOf('snav-sora-thread') !== -1 && idx.indexOf('view-sora-thread') !== -1);
+// 23 Aug 2026 — SUPERSEDED half of this pin: the Prove group moved to the
+// horizontal strip, so the nav entry is a render-gated strip pill declared in
+// bindings (_WF_STEPS, gateLane 'sora'), not an index.html row. The view stays.
+// 23 Aug 2026 (3) — the strip retired the same day; SORA now lives as a
+// basis-gated TAB in the Prove area (prove_tabs.js), same render-time rule.
+check('the SORA Thread page is wired (Prove tab + view — the inert era ended with #103)',
+  idx.indexOf('id="snav-sora-thread"') === -1 && idx.indexOf('view-sora-thread') !== -1 &&
+  fs.readFileSync(path.join(__dirname, '..', 'site', 'prove_tabs.js'), 'utf8').indexOf("gateLane: 'sora'") !== -1);
 check('the cert-basis spine + router ship (the #101 grounding chain)',
   idx.indexOf('cert_basis_spine.js?v=') !== -1 && idx.indexOf('cert_basis_router.js?v=') !== -1);
 check('specific-sora basis present in the wizard bases', /specific-sora/.test(S('bindings_modules.js')));
