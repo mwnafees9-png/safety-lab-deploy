@@ -718,6 +718,71 @@ post-Radia.
   retrieval becomes one. No action now — recorded so it isn't rediscovered from scratch when a
   real document forces the question.
 
+**Opened 3 Sep 2026, from the FHA consistency campaign.** Full data and method in
+`eval/FHA_CONSISTENCY_RESULTS_2026-09-03.md`; raw draws in `eval/runs/slab_campaign_v1_2026-09-03.json`
+(15 runs, 12 landed, 573 rows). NOTE: that write-up numbers its OWN findings F1–F7 independently of
+this register — the ids below are this register's, and do not correspond.
+
+- **F4 — Downward drift in the middle band. The principal finding, and the one with a safety
+  direction.** Across three Opus runs, disagreement with the project's own accepted rows breaks
+  **18 less severe to 2 more severe**. Noise is symmetric; this is not noise. Catastrophic holds to
+  ±1 (17/16/18) but Major swings 12/21/20 and Minor 10/2/4, and the drift sits entirely between
+  Minor and Hazardous — the band where the joint-top-step rule (WORKING_RULES 23) stops applying.
+  Under-classification is the direction that removes DAL, verification rigour and independent means,
+  so this is not a tidiness problem. **Proposed:** extend axis coherence below the top step
+  (occupants downstream of aircraft, not only at the joint top) and require the explicit
+  independent-means count the rubric already asks for on the aircraft axis, which the runs are not
+  supplying. Note also that `severity` is DERIVED (`max()` of the three levels) and must never be
+  reported as an independent axis — the perfect Catastrophic↔hull-loss pairing is tautological.
+
+- **F5 — The abstention total is pinned; its membership is not.** Severity came back blank on
+  **exactly 37 rows in all three runs**, yet only 21 rows were blank in all three out of 51 blank in
+  at least one (stability 0.41). Genuine per-row uncertainty would abstain on roughly the same hard
+  rows and let the total drift; a fixed total over shifting membership looks like a quota. ~30 flips
+  per axis are one run answering where another declined — disagreement about whether the question is
+  answerable, not about the answer. Cheapest outstanding check: re-run the same test on the Sonnet
+  set and the E2 data to confirm or kill the quota hypothesis, THEN pin the abstention rule.
+
+- **F6 — Consistency is being scored on wording, which cannot answer the question asked.**
+  Waqas's ruling (3 Sep): **the bar is that the intent of the effect is captured and the severity is
+  correct; identical wording is a bonus, not the metric.** Token overlap sees neither — two effects
+  can share almost no vocabulary and carry one intent, or share most of it and differ. The reported
+  0.18–0.27 effect-prose figures therefore mean "not checked", not "failed". Needs a judge over
+  meaning (model-as-judge on the effects pair, same/different, hand spot-checked) or the measure
+  should be dropped. Do not quote token overlap as a consistency result again.
+
+- **F7 — The enumeration step has never been tested under the current build.** The 3 Sep campaign
+  SUPPLIED the 85 failure conditions and asked the lane to fill in effects, so "found all 85 every
+  time" is echoing a list, not enumerating — and the condition-wording figure (0.913) is inflated
+  the same way. The golden runs DID generate their own conditions (FCIM 35/30/35), which is why
+  content-matched overlap between them is only 38–66%. The two are therefore not comparable and no
+  improvement claim can rest on them. Re-run the way August ran: tool finds its own conditions,
+  three runs, matched by content. Until then there is no honest before/after on the half of the job
+  that matters most. Related ruling: conditions must be stated at aircraft level and stay
+  implementation-agnostic — "complete loss of propulsive thrust" is correct where "complete loss of
+  thrust generation" hints at loss of engine, when the loss may arise on the inceptor, computation
+  or effector side, and those three are what feed interdependence.
+
+- **F8 — There is no answer key, and nothing in the repo can substitute for one.** All seven golden
+  files are `aiGenerated: true` throughout, as are all 253 accepted rows on the campaign project, so
+  every number produced to date is the tool compared with itself — drift, never accuracy. Twenty
+  conditions classified by hand would make the word usable for the first time. Needs a person; no
+  model can stand in.
+
+- **F9 — The wall can mislabel a real failure as a crash.** `ship.sh` greps `^  FAIL  ` (two
+  spaces, house style) but `regression_hf_lane_drafters` prints `FAIL` with one, so a genuine
+  failing check was reported as "suite did not run to completion". Both states block the deploy, so
+  nothing shipped wrongly — but the operator is told the wrong thing about why. Either normalise the
+  suite's output or widen the grep and keep the crash/fail distinction on the exit code.
+
+- **F10 — SHIPPED 3 Sep 2026 (ai_assistant 76.39), listed so the campaign machinery's state is on the register too.** A refusal is a result:
+  `_captureBail` + `_captureGuard` on the 17 public lane entry points, plus a guard on
+  `_fmeaSystemPicker` (the sixth picker — the 76.38 sweep matched `_open*Picker` and missed it).
+  99 toast-and-return guard clauses resolved no capture, so a lane refusing early hung a campaign
+  for its full timeout: three FMEA runs burned 901 s each to report "no panel opened" when the lane
+  had already said "AI backend not ready" in milliseconds. `regression_capture_bail`, 30 checks,
+  14 executed. Inert when no capture is armed.
+
 
 ---
 
