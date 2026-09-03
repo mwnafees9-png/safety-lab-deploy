@@ -85,7 +85,16 @@ check('a missing source id is a no-op', (acFhaAddPhaseVariant(999), acFhaData.le
 // ---- the rendered markup (rule 11) -----------------------------------------
 const src = helpers;
 check('the head row wears the phase-group badge with count and worst severity',
-  /phase group × \$\{_grp\.count\} · worst \$\{esc\(_grp\.worst\)\}/.test(src));
+  /phase group × \$\{_grp\.count\} · \$\{_grpWorst\}/.test(src)
+  && /_grpWorst = _grp && _grp\.worst \? \('worst ' \+ esc\(_grp\.worst\)\) : 'unclassified'/.test(src));
+// 3 Sep 2026 — the badge must never print "worst " with nothing after it, and must
+// not call duplicates a phase group. See the executed block at the end of this file.
+check('a group with no committed severity says "unclassified", never a dangling "worst"',
+  /: 'unclassified'/.test(src));
+check('duplicates get their OWN badge, not the phase-group one',
+  /fha-group-dup/.test(src) && /duplicate rows · same phases/.test(src));
+check('the duplicate tooltip says what to do about it',
+  /Merge or delete the extras/.test(src) && /not a per-phase classification/.test(src));
 check('the badge tooltip teaches the App Q pattern and the worst-case rule',
   /classified per phase \(ARP4761A App Q pattern\)/.test(src) && /fault trees take the group's worst case/.test(src));
 check('member rows read as continuations (└), muted, with a title explaining membership',
@@ -229,6 +238,53 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   check('SFHA: srcCondId resolves against that system\'s extractedFCs', rs && rs.fcId === 'NAV-SF-01-M');
   // 5. wiring: the executor passes srcCondId through to the apply
   check('add_fha executor passes srcCondId to the apply (wiring pin)', /sevBasis: a\.sevBasis, srcCondId: a\.srcCondId/.test(ai));
+})();
+
+// ---- EXECUTED: a group must PROVE it partitions the phases (3 Sep 2026) --------
+// Waqas, on a badge reading "phase group × 3 · worst Hazardous" over three rows
+// with identical phase lists: "why is the AI not splitting it into two rows rather
+// than saying that … it's there to help not to confuse." Sharing an fcId was the
+// only test, so three accepted drafts of one condition were announced as a
+// deliberate per-phase classification. These pin the distinction.
+(() => {
+  const g = rows => _fhaGroupRows(rows).groups;
+
+  // three accepted drafts of ONE condition: same phases every time
+  const dup = g([
+    { internalId: 1, fcId: 'SF-001-M', phases: 'Takeoff, Climb, Cruise', severity: 'Hazardous' },
+    { internalId: 2, fcId: 'SF-001-M', phases: 'Takeoff, Climb, Cruise', severity: 'Hazardous' },
+    { internalId: 3, fcId: 'SF-001-M', phases: 'Takeoff, Climb, Cruise', severity: 'Major' },
+  ]).get('SF-001-M');
+  check('identical phase coverage is DUPLICATES, not a phase group', dup && dup.kind === 'duplicate', dup && dup.kind);
+  check('the duplicate group still reports its count', dup && dup.count === 3);
+
+  // a real App Q split: same condition, different phases, different classes
+  const ph = g([
+    { internalId: 1, fcId: 'SF-002-TL', phases: 'Taxi', severity: 'Major' },
+    { internalId: 2, fcId: 'SF-002-TL', phases: 'Landing', severity: 'Catastrophic' },
+  ]).get('SF-002-TL');
+  check('genuinely different phases ARE a phase group', ph && ph.kind === 'phase', ph && ph.kind);
+  check('the phase group takes the worst class across phases', ph && ph.worst === 'Catastrophic', ph && ph.worst);
+  check('the phase group reports how many distinct phase sets it spans', ph && ph.distinctPhaseSets === 2);
+
+  // ordering must not fake a difference
+  const ord = g([
+    { internalId: 1, fcId: 'SF-003-M', phases: 'Takeoff, Cruise', severity: 'Minor' },
+    { internalId: 2, fcId: 'SF-003-M', phases: 'Cruise,Takeoff',  severity: 'Minor' },
+  ]).get('SF-003-M');
+  check('phase order and spacing do not invent a phase group', ord && ord.kind === 'duplicate', ord && ord.kind);
+
+  // blank phases on both sides are still the same (empty) coverage
+  const blank = g([
+    { internalId: 1, fcId: 'SF-004-M', phases: '', severity: '' },
+    { internalId: 2, fcId: 'SF-004-M', phases: '', severity: '' },
+  ]).get('SF-004-M');
+  check('two rows with no phases at all are duplicates, not a phase group', blank && blank.kind === 'duplicate');
+  check('a group where nothing is classified reports an empty worst (the badge says "unclassified")',
+    blank && blank.worst === '', blank && JSON.stringify(blank.worst));
+
+  // a single row is never a group
+  check('one row is not a group at all', g([{ internalId: 1, fcId: 'SF-005-M', phases: 'Cruise', severity: 'Minor' }]).size === 0);
 })();
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

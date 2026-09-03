@@ -4568,10 +4568,30 @@ function _fhaGroupRows(rows) {
         if (members.length > 1) {
             let worst = '';
             members.forEach(m => { if ((rank[m.severity] || 0) > (rank[worst] || 0)) worst = m.severity || worst; });
-            groups.set(o.key, { count: members.length, worst, headId: members[0].internalId });
+            // 3 Sep 2026 (Waqas, on a badge reading "phase group × 3 · worst Hazardous"):
+            // "why is the AI not splitting it into two rows rather than saying that …
+            // it's there to help not to confuse." He was right. Sharing an fcId was the
+            // ONLY test, so three ACCEPTED DRAFTS of the same condition — 253 rows over
+            // 85 conditions on the campaign project, 35 groups with byte-identical phase
+            // lists and 45 with identical descriptions — were announced as a deliberate
+            // per-phase classification nobody had made. Worse, `worst` then feeds the
+            // fault trees the worst of three DUPLICATES rather than the worst across
+            // phases, which is a different number and not the one App Q asks for.
+            // A phase group must now PROVE it partitions the phases: two members whose
+            // phase sets are identical are duplicates, and saying so is the useful thing.
+            const phaseKeys = new Set(members.map(_fhaPhaseKey));
+            const kind = phaseKeys.size > 1 ? 'phase' : 'duplicate';
+            groups.set(o.key, { count: members.length, worst, headId: members[0].internalId, kind: kind, distinctPhaseSets: phaseKeys.size });
         }
     });
     return { ordered, groups };
+}
+// Order-insensitive identity for a row's phase coverage: "Takeoff, Cruise" and
+// "Cruise,Takeoff" are the same coverage and must not read as two phase variants.
+function _fhaPhaseKey(r) {
+    return String((r && r.phases) || '')
+        .split(',').map(function (x) { return x.trim().toLowerCase(); })
+        .filter(Boolean).sort().join('|');
 }
 
 // FHA-G — author the split: a new sibling row under the SAME failure-condition
@@ -4625,11 +4645,19 @@ function renderACFHA() {
         const _hfw = (typeof HFSeverityCheck !== 'undefined' && HFSeverityCheck.evalRow) ? HFSeverityCheck.evalRow(row) : null;
         const _hfwAttr = _hfw ? ' data-hfw="1"' : '';
         const _hfwBadge = (_hfw && typeof HFW_UI !== 'undefined') ? HFW_UI.badge(row, 'AC', _hfw) : '';
+        // 3 Sep 2026 — two different findings wear two different badges, because
+        // calling duplicates a "phase group" told the engineer a methodology decision
+        // had been made when it had not. An unclassified group says "unclassified"
+        // rather than printing "worst " with nothing after it.
+        const _grpDup = _grp && _grp.kind === 'duplicate';
+        const _grpWorst = _grp && _grp.worst ? ('worst ' + esc(_grp.worst)) : 'unclassified';
         const _grpBadge = _isHead
-            ? `<span class="fha-group-badge" title="One failure condition, classified per phase (ARP4761A App Q pattern). The fault trees take the group's worst case — ${esc(_grp.worst)}." style="display:inline-block; margin-left:6px; padding:1px 7px; font-size:10px; font-weight:700; letter-spacing:0.03em; border:1px solid var(--color-border-strong); border-radius:9px; background:var(--color-surface-2); white-space:nowrap;">phase group × ${_grp.count} · worst ${esc(_grp.worst)}</span>`
+            ? (_grpDup
+                ? `<span class="fha-group-badge fha-group-dup" title="${_grp.count} rows share this failure-condition id and cover the SAME flight phases, so this is not a per-phase classification — they are duplicates, most often repeated drafts accepted into the project. Merge or delete the extras; until then the fault trees take the worst of the copies." style="display:inline-block; margin-left:6px; padding:1px 7px; font-size:10px; font-weight:700; letter-spacing:0.03em; border:1px solid var(--color-warning, #7A5300); color:var(--color-warning, #7A5300); border-radius:9px; background:var(--color-surface-2); white-space:nowrap;">${_grp.count} duplicate rows · same phases</span>`
+                : `<span class="fha-group-badge" title="One failure condition, classified per phase (ARP4761A App Q pattern) — ${_grp.distinctPhaseSets} distinct phase sets across ${_grp.count} rows. The fault trees take the group's worst case." style="display:inline-block; margin-left:6px; padding:1px 7px; font-size:10px; font-weight:700; letter-spacing:0.03em; border:1px solid var(--color-border-strong); border-radius:9px; background:var(--color-surface-2); white-space:nowrap;">phase group × ${_grp.count} · ${_grpWorst}</span>`)
             : '';
         const _fcCell = _isMember
-            ? `<span style="color:var(--color-text-tertiary);" title="Member of phase group ${esc(row.fcId)} — same failure condition, different phase classification.">└ ${esc(row.fcId)}</span>`
+            ? `<span style="color:var(--color-text-tertiary);" title="${_grpDup ? `Duplicate of ${esc(row.fcId)} — same failure condition, same flight phases.` : `Member of phase group ${esc(row.fcId)} — same failure condition, different phase classification.`}">└ ${esc(row.fcId)}</span>`
             : `<strong>${esc(row.fcId)}</strong>${_grpBadge}`;
         return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td><strong>${esc(_fhaSubFunctionDisplay(row.subId))}</strong></td><td>${_fcCell}</td><td>${_obsBadge}${esc(row.fcDesc)}</td><td>${esc(row.phases)}</td><td style="min-width: 200px;">${effectsHtml}</td><td class="cell-${esc(row.severity)}">${esc(row.severity)}${_hfwBadge}</td><td>${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td>${esc(row.comments)}</td>${customTds}${reviewTd}</tr>`;
     };
