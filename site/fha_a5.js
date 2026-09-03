@@ -28,6 +28,7 @@
 // existing sweep. No monolith edits.
 // ============================================================================
 (function () {
+    const A5_BADGE = false;   // 3 Sep 2026 — see _inject
     'use strict';
 
     const SEVS = ['', 'No Safety Effect', 'Minor', 'Major', 'Hazardous', 'Catastrophic'];
@@ -146,6 +147,16 @@
         return ' <button type="button" class="fha-a5-badge" data-a5-open="' + _esc(row.internalId) + '" title="' + _esc(tip) + '" style="font-size:10px;padding:0 5px;border-radius:999px;background:transparent;cursor:pointer;' + style + '">' + label + '</button>';
     }
     function _inject() {
+        // 3 Sep 2026 (Waqas) — RETIRED FROM THE TABLE. The 2 Aug reading that per-phase
+        // effects are annotation on ONE row was a misunderstanding: with one governing
+        // severity over a full phase list the exposure ratio is pinned at 1 and every
+        // tree under the row is over-allocated, which is exactly what the exposure
+        // linkage exists to prevent. Per-phase differences now land as separate rows
+        // (rows come from effects; each row's phase list sets its own exposure), and
+        // the AI never wrote this matrix in any case — every AI row showed "A5 +"
+        // forever. The module, its editor and INV-43 stay in the codebase untouched;
+        // only the per-row badge stops rendering. Flip A5_BADGE to re-enable.
+        if (!A5_BADGE) return;
         const tbody = document.getElementById('ac-fha-body');
         if (!tbody) return;
         tbody.querySelectorAll('tr').forEach(tr => {

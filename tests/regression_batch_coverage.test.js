@@ -184,8 +184,10 @@ console.log('\n[panel] the decision stays above the narration');
 // anything". The rows and their Accept buttons were rendered; they sat under ~5,000
 // characters of prose, because every chunk writes its own paragraph and all of them
 // were pasted into the disclaimer.
+// 3 Sep 2026 (evening) — the one-liner now carries a judgement-row count on the end; it
+// is still the fixed sentence, still never the model's replies.
 check('the disclaimer is a fixed one-liner, not the model\'s concatenated replies',
-  /disclaimer: 'Advisory drafts from the unified AI engine\./.test(ai) &&
+  /return 'Advisory drafts from the unified AI engine\./.test(ai) && /classified by JUDGEMENT on limited information/.test(ai) &&
   !/disclaimer: \(parsed\.reply \? _esc\(String\(parsed\.reply\)\)/.test(ai),
   'one paragraph per turn in the disclaimer pushes the first row off the screen');
 check('…and the narration is passed separately, collapsed',

@@ -441,15 +441,19 @@ console.log('\n[citations] the FHA method text');
   check('NEW — crew awareness splits a failure condition in two',
     /CREW AWARENESS SPLITS A FAILURE CONDITION/.test(spec) && /assume the crew continue their duties normally and take NO action/.test(spec),
     'A.8.1; this is also what the FCIM awareness field and the HF crew-credit assist both hang off');
-  check('NEW — classification is per flight phase, overall is the worst case',
-    /CLASSIFY PER FLIGHT PHASE, THEN TAKE THE WORST/.test(spec) && /never an average and never the cruise case by default/.test(spec),
-    'A.5: a classification is established for each phase and the overall is the worst applicable');
+  // 3 Sep 2026 (evening, Waqas) — A.5 still holds: every condition is considered in every
+  // phase and the trees take the worst. What changed is how ROWS are formed: phases that
+  // share an effect and class sit on one row; a second row only where they differ — so the
+  // row's phase list, and with it the exposure ratio, is real rather than pinned to the flight.
+  check('NEW — every condition in every phase; rows come from effects; the worst case still governs the trees',
+    /EVERY FAILURE CONDITION APPLIES TO EVERY FLIGHT PHASE/.test(spec) && /ROWS COME FROM EFFECTS, NOT FROM PHASES/.test(spec) && /NEVER GIVE THE ROW THAT LISTS EVERY PHASE THE WORST CLASS OF ONE PHASE/.test(spec),
+    'A.5: a classification is established for each phase; App Q: a condition may span rows where its effects differ by phase');
   check('NEW — do not anchor on a severity while describing effects',
     /DO NOT ASSUME A CLASSIFICATION WHILE IDENTIFYING EFFECTS/.test(spec),
     'A.5 warns that a preconceived outcome leaves the effects assessment incomplete — the standard\'s own version of the A8.1 abstention rule');
-  check('…and it routes that into leaving severity EMPTY rather than guessing',
-    /leave severity EMPTY rather than reaching for a plausible value/.test(spec),
-    'ties the appendix rule to the abstention machinery the product already ships');
+  check('…and where the context is thin it routes that into a FLAGGED judgement, never a silent guess and never a silent blank',
+    /WHEN THE INFORMATION IS THIN, JUDGE - DO NOT ABSTAIN/.test(spec) && /judgementCall: true and a judgementNote/.test(spec) && !/leave severity EMPTY rather than reaching for a plausible value/.test(spec),
+    'the appendix warning (describe effects first) is kept; the response to thin evidence is a marked judgement filed as an assumption (Waqas, 3 Sep)');
   check('the worksheet tables are right, and the field-definition tables are named as such',
     /Table A7 is the AFHA format example and Table C6 the SFHA capture table; A8 and C5 are their field definitions/.test(spec),
     'the original cited A7/C5 — C5 defines the fields, C6 is the worksheet');

@@ -85,7 +85,7 @@ check('a missing source id is a no-op', (acFhaAddPhaseVariant(999), acFhaData.le
 // ---- the rendered markup (rule 11) -----------------------------------------
 const src = helpers;
 check('the head row wears the phase-group badge with count and worst severity',
-  /phase group × \$\{_grp\.count\} · \$\{_grpWorst\}/.test(src)
+  /phase group × \$\{n\} · \$\{_grpWorst\}/.test(src)
   && /_grpWorst = _grp && _grp\.worst \? \('worst ' \+ esc\(_grp\.worst\)\) : 'unclassified'/.test(src));
 // 3 Sep 2026 — the badge must never print "worst " with nothing after it, and must
 // not call duplicates a phase group. See the executed block at the end of this file.
@@ -94,7 +94,7 @@ check('a group with no committed severity says "unclassified", never a dangling 
 check('duplicates get their OWN badge, not the phase-group one',
   /fha-group-dup/.test(src) && /duplicate rows · same phases/.test(src));
 check('the duplicate tooltip says what to do about it',
-  /Merge or delete the extras/.test(src) && /not a per-phase classification/.test(src));
+  /Merge or delete the extras/.test(src) && /repeated drafts accepted into the project/.test(src));
 check('the badge tooltip teaches the App Q pattern and the worst-case rule',
   /classified per phase \(ARP4761A App Q pattern\)/.test(src) && /fault trees take the group's worst case/.test(src));
 check('member rows read as continuations (└), muted, with a title explaining membership',
@@ -218,7 +218,11 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
     _promoteDeclaredAssumptions: () => [], _axisLevel: () => '', _axisDerive: () => null,
   };
   vm.createContext(ctx);
-  vm.runInContext(src + '; globalThis.__ap = _applyFhaSuggestion;', ctx);
+  // 3 Sep 2026 — accept now de-dups through _fhaUpsert (+ its phase key) and sweeps
+  // the AI ledger; those are real code, not stubs, so they ride in with the function.
+  const helpersSrc = ['_fhaPhaseKeyOf', '_fhaUpsert', '_promoteLedgerForFha'].map(n => fn(ai, n)).join('\n');
+  check('extracted the accept-path helpers (_fhaPhaseKeyOf / _fhaUpsert / _promoteLedgerForFha)', /_fhaUpsert/.test(helpersSrc) && /_fhaPhaseKeyOf/.test(helpersSrc));
+  vm.runInContext(helpersSrc + '\n' + src + '; globalThis.__ap = _applyFhaSuggestion; globalThis.__up = _fhaUpsert;', ctx);
   // 1. valid srcCondId (case-drifted echo) -> canonical FCIM id carried forward
   ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Landing'], srcCondId: 'sf-001-tl' });
   const r1 = ctx.acFhaData[0];
@@ -238,6 +242,43 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   check('SFHA: srcCondId resolves against that system\'s extractedFCs', rs && rs.fcId === 'NAV-SF-01-M');
   // 5. wiring: the executor passes srcCondId through to the apply
   check('add_fha executor passes srcCondId to the apply (wiring pin)', /sevBasis: a\.sevBasis, srcCondId: a\.srcCondId/.test(ai));
+
+  // ---- 3 Sep 2026 — ACCEPT NO LONGER STACKS DUPLICATES (Waqas: "consolidated to 1")
+  const before = ctx.acFhaData.length;
+  // same condition, same phases, AI-written and untouched -> UPDATED IN PLACE
+  const r = ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking (redraft)', phases: ['Landing'], srcCondId: 'SF-001-TL', severity: 'Hazardous' });
+  check('re-accepting the same condition + phases does NOT add a row', ctx.acFhaData.length === before, before + ' -> ' + ctx.acFhaData.length);
+  check('… it updates the existing row in place (text moved, id kept)', r === true && ctx.acFhaData[0].fcDesc === 'Total loss of braking (redraft)' && ctx.acFhaData[0].internalId === 501);
+  check('… and counts the redraft', ctx.acFhaData[0].aiRedrafts === 1);
+  check('the apply reports what it did', ctx.__ap._last && ctx.__ap._last.action === 'updated');
+  // phase order does not fake a new row
+  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Landing'], srcCondId: 'sf-001-tl' });
+  check('the same phases in another order / case are still the same row', ctx.acFhaData.length === before);
+  // a row a person edited is PROTECTED
+  ctx.acFhaData[0].humanEdited = true; ctx.acFhaData[0].humanEditedAt = '2026-09-03T21:00:00Z';
+  const _keep = ctx.acFhaData[0].fcDesc;
+  const p = ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking (third draft)', phases: ['Landing'], srcCondId: 'SF-001-TL' });
+  check('a hand-edited row is never overwritten by a re-draft', p === 'protected' && ctx.acFhaData[0].fcDesc === _keep, String(p) + ' / ' + ctx.acFhaData[0].fcDesc);
+  check('… and the newer draft is noted ON the protected row', !!ctx.acFhaData[0].aiNewerDraftAt && /edited by hand/.test(ctx.acFhaData[0].aiNewerDraftNote));
+  check('… still no extra row', ctx.acFhaData.length === before);
+  // a different phase set is a genuinely new row (the per-phase split)
+  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Takeoff'], srcCondId: 'SF-001-TL', severity: 'Catastrophic' });
+  check('a different phase set for the same condition IS a new row', ctx.acFhaData.length === before + 1);
+  // no stable identity -> cannot de-dup, so it adds (never merges the wrong rows)
+  const n0 = ctx.acFhaData.length;
+  ctx.__ap({ subId: 'SF-010', fcDesc: 'No source id', phases: ['Cruise'] });
+  ctx.__ap({ subId: 'SF-010', fcDesc: 'No source id', phases: ['Cruise'] });
+  check('rows with no sourceCondId are never merged (identity unknown)', ctx.acFhaData.length === n0 + 2);
+
+  // ---- judgement call: flag on the row, note filed as an assumption ------------
+  let promoted = [];
+  ctx._promoteDeclaredAssumptions = (list) => { promoted = list || []; return (list || []).map((a, i) => 'ASM-T-' + i); };
+  ctx.__ap({ subId: 'SF-011', fcDesc: 'Judged row', phases: ['Cruise'], srcCondId: 'SF-001-TL', severity: 'Major', judgementCall: true, judgementNote: 'No gear retraction data; assumed retractable per class.' });
+  const jr = ctx.acFhaData[ctx.acFhaData.length - 1];
+  check('judgementCall lands on the row as a first-class field', jr && jr.judgementCall === true && /gear retraction/.test(jr.judgementNote));
+  check('the judgement note is filed as an assumption of type judgement', promoted.some(a => a.type === 'judgement' && /JUDGEMENT CALL/.test(a.text)));
+  check('… and the row cites it in its assumptions column', Array.isArray(jr.assumptionIds) && jr.assumptionIds.length === 1);
+  check('the comment shouts it too', /⚠ JUDGEMENT CALL/.test(jr.comments));
 })();
 
 // ---- EXECUTED: a group must PROVE it partitions the phases (3 Sep 2026) --------
@@ -253,9 +294,9 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   const dup = g([
     { internalId: 1, fcId: 'SF-001-M', phases: 'Takeoff, Climb, Cruise', severity: 'Hazardous' },
     { internalId: 2, fcId: 'SF-001-M', phases: 'Takeoff, Climb, Cruise', severity: 'Hazardous' },
-    { internalId: 3, fcId: 'SF-001-M', phases: 'Takeoff, Climb, Cruise', severity: 'Major' },
+    { internalId: 3, fcId: 'SF-001-M', phases: 'Takeoff, Climb, Cruise', severity: 'Hazardous' },
   ]).get('SF-001-M');
-  check('identical phase coverage is DUPLICATES, not a phase group', dup && dup.kind === 'duplicate', dup && dup.kind);
+  check('identical phase coverage and class is DUPLICATES, not a phase group', dup && dup.kind === 'duplicate', dup && dup.kind);
   check('the duplicate group still reports its count', dup && dup.count === 3);
 
   // a real App Q split: same condition, different phases, different classes
@@ -285,7 +326,46 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
 
   // a single row is never a group
   check('one row is not a group at all', g([{ internalId: 1, fcId: 'SF-005-M', phases: 'Cruise', severity: 'Minor' }]).size === 0);
+
+  // ---- second pass, same evening (Waqas): "different phases dont mean genuinely
+  // different effects … the severity follows the change in effect." The split test
+  // is BOTH phases and class; the four outcomes each get named.
+  const con = g([
+    { internalId: 1, fcId: 'SF-006-M', phases: 'Takeoff, Climb', severity: 'Major' },
+    { internalId: 2, fcId: 'SF-006-M', phases: 'Cruise, Descent', severity: 'Major' },
+  ]).get('SF-006-M');
+  check('different phases but the SAME class is not a split — it should be ONE row', con && con.kind === 'consolidate', con && con.kind);
+
+  const ctr = g([
+    { internalId: 1, fcId: 'SF-007-M', phases: 'Cruise', severity: 'Major' },
+    { internalId: 2, fcId: 'SF-007-M', phases: 'Cruise', severity: 'Hazardous' },
+  ]).get('SF-007-M');
+  check('same phases classified two ways is a CONTRADICTION, not a variant', ctr && ctr.kind === 'contradiction', ctr && ctr.kind);
+
+  const bl = g([
+    { internalId: 1, fcId: 'SF-008-M', phases: 'Cruise', severity: 'Major' },
+    { internalId: 2, fcId: 'SF-008-M', phases: 'Cruise', severity: '' },
+  ]).get('SF-008-M');
+  check('a blank is an abstention, not a class — it never manufactures a contradiction', bl && bl.kind === 'duplicate', bl && bl.kind);
+  check('a legitimate split reports how many classes it spans', ph && ph.distinctClasses === 2);
 })();
+
+// ---- the four badges + the judgement / dropped-phase badges (rule 11) ----------
+{
+  check('duplicate, contradiction and consolidate each wear their OWN badge text',
+    /duplicate rows · same phases/.test(helpers) && /same phases, different class — resolve/.test(helpers) && /same class across phases — should be one row/.test(helpers));
+  check('the consolidate tooltip says WHY (rows come from effects; exposure)',
+    /Rows come from effects, not from phases/.test(helpers) && /exposure ratio the full phase list/.test(helpers));
+  check('a judgement call renders as an amber uppercase badge in the Severity cell',
+    /function _fhaJudgementBadge\(row\)/.test(helpers) && /background:#F5B400;color:#1A1200/.test(helpers) && /\$\{_fhaJudgementBadge\(row\)\}\$\{_hfwBadge\}/.test(helpers));
+  check('both FHA tables (aircraft and system) wear the judgement badge', (helpers.match(/\$\{_fhaJudgementBadge\(row\)\}/g) || []).length === 2);
+  check('a dropped phase renders in the Phases cell, danger-coloured, naming the phase',
+    /function _fhaDroppedPhasesBadge\(row\)/.test(helpers) && (helpers.match(/\$\{_fhaDroppedPhasesBadge\(row\)\}/g) || []).length === 2);
+  check('a human edit marks the row and preserves the fields the form does not know',
+    /acFhaData\[idx\] = Object\.assign\(\{\}, acFhaData\[idx\], data, \{ humanEdited: true/.test(helpers) && /arr\[idx\] = Object\.assign\(\{\}, arr\[idx\], data, \{ humanEdited: true/.test(helpers));
+  const a5 = fs.readFileSync(path.join(__dirname, '..', 'site', 'fha_a5.js'), 'utf8');
+  check('the A5 badge is retired from the table (module kept, flag off)', /const A5_BADGE = false;/.test(a5) && /if \(!A5_BADGE\) return;/.test(a5));
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

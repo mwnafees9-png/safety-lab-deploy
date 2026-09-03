@@ -86,8 +86,17 @@ test('E2 — severity commitment: the rejected v3 rule and its gate', () => {
   // 3 Sep 2026 - v5#d9c0a41a: THREE EFFECT AXES (v4) plus ONE CREDITED OUTCOME and
   // the joint top step (v5). The two checks above still prove the rejected E2
   // forced-commitment take never landed - v5 adds no commitment test either.
-  check('fha.draft stamps the shipped v5#d9c0a41a (joint top step), not the rejected E2 take', global.window.SLABSkills.stampFor('fha.populate', '') === 'fha.draft@v5#d9c0a41a');
-  check('the original abstention clause survives intact', /leave severity EMPTY rather than reaching for a plausible value/.test(body));
+  // 3 Sep 2026 (evening) - v6#c190bc76: Waqas's phase rule + JUDGEMENT OVER ABSTENTION.
+  // This REVERSES the abstention policy the E2 rig defended, and the E2 evidence is
+  // exactly why the reversal is shaped the way it is: forced commitment landed near a
+  // coin flip on the rows it forced (checks above). v6 does NOT force commitment - it
+  // asks for a judgement that is FLAGGED on the row (judgementCall), explained
+  // (judgementNote), filed as an assumption, and shown before accept. The two checks
+  // above still prove the rejected E2 text never landed. A campaign scoring v6 must
+  // score judgement rows SEPARATELY from grounded ones, because E2 says they agree less.
+  check('fha.draft stamps the shipped v6#c190bc76 (phase rule + flagged judgement), not the rejected E2 take', global.window.SLABSkills.stampFor('fha.populate', '') === 'fha.draft@v6#c190bc76', global.window.SLABSkills.stampFor('fha.populate', ''));
+  check('the abstention clause is replaced by FLAGGED judgement, never by silent commitment',
+    !/leave severity EMPTY rather than reaching for a plausible value/.test(body) && /WHEN THE INFORMATION IS THIN, JUDGE - DO NOT ABSTAIN/.test(body) && /judgementCall: true and a judgementNote/.test(body));
 
   console.log(fails ? ('# FAILED — ' + fails + ' check(s)') : ('# ' + checks + ' passed, 0 failed'));
   assert.strictEqual(fails, 0);

@@ -407,8 +407,10 @@ console.log('7. severity anchoring — SHIPPED on take 3 (30 Aug 2026, Waqas: "S
     /THREE EFFECT AXES, CLOSED VOCABULARY/.test(skSrc2) && /none \| slight \| significant \| large \| hull loss/.test(skSrc2) && /none or slight inconvenience \| discomfort \| minor injuries \| severe injuries or few fatalities \| multiple fatalities/.test(skSrc2));
   check('the take-3 SHAPE: anchors folded INLINE into EXPECTED OUTPUTS — no standalone section',
     /EXPECTED OUTPUTS[^"]*sevBasis[^"]*CAT-1 multiple fatalities/.test(skSrc2) && !/\\nSEVERITY ANCHORING/.test(skSrc2));
-  check('abstain-preserving line shipped verbatim',
-    /where you would abstain, still abstain, with neither field set/.test(skSrc2));
+  // 3 Sep 2026 (evening) - the abstain line is superseded by Waqas's ruling: judge on thin
+  // information, flag it, keep the anchor. See regression_phase_rule_judgement.
+  check('the anchor is required on a judged class (v6 replaces the abstain line)',
+    /on a row you have JUDGED rather than grounded, the anchor is still required/.test(skSrc2) && !/where you would abstain, still abstain, with neither field set/.test(skSrc2));
   // the engine table + closed set
   const m = aiSrc2.match(/const _SEV_ANCHORS = \{([^}]+)\}/);
   check('_SEV_ANCHORS closed set (11 anchors) matches the skill ids', !!m && [...m[1].matchAll(/'([A-Z]{3}-\d)'/g)].length === 11);

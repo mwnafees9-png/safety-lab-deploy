@@ -862,10 +862,19 @@
         const vocab = _projectPhaseNames();
         const wasString = (typeof v === 'string');
         const list = Array.isArray(v) ? v : String(v == null ? '' : v).split(',');
-        const kept = list.map(function (x) { return String(x).trim(); })
-                         .filter(function (x) { return x && vocab.indexOf(x) >= 0; });
+        const names = list.map(function (x) { return String(x).trim(); }).filter(Boolean);
+        const kept = names.filter(function (x) { return vocab.indexOf(x) >= 0; });
+        // 3 Sep 2026 — THE DROP IS NO LONGER SILENT. On the Vayu v5 run the model named
+        // hover and transition as the worst-case phases and said why; neither is in a
+        // fixed-wing phase table, so 11 of 12 rows landed with an EMPTY phases cell and
+        // nobody was told. Now that rows carry phase subsets, a dropped phase silently
+        // changes the exposure ratio as well. The filter keeps filtering — an invented
+        // phase must never read as scope — but it records what it removed, and every
+        // caller carries that onto the row as a visible flag.
+        _validPhases.lastDropped = names.filter(function (x) { return vocab.indexOf(x) < 0; });
         return wasString ? kept.join(', ') : kept;
     }
+    _validPhases.lastDropped = [];
 
     // 3 Sep 2026 — the last toast is REMEMBERED. Under capture a guard clause is
     // the entire story: the 3 Sep FMEA campaign spent 901 s per run (three runs,
@@ -1486,7 +1495,7 @@
             '5. Be complete but do not pad — only credible conditions.',
             '',
             'Return STRICT JSON only — no prose, no markdown fences:',
-            '{ "rows": [ { "subId": "<echo the given subId>", "fcDesc": "...", "phases": ["..."], "effAc": "...", "effCrew": "...", "effPax": "...", "effAcLevel": "<none | slight | significant | large | hull loss, or \"\">", "effCrewLevel": "<none | slight | significant | large | fatalities or incapacitation, or \"\">", "effPaxLevel": "<none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities, or \"\">", "severity": "<one of the classes above, or \"\" if it cannot be derived from the effects>", "sevBasis": "<the Table A6 anchor id for the governing axis, or \"\">", "severityRationale": "..." } ] }'
+            '{ "rows": [ { "subId": "<echo the given subId>", "fcDesc": "...", "phases": ["..."], "effAc": "...", "effCrew": "...", "effPax": "...", "effAcLevel": "<none | slight | significant | large | hull loss, or \"\">", "effCrewLevel": "<none | slight | significant | large | fatalities or incapacitation, or \"\">", "effPaxLevel": "<none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities, or \"\">", "severity": "<one of the classes above, or \"\" only when there is genuinely nothing to reason from>", "sevBasis": "<the Table A6 anchor id for the governing axis - required whenever severity is set, judged or grounded>", "severityRationale": "...", "judgementCall": <true ONLY where you set a level or the class by judgement because the context did not settle it; otherwise false>, "judgementNote": "<when judgementCall is true: one or two sentences saying exactly what you assumed and what evidence would confirm or overturn it; otherwise \"\">" } ] }'
         ].join('\n');
     }
 
@@ -1626,11 +1635,14 @@
         'A FAILURE CONDITION IS NOT A FAILURE MODE. A failure mode describes how a particular device fails - open-circuit resistor, valve jammed closed, fractured piece-part. That belongs in the FMEA, not here. If you find yourself naming a component, you have left the FHA.',
         'TWO CATEGORIES, BOTH REQUIRED: assess every function for LOSS OF FUNCTION and for MALFUNCTION. In general each function has at least one of each worth analysing, so a function carrying only one category is usually incomplete. Loss may be TOTAL (the function cannot be performed by any means) or PARTIAL (still performed, but at reduced capability or with increased difficulty). Malfunction is operation different from intended, excluding loss - name the aspect performed incorrectly (erroneous, uncommanded, misleading).',
         'CREW AWARENESS SPLITS A FAILURE CONDITION: where the effect is significantly affected by crew action, create SEPARATE failure conditions for the crew being aware and unaware. For an aware condition, say how the crew becomes aware, how they are assumed to act, and the result of that action. For an unaware condition, assume the crew continue their duties normally and take NO action regarding it - which routinely changes the severity.',
-        'CLASSIFY PER FLIGHT PHASE, THEN TAKE THE WORST: a classification is established for each applicable flight phase from the effects on aircraft, crew and occupants, with the most severe effect driving that phase. Any overall classification is the worst case across the applicable phases - never an average and never the cruise case by default.',
-        'DO NOT ASSUME A CLASSIFICATION WHILE IDENTIFYING EFFECTS. The appendix warns that fixing on a preconceived outcome for a familiar failure condition leaves the effects assessment incomplete. Describe the effects first and let them drive the class; where they do not support one, leave severity EMPTY rather than reaching for a plausible value.',
-        'EXPECTED OUTPUTS: failure conditions with per-phase effects on aircraft, crew and occupants, and a SUGGESTED severity classification for the engineer to confirm - Catastrophic, Hazardous, Major, Minor or No Safety Effect. When you commit a class, also cite the matching Table A6 anchor id in sevBasis: CAT-1 multiple fatalities or loss of the airplane; HAZ-1 large reduction in safety margins or functional capabilities; HAZ-2 physical distress or excessive workload impairing crew task performance; HAZ-3 serious or fatal injury to a small number of occupants; MAJ-1 significant reduction in safety margins or functional capabilities; MAJ-2 significant increase in crew workload; MAJ-3 discomfort to crew or physical distress to passengers; MIN-1 slight reduction in safety margins; MIN-2 slight increase in crew workload; MIN-3 physical discomfort to passengers; NSE-1 no effect on safety. The anchor is a citation for the class your stated effects already support under the rules above; where you would abstain, still abstain, with neither field set.',
+        'EVERY FAILURE CONDITION APPLIES TO EVERY FLIGHT PHASE. Do not pick the phases a condition is \'relevant\' to - consider all of them. ROWS COME FROM EFFECTS, NOT FROM PHASES: phases that share the same effects and the same class sit together on ONE row, with all of those phases listed on it; return a SECOND row for the same failure condition ONLY where the effects - and with them the class - genuinely differ in some phases. Do not evaluate a condition against every phase and hand back one row per phase; gather the phases by shared effect. A condition whose effects are the same from takeoff to landing is ONE row listing every phase.',
+        'PHASES WHERE NOTHING HAS HAPPENED YET - the question is whether the crew can get out of it. Where the effect is not realised in that phase AND the flight can be aborted or the condition escaped, that phase is No Safety Effect: the abort is a real escape, not a milder version of the same outcome. Where the effect is not realised yet AND it cannot be escaped, classify by the END EFFECT the flight will arrive at: a landing-gear failure in cruise does nothing in cruise, the aircraft still has to land, so cruise carries the landing consequence - and that consequence is set by the certification basis in force (a Part 25 transport and a Part 23 aeroplane do not share a class for the same end state; use the rubric appended for THIS basis).',
+        'NEVER GIVE THE ROW THAT LISTS EVERY PHASE THE WORST CLASS OF ONE PHASE. The product reads a row\'s phase list to set the exposure time on every fault tree under it; a single worst-case row across all phases pins that exposure to the whole flight and over-allocates everything below it. The per-phase rows exist precisely so that exposure is real.',
+        'DO NOT ASSUME A CLASSIFICATION WHILE IDENTIFYING EFFECTS. The appendix warns that fixing on a preconceived outcome for a familiar failure condition leaves the effects assessment incomplete. Describe the effects first and let them drive the class.',
+        'WHEN THE INFORMATION IS THIN, JUDGE - DO NOT ABSTAIN. An FHA is performed early, before the design exists, and the engineer will routinely have far less than a full design description in front of them; a blank row helps nobody. Where the context does not settle a level or a class, make the call an experienced safety engineer would make from what IS known, set the levels and the class, and mark the row with judgementCall: true and a judgementNote of one or two sentences stating exactly what you assumed and what evidence would confirm or overturn it. The product renders that flag loudly and files the note in the assumptions register for the engineer to confirm - a marked judgement is honest; a silent guess and a silent blank are both not. Abstain on a row only when there is genuinely nothing to reason from (no function objective, no stated failure), and say so in the note.',
+        'EXPECTED OUTPUTS: failure conditions with per-phase effects on aircraft, crew and occupants, and a SUGGESTED severity classification for the engineer to confirm - Catastrophic, Hazardous, Major, Minor or No Safety Effect. When you commit a class, also cite the matching Table A6 anchor id in sevBasis: CAT-1 multiple fatalities or loss of the airplane; HAZ-1 large reduction in safety margins or functional capabilities; HAZ-2 physical distress or excessive workload impairing crew task performance; HAZ-3 serious or fatal injury to a small number of occupants; MAJ-1 significant reduction in safety margins or functional capabilities; MAJ-2 significant increase in crew workload; MAJ-3 discomfort to crew or physical distress to passengers; MIN-1 slight reduction in safety margins; MIN-2 slight increase in crew workload; MIN-3 physical discomfort to passengers; NSE-1 no effect on safety. The anchor is a citation for the class your stated effects support under the rules above; on a row you have JUDGED rather than grounded, the anchor is still required - it names the class you chose, and the judgementNote says why.',
         'TIE THE EFFECTS TO THE DEFINITIONS AND QUOTE THE ONE YOU USED: the SEVERITY CLASSIFICATION RUBRIC appended for this certification basis carries the authority definitions verbatim. Keep effAc / effCrew / effPax as concrete, project-specific sentences AND, where a stated effect matches the descriptor language of the governing definition, phrase that part in the wording of the definition so the effect reads directly against the rubric. Then in severityRationale QUOTE, inside quotation marks, the single governing definition phrase you relied on, followed by its clause exactly as the rubric cites it (for a Part 25 basis, for example: Major - "significant reduction in safety margins or functional capabilities", AC 25.1309-1B §3.1.3). Quote only the phrase that carries the class, never the whole definition, and never a definition from a standard outside the certification basis in force. Do this IN ADDITION to the plain effects, never instead of them.',
-        'THREE EFFECT AXES, CLOSED VOCABULARY - the severity class is DERIVED from three levels, never chosen free-hand, and the product recomputes it from your levels on accept (a class that disagrees with your levels is overruled). For every row set: effAcLevel = the reduction in safety margins or functional capabilities, exactly one of none | slight | significant | large | hull loss; effCrewLevel = the increase in crew workload, exactly one of none | slight | significant | large | fatalities or incapacitation; effPaxLevel = the effect on occupants, exactly one of none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities. The five steps of each axis are the five classes in order (No Safety Effect, Minor, Major, Hazardous, Catastrophic) and the class is the WORST axis. ONE CREDITED OUTCOME - all three axes describe the SAME end state of the SAME condition in that phase. Do not credit a recovery on two axes and the crash on the third: a row whose aircraft and crew effects describe the pilot fighting an excursion, alongside occupants killed in the collision that follows, is describing two different moments and is WRONG. Decide which outcome you are crediting, then state all three axes under it. THE TOP STEP IS JOINT - if the aircraft is lost, the crew and occupant effects are multiple fatalities and fatalities or incapacitation AUTOMATICALLY: the crew and passengers are aboard, hull loss is credited as not recoverable by crew action, and Table A6 CAT-1 is one joint state (multiple fatalities, usually with the loss of the aircraft) rather than three separate judgments. This runs in every direction: any axis you set to its top step carries the other two to theirs. DO NOT look for human-factors evidence, crew-workload data, annunciation coverage or handling margin to settle the crew axis once the aircraft is lost, and NEVER abstain on the crew or occupant axis for want of it - no further context is needed for them, and the product will set them regardless. Crew-workload evidence is for the levels BELOW the top step, where the crew can still act. Conversely, if crew action can arrest the condition, it is NOT hull loss - say so on the aircraft axis and the other axes come down with it. EVIDENCE PER AXIS (for the levels below the top step): aircraft - how many independent means remain after this failure and how many further failures until a catastrophic outcome (count them from the architecture or the fault tree where one exists, and say the count); crew - the human-factors record for this condition where one exists (credited crew tasks, response time against time available, phase occupancy, the alerting that supports detection) - look for it in the context and cite it; occupants - the physical consequence of the aircraft effect in that phase, which is DOWNSTREAM of the aircraft and crew effects and almost never the axis that drives the class on its own. Keep effAc / effCrew / effPax as the concrete sentences that say WHY each level holds - the levels classify, the sentences show the full picture. Where a level below the top step cannot be grounded leave it EMPTY, and with no level set leave severity empty too.',
+        'THREE EFFECT AXES, CLOSED VOCABULARY - the severity class is DERIVED from three levels, never chosen free-hand, and the product recomputes it from your levels on accept (a class that disagrees with your levels is overruled). For every row set: effAcLevel = the reduction in safety margins or functional capabilities, exactly one of none | slight | significant | large | hull loss; effCrewLevel = the increase in crew workload, exactly one of none | slight | significant | large | fatalities or incapacitation; effPaxLevel = the effect on occupants, exactly one of none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities. The five steps of each axis are the five classes in order (No Safety Effect, Minor, Major, Hazardous, Catastrophic) and the class is the WORST axis. ONE CREDITED OUTCOME - all three axes describe the SAME end state of the SAME condition in that phase. Do not credit a recovery on two axes and the crash on the third: a row whose aircraft and crew effects describe the pilot fighting an excursion, alongside occupants killed in the collision that follows, is describing two different moments and is WRONG. Decide which outcome you are crediting, then state all three axes under it. THE TOP STEP IS JOINT - if the aircraft is lost, the crew and occupant effects are multiple fatalities and fatalities or incapacitation AUTOMATICALLY: the crew and passengers are aboard, hull loss is credited as not recoverable by crew action, and Table A6 CAT-1 is one joint state (multiple fatalities, usually with the loss of the aircraft) rather than three separate judgments. This runs in every direction: any axis you set to its top step carries the other two to theirs. DO NOT look for human-factors evidence, crew-workload data, annunciation coverage or handling margin to settle the crew axis once the aircraft is lost, and NEVER abstain on the crew or occupant axis for want of it - no further context is needed for them, and the product will set them regardless. Crew-workload evidence is for the levels BELOW the top step, where the crew can still act. Conversely, if crew action can arrest the condition, it is NOT hull loss - say so on the aircraft axis and the other axes come down with it. EVIDENCE PER AXIS (for the levels below the top step): aircraft - how many independent means remain after this failure and how many further failures until a catastrophic outcome (count them from the architecture or the fault tree where one exists, and say the count); crew - the human-factors record for this condition where one exists (credited crew tasks, response time against time available, phase occupancy, the alerting that supports detection) - look for it in the context and cite it; occupants - the physical consequence of the aircraft effect in that phase, which is DOWNSTREAM of the aircraft and crew effects and almost never the axis that drives the class on its own. Keep effAc / effCrew / effPax as the concrete sentences that say WHY each level holds - the levels classify, the sentences show the full picture. Where a level below the top step cannot be grounded from the context, set it by judgement and flag the row (judgementCall / judgementNote) rather than leaving it empty - an empty level silently drops the row from every downstream check, a flagged judgement gets reviewed.',
         'WORKSHEET: ARP4761A Table A7 is the AFHA format example and Table C6 the SFHA capture table; A8 and C5 are their field definitions, not the worksheets. Columns: ID | Failure Condition | Flight Phase | Effect on Aircraft/Crew/Occupants | Severity Classification | Assumptions, Rationale, or References.'
     ].join('\n');
     // Grounding settled 2 Aug 2026 by reading the source: the FCIM corresponds to
@@ -2401,11 +2413,17 @@
                     // Only the flight phases the product actually declares. An invented
                     // phase reads as scope, which is worse than an obviously missing one.
                     phases: _validPhases(Array.isArray(x.phases) ? x.phases : []),
+                    droppedPhases: (_validPhases.lastDropped || []).slice(),   // 3 Sep 2026 — shown on the card and carried to the row
                     severityRationale: String(x.severityRationale || '').trim(),
                     sevBasis: String(x.sevBasis || '').trim(),   // 3 Sep 2026 — the panel path dropped the anchor the spec asks for; carried now
                     // 3 Sep 2026 — the three effect levels (closed vocabulary; off-list => empty).
                     // Accept derives the class from these; see _applyFhaSuggestion.
                     effAcLevel: _axisLevel('ac', x.effAcLevel), effCrewLevel: _axisLevel('crew', x.effCrewLevel), effPaxLevel: _axisLevel('pax', x.effPaxLevel),
+                    // 3 Sep 2026 (Waqas) — judge, don't abstain: a level or class set from
+                    // thin context is allowed, PROVIDED it is flagged. The flag rides the row
+                    // to accept, where it becomes a loud badge and a registered assumption.
+                    judgementCall: x.judgementCall === true || String(x.judgementCall).toLowerCase() === 'true',
+                    judgementNote: String(x.judgementNote || '').trim().slice(0, 600),
                     // A10 — which fields the model declined rather than guessed at.
                     _abstained: _abstainedFields(x, ['effAc', 'effCrew', 'effPax', 'effAcLevel', 'effCrewLevel', 'effPaxLevel', 'severity', 'severityRationale']),
                     _model: r.model || MODELS.reason,
@@ -2769,7 +2787,8 @@
         document.getElementById('ai-fha-close').onclick = _closeFhaPanel;
         document.getElementById('ai-fha-dismiss-all').onclick = function () { _fhaSuggestions = []; _closeFhaPanel(); _toast('All suggestions dismissed.', 'info'); };
         document.getElementById('ai-fha-accept-all').onclick = function () {
-            let n = 0; _fhaSuggestions.slice().forEach(function (s) { if (_applyFhaSuggestion(s)) n++; });
+            let n = 0, held = 0; _fhaSuggestions.slice().forEach(function (s) { const r = _applyFhaSuggestion(s); if (r === 'protected') held++; else if (r) n++; });
+            if (held) _toast(held + ' row(s) not applied — edited by hand; the newer draft is noted on each.', 'warning');
             _fhaSuggestions = []; _closeFhaPanel();
             _toast(n + ' ' + scopeLabel + ' row(s) added — ' + (scope.systemId ? ('open ' + (scope.systemName || 'the system') + ' → System FHA.') : 'open the Aircraft FHA tab.'), 'success');
         };
@@ -2806,7 +2825,8 @@
                 if (idx < 0) return;
                 const _act = btn.getAttribute('data-act') === 'accept' ? 'accept' : 'dismiss';
                 if (_act === 'accept') {
-                    if (_applyFhaSuggestion(_fhaSuggestions[idx])) _toast('Row added to Aircraft FHA.', 'success');
+                    const _r1 = _applyFhaSuggestion(_fhaSuggestions[idx]);
+                    if (_r1 === true) _toast((_applyFhaSuggestion._last && _applyFhaSuggestion._last.action === 'updated') ? 'Row updated in the Aircraft FHA (same condition, same phases).' : 'Row added to Aircraft FHA.', 'success');
                 }
                 try { _logDelta(_fhaFeatureId, _act, _fhaSuggestions[idx], _fhaCov(_fhaSuggestions[idx])); } catch (_) {}
                 _fhaSuggestions.splice(idx, 1);
@@ -2858,7 +2878,7 @@
             return '<div class="aifh-eff" style="font-size:11px;opacity:.9;margin-top:4px">Levels: ' + parts + tail + '</div>';
         } catch (_) { return ''; }
     }
-    var _ASM_TYPE_LABEL = { independence: 'Design', architecture: 'Design', data: 'Reliability data', operational: 'Operational', other: '' };
+    var _ASM_TYPE_LABEL = { independence: 'Design', architecture: 'Design', data: 'Reliability data', operational: 'Operational', judgement: 'AI judgement', other: '' };
     // Promote each declared assumption into the engineer's register (aircraft or the
     // system's), state Proposed, origin naming the model — ONE register row per
     // distinct statement (re-runs and sibling rows reuse it) — and return the ids the
@@ -2897,6 +2917,63 @@
             });
         } catch (_) {}
         return ids;
+    }
+    // Order-insensitive identity for a row's phase coverage (mirror of helpers'
+    // _fhaPhaseKey; kept local so the accept path has no render-layer dependency).
+    function _fhaPhaseKeyOf(phases) {
+        var list = Array.isArray(phases) ? phases : String(phases || '').split(',');
+        return list.map(function (x) { return String(x || '').trim().toLowerCase(); }).filter(Boolean).sort().join('|');
+    }
+    // 3 Sep 2026 (Waqas): "everything that the AI is logging in AI assumptions for
+    // the AFHA/SFHA need to be captured as assumptions in the FHA same way human
+    // assumptions do." The ledger (AI Inputs → AI assumptions) held 351 entries on
+    // the campaign project and the FHA register held none of them: promotion only
+    // ever ran for entries matched to an accepted row by fcDesc, and only on the
+    // panel path. This sweeps EVERY unpromoted ledger entry for this FHA scope into
+    // the engineer's register after an accept — idempotent, because the promoter
+    // de-dups by text and marks the ledger entry promoted.
+    function _promoteLedgerForFha(sysScoped, sysEntry, modelName) {
+        try {
+            if (typeof window === 'undefined' || !window.SafetyLabAiAssumptions || typeof window.SafetyLabAiAssumptions.list !== 'function') return [];
+            var want = sysScoped ? 'sfha' : 'fha';
+            var sid = (sysScoped && sysEntry) ? String(sysEntry.id) : '';
+            var pending = window.SafetyLabAiAssumptions.list().filter(function (e) {
+                if (!e || !e.text || e.promotedTo) return false;
+                var an = String(e.analysis || '').toLowerCase();
+                if (an !== want && an.indexOf(want + '.') !== 0) return false;      // 'fha.' never matches 'sfha.populate'
+                if (sysScoped && e.systemId && String(e.systemId) !== sid) return false;
+                return true;
+            }).map(function (e) { return { text: e.text, type: e.type, citations: e.citations, _ledgerId: e.id }; });
+            return pending.length ? _promoteDeclaredAssumptions(pending, sysScoped, sysEntry, modelName) : [];
+        } catch (_) { return []; }
+    }
+    // 3 Sep 2026 (Waqas): "if they are duplicates they should be consolidated to 1."
+    // Accept used to push unconditionally, so three accepted drafts of one analysis
+    // stacked 253 rows over 85 conditions. Same condition + same phase coverage is
+    // the SAME row: an AI-written row nobody has touched is updated in place; a row
+    // a person edited is left alone and the caller is told (never overwrite the
+    // engineer's work silently). Different phase coverage is a genuinely new row —
+    // that is the per-phase split, and it is what makes the exposure ratio real.
+    function _fhaUpsert(store, data) {
+        var cond = String(data.sourceCondId || '').trim();
+        if (!cond) return { action: 'add' };          // no stable identity → cannot de-dup safely
+        var pk = _fhaPhaseKeyOf(data.phases);
+        var hit = (store || []).find(function (r) {
+            return r && String(r.sourceCondId || '').trim() === cond && _fhaPhaseKeyOf(r.phases) === pk;
+        });
+        if (!hit) return { action: 'add' };
+        if (hit.humanEdited || hit.aiGenerated !== true) {
+            hit.aiNewerDraftAt = new Date().toISOString();
+            hit.aiNewerDraftNote = 'A newer AI draft for this condition and phase set was declined on accept because this row was edited by hand.';
+            return { action: 'protected', row: hit };
+        }
+        var keep = { internalId: hit.internalId, fcId: hit.fcId || data.fcId };
+        var merged = [].concat(Array.isArray(hit.assumptionIds) ? hit.assumptionIds : [], Array.isArray(data.assumptionIds) ? data.assumptionIds : [])
+            .filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+        // Overlay, never delete: anything a person attached outside the form (an A5
+        // matrix, a custom column, review links) survives the re-draft.
+        Object.assign(hit, data, keep, { assumptionIds: merged, aiRedrafts: (hit.aiRedrafts || 0) + 1 });
+        return { action: 'updated', row: hit };
     }
     function _applyFhaSuggestion(s) {
         try {
@@ -2940,6 +3017,7 @@
                    + ((_term.changed && _term.changed.length) ? (' ' + SLSeverityAxes.terminalNote(_term)) : '')
                    + ((s.severity && s.severity !== _derived.severity) ? (' Model proposed ' + s.severity + '; the class is derived from the levels.') : ''))
                 : '';
+            const _sysEntryForAsm = sysScoped ? ((((typeof systemsData !== 'undefined' ? systemsData : []) || []).find(function (x) { return String(x.id) === String(s._systemId); })) || null) : null;
             const data = {
                 internalId: (typeof newRowId === 'function') ? newRowId() : ('ai-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
                 subId: s.subId, fcId: _srcHit ? String(_srcHit.id) : '', fcDesc: s.fcDesc,
@@ -2954,6 +3032,10 @@
                 // the drawer never opened. Both reproduced live on Aeolus + Untitled, 28 Aug.
                 // The row now speaks the project's vocabulary at the moment it is born.
                 phases: _validPhases(s.phases || []).join(', '),   // A7-3 — the batch path reaches this function directly and bypassed the parse-stage filter entirely
+                // 3 Sep 2026 — what the filter removed, as data on the row. The table flags it
+                // in the Phases cell; the comment names the phases so the engineer can add
+                // them to the project's phase table (the SC-VTOL profile gap) and re-check.
+                droppedPhases: (function () { const d = (_validPhases.lastDropped || []).slice(); return d.length ? d : undefined; })(),
                 effAc: s.effAc || '', effCrew: s.effCrew || '', effPax: s.effPax || '',
                 // 3 Sep 2026 — the three effect levels ride on the row; when any is set the
                 // class and its anchor are DERIVED from the worst axis (fha.draft@v4), and a
@@ -2964,8 +3046,21 @@
                 // Off-list => dropped (never written), and the checker already
                 // flagged it on the review panel before accept.
                 sevBasis: _derived ? _derived.anchor : ((s.sevBasis && _SEV_ANCHORS[String(s.sevBasis).trim()]) ? String(s.sevBasis).trim() : ''),
-                assumptionIds: _promoteDeclaredAssumptions(s._assumptions, sysScoped, sysScoped ? ((typeof systemsData !== 'undefined' ? systemsData : []) || []).find(function (x) { return String(x.id) === String(s._systemId); }) : null, s._model),
-                comments: 'AI-drafted (' + (s._model || 'model') + '). '
+                // 3 Sep 2026 (Waqas) — judge, don't abstain. The flag is a first-class
+                // field so the table can shout it; the note is ALSO filed as an
+                // assumption (type 'AI judgement') so it sits in the register and the
+                // row's assumptions column exactly like a human-declared premise.
+                judgementCall: !!s.judgementCall,
+                judgementNote: String(s.judgementNote || '').trim().slice(0, 600),
+                assumptionIds: _promoteDeclaredAssumptions(
+                    [].concat(Array.isArray(s._assumptions) ? s._assumptions : [],
+                              (s.judgementCall && String(s.judgementNote || '').trim())
+                                  ? [{ text: 'JUDGEMENT CALL (limited information) — ' + String(s.judgementNote).trim(), type: 'judgement', appliesTo: 'all' }]
+                                  : []),
+                    sysScoped, _sysEntryForAsm, s._model),
+                comments: (s.judgementCall ? ('⚠ JUDGEMENT CALL — classified on limited information; engineer to confirm. ' + String(s.judgementNote || '').trim() + ' | ') : '')
+                    + ((_validPhases.lastDropped || []).length ? ('⚠ PHASES DROPPED — the model named ' + _validPhases.lastDropped.join(', ') + ', not in this project\'s phase table; exposure is computed without them. | ') : '')
+                    + 'AI-drafted (' + (s._model || 'model') + '). '
                     + ((s.severity || _derived) ? ('Severity rationale: ' + (s.severityRationale || '—')
                         + (_derived ? (' [anchor ' + _derived.anchor + ' — ' + (_SEV_ANCHORS[_derived.anchor] || '') + ']')
                                     : ((s.sevBasis && _SEV_ANCHORS[String(s.sevBasis).trim()]) ? (' [anchor ' + String(s.sevBasis).trim() + ' — ' + _SEV_ANCHORS[String(s.sevBasis).trim()] + ']') : ''))
@@ -2982,14 +3077,26 @@
                 const sys = (systemsData || []).find(function (x) { return String(x.id) === String(s._systemId); });
                 if (!sys) { _toast('Target system not found.', 'warning'); return false; }
                 if (!Array.isArray(sys.fha)) sys.fha = [];
-                try { if (typeof _slAutoNumber === 'function') _slAutoNumber('sysFha', data); } catch (_) {}   // SFHA FC ID
-                sys.fha.push(data);
+                const _upS = _fhaUpsert(sys.fha, data);
+                if (_upS.action === 'protected') { _applyFhaSuggestion._last = _upS; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
+                if (_upS.action === 'add') {
+                    try { if (typeof _slAutoNumber === 'function') _slAutoNumber('sysFha', data); } catch (_) {}   // SFHA FC ID
+                    sys.fha.push(data);
+                }
+                _applyFhaSuggestion._last = _upS;
+                try { _promoteLedgerForFha(true, sys, s._model); } catch (_) {}
                 if (typeof renderSysFHA === 'function') renderSysFHA();
                 if (typeof renderSysAssumptions === 'function') { try { renderSysAssumptions(); } catch (_) {} }   // promoted AI assumptions show at once
             } else {
                 if (typeof acFhaData === 'undefined') { _toast('FHA data not loaded in this session.', 'warning'); return false; }
-                if (typeof _slAutoNumber === 'function') _slAutoNumber('acFha', data); // FC ID per the numbering engine
-                acFhaData.push(data);
+                const _upA = _fhaUpsert(acFhaData, data);
+                if (_upA.action === 'protected') { _applyFhaSuggestion._last = _upA; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
+                if (_upA.action === 'add') {
+                    if (typeof _slAutoNumber === 'function') _slAutoNumber('acFha', data); // FC ID per the numbering engine
+                    acFhaData.push(data);
+                }
+                _applyFhaSuggestion._last = _upA;
+                try { _promoteLedgerForFha(false, null, s._model); } catch (_) {}
                 if (typeof renderACFHA === 'function') renderACFHA();
                 if (typeof renderACAssumptions === 'function') renderACAssumptions();
             }
@@ -10051,7 +10158,7 @@
             '',
             'ACTION CATALOG (op + fields). scope is "aircraft" or "system"; for system scope include systemId from the state.',
             'ADD:',
-            '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is committed; omit both to abstain)}',
+            '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgement because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it)}',
             '- add_system {name}  — create a system (idempotent by name) from an SDD/architecture doc. Emit this BEFORE the system\'s functions/interfaces so they can reference it by name.',
             '- add_function {scope, systemId?, funcName, funcDef, subName, subDef}   (ONE level of decomposition)',
             '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" (empty FCs + short rationale) when the unaware case is inapplicable.',
@@ -11253,8 +11360,14 @@
                 const sysName = a.systemId ? ((_chatSysById(a.systemId) || {}).name || a.systemId) : '';
                 switch (a.op) {
                     case 'add_fha': {
-                        const ok = _applyFhaSuggestion({ subId: a.subId, fcDesc: a.fcDesc, phases: a.phases || [], effAc: a.effAc, effCrew: a.effCrew, effPax: a.effPax, effAcLevel: a.effAcLevel, effCrewLevel: a.effCrewLevel, effPaxLevel: a.effPaxLevel, severity: a.severity, severityRationale: a.severityRationale, sevBasis: a.sevBasis, srcCondId: a.srcCondId, _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
-                        results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'SFHA' : 'AFHA') + ' FC added — ' + _chatClip(a.fcDesc, 50) } : { ok: false, error: 'add_fha failed' }); break;
+                        // 3 Sep 2026 — the ACTION path never passed _assumptions (Vayu: 58 rows,
+                        // empty assumptions column, empty register). It does now, and the
+                        // judgement flag rides along. The result names what actually happened.
+                        const ok = _applyFhaSuggestion({ subId: a.subId, fcDesc: a.fcDesc, phases: a.phases || [], effAc: a.effAc, effCrew: a.effCrew, effPax: a.effPax, effAcLevel: a.effAcLevel, effCrewLevel: a.effCrewLevel, effPaxLevel: a.effPaxLevel, severity: a.severity, severityRationale: a.severityRationale, sevBasis: a.sevBasis, srcCondId: a.srcCondId, judgementCall: a.judgementCall === true, judgementNote: a.judgementNote, _assumptions: Array.isArray(a._assumptions) ? a._assumptions : [], _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
+                        const _did = (_applyFhaSuggestion._last && _applyFhaSuggestion._last.action) || (ok ? 'add' : '');
+                        if (ok === 'protected') results.push({ ok: false, blocked: true, error: 'row for ' + (a.srcCondId || _chatClip(a.fcDesc, 30)) + ' (same phases) was edited by hand — not overwritten; newer draft noted on it' });
+                        else results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'SFHA' : 'AFHA') + ' FC ' + (_did === 'updated' ? 'updated in place' : 'added') + ' — ' + _chatClip(a.fcDesc, 50) + (a.judgementCall === true ? ' · JUDGEMENT CALL flagged' : '') } : { ok: false, error: 'add_fha failed' });
+                        break;
                     }
                     case 'add_function': results.push(_chatAddFunction(a, model)); break;
                     case 'add_system': { const r2 = _chatAddSystem(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
@@ -11463,8 +11576,23 @@
         // engineer open the row to find out.
         const _abReason = (!a.severity && _wantsSev && a.severityRationale)
             ? '<div class="aifh-meta" style="color:#8A6D00;">' + _esc(String(a.severityRationale).slice(0, 200)) + '</div>' : '';
-        return '<h4>' + _esc(title) + (a.scope === 'system' ? ' · System' : '') + sev + '</h4><div class="aifh-eff">' + _esc(String(body).slice(0, 220)) + '</div>'
-             + _abReason
+        // 3 Sep 2026 (Waqas) — a judgement call is shown BEFORE accept, in the same amber
+        // the table will use, with the assumption underneath; and a phase the project
+        // cannot hold is named here rather than vanishing between the card and the row.
+        const _judge = (op === 'add_fha' && a.judgementCall === true)
+            ? ' · <span style="display:inline-block;padding:1px 7px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;background:#F5B400;color:#1A1200;border:1px solid #B26A00;">⚠ Judgement</span>' : '';
+        const _judgeNote = (op === 'add_fha' && a.judgementCall === true && a.judgementNote)
+            ? '<div class="aifh-meta" style="color:#7A5300;"><b>Judgement call on limited information:</b> ' + _esc(String(a.judgementNote).slice(0, 300)) + ' — filed as an assumption on accept.</div>' : '';
+        const _droppedPh = (function () {
+            try {
+                if (op !== 'add_fha' || typeof _projectPhaseNames !== 'function') return '';
+                const vocab = _projectPhaseNames(); const named = Array.isArray(a.phases) ? a.phases : String(a.phases || '').split(',');
+                const d = named.map(function (x) { return String(x || '').trim(); }).filter(function (x) { return x && vocab.indexOf(x) < 0; });
+                return d.length ? '<div class="aifh-meta" style="color:#C0271C;font-weight:700;">⚠ Phase(s) not in this project and will be dropped on accept: ' + _esc(d.join(', ')) + ' — add them under Flight Phases first if they are real.</div>' : '';
+            } catch (_) { return ''; }
+        })();
+        return '<h4>' + _esc(title) + (a.scope === 'system' ? ' · System' : '') + sev + _judge + '</h4><div class="aifh-eff">' + _esc(String(body).slice(0, 220)) + '</div>'
+             + _abReason + _judgeNote + _droppedPh
              + _abstainChips(a, { fcDesc: 'Failure condition', effAc: 'Aircraft effect', effCrew: 'Crew effect', effPax: 'Passenger effect', severity: 'Severity', severityRationale: 'Severity rationale', text: 'Requirement', rationale: 'Rationale', totalLoss: 'Total loss', partialLoss: 'Partial loss', malfunction: 'Malfunction', desc: 'Description', mitigation: 'Mitigation', claim: 'Independence claim', verification: 'Verification', threat: 'Particular risk', interference: 'Interference' })
              + _confidenceBadge(a);
     }
@@ -11784,7 +11912,13 @@
             // The model's narration used to be pasted in front of this sentence. On a
             // chunked draft that is one paragraph PER TURN, which buried the rows.
             // It moves to the collapsed notes block; the disclaimer stays one line.
-            disclaimer: 'Advisory drafts from the unified AI engine. Severities are proposed for your confirmation. Accept applies through the same executor + safeguards as the live assistant.',
+            disclaimer: (function () {
+                // 3 Sep 2026 — how many rows in this draft were judged rather than grounded,
+                // said up front so the engineer knows how much of the sheet needs a closer look.
+                const _jc = (_gvr.rows || []).filter(function (r) { return r && r.op === 'add_fha' && r.judgementCall === true; }).length;
+                return 'Advisory drafts from the unified AI engine. Severities are proposed for your confirmation. Accept applies through the same executor + safeguards as the live assistant.'
+                     + (_jc ? (' <b style="color:#7A5300;">' + _jc + ' row' + (_jc === 1 ? '' : 's') + ' classified by JUDGEMENT on limited information — each is flagged and its assumption is filed on accept.</b>') : '');
+            })(),
             notes: _replies,
             items: _gvr.rows,
             requireVisionConfirm: !!cfg.requireVisionConfirm,
@@ -11795,6 +11929,10 @@
                 // cfg.analysis rides along so add_requirement can tell doc.import
                 // (mirroring the engineer's own documents → rows) from every other
                 // feature (AI-authored → advisory review comment).
+                // 3 Sep 2026 — the batch's declared assumptions were shown in the panel
+                // but never handed to the executor, so an accepted row cited none of
+                // them. Match them to this row the same way the classic lane does.
+                try { if (a && a.op === 'add_fha') a._assumptions = _assumptionsFor(_batchAsms, String(a.fcDesc || '').trim()); } catch (_) {}
                 const res = _chatRunActions([a], (attempt.rr && attempt.rr.model) || MODELS.reason, undefined, cfg.analysis);
                 const ok = !!(res && res[0] && res[0].ok !== false);
                 // AIF-1 — the reason used to be discarded here, which is half of

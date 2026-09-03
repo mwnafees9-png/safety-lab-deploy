@@ -4446,7 +4446,11 @@ function submitACFHA() {
     if (!editStates.acFha) _slAutoNumber('acFha', data); // auto-fill blank FC ID on create only
     if (editStates.acFha) {
         const idx = acFhaData.findIndex(i => String(i.internalId) === String(editStates.acFha));   // 28 Aug 2026 — the SAVE half of the numeric-id edit bug: without this an edit that opened could still fail to write back
-        if (idx >= 0) acFhaData[idx] = data; else acFhaData.push(data);
+        // 3 Sep 2026 — the form only knows its own fields. Replacing the row wholesale
+        // silently dropped provenance, the effect levels, the anchor, sourceCondId and
+        // the judgement flag. Overlay instead, and mark that a person touched it — the
+        // AI accept path uses that mark to never overwrite an edited row.
+        if (idx >= 0) acFhaData[idx] = Object.assign({}, acFhaData[idx], data, { humanEdited: true, humanEditedAt: new Date().toISOString() }); else acFhaData.push(data);
     } else {
         acFhaData.push(data);
     }
@@ -4539,6 +4543,27 @@ async function sysFhaRekey(sysId, internalId, funcId) {
 // the first member's position, plus per-group info. The Appendix Q pattern:
 // one condition, classified per phase, under one id — worst case governs the
 // fault trees (B3 ruling), so the head badge names the worst severity.
+// 3 Sep 2026 (Waqas): "color code the disclaimer so it is glaringly obvious." A row
+// the AI classified on limited information wears this in its Severity cell: amber
+// fill, near-black text, uppercase — the one thing on the row you cannot skim past.
+// The note is on hover, and the same note is filed as an 'AI judgement' assumption
+// in the row's assumptions column, so it is reviewable like any human premise.
+// 3 Sep 2026 — a phase the model named that this project's phase table does not
+// have was silently discarded until today. Now it is data on the row (droppedPhases)
+// and this badge says so: exposure was computed WITHOUT these phases, so either add
+// them to the phase table (SC-VTOL projects have no hover / transition today) or
+// confirm the row without them. Danger-coloured because it changes a number.
+function _fhaDroppedPhasesBadge(row) {
+    const d = row && Array.isArray(row.droppedPhases) ? row.droppedPhases.filter(Boolean) : [];
+    if (!d.length) return '';
+    return ` <span class="fha-dropped-phases" title="${esc('PHASES DROPPED — the AI named ' + d.join(', ') + ' but this project\'s phase table has no such phase, so they were removed and the exposure ratio is computed without them. Add the phase(s) to the project (Flight Phases) and re-draft, or confirm the row as it stands.')}" style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;letter-spacing:.04em;border-radius:4px;background:var(--color-danger, #C0271C);color:#fff;white-space:nowrap;vertical-align:middle;">⚠ ${d.length} dropped: ${esc(d.join(', '))}</span>`;
+}
+function _fhaJudgementBadge(row) {
+    if (!row || !row.judgementCall) return '';
+    const note = String(row.judgementNote || '').trim();
+    const edited = row.humanEdited ? (' (Row edited by hand ' + String(row.humanEditedAt || '').slice(0, 10) + ' — re-check whether the judgement still stands.)') : '';
+    return `<span class="fha-judgement-badge" title="${esc('JUDGEMENT CALL — the AI classified this on limited information; engineer to confirm. ' + (note || '(no note given)') + edited)}" style="display:inline-block;margin-left:6px;padding:2px 8px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;background:#F5B400;color:#1A1200;border:1px solid #B26A00;white-space:nowrap;vertical-align:middle;">⚠ Judgement</span>`;
+}
 function _fhaGroupRows(rows) {
     const rank = (typeof SEVERITY_RANK !== 'undefined') ? SEVERITY_RANK
         : { 'No Safety Effect': 1, 'Negligible': 1, 'Minor': 2, 'Major': 3, 'Hazardous': 4, 'Catastrophic': 5 };
@@ -4579,9 +4604,17 @@ function _fhaGroupRows(rows) {
             // phases, which is a different number and not the one App Q asks for.
             // A phase group must now PROVE it partitions the phases: two members whose
             // phase sets are identical are duplicates, and saying so is the useful thing.
+            // 3 Sep 2026, second pass (Waqas): "different phases dont mean genuinely
+            // different effects … the severity follows the change in effect." The first
+            // fix split on phase lists; that is the wrong question. A legitimate split
+            // needs BOTH different phases AND a different class. Blanks are abstentions,
+            // not classifications, and do not count as a difference.
             const phaseKeys = new Set(members.map(_fhaPhaseKey));
-            const kind = phaseKeys.size > 1 ? 'phase' : 'duplicate';
-            groups.set(o.key, { count: members.length, worst, headId: members[0].internalId, kind: kind, distinctPhaseSets: phaseKeys.size });
+            const sevKeys = new Set(members.map(function (m) { return String(m.severity || '').trim(); }).filter(Boolean));
+            const kind = (phaseKeys.size > 1)
+                ? (sevKeys.size > 1 ? 'phase' : 'consolidate')          // real split · or should be ONE row listing all phases
+                : (sevKeys.size > 1 ? 'contradiction' : 'duplicate');   // same phases classified two ways · or plain copies
+            groups.set(o.key, { count: members.length, worst, headId: members[0].internalId, kind: kind, distinctPhaseSets: phaseKeys.size, distinctClasses: sevKeys.size });
         }
     });
     return { ordered, groups };
@@ -4649,17 +4682,31 @@ function renderACFHA() {
         // calling duplicates a "phase group" told the engineer a methodology decision
         // had been made when it had not. An unclassified group says "unclassified"
         // rather than printing "worst " with nothing after it.
-        const _grpDup = _grp && _grp.kind === 'duplicate';
+        const _grpDup = _grp && _grp.kind !== 'phase';   // anything that is NOT a legitimate split gets the member tooltip for it
         const _grpWorst = _grp && _grp.worst ? ('worst ' + esc(_grp.worst)) : 'unclassified';
-        const _grpBadge = _isHead
-            ? (_grpDup
-                ? `<span class="fha-group-badge fha-group-dup" title="${_grp.count} rows share this failure-condition id and cover the SAME flight phases, so this is not a per-phase classification — they are duplicates, most often repeated drafts accepted into the project. Merge or delete the extras; until then the fault trees take the worst of the copies." style="display:inline-block; margin-left:6px; padding:1px 7px; font-size:10px; font-weight:700; letter-spacing:0.03em; border:1px solid var(--color-warning, #7A5300); color:var(--color-warning, #7A5300); border-radius:9px; background:var(--color-surface-2); white-space:nowrap;">${_grp.count} duplicate rows · same phases</span>`
-                : `<span class="fha-group-badge" title="One failure condition, classified per phase (ARP4761A App Q pattern) — ${_grp.distinctPhaseSets} distinct phase sets across ${_grp.count} rows. The fault trees take the group's worst case." style="display:inline-block; margin-left:6px; padding:1px 7px; font-size:10px; font-weight:700; letter-spacing:0.03em; border:1px solid var(--color-border-strong); border-radius:9px; background:var(--color-surface-2); white-space:nowrap;">phase group × ${_grp.count} · ${_grpWorst}</span>`)
-            : '';
+        const _badgeStyle = (edge, ink) => `display:inline-block; margin-left:6px; padding:1px 7px; font-size:10px; font-weight:700; letter-spacing:0.03em; border:1px solid ${edge}; color:${ink}; border-radius:9px; background:var(--color-surface-2); white-space:nowrap;`;
+        const _grpBadge = !_isHead ? '' : (function () {
+            const n = _grp.count;
+            switch (_grp.kind) {
+                case 'duplicate':
+                    return `<span class="fha-group-badge fha-group-dup" title="${n} rows share this failure-condition id, cover the SAME flight phases and carry the same class — duplicates, most often repeated drafts accepted into the project. Merge or delete the extras; until then the fault trees take the worst of the copies." style="${_badgeStyle('var(--color-warning, #7A5300)', 'var(--color-warning, #7A5300)')}">${n} duplicate rows · same phases</span>`;
+                case 'contradiction':
+                    return `<span class="fha-group-badge fha-group-contra" title="${n} rows share this failure-condition id and the SAME flight phases but are classified differently. The same condition in the same phases cannot be two classes — resolve which is right; until then the fault trees take the worst." style="${_badgeStyle('var(--color-danger, #8E2A2A)', 'var(--color-danger, #8E2A2A)')}">${n} rows · same phases, different class — resolve</span>`;
+                case 'consolidate':
+                    return `<span class="fha-group-badge fha-group-merge" title="${n} rows share this failure-condition id with different phase lists but the SAME class. Rows come from effects, not from phases: where the effect and class are the same across phases, this is ONE row listing all of those phases. Merge them — a single row also gives the exposure ratio the full phase list it should have." style="${_badgeStyle('var(--color-warning, #7A5300)', 'var(--color-warning, #7A5300)')}">${n} rows · same class across phases — should be one row</span>`;
+                default:
+                    return `<span class="fha-group-badge" title="One failure condition, classified per phase (ARP4761A App Q pattern) because its effects — and with them the class — genuinely differ by phase: ${_grp.distinctClasses} classes across ${_grp.distinctPhaseSets} phase sets in ${n} rows. Each row's phase list sets its own exposure time; the fault trees take the group's worst case." style="${_badgeStyle('var(--color-border-strong)', 'inherit')}">phase group × ${n} · ${_grpWorst}</span>`;
+            }
+        })();
         const _fcCell = _isMember
-            ? `<span style="color:var(--color-text-tertiary);" title="${_grpDup ? `Duplicate of ${esc(row.fcId)} — same failure condition, same flight phases.` : `Member of phase group ${esc(row.fcId)} — same failure condition, different phase classification.`}">└ ${esc(row.fcId)}</span>`
+            ? `<span style="color:var(--color-text-tertiary);" title="${({
+                    duplicate:     `Duplicate of ${esc(row.fcId)} — same failure condition, same flight phases, same class.`,
+                    contradiction: `Conflicts with ${esc(row.fcId)} — same failure condition and phases, classified differently. Resolve.`,
+                    consolidate:   `Belongs on the ${esc(row.fcId)} row — same failure condition and class, only the phase list differs. Merge.`,
+                    phase:         `Member of phase group ${esc(row.fcId)} — same failure condition, genuinely different effects and class in these phases.`
+                })[_grp.kind] || ''}">└ ${esc(row.fcId)}</span>`
             : `<strong>${esc(row.fcId)}</strong>${_grpBadge}`;
-        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td><strong>${esc(_fhaSubFunctionDisplay(row.subId))}</strong></td><td>${_fcCell}</td><td>${_obsBadge}${esc(row.fcDesc)}</td><td>${esc(row.phases)}</td><td style="min-width: 200px;">${effectsHtml}</td><td class="cell-${esc(row.severity)}">${esc(row.severity)}${_hfwBadge}</td><td>${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td>${esc(row.comments)}</td>${customTds}${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td><strong>${esc(_fhaSubFunctionDisplay(row.subId))}</strong></td><td>${_fcCell}</td><td>${_obsBadge}${esc(row.fcDesc)}</td><td>${esc(row.phases)}${_fhaDroppedPhasesBadge(row)}</td><td style="min-width: 200px;">${effectsHtml}</td><td class="cell-${esc(row.severity)}">${esc(row.severity)}${_fhaJudgementBadge(row)}${_hfwBadge}</td><td>${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td>${esc(row.comments)}</td>${customTds}${reviewTd}</tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'fha-ac', tbody, rows: _fhaGrouping.ordered, rowHtml: _fhaRowHtml,
@@ -4965,7 +5012,7 @@ function submitSysFHA() {
     const arr = sys().fha;
     if (editStates.sysFha) {
         const idx = arr.findIndex(i => String(i.internalId) === String(editStates.sysFha));   // 28 Aug 2026 — see the acFha twin
-        if (idx >= 0) arr[idx] = data; else arr.push(data);
+        if (idx >= 0) arr[idx] = Object.assign({}, arr[idx], data, { humanEdited: true, humanEditedAt: new Date().toISOString() }); else arr.push(data);   // 3 Sep 2026 — see submitACFHA
     } else {
         arr.push(data);
     }
@@ -5040,7 +5087,7 @@ function renderSysFHA() {
                   _l1Fns.map(f => `<option value="${esc(f.funcId)}"${_l1Sugg === String(f.funcId) ? ' selected-suggested' : ''}>${esc(f.funcName || f.funcId)}${_l1Sugg === String(f.funcId) ? ' (FCIM match)' : ''}</option>`).join('') + `</select>`
                 : `<div style="font-size:10px; color:var(--color-text-tertiary);">declare functions on this system first</div>`)
         ;
-        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td>${_l1Cell}</td><td><strong>${esc(row.fcId)}</strong></td><td>${_obsBadge}${esc(row.fcDesc)}</td><td>${esc(row.phases)}</td><td style="min-width: 200px;">${effectsHtml}</td><td class="cell-${esc(row.severity)}">${esc(row.severity)}${_hfwBadge}</td><td>${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td>${esc(row.comments)}</td>${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td>${_l1Cell}</td><td><strong>${esc(row.fcId)}</strong></td><td>${_obsBadge}${esc(row.fcDesc)}</td><td>${esc(row.phases)}${_fhaDroppedPhasesBadge(row)}</td><td style="min-width: 200px;">${effectsHtml}</td><td class="cell-${esc(row.severity)}">${esc(row.severity)}${_fhaJudgementBadge(row)}${_hfwBadge}</td><td>${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td>${esc(row.comments)}</td>${reviewTd}</tr>`;
     };
     // 31 Aug 2026 — same ordered view as the AC table: natural ascending fcId,
     // same-id phase rows clustered, blank ids last.
