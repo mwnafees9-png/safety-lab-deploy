@@ -104,7 +104,8 @@ check('DELIBERATELY outside _ANALYSIS_FEATURES (insufficiency guard would kill t
   !/'hf\.improve': 1/.test((ai.match(/const _ANALYSIS_FEATURES = \{[\s\S]*?\};/) || [''])[0]));
 
 console.log('6. per-lane wiring + export');
-check('exported on the SafetyLabAI API', /recommendHfImprovements: recommendHfImprovements,/.test(ai));
+// 3 Sep 2026 — _captureGuard wraps the lane entry points (see regression_capture_bail).
+check('exported on the SafetyLabAI API', /recommendHfImprovements:\s+(?:_captureGuard\('recommendHfImprovements', )?recommendHfImprovements[,)]/.test(ai));
 ['alloc','hea','alerts','mfc','cd','sa'].forEach(function (lane) {
   check('the ' + lane + ' lane is wired for an in-lane AI button', laneBar.indexOf("'hfa-" + lane + "'") >= 0);
 });

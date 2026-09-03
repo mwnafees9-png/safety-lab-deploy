@@ -265,7 +265,8 @@ check('the feature is reachable from the AI menu',
 check('it does NOT short-circuit into the unified engine',
   !/_useUnifiedFeatures/.test(run) && !/_useUnifiedFeatures/.test(apply),
   'if this is ever unified, the deterministic sweep and the forbidden-field stripping must be carried into _anemBatch — neither travels automatically');
-check('it is exposed on the public API', /draftHfAssumptions: draftHfAssumptions/.test(ai));
+// 3 Sep 2026 — _captureGuard wraps the lane entry points (see regression_capture_bail).
+check('it is exposed on the public API', /draftHfAssumptions:\s+(?:_captureGuard\('draftHfAssumptions', )?draftHfAssumptions/.test(ai));
 
 console.log('\n[hfa] wiring');
 check('the feature has a cost-map entry', /'hfa\.draft': 1/.test(ai));

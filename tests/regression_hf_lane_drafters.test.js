@@ -73,7 +73,8 @@ ok('and that list is wired into the basis clause', /f === 'hf\.draftlane'\) \{ t
 ok('why the drafter bases differ from the recommender bases is recorded',
     /a drafter cites the DOCUMENT it read plus the standard whose vocabulary it used/.test(ai));
 ok('the busy indicator names the drafter', /'hf\.draftlane': 'drafting HF lane rows from your documents'/.test(ai));
-ok('draftHfLane is exported on the public API', /draftHfLane: draftHfLane,/.test(ai));
+// 3 Sep 2026 — _captureGuard wraps the lane entry points (see regression_capture_bail).
+ok('draftHfLane is exported on the public API', /draftHfLane:\s+(?:_captureGuard\('draftHfLane', )?draftHfLane[,)]/.test(ai));
 
 const draftLanesSrc = (ai.match(/var _HF_DRAFT_LANES = \{[\s\S]*?\n    \};/) || [''])[0];
 const improveSrc    = (ai.match(/var _HF_IMPROVE_LANES = \{[\s\S]*?\n    \};/) || [''])[0];

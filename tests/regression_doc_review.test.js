@@ -120,7 +120,11 @@ console.log('\n[docrev] wiring');
 {
   check('launcher menu entry present',
     /Review compliance document/.test(ai) && /Audit AI Inputs against the live model/.test(ai));
-  check('exported on the AI surface', /reviewComplianceDoc: reviewComplianceDoc/.test(ai));
+  // 3 Sep 2026 — the lane entry points are now wrapped by _captureGuard so a
+  // refusal resolves an armed capture instead of hanging it. The export is the
+  // same function; only the expression around it changed. Accept either form,
+  // and keep pinning that it IS reviewComplianceDoc behind the wrapper.
+  check('exported on the AI surface', /reviewComplianceDoc:\s+(?:_captureGuard\('reviewComplianceDoc', )?reviewComplianceDoc/.test(ai));
   check('sourceDoc kind labelled + ordered in the review registry',
     /sourceDoc: 'Source Documents'/.test(asr) && /'stpaScope', 'sourceDoc'[,\]]/.test(asr));   // HF kinds may follow sourceDoc (1 Sep 2026)
   const pin = f => { const m2 = html.match(new RegExp('<script src="' + f + '\\?v=([0-9.]+)"')); return m2 ? m2[1] : null; };

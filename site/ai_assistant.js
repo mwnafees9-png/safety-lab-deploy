@@ -867,7 +867,13 @@
         return wasString ? kept.join(', ') : kept;
     }
 
+    // 3 Sep 2026 — the last toast is REMEMBERED. Under capture a guard clause is
+    // the entire story: the 3 Sep FMEA campaign spent 901 s per run (three runs,
+    // 45 minutes) to learn only "no panel opened". The refusal itself had already
+    // been spoken — into a toast nobody was listening to. Now the bail carries it.
+    var _lastToast = { msg: '', kind: '', at: 0 };
     function _toast(msg, kind) {
+        _lastToast = { msg: String(msg == null ? '' : msg), kind: kind || 'info', at: Date.now() };
         try { if (typeof showToast === 'function') return showToast('[AI] ' + msg, kind || 'info', 4200); } catch (_) {}
         try { console.info('[Safety Lab Aero AI] ' + msg); } catch (_) {}
     }
@@ -3826,6 +3832,52 @@
         if (extra) Object.keys(extra).forEach(function (k) { payload[k] = extra[k]; });
         try { if (res) res(payload); } catch (_) {}
         return payload;
+    }
+    // A REFUSAL IS A RESULT TOO. _captureFire covers the two paths that reach a
+    // panel (rows drafted, model declined). This covers the third: a lane that
+    // never gets that far because a guard clause turned it away — no provider, a
+    // lane not in the programme's scope, nothing to work on. There are 99 such
+    // toast-and-return points and not one of them used to resolve the capture, so
+    // every one of them cost a campaign the full timeout and reported nothing.
+    // Resolves (never rejects): "the tool declined, and here is what it said".
+    function _captureBail(reason, extra) {
+        if (!_capture.armed) return false;
+        var res = _capture.resolve; _captureDisarm();
+        var payload = {
+            id: '', feature: '', title: '', items: [], assumptions: [],
+            coverage: null, notes: null, verifyReport: null, skill: null,
+            declined: true, bailed: true,
+            reason: String(reason || 'the lane returned without opening a draft panel'),
+            saidToUser: (_lastToast && _lastToast.msg) || '',
+            at: Date.now()
+        };
+        if (extra) Object.keys(extra).forEach(function (k) { payload[k] = extra[k]; });
+        try { if (res) res(payload); } catch (_) {}
+        return true;
+    }
+    // The guard that makes the bail automatic. Wraps a lane's PUBLIC entry point:
+    // when a capture is armed, wait for the lane to finish and, if it finished
+    // without firing the seam, bail with whatever it told the user. Completely
+    // inert when disarmed - the engineer's own path never enters this branch, and
+    // the promise wrapper it adds is only ever seen by the harness.
+    function _captureGuard(name, fn) {
+        return function () {
+            if (!_capture.armed) return fn.apply(this, arguments);
+            var stamp = _capture.armedAt, out;
+            var stillMine = function () { return _capture.armed && _capture.armedAt === stamp; };
+            try { out = fn.apply(this, arguments); }
+            catch (e) {
+                if (stillMine()) _captureBail('lane "' + name + '" threw before drafting: ' + ((e && e.message) || e), { lane: name });
+                throw e;
+            }
+            return Promise.resolve(out).then(function (v) {
+                if (stillMine()) _captureBail('lane "' + name + '" returned without drafting - a guard clause refused it', { lane: name });
+                return v;
+            }, function (e) {
+                if (stillMine()) _captureBail('lane "' + name + '" rejected before drafting: ' + ((e && e.message) || e), { lane: name });
+                throw e;
+            });
+        };
     }
     // A requested-id list resolved against the lane's own unit array. Returns null
     // when no ids were asked for (the human picker path). THROWS on an unknown id:
@@ -7687,6 +7739,16 @@
     // filed under that system. We don't FMEA the whole component library, and there is
     // no aircraft-level FMEA. Picker lists the systems that have trees with basic events.
     function _fmeaSystemPicker(systems, onPick) {
+        // The SIXTH picker. The 76.38 sweep guarded three and missed this one
+        // because its name does not match _open*Picker - which is exactly how the
+        // FMEA lane came to hang. Under capture it picks the system with the most
+        // basic events (the most analysable one) and says so.
+        if (_capture.armed) {
+            var _best = (systems || []).slice().sort(function (a, b) { return (b.beCount || 0) - (a.beCount || 0); })[0];
+            if (!_best) { _captureBail('FMEA: no system has fault trees with basic events', { lane: 'fmea' }); return; }
+            try { console.info('[AI] FMEA system auto-selected: ' + _best.name + ' (' + _best.beCount + ' basic events) - capture armed, no UI'); } catch (_) {}
+            return onPick(_best);
+        }
         _ensurePanelStyles();
         let p = document.getElementById('ai-fmea-pick'); if (p) p.remove();
         p = document.createElement('div'); p.id = 'ai-fmea-pick'; p.className = 'ai-rev-panel'; _applyPanelPalette(p);
@@ -12285,7 +12347,7 @@
         },
         memoryRefresh: function () { try { _memoryRefresh(); return 'refreshing…'; } catch (_) { return 'failed'; } },
         // ---- Feature #48 — FHA / FCIM population + effects assist -----------
-        populateFha: populateFha,                 // async: draft rows → review panel
+        populateFha: _captureGuard('populateFha', populateFha),                 // async: draft rows → review panel
         // THE CAPTURE SEAM — arm, call any lane's own entry point, await the draft.
         //   const p = SafetyLabAI.captureNextDraft(600000);
         //   SafetyLabAI.populateFha({ condIds: ['SF-001-TL','SF-001-PL'] });
@@ -12296,33 +12358,33 @@
         captureCancel: function () { var r = _capture.reject; _captureDisarm(); try { if (r) r(new Error('capture cancelled')); } catch (_) {} },
         fhaGaps:     _funcsNeedingFha,             // list sub-functions without FHA coverage
         // ---- Feature #60 — FCIM generation (failure conditions per function) -
-        populateFcim: populateFcim,                // async: draft FCIM rows → review panel
+        populateFcim: _captureGuard('populateFcim', populateFcim),                // async: draft FCIM rows → review panel
         fcimGaps:     _funcsNeedingFcim,           // sub-functions without FCIM coverage
         // ---- Feature #49 — functional decomposition from architecture docs --
-        decompose:   decompose,                    // open input panel (or pass { text })
+        decompose:   _captureGuard('decompose', decompose),                    // open input panel (or pass { text })
         // ---- Feature #52 — fault-tree consistency reviewer (advisory) -------
-        reviewTrees: reviewTrees,                  // async: flag inconsistencies (read-only)
+        reviewTrees: _captureGuard('reviewTrees', reviewTrees),                  // async: flag inconsistencies (read-only)
         // ---- Feature #53 — recommend safety requirements --------------------
-        recommendRequirements: recommendRequirements,  // async: propose reqs → review → Accept
+        recommendRequirements: _captureGuard('recommendRequirements', recommendRequirements),  // async: propose reqs → review → Accept
         // ---- FIG3-4 — compliance-document review (advisory; findings → comments)
-        reviewComplianceDoc: reviewComplianceDoc,
+        reviewComplianceDoc: _captureGuard('reviewComplianceDoc', reviewComplianceDoc),
         // ---- Feature #50 — fault-tree synthesis (structure only, λ blank) ---
-        synthesizeTree: synthesizeTree,            // async: draft trees for FCs with no tree → review → Accept
+        synthesizeTree: _captureGuard('synthesizeTree', synthesizeTree),            // async: draft trees for FCs with no tree → review → Accept
         treeGaps:       _fcsNeedingTree,           // FHA failure conditions without a fault tree
         // ---- Feature #62 — CCA family + FMEA -------------------------------
-        draftPra:    draftPra,                     // async: Particular Risk Analysis
-        draftZsa:    draftZsa,                     // async: Zonal Safety Analysis
-        draftCma:    draftCma,                     // async: Common Mode Analysis (reasoning)
-        draftResources: draftResources,            // async: enumerate electrical/hydraulic/pneumatic/fuel resources → review → Accept
+        draftPra:    _captureGuard('draftPra', draftPra),                     // async: Particular Risk Analysis
+        draftZsa:    _captureGuard('draftZsa', draftZsa),                     // async: Zonal Safety Analysis
+        draftCma:    _captureGuard('draftCma', draftCma),                     // async: Common Mode Analysis (reasoning)
+        draftResources: _captureGuard('draftResources', draftResources),            // async: enumerate electrical/hydraulic/pneumatic/fuel resources → review → Accept
         // ---- Feature #142 / #143 — AI CCF-group modeling + approval gate ---
-        proposeCcfGroups: proposeCcfGroups,        // async: propose candidate CCF groups → review/Accept/Edit/Reject (Accept tags nodes; nothing else writes the trees)
-        draftFmea:   draftFmea,                    // async: FMEA — pass { level: 'functional' | 'item' }
+        proposeCcfGroups: _captureGuard('proposeCcfGroups', proposeCcfGroups),        // async: propose candidate CCF groups → review/Accept/Edit/Reject (Accept tags nodes; nothing else writes the trees)
+        draftFmea:   _captureGuard('draftFmea', draftFmea),                    // async: FMEA — pass { level: 'functional' | 'item' }
         // ---- Feature #54 / #43 ---------------------------------------------
-        recommendArchitecture: recommendArchitecture,  // async: advisory architecture improvements
-        draftHfAssumptions: draftHfAssumptions,        // async: register unregistered crew credit
-        recommendHfImprovements: recommendHfImprovements,  // async: per-lane HF design-improvement advisor (advisory; Accept files review comments)
+        recommendArchitecture: _captureGuard('recommendArchitecture', recommendArchitecture),  // async: advisory architecture improvements
+        draftHfAssumptions: _captureGuard('draftHfAssumptions', draftHfAssumptions),        // async: register unregistered crew credit
+        recommendHfImprovements: _captureGuard('recommendHfImprovements', recommendHfImprovements),  // async: per-lane HF design-improvement advisor (advisory; Accept files review comments)
         hfConsistencyFor: hfConsistencyFor,                // the lane's own view of the cross-lane findings, for its in-lane banner
-        draftHfLane: draftHfLane,                          // async: per-lane HF drafter — reads the AI Inputs documents, proposes rows into a review gate
+        draftHfLane: _captureGuard('draftHfLane', draftHfLane),                          // async: per-lane HF drafter — reads the AI Inputs documents, proposes rows into a review gate
         hfCandidates: _hfCandidates,                   // QA hook — the deterministic sweep, no model involved
         showAiProvenance:      showAiProvenance,        // read-only audit of AI-drafted artifacts
         // ---- In-app entry point --------------------------------------------
