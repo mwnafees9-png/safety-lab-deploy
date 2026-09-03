@@ -53,6 +53,12 @@ const CSP_POLICY = [
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self' https://buy.stripe.com",
+    // FRAMING: refused outright again (13 Aug 2026). The allowlist added the
+    // day before existed ONLY for a Microsoft Teams tab embedding this app.
+    // Waqas ruled the tab out — Teams is a NOTIFICATION surface, not a
+    // container for the platform — so the loosening has no remaining
+    // purpose, and a CSP is not somewhere to leave unused permissions
+    // lying around. Back to the strict posture: nothing may frame this app.
     "frame-ancestors 'none'",
     "upgrade-insecure-requests"
 ].join('; ');
@@ -64,18 +70,43 @@ const SEC_HEADERS = {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Frame-Options': 'DENY',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
-    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains'
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    // OAuth (Entra SSO) uses a full-page redirect, not a popup, so same-origin
+    // isolation is safe and adds cross-origin process isolation.
+    'Cross-Origin-Opener-Policy': 'same-origin'
 };
+
+// The Outlook Bookings page behind /demo. Held as a named constant because the
+// meetingtype id changes whenever the booking type is edited or recreated in
+// Outlook — when that happens this one line is the whole fix, and the /demo
+// address every prospect already has keeps working.
+const BOOKING_URL = 'https://outlook.office.com/bookwithme/user/0e0ecdee9067430bbe5fa9e064ed5b66@safetylabaero.com/meetingtype/cRS34C0nfky7LVYAR6IEZw2?anonymous&ismsaljsauthenabled&ep=mcard';
+
+// RFC 9116 vulnerability-disclosure policy. Served at /.well-known/security.txt
+// (and /security.txt legacy). Kept inline so it can't 404 behind asset config.
+const SECURITY_TXT = [
+    '# Safety Lab Aero — security contact & disclosure policy',
+    'Contact: mailto:waqas.nafees@safetylabaero.com',
+    'Contact: https://calendly.com/mwnafees9/30min',
+    'Expires: 2027-07-01T00:00:00.000Z',
+    'Preferred-Languages: en',
+    'Canonical: https://safetylabaero.com/.well-known/security.txt',
+    'Policy: https://safetylabaero.com/trust',
+    ''
+].join('\n');
 
 // Serve an HTML document with a revalidation header so browsers always check for
 // a fresh shell instead of silently reusing a stale cached copy on the next visit.
 // (JS/CSS keep their ?v= cache-busting and are passed through untouched below.)
 // Also stamps the CSP + hardening headers — this is the single chokepoint for all
 // HTML documents (landing, content pages, the app shell).
-async function serveHtml(respPromise) {
+async function serveHtml(respPromise, opts) {
     const r = await respPromise;
     const h = new Headers(r.headers);
-    h.set('Cache-Control', 'no-cache, must-revalidate');
+    // App shell (index.html) uses no-store so a new deploy is ALWAYS picked up on
+    // the next load — the shell references the ?v=-busted JS, so it must be fresh.
+    // Marketing/content HTML keeps no-cache+revalidate (cacheable but revalidated).
+    h.set('Cache-Control', (opts && opts.noStore) ? 'no-store' : 'no-cache, must-revalidate');
     h.set(CSP_ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only', CSP_POLICY);
     for (const [k, v] of Object.entries(SEC_HEADERS)) h.set(k, v);
     return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
@@ -85,6 +116,16 @@ export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
         const path = url.pathname;
+
+        // -----------------------------------------------------------------
+        // Vulnerability-disclosure policy (RFC 9116).
+        // -----------------------------------------------------------------
+        if (path === '/.well-known/security.txt' || path === '/security.txt') {
+            return new Response(SECURITY_TXT, {
+                status: 200,
+                headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=86400' }
+            });
+        }
 
         // -----------------------------------------------------------------
         // /api/bridge — J1 live-bridge proxy (STATELESS pass-through).
@@ -103,7 +144,6 @@ export default {
         // R2 bucket via multipart assembly. Exists because single ~100MB+
         // PUTs die on residential uplinks; 25MB parts do not. Locked down:
         //   · requires x-upload-token header === env.UPLOAD_TOKEN (secret)
-        //   · keys must live under desktop/ (release artifacts only)
         //   · no listing, no reads, no deletes — create/part/complete/abort
         // -----------------------------------------------------------------
         if (path === '/api/upload') {
@@ -113,7 +153,9 @@ export default {
             if (!env.DOWNLOADS) return j({ error: 'bucket binding missing' }, 500);
             const action = url.searchParams.get('action') || '';
             const key = url.searchParams.get('key') || '';
-            if (!/^desktop\/[A-Za-z0-9 ._-]+$/.test(key)) return j({ error: 'key must be desktop/<file>' }, 400);
+            //   · keys live under desktop/ (release artifacts) or docs/ (published
+            //     collateral such as the welcome deck) — nothing else is writable
+            if (!/^(?:desktop|docs)\/[A-Za-z0-9 ._-]+$/.test(key)) return j({ error: 'key must be desktop/<file> or docs/<file>' }, 400);
             try {
                 if (action === 'create' && request.method === 'POST') {
                     const ct = url.searchParams.get('ct') || 'application/octet-stream';
@@ -193,6 +235,43 @@ export default {
         }
 
         // -----------------------------------------------------------------
+        // /security → /trust  (301, permanent)
+        //   trust.html (23 Jul) supersedes security.html (5 Jul) — same page,
+        //   renamed. The rename half-landed: trust.html shipped and was
+        //   allowlisted, but the landing footer still pointed at /security,
+        //   which was never routed. Redirecting keeps every old link, bookmark
+        //   and inbound reference alive against one canonical URL — which
+        //   matters here because security.txt's Policy field resolves to /trust.
+        // -----------------------------------------------------------------
+        if (path === '/security' || path === '/security/') {
+            return Response.redirect(url.origin + '/trust', 301);
+        }
+
+        // -----------------------------------------------------------------
+        // /demo → the Outlook Bookings page  (302, deliberately NOT 301)
+        //   The booking URL is 168 characters, which is too long for a LinkedIn
+        //   connection note (300 cap) and ugly everywhere else. This gives it one
+        //   short branded address that can go in a signature, a deck or a cold
+        //   message without pasting the whole thing.
+        //
+        //   302, NOT 301, and the distinction matters here: Outlook regenerates
+        //   the meetingtype id whenever the booking type is edited or recreated.
+        //   A 301 is cached by the browser indefinitely, so the day that id
+        //   changes, every person who had ever clicked /demo would be pinned to a
+        //   dead URL with no way to clear it short of wiping their cache. The
+        //   /security → /trust redirect above IS permanent, which is why it is a
+        //   301 — the difference is whether the target can move, not taste.
+        //
+        //   The query string is passed through verbatim on purpose: `anonymous`
+        //   is what lets an invitee book without signing in to a Microsoft
+        //   account. Trimming params to tidy the URL is how you discover which
+        //   one was load-bearing.
+        // -----------------------------------------------------------------
+        if (path === '/demo' || path === '/demo/') {
+            return Response.redirect(BOOKING_URL, 302);
+        }
+
+        // -----------------------------------------------------------------
         // Root → marketing landing page
         // -----------------------------------------------------------------
         if (path === '/' || path === '') {
@@ -212,6 +291,16 @@ export default {
             'common-cause-analysis',
             'resources',
             'roi',
+            'legal',
+            'trust',
+            // Added 30 Jul: tools.html and templates.html shipped and are linked
+            // from the landing footer, but were never allowlisted — so /tools and
+            // /templates fell through to the assets binding, missed, and returned
+            // 200 + the APP SHELL via not_found_handling: "single-page-application".
+            // Silent: a 200 logs as success, so nothing ever flagged it.
+            'tools',
+            'templates',
+            'ai-guardrails',
         ]);
         const slug = path.replace(/^\/+|\/+$/g, '');
         if (CONTENT_PAGES.has(slug)) {
@@ -230,7 +319,7 @@ export default {
             if (path === '/app') {
                 return Response.redirect(url.origin + '/app/' + url.search, 301);
             }
-            return serveHtml(env.ASSETS.fetch(new URL('/index.html', url.origin)));
+            return serveHtml(env.ASSETS.fetch(new URL('/index.html', url.origin)), { noStore: true });
         }
 
         // -----------------------------------------------------------------

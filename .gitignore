@@ -18,3 +18,7 @@ backups-2026-*/
 *.orig
 *.tgz
 .fuse_hidden*
+
+# Browser-tool screenshot dumps (bridge scratch, not project files).
+Claude outputs/
+screenshot-*.jpg
