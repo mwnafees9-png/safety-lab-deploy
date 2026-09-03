@@ -1,3 +1,20 @@
 .DS_Store
 *.log
 node_modules/
+dist/
+
+# --- 3 Sep 2026: added when the repo got its first snapshot since 30 July. ---
+# Dated backup trees and scratch/staging dirs. These are copies of files that are
+# already tracked; committing them doubles the history for no recoverable value.
+_bak/
+_to_delete/
+_claude_stage/
+backups-2026-*/
+
+# Editor/tool leftovers and FUSE mount artifacts (created by the remote bridge,
+# not by the app — they appear and vanish on their own).
+*.bak
+*.bak.*
+*.orig
+*.tgz
+.fuse_hidden*
