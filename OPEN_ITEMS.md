@@ -797,7 +797,19 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
-- **F15 — THE FULL THREAD BEFORE RUN 2 (Waqas, 4 Sep: "wait for the full MAC/CoFFE"; "the thread
+- **F16 — RUN 2 FINDINGS (4 Sep 2026, evening; the full thread's first pass).** (a) The
+  interdependence sweep made 25 calls and landed 0 proposals — undiagnosed; inspect the raw reply
+  and the colId echo in `interdep_ai.js` before run 3. (b) `lane_trees` `idpFindings`/coverage do
+  not treat a configuration item that is a MAC member as covering its owner system's functions —
+  `idp-uncovered` on every one of the 33 pages. (c) The MAC drafter proposes no `arbitration`
+  scheme — `lane-mal` "No arbitration scheme declared" everywhere. (d) FMEA declined with no
+  reason (goes with F13). (e) CoFFE residue was 1,389 cases; the lane needs a cap or a smarter
+  residue before it runs unattended. (f) The run 2 export is in Downloads, not yet under
+  `eval/runs/goldens/`; 8 sub-functions have no MAC rule. Fix a–d in one pass, then run 3.
+
+- **F15 — BUILT AND RUN 4 Sep 2026 (arch.systems, arch.items, mac.draft, coffe.draft; THREAD
+  compiles trees). Kept for the design record; what it found is F16.** Original entry: THE FULL
+  THREAD BEFORE RUN 2 (Waqas, 4 Sep: "wait for the full MAC/CoFFE"; "the thread
   should run CoFFE interdependence and MAC").** Trees must be COMPILED from interdependence + MAC +
   CoFFE (+ CRA) — `SLLaneTrees.compileAll()` — not drawn by the AI synthesiser, so tree logic is
   identical run to run. Build order: (1) systems + system functions from the SDD through the
