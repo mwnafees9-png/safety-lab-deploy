@@ -103,7 +103,7 @@ check('the desk edits extras with the two ruling-named add buttons',
 // 4 Sep 2026 (Waqas): "total loss will be loss outside mac and partial within mac limits" —
 // the two modelling styles are gone; the MAC is the one line between TL and PL.
 check('_SPEC_FCIM asks for the arrays and defines TL/PL by the MAC (one definition, no styles)',
-  /"malfunctions": \[MF1, MF2/.test(ai) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(ai) && !/TL MODELLING STYLES/.test(ai));
+  /"malfunctions": \[MF1, MF2/.test(ai) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(ai) && /Loss of <capability> outside MAC limits/.test(ai) && !/TL MODELLING STYLES/.test(ai));
 // The §8 captured-then-discarded guard, on its FOURTH potential instance: the
 // chat/unified accept path maps add_fcim fields explicitly, so the arrays must
 // be named there or the spec's own answer is dropped on accept. Caught live on

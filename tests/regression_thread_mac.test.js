@@ -45,22 +45,26 @@ console.log('[1] the lane, the skill, the op');
   const S = sb.window.SLABSkills;
   check('mac.draft is a registered skill at v1', S && S.skills['mac.draft'] && /^mac\.draft@v1#[0-9a-f]{8}$/.test(S.stampFor('mac.draft')));
   const body = S ? S.skills['mac.draft'].body : '';
-  check('the body defines a rule as clauses of "at least MIN of these system functions", one rule per aircraft sub-function', /ONE RULE PER AIRCRAFT SUB-FUNCTION/.test(body) && /at least MIN of these system functions available/.test(body));
-  check('… the numbers come from the document; silence → conservative (min = all) and say so', /WHERE THE NUMBERS COME FROM: the document's redundancy and dispatch statements/.test(body) && /require every implementing function|every implementing function required, min = all/.test(body));
-  check('… never a weaker clause than the document supports, never a duplicate, never an off-profile phase', /make a clause weaker than the document supports/.test(body) && /duplicate a rule the project already holds/.test(body) && /name a phase that is not in the project's mission profile/.test(body));
+  check('the body counts CONFIGURATION ITEMS — the redundant copies — not different functions', /WHAT A CLAUSE COUNTS \(Waqas ruling, 4 Sep 2026\): a clause is "at least MIN of these CONFIGURATION ITEMS available"/.test(body) && /NOT a count of different functions/.test(body) && /how much control \/ configuration authority must remain available for continued safe flight and landing/.test(body));
+  check('… shape matters: a symmetric / per-side minimum is one clause per group, never a flat count', /SHAPE MATTERS/.test(body) && /at least 1 of \[left engines\] AND at least 1 of \[right engines\]/.test(body) && /both engines lost on one side/.test(body));
+  check('… the numbers come from the document; silence → conservative (min = all) and say so', /WHERE THE NUMBERS COME FROM: the document's redundancy, dispatch and performance statements/.test(body) && /every copy required, min = all/.test(body));
+  check('… never a weaker clause than the document supports, never a duplicate, never an off-profile phase', /make a clause weaker than the document supports \(a lower minimum, or a flat count where the document says per side\)/.test(body) && /duplicate a rule the project already holds/.test(body) && /name a phase that is not in the project's mission profile/.test(body));
   check('draftMac is a public, capture-guarded entry point', /draftMac:\s+_captureGuard\('draftMac', draftMac\)/.test(ai));
   check('it refuses without aircraft functions and without system functions (no members)', /a MAC rule floors an aircraft function/.test(ai) && /MAC members are system functions/.test(ai));
   check('it only asks for sub-functions that have no rule yet', /subs\.filter\(function \(id\) \{ return !existing\.some\(function \(r\) \{ return String\(r\.subId\) === String\(id\); \}\); \}\)/.test(ai));
-  check('the op spec teaches add_mac and says the rule is filed as an assumption until substantiated', /- add_mac \{subId, phase, clauses:\[\{min, of:\[system function ids\]\}\], sddRef, rationale\}/.test(ai) && /Filed as an assumption carrying sddRef until the engineer substantiates it/.test(ai));
+  check('the op spec teaches add_mac and says the rule is filed as an assumption until substantiated', /- add_mac \{subId, phase, clauses:\[\{min, of:\[configuration item ids\]\}\], sddRef, rationale\}/.test(ai) && /REDUNDANT CONFIGURATION ITEMS available/.test(ai) && /Filed as an assumption carrying sddRef until the engineer substantiates it/.test(ai));
   check('the executor routes add_mac; the review card titles it', /case 'add_mac': \{ const r2 = _chatAddMac\(a, model\);/.test(ai) && /add_mac: 'MAC rule'/.test(ai));
   check('the project state given to the model lists existing MAC rules (update, do not repeat)', /mac:\s+\(\(typeof projectConfig !== 'undefined' && projectConfig && projectConfig\.macModels\) \|\| \[\]\)\.slice\(0, 60\)/.test(ai));
-  check('the golden thread runs mac after systems and BEFORE fcim (Waqas, 4 Sep)', drv.indexOf("step: 'mac'") > drv.indexOf("step: 'systems'") && drv.indexOf("step: 'mac'") < drv.indexOf("step: 'fcim'"));
+  check('the golden thread runs mac after systems and BEFORE the system FCIM / SFHA (aircraft level first, generic)', drv.indexOf("step: 'mac'") > drv.indexOf("step: 'systems'") && drv.indexOf("step: 'mac'") < drv.indexOf("step: 'sfcim'") && drv.indexOf("step: 'fcim'") < drv.indexOf("step: 'systems'"));
   // 4 Sep 2026 (Waqas): "total loss will be loss outside mac and partial within mac limits"
   const sbk = { window: {}, console: { info: function () {} } }; vm.createContext(sbk);
   vm.runInContext(fs.readFileSync(path.join(SITE, 'ai_skills.js'), 'utf8'), sbk);
   const fcimBody = sbk.window.SLABSkills.skills['fcim.draft'].body;
-  check('fcim.draft is at v3: TOTAL LOSS = MAC breached, PARTIAL LOSS = degraded within the MAC — the only definition', /^fcim\.draft@v3#/.test(sbk.window.SLABSkills.stampFor('fcim.populate')) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(fcimBody) && /TOTAL LOSS = the function's MAC is breached/.test(fcimBody) && /PARTIAL LOSS = degraded but the MAC still holds/.test(fcimBody) && !/TL MODELLING STYLES/.test(fcimBody) && /Never offer two styles or choose one yourself/.test(fcimBody));
-  check('the FCIM drafter hands the model each function\'s MAC rule in plain words', /function _macRulesForPrompt\(subIds\)/.test(ai) && /_anemBatch\(_FEATURE_DIRECTIVE\.fcim \+ _macRulesForPrompt\(picked\.map/.test(ai));
+  check('fcim.draft is at v3: TOTAL LOSS = outside MAC limits, PARTIAL LOSS = within MAC limits — the only definition', /^fcim\.draft@v3#/.test(sbk.window.SLABSkills.stampFor('fcim.populate')) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(fcimBody) && /TOTAL LOSS = the loss takes the aircraft OUTSIDE MAC limits/.test(fcimBody) && /PARTIAL LOSS = the loss stays WITHIN MAC limits/.test(fcimBody) && !/TL MODELLING STYLES/.test(fcimBody) && /Never offer two styles or choose one yourself/.test(fcimBody));
+  check('the aircraft-level condition TEXT carries the MAC: "Loss of <capability> outside / within MAC limits"; "Complete/Partial loss of" are gone', /TL = "Loss of <capability> outside MAC limits", PL = "Loss of <capability> within MAC limits"/.test(fcimBody) && /Never write "complete\/total\/full\/gross\/partial loss of" as the loss-form/.test(fcimBody) && /"Loss of propulsive thrust outside MAC limits" is RIGHT/.test(fcimBody));
+  check('at aircraft level: no copies, counts, channels, sides or system names; at system level the MAC detail is parsed out', /AT AIRCRAFT LEVEL say exactly that and no more/.test(fcimBody) && /never copies, counts, channels, sides or system names/.test(fcimBody) && /AT SYSTEM LEVEL \(system FCIM \/ SFHA\) the MAC detail IS parsed out/.test(fcimBody));
+  check('the AIRCRAFT FCIM drafter is handed NO MAC rules; the SYSTEM FCIM and SFHA drafters are', !/_anemBatch\(_FEATURE_DIRECTIVE\.fcim \+ _macRulesForPrompt/.test(ai) && /function _macRulesForSystemPrompt\(systemId\)/.test(ai) && (ai.match(/\(scope\.systemId \? \('\\n' \+ _macRulesForSystemPrompt\(scope\.systemId\)\) : ''\)/g) || []).length === 2);
+  check('system-scope entry points exist for the thread (populateSysFcim, populateSfha), capture-guarded', /populateSysFcim: _captureGuard\('populateSysFcim'/.test(ai) && /populateSfha: _captureGuard\('populateSfha'/.test(ai));
 }
 
 console.log('\n[2] executed — add_mac lands in the store\'s own shape');
@@ -91,8 +95,21 @@ console.log('\n[2] executed — add_mac lands in the store\'s own shape');
   check('an unknown aircraft sub-function is refused', !r4.ok && /no aircraft sub-function 9\.9/.test(r4.error));
   const r5 = vm.runInContext(`_chatAddMac({ subId: '1.1', clauses: [{ min: 1, of: ['Nothing real'] }] }, 'm')`, ctx);
   check('a rule whose clauses name no known member is refused (no empty rule)', !r5.ok && /no clause names a known system function/.test(r5.error));
+  ctx.snapshot = () => ({
+    acFunctionsData: [{ subId: '1.1', subName: 'Provide pitch control' }, { subId: '2.3', subName: 'Provide wheel braking' }, { subId: '3.1', subName: 'Provide thrust' }],
+    systemsData: [
+      { id: 'sys-fcs', name: 'Flight Control', functions: [{ funcId: 'FCS-F1', funcName: 'Command elevator channel A' }, { funcId: 'FCS-F2', funcName: 'Command elevator channel B' }] },
+      { id: 'sys-brk', name: 'Wheel Brake', functions: [{ funcId: 'BRK-F1', funcName: 'Apply wheel brakes' }] },
+      { id: 'sys-eng1', name: 'Engine 1 (left outboard)', functions: [] }, { id: 'sys-eng2', name: 'Engine 2 (left inboard)', functions: [] }, { id: 'sys-eng3', name: 'Engine 3 (right inboard)', functions: [] }, { id: 'sys-eng4', name: 'Engine 4 (right outboard)', functions: [] },
+    ],
+    itemsData: [{ itemId: 'ITM-007', name: 'Brake control unit A' }, { itemId: 'ITM-008', name: 'Brake control unit B' }],
+  });
+  const r8 = vm.runInContext(`_chatAddMac({ subId: '3.1', phase: 'All phases', clauses: [{ min: 1, of: ['sys-eng1', 'Engine 2 (left inboard)'] }, { min: 1, of: ['sys-eng3', 'sys-eng4'] }], sddRef: 'SDD §3.1', rationale: 'two-engine minimum, symmetric' }, 'm')`, ctx);
+  check('members may be SYSTEMS (four engines) — a symmetric minimum lands as one clause per side', r8.ok && JSON.stringify(rules[rules.length - 1].clauses) === '[{"min":1,"of":["sys-eng1","sys-eng2"]},{"min":1,"of":["sys-eng3","sys-eng4"]}]', JSON.stringify(r8) + JSON.stringify(rules[rules.length - 1].clauses));
+  const r9 = vm.runInContext(`_chatAddMac({ subId: '2.3', phase: 'All phases', clauses: [{ min: 1, of: ['ITM-007', 'Brake control unit B'] }] }, 'm')`, ctx);
+  check('members may be ITEMS (two brake control units), by id or by name', r9.ok && JSON.stringify(rules.find(r => r.subId === '2.3' && r.phase === 'All phases').clauses) === '[{"min":1,"of":["ITM-007","ITM-008"]}]', JSON.stringify(r9));
   const r6 = vm.runInContext(`_chatAddMac({ subId: '1.1', phase: 'All phases', clauses: [{ min: 2, of: ['FCS-F1', 'FCS-F2'] }], sddRef: 'SDD §4.3' }, 'm')`, ctx);
-  check('the model\'s own untouched rule for the same sub-function + phase is UPDATED in place, keeping its id', r6.ok && /updated in place/.test(r6.summary) && rules.length === 2 && rules[0].clauses[0].min === 2 && rules[0].substantiation.ref === 'SDD §4.3');
+  check('the model\'s own untouched rule for the same sub-function + phase is UPDATED in place, keeping its id', r6.ok && /updated in place/.test(r6.summary) && rules.filter(r => r.subId === '1.1').length === 1 && rules[0].clauses[0].min === 2 && rules[0].substantiation.ref === 'SDD §4.3');
   vm.runInContext(`projectConfig.macModels[0].substantiation = { kind: 'sdd', ref: 'SDD-FCS-041', by: 'J. Okafor', at: 'x' }`, ctx);
   const r7 = vm.runInContext(`_chatAddMac({ subId: '1.1', phase: 'All phases', clauses: [{ min: 1, of: ['FCS-F1'] }] }, 'm')`, ctx);
   check('a rule the engineer has substantiated is NEVER overwritten', !r7.ok && /a signed rule already exists — not overwritten/.test(r7.error) && rules[0].clauses[0].min === 2);

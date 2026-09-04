@@ -1676,8 +1676,8 @@
     const _SPEC_FCIM = [
         'STANDARD GROUNDING — ARP4761A failure condition identification matrix: §A.3 / Table A3 (aircraft level), §C.3 / Table C1 (system level); worked example Table Q.3-2. Indication/mitigation substantiation per §xx.1309. This is NOT the App B CoFFE (Table B2) — CoFFE combines SYSTEM functional failures against an aircraft FC and lives in the PASA.',
         'THE MATRIX SHAPE (Table A3): one row per function in the decomposition; per row, failure conditions of each type — a cell may legitimately hold SEVERAL distinct conditions (Q.3-2: MF1, MF2, MF3). Return them as ARRAYS: "malfunctions": [MF1, MF2, …] and "partials": [PL1, PL2, …] — one distinct condition per entry, NEVER merged into one phrase (a merged phrase hides a failure condition). A single "malfunction"/"partialLoss" string is also accepted for one-condition cells.',
-        'TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC (Waqas ruling, 4 Sep 2026): the Minimum Acceptable Configuration is the line. TOTAL LOSS = the function\'s MAC is breached — the aircraft can no longer deliver the function to its minimum ("fewer than 2 of 4 engines available", "both elevator channels lost"). PARTIAL LOSS = degraded but the MAC still holds ("1 or 2 of 4 engines lost, MAC held", "one elevator channel lost"). Where a MAC rule for the sub-function is given to you, state BOTH conditions in that rule\'s terms — same numbers, same members, every time. Where no MAC rule exists yet, say so in the rationale and use the conservative reading (TL = loss of the whole capability, PL = any degradation) so the engineer can tighten it once the MAC is drafted. Never offer two styles or choose one yourself: this is the only definition. Related sub-functions may also require COMBINED failure conditions (A3 text); flag any you identify in your reply — the engineer files them in the matrix\'s Combined column.',
-        'IMPLEMENTATION-AGNOSTIC WORDING (Waqas ruling, 2 Aug 2026): this analysis is FUNCTIONAL. Never name components, surfaces, or configuration in a condition — no rudder / spoiler / elevator / aileron / fin / empennage, no engine counts, no gear / bus / actuator nouns. "Single rudder inoperative on the twin-fin empennage" is WRONG; "partial loss of yaw control authority" is RIGHT. "Loss of thrust from all four engines" is WRONG; "complete loss of thrust generation" is RIGHT.',
+        'TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC (Waqas ruling, 4 Sep 2026): the Minimum Acceptable Configuration — how much control / configuration authority must remain for continued safe flight and landing — is the line between them. TOTAL LOSS = the loss takes the aircraft OUTSIDE MAC limits. PARTIAL LOSS = the loss stays WITHIN MAC limits (degraded, minimum still met). AT AIRCRAFT LEVEL say exactly that and no more: the condition text is "Loss of <capability> outside MAC limits" and "Loss of <capability> within MAC limits" — never copies, counts, channels, sides or system names, because the MAC may not be defined until the systems are designed, and the aircraft level stays implementation-agnostic. AT SYSTEM LEVEL (system FCIM / SFHA) the MAC detail IS parsed out: where a MAC rule is given to you, state the system conditions in that rule\'s terms — which configuration items, how many, symmetric or per-side — the same way every time; where no rule exists yet, say so in the rationale and read conservatively. Never offer two styles or choose one yourself: this is the only definition. Related sub-functions may also require COMBINED failure conditions (A3 text); flag any you identify in your reply — the engineer files them in the matrix\'s Combined column.',
+        'IMPLEMENTATION-AGNOSTIC WORDING (Waqas ruling, 2 Aug 2026): this analysis is FUNCTIONAL. Never name components, surfaces, or configuration in a condition — no rudder / spoiler / elevator / aileron / fin / empennage, no engine counts, no gear / bus / actuator nouns. "Single rudder inoperative on the twin-fin empennage" is WRONG; "partial loss of yaw control authority" is RIGHT. "Loss of thrust from all four engines" is WRONG; "Loss of propulsive thrust outside MAC limits" is RIGHT.',
         'AWARENESS DISMISSAL IS PER-CONDITION (Waqas ruling, 2 Aug 2026): NEVER emit an N/A row carrying prose rationale in the matrix — if the crew-unaware variant of a condition is inapplicable because the cues are intrinsic, put that reasoning in your ASSUMPTIONS block and emit the row as Aware with an EMPTY rationale field. Dismissing the unaware case for a WHOLE function is almost never right: erroneous / malfunction behaviour that can develop below crew detection thresholds keeps its own crew-UNAWARE row carrying exactly the undetectable condition(s), nothing else.',
         'CONTROL-AXIS MALFUNCTIONS COME IN PAIRS (Waqas ruling, 2 Aug 2026): for pitch, roll and yaw the malfunction cell carries BOTH distinct conditions — (a) erroneous response to crew command AND (b) uncommanded motion with no command — as malfunctions[] entries, never merged; each variant that can develop undetected also appears on the Unaware row.',
         'NO SEVERITY WORDS IN CELLS: severities and effects live in the FHA, never in FCIM cell text.',
@@ -1703,7 +1703,7 @@
         // (fcimTopicModeJaccard 0.83 vs golden v5). The 12-word cap is load-bearing:
         // the capless variant blocked 4+1 rows on the cell-length check and FAILED.
         // BYTE-IDENTICAL to the ai_skills.js registry body (regression_ai_skills pins it).
-        'CANONICAL CONDITION PHRASING: word every condition, in 12 words or fewer, as "<Loss-form> <capability>" using EXACTLY these loss-forms: "Complete loss of", "Partial loss of", "Erroneous", "Uncommanded", "Inadvertent", "Undetected". <capability> is the sub-function\'s own name recast as the delivered capability, the SAME words every time ("Provide wheel braking" -> TL "Complete loss of wheel braking", PL "Partial loss of wheel braking", M "Uncommanded wheel braking"). Add at most ONE short qualifier, two words or fewer, and only where a cell holds two distinct conditions that need telling apart ("— asymmetric", "— undetected"). Never synonymise loss-forms (no "total/full/gross loss", no "spurious/false" where Erroneous applies), never restate the mechanism, never exceed 12 words in a cell.'
+        'CANONICAL CONDITION PHRASING: word every condition, in 12 words or fewer, from the sub-function\'s own name recast as the delivered capability, the SAME words every time. Loss conditions carry the MAC in the text: TL = "Loss of <capability> outside MAC limits", PL = "Loss of <capability> within MAC limits" ("Provide wheel braking" -> TL "Loss of wheel braking outside MAC limits", PL "Loss of wheel braking within MAC limits"). Malfunction conditions use EXACTLY these forms: "Erroneous", "Uncommanded", "Inadvertent", "Undetected" + <capability> (M "Uncommanded wheel braking"). Add at most ONE short qualifier, two words or fewer, and only where a cell holds two distinct conditions that need telling apart ("— asymmetric", "— undetected"). Never write "complete/total/full/gross/partial loss of" as the loss-form, never "spurious/false" where Erroneous applies, never restate the mechanism, never exceed 12 words in a cell.'
     ].join('\n');
     const _SPEC_FTA_SYNTH = [
         'STANDARD GROUNDING — ARP4761A Appendix G Fault Tree Analysis (synthesis).',
@@ -1852,19 +1852,22 @@
         'ONE add_system PER SYSTEM, BEFORE ITS FUNCTIONS, named exactly as the document names it. A system that already exists in the project is reused by name — never duplicated under a variant name.',
         'SYSTEM FUNCTIONS: for each system, add_function with scope "system", systemId = the system\'s name, funcName verb-first in the document\'s vocabulary, funcDef one sentence of WHAT it delivers (never the means), and traceIds = the aircraft SUB-FUNCTION ids this system function implements or directly supports. Trace ONLY where the document says so; an untraced system function is allowed (a resource or housekeeping function) and is better than a guessed trace.',
         'GRANULARITY: one system function per independently-failable capability of that system, typically 2–6 per system; a single catch-all function per system is too coarse, and component-level detail is too fine.',
+        'KEEP EVERY REDUNDANT COPY COUNTABLE (Waqas ruling, 4 Sep 2026): the MAC counts configuration items — "at least 1 of 2 flight control computers", "at least 2 of 4 engines" — so a redundancy the document states must survive as separately named entries, never collapsed into one. Four engines are four systems (or four items under one propulsion system); dual channels are two functions ("Command elevator — channel A", "— channel B") or two items. Name each copy exactly as the document does, with its side or position where the document gives one (left / right, 1 / 2, A / B), because the MAC may need one clause per side.',
         'DOCUMENT ANCHORING: derive every system and function from a specific section of the document and cite that section in funcDef. Never introduce a system or a function the document does not describe.',
         'EXPECTED OUTPUTS: the project\'s system list with each system\'s functions, every function traced to the aircraft sub-functions it implements — the columns of the interdependence table and the members of every MAC rule.',
         'FORMAT: add_system {name}; then add_function {scope:"system", systemId:<name>, funcName, funcDef, traceIds:[…]}.',
     ].join('\n');
     // 4 Sep 2026 (F15 step 3) — the MAC drafter. Inline copy of the registry body.
     const _SPEC_MAC = [
-        'STANDARD GROUNDING — ARP4761A §B.4 / Appendix Q (Q.4-1): the Minimum Acceptable Configuration (MAC) — for each AIRCRAFT function, the least set of SYSTEM functions that must remain available for the aircraft function to be delivered. MAC rules are what CoFFE consumes and what the multifunction / multisystem fault trees are compiled from; a rule is engineering judgement until the SDD substantiates it.',
-        'REQUIRED INPUTS: the aircraft sub-functions, the systems with their functions (each traced to the aircraft sub-functions it implements), and the system design description. Without system functions there are no members to name — return insufficient_information rather than inventing members.',
-        'ONE RULE PER AIRCRAFT SUB-FUNCTION (and per phase only where the document states a different minimum for a phase — otherwise phase "All phases"). A rule is a set of CLAUSES; every clause must hold. A clause is "at least MIN of these system functions available" (min 1 of two redundant channels; min 2 of four engines; min 1 of the one function that delivers it). The members of a clause are the SYSTEM FUNCTION ids (the fid values in the project state), never system names and never aircraft functions.',
-        'WHERE THE NUMBERS COME FROM: the document\'s redundancy and dispatch statements — channel counts, engine-out performance, single-thread paths. Cite the section in sddRef and quote its substance in rationale. Where the document is silent on a minimum, state the conservative reading (every implementing function required, min = all) and say in rationale that the SDD does not state a lower minimum — that is a judgement the engineer confirms, and the rule is filed as an assumption.',
-        'NEVER: name a system function that does not implement or support the aircraft function; make a clause weaker than the document supports (a lower min is an unconservative guess); duplicate a rule the project already holds for the same sub-function and phase (the project state lists existing MAC rules — update, do not repeat); name a phase that is not in the project\'s mission profile.',
+        'STANDARD GROUNDING — ARP4761A §B.4 / Appendix Q (Q.4-1): the Minimum Acceptable Configuration (MAC) — for each AIRCRAFT function, how much control / configuration authority must remain available for continued safe flight and landing (CSFL). MAC rules are what CoFFE consumes and what the multifunction / multisystem fault trees are compiled from; a rule is engineering judgement until the SDD substantiates it.',
+        'REQUIRED INPUTS: the aircraft sub-functions, the systems with their functions and configuration items (every redundant copy listed as its own countable entry, traced to the aircraft sub-functions it serves), and the system design description. Without countable entries there are no members to name — return insufficient_information rather than inventing them.',
+        'WHAT A CLAUSE COUNTS (Waqas ruling, 4 Sep 2026): a clause is "at least MIN of these CONFIGURATION ITEMS available" — the members are the REDUNDANT COPIES of the same thing (channels, lanes, units, engines, pumps, computers), named by their ids in the project state (a system id, a system function id, or an item id — whichever the project lists the copy as). Four engines with a two-engine minimum: at least 2 of [engine 1, engine 2, engine 3, engine 4]. Two redundant flight control computers: at least 1 of [FCC A, FCC B]. NOT a count of different functions — different functions that are all required are separate clauses.',
+        'ONE RULE PER AIRCRAFT SUB-FUNCTION (and per phase only where the document states a different minimum for a phase — otherwise phase "All phases"). A rule is a set of CLAUSES; every clause must hold. A function that needs more than one kind of thing has one clause per kind: at least 1 of [FCC A, FCC B] AND at least 2 of [hydraulic system 1, 2, 3].',
+        'SHAPE MATTERS: when the document\'s minimum is positional or symmetric — per side, per axis, per channel group — write ONE CLAUSE PER GROUP, never one flat count across all copies. "At least 2 of 4 engines, symmetric" is at least 1 of [left engines] AND at least 1 of [right engines]; a flat "2 of 4" would wrongly accept both engines lost on one side. Where the document states a capacity rather than a count (a percentage of flow, a fraction of authority), write the counting form that is at least as conservative and say in rationale that the engineer should set the weighted floor.',
+        'WHERE THE NUMBERS COME FROM: the document\'s redundancy, dispatch and performance statements — channel counts, engine-out performance, single-thread paths. Cite the section in sddRef and quote its substance in rationale. Where the document is silent on a minimum, state the conservative reading (every copy required, min = all) and say in rationale that the SDD does not state a lower minimum — that is a judgement the engineer confirms, and the rule is filed as an assumption.',
+        'NEVER: name a member that does not serve the aircraft function; make a clause weaker than the document supports (a lower minimum, or a flat count where the document says per side); duplicate a rule the project already holds for the same sub-function and phase (the project state lists existing MAC rules — update, do not repeat); name a phase that is not in the project\'s mission profile.',
         'EXPECTED OUTPUTS: add_mac actions — one per aircraft sub-function (per phase where needed), each with its clauses, sddRef and rationale.',
-        'FORMAT: add_mac {subId, phase, clauses:[{min, of:[system function ids]}], sddRef, rationale}.',
+        'FORMAT: add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale}.',
     ].join('\n');
     // 4 Sep 2026 (F15 step 4) — the CoFFE residue proposer. Inline copy of the registry body.
     const _SPEC_COFFE = [
@@ -2423,7 +2426,8 @@
             _toast('Drafting ' + label + ' — batch ' + (bi + 1) + ' of ' + nBatches + ' (' + allSuggestions.length + ' FC so far)…', 'info');
             const userMsg = 'Cert basis: ' + certBasis + (scope.systemId ? ('\nSystem: ' + scope.systemName) : '') + '\nFunctions:\n' + batch.map(function (f) {
                 return '- subId=' + f.subId + ' | name=' + f.subName + (f.subDef ? ' | definition=' + f.subDef : '');
-            }).join('\n');
+            }).join('\n')
+            + (scope.systemId ? ('\n' + _macRulesForSystemPrompt(scope.systemId)) : '');   // 4 Sep 2026 — the SFHA parses the MAC detail out; the AFHA never sees it
             let r;
             try {
                 r = await Provider.complete({
@@ -5153,7 +5157,7 @@
             'Include only the levels that are credible (omit any that do not apply).',
             '',
             'STYLE — a failure condition must be CLEAN and SHORT (entries have been coming out FAR too long — fix this):',
-            '1. Each failure condition is a TERSE noun phrase of 4–12 words naming ONLY the lost / degraded / erroneous capability (e.g. "Total loss of pitch trajectory control"). No sentences, no semicolons, no "because / regardless / whereas / not altered by", no rationale. If it reads like a sentence, it is too long — cut it down.',
+            '1. Each failure condition is a TERSE noun phrase of 4–12 words naming ONLY the lost / degraded / erroneous capability (e.g. "Loss of pitch trajectory control outside MAC limits"). No sentences, no semicolons, no "because / regardless / whereas / not altered by", no rationale. If it reads like a sentence, it is too long — cut it down.',
             '2. Do NOT append effects or consequences. No "resulting in…", "leading to…", "potentially causing…". The downstream FHA captures effects on aircraft / crew / passengers — keep them OUT of the FCIM.',
             _ABSTAIN_RULE,
             '3. NEVER state, propose, or imply a SEVERITY anywhere in the FCIM. Do NOT write "Catastrophic", "Hazardous", "Major", "Minor", "No Safety Effect", the word "severity", or "(proposed …)" in totalLoss / partialLoss / malfunction OR in rationale. Severity is classified in the FHA — never here. The awareness split is a yes/no judgement about whether severity DIFFERS by awareness; express that ONLY through the "awareness" field, never as text in a cell.',
@@ -5195,6 +5199,21 @@
             return ' MAC RULES for the functions in scope (TOTAL LOSS = this rule breached; PARTIAL LOSS = degraded with this rule still held — state both in these terms): ' + (lines.length ? lines.join(' | ') : '(none)') + (none.length ? '. NO MAC RULE YET for: ' + none.join(', ') + ' — say so in the rationale and use the conservative reading.' : '');
         } catch (_) { return ''; }
     }
+    // 4 Sep 2026 (Waqas): "that detail can be parsed out at the SFHA level". For a SYSTEM
+    // scope, the rules handed over are those of the aircraft sub-functions this system's
+    // functions trace to — the copies, the counts, the sides — so the system FCIM / SFHA
+    // states its loss conditions in the rule's terms.
+    function _macRulesForSystemPrompt(systemId) {
+        try {
+            const s = snapshot();
+            const sy = (s.systemsData || []).find(function (x) { return x && String(x.id) === String(systemId); });
+            if (!sy) return '';
+            const subs = [];
+            (sy.functions || []).forEach(function (f) { (Array.isArray(f.traceIds) ? f.traceIds : (f.traceId ? [f.traceId] : [])).forEach(function (t) { if (t && subs.indexOf(String(t)) < 0) subs.push(String(t)); }); });
+            if (!subs.length) return ' MAC RULES: this system\'s functions carry no trace to an aircraft sub-function, so no MAC rule can be matched — say so in the rationale and read conservatively.';
+            return _macRulesForPrompt(subs).replace('for the functions in scope', 'for the aircraft functions this system serves');
+        } catch (_) { return ''; }
+    }
     async function populateFcim(opts) {
         opts = opts || {};
         if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); throw new Error('[Safety Lab Aero AI] backend not available.'); }
@@ -5211,7 +5230,10 @@
                 sort: function (a, b) { return String(a.subId).localeCompare(String(b.subId), undefined, { numeric: true }); },
                 row: function (f) { return [f.subId, f.subName || '', f.funcName || '']; }
             }, function (picked) {
-                _anemBatch(_FEATURE_DIRECTIVE.fcim + _macRulesForPrompt(picked.map(function (f) { return f.subId; })), {
+                // 4 Sep 2026 (Waqas): the AIRCRAFT-level FCIM gets NO MAC rules — its conditions
+                // read "Loss of X outside / within MAC limits" and nothing more; the MAC detail is
+                // parsed out at the SYSTEM level (_macRulesForSystemPrompt, below).
+                _anemBatch(_FEATURE_DIRECTIVE.fcim, {
                     title: '✨ AI-drafted FCIM · review', analysis: 'fcim.populate',
                     specSecs: _specSecsForSubIds(picked.map(function (f) { return f.subId; })),   // per-system doc narrowing
                     chunk: {
@@ -5270,7 +5292,8 @@
                 }).join(' ; ');
             } catch (_) { return ''; }
         };
-        const userMsg = 'Cert basis: ' + certBasis + (scope.systemId ? ('\nSystem: ' + scope.systemName) : '') + '\nSub-functions:\n' + batch.map(function (f) { return '- subId=' + f.subId + ' | name=' + f.subName + (f.subDef ? ' | definition=' + f.subDef : '') + _existingFor(f.subId); }).join('\n');
+        const userMsg = 'Cert basis: ' + certBasis + (scope.systemId ? ('\nSystem: ' + scope.systemName) : '') + '\nSub-functions:\n' + batch.map(function (f) { return '- subId=' + f.subId + ' | name=' + f.subName + (f.subDef ? ' | definition=' + f.subDef : '') + _existingFor(f.subId); }).join('\n')
+            + (scope.systemId ? ('\n' + _macRulesForSystemPrompt(scope.systemId)) : '');   // 4 Sep 2026 — MAC detail is parsed out at SYSTEM level only
         _toast('Drafting ' + (scope.systemId ? ('system FCIM (' + scope.systemName + ')') : 'FCIM') + ' for ' + batch.length + ' sub-function(s)…', 'info');
         // Golden-thread anchors (#131): aircraft vs system scope + the function keys in play.
         // maxTokens 8000 → 16000 (2 Aug): the budget must hold reasoning AND rows.
@@ -10385,8 +10408,17 @@
         const s = snapshot();
         const sub = (s.acFunctionsData || []).find(function (f) { return String(f.subId) === subId; });
         if (!sub) return { ok: false, error: 'no aircraft sub-function ' + subId };
+        // 4 Sep 2026 (Waqas): members are REDUNDANT CONFIGURATION ITEMS — whichever the
+        // project lists a copy as: a system (four engines as four systems), a system
+        // function (channel A / channel B), or an item. Resolved by id or by name.
         const fnIds = {};
-        (s.systemsData || []).forEach(function (sy) { (sy.functions || []).forEach(function (f) { if (f && f.funcId) { fnIds[String(f.funcId)] = f; fnIds[String(f.funcId).toLowerCase()] = f; const nm = String(f.funcName || '').trim().toLowerCase(); if (nm) fnIds['name:' + nm] = f; } }); });
+        const reg = function (id, rec) { if (!id) return; fnIds[String(id)] = rec; fnIds[String(id).toLowerCase()] = rec; };
+        (s.systemsData || []).forEach(function (sy) {
+            if (!sy) return;
+            reg(sy.id, { id: sy.id }); const sn = String(sy.name || '').trim().toLowerCase(); if (sn) fnIds['name:' + sn] = { id: sy.id };
+            (sy.functions || []).forEach(function (f) { if (f && f.funcId) { reg(f.funcId, { id: f.funcId }); const nm = String(f.funcName || '').trim().toLowerCase(); if (nm) fnIds['name:' + nm] = { id: f.funcId }; if (sn && nm) fnIds['name:' + sn + ' · ' + nm] = { id: f.funcId }; } });
+        });
+        (s.itemsData || []).forEach(function (it) { if (it && it.itemId) { reg(it.itemId, { id: it.itemId }); const nm = String(it.name || '').trim().toLowerCase(); if (nm && !fnIds['name:' + nm]) fnIds['name:' + nm] = { id: it.itemId }; } });
         const unknown = [];
         const clauses = (Array.isArray(a.clauses) ? a.clauses : []).map(function (cl) {
             const of = [];
@@ -10394,7 +10426,7 @@
                 const key = String(m == null ? '' : m).trim();
                 const hit = fnIds[key] || fnIds[key.toLowerCase()] || fnIds['name:' + key.toLowerCase()];
                 if (!hit) { unknown.push(key); return; }
-                if (of.indexOf(String(hit.funcId)) < 0) of.push(String(hit.funcId));
+                if (of.indexOf(String(hit.id)) < 0) of.push(String(hit.id));
             });
             const min = Math.max(1, Math.min(parseInt((cl && cl.min) || 1, 10) || 1, of.length || 1));
             return { min: min, of: of };
@@ -10533,7 +10565,7 @@
             'ACTION CATALOG (op + fields). scope is "aircraft" or "system"; for system scope include systemId from the state.',
             'ADD:',
             '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgement because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it)}',
-            '- add_mac {subId, phase, clauses:[{min, of:[system function ids]}], sddRef, rationale}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these system functions available". Members are system function ids (fid). Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it.',
+            '- add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these REDUNDANT CONFIGURATION ITEMS available" (the copies of the same thing — engines, channels, computers). Members are ids from the project state: a system id, a system function id (fid) or an item id. Positional / symmetric minima are one clause per group. Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it.',
             '- add_system {name}  — create a system (idempotent by name) from an SDD/architecture doc. Emit this BEFORE the system\'s functions/interfaces so they can reference it by name.',
             '- add_function {scope, systemId?, funcName, funcDef, subName, subDef, traceIds?}   (ONE level of decomposition; for scope "system", traceIds = the aircraft sub-function ids this system function implements)',
             '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" (empty FCs + short rationale) when the unaware case is inapplicable.',
@@ -12406,7 +12438,7 @@
         req:   'Recommend derived SAFETY REQUIREMENTS that close the project\'s open analysis gaps (failure conditions lacking mitigating requirements; fault-tree contributors lacking controls). Write each as "The <item> shall …", trace it to the function / failure condition it addresses, and set level + type + verification method. Emit them as add_requirement actions; ground every requirement in the current project state. These are ADVISORY PROPOSALS — an accepted one is filed as a review comment on its traced failure condition, never written into the requirements register.',
         fha:   'Draft the AIRCRAFT-level FHA. For each aircraft function, identify its failure condition(s) with effects on Aircraft / Crew / Passengers and a SEVERITY classified per §__.1309 (Catastrophic ↔ Extremely Improbable … No Safety Effect ↔ none), DERIVED from the effects you state for that condition. Ground every row strictly in the project\'s functions. If a function\'s definition does not support stating an aircraft effect, you CANNOT classify it: emit the row with severity as an EMPTY STRING and say what is missing in severityRationale. Do NOT reach for the benign end of the scale to avoid a blank — "No Safety Effect" is a finding about the aircraft, not a way of saying you do not know. Emit add_fha actions with scope "aircraft".',
         fcim:  'Generate the FCIM (Failure Conditions, Indications & Mitigations) per aircraft function — Total Loss / Partial Loss / Malfunction as concise capability phrases, the crew-Aware vs crew-Unaware awareness split, and the indications + mitigations. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[]/malfunctions[] arrays, never merged into one phrase. Put NO severity words anywhere (severity lives in the FHA, never the FCIM). Emit add_fcim actions.',
-        mac: 'For each named aircraft sub-function, draft its Minimum Acceptable Configuration from the architecture / source documents: the least set of SYSTEM functions (by fid) that must remain available for that aircraft function to be delivered, as clauses "at least min of [...]". Read the minimum from the document\'s redundancy and dispatch statements and cite the section in sddRef; where the document is silent, require every implementing function (min = all) and say so in rationale. Emit one add_mac per sub-function (per phase only where the document states a phase-specific minimum). Never name a system function that does not implement or support the aircraft function.',
+        mac: 'For each named aircraft sub-function, draft its Minimum Acceptable Configuration from the architecture / source documents: how much control / configuration authority must remain available for continued safe flight and landing, as clauses "at least min of [redundant configuration items]" — the members are the COPIES of the same thing (engines, channels, computers, pumps), by their ids in the project state (system, system function or item). A positional or symmetric minimum is one clause per group (per side, per axis), never a flat count. Read the minimum from the document\'s redundancy and dispatch statements and cite the section in sddRef; where the document is silent, require every copy (min = all) and say so in rationale. Emit one add_mac per sub-function (per phase only where the document states a phase-specific minimum). Never name a member that does not serve the aircraft function.',
         systems: 'From the project architecture / source documents, identify the aircraft SYSTEMS the design allocates functions to, and each system\'s own functions. Emit add_system {name} for each system FIRST, then add_function {scope:"system", systemId:<that name>, funcName, funcDef, traceIds:[aircraft sub-function ids it implements]} for each of its functions. Never invent a system or a function the document does not describe; trace only where the document says the system delivers that aircraft function.',
         decompose: 'From the project architecture / source documents, extract ONE level of functional decomposition: each top-level function → its immediate sub-functions (behaviours the aircraft accomplishes — NOT resources like electrical/hydraulic power, and NOT structure). Emit add_function actions. Never invent functions the architecture does not support.',
         synth: 'Synthesise fault-tree STRUCTURE ONLY (no failure rates) for the untreated failure conditions, using the architecture to find the real contributors and the correct AND/OR gate logic. Tree DEPTH comes solely from the architecture — never fabricate depth. Emit add_fta_tree actions with every basic-event λ left blank for the engineer.',
@@ -12880,7 +12912,23 @@
         applyDraft: _applyCapturedDraft,
         fhaGaps:     _funcsNeedingFha,             // list sub-functions without FHA coverage
         // ---- Feature #60 — FCIM generation (failure conditions per function) -
-        populateFcim: _captureGuard('populateFcim', populateFcim),                // async: draft FCIM rows → review panel
+        populateFcim: _captureGuard('populateFcim', populateFcim),
+        // 4 Sep 2026 (F15) — system-scope entry points for the golden thread: the system's
+        // functions that still lack a row, drafted at that scope with its MAC rules handed over.
+        populateSysFcim: _captureGuard('populateSysFcim', function (systemId) {
+            const sy = (snapshot().systemsData || []).find(function (x) { return x && String(x.id) === String(systemId); });
+            if (!sy) { _toast('No system ' + systemId, 'warning'); return; }
+            const funcs = _funcsNeedingFcimForSystem(sy);
+            if (!funcs.length) { _toast('Every function in ' + (sy.name || sy.id) + ' already has an FCIM row.', 'info'); return; }
+            return populateFcim({ systemId: sy.id, systemName: sy.name || sy.id, funcs: funcs });
+        }),
+        populateSfha: _captureGuard('populateSfha', function (systemId) {
+            const sy = (snapshot().systemsData || []).find(function (x) { return x && String(x.id) === String(systemId); });
+            if (!sy) { _toast('No system ' + systemId, 'warning'); return; }
+            const funcs = _funcsNeedingFhaForSystem(sy);
+            if (!funcs.length) { _toast('Every function in ' + (sy.name || sy.id) + ' already has an SFHA row.', 'info'); return; }
+            return populateFha({ systemId: sy.id, systemName: sy.name || sy.id, funcs: funcs });
+        }),                // async: draft FCIM rows → review panel
         fcimGaps:     _funcsNeedingFcim,           // sub-functions without FCIM coverage
         // ---- Feature #49 — functional decomposition from architecture docs --
         decompose:   _captureGuard('decompose', decompose),                    // open input panel (or pass { text })

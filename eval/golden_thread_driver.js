@@ -23,15 +23,18 @@
     var HF = ['task', 'ergo', 'alloc', 'hea', 'alerts', 'tid', 'cd', 'sa', 'mfc'];
 
     var THREAD = [
-        // F15 (4 Sep 2026, Waqas): "aircraft functions > mac for those functions > FCIM for
-        // those > FHA > resources/interdependence > CoFFE > Fault trees". Systems sit between
-        // aircraft functions and MAC because MAC members ARE system functions. The MAC is
-        // drafted BEFORE the FCIM so total loss / partial loss are stated in each rule's terms.
+        // 4 Sep 2026 (Waqas): "the AFHA level failure conditions can just be total loss /
+        // partial loss [by MAC] because MAC may not be defined till systems get designed and
+        // that detail can be parsed out at the SFHA level." So: aircraft first, generic
+        // ("Loss of X outside / within MAC limits"); then systems → MAC → system FCIM and
+        // SFHA per system, where the MAC detail (copies, counts, sides) is used.
         { step: 'decompose', call: function () { return SafetyLabAI.decompose(); } },
-        { step: 'systems',   call: function () { return SafetyLabAI.decomposeSystems(); } },
-        { step: 'mac',       call: function () { return SafetyLabAI.draftMac(); } },
         { step: 'fcim',      call: function () { return SafetyLabAI.populateFcim(); } },
         { step: 'fha',       call: function () { return SafetyLabAI.populateFha(); } },
+        { step: 'systems',   call: function () { return SafetyLabAI.decomposeSystems(); } },
+        { step: 'mac',       call: function () { return SafetyLabAI.draftMac(); } },
+        { step: 'sfcim',     each: 'systems', call: function (sy) { return SafetyLabAI.populateSysFcim(sy.id); } },
+        { step: 'sfha',      each: 'systems', call: function (sy) { return SafetyLabAI.populateSfha(sy.id); } },
         { step: 'resources', call: function () { return SafetyLabAI.draftResources(); } },   // electrical / hydraulic / pneumatic / fuel — the CRA lane of the compiled trees
         { step: 'interdep',  direct: interdepSweepAndAccept },
         { step: 'coffe',     direct: function () { return SafetyLabAI.draftCoffe({ fcCap: 200 }); } },
@@ -119,7 +122,9 @@
         try { mac = ((projectConfig.macModels) || []).length; } catch (_) {}
         try { coffe = Object.keys((projectConfig.coffe && projectConfig.coffe.verdicts) || {}).length; } catch (_) {}
         try { sysFns = (systemsData || []).reduce(function (n, sy) { return n + ((sy.functions || []).length); }, 0); } catch (_) {}
-        return { functions: g('acFunctionsData'), fcim: g('acFcimData'), fha: g('acFhaData'), systems: g('systemsData'), systemFunctions: sysFns, interdep: idp ? { contributes: idp.contributes, cleared: idp.cleared, unreviewed: idp.unreviewed, proposed: idp.proposed, multi: idp.multi } : null, mac: mac, coffeVerdicts: coffe, trees: g('ftaPages'), fmea: g('fmeaData'), pra: g('praData'), zsa: g('zsaData'), cma: g('cmaData'), assumptions: g('acAssumptionsData'), aiLedger: g('aiAssumptions'), hf: hf };
+        var sysFcim = null, sysFha = null;
+        try { sysFcim = (systemsData || []).reduce(function (n, sy) { return n + ((sy.fcim || []).length); }, 0); sysFha = (systemsData || []).reduce(function (n, sy) { return n + ((sy.fha || []).length); }, 0); } catch (_) {}
+        return { functions: g('acFunctionsData'), fcim: g('acFcimData'), fha: g('acFhaData'), systems: g('systemsData'), systemFunctions: sysFns, systemFcim: sysFcim, systemFha: sysFha, interdep: idp ? { contributes: idp.contributes, cleared: idp.cleared, unreviewed: idp.unreviewed, proposed: idp.proposed, multi: idp.multi } : null, mac: mac, coffeVerdicts: coffe, trees: g('ftaPages'), fmea: g('fmeaData'), pra: g('praData'), zsa: g('zsaData'), cma: g('cmaData'), assumptions: g('acAssumptionsData'), aiLedger: g('aiAssumptions'), hf: hf };
     }
     // the page's project name is a top-level `let`, so it is reachable by name but not via window
     function _pname() { try { return String(projectName || ''); } catch (_) { try { return document.title; } catch (__) { return ''; } } }
@@ -190,6 +195,18 @@
             if (skip.indexOf(s.step) >= 0) continue;
             if (s.optional && !(only && only.indexOf(s.step) >= 0)) continue;   // 'trees-ai' runs only when named
             if (window.__goldenStop) { console.info('[golden] stopped before ' + s.step); break; }
+            if (s.each === 'systems') {   // F15 — one captured lane call per system (system FCIM, SFHA)
+                var syss = (typeof systemsData !== 'undefined' && systemsData) ? systemsData.slice() : [];
+                if (!syss.length) { var r0 = { run: run, step: s.step, state: 'done', ok: false, error: 'no systems in the project', at: Date.now(), project: _pname() }; put(r0); out.push(r0); console.info('[golden] ' + run + ' ' + s.step + ': FAIL · no systems'); if (opts.stopOnFail) break; continue; }
+                for (var k = 0; k < syss.length; k++) {
+                    if (window.__goldenStop) break;
+                    var sy = syss[k];
+                    var rs = await step(run, { step: s.step + ':' + (sy.name || sy.id), call: (function (fn, x) { return function () { return fn(x); }; })(s.call, sy) }, opts.timeoutMs);
+                    console.info('[golden] ' + run + ' ' + s.step + ' · ' + (sy.name || sy.id) + ': ' + (rs.ok ? 'ok' : 'FAIL') + ' · drafted ' + (rs.drafted || 0));
+                    out.push(rs);
+                }
+                continue;
+            }
             var r = await step(run, s, opts.timeoutMs);
             console.info('[golden] ' + run + ' ' + s.step + ': ' + (r.ok ? 'ok' : 'FAIL') + ' · drafted ' + (r.drafted || 0) + (r.apply ? (' · applied ' + r.apply.applied + ' updated ' + r.apply.updated + ' blocked ' + r.apply.blocked + ' protected ' + r.apply.protected + ' failed ' + r.apply.failed + ' unsupported ' + r.apply.unsupported + ' judgement ' + r.apply.judgement) : '') + (r.declined ? (' · DECLINED: ' + r.reason) : '') + (r.error ? (' · ERROR: ' + r.error) : '') + ' · ' + r.secs + 's');
             out.push(r);

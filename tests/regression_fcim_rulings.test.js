@@ -99,7 +99,7 @@ console.log('\n[rulings] _SPEC_FCIM carries the 2 Aug doctrine');
   const spec = (ai.match(/const _SPEC_FCIM = \[[\s\S]*?\]\.join/) || [''])[0];
   check('implementation-agnostic: component-noun ban with the live wrong/right pairs',
     /IMPLEMENTATION-AGNOSTIC WORDING/.test(spec) && /no rudder \/ spoiler \/ elevator/.test(spec) &&
-    /partial loss of yaw control authority/.test(spec) && /complete loss of thrust generation/.test(spec));
+    /partial loss of yaw control authority/.test(spec) && /Loss of propulsive thrust outside MAC limits/.test(spec));   // 4 Sep 2026 — loss-form carries the MAC
   check('awareness dismissal is per-condition; rationale goes to ASSUMPTIONS, row stays Aware',
     /AWARENESS DISMISSAL IS PER-CONDITION/.test(spec) && /NEVER emit an N\/A row carrying prose rationale/.test(spec) &&
     /ASSUMPTIONS block and emit the row as Aware with an EMPTY rationale/.test(spec));

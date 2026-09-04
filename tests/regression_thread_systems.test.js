@@ -60,17 +60,19 @@ console.log('[1] the systems lane exists, is guarded, and asks for the right sha
 
 console.log('\n[2] the golden thread runs systems, then the interdependence sweep, before trees');
 {
-  // 4 Sep 2026 (Waqas): "aircraft functions > mac for those functions > FCIM for those > FHA >
-  // resources/interdependence > CoFFE > Fault trees" — systems sit before MAC (its members).
-  const order = ['decompose', 'systems', 'mac', 'fcim', 'fha', 'resources', 'interdep', 'coffe', 'trees', 'trees-ai', 'fmea'];
+  // 4 Sep 2026 (Waqas, final): aircraft level first and generic; systems → MAC → system FCIM
+  // and SFHA per system (MAC detail parsed out there) → resources → interdependence → CoFFE → trees.
+  const order = ['decompose', 'fcim', 'fha', 'systems', 'mac', 'sfcim', 'sfha', 'resources', 'interdep', 'coffe', 'trees', 'trees-ai', 'fmea'];
   const idx = order.map(k => drv.indexOf("step: '" + k + "'"));
-  check('THREAD order: decompose → systems → mac → fcim → fha → resources → interdep → coffe → trees (compiled) → [trees-ai] → fmea', idx.every(i => i >= 0) && idx.every((v, i) => i === 0 || v > idx[i - 1]), idx.join(','));
+  check('THREAD order: decompose → fcim → fha → systems → mac → sfcim → sfha → resources → interdep → coffe → trees (compiled) → [trees-ai] → fmea', idx.every(i => i >= 0) && idx.every((v, i) => i === 0 || v > idx[i - 1]), idx.join(','));
+  check('system FCIM and SFHA run once per system through the capture seam', /\{ step: 'sfcim',\s+each: 'systems', call: function \(sy\) \{ return SafetyLabAI\.populateSysFcim\(sy\.id\); \} \}/.test(drv) && /if \(s\.each === 'systems'\)/.test(drv) && /step: s\.step \+ ':' \+ \(sy\.name \|\| sy\.id\)/.test(drv));
+  check('the systems instructions keep every redundant copy countable (the MAC counts configuration items)', (() => { const sb = { window: {}, console: { info() {} } }; vm.createContext(sb); vm.runInContext(fs.readFileSync(path.join(SITE, 'ai_skills.js'), 'utf8'), sb); const b = sb.window.SLABSkills.skills['arch.systems'].body; return /KEEP EVERY REDUNDANT COPY COUNTABLE/.test(b) && /Four engines are four systems/.test(b) && /with its side or position where the document gives one/.test(b); })());
   check('trees are COMPILED (SLLaneTrees.compileAll), the AI synthesiser is optional and off by default', /\{ step: 'trees',\s+direct: compileTrees \}/.test(drv) && /\{ step: 'trees-ai',\s+call: function \(\) \{ return SafetyLabAI\.synthesizeTree\(\); \}, optional: true \}/.test(drv) && /if \(s\.optional && !\(only && only\.indexOf\(s\.step\) >= 0\)\) continue;/.test(drv) && /LT\.compileAll\(\)/.test(drv));
   check('the resources lane\'s items are applied by applyDraft (they are not unified actions)', /feature === 'resources\.draft' \|\| \(a\.name !== undefined && \(a\.providedBy !== undefined \|\| a\.consumedBy !== undefined\)\)/.test(ai) && /const ok = _applyResource\(a\);/.test(ai));
   check('systems is a captured lane (review panel → applyDraft)', /\{ step: 'systems',\s+call: function \(\) \{ return SafetyLabAI\.decomposeSystems\(\); \} \}/.test(drv));
   check('interdep is a DIRECT step (no panel to capture)', /\{ step: 'interdep',\s+direct: interdepSweepAndAccept \}/.test(drv));
   check('step() handles direct steps and records their numbers', /if \(typeof s\.direct === 'function'\)/.test(drv) && /rec\.direct = await s\.direct\(\)/.test(drv));
-  check('counts() now reports systems, system functions, interdependence, MAC and CoFFE', /systems: g\('systemsData'\), systemFunctions: sysFns, interdep: idp \?/.test(drv) && /mac: mac, coffeVerdicts: coffe/.test(drv));
+  check('counts() now reports systems, system functions, interdependence, MAC and CoFFE', /systems: g\('systemsData'\), systemFunctions: sysFns, systemFcim: sysFcim, systemFha: sysFha, interdep: idp \?/.test(drv) && /mac: mac, coffeVerdicts: coffe/.test(drv));
 }
 
 console.log('\n[3] executed — the sweep loops to completion and accepts proposals as TESTING ONLY');
