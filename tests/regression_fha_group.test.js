@@ -84,8 +84,10 @@ check('a missing source id is a no-op', (acFhaAddPhaseVariant(999), acFhaData.le
 
 // ---- the rendered markup (rule 11) -----------------------------------------
 const src = helpers;
-check('the head row wears the phase-group badge with count and worst severity',
-  /phase group × \$\{n\} · \$\{_grpWorst\}/.test(src)
+// 4 Sep 2026 (Waqas): a legitimate per-phase split is standard practice and wears NO badge;
+// only duplicates, contradictions and consolidation candidates are announced.
+check('a legitimate phase split wears no badge; the finding badges remain',
+  !/phase group × \$\{n\}/.test(src) && /fha-group-dup/.test(src) && /fha-group-contra/.test(src) && /fha-group-merge/.test(src)
   && /_grpWorst = _grp && _grp\.worst \? \('worst ' \+ esc\(_grp\.worst\)\) : 'unclassified'/.test(src));
 // 3 Sep 2026 — the badge must never print "worst " with nothing after it, and must
 // not call duplicates a phase group. See the executed block at the end of this file.
@@ -95,8 +97,9 @@ check('duplicates get their OWN badge, not the phase-group one',
   /fha-group-dup/.test(src) && /duplicate rows · same phases/.test(src));
 check('the duplicate tooltip says what to do about it',
   /Merge or delete the extras/.test(src) && /repeated drafts accepted into the project/.test(src));
-check('the badge tooltip teaches the App Q pattern and the worst-case rule',
-  /classified per phase \(ARP4761A App Q pattern\)/.test(src) && /fault trees take the group's worst case/.test(src));
+// 4 Sep 2026 — the per-phase badge (and its tooltip) is gone; the worst-case rule lives in the
+// member-row title and the tree binding, not in a pill.
+check('no per-phase badge tooltip remains', !/classified per phase \(ARP4761A App Q pattern\)/.test(src));
 check('member rows read as continuations (└), muted, with a title explaining membership',
   /└ \$\{esc\(row\.fcId\)\}/.test(src) && /data-fha-group-member="1"/.test(src));
 check('every row\'s menu offers "Add phase variant"', /⧉ Add phase variant/.test(src) && /acFhaAddPhaseVariant\(/.test(src));

@@ -4718,7 +4718,12 @@ function renderACFHA() {
                 case 'consolidate':
                     return `<span class="fha-group-badge fha-group-merge" title="${n} rows share this failure-condition id with different phase lists but the SAME class. Rows come from effects, not from phases: where the effect and class are the same across phases, this is ONE row listing all of those phases. Merge them — a single row also gives the exposure ratio the full phase list it should have." style="${_badgeStyle('var(--color-warning, #7A5300)', 'var(--color-warning, #7A5300)')}">${n} rows · same class across phases — should be one row</span>`;
                 default:
-                    return `<span class="fha-group-badge" title="One failure condition, classified per phase (ARP4761A App Q pattern) because its effects — and with them the class — genuinely differ by phase: ${_grp.distinctClasses} classes across ${_grp.distinctPhaseSets} phase sets in ${n} rows. Each row's phase list sets its own exposure time; the fault trees take the group's worst case." style="${_badgeStyle('var(--color-border-strong)', 'inherit')}">phase group × ${n} · ${_grpWorst}</span>`;
+                    // 4 Sep 2026 (Waqas, on "phase group × 2 · worst Major"): "you do not need that
+                    // pill its standard practice what we are doing" — a condition split into rows
+                    // by phase because its effects differ IS the method (rows come from effects);
+                    // it earns no badge. Duplicates, contradictions and consolidation candidates
+                    // above still do — those are findings.
+                    return '';
             }
         })();
         const _fcCell = _isMember
