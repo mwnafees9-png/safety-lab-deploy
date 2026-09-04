@@ -2430,7 +2430,7 @@
                     _systemId: scope.systemId || '', _systemName: scope.systemName || '',
                     // 3 Sep 2026 — the declared assumptions this row relies on, so Accept can
                     // promote them into the register and fill the row's assumptions column.
-                    _assumptions: _assumptionsFor(batchAssumptions, String(x.fcDesc).trim())
+                    _assumptions: _assumptionsFor(batchAssumptions, String(x.fcDesc).trim(), [x.subId, x.srcCondId])
                 });
             });
         }
@@ -2840,14 +2840,25 @@
     // "all", and — when the model gave no appliesTo at all (older skill text, or a
     // model that ignored the rule) — every assumption of the batch, because it was
     // declared load-bearing for that batch and dropping it would silently un-log it.
-    function _assumptionsFor(list, fcDesc) {
+    // 4 Sep 2026 (Waqas, reading golden run 1): "we dont need to show all 97
+    // assumptions on every failure condition, just the ones applicable to that one."
+    // An assumption the model did not scope used to match EVERY row (appliesTo null or
+    // 'all' returned true), so 129 rows each cited all 91 declared assumptions. Now a
+    // row links an assumption only when it is NAMED — in appliesTo, or in the
+    // free-text usedFor the model writes ("Restrain payload (both sub-functions)").
+    // Unscoped assumptions still reach the register (the ledger sweep); they just do
+    // not decorate every row. A row's own judgement note is linked by the caller.
+    function _assumptionsFor(list, fcDesc, extraKeys) {
         var norm = function (t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); };
-        var key = norm(fcDesc);
+        var keys = [norm(fcDesc)].concat((extraKeys || []).map(norm)).filter(function (k) { return k && k.length >= 4; });
+        if (!keys.length) return [];
+        var hits = function (d) { var k = norm(d); if (!k || k.length < 4) return false; return keys.some(function (key) { return k === key || key.indexOf(k) >= 0 || k.indexOf(key) >= 0; }); };
         return (list || []).filter(function (a) {
             if (!a) return false;
-            if (a.appliesTo == null) return true;
-            if (a.appliesTo === 'all') return true;
-            return Array.isArray(a.appliesTo) && a.appliesTo.some(function (d) { var k = norm(d); return k && (k === key || key.indexOf(k) >= 0 || k.indexOf(key) >= 0); });
+            if (Array.isArray(a.appliesTo) && a.appliesTo.some(hits)) return true;
+            if (typeof a.appliesTo === 'string' && a.appliesTo !== 'all' && hits(a.appliesTo)) return true;
+            if (a.usedFor && hits(a.usedFor)) return true;
+            return false;
         });
     }
     // 3 Sep 2026 — THREE EFFECT AXES (Waqas: "reduction in safety margins or
@@ -4020,7 +4031,7 @@
                 if (a.op) {
                     // unified-engine action — exactly the panel's per-item onAccept
                     if (a.op === 'add_fha') {
-                        try { a._assumptions = _assumptionsFor(asms, String(a.fcDesc || '').trim()); } catch (_) {}
+                        try { a._assumptions = _assumptionsFor(asms, String(a.fcDesc || '').trim(), [a.subId, a.srcCondId]); } catch (_) {}
                         if (a.judgementCall === true) out.judgement++;
                     }
                     const res = _chatRunActions([a], model, undefined, feature);
@@ -4036,7 +4047,7 @@
                     out.results.push({ i: i, op: 'hf:' + opts.lane, ok: !!ok });
                 } else if (a.fcDesc !== undefined && a.subId !== undefined) {
                     // classic FHA suggestion shape
-                    const r = _applyFhaSuggestion(Object.assign({}, a, { _model: model, _assumptions: _assumptionsFor(asms, String(a.fcDesc || '').trim()) }));
+                    const r = _applyFhaSuggestion(Object.assign({}, a, { _model: model, _assumptions: _assumptionsFor(asms, String(a.fcDesc || '').trim(), [a.subId, a.srcCondId]) }));
                     if (r === 'protected') out.protected++;
                     else if (r) { if (_applyFhaSuggestion._last && _applyFhaSuggestion._last.action === 'updated') out.updated++; else out.applied++; }
                     else out.failed++;
@@ -5385,6 +5396,12 @@
     }
     // Step 1 — Allocation vs Verification. Small two-card picker (reuses panel styles).
     function _openSynthKindPicker(onPick) {
+        // 4 Sep 2026 — the FIFTH picker guarded. Golden campaign run 1: the trees step
+        // opened this card and waited for a click while the harness recorded a refusal,
+        // and FMEA then correctly declined for want of trees. Under capture: the
+        // ALLOCATION tree (PASA/PSSA, top-down from the FHA) — the tree an FHA feeds
+        // first; the verification mirror is a later, deliberate choice.
+        if (_capture.armed) { try { console.info('[AI] synthesis kind auto-selected: allocation (PASA) — capture armed, no UI'); } catch (_) {} return onPick('allocation'); }
         _ensurePanelStyles();
         let p = document.getElementById('ai-synth-kind'); if (p) p.remove();
         p = document.createElement('div'); p.id = 'ai-synth-kind'; p.className = 'ai-rev-panel'; _applyPanelPalette(p);
@@ -5477,6 +5494,14 @@
     // condition listed with a checkbox (all pre-checked — "do them all" is the
     // default), grouped by severity so the Catastrophic ones read first.
     function _openFcPicker(fcs, asm, onPick) {
+        // 4 Sep 2026 — the SIXTH and last picker guarded. Its own default is "all
+        // pre-checked — do them all"; under capture that default is simply taken.
+        if (_capture.armed) {
+            const all = (fcs || []).slice();
+            if (!all.length) { _captureBail('tree synthesis: no untreed failure conditions to synthesise', { lane: 'synthesizeTree' }); return; }
+            try { console.info('[AI] tree synthesis auto-selected all ' + all.length + ' untreed condition(s) — capture armed, no UI'); } catch (_) {}
+            return onPick(all);
+        }
         _ensurePanelStyles();
         let p = document.getElementById('ai-synth-fc-pick'); if (p) p.remove();
         p = document.createElement('div'); p.id = 'ai-synth-fc-pick'; p.className = 'ai-rev-panel'; _applyPanelPalette(p);
@@ -12001,7 +12026,7 @@
                 // 3 Sep 2026 — the batch's declared assumptions were shown in the panel
                 // but never handed to the executor, so an accepted row cited none of
                 // them. Match them to this row the same way the classic lane does.
-                try { if (a && a.op === 'add_fha') a._assumptions = _assumptionsFor(_batchAsms, String(a.fcDesc || '').trim()); } catch (_) {}
+                try { if (a && a.op === 'add_fha') a._assumptions = _assumptionsFor(_batchAsms, String(a.fcDesc || '').trim(), [a.subId, a.srcCondId]); } catch (_) {}
                 const res = _chatRunActions([a], (attempt.rr && attempt.rr.model) || MODELS.reason, undefined, cfg.analysis);
                 const ok = !!(res && res[0] && res[0].ok !== false);
                 // AIF-1 — the reason used to be discarded here, which is half of

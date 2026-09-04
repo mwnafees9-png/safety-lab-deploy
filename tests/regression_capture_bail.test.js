@@ -58,6 +58,15 @@ console.log('[1] the wiring');
     /function _fmeaSystemPicker[\s\S]{0,600}?if \(_capture\.armed\) \{[\s\S]{0,400}?FMEA system auto-selected/.test(ai));
   check('the FMEA picker bails rather than hangs when there is nothing to analyse',
     /_captureBail\('FMEA: no system has fault trees with basic events'/.test(ai));
+  // 4 Sep 2026 — golden run 1: the trees step stopped on the synthesis-kind card. ALL SIX
+  // pickers must answer themselves under capture; this enumerates them so a seventh
+  // cannot be added unguarded without this line changing.
+  ['_openScopePicker', '_openDecompScopePicker', '_openFhaScopePicker', '_fmeaSystemPicker', '_openSynthKindPicker', '_openFcPicker'].forEach(function (name) {
+    const body = extractFn(ai, name) || '';
+    check('picker answers itself under capture: ' + name, /if \(_capture\.armed\)/.test(body.slice(0, 1800)), name + ' has no capture guard near its top');
+  });
+  check('the synthesis kind picker chooses the allocation tree under capture', /synthesis kind auto-selected: allocation/.test(ai));
+  check('the failure-condition picker takes its own "all" default under capture, and bails on an empty list', /tree synthesis auto-selected all/.test(ai) && /no untreed failure conditions to synthesise/.test(ai));
 }
 
 // ---- 2. EXECUTED: the machinery actually behaves ----------------------------

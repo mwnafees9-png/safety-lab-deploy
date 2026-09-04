@@ -36,7 +36,7 @@ function extractFn(src, name) {
 console.log('[1] the wiring');
 check('applyDraft is on the public API, next to the capture seam', /applyDraft: _applyCapturedDraft,/.test(ai));
 check('unified actions go through _chatRunActions — the SAME executor as the panel', /const res = _chatRunActions\(\[a\], model, undefined, feature\);/.test(ai));
-check('add_fha rows get the batch assumptions matched exactly as the panel does', /a\._assumptions = _assumptionsFor\(asms, String\(a\.fcDesc \|\| ''\)\.trim\(\)\)/.test(ai));
+check('add_fha rows get the batch assumptions matched exactly as the panel does', /a\._assumptions = _assumptionsFor\(asms, String\(a\.fcDesc \|\| ''\)\.trim\(\), \[a\.subId, a\.srcCondId\]\)/.test(ai));
 check('HF rows go through the lane\'s own applier', /_applyHfDraftRow\(_HF_DRAFT_LANES\[opts\.lane\], a\)/.test(ai));
 
 console.log('\n[2] executed — every item is accounted for');

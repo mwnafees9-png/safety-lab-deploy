@@ -73,7 +73,7 @@ console.log('\n[2] the judgement travels the whole way');
   check('accept files the note as an assumption of type judgement', /type: 'judgement', appliesTo: 'all'/.test(ai) && /judgement: 'AI judgement'/.test(ai));
   check('accept shouts it in the comments column too', /⚠ JUDGEMENT CALL — classified on limited information; engineer to confirm/.test(ai));
   check('the action executor passes the flag AND the assumptions through (the Vayu gap)', /judgementCall: a\.judgementCall === true, judgementNote: a\.judgementNote, _assumptions: Array\.isArray\(a\._assumptions\)/.test(ai));
-  check('the panel per-item accept attaches the batch assumptions to the action', /a\._assumptions = _assumptionsFor\(_batchAsms, String\(a\.fcDesc \|\| ''\)\.trim\(\)\)/.test(ai));
+  check('the panel per-item accept attaches the batch assumptions to the action', /a\._assumptions = _assumptionsFor\(_batchAsms, String\(a\.fcDesc \|\| ''\)\.trim\(\), \[a\.subId, a\.srcCondId\]\)/.test(ai));
   check("a protected row is reported as blocked, not as 'add_fha failed'", /edited by hand — not overwritten; newer draft noted on it/.test(ai));
 }
 
@@ -120,6 +120,30 @@ console.log('\n[4] executed — the ledger sweep');
   vm.runInContext('_promoteLedgerForFha(true, { id: "NAV" }, "test-model")', ctx);
   check("system scope promotes that system's sfha entries only", seen && seen.length === 1 && seen[0].text === 'Sys-scoped premise', JSON.stringify(seen && seen.map(x => x.text)));
   check('the sweep runs after every successful accept, both scopes', /_promoteLedgerForFha\(false, null, s\._model\)/.test(ai) && /_promoteLedgerForFha\(true, sys, s\._model\)/.test(ai));
+}
+
+// ---- 5. EXECUTED: an assumption links to a row only when it NAMES it ----------------
+console.log('\n[5] executed — assumptions link by name, never by default');
+{
+  const ctx = { console, String, Array };
+  vm.createContext(ctx);
+  vm.runInContext(extractFn(ai, '_assumptionsFor'), ctx);
+  const list = JSON.stringify([
+    { text: 'A unscoped' },
+    { text: 'B all', appliesTo: 'all' },
+    { text: 'C named in appliesTo', appliesTo: ['Loss of braking'] },
+    { text: 'D named in usedFor', usedFor: 'Loss of braking (both sub-functions)' },
+    { text: 'E names another', appliesTo: ['Loss of thrust'] },
+    { text: 'F names the sub-function id', usedFor: 'SF-003 rows' }
+  ]);
+  const r = JSON.parse(vm.runInContext('JSON.stringify(_assumptionsFor(' + list + ', "Loss of braking", ["SF-003", ""]).map(function (a) { return a.text[0]; }))', ctx));
+  check('unscoped and "all" assumptions do NOT attach to every row (the 91-per-row bug)', !r.includes('A') && !r.includes('B'), r.join(''));
+  check('an assumption naming the condition in appliesTo attaches', r.includes('C'));
+  check('an assumption naming it in the free-text usedFor attaches', r.includes('D'));
+  check('an assumption naming a DIFFERENT condition does not', !r.includes('E'));
+  check('an assumption naming the sub-function id attaches via the extra keys', r.includes('F'));
+  const none = JSON.parse(vm.runInContext('JSON.stringify(_assumptionsFor(' + list + ', "", []))', ctx));
+  check('a row with no usable key links nothing rather than everything', none.length === 0);
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
