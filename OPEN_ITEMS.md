@@ -797,6 +797,21 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
+- **F15 — THE FULL THREAD BEFORE RUN 2 (Waqas, 4 Sep: "wait for the full MAC/CoFFE"; "the thread
+  should run CoFFE interdependence and MAC").** Trees must be COMPILED from interdependence + MAC +
+  CoFFE (+ CRA) — `SLLaneTrees.compileAll()` — not drawn by the AI synthesiser, so tree logic is
+  identical run to run. Build order: (1) systems + system functions from the SDD through the
+  harness (`add_system`, `decompose` needs a system-scope handle under capture — today the picker
+  auto-selects Aircraft); (2) interdependence sweep (`idpAiSweep`) as a thread step; the harness
+  asserts the model's proposals so downstream can run (testing only — a proposal is never a review
+  in production); (3) MAC drafter — NEW lane: per aircraft sub-function and phase, clauses of system
+  functions with min-of, from the SDD's redundancy statements; lands as `macModels` entries with
+  `substantiation.kind='assumption'` carrying the SDD citation, engineer flips to 'sdd'; eval-gated
+  (changes what the trees measure); (4) CoFFE residue proposer — NEW lane: yes/no + result text for
+  the cases the MAC cannot compute (malfunction cases, unmodelled systems); lands as verdicts by the
+  model; (5) thread step 'trees' becomes compileAll(); FMEA then runs (systems exist). Score trees
+  two ways: shape identical (yes/no per condition) and node names same-meaning (judge).
+
 - **F13 — CMA "link" fails because adding a CMA returns no id (found on golden run 1, 4 Sep 2026;
   46 of the CMA draft's actions failed).** The AI's CMA draft is `add_cma` followed by `link`
   actions that point at the new CMA with a placeholder id; `add_cma` does not return the id it
