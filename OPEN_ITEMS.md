@@ -797,6 +797,19 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
+- **F18 — A RELOAD THAT FAILS TO RESTORE LOCALLY KEEPS THE CLOUD IDENTITY AND RENAMES THE ROW
+  (live, 4 Sep 2026 ~19:08 UTC).** The run 2 tab reloaded after a deploy (its localStorage was at
+  Chrome's ceiling), came up as an empty "Untitled Project" with `_activeCloudProjectId` still
+  2f31f51e and `_dirtySinceSave` true, and autosave wrote the NAME "Untitled Project" over the
+  run 2 project row. The anti-wipe guard refused the data (version stayed 237; 126 conditions,
+  19 MAC rules, 142 trees intact); the name was put back by hand and the tab detached with
+  `__slCloudSyncDetach`. Same family as de27b117 (31 Aug), different entry: not New Project but a
+  failed local restore. Fix: on boot, if the local snapshot did not restore (or restored empty)
+  while a cloud id is stored, DETACH before the first autosave — or adopt the server document
+  instead of pushing; never let an empty document carry a stored identity. A duplicate near-empty
+  row 417f4ea9 (SDD only, 05:48) also exists from the morning's "saved copy changed" dialog —
+  export-then-delete when the cleanup list is agreed (rule 26).
+
 - **F17 — NO HAND EDITOR FOR THE ARBITRATION SCHEME (found 4 Sep 2026 while fixing F16c).** `rule.arbitration`
   {scheme voting|none, k, of} is read by mac_lanes and reported by lane_trees, and the MAC drafter
   can now propose it from the document — but no panel lets the engineer DECLARE or SIGN it by

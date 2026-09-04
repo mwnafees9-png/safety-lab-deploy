@@ -1865,7 +1865,7 @@
         'STANDARD GROUNDING — ARP4754B §4.3 / §4.5 architecture: the allocation of aircraft functions to SYSTEMS, and each system\'s own functions (ARP4761A Table Q.4-1 columns are systems WITH their functions).',
         'REQUIRED INPUTS: the aircraft functional decomposition (aircraft sub-function ids) and the system design description / architecture document. Without the document, return insufficient_information — never guess a system list from the function names alone.',
         'WHAT A SYSTEM IS HERE: a design-allocated system the document itself names as one (propulsion, flight control, landing gear, electrical power, fuel, hydraulics, avionics, environmental control, and the like — ATA-chapter style where the document uses it). Resources such as electrical, hydraulic and pneumatic power ARE systems here (they own functions other systems consume). Structure, zones and items are NOT systems.',
-        'ONE add_system PER SYSTEM, BEFORE ITS FUNCTIONS, named exactly as the document names it. A system that already exists in the project is reused by name — never duplicated under a variant name.',
+        'ONE add_system PER SYSTEM, BEFORE ITS FUNCTIONS, named exactly as the document names it. A system that already exists in the project is reused by name — never duplicated under a variant name. EVERY system you file a function under must have its own add_system in the SAME reply, before that function — a function for a system you did not add is an error. Cover EVERY system the document describes, never a subset: when the list is long, keep each definition to one sentence rather than dropping systems.',
         'SYSTEM FUNCTIONS: for each system, add_function with scope "system", systemId = the system\'s name, funcName verb-first in the document\'s vocabulary, funcDef one sentence of WHAT it delivers (never the means), and traceIds = the aircraft SUB-FUNCTION ids this system function implements or directly supports. Trace ONLY where the document says so; an untraced system function is allowed (a resource or housekeeping function) and is better than a guessed trace.',
         'GRANULARITY: one system function per independently-failable capability of that system, typically 2–6 per system; a single catch-all function per system is too coarse, and component-level detail is too fine.',
         'KEEP EVERY REDUNDANT COPY COUNTABLE (Waqas ruling, 4 Sep 2026): the MAC counts configuration items — "at least 1 of 2 flight control computers", "at least 2 of 4 engines" — so a redundancy the document states must survive as separately named entries, never collapsed into one. Four engines are four systems (or four items under one propulsion system); dual channels are two functions ("Command elevator — channel A", "— channel B") or two items. Name each copy exactly as the document does, with its side or position where the document gives one (left / right, 1 / 2, A / B), because the MAC may need one clause per side.',
@@ -10541,7 +10541,16 @@
             const of = [];
             (Array.isArray(cl && cl.of) ? cl.of : []).forEach(function (m) {
                 const key = String(m == null ? '' : m).trim();
-                const hit = fnIds[key] || fnIds[key.toLowerCase()] || fnIds['name:' + key.toLowerCase()];
+                let hit = fnIds[key] || fnIds[key.toLowerCase()] || fnIds['name:' + key.toLowerCase()];
+                // run 3 (4 Sep): the model wrote the copy's SHORT name ("FCC 1", "HYD A", "boost
+                // pump A") where the project holds the long one ("Flight control computer 1 (FCC 1)").
+                // A short name that is a whole-word fragment of exactly ONE project name resolves;
+                // anything ambiguous or absent stays unknown and is reported, never guessed.
+                if (!hit && key.length >= 3) {
+                    const kl = key.toLowerCase(); const cands = [];
+                    Object.keys(fnIds).forEach(function (k2) { if (k2.indexOf('name:') !== 0) return; const nm = k2.slice(5); const at = nm.indexOf(kl); if (at < 0) return; const before = at === 0 ? ' ' : nm[at - 1], after = at + kl.length >= nm.length ? ' ' : nm[at + kl.length]; if (/[a-z0-9]/.test(before) || /[a-z0-9]/.test(after)) return; if (cands.indexOf(fnIds[k2].id) < 0) cands.push(fnIds[k2].id); });
+                    if (cands.length === 1) hit = { id: cands[0] };
+                }
                 if (!hit) { unknown.push(key); return; }
                 if (of.indexOf(String(hit.id)) < 0) of.push(String(hit.id));
             });
@@ -10769,14 +10778,26 @@
     }
     function _chatAddFunction(a, model) {
         if (a.scope === 'system' && a.systemId) {
-            const sysObj = _chatSysByIdOrName(a.systemId); if (!sysObj) return { ok: false, error: 'system not found' };
+            let sysObj = _chatSysByIdOrName(a.systemId);
+            // 4 Sep 2026 (run 3): the systems lane emitted functions for systems it had NAMED but
+            // not added (15 of 30 actions failed "system not found"; 5 systems landed instead
+            // of 10, and every MAC rule for the missing systems failed with it). A function
+            // filed under a system NAME the model gave is the model naming that system — create
+            // it idempotently, the same way add_system would, and say so. An id-shaped token
+            // that resolves to nothing stays an error (nothing to name).
+            let createdSys = '';
+            if (!sysObj && !/^sys-/.test(String(a.systemId)) && String(a.systemId).trim()) {
+                const mk = _chatAddSystem({ name: String(a.systemId).trim() }, model);
+                if (mk && mk.ok) { sysObj = _chatSysByIdOrName(mk.id) || _chatSysByIdOrName(a.systemId); createdSys = String(a.systemId).trim(); }
+            }
+            if (!sysObj) return { ok: false, error: 'system not found: ' + String(a.systemId) };
             if (!Array.isArray(sysObj.functions)) sysObj.functions = [];
             const row = { internalId: newRowId(), funcId: '', funcName: a.subName || a.funcName || '', funcDef: a.subDef || a.funcDef || '', traceIds: a.traceIds || [], ..._chatProv(model) };
             try { if (typeof _slAutoNumber === 'function') _slAutoNumber('sysFunc', row); } catch (_) {}
             if (!row.funcId) { let max = 0; (sysObj.functions || []).forEach(function (r) { const m = String(r.funcId || '').match(/(\d+)\s*$/); if (m) { const n = +m[1]; if (n > max) max = n; } }); row.funcId = 'SF-' + (max + 1); }
             sysObj.functions.push(row);
             if (typeof renderSysFunctions === 'function') renderSysFunctions();
-            return { ok: true, summary: 'System function ' + row.funcId + ' added — ' + _chatClip(row.funcName, 40) };
+            return { ok: true, summary: 'System function ' + row.funcId + ' added — ' + _chatClip(row.funcName, 40) + (createdSys ? ' (system “' + createdSys + '” created — it was named but not added)' : '') };
         }
         if (typeof acFunctionsData === 'undefined') return { ok: false, error: 'functions not loaded' };
         const row = { internalId: newRowId(), funcId: '', funcName: a.funcName || '', funcDef: a.funcDef || '', subId: '', subName: a.subName || '', subDef: a.subDef || '', ..._chatProv(model) };

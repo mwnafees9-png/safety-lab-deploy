@@ -24,7 +24,7 @@ check('nothing drafted because of them → the decline names the cause and quote
 check('… routed through the no-actions panel (capture-aware), not a transient toast', /if \(_unparsed && !_permanentErr && !_hardErr\) \{[\s\S]{0,120}_anemNoActionsPanel\(cfg, \{ reply: 'Nothing drafted — ' \+ _unparsed/.test(ai));
 check('valid replies with no actions and no explanation say exactly that (the old bare toast is gone)', !/turn\(s\) returned but produced no rows\.'/.test(ai) && /returned valid replies with no actions and no explanation\./.test(ai) && /The model gave no reason\./.test(ai));
 check('the capture payload carries the reply as the reason the harness reads', /reply: String\(\(parsed && parsed\.reply\) \|\| \(insuf && insuf\.reason\) \|\| ''\)/.test(ai) && /rec\.reason = String\(d\.reason \|\| d\.reply \|\| ''\)/.test(drv));
-check('pins: ai_assistant 76.54 (loader), ai_skills 2.11, ai_loader 8.46', /ai_assistant\.js\?v=76\.54/.test(loader) && /ai_skills\.js\?v=2\.11/.test(idx) && /ai_loader\.js\?v=8\.46/.test(idx));
+check('pins: ai_assistant 76.55 (loader), ai_skills 2.12, ai_loader 8.47', /ai_assistant\.js\?v=76\.55/.test(loader) && /ai_skills\.js\?v=2\.12/.test(idx) && /ai_loader\.js\?v=8\.47/.test(idx));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

@@ -42,7 +42,9 @@ console.log('[1] the systems lane exists, is guarded, and asks for the right sha
   vm.createContext(sb);
   vm.runInContext(fs.readFileSync(path.join(SITE, 'ai_skills.js'), 'utf8'), sb);
   const S = sb.window.SLABSkills;
-  check('arch.systems is a registered skill at v1', S && S.skills['arch.systems'] && /^arch\.systems@v1#[0-9a-f]{8}$/.test(S.stampFor('arch.systems')), S && S.stampFor('arch.systems'));
+  check('arch.systems is a registered skill at v2 (run 3: every system added in the same reply, never a subset)', S && S.skills['arch.systems'] && /^arch\.systems@v2#[0-9a-f]{8}$/.test(S.stampFor('arch.systems')), S && S.stampFor('arch.systems'));
+  check('… the body says a function for a system not added is an error, and to cover every system', /a function for a system you did not add is an error/.test(S ? S.skills['arch.systems'].body : '') && /Cover EVERY system the document describes, never a subset/.test(S ? S.skills['arch.systems'].body : ''));
+  check('the executor creates a NAMED owner system on add_function rather than failing (run 3: 15 of 30 actions failed "system not found")', /const mk = _chatAddSystem\(\{ name: String\(a\.systemId\)\.trim\(\) \}, model\);/.test(ai) && /system “' \+ createdSys \+ '” created — it was named but not added/.test(ai) && /if \(!sysObj\) return \{ ok: false, error: 'system not found: ' \+ String\(a\.systemId\) \};/.test(ai));
   check('the feature maps to its own skill', S && S.featureMap['arch.systems'] === 'arch.systems');
   const body = S ? S.skills['arch.systems'].body : '';
   check('… and the body says: systems the document names, add_system BEFORE functions, trace only where the document says so', /ONE add_system PER SYSTEM, BEFORE ITS FUNCTIONS/.test(body) && /Trace ONLY where the document says so/.test(body) && /Never introduce a system or a function the document does not describe/.test(body));
