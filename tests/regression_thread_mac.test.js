@@ -115,6 +115,28 @@ console.log('\n[2] executed — add_mac lands in the store\'s own shape');
   check('a rule the engineer has substantiated is NEVER overwritten', !r7.ok && /a signed rule already exists — not overwritten/.test(r7.error) && rules[0].clauses[0].min === 2);
 }
 
+console.log('\n[2b] run 2 findings (4 Sep 2026) — copies as items, ids the model echoes, the classic panels on the seam');
+{
+  const sbk = { window: {}, console: { info: function () {} } }; vm.createContext(sbk);
+  vm.runInContext(fs.readFileSync(path.join(SITE, 'ai_skills.js'), 'utf8'), sbk);
+  const S = sbk.window.SLABSkills;
+  check('arch.items is a registered skill: one add_item per redundant copy, named with its side / position, never merged', S.skills['arch.items'] && /One add_item per copy, named exactly as the document names it, with its side or position/.test(S.skills['arch.items'].body) && /"four turbofans" is four items/.test(S.skills['arch.items'].body));
+  check('draftItems is a public, capture-guarded lane; the thread runs items right after systems and before mac', /draftItems:\s+_captureGuard\('draftItems', draftItems\)/.test(ai) && drv.indexOf("step: 'items'") > drv.indexOf("step: 'systems'") && drv.indexOf("step: 'items'") < drv.indexOf("step: 'mac'"));
+  check('add_item resolves owningSystemId by NAME and never duplicates an item under the same system', /const sy = _chatSysByIdOrName\(a\.owningSystemId\); if \(sy\) a\.owningSystemId = sy\.id;/.test(ai) && /Item “' \+ a\.name \+ '” already exists/.test(ai));
+  check('the MAC directive says: members are the ITEMS where they exist; never an internal _id', /use the configuration ITEMS listed under each system \(itemId\) wherever they exist/.test(ai) && /never echo an internal _id/.test(ai));
+  check('the classic FHA panel (SFHA path) is on the capture seam', /if \(_capture\.armed\) \{\s+_captureFire\(\{ id: 'ai-fha-panel', feature: _fhaFeatureId/.test(ai));
+  check('applyDraft applies the classic FCIM shape (system-scope FCIM) through _applyFcimSuggestion', /a\.subId !== undefined && a\.fcDesc === undefined && \(a\.totalLoss !== undefined \|\| a\.partialLoss !== undefined \|\| a\.malfunction !== undefined\)/.test(ai) && /const ok = _applyFcimSuggestion\(Object\.assign\(\{\}, a, \{ _model: a\._model \|\| model \}\)\);/.test(ai));
+  // executed: an internalId echoed by the model resolves to the function / item
+  const ctx = { console, String, Array, Math, Date, Object, parseInt, JSON };
+  ctx.projectConfig = { macModels: [] };
+  ctx.snapshot = () => ({ acFunctionsData: [{ subId: '1.1' }], systemsData: [{ id: 'sys-fcs', name: 'Flight Control', functions: [{ internalId: '1788502035487wj6w7', funcId: 'FCS-F1', funcName: 'Command elevator' }] }], itemsData: [{ internalId: 'i-77', itemId: 'ITM-001', name: 'FCC A' }, { internalId: 'i-78', itemId: 'ITM-002', name: 'FCC B' }] });
+  ctx._validPhases = v => v;
+  vm.createContext(ctx);
+  vm.runInContext(extractFn(ai, '_chatAddMac') + '\n', ctx);
+  const r = vm.runInContext(`_chatAddMac({ subId: '1.1', clauses: [{ min: 1, of: ['1788502035487wj6w7'] }, { min: 1, of: ['i-77', 'i-78'] }] }, 'm')`, ctx);
+  check('an internal _id the model echoed resolves to the function (fid) or the item (itemId) — run 2 lost 11 of 28 rules to this', r.ok && JSON.stringify(ctx.projectConfig.macModels[0].clauses) === '[{"min":1,"of":["FCS-F1"]},{"min":1,"of":["ITM-001","ITM-002"]}]', JSON.stringify(r) + JSON.stringify(ctx.projectConfig.macModels[0] && ctx.projectConfig.macModels[0].clauses));
+}
+
 console.log('\n[3] executed — the MAC rules reach the FCIM drafter in plain words');
 {
   const ctx = { console, String, Array, Object };

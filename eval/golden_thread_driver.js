@@ -32,6 +32,7 @@
         { step: 'fcim',      call: function () { return SafetyLabAI.populateFcim(); } },
         { step: 'fha',       call: function () { return SafetyLabAI.populateFha(); } },
         { step: 'systems',   call: function () { return SafetyLabAI.decomposeSystems(); } },
+        { step: 'items',     call: function () { return SafetyLabAI.draftItems(); } },        // run 2 finding: the copies the MAC counts
         { step: 'mac',       call: function () { return SafetyLabAI.draftMac(); } },
         { step: 'sfcim',     each: 'systems', call: function (sy) { return SafetyLabAI.populateSysFcim(sy.id); } },
         { step: 'sfha',      each: 'systems', call: function (sy) { return SafetyLabAI.populateSfha(sy.id); } },
@@ -100,12 +101,17 @@
     }
 
     function read() {
+        if (_mem) return _mem;
         var v = null;
         try { v = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) { v = null; }
         if (!v || typeof v !== 'object' || !Array.isArray(v.steps)) return { steps: [] };
         return v;
     }
-    function write(s) { localStorage.setItem(KEY, JSON.stringify(s)); }
+    // 4 Sep 2026 — the campaign tab's localStorage sat at 5.2M chars (Chrome's ceiling);
+    // a quota failure here must never kill a step. Memory keeps the record; storage is
+    // best-effort, and the failure is counted so the export can say so.
+    var _mem = null; var _quotaFails = 0;
+    function write(s) { _mem = s; try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { _quotaFails++; if (_quotaFails === 1) console.warn('[golden] store write failed (' + (e && e.name) + ') — keeping the record in memory; ' + KEY + ' will lag'); } }
     function put(rec) {
         var s = read(), i = -1;
         for (var k = 0; k < s.steps.length; k++) if (s.steps[k].run === rec.run && s.steps[k].step === rec.step) { i = k; break; }
@@ -223,5 +229,5 @@
     function pending() { return read().steps.filter(function (r) { return r.state === 'started'; }); }
     function stop() { window.__goldenStop = true; return 'will stop after the current step'; }
 
-    window.SLGolden = { KEY: KEY, THREAD: THREAD, HF: HF, step: step, thread: thread, exportGolden: exportGolden, read: read, summary: summary, pending: pending, counts: counts, stop: stop };
+    window.SLGolden = { KEY: KEY, THREAD: THREAD, HF: HF, step: step, thread: thread, exportGolden: exportGolden, read: read, summary: summary, pending: pending, counts: counts, stop: stop, quotaFails: function () { return _quotaFails; } };
 })();
