@@ -44,7 +44,10 @@
         // synthesiser stays reachable as 'trees-ai' (optional — only when named in opts.only).
         { step: 'trees',     direct: compileTrees },
         { step: 'trees-ai',  call: function () { return SafetyLabAI.synthesizeTree(); }, optional: true },
-        { step: 'fmea',      call: function () { return SafetyLabAI.draftFmea(); } },
+        // 4 Sep 2026 (Waqas): "leave FMEAs out for now" — the FMEA lane is per system, from that
+        // system's own fault trees / system-level analysis, and the compiled trees are aircraft
+        // level; runs 1–3 declined it every time. Optional: runs only when named in opts.only.
+        { step: 'fmea',      call: function () { return SafetyLabAI.draftFmea(); }, optional: true },
         { step: 'pra',       call: function () { return SafetyLabAI.draftPra(); } },
         { step: 'zsa',       call: function () { return SafetyLabAI.draftZsa(); } },
         { step: 'cma',       call: function () { return SafetyLabAI.draftCma(); } }
