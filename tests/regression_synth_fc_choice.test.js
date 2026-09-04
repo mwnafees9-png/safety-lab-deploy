@@ -102,10 +102,13 @@ if (pickSrc) {
     root.querySelectorAll = sel => /synth-fc\b/.test(sel) ? ensureBoxes() : [];
     const doc = { getElementById: () => null, createElement: () => root, body: { appendChild() {} } };
     let picked = null;
-    const fn = new Function('document', '_ensurePanelStyles', '_applyPanelPalette', '_esc',
+    // 4 Sep 2026 — the picker answers itself under an ARMED capture (golden campaign);
+    // this suite is the human path, so the capture is disarmed and a bail would be a bug.
+    const fn = new Function('document', '_ensurePanelStyles', '_applyPanelPalette', '_esc', '_capture', '_captureBail', 'console',
       pickSrc + '\nreturn _openFcPicker;')(
       doc, () => {}, () => {},
-      s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+      s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])),
+      { armed: false }, () => { throw new Error('bail must not fire on the human path'); }, { info() {} });
     fn(fcs, 'PASA', p => { picked = p; });
     const go = els.find(e => e._sel === '#synth-fc-go');
     if (drive) drive({ boxes: ensureBoxes(), go, root });
