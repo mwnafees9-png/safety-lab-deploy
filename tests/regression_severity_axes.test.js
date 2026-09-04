@@ -179,6 +179,7 @@ console.log('\n[4] accept — the class is derived, the model\'s class is record
     console, Date, Math, JSON, Array, String, Object, Number,
     newRowId: (() => { let n = 100; return () => ++n; })(),
     _validPhases: p => Array.isArray(p) ? p : [],
+    _macCommentFor: () => '',   // 4 Sep 2026 (evening)
     _SEV_ANCHORS: { 'CAT-1': 'Catastrophic', 'HAZ-1': 'Hazardous', 'HAZ-2': 'Hazardous', 'HAZ-3': 'Hazardous', 'MAJ-1': 'Major', 'MAJ-2': 'Major', 'MAJ-3': 'Major', 'MIN-1': 'Minor', 'MIN-2': 'Minor', 'MIN-3': 'Minor', 'NSE-1': 'No Safety Effect' },
     _skillStampFor: () => 'fha.draft@v4#test',
     _slAutoNumber: (k, d) => { if (!d.fcId) d.fcId = 'FC-' + (++minted); return d; },

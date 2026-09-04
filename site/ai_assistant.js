@@ -1515,7 +1515,7 @@
             '5. Be complete but do not pad — only credible conditions.',
             '',
             'Return STRICT JSON only — no prose, no markdown fences:',
-            '{ "rows": [ { "subId": "<echo the given subId>", "fcDesc": "...", "phases": ["..."], "effAc": "...", "effCrew": "...", "effPax": "...", "effAcLevel": "<none | slight | significant | large | hull loss, or \"\">", "effCrewLevel": "<none | slight | significant | large | fatalities or incapacitation, or \"\">", "effPaxLevel": "<none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities, or \"\">", "severity": "<one of the classes above, or \"\" only when there is genuinely nothing to reason from>", "sevBasis": "<the Table A6 anchor id for the governing axis - required whenever severity is set, judged or grounded>", "severityRationale": "...", "judgementCall": <true ONLY where you set a level or the class by judgement because the context did not settle it; otherwise false>, "judgementNote": "<when judgementCall is true: one or two sentences saying exactly what you assumed and what evidence would confirm or overturn it; otherwise \"\">" } ] }'
+            '{ "rows": [ { "subId": "<echo the given subId>", "srcCondId": "<the FCIM condition id when one was given, else omit>", "fcDesc": "...", "phases": ["..."], "effAc": "...", "effCrew": "...", "effPax": "...", "effAcLevel": "<none | slight | significant | large | hull loss, or \"\">", "effCrewLevel": "<none | slight | significant | large | fatalities or incapacitation, or \"\">", "effPaxLevel": "<none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities, or \"\">", "severity": "<one of the classes above, or \"\" only when there is genuinely nothing to reason from>", "sevBasis": "<the Table A6 anchor id for the governing axis - required whenever severity is set, judged or grounded>", "severityRationale": "...", "judgementCall": <true ONLY where you set a level or the class by judgement because the context did not settle it; otherwise false>, "judgementNote": "<when judgementCall is true: one or two sentences saying exactly what you assumed and what evidence would confirm or overturn it; otherwise \"\">" } ] }'
         ].join('\n');
     }
 
@@ -1676,8 +1676,8 @@
     const _SPEC_FCIM = [
         'STANDARD GROUNDING — ARP4761A failure condition identification matrix: §A.3 / Table A3 (aircraft level), §C.3 / Table C1 (system level); worked example Table Q.3-2. Indication/mitigation substantiation per §xx.1309. This is NOT the App B CoFFE (Table B2) — CoFFE combines SYSTEM functional failures against an aircraft FC and lives in the PASA.',
         'THE MATRIX SHAPE (Table A3): one row per function in the decomposition; per row, failure conditions of each type — a cell may legitimately hold SEVERAL distinct conditions (Q.3-2: MF1, MF2, MF3). Return them as ARRAYS: "malfunctions": [MF1, MF2, …] and "partials": [PL1, PL2, …] — one distinct condition per entry, NEVER merged into one phrase (a merged phrase hides a failure condition). A single "malfunction"/"partialLoss" string is also accepted for one-condition cells.',
-        'TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC (Waqas ruling, 4 Sep 2026): the Minimum Acceptable Configuration — how much control / configuration authority must remain for continued safe flight and landing — is the line between them. TOTAL LOSS = the loss takes the aircraft OUTSIDE MAC limits. PARTIAL LOSS = the loss stays WITHIN MAC limits (degraded, minimum still met). AT AIRCRAFT LEVEL say exactly that and no more: the condition text is "Loss of <capability> outside MAC limits" and "Loss of <capability> within MAC limits" — never copies, counts, channels, sides or system names, because the MAC may not be defined until the systems are designed, and the aircraft level stays implementation-agnostic. AT SYSTEM LEVEL (system FCIM / SFHA) the MAC detail IS parsed out: where a MAC rule is given to you, state the system conditions in that rule\'s terms — which configuration items, how many, symmetric or per-side — the same way every time; where no rule exists yet, say so in the rationale and read conservatively. Never offer two styles or choose one yourself: this is the only definition. Related sub-functions may also require COMBINED failure conditions (A3 text); flag any you identify in your reply — the engineer files them in the matrix\'s Combined column.',
-        'IMPLEMENTATION-AGNOSTIC WORDING (Waqas ruling, 2 Aug 2026): this analysis is FUNCTIONAL. Never name components, surfaces, or configuration in a condition — no rudder / spoiler / elevator / aileron / fin / empennage, no engine counts, no gear / bus / actuator nouns. "Single rudder inoperative on the twin-fin empennage" is WRONG; "partial loss of yaw control authority" is RIGHT. "Loss of thrust from all four engines" is WRONG; "Loss of propulsive thrust outside MAC limits" is RIGHT.',
+        'TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC (Waqas ruling, 4 Sep 2026): the Minimum Acceptable Configuration — how much control / configuration authority must remain for continued safe flight and landing — is the line between them. TOTAL LOSS = the loss takes the aircraft outside the MAC. PARTIAL LOSS (degraded) = the loss stays within the MAC (minimum still met). The condition TEXT stays plain — "Total loss of <capability>", "Partial loss of <capability>" — the MAC is the definition behind those words, and the hazard analysis (the FHA row\'s comments) states it; never write "MAC" into a condition. AT AIRCRAFT LEVEL: never copies, counts, channels, sides or system names — the MAC may not be defined until the systems are designed, and the aircraft level stays implementation-agnostic. AT SYSTEM LEVEL (system FCIM / SFHA) the MAC detail IS parsed out in the rationale and the FHA comments: where a MAC rule is given to you, describe the system conditions in that rule\'s terms — which configuration items, how many, symmetric or per-side — the same way every time; where no rule exists yet, say so and read conservatively. Never offer two styles or choose one yourself: this is the only definition. Related sub-functions may also require COMBINED failure conditions (A3 text); flag any you identify in your reply — the engineer files them in the matrix\'s Combined column.',
+        'IMPLEMENTATION-AGNOSTIC WORDING (Waqas ruling, 2 Aug 2026): this analysis is FUNCTIONAL. Never name components, surfaces, or configuration in a condition — no rudder / spoiler / elevator / aileron / fin / empennage, no engine counts, no gear / bus / actuator nouns. "Single rudder inoperative on the twin-fin empennage" is WRONG; "partial loss of yaw control authority" is RIGHT. "Loss of thrust from all four engines" is WRONG; "Total loss of propulsive thrust" is RIGHT.',
         'AWARENESS DISMISSAL IS PER-CONDITION (Waqas ruling, 2 Aug 2026): NEVER emit an N/A row carrying prose rationale in the matrix — if the crew-unaware variant of a condition is inapplicable because the cues are intrinsic, put that reasoning in your ASSUMPTIONS block and emit the row as Aware with an EMPTY rationale field. Dismissing the unaware case for a WHOLE function is almost never right: erroneous / malfunction behaviour that can develop below crew detection thresholds keeps its own crew-UNAWARE row carrying exactly the undetectable condition(s), nothing else.',
         'CONTROL-AXIS MALFUNCTIONS COME IN PAIRS (Waqas ruling, 2 Aug 2026): for pitch, roll and yaw the malfunction cell carries BOTH distinct conditions — (a) erroneous response to crew command AND (b) uncommanded motion with no command — as malfunctions[] entries, never merged; each variant that can develop undetected also appears on the Unaware row.',
         'NO SEVERITY WORDS IN CELLS: severities and effects live in the FHA, never in FCIM cell text.',
@@ -1703,7 +1703,7 @@
         // (fcimTopicModeJaccard 0.83 vs golden v5). The 12-word cap is load-bearing:
         // the capless variant blocked 4+1 rows on the cell-length check and FAILED.
         // BYTE-IDENTICAL to the ai_skills.js registry body (regression_ai_skills pins it).
-        'CANONICAL CONDITION PHRASING: word every condition, in 12 words or fewer, from the sub-function\'s own name recast as the delivered capability, the SAME words every time. Loss conditions carry the MAC in the text: TL = "Loss of <capability> outside MAC limits", PL = "Loss of <capability> within MAC limits" ("Provide wheel braking" -> TL "Loss of wheel braking outside MAC limits", PL "Loss of wheel braking within MAC limits"). Malfunction conditions use EXACTLY these forms: "Erroneous", "Uncommanded", "Inadvertent", "Undetected" + <capability> (M "Uncommanded wheel braking"). Add at most ONE short qualifier, two words or fewer, and only where a cell holds two distinct conditions that need telling apart ("— asymmetric", "— undetected"). Never write "complete/total/full/gross/partial loss of" as the loss-form, never "spurious/false" where Erroneous applies, never restate the mechanism, never exceed 12 words in a cell.'
+        'CANONICAL CONDITION PHRASING: word every condition, in 12 words or fewer, as "<Loss-form> <capability>" using EXACTLY these loss-forms: "Total loss of", "Partial loss of", "Erroneous", "Uncommanded", "Inadvertent", "Undetected". <capability> is the sub-function\'s own name recast as the delivered capability, the SAME words every time ("Provide wheel braking" -> TL "Total loss of wheel braking", PL "Partial loss of wheel braking", M "Uncommanded wheel braking"). Add at most ONE short qualifier, two words or fewer, and only where a cell holds two distinct conditions that need telling apart ("— asymmetric", "— undetected"). Never synonymise loss-forms (no "complete/full/gross loss", no "degraded" as the loss-form, no "spurious/false" where Erroneous applies), never write "MAC" into a condition, never restate the mechanism, never exceed 12 words in a cell.'
     ].join('\n');
     const _SPEC_FTA_SYNTH = [
         'STANDARD GROUNDING — ARP4761A Appendix G Fault Tree Analysis (synthesis).',
@@ -2434,9 +2434,28 @@
             const batch = todo.slice(bi * CHUNK, (bi + 1) * CHUNK);
             if (!batch.length) break;
             _toast('Drafting ' + label + ' — batch ' + (bi + 1) + ' of ' + nBatches + ' (' + allSuggestions.length + ' FC so far)…', 'info');
+            // run 2 (4 Sep 2026) — THE FCIM FEEDS THE FHA, at system level too. This classic
+            // path used to ask the model to ENUMERATE conditions per function ("typically total
+            // loss, partial loss, malfunction"), so the SFHA rewrote the system FCIM's conditions
+            // in its own words ("Complete loss of thrust generation" beside an FCIM that said
+            // "Loss of thrust production outside MAC limits"). Where the scope's FCIM already
+            // holds conditions for the functions in this batch, they are handed over verbatim
+            // with their ids, and the model classifies THOSE — fcDesc echoed word for word,
+            // srcCondId carried — exactly as the aircraft path does through its picker.
+            const _condsFor = (function () {
+                try {
+                    const pool = scope.systemId
+                        ? ((((typeof systemsData !== 'undefined' ? systemsData : []) || []).find(function (x) { return String(x.id) === String(scope.systemId); }) || {}).extractedFCs || [])
+                        : ((typeof acExtractedFCs !== 'undefined' ? acExtractedFCs : []) || []);
+                    const ids = batch.map(function (f) { return String(f.subId); });
+                    return (pool || []).filter(function (e) { return e && e.id && e.desc && ids.indexOf(String(e.subId)) >= 0; });
+                } catch (_) { return []; }
+            })();
             const userMsg = 'Cert basis: ' + certBasis + (scope.systemId ? ('\nSystem: ' + scope.systemName) : '') + '\nFunctions:\n' + batch.map(function (f) {
                 return '- subId=' + f.subId + ' | name=' + f.subName + (f.subDef ? ' | definition=' + f.subDef : '');
             }).join('\n')
+            + (_condsFor.length ? ('\n\nFAILURE CONDITIONS TO CLASSIFY (from the FCIM — classify EXACTLY these, one row per condition (a second row for the same condition only where the effects genuinely differ by phase), "fcDesc" echoed WORD FOR WORD and "srcCondId" set to the id; do not invent or reword conditions):\n'
+                + _condsFor.map(function (e) { return '- srcCondId=' + e.id + ' | subId=' + e.subId + ' | fcDesc=' + e.desc; }).join('\n')) : '')
             + (scope.systemId ? ('\n' + _macRulesForSystemPrompt(scope.systemId)) : '');   // 4 Sep 2026 — the SFHA parses the MAC detail out; the AFHA never sees it
             let r;
             try {
@@ -2468,6 +2487,7 @@
                     _sid: 'aifha-' + Date.now() + '-' + bi + '-' + i,
                     subId: x.subId,
                     subName: nameFor.get(x.subId) || x.subId,
+                    srcCondId: (x.srcCondId != null && String(x.srcCondId).trim()) ? String(x.srcCondId).trim() : undefined,   // run 2 — the FCIM condition this row classifies
                     fcDesc: String(x.fcDesc).trim(),
                     effAc: String(x.effAc || '').trim(),
                     effCrew: String(x.effCrew || '').trim(),
@@ -3153,6 +3173,7 @@
                                   : []),
                     sysScoped, _sysEntryForAsm, s._model),
                 comments: (s.judgementCall ? ('⚠ JUDGEMENT CALL — classified on limited information; engineer to confirm. ' + String(s.judgementNote || '').trim() + ' | ') : '')
+                    + _macCommentFor(s, sysScoped)   // 4 Sep 2026 (Waqas, evening): the MAC definition lives in the hazard analysis comments, not in the condition text
                     + ((_validPhases.lastUnlisted || []).length ? ('⚠ PHASE NOT IN MISSION PROFILE — the AI named ' + _validPhases.lastUnlisted.join(', ') + ', which is not a phase in this project\'s Flight Phases table; tick the right phase on this row. | ') : '')
                     + 'AI-drafted (' + (s._model || 'model') + '). '
                     + ((s.severity || _derived) ? ('Severity rationale: ' + (s.severityRationale || '—')
@@ -5205,7 +5226,7 @@
             'Include only the levels that are credible (omit any that do not apply).',
             '',
             'STYLE — a failure condition must be CLEAN and SHORT (entries have been coming out FAR too long — fix this):',
-            '1. Each failure condition is a TERSE noun phrase of 4–12 words naming ONLY the lost / degraded / erroneous capability (e.g. "Loss of pitch trajectory control outside MAC limits"). No sentences, no semicolons, no "because / regardless / whereas / not altered by", no rationale. If it reads like a sentence, it is too long — cut it down.',
+            '1. Each failure condition is a TERSE noun phrase of 4–12 words naming ONLY the lost / degraded / erroneous capability (e.g. "Total loss of pitch trajectory control"). No sentences, no semicolons, no "because / regardless / whereas / not altered by", no rationale. If it reads like a sentence, it is too long — cut it down.',
             '2. Do NOT append effects or consequences. No "resulting in…", "leading to…", "potentially causing…". The downstream FHA captures effects on aircraft / crew / passengers — keep them OUT of the FCIM.',
             _ABSTAIN_RULE,
             '3. NEVER state, propose, or imply a SEVERITY anywhere in the FCIM. Do NOT write "Catastrophic", "Hazardous", "Major", "Minor", "No Safety Effect", the word "severity", or "(proposed …)" in totalLoss / partialLoss / malfunction OR in rationale. Severity is classified in the FHA — never here. The awareness split is a yes/no judgement about whether severity DIFFERS by awareness; express that ONLY through the "awareness" field, never as text in a cell.',
@@ -5227,6 +5248,35 @@
     // within mac limits." The FCIM drafter is handed each function's MAC rule in plain
     // words — members by name, the minimum, the phase — so TL/PL are stated in the rule's
     // terms every run. A function with no rule is listed as such so the model says so.
+    // 4 Sep 2026 (Waqas, evening): "instead of saying MAC limits we should stick with
+    // total loss / degraded etc, and provide the MAC definition in the comments when
+    // doing the hazard analysis." Every accepted FHA row's comment opens with the MAC
+    // behind its loss-form: the definition, plus the rule in plain words where one exists
+    // for the aircraft function (the system row's rule is that of the aircraft function
+    // its system function serves). Malfunction rows carry no MAC note.
+    function _macCommentFor(s, sysScoped) {
+        try {
+            const desc = String((s && s.fcDesc) || '');
+            const isLoss = /^(total|partial) loss of/i.test(desc.trim());
+            if (!isLoss) return '';
+            let subIds = [String(s.subId || '')];
+            if (sysScoped) {
+                const sy = (snapshot().systemsData || []).find(function (x) { return x && String(x.id) === String(s._systemId); });
+                const fn = sy ? (sy.functions || []).find(function (f) { return f && (String(f.funcId) === String(s.subId) || String(f.subId) === String(s.subId)); }) : null;
+                const t = fn ? (Array.isArray(fn.traceIds) ? fn.traceIds : (fn.traceId ? [fn.traceId] : [])) : [];
+                if (t.length) subIds = t.map(String);
+            }
+            const rules = ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []).filter(function (r) { return r && subIds.indexOf(String(r.subId)) >= 0; });
+            const nameOf = {};
+            (snapshot().systemsData || []).forEach(function (sy) { nameOf[String(sy.id)] = sy.name || sy.id; (sy.functions || []).forEach(function (f) { if (f && f.funcId) nameOf[String(f.funcId)] = (sy.name || sy.id) + ' · ' + (f.funcName || f.funcId); }); });
+            (snapshot().itemsData || []).forEach(function (it) { if (it && it.itemId) nameOf[String(it.itemId)] = it.name || it.itemId; });
+            const def = /^total/i.test(desc.trim()) ? 'MAC — total loss: the loss takes the aircraft outside the minimum acceptable configuration for this function.' : 'MAC — partial loss: degraded, but the minimum acceptable configuration for this function still holds.';
+            const ruleTxt = rules.length
+                ? (' Rule: ' + rules.map(function (r) { return (r.phase && !/^all phases$/i.test(r.phase) ? (r.phase + ' — ') : '') + (r.clauses || []).map(function (c) { return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(function (m) { return nameOf[String(m)] || String(m); }).join(', ') + ']'; }).join(' AND ') + (r.substantiation && r.substantiation.ref ? ' (' + r.substantiation.ref + ')' : ''); }).join('; ') + '.')
+                : ' Rule: not yet defined for this function — to be set from the systems design.';
+            return def + ruleTxt + ' | ';
+        } catch (_) { return ''; }
+    }
     function _macRulesForPrompt(subIds) {
         try {
             const rules = ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []);
@@ -10574,7 +10624,7 @@
             pra:         (s.praData || []).slice(0, 30).map(function (p) { return { _id: p.internalId, praId: p.praId, threat: _chatClip(p.threat, 40) }; }),
             zsa:         (s.zsaData || []).slice(0, 30).map(function (z) { return { _id: z.internalId, zoneId: z.zoneId, sev: z.severity }; }),
             cma:         (s.cmaData || []).slice(0, 30).map(function (c) { return { _id: c.internalId, cmaId: c.cmaId, subject: _chatClip(c.subject, 40), scope: c.scope }; }),
-            items:       (s.itemsData || []).slice(0, 40).map(function (it) { return { _id: it.internalId, itemId: it.itemId, name: _chatClip(it.name, 40), dal: it.dal }; }),
+            items:       (s.itemsData || []).slice(0, 240).map(function (it) { return { _id: it.internalId, itemId: it.itemId, name: _chatClip(it.name, 48), sys: it.owningSystemId || '' }; }),   // run 2 (4 Sep): the 40 cap hid 18 of 58 items from the MAC drafter — 7 rules lost; items are small, list them all (with their system)
             fmea:        (s.fmeaData || []).slice(0, 40).map(function (m) { return { _id: m.internalId, level: m.level, sub: m.funcSubId || '', mode: _chatClip(m.funcMode || '', 36), sev: m.severity, fc: m.linkedFcId || '' }; }),
             routing:     (s.routingData || []).slice(0, 30).map(function (r) { return { _id: r.internalId, rId: r.routingId, name: _chatClip(r.name, 36), kind: r.kind }; }),
             markov:      ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.markovModels) || []).slice(0, 12).map(function (m) { return { id: m.id, name: _chatClip(m.name, 40), states: (m.states || []).slice(0, 24).map(function (st) { return { n: st.name, failed: !!st.isFailed }; }), transitions: (m.transitions || []).slice(0, 50).map(function (t) { return { from: t.from, to: t.to }; }) }; }),
@@ -11798,7 +11848,11 @@
         function _preflightAction(a) {
             const errs = (_validateArtifact(a) || []).slice();
             try {
-                if (typeof window !== 'undefined' && window.AiFidelity && window.AiFidelity.checkClaims) {
+                // run 2 (4 Sep 2026) — add_mac's rationale is the model's justification prose
+                // ("engine-out at V1 …"); the id-claim scanner read the hyphenated phrase as an
+                // identifier and blocked the thrust rule. The MAC executor grounds a rule the
+                // real way — every member must exist in the project — so the prose is exempt.
+                if (a && a.op !== 'add_mac' && typeof window !== 'undefined' && window.AiFidelity && window.AiFidelity.checkClaims) {
                     const txt = [a.fcDesc, a.text, a.rationale, a.severityRationale, a.effAc, a.effCrew, a.effPax, a.localEffect, a.nextEffect, a.endEffect, a.remarks]
                         .filter(Boolean).join(' · ');
                     const ctx = _pfGet();

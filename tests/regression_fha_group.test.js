@@ -205,6 +205,7 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
     console, Date, Math, JSON, Array, String, Object,
     newRowId: (() => { let n = 500; return () => ++n; })(),
     _validPhases: (p) => Array.isArray(p) ? p : [],
+    _macCommentFor: () => '',   // 4 Sep 2026 (evening) — the MAC note on the comment; exercised in regression_thread_mac
     _SEV_ANCHORS: { 'CAT-1': 'anchor text' },
     _skillStampFor: () => 'fha.draft@v2#test',
     _slAutoNumber: (key, data) => { if (!data.fcId) data.fcId = 'FC-MINTED-' + (++minted); return data; },

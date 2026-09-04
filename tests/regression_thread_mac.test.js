@@ -60,9 +60,10 @@ console.log('[1] the lane, the skill, the op');
   const sbk = { window: {}, console: { info: function () {} } }; vm.createContext(sbk);
   vm.runInContext(fs.readFileSync(path.join(SITE, 'ai_skills.js'), 'utf8'), sbk);
   const fcimBody = sbk.window.SLABSkills.skills['fcim.draft'].body;
-  check('fcim.draft is at v3: TOTAL LOSS = outside MAC limits, PARTIAL LOSS = within MAC limits — the only definition', /^fcim\.draft@v3#/.test(sbk.window.SLABSkills.stampFor('fcim.populate')) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(fcimBody) && /TOTAL LOSS = the loss takes the aircraft OUTSIDE MAC limits/.test(fcimBody) && /PARTIAL LOSS = the loss stays WITHIN MAC limits/.test(fcimBody) && !/TL MODELLING STYLES/.test(fcimBody) && /Never offer two styles or choose one yourself/.test(fcimBody));
-  check('the aircraft-level condition TEXT carries the MAC: "Loss of <capability> outside / within MAC limits"; "Complete/Partial loss of" are gone', /TL = "Loss of <capability> outside MAC limits", PL = "Loss of <capability> within MAC limits"/.test(fcimBody) && /Never write "complete\/total\/full\/gross\/partial loss of" as the loss-form/.test(fcimBody) && /"Loss of propulsive thrust outside MAC limits" is RIGHT/.test(fcimBody));
-  check('at aircraft level: no copies, counts, channels, sides or system names; at system level the MAC detail is parsed out', /AT AIRCRAFT LEVEL say exactly that and no more/.test(fcimBody) && /never copies, counts, channels, sides or system names/.test(fcimBody) && /AT SYSTEM LEVEL \(system FCIM \/ SFHA\) the MAC detail IS parsed out/.test(fcimBody));
+  check('fcim.draft is at v4: TOTAL LOSS / PARTIAL LOSS defined by the MAC, condition text plain (Waqas, 4 Sep evening)', /^fcim\.draft@v4#/.test(sbk.window.SLABSkills.stampFor('fcim.populate')) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(fcimBody) && /TOTAL LOSS = the loss takes the aircraft outside the MAC/.test(fcimBody) && /PARTIAL LOSS \(degraded\) = the loss stays within the MAC/.test(fcimBody) && !/TL MODELLING STYLES/.test(fcimBody) && /Never offer two styles or choose one yourself/.test(fcimBody));
+  check('the condition TEXT is "Total loss of" / "Partial loss of"; "MAC" never appears in a condition; the MAC is stated in the FHA comments', /"Total loss of", "Partial loss of", "Erroneous", "Uncommanded", "Inadvertent", "Undetected"/.test(fcimBody) && /never write "MAC" into a condition/.test(fcimBody) && /the hazard analysis \(the FHA row's comments\) states it/.test(fcimBody) && /"Total loss of propulsive thrust" is RIGHT/.test(fcimBody) && !/outside MAC limits"/.test(fcimBody));
+  check('at aircraft level: no copies, counts, channels, sides or system names; at system level the MAC detail is parsed out', /AT AIRCRAFT LEVEL: never copies, counts, channels, sides or system names/.test(fcimBody) && /AT SYSTEM LEVEL \(system FCIM \/ SFHA\) the MAC detail IS parsed out/.test(fcimBody));
+  check('every accepted loss-form FHA row opens its comment with the MAC definition and the rule in plain words', /function _macCommentFor\(s, sysScoped\)/.test(ai) && /\+ _macCommentFor\(s, sysScoped\)/.test(ai) && /MAC — total loss: the loss takes the aircraft outside the minimum acceptable configuration/.test(ai) && /Rule: not yet defined for this function/.test(ai));
   check('the AIRCRAFT FCIM drafter is handed NO MAC rules; the SYSTEM FCIM and SFHA drafters are', !/_anemBatch\(_FEATURE_DIRECTIVE\.fcim \+ _macRulesForPrompt/.test(ai) && /function _macRulesForSystemPrompt\(systemId\)/.test(ai) && (ai.match(/\(scope\.systemId \? \('\\n' \+ _macRulesForSystemPrompt\(scope\.systemId\)\) : ''\)/g) || []).length === 2);
   check('system-scope entry points exist for the thread (populateSysFcim, populateSfha), capture-guarded', /populateSysFcim: _captureGuard\('populateSysFcim'/.test(ai) && /populateSfha: _captureGuard\('populateSfha'/.test(ai));
 }
@@ -135,6 +136,23 @@ console.log('\n[2b] run 2 findings (4 Sep 2026) — copies as items, ids the mod
   vm.runInContext(extractFn(ai, '_chatAddMac') + '\n', ctx);
   const r = vm.runInContext(`_chatAddMac({ subId: '1.1', clauses: [{ min: 1, of: ['1788502035487wj6w7'] }, { min: 1, of: ['i-77', 'i-78'] }] }, 'm')`, ctx);
   check('an internal _id the model echoed resolves to the function (fid) or the item (itemId) — run 2 lost 11 of 28 rules to this', r.ok && JSON.stringify(ctx.projectConfig.macModels[0].clauses) === '[{"min":1,"of":["FCS-F1"]},{"min":1,"of":["ITM-001","ITM-002"]}]', JSON.stringify(r) + JSON.stringify(ctx.projectConfig.macModels[0] && ctx.projectConfig.macModels[0].clauses));
+}
+
+console.log('\n[2c] executed — the MAC definition rides the FHA comment');
+{
+  const ctx = { console, String, Array, Object, RegExp };
+  ctx.projectConfig = { macModels: [ { subId: '1.1', phase: 'All phases', clauses: [{ min: 1, of: ['ITM-001', 'ITM-002'] }], substantiation: { kind: 'assumption', ref: 'SDD §4.2' } } ] };
+  ctx.snapshot = () => ({ systemsData: [{ id: 'sys-fcs', name: 'Flight Control', functions: [{ funcId: 'FCS-F1', funcName: 'Command elevator', traceIds: ['1.1'] }] }], itemsData: [{ itemId: 'ITM-001', name: 'FCC A' }, { itemId: 'ITM-002', name: 'FCC B' }] });
+  vm.createContext(ctx);
+  vm.runInContext(extractFn(ai, '_macCommentFor') + '\n', ctx);
+  const a = vm.runInContext(`_macCommentFor({ subId: '1.1', fcDesc: 'Total loss of pitch control' }, false)`, ctx);
+  check('aircraft row, total loss: definition + the rule with members by NAME', /^MAC — total loss: the loss takes the aircraft outside the minimum acceptable configuration for this function\. Rule: at least 1 of \[FCC A, FCC B\] \(SDD §4\.2\)\. \| $/.test(a), a);
+  const b = vm.runInContext(`_macCommentFor({ subId: '2.3', fcDesc: 'Partial loss of wheel braking' }, false)`, ctx);
+  check('partial loss with no rule yet: definition + "not yet defined"', /^MAC — partial loss: degraded, but the minimum acceptable configuration for this function still holds\. Rule: not yet defined for this function/.test(b), b);
+  const c = vm.runInContext(`_macCommentFor({ subId: 'FCS-F1', _systemId: 'sys-fcs', fcDesc: 'Total loss of elevator command' }, true)`, ctx);
+  check('a SYSTEM row finds the rule through the aircraft function its system function serves', /Rule: at least 1 of \[FCC A, FCC B\]/.test(c), c);
+  const d = vm.runInContext(`_macCommentFor({ subId: '1.1', fcDesc: 'Uncommanded pitch motion' }, false)`, ctx);
+  check('a malfunction row carries no MAC note', d === '');
 }
 
 console.log('\n[3] executed — the MAC rules reach the FCIM drafter in plain words');
