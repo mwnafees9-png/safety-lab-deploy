@@ -23,17 +23,17 @@
     var HF = ['task', 'ergo', 'alloc', 'hea', 'alerts', 'tid', 'cd', 'sa', 'mfc'];
 
     var THREAD = [
+        // F15 (4 Sep 2026, Waqas): "aircraft functions > mac for those functions > FCIM for
+        // those > FHA > resources/interdependence > CoFFE > Fault trees". Systems sit between
+        // aircraft functions and MAC because MAC members ARE system functions. The MAC is
+        // drafted BEFORE the FCIM so total loss / partial loss are stated in each rule's terms.
         { step: 'decompose', call: function () { return SafetyLabAI.decompose(); } },
+        { step: 'systems',   call: function () { return SafetyLabAI.decomposeSystems(); } },
+        { step: 'mac',       call: function () { return SafetyLabAI.draftMac(); } },
         { step: 'fcim',      call: function () { return SafetyLabAI.populateFcim(); } },
         { step: 'fha',       call: function () { return SafetyLabAI.populateFha(); } },
-        // F15 (4 Sep 2026) — the full thread before trees: systems and their functions from
-        // the SDD (traced to aircraft sub-functions), then the interdependence sweep. MAC,
-        // CoFFE and compiled trees follow as they are built; until then 'trees' is still the
-        // AI synthesiser and is NOT what the consistency bar measures.
-        { step: 'systems',   call: function () { return SafetyLabAI.decomposeSystems(); } },
         { step: 'resources', call: function () { return SafetyLabAI.draftResources(); } },   // electrical / hydraulic / pneumatic / fuel — the CRA lane of the compiled trees
         { step: 'interdep',  direct: interdepSweepAndAccept },
-        { step: 'mac',       call: function () { return SafetyLabAI.draftMac(); } },
         { step: 'coffe',     direct: function () { return SafetyLabAI.draftCoffe({ fcCap: 200 }); } },
         // F15 step 5 — TREES ARE COMPILED, not drawn: SLLaneTrees.compileAll() builds every
         // lane page from the MAC rules + interdependence + CoFFE residue + resources. The AI

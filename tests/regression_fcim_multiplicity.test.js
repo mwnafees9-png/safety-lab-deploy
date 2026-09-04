@@ -100,8 +100,10 @@ check('the renderer stacks extras under the primary in the same cell',
   /_extraHtml\(row\.plExtra\)/.test(mfn) && /_extraHtml\(row\.mExtra\)/.test(mfn));
 check('the desk edits extras with the two ruling-named add buttons',
   /\+ partial-loss condition/.test(cbm) && /\+ malfunction condition/.test(cbm) && /within MAC limits, one outside/.test(cbm));
-check('_SPEC_FCIM asks for the arrays and states both TL modelling styles',
-  /"malfunctions": \[MF1, MF2/.test(ai) && /TL MODELLING STYLES/.test(ai) && /degraded-within-MAC-limits, one degraded-outside-MAC/.test(ai));
+// 4 Sep 2026 (Waqas): "total loss will be loss outside mac and partial within mac limits" —
+// the two modelling styles are gone; the MAC is the one line between TL and PL.
+check('_SPEC_FCIM asks for the arrays and defines TL/PL by the MAC (one definition, no styles)',
+  /"malfunctions": \[MF1, MF2/.test(ai) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(ai) && !/TL MODELLING STYLES/.test(ai));
 // The §8 captured-then-discarded guard, on its FOURTH potential instance: the
 // chat/unified accept path maps add_fcim fields explicitly, so the arrays must
 // be named there or the spec's own answer is dropped on accept. Caught live on

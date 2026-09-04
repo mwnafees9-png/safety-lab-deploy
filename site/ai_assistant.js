@@ -1676,7 +1676,7 @@
     const _SPEC_FCIM = [
         'STANDARD GROUNDING — ARP4761A failure condition identification matrix: §A.3 / Table A3 (aircraft level), §C.3 / Table C1 (system level); worked example Table Q.3-2. Indication/mitigation substantiation per §xx.1309. This is NOT the App B CoFFE (Table B2) — CoFFE combines SYSTEM functional failures against an aircraft FC and lives in the PASA.',
         'THE MATRIX SHAPE (Table A3): one row per function in the decomposition; per row, failure conditions of each type — a cell may legitimately hold SEVERAL distinct conditions (Q.3-2: MF1, MF2, MF3). Return them as ARRAYS: "malfunctions": [MF1, MF2, …] and "partials": [PL1, PL2, …] — one distinct condition per entry, NEVER merged into one phrase (a merged phrase hides a failure condition). A single "malfunction"/"partialLoss" string is also accepted for one-condition cells.',
-        'TL MODELLING STYLES (state which you used in the rationale): either TL = loss of the minimum acceptable configuration with PL = the degraded mode, OR TL = complete loss of all functionality with TWO partials — one degraded-within-MAC-limits, one degraded-outside-MAC. Related sub-functions may also require COMBINED failure conditions (A3 text); flag any you identify in your reply — the engineer files them in the matrix\'s Combined column.',
+        'TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC (Waqas ruling, 4 Sep 2026): the Minimum Acceptable Configuration is the line. TOTAL LOSS = the function\'s MAC is breached — the aircraft can no longer deliver the function to its minimum ("fewer than 2 of 4 engines available", "both elevator channels lost"). PARTIAL LOSS = degraded but the MAC still holds ("1 or 2 of 4 engines lost, MAC held", "one elevator channel lost"). Where a MAC rule for the sub-function is given to you, state BOTH conditions in that rule\'s terms — same numbers, same members, every time. Where no MAC rule exists yet, say so in the rationale and use the conservative reading (TL = loss of the whole capability, PL = any degradation) so the engineer can tighten it once the MAC is drafted. Never offer two styles or choose one yourself: this is the only definition. Related sub-functions may also require COMBINED failure conditions (A3 text); flag any you identify in your reply — the engineer files them in the matrix\'s Combined column.',
         'IMPLEMENTATION-AGNOSTIC WORDING (Waqas ruling, 2 Aug 2026): this analysis is FUNCTIONAL. Never name components, surfaces, or configuration in a condition — no rudder / spoiler / elevator / aileron / fin / empennage, no engine counts, no gear / bus / actuator nouns. "Single rudder inoperative on the twin-fin empennage" is WRONG; "partial loss of yaw control authority" is RIGHT. "Loss of thrust from all four engines" is WRONG; "complete loss of thrust generation" is RIGHT.',
         'AWARENESS DISMISSAL IS PER-CONDITION (Waqas ruling, 2 Aug 2026): NEVER emit an N/A row carrying prose rationale in the matrix — if the crew-unaware variant of a condition is inapplicable because the cues are intrinsic, put that reasoning in your ASSUMPTIONS block and emit the row as Aware with an EMPTY rationale field. Dismissing the unaware case for a WHOLE function is almost never right: erroneous / malfunction behaviour that can develop below crew detection thresholds keeps its own crew-UNAWARE row carrying exactly the undetectable condition(s), nothing else.',
         'CONTROL-AXIS MALFUNCTIONS COME IN PAIRS (Waqas ruling, 2 Aug 2026): for pitch, roll and yaw the malfunction cell carries BOTH distinct conditions — (a) erroneous response to crew command AND (b) uncommanded motion with no command — as malfunctions[] entries, never merged; each variant that can develop undetected also appears on the Unaware row.',
@@ -5170,6 +5170,31 @@
             '{ "rows": [ { "subId":"<echo the subId>", "awareness":"Aware|Unaware|Both|N/A", "rationale":"<ONLY for N/A: why the crew-unaware case is inapplicable; leave empty otherwise>", "totalLoss":"...", "partialLoss":"...", "malfunction":"..." } ] }'
         ].join('\n');
     }
+    // 4 Sep 2026 (Waqas): "the MAC drafter should also aid the AI to draft partial loss
+    // failure conditions consistently, total loss will be loss outside mac and partial
+    // within mac limits." The FCIM drafter is handed each function's MAC rule in plain
+    // words — members by name, the minimum, the phase — so TL/PL are stated in the rule's
+    // terms every run. A function with no rule is listed as such so the model says so.
+    function _macRulesForPrompt(subIds) {
+        try {
+            const rules = ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []);
+            if (!rules.length) return ' MAC RULES: none drafted yet for this project — say so in each rationale and use the conservative reading (TL = loss of the whole capability, PL = any degradation).';
+            const s = snapshot();
+            const fnName = {};
+            (s.systemsData || []).forEach(function (sy) { (sy.functions || []).forEach(function (f) { if (f && f.funcId) fnName[String(f.funcId)] = (sy.name || sy.id) + ' · ' + (f.funcName || f.funcId); }); });
+            const want = (subIds || []).map(String);
+            const lines = [], none = [];
+            want.forEach(function (id) {
+                const rs = rules.filter(function (r) { return r && String(r.subId) === id; });
+                if (!rs.length) { none.push(id); return; }
+                rs.forEach(function (r) {
+                    const cl = (r.clauses || []).map(function (c) { return 'at least ' + (c.min || 1) + ' of [' + (c.of || []).map(function (m) { return (fnName[String(m)] || String(m)) + ' (' + m + ')'; }).join('; ') + ']'; }).join(' AND ');
+                    lines.push(id + ' (' + (r.phase || 'All phases') + '): ' + cl + (r.substantiation && r.substantiation.ref ? ' — ' + r.substantiation.ref : ''));
+                });
+            });
+            return ' MAC RULES for the functions in scope (TOTAL LOSS = this rule breached; PARTIAL LOSS = degraded with this rule still held — state both in these terms): ' + (lines.length ? lines.join(' | ') : '(none)') + (none.length ? '. NO MAC RULE YET for: ' + none.join(', ') + ' — say so in the rationale and use the conservative reading.' : '');
+        } catch (_) { return ''; }
+    }
     async function populateFcim(opts) {
         opts = opts || {};
         if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); throw new Error('[Safety Lab Aero AI] backend not available.'); }
@@ -5186,7 +5211,7 @@
                 sort: function (a, b) { return String(a.subId).localeCompare(String(b.subId), undefined, { numeric: true }); },
                 row: function (f) { return [f.subId, f.subName || '', f.funcName || '']; }
             }, function (picked) {
-                _anemBatch(_FEATURE_DIRECTIVE.fcim, {
+                _anemBatch(_FEATURE_DIRECTIVE.fcim + _macRulesForPrompt(picked.map(function (f) { return f.subId; })), {
                     title: '✨ AI-drafted FCIM · review', analysis: 'fcim.populate',
                     specSecs: _specSecsForSubIds(picked.map(function (f) { return f.subId; })),   // per-system doc narrowing
                     chunk: {

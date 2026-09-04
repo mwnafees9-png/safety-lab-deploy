@@ -323,7 +323,7 @@ console.log('4. assumption ledger stamping executed');
     e1 && /^fha\.draft@v[4-9]#[0-9a-f]{8}$/.test(e1.skill), e1 && JSON.stringify(e1.skill));
   const e2 = vm.runInContext(
     'window.SafetyLabAiAssumptions.add({ analysis: "fcim.populate", text: "premise two" })', withReg);
-  check('stamp follows the analysis key (fcim)', e2 && /^fcim\.draft@v2#/.test(e2.skill));   // v1→v2 31 Aug 2026: CANONICAL CONDITION PHRASING (E1 rig)
+  check('stamp follows the analysis key (fcim)', e2 && /^fcim\.draft@v[2-9]#/.test(e2.skill));   // v1→v2 31 Aug 2026: CANONICAL CONDITION PHRASING (E1 rig)
   const e3 = vm.runInContext(
     'window.SafetyLabAiAssumptions.add({ analysis: "chat.edit", text: "premise three" })', withReg);
   check('spec-less analysis -> empty stamp, entry still recorded', e3 && e3.skill === '' && e3.text === 'premise three');

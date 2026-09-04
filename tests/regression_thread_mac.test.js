@@ -54,7 +54,13 @@ console.log('[1] the lane, the skill, the op');
   check('the op spec teaches add_mac and says the rule is filed as an assumption until substantiated', /- add_mac \{subId, phase, clauses:\[\{min, of:\[system function ids\]\}\], sddRef, rationale\}/.test(ai) && /Filed as an assumption carrying sddRef until the engineer substantiates it/.test(ai));
   check('the executor routes add_mac; the review card titles it', /case 'add_mac': \{ const r2 = _chatAddMac\(a, model\);/.test(ai) && /add_mac: 'MAC rule'/.test(ai));
   check('the project state given to the model lists existing MAC rules (update, do not repeat)', /mac:\s+\(\(typeof projectConfig !== 'undefined' && projectConfig && projectConfig\.macModels\) \|\| \[\]\)\.slice\(0, 60\)/.test(ai));
-  check('the golden thread runs mac after interdep and before trees', drv.indexOf("step: 'mac'") > drv.indexOf("step: 'interdep'") && drv.indexOf("step: 'mac'") < drv.indexOf("step: 'trees'"));
+  check('the golden thread runs mac after systems and BEFORE fcim (Waqas, 4 Sep)', drv.indexOf("step: 'mac'") > drv.indexOf("step: 'systems'") && drv.indexOf("step: 'mac'") < drv.indexOf("step: 'fcim'"));
+  // 4 Sep 2026 (Waqas): "total loss will be loss outside mac and partial within mac limits"
+  const sbk = { window: {}, console: { info: function () {} } }; vm.createContext(sbk);
+  vm.runInContext(fs.readFileSync(path.join(SITE, 'ai_skills.js'), 'utf8'), sbk);
+  const fcimBody = sbk.window.SLABSkills.skills['fcim.draft'].body;
+  check('fcim.draft is at v3: TOTAL LOSS = MAC breached, PARTIAL LOSS = degraded within the MAC — the only definition', /^fcim\.draft@v3#/.test(sbk.window.SLABSkills.stampFor('fcim.populate')) && /TOTAL LOSS AND PARTIAL LOSS ARE DEFINED BY THE MAC/.test(fcimBody) && /TOTAL LOSS = the function's MAC is breached/.test(fcimBody) && /PARTIAL LOSS = degraded but the MAC still holds/.test(fcimBody) && !/TL MODELLING STYLES/.test(fcimBody) && /Never offer two styles or choose one yourself/.test(fcimBody));
+  check('the FCIM drafter hands the model each function\'s MAC rule in plain words', /function _macRulesForPrompt\(subIds\)/.test(ai) && /_anemBatch\(_FEATURE_DIRECTIVE\.fcim \+ _macRulesForPrompt\(picked\.map/.test(ai));
 }
 
 console.log('\n[2] executed — add_mac lands in the store\'s own shape');
@@ -90,6 +96,22 @@ console.log('\n[2] executed — add_mac lands in the store\'s own shape');
   vm.runInContext(`projectConfig.macModels[0].substantiation = { kind: 'sdd', ref: 'SDD-FCS-041', by: 'J. Okafor', at: 'x' }`, ctx);
   const r7 = vm.runInContext(`_chatAddMac({ subId: '1.1', phase: 'All phases', clauses: [{ min: 1, of: ['FCS-F1'] }] }, 'm')`, ctx);
   check('a rule the engineer has substantiated is NEVER overwritten', !r7.ok && /a signed rule already exists — not overwritten/.test(r7.error) && rules[0].clauses[0].min === 2);
+}
+
+console.log('\n[3] executed — the MAC rules reach the FCIM drafter in plain words');
+{
+  const ctx = { console, String, Array, Object };
+  ctx.projectConfig = { macModels: [ { subId: '1.1', phase: 'All phases', clauses: [{ min: 1, of: ['FCS-F1', 'FCS-F2'] }], substantiation: { kind: 'assumption', ref: 'SDD §4.2' } } ] };
+  ctx.snapshot = () => ({ systemsData: [{ id: 'sys-fcs', name: 'Flight Control', functions: [{ funcId: 'FCS-F1', funcName: 'Command elevator channel A' }, { funcId: 'FCS-F2', funcName: 'Command elevator channel B' }] }] });
+  vm.createContext(ctx);
+  vm.runInContext(extractFn(ai, '_macRulesForPrompt') + '\n', ctx);
+  const t = vm.runInContext(`_macRulesForPrompt(['1.1', '2.3'])`, ctx);
+  check('a function with a rule: members by name, the minimum, the phase, the citation', /1\.1 \(All phases\): at least 1 of \[Flight Control · Command elevator channel A \(FCS-F1\); Flight Control · Command elevator channel B \(FCS-F2\)\] — SDD §4\.2/.test(t), t);
+  check('… and TL/PL are defined against it in the same breath', /TOTAL LOSS = this rule breached; PARTIAL LOSS = degraded with this rule still held/.test(t));
+  check('a function without a rule is named so the model says so and reads conservatively', /NO MAC RULE YET for: 2\.3 — say so in the rationale and use the conservative reading/.test(t));
+  ctx.projectConfig.macModels = [];
+  const t0 = vm.runInContext(`_macRulesForPrompt(['1.1'])`, ctx);
+  check('no rules in the project at all: says so, conservative reading', /MAC RULES: none drafted yet for this project/.test(t0));
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
