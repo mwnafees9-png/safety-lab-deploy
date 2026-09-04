@@ -228,6 +228,9 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   const r1 = ctx.acFhaData[0];
   check('a valid srcCondId lands the STORE\'s canonical FCIM id as fcId', r1 && r1.fcId === 'SF-001-TL', r1 && r1.fcId);
   check('the accepted row carries sourceCondId (30 Aug debt closed)', r1 && r1.sourceCondId === 'SF-001-TL');
+  // 4 Sep 2026 — the model echoes the CONDITION id into subId; the row takes the
+  // sub-function from the condition record so the table can show its name.
+  check('the row\'s subId is the condition\'s SUB-FUNCTION (SF-001), not the condition id', r1 && r1.subId === 'SF-001', r1 && r1.subId);
   // 2. second phase row, same condition -> same carried id (no per-phase fork)
   ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Taxi'], srcCondId: 'SF-001-TL' });
   check('the same condition in another phase keeps the SAME carried id', ctx.acFhaData[1].fcId === 'SF-001-TL');
@@ -360,11 +363,16 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
     /function _fhaJudgementBadge\(row\)/.test(helpers) && /background:#F5B400;color:#1A1200/.test(helpers) && /\$\{_fhaJudgementBadge\(row\)\}\$\{_hfwBadge\}/.test(helpers));
   check('both FHA tables (aircraft and system) wear the judgement badge', (helpers.match(/\$\{_fhaJudgementBadge\(row\)\}/g) || []).length === 2);
   check('a dropped phase renders in the Phases cell, danger-coloured, naming the phase',
-    /function _fhaDroppedPhasesBadge\(row\)/.test(helpers) && (helpers.match(/\$\{_fhaDroppedPhasesBadge\(row\)\}/g) || []).length === 2);
+    /function _fhaDroppedPhasesBadge\(row\)/.test(helpers) && /join\('<br>'\) \+ _fhaDroppedPhasesBadge\(row\)/.test(helpers));   // 4 Sep — now emitted by _fhaPhasesCell, which both tables call
   check('a human edit marks the row and preserves the fields the form does not know',
     /acFhaData\[idx\] = Object\.assign\(\{\}, acFhaData\[idx\], data, \{ humanEdited: true/.test(helpers) && /arr\[idx\] = Object\.assign\(\{\}, arr\[idx\], data, \{ humanEdited: true/.test(helpers));
   const a5 = fs.readFileSync(path.join(__dirname, '..', 'site', 'fha_a5.js'), 'utf8');
   check('the A5 badge is retired from the table (module kept, flag off)', /const A5_BADGE = false;/.test(a5) && /if \(!A5_BADGE\) return;/.test(a5));
+  // 4 Sep 2026 — layout rulings (Waqas): sub-function NAME, non-wrapping FC id, stacked phases, wide effects — both tables
+  check('Sub-Function shows the name with the id in parentheses beneath', /function _fhaSubCell\(subId\)/.test(helpers) && /\(\$\{esc\(id\)\}\)<\/span>/.test(helpers) && (helpers.match(/\$\{_fhaSubCell\(row\.subId\)\}/g) || []).length === 1);
+  check('the failure-condition id never wraps (both tables)', (helpers.match(/<td style="white-space:nowrap;min-width:120px;">/g) || []).length === 2);
+  check('phases stack one per line in a narrow column (both tables)', /function _fhaPhasesCell\(row\)/.test(helpers) && /join\('<br>'\)/.test(helpers) && (helpers.match(/\$\{_fhaPhasesCell\(row\)\}/g) || []).length === 2);
+  check('effects is the wide column (both tables)', (helpers.match(/<td style="min-width:380px;">\$\{effectsHtml\}<\/td>/g) || []).length === 2);
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -58,7 +58,15 @@ console.log('[1] the drafting instructions');
   check('the levels tail judges instead of leaving empty (skill)', /set it by judgement and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/.test(sk));
   check('the levels tail judges instead of leaving empty (inline copy in ai_assistant, byte-identical)', (ai.match(/set it by judgement and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/g) || []).length === 1);
   check('the anchor is still required on a judged class', /on a row you have JUDGED rather than grounded, the anchor is still required/.test(sk));
-  check('fha.draft and sfha.draft stamp as v6 — the body changed', /'fha\.draft': 6,\s*\n\s*'sfha\.draft': 6,/.test(sk));
+  check('fha.draft and sfha.draft stamp as v7 — the body changed again', /'fha\.draft': 7,\s*\n\s*'sfha\.draft': 7,/.test(sk));
+  // 4 Sep 2026 — golden run 1 flagged 121 of 129 rows, 18 of 22 hull-loss rows among them.
+  // v6 never said what GROUNDED means, so the model flagged classification itself.
+  check('v7 defines grounded: objective + failure + rubric + joint top step + ordinary reasoning', /A class is GROUNDED when it follows from the function objective/.test(sk));
+  check('choosing the credited outcome is classification, not judgement', /Choosing the credited outcome IS classification, not judgement/.test(sk));
+  check('the top step is never a judgement', /The top step is never a judgement/.test(sk));
+  check('a judgement is a SPECIFIC missing fact the class turns on, named in the note', /A class is a JUDGEMENT when a SPECIFIC FACT it turns on is absent/.test(sk) && /Name that fact in judgementNote/.test(sk));
+  check('a sheet flagged everywhere is called out as defeating the flag', /a sheet where nearly every row is flagged has flagged classification itself/.test(sk));
+  check('the inline copy carries the same paragraph (byte parity is proven in regression_ai_skills)', /WHAT IS GROUNDED AND WHAT IS A JUDGEMENT/.test(ai));
   check('the returned row shape carries judgementCall / judgementNote', /"judgementCall": <true ONLY where you set a level or the class by judgement/.test(ai) && /"judgementNote": "<when judgementCall is true/.test(ai));
   check('the unified add_fha op spec asks for them too', /judgementCall\(true ONLY where a level or the class was set by judgement/.test(ai));
 }
