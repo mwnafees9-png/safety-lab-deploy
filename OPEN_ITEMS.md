@@ -775,6 +775,19 @@ this register — the ids below are this register's, and do not correspond.
   nothing shipped wrongly — but the operator is told the wrong thing about why. Either normalise the
   suite's output or widen the grep and keep the crash/fail distinction on the exit code.
 
+- **F11 — Learn from review comments and edits on AI rows (Waqas, 4 Sep: "like if I comment on
+  an AI generated row, or edit it I want it to learn from the comments — post campaign but needs
+  to get done").** Today the model learns nothing; the app remembers EDITS as style-only exemplars
+  (A14, Top-K, "style never substance") and reads review COMMENTS not at all — the only use of
+  `reviewCommentsData` in ai_assistant.js is an open-count for a dashboard. Rejections leave no
+  trace the AI sees, and a judgement call (v6) that the engineer overturns or confirms teaches it
+  nothing about the judgement. WANTED: a feedback loop where a comment on an AI row and an edit to
+  one shape SUBSTANCE on the next draft of the same kind — classification, not just phrasing — with
+  the same ITAR filter A14 has, and provenance so a retrieved correction can be traced to the row
+  it came from. Design question first: retrieval into the prompt (few-shot, like A14 but for
+  substance) vs. a per-project rulebook the engineer can read and prune. **After the goldens are
+  drawn**, because it changes what they measure; **not optional**.
+
 - **F10 — SHIPPED 3 Sep 2026 (ai_assistant 76.39), listed so the campaign machinery's state is on the register too.** A refusal is a result:
   `_captureBail` + `_captureGuard` on the 17 public lane entry points, plus a guard on
   `_fmeaSystemPicker` (the sixth picker — the 76.38 sweep matched `_open*Picker` and missed it).
