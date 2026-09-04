@@ -124,7 +124,8 @@ console.log('\n[5] the runner');
   check('refusal rendered as a result, never hidden', /guard refused/.test(src) && /never approximates/.test(src));
 
   console.log('\n[7] wiring');
-  check('index.html loads perf_bench.js', SITE('index.html').indexOf('perf_bench.js?v=') !== -1);
+  // 4 Sep 2026 (Waqas: "this whole thing can be taken out") — the page is NOT loaded by the app any more; the module stays for the engine tests.
+  check('index.html does NOT load perf_bench.js (engineering tool, not a product page)', SITE('index.html').indexOf('<script src="perf_bench.js') === -1);
   check('self-registering bench page + nav', /view-bench/.test(src) && /snav-bench/.test(src) && /switchTab\('bench'\)/.test(src));
   check('results stamped with time + UA', /at: new Date\(\)\.toISOString\(\)/.test(src) && /navigator\.userAgent/.test(src));
 

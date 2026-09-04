@@ -271,7 +271,10 @@
             const v = document.createElement('div'); v.id = 'view-bench'; v.style.display = 'none';
             prev.parentNode.insertBefore(v, prev.nextSibling);
         }
-        if (!document.getElementById('snav-bench')) {
+        // 4 Sep 2026 (Waqas: "we dont need to show scale and performance") — the benchmark is an
+        // engineering tool, not a user page: no sidebar entry. The page still mounts and opens
+        // from the console with switchTab('bench') for our own timing work.
+        if (false && !document.getElementById('snav-bench')) {
             const prevNav = document.getElementById('snav-ffs') || document.getElementById('snav-budget') || document.getElementById('snav-fta');   // 23 Aug: chain re-anchored
             if (prevNav && prevNav.parentNode) {
                 const a = document.createElement('a');
