@@ -600,29 +600,10 @@
     function renderProduction() {
         const view = document.getElementById('view-ac-asm');
         if (!view) return;
-        // 4 Sep 2026 (Waqas) — same ruling as the moat: the typed-assumptions panel sat
-        // above the working Assumptions Log and buried it. It now lives BELOW the log,
-        // folded shut, after the program register fold.
-        let fold = document.getElementById('hfr-register-fold');
+        // 4 Sep 2026 — no longer wired to the assumptions tabs (see the switchTab wrap);
+        // callable by hand for a dev host. Appends at the END of the view, never above the log.
         let host = document.getElementById('hfr-register-host');
-        if (!fold) {
-            fold = document.createElement('details');
-            fold.id = 'hfr-register-fold';
-            fold.style.cssText = 'margin-top:12px;';
-            const sum = document.createElement('summary');
-            sum.id = 'hfr-register-fold-summary';
-            sum.style.cssText = 'cursor:pointer;font-weight:700;padding:8px 0;';
-            sum.textContent = 'Typed assumptions — credited ⇄ uncredited posture';
-            fold.appendChild(sum);
-            host = document.createElement('div');
-            host.id = 'hfr-register-host';
-            fold.appendChild(host);
-            view.appendChild(fold);
-        } else if (!host) {
-            host = document.createElement('div');
-            host.id = 'hfr-register-host';
-            fold.appendChild(host);
-        }
+        if (!host) { host = document.createElement('div'); host.id = 'hfr-register-host'; view.appendChild(host); }
         render({ mount: host, author: _productionAuthor(), rerender: renderProduction });
     }
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -631,7 +612,10 @@
                 const orig = window.switchTab;
                 const wrapped = function (tabId) {
                     const r = orig.apply(this, arguments);
-                    try { if (tabId === 'ac-asm' || String(tabId).indexOf('asm') !== -1) setTimeout(renderProduction, 0); if (tabId === 'hfa') setTimeout(renderHfa, 0); if (tabId === 'hfa-task') setTimeout(renderHfaTask, 0); if (tabId === 'hfa-ergo') setTimeout(renderHfaErgo, 0); } catch (_) {}
+                    // 4 Sep 2026 (Waqas): "one table is sufficient" — the typed panel no longer
+                    // mounts on the assumptions pages; Type and Credited ⇄ uncredited are columns
+                    // of the Assumptions Log itself. The HF page keeps the panel (HF authoring).
+                    try { if (tabId === 'hfa') setTimeout(renderHfa, 0); if (tabId === 'hfa-task') setTimeout(renderHfaTask, 0); if (tabId === 'hfa-ergo') setTimeout(renderHfaErgo, 0); } catch (_) {}
                     return r;
                 };
                 wrapped._hfrWrapped = true;

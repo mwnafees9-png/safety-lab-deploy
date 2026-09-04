@@ -1967,11 +1967,15 @@ function computePhaseStatus() {
 }
 
 function updateSysAsmState(id, newState) { const asm = sys().asm.find(a => a.asmId === id); if(asm) asm.state = newState; renderSysAssumptions(); }
-function updateSysAsmText(id, field, val) { const asm = sys().asm.find(a => a.asmId === id); if(asm) asm[field] = val; }
+function updateSysAsmText(id, field, val) {
+    const asm = sys().asm.find(a => a.asmId === id); if(asm) asm[field] = val;
+    if (field === 'type' || field === 'credited' || field === 'uncredited') { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} renderSysAssumptions(); }
+}
 function renderSysAssumptions() {
     if (!sys()) return;
     const tbody = document.getElementById('sys-asm-body'); tbody.innerHTML = '';
     const activeSysId = sys().id;
+    const _wu = (typeof _asmMoatUses === 'function') ? _asmMoatUses() : { map: new Map(), gaps: [] };
     // ENG-2 phase 1c — paginated via the shared pager (>50 rows).
     const _sysAsmRowHtml = row => {
         let dynFields = _asmRouteSelect('sys', row.asmId, row);
@@ -1983,7 +1987,7 @@ function renderSysAssumptions() {
         }
         const commentBtn = (typeof commentTriggerHtml === 'function')
             ? commentTriggerHtml({ kind: 'sysAsm', id: row.asmId, systemId: activeSysId }) : '';
-        return `<tr><td><div style="display:flex; align-items:center; gap:6px;"><strong>${esc(row.asmId)}</strong>${commentBtn}</div></td><td>${esc(row.origin)}</td><td>${esc(row.text)}</td><td>${renderLinkedFHAsHtml(row.asmId)}</td><td style="width: 140px;"><select class="state-select" onchange="updateSysAsmState('${esc(row.asmId)}', this.value)"><option value="Proposed" ${row.state==='Proposed'?'selected':''}>Proposed</option><option value="Validated" ${row.state==='Validated'?'selected':''}>Validated</option><option value="Verified" ${row.state==='Verified'?'selected':''}>Verified</option><option value="Invalidated" ${row.state==='Invalidated'?'selected':''}>Invalidated</option></select></td><td><div class="asm-dynamic-fields">${dynFields}</div></td></tr>`;
+        return `<tr><td><div style="display:flex; align-items:center; gap:6px;"><strong>${esc(row.asmId)}</strong>${commentBtn}</div></td><td>${esc(row.origin)}</td><td style="min-width:260px;">${esc(row.text)}</td><td>${_asmTypeCell(row, 'updateSysAsmText')}</td><td>${_asmPostureCell(row, 'updateSysAsmText')}</td><td>${renderLinkedFHAsHtml(row.asmId)}</td><td>${_asmRestsOnCell(row.asmId, row.state, _wu)}</td><td style="width: 140px;"><select class="state-select" onchange="updateSysAsmState('${esc(row.asmId)}', this.value)"><option value="Proposed" ${row.state==='Proposed'?'selected':''}>Proposed</option><option value="Validated" ${row.state==='Validated'?'selected':''}>Validated</option><option value="Verified" ${row.state==='Verified'?'selected':''}>Verified</option><option value="Invalidated" ${row.state==='Invalidated'?'selected':''}>Invalidated</option></select></td><td><div class="asm-dynamic-fields">${dynFields}</div></td></tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'asm-sys', tbody, rows: sys().asm, rowHtml: _sysAsmRowHtml,
@@ -1991,6 +1995,7 @@ function renderSysAssumptions() {
     } else {
         sys().asm.forEach(row => tbody.insertAdjacentHTML('beforeend', _sysAsmRowHtml(row)));
     }
+    try { if (typeof _asmRenderFindings === 'function') _asmRenderFindings('sys-asm-table'); } catch (_) {}
 }
 
 

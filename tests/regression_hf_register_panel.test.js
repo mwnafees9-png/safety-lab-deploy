@@ -87,10 +87,17 @@ check('validate button carries the evidence reminder',
 
 // ---- [2] self-mount pattern ---------------------------------------------------
 check('mounts on the aircraft assumptions view', /getElementById\('view-ac-asm'\)/.test(src));
-// 4 Sep 2026 (Waqas) — the panel is folded shut BELOW the working Assumptions Log,
-// never above it: the log (validation / verification artifacts) is the page.
-check('own host div, inside a closed fold appended at the END of the view (below the working log)',
-  /hfr-register-host/.test(src) && /hfr-register-fold/.test(src) && /createElement\('details'\)/.test(src) && /view\.appendChild\(fold\)/.test(src) && !/view\.insertBefore\(host, view\.firstChild\)/.test(src));
+// 4 Sep 2026 (Waqas): "one table is sufficient" — the typed panel no longer mounts on
+// the assumptions tabs at all; Type and Credited ⇄ uncredited are columns of the log.
+// The HF page keeps the panel (HF authoring). renderProduction stays callable by hand
+// and appends at the END of the view, never above the log.
+check('the typed panel is NOT wired to the assumptions tabs; only the HF page renders it',
+  !/tabId === 'ac-asm' \|\| String\(tabId\)\.indexOf\('asm'\)/.test(src) && /if \(tabId === 'hfa'\) setTimeout\(renderHfa, 0\)/.test(src));
+check('renderProduction appends at the end of the view (never insertBefore firstChild)',
+  /view\.appendChild\(host\)/.test(src) && !/view\.insertBefore\(host, view\.firstChild\)/.test(src));
+const helpersSrc = fs.readFileSync(path.join(__dirname, '..', 'site', 'helpers_modules.js'), 'utf8');
+check('the Assumptions Log carries Type and Credited ⇄ uncredited columns itself',
+  /function _asmTypeCell\(row, fn\)/.test(helpersSrc) && /function _asmPostureCell\(row, fn\)/.test(helpersSrc) && /_asmTypeCell\(row, 'updateACAsmText'\)/.test(helpersSrc) && /holds now:/.test(helpersSrc));
 check('switchTab wrap carries an idempotency guard',
   /_hfrWrapped/.test(src) && /window\.switchTab = wrapped/.test(src));
 

@@ -165,86 +165,19 @@
     })();
 
     // ------------------------------------------------ the program register
-    function renderAsmRegister() {
-        const view = document.getElementById('view-ac-asm');
-        if (!view) return;
-        // 4 Sep 2026 (Waqas): "where did the column for assumption review validation and
-        // other stuff go" — this 557-row summary sat ABOVE the working Assumptions Log and
-        // pushed the log (validation / verification artifacts, state, linked conditions)
-        // 60,000 px down the page. The summary now lives BELOW the log, folded shut, with
-        // its counts on the fold line. The log is the page; this is the cross-reference.
-        let fold = document.getElementById('asm-register-fold');
-        let host = document.getElementById('asm-register-host');
-        if (!fold) {
-            fold = document.createElement('details');
-            fold.id = 'asm-register-fold';
-            fold.style.cssText = 'margin-top:22px;';
-            const sum = document.createElement('summary');
-            sum.id = 'asm-register-fold-summary';
-            sum.style.cssText = 'cursor:pointer;font-weight:700;padding:8px 0;';
-            fold.appendChild(sum);
-            host = document.createElement('div');
-            host.id = 'asm-register-host';
-            fold.appendChild(host);
-            view.appendChild(fold);
-        } else if (!host) {
-            host = document.createElement('div');
-            host.id = 'asm-register-host';
-            fold.appendChild(host);
-        }
-        const reg2 = asmRegister();
-        const rows = reg2.rows;
-        const validated = rows.filter(r => r.state === 'Validated').length;
-        const bearing = rows.filter(r => r.loadBearing > 0).length;
-        const problems = rows.filter(r => r.dead && r.loadBearing > 0).length;
-        const stateBadge = r => {
-            const color = r.dead ? '#8E2A2A' : (r.state === 'Validated' ? '#1D9E75' : '#B7791F');
-            return '<span class="u-mono" style="font-size:10.5px; font-weight:700; color:' + color + ';">' + _esc(r.state.toUpperCase()) + '</span>';
-        };
-        host.innerHTML =
-            '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); margin-bottom:18px;">' +
-            '<div style="padding:9px 14px; border-bottom:2px solid var(--color-text-primary); display:flex; justify-content:space-between; align-items:center;">' +
-            '<b>Program assumption register — every claim knows what it rests on</b>' +
-            '<span class="u-mono" style="font-size:11px; font-weight:700;' + (problems ? ' color:#8E2A2A;' : '') + '">' +
-            rows.length + ' assumptions · ' + validated + ' validated · ' + bearing + ' load-bearing' + (problems ? ' · ' + problems + ' BROKEN' : '') + '</span></div>' +
-            '<p style="font-size:12px; color:var(--color-text-secondary); padding:8px 14px 4px;">Aircraft, system, and AI-extracted assumptions in one register, each with everything that rests on it — FHA classifications, MAC model substantiations, requirements, signed dispositions, mitigations. Invalidate one and INV-13 names every exposed claim. Assumptions nothing rests on are flagged too: bind them or retire them.</p>' +
-            '<div style="overflow-x:auto; padding:0 14px 12px;"><table class="data-table" style="width:100%; font-size:12px;">' +
-            '<thead><tr><th style="width:1%;white-space:nowrap;">ID</th><th style="min-width:320px;width:40%;">Assumption</th><th>Scope</th><th>State</th><th>Load-bearing for</th></tr></thead><tbody>' +
-            // 4 Sep 2026 (Waqas): "we need both a column for the assumption text and assumption
-            // ID" — the id in its own narrow column, the text in a wide one.
-            rows.map(r =>
-                '<tr><td class="u-mono" style="width:1%;white-space:nowrap;"><b>' + _esc(r.asmId) + '</b></td>' +
-                '<td style="min-width:320px;width:40%;">' + (String(r.text || '').trim() ? _esc(String(r.text).trim()) : '<span style="color:#B7791F;">(no text recorded)</span>') +
-                    (r.origin ? '<br><span style="font-size:10.5px;color:var(--color-text-tertiary);">' + _esc(String(r.origin).slice(0, 80)) + '</span>' : '') + '</td>' +
-                '<td>' + _esc(r.scope) + '</td>' +
-                '<td>' + stateBadge(r) + '</td>' +
-                '<td style="font-size:11.5px;">' + (r.uses.length
-                    ? '<span class="u-mono" style="font-weight:700;">' + r.uses.length + '</span> — ' + _esc(r.uses.slice(0, 4).map(u => u.detail).join(' · ')) + (r.uses.length > 4 ? ' <span style="color:var(--color-text-tertiary);">+' + (r.uses.length - 4) + '</span>' : '')
-                    : '<span style="color:#B7791F; font-weight:600;">decorative — nothing rests on it</span>') + '</td></tr>').join('') +
-            '</tbody></table>' +
-            (reg2.gaps.length ? '<p style="font-size:11.5px; color:#B7791F; font-weight:600;">⚠ ' + reg2.gaps.map(_esc).join('<br>⚠ ') + '</p>' : '') +
-            '</div></div>';
-        try {
-            const sum = document.getElementById('asm-register-fold-summary');
-            if (sum) sum.textContent = 'Program assumption register — what rests on each assumption (' + rows.length + ' entries · ' + bearing + ' load-bearing' + (problems ? ' · ' + problems + ' BROKEN' : '') + ')';
-        } catch (_) {}
-    }
-    (function wrap() {
-        if (typeof window.switchTab === 'function' && !window.switchTab._asmMoatWrapped) {
-            const orig = window.switchTab;
-            const wrapped = function (tabId) {
-                const r = orig.apply(this, arguments);
-                try { if (tabId === 'ac-asm') setTimeout(renderAsmRegister, 120); } catch (_) {}
-                return r;
-            };
-            wrapped._asmMoatWrapped = true;
-            window.switchTab = wrapped;
-        }
-    })();
+    // 4 Sep 2026 (Waqas): "one table is sufficient". This module used to self-mount a
+    // 557-row "program assumption register" table above the working Assumptions Log —
+    // the same records again, with a "load-bearing for" column. The table is gone; the
+    // where-used map it computed is exposed instead, and the Assumptions Log renders it
+    // as its own "Rests on" column (helpers_modules._asmRestsOnCell). The INV-13/14/15
+    // checks above read the same map and are unchanged.
+    try {
+        window.SafetyLabAsmMoat = { whereUsed: asmWhereUsed, register: asmRegister, all: asmAll };
+    } catch (_) {}
 
     // ------------------------------------------------------------- exports
     window.asmAll = asmAll;
     window.asmWhereUsed = asmWhereUsed;
     window.asmRegister = asmRegister;
-    window.renderAsmRegister = renderAsmRegister;
+    window.renderAsmRegister = function () { try { if (typeof renderACAssumptions === 'function') renderACAssumptions(); } catch (_) {} };   // kept for callers; the log IS the register now
 })();

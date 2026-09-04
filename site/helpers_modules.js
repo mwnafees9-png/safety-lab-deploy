@@ -4832,8 +4832,66 @@ function updateSysAsmRoute(id, val) {
     renderSysAssumptions();
 }
 
+// 4 Sep 2026 (Waqas): "one table is sufficient". The Assumptions page carried the same
+// records three times — the working log, a "program register" (what rests on each
+// assumption) and a "typed assumptions" panel (type, credited ⇄ uncredited posture).
+// The two extra tables are gone from this page; their columns live on the log now.
+// The where-used map comes from assumption_moat (SafetyLabAsmMoat), the typed lanes
+// from hf_assumptions (HF_ASSUMPTIONS); every write still goes through the app's own
+// row-update path. The HF page keeps its own typed panel — that one is HF authoring.
+function _asmMoatUses() {
+    try { if (window.SafetyLabAsmMoat && typeof SafetyLabAsmMoat.whereUsed === 'function') return SafetyLabAsmMoat.whereUsed(); } catch (_) {}
+    return { map: new Map(), gaps: [] };
+}
+function _asmRestsOnCell(asmId, state, wu) {
+    const uses = (wu && wu.map && wu.map.get(asmId)) || [];
+    const dead = ['Invalidated', 'Retired', 'Rejected', 'Withdrawn'].indexOf(String(state || '')) >= 0;
+    if (!uses.length) return '<span style="color:#B7791F; font-weight:600; font-size:11px;" title="Nothing in the analysis depends on this assumption yet — bind it to the rows it supports, or retire it">nothing rests on it</span>';
+    const head = dead ? '<span class="u-mono" style="font-weight:800; color:#8E2A2A;" title="This assumption is ' + esc(state) + ' but the analysis still depends on it">' + uses.length + ' BROKEN</span> — ' : '<span class="u-mono" style="font-weight:700;">' + uses.length + '</span> — ';
+    return '<span style="font-size:11px;">' + head + esc(uses.slice(0, 4).map(u => u.detail).join(' · ')) + (uses.length > 4 ? ' <span style="color:var(--color-text-tertiary);">+' + (uses.length - 4) + ' more</span>' : '') + '</span>';
+}
+const _ASM_TYPE_COLOR = { hf: '#7A3EA8', dz: '#0E5A8A', rg: '#8E2A2A', op: '#1E6B4F', mx: '#8A5B0E', en: '#3F6212', sw: '#4A4A8A', hw: '#6B3F14', rd: '#116673' };
+function _asmTypeCell(row, fn) {
+    const hf = (typeof HF_ASSUMPTIONS !== 'undefined') ? HF_ASSUMPTIONS : null;
+    const types = (hf && Array.isArray(hf.ASM_TYPES)) ? hf.ASM_TYPES : [];
+    const cur = String(row.type || '');
+    return '<select class="state-select" style="min-width:110px;" title="Assumption type — sets which lane rules apply (human-factors types get an HFA work item)" onchange="' + fn + '(\'' + esc(row.asmId) + '\', \'type\', this.value)">' +
+        '<option value=""' + (cur ? '' : ' selected') + '>— type —</option>' +
+        types.map(t => '<option value="' + esc(t.label) + '"' + (cur === t.label || cur === t.id ? ' selected' : '') + '>' + esc(t.label) + '</option>').join('') +
+        (cur && !types.some(t => t.label === cur || t.id === cur) ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + '</option>' : '') +
+        '</select>';
+}
+function _asmPostureCell(row, fn) {
+    const hf = (typeof HF_ASSUMPTIONS !== 'undefined') ? HF_ASSUMPTIONS : null;
+    const validated = hf ? hf.isValidated(row.state) : (row.state === 'Validated' || row.state === 'Verified');
+    const cr = row.credited == null ? '' : String(row.credited), uc = row.uncredited == null ? '' : String(row.uncredited);
+    const eff = validated ? cr : uc;
+    const inp = (lane, val, ph, tip) => '<input type="text" style="width:100%; min-width:90px; font-size:11px; padding:3px 5px;" placeholder="' + ph + '" title="' + tip + '" value="' + esc(val) + '" onchange="' + fn + '(\'' + esc(row.asmId) + '\', \'' + lane + '\', this.value)">';
+    return '<div style="display:flex; flex-direction:column; gap:3px; min-width:150px;">' +
+        '<div style="display:flex; align-items:center; gap:4px;"><span class="u-mono" style="font-size:9.5px; color:#1D9E75; width:62px;">credited</span>' + inp('credited', cr, 'credited posture', 'What the analysis credits while this assumption is Validated or Verified') + '</div>' +
+        '<div style="display:flex; align-items:center; gap:4px;"><span class="u-mono" style="font-size:9.5px; color:#8E2A2A; width:62px;">uncredited</span>' + inp('uncredited', uc, 'conservative posture', 'What holds while the assumption is NOT validated') + '</div>' +
+        ((cr || uc) ? '<div class="u-mono" style="font-size:10px; font-weight:700; color:' + (validated ? '#1D9E75' : '#8E2A2A') + ';" title="The lane the analysis reads right now — credited only while Validated / Verified">holds now: ' + esc(eff || '—') + '</div>' : '') +
+        '</div>';
+}
+function _asmFindingsHtml(scopeSys) {
+    let out = '';
+    try {
+        const wu = _asmMoatUses();
+        (wu.gaps || []).forEach(g => { out += '<p style="font-size:11.5px; color:#B7791F; font-weight:600; margin:4px 0;">⚠ ' + esc(g) + '</p>'; });
+        const hf = (typeof HF_ASSUMPTIONS !== 'undefined') ? HF_ASSUMPTIONS : null;
+        if (hf && typeof hf.inv16 === 'function') (hf.inv16().fails || []).forEach(f => { out += '<p style="font-size:11.5px; color:#8E2A2A; font-weight:600; margin:4px 0;">⚠ Unvalidated credit · ' + esc(f.detail) + '</p>'; });
+    } catch (_) {}
+    return out;
+}
+function _asmRenderFindings(tableId) {
+    const t = document.getElementById(tableId); if (!t) return;
+    let host = document.getElementById(tableId + '-findings');
+    if (!host) { host = document.createElement('div'); host.id = tableId + '-findings'; host.style.cssText = 'padding:6px 2px;'; t.parentNode.insertBefore(host, t.nextSibling); }
+    host.innerHTML = _asmFindingsHtml();
+}
 function renderACAssumptions() {
     const tbody = document.getElementById('ac-asm-body'); tbody.innerHTML = '';
+    const _wu = _asmMoatUses();   // one where-used pass per render, shared by every row
     // ENG-2 phase 1c — paginated via the shared pager (>50 rows).
     const _acAsmRowHtml = row => {
         let dynFields = _asmRouteSelect('ac', row.asmId, row);
@@ -4846,7 +4904,7 @@ function renderACAssumptions() {
         // Phase 50 — no action column on this table; tuck the 💬 button next to the ID.
         const commentBtn = (typeof commentTriggerHtml === 'function')
             ? commentTriggerHtml({ kind: 'acAsm', id: row.asmId, systemId: null }) : '';
-        return `<tr><td><div style="display:flex; align-items:center; gap:6px;"><strong>${esc(row.asmId)}</strong>${commentBtn}</div></td><td>${esc(row.origin)}</td><td>${esc(row.text)}</td><td>${renderLinkedFHAsHtml(row.asmId)}</td><td style="width: 140px;"><select class="state-select" onchange="updateACAsmState('${esc(row.asmId)}', this.value)"><option value="Proposed" ${row.state==='Proposed'?'selected':''}>Proposed</option><option value="Validated" ${row.state==='Validated'?'selected':''}>Validated</option><option value="Verified" ${row.state==='Verified'?'selected':''}>Verified</option><option value="Invalidated" ${row.state==='Invalidated'?'selected':''}>Invalidated</option></select></td><td><div class="asm-dynamic-fields">${dynFields}</div></td></tr>`;
+        return `<tr><td><div style="display:flex; align-items:center; gap:6px;"><strong>${esc(row.asmId)}</strong>${commentBtn}</div></td><td>${esc(row.origin)}</td><td style="min-width:260px;">${esc(row.text)}</td><td>${_asmTypeCell(row, 'updateACAsmText')}</td><td>${_asmPostureCell(row, 'updateACAsmText')}</td><td>${renderLinkedFHAsHtml(row.asmId)}</td><td>${_asmRestsOnCell(row.asmId, row.state, _wu)}</td><td style="width: 140px;"><select class="state-select" onchange="updateACAsmState('${esc(row.asmId)}', this.value)"><option value="Proposed" ${row.state==='Proposed'?'selected':''}>Proposed</option><option value="Validated" ${row.state==='Validated'?'selected':''}>Validated</option><option value="Verified" ${row.state==='Verified'?'selected':''}>Verified</option><option value="Invalidated" ${row.state==='Invalidated'?'selected':''}>Invalidated</option></select></td><td><div class="asm-dynamic-fields">${dynFields}</div></td></tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'asm-ac', tbody, rows: acAssumptionsData, rowHtml: _acAsmRowHtml,
@@ -4854,9 +4912,14 @@ function renderACAssumptions() {
     } else {
         acAssumptionsData.forEach(row => tbody.insertAdjacentHTML('beforeend', _acAsmRowHtml(row)));
     }
+    _asmRenderFindings('ac-asm-table');
 }
 function updateACAsmState(id, newState) { const asm = acAssumptionsData.find(a => a.asmId === id); if(asm) asm.state = newState; renderACAssumptions(); }
-function updateACAsmText(id, field, val) { const asm = acAssumptionsData.find(a => a.asmId === id); if(asm) asm[field] = val; }
+function updateACAsmText(id, field, val) {
+    const asm = acAssumptionsData.find(a => a.asmId === id); if(asm) asm[field] = val;
+    // type / posture change what "holds now" and the credit findings read — re-render for those
+    if (field === 'type' || field === 'credited' || field === 'uncredited') { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} renderACAssumptions(); }
+}
 
 
 // ==========================================

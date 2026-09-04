@@ -232,16 +232,21 @@
         function _esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
         function renderThreadCard() {
             if (!w.document) return;
-            const host = w.document.getElementById('asm-register-host');
-            if (!host) return;
+            // 4 Sep 2026 (Waqas): "one table is sufficient" — the program-register host this
+            // card lived in is gone. The card now sits at the END of the Assumptions view,
+            // and only when there are roster events to show; with none it stays empty.
+            const view = w.document.getElementById('view-ac-asm');
+            if (!view) return;
             let card = w.document.getElementById('thread-bridge-card');
             if (!card) {
                 card = w.document.createElement('div');
                 card.id = 'thread-bridge-card';
-                host.appendChild(card);
+                card.style.cssText = 'margin-top:18px;';
+                view.appendChild(card);
             }
             const st = tc.status();
             const recent = inbox.slice(-8).reverse();
+            if (!recent.length) { card.innerHTML = ''; return; }
             const SEVC = { 5: '#8E2A2A', 4: '#B4451A', 3: '#B7791F', 2: '#5A6472', 1: '#5A6472' };
             function impactCell(e) {
                 if (e.kind === 'evidence') return _esc('evidence' + (e.payload && e.payload.asmId ? ' → ' + e.payload.asmId : '') + (e.state ? ' [' + e.state + ']' : ''));
@@ -296,6 +301,7 @@
                         const wrapped = function () {
                             const r = orig.apply(this, arguments);
                             try { setTimeout(sweep, 0); } catch (_) {}
+                            try { setTimeout(renderThreadCard, 0); } catch (_) {}   // 4 Sep 2026 — the log render is the card's cue now
                             return r;
                         };
                         wrapped._threadBridgeWrapped = true;
