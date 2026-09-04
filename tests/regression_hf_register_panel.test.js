@@ -87,8 +87,10 @@ check('validate button carries the evidence reminder',
 
 // ---- [2] self-mount pattern ---------------------------------------------------
 check('mounts on the aircraft assumptions view', /getElementById\('view-ac-asm'\)/.test(src));
-check('own host div, placed after the moat register',
-  /hfr-register-host/.test(src) && /asm-register-host/.test(src) && /moat\.nextSibling/.test(src));
+// 4 Sep 2026 (Waqas) — the panel is folded shut BELOW the working Assumptions Log,
+// never above it: the log (validation / verification artifacts) is the page.
+check('own host div, inside a closed fold appended at the END of the view (below the working log)',
+  /hfr-register-host/.test(src) && /hfr-register-fold/.test(src) && /createElement\('details'\)/.test(src) && /view\.appendChild\(fold\)/.test(src) && !/view\.insertBefore\(host, view\.firstChild\)/.test(src));
 check('switchTab wrap carries an idempotency guard',
   /_hfrWrapped/.test(src) && /window\.switchTab = wrapped/.test(src));
 

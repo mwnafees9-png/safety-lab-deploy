@@ -600,14 +600,28 @@
     function renderProduction() {
         const view = document.getElementById('view-ac-asm');
         if (!view) return;
+        // 4 Sep 2026 (Waqas) — same ruling as the moat: the typed-assumptions panel sat
+        // above the working Assumptions Log and buried it. It now lives BELOW the log,
+        // folded shut, after the program register fold.
+        let fold = document.getElementById('hfr-register-fold');
         let host = document.getElementById('hfr-register-host');
-        if (!host) {
+        if (!fold) {
+            fold = document.createElement('details');
+            fold.id = 'hfr-register-fold';
+            fold.style.cssText = 'margin-top:12px;';
+            const sum = document.createElement('summary');
+            sum.id = 'hfr-register-fold-summary';
+            sum.style.cssText = 'cursor:pointer;font-weight:700;padding:8px 0;';
+            sum.textContent = 'Typed assumptions — credited ⇄ uncredited posture';
+            fold.appendChild(sum);
             host = document.createElement('div');
             host.id = 'hfr-register-host';
-            const moat = document.getElementById('asm-register-host');
-            if (moat && moat.nextSibling) view.insertBefore(host, moat.nextSibling);
-            else if (moat) view.appendChild(host);
-            else view.insertBefore(host, view.firstChild);
+            fold.appendChild(host);
+            view.appendChild(fold);
+        } else if (!host) {
+            host = document.createElement('div');
+            host.id = 'hfr-register-host';
+            fold.appendChild(host);
         }
         render({ mount: host, author: _productionAuthor(), rerender: renderProduction });
     }

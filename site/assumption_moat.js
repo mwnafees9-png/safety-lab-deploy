@@ -168,11 +168,29 @@
     function renderAsmRegister() {
         const view = document.getElementById('view-ac-asm');
         if (!view) return;
+        // 4 Sep 2026 (Waqas): "where did the column for assumption review validation and
+        // other stuff go" — this 557-row summary sat ABOVE the working Assumptions Log and
+        // pushed the log (validation / verification artifacts, state, linked conditions)
+        // 60,000 px down the page. The summary now lives BELOW the log, folded shut, with
+        // its counts on the fold line. The log is the page; this is the cross-reference.
+        let fold = document.getElementById('asm-register-fold');
         let host = document.getElementById('asm-register-host');
-        if (!host) {
+        if (!fold) {
+            fold = document.createElement('details');
+            fold.id = 'asm-register-fold';
+            fold.style.cssText = 'margin-top:22px;';
+            const sum = document.createElement('summary');
+            sum.id = 'asm-register-fold-summary';
+            sum.style.cssText = 'cursor:pointer;font-weight:700;padding:8px 0;';
+            fold.appendChild(sum);
             host = document.createElement('div');
             host.id = 'asm-register-host';
-            view.insertBefore(host, view.firstChild);
+            fold.appendChild(host);
+            view.appendChild(fold);
+        } else if (!host) {
+            host = document.createElement('div');
+            host.id = 'asm-register-host';
+            fold.appendChild(host);
         }
         const reg2 = asmRegister();
         const rows = reg2.rows;
@@ -206,6 +224,10 @@
             '</tbody></table>' +
             (reg2.gaps.length ? '<p style="font-size:11.5px; color:#B7791F; font-weight:600;">⚠ ' + reg2.gaps.map(_esc).join('<br>⚠ ') + '</p>' : '') +
             '</div></div>';
+        try {
+            const sum = document.getElementById('asm-register-fold-summary');
+            if (sum) sum.textContent = 'Program assumption register — what rests on each assumption (' + rows.length + ' entries · ' + bearing + ' load-bearing' + (problems ? ' · ' + problems + ' BROKEN' : '') + ')';
+        } catch (_) {}
     }
     (function wrap() {
         if (typeof window.switchTab === 'function' && !window.switchTab._asmMoatWrapped) {
