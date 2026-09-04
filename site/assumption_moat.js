@@ -191,12 +191,13 @@
             rows.length + ' assumptions · ' + validated + ' validated · ' + bearing + ' load-bearing' + (problems ? ' · ' + problems + ' BROKEN' : '') + '</span></div>' +
             '<p style="font-size:12px; color:var(--color-text-secondary); padding:8px 14px 4px;">Aircraft, system, and AI-extracted assumptions in one register, each with everything that rests on it — FHA classifications, MAC model substantiations, requirements, signed dispositions, mitigations. Invalidate one and INV-13 names every exposed claim. Assumptions nothing rests on are flagged too: bind them or retire them.</p>' +
             '<div style="overflow-x:auto; padding:0 14px 12px;"><table class="data-table" style="width:100%; font-size:12px;">' +
-            '<thead><tr><th style="min-width:320px;width:40%;">Assumption</th><th>Scope</th><th>State</th><th>Load-bearing for</th></tr></thead><tbody>' +
-            // 4 Sep 2026 (Waqas): "where is the actual assumption text" — the register listed
-            // ids only. The assumption itself is the row; the id sits small beneath it.
+            '<thead><tr><th style="width:1%;white-space:nowrap;">ID</th><th style="min-width:320px;width:40%;">Assumption</th><th>Scope</th><th>State</th><th>Load-bearing for</th></tr></thead><tbody>' +
+            // 4 Sep 2026 (Waqas): "we need both a column for the assumption text and assumption
+            // ID" — the id in its own narrow column, the text in a wide one.
             rows.map(r =>
-                '<tr><td style="min-width:320px;width:40%;">' + (String(r.text || '').trim() ? _esc(String(r.text).trim()) : '<span style="color:#B7791F;">(no text recorded)</span>') +
-                    '<br><span class="u-mono" style="font-size:10.5px;color:var(--color-text-tertiary);white-space:nowrap;">' + _esc(r.asmId) + (r.origin ? ' · ' + _esc(String(r.origin).slice(0, 80)) : '') + '</span></td>' +
+                '<tr><td class="u-mono" style="width:1%;white-space:nowrap;"><b>' + _esc(r.asmId) + '</b></td>' +
+                '<td style="min-width:320px;width:40%;">' + (String(r.text || '').trim() ? _esc(String(r.text).trim()) : '<span style="color:#B7791F;">(no text recorded)</span>') +
+                    (r.origin ? '<br><span style="font-size:10.5px;color:var(--color-text-tertiary);">' + _esc(String(r.origin).slice(0, 80)) + '</span>' : '') + '</td>' +
                 '<td>' + _esc(r.scope) + '</td>' +
                 '<td>' + stateBadge(r) + '</td>' +
                 '<td style="font-size:11.5px;">' + (r.uses.length
