@@ -60,9 +60,11 @@ console.log('[1] the systems lane exists, is guarded, and asks for the right sha
 
 console.log('\n[2] the golden thread runs systems, then the interdependence sweep, before trees');
 {
-  const order = ['decompose', 'fcim', 'fha', 'systems', 'interdep', 'trees'];
+  const order = ['decompose', 'fcim', 'fha', 'systems', 'resources', 'interdep', 'mac', 'coffe', 'trees', 'trees-ai', 'fmea'];
   const idx = order.map(k => drv.indexOf("step: '" + k + "'"));
-  check('THREAD order: decompose → fcim → fha → systems → interdep → trees', idx.every(i => i >= 0) && idx.every((v, i) => i === 0 || v > idx[i - 1]), idx.join(','));
+  check('THREAD order: decompose → fcim → fha → systems → resources → interdep → mac → coffe → trees (compiled) → [trees-ai] → fmea', idx.every(i => i >= 0) && idx.every((v, i) => i === 0 || v > idx[i - 1]), idx.join(','));
+  check('trees are COMPILED (SLLaneTrees.compileAll), the AI synthesiser is optional and off by default', /\{ step: 'trees',\s+direct: compileTrees \}/.test(drv) && /\{ step: 'trees-ai',\s+call: function \(\) \{ return SafetyLabAI\.synthesizeTree\(\); \}, optional: true \}/.test(drv) && /if \(s\.optional && !\(only && only\.indexOf\(s\.step\) >= 0\)\) continue;/.test(drv) && /LT\.compileAll\(\)/.test(drv));
+  check('the resources lane\'s items are applied by applyDraft (they are not unified actions)', /feature === 'resources\.draft' \|\| \(a\.name !== undefined && \(a\.providedBy !== undefined \|\| a\.consumedBy !== undefined\)\)/.test(ai) && /const ok = _applyResource\(a\);/.test(ai));
   check('systems is a captured lane (review panel → applyDraft)', /\{ step: 'systems',\s+call: function \(\) \{ return SafetyLabAI\.decomposeSystems\(\); \} \}/.test(drv));
   check('interdep is a DIRECT step (no panel to capture)', /\{ step: 'interdep',\s+direct: interdepSweepAndAccept \}/.test(drv));
   check('step() handles direct steps and records their numbers', /if \(typeof s\.direct === 'function'\)/.test(drv) && /rec\.direct = await s\.direct\(\)/.test(drv));

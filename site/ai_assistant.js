@@ -1574,7 +1574,7 @@
     // small {"insufficient_information":true,...} object instead of fabricating, and
     // Provider.complete turns that into a clean, catchable flag the feature surfaces.
     const _ANALYSIS_FEATURES = {
-        'fha.populate': 1, 'sfha.populate': 1, 'arch.decompose': 1, 'arch.systems': 1, 'fta.review': 1,
+        'fha.populate': 1, 'sfha.populate': 1, 'arch.decompose': 1, 'arch.systems': 1, 'mac.draft': 1, 'coffe.draft': 1, 'fta.review': 1,
         'req.recommend': 1, 'fcim.populate': 1, 'fta.synthesize': 1, 'pra.draft': 1,
         'zsa.draft': 1, 'cma.draft': 1, 'fmea.functional': 1, 'fmea.item': 1, 'arch.recommend': 1,
         'ccf.propose': 1,  // #142 — AI CCF-group modeling (advisory proposal; never writes the trees)
@@ -1613,7 +1613,7 @@
     const _AI_BUSY_SKIP = { 'ai.test': 1, 'eval.judge': 1 };
     const _AI_BUSY_LABELS = {
         'fha.populate': 'drafting the FHA', 'sfha.populate': 'drafting the system FHA',
-        'fcim.populate': 'drafting the FCIM', 'arch.decompose': 'decomposing functions', 'arch.systems': 'identifying systems',
+        'fcim.populate': 'drafting the FCIM', 'arch.decompose': 'decomposing functions', 'arch.systems': 'identifying systems', 'mac.draft': 'drafting MAC rules', 'coffe.draft': 'judging CoFFE cases',
         'arch.recommend': 'recommending architecture', 'fta.review': 'reviewing the fault tree',
         'fta.synthesize': 'synthesizing the fault tree', 'req.recommend': 'recommending requirements',
         'pra.draft': 'drafting the PRA', 'zsa.draft': 'drafting the ZSA', 'cma.draft': 'drafting the CMA',
@@ -1856,6 +1856,24 @@
         'EXPECTED OUTPUTS: the project\'s system list with each system\'s functions, every function traced to the aircraft sub-functions it implements — the columns of the interdependence table and the members of every MAC rule.',
         'FORMAT: add_system {name}; then add_function {scope:"system", systemId:<name>, funcName, funcDef, traceIds:[…]}.',
     ].join('\n');
+    // 4 Sep 2026 (F15 step 3) — the MAC drafter. Inline copy of the registry body.
+    const _SPEC_MAC = [
+        'STANDARD GROUNDING — ARP4761A §B.4 / Appendix Q (Q.4-1): the Minimum Acceptable Configuration (MAC) — for each AIRCRAFT function, the least set of SYSTEM functions that must remain available for the aircraft function to be delivered. MAC rules are what CoFFE consumes and what the multifunction / multisystem fault trees are compiled from; a rule is engineering judgement until the SDD substantiates it.',
+        'REQUIRED INPUTS: the aircraft sub-functions, the systems with their functions (each traced to the aircraft sub-functions it implements), and the system design description. Without system functions there are no members to name — return insufficient_information rather than inventing members.',
+        'ONE RULE PER AIRCRAFT SUB-FUNCTION (and per phase only where the document states a different minimum for a phase — otherwise phase "All phases"). A rule is a set of CLAUSES; every clause must hold. A clause is "at least MIN of these system functions available" (min 1 of two redundant channels; min 2 of four engines; min 1 of the one function that delivers it). The members of a clause are the SYSTEM FUNCTION ids (the fid values in the project state), never system names and never aircraft functions.',
+        'WHERE THE NUMBERS COME FROM: the document\'s redundancy and dispatch statements — channel counts, engine-out performance, single-thread paths. Cite the section in sddRef and quote its substance in rationale. Where the document is silent on a minimum, state the conservative reading (every implementing function required, min = all) and say in rationale that the SDD does not state a lower minimum — that is a judgement the engineer confirms, and the rule is filed as an assumption.',
+        'NEVER: name a system function that does not implement or support the aircraft function; make a clause weaker than the document supports (a lower min is an unconservative guess); duplicate a rule the project already holds for the same sub-function and phase (the project state lists existing MAC rules — update, do not repeat); name a phase that is not in the project\'s mission profile.',
+        'EXPECTED OUTPUTS: add_mac actions — one per aircraft sub-function (per phase where needed), each with its clauses, sddRef and rationale.',
+        'FORMAT: add_mac {subId, phase, clauses:[{min, of:[system function ids]}], sddRef, rationale}.',
+    ].join('\n');
+    // 4 Sep 2026 (F15 step 4) — the CoFFE residue proposer. Inline copy of the registry body.
+    const _SPEC_COFFE = [
+        'STANDARD GROUNDING — ARP4761A §B.4 / Table B2 Combined Functional Failure Effects (CoFFE): for ONE aircraft-level failure condition, whether a given combination of SYSTEM failure states produces that condition. The MAC model answers the availability cases itself; you are asked ONLY the residue the model cannot compute — malfunction states (an adverse action is not a loss of capability) and states of systems no MAC clause models.',
+        'REQUIRED INPUTS: the failure condition (id, text, severity, the aircraft function it belongs to), the case list (each a set of system + state parts), the systems\' functions, and the design description. Answer every case you are given; do not add cases.',
+        'FOR EACH CASE: resultsInFc true if that combination of states, with everything else intact, produces the failure condition as written (not a lesser or different effect); false otherwise. result = the capability effect in a few words ("high-speed overrun", "stops on runway — reduced margin"). why = one line grounded in the systems\' functions and the document. Be conservative where the document is silent: an uncertain malfunction case is true with a why that says the coupling is uncertain — a false no hides a hazard; a false yes costs a review click.',
+        'NEVER: answer a case by its severity label (severity is the FHA\'s output); credit a mitigation the document does not state; say false because the combination seems unlikely (likelihood is the fault tree\'s job, not this table\'s).',
+        'EXPECTED OUTPUTS: JSON {"cases":[{"key":"<echo exactly>","resultsInFc":true|false,"result":"…","why":"…"}], "assumptions":[…]} — one entry per case, keys echoed exactly.',
+    ].join('\n');
     // Rewritten 1 Aug 2026 after reading ARP4754B §5.2 and ARP4761A App P against
     // it. The independence claim it already made was right; what it left out were
     // the three rules an advisory recommendation is most likely to trip over —
@@ -2007,7 +2025,7 @@
         'fmea.functional': _SPEC_FMEA_FUNC, 'fmea.item': _SPEC_FMEA_ITEM,
         'pra.draft': _SPEC_PRA, 'zsa.draft': _SPEC_ZSA, 'cma.draft': _SPEC_CMA,
         'ccf.propose': _SPEC_CCF,
-        'req.recommend': _SPEC_REQ, 'arch.decompose': _SPEC_DECOMP, 'arch.systems': _SPEC_SYSTEMS, 'arch.recommend': _SPEC_ARCH,
+        'req.recommend': _SPEC_REQ, 'arch.decompose': _SPEC_DECOMP, 'arch.systems': _SPEC_SYSTEMS, 'mac.draft': _SPEC_MAC, 'coffe.draft': _SPEC_COFFE, 'arch.recommend': _SPEC_ARCH,
         'hfa.draft': _SPEC_HFA,
         'hf.draftlane': _SPEC_HF_DRAFT, 'hf.improve': _SPEC_HF_IMPROVE,   // Skills V1.3
         'comment.resolve': _SPEC_RESOLVE,
@@ -2077,6 +2095,8 @@
         'req.recommend':  ['ARP4754B §5.3', 'ARP4754B §5.1', 'ARP4761A §3.5'],
         'arch.decompose': ['ARP4754B §4.3', 'ARP4754B §4.5'],
         'arch.systems': ['ARP4754B §4.3', 'ARP4754B §4.5', 'ARP4761A Table Q.4-1'],
+        'mac.draft': ['ARP4761A §B.4', 'ARP4761A Appendix Q'],
+        'coffe.draft': ['ARP4761A §B.4', 'ARP4761A Table B2'],
         'arch.recommend': ['ARP4754B §4.3', 'ARP4754B §5.2', 'ARP4761A §3.9 · App P'],
         'resources.draft':['ARP4754B §4.3'],
         'stpa.draft':     ['SAE J3307', 'STPA Handbook']
@@ -2194,7 +2214,7 @@
     const _ASSUMPTION_LABELS = {
         'fha.populate': 'AFHA', 'sfha.populate': 'SFHA', 'fcim.populate': 'FCIM',
         'fta.synthesize': 'FTA synthesis', 'fta.review': 'FTA review',
-        'req.recommend': 'Requirements', 'arch.decompose': 'Decomposition', 'arch.systems': 'Systems',
+        'req.recommend': 'Requirements', 'arch.decompose': 'Decomposition', 'arch.systems': 'Systems', 'mac.draft': 'MAC', 'coffe.draft': 'CoFFE',
         'pra.draft': 'PRA', 'zsa.draft': 'ZSA', 'cma.draft': 'CMA',
         'fmea.functional': 'FMEA (functional)', 'fmea.item': 'FMEA (item)',
         'ccf.propose': 'CCF',
@@ -3319,6 +3339,106 @@
         if (opts.text) return go({ text: opts.text });
         return _withArchInput({ title: 'Systems · from the architecture', requireText: true }, go);
     }
+    // 4 Sep 2026 (F15 step 3) — THE MAC DRAFTER. For every aircraft sub-function, the
+    // least set of system functions that must stay available, read from the SDD's
+    // redundancy statements. Needs systems WITH functions (the members) and the
+    // aircraft functions (the subjects). Lands as add_mac actions → review panel →
+    // Accept (or the harness under capture); every rule is filed as an assumption
+    // carrying the SDD citation until the engineer substantiates it on the MAC page.
+    function draftMac(opts) {
+        opts = opts || {};
+        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        const s = snapshot();
+        const subs = (s.acFunctionsData || []).map(function (f) { return f.subId; }).filter(Boolean);
+        const fnCount = (s.systemsData || []).reduce(function (n, sy) { return n + ((sy.functions || []).length); }, 0);
+        if (!subs.length) { _toast('Decompose the aircraft functions first — a MAC rule floors an aircraft function.', 'warning'); return; }
+        if (!fnCount) { _toast('Add the systems and their functions first (Systems · from the architecture) — MAC members are system functions.', 'warning'); return; }
+        const existing = ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []);
+        const todo = opts.subIds ? [].concat(opts.subIds) : subs.filter(function (id) { return !existing.some(function (r) { return String(r.subId) === String(id); }); });
+        if (!todo.length) { _toast('Every aircraft sub-function already has a MAC rule.', 'info'); return; }
+        const go = function (input) {
+            return _anemBatch(_FEATURE_DIRECTIVE.mac
+                + ' Draft rules for these aircraft sub-functions: ' + todo.join(', ') + '.'
+                + ' Phases available (or "All phases"): ' + _projectPhaseNames().join(', ') + '.', {
+                title: '✨ MAC rules · from the architecture',
+                analysis: 'mac.draft',
+                context: (input && input.text) ? ('ARCHITECTURE / SOURCE MATERIAL:\n' + String(input.text)) : ''
+            });
+        };
+        if (opts.text) return go({ text: opts.text });
+        return _withArchInput({ title: 'MAC rules · from the architecture', requireText: true }, go);
+    }
+    // 4 Sep 2026 (F15 step 4) — THE COFFE RESIDUE PROPOSER. The MAC model answers the
+    // availability cases; this lane judges only what the model cannot: malfunction
+    // states and states of systems no MAC clause covers. It is a DIRECT lane (no review
+    // panel): each answer lands as a verdict marked aiProposed with the model as signer —
+    // the CoFFE panel shows "✨ AI-proposed" and the engineer clears it or signs over it.
+    // Cases that already carry a verdict are never touched. Returns its own numbers.
+    async function draftCoffe(opts) {
+        opts = opts || {};
+        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return { ok: false, reason: 'backend not ready' }; }
+        if (typeof coffeCases !== 'function' || typeof coffeComputed !== 'function' || typeof coffeUnmodelledSystems !== 'function' || typeof _coffeStore !== 'function' || typeof idpContributors !== 'function') {
+            _toast('CoFFE is not available on this page.', 'warning'); return { ok: false, reason: 'coffe not loaded' };
+        }
+        const s = snapshot();
+        const store = _coffeStore();
+        const V = store.verdicts;
+        if (!store.results) store.results = {};
+        const sysName = function (id) { const sy = (s.systemsData || []).find(function (x) { return String(x.id) === String(id); }); return sy ? (sy.name || sy.id) : String(id); };
+        const fcs = (s.acFhaData || []).filter(function (fc) { return fc && idpContributors(fc).length >= 2; });
+        const work = [];
+        fcs.forEach(function (fc) {
+            const unmod = {}; coffeUnmodelledSystems(fc).forEach(function (id) { unmod[id] = true; });
+            const cases = coffeCases(fc).filter(function (k) {
+                if (V[fc.internalId + '§' + k.key]) return false;                       // decided (by anyone) — never touched
+                if (coffeComputed(fc, k) === null) return true;                          // malfunction — no computed lane
+                return k.parts.some(function (p) { return unmod[p.sysId]; });          // outside the MAC model
+            });
+            if (cases.length) work.push({ fc: fc, cases: cases });
+        });
+        if (!work.length) { _toast('No CoFFE cases need judgement — the MAC model answers them all, or they are already signed.', 'info', 3500); return { ok: true, fcs: 0, cases: 0, proposed: 0 }; }
+        const cap = opts.fcCap || 40;
+        const batch = work.slice(0, cap);
+        let proposed = 0, calls = 0, failures = 0, casesAsked = 0, model = '';
+        _toast('CoFFE: judging ' + batch.reduce(function (n, w) { return n + w.cases.length; }, 0) + ' case(s) across ' + batch.length + ' condition(s)…', 'info', 3500);
+        for (let i = 0; i < batch.length; i++) {
+            const fc = batch[i].fc, cases = batch[i].cases;
+            const ctx = {
+                failureCondition: { fcId: fc.fcId, text: fc.fcDesc, severity: fc.severity, aircraftFunction: fc.subId },
+                systems: idpContributors(fc).map(function (id) { const sy = (s.systemsData || []).find(function (x) { return String(x.id) === String(id); }) || { id: id }; return { id: id, name: sy.name || id, functions: (sy.functions || []).slice(0, 12).map(function (f) { return (f.funcId || '') + ' ' + (f.funcName || ''); }) }; }),
+                cases: cases.map(function (k) { return { key: k.key, parts: k.parts.map(function (p) { return sysName(p.sysId) + ' — ' + p.state; }) }; })
+            };
+            let r;
+            try {
+                calls++; casesAsked += cases.length;
+                r = await Provider.complete({
+                    feature: 'coffe.draft',
+                    system: 'You are completing the residue of an ARP4761A CoFFE table for ONE aircraft-level failure condition. Answer every case given, echoing each key exactly. Respond ONLY with JSON {"cases":[{"key","resultsInFc":true|false,"result","why"}],"assumptions":[]}.',
+                    messages: [{ role: 'user', content: JSON.stringify(ctx, null, 1) }],
+                    maxTokens: 2400, temperature: 0
+                });
+            } catch (e) { failures++; continue; }
+            let j = null;
+            try { j = JSON.parse(String(r && r.text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); } catch (_) { try { const m = String(r && r.text || '').match(/\{[\s\S]*\}/); if (m) j = JSON.parse(m[0]); } catch (__) { j = null; } }
+            if (!j) { failures++; continue; }
+            model = model || (r && r.model) || '';
+            try { if (Array.isArray(j.assumptions) && j.assumptions.length) _parseAssumptions(JSON.stringify({ assumptions: j.assumptions }), 'coffe.draft'); } catch (_) {}
+            (Array.isArray(j.cases) ? j.cases : []).forEach(function (c) {
+                if (!c || !c.key) return;
+                const k = cases.find(function (x) { return String(x.key) === String(c.key); });
+                if (!k) return;                                                         // only the cases we asked about
+                const vk = fc.internalId + '§' + k.key;
+                if (V[vk]) return;                                                      // something landed meanwhile — never overwrite
+                V[vk] = { verdict: c.resultsInFc === true ? 'yes' : 'no', by: 'AI (' + ((r && r.model) || 'model') + ') — proposed', at: new Date().toISOString(), aiProposed: true, why: String(c.why || '').slice(0, 240) };
+                if (c.result && String(c.result).trim()) store.results[vk] = String(c.result).trim().slice(0, 160);
+                proposed++;
+            });
+        }
+        try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+        try { if (typeof renderCoffePanel === 'function') renderCoffePanel(); } catch (_) {}
+        _toast('CoFFE: ' + proposed + ' case(s) proposed (' + calls + ' call(s)' + (failures ? ', ' + failures + ' failed' : '') + ')' + (work.length > batch.length ? ' · ' + (work.length - batch.length) + ' condition(s) remain — run again' : ''), failures ? 'warning' : 'success', 5000);
+        return { ok: failures === 0, fcs: batch.length, cases: casesAsked, proposed: proposed, calls: calls, failures: failures, remaining: work.length - batch.length, model: model };
+    }
     async function _decomposeFromInput(input, scope) {
         input = input || {}; scope = scope || {};
         if (!(input.text && input.text.trim()) && !_archImgUsed(input)) { _toast('Provide a SysML model / design description, or attach a diagram.', 'warning'); return; }
@@ -4113,6 +4233,11 @@
                     const ok = _applyHfDraftRow(_HF_DRAFT_LANES[opts.lane], a);
                     if (ok) out.applied++; else out.failed++;
                     out.results.push({ i: i, op: 'hf:' + opts.lane, ok: !!ok });
+                } else if (feature === 'resources.draft' || (a.name !== undefined && (a.providedBy !== undefined || a.consumedBy !== undefined))) {
+                    // 4 Sep 2026 (F15) — the resources lane's own item shape (Draft Resources panel)
+                    const ok = _applyResource(a);
+                    if (ok) out.applied++; else out.failed++;
+                    out.results.push({ i: i, op: 'resource', ok: !!ok });
                 } else if (a.fcDesc !== undefined && a.subId !== undefined) {
                     // classic FHA suggestion shape
                     const r = _applyFhaSuggestion(Object.assign({}, a, { _model: model, _assumptions: _assumptionsFor(asms, String(a.fcDesc || '').trim(), [a.subId, a.srcCondId]) }));
@@ -10221,6 +10346,67 @@
     }
     // Phase 2 — create a system from an SDD/architecture doc (idempotent by name). Mirrors the
     // System Directory shape; gated like every AI write. No λ/DAL/severity here — structure only.
+    // 4 Sep 2026 (F15 step 3) — a MAC rule from the model, in the store's own shape
+    // (macSaveDraft is the reference): { id, level 0, subId, phase, clauses[{min, of}],
+    // substantiation { kind:'assumption', ref, by, at } }. Members must be system
+    // function ids that exist; the phase must be a box in the mission profile (or
+    // "All phases"); a rule for the same sub-function + phase is UPDATED in place when
+    // it is the model's own and untouched, never duplicated, never overwriting a
+    // signed one. The rule stays an assumption — the engineer flips it to SDD.
+    function _chatAddMac(a, model) {
+        if (typeof projectConfig === 'undefined' || !projectConfig) return { ok: false, error: 'project not loaded' };
+        const subId = String((a && a.subId) || '').trim();
+        if (!subId) return { ok: false, error: 'add_mac needs subId' };
+        const s = snapshot();
+        const sub = (s.acFunctionsData || []).find(function (f) { return String(f.subId) === subId; });
+        if (!sub) return { ok: false, error: 'no aircraft sub-function ' + subId };
+        const fnIds = {};
+        (s.systemsData || []).forEach(function (sy) { (sy.functions || []).forEach(function (f) { if (f && f.funcId) { fnIds[String(f.funcId)] = f; fnIds[String(f.funcId).toLowerCase()] = f; const nm = String(f.funcName || '').trim().toLowerCase(); if (nm) fnIds['name:' + nm] = f; } }); });
+        const unknown = [];
+        const clauses = (Array.isArray(a.clauses) ? a.clauses : []).map(function (cl) {
+            const of = [];
+            (Array.isArray(cl && cl.of) ? cl.of : []).forEach(function (m) {
+                const key = String(m == null ? '' : m).trim();
+                const hit = fnIds[key] || fnIds[key.toLowerCase()] || fnIds['name:' + key.toLowerCase()];
+                if (!hit) { unknown.push(key); return; }
+                if (of.indexOf(String(hit.funcId)) < 0) of.push(String(hit.funcId));
+            });
+            const min = Math.max(1, Math.min(parseInt((cl && cl.min) || 1, 10) || 1, of.length || 1));
+            return { min: min, of: of };
+        }).filter(function (cl) { return cl.of.length > 0; });
+        if (!clauses.length) return { ok: false, error: 'add_mac ' + subId + ': no clause names a known system function' + (unknown.length ? ' (unknown: ' + unknown.slice(0, 4).join(', ') + ')' : '') };
+        let phase = String((a && a.phase) || 'All phases').trim() || 'All phases';
+        if (!/^all phases$/i.test(phase)) {
+            const vp = _validPhases([phase]);
+            if (!vp.length) return { ok: false, error: 'add_mac ' + subId + ': phase "' + phase + '" is not in this project\'s mission profile' };
+            phase = vp[0];
+        } else phase = 'All phases';
+        if (!Array.isArray(projectConfig.macModels)) projectConfig.macModels = [];
+        const store = projectConfig.macModels;
+        const by = 'AI (' + (model || 'model') + ') — proposed, not yet substantiated';
+        const rec = {
+            id: 'mac-' + Date.now() + '-' + Math.floor(Math.random() * 1000), level: 0, subId: subId, phase: phase, clauses: clauses,
+            substantiation: { kind: 'assumption', ref: String((a && a.sddRef) || '').trim().slice(0, 200), by: by, at: new Date().toISOString() },
+            floor: null, contributions: [],
+            aiGenerated: true, aiModel: model || null, aiRationale: String((a && a.rationale) || '').trim().slice(0, 600), aiUnknownMembers: unknown.length ? unknown.slice(0, 8) : undefined
+        };
+        const prior = store.find(function (r) { return r && String(r.subId) === subId && String(r.phase || 'All phases') === phase; });
+        let summary;
+        if (prior) {
+            const signed = !(prior.aiGenerated) || (prior.substantiation && prior.substantiation.kind === 'sdd') || prior.humanEdited;
+            if (signed) return { ok: false, error: 'add_mac ' + subId + ' (' + phase + '): a signed rule already exists — not overwritten' };
+            rec.id = prior.id;
+            store[store.indexOf(prior)] = rec;
+            summary = 'MAC rule updated in place — ' + subId + ' (' + phase + '), ' + clauses.length + ' clause(s)';
+        } else {
+            store.push(rec);
+            summary = 'MAC rule added — ' + subId + ' (' + phase + '), ' + clauses.length + ' clause(s)';
+        }
+        if (unknown.length) summary += ' · ' + unknown.length + ' member(s) not found: ' + unknown.slice(0, 3).join(', ');
+        try { if (typeof renderMacPage === 'function') renderMacPage(); } catch (_) {}
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        return { ok: true, summary: summary, id: rec.id };
+    }
     function _chatAddSystem(a, model) {
         var name = String((a && a.name) || '').trim();
         if (!name) return { ok: false, error: 'system needs a name' };
@@ -10286,6 +10472,7 @@
             routing:     (s.routingData || []).slice(0, 30).map(function (r) { return { _id: r.internalId, rId: r.routingId, name: _chatClip(r.name, 36), kind: r.kind }; }),
             markov:      ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.markovModels) || []).slice(0, 12).map(function (m) { return { id: m.id, name: _chatClip(m.name, 40), states: (m.states || []).slice(0, 24).map(function (st) { return { n: st.name, failed: !!st.isFailed }; }), transitions: (m.transitions || []).slice(0, 50).map(function (t) { return { from: t.from, to: t.to }; }) }; }),
             interfaces:  ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interfaces) || []).slice(0, 60).map(function (i) { return { id: i.id, from: i.fromSystemId, ff: i.fromFuncId || null, to: i.toSystemId, tf: i.toFuncId || null, kind: i.kind, medium: i.medium || null, dir: i.direction || null }; }),
+            mac:         ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []).slice(0, 60).map(function (r) { return { id: r.id, subId: r.subId, phase: r.phase || 'All phases', clauses: (r.clauses || []).map(function (c) { return { min: c.min, of: (c.of || []).slice(0, 12) }; }), basis: r.substantiation ? r.substantiation.kind : null }; }),
             systems:     (s.systemsData || []).map(function (sy) { return {
                 id: sy.id, name: sy.name,
                 functions: (sy.functions || []).slice(0, 28).map(function (f) { return { _id: f.internalId, fid: f.funcId, fn: _chatClip(f.funcName, 48), tracesUpTo: (f.traceIds || []).join(',') || null }; }),
@@ -10321,6 +10508,7 @@
             'ACTION CATALOG (op + fields). scope is "aircraft" or "system"; for system scope include systemId from the state.',
             'ADD:',
             '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgement because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it)}',
+            '- add_mac {subId, phase, clauses:[{min, of:[system function ids]}], sddRef, rationale}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these system functions available". Members are system function ids (fid). Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it.',
             '- add_system {name}  — create a system (idempotent by name) from an SDD/architecture doc. Emit this BEFORE the system\'s functions/interfaces so they can reference it by name.',
             '- add_function {scope, systemId?, funcName, funcDef, subName, subDef, traceIds?}   (ONE level of decomposition; for scope "system", traceIds = the aircraft sub-function ids this system function implements)',
             '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" (empty FCs + short rationale) when the unaware case is inapplicable.',
@@ -11532,6 +11720,7 @@
                         break;
                     }
                     case 'add_function': results.push(_chatAddFunction(a, model)); break;
+                    case 'add_mac': { const r2 = _chatAddMac(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'add_system': { const r2 = _chatAddSystem(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'add_fcim': {
                         // malfunctions[]/partials[] ride through — _SPEC_FCIM asks for the
@@ -11723,7 +11912,7 @@
     // Render a heterogeneous ANEM action as a review card (op-aware; carries #258 confidence/source).
     function _anemActionCard(a) {
         const op = String(a.op || '?');
-        const title = ({ add_fha: 'Failure condition', add_function: 'Function', add_system: 'System', add_fcim: 'FCIM', add_requirement: 'Requirement', add_fta_tree: 'Fault tree', add_fta_node: 'FTA node', update_fta_node: 'FTA node', delete_fta_node: 'FTA node', link: 'Link', add_markov_state: 'Markov state', delete_markov_state: 'Markov state', add_markov_transition: 'Markov transition', delete_markov_transition: 'Markov transition', add_interface: 'Interface', update_interface: 'Interface', delete_interface: 'Interface', add_pra: 'Particular risk', add_zsa: 'Zonal', add_cma: 'Common mode', add_fmea: 'FMEA', add_routing: 'Routing', add_item: 'Item', update: 'Update', 'delete': 'Delete' })[op] || op;
+        const title = ({ add_fha: 'Failure condition', add_function: 'Function', add_system: 'System', add_mac: 'MAC rule', add_fcim: 'FCIM', add_requirement: 'Requirement', add_fta_tree: 'Fault tree', add_fta_node: 'FTA node', update_fta_node: 'FTA node', delete_fta_node: 'FTA node', link: 'Link', add_markov_state: 'Markov state', delete_markov_state: 'Markov state', add_markov_transition: 'Markov transition', delete_markov_transition: 'Markov transition', add_interface: 'Interface', update_interface: 'Interface', delete_interface: 'Interface', add_pra: 'Particular risk', add_zsa: 'Zonal', add_cma: 'Common mode', add_fmea: 'FMEA', add_routing: 'Routing', add_item: 'Item', update: 'Update', 'delete': 'Delete' })[op] || op;
         const body = a.fcDesc || a.funcName || a.subName || a.text || a.topEvent || a.threat || a.zoneId || a.subject || a.mode || (a.subId ? ('subId ' + a.subId) : '') || '';
         // A classified row says "· Catastrophic". An abstained row used to say
         // nothing at all — the absence shown only by OMISSION, which on a stack of
@@ -12192,6 +12381,7 @@
         req:   'Recommend derived SAFETY REQUIREMENTS that close the project\'s open analysis gaps (failure conditions lacking mitigating requirements; fault-tree contributors lacking controls). Write each as "The <item> shall …", trace it to the function / failure condition it addresses, and set level + type + verification method. Emit them as add_requirement actions; ground every requirement in the current project state. These are ADVISORY PROPOSALS — an accepted one is filed as a review comment on its traced failure condition, never written into the requirements register.',
         fha:   'Draft the AIRCRAFT-level FHA. For each aircraft function, identify its failure condition(s) with effects on Aircraft / Crew / Passengers and a SEVERITY classified per §__.1309 (Catastrophic ↔ Extremely Improbable … No Safety Effect ↔ none), DERIVED from the effects you state for that condition. Ground every row strictly in the project\'s functions. If a function\'s definition does not support stating an aircraft effect, you CANNOT classify it: emit the row with severity as an EMPTY STRING and say what is missing in severityRationale. Do NOT reach for the benign end of the scale to avoid a blank — "No Safety Effect" is a finding about the aircraft, not a way of saying you do not know. Emit add_fha actions with scope "aircraft".',
         fcim:  'Generate the FCIM (Failure Conditions, Indications & Mitigations) per aircraft function — Total Loss / Partial Loss / Malfunction as concise capability phrases, the crew-Aware vs crew-Unaware awareness split, and the indications + mitigations. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[]/malfunctions[] arrays, never merged into one phrase. Put NO severity words anywhere (severity lives in the FHA, never the FCIM). Emit add_fcim actions.',
+        mac: 'For each named aircraft sub-function, draft its Minimum Acceptable Configuration from the architecture / source documents: the least set of SYSTEM functions (by fid) that must remain available for that aircraft function to be delivered, as clauses "at least min of [...]". Read the minimum from the document\'s redundancy and dispatch statements and cite the section in sddRef; where the document is silent, require every implementing function (min = all) and say so in rationale. Emit one add_mac per sub-function (per phase only where the document states a phase-specific minimum). Never name a system function that does not implement or support the aircraft function.',
         systems: 'From the project architecture / source documents, identify the aircraft SYSTEMS the design allocates functions to, and each system\'s own functions. Emit add_system {name} for each system FIRST, then add_function {scope:"system", systemId:<that name>, funcName, funcDef, traceIds:[aircraft sub-function ids it implements]} for each of its functions. Never invent a system or a function the document does not describe; trace only where the document says the system delivers that aircraft function.',
         decompose: 'From the project architecture / source documents, extract ONE level of functional decomposition: each top-level function → its immediate sub-functions (behaviours the aircraft accomplishes — NOT resources like electrical/hydraulic power, and NOT structure). Emit add_function actions. Never invent functions the architecture does not support.',
         synth: 'Synthesise fault-tree STRUCTURE ONLY (no failure rates) for the untreated failure conditions, using the architecture to find the real contributors and the correct AND/OR gate logic. Tree DEPTH comes solely from the architecture — never fabricate depth. Emit add_fta_tree actions with every basic-event λ left blank for the engineer.',
@@ -12669,7 +12859,9 @@
         fcimGaps:     _funcsNeedingFcim,           // sub-functions without FCIM coverage
         // ---- Feature #49 — functional decomposition from architecture docs --
         decompose:   _captureGuard('decompose', decompose),                    // open input panel (or pass { text })
-        decomposeSystems: _captureGuard('decomposeSystems', decomposeSystems),  // F15 — systems + their functions from the SDD, traced to aircraft sub-functions
+        decomposeSystems: _captureGuard('decomposeSystems', decomposeSystems),
+        draftMac:    _captureGuard('draftMac', draftMac),
+        draftCoffe:  draftCoffe,                                               // F15 — CoFFE residue (direct lane: verdicts land as AI-proposed, no panel)                      // F15 — MAC rules from the SDD (members = system functions)  // F15 — systems + their functions from the SDD, traced to aircraft sub-functions
         // ---- Feature #52 — fault-tree consistency reviewer (advisory) -------
         reviewTrees: _captureGuard('reviewTrees', reviewTrees),                  // async: flag inconsistencies (read-only)
         // ---- Feature #53 — recommend safety requirements --------------------

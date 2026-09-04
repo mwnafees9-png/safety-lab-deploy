@@ -238,6 +238,9 @@ console.log('\n[9] The computed (MAC) lane in CoFFE — coffeComputed(), rewritt
     X(/function macBreachSetsChecked\(rule\) \{[\s\S]*?\n\}/) + '\n' +
     X(/function macBreachSets\(rule\) \{[\s\S]*?\n\}/) + '\n' +
     X(/function _coffeBreachSetsForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' +
+    // 4 Sep 2026 — tokens resolve to their owner system (MAC members are system functions since B6)
+    'let systemsData = [];\n' +
+    X(/function _coffeTokSys\(tok\) \{[\s\S]*?\n\}/) + '\n' +
     X(/function _coffeDegSys\(tok\) \{[\s\S]*?\n\}/) + '\n' +
     X(/function coffeComputed\(fc, kase\) \{[\s\S]*?\n\}/) +
     '\n;__o.setRules = r => { __RULES = r; };' +
@@ -281,7 +284,25 @@ console.log('\n[9] The computed (MAC) lane in CoFFE — coffeComputed(), rewritt
 
   check('the deg: token parser survives a label containing a colon',
     (() => { const src = misc.match(/function _coffeDegSys\(tok\) \{[\s\S]*?\n\}/)[0];
-      const f = new Function('return ' + src)(); return f('deg:sysA:lvl:2') === 'sysA'; })());
+      const f = new Function('_coffeTokSys', 'return ' + src)(x => x); return f('deg:sysA:lvl:2') === 'sysA'; })());
+  // 4 Sep 2026 (F15) — the computed lane sees FUNCTION-member rules through the owner system.
+  {
+    const sb3 = { console, JSON, Math, Set, Array, Object, String, Number, isFinite, parseFloat, __o: {} };
+    vm.createContext(sb3);
+    vm.runInContext('const MAC_COMBO_CAP = 50000;\nlet __RULES = [];\nfunction _macStore(){ return __RULES; }\n' +
+      'let systemsData = [{ id: "sys-fcs", functions: [{ funcId: "FCS-F1" }, { funcId: "FCS-F2" }] }, { id: "sys-hyd", functions: [{ funcId: "HYD-F1" }] }];\n' +
+      'function _idpFnOwner(id){ for (const s of systemsData) { const f = (s.functions||[]).find(x => x.funcId === id); if (f) return { system: s, fn: f }; } return null; }\n' +
+      X(/function _macDegFor\(rule, sysId\) \{[\s\S]*?\n\}/) + '\n' + X(/function macClauseWeighted\(rule, cl\) \{[\s\S]*?\n\}/) + '\n' +
+      X(/function macBreachSetsChecked\(rule\) \{[\s\S]*?\n\}/) + '\n' + X(/function macBreachSets\(rule\) \{[\s\S]*?\n\}/) + '\n' +
+      X(/function _coffeBreachSetsForFc\(fc\) \{[\s\S]*?\n\}/) + '\n' + X(/function _coffeTokSys\(tok\) \{[\s\S]*?\n\}/) + '\n' +
+      X(/function _coffeDegSys\(tok\) \{[\s\S]*?\n\}/) + '\n' + X(/function coffeComputed\(fc, kase\) \{[\s\S]*?\n\}/) +
+      '\n__RULES = [{ id: "r", subId: "SF-X", clauses: [{ min: 1, of: ["FCS-F1", "FCS-F2"] }, { min: 1, of: ["HYD-F1"] }] }];' +
+      '\n__o.calc = parts => coffeComputed({ internalId: 1, subId: "SF-X" }, { parts, key: "k" });', sb3);
+    check('a MAC rule whose members are system FUNCTIONS is seen by CoFFE through the owner system: total loss of Flight Control breaches "1 of [FCS-F1, FCS-F2]"',
+      sb3.__o.calc([{ sysId: 'sys-fcs', state: 'total loss' }]) === 'yes');
+    check('… total loss of hydraulics breaches its single-member clause', sb3.__o.calc([{ sysId: 'sys-hyd', state: 'total loss' }]) === 'yes');
+    check('… and a system the rule does not name computes "no", not null', sb3.__o.calc([{ sysId: 'sys-other', state: 'total loss' }]) === 'no');
+  }
 }
 
 console.log('\n' + (fail === 0 ? 'ALL GREEN — ' + pass + ' checks' : 'RED — ' + fail + ' failed, ' + pass + ' passed'));

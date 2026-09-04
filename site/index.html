@@ -4061,13 +4061,13 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.30" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.80" defer></script>
+    <script src="helpers_modules.js?v=2.81" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
     <script src="severity_axes.js?v=1.2" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.35" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.53" defer></script>
+    <script src="misc_fn_modules.js?v=66.54" defer></script>
     <script src="safety_lab.js?v=65.50" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4370,9 +4370,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          first completion; the engine falls back to inline specs if absent. -->
     <script src="spec_index.js?v=1.3" defer></script>
     <script src="eval_core.js?v=1.6" defer></script>
-    <script src="ai_skills.js?v=2.5" defer></script>
+    <script src="ai_skills.js?v=2.6" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.39" defer></script>
+    <script src="ai_loader.js?v=8.40" defer></script>
     <script src="config_management.js?v=1.8" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.1" defer></script>

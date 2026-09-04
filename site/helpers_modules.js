@@ -3044,7 +3044,7 @@ function renderCoffePanel() {
             : '';
         const vacuous = c !== null && kase.parts.some(p => unmod.has(p.sysId));
         const det = (v
-            ? '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;' + (v.verdict === 'yes' ? ' color: var(--color-danger); border-color: var(--color-danger);' : '') + '" onclick="coffeVerdict(\'' + esc(String(fc.internalId)) + '\',\'' + esc(kase.key) + '\')">✍ ' + (v.verdict === 'yes' ? 'Yes' : 'No') + ' · ' + esc(v.by) + (v.derived ? ' <span style="opacity:.6;">(derived)</span>' : '') + '</button>' + graftBtn
+            ? '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;' + (v.verdict === 'yes' ? ' color: var(--color-danger); border-color: var(--color-danger);' : '') + '" onclick="coffeVerdict(\'' + esc(String(fc.internalId)) + '\',\'' + esc(kase.key) + '\')">' + (v.aiProposed ? '<span style="color:#7A5300;" title="AI-proposed — not a review. Click to clear it, then determine and sign; or leave it and sign your own.">✨ AI-proposed</span> ' : '✍ ') + (v.verdict === 'yes' ? 'Yes' : 'No') + ' · ' + esc(v.by) + (v.derived ? ' <span style="opacity:.6;">(derived)</span>' : '') + '</button>' + graftBtn
             : '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="coffeVerdict(\'' + esc(String(fc.internalId)) + '\',\'' + esc(kase.key) + '\')">determine →</button>' + derivedBtn) +
             '<div style="font-size:10px; font-family:var(--font-mono); color:' +
             (c === null ? 'var(--color-text-tertiary);">— no computed lane' :

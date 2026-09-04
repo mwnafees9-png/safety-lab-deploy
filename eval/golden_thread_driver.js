@@ -31,8 +31,15 @@
         // CoFFE and compiled trees follow as they are built; until then 'trees' is still the
         // AI synthesiser and is NOT what the consistency bar measures.
         { step: 'systems',   call: function () { return SafetyLabAI.decomposeSystems(); } },
+        { step: 'resources', call: function () { return SafetyLabAI.draftResources(); } },   // electrical / hydraulic / pneumatic / fuel — the CRA lane of the compiled trees
         { step: 'interdep',  direct: interdepSweepAndAccept },
-        { step: 'trees',     call: function () { return SafetyLabAI.synthesizeTree(); } },
+        { step: 'mac',       call: function () { return SafetyLabAI.draftMac(); } },
+        { step: 'coffe',     direct: function () { return SafetyLabAI.draftCoffe({ fcCap: 200 }); } },
+        // F15 step 5 — TREES ARE COMPILED, not drawn: SLLaneTrees.compileAll() builds every
+        // lane page from the MAC rules + interdependence + CoFFE residue + resources. The AI
+        // synthesiser stays reachable as 'trees-ai' (optional — only when named in opts.only).
+        { step: 'trees',     direct: compileTrees },
+        { step: 'trees-ai',  call: function () { return SafetyLabAI.synthesizeTree(); }, optional: true },
         { step: 'fmea',      call: function () { return SafetyLabAI.draftFmea(); } },
         { step: 'pra',       call: function () { return SafetyLabAI.draftPra(); } },
         { step: 'zsa',       call: function () { return SafetyLabAI.draftZsa(); } },
@@ -69,6 +76,24 @@
         try { if (typeof renderInterdepPage === 'function') renderInterdepPage(); } catch (_) {}
         var after = idpStats();
         return { sweeps: calls, before: before, after: after, accepted: accepted, cleared: cleared, model: model };
+    }
+
+    // F15 step 5 — compile the multifunction / multisystem trees from the lanes.
+    function compileTrees() {
+        var LT = window.SLLaneTrees;
+        if (!LT || typeof LT.compileAll !== 'function') throw new Error('SLLaneTrees.compileAll not available on this page');
+        var before = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages.length : null;
+        var res = LT.compileAll();
+        var findings = [];
+        try {
+            ((projectConfig.macModels) || []).forEach(function (r) {
+                var c = LT.compile(r.id);
+                (c.findings || []).forEach(function (f) { findings.push({ rule: r.id, subId: r.subId, kind: f.kind, msg: String(f.msg || '').slice(0, 200) }); });
+            });
+        } catch (_) {}
+        var after = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages.length : null;
+        try { if (typeof renderFTASidebar === 'function') renderFTASidebar(); } catch (_) {}
+        return { rules: res.rules, pages: res.pages, findings: res.findings, findingDetail: findings.slice(0, 60), pagesBefore: before, pagesAfter: after };
     }
 
     function read() {
@@ -163,6 +188,7 @@
             var s = THREAD[i];
             if (only && only.indexOf(s.step) < 0) continue;
             if (skip.indexOf(s.step) >= 0) continue;
+            if (s.optional && !(only && only.indexOf(s.step) >= 0)) continue;   // 'trees-ai' runs only when named
             if (window.__goldenStop) { console.info('[golden] stopped before ' + s.step); break; }
             var r = await step(run, s, opts.timeoutMs);
             console.info('[golden] ' + run + ' ' + s.step + ': ' + (r.ok ? 'ok' : 'FAIL') + ' · drafted ' + (r.drafted || 0) + (r.apply ? (' · applied ' + r.apply.applied + ' updated ' + r.apply.updated + ' blocked ' + r.apply.blocked + ' protected ' + r.apply.protected + ' failed ' + r.apply.failed + ' unsupported ' + r.apply.unsupported + ' judgement ' + r.apply.judgement) : '') + (r.declined ? (' · DECLINED: ' + r.reason) : '') + (r.error ? (' · ERROR: ' + r.error) : '') + ' · ' + r.secs + 's');

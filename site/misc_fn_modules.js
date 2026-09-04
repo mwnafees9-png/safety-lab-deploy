@@ -1975,7 +1975,23 @@ function _coffeDegSys(tok) {
     if (String(tok).indexOf('deg:') !== 0) return null;
     const rest = String(tok).slice(4);
     const i = rest.indexOf(':');
-    return i < 0 ? rest : rest.slice(0, i);
+    return _coffeTokSys(i < 0 ? rest : rest.slice(0, i));
+}
+// 4 Sep 2026 (F15, found while building the MAC drafter) — MAC MEMBERS ARE SYSTEM
+// FUNCTIONS SINCE B6 (21 Aug), BUT COFFE CASES ARE PER SYSTEM. The computed lane
+// compared a breach-set token (a system FUNCTION id such as FCS-F1) with a case part
+// (a SYSTEM id such as sys-fcs) letter for letter, so every rule drafted on the MAC
+// page since B6 was invisible to CoFFE: nothing folded, every case was elicited, and
+// coffeUnmodelledSystems called every contributor unmodelled. The demo projects still
+// carry system-id members, which is why it never showed. A function token now
+// resolves to its OWNER SYSTEM: total loss of the system covers loss of any of its
+// functions (the conservative direction — it raises the question, never hides it).
+function _coffeTokSys(tok) {
+    const id = String(tok == null ? '' : tok);
+    if (!id) return id;
+    try { if ((systemsData || []).some(s => s && String(s.id) === id)) return id; } catch (_) {}
+    try { const own = (typeof _idpFnOwner === 'function') ? _idpFnOwner(id) : null; if (own && own.system) return String(own.system.id); } catch (_) {}
+    return id;
 }
 function coffeComputed(fc, kase) {
     // Malfunction has no computed lane — see the note above.
@@ -1989,8 +2005,9 @@ function coffeComputed(fc, kase) {
             return kase.parts.some(p => p.sysId === degSys &&
                 (p.state === 'partial loss' || p.state === 'total loss'));
         }
-        // A full-loss requirement is met only by full loss.
-        return kase.parts.some(p => p.sysId === tok && p.state === 'total loss');
+        // A full-loss requirement is met only by full loss (of the member's OWNER system).
+        const sysOf = _coffeTokSys(tok);
+        return kase.parts.some(p => p.sysId === sysOf && p.state === 'total loss');
     };
     return sets.some(b => b.every(covers)) ? 'yes' : 'no';
 }
@@ -2003,7 +2020,8 @@ function coffeMatchedBreachSet(fc, kase) {
     const covers = tok => {
         const degSys = _coffeDegSys(tok);
         if (degSys !== null) return kase.parts.some(p => p.sysId === degSys && (p.state === 'partial loss' || p.state === 'total loss'));
-        return kase.parts.some(p => p.sysId === tok && p.state === 'total loss');
+        const sysOf = _coffeTokSys(tok);
+        return kase.parts.some(p => p.sysId === sysOf && p.state === 'total loss');
     };
     return sets.find(b => b.every(covers)) || null;
 }
@@ -2057,7 +2075,7 @@ function coffeShortestRoute(fc) {
 function coffeUnmodelledSystems(fc) {
     const rules = _macStore().filter(r => r.subId === fc.subId);
     const covered = new Set();
-    rules.forEach(r => (r.clauses || []).forEach(cl => (cl.of || []).forEach(m => covered.add(m))));
+    rules.forEach(r => (r.clauses || []).forEach(cl => (cl.of || []).forEach(m => { covered.add(m); covered.add(_coffeTokSys(m)); })));
     return idpContributors(fc).filter(id => !covered.has(id));
 }
 
