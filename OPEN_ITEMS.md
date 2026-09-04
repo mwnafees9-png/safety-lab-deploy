@@ -797,6 +797,24 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
+- **F13 — CMA "link" fails because adding a CMA returns no id (found on golden run 1, 4 Sep 2026;
+  46 of the CMA draft's actions failed).** The AI's CMA draft is `add_cma` followed by `link`
+  actions that point at the new CMA with a placeholder id; `add_cma` does not return the id it
+  created, so every `link` fails with "no CMA with _id …". The human review panel's Accept-all
+  applies items one at a time and has the SAME fault, so this is a product defect, not a harness
+  one. Fix: `add_cma` returns the new id and the executor rewrites placeholder ids in the actions
+  that follow (the same way functions → failure conditions already resolve). Two honesty gaps
+  found alongside, same fix pass: `add_fta_tree failed` with no reason given (4 trees on run 1),
+  and the FMEA lane declining with no reason when the project has no systems. One deploy, before
+  run 2 if time allows — the CMA and tree numbers on the goldens are wrong until it lands.
+
+- **F14 — Declared assumptions never name a failure condition (run 1: 0 of the AI's declared
+  assumptions named a condition id, so `_assumptionsFor` linked none of them).** The engine now
+  links an assumption to a row only when the assumption names the row's condition or sub-function
+  (4 Sep — "we dont need to show all 97 assumptions on every failure condition"). For that to
+  populate, the drafting instruction must ask the model to fill `appliesTo` with the condition
+  ids the assumption governs. Skill-body change → eval-gated; do it with the next skills bump.
+
 - **F10 — SHIPPED 3 Sep 2026 (ai_assistant 76.39), listed so the campaign machinery's state is on the register too.** A refusal is a result:
   `_captureBail` + `_captureGuard` on the 17 public lane entry points, plus a guard on
   `_fmeaSystemPicker` (the sixth picker — the 76.38 sweep matched `_open*Picker` and missed it).

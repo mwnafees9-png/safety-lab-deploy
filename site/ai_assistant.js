@@ -856,25 +856,42 @@
         if (out.indexOf('All phases') < 0) out.push('All phases');
         return out;
     }
-    // Filters a phases value against the project vocabulary, preserving whether
+    // Maps a phases value onto the project's own phase spellings, preserving whether
     // the caller supplied an array or a comma-joined string.
+    // 4 Sep 2026 (Waqas): "I dont want anything dropped." Golden run 1 wrote
+    // "Initial climb"; the project table spells it "Initial Climb"; the old
+    // letter-for-letter filter threw the phase away and put a "1 dropped" badge on
+    // the row. NOTHING IS DROPPED NOW. A phase that matches the table ignoring case,
+    // spacing and hyphens is written in the table's spelling. A phase the table does
+    // not have at all is KEPT as the model wrote it and recorded in lastUnlisted, so
+    // the row's comment can say "not in this project's phase table" and the engineer
+    // decides — the row keeps what the AI said. Duplicates after normalising collapse.
+    function _phaseKeyOf(x) { return String(x == null ? '' : x).toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim(); }
     function _validPhases(v) {
+        // Same normalisation as _phaseKeyOf, inlined so the tests that lift this
+        // function out on its own (a73_phases, fha_phase_shape, ai_repeatability) run it.
+        const _phaseKeyOf = function (x) { return String(x == null ? '' : x).toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim(); };
         const vocab = _projectPhaseNames();
+        const byKey = {};
+        vocab.forEach(function (name) { const k = _phaseKeyOf(name); if (k && !byKey[k]) byKey[k] = name; });
         const wasString = (typeof v === 'string');
         const list = Array.isArray(v) ? v : String(v == null ? '' : v).split(',');
         const names = list.map(function (x) { return String(x).trim(); }).filter(Boolean);
-        const kept = names.filter(function (x) { return vocab.indexOf(x) >= 0; });
-        // 3 Sep 2026 — THE DROP IS NO LONGER SILENT. On the Vayu v5 run the model named
-        // hover and transition as the worst-case phases and said why; neither is in a
-        // fixed-wing phase table, so 11 of 12 rows landed with an EMPTY phases cell and
-        // nobody was told. Now that rows carry phase subsets, a dropped phase silently
-        // changes the exposure ratio as well. The filter keeps filtering — an invented
-        // phase must never read as scope — but it records what it removed, and every
-        // caller carries that onto the row as a visible flag.
-        _validPhases.lastDropped = names.filter(function (x) { return vocab.indexOf(x) < 0; });
+        const kept = [], seen = {}, unlisted = [];
+        names.forEach(function (x) {
+            const k = _phaseKeyOf(x);
+            const canon = byKey[k] || x;
+            if (seen[_phaseKeyOf(canon)]) return;
+            seen[_phaseKeyOf(canon)] = true;
+            kept.push(canon);
+            if (!byKey[k]) unlisted.push(x);
+        });
+        _validPhases.lastUnlisted = unlisted;
+        _validPhases.lastDropped = [];   // kept for old readers — nothing is ever dropped now
         return wasString ? kept.join(', ') : kept;
     }
     _validPhases.lastDropped = [];
+    _validPhases.lastUnlisted = [];
 
     // 3 Sep 2026 — the last toast is REMEMBERED. Under capture a guard clause is
     // the entire story: the 3 Sep FMEA campaign spent 901 s per run (three runs,
@@ -1490,7 +1507,7 @@
             '2c. THREE EFFECT AXES: alongside the sentences, set effAcLevel / effCrewLevel / effPaxLevel from the closed vocabularies in the THREE EFFECT AXES rule below; the class is the worst axis and the product derives it from your levels. A level you cannot ground stays EMPTY.',
             '2b. If the function definition is too thin to state an aircraft effect, you CANNOT classify it. Return severity as an EMPTY STRING and say in severityRationale what is missing. An unclassified condition the engineer then classifies is a good outcome. A guess that looks considered is the failure mode this rule exists to prevent — do not pick a middle value to avoid leaving a blank.',
             '3. Effects: one concise factual sentence each, third-person ("the aircraft…", "the crew…"). If an effect is minor or none, say so briefly.',
-            '4. phases: choose the flight phases where the condition is most relevant, only from: ' + _projectPhaseNames().join(', ') + '. These are THIS project\'s phases — any value outside the list is discarded, and a discarded phase means the exposure normalisation for that condition silently does not run.',
+            '4. phases: choose the flight phases where the condition is most relevant, only from: ' + _projectPhaseNames().join(', ') + '. These are THIS project\'s phases, spelled as the project spells them — a phase outside the list is kept on the row but flagged for the engineer and carries no duration, so name a listed phase whenever one fits.',
             '   Some of those are CONTINGENCY phases (rejected take-off, go-around, balked landing and the like). Name one when the condition matters specifically at that demand — losing a function during a go-around is a different failure condition, and usually a more severe one, than losing it in the cruise. A contingency phase does not shrink the exposure window.',
             '5. Be complete but do not pad — only credible conditions.',
             '',
@@ -2414,7 +2431,7 @@
                     // Only the flight phases the product actually declares. An invented
                     // phase reads as scope, which is worse than an obviously missing one.
                     phases: _validPhases(Array.isArray(x.phases) ? x.phases : []),
-                    droppedPhases: (_validPhases.lastDropped || []).slice(),   // 3 Sep 2026 — shown on the card and carried to the row
+                    unlistedPhases: (_validPhases.lastUnlisted || []).slice(),   // 4 Sep 2026 — kept on the row, named on the card and in the comment; never dropped
                     severityRationale: String(x.severityRationale || '').trim(),
                     sevBasis: String(x.sevBasis || '').trim(),   // 3 Sep 2026 — the panel path dropped the anchor the spec asks for; carried now
                     // 3 Sep 2026 — the three effect levels (closed vocabulary; off-list => empty).
@@ -3048,10 +3065,10 @@
                 // the drawer never opened. Both reproduced live on Aeolus + Untitled, 28 Aug.
                 // The row now speaks the project's vocabulary at the moment it is born.
                 phases: _validPhases(s.phases || []).join(', '),   // A7-3 — the batch path reaches this function directly and bypassed the parse-stage filter entirely
-                // 3 Sep 2026 — what the filter removed, as data on the row. The table flags it
-                // in the Phases cell; the comment names the phases so the engineer can add
-                // them to the project's phase table (the SC-VTOL profile gap) and re-check.
-                droppedPhases: (function () { const d = (_validPhases.lastDropped || []).slice(); return d.length ? d : undefined; })(),
+                // 4 Sep 2026 — phases the project's table does not list are KEPT on the row
+                // (nothing is dropped); this names them so the comment can say so and the
+                // engineer can add them under Flight Phases or edit the row.
+                unlistedPhases: (function () { const d = (_validPhases.lastUnlisted || []).slice(); return d.length ? d : undefined; })(),
                 effAc: s.effAc || '', effCrew: s.effCrew || '', effPax: s.effPax || '',
                 // 3 Sep 2026 — the three effect levels ride on the row; when any is set the
                 // class and its anchor are DERIVED from the worst axis (fha.draft@v4), and a
@@ -3075,7 +3092,7 @@
                                   : []),
                     sysScoped, _sysEntryForAsm, s._model),
                 comments: (s.judgementCall ? ('⚠ JUDGEMENT CALL — classified on limited information; engineer to confirm. ' + String(s.judgementNote || '').trim() + ' | ') : '')
-                    + ((_validPhases.lastDropped || []).length ? ('⚠ PHASES DROPPED — the model named ' + _validPhases.lastDropped.join(', ') + ', not in this project\'s phase table; exposure is computed without them. | ') : '')
+                    + ((_validPhases.lastUnlisted || []).length ? ('⚠ PHASE NOT IN PROJECT TABLE — ' + _validPhases.lastUnlisted.join(', ') + ' kept on the row as the model named it; add it under Flight Phases (it carries no duration until then) or edit the row. | ') : '')
                     + 'AI-drafted (' + (s._model || 'model') + '). '
                     + ((s.severity || _derived) ? ('Severity rationale: ' + (s.severityRationale || '—')
                         + (_derived ? (' [anchor ' + _derived.anchor + ' — ' + (_SEV_ANCHORS[_derived.anchor] || '') + ']')
@@ -11686,8 +11703,9 @@
             try {
                 if (op !== 'add_fha' || typeof _projectPhaseNames !== 'function') return '';
                 const vocab = _projectPhaseNames(); const named = Array.isArray(a.phases) ? a.phases : String(a.phases || '').split(',');
-                const d = named.map(function (x) { return String(x || '').trim(); }).filter(function (x) { return x && vocab.indexOf(x) < 0; });
-                return d.length ? '<div class="aifh-meta" style="color:#C0271C;font-weight:700;">⚠ Phase(s) not in this project and will be dropped on accept: ' + _esc(d.join(', ')) + ' — add them under Flight Phases first if they are real.</div>' : '';
+                const keys = vocab.map(_phaseKeyOf);
+                const d = named.map(function (x) { return String(x || '').trim(); }).filter(function (x) { return x && keys.indexOf(_phaseKeyOf(x)) < 0; });
+                return d.length ? '<div class="aifh-meta" style="color:#7A5300;font-weight:700;">⚠ Phase(s) not in this project\'s phase table — kept on the row as named: ' + _esc(d.join(', ')) + ' — add them under Flight Phases if they are real, or edit the row after accept.</div>' : '';
             } catch (_) { return ''; }
         })();
         return '<h4>' + _esc(title) + (a.scope === 'system' ? ' · System' : '') + sev + _judge + '</h4><div class="aifh-eff">' + _esc(String(body).slice(0, 220)) + '</div>'

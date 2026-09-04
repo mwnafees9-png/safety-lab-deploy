@@ -57,14 +57,19 @@ console.log('\n[A7-3] the project owns the phase vocabulary');
   check('Hover and Transition now SURVIVE validation',
     JSON.stringify(sb._v(['Hover', 'Transition'])) === '["Hover","Transition"]',
     'the hardcoded list would have deleted both — and sc-vtol is a supported certification basis');
-  check('an invented phase is still dropped',
-    JSON.stringify(sb._v(['Hover', 'Orbit'])) === '["Hover"]',
-    'this is validation, not a free pass');
+  // 4 Sep 2026 (Waqas): "I dont want anything dropped." An off-list phase is KEPT on
+  // the row as named and flagged (lastUnlisted); it is no longer removed.
+  check('an off-list phase is KEPT, not dropped — and recorded as unlisted',
+    JSON.stringify(sb._v(['Hover', 'Orbit'])) === '["Hover","Orbit"]' && JSON.stringify(sb._v.lastUnlisted) === '["Orbit"]',
+    'nothing is dropped; the comment names the unlisted phase for the engineer');
+  check('a phase spelled differently from the project table is written in the TABLE\'s spelling',
+    JSON.stringify(sb._v(['hover', 'TRANSITION'])) === '["Hover","Transition"]',
+    '"Initial climb" vs "Initial Climb" cost golden run 1 a phase');
   check('"All phases" is kept as a wildcard',
     JSON.stringify(sb._v(['All phases'])) === '["All phases"]',
     'the shipped demos already use it, and the constant does not contain it');
   check('a comma-joined string stays a string',
-    sb._v('Hover, Orbit, Cruise') === 'Hover, Cruise',
+    sb._v('Hover, Orbit, Cruise') === 'Hover, Orbit, Cruise',
     'imported rows carry phases as text; returning an array there would corrupt the row');
   check('empty input is handled',
     JSON.stringify(sb._v([])) === '[]' && sb._v('') === '');
@@ -88,7 +93,7 @@ console.log('\n[A7-3] the model is offered the right list');
 check('the prompt enumerates the PROJECT phases',
   /_projectPhaseNames\(\)\.join\(', '\)/.test(ai) && !/only from: ' \+ FLIGHT_PHASES/.test(ai));
 check('…and states the cost of going outside it',
-  /the exposure normalisation for that condition silently does not run/.test(ai),
+  /kept on the row but flagged for the engineer and carries no duration/.test(ai),
   'a rule with a stated consequence is followed more often than a bare list');
 check('the constant survives only as the fallback',
   /const FLIGHT_PHASES/.test(ai) && /falling back to the\s*\n\s*\/\/ constant only when the project has not defined any phases/.test(ai));

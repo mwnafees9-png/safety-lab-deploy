@@ -359,20 +359,25 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
     /duplicate rows · same phases/.test(helpers) && /same phases, different class — resolve/.test(helpers) && /same class across phases — should be one row/.test(helpers));
   check('the consolidate tooltip says WHY (rows come from effects; exposure)',
     /Rows come from effects, not from phases/.test(helpers) && /exposure ratio the full phase list/.test(helpers));
-  check('a judgement call renders as an amber uppercase badge in the Severity cell',
-    /function _fhaJudgementBadge\(row\)/.test(helpers) && /background:#F5B400;color:#1A1200/.test(helpers) && /\$\{_fhaJudgementBadge\(row\)\}\$\{_hfwBadge\}/.test(helpers));
-  check('both FHA tables (aircraft and system) wear the judgement badge', (helpers.match(/\$\{_fhaJudgementBadge\(row\)\}/g) || []).length === 2);
-  check('a dropped phase renders in the Phases cell, danger-coloured, naming the phase',
-    /function _fhaDroppedPhasesBadge\(row\)/.test(helpers) && /join\('<br>'\) \+ _fhaDroppedPhasesBadge\(row\)/.test(helpers));   // 4 Sep — now emitted by _fhaPhasesCell, which both tables call
+  // 4 Sep 2026, second layout pass — the Severity badge is gone; the judgement is the
+  // amber-coloured leading segment of the Comments cell instead (Waqas, screenshot).
+  check('the Severity cell no longer wears a judgement badge (pick-list column stays narrow)', (helpers.match(/\$\{_fhaJudgementBadge\(row\)\}/g) || []).length === 0);
+  check('the judgement call is colour-coded in Comments, on both tables', /function _fhaCommentsCell\(row\)/.test(helpers) && /color:#7A5300;font-weight:600;/.test(helpers) && (helpers.match(/\$\{_fhaCommentsCell\(row\)\}/g) || []).length === 2);
+  check('nothing is dropped: the danger badge is gone and an unlisted phase renders in place, amber, with a tooltip (Waqas, 4 Sep)',
+    !/_fhaDroppedPhasesBadge/.test(helpers) && !/droppedPhases/.test(helpers) && /function _fhaPhaseUnlisted\(row, name\)/.test(helpers) && /_fhaPhaseUnlisted\(row, p\)/.test(helpers) && /kept as the AI named it/.test(helpers));
   check('a human edit marks the row and preserves the fields the form does not know',
     /acFhaData\[idx\] = Object\.assign\(\{\}, acFhaData\[idx\], data, \{ humanEdited: true/.test(helpers) && /arr\[idx\] = Object\.assign\(\{\}, arr\[idx\], data, \{ humanEdited: true/.test(helpers));
   const a5 = fs.readFileSync(path.join(__dirname, '..', 'site', 'fha_a5.js'), 'utf8');
   check('the A5 badge is retired from the table (module kept, flag off)', /const A5_BADGE = false;/.test(a5) && /if \(!A5_BADGE\) return;/.test(a5));
   // 4 Sep 2026 — layout rulings (Waqas): sub-function NAME, non-wrapping FC id, stacked phases, wide effects — both tables
   check('Sub-Function shows the name with the id in parentheses beneath', /function _fhaSubCell\(subId\)/.test(helpers) && /\(\$\{esc\(id\)\}\)<\/span>/.test(helpers) && (helpers.match(/\$\{_fhaSubCell\(row\.subId\)\}/g) || []).length === 1);
-  check('the failure-condition id never wraps (both tables)', (helpers.match(/<td style="white-space:nowrap;min-width:120px;">/g) || []).length === 2);
+  check('the failure-condition id never wraps and takes only its own width (both tables)', (helpers.match(/<td style="width:1%;white-space:nowrap;">\$\{_fcCell\}/g) || []).length === 1 && (helpers.match(/<td style="width:1%;white-space:nowrap;"><strong>\$\{esc\(row\.fcId\)\}/g) || []).length === 1);
   check('phases stack one per line in a narrow column (both tables)', /function _fhaPhasesCell\(row\)/.test(helpers) && /join\('<br>'\)/.test(helpers) && (helpers.match(/\$\{_fhaPhasesCell\(row\)\}/g) || []).length === 2);
-  check('effects is the wide column (both tables)', (helpers.match(/<td style="min-width:380px;">\$\{effectsHtml\}<\/td>/g) || []).length === 2);
+  check('Effects and Comments are the wide columns; Severity, Phases, Assumptions shrink to content (both tables)',
+    (helpers.match(/<td style="min-width:360px;width:30%;">\$\{effectsHtml\}<\/td>/g) || []).length === 2
+    && (helpers.match(/<td style="min-width:360px;width:30%;">\$\{_fhaCommentsCell\(row\)\}<\/td>/g) || []).length === 2
+    && (helpers.match(/style="width:1%;white-space:nowrap;">\$\{esc\(row\.severity\)\}/g) || []).length === 2
+    && (helpers.match(/<td style="width:1%;white-space:nowrap;">\$\{_fhaPhasesCell\(row\)\}/g) || []).length === 2);
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

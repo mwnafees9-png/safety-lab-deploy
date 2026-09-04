@@ -4548,15 +4548,14 @@ async function sysFhaRekey(sysId, internalId, funcId) {
 // fill, near-black text, uppercase — the one thing on the row you cannot skim past.
 // The note is on hover, and the same note is filed as an 'AI judgement' assumption
 // in the row's assumptions column, so it is reviewable like any human premise.
-// 3 Sep 2026 — a phase the model named that this project's phase table does not
-// have was silently discarded until today. Now it is data on the row (droppedPhases)
-// and this badge says so: exposure was computed WITHOUT these phases, so either add
-// them to the phase table (SC-VTOL projects have no hover / transition today) or
-// confirm the row without them. Danger-coloured because it changes a number.
-function _fhaDroppedPhasesBadge(row) {
-    const d = row && Array.isArray(row.droppedPhases) ? row.droppedPhases.filter(Boolean) : [];
-    if (!d.length) return '';
-    return ` <span class="fha-dropped-phases" title="${esc('PHASES DROPPED — the AI named ' + d.join(', ') + ' but this project\'s phase table has no such phase, so they were removed and the exposure ratio is computed without them. Add the phase(s) to the project (Flight Phases) and re-draft, or confirm the row as it stands.')}" style="display:inline-block;margin-left:4px;padding:1px 6px;font-size:10px;font-weight:700;letter-spacing:.04em;border-radius:4px;background:var(--color-danger, #C0271C);color:#fff;white-space:nowrap;vertical-align:middle;">⚠ ${d.length} dropped: ${esc(d.join(', '))}</span>`;
+// 4 Sep 2026 (Waqas): "I dont want anything dropped." The old danger badge
+// ("1 dropped: Initial climb") is gone with the drop itself — a phase the model
+// named is never removed from the row now. A phase the project's table does not
+// list stays on the row, in amber with a tooltip, and the row's comment names it.
+function _fhaPhaseUnlisted(row, name) {
+    const u = row && Array.isArray(row.unlistedPhases) ? row.unlistedPhases : [];
+    const k = String(name || '').toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim();
+    return u.some(x => String(x || '').toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim() === k);
 }
 // 4 Sep 2026 (Waqas, reading golden run 1) — four layout rulings for both FHA tables:
 //   · Sub-Function shows the sub-function ITSELF (name), with its id small beneath;
@@ -4571,7 +4570,22 @@ function _fhaSubCell(subId) {
 }
 function _fhaPhasesCell(row) {
     const list = String((row && row.phases) || '').split(',').map(x => x.trim()).filter(Boolean);
-    return list.map(esc).join('<br>') + _fhaDroppedPhasesBadge(row);
+    return list.map(p => _fhaPhaseUnlisted(row, p)
+        ? `<span style="color:#7A5300;font-weight:600;border-bottom:1px dashed #7A5300;" title="${esc('Not in this project\'s phase table — kept as the AI named it. Add it under Flight Phases (it carries no duration until then) or edit the row.')}">${esc(p)}</span>`
+        : esc(p)).join('<br>');
+}
+// 4 Sep 2026 (Waqas, second layout pass, screenshot of run 1): "judgement tag can be
+// removed and comments judgement call to be color coded". The Severity cell is a
+// pick-list column and stays narrow; the judgement lives in Comments, where the
+// leading "⚠ JUDGEMENT CALL — …" segment is rendered in the same amber as the old
+// badge so it still cannot be skimmed past, and the rest of the comment stays plain.
+function _fhaCommentsCell(row) {
+    const txt = String((row && row.comments) || '');
+    if (!(row && row.judgementCall) || !/^⚠ JUDGEMENT CALL/.test(txt)) return esc(txt);
+    const cut = txt.indexOf(' | ');
+    const head = cut >= 0 ? txt.slice(0, cut) : txt;
+    const rest = cut >= 0 ? txt.slice(cut + 3) : '';
+    return `<span style="color:#7A5300;font-weight:600;">${esc(head)}</span>` + (rest ? `<br><span>${esc(rest)}</span>` : '');
 }
 function _fhaJudgementBadge(row) {
     if (!row || !row.judgementCall) return '';
@@ -4721,7 +4735,7 @@ function renderACFHA() {
                     phase:         `Member of phase group ${esc(row.fcId)} — same failure condition, genuinely different effects and class in these phases.`
                 })[_grp.kind] || ''}">└ ${esc(row.fcId)}</span>`
             : `<strong>${esc(row.fcId)}</strong>${_grpBadge}`;
-        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="min-width:150px;">${_fhaSubCell(row.subId)}</td><td style="white-space:nowrap;min-width:120px;">${_fcCell}</td><td>${_obsBadge}${esc(row.fcDesc)}</td><td style="max-width:110px;">${_fhaPhasesCell(row)}</td><td style="min-width:380px;">${effectsHtml}</td><td class="cell-${esc(row.severity)}">${esc(row.severity)}${_fhaJudgementBadge(row)}${_hfwBadge}</td><td>${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td>${esc(row.comments)}</td>${customTds}${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:110px;">${_fhaSubCell(row.subId)}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:130px;max-width:190px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:360px;width:30%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${esc(row.severity)}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:360px;width:30%;">${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'fha-ac', tbody, rows: _fhaGrouping.ordered, rowHtml: _fhaRowHtml,
@@ -5102,7 +5116,7 @@ function renderSysFHA() {
                   _l1Fns.map(f => `<option value="${esc(f.funcId)}"${_l1Sugg === String(f.funcId) ? ' selected-suggested' : ''}>${esc(f.funcName || f.funcId)}${_l1Sugg === String(f.funcId) ? ' (FCIM match)' : ''}</option>`).join('') + `</select>`
                 : `<div style="font-size:10px; color:var(--color-text-tertiary);">declare functions on this system first</div>`)
         ;
-        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="min-width:150px;">${_l1Cell}</td><td style="white-space:nowrap;min-width:120px;"><strong>${esc(row.fcId)}</strong></td><td>${_obsBadge}${esc(row.fcDesc)}</td><td style="max-width:110px;">${_fhaPhasesCell(row)}</td><td style="min-width:380px;">${effectsHtml}</td><td class="cell-${esc(row.severity)}">${esc(row.severity)}${_fhaJudgementBadge(row)}${_hfwBadge}</td><td>${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td>${esc(row.comments)}</td>${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:110px;">${_l1Cell}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:130px;max-width:190px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:360px;width:30%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${esc(row.severity)}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:360px;width:30%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
     };
     // 31 Aug 2026 — same ordered view as the AC table: natural ascending fcId,
     // same-id phase rows clustered, blank ids last.
