@@ -71,6 +71,7 @@ console.log('\n[2] executed — arm, refuse, resolve');
     extractFn(ai, '_captureDisarm') + '\n' +
     extractFn(ai, '_captureArm') + '\n' +
     extractFn(ai, '_captureBail') + '\n' +
+    extractFn(ai, '_aiCallsInFlight') + '\n' +
     extractFn(ai, '_captureGuard') + '\n', ctx);
 
   check('disarmed, a bail does nothing and reports so', vm.runInContext('_captureBail("nope") === false', ctx));
@@ -112,6 +113,26 @@ console.log('\n[2] executed — arm, refuse, resolve');
       var out = await p;
       return { threw: threw, bailed: out.bailed, mentions: /threw before drafting/.test(out.reason) };
     `);
+    // 4 Sep 2026 — THE FALSE BAIL. A fire-and-forget lane returns at once while its
+    // model call runs. With the app's in-flight counter > 0 the guard must NOT bail;
+    // the seam fires when the panel opens. (decompose, run 1 of the golden campaign:
+    // the first guard bailed at 0 s while Opus was 24 s into the real draft.)
+    const f = await run(`
+      var p = _captureArm(5000);
+      globalThis._aiBusy = { n: 1 };                                   // a call is running
+      var lane = _captureGuard('decompose', function () { return undefined; });   // returns immediately
+      lane();
+      var bailedEarly = null;
+      await new Promise(function (r) { setTimeout(r, 2200); });         // past the 1.5 s grace
+      bailedEarly = !_capture.armed;
+      // now the draft "lands": the seam fires with rows
+      var res = _capture.resolve; if (res) { _captureDisarm(); res({ items: [{ op: 'add_function' }], declined: false }); }
+      var out = await p;
+      globalThis._aiBusy = { n: 0 };
+      return { bailedEarly: bailedEarly, rows: out.items ? out.items.length : -1, declined: out.declined };
+    `);
+    check('a lane that RETURNS while its AI call is in flight is NOT bailed', f.bailedEarly === false);
+    check('… and the real draft lands in the capture when the panel opens', f.rows === 1 && f.declined === false);
     // arming twice is refused — the property that made this suite honest
     const d = await run(`
       var p1 = _captureArm(5000); var rejected = false;
@@ -128,7 +149,7 @@ console.log('\n[2] executed — arm, refuse, resolve');
     check('a refusing lane RESOLVES instead of hanging to the timeout', a.declined === true && a.bailed === true);
     check('the bail repeats what the tool actually said', a.said === 'AI backend not ready.', a.said);
     check('the bail names the lane that refused', a.lane === 'draftFmea', String(a.lane));
-    check('the reason says a guard clause turned it away', /returned without drafting/.test(a.reason), a.reason);
+    check('the reason says a guard clause turned it away', /returned without drafting and no AI call is in flight/.test(a.reason), a.reason);
     check('a bailed payload is shaped like any other — empty items, never undefined', a.items === true);
     check('the capture disarms on bail (one-shot, like the fire path)', a.armed === false);
 

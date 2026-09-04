@@ -3967,23 +3967,35 @@
     // without firing the seam, bail with whatever it told the user. Completely
     // inert when disarmed - the engineer's own path never enters this branch, and
     // the promise wrapper it adds is only ever seen by the harness.
+    // 4 Sep 2026 — THE FALSE BAIL. decompose() (and any fire-and-forget lane) kicks off
+    // its model call and RETURNS at once; the first draft of this guard read "returned"
+    // as "finished" and bailed while the real draft was 24 s into an Opus call — which
+    // then opened a panel nobody was capturing, and a read-back started a second one.
+    // "Returned" is not "done". The only trustworthy signal is the app's own in-flight
+    // counter (_aiBusy.n, helpers_modules): if a call is running, the seam WILL fire
+    // when its panel opens, so leave the capture armed; bail only when nothing is
+    // running. A short grace period covers a lane that starts its call a tick later.
+    function _aiCallsInFlight() { try { return (typeof _aiBusy !== 'undefined' && _aiBusy && _aiBusy.n) ? _aiBusy.n : 0; } catch (_) { return 0; } }
     function _captureGuard(name, fn) {
         return function () {
             if (!_capture.armed) return fn.apply(this, arguments);
             var stamp = _capture.armedAt, out;
             var stillMine = function () { return _capture.armed && _capture.armedAt === stamp; };
+            var settleOrBail = function (how) {
+                if (!stillMine()) return;
+                setTimeout(function () {
+                    if (!stillMine()) return;                       // the seam fired in the meantime
+                    if (_aiCallsInFlight() > 0) return;             // a draft is running; the seam will catch it
+                    _captureBail('lane "' + name + '" ' + how + ' and no AI call is in flight - a guard clause refused it', { lane: name });
+                }, 1500);
+            };
             try { out = fn.apply(this, arguments); }
             catch (e) {
                 if (stillMine()) _captureBail('lane "' + name + '" threw before drafting: ' + ((e && e.message) || e), { lane: name });
                 throw e;
             }
-            return Promise.resolve(out).then(function (v) {
-                if (stillMine()) _captureBail('lane "' + name + '" returned without drafting - a guard clause refused it', { lane: name });
-                return v;
-            }, function (e) {
-                if (stillMine()) _captureBail('lane "' + name + '" rejected before drafting: ' + ((e && e.message) || e), { lane: name });
-                throw e;
-            });
+            return Promise.resolve(out).then(function (v) { settleOrBail('returned without drafting'); return v; },
+                                             function (e) { settleOrBail('rejected before drafting: ' + ((e && e.message) || e)); throw e; });
         };
     }
     // PROGRAMMATIC ACCEPT (3 Sep 2026) — the other half of the capture seam. A

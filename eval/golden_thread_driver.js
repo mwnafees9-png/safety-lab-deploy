@@ -73,7 +73,8 @@
         catch (e) { rec.state = 'done'; rec.ok = false; rec.error = String((e && e.message) || e); rec.secs = Math.round((Date.now() - t0) / 1000); return put(rec); }
         rec.secs = Math.round((Date.now() - t0) / 1000);
         rec.skill = d.skill || null; rec.feature = d.feature || ''; rec.declined = !!d.declined; rec.bailed = !!d.bailed;
-        rec.reason = String(d.reason || d.reply || d.saidToUser || '').slice(0, 300);
+        rec.reason = String(d.reason || d.reply || '').slice(0, 300);
+        rec.saidToUser = String(d.saidToUser || '').slice(0, 300);   // the tool's own words, kept separately (4 Sep: the guard's reason masked them)
         rec.drafted = Array.isArray(d.items) ? d.items.length : 0;
         rec.assumptionsDeclared = Array.isArray(d.assumptions) ? d.assumptions.length : 0;
         rec.coverage = d.coverage || null;
