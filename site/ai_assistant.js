@@ -856,16 +856,18 @@
         if (out.indexOf('All phases') < 0) out.push('All phases');
         return out;
     }
-    // Maps a phases value onto the project's own phase spellings, preserving whether
+    // Ticks the project's OWN phase boxes from a phases value, preserving whether
     // the caller supplied an array or a comma-joined string.
-    // 4 Sep 2026 (Waqas): "I dont want anything dropped." Golden run 1 wrote
-    // "Initial climb"; the project table spells it "Initial Climb"; the old
-    // letter-for-letter filter threw the phase away and put a "1 dropped" badge on
-    // the row. NOTHING IS DROPPED NOW. A phase that matches the table ignoring case,
-    // spacing and hyphens is written in the table's spelling. A phase the table does
-    // not have at all is KEPT as the model wrote it and recorded in lastUnlisted, so
-    // the row's comment can say "not in this project's phase table" and the engineer
-    // decides — the row keeps what the AI said. Duplicates after normalising collapse.
+    // 4 Sep 2026 (Waqas): the flight phases on a row are CHECKBOXES, and the boxes
+    // come from the project's mission profile (the Flight Phases table). The AI's
+    // only job is to tick boxes that already exist — "we should not be creating
+    // anything unique". Golden run 1 wrote "Initial climb"; the table spells it
+    // "Initial Climb"; the old letter-for-letter filter threw the phase away behind
+    // a "1 dropped" badge. Now: a value that matches a box ignoring case, spacing
+    // and hyphens ticks THAT box, in the table's spelling. A value that matches no
+    // box is not written onto the row (there is no such box) — it is recorded in
+    // lastUnlisted so the row's comment names it and the engineer ticks the right
+    // one. The AI never adds a phase to a project. Duplicates collapse.
     function _phaseKeyOf(x) { return String(x == null ? '' : x).toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim(); }
     function _validPhases(v) {
         // Same normalisation as _phaseKeyOf, inlined so the tests that lift this
@@ -880,14 +882,14 @@
         const kept = [], seen = {}, unlisted = [];
         names.forEach(function (x) {
             const k = _phaseKeyOf(x);
-            const canon = byKey[k] || x;
-            if (seen[_phaseKeyOf(canon)]) return;
-            seen[_phaseKeyOf(canon)] = true;
-            kept.push(canon);
-            if (!byKey[k]) unlisted.push(x);
+            const box = byKey[k];
+            if (!box) { if (unlisted.indexOf(x) < 0) unlisted.push(x); return; }
+            if (seen[k]) return;
+            seen[k] = true;
+            kept.push(box);
         });
         _validPhases.lastUnlisted = unlisted;
-        _validPhases.lastDropped = [];   // kept for old readers — nothing is ever dropped now
+        _validPhases.lastDropped = [];   // kept for old readers; the row never carried these
         return wasString ? kept.join(', ') : kept;
     }
     _validPhases.lastDropped = [];
@@ -1507,7 +1509,7 @@
             '2c. THREE EFFECT AXES: alongside the sentences, set effAcLevel / effCrewLevel / effPaxLevel from the closed vocabularies in the THREE EFFECT AXES rule below; the class is the worst axis and the product derives it from your levels. A level you cannot ground stays EMPTY.',
             '2b. If the function definition is too thin to state an aircraft effect, you CANNOT classify it. Return severity as an EMPTY STRING and say in severityRationale what is missing. An unclassified condition the engineer then classifies is a good outcome. A guess that looks considered is the failure mode this rule exists to prevent — do not pick a middle value to avoid leaving a blank.',
             '3. Effects: one concise factual sentence each, third-person ("the aircraft…", "the crew…"). If an effect is minor or none, say so briefly.',
-            '4. phases: choose the flight phases where the condition is most relevant, only from: ' + _projectPhaseNames().join(', ') + '. These are THIS project\'s phases, spelled as the project spells them — a phase outside the list is kept on the row but flagged for the engineer and carries no duration, so name a listed phase whenever one fits.',
+            '4. phases: choose the flight phases where the condition is most relevant, only from: ' + _projectPhaseNames().join(', ') + '. These are the checkboxes on THIS project\'s mission profile, spelled exactly as listed — you are ticking existing boxes, never naming a phase of your own; a value outside the list cannot be ticked and is flagged to the engineer as your error.',
             '   Some of those are CONTINGENCY phases (rejected take-off, go-around, balked landing and the like). Name one when the condition matters specifically at that demand — losing a function during a go-around is a different failure condition, and usually a more severe one, than losing it in the cruise. A contingency phase does not shrink the exposure window.',
             '5. Be complete but do not pad — only credible conditions.',
             '',
@@ -2431,7 +2433,7 @@
                     // Only the flight phases the product actually declares. An invented
                     // phase reads as scope, which is worse than an obviously missing one.
                     phases: _validPhases(Array.isArray(x.phases) ? x.phases : []),
-                    unlistedPhases: (_validPhases.lastUnlisted || []).slice(),   // 4 Sep 2026 — kept on the row, named on the card and in the comment; never dropped
+                    unlistedPhases: (_validPhases.lastUnlisted || []).slice(),   // 4 Sep 2026 — values that matched no box in the mission profile; named on the card and in the comment
                     severityRationale: String(x.severityRationale || '').trim(),
                     sevBasis: String(x.sevBasis || '').trim(),   // 3 Sep 2026 — the panel path dropped the anchor the spec asks for; carried now
                     // 3 Sep 2026 — the three effect levels (closed vocabulary; off-list => empty).
@@ -3065,9 +3067,9 @@
                 // the drawer never opened. Both reproduced live on Aeolus + Untitled, 28 Aug.
                 // The row now speaks the project's vocabulary at the moment it is born.
                 phases: _validPhases(s.phases || []).join(', '),   // A7-3 — the batch path reaches this function directly and bypassed the parse-stage filter entirely
-                // 4 Sep 2026 — phases the project's table does not list are KEPT on the row
-                // (nothing is dropped); this names them so the comment can say so and the
-                // engineer can add them under Flight Phases or edit the row.
+                // 4 Sep 2026 — values that matched no box in the project's mission profile.
+                // They are not written as phases (the AI only ticks boxes that exist); the
+                // comment names them so the engineer ticks the right box.
                 unlistedPhases: (function () { const d = (_validPhases.lastUnlisted || []).slice(); return d.length ? d : undefined; })(),
                 effAc: s.effAc || '', effCrew: s.effCrew || '', effPax: s.effPax || '',
                 // 3 Sep 2026 — the three effect levels ride on the row; when any is set the
@@ -3092,7 +3094,7 @@
                                   : []),
                     sysScoped, _sysEntryForAsm, s._model),
                 comments: (s.judgementCall ? ('⚠ JUDGEMENT CALL — classified on limited information; engineer to confirm. ' + String(s.judgementNote || '').trim() + ' | ') : '')
-                    + ((_validPhases.lastUnlisted || []).length ? ('⚠ PHASE NOT IN PROJECT TABLE — ' + _validPhases.lastUnlisted.join(', ') + ' kept on the row as the model named it; add it under Flight Phases (it carries no duration until then) or edit the row. | ') : '')
+                    + ((_validPhases.lastUnlisted || []).length ? ('⚠ PHASE NOT IN MISSION PROFILE — the AI named ' + _validPhases.lastUnlisted.join(', ') + ', which is not a phase in this project\'s Flight Phases table; tick the right phase on this row. | ') : '')
                     + 'AI-drafted (' + (s._model || 'model') + '). '
                     + ((s.severity || _derived) ? ('Severity rationale: ' + (s.severityRationale || '—')
                         + (_derived ? (' [anchor ' + _derived.anchor + ' — ' + (_SEV_ANCHORS[_derived.anchor] || '') + ']')
@@ -11705,7 +11707,7 @@
                 const vocab = _projectPhaseNames(); const named = Array.isArray(a.phases) ? a.phases : String(a.phases || '').split(',');
                 const keys = vocab.map(_phaseKeyOf);
                 const d = named.map(function (x) { return String(x || '').trim(); }).filter(function (x) { return x && keys.indexOf(_phaseKeyOf(x)) < 0; });
-                return d.length ? '<div class="aifh-meta" style="color:#7A5300;font-weight:700;">⚠ Phase(s) not in this project\'s phase table — kept on the row as named: ' + _esc(d.join(', ')) + ' — add them under Flight Phases if they are real, or edit the row after accept.</div>' : '';
+                return d.length ? '<div class="aifh-meta" style="color:#7A5300;font-weight:700;">⚠ Not a phase in this project\'s mission profile: ' + _esc(d.join(', ')) + ' — it will not be ticked; the row comment will name it so you can tick the right phase.</div>' : '';
             } catch (_) { return ''; }
         })();
         return '<h4>' + _esc(title) + (a.scope === 'system' ? ' · System' : '') + sev + _judge + '</h4><div class="aifh-eff">' + _esc(String(body).slice(0, 220)) + '</div>'

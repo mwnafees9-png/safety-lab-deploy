@@ -363,8 +363,8 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   // amber-coloured leading segment of the Comments cell instead (Waqas, screenshot).
   check('the Severity cell no longer wears a judgement badge (pick-list column stays narrow)', (helpers.match(/\$\{_fhaJudgementBadge\(row\)\}/g) || []).length === 0);
   check('the judgement call is colour-coded in Comments, on both tables', /function _fhaCommentsCell\(row\)/.test(helpers) && /color:#7A5300;font-weight:600;/.test(helpers) && (helpers.match(/\$\{_fhaCommentsCell\(row\)\}/g) || []).length === 2);
-  check('nothing is dropped: the danger badge is gone and an unlisted phase renders in place, amber, with a tooltip (Waqas, 4 Sep)',
-    !/_fhaDroppedPhasesBadge/.test(helpers) && !/droppedPhases/.test(helpers) && /function _fhaPhaseUnlisted\(row, name\)/.test(helpers) && /_fhaPhaseUnlisted\(row, p\)/.test(helpers) && /kept as the AI named it/.test(helpers));
+  check('the Phases cell lists ticked boxes only: no danger badge, no droppedPhases, no invented phase styling (Waqas, 4 Sep)',
+    !/_fhaDroppedPhasesBadge/.test(helpers) && !/droppedPhases/.test(helpers) && !/_fhaPhaseUnlisted/.test(helpers) && /return list\.map\(esc\)\.join\('<br>'\);/.test(helpers));
   check('a human edit marks the row and preserves the fields the form does not know',
     /acFhaData\[idx\] = Object\.assign\(\{\}, acFhaData\[idx\], data, \{ humanEdited: true/.test(helpers) && /arr\[idx\] = Object\.assign\(\{\}, arr\[idx\], data, \{ humanEdited: true/.test(helpers));
   const a5 = fs.readFileSync(path.join(__dirname, '..', 'site', 'fha_a5.js'), 'utf8');

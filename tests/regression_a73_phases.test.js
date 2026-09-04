@@ -57,11 +57,12 @@ console.log('\n[A7-3] the project owns the phase vocabulary');
   check('Hover and Transition now SURVIVE validation',
     JSON.stringify(sb._v(['Hover', 'Transition'])) === '["Hover","Transition"]',
     'the hardcoded list would have deleted both — and sc-vtol is a supported certification basis');
-  // 4 Sep 2026 (Waqas): "I dont want anything dropped." An off-list phase is KEPT on
-  // the row as named and flagged (lastUnlisted); it is no longer removed.
-  check('an off-list phase is KEPT, not dropped — and recorded as unlisted',
-    JSON.stringify(sb._v(['Hover', 'Orbit'])) === '["Hover","Orbit"]' && JSON.stringify(sb._v.lastUnlisted) === '["Orbit"]',
-    'nothing is dropped; the comment names the unlisted phase for the engineer');
+  // 4 Sep 2026 (Waqas): phases are the mission profile's checkboxes; the AI ticks
+  // existing boxes and never adds one. A value with no box is not written and is
+  // recorded (lastUnlisted) so the row comment names it.
+  check('a value with no box in the mission profile is not written — and is recorded for the comment',
+    JSON.stringify(sb._v(['Hover', 'Orbit'])) === '["Hover"]' && JSON.stringify(sb._v.lastUnlisted) === '["Orbit"]',
+    'the AI never creates a phase; the engineer ticks the right box');
   check('a phase spelled differently from the project table is written in the TABLE\'s spelling',
     JSON.stringify(sb._v(['hover', 'TRANSITION'])) === '["Hover","Transition"]',
     '"Initial climb" vs "Initial Climb" cost golden run 1 a phase');
@@ -69,7 +70,7 @@ console.log('\n[A7-3] the project owns the phase vocabulary');
     JSON.stringify(sb._v(['All phases'])) === '["All phases"]',
     'the shipped demos already use it, and the constant does not contain it');
   check('a comma-joined string stays a string',
-    sb._v('Hover, Orbit, Cruise') === 'Hover, Orbit, Cruise',
+    sb._v('Hover, Orbit, Cruise') === 'Hover, Cruise',
     'imported rows carry phases as text; returning an array there would corrupt the row');
   check('empty input is handled',
     JSON.stringify(sb._v([])) === '[]' && sb._v('') === '');
@@ -93,7 +94,7 @@ console.log('\n[A7-3] the model is offered the right list');
 check('the prompt enumerates the PROJECT phases',
   /_projectPhaseNames\(\)\.join\(', '\)/.test(ai) && !/only from: ' \+ FLIGHT_PHASES/.test(ai));
 check('…and states the cost of going outside it',
-  /kept on the row but flagged for the engineer and carries no duration/.test(ai),
+  /a value outside the list cannot be ticked and is flagged to the engineer as your error/.test(ai),
   'a rule with a stated consequence is followed more often than a bare list');
 check('the constant survives only as the fallback',
   /const FLIGHT_PHASES/.test(ai) && /falling back to the\s*\n\s*\/\/ constant only when the project has not defined any phases/.test(ai));

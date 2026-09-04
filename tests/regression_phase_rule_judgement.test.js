@@ -85,23 +85,23 @@ console.log('\n[2] the judgement travels the whole way');
   check("a protected row is reported as blocked, not as 'add_fha failed'", /edited by hand — not overwritten; newer draft noted on it/.test(ai));
 }
 
-// ---- 3. EXECUTED: nothing is dropped; spelling is the project's; unlisted is kept ----
-console.log('\n[3] executed — nothing is dropped (Waqas, 4 Sep 2026)');
+// ---- 3. EXECUTED: the AI ticks the mission profile's boxes, never invents one ----
+console.log('\n[3] executed — phases are the mission profile\'s checkboxes (Waqas, 4 Sep 2026)');
 {
   const ctx = { console, String, Array, Boolean, RegExp };
   vm.createContext(ctx);
-  vm.runInContext('function _projectPhaseNames(){ return ["Takeoff","Initial Climb","Cruise","Landing"]; }\n' + extractFn(ai, '_phaseKeyOf') + '\n' + extractFn(ai, '_validPhases') + '\n_validPhases.lastDropped = []; _validPhases.lastUnlisted = [];', ctx);
+  vm.runInContext('function _projectPhaseNames(){ return ["Takeoff","Initial Climb","Cruise","Landing"]; }\n' + extractFn(ai, '_validPhases') + '\n_validPhases.lastDropped = []; _validPhases.lastUnlisted = [];', ctx);
   const o = JSON.parse(vm.runInContext('JSON.stringify({ kept: _validPhases(["Takeoff","Initial climb","initial-climb","Hover","Cruise","Transition"]), unlisted: _validPhases.lastUnlisted, dropped: _validPhases.lastDropped })', ctx));
-  check('a phase that differs only by case/hyphen is written in the PROJECT\'s spelling', o.kept.indexOf('Initial Climb') >= 0 && o.kept.indexOf('Initial climb') < 0, o.kept.join(','));
-  check('… and the two spellings collapse to ONE phase (no duplicates)', o.kept.filter(x => x === 'Initial Climb').length === 1);
-  check('a phase the project does not list is KEPT on the row, not removed', o.kept.indexOf('Hover') >= 0 && o.kept.indexOf('Transition') >= 0, o.kept.join(','));
-  check('… and recorded as unlisted so the comment can say so', o.unlisted.join(',') === 'Hover,Transition', o.unlisted.join(','));
-  check('nothing is ever dropped (lastDropped stays empty for old readers)', o.dropped.length === 0);
+  check('a spelling that differs only by case/hyphen ticks the EXISTING box, in the profile\'s spelling', o.kept.indexOf('Initial Climb') >= 0 && o.kept.indexOf('Initial climb') < 0, o.kept.join(','));
+  check('… and two spellings of one box tick it ONCE', o.kept.filter(x => x === 'Initial Climb').length === 1);
+  check('a value that matches no box is NOT written as a phase (the AI never adds a phase to a project)', o.kept.indexOf('Hover') < 0 && o.kept.indexOf('Transition') < 0 && o.kept.join(',') === 'Takeoff,Initial Climb,Cruise', o.kept.join(','));
+  check('… and is recorded so the row comment can name it for the engineer', o.unlisted.join(',') === 'Hover,Transition', o.unlisted.join(','));
+  check('lastDropped stays empty for old readers', o.dropped.length === 0);
   const b = JSON.parse(vm.runInContext('JSON.stringify({ kept: _validPhases("cruise, Landing"), unlisted: _validPhases.lastUnlisted })', ctx));
-  check('a string list comes back as a string in the project\'s spelling, with no stale unlisted value', b.kept === 'Cruise, Landing' && b.unlisted.length === 0, JSON.stringify(b));
-  check('the accepted row carries unlistedPhases and the comment names them (kept, not dropped)', /unlistedPhases: \(function \(\) \{ const d = \(_validPhases\.lastUnlisted \|\| \[\]\)\.slice\(\)/.test(ai) && /⚠ PHASE NOT IN PROJECT TABLE — /.test(ai) && !/PHASES DROPPED/.test(ai));
-  check('the review card says an unlisted phase is KEPT on accept (never "will be dropped")', /kept on the row as named:/.test(ai) && !/will be dropped on accept/.test(ai));
-  check('the drafting instruction no longer threatens to discard off-list phases', /spelled as the project spells them/.test(ai) && !/any value outside the list is discarded/.test(ai));
+  check('a string list comes back as a string in the profile\'s spelling, with no stale unlisted value', b.kept === 'Cruise, Landing' && b.unlisted.length === 0, JSON.stringify(b));
+  check('the accepted row carries unlistedPhases and the comment names them as NOT in the mission profile', /unlistedPhases: \(function \(\) \{ const d = \(_validPhases\.lastUnlisted \|\| \[\]\)\.slice\(\)/.test(ai) && /⚠ PHASE NOT IN MISSION PROFILE — the AI named /.test(ai) && !/PHASES DROPPED/.test(ai));
+  check('the review card says an off-profile value will not be ticked (never "will be dropped", never "kept as named")', /it will not be ticked; the row comment will name it/.test(ai) && !/will be dropped on accept/.test(ai) && !/kept on the row as named/.test(ai));
+  check('the drafting instruction says: tick existing boxes, never name a phase of your own', /ticking existing boxes, never naming a phase of your own/.test(ai) && !/any value outside the list is discarded/.test(ai));
 }
 
 // ---- 4. EXECUTED: every AI assumption for the FHA reaches the register ---------

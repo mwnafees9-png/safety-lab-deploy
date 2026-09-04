@@ -4548,15 +4548,11 @@ async function sysFhaRekey(sysId, internalId, funcId) {
 // fill, near-black text, uppercase — the one thing on the row you cannot skim past.
 // The note is on hover, and the same note is filed as an 'AI judgement' assumption
 // in the row's assumptions column, so it is reviewable like any human premise.
-// 4 Sep 2026 (Waqas): "I dont want anything dropped." The old danger badge
-// ("1 dropped: Initial climb") is gone with the drop itself — a phase the model
-// named is never removed from the row now. A phase the project's table does not
-// list stays on the row, in amber with a tooltip, and the row's comment names it.
-function _fhaPhaseUnlisted(row, name) {
-    const u = row && Array.isArray(row.unlistedPhases) ? row.unlistedPhases : [];
-    const k = String(name || '').toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim();
-    return u.some(x => String(x || '').toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim() === k);
-}
+// 4 Sep 2026 (Waqas): the phases on a row are the mission profile's checkboxes; the
+// AI only ticks boxes that exist. The old danger badge ("1 dropped: Initial climb")
+// is gone — a spelling that matches a box ticks it now, and a value that matches
+// no box is named in the row comment (⚠ PHASE NOT IN MISSION PROFILE) rather than
+// shown here. The Phases cell lists ticked boxes, one per line, nothing else.
 // 4 Sep 2026 (Waqas, reading golden run 1) — four layout rulings for both FHA tables:
 //   · Sub-Function shows the sub-function ITSELF (name), with its id small beneath;
 //   · the failure-condition ID never wraps — the id itself sits on one line;
@@ -4570,9 +4566,7 @@ function _fhaSubCell(subId) {
 }
 function _fhaPhasesCell(row) {
     const list = String((row && row.phases) || '').split(',').map(x => x.trim()).filter(Boolean);
-    return list.map(p => _fhaPhaseUnlisted(row, p)
-        ? `<span style="color:#7A5300;font-weight:600;border-bottom:1px dashed #7A5300;" title="${esc('Not in this project\'s phase table — kept as the AI named it. Add it under Flight Phases (it carries no duration until then) or edit the row.')}">${esc(p)}</span>`
-        : esc(p)).join('<br>');
+    return list.map(esc).join('<br>');
 }
 // 4 Sep 2026 (Waqas, second layout pass, screenshot of run 1): "judgement tag can be
 // removed and comments judgement call to be color coded". The Severity cell is a

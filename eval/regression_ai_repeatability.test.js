@@ -261,8 +261,7 @@ if (bodies._validPhases && bodies._projectPhaseNames) {
     ';globalThis.__vp = v => JSON.stringify(_validPhases(v));', sb);
   const r1 = vm.runInContext('__vp(["Cruise","Climb","Hover"])', sb);
   const r2 = vm.runInContext('__vp(["Cruise","Climb","Hover"])', sb);
-  // 4 Sep 2026 — nothing is dropped any more: an off-list phase rides along as named.
-  check('_validPhases() is stable and order-preserving', r1 === r2 && r1 === '["Cruise","Climb","Hover"]', r1);
+  check('_validPhases() is stable and order-preserving (ticks existing boxes only)', r1 === r2 && r1 === '["Cruise","Climb"]', r1);
 }
 
 /* ------------------------------------------------------------------ */
