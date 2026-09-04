@@ -4372,7 +4372,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.6" defer></script>
     <script src="ai_skills.js?v=2.10" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.44" defer></script>
+    <script src="ai_loader.js?v=8.45" defer></script>
     <script src="config_management.js?v=1.8" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.1" defer></script>
@@ -4381,7 +4381,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          Loads AFTER program_plan.js (wraps renderScopeSection) and numbering_ui.js. -->
     <script src="numbering_plan.js?v=1.2" defer></script>
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
-    <script src="auth_gate.js?v=62.66" defer></script>
+    <script src="auth_gate.js?v=62.67" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the
          auth gate itself (auth_gate.js ssoBlockHTML) and calls window.signInWithMicrosoft.

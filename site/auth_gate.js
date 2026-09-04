@@ -890,19 +890,46 @@
     // Phase 55.0.6b4 — License token lifecycle. Fetches the signed-in user's
     // license_tokens row (RLS-protected; returns 0 or 1 row) and writes the
     // token to localStorage so AiClient routes via the hosted proxy.
-    async function _syncLicenseTokenFromSupabase() {
-      try {
-        const { data, error } = await sb.from('license_tokens').select('token,plan,expires_at').limit(1).maybeSingle();
-        if (error) { console.warn('[auth-gate] license_tokens query error:', error.message || error); try { localStorage.removeItem('safetyLab.license.token'); } catch(_){} return; }
-        if (data && data.token && (!data.expires_at || new Date(data.expires_at) > new Date())) {
-          try { localStorage.setItem('safetyLab.license.token', String(data.token)); } catch(_){}
-          // Make the client license tier authoritative from the server's purchased plan
-          // (e.g. an enterprise account is uncapped; a pro-plus account keeps the standard
-          // allowance) rather than trusting the local onboarding guess. setLicenseTier
-          // validates the value, so an unexpected plan string is simply ignored.
-          try { if (data.plan && typeof window.setLicenseTier === 'function') window.setLicenseTier(String(data.plan)); } catch(_){}
-        } else { try { localStorage.removeItem('safetyLab.license.token'); } catch(_){} }
-      } catch (e) { console.warn('[auth-gate] license token sync failed:', e); }
+    // 4 Sep 2026 — "AI backend not ready" IN THE MIDDLE OF A DEMO (Waqas). Two causes,
+    // both here. (1) On sign-in the gate lifted BEFORE this query returned, so for a few
+    // seconds every AI button saw no license token and said "not ready". (2) A transient
+    // query error REMOVED the stored token — one bad network moment and the AI stayed
+    // off until the next sign-in. Now: the gate waits for this sync (bounded, 6 s) before
+    // lifting; an error keeps the last known-good token; the sync is exposed as
+    // window.__slabLicenseReady (a promise) and window.__slabSyncLicense (re-run) so the
+    // AI's own guard can wait or retry instead of failing.
+    let _licenseSyncPromise = null;
+    function _syncLicenseTokenFromSupabase() {
+      const run = (async function () {
+        try {
+          const { data, error } = await sb.from('license_tokens').select('token,plan,expires_at').limit(1).maybeSingle();
+          if (error) { console.warn('[auth-gate] license_tokens query error (keeping the stored token):', error.message || error); return { ok: false, kept: true }; }
+          if (data && data.token && (!data.expires_at || new Date(data.expires_at) > new Date())) {
+            try { localStorage.setItem('safetyLab.license.token', String(data.token)); } catch(_){}
+            // Make the client license tier authoritative from the server's purchased plan
+            // (e.g. an enterprise account is uncapped; a pro-plus account keeps the standard
+            // allowance) rather than trusting the local onboarding guess. setLicenseTier
+            // validates the value, so an unexpected plan string is simply ignored.
+            try { if (data.plan && typeof window.setLicenseTier === 'function') window.setLicenseTier(String(data.plan)); } catch(_){}
+            return { ok: true, token: true };
+          }
+          // The server positively says there is no valid token for this user.
+          try { localStorage.removeItem('safetyLab.license.token'); } catch(_){}
+          return { ok: true, token: false };
+        } catch (e) { console.warn('[auth-gate] license token sync failed (keeping the stored token):', e); return { ok: false, kept: true }; }
+      })();
+      _licenseSyncPromise = run;
+      try { window.__slabLicenseReady = run; } catch (_) {}
+      return run;
+    }
+    try { window.__slabSyncLicense = _syncLicenseTokenFromSupabase; } catch (_) {}
+    // Lift the gate once the license is known (or after 6 s, whichever first) so the
+    // first AI click after sign-in never lands in the gap.
+    function _syncThenLift() {
+      let done = false;
+      const lift = function () { if (done) return; done = true; try { liftGate(); } catch (_) {} };
+      try { _syncLicenseTokenFromSupabase().then(lift, lift); } catch (_) { lift(); }
+      setTimeout(lift, 6000);
     }
 
     sb.auth.onAuthStateChange((event, session) => {
@@ -924,8 +951,7 @@
             if (_passwordRecoveryActive) return; // PASSWORD_RECOVERY fired, set-new-password already shown
             _mfaGateThenLift(sb, function () {
               try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
-              _syncLicenseTokenFromSupabase();
-              liftGate();
+              _syncThenLift();
               toast('Signed in as ' + session.user.email, 'success');
             });
           }, 1500);
@@ -934,8 +960,7 @@
         // Normal sign-in — enforce the MFA step-up (if enrolled) before lifting.
         _mfaGateThenLift(sb, function () {
           try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
-          _syncLicenseTokenFromSupabase();
-          liftGate();
+          _syncThenLift();
           toast('Signed in as ' + session.user.email, 'success');
         });
       } else if (event === 'SIGNED_OUT') {
@@ -970,7 +995,7 @@
           if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email);
           else localStorage.setItem('safetyLab.signup.email', String(session.user.email).toLowerCase());
         } catch (_) {}
-        _mfaGateThenLift(sb, function () { _syncLicenseTokenFromSupabase(); liftGate(); });
+        _mfaGateThenLift(sb, function () { _syncThenLift(); });
       } else {
         renderGate();
       }

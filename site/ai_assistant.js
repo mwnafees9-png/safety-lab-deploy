@@ -157,7 +157,23 @@
         // True when the active backend can service a call right now.
         available() {
             if (this.mode === 'local') return !!_localEndpoint();
-            return !!(window.AiClient && window.AiClient.isConfigured && window.AiClient.isConfigured());
+            const ok = !!(window.AiClient && window.AiClient.isConfigured && window.AiClient.isConfigured());
+            // 4 Sep 2026 — a "not ready" that is really "license not synced yet" kicks a
+            // re-sync (auth_gate exposes it) so the very next click succeeds; the toast
+            // below tells the engineer to try again in a moment rather than implying an outage.
+            if (!ok && this.mode !== 'local') { try { if (typeof window.__slabSyncLicense === 'function' && !Provider._resyncing) { Provider._resyncing = true; Promise.resolve(window.__slabSyncLicense()).finally(function () { Provider._resyncing = false; }); } } catch (_) {} }
+            return ok;
+        },
+        // What to tell the engineer when available() is false — the honest reason.
+        notReadyMessage() {
+            try {
+                if (this.mode === 'local') return 'Local AI endpoint is not configured — set it under AI Settings.';
+                const signedIn = (typeof _cloudSignedOut === 'function') ? !_cloudSignedOut() : true;
+                if (!signedIn) return 'Sign in to use the AI — your work is saved locally meanwhile.';
+                const pro = (typeof isProPlusLicensed === 'function') ? isProPlusLicensed() : true;
+                if (!pro) return 'AI is a Pro+ feature — upgrade under Account, or paste an Anthropic key under AI Settings.';
+                return 'AI is still connecting (your license is being confirmed) — please try again in a few seconds.';
+            } catch (_) { return 'AI is still connecting — please try again in a few seconds.'; }
         },
 
         // Human-readable status for the (future) AI panel + the console banner.
@@ -2326,7 +2342,7 @@
     async function populateFha(opts) {
         opts = opts || {};
         if (!Provider.available()) {
-            _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning');
+            _toast(Provider.notReadyMessage(), 'warning', 5000);
             throw new Error('[Safety Lab Aero AI] backend not available.');
         }
         if (_useUnifiedFeatures() && !opts.systemId && !(opts.funcs && opts.funcs.length)) {
@@ -3318,7 +3334,7 @@
     // Public entry — open the input panel (or run directly if text supplied).
     function decompose(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const systems = (snapshot().systemsData || []);
         _openDecompScopePicker(systems, function (scope) {
             if (opts.text) { _decomposeFromInput({ text: opts.text }, scope); return; }
@@ -3366,7 +3382,7 @@
     // the executor resolves systemId by NAME, so the order inside one draft is enough).
     function decomposeSystems(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         if (!((snapshot().acFunctionsData || []).length)) { _toast('Decompose the aircraft functions first — system functions trace to aircraft sub-functions.', 'warning'); return; }
         const go = function (input) {
             if (!(input && input.text && input.text.trim())) { _toast('Provide the system design description under AI Inputs first.', 'warning'); return; }
@@ -3395,7 +3411,7 @@
     // system (the store the MAC executor already accepts as members).
     function draftItems(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const s = snapshot();
         if (!((s.systemsData || []).length)) { _toast('Add the systems first (Systems · from the architecture) — items are listed under their system.', 'warning'); return; }
         const names = (s.systemsData || []).map(function (sy) { return sy.name || sy.id; });
@@ -3414,7 +3430,7 @@
     }
     function draftMac(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const s = snapshot();
         const subs = (s.acFunctionsData || []).map(function (f) { return f.subId; }).filter(Boolean);
         const fnCount = (s.systemsData || []).reduce(function (n, sy) { return n + ((sy.functions || []).length); }, 0);
@@ -3443,7 +3459,7 @@
     // Cases that already carry a verdict are never touched. Returns its own numbers.
     async function draftCoffe(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return { ok: false, reason: 'backend not ready' }; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return { ok: false, reason: 'backend not ready' }; }
         if (typeof coffeCases !== 'function' || typeof coffeComputed !== 'function' || typeof coffeUnmodelledSystems !== 'function' || typeof _coffeStore !== 'function' || typeof idpContributors !== 'function') {
             _toast('CoFFE is not available on this page.', 'warning'); return { ok: false, reason: 'coffe not loaded' };
         }
@@ -4885,7 +4901,7 @@
         ].join('\n');
     }
     async function reviewTrees() {
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const ctx = _gatherTreeReview();
         if (!ctx.trees.length && !ctx.fhaWithoutTree.length) { _toast('No fault trees or FHA rows to review yet.', 'info'); return; }
         _toast('Reviewing fault trees for consistency…', 'info');
@@ -5117,7 +5133,7 @@
         } catch (e) { _toast('Could not add requirement: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     async function recommendRequirements() {
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         if (_useUnifiedFeatures()) return _anemBatch(_FEATURE_DIRECTIVE.req, { title: '✨ Recommended safety requirements', analysis: 'req.recommend' });   // #271 unified engine
         const ctx = _gatherReqGaps();
         if (!ctx.failureConditions.length) { _toast('No FHA failure conditions to derive requirements from yet.', 'info'); return; }
@@ -5314,7 +5330,7 @@
     }
     async function populateFcim(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); throw new Error('[Safety Lab Aero AI] backend not available.'); }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); throw new Error('[Safety Lab Aero AI] backend not available.'); }
         if (_useUnifiedFeatures() && !(opts.funcs && opts.funcs.length) && !opts.systemId) {
             // Same ceiling as the AFHA (26 Aug) — the matrix is one row per function,
             // so the function list is the unit list and coverage is checkable.
@@ -5706,7 +5722,7 @@
     }
     async function synthesizeTree(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         // Programmatic call (fcs supplied) → synthesise directly.
         if (opts.fcs && opts.fcs.length) {
             _withArchInput(
@@ -6601,7 +6617,7 @@
     async function _askDocs(question) {
         const q = String(question || '').trim();
         if (!q) return '';
-        if (!Provider.available()) return 'AI backend not ready — open AI Settings.';
+        if (!Provider.available()) return Provider.notReadyMessage();
         const docCtx = _projectDocContext('doc.qa', {});
         if (!docCtx) return 'No source documents in your AI Inputs yet — add an SDD / FHA / PSSA (or paste text) above, then ask.';
         const sys = [
@@ -6625,7 +6641,7 @@
     // write-time consistency engine (#255, which guards the AI's own edits): this audits the
     // ENGINEER's uploaded documents against EACH OTHER for contradictions/traceability gaps.
     async function _checkDocsConsistency() {
-        if (!Provider.available()) return 'AI backend not ready — open AI Settings.';
+        if (!Provider.available()) return Provider.notReadyMessage();
         const docCtx = _projectDocContext('doc.consistency', {});
         if (!docCtx) return 'Add two or more source documents to AI Inputs first — consistency checks compare across your documents.';
         const sys = [
@@ -7790,7 +7806,7 @@
         } catch (e) { _toast('Could not add PRA: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     function draftPra() {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         if (_useUnifiedFeatures()) {
             // 26 Aug evening ruling ("which PRA they wanna perform"): the picker
             // lists the APPLICABLE risks from the deterministic applicability
@@ -7866,7 +7882,7 @@
         ].join('\n');
     }
     function draftStpa() {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         // §3.2 — the plan is the authority, checked before any tokens are spent;
         // the stpaData presence check below is a proxy that survives as a backstop.
         if (!_aiLaneOn('stpa')) { _toast('The STPA lane is opt-in and not in this programme\'s scope — add it first: Program Planning → Program scope.', 'warning'); return; }
@@ -7998,7 +8014,7 @@
         } catch (e) { _toast('Could not add ZSA: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     async function draftZsa() {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         if (_useUnifiedFeatures()) {
             // 26 Aug evening ruling ("which zone they wanna evaluate"): zones are
             // enumerated from everywhere the model knows one — existing ZSA rows,
@@ -8149,7 +8165,7 @@
         } catch (e) { _toast('Could not add CMA: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     function draftCma() {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         if (_useUnifiedFeatures()) {
             // 26 Aug evening ruling ("same for … CMA"): the CMA's natural unit is
             // the independence claim, and independence claims live at the AND
@@ -8457,7 +8473,7 @@
     async function draftFmea(opts) {
         // FMEA is per-system, item-level only. Build the list of systems that already have
         // fault trees with basic events, then let the analyst pick which system to FMEA.
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         // §3.2 — item-level rows land as piece-part (Table J2), an opt-in lane.
         // Checked before the unified short-circuit so neither path spends tokens
         // drafting into a lane the programme has not committed to.
@@ -8657,7 +8673,7 @@
 
     function proposeCcfGroups(opts) {
         opts = opts || {};
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const events = _ccfBasicEvents();
         if (events.length < 2) { _toast('Need at least two basic events across your fault trees to propose a CCF group. Build / import trees first.', 'info'); return; }
         // Reuse the SAME aircraft context input the other CCA features use (zonal + routing
@@ -8996,7 +9012,7 @@
         ].join('\n');
     }
     async function recommendArchitecture() {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         _withArchInput(
             { title: 'Architecture recommendations', subtitle: 'Advisory design improvements from your failure conditions + fault-tree structure. Architecture input is optional but sharpens the advice.', requireText: false, ctaLabel: 'Recommend' },
             function (input) { _runArchRec(input); }
@@ -9221,7 +9237,7 @@
         } catch (e) { _toast('Could not file disposition: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     async function resolveReviewComments() {
-        if (!Provider.available()) { _toast('AI backend not ready — open AI Settings.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const R = (typeof Review !== 'undefined') ? Review : null;
         if (!R || typeof R.allOpen !== 'function') { _toast('Review comments not loaded in this session.', 'warning'); return; }
         const open = R.allOpen().filter(function (c) { return !c.parentId; });   // roots — a reply is context, not a thread of its own
@@ -9339,7 +9355,7 @@
         } catch (e) { _toast('Filing failed: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     async function reviewComplianceDoc() {
-        if (!Provider.available()) { _toast('AI backend not ready — open AI Settings.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         if (!_projectDocContext('doc.review', {})) { _toast('No source documents in your AI Inputs yet — add the compliance document (plan, PSSA report, cert plan…) there first.', 'warning'); return; }
         const digest = _modelDigest();
         _toast('Reviewing the compliance document(s) against the live model…', 'info');
@@ -9637,7 +9653,7 @@
     }
 
     async function draftHfAssumptions() {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const cands = _hfCandidates();
         if (!cands.length) {
             _toast('No unregistered crew credit found — every failure condition that relies on the crew already has a Human Factors assumption on the register.', 'info');
@@ -9857,7 +9873,7 @@
         } catch (e) { _toast('Could not file recommendation: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     async function recommendHfImprovements(lane) {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         var cfg = _HF_IMPROVE_LANES[lane];
         if (!cfg) { _toast('Unknown HF lane: ' + lane, 'warning'); return; }
         var data = _hfLaneData(cfg);
@@ -10259,7 +10275,7 @@
     }
 
     async function draftHfLane(lane) {
-        if (!Provider.available()) { _toast('AI backend not ready.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         var cfg = _HF_DRAFT_LANES[lane];
         if (!cfg) { _toast('Unknown HF lane: ' + lane, 'warning'); return; }
         var docs = [];
@@ -10425,7 +10441,7 @@
         } catch (e) { _toast('Could not add resource: ' + ((e && e.message) || e), 'warning'); return false; }
     }
     async function draftResources() {
-        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const s = snapshot();
         const ctx = {
             certBasis: _certBasis(), aircraft: _aircraftName(),
@@ -11700,7 +11716,7 @@
         return ov;
     }
     async function runEvalSuite() {
-        if (!Provider.available()) { _toast('AI backend not ready — enable AI (Pro+) first.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const dark = (typeof _isDarkTheme === 'function') ? _isDarkTheme() : false;
         const sub = dark ? '#9aa3b2' : '#667085', bd = dark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.12)';
         const head = function () { return '<div style="padding:15px 17px;border-bottom:1px solid ' + bd + ';display:flex;justify-content:space-between;align-items:center;"><div style="font-size:16px;font-weight:700;">AI Eval Suite</div><button data-evx style="border:none;background:transparent;font-size:23px;cursor:pointer;color:' + sub + ';">×</button></div>'; };
@@ -12120,7 +12136,7 @@
     // Accept applies through the SAME executor (_chatRunActions) + safeguards as the chat.
     async function _anemBatch(taskDirective, cfg) {
         cfg = cfg || {};
-        if (!Provider.available()) { _toast('AI backend not ready — open AI Settings.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const ctxNote = cfg.context ? ('\n\nPROJECT CONTEXT:\n' + (typeof cfg.context === 'string' ? cfg.context : JSON.stringify(cfg.context, null, 1))) : '';
         const imgs = Array.isArray(cfg.images) ? cfg.images.filter(function (im) { return im && (im.data || im.imageData); }) : [];
         // The turn's user content, rebuilt per chunk so each call can name the slice
@@ -12564,7 +12580,7 @@
         text = String(text || '').trim();
         const atts = _chatAttachments.slice();
         if ((!text && !atts.length) || _chatBusy) return;
-        if (!Provider.available()) { _toast('AI backend not ready — open AI Settings.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         _chatAttachments = []; _renderChatAttachments();
         _chatBusy = true;
         const display = text + (atts.length ? ((text ? '\n' : '') + '📎 ' + atts.map(function (a) { return a.name; }).join(', ')) : '');
@@ -12949,7 +12965,7 @@
         } catch (e) { return { id: c.id, cat: c.cat, label: c.label, error: (e && e.message) || String(e) }; }
     }
     async function runRedTeamSuite() {
-        if (!Provider.available()) { _toast('AI backend not ready — enable AI (Pro+) first.', 'warning'); return; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         const dark = (typeof _isDarkTheme === 'function') ? _isDarkTheme() : false;
         const sub = dark ? '#9aa3b2' : '#667085', bd = dark ? 'rgba(255,255,255,.14)' : 'rgba(0,0,0,.12)';
         const head = function () { return '<div style="padding:15px 17px;border-bottom:1px solid ' + bd + ';display:flex;justify-content:space-between;align-items:center;"><div style="font-size:16px;font-weight:700;">🛡 AI Safeguard Red-Team</div><button data-evx style="border:none;background:transparent;font-size:23px;cursor:pointer;color:' + sub + ';">×</button></div>'; };
