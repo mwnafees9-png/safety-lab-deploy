@@ -797,6 +797,19 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
+- **F19 — THE SFHA (classic path) HAS NO PHASE-COVERAGE RE-ASK (4 Sep 2026).** The AFHA's
+  unified path now checks that a condition's rows together cover every phase of the mission
+  profile and re-asks once for the gaps; the classic `_runPopulateFha` path the SFHA uses got the
+  rewritten system-prompt rule 4 but no coverage check. Add `_fhaPhaseGaps` + one repair turn
+  there too, and a checker rule on stored rows (advisory: "phases not assessed on N conditions").
+
+- **F20 — TWO FAMILIES OF TREES FOR THE SAME CONDITIONS (run 3, 4 Sep 2026).** The interdependence
+  step still seeds one "MF&MS · <condition> — seeded" skeleton page per multi-system condition
+  (102 on run 3, `generatedFrom`/`_idpFp`), beside the 18 pages the lane compiler built from MAC +
+  interdependence + CoFFE. Question for Waqas: retire the seeded skeletons now the compiler
+  exists, or keep them as the "not yet floored" placeholder. Also from run 3: CoFFE 101 calls,
+  44 failed — the lane records no per-call reason yet (same fix shape as F16a/F16d).
+
 - **F18 — A RELOAD THAT FAILS TO RESTORE LOCALLY KEEPS THE CLOUD IDENTITY AND RENAMES THE ROW
   (live, 4 Sep 2026 ~19:08 UTC).** The run 2 tab reloaded after a deploy (its localStorage was at
   Chrome's ceiling), came up as an empty "Untitled Project" with `_activeCloudProjectId` still
