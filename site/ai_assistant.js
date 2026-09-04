@@ -3986,6 +3986,63 @@
             });
         };
     }
+    // PROGRAMMATIC ACCEPT (3 Sep 2026) — the other half of the capture seam. A
+    // captured draft is data; this applies it through the SAME executor the review
+    // panel's Accept button uses (_chatRunActions for unified-engine actions,
+    // _applyHfDraftRow for HF lane rows, _applyFhaSuggestion for the classic FHA
+    // shape), with the draft's declared assumptions matched to each row exactly as
+    // the panel does. Nothing is rendered. Every item is accounted for — applied,
+    // updated in place, blocked by a safeguard, protected (a hand-edited row), or
+    // unsupported — because the golden-thread campaign accepts at every step and a
+    // silently dropped row there would corrupt a reference snapshot.
+    function _applyCapturedDraft(payload, opts) {
+        opts = opts || {};
+        const items = (payload && Array.isArray(payload.items)) ? payload.items : [];
+        const asms  = (payload && Array.isArray(payload.assumptions)) ? payload.assumptions : [];
+        const model = opts.model || MODELS.reason;
+        const feature = (payload && payload.feature) || opts.feature || '';
+        const out = { applied: 0, updated: 0, blocked: 0, protected: 0, failed: 0, unsupported: 0, judgement: 0, items: items.length, results: [] };
+        items.forEach(function (a, i) {
+            if (!a) { out.unsupported++; out.results.push({ i: i, kind: 'empty' }); return; }
+            try {
+                if (a.op) {
+                    // unified-engine action — exactly the panel's per-item onAccept
+                    if (a.op === 'add_fha') {
+                        try { a._assumptions = _assumptionsFor(asms, String(a.fcDesc || '').trim()); } catch (_) {}
+                        if (a.judgementCall === true) out.judgement++;
+                    }
+                    const res = _chatRunActions([a], model, undefined, feature);
+                    const r = (res && res[0]) || { ok: false, error: 'no result' };
+                    if (r.ok) { if (/updated in place/.test(String(r.summary || ''))) out.updated++; else out.applied++; }
+                    else if (r.blocked && /edited by hand/.test(String(r.error || ''))) out.protected++;
+                    else if (r.blocked) out.blocked++;
+                    else out.failed++;
+                    out.results.push({ i: i, op: a.op, ok: !!r.ok, blocked: !!r.blocked, error: r.error || '', summary: r.summary || '' });
+                } else if (opts.lane && _HF_DRAFT_LANES[opts.lane] && a._k !== undefined) {
+                    const ok = _applyHfDraftRow(_HF_DRAFT_LANES[opts.lane], a);
+                    if (ok) out.applied++; else out.failed++;
+                    out.results.push({ i: i, op: 'hf:' + opts.lane, ok: !!ok });
+                } else if (a.fcDesc !== undefined && a.subId !== undefined) {
+                    // classic FHA suggestion shape
+                    const r = _applyFhaSuggestion(Object.assign({}, a, { _model: model, _assumptions: _assumptionsFor(asms, String(a.fcDesc || '').trim()) }));
+                    if (r === 'protected') out.protected++;
+                    else if (r) { if (_applyFhaSuggestion._last && _applyFhaSuggestion._last.action === 'updated') out.updated++; else out.applied++; }
+                    else out.failed++;
+                    if (a.judgementCall === true) out.judgement++;
+                    out.results.push({ i: i, op: 'fha:classic', ok: r === true, protected: r === 'protected' });
+                } else {
+                    out.unsupported++;
+                    out.results.push({ i: i, kind: 'unsupported', keys: Object.keys(a).slice(0, 8) });
+                }
+            } catch (e) {
+                out.failed++;
+                out.results.push({ i: i, op: a.op || '?', ok: false, error: String((e && e.message) || e) });
+            }
+        });
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        try { _aiConsistencyAutoCheck(); } catch (_) {}
+        return out;
+    }
     // A requested-id list resolved against the lane's own unit array. Returns null
     // when no ids were asked for (the human picker path). THROWS on an unknown id:
     // silently drafting a subset of what a campaign asked for is the same silent-drop
@@ -12494,6 +12551,11 @@
         captureNextDraft: _captureArm,
         captureStatus: function () { return { armed: _capture.armed, armedAt: _capture.armedAt }; },
         captureCancel: function () { var r = _capture.reject; _captureDisarm(); try { if (r) r(new Error('capture cancelled')); } catch (_) {} },
+        // 3 Sep 2026 — apply a captured draft through the panel's own executor, no DOM.
+        //   const p = SafetyLabAI.captureNextDraft(); SafetyLabAI.populateFcim(); const d = await p;
+        //   SafetyLabAI.applyDraft(d);                       // unified-engine lanes
+        //   SafetyLabAI.applyDraft(d, { lane: 'tid' });      // an HF lane needs its key
+        applyDraft: _applyCapturedDraft,
         fhaGaps:     _funcsNeedingFha,             // list sub-functions without FHA coverage
         // ---- Feature #60 — FCIM generation (failure conditions per function) -
         populateFcim: _captureGuard('populateFcim', populateFcim),                // async: draft FCIM rows → review panel
