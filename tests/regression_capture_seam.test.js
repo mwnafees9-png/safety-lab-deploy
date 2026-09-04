@@ -139,7 +139,7 @@ console.log('\n[2] EXECUTED — arm, fire, one-shot, clone, timeout');
     check('the condition callback is a NAMED function, defined once', /const _draftForConditions = function \(picked\) \{/.test(pf) &&
       (pf.match(/const _draftForConditions/g) || []).length === 1);
     check('the picker is handed that same named function — no second copy of the body',
-      /_openScopePicker\(_exArr,[\s\S]{0,600}?\}, _draftForConditions\);/.test(pf));
+      /_openScopePicker\(_exArr,[\s\S]{0,900}?\}, _draftForConditions\);/.test(pf));   // 4 Sep: the disclaimer grew (rows come from effects)
     check('opts.condIds routes to the SAME function, before the picker is ever opened',
       /const _sel = _pickByIds\(_exArr, opts\.condIds[\s\S]{0,120}?if \(_sel\) \{ _draftForConditions\(_sel\); return; \}/.test(pf));
     check('the _anemBatch cfg is built exactly once for the condition path (one prompt, one chunk size)',

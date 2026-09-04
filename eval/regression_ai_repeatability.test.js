@@ -310,7 +310,14 @@ console.log('6. golden v3 (F1c-era config) integrity — added 30 Aug 2026');
     const id3 = runScorer(G3, G3);
     check('v3 identity scores REPEATABLE with exit 0', id3.code === 0 && id3.report && id3.report.verdict === 'REPEATABLE');
     const x = runScorer(path.join(EVAL, 'golden_aeolus_v2.json'), G3);
-    check('v3 scores REPEATABLE against golden v2 (the promotion criterion)', x.code === 0, x.report && JSON.stringify(x.report.failures));
+    // 4 Sep 2026 (eval_core v1.7): the severity bar rose to 0.90 on STRICT pairs and the
+    // function-level worst case joined at 0.90 (Waqas: "the numbers need to be over 90
+    // percent"). v3 was promoted under the old 0.50 topic-paired bar and does not meet the
+    // new one — that is the honest reading, not a scorer regression. Everything ELSE must
+    // still pass; only the two raised severity bars may fail here.
+    const _sevBars = ['severityAgreement', 'functionWorstCaseAgreement'];
+    check('v3 vs golden v2: every metric other than the two raised severity bars still passes (the promotion criterion, as it stood)',
+      x.report && x.report.failures.every(function (f) { return _sevBars.indexOf(f) >= 0; }), x.report && JSON.stringify(x.report.failures));
   }
 }
 

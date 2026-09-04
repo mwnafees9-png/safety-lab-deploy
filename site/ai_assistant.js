@@ -872,6 +872,28 @@
         if (out.indexOf('All phases') < 0) out.push('All phases');
         return out;
     }
+    // 4 Sep 2026 — PHASE COVERAGE per condition. Given the conditions asked for and the
+    // add_fha actions returned, list every condition whose rows together do NOT cover
+    // every phase of the mission profile ("All phases" covers all). Pure; used by the
+    // FHA lane's coverage hook and by the tests.
+    function _fhaPhaseGaps(conds, acts, keyOf) {
+        const profile = _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); });
+        const keyP = function (x) { return String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ''); };
+        const byCond = {};
+        (acts || []).forEach(function (a) { let k = null; try { k = keyOf(a); } catch (_) {} if (!k) return; k = String(k); (byCond[k] = byCond[k] || []).push(a); });
+        const out = [];
+        (conds || []).forEach(function (e) {
+            const id = String((e && (e.id != null ? e.id : e.key)) || ''); const rows = byCond[id]; if (!rows) return;   // a condition with NO row is the ordinary coverage miss, reported already
+            const cov = {};
+            rows.forEach(function (a) {
+                const ph = _validPhases(Array.isArray(a.phases) ? a.phases : (typeof a.phases === 'string' ? a.phases.split(',') : []));
+                ph.forEach(function (p) { if (/^all phases$/i.test(p)) profile.forEach(function (q) { cov[keyP(q)] = 1; }); else cov[keyP(p)] = 1; });
+            });
+            const missing = profile.filter(function (q) { return !cov[keyP(q)]; });
+            if (missing.length) out.push({ key: id, label: id + ' — ' + String((e && e.desc) || '').slice(0, 80), missing: missing });
+        });
+        return out;
+    }
     // Ticks the project's OWN phase boxes from a phases value, preserving whether
     // the caller supplied an array or a comma-joined string.
     // 4 Sep 2026 (Waqas): the flight phases on a row are CHECKBOXES, and the boxes
@@ -1526,7 +1548,7 @@
             '2c. THREE EFFECT AXES: alongside the sentences, set effAcLevel / effCrewLevel / effPaxLevel from the closed vocabularies in the THREE EFFECT AXES rule below; the class is the worst axis and the product derives it from your levels. A level you cannot ground stays EMPTY.',
             '2b. If the function definition is too thin to state an aircraft effect, you CANNOT classify it. Return severity as an EMPTY STRING and say in severityRationale what is missing. An unclassified condition the engineer then classifies is a good outcome. A guess that looks considered is the failure mode this rule exists to prevent — do not pick a middle value to avoid leaving a blank.',
             '3. Effects: one concise factual sentence each, third-person ("the aircraft…", "the crew…"). If an effect is minor or none, say so briefly.',
-            '4. phases: choose the flight phases where the condition is most relevant, only from: ' + _projectPhaseNames().join(', ') + '. These are the checkboxes on THIS project\'s mission profile, spelled exactly as listed — you are ticking existing boxes, never naming a phase of your own; a value outside the list cannot be ticked and is flagged to the engineer as your error.',
+            '4. phases: EVERY failure condition applies to EVERY flight phase — never pick the phases a condition is "relevant" to. A row\'s phases are the phases that SHARE that row\'s effects and class; return as MANY rows for one condition as its effects across the flight require (one, two, five — whatever the effects dictate), and all the rows for a condition together must cover every phase in this list: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. Phases where the effect is not realised AND the flight can be aborted or the condition escaped are a No Safety Effect row; phases where nothing has happened yet but the flight cannot escape the end effect carry that END effect and its class. "All phases" is allowed ONLY when the effects and class are identical in every phase. Spell phases exactly as listed — these are the checkboxes on THIS project\'s mission profile; a value outside the list cannot be ticked and is flagged to the engineer as your error. Never give the row that lists every phase the worst class of one phase.',
             '   Some of those are CONTINGENCY phases (rejected take-off, go-around, balked landing and the like). Name one when the condition matters specifically at that demand — losing a function during a go-around is a different failure condition, and usually a more severe one, than losing it in the cruise. A contingency phase does not shrink the exposure window.',
             '5. Be complete but do not pad — only credible conditions.',
             '',
@@ -2370,7 +2392,7 @@
                     _anemBatch(_FEATURE_DIRECTIVE.fha, {
                         title: '✨ AI-drafted FHA · review', analysis: 'fha', verifyKind: 'fha',
                         specSecs: _specSecsForSubIds(picked.map(function (e) { return e.subId; })),   // per-system doc narrowing
-                        systemExtra: '\n\nSOURCE-CONDITION TRACE (required): every add_fha action MUST carry "srcCondId": the id of the failure condition it classifies, echoed VERBATIM from the THIS TURN list (e.g. "SF-001-TL"). One row per listed condition.',
+                        systemExtra: '\n\nSOURCE-CONDITION TRACE (required): every add_fha action MUST carry "srcCondId": the id of the failure condition it classifies, echoed VERBATIM from the THIS TURN list (e.g. "SF-001-TL").\n\nROWS PER CONDITION (4 Sep 2026 ruling): every condition applies to every flight phase. Return as MANY add_fha rows for one condition as its effects across the flight require — phases that share the same effects and class sit on ONE row; where the effects or the class differ, that is ANOTHER row, and there is no limit on how many. All the rows for a condition together must cover every phase of this project\'s mission profile: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. A phase where the effect is not realised and the flight can be aborted or the condition escaped is a No Safety Effect row; a phase where nothing has happened yet but the end effect cannot be escaped carries that end effect. "All phases" only when the effects and class are identical everywhere — never the worst class of one phase on a row that lists every phase.',
                         chunk: {
                             units: picked, size: 5, noun: 'failure condition',
                             keyOf:     function (e) { return e.id; },
@@ -2380,7 +2402,13 @@
                                 if (a.srcCondId) return a.srcCondId;
                                 // fallback: an exact (normalized) condition-text match
                                 return _descMap[String(a.fcDesc || '').replace(/\s+/g, ' ').trim().toLowerCase()] || null;
-                            }
+                            },
+                            // 4 Sep 2026 (Waqas): every condition applies to every phase; rows come from
+                            // effects. A condition is not DONE when it has a row — it is done when its rows
+                            // together cover the whole mission profile. Run 3 (fha.draft v7) returned one
+                            // row per condition for all 107, 58 of them "All phases": the coverage check
+                            // counted every one as complete. This hook names the phases still unassessed.
+                            gapsOf: function (acts) { return _fhaPhaseGaps(picked, acts, function (a) { return (a && a.op === 'add_fha') ? (a.srcCondId || _descMap[String(a.fcDesc || '').replace(/\s+/g, ' ').trim().toLowerCase()] || null) : null; }); }
                         }
                     });
                 };
@@ -2388,7 +2416,7 @@
                 if (_sel) { _draftForConditions(_sel); return; }
                 _openScopePicker(_exArr, {
                     title: '✨ AI-drafted FHA · which failure conditions?',
-                    disclaimer: _exArr.length + ' failure condition(s) identified in the FCIM. All are selected — leave it that way to classify the full set, or narrow the scope. One FHA row per selected condition.',
+                    disclaimer: _exArr.length + ' failure condition(s) identified in the FCIM. All are selected — leave it that way to classify the full set, or narrow the scope. Each condition is assessed across every flight phase: one row where the effects are the same, separate rows where they differ.',
                     verb: 'Draft FHA for',
                     sort: function (a, b) { return String(a.id).localeCompare(String(b.id), undefined, { numeric: true }); },
                     row: function (e) { return [e.id, e.desc, e.subId]; }
@@ -2471,7 +2499,7 @@
             const userMsg = 'Cert basis: ' + certBasis + (scope.systemId ? ('\nSystem: ' + scope.systemName) : '') + '\nFunctions:\n' + batch.map(function (f) {
                 return '- subId=' + f.subId + ' | name=' + f.subName + (f.subDef ? ' | definition=' + f.subDef : '');
             }).join('\n')
-            + (_condsFor.length ? ('\n\nFAILURE CONDITIONS TO CLASSIFY (from the FCIM — classify EXACTLY these, one row per condition (a second row for the same condition only where the effects genuinely differ by phase), "fcDesc" echoed WORD FOR WORD and "srcCondId" set to the id; do not invent or reword conditions):\n'
+            + (_condsFor.length ? ('\n\nFAILURE CONDITIONS TO CLASSIFY (from the FCIM — classify EXACTLY these; as many rows per condition as its effects across the flight phases require, the rows for one condition together covering every phase of the mission profile; "fcDesc" echoed WORD FOR WORD and "srcCondId" set to the id; do not invent or reword conditions):\n'
                 + _condsFor.map(function (e) { return '- srcCondId=' + e.id + ' | subId=' + e.subId + ' | fcDesc=' + e.desc; }).join('\n')) : '')
             + (scope.systemId ? ('\n' + _macRulesForSystemPrompt(scope.systemId)) : '');   // 4 Sep 2026 — the SFHA parses the MAC detail out; the AFHA never sees it
             let r;
@@ -4105,13 +4133,18 @@
         const missing = Array.isArray(cov.missing) ? cov.missing.filter(Boolean) : [];
         const shown = missing.slice(0, 12).map(function (m) { return _esc(String(m)); }).join(', ');
         const more = missing.length > 12 ? (' … and ' + (missing.length - 12) + ' more') : '';
+        const gaps = Array.isArray(cov.phaseGaps) ? cov.phaseGaps.filter(Boolean) : [];
+        const gapsHtml = gaps.length
+            ? '<div style="margin:0 16px 8px;padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.5;border:1px dashed #8A6D00;color:#8A6D00;">⚠ <b>Phases not assessed on ' + gaps.length + ' ' + (gaps.length === 1 ? 'condition' : 'conditions') + '</b> — every failure condition applies to every flight phase; the rows for these do not yet cover the whole mission profile (asked once more, still missing). Add the rows by hand or re-draft those conditions.'
+              + '<div style="margin-top:4px;">' + gaps.slice(0, 12).map(function (g) { return _esc(String(g)); }).join('; ') + (gaps.length > 12 ? (' … and ' + (gaps.length - 12) + ' more') : '') + '</div></div>'
+            : '';
         return '<div style="margin:0 16px 8px;padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.5;'
             + (complete
-                ? 'border:1px solid #1F7A33;color:#1F7A33;">✓ <b>Coverage complete</b> — all ' + cov.total + ' ' + noun + ' drafted.'
+                ? 'border:1px solid #1F7A33;color:#1F7A33;">✓ <b>Coverage complete</b> — all ' + cov.total + ' ' + noun + ' drafted' + (gaps.length ? '' : ', every flight phase assessed') + '.'
                 : 'border:1px dashed #8A6D00;color:#8A6D00;">⚠ <b>Coverage: ' + covered + ' of ' + cov.total + ' ' + noun + ' drafted — ' + (cov.total - covered) + ' NOT drafted.</b>'
                   + ' This analysis is INCOMPLETE; accepting it does not close the remaining ' + noun + '.'
                   + (shown ? ('<div style="margin-top:4px;">Not drafted: ' + shown + more + '</div>') : ''))
-            + '</div>';
+            + '</div>' + gapsHtml;
     }
     // 26 Aug 2026 — Waqas, looking at a chunked FHA panel: "where do I accept/reject
     // anything". The rows and their Accept buttons were there; they were just below
@@ -12308,7 +12341,7 @@
                 const _noun = String(_chunk.noun || 'item');
                 _extra = '\n\nTHIS TURN — cover EXACTLY these ' + _noun + 's and no others: '
                     + _slice.map(function (u) { return (_chunk.label ? _chunk.label(u) : String(u)); }).join('; ') + '.'
-                    + ' Emit a row for EVERY failure condition belonging to them. Where a field cannot be grounded, leave THAT FIELD empty per the abstention rule — never omit the row, never summarise, and never stop early.'
+                    + (String(_chunk.noun || '') === 'failure condition' ? ' Emit rows for EVERY failure condition listed — as many rows per condition as its effects across the flight phases require, the rows for one condition together covering every phase of the mission profile.' : ' Emit a row for EVERY ' + _noun + ' listed.') + ' Where a field cannot be grounded, leave THAT FIELD empty per the abstention rule — never omit a row, never summarise, and never stop early.'
                     + ' This is turn ' + (_ci + 1) + ' of ' + _slices.length + '; the other ' + _noun + 's are covered by the other turns, so do NOT offer to continue and do NOT mention the ones outside this turn.';
             }
             // 3 Sep 2026 — A TURN THAT THROWS USED TO BE LOST FOREVER. There was no
@@ -12434,6 +12467,27 @@
             _coverage = { total: _chunk.units.length, covered: _chunk.units.length - _missing.length,
                           noun: _chunk.noun || 'item',
                           missing: _missing.map(function (u) { return (_chunk.label ? _chunk.label(u) : _keyOf(u)); }) };
+        }
+        // 4 Sep 2026 — PHASE COVERAGE (Waqas: every condition applies to every phase; rows come
+        // from effects, as many as the effects require). A lane that declares gapsOf gets ONE
+        // follow-up turn for the phases its rows left unassessed; what is still missing after
+        // that is reported on the panel beside the ordinary coverage line, never hidden.
+        if (_chunk && typeof _chunk.gapsOf === 'function' && actions.length) {
+            let _gaps = [];
+            try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) { _gaps = []; }
+            if (_gaps.length && !_permanentErr) {
+                const _steer = '\n\nPHASES NOT YET ASSESSED — the rows returned for the conditions below do not cover every phase of the mission profile. For EACH condition return ONLY the ADDITIONAL add_fha rows that cover the phases named: group phases that share the same effects and class on one row; where the effect is not realised and the flight can be aborted or the condition escaped, that is a No Safety Effect row; where the effect is not realised yet but cannot be escaped, the row carries the end effect and its class. Echo srcCondId and fcDesc exactly; do not repeat rows already returned.\n'
+                    + _gaps.map(function (g) { return '- ' + g.label + ' — phases still unassessed: ' + g.missing.join(', '); }).join('\n');
+                try {
+                    const _a2 = await _anemRun(_mkMessages(_steer), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined);
+                    const _pp2 = (_a2 && _a2.parsed) || {};
+                    if (Array.isArray(_pp2.actions)) Array.prototype.push.apply(actions, _pp2.actions);
+                    if (_pp2.reply) _replies.push(String(_pp2.reply));
+                    try { console.info('[AI] phase-coverage pass: ' + _gaps.length + ' condition(s) re-asked, ' + ((_pp2.actions || []).length) + ' row(s) added'); } catch (_) {}
+                } catch (e) { _turnErrs.push('phase-coverage pass: ' + ((e && e.message) || e)); }
+                try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) {}
+            }
+            if (_coverage) _coverage.phaseGaps = _gaps.map(function (g) { return g.label + ' (' + g.missing.join(', ') + ')'; });
         }
         // F1c — the decompose lane's denominator is the DOCUMENT, not a scope
         // picker: its own section list, against the \u00a7 citations v2 rows carry.

@@ -102,7 +102,7 @@ console.log('\n[3] executed — phases are the mission profile\'s checkboxes (Wa
   check('a string list comes back as a string in the profile\'s spelling, with no stale unlisted value', b.kept === 'Cruise, Landing' && b.unlisted.length === 0, JSON.stringify(b));
   check('the accepted row carries unlistedPhases and the comment names them as NOT in the mission profile', /unlistedPhases: \(function \(\) \{ const d = \(_validPhases\.lastUnlisted \|\| \[\]\)\.slice\(\)/.test(ai) && /⚠ PHASE NOT IN MISSION PROFILE — the AI named /.test(ai) && !/PHASES DROPPED/.test(ai));
   check('the review card says an off-profile value will not be ticked (never "will be dropped", never "kept as named")', /it will not be ticked; the row comment will name it/.test(ai) && !/will be dropped on accept/.test(ai) && !/kept on the row as named/.test(ai));
-  check('the drafting instruction says: tick existing boxes, never name a phase of your own', /ticking existing boxes, never naming a phase of your own/.test(ai) && !/any value outside the list is discarded/.test(ai));
+  check('the drafting instruction says: tick existing boxes, never name a phase of your own', /these are the checkboxes on THIS project\\'s mission profile; a value outside the list cannot be ticked and is flagged to the engineer as your error/.test(ai) && !/any value outside the list is discarded/.test(ai));   // 4 Sep: rule 4 rewritten — every condition applies to every phase, rows come from effects
 }
 
 // ---- 4. EXECUTED: every AI assumption for the FHA reaches the register ---------

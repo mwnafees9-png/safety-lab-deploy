@@ -69,7 +69,7 @@ check('…and runs one call per slice, accumulating actions',
   /for \(let _ci = 0; _ci < _slices\.length; _ci\+\+\)/.test(ai) &&
   /Array\.prototype\.push\.apply\(actions, pp\.actions\)/.test(ai));
 check('each turn is told to cover its slice and NOT to stop early',
-  /never omit the row, never summarise, and never stop early/.test(ai));
+  /never omit a row, never summarise, and never stop early/.test(ai));   // 4 Sep: "a row" — several rows per condition are the rule now
 check('…and told not to offer to continue (that offer is what the app now owns)',
   /do NOT offer to continue/.test(ai));
 check('an unchunked caller still runs exactly one turn (no behaviour change)',

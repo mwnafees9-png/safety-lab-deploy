@@ -230,6 +230,102 @@ function pairFhaRows(golden, cand) {
   return { pairs, gTotal: gRows.length };
 }
 
+// ---------------------------------------------------------------------------
+// STRICT PAIRING (4 Sep 2026, v1.7). The topic|mode pairing above is the right
+// instrument for "did the runs find the same THINGS" — but it is the wrong one
+// for severity: its topic lexicon puts "loss of forward thrust" and "loss of
+// ground reverse thrust" in the same bucket, so it compared the severity of
+// DIFFERENT conditions and reported 0.40–0.46 agreement where a strict pairing
+// of the same condition gave 0.62 and zero two-class jumps (runs 2 vs 3).
+// Strict = the same condition (shared id, or same loss form + the same wording)
+// on the same phase group. Rows come from effects (one condition, any number
+// of phase-group rows), so a pair must also agree on phases.
+const LOSS_STOP = new Set(['of', 'the', 'a', 'an', 'to', 'and', 'or', 'in', 'on', 'at', 'with', 'for', 'by',
+  'limits', 'limit', 'mac', 'outside', 'within', 'loss', 'total', 'partial', 'complete', 'erroneous',
+  'uncommanded', 'undetected', 'detected', 'failure', 'function', 'aircraft', 'degraded', 'inadvertent']);
+function lossFormOf(text) {
+  const t = norm(text);
+  if (/\b(total loss|complete loss|outside (the )?mac|loss of all)\b/.test(t)) return 'TL';
+  if (/\b(partial loss|within (the )?mac|degraded|reduced|asymmetric|one (engine|side|channel|lane|unit))\b/.test(t)) return 'PL';
+  return modeOf(text);
+}
+function condTokens(text) {
+  return new Set(norm(text).split(' ').filter(w => w && !LOSS_STOP.has(w)));
+}
+function phaseKeys(r) {
+  const raw = Array.isArray(r.phases) ? r.phases : String(r.phases ?? '').split(',');
+  const ks = raw.map(x => String(x ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '')).filter(Boolean);
+  if (!ks.length || ks.indexOf('allphases') !== -1) return new Set(['*']);
+  return new Set(ks);
+}
+function phaseOverlap(a, b, profile) {
+  if (a.has('*') && b.has('*')) return 1;
+  const A = a.has('*') ? profile : a, B = b.has('*') ? profile : b;
+  if (!A.size || !B.size) return 0;
+  return jaccard(A, B);
+}
+const condIdOf = r => String(r.sourceCondId ?? r.srcCondId ?? r.fcId ?? '').trim().toLowerCase();
+function pairFhaRowsStrict(golden, cand) {
+  const profile = new Set();
+  [golden, cand].forEach(d => d.fha.forEach(r => { for (const k of phaseKeys(r)) if (k !== '*') profile.add(k); }));
+  const mk = r => ({ r, key: norm(r.fcDesc), id: condIdOf(r), form: lossFormOf(r.fcDesc), toks: condTokens(r.fcDesc), ph: phaseKeys(r) });
+  const gRows = golden.fha.map(mk), cRows = cand.fha.map(mk);
+  const taken = new Array(cRows.length).fill(false);
+  const pairs = [];
+  const score = (g, c) => {
+    if (c.form !== g.form) return 0;
+    const same = g.id && c.id && g.id === c.id;
+    const tj = jaccard(g.toks, c.toks);
+    if (!same && tj < 0.5) return 0;
+    const po = phaseOverlap(g.ph, c.ph, profile);
+    if (po < 0.5) return 0;
+    return (same ? 1 : tj) + po;
+  };
+  for (const g of gRows) {
+    let best = -1, bs = 0;
+    for (let i = 0; i < cRows.length; i++) {
+      if (taken[i]) continue;
+      const sc = score(g, cRows[i]);
+      if (sc > bs) { bs = sc; best = i; }
+    }
+    if (best >= 0) { taken[best] = true; pairs.push([g, cRows[best], (g.key && g.key === cRows[best].key) ? 'text' : 'strict']); }
+  }
+  return { pairs, gTotal: gRows.length };
+}
+// Function-level worst case: one class per sub-function (the worst of its rows),
+// paired by shared subId when the runs share one and the names agree, else by
+// name overlap. This is the headline the engineer reads — is the worst thing
+// that can happen to THIS function the same class every time?
+function functionWorstCase(golden, cand) {
+  // rank 0 = Catastrophic … 4 = Negligible / No Safety Effect; the WORST is the LOWEST rank
+  const WC_LABEL = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'Negligible'];
+  const wcRank = sev => { const t = String(sev || '').trim(); if (/^no safety effect$/i.test(t)) return 4; const i = WC_LABEL.indexOf(t); return i < 0 ? null : i; };
+  const worst = (d, subId) => { let m = -1; for (const r of d.fha) if (String(r.subId ?? '').trim() === subId) { const k = wcRank(sevOf(r)); if (k !== null && (m < 0 || k < m)) m = k; } return m; };
+  const fnToks = f => condTokens(`${f.subName ?? ''}`);
+  const cFns = cand.functions.map(f => ({ f, id: String(f.subId ?? '').trim(), toks: fnToks(f) }));
+  const taken = new Array(cFns.length).fill(false);
+  let paired = 0, same = 0, offByOne = 0, offMore = 0; const misses = [];
+  for (const gf of golden.functions) {
+    const gid = String(gf.subId ?? '').trim(), gt = fnToks(gf);
+    let best = -1, bs = 0;
+    for (let i = 0; i < cFns.length; i++) {
+      if (taken[i]) continue;
+      const nj = jaccard(gt, cFns[i].toks);
+      const sc = (gid && cFns[i].id === gid && nj >= 0.4) ? 2 : (nj >= 0.4 ? nj : 0);
+      if (sc > bs) { bs = sc; best = i; }
+    }
+    if (best < 0) continue;
+    taken[best] = true;
+    const wg = worst(golden, gid), wc = worst(cand, cFns[best].id);
+    if (wg < 0 || wc < 0) continue;
+    paired++;
+    const d = Math.abs(wg - wc);
+    if (d === 0) same++; else if (d === 1) offByOne++; else offMore++;
+    if (d) misses.push(`${gf.subName ?? gid}: ${WC_LABEL[wg]} → ${WC_LABEL[wc]}`);
+  }
+  return { paired, same, offByOne, offMore, rate: paired ? same / paired : 1, misses };
+}
+
 
     // --- lane-complete engine (30 Aug 2026, Waqas: "it needs to be done for
     // every single analysis, consistency will be key") ------------------------
@@ -523,10 +619,14 @@ function pairFhaRows(golden, cand) {
         const within = (a, b, tol) => (b === 0 ? a === 0 : Math.abs(a - b) / b <= tol);
 
         const { pairs, gTotal } = pairFhaRows(golden, cand);
-        let sevAgree = 0, sevDenom = 0, severeJumps = 0, textMatched = 0;
+        let textMatched = 0;
+        for (const [, , how] of pairs) if (how === 'text') textMatched++;
+        // v1.7 — severity is judged on STRICT pairs (same condition, same phase group); the
+        // topic pairing above keeps measuring content coverage (fhaSignatureMatchRate).
+        const strict = pairFhaRowsStrict(golden, cand);
+        let sevAgree = 0, sevDenom = 0, severeJumps = 0;
         let clsAgree = 0, clsDenom = 0;
-        for (const [g, c, how] of pairs) {
-            if (how === 'text') textMatched++;
+        for (const [g, c] of strict.pairs) {
             if (engSet.has(norm(g.r.fcId))) continue;
             sevDenom++;
             if (sevOf(g.r) === sevOf(c.r)) sevAgree++;
@@ -577,15 +677,21 @@ function pairFhaRows(golden, cand) {
                 value: +(gTotal ? pairs.length / gTotal : 0).toFixed(3), threshold: 0.70,
                 note: 'golden FHA rows with a text OR topic|mode matched candidate row' },
             severityAgreement: {
-                value: +(sevDenom ? sevAgree / sevDenom : 0).toFixed(3), threshold: 0.50,
-                note: 'exact severity (incl. abstain-as-abstain) over matched pairs (F1b: signature pairs included; observed same-model floor 0.535 — tighten as data accumulates)' },
+                value: +(sevDenom ? sevAgree / sevDenom : 0).toFixed(3), threshold: 0.90,
+                note: 'v1.7 (4 Sep 2026): exact severity over STRICT pairs — same condition (shared id, or same loss form + wording), same phase group; bar 0.90 (Waqas: "the numbers need to be over 90 percent"). Was topic-paired at 0.50: it compared different conditions.' },
+            strictPairRate: {
+                value: +(strict.gTotal ? strict.pairs.length / strict.gTotal : 0).toFixed(3), informational: true,
+                note: 'golden FHA rows with a strict counterpart (same condition + phase group) — the denominator the severity metrics stand on' },
+            functionWorstCaseAgreement: (function () { const w = functionWorstCase(golden, cand); return {
+                value: +w.rate.toFixed(3), threshold: 0.90, paired: w.paired, same: w.same, offByOne: w.offByOne, offByTwoPlus: w.offMore, misses: w.misses.slice(0, 20),
+                note: 'the worst class per aircraft sub-function is the same in both runs (the headline an engineer reads; abstraction-level differences in row counts do not move it)' }; })(),
             severityAgreementClassified: {
                 value: +(clsDenom ? clsAgree / clsDenom : 1).toFixed(3), threshold: 0.35,
-                note: 'agreement over pairs where BOTH sides committed to a class — cannot hide behind abstain-abstain pairs; wholesale reclassification scores 0 here' },
+                note: 'agreement over STRICT pairs where BOTH sides committed to a class — cannot hide behind abstain-abstain pairs; wholesale reclassification scores 0 here' },
             severityDistL1: { value: +sevDistL1Rate.toFixed(3), thresholdMax: 0.20,
                 note: 'total-variation distance of severity distributions' },
             severeJumpRate: { value: +(sevDenom ? severeJumps / sevDenom : 0).toFixed(3), thresholdMax: 0.05,
-                note: 'matched rows whose severity moved >= 2 classes — judgment changes, not wobble' },
+                note: 'STRICT-paired rows whose severity moved >= 2 classes — judgment changes, not wobble' },
             abstentionRateDelta: {
                 golden: +gAbst.toFixed(3), candidate: +cAbst.toFixed(3),
                 pass: Math.abs(gAbst - cAbst) <= 0.15,
@@ -636,7 +742,7 @@ function pairFhaRows(golden, cand) {
     }
 
     return { normalizeRun, scoreRun, norm, jaccard, TOPICS, topicsOf, modeOf,
-             rowSignatures, pairFhaRows, functionTopics, fcimSignatures,
+             rowSignatures, pairFhaRows, pairFhaRowsStrict, functionWorstCase, lossFormOf, phaseKeys, functionTopics, fcimSignatures,
              LANES, rowText, laneTopics, laneTokens,
              agreementOn, agreementTwoLevel };   // HF-4 — categorical agreement, id-matched only
 }));
