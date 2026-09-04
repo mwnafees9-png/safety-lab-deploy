@@ -26,12 +26,50 @@
         { step: 'decompose', call: function () { return SafetyLabAI.decompose(); } },
         { step: 'fcim',      call: function () { return SafetyLabAI.populateFcim(); } },
         { step: 'fha',       call: function () { return SafetyLabAI.populateFha(); } },
+        // F15 (4 Sep 2026) — the full thread before trees: systems and their functions from
+        // the SDD (traced to aircraft sub-functions), then the interdependence sweep. MAC,
+        // CoFFE and compiled trees follow as they are built; until then 'trees' is still the
+        // AI synthesiser and is NOT what the consistency bar measures.
+        { step: 'systems',   call: function () { return SafetyLabAI.decomposeSystems(); } },
+        { step: 'interdep',  direct: interdepSweepAndAccept },
         { step: 'trees',     call: function () { return SafetyLabAI.synthesizeTree(); } },
         { step: 'fmea',      call: function () { return SafetyLabAI.draftFmea(); } },
         { step: 'pra',       call: function () { return SafetyLabAI.draftPra(); } },
         { step: 'zsa',       call: function () { return SafetyLabAI.draftZsa(); } },
         { step: 'cma',       call: function () { return SafetyLabAI.draftCma(); } }
     ].concat(HF.map(function (k) { return { step: 'hf:' + k, lane: k, call: function () { return SafetyLabAI.draftHfLane(k); } }; }));
+
+    // ---- direct steps: lanes that do not go through the review panel -------------
+    // The interdependence sweep writes PROPOSED cells straight into the store (a
+    // proposal is never a review). For the campaign the harness then accepts every
+    // proposal the way an engineer's signature would — marked as harness-accepted,
+    // TESTING ONLY (Waqas, 3 Sep: "accept without a click is just for testing") —
+    // so CoFFE, the MAC and the compiled trees downstream have contributors to work
+    // from. The sweep is capped at 25 FCs per call, so it loops until nothing is
+    // left unreviewed or it stops making progress.
+    async function interdepSweepAndAccept() {
+        if (typeof idpAiSweep !== 'function' || typeof idpStats !== 'function' || typeof _idpStore !== 'function') throw new Error('interdependence sweep not available on this page');
+        var before = idpStats(), loops = 0, last = -1, calls = 0;
+        while (loops < 12) {
+            var st = idpStats();
+            var empty = st.unreviewed - st.proposed;
+            if (empty <= 0 || empty === last) break;
+            last = empty; loops++; calls++;
+            await idpAiSweep();
+        }
+        var store = _idpStore(), accepted = 0, cleared = 0, model = '';
+        Object.keys(store.cells).forEach(function (k) {
+            var c = store.cells[k];
+            if (!c || c.state !== 'proposed') return;
+            model = model || c.model || '';
+            store.cells[k] = { state: c.dir === 'clear' ? 'cleared' : 'asserted', by: 'AI (' + (c.model || 'model') + ') — harness-accepted, TESTING ONLY', at: new Date().toISOString(), note: 'AI-proposed, harness-accepted: ' + (c.why || ''), aiProposed: true };
+            if (c.dir === 'clear') cleared++; else accepted++;
+        });
+        try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+        try { if (typeof renderInterdepPage === 'function') renderInterdepPage(); } catch (_) {}
+        var after = idpStats();
+        return { sweeps: calls, before: before, after: after, accepted: accepted, cleared: cleared, model: model };
+    }
 
     function read() {
         var v = null;
@@ -51,7 +89,12 @@
         var g = function (n) { try { var v = eval(n); return Array.isArray(v) ? v.length : null; } catch (_) { return null; } };
         var hf = {};
         try { HF.forEach(function (k) { var v = (window.HF_ANALYSES && HF_ANALYSES.rows) ? HF_ANALYSES.rows(k) : null; if (Array.isArray(v)) hf[k] = v.length; }); } catch (_) {}
-        return { functions: g('acFunctionsData'), fcim: g('acFcimData'), fha: g('acFhaData'), trees: g('ftaPages'), fmea: g('fmeaData'), pra: g('praData'), zsa: g('zsaData'), cma: g('cmaData'), assumptions: g('acAssumptionsData'), aiLedger: g('aiAssumptions'), hf: hf };
+        var idp = null, mac = null, coffe = null, sysFns = null;
+        try { idp = (typeof idpStats === 'function') ? idpStats() : null; } catch (_) {}
+        try { mac = ((projectConfig.macModels) || []).length; } catch (_) {}
+        try { coffe = Object.keys((projectConfig.coffe && projectConfig.coffe.verdicts) || {}).length; } catch (_) {}
+        try { sysFns = (systemsData || []).reduce(function (n, sy) { return n + ((sy.functions || []).length); }, 0); } catch (_) {}
+        return { functions: g('acFunctionsData'), fcim: g('acFcimData'), fha: g('acFhaData'), systems: g('systemsData'), systemFunctions: sysFns, interdep: idp ? { contributes: idp.contributes, cleared: idp.cleared, unreviewed: idp.unreviewed, proposed: idp.proposed, multi: idp.multi } : null, mac: mac, coffeVerdicts: coffe, trees: g('ftaPages'), fmea: g('fmeaData'), pra: g('praData'), zsa: g('zsaData'), cma: g('cmaData'), assumptions: g('acAssumptionsData'), aiLedger: g('aiAssumptions'), hf: hf };
     }
     // the page's project name is a top-level `let`, so it is reachable by name but not via window
     function _pname() { try { return String(projectName || ''); } catch (_) { try { return document.title; } catch (__) { return ''; } } }
@@ -59,6 +102,13 @@
     async function step(run, s, timeoutMs) {
         var rec = { run: run, step: s.step, state: 'started', at: Date.now(), project: _pname(), before: counts() };
         put(rec);
+        if (typeof s.direct === 'function') {   // F15 — no review panel to capture; the lane reports its own numbers
+            var t1 = Date.now();
+            try { rec.direct = await s.direct(); rec.ok = true; }
+            catch (e) { rec.ok = false; rec.error = 'direct step threw: ' + ((e && e.message) || e); }
+            rec.secs = Math.round((Date.now() - t1) / 1000); rec.state = 'done'; rec.after = counts();
+            return put(rec);
+        }
         try { SafetyLabAI.evalFresh = true; } catch (_) {}
         var p = SafetyLabAI.captureNextDraft(timeoutMs || STEP_TIMEOUT_MS);
         var t0 = Date.now();

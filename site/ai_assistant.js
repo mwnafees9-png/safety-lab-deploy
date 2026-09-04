@@ -1574,7 +1574,7 @@
     // small {"insufficient_information":true,...} object instead of fabricating, and
     // Provider.complete turns that into a clean, catchable flag the feature surfaces.
     const _ANALYSIS_FEATURES = {
-        'fha.populate': 1, 'sfha.populate': 1, 'arch.decompose': 1, 'fta.review': 1,
+        'fha.populate': 1, 'sfha.populate': 1, 'arch.decompose': 1, 'arch.systems': 1, 'fta.review': 1,
         'req.recommend': 1, 'fcim.populate': 1, 'fta.synthesize': 1, 'pra.draft': 1,
         'zsa.draft': 1, 'cma.draft': 1, 'fmea.functional': 1, 'fmea.item': 1, 'arch.recommend': 1,
         'ccf.propose': 1,  // #142 — AI CCF-group modeling (advisory proposal; never writes the trees)
@@ -1613,7 +1613,7 @@
     const _AI_BUSY_SKIP = { 'ai.test': 1, 'eval.judge': 1 };
     const _AI_BUSY_LABELS = {
         'fha.populate': 'drafting the FHA', 'sfha.populate': 'drafting the system FHA',
-        'fcim.populate': 'drafting the FCIM', 'arch.decompose': 'decomposing functions',
+        'fcim.populate': 'drafting the FCIM', 'arch.decompose': 'decomposing functions', 'arch.systems': 'identifying systems',
         'arch.recommend': 'recommending architecture', 'fta.review': 'reviewing the fault tree',
         'fta.synthesize': 'synthesizing the fault tree', 'req.recommend': 'recommending requirements',
         'pra.draft': 'drafting the PRA', 'zsa.draft': 'drafting the ZSA', 'cma.draft': 'drafting the CMA',
@@ -1842,6 +1842,20 @@
         'EXPECTED OUTPUTS: a sub-function hierarchy with allocation to systems/items and defined interfaces.',
         'FORMAT: Function ID | Statement | Allocated-to | Inputs/Outputs | Independence note | Failure-Condition Classification.'
     ].join('\n');
+    // 4 Sep 2026 (F15) — systems + their functions from the SDD, traced to the aircraft
+    // sub-functions: the columns of the interdependence table and the members of every
+    // MAC rule. Inline copy of the registry body (byte parity enforced by regression_ai_skills).
+    const _SPEC_SYSTEMS = [
+        'STANDARD GROUNDING — ARP4754B §4.3 / §4.5 architecture: the allocation of aircraft functions to SYSTEMS, and each system\'s own functions (ARP4761A Table Q.4-1 columns are systems WITH their functions).',
+        'REQUIRED INPUTS: the aircraft functional decomposition (aircraft sub-function ids) and the system design description / architecture document. Without the document, return insufficient_information — never guess a system list from the function names alone.',
+        'WHAT A SYSTEM IS HERE: a design-allocated system the document itself names as one (propulsion, flight control, landing gear, electrical power, fuel, hydraulics, avionics, environmental control, and the like — ATA-chapter style where the document uses it). Resources such as electrical, hydraulic and pneumatic power ARE systems here (they own functions other systems consume). Structure, zones and items are NOT systems.',
+        'ONE add_system PER SYSTEM, BEFORE ITS FUNCTIONS, named exactly as the document names it. A system that already exists in the project is reused by name — never duplicated under a variant name.',
+        'SYSTEM FUNCTIONS: for each system, add_function with scope "system", systemId = the system\'s name, funcName verb-first in the document\'s vocabulary, funcDef one sentence of WHAT it delivers (never the means), and traceIds = the aircraft SUB-FUNCTION ids this system function implements or directly supports. Trace ONLY where the document says so; an untraced system function is allowed (a resource or housekeeping function) and is better than a guessed trace.',
+        'GRANULARITY: one system function per independently-failable capability of that system, typically 2–6 per system; a single catch-all function per system is too coarse, and component-level detail is too fine.',
+        'DOCUMENT ANCHORING: derive every system and function from a specific section of the document and cite that section in funcDef. Never introduce a system or a function the document does not describe.',
+        'EXPECTED OUTPUTS: the project\'s system list with each system\'s functions, every function traced to the aircraft sub-functions it implements — the columns of the interdependence table and the members of every MAC rule.',
+        'FORMAT: add_system {name}; then add_function {scope:"system", systemId:<name>, funcName, funcDef, traceIds:[…]}.',
+    ].join('\n');
     // Rewritten 1 Aug 2026 after reading ARP4754B §5.2 and ARP4761A App P against
     // it. The independence claim it already made was right; what it left out were
     // the three rules an advisory recommendation is most likely to trip over —
@@ -1993,7 +2007,7 @@
         'fmea.functional': _SPEC_FMEA_FUNC, 'fmea.item': _SPEC_FMEA_ITEM,
         'pra.draft': _SPEC_PRA, 'zsa.draft': _SPEC_ZSA, 'cma.draft': _SPEC_CMA,
         'ccf.propose': _SPEC_CCF,
-        'req.recommend': _SPEC_REQ, 'arch.decompose': _SPEC_DECOMP, 'arch.recommend': _SPEC_ARCH,
+        'req.recommend': _SPEC_REQ, 'arch.decompose': _SPEC_DECOMP, 'arch.systems': _SPEC_SYSTEMS, 'arch.recommend': _SPEC_ARCH,
         'hfa.draft': _SPEC_HFA,
         'hf.draftlane': _SPEC_HF_DRAFT, 'hf.improve': _SPEC_HF_IMPROVE,   // Skills V1.3
         'comment.resolve': _SPEC_RESOLVE,
@@ -2062,6 +2076,7 @@
         'ccf.propose':    ['ARP4761A §4.6 · App M', 'ARP4761A App G'],
         'req.recommend':  ['ARP4754B §5.3', 'ARP4754B §5.1', 'ARP4761A §3.5'],
         'arch.decompose': ['ARP4754B §4.3', 'ARP4754B §4.5'],
+        'arch.systems': ['ARP4754B §4.3', 'ARP4754B §4.5', 'ARP4761A Table Q.4-1'],
         'arch.recommend': ['ARP4754B §4.3', 'ARP4754B §5.2', 'ARP4761A §3.9 · App P'],
         'resources.draft':['ARP4754B §4.3'],
         'stpa.draft':     ['SAE J3307', 'STPA Handbook']
@@ -2179,7 +2194,7 @@
     const _ASSUMPTION_LABELS = {
         'fha.populate': 'AFHA', 'sfha.populate': 'SFHA', 'fcim.populate': 'FCIM',
         'fta.synthesize': 'FTA synthesis', 'fta.review': 'FTA review',
-        'req.recommend': 'Requirements', 'arch.decompose': 'Decomposition',
+        'req.recommend': 'Requirements', 'arch.decompose': 'Decomposition', 'arch.systems': 'Systems',
         'pra.draft': 'PRA', 'zsa.draft': 'ZSA', 'cma.draft': 'CMA',
         'fmea.functional': 'FMEA (functional)', 'fmea.item': 'FMEA (item)',
         'ccf.propose': 'CCF',
@@ -3275,6 +3290,34 @@
         Array.prototype.forEach.call(p.querySelectorAll('[data-sid]'), function (btn) {
             btn.onclick = function () { const sid = btn.getAttribute('data-sid'); const sy = systems.find(function (z) { return String(z.id) === sid; }); p.remove(); onPick({ systemId: sid || '', systemName: sy ? (sy.name || sy.id) : '' }); };
         });
+    }
+    // 4 Sep 2026 (F15) — SYSTEMS FROM THE SDD. One batch: add_system per system the
+    // document names, then that system's functions (scope "system") traced to the
+    // aircraft sub-functions they implement. Those traces are what makes the
+    // interdependence table's "implements" cells DERIVED facts, and the functions
+    // are the members every MAC rule is built from — so this step runs before the
+    // interdependence sweep and the MAC drafter in the golden thread. Reads the same
+    // consolidated AI Inputs as decomposition; opens the same review panel; under
+    // capture the harness applies the actions (add_system first, functions after —
+    // the executor resolves systemId by NAME, so the order inside one draft is enough).
+    function decomposeSystems(opts) {
+        opts = opts || {};
+        if (!Provider.available()) { _toast('AI backend not ready — ' + JSON.stringify(Provider.describe()), 'warning'); return; }
+        if (!((snapshot().acFunctionsData || []).length)) { _toast('Decompose the aircraft functions first — system functions trace to aircraft sub-functions.', 'warning'); return; }
+        const go = function (input) {
+            if (!(input && input.text && input.text.trim())) { _toast('Provide the system design description under AI Inputs first.', 'warning'); return; }
+            const existing = (snapshot().systemsData || []).map(function (sy) { return sy.name || sy.id; }).filter(Boolean);
+            const subs = (snapshot().acFunctionsData || []).map(function (f) { return f.subId; }).filter(Boolean);
+            return _anemBatch(_FEATURE_DIRECTIVE.systems
+                + (existing.length ? (' Systems already in the project (reuse these names, never duplicate): ' + existing.join('; ') + '.') : '')
+                + ' Aircraft sub-function ids available for traceIds: ' + subs.join(', ') + '.', {
+                title: '✨ Systems · from the architecture',
+                analysis: 'arch.systems',
+                context: 'ARCHITECTURE / SOURCE MATERIAL:\n' + String(input.text)
+            });
+        };
+        if (opts.text) return go({ text: opts.text });
+        return _withArchInput({ title: 'Systems · from the architecture', requireText: true }, go);
     }
     async function _decomposeFromInput(input, scope) {
         input = input || {}; scope = scope || {};
@@ -10279,7 +10322,7 @@
             'ADD:',
             '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgement because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it)}',
             '- add_system {name}  — create a system (idempotent by name) from an SDD/architecture doc. Emit this BEFORE the system\'s functions/interfaces so they can reference it by name.',
-            '- add_function {scope, systemId?, funcName, funcDef, subName, subDef}   (ONE level of decomposition)',
+            '- add_function {scope, systemId?, funcName, funcDef, subName, subDef, traceIds?}   (ONE level of decomposition; for scope "system", traceIds = the aircraft sub-function ids this system function implements)',
             '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" (empty FCs + short rationale) when the unaware case is inapplicable.',
             '- add_requirement {scope, systemId?, text("The X shall ..."), rationale, traceSubId, level, type, verifMethod} — ADVISORY: files as a review comment on the traced failure condition for the engineer to disposition; the AI never writes requirement rows (document import mirroring the engineer\'s own existing requirements is the one exception)',
             '- add_fta_tree {scope, systemId?, topEvent, kind("allocation"|"verification"), fhaFcId?, root:{name,type("gate"|"basic"),gateType("AND"|"OR"),children:[...]}}  (lambda always blank)',
@@ -12149,6 +12192,7 @@
         req:   'Recommend derived SAFETY REQUIREMENTS that close the project\'s open analysis gaps (failure conditions lacking mitigating requirements; fault-tree contributors lacking controls). Write each as "The <item> shall …", trace it to the function / failure condition it addresses, and set level + type + verification method. Emit them as add_requirement actions; ground every requirement in the current project state. These are ADVISORY PROPOSALS — an accepted one is filed as a review comment on its traced failure condition, never written into the requirements register.',
         fha:   'Draft the AIRCRAFT-level FHA. For each aircraft function, identify its failure condition(s) with effects on Aircraft / Crew / Passengers and a SEVERITY classified per §__.1309 (Catastrophic ↔ Extremely Improbable … No Safety Effect ↔ none), DERIVED from the effects you state for that condition. Ground every row strictly in the project\'s functions. If a function\'s definition does not support stating an aircraft effect, you CANNOT classify it: emit the row with severity as an EMPTY STRING and say what is missing in severityRationale. Do NOT reach for the benign end of the scale to avoid a blank — "No Safety Effect" is a finding about the aircraft, not a way of saying you do not know. Emit add_fha actions with scope "aircraft".',
         fcim:  'Generate the FCIM (Failure Conditions, Indications & Mitigations) per aircraft function — Total Loss / Partial Loss / Malfunction as concise capability phrases, the crew-Aware vs crew-Unaware awareness split, and the indications + mitigations. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[]/malfunctions[] arrays, never merged into one phrase. Put NO severity words anywhere (severity lives in the FHA, never the FCIM). Emit add_fcim actions.',
+        systems: 'From the project architecture / source documents, identify the aircraft SYSTEMS the design allocates functions to, and each system\'s own functions. Emit add_system {name} for each system FIRST, then add_function {scope:"system", systemId:<that name>, funcName, funcDef, traceIds:[aircraft sub-function ids it implements]} for each of its functions. Never invent a system or a function the document does not describe; trace only where the document says the system delivers that aircraft function.',
         decompose: 'From the project architecture / source documents, extract ONE level of functional decomposition: each top-level function → its immediate sub-functions (behaviours the aircraft accomplishes — NOT resources like electrical/hydraulic power, and NOT structure). Emit add_function actions. Never invent functions the architecture does not support.',
         synth: 'Synthesise fault-tree STRUCTURE ONLY (no failure rates) for the untreated failure conditions, using the architecture to find the real contributors and the correct AND/OR gate logic. Tree DEPTH comes solely from the architecture — never fabricate depth. Emit add_fta_tree actions with every basic-event λ left blank for the engineer.',
         pra:   'Draft a Particular Risk Analysis: enumerate the particular risks applicable to this cert basis (bird strike, rotor/fan-blade burst, fire/overheat, HIRF/lightning, tyre burst, …), the zones/systems each affects, the failure conditions they could cause, and mitigations. Emit add_pra actions grounded in the project zones/systems.',
@@ -12625,6 +12669,7 @@
         fcimGaps:     _funcsNeedingFcim,           // sub-functions without FCIM coverage
         // ---- Feature #49 — functional decomposition from architecture docs --
         decompose:   _captureGuard('decompose', decompose),                    // open input panel (or pass { text })
+        decomposeSystems: _captureGuard('decomposeSystems', decomposeSystems),  // F15 — systems + their functions from the SDD, traced to aircraft sub-functions
         // ---- Feature #52 — fault-tree consistency reviewer (advisory) -------
         reviewTrees: _captureGuard('reviewTrees', reviewTrees),                  // async: flag inconsistencies (read-only)
         // ---- Feature #53 — recommend safety requirements --------------------

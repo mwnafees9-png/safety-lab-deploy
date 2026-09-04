@@ -59,7 +59,8 @@ check('registry loads and exports SLABSkills', !!S);
 // edited silently.
 // 21 -> 23 (Skills V1.3, later the same day): ram.fracas.draft + ram.msg3.rationale, the
 // two prose-only RAM drafters in ram_ai.js, found unregistered by the Phase 4 census.
-check('23 skills registered (V1.3: hf.draftlane + hf.improve, then the two RAM prose drafters)', S && Object.keys(S.skills).length === 23);
+// 23 -> 24 (F15, 4 Sep 2026): arch.systems — systems + their functions from the SDD.
+check('24 skills registered (V1.3: hf.draftlane + hf.improve, the two RAM prose drafters; F15: arch.systems)', S && Object.keys(S.skills).length === 24);
 if (S) {
   // 29 Aug (V1.1) - Waqas ruling: EACH analysis is its own skill. SFHA gets its
   // own identity; body intentionally byte-identical to fha.draft TODAY (one App
