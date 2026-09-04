@@ -91,9 +91,10 @@ console.log('\n[3] executed — phases are the mission profile\'s checkboxes (Wa
   const ctx = { console, String, Array, Boolean, RegExp };
   vm.createContext(ctx);
   vm.runInContext('function _projectPhaseNames(){ return ["Takeoff","Initial Climb","Cruise","Landing"]; }\n' + extractFn(ai, '_validPhases') + '\n_validPhases.lastDropped = []; _validPhases.lastUnlisted = [];', ctx);
-  const o = JSON.parse(vm.runInContext('JSON.stringify({ kept: _validPhases(["Takeoff","Initial climb","initial-climb","Hover","Cruise","Transition"]), unlisted: _validPhases.lastUnlisted, dropped: _validPhases.lastDropped })', ctx));
+  const o = JSON.parse(vm.runInContext('JSON.stringify({ kept: _validPhases(["Take-off","Initial climb","initial-climb","Hover","cruise","Transition"]), unlisted: _validPhases.lastUnlisted, dropped: _validPhases.lastDropped })', ctx));
   check('a spelling that differs only by case/hyphen ticks the EXISTING box, in the profile\'s spelling', o.kept.indexOf('Initial Climb') >= 0 && o.kept.indexOf('Initial climb') < 0, o.kept.join(','));
   check('… and two spellings of one box tick it ONCE', o.kept.filter(x => x === 'Initial Climb').length === 1);
+  check('a hyphen or a lower-case letter does not make a new phase: "Take-off" ticks Takeoff, "cruise" ticks Cruise (run 1 lost 18 and 10 rows to these)', o.kept[0] === 'Takeoff' && o.kept.indexOf('Cruise') >= 0);
   check('a value that matches no box is NOT written as a phase (the AI never adds a phase to a project)', o.kept.indexOf('Hover') < 0 && o.kept.indexOf('Transition') < 0 && o.kept.join(',') === 'Takeoff,Initial Climb,Cruise', o.kept.join(','));
   check('… and is recorded so the row comment can name it for the engineer', o.unlisted.join(',') === 'Hover,Transition', o.unlisted.join(','));
   check('lastDropped stays empty for old readers', o.dropped.length === 0);

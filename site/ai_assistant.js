@@ -868,11 +868,12 @@
     // box is not written onto the row (there is no such box) — it is recorded in
     // lastUnlisted so the row's comment names it and the engineer ticks the right
     // one. The AI never adds a phase to a project. Duplicates collapse.
-    function _phaseKeyOf(x) { return String(x == null ? '' : x).toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim(); }
+    // The key strips everything but letters and digits: "Take-off", "take off" and "Takeoff" are one box.
+    function _phaseKeyOf(x) { return String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
     function _validPhases(v) {
         // Same normalisation as _phaseKeyOf, inlined so the tests that lift this
         // function out on its own (a73_phases, fha_phase_shape, ai_repeatability) run it.
-        const _phaseKeyOf = function (x) { return String(x == null ? '' : x).toLowerCase().replace(/[\s\-_\/]+/g, ' ').trim(); };
+        const _phaseKeyOf = function (x) { return String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ''); };
         const vocab = _projectPhaseNames();
         const byKey = {};
         vocab.forEach(function (name) { const k = _phaseKeyOf(name); if (k && !byKey[k]) byKey[k] = name; });
