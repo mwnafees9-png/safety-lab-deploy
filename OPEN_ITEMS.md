@@ -788,6 +788,15 @@ this register — the ids below are this register's, and do not correspond.
   substance) vs. a per-project rulebook the engineer can read and prune. **After the goldens are
   drawn**, because it changes what they measure; **not optional**.
 
+- **F12 — Accept should take the engineer to where the rows landed (Waqas, 4 Sep: "when a user
+  accepts AI inputs it should automatically take them to the page where the inputs landed").**
+  Today Accept applies the rows and leaves the screen where it was. Wanted: after the review
+  panel's Accept / Accept all, switch to the worksheet that received the rows (functions →
+  Functions, FCIM → FCIM, FHA → the FHA table, trees → the tree, HF lane → that lane), scrolled to
+  the first new row. Where one draft lands in more than one place, go to the first kind accepted
+  and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
+  screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
+
 - **F10 — SHIPPED 3 Sep 2026 (ai_assistant 76.39), listed so the campaign machinery's state is on the register too.** A refusal is a result:
   `_captureBail` + `_captureGuard` on the 17 public lane entry points, plus a guard on
   `_fmeaSystemPicker` (the sixth picker — the 76.38 sweep matched `_open*Picker` and missed it).
