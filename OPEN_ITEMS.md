@@ -797,7 +797,24 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
-- **F16 — RUN 2 FINDINGS (4 Sep 2026, evening; the full thread's first pass).** (a) The
+- **F17 — NO HAND EDITOR FOR THE ARBITRATION SCHEME (found 4 Sep 2026 while fixing F16c).** `rule.arbitration`
+  {scheme voting|none, k, of} is read by mac_lanes and reported by lane_trees, and the MAC drafter
+  can now propose it from the document — but no panel lets the engineer DECLARE or SIGN it by
+  hand (helpers only re-points members). Until the MAC page has an arbitration control (scheme,
+  k, members, citation, signature), an AI-proposed scheme cannot be confirmed in the product and
+  a document that is silent leaves the malfunction lane underivable with no way to fix it on
+  screen. One panel change; the store shape already exists.
+
+- **F16 — FIXED a–d 4 Sep 2026 (evening batch: interdep_ai 1.2, misc 66.55, lane_trees 1.3,
+  ai_assistant 76.54, ai_skills 2.11 / mac.draft v2, loader 8.46); e and f remain.** (a) the
+  sweep's reply was cut off at maxTokens 1200 with 27 candidates per condition and the parse
+  failed silently — budget now sized to the candidate count, cut-off replies salvaged and
+  REPORTED as failures; (b) `_coffeTokSys` resolves configuration items to their owner system
+  and `idpFindings` treats a contributor as covered when a member belongs to its system; (c)
+  `add_mac` accepts `arbitration` from the document only, never guessed, malformed dropped and
+  reported; (d) a batch whose replies were unreadable, or valid with no actions and no words,
+  now says so — the harness records the reason. Original entry follows.
+  RUN 2 FINDINGS (4 Sep 2026, evening; the full thread's first pass).** (a) The
   interdependence sweep made 25 calls and landed 0 proposals — undiagnosed; inspect the raw reply
   and the colId echo in `interdep_ai.js` before run 3. (b) `lane_trees` `idpFindings`/coverage do
   not treat a configuration item that is a MAC member as covering its owner system's functions —

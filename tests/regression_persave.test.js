@@ -100,7 +100,8 @@ ok('binding a folder writes the first .sl immediately', /if \(handle\) \{ try \{
 // 66.34 -> 66.35 (3 Sep 2026): HF_Tasks CSV carries Reaction / Execution / Response.
 // 66.35 -> 66.36 (3 Sep 2026): FHA CSV carries Aircraft / Crew / Pax Level (three effect axes).
 // misc 66.53 -> 66.54 (4 Sep 2026, F15): CoFFE resolves function-member MAC tokens to the owner system.
-['data_ops_modules.js?v=66.36', 'bindings_modules.js?v=1.35', 'misc_fn_modules.js?v=66.54'].forEach(pin => {
+// misc 66.54 -> 66.55 (4 Sep 2026, F16b): … and configuration-item members (itemId / internalId → owningSystemId).
+['data_ops_modules.js?v=66.36', 'bindings_modules.js?v=1.35', 'misc_fn_modules.js?v=66.55'].forEach(pin => {
     ok('index pins ' + pin, idx.indexOf(pin) >= 0);
 });
 

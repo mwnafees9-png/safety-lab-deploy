@@ -1882,8 +1882,9 @@
         'SHAPE MATTERS: when the document\'s minimum is positional or symmetric — per side, per axis, per channel group — write ONE CLAUSE PER GROUP, never one flat count across all copies. "At least 2 of 4 engines, symmetric" is at least 1 of [left engines] AND at least 1 of [right engines]; a flat "2 of 4" would wrongly accept both engines lost on one side. Where the document states a capacity rather than a count (a percentage of flow, a fraction of authority), write the counting form that is at least as conservative and say in rationale that the engineer should set the weighted floor.',
         'WHERE THE NUMBERS COME FROM: the document\'s redundancy, dispatch and performance statements — channel counts, engine-out performance, single-thread paths. Cite the section in sddRef and quote its substance in rationale. Where the document is silent on a minimum, state the conservative reading (every copy required, min = all) and say in rationale that the SDD does not state a lower minimum — that is a judgement the engineer confirms, and the rule is filed as an assumption.',
         'NEVER: name a member that does not serve the aircraft function; make a clause weaker than the document supports (a lower minimum, or a flat count where the document says per side); duplicate a rule the project already holds for the same sub-function and phase (the project state lists existing MAC rules — update, do not repeat); name a phase that is not in the project\'s mission profile.',
-        'EXPECTED OUTPUTS: add_mac actions — one per aircraft sub-function (per phase where needed), each with its clauses, sddRef and rationale.',
-        'FORMAT: add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale}.',
+        'ARBITRATION (4 Sep 2026, F16c): the malfunction lane is derived from how the redundant copies are ARBITRATED, not from the floor. Where the document states it, add arbitration {scheme, k, of, ref}: scheme "voting" when k erroneous copies defeat the arbitration (2-of-3 voting: k = 2; a monitored pair where one erroneous unit is out-voted or passivated: k = 2 of 2), or scheme "none" when a single erroneous output propagates (no cross-comparison, no monitor). k must be between 1 and the number of copies in of; of defaults to every member of the rule. Cite the section in ref. Where the document does not say how the copies are arbitrated, OMIT arbitration entirely — never guess a scheme or a k; the engineer declares it.',
+        'EXPECTED OUTPUTS: add_mac actions — one per aircraft sub-function (per phase where needed), each with its clauses, sddRef and rationale, and arbitration where the document states it.',
+        'FORMAT: add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale, arbitration?:{scheme:"voting"|"none", k, of?, ref}}.',
     ].join('\n');
     // 4 Sep 2026 (F15 step 4) — the CoFFE residue proposer. Inline copy of the registry body.
     const _SPEC_COFFE = [
@@ -10557,12 +10558,31 @@
         if (!Array.isArray(projectConfig.macModels)) projectConfig.macModels = [];
         const store = projectConfig.macModels;
         const by = 'AI (' + (model || 'model') + ') — proposed, not yet substantiated';
+        // 4 Sep 2026 (F16c) — the malfunction lane needs the ARBITRATION scheme (how the redundant
+        // copies are arbitrated: 'voting' with k erroneous copies defeating it, or 'none' — a single
+        // erroneous output propagates). Run 2's 33 pages all said "No arbitration scheme declared".
+        // The drafter may propose one ONLY from the document, with its citation; silence stays a
+        // finding (mac_lanes _NO_DEFAULTS — the tool never guesses a scheme or a k). Anything
+        // malformed is dropped and reported, never coerced.
+        let arbitration; let arbNote = '';
+        if (a && a.arbitration && typeof a.arbitration === 'object') {
+            const ar = a.arbitration; const scheme = String(ar.scheme || '').trim().toLowerCase();
+            const allMembers = []; clauses.forEach(function (cl) { cl.of.forEach(function (m) { if (allMembers.indexOf(m) < 0) allMembers.push(m); }); });
+            const ofRaw = Array.isArray(ar.of) && ar.of.length ? ar.of : allMembers;
+            const ofRes = []; ofRaw.forEach(function (m) { const key = String(m == null ? '' : m).trim(); const hit = fnIds[key] || fnIds[key.toLowerCase()] || fnIds['name:' + key.toLowerCase()]; const id = hit ? String(hit.id) : null; if (id && allMembers.indexOf(id) >= 0 && ofRes.indexOf(id) < 0) ofRes.push(id); });
+            const k = parseInt(ar.k, 10);
+            if (scheme === 'none' && ofRes.length) arbitration = { scheme: 'none', k: 1, of: ofRes };
+            else if (scheme === 'voting' && ofRes.length && k >= 1 && k <= ofRes.length) arbitration = { scheme: 'voting', k: k, of: ofRes };
+            else arbNote = ' · arbitration not recorded (' + (scheme ? 'scheme "' + scheme + '"' + (scheme === 'voting' ? ', k=' + ar.k + ' over ' + ofRes.length : '') : 'no scheme') + ' — supported: voting with 1 ≤ k ≤ members, or none)';
+            if (arbitration) { arbitration.ref = String(ar.ref || ar.sddRef || (a && a.sddRef) || '').trim().slice(0, 200); arbitration.by = by; arbitration.at = new Date().toISOString(); arbitration.aiProposed = true; }
+        }
         const rec = {
             id: 'mac-' + Date.now() + '-' + Math.floor(Math.random() * 1000), level: 0, subId: subId, phase: phase, clauses: clauses,
             substantiation: { kind: 'assumption', ref: String((a && a.sddRef) || '').trim().slice(0, 200), by: by, at: new Date().toISOString() },
             floor: null, contributions: [],
             aiGenerated: true, aiModel: model || null, aiRationale: String((a && a.rationale) || '').trim().slice(0, 600), aiUnknownMembers: unknown.length ? unknown.slice(0, 8) : undefined
         };
+        if (arbitration) rec.arbitration = arbitration;
         const prior = store.find(function (r) { return r && String(r.subId) === subId && String(r.phase || 'All phases') === phase; });
         let summary;
         if (prior) {
@@ -10576,6 +10596,8 @@
             summary = 'MAC rule added — ' + subId + ' (' + phase + '), ' + clauses.length + ' clause(s)';
         }
         if (unknown.length) summary += ' · ' + unknown.length + ' member(s) not found: ' + unknown.slice(0, 3).join(', ');
+        if (arbitration) summary += ' · arbitration: ' + arbitration.scheme + (arbitration.scheme === 'voting' ? ' k=' + arbitration.k + ' of ' + arbitration.of.length : '');
+        summary += arbNote;
         try { if (typeof renderMacPage === 'function') renderMacPage(); } catch (_) {}
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
         return { ok: true, summary: summary, id: rec.id };
@@ -10681,7 +10703,7 @@
             'ACTION CATALOG (op + fields). scope is "aircraft" or "system"; for system scope include systemId from the state.',
             'ADD:',
             '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgement because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it)}',
-            '- add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these REDUNDANT CONFIGURATION ITEMS available" (the copies of the same thing — engines, channels, computers). Members are ids from the project state: a system id, a system function id (fid) or an item id. Positional / symmetric minima are one clause per group. Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it.',
+            '- add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale, arbitration?}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these REDUNDANT CONFIGURATION ITEMS available" (the copies of the same thing — engines, channels, computers). Members are ids from the project state: a system id, a system function id (fid) or an item id. Positional / symmetric minima are one clause per group. Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it. arbitration {scheme:"voting"|"none", k, of?, ref} ONLY where the document states how the copies are arbitrated (k erroneous copies defeat voting; none = a single erroneous output propagates); omit it otherwise — never guess.',
             '- add_system {name}  — create a system (idempotent by name) from an SDD/architecture doc. Emit this BEFORE the system\'s functions/interfaces so they can reference it by name.',
             '- add_function {scope, systemId?, funcName, funcDef, subName, subDef, traceIds?}   (ONE level of decomposition; for scope "system", traceIds = the aircraft sub-function ids this system function implements)',
             '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" (empty FCs + short rationale) when the unaware case is inapplicable.',
@@ -12220,6 +12242,7 @@
         let _batchAsms = [];
         const _replies = [];
         let attempt = null, _declined = null, _hardErr = null, _slicesRun = 0;
+        let _unparsed = 0, _rawTail = '';   // F16d — unreadable replies, counted and quoted
 
         // 26 Aug 2026, same day, Waqas: "it has taken about 10 mins on the FCIM now"
         // — it was 25. Three mistakes in the first cut of this loop, all mine:
@@ -12320,6 +12343,10 @@
             const a = _r.a;
             _slicesRun++;
             attempt = a;
+            // 4 Sep 2026 (F16d) — run 2's FMEA "declined" with an EMPTY reason: both attempts
+            // came back unparseable, pp was {}, and the no-actions path had nothing to say.
+            // Keep the count and the start of the raw reply so the decline names its cause.
+            if (!a.parsed) { _unparsed++; if (!_rawTail) _rawTail = String((a.rr && a.rr.text) || '').replace(/\s+/g, ' ').trim().slice(0, 240); }
             const pp = a.parsed || {};
             if (pp.reply) _replies.push(String(pp.reply));
             if (Array.isArray(pp.actions)) Array.prototype.push.apply(actions, pp.actions);
@@ -12355,11 +12382,15 @@
 
         if (!actions.length) {
             if (_declined) { _anemNoActionsPanel(cfg, _declined.parsed, _declined.insufficient, _rerun); return; }
+            if (_unparsed && !_permanentErr && !_hardErr) {   // F16d — an unreadable reply is a stated reason, not a blank one
+                _anemNoActionsPanel(cfg, { reply: 'Nothing drafted — ' + _unparsed + ' of ' + _slices.length + ' turn(s) came back as text that was not the JSON asked for, after one retry each.' + (_rawTail ? ' The reply began: "' + _rawTail + '"' : ' The reply was empty.'), actions: [], choices: [] }, null, _rerun);
+                return;
+            }
             if (_permanentErr) { _toast('Nothing drafted — the AI backend refused every turn and a retry cannot clear it: ' + ((_permanentErr && _permanentErr.message) || _permanentErr), 'warning', 12000); return; }
             if (_hardErr) { _toast('Nothing drafted — every turn failed after ' + _TURN_TRIES + ' attempts. Last error: ' + ((_hardErr && _hardErr.message) || _hardErr), 'warning', 8000); return; }
             // Neither a reasoned abstention nor a hard error, and still nothing:
             // say so rather than opening an empty panel with no explanation.
-            _toast('Nothing drafted — ' + _slicesRun + ' of ' + _slices.length + ' turn(s) returned but produced no rows.', 'warning', 8000);
+            _anemNoActionsPanel(cfg, { reply: 'Nothing drafted — ' + _slicesRun + ' of ' + _slices.length + ' turn(s) returned valid replies with no actions and no explanation.' + (_replies.length ? '' : ' The model gave no reason.'), actions: [], choices: [] }, null, _rerun);
         } else if (_permanentErr) {
             // Half an analysis, and the reason is not flakiness — say the real thing.
             _toast('Drafted ' + actions.length + ' row(s), then the AI backend refused the rest: ' + ((_permanentErr && _permanentErr.message) || _permanentErr)

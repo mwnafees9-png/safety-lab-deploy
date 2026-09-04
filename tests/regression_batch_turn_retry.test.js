@@ -28,7 +28,7 @@ console.log('[1] the pool retries, and says what it did');
   check('backoff is exponential with jitter, not a tight loop', /500 \* Math\.pow\(3, _try - 1\) \+ Math\.floor\(Math\.random\(\) \* 400\)/.test(ai));
   check('only the final failure is recorded as the slice result', /_results\[_ci\] = \{ ok: false, e: _lastErr, tries: _TURN_TRIES \}/.test(ai));
   check('retries that succeeded are counted and reported', /_retried\+\+/.test(ai) && /needed a retry/.test(ai));
-  check('a batch that drafts NOTHING can no longer pass in silence', /Nothing drafted — .* turn\(s\) returned but produced no rows/.test(ai) && /Nothing drafted — every turn failed after/.test(ai));
+  check('a batch that drafts NOTHING can no longer pass in silence (4 Sep, F16d: the no-rows case now names its cause through the no-actions panel)', /Nothing drafted — .* turn\(s\) returned valid replies with no actions and no explanation/.test(ai) && /Nothing drafted — every turn failed after/.test(ai));
   check('one console line per batch states turns returned / retried / rows', /\[AI\] batch/.test(ai) && /turn\(s\) returned/.test(ai) && /still failed/.test(ai));
 }
 

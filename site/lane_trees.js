@@ -350,8 +350,18 @@
             var M = G('SLMacLanes');
             if (!fns || !M) return out;
             var members = M.members(rule);
+            // 4 Sep 2026 (F16b) — a member is a configuration item or a system as often as a
+            // function (FCC A / FCC B under Flight Control). A contributing system FUNCTION is
+            // covered when the member IS that function, or when the member belongs to the
+            // function's own system — the floor is stated over that system's copies. Run 2
+            // flagged idp-uncovered on all 33 pages for exactly this.
+            var tokSys = G('_coffeTokSys');
+            var coveredSys = {};
+            members.forEach(function (m) { try { var sid = tokSys ? tokSys(m) : null; if (sid && sid !== m) coveredSys[String(sid)] = true; else if (sid && systems().some(function (x) { return x.id === sid; })) coveredSys[String(sid)] = true; } catch (_) {} });
+            var owner = G('_idpFnOwner');
             (fns(fc) || []).forEach(function (funcId) {
                 if (members.indexOf(funcId) !== -1) return;
+                try { var own = owner ? owner(funcId) : null; if (own && own.system && coveredSys[String(own.system.id)]) return; } catch (_) {}
                 var served = resourcesServing(rule, fc, funcId, 'tl').length || resourcesServing(rule, fc, funcId, 'pl').length;
                 out.push({ kind: 'idp-uncovered', member: funcId,
                     msg: fnLabel(funcId) + ' contributes to ' + (fc.fcId || 'this condition') + ' per the interdependence row but no MAC clause covers it' +

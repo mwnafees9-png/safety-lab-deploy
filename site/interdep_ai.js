@@ -28,6 +28,16 @@
         try { const m = String(text).match(/\{[\s\S]*\}/); if (m) return JSON.parse(m[0]); } catch (_) {}
         return null;
     }
+    // 4 Sep 2026 (F16a) — run 2's sweep made 25 calls and landed NOTHING: with 27 candidate
+    // functions per condition the reply outgrew maxTokens 1200 and was cut off mid-JSON, so the
+    // parse failed silently. A cut-off reply is now SALVAGED (every complete cell entry before the
+    // cut is kept) and REPORTED as a failure, never swallowed.
+    function _salvageCells(text) {
+        const out = []; const re = /\{\s*"colId"\s*:\s*"([^"]+)"\s*,\s*"contributes"\s*:\s*(true|false)\s*,\s*"why"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g;
+        let m; while ((m = re.exec(String(text || '')))) out.push({ colId: m[1], contributes: m[2] === 'true', why: m[3].replace(/\\"/g, '"') });
+        return out;
+    }
+    function _sweepBudget(nCandidates) { return Math.min(8000, 600 + 110 * Math.max(1, nCandidates)); }   // tokens: ~60 per cell + assumptions
     async function _lane() {
         try { if (typeof window.slLoadAI === 'function') await window.slLoadAI(); } catch (_) {}
         const P = window.SafetyLabAI;
@@ -80,7 +90,7 @@
         _toast('AI sweep: proposing verdicts for ' + batch.reduce((a, w) => a + w.empty.length, 0) + ' empty cell(s) across ' + batch.length + ' FC(s)…' + (skipped ? ' (' + skipped + ' more FC(s) next run)' : ''), 'info', 4000);
 
         const store = _idpStore();
-        let proposedN = 0, calls = 0, failures = 0;
+        let proposedN = 0, calls = 0, failures = 0; const reasons = [];
         for (const wk of batch) {
             const fc = wk.fc;
             const ctx = {
@@ -95,12 +105,17 @@
                 calls++;
                 r = await P.complete({
                     feature: 'interdep.sweep',
-                    system: 'You are screening an aircraft-level Interdependence table (ARP 4761A B.3): for ONE failure condition, judge which candidate SYSTEM FUNCTIONS could CONTRIBUTE to it — by implementing the aircraft function, by malfunction, or by a credible coupling — using ONLY the provided context. These are PROPOSALS an engineer will sign or dismiss; be conservative: when the context genuinely supports neither verdict, mark contributes=true with a why that says the coupling is uncertain (a false "no" hides a hazard; a false "yes" costs a review click). Respond ONLY with JSON {"cells":[{"colId":"…","contributes":true|false,"why":"<one line, grounded in the provided functions/FCs>"}],"assumptions":[…]} — one entry per candidate function (echo its colId exactly), no extras. ' + _ASM_CLAUSE,
+                    system: 'You are screening an aircraft-level Interdependence table (ARP 4761A B.3): for ONE failure condition, judge which candidate SYSTEM FUNCTIONS could CONTRIBUTE to it — by implementing the aircraft function, by malfunction, or by a credible coupling — using ONLY the provided context. These are PROPOSALS an engineer will sign or dismiss; be conservative: when the context genuinely supports neither verdict, mark contributes=true with a why that says the coupling is uncertain (a false "no" hides a hazard; a false "yes" costs a review click). Respond ONLY with JSON {"cells":[{"colId":"…","contributes":true|false,"why":"<at most 20 words, grounded in the provided functions/FCs>"}],"assumptions":[…]} — one entry per candidate function (echo its colId exactly), no extras. Keep every why short: the reply must fit. ' + _ASM_CLAUSE,
                     messages: [{ role: 'user', content: JSON.stringify(ctx, null, 1) }],
-                    maxTokens: 1200, temperature: 0,
+                    maxTokens: _sweepBudget(wk.empty.length), temperature: 0,
                 });
-            } catch (e) { failures++; continue; }
-            const j = _parseJson(r && r.text) || {};
+            } catch (e) { failures++; reasons.push((fc.fcId || fc.internalId) + ': ' + ((e && e.message) || 'call failed')); continue; }
+            let j = _parseJson(r && r.text);
+            if (!j) {
+                const got = _salvageCells(r && r.text);
+                failures++; reasons.push((fc.fcId || fc.internalId) + ': reply was not valid JSON' + (got.length ? ' (cut off — ' + got.length + ' complete cell(s) salvaged)' : ''));
+                j = { cells: got, assumptions: [] };
+            }
             _logAssumptions(j.assumptions);
             try { if (window.AiFidelity && window.AiFidelity.recordProvenance) window.AiFidelity.recordProvenance({ kind: 'draft', feature: 'interdep.sweep', section: fc.fcId || String(fc.internalId), model: (r && r.model) || '' }); } catch (_) {}
             (Array.isArray(j.cells) ? j.cells : []).forEach(c => {
@@ -114,10 +129,12 @@
             });
         }
         try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
-        _toast('Sweep complete — ' + proposedN + ' proposal(s) landed (' + calls + ' call(s)' + (failures ? ', ' + failures + ' failed' : '') + ')' + (skipped ? ' · ' + skipped + ' FC(s) remain — run again' : '') + '. Amber dashed cells await your signature.', failures ? 'warning' : 'success', 6000);
+        _toast('Sweep complete — ' + proposedN + ' proposal(s) landed (' + calls + ' call(s)' + (failures ? ', ' + failures + ' failed — ' + reasons[0] : '') + ')' + (skipped ? ' · ' + skipped + ' FC(s) remain — run again' : '') + '. Amber dashed cells await your signature.', failures ? 'warning' : 'success', 8000);
+        try { window.__idpSweepLast = { proposed: proposedN, calls: calls, failures: failures, reasons: reasons.slice(0, 25), skipped: skipped, at: new Date().toISOString() }; } catch (_) {}
         try { if (typeof renderInterdepPage === 'function') renderInterdepPage(); } catch (_) {}
     }
 
     // ------------------------------------------------------------- exports
     window.idpAiSweep = idpAiSweep;
+    window.__idpSweepInternals = { _parseJson: _parseJson, _salvageCells: _salvageCells, _sweepBudget: _sweepBudget };
 })();

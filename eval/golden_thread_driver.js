@@ -60,13 +60,14 @@
     // left unreviewed or it stops making progress.
     async function interdepSweepAndAccept() {
         if (typeof idpAiSweep !== 'function' || typeof idpStats !== 'function' || typeof _idpStore !== 'function') throw new Error('interdependence sweep not available on this page');
-        var before = idpStats(), loops = 0, last = -1, calls = 0;
+        var before = idpStats(), loops = 0, last = -1, calls = 0, sweepLog = [];
         while (loops < 12) {
             var st = idpStats();
             var empty = st.unreviewed - st.proposed;
             if (empty <= 0 || empty === last) break;
             last = empty; loops++; calls++;
             await idpAiSweep();
+            try { if (window.__idpSweepLast) sweepLog.push(window.__idpSweepLast); } catch (_) {}   // F16a — a cut-off reply is a reported failure, kept for the record
         }
         var store = _idpStore(), accepted = 0, cleared = 0, model = '';
         Object.keys(store.cells).forEach(function (k) {
@@ -79,7 +80,7 @@
         try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
         try { if (typeof renderInterdepPage === 'function') renderInterdepPage(); } catch (_) {}
         var after = idpStats();
-        return { sweeps: calls, before: before, after: after, accepted: accepted, cleared: cleared, model: model };
+        return { sweeps: calls, before: before, after: after, accepted: accepted, cleared: cleared, model: model, sweepLog: sweepLog };
     }
 
     // F15 step 5 — compile the multifunction / multisystem trees from the lanes.

@@ -1991,6 +1991,10 @@ function _coffeTokSys(tok) {
     if (!id) return id;
     try { if ((systemsData || []).some(s => s && String(s.id) === id)) return id; } catch (_) {}
     try { const own = (typeof _idpFnOwner === 'function') ? _idpFnOwner(id) : null; if (own && own.system) return String(own.system.id); } catch (_) {}
+    // 4 Sep 2026 (F16b) — a MAC member may be a CONFIGURATION ITEM (FCC A, FCC B); its owner
+    // system is the item's owningSystemId. Run 2's rules were mostly items, and every one read
+    // as "no system" here.
+    try { const it = (typeof itemsData !== 'undefined' && itemsData || []).find(x => x && (String(x.itemId) === id || String(x.internalId) === id)); if (it && it.owningSystemId) return String(it.owningSystemId); } catch (_) {}
     return id;
 }
 function coffeComputed(fc, kase) {

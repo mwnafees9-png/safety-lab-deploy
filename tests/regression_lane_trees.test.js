@@ -158,6 +158,27 @@ check('one physical event, one id — macsys:FN-WBS carries the SAME displayId o
 // ---- interdependence coverage finding ---------------------------------------
 check('uncovered contributor (Propulsion, asserted in the idp row) is a NAMED finding',
   res.findings.some(f => f.kind === 'idp-uncovered' && /Propulsion|FN-PROP/.test(f.msg)), JSON.stringify(res.findings.map(f => f.kind)));
+// 4 Sep 2026 (F16b) — run 2's rules named CONFIGURATION ITEMS (FCC A / FCC B) and every page
+// said idp-uncovered: a contributing system function is covered when a member belongs to its
+// own system. The Propulsion contributor stays uncovered (no member of Propulsion).
+(function () {
+  const saveItems = globalThis.itemsData;
+  globalThis.itemsData = [
+    { internalId: 9101, itemId: 'ITM-001', name: 'Brake control unit A', owningSystemId: 'sys-wbs' },
+    { internalId: 9102, itemId: 'ITM-002', name: 'Brake control unit B', owningSystemId: 'sys-wbs' },
+  ];
+  const ruleItems = { id: 'r-items', subId: 'SF-06', phase: 'Landing', clauses: [{ min: 1, of: ['ITM-001', '9102'] }], arbitration: null };
+  const fc = globalThis.acFhaData[0];
+  const cells = globalThis.projectConfig.interdep.cells;
+  cells['601§fn:FN-WBS'] = { state: 'asserted', by: 'W' };          // Wheel Brake's function contributes
+  const f = LT.idpFindings(ruleItems, fc);
+  check('a contributing function whose SYSTEM is in the MAC through its items is NOT flagged; the Propulsion contributor still is',
+    !f.some(x => x.member === 'FN-WBS') && f.some(x => x.member === 'FN-PROP'), JSON.stringify(f.map(x => x.member)));
+  check('_coffeTokSys resolves an item by itemId and by internalId to its owner system',
+    _coffeTokSys('ITM-001') === 'sys-wbs' && _coffeTokSys('9102') === 'sys-wbs' && _coffeTokSys('FN-GSS') === 'sys-gss' && _coffeTokSys('sys-prop') === 'sys-prop');
+  delete cells['601§fn:FN-WBS'];
+  globalThis.itemsData = saveItems;
+})();
 check('an aircraft sub-function subId is a real declaration — NO spurious not-per-function finding (live-found on K350)',
   !res.findings.some(f => f.kind === 'not-per-function'), JSON.stringify(res.findings.map(f => f.kind)));
 check('gate names read the FUNCTION, not a raw SF- id',
