@@ -820,6 +820,34 @@ this register — the ids below are this register's, and do not correspond.
   is Standing NSE / Taxi Maj-Haz / airborne forward-looking CAT / Landing immediate CAT — groups
   come from each condition's effects).
 
+- **F22 — "FELT YET" AS A PROPERTY OF THE FUNCTION (consistency lever A; Waqas, 5 Sep 2026: "yes"
+  to A then B; not started).** After the three identical-input draws on the lever build (e1/e2/e3,
+  5 Sep) the judged number — class per condition per phase (eval_core 1.9) — sat at 0.72 / 0.66 /
+  0.64 against the 0.90 bar; function worst case 0.91–0.96 passes. About a third of the disagreeing
+  cells are the drafter's "is the effect felt yet / can the flight escape" answer flipping between
+  draws (two-class jumps, ground phases and malfunctions worst). Build: each aircraft function
+  carries the phases it is demanded in (drafted once from the SDD, reviewed by Waqas, then held
+  fixed like the functions and FCIM); not demanded in a phase → not realised there, by rule; the
+  drafter answers only "does this failure defeat the escape". Prompt + accept + tests + one review
+  pass over the 22 functions. Expected to move the per-phase number into the 80s on its own.
+
+- **F23 — FEED THE DERIVATIONS (consistency lever B; after F22).** MAC rules for the 13 of 22
+  functions that have none (today 9 rules → the aircraft axis derives on 10 partial losses only);
+  the 6 crew tasks given phases, response times and the conditions they answer (today none → crew
+  axis never derives; every row lands as "assumed pending HF workload"). Data entry, AI-drafted and
+  reviewed; the machinery (`fha_derive.js`) is built. Targets the one-step swaps (Major↔Hazardous,
+  Minor↔No Safety Effect). Cannot touch a malfunction's aircraft axis — the MAC says nothing about
+  erroneous behaviour.
+
+- **F24 — THREE FRESH DRAWS AFTER F22 + F23, THEN READ THE RESIDUAL.** Same protocol as e1/e2/e3
+  (fresh reload, FHA cleared, cache bypassed, run 3's 22 functions / 43 FCIM / 107 conditions;
+  ~9 min and ~$5 each), scored with eval_core 1.9 (`perPhaseClassAgreement` ≥ 0.90; row-level
+  severity and phase split informational). Whatever is left is judgement on malfunctions and the
+  occupant axis — Waqas: the drafter says "no passengers" consistently on Aeolus, so option C
+  (occupant axis by rule) is OFF the table. If malfunctions carry the residual, that is the next
+  derivation to design, not a prompt to tune. Also file e1/e2/e3 exports under eval/runs/goldens/
+  (they sit in the draws tab's IndexedDB `slab.draw5.*` and in Waqas's Downloads).
+
 - **F19 — THE SFHA (classic path) HAS NO PHASE-COVERAGE RE-ASK (4 Sep 2026).** The AFHA's
   unified path now checks that a condition's rows together cover every phase of the mission
   profile and re-asks once for the gaps; the classic `_runPopulateFha` path the SFHA uses got the
@@ -1069,3 +1097,49 @@ standard needs a per-tenant store the worker reads at query time:
   - isolation: one tenant's standard must never leak into another tenant's answers
 DECISION NEEDED FROM WAQAS: storage model (KV vs D1) and whether to build now. This is standing
 config + backend, so not started on my own initiative.
+
+## S · Security and data residency (opened 5 Sep 2026, from the code audit — see `SECURITY_AUDIT_2026-09-05.md`)
+
+Waqas's target: data security "at Microsoft Office levels … or even Jama Connect level, so they have
+no arguments" — engineering only (independent audits and a government tier ruled OUT, 5 Sep). The
+audit found the product does less than the Data Security paper (SL-WP-0003 Rev 2.4) and the trust
+page say. Order: S1–S6 (defects), then S7–S12, then S13–S18 (Enterprise builds), then S19–S21
+(residency), then S22 (paper + pages). Each build is stated back to Waqas before it starts.
+
+### Critical defects
+
+- **S1 — Cross-tenant membership hole (live).** `ws_members_self_join` = `WITH CHECK (auth.uid() = user_id)` only; no trigger. Anyone signed in who learns a workspace id can add themselves as owner. Fix: self-join only into a workspace the caller owns (creation); joins otherwise via `accept_invitation`; add `WITH CHECK` to `ws_members_admin_update` (no promotion to owner). Migration + test against live `pg_policies`.
+- **S2 — MFA is off and browser-only.** `index.html:4007 SL_MFA_REQUIRED=false`; enforcement fails open; desktop bypass; no server-side AAL2 check. Fix: switch on; require `aal2` in RLS helpers (or a policy on the content tables) so an AAL1 session cannot read project data; desktop path decided with Waqas.
+- **S3 — ITAR fences that do not hold.** (a) `crdt_sync.js:59` / `presence.js:38` read `window.projectConfig` (never assigned) — expose it or read the bare identifier; (b) manual Save-to-cloud and Create Revision upload ITAR projects — fence both; (c) `notify_agents.js` has no ITAR gate — add; (d) controlled-document guard only on the ANEM path — move into `Provider.complete` so every lane obeys it; (e) "ITAR cloud" backend selection does not set the ITAR header — make the header follow the effective policy, not the project toggle alone. Tests for each.
+- **S4 — Security headers missing on the SPA fallback.** `/app/index.html` and any unknown `/app/<path>` serve the app with no CSP/HSTS/XFO (verified live). Fix in `worker.js`: stamp headers on every HTML response incl. the fallback; add `fonts.googleapis.com`/`gstatic` to the CSP or drop the Google Fonts tags.
+- **S5 — Sealed baselines are hollow in the web build.** `lock_seal.js:91` reads stores via eval (blocked by CSP) → FHA/requirements/CCA/items/FMEA not sealed. Fix: read stores through `SLStores.snapshot()` / explicit references (same in `stale_watch.js:53`, `lane_trees.js:75,87`); test that every family in `CONTENT_FOR` hashes non-null.
+- **S6 — Trust page says customer content may train models** (`trust.html:164`) — contradicts the EULA, SL-WP-0003 §6 and the no-training regression test. Fix the page; decide the sovereign fine-tuning policy in writing ("never without written opt-in" proposed).
+
+### High
+
+- **S7 — No audit record is written.** `audit_log` (chain trigger, append-only) and `workspace_audit` have no writer; `audit_log` has 0 rows. Build: the gateway writes one row per AI call (user, feature header, model, tokens, ITAR flag, latency, outcome — never content) through a service-role RPC; the app writes workspace events (sign-in, role change, invitation, export, erasure); `verify_audit_chain()`; customer-facing export. This is also Enterprise build S13.
+- **S8 — Credentials in plaintext localStorage.** Licence bearer token, BYO Anthropic/Voyage keys, Jama username+password, live-bridge token, local-LLM key. Fix: session-scoped storage (sessionStorage / in-memory) for the licence token; keys entered per session or held server-side per workspace; Jama credentials never persisted (or wrapped with a session key). Overlaps S19.
+- **S9 — Erasure narrower than described.** `erase_project` service-role only; certificate shown once, never persisted client-side; local copies (autosave, ring, last-good, disk `.sl`, AI memory, CRDT IndexedDB) never cleared; manifest counts three things while the cascade removes many more; `ai_org_cache` survives erasure. Fix: self-service project erasure via RPC, certificate stored in `destruction_certificates` and shown on the account page, local wipe on erase and sign-out, complete manifest, cache rows stamped with workspace/project and cascaded.
+- **S10 — Notification edge functions accept any bearer ≥ 16 chars** (`notify-signin/-signup/-expiry/-review`). Fix: verify the shared secret.
+- **S11 — Proxy hygiene.** Rate limit fails open on KV error (decide: fail closed for non-founder licences); raw licence token used as the KV key (hash it); `x-safetylab-feature` never read (S7 needs it); CORS `*` (restrict to safetylabaero.com origins).
+- **S12 — Migration drift and stale artefacts.** Capture DDL for `users`, `workspaces`, `projects`, `project_documents`, `audit_log`, `license_tokens`, `approved_tenants`, `ai_org_cache`, `destruction_certificates`, `pending_comps`, the `private.erase_*` bodies and `private.audit_immutable` into the repo (`supabase db dump`); apply or retire `20260831_version_monotonic_guard.sql` and 0007; delete `site/.fuse_hidden*`, `site/MS_SSO_SETUP.md` from the served tree, and the stale `safety-lab-proxy_worker_SEC.js` copy; enable SSO (`SL_MS_SSO_ENABLED`) only once the Azure provider and the tenant hook are verified.
+
+### Enterprise builds (Microsoft / Jama parity, engineering only)
+
+- **S13 — Unified activity log** (= S7 done properly): every sign-in, role change, invitation, export, erasure and AI call, hash-chained, customer-exportable, with a workspace-admin view.
+- **S14 — One classification label per project** (Public / Internal / Controlled-ITAR / Controlled-non-US) that every channel obeys: AI routing, answer cache, Teams/email notifications, exports, sharing, collaboration. Replaces the scattered flags (project toggle, document `controlled`, per-system taint, licence flag).
+- **S15 — Retention and legal hold**: workspace retention rules on version history, a hold flag that blocks erasure, complete destruction certificate.
+- **S16 — Workspace admin controls**: force sign-out / session revocation, session lifetime, re-auth for sensitive actions, MFA/SSO policy, AI on/off, cache on/off, access-review export.
+- **S17 — AI data receipt per call**: which documents and sections left the browser, to which backend, how many bytes — on the row and in the evidence package.
+- **S18 — Customer-managed encryption keys** (last): per-workspace key from the customer's vault wrapping the project blob before it reaches the database; changes backups and search.
+
+### Data residency (Waqas, 5 Sep: "can the data live in the customer's cloud/server instead of browser memory?")
+
+- **S19 — "Thin browser" mode (Enterprise setting, ~1 week).** No persistent browser storage: project in memory while the tab is open, saves straight to the server, sign-out/close leaves nothing (no autosave, ring, caches, AI memory; licence token session-only). Closes S8 and half of S9 by construction.
+- **S20 — Customer-hosted backend (~2–3 weeks).** Database, sign-in, real-time and the AI gateway run in the customer's own Supabase org / AWS account; we host only the static app (or they do). Needs: backend URL/key as an installation setting (today hard-coded in `safety_lab.js:3088`, `labs_thread_config.js`, and the CSP connect-src); packaged migrations (depends on S12); packaged edge functions and proxy; a licence check that does not phone home; their Entra SSO; their model endpoint (Bedrock / Azure / vLLM). Deployment guide.
+- **S21 — Fully self-hosted / air-gapped (S20 + ~1–2 weeks).** App container + open-weights model on their hardware; packaged installer; what the paper already promises as the fourth tier.
+
+### Paper and pages
+
+- **S22 — SL-WP-0003 Data Security → Rev 3.0, trust.html and security.html rewritten to match, AI data policy page, sub-processor list (add Voyage AI, Microsoft/Teams, AWS GovCloud planned, Resend, Stripe).** Written AFTER the builds ("we build then we write the papers"). Must not claim: Azure as the ITAR backend (it is Bedrock GovCloud, unprovisioned — today ITAR requests are refused); MFA enforced; AI calls audited; customer-managed keys (until S18); signed certificates; pen test done; "nothing leaves the browser in local mode" (corpus search, cache, autosave, notify); "only excerpts sent" (whole documents are sent).
+
