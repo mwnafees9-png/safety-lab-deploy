@@ -11,8 +11,8 @@
 #   • the green-gated one-liner in SESSION_HANDOFF_2026-07-22.md
 #     (right idea, never made the default)
 #
-# Do NOT use the old ./deploy.sh — it copies from a Claude outputs folder and can
-# ship stale files.
+# The old ./deploy.sh was DELETED on 5 Sep 2026. It was executable, copied from a
+# Claude outputs folder and could ship stale files; this is the only deploy path.
 #
 # Usage:
 #   ./ship.sh          wall, build, runtime smoke gate, deploy — each gating the next

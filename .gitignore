@@ -22,3 +22,6 @@ backups-2026-*/
 # Browser-tool screenshot dumps (bridge scratch, not project files).
 Claude outputs/
 screenshot-*.jpg
+
+# miniflare/wrangler local cache — never commit (5 Sep 2026)
+.wrangler/

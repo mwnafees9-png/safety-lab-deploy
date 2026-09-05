@@ -1,4 +1,0 @@
--- Superseded. This note previously named the deployed function (slug notify-invite v1)
--- as the canonical source; that is stale. notify-invite is at v3 and its source is now
--- exported into git alongside this file (notify-invite/index.ts).
--- See ../README.md for the export's provenance and the version exported for each function.
