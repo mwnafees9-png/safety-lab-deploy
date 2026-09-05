@@ -1531,6 +1531,19 @@
         });
     }
 
+    // 5 Sep 2026 (lever 3) — the escapes clause the FHA prompts carry, from the mission profile.
+    function _fhaEscapesClause() {
+        try { const t = (typeof window !== 'undefined' && window.SLFhaDerive) ? window.SLFhaDerive.escapesPromptText() : ''; return t ? (' ' + t) : ''; } catch (_) { return ''; }
+    }
+    // 5 Sep 2026 (lever 2) — the levels the product derives by rule for these conditions, told
+    // to the drafter so it writes the sentences and judges only what is not derived.
+    function _fhaDerivedClause(conds, systemId) {
+        try {
+            if (typeof window === 'undefined' || !window.SLFhaDerive || !conds || !conds.length) return '';
+            const t = window.SLFhaDerive.promptFor(conds, function (c) { return _macSubIdsFor({ subId: c.subId, _systemId: systemId || '' }, !!systemId); });
+            return t ? ('\n\n' + t) : '';
+        } catch (_) { return ''; }
+    }
     function _fhaSystemPrompt(certBasis, systemName) {
         const isSys = !!(systemName && String(systemName).trim());
         return [
@@ -1554,12 +1567,13 @@
             '2c. THREE EFFECT AXES: alongside the sentences, set effAcLevel / effCrewLevel / effPaxLevel from the closed vocabularies in the THREE EFFECT AXES rule below; the class is the worst axis and the product derives it from your levels. A level you cannot ground stays EMPTY.',
             '2b. If the function definition is too thin to state an aircraft effect, you CANNOT classify it. Return severity as an EMPTY STRING and say in severityRationale what is missing. An unclassified condition the engineer then classifies is a good outcome. A guess that looks considered is the failure mode this rule exists to prevent — do not pick a middle value to avoid leaving a blank.',
             '3. Effects: one concise factual sentence each, third-person ("the aircraft…", "the crew…"). If an effect is minor or none, say so briefly.',
-            '4. phases: EVERY failure condition applies to EVERY flight phase — never pick the phases a condition is "relevant" to. A row\'s phases are the phases that SHARE that row\'s effects and class; return as MANY rows for one condition as its effects across the flight require (one, two, five — whatever the effects dictate), and all the rows for a condition together must cover every phase in this list: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. Phases where the effect is not realised AND the flight can be aborted or the condition escaped are a No Safety Effect row; phases where nothing has happened yet but the flight cannot escape the end effect carry that END effect and its class. "All phases" is allowed ONLY when the effects and class are identical in every phase. Spell phases exactly as listed — these are the checkboxes on THIS project\'s mission profile; a value outside the list cannot be ticked and is flagged to the engineer as your error. Never give the row that lists every phase the worst class of one phase. A phase belongs to EXACTLY ONE row of a condition: once Standing and Taxi sit on a No Safety Effect row, no other row of that condition may name them with a different effect or class.',
+            '4. phases: EVERY failure condition applies to EVERY flight phase — never pick the phases a condition is "relevant" to. A row\'s phases are the phases that SHARE that row\'s effects and class; return as MANY rows for one condition as its effects across the flight require (one, two, five — whatever the effects dictate), and all the rows for a condition together must cover every phase in this list: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. Phases where the effect is not realised AND the flight can be aborted or the condition escaped are a No Safety Effect row; phases where nothing has happened yet but the flight cannot escape the end effect carry that END effect and its class. "All phases" is allowed ONLY when the effects and class are identical in every phase. Spell phases exactly as listed — these are the checkboxes on THIS project\'s mission profile; a value outside the list cannot be ticked and is flagged to the engineer as your error. Never give the row that lists every phase the worst class of one phase. A phase belongs to EXACTLY ONE row of a condition: once Standing and Taxi sit on a No Safety Effect row, no other row of that condition may name them with a different effect or class.'
+                + _fhaEscapesClause(),   // 5 Sep 2026 (lever 3) — the escape per phase and the three structured answers
             '   Some of those are CONTINGENCY phases (rejected take-off, go-around, balked landing and the like). Name one when the condition matters specifically at that demand — losing a function during a go-around is a different failure condition, and usually a more severe one, than losing it in the cruise. A contingency phase does not shrink the exposure window.',
             '5. Be complete but do not pad — only credible conditions.',
             '',
             'Return STRICT JSON only — no prose, no markdown fences:',
-            '{ "rows": [ { "subId": "<echo the given subId>", "srcCondId": "<the FCIM condition id when one was given, else omit>", "fcDesc": "...", "phases": ["..."], "effAc": "...", "effCrew": "...", "effPax": "...", "effAcLevel": "<none | slight | significant | large | hull loss, or \"\">", "effCrewLevel": "<none | slight | significant | large | fatalities or incapacitation, or \"\">", "effPaxLevel": "<none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities, or \"\">", "severity": "<one of the classes above, or \"\" only when there is genuinely nothing to reason from>", "sevBasis": "<the Table A6 anchor id for the governing axis - required whenever severity is set, judged or grounded>", "severityRationale": "...", "judgementCall": <true ONLY where you set a level or the class by judgement because the context did not settle it; otherwise false>, "judgementNote": "<when judgementCall is true: one or two sentences saying exactly what you assumed and what evidence would confirm or overturn it; otherwise \"\">" } ] }'
+            '{ "rows": [ { "subId": "<echo the given subId>", "srcCondId": "<the FCIM condition id when one was given, else omit>", "fcDesc": "...", "phases": ["..."], "effAc": "...", "effCrew": "...", "effPax": "...", "effAcLevel": "<none | slight | significant | large | hull loss, or \"\">", "effCrewLevel": "<none | slight | significant | large | fatalities or incapacitation, or \"\">", "effPaxLevel": "<none or slight inconvenience | discomfort | minor injuries | severe injuries or few fatalities | multiple fatalities, or \"\">", "severity": "<one of the classes above, or \"\" only when there is genuinely nothing to reason from>", "sevBasis": "<the Table A6 anchor id for the governing axis - required whenever severity is set, judged or grounded>", "severityRationale": "...", "judgementCall": <true ONLY where you set a level or the class by judgement because the context did not settle it; otherwise false>, "judgementNote": "<when judgementCall is true: one or two sentences saying exactly what you assumed and what evidence would confirm or overturn it; otherwise \"\">", "realized": <true when the effect is felt in the row\'s phases, false when nothing has happened yet>, "escape": "<the escape from ESCAPES BY PHASE that applies to the row\'s phases, or \"none\">", "escapeDefeated": <true when THIS failure removes that escape> } ] }'
         ].join('\n');
     }
 
@@ -2398,7 +2412,8 @@
                     _anemBatch(_FEATURE_DIRECTIVE.fha, {
                         title: '✨ AI-drafted FHA · review', analysis: 'fha', verifyKind: 'fha',
                         specSecs: _specSecsForSubIds(picked.map(function (e) { return e.subId; })),   // per-system doc narrowing
-                        systemExtra: '\n\nSOURCE-CONDITION TRACE (required): every add_fha action MUST carry "srcCondId": the id of the failure condition it classifies, echoed VERBATIM from the THIS TURN list (e.g. "SF-001-TL").\n\nROWS PER CONDITION (4 Sep 2026 ruling): every condition applies to every flight phase. Return as MANY add_fha rows for one condition as its effects across the flight require — phases that share the same effects and class sit on ONE row; where the effects or the class differ, that is ANOTHER row, and there is no limit on how many. All the rows for a condition together must cover every phase of this project\'s mission profile: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. A phase where the effect is not realised and the flight can be aborted or the condition escaped is a No Safety Effect row; a phase where nothing has happened yet but the end effect cannot be escaped carries that end effect. "All phases" only when the effects and class are identical everywhere — never the worst class of one phase on a row that lists every phase. A phase belongs to EXACTLY ONE row of a condition — one effect, one class — never to two rows with different classes.',
+                        systemExtra: '\n\nSOURCE-CONDITION TRACE (required): every add_fha action MUST carry "srcCondId": the id of the failure condition it classifies, echoed VERBATIM from the THIS TURN list (e.g. "SF-001-TL").\n\nROWS PER CONDITION (4 Sep 2026 ruling): every condition applies to every flight phase. Return as MANY add_fha rows for one condition as its effects across the flight require — phases that share the same effects and class sit on ONE row; where the effects or the class differ, that is ANOTHER row, and there is no limit on how many. All the rows for a condition together must cover every phase of this project\'s mission profile: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. A phase where the effect is not realised and the flight can be aborted or the condition escaped is a No Safety Effect row; a phase where nothing has happened yet but the end effect cannot be escaped carries that end effect. "All phases" only when the effects and class are identical everywhere — never the worst class of one phase on a row that lists every phase. A phase belongs to EXACTLY ONE row of a condition — one effect, one class — never to two rows with different classes.'
+                            + _fhaEscapesClause(),   // 5 Sep 2026 (lever 3)
                         chunk: {
                             units: picked, size: 5, noun: 'failure condition',
                             keyOf:     function (e) { return e.id; },
@@ -2414,7 +2429,9 @@
                             // together cover the whole mission profile. Run 3 (fha.draft v7) returned one
                             // row per condition for all 107, 58 of them "All phases": the coverage check
                             // counted every one as complete. This hook names the phases still unassessed.
-                            gapsOf: function (acts) { return _fhaPhaseGaps(picked, acts, function (a) { return (a && a.op === 'add_fha') ? (a.srcCondId || _descMap[String(a.fcDesc || '').replace(/\s+/g, ' ').trim().toLowerCase()] || null) : null; }); }
+                            gapsOf: function (acts) { return _fhaPhaseGaps(picked, acts, function (a) { return (a && a.op === 'add_fha') ? (a.srcCondId || _descMap[String(a.fcDesc || '').replace(/\s+/g, ' ').trim().toLowerCase()] || null) : null; }); },
+                            // 5 Sep 2026 (lever 2) — per turn, the levels derived by rule for the conditions in the slice.
+                            extraOf: function (slice) { return _fhaDerivedClause(slice, ''); }
                         }
                     });
                 };
@@ -2507,7 +2524,8 @@
             }).join('\n')
             + (_condsFor.length ? ('\n\nFAILURE CONDITIONS TO CLASSIFY (from the FCIM — classify EXACTLY these; as many rows per condition as its effects across the flight phases require, the rows for one condition together covering every phase of the mission profile; "fcDesc" echoed WORD FOR WORD and "srcCondId" set to the id; do not invent or reword conditions):\n'
                 + _condsFor.map(function (e) { return '- srcCondId=' + e.id + ' | subId=' + e.subId + ' | fcDesc=' + e.desc; }).join('\n')) : '')
-            + (scope.systemId ? ('\n' + _macRulesForSystemPrompt(scope.systemId)) : '');   // 4 Sep 2026 — the SFHA parses the MAC detail out; the AFHA never sees it
+            + (scope.systemId ? ('\n' + _macRulesForSystemPrompt(scope.systemId)) : '')   // 4 Sep 2026 — the SFHA parses the MAC detail out; the AFHA never sees it
+            + _fhaDerivedClause(_condsFor, scope.systemId || '');   // 5 Sep 2026 (lever 2)
             let r;
             try {
                 r = await Provider.complete({
@@ -2565,6 +2583,9 @@
                     // to accept, where it becomes a loud badge and a registered assumption.
                     judgementCall: x.judgementCall === true || String(x.judgementCall).toLowerCase() === 'true',
                     judgementNote: String(x.judgementNote || '').trim().slice(0, 600),
+                    // 5 Sep 2026 (lever 3) — the three escape answers ride to accept, where the rule fires.
+                    realized: (x.realized === true || x.realized === false) ? x.realized : (String(x.realized).toLowerCase() === 'true' ? true : (String(x.realized).toLowerCase() === 'false' ? false : undefined)),
+                    escape: String(x.escape || '').trim(), escapeDefeated: x.escapeDefeated === true || String(x.escapeDefeated).toLowerCase() === 'true',
                     // A10 — which fields the model declined rather than guessed at.
                     _abstained: _abstainedFields(x, ['effAc', 'effCrew', 'effPax', 'effAcLevel', 'effCrewLevel', 'effPaxLevel', 'severity', 'severityRationale']),
                     _model: r.model || MODELS.reason,
@@ -3169,7 +3190,21 @@
             // step carries the other two there, so a drafted row that credits a
             // survivable aircraft or a working pilot beside dead occupants is completed
             // rather than stored as-is. The determination is recorded in the comments.
-            const _rawLevels = { effAcLevel: _axisLevel('ac', s.effAcLevel), effCrewLevel: _axisLevel('crew', s.effCrewLevel), effPaxLevel: _axisLevel('pax', s.effPaxLevel) };
+            const _rawLevels0 = { effAcLevel: _axisLevel('ac', s.effAcLevel), effCrewLevel: _axisLevel('crew', s.effCrewLevel), effPaxLevel: _axisLevel('pax', s.effPaxLevel) };
+            // 5 Sep 2026 (levers 2 + 3) — LEVELS BY RULE BEFORE JUDGEMENT. The escape rule
+            // (not realised + escapable + not defeated → No Safety Effect), the MAC rule for the
+            // aircraft axis and the Task Analysis for the crew axis run here, on the drafted
+            // levels, before the joint top step. What they decided is written into the comments;
+            // what they could not decide (no MAC rule, no timed crew task) lands as an assumption.
+            const _drv = (function () {
+                try {
+                    if (typeof window === 'undefined' || !window.SLFhaDerive) return null;
+                    const _cond = _srcHit ? { id: String(_srcHit.id), desc: String(_srcHit.desc || s.fcDesc || ''), subId: String(_srcHit.subId || s.subId || ''), combined: !!_srcHit.combined } : { id: '', desc: String(s.fcDesc || ''), subId: String(s.subId || '') };
+                    return window.SLFhaDerive.apply(s, _cond, _macSubIdsFor(Object.assign({}, s, { subId: _cond.subId || s.subId }), sysScoped), _rawLevels0);
+                } catch (_) { return null; }
+            })();
+            const _rawLevels = (_drv && _drv.levels) ? _drv.levels : _rawLevels0;
+            const _drvNote = (_drv && _drv.notes && _drv.notes.length) ? (' ' + _drv.notes.join(' ')) : '';
             const _term = (function () { try { return SLSeverityAxes.applyTerminal(_rawLevels); } catch (_) { return { levels: _rawLevels, changed: [] }; } })();
             const _levels = _term.levels || _rawLevels;
             const _derived = _axisDerive(_levels);
@@ -3217,8 +3252,14 @@
                 // row's assumptions column exactly like a human-declared premise.
                 judgementCall: !!s.judgementCall,
                 judgementNote: String(s.judgementNote || '').trim().slice(0, 600),
+                // 5 Sep 2026 (levers 2 + 3) — the escape answers and which levels were set by rule.
+                realized: (s.realized === true || s.realized === false) ? s.realized : undefined,
+                escape: String(s.escape || '').trim() || undefined,
+                escapeDefeated: (s.escapeDefeated === true) ? true : undefined,
+                derived: (_drv && _drv.derived && (_drv.derived.ac || _drv.derived.crew || _drv.derived.pax)) ? _drv.derived : undefined,
                 assumptionIds: _promoteDeclaredAssumptions(
                     [].concat(Array.isArray(s._assumptions) ? s._assumptions : [],
+                              (_drv && Array.isArray(_drv.assumptions)) ? _drv.assumptions : [],
                               (s.judgementCall && String(s.judgementNote || '').trim())
                                   ? [{ text: 'JUDGEMENT CALL (limited information) — ' + String(s.judgementNote).trim(), type: 'judgement', appliesTo: 'all' }]
                                   : []),
@@ -3231,8 +3272,9 @@
                         + (_derived ? (' [anchor ' + _derived.anchor + ' — ' + (_SEV_ANCHORS[_derived.anchor] || '') + ']')
                                     : ((s.sevBasis && _SEV_ANCHORS[String(s.sevBasis).trim()]) ? (' [anchor ' + String(s.sevBasis).trim() + ' — ' + _SEV_ANCHORS[String(s.sevBasis).trim()] + ']') : ''))
                         + _derivedNote
+                        + _drvNote
                         + ' — engineer to confirm.')
-                                  : ('SEVERITY NOT DETERMINED by the model — ' + (s.severityRationale || 'no basis given') + '. Engineer to classify.')),
+                                  : ('SEVERITY NOT DETERMINED by the model — ' + (s.severityRationale || 'no basis given') + '.' + _drvNote + ' Engineer to classify.')),
                 // provenance — seeds the audit trail (#43); the engine ignores unknown keys.
                 aiGenerated: true, aiFeature: sysScoped ? 'sfha.populate' : 'fha.populate', aiModel: s._model || null,
                 aiSkill: _skillStampFor(sysScoped ? 'sfha.populate' : 'fha.populate'),   // Skills V1 — which instructions drafted this row
@@ -5310,6 +5352,21 @@
     // behind its loss-form: the definition, plus the rule in plain words where one exists
     // for the aircraft function (the system row's rule is that of the aircraft function
     // its system function serves). Malfunction rows carry no MAC note.
+    // 5 Sep 2026 — the aircraft sub-function(s) a row's MAC rule is keyed on: its own for the
+    // AFHA; for an SFHA, the ones the system function traces to. Shared by the MAC comment
+    // and by fha_derive.js.
+    function _macSubIdsFor(s, sysScoped) {
+        try {
+            let subIds = [String((s && s.subId) || '')].filter(Boolean);
+            if (sysScoped) {
+                const sy = (snapshot().systemsData || []).find(function (x) { return x && String(x.id) === String(s._systemId); });
+                const fn = sy ? (sy.functions || []).find(function (f) { return f && (String(f.funcId) === String(s.subId) || String(f.subId) === String(s.subId)); }) : null;
+                const t = fn ? (Array.isArray(fn.traceIds) ? fn.traceIds : (fn.traceId ? [fn.traceId] : [])) : [];
+                if (t.length) subIds = t.map(String);
+            }
+            return subIds;
+        } catch (_) { return [String((s && s.subId) || '')].filter(Boolean); }
+    }
     function _macCommentFor(s, sysScoped) {
         try {
             const desc = String((s && s.fcDesc) || '');
@@ -10750,7 +10807,7 @@
             '',
             'ACTION CATALOG (op + fields). scope is "aircraft" or "system"; for system scope include systemId from the state.',
             'ADD:',
-            '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgement because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it)}',
+            '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (the THREE EFFECT AXES closed vocabularies - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgement because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it), realized(true when the effect is felt in the row\'s phases; false when nothing has happened yet), escape(the escape from ESCAPES BY PHASE that applies, or "none"), escapeDefeated(true when THIS failure removes that escape)}',
             '- add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale, arbitration?}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these REDUNDANT CONFIGURATION ITEMS available" (the copies of the same thing — engines, channels, computers). Members are ids from the project state: a system id, a system function id (fid) or an item id. Positional / symmetric minima are one clause per group. Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it. arbitration {scheme:"voting"|"none", k, of?, ref} ONLY where the document states how the copies are arbitrated (k erroneous copies defeat voting; none = a single erroneous output propagates); omit it otherwise — never guess.',
             '- add_system {name}  — create a system (idempotent by name) from an SDD/architecture doc. Emit this BEFORE the system\'s functions/interfaces so they can reference it by name.',
             '- add_function {scope, systemId?, funcName, funcDef, subName, subDef, traceIds?}   (ONE level of decomposition; for scope "system", traceIds = the aircraft sub-function ids this system function implements)',
@@ -11979,7 +12036,7 @@
                         // 3 Sep 2026 — the ACTION path never passed _assumptions (Vayu: 58 rows,
                         // empty assumptions column, empty register). It does now, and the
                         // judgement flag rides along. The result names what actually happened.
-                        const ok = _applyFhaSuggestion({ subId: a.subId, fcDesc: a.fcDesc, phases: a.phases || [], effAc: a.effAc, effCrew: a.effCrew, effPax: a.effPax, effAcLevel: a.effAcLevel, effCrewLevel: a.effCrewLevel, effPaxLevel: a.effPaxLevel, severity: a.severity, severityRationale: a.severityRationale, sevBasis: a.sevBasis, srcCondId: a.srcCondId, judgementCall: a.judgementCall === true, judgementNote: a.judgementNote, _assumptions: Array.isArray(a._assumptions) ? a._assumptions : [], _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
+                        const ok = _applyFhaSuggestion({ subId: a.subId, fcDesc: a.fcDesc, phases: a.phases || [], effAc: a.effAc, effCrew: a.effCrew, effPax: a.effPax, effAcLevel: a.effAcLevel, effCrewLevel: a.effCrewLevel, effPaxLevel: a.effPaxLevel, severity: a.severity, severityRationale: a.severityRationale, sevBasis: a.sevBasis, srcCondId: a.srcCondId, judgementCall: a.judgementCall === true, judgementNote: a.judgementNote, realized: a.realized, escape: a.escape, escapeDefeated: a.escapeDefeated, _assumptions: Array.isArray(a._assumptions) ? a._assumptions : [], _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
                         const _did = (_applyFhaSuggestion._last && _applyFhaSuggestion._last.action) || (ok ? 'add' : '');
                         if (ok === 'protected') results.push({ ok: false, blocked: true, error: 'row for ' + (a.srcCondId || _chatClip(a.fcDesc, 30)) + ' (same phases) was edited by hand — not overwritten; newer draft noted on it' });
                         else results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'SFHA' : 'AFHA') + ' FC ' + (_did === 'updated' ? 'updated in place' : 'added') + ' — ' + _chatClip(a.fcDesc, 50) + (a.judgementCall === true ? ' · JUDGEMENT CALL flagged' : '') } : { ok: false, error: 'add_fha failed' });
@@ -12352,6 +12409,7 @@
                     + _slice.map(function (u) { return (_chunk.label ? _chunk.label(u) : String(u)); }).join('; ') + '.'
                     + (String(_chunk.noun || '') === 'failure condition' ? ' Emit rows for EVERY failure condition listed — as many rows per condition as its effects across the flight phases require, the rows for one condition together covering every phase of the mission profile.' : ' Emit a row for EVERY ' + _noun + ' listed.') + ' Where a field cannot be grounded, leave THAT FIELD empty per the abstention rule — never omit a row, never summarise, and never stop early.'
                     + ' This is turn ' + (_ci + 1) + ' of ' + _slices.length + '; the other ' + _noun + 's are covered by the other turns, so do NOT offer to continue and do NOT mention the ones outside this turn.';
+                try { if (typeof _chunk.extraOf === 'function') _extra += String(_chunk.extraOf(_slice) || ''); } catch (_) {}   // 5 Sep 2026 — per-slice derived levels
             }
             // 3 Sep 2026 — A TURN THAT THROWS USED TO BE LOST FOREVER. There was no
             // retry anywhere in this pool: one transient provider error and that

@@ -644,7 +644,8 @@ check('no "System lane" category survives anywhere in the rail',
 // 225 -> 226 (3 Sep 2026): continue_session.js — "Continue where you left off" on sign-in.
 // 226 -> 227 (3 Sep 2026): severity_axes.js — severity derived from the three effect axes.
 // 227 -> 226 (4 Sep 2026): perf_bench.js no longer loaded — Waqas: the Scale & Performance page "can be taken out".
-check('script tag count unchanged (226 — severity_rubrics.js + crdt_gc.js 31 Aug; lane_ai_bar.js + mel_fha_crosscheck.js 2 Sep; cloud_writer.js + field_defs.js + continue_session.js + severity_axes.js 3 Sep; perf_bench.js REMOVED 4 Sep)', tags === 226, 'got ' + tags);
+// 226 -> 227 (5 Sep 2026): fha_derive.js — escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis (levers 2 + 3).
+check('script tag count unchanged (227 — severity_rubrics.js + crdt_gc.js 31 Aug; lane_ai_bar.js + mel_fha_crosscheck.js 2 Sep; cloud_writer.js + field_defs.js + continue_session.js + severity_axes.js 3 Sep; perf_bench.js REMOVED 4 Sep; fha_derive.js 5 Sep)', tags === 227, 'got ' + tags);
   check('HTML comments balanced', (html.match(/<!--/g) || []).length === (html.match(/-->/g) || []).length);
   // Floors, not equality — a later build must not silently serve a stale cached file.
   // COMPONENT-WISE, not parseFloat: `>= 2.40` read as a float is `>= 2.4`, which a stale 2.9

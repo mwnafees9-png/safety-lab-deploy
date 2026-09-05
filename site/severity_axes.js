@@ -1,5 +1,6 @@
 // ============================================================================
-// severity_axes.js — v1.0 — severity DERIVED from three effect axes (3 Sep 2026).
+// severity_axes.js — v1.3 — severity DERIVED from three effect axes (3 Sep 2026).
+//   1.3 (5 Sep 2026): the Effects cell names the levels fha_derive.js set by rule (MAC / HF / escape).
 //
 // Waqas: "reduction in safety margins or reduction in functional capabilities —
 // none, slight, significant, large or hull loss — determine aircraft effect;
@@ -184,6 +185,10 @@
         return ORDER.map(function (ax) {
             var a = AXES[ax], i = levelIndex(ax, row && row[a.key]);
             var chip = i >= 0 ? '<span class="sev-axis-chip" title="' + esc(a.question + ': ' + a.defs[i]) + '" style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:999px;margin-right:6px;' + CHIP[i] + '">' + esc(a.levels[i]) + '</span>' : '';
+            // 5 Sep 2026 (levers 2 + 3) — a level set BY RULE says so beside the chip: from the
+            // MAC rule, from the Task Analysis, or by the escape rule (No Safety Effect).
+            var _dv = (row && row.derived && row.derived[ax]) ? String(row.derived[ax]) : '';
+            if (chip && _dv) chip += '<span class="sev-axis-derived" title="' + esc(_dv === 'MAC' ? 'Derived from the MAC rule for this function, not judged.' : (_dv === 'HF' ? 'Derived from the crew Task Analysis (occupancy against the 60% / 80% lines), not judged.' : 'Set by the escape rule: the effect is not realised in these phases and the flight can be escaped.')) + '" style="font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-tertiary);margin-right:6px;cursor:help;">' + esc(_dv === 'escape' ? 'by rule' : 'from ' + _dv) + '</span>';
             var sentenceKey = ax === 'ac' ? 'effAc' : (ax === 'crew' ? 'effCrew' : 'effPax');
             // 3 Sep 2026 — AN ABSTENTION IS NOT A LEVEL. This printed the word
             // "None" for an empty sentence, which reads as "no effect on the crew"
@@ -301,5 +306,5 @@
     }
     if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot(); }
 
-    G.SLSeverityAxes = { _v: '1.2', AXES: AXES, ORDER: ORDER, CLASSES: CLASSES, CLASS_LABEL: CLASS_LABEL, levelIndex: levelIndex, normLevel: normLevel, levelsOf: levelsOf, derive: derive, applyTerminal: applyTerminal, terminalNote: terminalNote, TERMINAL_ASSUMPTION: TERMINAL_ASSUMPTION, TOP: TOP, hasLevels: hasLevels, rationale: rationale, effectsHtml: effectsHtml };
+    G.SLSeverityAxes = { _v: '1.3', AXES: AXES, ORDER: ORDER, CLASSES: CLASSES, CLASS_LABEL: CLASS_LABEL, levelIndex: levelIndex, normLevel: normLevel, levelsOf: levelsOf, derive: derive, applyTerminal: applyTerminal, terminalNote: terminalNote, TERMINAL_ASSUMPTION: TERMINAL_ASSUMPTION, TOP: TOP, hasLevels: hasLevels, rationale: rationale, effectsHtml: effectsHtml };
 })();

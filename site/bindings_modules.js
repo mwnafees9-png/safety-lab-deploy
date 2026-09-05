@@ -99,16 +99,21 @@ let itemsData = [];
 //     Rather than invent a frequency, it holds the conservative bound: r = 1.
 //     Adding that field is logged as an open item, not guessed at here.
 // ---------------------------------------------------------------------------
+// 5 Sep 2026 (lever 3) — every phase carries its ESCAPE: how the flight gets out of a
+// condition whose effect has not yet been felt. The FHA drafter is told these, and
+// fha_derive.js applies the 4 Sep ruling from them (not realised + escapable and not
+// defeated → No Safety Effect; not realised + no escape or defeated → the end effect).
+// A project saved before this field existed reads the same defaults by phase name.
 const DEFAULT_FLIGHT_PHASES = [
-    {phase: 'Standing', altFrom: '', altFromUnit: 'AGL', altTo: '', altToUnit: 'AGL', duration: '1', durationUnit: 'hours'},
-    {phase: 'Taxi', altFrom: '', altFromUnit: 'AGL', altTo: '', altToUnit: 'AGL', duration: '15', durationUnit: 'mins'},
-    {phase: 'Takeoff', altFrom: '0', altFromUnit: 'AGL', altTo: '1500', altToUnit: 'AGL', duration: '2', durationUnit: 'mins'},
-    {phase: 'Initial Climb', altFrom: '1500', altFromUnit: 'AGL', altTo: '10000', altToUnit: 'ASL', duration: '5', durationUnit: 'mins'},
-    {phase: 'Climb', altFrom: '10000', altFromUnit: 'ASL', altTo: '35000', altToUnit: 'ASL', duration: '20', durationUnit: 'mins'},
-    {phase: 'Cruise', altFrom: '35000', altFromUnit: 'ASL', altTo: '35000', altToUnit: 'ASL', duration: '4', durationUnit: 'hours'},
-    {phase: 'Descent', altFrom: '35000', altFromUnit: 'ASL', altTo: '10000', altToUnit: 'ASL', duration: '25', durationUnit: 'mins'},
-    {phase: 'Approach', altFrom: '10000', altFromUnit: 'ASL', altTo: '1000', altToUnit: 'AGL', duration: '10', durationUnit: 'mins'},
-    {phase: 'Landing', altFrom: '1000', altFromUnit: 'AGL', altTo: '0', altToUnit: 'AGL', duration: '3', durationUnit: 'mins'}
+    {phase: 'Standing', altFrom: '', altFromUnit: 'AGL', altTo: '', altToUnit: 'AGL', duration: '1', durationUnit: 'hours', escape: 'stop on the ground'},
+    {phase: 'Taxi', altFrom: '', altFromUnit: 'AGL', altTo: '', altToUnit: 'AGL', duration: '15', durationUnit: 'mins', escape: 'stop on the ground'},
+    {phase: 'Takeoff', altFrom: '0', altFromUnit: 'AGL', altTo: '1500', altToUnit: 'AGL', duration: '2', durationUnit: 'mins', escape: 'reject the take-off before V1'},
+    {phase: 'Initial Climb', altFrom: '1500', altFromUnit: 'AGL', altTo: '10000', altToUnit: 'ASL', duration: '5', durationUnit: 'mins', escape: 'continue to a landing'},
+    {phase: 'Climb', altFrom: '10000', altFromUnit: 'ASL', altTo: '35000', altToUnit: 'ASL', duration: '20', durationUnit: 'mins', escape: 'continue to a landing'},
+    {phase: 'Cruise', altFrom: '35000', altFromUnit: 'ASL', altTo: '35000', altToUnit: 'ASL', duration: '4', durationUnit: 'hours', escape: 'continue to a landing'},
+    {phase: 'Descent', altFrom: '35000', altFromUnit: 'ASL', altTo: '10000', altToUnit: 'ASL', duration: '25', durationUnit: 'mins', escape: 'continue to a landing'},
+    {phase: 'Approach', altFrom: '10000', altFromUnit: 'ASL', altTo: '1000', altToUnit: 'AGL', duration: '10', durationUnit: 'mins', escape: 'go-around'},
+    {phase: 'Landing', altFrom: '1000', altFromUnit: 'AGL', altTo: '0', altToUnit: 'AGL', duration: '3', durationUnit: 'mins', escape: 'none'}
 ];
 
 // Seeded into every new project alongside the nominal phases. These two are the
@@ -116,8 +121,8 @@ const DEFAULT_FLIGHT_PHASES = [
 // they are where the demand on a degraded function is highest and the severity
 // of losing it is worst.
 const SPECIAL_FLIGHT_PHASES = [
-    {phase: 'Rejected Takeoff', altFrom: '0', altFromUnit: 'AGL', altTo: '0', altToUnit: 'AGL', duration: '1', durationUnit: 'mins', special: true},
-    {phase: 'Go-around', altFrom: '0', altFromUnit: 'AGL', altTo: '3000', altToUnit: 'AGL', duration: '3', durationUnit: 'mins', special: true}
+    {phase: 'Rejected Takeoff', altFrom: '0', altFromUnit: 'AGL', altTo: '0', altToUnit: 'AGL', duration: '1', durationUnit: 'mins', special: true, escape: 'stop on the runway'},
+    {phase: 'Go-around', altFrom: '0', altFromUnit: 'AGL', altTo: '3000', altToUnit: 'AGL', duration: '3', durationUnit: 'mins', special: true, escape: 'continue to a landing'}
 ];
 
 // Offered by "+ Add contingency phase" on the Flight Phases tab. Not seeded —

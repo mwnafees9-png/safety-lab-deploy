@@ -797,7 +797,14 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
-- **F21 — SEVERITY LEVELS DERIVED FROM THE MAC AND FROM HUMAN FACTORS WORKLOAD (Waqas, 5 Sep 2026).**
+- **F21 — SEVERITY LEVELS DERIVED FROM THE MAC AND FROM HUMAN FACTORS WORKLOAD (Waqas, 5 Sep 2026). BUILT 5 Sep (midday), `site/fha_derive.js` v1.0 + 76.59 — awaiting deploy and the three identical-input draws.**
+  Built as stated below, plus lever 3 (escapes per phase on the mission profile, three structured
+  answers per row, the 4 Sep ruling applied at accept). Follow-ups once the draws are read: the FHA
+  CSV export does not yet carry `realized` / `escape` / `escapeDefeated` / `derived`; the classic
+  SFHA path carries the escapes clause and the derived clause but still has no coverage re-ask (F19);
+  the occupant axis and a malfunction's aircraft axis remain judged — if they carry the residual
+  disagreement, that is the next derivation to design, not a prompt to tune.
+  Original statement:
   Identical-input draws agree on a row's class 63% of the time and on a function's worst class
   82%; the aircraft/crew axis levels underneath agree ~62%. Judgement cannot be made consistent;
   derivation can. Build: (a) aircraft axis from the MAC — for a condition's phase row, how much

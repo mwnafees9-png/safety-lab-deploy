@@ -1070,7 +1070,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 6px 0;">This table is the project's phase vocabulary — the FHA forms offer exactly these phases and nothing else. <strong>Nominal</strong> phases sum to the mission duration behind every exposure ratio; <strong>contingency</strong> phases (rejected take-off, go-around) are excluded from that total and hold the full-flight exposure window. The default profile is your project baseline. Add a <strong>special mission profile</strong> (e.g. Long-haul) to analyse extended-exposure / latent-failure risk — same phases, different durations — then a fault tree picks which profile it's built for.</p>
             <div id="phases-profile-bar" style="display:flex; align-items:center; gap:10px; margin:6px 0 12px; flex-wrap:wrap;"></div>
             <table id="phases-table">
-                <thead><tr><th>Phase of Flight</th><th>Altitude From</th><th>Unit</th><th>Altitude To</th><th>Unit</th><th>Duration</th><th>Unit</th><th title="HF response window (seconds) — the time the crew actually has to respond in this phase. Feeds INV-36 workload saturation (HIDH §5.7.5.1, 80% red line). Duration is exposure; it is never read as a response window.">HF window (s)</th><th></th></tr></thead>
+                <thead><tr><th>Phase of Flight</th><th>Altitude From</th><th>Unit</th><th>Altitude To</th><th>Unit</th><th>Duration</th><th>Unit</th><th title="HF response window (seconds) — the time the crew actually has to respond in this phase. Feeds INV-36 workload saturation (HIDH §5.7.5.1, 80% red line). Duration is exposure; it is never read as a response window.">HF window (s)</th><th title="How the flight gets out of a failure condition whose effect has not yet been felt in this phase — stop on the ground, reject the take-off before V1, continue to a landing, go-around, or none. The FHA drafter is told these, and a row that is not yet realised, can be escaped, and whose failure does not defeat the escape is No Safety Effect by rule (4 Sep 2026 ruling).">Escape</th><th></th></tr></thead>
                 <tbody id="phases-body"></tbody>
             </table>
             <div style="margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap;"><button type="button" class="action-btn" onclick="addPhaseRow()">+ Add phase</button><button type="button" class="action-btn" onclick="addContingencyPhase()" title="Rejected take-off, go-around, balked landing… — outside the nominal mission, excluded from the mission duration, and exposure stays the full flight.">+ Add contingency phase</button></div>
@@ -4063,11 +4063,13 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.30" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.83" defer></script>
+    <script src="helpers_modules.js?v=2.84" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
-    <script src="severity_axes.js?v=1.2" defer></script>
+    <script src="severity_axes.js?v=1.3" defer></script>
+    <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
+    <script src="fha_derive.js?v=1.0" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.35" defer></script>
+    <script src="bindings_modules.js?v=1.36" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <script src="misc_fn_modules.js?v=66.55" defer></script>
     <script src="safety_lab.js?v=65.50" defer></script>
@@ -4374,7 +4376,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.8" defer></script>
     <script src="ai_skills.js?v=2.12" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.50" defer></script>
+    <script src="ai_loader.js?v=8.51" defer></script>
     <script src="config_management.js?v=1.8" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.1" defer></script>

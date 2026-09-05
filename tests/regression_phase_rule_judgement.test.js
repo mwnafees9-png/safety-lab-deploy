@@ -80,7 +80,7 @@ console.log('\n[2] the judgement travels the whole way');
   check('accept persists the flag on the row', /judgementCall: !!s\.judgementCall,\s*\n\s*judgementNote: String\(s\.judgementNote \|\| ''\)/.test(ai));
   check('accept files the note as an assumption of type judgement', /type: 'judgement', appliesTo: 'all'/.test(ai) && /judgement: 'AI judgement'/.test(ai));
   check('accept shouts it in the comments column too', /⚠ JUDGEMENT CALL — classified on limited information; engineer to confirm/.test(ai));
-  check('the action executor passes the flag AND the assumptions through (the Vayu gap)', /judgementCall: a\.judgementCall === true, judgementNote: a\.judgementNote, _assumptions: Array\.isArray\(a\._assumptions\)/.test(ai));
+  check('the action executor passes the flag AND the assumptions through (the Vayu gap)', /judgementCall: a\.judgementCall === true, judgementNote: a\.judgementNote, realized: a\.realized, escape: a\.escape, escapeDefeated: a\.escapeDefeated, _assumptions: Array\.isArray\(a\._assumptions\)/.test(ai));
   check('the panel per-item accept attaches the batch assumptions to the action', /a\._assumptions = _assumptionsFor\(_batchAsms, String\(a\.fcDesc \|\| ''\)\.trim\(\), \[a\.subId, a\.srcCondId\]\)/.test(ai));
   check("a protected row is reported as blocked, not as 'add_fha failed'", /edited by hand — not overwritten; newer draft noted on it/.test(ai));
 }
