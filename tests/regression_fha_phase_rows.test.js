@@ -104,7 +104,7 @@ console.log('\n[4] the stored-row check — a phase on two rows with different c
   check('the FHA table classifies an overlapping split as "overlap" and shows which phases are assessed twice', /if \(twice\.length\) kind = 'overlap';/.test(helpers) && /⚠ phase assessed twice — /.test(helpers) && /A flight phase can carry only ONE effect and one class per failure condition/.test(helpers));
   const ctx2 = { console, String, Array, Object, Set, Map, JSON };
   vm.createContext(ctx2);
-  ['_fhaPhaseKey'].forEach(n => vm.runInContext(extractFn(helpers, n), ctx2));
+  ['_fhaPhaseKey', '_fhaEffectKey'].forEach(n => vm.runInContext(extractFn(helpers, n), ctx2));
   const grpFn = extractFn(helpers, '_fhaGroups') || extractFn(helpers, '_fhaGroupRows');
   if (grpFn) {
     vm.runInContext(grpFn, ctx2);
