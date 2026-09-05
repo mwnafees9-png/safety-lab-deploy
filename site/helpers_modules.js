@@ -4634,10 +4634,27 @@ function _fhaGroupRows(rows) {
             // not classifications, and do not count as a difference.
             const phaseKeys = new Set(members.map(_fhaPhaseKey));
             const sevKeys = new Set(members.map(function (m) { return String(m.severity || '').trim(); }).filter(Boolean));
-            const kind = (phaseKeys.size > 1)
+            let kind = (phaseKeys.size > 1)
                 ? (sevKeys.size > 1 ? 'phase' : 'consolidate')          // real split · or should be ONE row listing all phases
                 : (sevKeys.size > 1 ? 'contradiction' : 'duplicate');   // same phases classified two ways · or plain copies
-            groups.set(o.key, { count: members.length, worst, headId: members[0].internalId, kind: kind, distinctPhaseSets: phaseKeys.size, distinctClasses: sevKeys.size });
+            // 5 Sep 2026 (Waqas): "one phase of flight can only have one effect and severity per
+            // failure condition" — a phase named on two rows of one condition that carry
+            // different classes is a contradiction even when the phase LISTS differ
+            // ("Standing, Taxi" No Safety Effect and "Taxi, Takeoff" Major both claim Taxi).
+            let twice = [];
+            if (kind === 'phase') {
+                const seen = {};
+                members.forEach(function (m) {
+                    const sev = String(m.severity || '').trim(); if (!sev) return;
+                    String(m.phases || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (ph) {
+                        const k = ph.toLowerCase().replace(/[^a-z0-9]+/g, ''); if (k === 'allphases') return;
+                        if (seen[k] && seen[k] !== sev) { if (twice.indexOf(ph) < 0) twice.push(ph); }
+                        else if (!seen[k]) seen[k] = sev;
+                    });
+                });
+                if (twice.length) kind = 'overlap';
+            }
+            groups.set(o.key, { count: members.length, worst, headId: members[0].internalId, kind: kind, distinctPhaseSets: phaseKeys.size, distinctClasses: sevKeys.size, twice: twice });
         }
     });
     return { ordered, groups };
@@ -4713,6 +4730,8 @@ function renderACFHA() {
             switch (_grp.kind) {
                 case 'duplicate':
                     return `<span class="fha-group-badge fha-group-dup" title="${n} rows share this failure-condition id, cover the SAME flight phases and carry the same class — duplicates, most often repeated drafts accepted into the project. Merge or delete the extras; until then the fault trees take the worst of the copies." style="${_badgeStyle('var(--color-warning, #7A5300)', 'var(--color-warning, #7A5300)')}">${n} duplicate rows · same phases</span>`;
+                case 'overlap':
+                    return `<span class="fha-group-badge fha-group-contra" title="A flight phase can carry only ONE effect and one class per failure condition. These rows name ${esc((_grp.twice || []).join(', '))} more than once with different classes — decide which row owns each phase and remove it from the other." style="${_badgeStyle('#B42318', '#B42318')}">⚠ phase assessed twice — ${esc((_grp.twice || []).slice(0, 3).join(', '))}</span>`;
                 case 'contradiction':
                     return `<span class="fha-group-badge fha-group-contra" title="${n} rows share this failure-condition id and the SAME flight phases but are classified differently. The same condition in the same phases cannot be two classes — resolve which is right; until then the fault trees take the worst." style="${_badgeStyle('var(--color-danger, #8E2A2A)', 'var(--color-danger, #8E2A2A)')}">${n} rows · same phases, different class — resolve</span>`;
                 case 'consolidate':
@@ -4731,6 +4750,7 @@ function renderACFHA() {
                     duplicate:     `Duplicate of ${esc(row.fcId)} — same failure condition, same flight phases, same class.`,
                     contradiction: `Conflicts with ${esc(row.fcId)} — same failure condition and phases, classified differently. Resolve.`,
                     consolidate:   `Belongs on the ${esc(row.fcId)} row — same failure condition and class, only the phase list differs. Merge.`,
+                    overlap:       `Shares a phase with another ${esc(row.fcId)} row under a different class — a phase carries one effect and one class per condition. Resolve.`,
                     phase:         `Member of phase group ${esc(row.fcId)} — same failure condition, genuinely different effects and class in these phases.`
                 })[_grp.kind] || ''}">└ ${esc(row.fcId)}</span>`
             : `<strong>${esc(row.fcId)}</strong>${_grpBadge}`;

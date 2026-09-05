@@ -70,22 +70,60 @@ console.log('\n[2] phase coverage — executed');
   check('"All phases" covers the profile; three rows that together cover every phase are complete (case-insensitive)', !gaps.some(g => g.key === 'SF-001-TL') && !gaps.some(g => g.key === 'SF-003-M'), JSON.stringify(gaps));
   check('a condition with only a Landing row is named with the four phases it never assessed', gaps.length === 1 && gaps[0].key === 'SF-002-TL' && gaps[0].missing.join() === 'Taxi,Takeoff,Climb,Cruise' && /SF-002-TL — Total loss of reverse thrust/.test(gaps[0].label), JSON.stringify(gaps));
   check('a condition with NO row is not a phase gap (that is the ordinary coverage miss)', !gaps.some(g => g.key === 'SF-004-PL'));
+  // 5 Sep 2026 — a phase on two rows of one condition is "assessed twice"
+  ctx.acts2 = [
+    { op: 'add_fha', srcCondId: 'SF-005-TL', phases: ['Taxi', 'Takeoff'] },
+    { op: 'add_fha', srcCondId: 'SF-005-TL', phases: ['Takeoff', 'Climb', 'Cruise', 'Landing'] },
+    { op: 'add_fha', srcCondId: 'SF-006-TL', phases: ['All phases'] },
+    { op: 'add_fha', srcCondId: 'SF-006-TL', phases: ['Landing'] },
+  ];
+  ctx.conds2 = [{ id: 'SF-005-TL', desc: 'x' }, { id: 'SF-006-TL', desc: 'y' }];
+  const g2 = vm.runInContext("_fhaPhaseGaps(conds2, acts2, function (a) { return a.srcCondId; })", ctx);
+  const f5 = g2.find(g => g.key === 'SF-005-TL'), f6 = g2.find(g => g.key === 'SF-006-TL');
+  check('Takeoff on two rows of SF-005-TL is reported as assessed twice (and nothing missing)', f5 && f5.twice.join() === 'Takeoff' && f5.missing.length === 0, JSON.stringify(g2));
+  check('"All phases" plus a Landing row is Landing assessed twice', f6 && f6.twice.join() === 'Landing' && f6.missing.length === 0, JSON.stringify(f6));
 }
 
 console.log('\n[3] the batch re-asks once and the panel says what is still missing');
 {
   check('the FHA chunk config declares gapsOf', /gapsOf: function \(acts\) \{ return _fhaPhaseGaps\(picked, acts,/.test(ai));
-  check('_anemBatch runs ONE follow-up turn for the unassessed phases and re-measures', /PHASES NOT YET ASSESSED — the rows returned for the conditions below do not cover every phase of the mission profile/.test(ai) && /const _a2 = await _anemRun\(_mkMessages\(_steer\), _sysExtra/.test(ai) && /try \{ _gaps = _chunk\.gapsOf\(actions\) \|\| \[\]; \} catch \(_\) \{\}/.test(ai) && /_coverage\.phaseGaps = _gaps\.map/.test(ai));
-  check('… the follow-up asks for additional rows only, with the two "nothing has happened yet" cases spelled out', /return ONLY the ADDITIONAL add_fha rows that cover the phases named/.test(ai) && /do not repeat rows already returned/.test(ai));
+  check('_anemBatch runs ONE follow-up turn for wrong phase coverage and re-measures', /PHASE COVERAGE — for one failure condition, every phase of the mission profile belongs to EXACTLY ONE row: one effect, one class/.test(ai) && /const _a2 = await _anemRun\(_mkMessages\(_steer\), _sysExtra/.test(ai) && /try \{ _gaps = _chunk\.gapsOf\(actions\) \|\| \[\]; \} catch \(_\) \{\}/.test(ai) && /_coverage\.phaseGaps = _gaps\.map/.test(ai));
+  check('… unassessed phases get additional rows; a phase assessed twice gets the condition\'s rows again, each phase on exactly one row', /where phases are UNASSESSED, return ONLY the additional add_fha rows that cover them/.test(ai) && /Where a phase is ASSESSED TWICE, return the condition\\'s COMPLETE set of rows again with each phase on exactly one row/.test(ai));
+  check('the rule itself is in both drafting instructions (5 Sep: Standing and Taxi on a No Safety Effect row cannot be classed again)', /A phase belongs to EXACTLY ONE row of a condition: once Standing and Taxi sit on a No Safety Effect row, no other row of that condition may name them with a different effect or class/.test(ai) && /A phase belongs to EXACTLY ONE row of a condition — one effect, one class — never to two rows with different classes/.test(ai));
   const ctx = { console, String, Array, Object, Math, _esc: (x) => String(x) };
   vm.createContext(ctx); vm.runInContext(extractFn(ai, '_coverageBanner'), ctx);
   const html = vm.runInContext("_coverageBanner({ total: 3, covered: 3, noun: 'failure condition', phaseGaps: ['SF-002-TL — Total loss of reverse thrust (Taxi, Takeoff, Climb, Cruise)'] })", ctx);
-  check('the banner shows the phase gap beside "coverage complete" and does not claim every phase assessed', /Coverage complete/.test(html) && /Phases not assessed on 1 condition/.test(html) && /SF-002-TL — Total loss of reverse thrust \(Taxi, Takeoff, Climb, Cruise\)/.test(html) && !/every flight phase assessed/.test(html));
+  check('the banner shows the phase problem beside "coverage complete" and does not claim every phase assessed', /Coverage complete/.test(html) && /Phase coverage wrong on 1 condition/.test(html) && /assess a phase twice/.test(html) && /SF-002-TL — Total loss of reverse thrust \(Taxi, Takeoff, Climb, Cruise\)/.test(html) && !/every flight phase assessed/.test(html));
   const html2 = vm.runInContext("_coverageBanner({ total: 3, covered: 3, noun: 'failure condition', phaseGaps: [] })", ctx);
   check('… and says "every flight phase assessed" only when there are no gaps', /every flight phase assessed/.test(html2) && !/Phases not assessed/.test(html2));
 }
 
-console.log('\n[4] the executor never caps rows per condition');
+console.log('\n[4] the stored-row check — a phase on two rows with different classes is flagged');
+{
+  const helpers = fs.readFileSync(path.join(SITE, 'helpers_modules.js'), 'utf8');
+  check('the FHA table classifies an overlapping split as "overlap" and shows which phases are assessed twice', /if \(twice\.length\) kind = 'overlap';/.test(helpers) && /⚠ phase assessed twice — /.test(helpers) && /A flight phase can carry only ONE effect and one class per failure condition/.test(helpers));
+  const ctx2 = { console, String, Array, Object, Set, Map, JSON };
+  vm.createContext(ctx2);
+  ['_fhaPhaseKey'].forEach(n => vm.runInContext(extractFn(helpers, n), ctx2));
+  const grpFn = extractFn(helpers, '_fhaGroups') || extractFn(helpers, '_fhaGroupRows');
+  if (grpFn) {
+    vm.runInContext(grpFn, ctx2);
+    const name = /function (_fha\w+)\(/.exec(grpFn)[1];
+    const rows = [
+      { internalId: 1, fcId: 'SF-001-TL', phases: 'Standing, Taxi', severity: 'No Safety Effect' },
+      { internalId: 2, fcId: 'SF-001-TL', phases: 'Taxi, Takeoff', severity: 'Major' },
+      { internalId: 3, fcId: 'SF-002-TL', phases: 'Standing, Taxi', severity: 'No Safety Effect' },
+      { internalId: 4, fcId: 'SF-002-TL', phases: 'Takeoff, Landing', severity: 'Catastrophic' },
+    ];
+    ctx2.rows = rows;
+    const g = vm.runInContext(name + '(rows)', ctx2);
+    const k1 = g.groups.get('SF-001-TL'), k2 = g.groups.get('SF-002-TL');
+    check('Taxi on a No Safety Effect row AND on a Major row → overlap, naming Taxi', k1 && k1.kind === 'overlap' && k1.twice.join() === 'Taxi', JSON.stringify(k1));
+    check('a clean partition with different classes stays a legitimate split (no badge)', k2 && k2.kind === 'phase', JSON.stringify(k2));
+  } else check('group classifier extracted', false);
+}
+
+console.log('\n[5] the executor never caps rows per condition');
 {
   check('_fhaUpsert is keyed on condition + phase set — a different phase set for the same condition is a new row', /return r && String\(r\.sourceCondId \|\| ''\)\.trim\(\) === cond && _fhaPhaseKeyOf\(r\.phases\) === pk;/.test(ai) && /if \(!hit\) return \{ action: 'add' \};/.test(ai));
 }

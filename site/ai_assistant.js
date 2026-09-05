@@ -887,10 +887,14 @@
             const cov = {};
             rows.forEach(function (a) {
                 const ph = _validPhases(Array.isArray(a.phases) ? a.phases : (typeof a.phases === 'string' ? a.phases.split(',') : []));
-                ph.forEach(function (p) { if (/^all phases$/i.test(p)) profile.forEach(function (q) { cov[keyP(q)] = 1; }); else cov[keyP(p)] = 1; });
+                const seenRow = {};
+                ph.forEach(function (p) { const ks = /^all phases$/i.test(p) ? profile.map(keyP) : [keyP(p)]; ks.forEach(function (k) { if (seenRow[k]) return; seenRow[k] = 1; cov[k] = (cov[k] || 0) + 1; }); });
             });
             const missing = profile.filter(function (q) { return !cov[keyP(q)]; });
-            if (missing.length) out.push({ key: id, label: id + ' — ' + String((e && e.desc) || '').slice(0, 80), missing: missing });
+            // 5 Sep 2026 (Waqas): "one phase of flight can only have one effect and severity per
+            // failure condition" — a phase on two rows of the same condition is assessed twice.
+            const twice = profile.filter(function (q) { return (cov[keyP(q)] || 0) > 1; });
+            if (missing.length || twice.length) out.push({ key: id, label: id + ' — ' + String((e && e.desc) || '').slice(0, 80), missing: missing, twice: twice });
         });
         return out;
     }
@@ -1548,7 +1552,7 @@
             '2c. THREE EFFECT AXES: alongside the sentences, set effAcLevel / effCrewLevel / effPaxLevel from the closed vocabularies in the THREE EFFECT AXES rule below; the class is the worst axis and the product derives it from your levels. A level you cannot ground stays EMPTY.',
             '2b. If the function definition is too thin to state an aircraft effect, you CANNOT classify it. Return severity as an EMPTY STRING and say in severityRationale what is missing. An unclassified condition the engineer then classifies is a good outcome. A guess that looks considered is the failure mode this rule exists to prevent — do not pick a middle value to avoid leaving a blank.',
             '3. Effects: one concise factual sentence each, third-person ("the aircraft…", "the crew…"). If an effect is minor or none, say so briefly.',
-            '4. phases: EVERY failure condition applies to EVERY flight phase — never pick the phases a condition is "relevant" to. A row\'s phases are the phases that SHARE that row\'s effects and class; return as MANY rows for one condition as its effects across the flight require (one, two, five — whatever the effects dictate), and all the rows for a condition together must cover every phase in this list: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. Phases where the effect is not realised AND the flight can be aborted or the condition escaped are a No Safety Effect row; phases where nothing has happened yet but the flight cannot escape the end effect carry that END effect and its class. "All phases" is allowed ONLY when the effects and class are identical in every phase. Spell phases exactly as listed — these are the checkboxes on THIS project\'s mission profile; a value outside the list cannot be ticked and is flagged to the engineer as your error. Never give the row that lists every phase the worst class of one phase.',
+            '4. phases: EVERY failure condition applies to EVERY flight phase — never pick the phases a condition is "relevant" to. A row\'s phases are the phases that SHARE that row\'s effects and class; return as MANY rows for one condition as its effects across the flight require (one, two, five — whatever the effects dictate), and all the rows for a condition together must cover every phase in this list: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. Phases where the effect is not realised AND the flight can be aborted or the condition escaped are a No Safety Effect row; phases where nothing has happened yet but the flight cannot escape the end effect carry that END effect and its class. "All phases" is allowed ONLY when the effects and class are identical in every phase. Spell phases exactly as listed — these are the checkboxes on THIS project\'s mission profile; a value outside the list cannot be ticked and is flagged to the engineer as your error. Never give the row that lists every phase the worst class of one phase. A phase belongs to EXACTLY ONE row of a condition: once Standing and Taxi sit on a No Safety Effect row, no other row of that condition may name them with a different effect or class.',
             '   Some of those are CONTINGENCY phases (rejected take-off, go-around, balked landing and the like). Name one when the condition matters specifically at that demand — losing a function during a go-around is a different failure condition, and usually a more severe one, than losing it in the cruise. A contingency phase does not shrink the exposure window.',
             '5. Be complete but do not pad — only credible conditions.',
             '',
@@ -2392,7 +2396,7 @@
                     _anemBatch(_FEATURE_DIRECTIVE.fha, {
                         title: '✨ AI-drafted FHA · review', analysis: 'fha', verifyKind: 'fha',
                         specSecs: _specSecsForSubIds(picked.map(function (e) { return e.subId; })),   // per-system doc narrowing
-                        systemExtra: '\n\nSOURCE-CONDITION TRACE (required): every add_fha action MUST carry "srcCondId": the id of the failure condition it classifies, echoed VERBATIM from the THIS TURN list (e.g. "SF-001-TL").\n\nROWS PER CONDITION (4 Sep 2026 ruling): every condition applies to every flight phase. Return as MANY add_fha rows for one condition as its effects across the flight require — phases that share the same effects and class sit on ONE row; where the effects or the class differ, that is ANOTHER row, and there is no limit on how many. All the rows for a condition together must cover every phase of this project\'s mission profile: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. A phase where the effect is not realised and the flight can be aborted or the condition escaped is a No Safety Effect row; a phase where nothing has happened yet but the end effect cannot be escaped carries that end effect. "All phases" only when the effects and class are identical everywhere — never the worst class of one phase on a row that lists every phase.',
+                        systemExtra: '\n\nSOURCE-CONDITION TRACE (required): every add_fha action MUST carry "srcCondId": the id of the failure condition it classifies, echoed VERBATIM from the THIS TURN list (e.g. "SF-001-TL").\n\nROWS PER CONDITION (4 Sep 2026 ruling): every condition applies to every flight phase. Return as MANY add_fha rows for one condition as its effects across the flight require — phases that share the same effects and class sit on ONE row; where the effects or the class differ, that is ANOTHER row, and there is no limit on how many. All the rows for a condition together must cover every phase of this project\'s mission profile: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. A phase where the effect is not realised and the flight can be aborted or the condition escaped is a No Safety Effect row; a phase where nothing has happened yet but the end effect cannot be escaped carries that end effect. "All phases" only when the effects and class are identical everywhere — never the worst class of one phase on a row that lists every phase. A phase belongs to EXACTLY ONE row of a condition — one effect, one class — never to two rows with different classes.',
                         chunk: {
                             units: picked, size: 5, noun: 'failure condition',
                             keyOf:     function (e) { return e.id; },
@@ -3130,6 +3134,29 @@
         Object.assign(hit, data, keep, { assumptionIds: merged, aiRedrafts: (hit.aiRedrafts || 0) + 1 });
         return { action: 'updated', row: hit };
     }
+    // 5 Sep 2026 (Waqas: "I want you to scrap old rows") — a re-draft REPLACES the AI's earlier
+    // rows for a condition. Rows landing in one apply session share a token (the review
+    // panel's batch, or one harness applyDraft); when the first row for a condition lands,
+    // every AI-generated, un-edited row of that condition carrying a DIFFERENT token is
+    // removed — all its phase-group rows, not just the matching one. A hand-edited row is
+    // never touched: it stays, and the new draft for its phase set is declined as before.
+    // Only a DRAFTING session scraps (the review panel, the harness); a single add_fha from
+    // chat or the form has no session and only ever upserts its own row.
+    var _fhaScope = null;
+    var _fhaOneSeq = 0;
+    function _fhaScopeToken() { return (_fhaScope && _fhaScope.token) || ('one-' + Date.now() + '-' + (++_fhaOneSeq)); }   // no session → every accept is its own
+    function _fhaScrapOld(store, cond, token) {
+        if (!cond || !Array.isArray(store)) return 0;
+        var n = 0;
+        for (var i = store.length - 1; i >= 0; i--) {
+            var r = store[i];
+            if (!r || String(r.sourceCondId || '').trim() !== cond) continue;
+            if (r.aiGenerated !== true || r.humanEdited) continue;
+            if (r.aiApplyToken && r.aiApplyToken === token) continue;   // landed in THIS session — keep
+            store.splice(i, 1); n++;
+        }
+        return n;
+    }
     function _applyFhaSuggestion(s) {
         try {
             const sysScoped = !!(s && s._systemId);
@@ -3232,11 +3259,13 @@
                 aiSkill: _skillStampFor(sysScoped ? 'sfha.populate' : 'fha.populate'),   // Skills V1 — which instructions drafted this row
                 aiInputScope: sysScoped ? ('SFHA · ' + (s._systemName || '')) : 'AFHA', aiAt: new Date().toISOString()
             };
+            const _tok = _fhaScopeToken(); data.aiApplyToken = _tok;
             if (sysScoped) {
                 if (typeof systemsData === 'undefined') { _toast('System data not loaded in this session.', 'warning'); return false; }
                 const sys = (systemsData || []).find(function (x) { return String(x.id) === String(s._systemId); });
                 if (!sys) { _toast('Target system not found.', 'warning'); return false; }
                 if (!Array.isArray(sys.fha)) sys.fha = [];
+                if (_fhaScope) _fhaScrapOld(sys.fha, String(data.sourceCondId || '').trim(), _tok);   // only a drafting session scraps; a single chat/manual add never does
                 const _upS = _fhaUpsert(sys.fha, data);
                 if (_upS.action === 'protected') { _applyFhaSuggestion._last = _upS; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
                 if (_upS.action === 'add') {
@@ -3249,6 +3278,7 @@
                 if (typeof renderSysAssumptions === 'function') { try { renderSysAssumptions(); } catch (_) {} }   // promoted AI assumptions show at once
             } else {
                 if (typeof acFhaData === 'undefined') { _toast('FHA data not loaded in this session.', 'warning'); return false; }
+                if (_fhaScope) _fhaScrapOld(acFhaData, String(data.sourceCondId || '').trim(), _tok);
                 const _upA = _fhaUpsert(acFhaData, data);
                 if (_upA.action === 'protected') { _applyFhaSuggestion._last = _upA; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
                 if (_upA.action === 'add') {
@@ -4135,7 +4165,7 @@
         const more = missing.length > 12 ? (' … and ' + (missing.length - 12) + ' more') : '';
         const gaps = Array.isArray(cov.phaseGaps) ? cov.phaseGaps.filter(Boolean) : [];
         const gapsHtml = gaps.length
-            ? '<div style="margin:0 16px 8px;padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.5;border:1px dashed #8A6D00;color:#8A6D00;">⚠ <b>Phases not assessed on ' + gaps.length + ' ' + (gaps.length === 1 ? 'condition' : 'conditions') + '</b> — every failure condition applies to every flight phase; the rows for these do not yet cover the whole mission profile (asked once more, still missing). Add the rows by hand or re-draft those conditions.'
+            ? '<div style="margin:0 16px 8px;padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.5;border:1px dashed #8A6D00;color:#8A6D00;">⚠ <b>Phase coverage wrong on ' + gaps.length + ' ' + (gaps.length === 1 ? 'condition' : 'conditions') + '</b> — for one failure condition every flight phase belongs to exactly one row (one effect, one class); these leave phases unassessed or assess a phase twice (asked once more, still wrong). Fix the rows by hand or re-draft those conditions.'
               + '<div style="margin-top:4px;">' + gaps.slice(0, 12).map(function (g) { return _esc(String(g)); }).join('; ') + (gaps.length > 12 ? (' … and ' + (gaps.length - 12) + ' more') : '') + '</div></div>'
             : '';
         return '<div style="margin:0 16px 8px;padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.5;'
@@ -4326,6 +4356,7 @@
     function _applyCapturedDraft(payload, opts) {
         opts = opts || {};
         const items = (payload && Array.isArray(payload.items)) ? payload.items : [];
+        _fhaScope = { token: 'draft-' + String((payload && payload.id) || '') + '-' + Date.now() };   // one apply session — see _fhaScrapOld
         const asms  = (payload && Array.isArray(payload.assumptions)) ? payload.assumptions : [];
         const model = opts.model || MODELS.reason;
         const feature = (payload && payload.feature) || opts.feature || '';
@@ -12296,6 +12327,7 @@
         let _batchAsms = [];
         const _replies = [];
         let attempt = null, _declined = null, _hardErr = null, _slicesRun = 0;
+        const _batchToken = 'b' + Date.now() + Math.floor(Math.random() * 1000);   // 5 Sep — the panel's apply session id
         let _unparsed = 0, _rawTail = '';   // F16d — unreadable replies, counted and quoted
 
         // 26 Aug 2026, same day, Waqas: "it has taken about 10 mins on the FCIM now"
@@ -12476,8 +12508,8 @@
             let _gaps = [];
             try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) { _gaps = []; }
             if (_gaps.length && !_permanentErr) {
-                const _steer = '\n\nPHASES NOT YET ASSESSED — the rows returned for the conditions below do not cover every phase of the mission profile. For EACH condition return ONLY the ADDITIONAL add_fha rows that cover the phases named: group phases that share the same effects and class on one row; where the effect is not realised and the flight can be aborted or the condition escaped, that is a No Safety Effect row; where the effect is not realised yet but cannot be escaped, the row carries the end effect and its class. Echo srcCondId and fcDesc exactly; do not repeat rows already returned.\n'
-                    + _gaps.map(function (g) { return '- ' + g.label + ' — phases still unassessed: ' + g.missing.join(', '); }).join('\n');
+                const _steer = '\n\nPHASE COVERAGE — for one failure condition, every phase of the mission profile belongs to EXACTLY ONE row: one effect, one class. The rows returned for the conditions below leave phases unassessed, or assess a phase twice. For each condition: where phases are UNASSESSED, return ONLY the additional add_fha rows that cover them (group phases that share the same effects and class on one row; where the effect is not realised and the flight can be aborted or the condition escaped, that is a No Safety Effect row; where the effect is not realised yet but cannot be escaped, the row carries the end effect and its class). Where a phase is ASSESSED TWICE, return the condition\'s COMPLETE set of rows again with each phase on exactly one row — those rows replace the ones you returned before. Echo srcCondId and fcDesc exactly.\n'
+                    + _gaps.map(function (g) { return '- ' + g.label + (g.missing && g.missing.length ? ' — phases unassessed: ' + g.missing.join(', ') : '') + (g.twice && g.twice.length ? ' — phases assessed twice: ' + g.twice.join(', ') : ''); }).join('\n');
                 try {
                     const _a2 = await _anemRun(_mkMessages(_steer), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined);
                     const _pp2 = (_a2 && _a2.parsed) || {};
@@ -12487,7 +12519,7 @@
                 } catch (e) { _turnErrs.push('phase-coverage pass: ' + ((e && e.message) || e)); }
                 try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) {}
             }
-            if (_coverage) _coverage.phaseGaps = _gaps.map(function (g) { return g.label + ' (' + g.missing.join(', ') + ')'; });
+            if (_coverage) _coverage.phaseGaps = _gaps.map(function (g) { return g.label + ' (' + [g.missing && g.missing.length ? 'unassessed: ' + g.missing.join(', ') : '', g.twice && g.twice.length ? 'assessed twice: ' + g.twice.join(', ') : ''].filter(Boolean).join('; ') + ')'; });
         }
         // F1c — the decompose lane's denominator is the DOCUMENT, not a scope
         // picker: its own section list, against the \u00a7 citations v2 rows carry.
@@ -12575,6 +12607,7 @@
                 // but never handed to the executor, so an accepted row cited none of
                 // them. Match them to this row the same way the classic lane does.
                 try { if (a && a.op === 'add_fha') a._assumptions = _assumptionsFor(_batchAsms, String(a.fcDesc || '').trim(), [a.subId, a.srcCondId]); } catch (_) {}
+                _fhaScope = { token: 'panel-' + _batchToken };   // every accept from THIS panel is one session — see _fhaScrapOld
                 const res = _chatRunActions([a], (attempt.rr && attempt.rr.model) || MODELS.reason, undefined, cfg.analysis);
                 const ok = !!(res && res[0] && res[0].ok !== false);
                 // AIF-1 — the reason used to be discarded here, which is half of
