@@ -296,6 +296,32 @@ function pairFhaRowsStrict(golden, cand) {
 // paired by shared subId when the runs share one and the names agree, else by
 // name overlap. This is the headline the engineer reads — is the worst thing
 // that can happen to THIS function the same class every time?
+// ---------------------------------------------------------------------------
+// LEVER 4 (5 Sep 2026) — MEASURE WHAT WE ARE FIXING.
+// phaseSplitAgreement: for each condition both runs drafted, did they split it into the
+// same phase groups (the same set of phase sets)? Identical-input draws 2 vs 3 gave the
+// same ROW COUNT on only 74 of 107 conditions; this is the honest form of that number.
+// conditionFlips: per condition, what changed — split, class, or both — so a build can be
+// aimed at the conditions that actually move instead of the average.
+function phaseSplitAgreement(golden, cand) {
+  const byCond = (d) => { const m = new Map(); d.fha.forEach(r => { const id = condIdOf(r); if (!id) return; if (!m.has(id)) m.set(id, []); m.get(id).push(r); }); return m; };
+  const G = byCond(golden), C = byCond(cand);
+  const setKey = (rows) => rows.map(r => [...phaseKeys(r)].sort().join('+')).sort().join(' | ');
+  let paired = 0, same = 0; const flips = [];
+  for (const [id, gRows] of G) {
+    const cRows = C.get(id); if (!cRows) continue;
+    paired++;
+    const gk = setKey(gRows), ck = setKey(cRows);
+    const splitSame = gk === ck;
+    if (splitSame) same++;
+    // class flips on strictly paired rows of THIS condition
+    const gS = { fha: gRows, functions: [] }, cS = { fha: cRows, functions: [] };
+    const { pairs } = pairFhaRowsStrict(gS, cS);
+    const classFlips = pairs.filter(([a, b]) => sevOf(a.r) !== sevOf(b.r)).map(([a, b]) => `${[...a.ph].join('+')}: ${sevOf(a.r) || 'abstain'} → ${sevOf(b.r) || 'abstain'}`);
+    if (!splitSame || classFlips.length) flips.push({ id, desc: String(gRows[0].fcDesc || '').slice(0, 60), split: splitSame ? null : { golden: gk, candidate: ck }, classFlips });
+  }
+  return { paired, same, rate: paired ? same / paired : 1, flips };
+}
 function functionWorstCase(golden, cand) {
   // rank 0 = Catastrophic … 4 = Negligible / No Safety Effect; the WORST is the LOWEST rank
   const WC_LABEL = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'Negligible'];
@@ -682,6 +708,10 @@ function functionWorstCase(golden, cand) {
             strictPairRate: {
                 value: +(strict.gTotal ? strict.pairs.length / strict.gTotal : 0).toFixed(3), informational: true,
                 note: 'golden FHA rows with a strict counterpart (same condition + phase group) — the denominator the severity metrics stand on' },
+            phaseSplitAgreement: (function () { const p = phaseSplitAgreement(golden, cand); return {
+                value: +p.rate.toFixed(3), threshold: 0.90, paired: p.paired, same: p.same,
+                flips: p.flips.slice(0, 40),
+                note: 'conditions drafted by both runs whose rows split the flight into the SAME phase groups; flips lists per condition what moved — the split, the class on a paired row, or both' }; })(),
             functionWorstCaseAgreement: (function () { const w = functionWorstCase(golden, cand); return {
                 value: +w.rate.toFixed(3), threshold: 0.90, paired: w.paired, same: w.same, offByOne: w.offByOne, offByTwoPlus: w.offMore, misses: w.misses.slice(0, 20),
                 note: 'the worst class per aircraft sub-function is the same in both runs (the headline an engineer reads; abstraction-level differences in row counts do not move it)' }; })(),
@@ -742,7 +772,7 @@ function functionWorstCase(golden, cand) {
     }
 
     return { normalizeRun, scoreRun, norm, jaccard, TOPICS, topicsOf, modeOf,
-             rowSignatures, pairFhaRows, pairFhaRowsStrict, functionWorstCase, lossFormOf, phaseKeys, functionTopics, fcimSignatures,
+             rowSignatures, pairFhaRows, pairFhaRowsStrict, functionWorstCase, phaseSplitAgreement, lossFormOf, phaseKeys, functionTopics, fcimSignatures,
              LANES, rowText, laneTopics, laneTokens,
              agreementOn, agreementTwoLevel };   // HF-4 — categorical agreement, id-matched only
 }));

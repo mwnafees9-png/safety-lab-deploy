@@ -60,12 +60,33 @@ console.log('\n[3] different ids, same condition wording — and different wordi
   check('a total-loss row never pairs with a partial-loss row of the same function', s2.metrics.strictPairRate.value === 0);
 }
 
-console.log('\n[4] identity and the pin');
+console.log('\n[4] lever 4 — phase-split agreement and the per-condition flip report');
+{
+  const g = { functions: [fn('SF-1', 'Decelerate on the ground')], fcim: [], assumptions: [], fha: [
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Standing, Taxi', 'No Safety Effect'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Takeoff, Climb, Cruise, Descent, Approach', 'Catastrophic'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Landing', 'Catastrophic'),
+    row('SF-1', 'SF-1-PL', 'Partial loss of braking', 'All phases', 'Major') ] };
+  const c = { functions: [fn('SF-1', 'Decelerate on the ground')], fcim: [], assumptions: [], fha: [
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Standing', 'No Safety Effect'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Taxi', 'Major'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Takeoff, Climb, Cruise, Descent, Approach', 'Catastrophic'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Landing', 'Catastrophic'),
+    row('SF-1', 'SF-1-PL', 'Partial loss of braking', 'All phases', 'Hazardous') ] };
+  const s = E.scoreRun(g, c); const m = s.metrics.phaseSplitAgreement;
+  check('the metric exists with the 0.90 bar and counts conditions both runs drafted', m && m.threshold === 0.90 && m.paired === 2, JSON.stringify(m));
+  check('total loss split differently (Standing+Taxi vs Standing | Taxi) → not the same split; partial loss same split → 1 of 2', m.same === 1 && m.value === 0.5);
+  const f = m.flips;
+  check('the flip report names the split that moved and the class that moved, per condition', f.length === 2 && f.some(x => x.id === 'sf-1-tl' && x.split && /standing\+taxi/.test(x.split.golden) && /standing \| taxi/.test(x.split.candidate)) && f.some(x => x.id === 'sf-1-pl' && !x.split && x.classFlips[0] === '*: Major → Hazardous'), JSON.stringify(f));
+  check('identical runs: 1.0 and no flips', E.scoreRun(g, g).metrics.phaseSplitAgreement.value === 1 && E.scoreRun(g, g).metrics.phaseSplitAgreement.flips.length === 0);
+}
+
+console.log('\n[5] identity and the pin');
 {
   const g = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'eval', 'golden_aeolus_v5.json'), 'utf8'));
   const s = E.scoreRun(g, g);
   check('a run against itself is REPEATABLE under the raised bar', s.verdict === 'REPEATABLE' && s.metrics.severityAgreement.value === 1 && s.metrics.functionWorstCaseAgreement.value === 1, JSON.stringify(s.failures));
-  check('eval_core pin bumped to 1.7', /eval_core\.js\?v=1\.7/.test(idx));
+  check('eval_core pin bumped to 1.8', /eval_core\.js\?v=1\.8/.test(idx));
 }
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
