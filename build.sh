@@ -43,8 +43,35 @@ npx --yes esbuild "$SRC"/*.js \
     --log-level=warning \
     --outdir="$OUT"
 
-# 2) Copy every non-JS asset verbatim (html, css, svg, png, txt, xml, json, …).
-find "$SRC" -maxdepth 1 -type f ! -name '*.js' -exec cp {} "$OUT"/ \;
+# 2) Copy shipping assets verbatim — EXPLICIT ALLOWLIST. Anything not listed
+#    here is not published.
+#
+#    Changed 5 Sep 2026. The previous filter was `! -name '*.js'`, i.e. copy
+#    every non-JS file. That published two hidden leftovers that had been
+#    sitting in site/: `.fuse_hidden0000001500000001` (919 KB — a complete copy
+#    of ai_assistant.js, every prompt and every skill body, with the
+#    "Confidential / Patent pending" comments intact, and because it is not
+#    .html it also bypassed the comment strip in step 3b) and
+#    `.fuse_hidden0000003900000001` (355 KB — a copy of index.html). Also
+#    MS_SSO_SETUP.md and gt_thread.js.v2bak. A denylist would have to predict
+#    the next kind of junk; an allowlist does not.
+find "$SRC" -maxdepth 1 -type f ! -name '.*' \( \
+      -name '*.html' -o -name '*.css'   -o -name '*.png'  -o -name '*.jpg'   \
+   -o -name '*.jpeg' -o -name '*.webp'  -o -name '*.gif'  -o -name '*.svg'   \
+   -o -name '*.ico'  -o -name '*.xml'   -o -name '*.txt'  -o -name '*.json'  \
+   -o -name '*.woff' -o -name '*.woff2' -o -name '*.map'                     \
+   \) -exec cp {} "$OUT"/ \;
+
+# 2b) Say out loud what did NOT get published. A new asset type must be added
+#     to the allowlist above rather than silently vanishing, and new junk must
+#     be visible rather than shipped. Read this list on every build.
+echo "  Top-level files in site/ NOT published:"
+_unpublished=0
+while IFS= read -r _f; do
+    case "$_f" in *.js) continue;; esac
+    if [ ! -e "$OUT/$_f" ]; then echo "      $_f"; _unpublished=1; fi
+done < <(find "$SRC" -maxdepth 1 -type f -printf '%f\n' | sort)
+[ "$_unpublished" = 0 ] && echo "      (none)"
 
 # 3) Copy any subdirectories verbatim.
 find "$SRC" -maxdepth 1 -mindepth 1 -type d -exec cp -R {} "$OUT"/ \;
