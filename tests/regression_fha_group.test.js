@@ -224,8 +224,7 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   vm.createContext(ctx);
   // 3 Sep 2026 — accept now de-dups through _fhaUpsert (+ its phase key) and sweeps
   // the AI ledger; those are real code, not stubs, so they ride in with the function.
-  // 5 Sep 2026 — accept also scraps the AI's earlier rows of the condition (_fhaScrapOld / _fhaScopeToken), real code too.
-  const helpersSrc = ['_fhaPhaseKeyOf', '_fhaUpsert', '_promoteLedgerForFha', '_fhaScopeToken', '_fhaScrapOld'].map(n => fn(ai, n)).join('\n') + '\nvar _fhaScope = null; var _fhaOneSeq = 0;';
+  const helpersSrc = ['_fhaPhaseKeyOf', '_fhaUpsert', '_promoteLedgerForFha'].map(n => fn(ai, n)).join('\n');
   check('extracted the accept-path helpers (_fhaPhaseKeyOf / _fhaUpsert / _promoteLedgerForFha)', /_fhaUpsert/.test(helpersSrc) && /_fhaPhaseKeyOf/.test(helpersSrc));
   vm.runInContext(helpersSrc + '\n' + src + '; globalThis.__ap = _applyFhaSuggestion; globalThis.__up = _fhaUpsert;', ctx);
   // 1. valid srcCondId (case-drifted echo) -> canonical FCIM id carried forward
@@ -252,44 +251,31 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   check('add_fha executor passes srcCondId to the apply (wiring pin)', /sevBasis: a\.sevBasis, srcCondId: a\.srcCondId/.test(ai));
 
   // ---- 3 Sep 2026 — ACCEPT NO LONGER STACKS DUPLICATES (Waqas: "consolidated to 1")
-  // ---- 5 Sep 2026 — AND A RE-DRAFT SCRAPS THE AI'S OLD ROWS (Waqas: "I want you to scrap old
-  // rows"): rows accepted in one session share a token; the first row of a condition to land
-  // in a NEW session removes every AI-generated, un-edited row of that condition (all its
-  // phase-group rows). Hand-edited rows stay and the draft for their phase set is declined.
-  ctx.acFhaData.length = 0; ctx._fhaScope = { token: 'panel-test-0' };
-  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Landing'], srcCondId: 'SF-001-TL', severity: 'Catastrophic' });
-  const firstId = ctx.acFhaData[0].internalId;
-  ctx._fhaScope = { token: 'panel-test-0b' };   // a later drafting session
+  const before = ctx.acFhaData.length;
+  // same condition, same phases, AI-written and untouched -> UPDATED IN PLACE
   const r = ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking (redraft)', phases: ['Landing'], srcCondId: 'SF-001-TL', severity: 'Hazardous' });
-  check('re-drafting the same condition does NOT stack a row', ctx.acFhaData.length === 1, String(ctx.acFhaData.length));
-  check('… the old AI row is scrapped and the new one lands (text moved, FC id kept, a new row identity)', r === true && ctx.acFhaData[0].fcDesc === 'Total loss of braking (redraft)' && ctx.acFhaData[0].fcId === 'SF-001-TL' && ctx.acFhaData[0].internalId !== firstId);
-  check('the apply reports an add (the old row is gone, not updated)', ctx.__ap._last && ctx.__ap._last.action === 'add');
-  // one session (a review panel, or one harness applyDraft): its rows share a token and coexist
-  ctx._fhaScope = { token: 'panel-test-1' };
-  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Standing', 'Taxi'], srcCondId: 'SF-001-TL', severity: 'Negligible' });
-  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Takeoff', 'Climb', 'Cruise'], srcCondId: 'SF-001-TL', severity: 'Catastrophic' });
-  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Landing'], srcCondId: 'SF-001-TL', severity: 'Catastrophic' });
-  check('rows from ONE session coexist: the first scrapped the earlier session\'s row, the rest added — three phase-group rows', ctx.acFhaData.length === 3 && ctx.acFhaData.every(x => x.aiApplyToken === 'panel-test-1'), ctx.acFhaData.map(x => x.phases + '/' + x.aiApplyToken).join(' | '));
-  // a row a person edited is PROTECTED — and survives the next session's scrap
-  const landing = ctx.acFhaData.find(x => x.phases === 'Landing');
-  landing.humanEdited = true; landing.humanEditedAt = '2026-09-05T00:00:00Z';
-  ctx._fhaScope = { token: 'panel-test-2' };
+  check('re-accepting the same condition + phases does NOT add a row', ctx.acFhaData.length === before, before + ' -> ' + ctx.acFhaData.length);
+  check('… it updates the existing row in place (text moved, id kept)', r === true && ctx.acFhaData[0].fcDesc === 'Total loss of braking (redraft)' && ctx.acFhaData[0].internalId === 501);
+  check('… and counts the redraft', ctx.acFhaData[0].aiRedrafts === 1);
+  check('the apply reports what it did', ctx.__ap._last && ctx.__ap._last.action === 'updated');
+  // phase order does not fake a new row
+  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Landing'], srcCondId: 'sf-001-tl' });
+  check('the same phases in another order / case are still the same row', ctx.acFhaData.length === before);
+  // a row a person edited is PROTECTED
+  ctx.acFhaData[0].humanEdited = true; ctx.acFhaData[0].humanEditedAt = '2026-09-03T21:00:00Z';
+  const _keep = ctx.acFhaData[0].fcDesc;
   const p = ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking (third draft)', phases: ['Landing'], srcCondId: 'SF-001-TL' });
-  check('a hand-edited row is never overwritten by a re-draft', p === 'protected' && landing.fcDesc === 'Total loss of braking', String(p) + ' / ' + landing.fcDesc);
-  check('… and the newer draft is noted ON the protected row', !!landing.aiNewerDraftAt && /edited by hand/.test(landing.aiNewerDraftNote));
-  check('… while the earlier session\'s AI rows of that condition are scrapped (only the hand-edited row remains)', ctx.acFhaData.length === 1 && ctx.acFhaData[0] === landing, ctx.acFhaData.map(x => x.phases).join(' | '));
+  check('a hand-edited row is never overwritten by a re-draft', p === 'protected' && ctx.acFhaData[0].fcDesc === _keep, String(p) + ' / ' + ctx.acFhaData[0].fcDesc);
+  check('… and the newer draft is noted ON the protected row', !!ctx.acFhaData[0].aiNewerDraftAt && /edited by hand/.test(ctx.acFhaData[0].aiNewerDraftNote));
+  check('… still no extra row', ctx.acFhaData.length === before);
+  // a different phase set is a genuinely new row (the per-phase split)
   ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Takeoff'], srcCondId: 'SF-001-TL', severity: 'Catastrophic' });
-  check('the new session\'s other phase-group rows land beside the protected row', ctx.acFhaData.length === 2);
-  // outside a drafting session (chat / form) nothing is ever scrapped — the old upsert only
-  ctx._fhaScope = null;
-  const nBefore = ctx.acFhaData.length;
-  ctx.__ap({ subId: 'SF-001', fcDesc: 'Total loss of braking', phases: ['Descent'], srcCondId: 'SF-001-TL', severity: 'Major' });
-  check('a single add outside a session adds its row and scraps nothing', ctx.acFhaData.length === nBefore + 1);
-  // no stable identity -> cannot de-dup or scrap, so it adds (never merges the wrong rows)
+  check('a different phase set for the same condition IS a new row', ctx.acFhaData.length === before + 1);
+  // no stable identity -> cannot de-dup, so it adds (never merges the wrong rows)
   const n0 = ctx.acFhaData.length;
   ctx.__ap({ subId: 'SF-010', fcDesc: 'No source id', phases: ['Cruise'] });
   ctx.__ap({ subId: 'SF-010', fcDesc: 'No source id', phases: ['Cruise'] });
-  check('rows with no sourceCondId are never merged or scrapped (identity unknown)', ctx.acFhaData.length === n0 + 2);
+  check('rows with no sourceCondId are never merged (identity unknown)', ctx.acFhaData.length === n0 + 2);
 
   // ---- judgement call: flag on the row, note filed as an assumption ------------
   let promoted = [];

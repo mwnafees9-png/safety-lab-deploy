@@ -3134,29 +3134,6 @@
         Object.assign(hit, data, keep, { assumptionIds: merged, aiRedrafts: (hit.aiRedrafts || 0) + 1 });
         return { action: 'updated', row: hit };
     }
-    // 5 Sep 2026 (Waqas: "I want you to scrap old rows") — a re-draft REPLACES the AI's earlier
-    // rows for a condition. Rows landing in one apply session share a token (the review
-    // panel's batch, or one harness applyDraft); when the first row for a condition lands,
-    // every AI-generated, un-edited row of that condition carrying a DIFFERENT token is
-    // removed — all its phase-group rows, not just the matching one. A hand-edited row is
-    // never touched: it stays, and the new draft for its phase set is declined as before.
-    // Only a DRAFTING session scraps (the review panel, the harness); a single add_fha from
-    // chat or the form has no session and only ever upserts its own row.
-    var _fhaScope = null;
-    var _fhaOneSeq = 0;
-    function _fhaScopeToken() { return (_fhaScope && _fhaScope.token) || ('one-' + Date.now() + '-' + (++_fhaOneSeq)); }   // no session → every accept is its own
-    function _fhaScrapOld(store, cond, token) {
-        if (!cond || !Array.isArray(store)) return 0;
-        var n = 0;
-        for (var i = store.length - 1; i >= 0; i--) {
-            var r = store[i];
-            if (!r || String(r.sourceCondId || '').trim() !== cond) continue;
-            if (r.aiGenerated !== true || r.humanEdited) continue;
-            if (r.aiApplyToken && r.aiApplyToken === token) continue;   // landed in THIS session — keep
-            store.splice(i, 1); n++;
-        }
-        return n;
-    }
     function _applyFhaSuggestion(s) {
         try {
             const sysScoped = !!(s && s._systemId);
@@ -3259,13 +3236,11 @@
                 aiSkill: _skillStampFor(sysScoped ? 'sfha.populate' : 'fha.populate'),   // Skills V1 — which instructions drafted this row
                 aiInputScope: sysScoped ? ('SFHA · ' + (s._systemName || '')) : 'AFHA', aiAt: new Date().toISOString()
             };
-            const _tok = _fhaScopeToken(); data.aiApplyToken = _tok;
             if (sysScoped) {
                 if (typeof systemsData === 'undefined') { _toast('System data not loaded in this session.', 'warning'); return false; }
                 const sys = (systemsData || []).find(function (x) { return String(x.id) === String(s._systemId); });
                 if (!sys) { _toast('Target system not found.', 'warning'); return false; }
                 if (!Array.isArray(sys.fha)) sys.fha = [];
-                if (_fhaScope) _fhaScrapOld(sys.fha, String(data.sourceCondId || '').trim(), _tok);   // only a drafting session scraps; a single chat/manual add never does
                 const _upS = _fhaUpsert(sys.fha, data);
                 if (_upS.action === 'protected') { _applyFhaSuggestion._last = _upS; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
                 if (_upS.action === 'add') {
@@ -3278,7 +3253,6 @@
                 if (typeof renderSysAssumptions === 'function') { try { renderSysAssumptions(); } catch (_) {} }   // promoted AI assumptions show at once
             } else {
                 if (typeof acFhaData === 'undefined') { _toast('FHA data not loaded in this session.', 'warning'); return false; }
-                if (_fhaScope) _fhaScrapOld(acFhaData, String(data.sourceCondId || '').trim(), _tok);
                 const _upA = _fhaUpsert(acFhaData, data);
                 if (_upA.action === 'protected') { _applyFhaSuggestion._last = _upA; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
                 if (_upA.action === 'add') {
@@ -4356,7 +4330,6 @@
     function _applyCapturedDraft(payload, opts) {
         opts = opts || {};
         const items = (payload && Array.isArray(payload.items)) ? payload.items : [];
-        _fhaScope = { token: 'draft-' + String((payload && payload.id) || '') + '-' + Date.now() };   // one apply session — see _fhaScrapOld
         const asms  = (payload && Array.isArray(payload.assumptions)) ? payload.assumptions : [];
         const model = opts.model || MODELS.reason;
         const feature = (payload && payload.feature) || opts.feature || '';
@@ -12327,7 +12300,6 @@
         let _batchAsms = [];
         const _replies = [];
         let attempt = null, _declined = null, _hardErr = null, _slicesRun = 0;
-        const _batchToken = 'b' + Date.now() + Math.floor(Math.random() * 1000);   // 5 Sep — the panel's apply session id
         let _unparsed = 0, _rawTail = '';   // F16d — unreadable replies, counted and quoted
 
         // 26 Aug 2026, same day, Waqas: "it has taken about 10 mins on the FCIM now"
@@ -12607,7 +12579,6 @@
                 // but never handed to the executor, so an accepted row cited none of
                 // them. Match them to this row the same way the classic lane does.
                 try { if (a && a.op === 'add_fha') a._assumptions = _assumptionsFor(_batchAsms, String(a.fcDesc || '').trim(), [a.subId, a.srcCondId]); } catch (_) {}
-                _fhaScope = { token: 'panel-' + _batchToken };   // every accept from THIS panel is one session — see _fhaScrapOld
                 const res = _chatRunActions([a], (attempt.rr && attempt.rr.model) || MODELS.reason, undefined, cfg.analysis);
                 const ok = !!(res && res[0] && res[0].ok !== false);
                 // AIF-1 — the reason used to be discarded here, which is half of

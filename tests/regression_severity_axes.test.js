@@ -172,7 +172,7 @@ console.log('\n[4] accept — the class is derived, the model\'s class is record
   const ai = S('ai_assistant.js');
   // 3 Sep 2026 (evening) — accept now de-dups (_fhaUpsert + _fhaPhaseKeyOf) and sweeps the
   // AI ledger (_promoteLedgerForFha); real code, so it rides in rather than being stubbed.
-  const src = [extractFn(ai, '_axisLevel'), extractFn(ai, '_axisDerive'), extractFn(ai, '_fhaPhaseKeyOf'), extractFn(ai, '_fhaUpsert'), extractFn(ai, '_promoteLedgerForFha'), 'var _fhaScope = null; var _fhaOneSeq = 0;', extractFn(ai, '_fhaScopeToken'), extractFn(ai, '_fhaScrapOld'), extractFn(ai, '_applyFhaSuggestion')].join('\n');
+  const src = [extractFn(ai, '_axisLevel'), extractFn(ai, '_axisDerive'), extractFn(ai, '_fhaPhaseKeyOf'), extractFn(ai, '_fhaUpsert'), extractFn(ai, '_promoteLedgerForFha'), extractFn(ai, '_applyFhaSuggestion')].join('\n');
   check('extracted _axisLevel/_axisDerive/_applyFhaSuggestion', /function _axisLevel/.test(src) && /function _axisDerive/.test(src) && /function _applyFhaSuggestion/.test(src));
   let minted = 0;
   const ctx = {
