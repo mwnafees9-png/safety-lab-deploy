@@ -1,5 +1,6 @@
 // ============================================================================
-// fha_derive.js — v1.0 — FHA LEVELS DERIVED BY RULE, NOT JUDGED (5 Sep 2026).
+// fha_derive.js — v1.1 — FHA LEVELS DERIVED BY RULE, NOT JUDGED (5 Sep 2026).
+//   1.1: the drafter's own "escape: none" counts as no escape (draw 1 lesson).
 //
 // Two identical-input draws of the same AFHA agreed on a row's class 63% of the
 // time. Waqas: "lever 2 are pure judgement calls and you will have a hard time
@@ -120,6 +121,13 @@
         var none = esc.filter(function (e) { return e.escape.toLowerCase() === ESCAPE_NONE; }).map(function (e) { return e.phase; });
         var open = esc.filter(function (e) { return e.escape.toLowerCase() !== ESCAPE_NONE; });
         var defeated = !!(s.escapeDefeated === true || String(s.escapeDefeated).toLowerCase() === 'true');
+        // 1.1 (5 Sep, draw 1 on run 3): the drafter's own answer "escape: none" is a
+        // statement that no way out applies to THIS condition in these phases — total
+        // loss of thrust airborne cannot "continue to a landing". Thirteen such rows were
+        // turned into No Safety Effect because only the profile's escape was read. The
+        // drafter's "none" now counts as the escape being defeated.
+        var saidNone = (s.escape != null) && String(s.escape).trim().toLowerCase() === ESCAPE_NONE;
+        if (saidNone && open.length) return { kind: 'end', escapes: esc, note: 'Effect not realised yet, and the drafter states no escape applies to this condition in these phases (the profile lists ' + open.map(function (e) { return e.escape; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' / ') + ') — the row carries the end effect and its class (4 Sep 2026 ruling).' };
         if (none.length && !open.length) return { kind: 'end', escapes: esc, note: 'Effect not realised yet and there is no escape in ' + none.join(', ') + ' — the row carries the end effect and its class (4 Sep 2026 ruling).' };
         if (none.length && open.length) return { kind: 'mixed', escapes: esc, note: 'Effect not realised yet; ' + none.join(', ') + ' has no escape while ' + open.map(function (e) { return e.phase; }).join(', ') + ' can be escaped — the row carries the end effect conservatively; split it so each phase sits on one row.' };
         var names = open.map(function (e) { return e.escape; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' / ');
@@ -367,7 +375,7 @@
         return out;
     }
 
-    G.SLFhaDerive = { _v: '1.0', ESCAPE_NONE: ESCAPE_NONE, defaultEscape: defaultEscape, escapeOf: escapeOf, phaseEscapes: phaseEscapes, escapesForRow: escapesForRow, escapesPromptText: escapesPromptText, applyEscape: applyEscape,
+    G.SLFhaDerive = { _v: '1.1', ESCAPE_NONE: ESCAPE_NONE, defaultEscape: defaultEscape, escapeOf: escapeOf, phaseEscapes: phaseEscapes, escapesForRow: escapesForRow, escapesPromptText: escapesPromptText, applyEscape: applyEscape,
                       condKind: condKind, lostCount: lostCount, rulesFor: rulesFor, ruleForPhase: ruleForPhase, ruleShape: ruleShape, ruleText: ruleText, macDerive: macDerive,
                       tasksFor: tasksFor, hfDerive: hfDerive, promptFor: promptFor, apply: apply };
 })();
