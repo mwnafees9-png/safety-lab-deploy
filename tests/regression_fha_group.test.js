@@ -367,6 +367,10 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   // amber-coloured leading segment of the Comments cell instead (Waqas, screenshot).
   check('the Severity cell no longer wears a judgement badge (pick-list column stays narrow)', (helpers.match(/\$\{_fhaJudgementBadge\(row\)\}/g) || []).length === 0);
   check('the judgement call is colour-coded in Comments, on both tables', /function _fhaCommentsCell\(row\)/.test(helpers) && /color:#7A5300;font-weight:600;/.test(helpers) && (helpers.match(/\$\{_fhaCommentsCell\(row\)\}/g) || []).length === 2);
+  // 5 Sep 2026 (Waqas): "I dont want any badges in that column" — the FC ID cell is the id
+  // alone; the group finding opens the Comments cell of the group head instead.
+  check('the FC ID cell carries no badge; the finding badge sits at the top of Comments', /: `<strong>\$\{esc\(row\.fcId\)\}<\/strong>`;/.test(helpers) && !/<\/strong>\$\{_grpBadge\}/.test(helpers) && /\$\{_findingHtml\}\$\{_fhaCommentsCell\(row\)\}/.test(helpers));
+  check('Sub-Function a bit wider, Effects and Comments much wider, on both tables', (helpers.match(/min-width:160px;">\$\{_fhaSubCell|min-width:160px;">\$\{_l1Cell/g) || []).length === 2 && (helpers.match(/min-width:480px;width:34%;/g) || []).length === 4 && !/min-width:360px;width:30%;/.test(helpers));
   check('the Phases cell lists ticked boxes only: no danger badge, no droppedPhases, no invented phase styling (Waqas, 4 Sep)',
     !/_fhaDroppedPhasesBadge/.test(helpers) && !/droppedPhases/.test(helpers) && !/_fhaPhaseUnlisted/.test(helpers) && /return list\.map\(esc\)\.join\('<br>'\);/.test(helpers));
   check('a human edit marks the row and preserves the fields the form does not know',
@@ -378,8 +382,10 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   check('the failure-condition id never wraps and takes only its own width (both tables)', (helpers.match(/<td style="width:1%;white-space:nowrap;">\$\{_fcCell\}/g) || []).length === 1 && (helpers.match(/<td style="width:1%;white-space:nowrap;"><strong>\$\{esc\(row\.fcId\)\}/g) || []).length === 1);
   check('phases stack one per line in a narrow column (both tables)', /function _fhaPhasesCell\(row\)/.test(helpers) && /join\('<br>'\)/.test(helpers) && (helpers.match(/\$\{_fhaPhasesCell\(row\)\}/g) || []).length === 2);
   check('Effects and Comments are the wide columns; Severity, Phases, Assumptions shrink to content (both tables)',
-    (helpers.match(/<td style="min-width:360px;width:30%;">\$\{effectsHtml\}<\/td>/g) || []).length === 2
-    && (helpers.match(/<td style="min-width:360px;width:30%;">\$\{_fhaCommentsCell\(row\)\}<\/td>/g) || []).length === 2
+    // 5 Sep 2026 (Waqas): "effects and comments columns much wider" — 480px / 34%, and the
+    // AC table's Comments cell opens with the group finding when there is one.
+    (helpers.match(/<td style="min-width:480px;width:34%;">\$\{effectsHtml\}<\/td>/g) || []).length === 2
+    && (helpers.match(/<td style="min-width:480px;width:34%;">(\$\{_findingHtml\})?\$\{_fhaCommentsCell\(row\)\}<\/td>/g) || []).length === 2
     && (helpers.match(/style="width:1%;white-space:nowrap;">\$\{esc\(row\.severity\)\}/g) || []).length === 2
     && (helpers.match(/<td style="width:1%;white-space:nowrap;">\$\{_fhaPhasesCell\(row\)\}/g) || []).length === 2);
 }
