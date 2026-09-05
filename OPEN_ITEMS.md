@@ -797,6 +797,22 @@ this register — the ids below are this register's, and do not correspond.
   and say where the rest went. Review-panel Accept ONLY — applyDraft (the harness) never moves the
   screen. Small; one deploy; do it between campaign passes so the campaign build is not disturbed.
 
+- **F21 — SEVERITY LEVELS DERIVED FROM THE MAC AND FROM HUMAN FACTORS WORKLOAD (Waqas, 5 Sep 2026).**
+  Identical-input draws agree on a row's class 63% of the time and on a function's worst class
+  82%; the aircraft/crew axis levels underneath agree ~62%. Judgement cannot be made consistent;
+  derivation can. Build: (a) aircraft axis from the MAC — for a condition's phase row, how much
+  configuration authority remains against the rule's floor → slight / significant / large; outside
+  the MAC → the loss itself, with the phase logic (abortable → No Safety Effect; inescapable → end
+  effect) on top; (b) crew axis from the Task Analysis — the workload increase a failure causes,
+  read as occupancy against the 60% / 80% lines → slight / significant / large; (c) where the MAC
+  or the task analysis is not populated, the AI's level lands as an ASSUMPTION ("assumed pending
+  MAC" / "assumed pending HF workload") in the register, validated when they are; (d) the FHA
+  drafter is told which levels are derived and only writes the rest. Then three fresh FHA draws on
+  identical inputs, scored strictly, bar 0.90. Rejected on the way and not to be re-raised: a
+  per-function worst-case anchor (the 2 Aug mistake again) and fixed phase groups (loss of braking
+  is Standing NSE / Taxi Maj-Haz / airborne forward-looking CAT / Landing immediate CAT — groups
+  come from each condition's effects).
+
 - **F19 — THE SFHA (classic path) HAS NO PHASE-COVERAGE RE-ASK (4 Sep 2026).** The AFHA's
   unified path now checks that a condition's rows together cover every phase of the mission
   profile and re-asks once for the gaps; the classic `_runPopulateFha` path the SFHA uses got the
