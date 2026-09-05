@@ -708,11 +708,13 @@
     // (high run-to-run variance + more confabulation). eval.judge / validators → 0.0
     // (deterministic); ANEM chat → 0.3 (natural prose); all analytical drafting
     // (FHA/FCIM/FTA/CCA/decomposition/requirements/etc.) → 0.2.
+    // 5 Sep 2026 (consistency, lever 1): analytical drafting runs at 0.0, not 0.2 — three
+    // identical-input FHA draws agreed on a row's class 63% of the time; sampling variance is
+    // the cheapest part of that to remove. Only the conversational ANEM chat keeps 0.3.
     function _featureTemp(feature) {
         const f = String(feature || '');
-        if (f === 'eval.judge' || f.indexOf('validate') !== -1 || f.indexOf('grade') !== -1) return 0.0;
         if (f === 'chat.edit') return 0.3;
-        return 0.2;
+        return 0.0;
     }
 
     // ---- Reproducible completion (AI-C2) ------------------------------------
@@ -12115,7 +12117,7 @@
     // and the batch surface (_anemBatch, routes to a review panel → Accept). Same
     // unified system prompt + action schema + executor (_chatRunActions) + safeguards.
     // ========================================================================
-    async function _anemComplete(messages, systemExtra, maxTokens) {
+    async function _anemComplete(messages, systemExtra, maxTokens, temperature) {
         // Newer models (Opus 4.7+/extended-thinking) reject an assistant-message prefill, so we no
         // longer prefill "{". Instead we instruct strict-JSON output and rely on the hardened parser
         // (_safeParseJson: balanced extraction + truncation repair) plus the one-shot retry in
@@ -12142,7 +12144,10 @@
         // row costs ~350 output tokens, so a full sweep never fit and it drafted a
         // batch and offered to continue. Chunking is the real fix; this matches the
         // doc.review lane (16000, per the 2 Aug token lesson) so each slice has room.
-        const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, messages: messages, maxTokens: (typeof maxTokens === 'number' ? maxTokens : 16000) });
+        // 5 Sep 2026 — this call is labelled chat.edit for the spec/context injection keyed on it, so
+        // it silently ran at the CHAT temperature (0.3) for every analysis batch — the FHA on the
+        // golden thread included. The batch passes 0 explicitly; the chat passes nothing and keeps 0.3.
+        const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, messages: messages, maxTokens: (typeof maxTokens === 'number' ? maxTokens : 16000), temperature: (typeof temperature === 'number' ? temperature : undefined) });
         return { rr: rr, parsed: _safeParseJson(String(rr.text || '')) };
     }
     // #56 — controlled-document routing guard. ITAR/proprietary docs marked "controlled"
@@ -12159,17 +12164,17 @@
     // A chunked turn covers a handful of units, not a whole project — asking a
     // reasoning model for 16,000 tokens it will not use is most of the latency.
     const _CHUNK_TURN_TOKENS = 8000;
-    async function _anemRun(messages, systemExtra, maxTokens) {
+    async function _anemRun(messages, systemExtra, maxTokens, temperature) {
         const _cg = _controlledGuard();
         if (!_cg.ok) {
             try { _toast('Blocked: a controlled document needs an on-prem / ITAR backend (current: ' + _cg.mode + ').', 'error'); } catch (_) {}
             throw new Error('[Safety Lab Aero] Controlled document(s) on file (' + _cg.names.join(', ') + ') require an on-prem (local) or ITAR (Azure Gov) backend — current backend is "' + _cg.mode + '". Switch the backend in AI Settings or unmark the document before processing.');
         }
         const ex = systemExtra || '';
-        let attempt = await _anemComplete(messages, ex, maxTokens);
+        let attempt = await _anemComplete(messages, ex, maxTokens, temperature);
         if (!attempt.parsed) {   // one retry on parse-fail, mirroring the chat reliability path
             const truncated = !!(attempt.rr && attempt.rr.raw && attempt.rr.raw.stop_reason === 'max_tokens');
-            attempt = await _anemComplete(messages, ex + '\n\nCRITICAL: your previous reply could not be parsed' + (truncated ? ' (it was cut off — be more concise, fewer actions this turn)' : '') + '. Return ONLY one strict JSON object {reply,actions,choices,assumptions}, every string properly escaped, no prose, no markdown fences.', maxTokens);
+            attempt = await _anemComplete(messages, ex + '\n\nCRITICAL: your previous reply could not be parsed' + (truncated ? ' (it was cut off — be more concise, fewer actions this turn)' : '') + '. Return ONLY one strict JSON object {reply,actions,choices,assumptions}, every string properly escaped, no prose, no markdown fences.', maxTokens, temperature);
         }
         return attempt;
     }
@@ -12364,7 +12369,7 @@
             let _lastErr = null;
             for (let _try = 1; _try <= _TURN_TRIES; _try++) {
                 try {
-                    _results[_ci] = { ok: true, a: await _anemRun(_mkMessages(_extra), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined), tries: _try };
+                    _results[_ci] = { ok: true, a: await _anemRun(_mkMessages(_extra), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0), tries: _try };   // 5 Sep — analysis batches at temperature 0
                     if (_try > 1) _retried++;
                     return;
                 } catch (e) {
@@ -12483,7 +12488,7 @@
                 const _steer = '\n\nPHASE COVERAGE — for one failure condition, every phase of the mission profile belongs to EXACTLY ONE row: one effect, one class. The rows returned for the conditions below leave phases unassessed, or assess a phase twice. For each condition: where phases are UNASSESSED, return ONLY the additional add_fha rows that cover them (group phases that share the same effects and class on one row; where the effect is not realised and the flight can be aborted or the condition escaped, that is a No Safety Effect row; where the effect is not realised yet but cannot be escaped, the row carries the end effect and its class). Where a phase is ASSESSED TWICE, return the condition\'s COMPLETE set of rows again with each phase on exactly one row — those rows replace the ones you returned before. Echo srcCondId and fcDesc exactly.\n'
                     + _gaps.map(function (g) { return '- ' + g.label + (g.missing && g.missing.length ? ' — phases unassessed: ' + g.missing.join(', ') : '') + (g.twice && g.twice.length ? ' — phases assessed twice: ' + g.twice.join(', ') : ''); }).join('\n');
                 try {
-                    const _a2 = await _anemRun(_mkMessages(_steer), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined);
+                    const _a2 = await _anemRun(_mkMessages(_steer), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0);
                     const _pp2 = (_a2 && _a2.parsed) || {};
                     if (Array.isArray(_pp2.actions)) Array.prototype.push.apply(actions, _pp2.actions);
                     if (_pp2.reply) _replies.push(String(_pp2.reply));

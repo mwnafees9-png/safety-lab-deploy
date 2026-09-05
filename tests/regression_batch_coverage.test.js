@@ -102,13 +102,13 @@ check('a chunked turn asks for a smaller budget than a one-shot lane',
   parseInt(ai.match(/const _CHUNK_TURN_TOKENS = (\d+);/)[1], 10) < 16000,
   'asking a reasoning model for 16,000 tokens per small turn is most of the latency');
 check('…and that budget is actually threaded to the provider call',
-  /_anemRun\(_mkMessages\(_extra\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined\)/.test(ai) &&
-  /async function _anemRun\(messages, systemExtra, maxTokens\)/.test(ai) &&
-  /async function _anemComplete\(messages, systemExtra, maxTokens\)/.test(ai) &&
+  /_anemRun\(_mkMessages\(_extra\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0\)/.test(ai) &&   // 5 Sep: + temperature 0
+  /async function _anemRun\(messages, systemExtra, maxTokens, temperature\)/.test(ai) &&
+  /async function _anemComplete\(messages, systemExtra, maxTokens, temperature\)/.test(ai) &&
   /maxTokens: \(typeof maxTokens === 'number' \? maxTokens : 16000\)/.test(ai),
   'a budget computed and not passed would look identical to a grep');
 check('…including on the parse-fail retry, which would otherwise jump back to 16,000',
-  /no prose, no markdown fences\.', maxTokens\);/.test(ai));
+  /no prose, no markdown fences\.', maxTokens, temperature\);/.test(ai));
 check('the busy indicator is begun ONCE for the whole chunked run and ended once',
   (ai.match(/window\.slabAiBusyBegin\('drafting '/g) || []).length === 1 &&
   /if \(_chunk && window\.slabAiBusyEnd\) window\.slabAiBusyEnd\(\);/.test(ai),
