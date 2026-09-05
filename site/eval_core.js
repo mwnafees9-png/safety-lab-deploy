@@ -322,6 +322,37 @@ function phaseSplitAgreement(golden, cand) {
   }
   return { paired, same, rate: paired ? same / paired : 1, flips };
 }
+// ---------------------------------------------------------------------------
+// v1.9 (5 Sep 2026) — THE BAR IS CLASS PER CONDITION PER PHASE.
+// Waqas: "same class different effect we just ruled doesnt need to be on the same row."
+// Two draws that put Takeoff and Climb on one Major row, or on two Major rows with
+// different effects, gave the SAME answer — row pairing and phase-split matching punished
+// the presentation. So the judged number is: for every condition both runs drafted, in
+// every phase of the mission profile, did they land on the same class? Rows are expanded
+// to their phases ("All phases" = the profile); a phase named on two rows of one condition
+// takes the worst class (the fault trees do the same). Cells where either side abstained
+// are counted separately, never as agreement. Bar 0.90.
+function perPhaseClassAgreement(golden, cand) {
+  const WC = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'Negligible'];
+  const rk = sev => { const t = String(sev || '').trim(); if (/^no safety effect$/i.test(t)) return 4; const i = WC.indexOf(t); return i < 0 ? null : i; };
+  const profile = new Set();
+  [golden, cand].forEach(d => d.fha.forEach(r => { for (const k of phaseKeys(r)) if (k !== '*') profile.add(k); }));
+  const cells = (d) => { const m = new Map(); d.fha.forEach(r => { const id = condIdOf(r); if (!id) return; const ks = phaseKeys(r); const ph = ks.has('*') ? [...profile] : [...ks]; const k0 = rk(sevOf(r)); ph.forEach(p => { const key = id + '|' + p; const cur = m.get(key); if (cur === undefined || (k0 !== null && (cur === null || k0 < cur))) m.set(key, k0); }); }); return m; };
+  const G = cells(golden), C = cells(cand);
+  let paired = 0, same = 0, abstain = 0, oneStep = 0, jumps = 0; const byPhase = {}, byCond = {};
+  for (const [key, g] of G) {
+    if (!C.has(key)) continue;
+    const c = C.get(key); paired++;
+    if (g === null || c === null) { abstain++; continue; }
+    if (g === c) { same++; continue; }
+    const [id, ph] = key.split('|');
+    byPhase[ph] = (byPhase[ph] || 0) + 1; byCond[id] = (byCond[id] || 0) + 1;
+    if (Math.abs(g - c) >= 2) jumps++; else oneStep++;
+  }
+  const denom = paired - abstain;
+  return { paired, same, abstain, oneStep, jumps, rate: denom ? same / denom : 1, byPhase,
+           worstConditions: Object.entries(byCond).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([id, n]) => ({ id, phasesDiffering: n })) };
+}
 function functionWorstCase(golden, cand) {
   // rank 0 = Catastrophic … 4 = Negligible / No Safety Effect; the WORST is the LOWEST rank
   const WC_LABEL = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'Negligible'];
@@ -702,16 +733,19 @@ function functionWorstCase(golden, cand) {
             fhaSignatureMatchRate: {
                 value: +(gTotal ? pairs.length / gTotal : 0).toFixed(3), threshold: 0.70,
                 note: 'golden FHA rows with a text OR topic|mode matched candidate row' },
+            perPhaseClassAgreement: (function () { const p = perPhaseClassAgreement(golden, cand); return {
+                value: +p.rate.toFixed(3), threshold: 0.90, paired: p.paired, same: p.same, abstain: p.abstain, oneStep: p.oneStep, jumps: p.jumps, byPhase: p.byPhase, worstConditions: p.worstConditions,
+                note: 'v1.9 (5 Sep 2026): for every condition both runs drafted, in every phase of the mission profile, the same class — regardless of how the phases were grouped into rows (Waqas: same class with different effects need not be one row). Bar 0.90. Cells where either side abstained are counted in abstain, never as agreement.' }; })(),
             severityAgreement: {
-                value: +(sevDenom ? sevAgree / sevDenom : 0).toFixed(3), threshold: 0.90,
-                note: 'v1.7 (4 Sep 2026): exact severity over STRICT pairs — same condition (shared id, or same loss form + wording), same phase group; bar 0.90 (Waqas: "the numbers need to be over 90 percent"). Was topic-paired at 0.50: it compared different conditions.' },
+                value: +(sevDenom ? sevAgree / sevDenom : 0).toFixed(3), informational: true,
+                note: 'v1.9: informational. Exact severity over STRICT pairs (same condition, same phase group) — punishes a legitimate difference in how the phases were grouped into rows; perPhaseClassAgreement is the judged number. Was the 0.90 bar in v1.7–1.8.' },
             strictPairRate: {
                 value: +(strict.gTotal ? strict.pairs.length / strict.gTotal : 0).toFixed(3), informational: true,
                 note: 'golden FHA rows with a strict counterpart (same condition + phase group) — the denominator the severity metrics stand on' },
             phaseSplitAgreement: (function () { const p = phaseSplitAgreement(golden, cand); return {
-                value: +p.rate.toFixed(3), threshold: 0.90, paired: p.paired, same: p.same,
+                value: +p.rate.toFixed(3), informational: true, paired: p.paired, same: p.same,
                 flips: p.flips.slice(0, 40),
-                note: 'conditions drafted by both runs whose rows split the flight into the SAME phase groups; flips lists per condition what moved — the split, the class on a paired row, or both' }; })(),
+                note: 'v1.9: informational — describes the drafting, not a fault (Waqas, 5 Sep: same class with different effects need not be one row). Conditions drafted by both runs whose rows split the flight into the SAME phase groups; flips lists per condition what moved. Was a 0.90 bar in v1.8.' }; })(),
             functionWorstCaseAgreement: (function () { const w = functionWorstCase(golden, cand); return {
                 value: +w.rate.toFixed(3), threshold: 0.90, paired: w.paired, same: w.same, offByOne: w.offByOne, offByTwoPlus: w.offMore, misses: w.misses.slice(0, 20),
                 note: 'the worst class per aircraft sub-function is the same in both runs (the headline an engineer reads; abstraction-level differences in row counts do not move it)' }; })(),
@@ -772,7 +806,7 @@ function functionWorstCase(golden, cand) {
     }
 
     return { normalizeRun, scoreRun, norm, jaccard, TOPICS, topicsOf, modeOf,
-             rowSignatures, pairFhaRows, pairFhaRowsStrict, functionWorstCase, phaseSplitAgreement, lossFormOf, phaseKeys, functionTopics, fcimSignatures,
+             rowSignatures, pairFhaRows, pairFhaRowsStrict, functionWorstCase, phaseSplitAgreement, perPhaseClassAgreement, lossFormOf, phaseKeys, functionTopics, fcimSignatures,
              LANES, rowText, laneTopics, laneTokens,
              agreementOn, agreementTwoLevel };   // HF-4 — categorical agreement, id-matched only
 }));

@@ -315,7 +315,7 @@ console.log('6. golden v3 (F1c-era config) integrity — added 30 Aug 2026');
     // percent"). v3 was promoted under the old 0.50 topic-paired bar and does not meet the
     // new one — that is the honest reading, not a scorer regression. Everything ELSE must
     // still pass; only the two raised severity bars may fail here.
-    const _sevBars = ['severityAgreement', 'functionWorstCaseAgreement', 'phaseSplitAgreement'];   // + lever 4 (5 Sep): the phase-split bar
+    const _sevBars = ['perPhaseClassAgreement', 'functionWorstCaseAgreement'];   // v1.9 (5 Sep): the judged bars — class per condition per phase, and the function worst case; row severity and phase split are informational now
     check('v3 vs golden v2: every metric other than the raised severity / phase-split bars still passes (the promotion criterion, as it stood)',
       x.report && x.report.failures.every(function (f) { return _sevBars.indexOf(f) >= 0; }), x.report && JSON.stringify(x.report.failures));
   }

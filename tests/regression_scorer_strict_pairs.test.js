@@ -44,7 +44,10 @@ console.log('\n[2] rows come from effects — any number of phase-group rows per
   const s = E.scoreRun(g, c);
   check('three phase-group rows of ONE condition pair by phase group (3 pairs), 2 of 3 agree', s.metrics.strictPairRate.value === 1 && s.metrics.severityAgreement.value === +(2 / 3).toFixed(3), JSON.stringify(s.metrics.severityAgreement));
   check('the worst case per function still agrees (Hazardous both sides)', s.metrics.functionWorstCaseAgreement.value === 1);
-  check('… and the 0.90 bar is what governs: 0.667 is a failure', s.failures.indexOf('severityAgreement') >= 0 && s.metrics.severityAgreement.threshold === 0.90 && s.metrics.functionWorstCaseAgreement.threshold === 0.90);
+  // v1.9: the judged number is class per condition per phase — 4 of 8 phases moved (Climb,
+  // Cruise, Descent, Approach: Major → Hazardous) → 0.5, a failure at the 0.90 bar; the
+  // row-level severity is informational now and can no longer fail a run by itself.
+  check('… and the 0.90 bar is what governs: 4 of 8 phases moved → 0.5 is a failure on perPhaseClassAgreement; the row-level number is informational', s.failures.indexOf('perPhaseClassAgreement') >= 0 && s.failures.indexOf('severityAgreement') < 0 && s.metrics.perPhaseClassAgreement.value === 0.5 && s.metrics.perPhaseClassAgreement.threshold === 0.90 && s.metrics.functionWorstCaseAgreement.threshold === 0.90, JSON.stringify(s.metrics.perPhaseClassAgreement));
 }
 
 console.log('\n[3] different ids, same condition wording — and different wording never pairs');
@@ -74,7 +77,9 @@ console.log('\n[4] lever 4 — phase-split agreement and the per-condition flip 
     row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Landing', 'Catastrophic'),
     row('SF-1', 'SF-1-PL', 'Partial loss of braking', 'All phases', 'Hazardous') ] };
   const s = E.scoreRun(g, c); const m = s.metrics.phaseSplitAgreement;
-  check('the metric exists with the 0.90 bar and counts conditions both runs drafted', m && m.threshold === 0.90 && m.paired === 2, JSON.stringify(m));
+  // v1.9 (5 Sep 2026, Waqas: "same class different effect we just ruled doesnt need to be on
+  // the same row") — the phase-split number describes the drafting; it is no longer a bar.
+  check('the metric exists, is informational (no bar), and counts conditions both runs drafted', m && m.informational === true && m.threshold === undefined && m.paired === 2, JSON.stringify(m));
   check('total loss split differently (Standing+Taxi vs Standing | Taxi) → not the same split; partial loss same split → 1 of 2', m.same === 1 && m.value === 0.5);
   const f = m.flips;
   check('the flip report names the split that moved and the class that moved, per condition', f.length === 2 && f.some(x => x.id === 'sf-1-tl' && x.split && /standing\+taxi/.test(x.split.golden) && /standing \| taxi/.test(x.split.candidate)) && f.some(x => x.id === 'sf-1-pl' && !x.split && x.classFlips[0] === '*: Major → Hazardous'), JSON.stringify(f));
@@ -86,7 +91,39 @@ console.log('\n[5] identity and the pin');
   const g = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'eval', 'golden_aeolus_v5.json'), 'utf8'));
   const s = E.scoreRun(g, g);
   check('a run against itself is REPEATABLE under the raised bar', s.verdict === 'REPEATABLE' && s.metrics.severityAgreement.value === 1 && s.metrics.functionWorstCaseAgreement.value === 1, JSON.stringify(s.failures));
-  check('eval_core pin bumped to 1.8', /eval_core\.js\?v=1\.8/.test(idx));
+  check('eval_core pin bumped to 1.9', /eval_core\.js\?v=1\.9/.test(idx));
+}
+
+console.log('\n[6] v1.9 — the bar is class per condition per phase (Waqas, 5 Sep: same class with different effects need not be one row)');
+{
+  const fn = (subId, subName) => ({ subId, subName });
+  const row = (subId, id, desc, phases, severity) => ({ subId, sourceCondId: id, fcId: id, fcDesc: desc, phases, severity });
+  const g = { functions: [fn('SF-1', 'Decelerate on the ground')], fcim: [], assumptions: [], fha: [
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Takeoff, Climb', 'Major'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Landing', 'Catastrophic') ] };
+  const c = { functions: [fn('SF-1', 'Decelerate on the ground')], fcim: [], assumptions: [], fha: [
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Takeoff', 'Major'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Climb', 'Major'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Landing', 'Catastrophic') ] };
+  const s = E.scoreRun(g, c), m = s.metrics.perPhaseClassAgreement;
+  check('one Major row vs two Major rows with different effects is the SAME answer: 3 of 3 phases agree, 1.0, bar 0.90', m && m.threshold === 0.90 && m.paired === 3 && m.same === 3 && m.value === 1, JSON.stringify(m));
+  check('… while the row-level severity and phase-split numbers are informational and cannot fail the run', s.metrics.severityAgreement.informational === true && s.metrics.phaseSplitAgreement.informational === true && s.failures.indexOf('severityAgreement') < 0 && s.failures.indexOf('phaseSplitAgreement') < 0);
+  const c2 = { functions: c.functions, fcim: [], assumptions: [], fha: [
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Takeoff', 'Hazardous'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Climb', 'Major'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Landing', '') ] };
+  const m2 = E.scoreRun(g, c2).metrics.perPhaseClassAgreement;
+  check('a class that moved in ONE phase counts against that phase only; an abstained phase counts as abstain, never agreement', m2.paired === 3 && m2.same === 1 && m2.abstain === 1 && m2.oneStep === 1 && m2.byPhase.takeoff === 1 && m2.value === 0.5, JSON.stringify(m2));
+  const c3 = { functions: c.functions, fcim: [], assumptions: [], fha: [ row('SF-1', 'SF-1-TL', 'Total loss of braking', 'All phases', 'Major') ] };
+  const m3 = E.scoreRun(g, c3).metrics.perPhaseClassAgreement;
+  check('"All phases" expands to the profile; Landing Catastrophic vs Major is a two-class jump', m3.paired === 3 && m3.same === 2 && m3.jumps === 1 && m3.worstConditions[0].id === 'sf-1-tl', JSON.stringify(m3));
+  const g4 = { functions: g.functions, fcim: [], assumptions: [], fha: [
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Taxi', 'Negligible'),
+    row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Taxi', 'Major') ] };
+  const c4 = { functions: g.functions, fcim: [], assumptions: [], fha: [ row('SF-1', 'SF-1-TL', 'Total loss of braking', 'Taxi', 'Major') ] };
+  check('a phase named twice on one side takes the worst class (as the fault trees do)', E.scoreRun(g4, c4).metrics.perPhaseClassAgreement.same === 1);
+  check('identity is 1.0 and REPEATABLE under the new bar', E.scoreRun(g, g).metrics.perPhaseClassAgreement.value === 1 && E.scoreRun(g, g).verdict === 'REPEATABLE');
+  check('the row builder in the product tells the same story: no consolidate finding when effects differ', /const _differ = sevKeys\.size > 1 \|\| effKeys\.size > 1;/.test(fs.readFileSync(path.join(__dirname, '..', 'site', 'helpers_modules.js'), 'utf8')));
 }
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
