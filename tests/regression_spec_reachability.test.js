@@ -71,7 +71,11 @@ console.log('\n[spec] the unified batch — the primary path');
 check('ONE assembler exists and both paths call it',
   /async function _assembleAnalysisContext\(feature, system, opts\)/.test(ai) &&
   /opts\.system = await _assembleAnalysisContext\(opts\.feature, opts\.system, opts\);/.test(ai) &&
-  /const _sysExtra = await _assembleAnalysisContext\(cfg\.analysis \|\| '', String\(cfg\.systemExtra \|\| ''\) \+ '\\n\\n' \+ _ABSTAIN_RULE,/.test(ai),
+  // 5 Sep 2026 — the second argument is now the lane-gated _abstainForLane
+  // rather than an unconditional + _ABSTAIN_RULE (the FHA lanes carry the
+  // judgement contract instead). The INVARIANT this check exists for is
+  // untouched: both paths still go through the one assembler.
+  /const _sysExtra = await _assembleAnalysisContext\(cfg\.analysis \|\| '', String\(cfg\.systemExtra \|\| ''\) \+ _abstainForLane,/.test(ai),
   'the fork is retired only while BOTH call sites go through the one function');
 check('the hand-copied compensations are gone from _anemBatch',
   !/const _specBlock =/.test(ai) && !/const _docBlock =/.test(ai) && !/const _zonalBlock =/.test(ai),

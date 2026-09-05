@@ -262,6 +262,14 @@ const AiClient = (function(){
     // Anthropic deprecated temperature/top_p/top_k on Opus 4.7+ (e.g. claude-opus-4-8): sending
     // them returns 400 "temperature is deprecated for this model". Omit (don't retune) for those;
     // Sonnet/Haiku and Opus ≤4.6 still accept a custom sampling temperature.
+    //
+    // CONSEQUENCE, established 5 Sep 2026 and worth stating here because it cost
+    // three paid measurement runs: the DEFAULT analytical model is
+    // claude-opus-4-8, so on the default configuration a requested temperature
+    // is never sent. Any consistency work that leans on sampling temperature
+    // must first change the model — and that is eval-gated — or it is leaning on
+    // nothing. Callers can now see this per call: the audit record carries
+    // temperatureAsked and temperatureApplied.
     function _modelAcceptsTemperature(model){
         var m = String(model || '');
         var om = m.match(/opus-(\d+)-(\d+)/i);
@@ -291,9 +299,20 @@ const AiClient = (function(){
         // Sampling temperature — Provider sets this per feature (tiered: 0.0 eval/validators,
         // 0.2 analytical drafting, 0.3 ANEM chat). Default low for repeatability if unset.
         // Omitted entirely for models that deprecated it (Opus 4.7+) — see _modelAcceptsTemperature.
-        if (_modelAcceptsTemperature(model)) {
-            body.temperature = (typeof opts.temperature === 'number') ? opts.temperature : 0.2;
-        }
+        // 5 Sep 2026 — this used to drop a caller's temperature SILENTLY. On
+        // 5 Sep every analytical lane was switched to temperature 0 to make the
+        // FHA repeatable, three identical-input draws were taken to measure the
+        // effect, and only a code read that evening established that the default
+        // drafting model is claude-opus-4-8, i.e. an Opus 4.7+ that does not
+        // accept the parameter at all. The setting never reached the model and
+        // nothing said so, so three paid draws were scored believing they
+        // measured something they did not. Omitting the parameter is still
+        // correct — sending it to these models returns 400 — but doing it
+        // quietly is not. Record both the value asked for and whether it landed,
+        // so a run's own audit trail answers the question.
+        const _tempAsked = (typeof opts.temperature === 'number') ? opts.temperature : 0.2;
+        const _tempApplied = _modelAcceptsTemperature(model);
+        if (_tempApplied) body.temperature = _tempAsked;
         if (opts.system) body.system = opts.system;
         const startedAt = Date.now();
         // One request send (proxy or BYO). Extracted so we can retry cleanly.
@@ -345,14 +364,14 @@ const AiClient = (function(){
                 }
             }
         } catch (e) {
-            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: String(e), startedAt, proxy, itar });
+            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: String(e), startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
             throw e;
         }
         if (_preErr || !response.ok) {
             // Errors (401/402/503/5xx) come back as JSON even when we asked for a stream.
             let emsg = _preErr;
             if (!emsg) { let errJson = {}; try { errJson = await response.json(); } catch (_) {} emsg = (errJson.error && errJson.error.message) || ('HTTP ' + response.status); }
-            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar });
+            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
             throw new Error(emsg);
         }
         // Phase 66 — assemble the SSE stream client-side (content-type text/event-stream).
@@ -368,7 +387,7 @@ const AiClient = (function(){
         const usage = json.usage || {};
         const incCost = _addCost(model, usage.input_tokens || 0, usage.output_tokens || 0);
         _consumeTokens(model, usage.input_tokens || 0, usage.output_tokens || 0);
-        _logCall({ feature: opts.feature || 'messages', model, ok: true, tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cost: incCost, startedAt, proxy, itar });
+        _logCall({ feature: opts.feature || 'messages', model, ok: true, tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
         return json;
     }
 

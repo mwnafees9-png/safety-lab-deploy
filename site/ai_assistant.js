@@ -708,9 +708,18 @@
     // (high run-to-run variance + more confabulation). eval.judge / validators → 0.0
     // (deterministic); ANEM chat → 0.3 (natural prose); all analytical drafting
     // (FHA/FCIM/FTA/CCA/decomposition/requirements/etc.) → 0.2.
-    // 5 Sep 2026 (consistency, lever 1): analytical drafting runs at 0.0, not 0.2 — three
+    // 5 Sep 2026 (consistency, lever 1): analytical drafting ASKS for 0.0, not 0.2 — three
     // identical-input FHA draws agreed on a row's class 63% of the time; sampling variance is
     // the cheapest part of that to remove. Only the conversational ANEM chat keeps 0.3.
+    // 5 Sep 2026 (night) — READ THIS BEFORE TRUSTING THE NUMBER ABOVE. What this
+    // function returns is what the client ASKS for, not what the model receives.
+    // AiClient omits temperature entirely for Opus 4.7+ (they reject it with a
+    // 400), and the default reason model is claude-opus-4-8. So on the shipped
+    // default this lever has NO effect on the wire, and the e1/e2/e3 draws taken
+    // on 5 Sep measured the provider's own sampling, not 0.0. The omission is
+    // now recorded per call (temperatureAsked / temperatureApplied in the audit
+    // log). Making this lever real means changing the drafting model, which is
+    // eval-gated against the reigning golden — a decision, not a tweak.
     function _featureTemp(feature) {
         const f = String(feature || '');
         if (f === 'chat.edit') return 0.3;
@@ -986,7 +995,12 @@
     }
 
     // SEVERITY ANCHORING (consistency lever). Same failure condition, same class —
-    // run to run. The model classifies at temperature > 0, so a condition re-drafted
+    // run to run. The premise below was written when every call ran at the API
+    // default of 1.0. It is still true on the shipped default, though not for the
+    // reason it gives: analytical lanes now ASK for 0.0, but the default model
+    // (claude-opus-4-8) does not accept the parameter, so sampling variance is
+    // present regardless. This block therefore still earns its place.
+    // The model classifies at a temperature this client cannot set, so a condition re-drafted
     // in a different batch could drift to an adjacent class for no substantive reason
     // (the "FHA assumption that quietly drifted"). This block feeds the severities
     // ALREADY established in the project into every severity-assigning feature and
@@ -1557,15 +1571,25 @@
                 ? ('For each failure condition give the effect on the ' + systemName + ' SYSTEM, then how it propagates up to the AIRCRAFT, the CREW, and the PASSENGERS, plus a SUGGESTED severity classification with a one-line rationale.')
                 : ('For each failure condition give the effect on the AIRCRAFT, on the CREW, and on the PASSENGERS, plus a SUGGESTED severity classification with a one-line rationale.'),
             '',
-            _ABSTAIN_RULE,
+            // 5 Sep 2026 — the abstention rule is GONE from this prompt. The FHA
+            // skill body governs instead ("WHEN THE INFORMATION IS THIN, JUDGE -
+            // DO NOT ABSTAIN", plus judgementCall/judgementNote), and shipping
+            // both put two opposite instructions in one request: one calling a
+            // blank a GOOD outcome, the other calling it a row silently dropped
+            // from every downstream check. Waqas, 5 Sep: "the abstain instruction
+            // needs to be removed, we have judgement call flags now." Scoped by
+            // him to the FHA and SFHA, because they are the only two of the 25
+            // skills that carry the judgement-call contract; the other 23 keep
+            // _ABSTAIN_RULE, since removing it there would trade a visible blank
+            // for a silent guess.
             '',
             'HARD RULES:',
             '1. Ground every entry in the provided function name + definition. Do NOT invent systems, numbers, probabilities, or failure rates. No quantitative reliability claims.',
             '2. Severity is a SUGGESTION for the engineer to confirm — never assert it as final. Use only: ' + FHA_SEVERITIES.join(', ') + '.',
             '2a. DERIVE the severity from the effects you have just written for THIS condition, by applying the SEVERITY CLASSIFICATION RUBRIC for the certification basis of this project — the verbatim authority definitions are appended below (for a Part 25 basis those are the AC/AMC 25.1309 definitions; for another basis, the corresponding § 1309 definitions for that basis). severityRationale must name the effect it follows from — "crew workload rises but margins are retained" — not restate the class.',
             '2a-i. TIE THE EFFECTS TO THE DEFINITIONS \u2014 do this IN ADDITION to the plain effects, never instead of them. Keep effAc / effCrew / effPax as the concrete, project-specific sentences they already are. Where a stated effect matches the descriptor language of the governing severity definition in the rubric, phrase that part using the wording of the authority definition so the effect reads directly against the rubric \u2014 an aircraft effect that amounts to a "significant reduction in safety margins or functional capabilities" should carry those words alongside the concrete description. Then in severityRationale QUOTE, in quotation marks, the single governing definition phrase you relied on, followed by its clause exactly as the rubric cites it (for example: Major \u2014 the crew keep control but there is a "significant reduction in safety margins or functional capabilities", AC 25.1309-1B \u00a73.1.3). Quote only the phrase that carries the class, not the whole definition, and never quote a definition from a standard outside the certification basis in force.',
-            '2c. THREE EFFECT AXES: alongside the sentences, set effAcLevel / effCrewLevel / effPaxLevel from the closed vocabularies in the THREE EFFECT AXES rule below; the class is the worst axis and the product derives it from your levels. A level you cannot ground stays EMPTY.',
-            '2b. If the function definition is too thin to state an aircraft effect, you CANNOT classify it. Return severity as an EMPTY STRING and say in severityRationale what is missing. An unclassified condition the engineer then classifies is a good outcome. A guess that looks considered is the failure mode this rule exists to prevent — do not pick a middle value to avoid leaving a blank.',
+            '2c. THREE EFFECT AXES: alongside the sentences, set effAcLevel / effCrewLevel / effPaxLevel from the closed vocabularies in the THREE EFFECT AXES rule below; the class is the worst axis and the product derives it from your levels. A level you cannot ground from the context is set by JUDGEMENT and the row flagged (judgementCall / judgementNote) — never left empty, because an empty level silently drops the row from every downstream check.',
+            '2b. WHEN THE INFORMATION IS THIN, JUDGE — DO NOT ABSTAIN. An FHA is performed early, before the design exists, so a thin function definition is the normal case, not a blocker, and a blank row helps nobody. Where a fact the class turns on is missing, make the call an experienced safety engineer would make from what IS known, set the levels and the class, and mark the row with judgementCall: true and a judgementNote of one or two sentences naming the missing fact, what you assumed for it, and what evidence would confirm or overturn it. The product renders that flag loudly and files the note in the assumptions register for the engineer to confirm. Abstain on a row only when there is genuinely nothing to reason from — no function objective, no stated failure — and say so in the note. A silent guess and a silent blank are both wrong; a marked judgement is honest.',
             '3. Effects: one concise factual sentence each, third-person ("the aircraft…", "the crew…"). If an effect is minor or none, say so briefly.',
             '4. phases: EVERY failure condition applies to EVERY flight phase — never pick the phases a condition is "relevant" to. A row\'s phases are the phases that SHARE that row\'s effects and class; return as MANY rows for one condition as its effects across the flight require (one, two, five — whatever the effects dictate), and all the rows for a condition together must cover every phase in this list: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. Phases where the effect is not realised AND the flight can be aborted or the condition escaped are a No Safety Effect row; phases where nothing has happened yet but the flight cannot escape the end effect carry that END effect and its class. "All phases" is allowed ONLY when the effects and class are identical in every phase. Spell phases exactly as listed — these are the checkboxes on THIS project\'s mission profile; a value outside the list cannot be ticked and is flagged to the engineer as your error. Never give the row that lists every phase the worst class of one phase. A phase belongs to EXACTLY ONE row of a condition: once Standing and Taxi sit on a No Safety Effect row, no other row of that condition may name them with a different effect or class.'
                 + _fhaEscapesClause(),   // 5 Sep 2026 (lever 3) — the escape per phase and the three structured answers
@@ -12324,7 +12348,14 @@
         // lets the assembler drop a source-doc block the decompose lane already
         // ships in cfg.context (the 60k-SDD-twice probe, moved, not lost).
         const _ctxStr = cfg.context ? (typeof cfg.context === 'string' ? cfg.context : JSON.stringify(cfg.context)) : '';
-        const _sysExtra = await _assembleAnalysisContext(cfg.analysis || '', String(cfg.systemExtra || '') + '\n\n' + _ABSTAIN_RULE, {
+        // 5 Sep 2026 — the FHA lanes are the exception: their skill body already
+        // says JUDGE - DO NOT ABSTAIN and gives the judgementCall/judgementNote
+        // contract, so appending _ABSTAIN_RULE here put two opposite instructions
+        // in the same request and which one the model followed was not decided by
+        // this code. Every other batch lane keeps it (Waqas's scoping, 5 Sep).
+        const _isFhaLane = /^s?fha$/i.test(String(cfg.analysis || ''));
+        const _abstainForLane = _isFhaLane ? '' : ('\n\n' + _ABSTAIN_RULE);
+        const _sysExtra = await _assembleAnalysisContext(cfg.analysis || '', String(cfg.systemExtra || '') + _abstainForLane, {
             thread: cfg.thread, zonal: cfg.zonal, specSecs: cfg.specSecs,
             data_classification: cfg.data_classification, dedupeContext: _ctxStr,
             messages: [{ role: 'user', content: String(taskDirective || '') }]
@@ -12736,7 +12767,7 @@
     function _useUnifiedFeatures() { try { return !(window.SafetyLabAI && window.SafetyLabAI.useUnifiedFeatures === false); } catch (_) { return true; } }
     const _FEATURE_DIRECTIVE = {
         req:   'Recommend derived SAFETY REQUIREMENTS that close the project\'s open analysis gaps (failure conditions lacking mitigating requirements; fault-tree contributors lacking controls). Write each as "The <item> shall …", trace it to the function / failure condition it addresses, and set level + type + verification method. Emit them as add_requirement actions; ground every requirement in the current project state. These are ADVISORY PROPOSALS — an accepted one is filed as a review comment on its traced failure condition, never written into the requirements register.',
-        fha:   'Draft the AIRCRAFT-level FHA. For each aircraft function, identify its failure condition(s) with effects on Aircraft / Crew / Passengers and a SEVERITY classified per §__.1309 (Catastrophic ↔ Extremely Improbable … No Safety Effect ↔ none), DERIVED from the effects you state for that condition. Ground every row strictly in the project\'s functions. If a function\'s definition does not support stating an aircraft effect, you CANNOT classify it: emit the row with severity as an EMPTY STRING and say what is missing in severityRationale. Do NOT reach for the benign end of the scale to avoid a blank — "No Safety Effect" is a finding about the aircraft, not a way of saying you do not know. Emit add_fha actions with scope "aircraft".',
+        fha:   'Draft the AIRCRAFT-level FHA. For each aircraft function, identify its failure condition(s) with effects on Aircraft / Crew / Passengers and a SEVERITY classified per §__.1309 (Catastrophic ↔ Extremely Improbable … No Safety Effect ↔ none), DERIVED from the effects you state for that condition. Ground every row strictly in the project\'s functions. If a function\'s definition is too thin to settle the class, do NOT return a blank: make the call an experienced safety engineer would make from what is known, set the class, and mark the row judgementCall: true with a judgementNote naming the missing fact and what you assumed. Do NOT reach for the benign end of the scale either — "No Safety Effect" is a finding about the aircraft, not a way of saying you do not know. Emit add_fha actions with scope "aircraft".',
         fcim:  'Generate the FCIM (Failure Conditions, Indications & Mitigations) per aircraft function — Total Loss / Partial Loss / Malfunction as concise capability phrases, the crew-Aware vs crew-Unaware awareness split, and the indications + mitigations. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[]/malfunctions[] arrays, never merged into one phrase. Put NO severity words anywhere (severity lives in the FHA, never the FCIM). Emit add_fcim actions.',
         items: 'From the architecture / source documents, list each system\'s CONFIGURATION ITEMS — every redundant copy the document names as a separate unit (engines 1–4, flight control computers A and B, hydraulic systems 1/2/3, generators, pumps, channels). One add_item per copy, named exactly as the document names it with its side or position, owningSystemId = the system\'s exact name, description citing the section. A system with no stated redundancy gets one item. Never merge copies into one entry and never invent a copy the document does not state.',
         mac: 'For each named aircraft sub-function, draft its Minimum Acceptable Configuration from the architecture / source documents: how much control / configuration authority must remain available for continued safe flight and landing, as clauses "at least min of [redundant configuration items]" — the members are the COPIES of the same thing (engines, channels, computers, pumps), by their ids in the project state — use the configuration ITEMS listed under each system (itemId) wherever they exist, and fall back to the system id or a system function id only where no items are listed; never echo an internal _id. A positional or symmetric minimum is one clause per group (per side, per axis), never a flat count. Read the minimum from the document\'s redundancy and dispatch statements and cite the section in sddRef; where the document is silent, require every copy (min = all) and say so in rationale. Emit one add_mac per sub-function (per phase only where the document states a phase-specific minimum). Never name a member that does not serve the aircraft function.',

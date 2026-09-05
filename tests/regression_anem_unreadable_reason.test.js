@@ -11,6 +11,7 @@
  * Run: node tests/regression_anem_unreadable_reason.test.js
  */
 const fs = require('fs'), path = require('path');
+const PIN = require('./lib/pinfloor.js');   // 5 Sep 2026 — version pins are FLOORS (rule 12)
 const SITE = path.join(__dirname, '..', 'site');
 const ai = fs.readFileSync(path.join(SITE, 'ai_assistant.js'), 'utf8');
 const drv = fs.readFileSync(path.join(__dirname, '..', 'eval', 'golden_thread_driver.js'), 'utf8');
@@ -24,7 +25,15 @@ check('nothing drafted because of them → the decline names the cause and quote
 check('… routed through the no-actions panel (capture-aware), not a transient toast', /if \(_unparsed && !_permanentErr && !_hardErr\) \{[\s\S]{0,120}_anemNoActionsPanel\(cfg, \{ reply: 'Nothing drafted — ' \+ _unparsed/.test(ai));
 check('valid replies with no actions and no explanation say exactly that (the old bare toast is gone)', !/turn\(s\) returned but produced no rows\.'/.test(ai) && /returned valid replies with no actions and no explanation\./.test(ai) && /The model gave no reason\./.test(ai));
 check('the capture payload carries the reply as the reason the harness reads', /reply: String\(\(parsed && parsed\.reply\) \|\| \(insuf && insuf\.reason\) \|\| ''\)/.test(ai) && /rec\.reason = String\(d\.reason \|\| d\.reply \|\| ''\)/.test(drv));
-check('pins: ai_assistant 76.59 (loader), ai_skills 2.12, ai_loader 8.51', /ai_assistant\.js\?v=76\.59/.test(loader) && /ai_skills\.js\?v=2\.12/.test(idx) && /ai_loader\.js\?v=8\.51/.test(idx));
+// 5 Sep 2026 — was an EXACT pin on ai_assistant 76.59, so an unrelated bump to
+// 76.60 (removing the abstention instruction from the FHA lanes) failed a check
+// about ANEM's unreadable-reason handling. WORKING_RULES rule 12: pins as
+// FLOORS, never literals — what this must prove is that the loader cannot still
+// be serving a build from before this feature landed, and a floor proves exactly
+// that while letting the file move on. A check that cries wolf is a check people
+// start editing without reading.
+check('pins: ai_assistant >= 76.59 (loader), ai_skills >= 2.12, ai_loader >= 8.51',
+  PIN.atLeast(loader, 'ai_assistant.js', '76.59') && PIN.atLeast(idx, 'ai_skills.js', '2.12') && PIN.atLeast(idx, 'ai_loader.js', '8.51'));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

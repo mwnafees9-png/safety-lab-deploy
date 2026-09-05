@@ -140,10 +140,28 @@ check('the review card shows the absence rather than printing a class',
   /NOT CLASSIFIED/.test(ai) && /not classified/.test(ai),
   'printing Major while storing blank is the worse half of the original defect');
 
-check('the prompt tells the model it may abstain',
-  /EMPTY STRING/.test(ai) && /cannot classify it/i.test(ai));
-check('the prompt forbids picking a middle value to avoid a blank',
-  /do not pick a middle value to avoid leaving a blank/.test(ai),
+// SUPERSEDED 5 Sep 2026 — these two checked that the FHA prompt told the model
+// to return an EMPTY STRING severity it could not ground. That instruction is
+// gone, on Waqas's ruling ("the abstain instruction needs to be removed, we
+// have judgement call flags now"), because the shipped fha.draft skill body in
+// the SAME request said the opposite: "WHEN THE INFORMATION IS THIN, JUDGE - DO
+// NOT ABSTAIN ... an empty level silently drops the row from every downstream
+// check". Two opposite instructions, one request, and nothing in the code
+// decided which won.
+//
+// The DEFECT these checks were written for is unchanged and still guarded: the
+// model must not reach for a plausible middle value to look considered (the
+// observed failure was Major specifically). What changed is the remedy — a
+// FLAGGED judgement with a named missing fact, rather than a blank. The
+// machinery for rendering declined fields stays and is still checked below;
+// only the instruction moved.
+// Full scope and mutation proofs: tests/regression_fha_no_abstain_and_temp.test.js
+check('the FHA prompt no longer orders a blank severity',
+  !/Return severity as an EMPTY STRING/.test(ai) && !/emit the row with severity as an EMPTY STRING/.test(ai));
+check('it asks for a flagged judgement instead, naming the missing fact',
+  /2b\. WHEN THE INFORMATION IS THIN, JUDGE/.test(ai) && /judgementCall: true/.test(ai));
+check('the prompt still forbids reaching for the benign end of the scale',
+  /Do NOT reach for the benign end of the scale/.test(ai),
   'the observed failure was Major specifically, because Major looks considered');
 check('the prompt requires the class to be derived from the stated effects',
   /DERIVE the severity from the effects/.test(ai) && /25\.1309/.test(ai),
@@ -432,9 +450,17 @@ const shortCircuits = (ai.match(/_useUnifiedFeatures\(\)[^\n]*return _anemBatch\
 check('REACH · the unified short-circuits route into _anemBatch', shortCircuits >= 3,
   'if a feature ever short-circuits somewhere else, that path needs these same checks');
 
-check('REACH · _anemBatch carries the abstention rule into the request',
+// 5 Sep 2026 — still true, and now lane-aware. _anemBatch carries the
+// abstention rule for every lane EXCEPT the FHA/SFHA, the only two of the 25
+// registered skills whose body supplies the judgementCall/judgementNote
+// contract that replaces it. Stripping it from the other 23 would trade a
+// visible blank for a silent guess, which is the failure mode A10 exists for.
+check('REACH · _anemBatch still carries the abstention rule into the request',
   /_ABSTAIN_RULE/.test(anemBatch),
   'A10 lived only on the dedicated per-lane prompts, which this path routes around');
+check('REACH · and it is gated on the lane, so the FHA does not get both instructions',
+  /const _abstainForLane = _isFhaLane \? '' : \('\\n\\n' \+ _ABSTAIN_RULE\);/.test(anemBatch),
+  'the FHA skill body already says JUDGE - DO NOT ABSTAIN; shipping both is the defect');
 // Invariant, not the exact concatenation (2 Aug: the spec block now prefixes
 // the same expression — HANDOFF §7.3, assert what must hold, not the literal):
 // _ABSTAIN_RULE is part of _sysExtra, and _sysExtra is what reaches the model.
@@ -444,8 +470,14 @@ check('REACH · _anemBatch carries the abstention rule into the request',
 // name the slice of work it owns, which retired the single `messages` variable. The
 // invariant this check exists for is unchanged, and the new check below extends it
 // to every turn — a rule that rode only the first slice would be worse than none.
+// 5 Sep 2026 — the concatenation is now lane-gated (_abstainForLane) rather
+// than an unconditional + _ABSTAIN_RULE. The invariant is unchanged and is what
+// this check is for: whatever the lane resolves to, it is APPENDED to
+// systemExtra and systemExtra is what reaches the model. Computing it and not
+// passing it would still look identical to a grep, which is why the second
+// half pins the hand-off to _anemRun.
 check('REACH · and it is appended to systemExtra, which actually reaches the model',
-  /const _sysExtra = [^;]*\+ '\\n\\n' \+ _ABSTAIN_RULE/.test(ai) &&
+  /const _sysExtra = [^;]*\+ _abstainForLane/.test(ai) &&
   /_anemRun\([^;]*?, _sysExtra[,)]/.test(ai),
   'computing it and not passing it would look identical to a grep');
 check('REACH · …on EVERY turn of a chunked draft, not just the first',
@@ -474,8 +506,14 @@ check('REACH · declined fields are captured on batch actions too',
   /_abstained = _abstainedFields\(a, fl\.map/.test(anemBatch));
 
 // --- the directive itself ---------------------------------------------------
-check('REACH · the FHA directive offers an explicit way to decline',
-  /EMPTY STRING/.test(ai) && /_FEATURE_DIRECTIVE[\s\S]{0,1200}CANNOT classify it/.test(ai),
+// SUPERSEDED 5 Sep 2026 — the directive no longer offers a blank as the way
+// out; it offers a FLAGGED JUDGEMENT, because the skill body in the same
+// request forbade the blank. The thing this check actually defends — that the
+// directive gives the model a route other than "classify it anyway, benignly"
+// — is unchanged, and the route is now judgementCall + judgementNote.
+check('REACH · the FHA directive gives a route other than a benign guess',
+  /_FEATURE_DIRECTIVE[\s\S]{0,1600}judgementCall: true/.test(ai) &&
+  /do NOT return a blank: make the call an experienced safety engineer would make/.test(ai),
   'the old directive told the model to classify and handed it the benign end of the scale');
 check('REACH · and it names the exact failure that was observed',
   /"No Safety Effect" is a finding about the aircraft, not a way of saying you do not know/.test(ai),
