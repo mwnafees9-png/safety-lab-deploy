@@ -341,7 +341,25 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
     { internalId: 1, fcId: 'SF-006-M', phases: 'Takeoff, Climb', severity: 'Major' },
     { internalId: 2, fcId: 'SF-006-M', phases: 'Cruise, Descent', severity: 'Major' },
   ]).get('SF-006-M');
-  check('different phases but the SAME class is not a split — it should be ONE row', con && con.kind === 'consolidate', con && con.kind);
+  check('different phases but the SAME class AND the same effects is not a split — it should be ONE row', con && con.kind === 'consolidate', con && con.kind);
+  // 5 Sep 2026 (Waqas): "two rows with same severities are fine as long as effects are
+  // different … you can increase pilot workload due to one failure condition in different
+  // phases of flight for completely different tasks."
+  const eff = g([
+    { internalId: 1, fcId: 'SF-006-M2', phases: 'Takeoff, Climb', severity: 'Major', effCrew: 'Crew reject the take-off and clear the runway' },
+    { internalId: 2, fcId: 'SF-006-M2', phases: 'Cruise, Descent', severity: 'Major', effCrew: 'Crew divert to the nearest suitable airfield' },
+  ]).get('SF-006-M2');
+  check('same class but DIFFERENT effects across phases is a legitimate split — no consolidate finding', eff && eff.kind === 'phase', eff && eff.kind);
+  const effOverlap = g([
+    { internalId: 1, fcId: 'SF-006-M3', phases: 'Takeoff, Climb', severity: 'Major', effCrew: 'Crew reject the take-off' },
+    { internalId: 2, fcId: 'SF-006-M3', phases: 'Climb, Cruise', severity: 'Major', effCrew: 'Crew divert' },
+  ]).get('SF-006-M3');
+  check('… but one phase carrying two different effects is still assessed twice (Climb)', effOverlap && effOverlap.kind === 'overlap' && effOverlap.twice.join() === 'Climb', effOverlap && (effOverlap.kind + ' ' + (effOverlap.twice || []).join()));
+  const effSame = g([
+    { internalId: 1, fcId: 'SF-006-M4', phases: 'Cruise', severity: 'Major', effCrew: 'Crew divert.' },
+    { internalId: 2, fcId: 'SF-006-M4', phases: 'Cruise', severity: 'Major', effCrew: 'crew divert' },
+  ]).get('SF-006-M4');
+  check('a re-typed comma or capital is not a different effect — still a duplicate', effSame && effSame.kind === 'duplicate', effSame && effSame.kind);
 
   const ctr = g([
     { internalId: 1, fcId: 'SF-007-M', phases: 'Cruise', severity: 'Major' },

@@ -4641,9 +4641,16 @@ function _fhaGroupRows(rows) {
             // not classifications, and do not count as a difference.
             const phaseKeys = new Set(members.map(_fhaPhaseKey));
             const sevKeys = new Set(members.map(function (m) { return String(m.severity || '').trim(); }).filter(Boolean));
+            // 5 Sep 2026 (Waqas): "two rows with same severities are fine as long as effects
+            // are different … you can increase pilot workload due to one failure condition in
+            // different phases of flight for completely different tasks." So the EFFECTS are
+            // part of the test: rows that differ in class OR in effect are a legitimate split;
+            // only rows that say the same thing (same class, same effects) should be one row.
+            const effKeys = new Set(members.map(_fhaEffectKey).filter(Boolean));
+            const _differ = sevKeys.size > 1 || effKeys.size > 1;
             let kind = (phaseKeys.size > 1)
-                ? (sevKeys.size > 1 ? 'phase' : 'consolidate')          // real split · or should be ONE row listing all phases
-                : (sevKeys.size > 1 ? 'contradiction' : 'duplicate');   // same phases classified two ways · or plain copies
+                ? (_differ ? 'phase' : 'consolidate')          // real split · or should be ONE row listing all phases
+                : (_differ ? 'contradiction' : 'duplicate');   // same phases, two different stories · or plain copies
             // 5 Sep 2026 (Waqas): "one phase of flight can only have one effect and severity per
             // failure condition" — a phase named on two rows of one condition that carry
             // different classes is a contradiction even when the phase LISTS differ
@@ -4653,10 +4660,11 @@ function _fhaGroupRows(rows) {
                 const seen = {};
                 members.forEach(function (m) {
                     const sev = String(m.severity || '').trim(); if (!sev) return;
+                    const story = sev + '|' + _fhaEffectKey(m);   // one phase carries ONE effect and one class per condition
                     String(m.phases || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (ph) {
                         const k = ph.toLowerCase().replace(/[^a-z0-9]+/g, ''); if (k === 'allphases') return;
-                        if (seen[k] && seen[k] !== sev) { if (twice.indexOf(ph) < 0) twice.push(ph); }
-                        else if (!seen[k]) seen[k] = sev;
+                        if (seen[k] && seen[k] !== story) { if (twice.indexOf(ph) < 0) twice.push(ph); }
+                        else if (!seen[k]) seen[k] = story;
                     });
                 });
                 if (twice.length) kind = 'overlap';
@@ -4665,6 +4673,14 @@ function _fhaGroupRows(rows) {
         }
     });
     return { ordered, groups };
+}
+// 5 Sep 2026 — the row's effect story (aircraft · crew · occupants), keyed on letters and
+// digits so a re-typed comma or a capital never reads as a different effect. Empty when
+// nothing is stated — an abstention is not a difference.
+function _fhaEffectKey(r) {
+    return [r && r.effAc, r && r.effCrew, r && r.effPax]
+        .map(x => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim())
+        .join('|').replace(/^\|+$/, '');
 }
 // Order-insensitive identity for a row's phase coverage: "Takeoff, Cruise" and
 // "Cruise,Takeoff" are the same coverage and must not read as two phase variants.
@@ -4742,7 +4758,7 @@ function renderACFHA() {
                 case 'contradiction':
                     return `<span class="fha-group-badge fha-group-contra" title="${n} rows share this failure-condition id and the SAME flight phases but are classified differently. The same condition in the same phases cannot be two classes — resolve which is right; until then the fault trees take the worst." style="${_badgeStyle('var(--color-danger, #8E2A2A)', 'var(--color-danger, #8E2A2A)')}">${n} rows · same phases, different class — resolve</span>`;
                 case 'consolidate':
-                    return `<span class="fha-group-badge fha-group-merge" title="${n} rows share this failure-condition id with different phase lists but the SAME class. Rows come from effects, not from phases: where the effect and class are the same across phases, this is ONE row listing all of those phases. Merge them — a single row also gives the exposure ratio the full phase list it should have." style="${_badgeStyle('var(--color-warning, #7A5300)', 'var(--color-warning, #7A5300)')}">${n} rows · same class across phases — should be one row</span>`;
+                    return `<span class="fha-group-badge fha-group-merge" title="${n} rows share this failure-condition id with different phase lists but the SAME class and the SAME effects. Rows come from effects, not from phases: where the effect and class are the same across phases, this is ONE row listing all of those phases. Merge them — a single row also gives the exposure ratio the full phase list it should have." style="${_badgeStyle('var(--color-warning, #7A5300)', 'var(--color-warning, #7A5300)')}">${n} rows · same class across phases — should be one row</span>`;
                 default:
                     // 4 Sep 2026 (Waqas, on "phase group × 2 · worst Major"): "you do not need that
                     // pill its standard practice what we are doing" — a condition split into rows
