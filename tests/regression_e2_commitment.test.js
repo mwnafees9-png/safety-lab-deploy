@@ -24,7 +24,7 @@ const idOf = r => String((r && (r.fcId || r.sourceCondId)) || '').trim();
 const sev = r => String((r && r.severity) || '').trim();
 
 let checks = 0, fails = 0;
-const check = (name, cond) => { checks++; if (!cond) { fails++; console.log('  FAIL ' + name); } else console.log('  PASS ' + name); };
+const check = (name, cond) => { checks++; if (!cond) { fails++; console.log('  FAIL  ' + name); } else console.log('  PASS  ' + name); };
 
 test('E2 — severity commitment: the rejected v3 rule and its gate', () => {
   console.log('[e2] the rig fixture');

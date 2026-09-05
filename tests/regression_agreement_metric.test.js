@@ -35,7 +35,7 @@ const C = require(path.join(ROOT, 'site/eval_core.js'));
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
     if (cond) { pass++; console.log('  ok   ' + name); }
-    else { fail++; console.log('  FAIL ' + name + (extra ? ('\n       ' + extra) : '')); }
+    else { fail++; console.log('  FAIL  ' + name + (extra ? ('\n       ' + extra) : '')); }
 }
 console.log('\nregression_agreement_metric — id-matched categorical agreement, with kappa\n');
 

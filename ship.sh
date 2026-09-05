@@ -38,7 +38,10 @@ echo "── wall ────────────────────�
 COUNT=0
 CRASHED=""
 CRASHES=0
-for t in tests/*.test.js; do
+# 5 Sep 2026 — the glob was tests/*.test.js alone, so eval/regression_ai_repeatability
+# (the scorer's OWN mutation proofs — the checks that prove eval_core's agreement
+# metrics measure what they claim) had never run on a deploy. Waqas: "widen it".
+for t in tests/*.test.js eval/*.test.js; do
   [ -e "$t" ] || continue
   echo "### $t" >> "$LOG"
   node "$t" >> "$LOG" 2>&1

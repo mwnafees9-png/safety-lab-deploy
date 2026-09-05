@@ -19,7 +19,7 @@ const ROOT = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 let checks = 0, fails = 0;
-const check = (name, cond) => { checks++; if (!cond) { fails++; console.log('  FAIL ' + name); } else console.log('  PASS ' + name); };
+const check = (name, cond) => { checks++; if (!cond) { fails++; console.log('  FAIL  ' + name); } else console.log('  PASS  ' + name); };
 
 test('workspace invitations — send, list, revoke, redeem', () => {
   const helpers = read('site/helpers_modules.js');

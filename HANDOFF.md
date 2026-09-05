@@ -1,3 +1,19 @@
+## 05 Sep 2026 (night, cleanup batch 2) — the wall now polices its own reporting format; 28 suites were mis-reporting, not 2; eval/ joined the wall. NOT YET DEPLOYED.
+
+**THE CLAIM, AND WHAT MEASURING IT FOUND.** The cleanup inventory said `regression_e2_commitment` and `regression_invitations` "print a non-canonical FAIL and never exit non-zero, so they can fail through a green wall". Proved by breaking one on purpose (rule 9) before believing it: a forced failure in `regression_invitations` exited **1**, and with no `^  FAIL  ` line present, `ship.sh`'s crash detector caught it — **the wall went red**. So the inventory OVERSTATED it: the defect is mis-reporting, not silence. A real assertion failure was announced as "suite did not run to completion", which sends the reader hunting for a load error that does not exist. Rule 14 both ways: the probe was wrong about the danger, and checking is what established the true shape.
+
+**BUT THE SCOPE WAS UNDERSTATED.** `ship.sh` anchors on `^  FAIL  ` (two spaces each side) — deliberate, because the bare word FAIL appears inside check NAMES ("...-> still FAIL (agreement guard bites)") and an unanchored grep would report failures that are not failures. Suites writing `'  FAIL ' + name` — one trailing space — are invisible to that grep. **Not 2 suites. 28.** All 28 fixed to the canonical form (26 found by the new check plus the original 2), one occurrence each.
+
+**NEW SUITE: `tests/regression_wall_hygiene.test.js` (12 checks).** Waqas, asked whether to fix the two suites or also mechanise the rule: "Both". It proves: no suite uses the one-space form; every suite emits a canonical FAIL line of its own; every suite can actually fail the process; the two originally-named suites are pinned by name; and `ship.sh` still anchors at BOTH call sites (`grep -cE` counting real failures, `grep -qE` separating a crash from a failure).
+
+**TWO DRAFTS OF THIS CHECK WERE WRONG, AND BOTH ARE RECORDED IN THE FILE.** Draft 1 searched for the bare substring `  FAIL`, so it flagged prose in comments (`  FAILURES of independence are GLOBAL`) and its own documentation; it now anchors on the opening quote of a string literal, with `(?![A-Z])` so the word FAILURE is not a finding. Draft 1 also tested only for `process.exit(` and accused **69 healthy suites** that use `process.exitCode =` — the check was wrong, not the suites. Rule 8: write the test from the requirement, not from the first thing that looks like the code.
+
+**MUTATION-PROVEN (rule 9), four of them.** Reintroduce the one-space form in `regression_persave` → red. Remove `process.exitCode` from `regression_paywall` → red. Loosen `ship.sh`'s COUNTING grep → red. Loosen `ship.sh`'s CRASH grep → red. The third and fourth exist because the first version of that check asserted only that the anchor appeared *somewhere* in `ship.sh`, and a mutation of the counting grep still passed on the crash detector's copy — a check satisfied by the wrong evidence is not a check.
+
+**eval/ IS ON THE WALL (Waqas: "widen it").** `ship.sh`'s glob was `tests/*.test.js` alone, so `eval/regression_ai_repeatability.test.js` — the scorer's OWN mutation proofs, the checks that prove `eval_core`'s agreement metrics measure what they claim — had never run on a deploy. The glob is now `tests/*.test.js eval/*.test.js`; that suite was canonicalised first, and the hygiene suite polices both directories.
+
+**WALL: 273 suites, 1 real fail, 0 crashed** (was 271 before this batch; +1 hygiene, +1 eval). The single failure remains the environment-only `regression_notify_agents` [P4] proxy-sibling one.
+
 ## 05 Sep 2026 (night, later) — cleanup batch 1: eight dead files removed, the miniflare cache untracked. Wall unchanged. NOT YET DEPLOYED.
 
 **AUTHORITY.** Waqas: "you can remove what needs to be removed as long as it does not break anything", after "clean up first > build on the three very high priority tasks > then the rest of the gamut".

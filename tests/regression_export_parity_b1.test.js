@@ -25,7 +25,7 @@ const indexSrc = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
 let failures = 0;
 function check(name, cond, detail) {
   if (cond) console.log('  ok   ' + name);
-  else { failures++; console.log('  FAIL ' + name + (detail ? ' — ' + detail : '')); }
+  else { failures++; console.log('  FAIL  ' + name + (detail ? ' — ' + detail : '')); }
 }
 
 function extractFn(source, name) {

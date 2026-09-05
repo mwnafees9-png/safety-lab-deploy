@@ -43,7 +43,7 @@ const GOLDEN = path.join(EVAL, 'golden_aeolus_v1.json');
 let failures = 0;
 function check(name, cond, detail) {
   if (cond) { console.log('  ok   ' + name); }
-  else { failures++; console.log('  FAIL ' + name + (detail ? ' — ' + detail : '')); }
+  else { failures++; console.log('  FAIL  ' + name + (detail ? ' — ' + detail : '')); }
 }
 
 function runScorer(goldenPath, candPath) {

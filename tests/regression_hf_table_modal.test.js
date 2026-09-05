@@ -33,7 +33,7 @@ function pinAtLeast(hay, file, floor) {
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
     if (cond) { pass++; console.log('  ok   ' + name); }
-    else { fail++; console.log('  FAIL ' + name + (extra ? ('\n       ' + extra) : '')); }
+    else { fail++; console.log('  FAIL  ' + name + (extra ? ('\n       ' + extra) : '')); }
 }
 
 console.log('\nregression_hf_table_modal — text cells, one schema, the FHA layout, the modal\n');

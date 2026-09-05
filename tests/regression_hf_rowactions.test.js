@@ -58,7 +58,7 @@ function headerAtLeast(src, file, floor) {
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
     if (cond) { pass++; console.log('  ok   ' + name); }
-    else { fail++; console.log('  FAIL ' + name + (extra ? ('\n       ' + extra) : '')); }
+    else { fail++; console.log('  FAIL  ' + name + (extra ? ('\n       ' + extra) : '')); }
 }
 
 console.log('\nregression_hf_rowactions — AFHA-style actions across the HF lanes\n');

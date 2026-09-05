@@ -23,7 +23,7 @@ const R = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 let pass = 0, fail = 0;
 function ok(name, cond, extra) {
     if (cond) { pass++; console.log('  ok   ' + name); }
-    else { fail++; console.log('  FAIL ' + name + (extra ? ('\n       ' + extra) : '')); }
+    else { fail++; console.log('  FAIL  ' + name + (extra ? ('\n       ' + extra) : '')); }
 }
 console.log('\nregression_hf_nav — the HF lanes are known to switchTab and the sidebar\n');
 
