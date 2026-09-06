@@ -28,6 +28,17 @@ from a self-assessed 9 to an independently-validated 9.5–10).
 
 **Live in the app after the next deploy:**
 
+> **CORRECTION, 5 Sep 2026 — MFA IS NOT ENFORCED.** `site/index.html` ships
+> `window.SL_MFA_REQUIRED = false`, so the enforcement described below is
+> switched OFF in production. It was turned off because it was not working, not
+> as a policy decision, and fixing it is a ruled item on the current build list.
+> Until that ships: enforcement is client-side only, it fails open, the desktop
+> build lifts the sign-in gate before MFA runs at all, and nothing server-side
+> requires a second factor to read project data. **Do not repeat the "enforced
+> MFA" claim below to a customer, in a white paper, or on the trust page.** The
+> same applies to the SSO line further down (`SL_MS_SSO_ENABLED` is set by
+> nothing) and to the control counts near the end of this file.
+
 - **MFA enforced for everyone (grace enrollment).** On next sign-in, any account
   without a 2FA factor is required to enroll before the app opens; accounts with a
   factor are challenged for their 6-digit code. Fails **open** if MFA infrastructure
@@ -40,7 +51,7 @@ from a self-assessed 9 to an independently-validated 9.5–10).
 - **`/.well-known/security.txt`** (RFC 9116) vulnerability-disclosure policy.
 - **`/trust`** security page, routed through the security-header chokepoint.
 
-**Deploy:** `cd ~/Desktop/safety-lab-deploy/site && npx wrangler deploy`
+**Deploy:** `cd ~/Desktop/safety-lab-deploy && ./ship.sh` — corrected 5 Sep 2026. The bare `wrangler deploy` shown here previously skipped the test wall, the build and the runtime smoke gate; `ship.sh` is the one deploy path and each stage gates the next.
 
 ---
 

@@ -1,6 +1,13 @@
 -- ============================================================================
 -- 31 Aug 2026 — H-2. Version-counter monotonicity for project_documents.
--- STATUS: READY TO APPLY, AWAITING WAQAS'S SIGN-OFF. NOT YET APPLIED.
+-- STATUS: APPLIED IN PRODUCTION. Signed off by Waqas, applied via MCP, verified
+--   with rolled-back probes — see PERSISTENCE_INVENTORY.md:65 and OPEN_ITEMS.md
+--   H-2 (struck through). This header said "NOT YET APPLIED" until 5 Sep 2026,
+--   which was simply out of date, and it mattered: a customer rebuild follows
+--   these files, and a migration that says do-not-apply gets skipped. It also
+--   propagated — the 5 Sep build plan repeated the header rather than checking
+--   the two records that contradicted it. Corrected during the cleanup Waqas
+--   ordered ahead of the three urgent builds.
 --
 -- WHY. Reproduced live on 31 Aug (project f7a7bda2): a tab that opened a project
 -- from cloud without loading its version token wrote version 1 over version 3.

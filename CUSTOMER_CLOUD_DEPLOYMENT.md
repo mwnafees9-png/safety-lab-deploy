@@ -1,5 +1,38 @@
 # Customer-cloud deployment — "your data lives in your cloud"
 
+> ## ⚠️ DO NOT SEND THIS TO A CUSTOMER YET — verified defective, 5 Sep 2026
+>
+> A step-by-step check against the code found six defects, four of them fatal to
+> an install that follows this document literally:
+>
+> 1. **Step 1 does not work.** `supabase db push` cannot rebuild this database.
+>    Seventeen production tables — including `projects`, `project_documents`,
+>    `workspaces`, `project_crdt` and `yjs_documents` — have no `CREATE TABLE`
+>    anywhere in `supabase/migrations/`. The push fails on `0001`.
+> 2. **It names a setting nothing reads.** `window.AI_PROXY_BASE_URL` appears in
+>    the snippet below and is read by no code in the product. The name the app
+>    actually reads is `__SLAB_AI_ENDPOINT__`.
+> 3. **It pointed at a proxy that no longer exists.** `safety-lab-proxy_worker_SEC.js`
+>    was a 5 Jul fork sitting in this repo, 184 lines behind the deployed worker
+>    and carrying no sovereign ITAR routing. It was deleted on 5 Sep 2026. The
+>    live proxy is the sibling repo `safety-lab-proxy-deploy`.
+> 4. **It omits three endpoints the app still calls** — the corpus search
+>    endpoint, the feedback function and the notification base. An install
+>    following only this document passes its own smoke test (which checks the
+>    database URL alone) while still calling Safety Lab on five paths, which is
+>    the exact opposite of what the document promises.
+>
+> Two further problems are of a different kind and are not this document's fault:
+> the migrations it tells the customer to apply currently carry the cross-tenant
+> membership hole and an `erase_project` grant that is more permissive on disk
+> than in production. **Any install built from this repo today inherits both.**
+>
+> This guide is rewritten as the last step of the customer-hosted build, against
+> what then exists, and proved by a reference install performed end to end by
+> someone who did not build it. Until that has happened, this file is an internal
+> design note, not a deliverable.
+
+
 How to stand up Safety Lab Aero against a **customer-owned** backend, so every
 project, document, signature, lock and auth identity lives inside the
 customer's boundary. Written 28 Aug 2026 from the mechanisms already in the
@@ -91,7 +124,7 @@ blocked. This is one line in the CSP block of their copy of `worker.js`.
 
 ## Step 4 — AI inference inside their boundary
 
-Deploy their own copy of the AI proxy worker (`safety-lab-proxy_worker_SEC.js`)
+Deploy their own copy of the AI proxy worker (the sibling repo `safety-lab-proxy-deploy/worker.js` — the old in-repo copy `safety-lab-proxy_worker_SEC.js` was stale and was deleted on 5 Sep 2026)
 holding **their** key to **their** endpoint (Azure OpenAI, Azure Gov,
 Bedrock, on-prem gateway), and point `AI_PROXY_BASE_URL` at it. Documents
 marked controlled then satisfy the controlled-document guard only when the

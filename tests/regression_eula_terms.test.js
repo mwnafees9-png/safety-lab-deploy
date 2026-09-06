@@ -77,10 +77,25 @@ check('EULA still states the trial length used by the signup trigger',
 // Section 12 says a US-sovereign hosted inference option is NOT yet available.
 // The proxy's ITAR branch returns 503 rather than routing, so that is accurate.
 // If someone wires Azure routing, this test fails and forces the EULA to follow.
-const proxy = (() => {
-  try { return fs.readFileSync(path.join(__dirname, '..', 'safety-lab-proxy_worker_SEC.js'), 'utf8'); }
-  catch (_) { return ''; }
-})();
+// 5 Sep 2026 — repointed at the REAL proxy. This used to read
+// `safety-lab-proxy_worker_SEC.js`, a copy sitting in THIS repo that was a
+// 5 Jul fork, 184 lines behind the deployed worker and carrying no sovereign
+// ITAR routing at all. So the check compared the EULA against a file nobody
+// ships. The live proxy lives in the sibling repo safety-lab-proxy-deploy; the
+// stale copy has been deleted, and the customer deployment guide no longer
+// points at it either.
+//
+// It also used to SKIP SILENTLY when the file was missing (`if (proxy)`), which
+// means a check about a published legal claim could vanish and take the wall's
+// green with it. It now says so out loud, the same way regression_notify_agents
+// does for the same repo — a finding of nothing is still a finding (rule 19).
+const proxyPath = path.join(__dirname, '..', '..', 'safety-lab-proxy-deploy', 'worker.js');
+let proxy = '', proxyErr = '';
+try { proxy = fs.readFileSync(proxyPath, 'utf8'); }
+catch (e) { proxyErr = String((e && e.code) || e); }
+check('the proxy repo is checked out beside this one, so the EULA claim can be checked',
+  !!proxy,
+  'safety-lab-proxy-deploy/worker.js not found at ' + proxyPath + ' (' + proxyErr + ') — clone it beside safety-lab-deploy. Until then the EULA sovereign-inference claim is NOT being checked.');
 if (proxy) {
   const itarStillRefused = /itar_not_implemented|itar_unconfigured/.test(proxy);
   const eulaSaysNotYet = /US-sovereign hosted inference option is planned but not yet available/i.test(eula);
