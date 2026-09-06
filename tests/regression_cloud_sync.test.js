@@ -233,6 +233,20 @@ function fakeClient(state) {
   });
 })();
 
+// 5 Sep 2026 — saveProjectToCloud now consults the shared controlled-data check
+// before it reaches the writer, so a sandbox running it in isolation must carry
+// that check too. Extracting the REAL functions rather than stubbing them means
+// these suites also prove the fence does not block an ORDINARY project — a stub
+// returning null would prove nothing. `projectConfig: {}` is added to each
+// context for the same reason the crdt sandbox needed it: in the browser it is a
+// bare global, not a window property, and the fence fails CLOSED without it.
+const FENCE_SRC = (function () {
+  const a = helpers.indexOf('function _slCloudBlockedForControlled');
+  const b = helpers.indexOf('\ntry {', a);
+  return a >= 0 && b > a ? helpers.slice(a, b) : '';
+})();
+if (!FENCE_SRC) { console.log('  FAIL  could not extract the controlled-data fence from helpers_modules'); process.exit(1); }
+
 // ---- 2. saveProjectToCloud: the three token postures -----------------------
 function runSave(opts) {
   const src = fn(helpers, 'saveProjectToCloud');
@@ -246,7 +260,7 @@ function runSave(opts) {
     getActiveWorkspaceId: () => 'ws1',
     _supabaseSession: { user: { id: 'u1' } },
     _buildProjectSnapshot: () => ({ acFhaData: [{ internalId: 'S' }], projectConfig: {} }),
-    projectName: 'proj', _activeCloudProjectId: 'pid-1',
+    projectConfig: {}, projectName: 'proj', _activeCloudProjectId: 'pid-1',
     _activeCloudDocVersion: opts.token,
     _ensureCloudProject: () => Promise.resolve('pid-1'),
     _recordSaveHistory: () => Promise.resolve(),
@@ -256,7 +270,7 @@ function runSave(opts) {
     window: { confirm: (msg) => { events.push('confirm'); ctx._confirmMsg = msg; return opts.confirmAnswer; } }
   };
   vm.createContext(ctx);
-  vm.runInContext(w + ';' + src + '; globalThis.__p = saveProjectToCloud();', ctx);
+  vm.runInContext(w + ';' + FENCE_SRC + ';' + src + '; globalThis.__p = saveProjectToCloud();', ctx);
   return ctx.__p.then(() => ({ ctx, events, calls: state.calls, state,
     writes: state.calls.filter(c => c.t === 'project_documents' && (c.op === 'update' || c.op === 'insert') && c.ok !== false),
     attempts: state.calls.filter(c => c.t === 'project_documents' && (c.op === 'update' || c.op === 'insert')),
@@ -309,13 +323,13 @@ const saveChecks = (async () => {
       console, Promise, Date, JSON,
       getSupabaseClient: () => fakeClient(state), _cloudSignedOut: () => false, getActiveWorkspaceId: () => 'ws1',
       _supabaseSession: { user: { id: 'u1' } }, _buildProjectSnapshot: () => ({ projectConfig: {} }),
-      projectName: 'proj', _activeCloudProjectId: 'pid-1', _activeCloudDocVersion: 5,
+      projectConfig: {}, projectName: 'proj', _activeCloudProjectId: 'pid-1', _activeCloudDocVersion: 5,
       _ensureCloudProject: () => Promise.resolve('pid-1'), _recordSaveHistory: () => Promise.resolve(),
       _bankWorkingState: () => { events.push('bank'); }, _loadCloudProject: () => { events.push('load'); return Promise.resolve(); },
       showToast: () => {}, setTimeout, clearTimeout, Object, Array, String, __slabCloudQuietMs: 5, window: { confirm: () => { events.push('confirm'); return true; } }
     };
     vm.createContext(ctx);
-    vm.runInContext(w + ';' + src + '; globalThis.__p1 = saveProjectToCloud();', ctx);
+    vm.runInContext(w + ';' + FENCE_SRC + ';' + src + '; globalThis.__p1 = saveProjectToCloud();', ctx);
     await new Promise(r => setTimeout(r, 2));   // run #1 is now in flight on its slow version read (already past the queue gate)
     vm.runInContext('globalThis.__rest = Promise.all([saveProjectToCloud(), saveProjectToCloud(), saveProjectToCloud()]);', ctx);
     await ctx.__p1; await ctx.__rest;
@@ -341,7 +355,7 @@ const saveChecks = (async () => {
       console: { warn: (m) => events.push('warn:' + m), error: () => {}, info: () => {}, log: () => {} }, Promise, Date, JSON, Object, Array, String, setTimeout,
       getSupabaseClient: () => fakeClient(state), _cloudSignedOut: () => false, getActiveWorkspaceId: () => 'ws1',
       _supabaseSession: { user: { id: 'u1' } }, _buildProjectSnapshot: () => ({ acFhaData: [{ internalId: 'S' }], projectConfig: {} }),
-      projectName: 'proj', _activeCloudProjectId: 'pid-1', _activeCloudDocVersion: 5, _dirtySinceSave: true, _autosaveLastWrite: 100,
+      projectConfig: {}, projectName: 'proj', _activeCloudProjectId: 'pid-1', _activeCloudDocVersion: 5, _dirtySinceSave: true, _autosaveLastWrite: 100,
       _ensureCloudProject: () => Promise.resolve('pid-1'), _recordSaveHistory: () => Promise.resolve(),
       _bankWorkingState: () => { events.push('bank'); }, _loadCloudProject: () => { events.push('load'); return Promise.resolve(); },
       showToast: () => {}, setTimeout, clearTimeout, __slabCloudQuietMs: 5, window: { confirm: () => { events.push('confirm'); return true; }, SL_CLOUD_AUTOSAVE: true }
@@ -355,7 +369,7 @@ const saveChecks = (async () => {
       function _snapshot(){ return _buildProjectSnapshot(); } function _hasRealContent(){ return true; } function _name(){ return projectName; }
       function _wouldGut(){ return false; } function _contentItems(){ return 1; } function _itarLocalOnlyNotice(){}
     `;
-    vm.runInContext(w + ';' + saveSrc + ';' + preamble + queueSrc + ';' + pushSrc + ';' + tickSrc + '; globalThis.__t = _tick; globalThis.__s = saveProjectToCloud;', ctx);
+    vm.runInContext(w + ';' + FENCE_SRC + ';' + saveSrc + ';' + preamble + queueSrc + ';' + pushSrc + ';' + tickSrc + '; globalThis.__t = _tick; globalThis.__s = saveProjectToCloud;', ctx);
     // manual save first, autosave tick while it is in flight on its slow version read
     vm.runInContext('globalThis.__p1 = __s();', ctx);
     await new Promise(r => setTimeout(r, 2));

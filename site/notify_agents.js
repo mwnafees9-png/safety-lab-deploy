@@ -129,6 +129,26 @@
     function naSend(payloadExtra) {
         var cfg = _cfg();
         if (!cfg || !cfg.enabled) return Promise.resolve({ skipped: 'disabled' });
+        // 5 Sep 2026 — this sender had NO controlled-data check of any kind, and
+        // its payload carries the project NAME plus the system and node names
+        // behind every integrity finding. On an export-controlled programme the
+        // names alone can be the sensitive part. Uses the one shared answer in
+        // helpers_modules (SLControlled), which loads first; the inline fallback
+        // is only for a build where that module is missing, and it FAILS CLOSED
+        // — a notification is never worth guessing about.
+        try {
+            var SC = (typeof window !== 'undefined') ? window.SLControlled : null;
+            var blocked = SC && typeof SC.blocksCloud === 'function'
+                ? SC.blocksCloud(null)
+                : ((typeof projectConfig !== 'undefined' && projectConfig)
+                     ? (projectConfig.isITARControlled ? 'this project is marked export-controlled' : null)
+                     : 'the project configuration could not be read');
+            if (blocked) {
+                try { console.info('[notify-agents] not sending — ' + blocked + '.'); } catch (_) {}
+                if (SC && typeof SC.notice === 'function') SC.notice(blocked, 'notifications');
+                return Promise.resolve({ skipped: 'controlled' });
+            }
+        } catch (_) { return Promise.resolve({ skipped: 'controlled' }); }
         if (!cfg.pairingCode && !cfg.webhookUrl && !cfg.email) return Promise.resolve({ skipped: 'no_destination' });
         var token = _licenseToken();
         if (!token) return Promise.resolve({ skipped: 'no_license' });

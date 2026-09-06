@@ -8075,6 +8075,15 @@ async function _recordSaveHistory(projectId, version, snapshot, userId) {
 // something that happens on every save. Persists the working copy first so the
 // revision matches it, then writes a hash-bound project_baselines row.
 async function createProjectRevision(label, note) {
+    // 5 Sep 2026 — this one is worse than the manual Save and gets no
+    // confirmation option. It uploads the whole project, including the full text
+    // of every source document, as a SIDE EFFECT of an action presented as
+    // document control: the second statement of its body is `await
+    // saveProjectToCloud()`. A user cutting a revision is not told they are
+    // sending anything anywhere, so a warning would not inform them — it would
+    // only move the blame. It refuses.
+    var _blockedRev = _slCloudBlockedForControlled(null);
+    if (_blockedRev) { _slControlledCloudNotice(_blockedRev, 'revision'); return null; }
     const client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
     if (!client) { if (typeof showToast === 'function') showToast('Sign in to create a revision.', 'warning', 4000); return null; }
     const userId = _supabaseSession && _supabaseSession.user && _supabaseSession.user.id;
@@ -8392,7 +8401,65 @@ function _bankWorkingState() {
     } catch (_) {}
 }
 
+// ---------------------------------------------------------------------------
+// ONE place that answers "may this project's content leave for the cloud?"
+//
+// 5 Sep 2026. The 5 Sep audit found FIVE separate ITAR fences and only one of
+// them worked. The two in crdt_sync/presence were fixed earlier tonight; these
+// are the paths that had no fence at all. They are written as ONE function
+// deliberately: five hand-copied checks is how you end up with five different
+// answers, which is exactly the state the audit found.
+//
+// WHY IT IS PHRASED AS "THE DESTINATION", NOT "IS THIS ITAR" (Waqas, 5 Sep):
+// "save to the user/customer cloud, in our instance it will be our own cloud,
+// for them its their server etc." Saving a controlled project is not wrong in
+// itself — sending it to a destination not approved for controlled data is.
+// Today there is exactly ONE destination, Safety Lab's shared multi-tenant
+// cloud, hard-coded in three places, and Waqas has ruled that tier is "just for
+// trial and demos and for our internal use". So a controlled project has no
+// business there and this returns a reason. When the customer-hosted build
+// lands and the destination becomes configurable, THIS FUNCTION is where
+// "approved for controlled data" gets answered — the call sites do not change.
+//
+// Reads the bare identifier, never window.projectConfig: these are classic
+// scripts sharing one global lexical scope, so the window property is
+// permanently undefined — that is precisely what made two of the five fences
+// dead code for weeks.
+function _slCloudBlockedForControlled(snap) {
+    try {
+        var pc = (snap && snap.projectConfig)
+              || (typeof projectConfig !== 'undefined' ? projectConfig : null);
+        if (!pc) return 'the project configuration could not be read';   // fail CLOSED
+        if (pc.isITARControlled) return 'this project is marked export-controlled';
+        return null;
+    } catch (_) { return 'the project configuration could not be read'; } // fail CLOSED
+}
+var _slControlledNoticeShown = false;
+function _slControlledCloudNotice(reason, action) {
+    var msg = 'Cloud ' + (action || 'save') + ' is off because ' + reason +
+              '. This project stays on this machine — use export to move it.';
+    try { console.info('[controlled] ' + msg); } catch (_) {}
+    if (_slControlledNoticeShown) return;
+    _slControlledNoticeShown = true;
+    try { if (typeof showToast === 'function') showToast(msg, 'info', 7000); } catch (_) {}
+}
+try {
+    if (typeof window !== 'undefined') {
+        window.SLControlled = {
+            blocksCloud: function (snap) { return _slCloudBlockedForControlled(snap); },
+            notice:      function (reason, action) { return _slControlledCloudNotice(reason, action); }
+        };
+    }
+} catch (_) {}
+
 async function saveProjectToCloud() {
+    // 5 Sep 2026 — the manual Save was deliberately left OUT of the 30 Aug
+    // autosave fence, on the reasoning that it is "a deliberate user act". That
+    // reasoning does not survive the destination framing: a deliberate act aimed
+    // at a destination not approved for the data is still the wrong destination,
+    // and the user is not told where their document text is going.
+    var _blocked = _slCloudBlockedForControlled(null);
+    if (_blocked) { _slControlledCloudNotice(_blocked, 'save'); return false; }
     // 3 Sep 2026 — the write itself lives in cloud_writer.js (the ONE writer of
     // project_documents; Waqas: "yes on 1", consolidate). This function keeps the
     // manual-save POLICY — the sign-in / workspace guards and their toasts,
