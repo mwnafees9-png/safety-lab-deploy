@@ -3994,6 +3994,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 20 Aug 2026 — nine modules monkey-patch globals by name and each carried only
          its own idempotence marker, so the last wrapper erased everyone else's guard.
          Loads first: it has no dependencies and every wrap site calls into it. -->
+    <!-- 6 Sep 2026 — the ONE backend-config surface. MUST load before any backend reader; it hard-stops a customer install that still points at Safety Lab. -->
+    <script src="slab_config.js?v=1.0" defer></script>
     <script src="fn_wrap.js?v=1.0" defer></script>
     <script src="numbering.js?v=1.0.1" defer></script>
     <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
@@ -4063,16 +4065,16 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.30" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.87" defer></script>
+    <script src="helpers_modules.js?v=2.88" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
     <script src="severity_axes.js?v=1.3" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.1" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.36" defer></script>
+    <script src="bindings_modules.js?v=1.37" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <script src="misc_fn_modules.js?v=66.55" defer></script>
-    <script src="safety_lab.js?v=65.50" defer></script>
+    <script src="safety_lab.js?v=65.51" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4175,7 +4177,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          (born modular; OFF by default per project). MUST load after
          q_completeness.js: it wraps renderGtIntegrityPage last so its config
          card appends below the Q map on the Thread Integrity page. -->
-    <script src="notify_agents.js?v=1.4" defer></script>
+    <script src="notify_agents.js?v=1.5" defer></script>
     <!-- Delete guard — referential integrity at the write + SSA thread gate. -->
     <script src="delete_guard.js?v=1.0" defer></script>
     <!-- Recovery ring + session resume (born modular; rides the autosave cadence). -->
@@ -4240,7 +4242,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- FCIM Combined column editor + aware/unaware pairing desk (born modular; ARP4761A §A.3). -->
     <script src="fcim_combined.js?v=1.3" defer></script>
     <script src="a11_sequencing.js?v=1.1" defer></script>
-    <script src="corpus_retrieve.js?v=1.1" defer></script>
+    <script src="corpus_retrieve.js?v=1.2" defer></script>
     <!-- STPA system lane — engine (deployed inert since v0.1) + the walkthrough panel that
          makes it user-visible. Registers INV-32 into the invariant sweep. -->
     <script src="stpa_core.js?v=1.1" defer></script>
@@ -4403,7 +4405,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          index ship unknowingly clobbered the wiring (the trio + suite lived only on the
          Desktop; the container mirror predated them — see HANDOFF lesson). Order matters:
          SDK (line ~3777) → config → client → bridge. Degrades gracefully if config absent. -->
-    <script src="labs_thread_config.js?v=1.0" defer></script>
+    <script src="labs_thread_config.js?v=1.1" defer></script>
     <script src="thread_client.js?v=1.1" defer></script>
     <script src="thread_bridge.js?v=1.1" defer></script>
     <!-- Easter egg (cosmetic; outside the qualified tool boundary — no engine/data/report contact). -->

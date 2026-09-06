@@ -7061,6 +7061,10 @@ function openProSignup() {
 
 function _initSupabaseClient() {
     if (_supabaseClient) return _supabaseClient;
+    // 6 Sep 2026 — never connect if the config surface refused the boot (a
+    // customer install that still points at Safety Lab). Belt-and-suspenders to
+    // the slab_config guard: no backend contact under a fatal config.
+    try { if (typeof window !== 'undefined' && window.__SLAB_CONFIG_FATAL__) { console.error('[Safety Lab Aero] backend disabled — ' + window.__SLAB_CONFIG_FATAL__); return null; } } catch (_) {}
     try {
         if (typeof window === 'undefined' || !window.supabase || typeof window.supabase.createClient !== 'function') {
             console.warn('[Safety Lab Aero] Supabase SDK not loaded — magic-link auth disabled, falling back to local signup.');

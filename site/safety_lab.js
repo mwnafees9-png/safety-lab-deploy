@@ -3081,13 +3081,19 @@ window.openNodePropertiesModal = openNodePropertiesModal;
 // this file runs, to point auth + realtime co-authoring + the project_crdt store at a customer's own
 // Supabase (e.g. Electra's VPC / intranet). Defaults to the hosted multi-tenant project, so the web
 // SaaS build is unchanged. Mirrors the AI_PROXY_BASE_URL override pattern used for AI inference.
+// 6 Sep 2026 — the ONE config surface (slab_config.js) is the source of truth; it
+// loads first and has already refused the boot if a customer install pointed here.
+// The direct-window fallback stays only so an out-of-order load can't crash.
 const _slabBackendCfg = (typeof window !== 'undefined') ? window : {};
+const _slabCfg = (typeof window !== 'undefined' && window.SLConfig) ? window.SLConfig : null;
 const SUPABASE_PROJECT_URL = String(
+    (_slabCfg && _slabCfg.supabaseUrl) ||
     _slabBackendCfg.__SLAB_SUPABASE_URL__ ||
     (_slabBackendCfg.SafetyLab && _slabBackendCfg.SafetyLab.SUPABASE_URL) ||
     'https://fhrqkhdrwbfnizkepkch.supabase.co'
 ).replace(/\/+$/, '');
 const SUPABASE_PUBLISHABLE_KEY = String(
+    (_slabCfg && _slabCfg.supabaseKey) ||
     _slabBackendCfg.__SLAB_SUPABASE_KEY__ ||
     (_slabBackendCfg.SafetyLab && _slabBackendCfg.SafetyLab.SUPABASE_KEY) ||
     'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ'

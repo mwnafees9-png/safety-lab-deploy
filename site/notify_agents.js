@@ -77,6 +77,7 @@
 
     function _proxyBase() {
         try {
+            if (typeof window !== 'undefined' && window.SLConfig && window.SLConfig.aiEndpoint) return String(window.SLConfig.aiEndpoint);
             if (typeof window !== 'undefined' && window.__SLAB_AI_ENDPOINT__) return String(window.__SLAB_AI_ENDPOINT__);
         } catch (_) {}
         return 'https://api.safetylabaero.com/v1/ai';

@@ -12,7 +12,9 @@
 (function () {
     'use strict';
 
-    const ENDPOINT = (typeof window !== 'undefined' && window.__SLAB_CORPUS_ENDPOINT__)
+    const ENDPOINT = (typeof window !== 'undefined' && window.SLConfig && window.SLConfig.corpusEndpoint)
+        ? String(window.SLConfig.corpusEndpoint).replace(/\/+$/, '')
+        : (typeof window !== 'undefined' && window.__SLAB_CORPUS_ENDPOINT__)
         ? String(window.__SLAB_CORPUS_ENDPOINT__).replace(/\/+$/, '')
         : 'https://api.safetylabaero.com';   // path-scoped route to the corpus worker (CSP-allowlisted)
 

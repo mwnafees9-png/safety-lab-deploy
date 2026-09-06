@@ -1520,7 +1520,7 @@ const AI_IDB_NAME     = 'safetyLab.ai.v1';
 
 const AI_IDB_STORE    = 'memory';
 
-const AI_PROXY_BASE_URL = (typeof window !== 'undefined' && window.__SLAB_AI_ENDPOINT__) ? String(window.__SLAB_AI_ENDPOINT__) : 'https://api.safetylabaero.com/v1/ai';
+const AI_PROXY_BASE_URL = (typeof window !== 'undefined' && window.SLConfig && window.SLConfig.aiEndpoint) ? String(window.SLConfig.aiEndpoint) : ((typeof window !== 'undefined' && window.__SLAB_AI_ENDPOINT__) ? String(window.__SLAB_AI_ENDPOINT__) : 'https://api.safetylabaero.com/v1/ai');
 
 const PRO_PLUS_MONTHLY_ALLOWANCE = 2000000;   // 2M Sonnet-equivalent tokens / month
 
