@@ -35,7 +35,32 @@
         } catch (_) {}
         return false;
     }
-    function _itar() { try { return !!(window.projectConfig && window.projectConfig.isITARControlled); } catch (_) { return false; } }
+    // 5 Sep 2026 — same dead fence as crdt_sync.js, same cause and same fix.
+    // `window.projectConfig` is permanently undefined (top-level `let` lives in
+    // the global lexical environment, not on window), so this returned false for
+    // every project and presence ran on ITAR projects. Reads through SLEnv, no
+    // eval (CSP), and FAILS CLOSED when the accessor is unavailable.
+    function _itar() {
+      try {
+        // Order matters. SLEnv is the supported accessor and the only one that
+        // works in every build. The BARE IDENTIFIER is the real variable — these
+        // are classic scripts sharing one global lexical scope, which is exactly
+        // why `window.projectConfig` was always undefined — and `typeof` guards it
+        // without eval (the production CSP blocks eval; that is what hollowed out
+        // lock_seal.js). If NEITHER is reachable we treat the project as
+        // controlled and stay out: fail-open is defensible for an outage and
+        // indefensible for a controlled-data fence.
+        var E = (typeof SLEnv !== 'undefined') ? SLEnv : (typeof window !== 'undefined' ? window.SLEnv : null);
+        if (E && typeof E.get === 'function') {
+          var pc = E.get('projectConfig');
+          if (pc !== undefined) return !!(pc && pc.isITARControlled);
+        }
+        if (typeof projectConfig !== 'undefined') {
+          return !!(projectConfig && projectConfig.isITARControlled);
+        }
+        return true;                                              // fail CLOSED
+      } catch (_) { return true; }                                // fail CLOSED
+    }
     function _proj() { try { return (typeof getActiveCloudProjectId === 'function' && getActiveCloudProjectId()) || window._activeCloudProjectId || null; } catch (_) { return null; } }
     function _ws() { try { return (typeof getActiveWorkspaceId === 'function' && getActiveWorkspaceId()) || null; } catch (_) { return null; } }
     function _me() {

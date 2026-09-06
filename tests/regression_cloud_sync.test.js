@@ -447,7 +447,18 @@ function runCrdt(adopt) {
     __crdtApply: (partial) => { if (partial.acFhaData) model.acFhaData = partial.acFhaData; },
     addEventListener: () => {}
   };
-  const ctx = { window: win, document: { createElement: () => ({}), head: { appendChild: () => {} }, documentElement: { appendChild: () => {} }, getElementById: () => null, body: {} }, console, Promise, Date, JSON, Array, Object, String, Uint8Array, setTimeout: (f) => f(), clearTimeout: () => {}, setInterval: () => {}, navigator: { onLine: true }, location: { search: '' }, localStorage: { getItem: () => null }, crypto: { randomUUID: () => 'aaaaaaaa-bbbb' }, btoa: () => '', atob: () => '' };
+  // 5 Sep 2026 — `projectConfig` must exist as a BARE GLOBAL in this sandbox,
+  // not only as win.projectConfig, because that is how it exists in the real
+  // browser: it is a top-level `let` in a classic script, so it lives in the
+  // global lexical environment and is NOT a property of window. This sandbox
+  // used to provide only the window property, which meant it was modelling a
+  // shape production has never had — and crdt_sync's ITAR fence read that same
+  // phantom property, so the sandbox and the defect agreed with each other and
+  // the fence's failure was invisible from here. With the fence corrected to
+  // read the real variable (SLEnv first, bare identifier second, fail closed),
+  // a sandbox without the bare name makes the module refuse to start and
+  // _doc() returns null.
+  const ctx = { window: win, projectConfig: win.projectConfig, document: { createElement: () => ({}), head: { appendChild: () => {} }, documentElement: { appendChild: () => {} }, getElementById: () => null, body: {} }, console, Promise, Date, JSON, Array, Object, String, Uint8Array, setTimeout: (f) => f(), clearTimeout: () => {}, setInterval: () => {}, navigator: { onLine: true }, location: { search: '' }, localStorage: { getItem: () => null }, crypto: { randomUUID: () => 'aaaaaaaa-bbbb' }, btoa: () => '', atob: () => '' };
   vm.createContext(ctx);
   vm.runInContext(crdtSrc, ctx);
   const CRDT = win.SafetyLabCRDT;

@@ -8292,6 +8292,21 @@ function __crdtApply(partial) {
         try { if (partial.ftaPages) { if (typeof renderFTASidebar === 'function') renderFTASidebar(); if (typeof updateD3 === 'function') updateD3(); } } catch (_) {}
         try { if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) {}
     } finally { _autosaveSuspended = prev; }
+
+    // 5 Sep 2026 — DATA LOSS, closed. Suspending autosave across the mutation is
+    // right (a write mid-merge could persist a half-applied state), but nothing
+    // scheduled one AFTERWARDS. A teammate's merged change therefore lived only
+    // in this tab's memory until the local user happened to make an edit of
+    // their own; close the tab first and the merge was gone, with no error and
+    // no trace. Working rule 26 exists because measurement data was lost once —
+    // this is the same class, arriving by a different door.
+    //
+    // Deliberately OUTSIDE the finally, so the flag is already restored and this
+    // write is not the one being suppressed. Only fires when we were not already
+    // inside a suspended region (a project load owns its own save).
+    if (!prev) {
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+    }
 }
 
 // ---------------------------------------------------------------------------

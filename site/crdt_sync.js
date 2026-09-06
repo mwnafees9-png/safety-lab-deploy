@@ -1,8 +1,16 @@
 /* crdt_sync.js — Phase 1: real-time co-authoring foundation (Yjs CRDT over Supabase Realtime).
  *
- * FLAG-GATED + inert by default. Enable with ?crdt=1, localStorage SLA_CRDT='1', or
- * window.SafetyLabAI.crdt=true. NEVER runs for ITAR-controlled projects. Requires a Supabase
- * session + an active cloud project. Loads Yjs (window.Y) lazily from vendor/yjs.min.js — if the
+ * FLAG-GATED, and DEFAULT ON — see flagOn() below. Until 5 Sep 2026 this header described the
+ * module as dormant until switched on, which had been false since the flag was inverted: flagOn()
+ * returns true
+ * unless something explicitly turns it OFF (window.SafetyLabAI.crdt=false, ?crdt=0, or
+ * localStorage SLA_CRDT='0'). Corrected 5 Sep 2026. Which posture is INTENDED is still Waqas's
+ * call (register O-7, open since 31 Aug); this comment now describes what the code does rather
+ * than what someone once meant it to do, because a file that argues with itself is how the ITAR
+ * fence below went unnoticed for weeks.
+ *
+ * Does not run for ITAR-controlled projects — and as of 5 Sep 2026 that is actually true; see
+ * _itar(). Requires a Supabase session + an active cloud project. Loads Yjs (window.Y) lazily from vendor/yjs.min.js — if the
  * bundle is missing or the flag is off, this module does nothing and the app is unaffected.
  *
  * v1 scope: item-level merge for the aircraft-level flat tables (functions / FHA / requirements),
@@ -56,7 +64,42 @@
       return true;
     } catch (_) { return true; }
   }
-  function _itar()      { try { return !!(window.projectConfig && window.projectConfig.isITARControlled); } catch (_) { return false; } }
+  // 5 Sep 2026 — THIS FENCE HAD NEVER FIRED ONCE.
+  // `projectConfig` is a top-level `let` in a classic script (bindings_modules.js),
+  // so it lives in the global LEXICAL environment and `window.projectConfig` is
+  // permanently undefined — the same trap sl_env.js was written for. This
+  // function therefore returned false for every project, including ITAR ones,
+  // while the file header promised it "NEVER runs for ITAR-controlled projects".
+  // Read through SLEnv, which is the one supported way to reach app state, and
+  // do NOT use eval to reach it (the production CSP blocks eval — that is what
+  // hollowed out lock_seal.js).
+  //
+  // AND IT FAILS CLOSED. If the accessor is unavailable the answer is "treat it
+  // as controlled" and collaboration stays off. Fail-open is defensible for an
+  // outage and indefensible for a controlled-data fence; a missing SLEnv means
+  // the build is broken anyway, and a broken build must not start syncing an
+  // ITAR project.
+  function _itar() {
+    try {
+      // Order matters. SLEnv is the supported accessor and the only one that
+      // works in every build. The BARE IDENTIFIER is the real variable — these
+      // are classic scripts sharing one global lexical scope, which is exactly
+      // why `window.projectConfig` was always undefined — and `typeof` guards it
+      // without eval (the production CSP blocks eval; that is what hollowed out
+      // lock_seal.js). If NEITHER is reachable we treat the project as
+      // controlled and stay out: fail-open is defensible for an outage and
+      // indefensible for a controlled-data fence.
+      var E = (typeof SLEnv !== 'undefined') ? SLEnv : (typeof window !== 'undefined' ? window.SLEnv : null);
+      if (E && typeof E.get === 'function') {
+        var pc = E.get('projectConfig');
+        if (pc !== undefined) return !!(pc && pc.isITARControlled);
+      }
+      if (typeof projectConfig !== 'undefined') {
+        return !!(projectConfig && projectConfig.isITARControlled);
+      }
+      return true;                                              // fail CLOSED
+    } catch (_) { return true; }                                // fail CLOSED
+  }
   function _signedIn()  { try { return typeof window.isSupabaseSignedIn === 'function' && window.isSupabaseSignedIn(); } catch (_) { return false; } }
   function _proj()      { try { return (typeof window.getActiveCloudProjectId === 'function' && window.getActiveCloudProjectId()) || null; } catch (_) { return null; } }
   function _ws()        { try { return (typeof window.getActiveWorkspaceId === 'function' && window.getActiveWorkspaceId()) || null; } catch (_) { return null; } }
