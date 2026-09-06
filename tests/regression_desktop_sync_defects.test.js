@@ -7,10 +7,10 @@
  *       every 12 s (crdt/presence refused them; this module checked nothing).
  *       Executed: a tick over an ITAR snapshot touches NO client and says the
  *       local-only posture ONCE; the same tick with ITAR clear proceeds.
- *  D2 — the server entitlement verdict rendered a paywall inside a LICENSED
- *       desktop install, and its tier write could downgrade the licensed tier.
- *       Executed: isPaywalled() is false on desktop even with the server
- *       verdict '1'; _entitlementTierToApply only ever raises on desktop.
+ *  D2 — (rewritten 6 Sep 2026) the paywall must follow the SIGNED LICENSE wherever
+ *       it is the authority (every customer install, desktop included); the
+ *       server entitlement verdict is the hosted demo's rule only. Executed:
+ *       isPaywalled() under the four license/verdict combinations.
  *  D3 — File > Open kept the previous project's cloud identity, so the next
  *       tick overwrote that cloud project with the .slab contents. Structural +
  *       wrap-mechanics: loadProject is in cloud_sync's wrapped loader lists.
@@ -126,56 +126,44 @@ if (tickFn && pushFn && queueFn && noticeFn) {
 } else { part2(); }
 
 function part2() {
-console.log('D2 — a licensed desktop never renders the paywall, tier only rises');
+console.log('D2 — ONE licensing rule: where the signed license is the authority, the paywall IS the license question');
+// 6 Sep 2026 (desktop parity) — D2 as first fixed (30 Aug) exempted the desktop from the
+// paywall because "the Electron gate is the authority". That gate is gone: the desktop now
+// runs the same signed-license verifier as every customer install. So the rule under test
+// became: SLLicense.authoritative → paywalled === !valid (any platform); not authoritative
+// (hosted demo) → the server verdict, exactly as before. _entitlementTierToApply (the
+// desktop raise-only floor) is DELETED: the sync stands down entirely under a signed license.
 
 const paywallFn = extractFn(helpersSrc, 'isPaywalled');
-const tierFn = extractFn(helpersSrc, '_entitlementTierToApply');
+const authFn = extractFn(helpersSrc, '_signedLicenseAuthority');
 check('isPaywalled extracted', !!paywallFn);
-check('_entitlementTierToApply extracted', !!tierFn);
-if (paywallFn && tierFn) {
-  function pwSandbox(desktop, serverVerdict) {
+check('_signedLicenseAuthority extracted', !!authFn);
+check('_entitlementTierToApply is GONE (dead once the license stands the sync down)', helpersSrc.indexOf('_entitlementTierToApply') < 0);
+check('isPaywalled no longer branches on _isDesktopAuth', paywallFn && paywallFn.indexOf('_isDesktopAuth') < 0);
+if (paywallFn && authFn) {
+  function pwSandbox(lic, serverVerdict) {
     const store = { 'safetyLab.server.paywalled': serverVerdict, 'safetyLab.signup.email': 'x@y.com' };
     const sb = {
       localStorage: { getItem: k => (k in store ? store[k] : null) },
-      _isDesktopAuth: () => desktop,
+      window: { SLLicense: lic },
       isOnTrial: () => false, isInGrandfatherWindow: () => false,
       LICENSE_TIER_RANK: { edu: 0, pro: 1, 'pro-plus': 2, enterprise: 3 },
     };
     vm.createContext(sb);
-    vm.runInContext(paywallFn + ';globalThis.__pw = isPaywalled;', sb);
+    vm.runInContext(authFn + ';' + paywallFn + ';globalThis.__pw = isPaywalled;', sb);
     return vm.runInContext('__pw()', sb);
   }
-  check('web + server verdict 1 -> paywalled (web behavior unchanged)', pwSandbox(false, '1') === true);
-  check('DESKTOP + server verdict 1 -> NOT paywalled (Electron gate is the authority)', pwSandbox(true, '1') === false);
-  check('desktop short-circuit precedes the server verdict read',
-    paywallFn.indexOf('_isDesktopAuth') < paywallFn.indexOf('safetyLab.server.paywalled'));
-
-  // 30 Aug (live-verify lesson): the first cut of this suite INVENTED rank names
-  // ('proplus') and passed while a live probe with the same invented name showed
-  // a downgrade — the function was right, the fixture vocabulary was wrong.
-  // Use the PRODUCT'S rank, extracted from bindings_modules.js, so a vocabulary
-  // drift between suite and product can never hide again.
-  const bindingsSrc = fs.readFileSync(path.join(SITE, 'bindings_modules.js'), 'utf8');
-  const rankM = bindingsSrc.match(/const LICENSE_TIER_RANK = (\{[^}]+\});/);
-  check('real LICENSE_TIER_RANK extracted from bindings_modules', !!rankM);
-  const REAL_RANK = rankM ? (0, eval)('(' + rankM[1] + ')') : { edu: 0, pro: 1, 'pro-plus': 2, enterprise: 3 };
-  check("real vocabulary has 'pro-plus' (hyphenated) — the name the first cut got wrong",
-    REAL_RANK.hasOwnProperty('pro-plus'));
-  const sb2 = { LICENSE_TIER_RANK: REAL_RANK };
-  vm.createContext(sb2);
-  vm.runInContext(tierFn + ';globalThis.__t = _entitlementTierToApply;', sb2);
-  const t = (d, cur, v) => vm.runInContext(`__t(${d}, ${JSON.stringify(cur)}, ${JSON.stringify(v)})`, sb2);
-  check('web: verdict tier applies as-is', t(false, 'pro-plus', 'pro') === 'pro');
-  check('desktop: cloud tier can RAISE the licensed tier', t(true, 'pro', 'enterprise') === 'enterprise');
-  check('desktop: cloud tier can NEVER lower it', t(true, 'pro-plus', 'pro') === null);
-  check('desktop: equal tier is left alone', t(true, 'pro', 'pro') === null);
-  check('desktop: unknown verdict tier never downgrades', t(true, 'pro-plus', 'weird') === null);
-  check('no verdict tier -> leave alone everywhere', t(true, 'pro', null) === null && t(false, 'pro', '') === null);
-  check('desktop: EMPTY current tier accepts the verdict (raising from nothing)', t(true, '', 'pro') === 'pro');
-  check('entitlement sync wired through the floor helper',
-    /_entitlementTierToApply\(_desk2, _curTier2, verdict\.tier\)/.test(helpersSrc));
-  check('desktop never calls endTrial off the server verdict',
-    /if \(!_desk2 && typeof endTrial === 'function'\) endTrial\(\);/.test(helpersSrc));
+  check('hosted demo (no authoritative license) + server verdict 1 -> paywalled (unchanged)', pwSandbox(null, '1') === true);
+  check('hosted demo + server verdict 0 -> not paywalled (unchanged)', pwSandbox(null, '0') === false);
+  check('authoritative + VALID license -> NOT paywalled even when the server verdict says 1', pwSandbox({ authoritative: true, valid: true }, '1') === false);
+  check('authoritative + INVALID license -> paywalled even when the server verdict says 0', pwSandbox({ authoritative: true, valid: false }, '0') === true);
+  check('a present-but-advisory license (hosted demo, valid) does not override the server verdict', pwSandbox({ authoritative: false, valid: true }, '1') === true);
+  check('license authority is consulted BEFORE the server verdict is read', paywallFn.indexOf('_signedLicenseAuthority') < paywallFn.indexOf('safetyLab.server.paywalled'));
+  const syncAt = helpersSrc.indexOf('function _syncEntitlementFromServer');
+  const sync = helpersSrc.slice(syncAt, syncAt + 1500);
+  check('entitlement sync STANDS DOWN under an authoritative license, before any license_tokens query',
+    /_signedLicenseAuthority\(\)\.authoritative\) return;/.test(sync) && sync.indexOf('_signedLicenseAuthority') < sync.indexOf("from('license_tokens')"));
+  check('the desktop raise-only clause is gone from the sync', sync.indexOf('_desk2') < 0);
 }
 
 console.log('D3 — File > Open drops the previous cloud identity');

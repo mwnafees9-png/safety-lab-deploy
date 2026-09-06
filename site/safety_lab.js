@@ -3191,7 +3191,6 @@ window.connectWorkspace = connectWorkspace;
 
 // Throttle auto-send so relaunching several times doesn't fire off a string of code emails.
 // [P2 batch 6] L5175-5198 moved verbatim to misc_fn_modules.js
-window._autoSendAndEnterCode = _autoSendAndEnterCode;
 // [P2 batch 6] L5200-5207 moved verbatim to misc_fn_modules.js
 window.openSignupModal  = openSignupModal;
 window.closeSignupModal = closeSignupModal;
@@ -3259,15 +3258,9 @@ window._wsToggleInlineLock = _wsToggleInlineLock;
 // Auto-open the signup modal on first launch when no signup record exists *and* the user
 // hasn't previously dismissed it. Wired into the existing DOMContentLoaded boot path
 // further down; this is the helper it calls.
-var _slabDesktopOfflineThisLaunch = false;   // desktop: user chose "work offline" this launch
 // [P2 batch 6] L5384-5410 moved verbatim to misc_fn_modules.js
 window.maybeAutoOpenSignup = maybeAutoOpenSignup;
 
-// Desktop "work offline" escape from the auto-opened connect modal. Closes the modal for THIS
-// launch only (no persisted dismissal) so collaboration is offered again next launch — collab
-// stays the default. The local-first app remains fully functional offline.
-// [P2 batch 6] L5416-5422 moved verbatim to misc_fn_modules.js
-window._desktopWorkOffline = _desktopWorkOffline;
 
 // Boot wiring: refresh the chip + auto-open if first-launch and no signup record.
 document.addEventListener('DOMContentLoaded', () => {

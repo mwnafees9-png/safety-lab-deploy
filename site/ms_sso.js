@@ -55,6 +55,9 @@
     }
     function _redirectTo() {
         try {
+            // Desktop (6 Sep 2026): the shell registers a safetylab:// handler and tells us
+            // where the provider should send the user back (a file:// page cannot receive it).
+            if (window.slabDesktop && window.slabDesktop.ssoRedirect) return String(window.slabDesktop.ssoRedirect);
             // Return to the app shell; supabase detectSessionInUrl finishes the exchange.
             return location.origin + (location.pathname.indexOf('/app') === 0 ? location.pathname : '/app');
         } catch (_) { return undefined; }

@@ -225,31 +225,21 @@ function _slEntitlementVerdict(o) {
 }
 try { if (typeof window !== 'undefined') window._slEntitlementVerdict = _slEntitlementVerdict; } catch(_) {}
 
-// Defect 2 (part b) — what tier should the entitlement sync apply, given where
-// we run and what the license gate already granted. PURE so the suite executes
-// it: on DESKTOP the cloud verdict can only RAISE the tier the Electron license
-// seeded (an account with no SaaS entitlement must not downgrade a licensed
-// install); on web it applies as-is. Returns the tier to set, or null for
-// "leave the current tier alone".
-function _entitlementTierToApply(isDesktop, currentTier, verdictTier) {
-    if (!verdictTier) return null;
-    if (!isDesktop) return String(verdictTier);
-    try {
-        const rank = (typeof LICENSE_TIER_RANK !== 'undefined') ? LICENSE_TIER_RANK : {};
-        const cur = (currentTier && rank.hasOwnProperty(currentTier)) ? rank[currentTier] : -1;
-        const nxt = rank.hasOwnProperty(verdictTier) ? rank[verdictTier] : -1;
-        if (nxt > cur) return String(verdictTier);
-        return null;
-    } catch (_) { return null; }
+// ONE licensing rule (6 Sep 2026, desktop parity). Wherever the signed license is the
+// authority — every customer install: self-hosted, browser-only, desktop — the paywall
+// question IS the license question: valid → never paywalled, invalid/absent → paywalled
+// (and slab_license.js shows the "load your license" screen). The server entitlement
+// verdict below belongs to the hosted demo cloud only. This replaces the 30 Aug "desktop
+// never renders the paywall" exemption: a desktop without a valid license IS paywalled
+// (Waqas, 5 Sep), and a desktop with one is licensed by the same file the web trusts.
+function _signedLicenseAuthority() {
+    try { const L = window.SLLicense; if (L && L.authoritative) return { authoritative: true, valid: !!L.valid }; } catch (_) {}
+    return { authoritative: false, valid: false };
 }
 function isPaywalled() {
     try {
-        // Defect 2 (spec 14 Aug, landed 30 Aug 2026) — on desktop, licensing is
-        // enforced by the ELECTRON GATE, full stop. The server entitlement verdict
-        // (written below for telemetry) must never render a paywall inside software
-        // the customer already licensed; its Sign-out button then wiped the seeded
-        // identity for the rest of the launch. Desktop never renders the paywall.
-        if (typeof _isDesktopAuth === 'function' && _isDesktopAuth()) return false;
+        const _lic = _signedLicenseAuthority();
+        if (_lic.authoritative) return !_lic.valid;
         // Phase 57 — SERVER-AUTHORITATIVE verdict, written by _onSupabaseSignedIn from the
         // user's real Supabase tier / trial_ends_at / license_tokens. When set it is the
         // ONLY authority; fails OPEN (unset -> fall through) so a transient error never
@@ -7306,6 +7296,10 @@ function _onSupabaseSignedIn(user) {
         (function _syncEntitlementFromServer() {
             try {
                 if (!_supabaseClient) return;   // not booted -> fail OPEN (no paywall)
+                // 6 Sep 2026 — on a customer install the signed license decides tier and
+                // paywall; the cloud's license_tokens/users rows are NOT consulted for it
+                // (the customer's database is theirs; licensing never calls home).
+                if (_signedLicenseAuthority().authoritative) return;
                 Promise.all([
                     _supabaseClient.from('license_tokens').select('plan,expires_at').limit(1).maybeSingle(),
                     _supabaseClient.from('users').select('tier,trial_ends_at').limit(1).maybeSingle()
@@ -7321,17 +7315,10 @@ function _onSupabaseSignedIn(user) {
                     const verdict = (typeof _slEntitlementVerdict === 'function')
                         ? _slEntitlementVerdict({ activeLicense: activeLicense, licensePlan: (lic && lic.plan) || null, comped: comped, academic: academic, onTrial: onTrial })
                         : { paywalled: false, tier: null };
-                    // Defect 2 — desktop: the Electron gate is the licensing
-                    // authority. The verdict is still computed and stored (telemetry)
-                    // but never enforces a paywall there, and the tier it carries can
-                    // only RAISE what the license seeded (_entitlementTierToApply).
-                    const _desk2 = (typeof _isDesktopAuth === 'function') && _isDesktopAuth();
                     if (verdict.paywalled) {
-                        if (!_desk2 && typeof endTrial === 'function') endTrial();
+                        if (typeof endTrial === 'function') endTrial();
                     } else {
-                        const _curTier2 = (function () { try { return localStorage.getItem('safetyLab.license.tier') || ''; } catch (_) { return ''; } })();
-                        const _applyTier2 = _entitlementTierToApply(_desk2, _curTier2, verdict.tier);
-                        if (_applyTier2 && typeof setLicenseTier === 'function') setLicenseTier(_applyTier2);
+                        if (verdict.tier && typeof setLicenseTier === 'function') setLicenseTier(String(verdict.tier));
                         if (onTrial && !activeLicense && !comped && !academic) {
                             try {
                                 localStorage.setItem('safetyLab.license.trialStartedAt', String(trialEndsAt - TRIAL_DURATION_MS));
@@ -7369,10 +7356,69 @@ function _onSupabaseSignedIn(user) {
         // is somebody to join the workspace as. Non-fatal by construction — a
         // failed redemption must never break sign-in itself.
         try { if (typeof _redeemPendingInvite === 'function') _redeemPendingInvite().catch(() => {}); } catch (_) {}
+        // 6 Sep 2026 (desktop parity) — an "open this project" request that arrived
+        // before sign-in (a ?project= link on the web, a safetylab:// link on the
+        // desktop) is honored now that there is somebody to open it as.
+        try { _consumePendingProjectLink(); } catch (_) {}
     } catch (e) {
         console.error('[Safety Lab Aero] onSignedIn handler error:', e);
     }
 }
+
+// ---- Open-in links (6 Sep 2026, "works like Office") ------------------------------
+// ONE function opens a cloud project by id from either direction:
+//   · web:     https://<web app>/app?project=<id>          (from the desktop's "Open in web")
+//   · desktop: safetylab://open?project=<id>&backend=<host> (from the web's "Open in desktop")
+// The id is a project row in the backend BOTH windows share; RLS decides whether this
+// account may read it. If nobody is signed in yet the request waits for sign-in.
+let _slabPendingProjectId = '';
+function _isProjectId(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || '')); }
+function openCloudProjectById(projectId) {
+    if (!_isProjectId(projectId)) { try { showToast('That link does not name a project.', 'warning', 4000); } catch (_) {} return false; }
+    _slabPendingProjectId = String(projectId).toLowerCase();
+    return _consumePendingProjectLink();
+}
+function _consumePendingProjectLink() {
+    if (!_slabPendingProjectId) _consumeProjectLinkFromUrl();
+    const id = _slabPendingProjectId; if (!id) return false;
+    const signedIn = (typeof isSupabaseSignedIn === 'function') && isSupabaseSignedIn();
+    if (!signedIn) return false;                       // stays pending; _onSupabaseSignedIn retries
+    _slabPendingProjectId = '';
+    try { if (typeof _loadCloudProject === 'function') { _loadCloudProject(id); return true; } } catch (e) { try { console.warn('[open-in] ' + e); } catch (_) {} }
+    return false;
+}
+// The web's ?project= parameter (read once at boot; removed from the address bar so a
+// reload does not silently replace whatever the engineer opened since).
+let _slabProjectLinkRead = false;
+function _consumeProjectLinkFromUrl() {
+    if (_slabProjectLinkRead) return; _slabProjectLinkRead = true;
+    try {
+        if (typeof location === 'undefined' || location.protocol === 'file:') return;   // desktop links arrive via safetylab://
+        const qs = new URLSearchParams(location.search || '');
+        const id = qs.get('project'); if (!id) return;
+        if (_isProjectId(id)) _slabPendingProjectId = id.toLowerCase();
+        qs.delete('project');
+        const rest = qs.toString();
+        history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + (location.hash || ''));
+    } catch (_) {}
+}
+// Links for the account panel. Desktop link carries the backend host so the desktop can
+// refuse a link meant for a different install; the web link is the install's own address.
+function openInDesktopLink() {
+    try {
+        const id = (typeof _activeCloudProjectId !== 'undefined') ? _activeCloudProjectId : null; if (!id) return '';
+        const cfg = window.SLConfig || {}; let hostName = ''; try { hostName = new URL(cfg.supabaseUrl || '').host; } catch (_) {}
+        return 'safetylab://open?project=' + encodeURIComponent(id) + (hostName ? '&backend=' + encodeURIComponent(hostName) : '');
+    } catch (_) { return ''; }
+}
+function openInWebLink() {
+    try {
+        const id = (typeof _activeCloudProjectId !== 'undefined') ? _activeCloudProjectId : null; if (!id) return '';
+        const base = (window.SLConfig && window.SLConfig.webAppUrl) || ''; if (!base) return '';
+        return base.replace(/\/+$/, '') + '?project=' + encodeURIComponent(id);
+    } catch (_) { return ''; }
+}
+try { if (typeof window !== 'undefined') { window.openCloudProjectById = openCloudProjectById; window.__slabOpenCloudProject = openCloudProjectById; window.openInDesktopLink = openInDesktopLink; window.openInWebLink = openInWebLink; } } catch (_) {}
 
 function _onSupabaseSignedOut() {
     try {
@@ -7391,9 +7437,10 @@ function _onSupabaseSignedOut() {
 }
 
 // True when the SPA runs inside the Electron desktop shell (or any file:// load).
-// The desktop CANNOT complete a magic-LINK redirect: email clients won't open file://
-// URLs and Supabase won't allow-list them. So desktop signs in with the emailed 6-digit
-// CODE (verifyOtp) instead of a clickable link — same Supabase identity either way.
+// Its ONE remaining job: the desktop cannot complete a magic-LINK redirect (email clients
+// won't open file:// URLs), so an emailed sign-in uses the 6-digit CODE instead of a link.
+// Identity, licensing and the paywall no longer branch on it — the signed license and the
+// shared auth gate decide those on every platform (6 Sep 2026).
 function _isDesktopAuth() {
     try {
         if (window.slabDesktop && window.slabDesktop.isDesktop) return true;
@@ -7413,25 +7460,13 @@ function openSignupModal() {
     const submitBtn = document.getElementById('signup-submit-btn');
     if (codeField) codeField.style.display = 'none';
     if (submitBtn) { submitBtn.textContent = 'Continue'; submitBtn.disabled = false; }
-    const offlineBtn = document.getElementById('signup-offline-btn');
-    if (offlineBtn) offlineBtn.style.display = _isDesktopAuth() ? '' : 'none';
     // Pre-fill from any prior signup state so a returning user sees their info.
     const emailEl = document.getElementById('signup-email');
     const nameEl  = document.getElementById('signup-name');
     const orgEl   = document.getElementById('signup-org');
-    // Treat the desktop's seeded local placeholder as "no email" so Connect starts blank.
-    let preEmail = getSignupEmail() || '';
-    if (preEmail === 'desktop@local') preEmail = '';
-    if (emailEl) { emailEl.removeAttribute('readonly'); emailEl.value = preEmail; }
+    if (emailEl) { emailEl.removeAttribute('readonly'); emailEl.value = getSignupEmail() || ''; }
     if (nameEl)  nameEl.value  = getSignupName()  || '';
     if (orgEl)   orgEl.value   = getSignupOrg()   || '';
-    if (introEl && _isDesktopAuth()) {
-        introEl.innerHTML = 'Connect to your Safety Lab Aero workspace to sync projects and collaborate. Enter your email and we&rsquo;ll send you a sign-in code.';
-    }
-    const legalEl = document.getElementById('signup-legal-text');
-    if (legalEl && _isDesktopAuth()) {
-        legalEl.innerHTML = 'By connecting you agree to the Safety Lab Aero beta terms. Connecting signs you in and syncs your projects to your workspace so you can collaborate. Choose <strong>Continue offline</strong> to keep everything local on this machine.';
-    }
     m.style.display = 'flex';
     setTimeout(() => m.classList.add('show'), 10);
     // Trigger detection so a pre-filled email immediately shows the right banner.
@@ -7439,30 +7474,19 @@ function openSignupModal() {
     // Focus email on open for keyboard-first flow.
     setTimeout(() => { try { if (emailEl) emailEl.focus(); } catch(_) {} }, 60);
 }
-// Desktop "Connect to Workspace" entry — opens the sign-in modal cleanly (no desktop@local
-// placeholder) so the local app can sign into the user's real Supabase workspace.
+// Sign-in entry from the chip / signed-out prompts. (6 Sep 2026: the desktop "Connect to
+// workspace" model — a local app that optionally attached to an account — is GONE. The
+// desktop now signs in at the same gate as the web, before the app opens, so there is
+// nothing desktop-specific left here.)
 function connectWorkspace() {
     try {
         if (typeof isSupabaseSignedIn === 'function' && isSupabaseSignedIn()) {
-            if (typeof showToast === 'function') showToast('Already connected to your workspace.', 'info', 3000);
+            if (typeof showToast === 'function') showToast('Already signed in.', 'info', 3000);
             if (typeof refreshWorkspaceChip === 'function') refreshWorkspaceChip();
             return;
         }
     } catch (_) {}
     openSignupModal();
-    // Desktop: the install gate already collected the user's email, so don't ask again — auto-send
-    // the code to that email and jump straight to code entry. (Throttled so rapid relaunches don't
-    // re-send.) Falls back to the normal email step if we have no usable email or sending fails.
-    if (_isDesktopAuth()) {
-        let known = ''; try { known = (getSignupEmail() || '').trim().toLowerCase(); } catch (_) {}
-        const usable = known && known !== 'desktop@local' && /@[\w.-]+\.[a-z]{2,}$/i.test(known);
-        if (usable && _desktopCanAutoSend()) {
-            _autoSendAndEnterCode(known);
-        } else if (usable) {
-            // Sent recently — go straight to code entry so they can type the code already in their inbox.
-            _showSignupEnterCodeState(known);
-        }
-    }
 }
 
 function onSignupEmailChange() {
@@ -7650,7 +7674,6 @@ async function _signupResendCode() {
     const email = _signupAwaitingCode; if (!email) return;
     try {
         await sendMagicLink(email);
-        try { localStorage.setItem('safetyLab.desktop.codeSentAt', String(Date.now())); } catch (_) {}
         if (typeof showToast === 'function') showToast('New code sent to ' + email + '.', 'success', 3500);
     } catch (e) {
         if (typeof showToast === 'function') showToast('Resend failed: ' + ((e && e.message) || 'error'), 'warning', 5000);
@@ -7689,15 +7712,10 @@ function refreshSigninChip() {
     const label = document.getElementById('signin-chip-label');
     if (!chip || !label) return;
     let email = getSignupEmail();
-    // On desktop the local profile seeds a desktop@local placeholder; until a real Supabase
-    // session restores, present the chip as "Connect" rather than a fake signed-in account.
-    if (_isDesktopAuth() && email === 'desktop@local' && !(typeof isSupabaseSignedIn === 'function' && isSupabaseSignedIn())) {
-        email = '';
-    }
     if (!email) {
         chip.className = 'signin-chip';
-        label.textContent = _isDesktopAuth() ? 'Connect' : 'Sign in';
-        chip.title = _isDesktopAuth() ? 'Connect to your workspace' : 'Sign in or sign up';
+        label.textContent = 'Sign in';
+        chip.title = 'Sign in or sign up';
         chip.onclick = function() { try { connectWorkspace(); } catch (_) { try { openSignupModal(); } catch (__) {} } };
         return;
     }
@@ -7721,6 +7739,30 @@ function refreshSigninChip() {
     chip.onclick = function() { try { openAccountPanel(); } catch (_) {} };
 }
 
+// Account panel extras (6 Sep 2026): what the signed license says, and the Office-style
+// "open this project in the other app" action. Both are empty strings when they do not apply.
+function _acctLicenseLine(esc) {
+    try {
+        const L = window.SLLicense; if (!L || !L.authoritative) return '';
+        if (!L.valid) return ' · <span style="color:#b91c1c;">no valid license</span>';
+        const who = L.customer ? ' · licensed to ' + esc(L.customer) : '';
+        const when = L.trial ? ' · <b style="color:var(--color-text-primary,#111);">Trial</b> · ' + esc(L.daysLeft) + ' days left' : (L.expiresAt ? ' · until ' + esc(String(L.expiresAt).slice(0, 10)) : '');
+        return who + when;
+    } catch (_) { return ''; }
+}
+function _acctOpenInRow(esc) {
+    try {
+        const isDesk = !!(window.SLConfig && window.SLConfig.isDesktop);
+        // The web→desktop link is offered only once a desktop build that registers the
+        // safetylab:// handler has been released (index.html sets SL_DESKTOP_APP_READY with
+        // that release). A link to an app nobody can have yet would be a dead end.
+        if (!isDesk && window.SL_DESKTOP_APP_READY !== true) return '';
+        const href = isDesk ? openInWebLink() : openInDesktopLink();
+        if (!href) return '';
+        const label = isDesk ? 'Open this project on the web' : 'Open this project in the desktop app';
+        return '<div style="font-size:12px;"><a id="acct-open-in" href="' + esc(href) + '" target="_blank" rel="noopener" style="color:var(--color-accent,#0A63CC);text-decoration:none;font-weight:600;">' + label + ' ↗</a></div>';
+    } catch (_) { return ''; }
+}
 function openAccountPanel() {
     const existing = document.getElementById('account-panel'); if (existing) existing.remove();
     const email = (typeof getSignupEmail === 'function' ? getSignupEmail() : '') || '';
@@ -7748,7 +7790,8 @@ function openAccountPanel() {
       +     '<label style="' + lblCss + '">Full name<input id="acct-name" type="text" value="' + esc(curName) + '" placeholder="Jane Doe" style="' + inputCss + '"></label>'
       +     '<label style="' + lblCss + '">Organization<input id="acct-org" type="text" value="' + esc(curOrg) + '" placeholder="Company or institution" style="' + inputCss + '"></label>'
       +     '<label style="' + lblCss + '">Email<input type="email" value="' + esc(email) + '" disabled style="' + inputCss + 'background:var(--color-surface-3,rgba(0,0,0,.04));color:var(--color-text-secondary,#667085);"></label>'
-      +     '<div style="font-size:12px;color:var(--color-text-secondary,#667085);">Plan: <b style="color:var(--color-text-primary,#111);">' + esc(tierLabel) + '</b></div>'
+      +     '<div style="font-size:12px;color:var(--color-text-secondary,#667085);">Plan: <b style="color:var(--color-text-primary,#111);">' + esc(tierLabel) + '</b>' + _acctLicenseLine(esc) + '</div>'
+      +     _acctOpenInRow(esc)
       +     '<div id="acct-msg" style="font-size:12px;min-height:14px;"></div>'
       +     '<div id="acct-mfa-mount" style="border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:12px;"></div>'
       +     '<details style="margin-top:2px;border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:10px;"><summary style="font-size:12px;font-weight:600;color:#b91c1c;cursor:pointer;">Danger zone</summary>'

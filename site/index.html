@@ -3714,10 +3714,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 </div>
             </div>
             <div class="modal-foot signup-modal-foot">
-                <!-- Phase 56.13 — "Skip for now" removed on web; signup is the only path forward.
-                     Desktop is local-first, so a desktop-only "Continue offline" escape is shown
-                     there (collab stays the default, but offline/air-gap must still work). -->
-                <button class="action-btn" id="signup-offline-btn" onclick="_desktopWorkOffline()" style="display:none;background:transparent;border:1px solid var(--color-border-hair,rgba(0,0,0,.18));color:inherit;">Continue offline</button>
+                <!-- Phase 56.13 — "Skip for now" removed; signup is the only path forward.
+                     (6 Sep 2026: the desktop-only "Continue offline" escape is gone — the
+                     desktop signs in at the gate like the web.) -->
                 <button class="action-btn btn-cyan" id="signup-submit-btn" onclick="submitSignup()">Continue</button>
             </div>
         </div>
@@ -3995,9 +3994,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          its own idempotence marker, so the last wrapper erased everyone else's guard.
          Loads first: it has no dependencies and every wrap site calls into it. -->
     <!-- 6 Sep 2026 — the ONE backend-config surface. MUST load before any backend reader; it hard-stops a customer install that still points at Safety Lab. -->
-    <script src="slab_config.js?v=1.0" defer></script>
+    <script src="slab_config.js?v=1.1" defer></script>
     <!-- 6 Sep 2026 — offline signed-license verification (needs SLConfig; must precede the tier readers). -->
-    <script src="slab_license.js?v=1.1" defer></script>
+    <script src="slab_license.js?v=1.2" defer></script>
     <script src="fn_wrap.js?v=1.0" defer></script>
     <script src="numbering.js?v=1.0.1" defer></script>
     <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
@@ -4067,7 +4066,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.30" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.89" defer></script>
+    <script src="helpers_modules.js?v=2.90" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
     <script src="severity_axes.js?v=1.3" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4075,8 +4074,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.37" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.55" defer></script>
-    <script src="safety_lab.js?v=65.51" defer></script>
+    <script src="misc_fn_modules.js?v=66.56" defer></script>
+    <script src="safety_lab.js?v=65.52" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4389,12 +4388,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          Loads AFTER program_plan.js (wraps renderScopeSection) and numbering_ui.js. -->
     <script src="numbering_plan.js?v=1.2" defer></script>
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
-    <script src="auth_gate.js?v=62.69" defer></script>
+    <script src="auth_gate.js?v=62.70" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the
          auth gate itself (auth_gate.js ssoBlockHTML) and calls window.signInWithMicrosoft.
          Tenant restriction enforced server-side (approved_tenants + before-user-created hook). -->
-    <script src="ms_sso.js?v=1.0" defer></script>
+    <script src="ms_sso.js?v=1.1" defer></script>
     <!-- Two-factor authentication (TOTP). Born-modular; adds a 2FA section to the
          account panel and a sign-in step-up (AAL2) consumed by auth_gate.js. -->
     <script src="mfa.js?v=1.1" defer></script>

@@ -94,7 +94,7 @@ check('EXEC: egress manifest lists database + AI hosts', (()=>{
 check('the module exposes a SLConfigEgress() self-test', /SLConfigEgress = function/.test(cfgSrc));
 
 console.log('\n[config] pins');
-check('slab_config pinned in index', /slab_config\.js\?v=1\.0/.test(idx));
+check('slab_config pinned in index >= 1.0 (floor; 1.1 added webAppUrl + desktop flag, 6 Sep)', PIN.atLeast(idx, 'slab_config.js', '1.0'));
 check('safety_lab >= 65.51', PIN.atLeast(idx,'safety_lab.js','65.51'));
 check('bindings_modules >= 1.37', PIN.atLeast(idx,'bindings_modules.js','1.37'));
 check('helpers_modules >= 2.88', PIN.atLeast(idx,'helpers_modules.js','2.88'));

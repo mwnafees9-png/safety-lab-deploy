@@ -103,9 +103,9 @@ ok('binding a folder writes the first .sl immediately', /if \(handle\) \{ try \{
 // misc 66.53 -> 66.54 (4 Sep 2026, F15): CoFFE resolves function-member MAC tokens to the owner system.
 // misc 66.54 -> 66.55 (4 Sep 2026, F16b): … and configuration-item members (itemId / internalId → owningSystemId).
 // bindings 1.35 -> 1.36 (5 Sep 2026, lever 3): every seeded phase carries its escape.
-['data_ops_modules.js?v=66.36', 'misc_fn_modules.js?v=66.55'].forEach(pin => {
-    ok('index pins ' + pin, idx.indexOf(pin) >= 0);
-});
+// 6 Sep 2026 — floors, not literals (rule 12): misc 66.56 removed the desktop "connect" model.
+ok('index pins data_ops_modules >= 66.36 (floor)', PIN.atLeast(idx, 'data_ops_modules.js', '66.36'));
+ok('index pins misc_fn_modules >= 66.55 (floor)', PIN.atLeast(idx, 'misc_fn_modules.js', '66.55'));
 ok('index pins bindings_modules >= 1.36 (floor, rule 12 — 1.37 added the SLConfig read 6 Sep)', PIN.atLeast(idx, 'bindings_modules.js', '1.36'));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed\n');

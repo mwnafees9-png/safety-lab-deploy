@@ -2969,31 +2969,6 @@ async function supabaseSignOut() {
     try { await client.auth.signOut(); } catch (e) { console.error(e); }
 }
 
-function _desktopCanAutoSend() {
-    try {
-        const last = parseInt(localStorage.getItem('safetyLab.desktop.codeSentAt') || '0', 10);
-        return !last || (Date.now() - last) > 5 * 60 * 1000;   // at most once / 5 min
-    } catch (_) { return true; }
-}
-
-// Desktop one-shot: email the code to the known gate email, then show the code-entry step.
-async function _autoSendAndEnterCode(email) {
-    const intro = document.getElementById('signup-intro');
-    const emailEl = document.getElementById('signup-email');
-    if (emailEl) emailEl.value = email;
-    if (intro) intro.innerHTML = 'Sending a sign-in code to <code>' + esc(email) + '</code>…';
-    try {
-        await sendMagicLink(email);
-        try { localStorage.setItem('safetyLab.desktop.codeSentAt', String(Date.now())); } catch (_) {}
-        _showSignupEnterCodeState(email);
-    } catch (e) {
-        // Offline / rate-limited — fall back to the manual email step.
-        if (intro) intro.innerHTML = 'Connect to your Safety Lab Aero workspace. Enter your email and we&rsquo;ll send you a sign-in code.';
-        if (emailEl) { try { emailEl.removeAttribute('readonly'); emailEl.focus(); } catch (_) {} }
-        try { if (typeof showToast === 'function') showToast('Could not send the code automatically — press “' + _authSendLabel() + '”.', 'warning', 5000); } catch (_) {}
-    }
-}
-
 function closeSignupModal() {
     const m = document.getElementById('signup-modal');
     if (!m) return;
@@ -3012,9 +2987,7 @@ function _signupUseDifferentEmail() {
     if (codeField) codeField.style.display = 'none';
     if (emailEl) { emailEl.removeAttribute('readonly'); emailEl.value = ''; try { emailEl.focus(); } catch (_) {} }
     if (submitBtn) { submitBtn.textContent = 'Continue'; submitBtn.disabled = false; }
-    if (intro) intro.innerHTML = _isDesktopAuth()
-        ? 'Connect to your Safety Lab Aero workspace to sync projects and collaborate. Enter your email and we&rsquo;ll send you a sign-in code.'
-        : 'Enter your email to sign in. We&rsquo;ll email you a sign-in code.';
+    if (intro) intro.innerHTML = 'Enter your email to sign in. We&rsquo;ll email you a sign-in code.';
     try { onSignupEmailChange(); } catch (_) {}
 }
 
@@ -3124,38 +3097,14 @@ async function _wsToggleInlineLock(scope, systemId) {
 
 function maybeAutoOpenSignup() {
     try {
-        // Desktop: collaboration is the DEFAULT. On launch, prompt to connect to the workspace
-        // unless we're already connected (a restored Supabase session), the user chose to work
-        // offline this launch, the machine is offline, or this is an AI-off (locked-down / likely
-        // air-gapped) install. The seeded desktop@local placeholder does NOT count as signed in.
-        if (_isDesktopAuth()) {
-            try { if (typeof navigator !== 'undefined' && navigator.onLine === false) return; } catch (_) {}
-            try { if (window.slabDesktop && window.slabDesktop.aiMode === 'off') return; } catch (_) {}
-            // Wait for the persisted Supabase session to restore (getSession settles ~1.5s)
-            // before deciding to prompt — a connected relaunch should be silent.
-            setTimeout(function () {
-                try {
-                    if (_slabDesktopOfflineThisLaunch) return;
-                    if (typeof isSupabaseSignedIn === 'function' && isSupabaseSignedIn()) return;   // session restored → already collaborating
-                    connectWorkspace();
-                } catch (_) {}
-            }, 2000);
-            return;
-        }
-        // Web: first-launch prompt unless a signup record exists or the modal was dismissed.
+        // First-launch prompt unless a signup record exists or the modal was dismissed.
+        // (6 Sep 2026: the desktop "prompt to connect" branch is gone — every platform
+        // signs in at the auth gate before the app opens.)
         if (getSignupEmail()) return;            // already signed in
         if (localStorage.getItem('safetyLab.signup.dismissed') === '1') return;
         // Tiny delay so it lands after the welcome modal logic if that ran first.
         setTimeout(openSignupModal, 600);
     } catch(_) {}
-}
-
-function _desktopWorkOffline() {
-    _slabDesktopOfflineThisLaunch = true;
-    _signupAwaitingCode = null;
-    const m = document.getElementById('signup-modal');
-    if (m) { m.classList.remove('show'); setTimeout(function () { m.style.display = 'none'; }, 220); }
-    try { if (typeof showToast === 'function') showToast('Working offline — local project only. Reconnect anytime from the Connect chip.', 'info', 5000); } catch (_) {}
 }
 
 function getActiveWorkspaceId() {

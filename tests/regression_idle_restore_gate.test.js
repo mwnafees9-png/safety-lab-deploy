@@ -73,8 +73,8 @@ console.log('\n[idle] the restored-login path consults it, and only that path');
   const i = src.indexOf('const { data: { session } } = await sb.auth.getSession();');
   const restored = strip(src.slice(i, i + 2200));
   check('the getSession() branch calls _idleAbandonedSince', /_idleAbandonedSince\(\)/.test(restored));
-  check('it decides BEFORE the MFA step-up and the lift',
-        before(restored, '_idleAbandonedSince()', '_mfaGateThenLift('),
+  check('it decides BEFORE the license/MFA step-up and the lift',
+        before(restored, '_idleAbandonedSince()', '_licensedThenMfaThenLift('),   // 6 Sep 2026: the lift path is wrapped by the license-covers-account check
         'an abandoned session must not be asked for a second factor on top of a first it no longer holds');
   check('a stale session is signed out LOCALLY, never globally',
         /signOut\(\{ scope: 'local' \}\)/.test(restored),

@@ -399,7 +399,7 @@
   // Only a timestamp that EXISTS and is STALE is treated as an abandoned session.
   function _idleAbandonedSince() {
     try {
-      if (typeof window !== 'undefined' && window.__SLAB_DESKTOP__) return 0;   // desktop has its own lock (S23)
+      if (typeof window !== 'undefined' && window.__SLAB_DESKTOP__) return 0;   // desktop stays signed in (Waqas 6 Sep: works like Office; optional local passcode lock)
       const last = _idleReadShared();
       if (!last) return 0;
       const away = Date.now() - last;
@@ -435,7 +435,7 @@
   }
   function _idleVis() { if (document.visibilityState === 'visible') _idleCheck(); }
   function armIdleTimeout() {
-    try { if (typeof window !== 'undefined' && window.__SLAB_DESKTOP__) return; } catch (_) {}   // desktop has its own lock
+    try { if (typeof window !== 'undefined' && window.__SLAB_DESKTOP__) return; } catch (_) {}   // desktop stays signed in (6 Sep ruling) — no idle sign-out
     if (_idleArmed) { _idleBump(); return; }
     _idleArmed = true; _idleBump();
     IDLE_EVENTS.forEach(function (ev) { try { document.addEventListener(ev, _idleBump, { passive: true, capture: true }); } catch (_) { try { document.addEventListener(ev, _idleBump, true); } catch (_) {} } });
@@ -855,6 +855,70 @@
   // absent or the check throws, we fail OPEN to the prior behavior so a transient
   // error can never lock out a non-MFA user; a cancelled mandatory challenge signs
   // the user back out so an un-stepped-up session never proceeds.
+  // 6 Sep 2026 (desktop parity) — THE LICENSE MUST COVER THE ACCOUNT. On a customer
+  // install the signed license may be bound to e-mail domains / an Entra tenant; the
+  // account that just signed in is checked against it BEFORE MFA and BEFORE the gate
+  // lifts. A mismatch signs out locally and says why in plain words. On the hosted demo
+  // (no authoritative license) this is a no-op. Fails OPEN only if the verifier is
+  // absent — never on a real "not covered" verdict.
+  function _sessionTenant(session) {
+    try {
+      const u = session && session.user; if (!u) return '';
+      if (u.app_metadata && u.app_metadata.tid) return String(u.app_metadata.tid);
+      const ids = Array.isArray(u.identities) ? u.identities : [];
+      for (const id of ids) { const d = id && id.identity_data; if (d && d.tid) return String(d.tid); }
+    } catch (_) {}
+    return '';
+  }
+  async function _licenseCoversAccount(session) {
+    try {
+      if (typeof window.SLLicenseCheckIdentity !== 'function') return { ok: true };
+      const email = session && session.user && session.user.email;
+      const r = await window.SLLicenseCheckIdentity(email || '', _sessionTenant(session));
+      if (!r || !r.authoritative) return { ok: true };
+      if (r.valid) return { ok: true };
+      const plain = (typeof window.SLLicensePlainReason === 'function') ? window.SLLicensePlainReason(r.reason) : String(r.reason || '');
+      return { ok: false, reason: plain };
+    } catch (_) { return { ok: true }; }
+  }
+  async function _licensedThenMfaThenLift(sb, session, onLift) {
+    const cover = await _licenseCoversAccount(session);
+    if (!cover.ok) {
+      _idleLockMessage = 'You signed in as ' + ((session && session.user && session.user.email) || 'this account') + ', but ' + cover.reason.replace(/^This license does not cover this account: /, 'this install\'s license does not cover it: ');
+      try { console.warn('[auth-gate] license does not cover the signed-in account — ' + cover.reason); } catch (_) {}
+      try { await sb.auth.signOut({ scope: 'local' }); } catch (_) { try { await sb.auth.signOut(); } catch (__) {} }
+      try { renderGate(); } catch (_) {}
+      return;
+    }
+    return _mfaGateThenLift(sb, onLift);
+  }
+
+  // 6 Sep 2026 (desktop parity, "works like Office") — STAY SIGNED IN OFFLINE. On the
+  // desktop a persisted login must still open the app with no network: supabase-js
+  // cannot refresh an expired token offline and reports "no session", which is not a
+  // sign-out. If this is the desktop and the stored login is still on disk (signing
+  // out deletes it), open the app in offline mode; the first successful refresh once
+  // the network returns carries on silently, and a refusal by the server arrives as a
+  // real SIGNED_OUT event, which renders the gate. Web installs never take this path.
+  function _storedLoginEmail() {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!/^sb-.*-auth-token$/.test(k || '')) continue;
+        const v = JSON.parse(localStorage.getItem(k) || 'null');
+        const u = v && (v.user || (v.currentSession && v.currentSession.user));
+        if (u && u.email) return String(u.email);
+      }
+    } catch (_) {}
+    return '';
+  }
+  function _desktopOfflineRestore() {
+    try {
+      if (!(window.SLConfig && window.SLConfig.isDesktop)) return '';
+      return _storedLoginEmail();
+    } catch (_) { return ''; }
+  }
+
   async function _mfaGateThenLift(sb, onLift) {
     const _signOutToGate = async function () {
       try { if (sb && sb.auth && typeof sb.auth.signOut === 'function') await sb.auth.signOut(); } catch (_) {}
@@ -902,10 +966,9 @@
   // Main: check session, gate or lift accordingly
   // -------------------------------------------------------------------------
   async function init() {
-    // Desktop (Electron) build — no hosted Supabase session exists offline. The native
-    // app authorizes locally (local profile / license file), so skip the online auth gate
-    // and reveal the app shell. Inert in the web build (window.__SLAB_DESKTOP__ is undefined).
-    if (typeof window !== 'undefined' && window.__SLAB_DESKTOP__) { try { liftGate(); } catch (_) {} return; }
+    // 6 Sep 2026 — the desktop bypass that lived here ("skip the online auth gate on
+    // Electron") is GONE. The desktop signs in at this gate exactly like the web; what
+    // differs is only that a stored login still opens the app offline (below).
     const sb = getSupabase();
     if (!sb) { setTimeout(init, 300); return; }
 
@@ -991,7 +1054,7 @@
           try { console.log('[auth-gate] SIGNED_IN with potential-recovery URL; waiting 1500ms for PASSWORD_RECOVERY before lifting'); } catch (_) {}
           setTimeout(() => {
             if (_passwordRecoveryActive) return; // PASSWORD_RECOVERY fired, set-new-password already shown
-            _mfaGateThenLift(sb, function () {
+            _licensedThenMfaThenLift(sb, session, function () {
               try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
               _syncThenLift();
               toast('Signed in as ' + session.user.email, 'success');
@@ -999,8 +1062,8 @@
           }, 1500);
           return;
         }
-        // Normal sign-in — enforce the MFA step-up (if enrolled) before lifting.
-        _mfaGateThenLift(sb, function () {
+        // Normal sign-in — license must cover the account, then the MFA step-up (if enrolled), then lift.
+        _licensedThenMfaThenLift(sb, session, function () {
           try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email); } catch (_) {}
           _syncThenLift();
           toast('Signed in as ' + session.user.email, 'success');
@@ -1055,12 +1118,22 @@
           if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email);
           else localStorage.setItem('safetyLab.signup.email', String(session.user.email).toLowerCase());
         } catch (_) {}
-        _mfaGateThenLift(sb, function () { _syncThenLift(); });
+        _licensedThenMfaThenLift(sb, session, function () { _syncThenLift(); });
       } else {
+        const offlineEmail = _desktopOfflineRestore();
+        if (offlineEmail) {
+          try { console.info('[auth-gate] desktop: stored login for ' + offlineEmail + ' opens the app offline; will refresh when the network returns'); } catch (_) {}
+          try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(offlineEmail); } catch (_) {}
+          _syncThenLift();
+          toast('Working offline as ' + offlineEmail + ' — your changes sync when you reconnect.', 'info');
+          return;
+        }
         renderGate();
       }
     } catch (err) {
       console.error('[auth-gate] init', err);
+      const offlineEmail = _desktopOfflineRestore();
+      if (offlineEmail) { try { if (typeof window.setSignupEmail === 'function') window.setSignupEmail(offlineEmail); } catch (_) {} _syncThenLift(); return; }
       renderGate();
     }
   }

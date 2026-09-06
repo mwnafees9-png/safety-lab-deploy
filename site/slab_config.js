@@ -13,6 +13,15 @@
  *   window.__SLAB_CORPUS_ENDPOINT__                        (method-corpus retrieval; empty = off)
  *   window.__SLAB_DESKTOP__                                (Electron desktop build)
  *   window.__SLAB_LOCAL_ONLY__  (or window.SafetyLab.LOCAL_ONLY)  (browser-only, door 3: no cloud at all)
+ *   window.__SLAB_WEB_APP_URL__                            (the WEB address of this install — the
+ *                                                           desktop's "Open in web" target; a customer
+ *                                                           install names its own, never ours)
+ *
+ * 1.1 (6 Sep 2026, desktop parity): webAppUrl + the desktop flag. A desktop install with
+ * no database override is a TRIAL desktop on our demo cloud (mode 'desktop'); a desktop
+ * install pointed at the customer's database is 'self-hosted' like the web and gets the
+ * same leak check — the desktop is a different window onto the same install, not a
+ * different set of rules.
  *
  * Modes: 'hosted-demo' (our multi-tenant cloud — trials/demos/internal ONLY),
  *        'self-hosted' (customer's own database), 'browser-only' (data on this
@@ -26,6 +35,7 @@
   var HOSTED_DB  = 'https://fhrqkhdrwbfnizkepkch.supabase.co';
   var HOSTED_KEY = 'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ';
   var HOSTED_AI  = 'https://api.safetylabaero.com/v1/ai';
+  var HOSTED_WEB = 'https://safetylabaero.com/app';
 
   function str(v) { return (v == null) ? '' : String(v); }
   function trim(u) { return str(u).replace(/\/+$/, ''); }
@@ -43,6 +53,7 @@
   var rawDbKey  = str(W.__SLAB_SUPABASE_KEY__ || (W.SafetyLab && W.SafetyLab.SUPABASE_KEY) || '');
   var rawAi     = trim(W.__SLAB_AI_ENDPOINT__ || '');
   var rawCorpus = trim(W.__SLAB_CORPUS_ENDPOINT__ || '');
+  var rawWeb    = trim(W.__SLAB_WEB_APP_URL__ || '');
   var isDesktop = !!W.__SLAB_DESKTOP__;
   var browserOnly = !!(W.__SLAB_LOCAL_ONLY__ || (W.SafetyLab && W.SafetyLab.LOCAL_ONLY));
 
@@ -59,7 +70,10 @@
     supabaseUrl: browserOnly ? '' : (rawDbUrl || HOSTED_DB),
     supabaseKey: browserOnly ? '' : (rawDbKey || HOSTED_KEY),
     aiEndpoint:  browserOnly ? '' : (rawAi || HOSTED_AI),
-    corpusEndpoint: browserOnly ? '' : rawCorpus
+    corpusEndpoint: browserOnly ? '' : rawCorpus,
+    // Where "Open in web" goes. Hosted/trial → our site. Self-hosted → ONLY what the
+    // customer named (blank = the button stays hidden; never a silent fallback to us).
+    webAppUrl: selfHosted ? rawWeb : (browserOnly ? '' : (rawWeb || HOSTED_WEB))
   };
 
   // Egress manifest: every host the app will contact, and whether it is ours.
@@ -78,12 +92,14 @@
     if (rawDbUrl)  strays.push('database');
     if (rawAi)     strays.push('AI inference');
     if (rawCorpus) strays.push('method corpus');
+    if (rawWeb)    strays.push('web address');
     if (strays.length) {
       fatal = 'This install is set to browser-only (your data stays on this machine), but a backend address is still configured for: '
             + strays.join(', ') + '. Remove those settings and reload.';
     }
   } else if (mode === 'self-hosted') {
     var leaks = egress.filter(function (e) { return e.safetyLab; });
+    if (rawWeb && pointsAtSafetyLab(rawWeb)) leaks = leaks.concat([{ purpose: 'web address', host: host(rawWeb) }]);
     if (leaks.length) {
       fatal = 'This install points its database at your own server, but these still point at Safety Lab: '
             + leaks.map(function (e) { return e.purpose + ' (' + e.host + ')'; }).join(', ')
@@ -94,9 +110,11 @@
   }
 
   var cfg = {
-    version: '1.0',
+    version: '1.1',
     mode: mode,
     isDesktop: isDesktop,
+    desktop: isDesktop,
+    webAppUrl: eff.webAppUrl,
     browserOnly: browserOnly,
     supabaseUrl: eff.supabaseUrl,
     supabaseKey: eff.supabaseKey,

@@ -30,7 +30,8 @@ console.log('[1] auth_gate — the license sync gates the lift and never wipes a
   check('the sync is exposed as a promise and a re-run hook', /window\.__slabLicenseReady = run;/.test(gate) && /window\.__slabSyncLicense = _syncLicenseTokenFromSupabase;/.test(gate));
   check('the gate lifts after the sync or after 6 s, whichever first', /function _syncThenLift\(\)/.test(gate) && /_syncLicenseTokenFromSupabase\(\)\.then\(lift, lift\)/.test(gate) && /setTimeout\(lift, 6000\)/.test(gate));
   const bare = (gate.match(/_syncLicenseTokenFromSupabase\(\);\s*\n\s*liftGate\(\);/g) || []).length;
-  check('every sign-in path uses _syncThenLift (no bare sync-then-lift left)', bare === 0 && (gate.match(/_syncThenLift\(\);/g) || []).length === 3, 'bare=' + bare);
+  // 3 sign-in paths + 2 desktop offline-restore paths (6 Sep 2026, desktop parity) = 5
+  check('every sign-in path uses _syncThenLift (no bare sync-then-lift left)', bare === 0 && (gate.match(/_syncThenLift\(\);/g) || []).length === 5, 'bare=' + bare + ' uses=' + (gate.match(/_syncThenLift\(\);/g) || []).length);
 }
 
 console.log('\n[2] ai_assistant — the honest reason, and a re-sync on the first miss');

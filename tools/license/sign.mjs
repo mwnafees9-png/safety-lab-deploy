@@ -70,6 +70,7 @@ if (cmd === 'template') {
     customer: 'Customer Name',
     tier: 'enterprise',                      // edu | pro | pro-plus | enterprise
     seats: 5,
+    trial: false,                            // true = evaluation license (short-dated; the app shows "Trial · N days left")
     features: [],                            // optional feature flags
     bind: {
       domains: ['customer.com'],             // sign-in email domains allowed (recommended)
@@ -93,6 +94,8 @@ if (cmd === 'sign') {
   if (!['edu', 'pro', 'pro-plus', 'enterprise'].includes(payload.tier)) die('tier must be edu | pro | pro-plus | enterprise');
   if (isNaN(Date.parse(payload.notBefore)) || isNaN(Date.parse(payload.notAfter))) die('notBefore/notAfter must be ISO dates');
   if (Date.parse(payload.notAfter) <= Date.parse(payload.notBefore)) die('notAfter must be after notBefore');
+  if (payload.trial != null && typeof payload.trial !== 'boolean') die('trial must be true or false');
+  if (payload.trial === true && (Date.parse(payload.notAfter) - Date.parse(payload.notBefore)) > 92 * 86400000) die('a trial license may not run longer than 92 days — set trial:false for a paid license');
   const pub = JSON.parse(readFileSync(PUB, 'utf8'));
   payload.kid = pub.kid;                     // which public key verifies this (rotation)
   const payloadB64 = b64u(Buffer.from(JSON.stringify(payload), 'utf8'));
