@@ -8,6 +8,55 @@ Rationale for the design decisions behind most of these lives in
 and the single ordered build list), `UPGRADES_Requirement_Bucketing.md` (U-1 … U-7) and
 `BUILD_SPEC_Structured_Nodes_and_Bucketing.md`.
 
+## Governing design decisions (rescued 5 Sep 2026 from `ROADMAP_Process_Layer.md`, which was scrapped)
+
+Written 2 Jul 2026 against v61.00. Waqas, 5 Sep: "scrap the road map." Its PHASE LIST was stale —
+the interdependence table, MAC editor, compiler, CoFFE and equivalence verifier had all shipped
+without it being updated, and a plan that lists built things as unbuilt sends the next person to
+build them twice. These ten decisions are a different thing: they are still the operating doctrine
+and that file was their only home, so they were moved here before it was deleted.
+
+1. **Probability-only allocation** — allocation trees distribute probability budgets; failure rate
+   is verification-side. (Shipped, v61.00.)
+2. **Artifacts are renderings** — the app maintains data relationships; standard-format documents
+   (FMES, CoFFE tables, FDAL summaries, all six assessment reports) are generated on demand, never
+   hand-maintained.
+3. **Fixed objectives, pluggable methods, recorded tailoring** — completion gates check the
+   standard's objectives; method choice (MAC vs manual CoFFE vs hybrid, FTA vs MBSA) is per-program
+   configuration; opt-outs carry signed rationale; severity drives depth defaults.
+4. **MAC + Interdependence as the aircraft-level model** (MBSA per App N) — MAC floors are source-
+   document inputs (assumptions until substantiated); the threshold model compiles; trees, cut sets,
+   CoFFE verdicts, budgets and functional failure sets are compiled OUTPUTS. Unmodelled states
+   default conservative.
+5. **Two-lane discipline** — elicited evidence (human or AI-confirmed) and computed evidence never
+   overwrite each other; the computed lane CHECKS the elicited lane. Locked human verdicts form the
+   model's regression suite.
+6. **AI drafts, the core proves** — the engine proves Boolean equivalence against the compiled truth
+   before acceptance. **AI never originates a number.**
+7. **Independence Principles as a deduped claim registry** — one record per unique member set;
+   gate attributes, CMA rows and requirements attach to it; lifecycle Identified → Evaluated →
+   Requirement → Verified; a compromise cascades to all dependents.
+8. **Cockpits, not report generators** — each of the six assessments is a stateful workspace:
+   input tray → activity board → completion checklist (the standard's own criteria) → outputs ledger.
+9. **Baseline and hand off** — a gate-green action: hashed baseline, versioned publish to downstream
+   input trays, sign-off. Iterative, with visible deltas.
+10. **Q-format reports** — the default template family mirrors ARP4761A Appendix Q artifact formats
+    (formats modelled, content original); contiguity is structural because every report renders one
+    database.
+
+**Three roadmap items looked ABSENT in a 5 Sep name search and were NOT confirmed:** the status
+engine (In work / Ready to hand off / Handed off / Reopened), assumption routing (owning level,
+routed-to, confirmation evidence), and the Independence Principle ledger of decision 7 — which the
+standard leans on for proposing independence requirements. **Treat as leads, not findings.** A
+name search proving absence is the exact trap rule 19 exists for (the "0 transfer gates" probe that
+was wrong); confirm each by more than one name before building anything.
+
+The roadmap's parked list, also rescued: problem reports / OPRs · ARP4754B Appendix A objectives
+matrix · validation-vs-verification split · CEA dependency graph · modification impact wizard
+(Tables 4/5) · MMEL/TLD dispatch mode · safety-significant events export.
+
+---
+
 **Live as of 19 Aug 2026, verified on the deployed build:** `mac_lanes.js` 1.1 ·
 `node_identity.js` 1.0 · `node_identity_ui.js` 1.3 · `sl_env.js` 1.0 · `misc_fn_modules.js` 66.31 ·
 `assurance_modules.js` 1.22 · `helpers_modules.js` 2.39 · `fta_view_modules.js` 66.30 ·
@@ -277,6 +326,62 @@ browser-invoked function answers OPTIONS and sets the CORS headers.
 ---
 
 ## B · MAC / CoFFE
+
+### B8 — CoFFE UPGRADE TO THE STANDARD'S METHOD (Waqas, 5 Sep 2026: "add the CoFFE upgrade to the buildmap after the 3 urgent builds and rest of the builds discussed from tonight")
+
+**SCHEDULED LAST.** Order: workspace membership → collaborative workspace → no customer data on our
+cloud → MFA → desktop (S23–S27) → MAC UI → **this**.
+
+Read against ARP4761A App B.4.3.1 (p.56, Table B2) and the worked example Q.4.4.1 (pp.382–387,
+Tables Q.4-6/7/8) on 5 Sep 2026.
+
+**What the standard asks.** Select an aircraft failure condition; take the contributing system
+functions from the Interdependence Analysis; enumerate their states in combination; record the
+resulting capability; answer whether each combination produces the condition. The braking example
+runs 4 functions × 3 states (Failed / Degraded / Operational) = 81 cases, then **Table Q.4-7 reduces
+them to the minimum contributors** — six lines, and THAT reduced set is the product. It becomes the
+AND gate in the fault tree and is where Independence Principles get proposed. CoFFE itself carries
+no independence requirements but indicates where they are needed.
+
+**Two things the standard CONFIRMS about the current build.** (a) Malfunction correctly sits outside
+the availability arithmetic: in the example, uncommanded high thrust (FF5.3) is not in the CoFFE
+table at all — it is already a Catastrophic system-level condition, so it hangs off the top OR gate
+and goes to the propulsion PSSA. `coffeComputed` returning null for malfunction cases is right.
+(b) "Degraded" is a per-project ASSUMPTION, not a universal — the example declares it as half
+capability (PASA-ASMP-02).
+
+**NOT to be re-proposed: a third STATE token.** B7 measured it and it was withdrawn deliberately —
+676 cases to ~1,500, with a computed lane for none of them, because partial loss is not a state, it
+is a capability below full. That reasoning stands.
+
+**But the standard does need "degraded"** — the whole summary table turns on it ("total loss of
+wheel brake in addition to PARTIAL loss of any ground spoiler or thrust reverser or flap"). The
+representation ALREADY EXISTS and is empty: `rule.degraded[].weight` plus a clause `floor`, used by
+**0 of 22 rules**. So this is the same data-entry job as F23, not a new mechanism — once the weights
+exist, CoFFE grades a degraded state from the weight without a new enum.
+
+**Depth is not solved by brute force.** Table Q.4-7 is a minimum-contributor set, which is what a
+minimal-cut-set computation over the MAC model produces (design decision 4 above). The 81-row table
+is the standard illustrating its reasoning, not a requirement to enumerate everything.
+
+**The work, in order:**
+- **B8.1 Wire `coffeCoverage`** (`misc_fn_modules.js:2094`, zero callers). It reports what the sweep
+  left out; today nothing tells a user that triples were never enumerated, and the house rule is
+  that a bounded sweep says what it left out. Safe half, can go alone.
+- **B8.2 `coffeShortestRoute` stays OFF** (`:2044`, zero callers) until Waqas rules. It raises a
+  `hard` finding on an order-1 route to Catastrophic/Hazardous without a single-member clause — a
+  genuine single-point failure, and the answer to his own question about the fastest route to the
+  catastrophic effect. Wiring it introduces a new finding class that could open the demo showing
+  unrehearsed findings. A demo-risk call, his.
+- **B8.3 The AI residue lane must report its failures** — `ai_assistant.js:3576,3579` do
+  `failures++; continue;` with no reason. Run 3: 101 calls, 44 failed, no per-call reason. Same fix
+  shape as F16a / F16d.
+- **B8.4 Cap the residue** — 1,389 cases on run 2; today the only bound is 40 conditions per
+  invocation, which bounds the run, not the work.
+- **B8.5 Populate the degraded weights** on the MAC rules (with F23's data work), which gives CoFFE
+  its third state through the existing path.
+- **B8.6 Cross-check CoFFE against the SFHAs** once they exist — the standard asks for this
+  explicitly, and it is what turns assumed failure effects into confirmed ones.
 
 ### Landed
 - **B0** — `mac_lanes.js` 1.0: three lanes derived from one declaration, per function,

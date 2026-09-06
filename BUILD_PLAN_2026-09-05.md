@@ -124,6 +124,28 @@ control with a remote — it has one commit from 5 July and no backup.
 
 ---
 
+## The full order, settled 5 Sep 2026
+
+Waqas: *"add the CoFFE upgrade to the buildmap after the 3 urgent builds and rest of the builds
+discussed from tonight."*
+
+| # | Build | Why here |
+|---|---|---|
+| 0 | Cleanup | **DONE 5 Sep.** Served-tree leak, test wall, dead files, 75 MB of scratch, the FHA prompt contradiction, the silent temperature drop, three lying documents, the stale proxy. |
+| 1 | **Workspace membership** | A live hole, and a hard prerequisite: it lives in the migration files, so every customer-hosted install would be built with it. |
+| 2 | **Collaborative workspace** | SharePoint-style. Live co-editing plus presence replaces the editing lock; the configuration-management and version-control lock stays and becomes server-enforced; change attribution (what changed, by whom, when) is part of it, not a later polish. |
+| 3 | **No customer data on our cloud** | Not just ITAR — all of it, on customer servers, with step-by-step instructions. Shares its foundation with 2: the database has to be rebuildable from files before either can move. |
+| 4 | **MFA** | Broken, not a policy choice. Fix it and turn it on. |
+| 5 | **Desktop** (S23–S27) | Update channel first (unsigned updates can push code to every user), then real sign-in — which delivers the sign-in notification and the paywall as consequences rather than as new features. |
+| 6 | **MAC screen** | "Messed up", needs to be markedly more intuitive; the approach itself can improve. |
+| 7 | **CoFFE upgrade** (B8) | Last. Wire the coverage report, make the residue lane report its failures and cap it, populate the degraded weights so the standard's third state comes through the existing path. The shortest-route finding stays off until Waqas rules on the demo risk. Full reading of ARP4761A B.4.3.1 and Q.4.4.1 is in the register at B8. |
+
+Two things sit outside this order because they are decisions, not builds: whether to change the
+drafting model so a sampling temperature actually applies (F25, eval-gated), and whether to wire the
+CoFFE shortest-route finding (B8.2).
+
+---
+
 ## What must be decided before Stage 1 starts
 
 These are not engineering questions.
