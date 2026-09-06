@@ -1,3 +1,26 @@
+## START HERE — 6 Sep 2026. One command, then two checks. Everything below this block is history.
+
+**FIRST THING: DEPLOY.** Three commits are built, tested and committed but NOT served. Waqas stopped for the night before shipping ("we will deploy tomorrow I am way too tired").
+
+```
+cd ~/Desktop/safety-lab-deploy && ./ship.sh
+```
+
+**THEN VERIFY THE SERVED PINS** — read the served files, not the terminal (rule 13/14, and the 19 Aug lesson that a deploy can miss the last commit by minutes):
+`helpers_modules 2.87` · `notify_agents 1.4` · `crdt_sync 1.7` · `presence 1.1` · `core_modules 1.3` · `ai_assistant 76.60` · `ai_loader 8.51` · `bindings 1.36` · `severity_axes 1.3` · `fha_derive 1.1` · `eval_core 1.9`
+
+**THEN CHECK ONE BEHAVIOUR ON THE LIVE SITE:** open a project marked export-controlled and press Save to cloud. It must refuse with a plain-language notice and stay local. That is the single most important thing shipping tonight, and it has only been proven in tests, never in the browser.
+
+**WHAT IS ALREADY LIVE AND NEEDS NOTHING:** the workspace membership fix (applied to production and verified with eleven rolled-back probes), the served-tree leak (fixed and confirmed gone), and the AI abstain/temperature changes (76.60, verified served).
+
+**KNOWN AND EXPECTED:** the wall shows 2 real fails in a Cowork session and 0 on Waqas's Mac. Both are `regression_eula_terms` and `regression_notify_agents` looking for `safety-lab-proxy-deploy/worker.js` as a sibling of this repo. It IS a sibling on his Desktop; it is not through the Cowork mount. Environment, not defect — do not "fix" it.
+
+**NEXT WORK, in the agreed order:** finish ITAR (2 of 6 doors still open — the controlled-document guard runs only on the chat lane while the classic AI lanes bypass it, and the "ITAR cloud" backend choice does not set the request header; the AI answer cache and feedback are also unfenced), then build 2 proper (collaborative workspace — blocked on four architecture decisions listed in `BUILD_PLAN_2026-09-05.md`), then build 3 (no customer data on our cloud), then MFA, desktop, MAC screen, CoFFE.
+
+**THE RULING THAT REFRAMES EVERYTHING, made late on 5 Sep:** *"I want each users data to stay with them, I do not want to handle user data"* and *"multi tenant cloud is just for trial and demos and for our internal use"*. Customer-hosted is THE PRODUCT, not a deployment option. The biggest unresolved consequence: **the AI currently carries the whole text of every uploaded source document through Safety Lab's gateway**, so the model endpoint has to move to the customer too — a customer-hosted database with the AI still routing through us leaks the thing the arrangement exists to protect.
+
+---
+
 ## 05 Sep 2026 (night) — three more controlled-data fences, written as ONE shared answer. NOT YET DEPLOYED (helpers 2.87, notify_agents 1.4).
 
 **THE FRAMING IS WAQAS'S AND IT CHANGED THE DESIGN.** Asked whether manual Save should be blocked or warned on an ITAR project, he answered: *"save to the user/customer cloud, in our instance it will be our own cloud, for them its their server etc."* Saving a controlled project is not wrong in itself — sending it to a destination not approved for controlled data is. Then: *"multi tenant cloud is just for trial and demos and for our internal use"*, which settles it with no compliance judgement to make: real work does not live on the shared cloud, so a controlled project there means something is misconfigured and the fence simply enforces what the tier is for.
