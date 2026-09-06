@@ -1520,7 +1520,11 @@ const AI_IDB_NAME     = 'safetyLab.ai.v1';
 
 const AI_IDB_STORE    = 'memory';
 
-const AI_PROXY_BASE_URL = (typeof window !== 'undefined' && window.SLConfig && window.SLConfig.aiEndpoint) ? String(window.SLConfig.aiEndpoint) : ((typeof window !== 'undefined' && window.__SLAB_AI_ENDPOINT__) ? String(window.__SLAB_AI_ENDPOINT__) : 'https://api.safetylabaero.com/v1/ai');
+// 6 Sep 2026 — when the config surface is present its answer is FINAL, including a blank
+// (browser-only / AI off = no AI endpoint at all). A blank used to fall through to Safety
+// Lab's proxy, which is exactly the leak the config surface exists to prevent. The direct
+// override / hosted fallback survives only for an out-of-order load with no SLConfig.
+const AI_PROXY_BASE_URL = (typeof window !== 'undefined' && window.SLConfig) ? String(window.SLConfig.aiEndpoint || '') : ((typeof window !== 'undefined' && window.__SLAB_AI_ENDPOINT__) ? String(window.__SLAB_AI_ENDPOINT__) : 'https://api.safetylabaero.com/v1/ai');
 
 const PRO_PLUS_MONTHLY_ALLOWANCE = 2000000;   // 2M Sonnet-equivalent tokens / month
 

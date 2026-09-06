@@ -309,6 +309,12 @@ const AiClient = (function(){
     function controlledRefusalMessage(reason){
         return 'AI is off because ' + reason + '. Controlled data can only run on your own Claude (GovCloud), Azure Government, or on-prem backend — choose one under AI Settings.';
     }
+    // 6 Sep 2026 — no AI endpoint at all (browser-only install, or AI switched off): refuse
+    // here, at the one choke point, in plain words. Never fall back to a Safety Lab address.
+    function unconfiguredRefusal(){
+        try { return AI_PROXY_BASE_URL ? null : 'AI is not set up on this install. Choose an AI backend under Settings (your own Claude, Azure, or on-prem endpoint).'; }
+        catch (_) { return 'AI is not set up on this install.'; }
+    }
     async function messages(opts){
         const s = _settings();
         const _cap = Number(s.costCap) || 0;   // 0 = uncapped (default); a per-customer cap is honored when set
@@ -316,6 +322,8 @@ const AiClient = (function(){
         const model = opts.model || s.anthropicModel;
         const _refused = controlledRefusal();
         if (_refused) throw new Error(controlledRefusalMessage(_refused));
+        const _unset = unconfiguredRefusal();
+        if (_unset) throw new Error(_unset);
         const itar = !!(projectConfig && projectConfig.isITARControlled);
         const proxy = isProxyMode();
         if (proxy && _allowanceRemaining() <= 0) {
@@ -432,6 +440,8 @@ const AiClient = (function(){
         const proxy = isProxyMode();
         const _refusedEmb = controlledRefusal();
         if (_refusedEmb) throw new Error(controlledRefusalMessage(_refusedEmb));
+        const _unsetEmb = unconfiguredRefusal();
+        if (_unsetEmb) throw new Error(_unsetEmb);
         const itar = !!(projectConfig && projectConfig.isITARControlled);
         if (proxy && _allowanceRemaining() <= 0) {
             throw new Error('Pro+ monthly token allowance exhausted. Resets next month.');
@@ -488,7 +498,7 @@ const AiClient = (function(){
     }
     function getAuditLog(){ return (projectConfig && projectConfig.aiAuditLog) || []; }
 
-    return { isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage };
+    return { isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage, unconfiguredRefusal };
 })();
 window.AiClient = AiClient;
 

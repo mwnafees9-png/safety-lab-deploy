@@ -44,8 +44,8 @@ check('slab_config loads BEFORE fn_wrap and every backend reader',
       before(idx, SREF('slab_config.js'), SREF('corpus_retrieve.js')) &&
       before(idx, SREF('slab_config.js'), SREF('labs_thread_config.js')));
 check('safety_lab.js reads SLConfig.supabaseUrl/Key', /_slabCfg && _slabCfg\.supabaseUrl/.test(S('safety_lab.js')) && /_slabCfg && _slabCfg\.supabaseKey/.test(S('safety_lab.js')));
-check('bindings_modules.js reads SLConfig.aiEndpoint', /window\.SLConfig && window\.SLConfig\.aiEndpoint/.test(S('bindings_modules.js')));
-check('notify_agents.js reads SLConfig.aiEndpoint', /window\.SLConfig && window\.SLConfig\.aiEndpoint/.test(S('notify_agents.js')));
+check('bindings_modules.js reads SLConfig.aiEndpoint', /window\.SLConfig\) \? String\(window\.SLConfig\.aiEndpoint/.test(S('bindings_modules.js')));
+check('notify_agents.js reads SLConfig.aiEndpoint', /window\.SLConfig\) return String\(window\.SLConfig\.aiEndpoint/.test(S('notify_agents.js')));
 check('corpus_retrieve.js reads SLConfig.corpusEndpoint', /window\.SLConfig && window\.SLConfig\.corpusEndpoint/.test(S('corpus_retrieve.js')));
 check('labs_thread_config.js reads SLConfig.supabaseUrl/Key', /window\.SLConfig && window\.SLConfig\.supabaseUrl/.test(S('labs_thread_config.js')));
 check('_initSupabaseClient bails on the fatal flag', /__SLAB_CONFIG_FATAL__/.test(S('helpers_modules.js')) && before(strip(S('helpers_modules.js')), '__SLAB_CONFIG_FATAL__', 'createClient'));
@@ -76,6 +76,25 @@ check('EXEC: browser-only + a backend still set → FATAL', (()=>{
   const r=runConfig({__SLAB_LOCAL_ONLY__:true, __SLAB_SUPABASE_URL__:'https://cust.supabase.co'});
   return r.cfg.mode==='browser-only' && typeof r.fatal==='string';
 })());
+check('EXEC: browser-only + the customer\'s OWN AI endpoint → allowed (files here, AI on their server) (1.2)', (()=>{
+  const r=runConfig({__SLAB_LOCAL_ONLY__:true, __SLAB_AI_ENDPOINT__:'https://ai.customer.com/v1'});
+  return r.cfg.mode==='browser-only' && !r.fatal && r.cfg.aiEndpoint==='https://ai.customer.com/v1' && r.cfg.egress.length===1 && r.cfg.egress[0].safetyLab===false;
+})());
+check('EXEC: browser-only + a SAFETY LAB AI address → FATAL (1.2)', (()=>{
+  const r=runConfig({__SLAB_LOCAL_ONLY__:true, __SLAB_AI_ENDPOINT__:'https://api.safetylabaero.com/v1/ai'});
+  return typeof r.fatal==='string' && /AI inference/.test(r.fatal);
+})());
+check('EXEC: AI OFF → aiEndpoint blank, no AI egress, aiOff flag, not fatal (1.2)', (()=>{
+  const r=runConfig({__SLAB_AI_OFF__:true});
+  return r.cfg.aiEndpoint==='' && r.cfg.aiOff===true && !r.fatal && !r.cfg.egress.some(e=>e.purpose==='AI inference');
+})());
+check('EXEC: self-hosted + AI OFF → not fatal (nothing points at us)', (()=>{
+  const r=runConfig({__SLAB_SUPABASE_URL__:'https://cust.supabase.co', __SLAB_SUPABASE_KEY__:'k', __SLAB_AI_OFF__:true});
+  return r.cfg.mode==='self-hosted' && !r.fatal && r.cfg.aiEndpoint==='';
+})());
+check('bindings_modules: a BLANK SLConfig.aiEndpoint stays blank (never falls through to Safety Lab)', /window\.SLConfig\) \? String\(window\.SLConfig\.aiEndpoint \|\| ''\)/.test(S('bindings_modules.js')));
+check('notify_agents: same rule', /window\.SLConfig\) return String\(window\.SLConfig\.aiEndpoint \|\| ''\)/.test(S('notify_agents.js')));
+check('core_modules: messages() and embed() refuse in plain words when no AI endpoint is configured', /function unconfiguredRefusal/.test(S('core_modules.js')) && (S('core_modules.js').match(/unconfiguredRefusal\(\);/g)||[]).length===2 && /AI is not set up on this install/.test(S('core_modules.js')));
 check('EXEC: browser-only clean → not fatal, no cloud endpoints', (()=>{
   const r=runConfig({__SLAB_LOCAL_ONLY__:true});
   return r.cfg.mode==='browser-only' && !r.fatal && r.cfg.supabaseUrl==='' && r.cfg.aiEndpoint==='';

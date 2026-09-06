@@ -13,6 +13,7 @@
  *   window.__SLAB_CORPUS_ENDPOINT__                        (method-corpus retrieval; empty = off)
  *   window.__SLAB_DESKTOP__                                (Electron desktop build)
  *   window.__SLAB_LOCAL_ONLY__  (or window.SafetyLab.LOCAL_ONLY)  (browser-only, door 3: no cloud at all)
+ *   window.__SLAB_AI_OFF__                                 (AI switched off: no AI endpoint at all)
  *   window.__SLAB_WEB_APP_URL__                            (the WEB address of this install — the
  *                                                           desktop's "Open in web" target; a customer
  *                                                           install names its own, never ours)
@@ -22,6 +23,10 @@
  * install pointed at the customer's database is 'self-hosted' like the web and gets the
  * same leak check — the desktop is a different window onto the same install, not a
  * different set of rules.
+ * 1.2 (6 Sep 2026): AI OFF (`__SLAB_AI_OFF__`) → aiEndpoint '' and no AI egress; browser-only
+ * may name the customer's OWN AI endpoint (files on the machine, AI on their server) — only a
+ * Safety Lab AI address is a contradiction there. Found while wiring the desktop: a blank AI
+ * address used to fall through to Safety Lab's proxy in the readers (fixed in bindings/notify).
  *
  * Modes: 'hosted-demo' (our multi-tenant cloud — trials/demos/internal ONLY),
  *        'self-hosted' (customer's own database), 'browser-only' (data on this
@@ -54,6 +59,7 @@
   var rawAi     = trim(W.__SLAB_AI_ENDPOINT__ || '');
   var rawCorpus = trim(W.__SLAB_CORPUS_ENDPOINT__ || '');
   var rawWeb    = trim(W.__SLAB_WEB_APP_URL__ || '');
+  var aiOff     = !!W.__SLAB_AI_OFF__;
   var isDesktop = !!W.__SLAB_DESKTOP__;
   var browserOnly = !!(W.__SLAB_LOCAL_ONLY__ || (W.SafetyLab && W.SafetyLab.LOCAL_ONLY));
 
@@ -69,7 +75,7 @@
   var eff = {
     supabaseUrl: browserOnly ? '' : (rawDbUrl || HOSTED_DB),
     supabaseKey: browserOnly ? '' : (rawDbKey || HOSTED_KEY),
-    aiEndpoint:  browserOnly ? '' : (rawAi || HOSTED_AI),
+    aiEndpoint:  aiOff ? '' : (browserOnly ? (pointsAtSafetyLab(rawAi) ? '' : rawAi) : (rawAi || HOSTED_AI)),
     corpusEndpoint: browserOnly ? '' : rawCorpus,
     // Where "Open in web" goes. Hosted/trial → our site. Self-hosted → ONLY what the
     // customer named (blank = the button stays hidden; never a silent fallback to us).
@@ -90,7 +96,7 @@
     // rather than silently pick one. (rawDbUrl includes our own host too.)
     var strays = [];
     if (rawDbUrl)  strays.push('database');
-    if (rawAi)     strays.push('AI inference');
+    if (rawAi && pointsAtSafetyLab(rawAi)) strays.push('AI inference (a Safety Lab address)');
     if (rawCorpus) strays.push('method corpus');
     if (rawWeb)    strays.push('web address');
     if (strays.length) {
@@ -110,8 +116,9 @@
   }
 
   var cfg = {
-    version: '1.1',
+    version: '1.2',
     mode: mode,
+    aiOff: aiOff,
     isDesktop: isDesktop,
     desktop: isDesktop,
     webAppUrl: eff.webAppUrl,
