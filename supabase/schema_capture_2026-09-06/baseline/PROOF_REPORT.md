@@ -41,3 +41,37 @@ authorization change. Every one of the 59 round-trips identically (whitespace-no
   end-state, so they become historical), and packaging the edge functions.
 - This baseline is a FULL current-state snapshot (a squash), not a diff. It is the source of truth for
   a customer install. Do not apply it to production — production already has this schema.
+
+
+---
+
+## Throwaway-Supabase proof — 6 Sep 2026 (the high-fidelity pass)
+The local proof used stubbed Supabase built-ins. To prove on the real thing, a throwaway
+Supabase project (ref `wnnjnnlejvilbvzqvzww`, us-east-2) was created, the baseline applied,
+and its object counts compared 1:1 to production `fhrqkhdrwbfnizkepkch`:
+
+| Dimension | Production | Rebuilt | Match |
+|---|---|---|---|
+| Tables | 24 | 24 | ✓ |
+| Views | 1 | 1 | ✓ |
+| Functions | 39 | 39 | ✓ |
+| RLS policies | 59 | 59 | ✓ |
+| Triggers | 20 | 20 | ✓ |
+| RLS enabled | 24 | 24 | ✓ |
+| Foreign keys | 35 | 35 | ✓ |
+| Checks | 14 | 14 | ✓ |
+| Indexes | 69 | 69 | ✓ |
+| Table grants | 493 | 493 | ✓ |
+| Function grants | 77 | 77 | ✓ |
+
+**What the real-Supabase pass caught that local could not:** fresh Supabase auto-grants ALL to
+anon/authenticated/service_role on new tables and EXECUTE to PUBLIC on new functions. Production
+had revoked those and locked down (append-only tables not writable by anon/authenticated;
+sensitive RPCs service_role-only; expiry_watch view service_role-only). The first rebuild came
+out OVER-PERMISSIONED (525 table-grants / 117 func-grants). The fix — three REVOKE statements
+before the grants (now section `65_revoke_defaults.sql` in the baseline) — brought it to an exact
+493 / 77 match. This is the layer local Postgres cannot model, and the reason the throwaway pass
+was worth running.
+
+The throwaway project holds no real data and must be deleted from the Supabase dashboard to stop
+its $10/mo charge (MCP cannot delete a paid-tier project).

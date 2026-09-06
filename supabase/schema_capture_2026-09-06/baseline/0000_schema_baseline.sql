@@ -15,8 +15,10 @@
 -- set per install (and, per the 6 Sep ruling, pointed at the customer's own
 -- endpoint, not Safety Lab's).
 --
--- NOT YET APPLIED ANYWHERE. Proven only on a local Postgres with stubbed Supabase
--- built-ins. Do not apply to production (production already has this schema).
+-- PROVEN on a throwaway Supabase project (real auth/roles/pgcrypto), 6 Sep 2026:
+-- reproduces production object-for-object incl. all 59 RLS policy bodies and the
+-- exact grant set (493 table-grants, 77 function-grants). Do NOT apply to production
+-- (production already has this schema).
 -- =============================================================================
 
 SET check_function_bodies = false;
@@ -1640,6 +1642,19 @@ CREATE POLICY yjs_docs_member_read ON public.yjs_documents AS PERMISSIVE FOR SEL
    FROM projects p
   WHERE ((p.id = yjs_documents.project_id) AND private.is_workspace_member(p.workspace_id) AND (p.deleted_at IS NULL)))));
 
+
+-- ================= 65_revoke_defaults.sql =================
+-- Supabase auto-grants ALL to anon/authenticated/service_role on every new table
+-- and EXECUTE to PUBLIC on every new function (ALTER DEFAULT PRIVILEGES). Production
+-- revoked those defaults and re-granted a locked-down set: append-only tables
+-- (audit_log, workspace_audit, signoffs, project_document_versions) are not writable
+-- by anon/authenticated, sensitive RPCs are service_role-only, and the expiry_watch
+-- view is service_role-only. Without these REVOKEs a customer rebuild would silently
+-- OVER-PERMISSION at the grant layer. Caught 6 Sep 2026 by the throwaway-Supabase
+-- proof (the local Postgres proof could not see Supabase's default privileges).
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated, service_role;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated, service_role, PUBLIC;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA private FROM anon, authenticated, service_role, PUBLIC;
 
 -- ================= 70_func_grants.sql =================
 -- ===== FUNCTION GRANTS =====
