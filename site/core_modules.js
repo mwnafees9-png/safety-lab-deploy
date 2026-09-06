@@ -276,16 +276,48 @@ const AiClient = (function(){
         if (om) { var maj = +om[1], min = +om[2]; if (maj > 4 || (maj === 4 && min >= 7)) return false; }
         return true;
     }
+    // 6 Sep 2026 — THE controlled-data fence for every AI request that leaves the
+    // browser. This function is the one place chat, drafts, batch, report prose, the
+    // connection test and embeddings all pass through, so the rule lives here and
+    // nowhere else. Waqas's rule: customer data never touches Safety Lab's cloud, at
+    // any point — and that includes transiting the proxy on its way to Azure Gov.
+    // So a project marked export-controlled, or any uploaded document marked
+    // controlled, refuses outright. The only backends that may process controlled
+    // data are the customer's own: Claude via their GovCloud, their Azure Government,
+    // or an on-prem model — none of which come through here (Provider routes
+    // 'local' straight to the endpoint). Fails CLOSED when the project
+    // configuration cannot be read. Returns a reason string, or null when clear.
+    function controlledRefusal(){
+        try {
+            let reason = null;
+            if (typeof window !== 'undefined' && window.SLControlled && typeof window.SLControlled.blocksCloud === 'function') {
+                reason = window.SLControlled.blocksCloud(null);
+            } else if (typeof projectConfig !== 'undefined' && projectConfig) {
+                reason = projectConfig.isITARControlled ? 'this project is marked export-controlled' : null;
+            } else {
+                reason = 'the project configuration could not be read';
+            }
+            if (!reason) {
+                const api = (typeof window !== 'undefined') ? window.SafetyLabSourceDocs : null;
+                const list = (api && typeof api.list === 'function') ? (api.list() || []) : [];
+                const ctrl = list.filter(function(d){ return d && d.controlled; });
+                if (ctrl.length) reason = 'a controlled document is on file (' + ctrl.map(function(d){ return d.name || 'document'; }).join(', ') + ')';
+            }
+            return reason;
+        } catch (_) { return 'the project configuration could not be read'; }
+    }
+    function controlledRefusalMessage(reason){
+        return 'AI is off because ' + reason + '. Controlled data can only run on your own Claude (GovCloud), Azure Government, or on-prem backend — choose one under AI Settings.';
+    }
     async function messages(opts){
         const s = _settings();
         const _cap = Number(s.costCap) || 0;   // 0 = uncapped (default); a per-customer cap is honored when set
         if (_cap > 0 && getSessionCost() >= _cap) throw new Error('Session cost cap ($' + _cap + ') reached. Raise or clear the cap in AI Settings, or reset the session.');
         const model = opts.model || s.anthropicModel;
+        const _refused = controlledRefusal();
+        if (_refused) throw new Error(controlledRefusalMessage(_refused));
         const itar = !!(projectConfig && projectConfig.isITARControlled);
         const proxy = isProxyMode();
-        if (itar && !proxy) {
-            throw new Error('This project is flagged ITAR-controlled. AI calls require Pro+ (Azure OpenAI routing). Disable BYO key or upgrade to Pro+.');
-        }
         if (proxy && _allowanceRemaining() <= 0) {
             const u = _tokenUsage();
             throw new Error('Pro+ monthly token allowance exhausted (' + u.allowance.toLocaleString() + ' tokens, Sonnet-equivalent). Resets on the 1st of next month. Add a top-up at Settings → Billing, or fall back to BYO key.');
@@ -398,10 +430,9 @@ const AiClient = (function(){
         const model = opts.model || s.voyageModel;
         const inputArr = Array.isArray(input) ? input : [input];
         const proxy = isProxyMode();
+        const _refusedEmb = controlledRefusal();
+        if (_refusedEmb) throw new Error(controlledRefusalMessage(_refusedEmb));
         const itar = !!(projectConfig && projectConfig.isITARControlled);
-        if (itar && !proxy) {
-            throw new Error('This project is flagged ITAR-controlled. AI calls require Pro+ (Azure routing). BYO Voyage key is blocked.');
-        }
         if (proxy && _allowanceRemaining() <= 0) {
             throw new Error('Pro+ monthly token allowance exhausted. Resets next month.');
         }
@@ -457,7 +488,7 @@ const AiClient = (function(){
     }
     function getAuditLog(){ return (projectConfig && projectConfig.aiAuditLog) || []; }
 
-    return { isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog };
+    return { isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage };
 })();
 window.AiClient = AiClient;
 

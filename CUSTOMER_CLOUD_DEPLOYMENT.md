@@ -48,8 +48,8 @@ region, under your SSO — we ship the application, you own the database."*
 - **Backend override** — `safety_lab.js` (~L3063): the app reads
   `window.__SLAB_SUPABASE_URL__` / `window.__SLAB_SUPABASE_KEY__` (or
   `window.SafetyLab.SUPABASE_URL/KEY`) **before** falling back to the hosted
-  multi-tenant project. `feedback_client_module.js` and
-  `labs_thread_config.js` honor the same override. When set, the console
+  multi-tenant project. (`feedback_client_module.js`, once listed here, was never loaded by index.html — the feedback button is a mailto — and was deleted 6 Sep 2026.)
+  `labs_thread_config.js` honors the same override. When set, the console
   logs `Collaboration backend → <their URL>` — that line is the smoke test.
 - **AI override** — the same pattern as `AI_PROXY_BASE_URL`: inference can
   point at the customer's endpoint (their Azure / Azure Gov / on-prem), and

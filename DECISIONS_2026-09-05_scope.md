@@ -182,3 +182,17 @@ settling before the customer-hosted build, not after.
   know"* what authorizes it. To be audited; until then every "MFA is enforced" and "sessions
   expire" claim is web-only.
 - Roughly forty lower-consequence questions across the six code digests, not yet put to him.
+
+---
+
+## Addendum — 6 Sep 2026 rulings (no customer data on our cloud)
+
+All stated by Waqas on 6 Sep 2026, in order:
+
+1. **"I don't want their data on our cloud, at any point."** Customer data — AI and non-AI — never touches Safety Lab's cloud, not even transiting the proxy. The hosted site is for trials, demos and internal use only.
+2. **Three doors for real customers:** (1) self-hosted backend (their database, their sign-in, their AI); (2) the desktop app (files on their machine); (3) browser-only mode with the project kept as a file on their own machine / OneDrive / SharePoint — "yes I want the third case too". No live co-editing in door 3 (no server holds the document); the workspace lock does the check-out job there.
+3. **Exactly three AI backends are offered:** Claude (via Bedrock; GovCloud for real ITAR programs), Azure (Azure OpenAI / Azure Government), and our own LLM (self-hosted / on-prem). "I dont wanna offer google." Controlled data may only run on these in their government-boundary or on-prem form — never the plain public API. Claude is the validated engine; Azure would need its own eval before a controlled draft is trusted.
+4. **ITAR demo = Safety Lab as its own first install:** app on our site, documents on our SharePoint, AI on our own Azure or Bedrock account, nothing through the proxy or the database.
+5. **Model improvement** comes from the instruction layer, adopting better base models, and training on material Safety Lab owns (standards, reference analyses, Aeolus, synthetic examples). A hosted copy of our LLM is frozen; nothing flows back from an install. Customer-donated examples only as a rare, consented, scrubbed extra.
+6. **Sign-in notifications in a customer install go to THEIR admin, never to us;** seats and expiry enforced locally against a signed licence. (Open: whether an optional anonymous monthly seat count is wanted — Waqas's answer was "at any point", which reads as no.)
+7. **Throwaway Supabase project** may be created under Waqas's account to prove the schema rebuild — "confirmed on both" (fences + throwaway database).

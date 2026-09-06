@@ -228,6 +228,9 @@
             let result;
             if (mode === 'local') {
                 result = await _localComplete(opts);
+                // Record where a controlled document was processed (moved here 6 Sep 2026
+                // from the retired chat-lane guard so the record survives for every lane).
+                try { const _a = _sourceDocsApi(); const _l = (_a && _a.list) ? (_a.list() || []) : []; _l.forEach(function (d) { if (d && d.controlled) { d.processedVia = 'local'; d.processedAt = Date.now(); } }); } catch (_) {}
             } else {
                 const ac = window.AiClient;
                 if (!ac) throw new Error('[Safety Lab Aero AI] AiClient unavailable — check load order / Pro+ gating.');
@@ -350,8 +353,10 @@
             if ((taint === 'natl' || /jurisdiction|uk ml|dual-use/i.test(why)) && mode !== 'local') {
                 return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run on ' + (mode === 'itar-cloud' ? 'a US government cloud' : 'the public cloud') + ' — this jurisdiction requires the local/on-prem backend.' };
             }
-            if (controlled && mode === 'cloud') {
-                return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run on the public-cloud backend — switch to ITAR (Azure Gov) or a local/on-prem model.' };
+            // 6 Sep 2026 — 'itar-cloud' is Safety Lab's proxy routed to Azure Gov; it still
+            // transits our cloud, so for controlled data it is refused like 'cloud'.
+            if (controlled && mode !== 'local') {
+                return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run through Safety Lab\'s cloud — use your own Claude (GovCloud), Azure Government, or on-prem backend.' };
             }
             return { allowed: true, mode: mode, controlled: controlled, reason: (controlled ? 'controlled → ' : 'standard → ') + mode };
         },
@@ -6707,7 +6712,7 @@
             return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid ' + pal.border + ';border-radius:8px;padding:8px 10px;margin-bottom:6px;">'
                 + '<div style="min-width:0;"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📄 ' + _esc(d.name || 'document') + (d.controlled ? ' <span style="font-size:10px;color:#b91c1c;border:1px solid #b91c1c;border-radius:4px;padding:0 4px;">🔒 controlled</span>' : '') + '</div><div style="font-size:11.5px;color:' + pal.sub + ';">' + _esc(meta) + '</div></div>'
                 + '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'
-                +   '<label title="ITAR / proprietary — process only on an on-prem or Azure-Gov (ITAR) backend" style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:' + (d.controlled ? '#b91c1c' : pal.sub) + ';cursor:pointer;white-space:nowrap;"><input type="checkbox" data-ctrl="' + _esc(String(d.id)) + '"' + (d.controlled ? ' checked' : '') + ' style="margin:0;">Controlled</label>'
+                +   '<label title="ITAR / proprietary — process only on your own Claude (GovCloud), Azure Government, or on-prem backend" style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:' + (d.controlled ? '#b91c1c' : pal.sub) + ';cursor:pointer;white-space:nowrap;"><input type="checkbox" data-ctrl="' + _esc(String(d.id)) + '"' + (d.controlled ? ' checked' : '') + ' style="margin:0;">Controlled</label>'
                 +   '<button type="button" data-rm="' + _esc(String(d.id)) + '" style="border:1px solid ' + pal.border + ';background:transparent;color:' + pal.sub + ';border-radius:7px;padding:5px 9px;font:inherit;font-size:12px;cursor:pointer;">Remove</button>'
                 + '</div>'
                 + '</div>';
@@ -6878,7 +6883,7 @@
             const tgt = e.target;
             const cid = tgt && tgt.getAttribute && tgt.getAttribute('data-ctrl');
             if (cid != null) {   // #56 — toggle the controlled (ITAR/proprietary) routing flag
-                try { const api = _sourceDocsApi(); const list = (api && api.list) ? (api.list() || []) : []; const d = list.find(function (x) { return String(x.id) === String(cid); }); if (d) { d.controlled = !!tgt.checked; _toast(d.controlled ? '“' + (d.name || 'document') + '” marked controlled — the AI now requires an on-prem / ITAR backend.' : 'Controlled flag removed.', d.controlled ? 'warning' : 'info'); } } catch (_) {}
+                try { const api = _sourceDocsApi(); const list = (api && api.list) ? (api.list() || []) : []; const d = list.find(function (x) { return String(x.id) === String(cid); }); if (d) { d.controlled = !!tgt.checked; _toast(d.controlled ? '“' + (d.name || 'document') + '” marked controlled — the AI now requires your own Claude (GovCloud), Azure Government, or on-prem backend.' : 'Controlled flag removed.', d.controlled ? 'warning' : 'info'); } } catch (_) {}
                 _aiInputsRenderSources(); return;
             }
             const id = tgt && tgt.getAttribute && tgt.getAttribute('data-rm');
@@ -12231,26 +12236,15 @@
         const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, messages: messages, maxTokens: (typeof maxTokens === 'number' ? maxTokens : 16000), temperature: (typeof temperature === 'number' ? temperature : undefined) });
         return { rr: rr, parsed: _safeParseJson(String(rr.text || '')) };
     }
-    // #56 — controlled-document routing guard. ITAR/proprietary docs marked "controlled"
-    // may ONLY be processed on an on-prem (local) or ITAR (Azure Gov) backend — never the
-    // default hosted proxy. Blocks every AI call (chat + batch) while such a doc is on file
-    // and the backend isn't safe, and stamps where a controlled doc was processed.
-    function _controlledGuard() {
-        var ctrl = []; try { var a = _sourceDocsApi(); var list = (a && a.list) ? (a.list() || []) : []; ctrl = list.filter(function (d) { return d && d.controlled; }); } catch (_) {}
-        if (!ctrl.length) return { ok: true };
-        var mode = ''; try { mode = (typeof Provider !== 'undefined' && Provider.describe) ? (Provider.describe().mode || '') : ''; } catch (_) {}
-        if (mode === 'itar-cloud' || mode === 'local') { ctrl.forEach(function (d) { try { d.processedVia = mode; d.processedAt = Date.now(); } catch (_) {} }); return { ok: true, mode: mode }; }
-        return { ok: false, mode: mode || 'cloud', names: ctrl.map(function (d) { return d.name || 'document'; }) };
-    }
+    // 6 Sep 2026 — the controlled-document guard that used to live here (chat lane only;
+    // it also let 'itar-cloud' through, which still transits Safety Lab's proxy) was
+    // retired. The ONE fence is AiClient.controlledRefusal in core_modules.js, at the
+    // point every cloud-bound request passes through, so no lane can miss it. The
+    // "processed on / at" stamp it kept moved into Provider.complete's local branch.
     // A chunked turn covers a handful of units, not a whole project — asking a
     // reasoning model for 16,000 tokens it will not use is most of the latency.
     const _CHUNK_TURN_TOKENS = 8000;
     async function _anemRun(messages, systemExtra, maxTokens, temperature) {
-        const _cg = _controlledGuard();
-        if (!_cg.ok) {
-            try { _toast('Blocked: a controlled document needs an on-prem / ITAR backend (current: ' + _cg.mode + ').', 'error'); } catch (_) {}
-            throw new Error('[Safety Lab Aero] Controlled document(s) on file (' + _cg.names.join(', ') + ') require an on-prem (local) or ITAR (Azure Gov) backend — current backend is "' + _cg.mode + '". Switch the backend in AI Settings or unmark the document before processing.');
-        }
         const ex = systemExtra || '';
         let attempt = await _anemComplete(messages, ex, maxTokens, temperature);
         if (!attempt.parsed) {   // one retry on parse-fail, mirroring the chat reliability path

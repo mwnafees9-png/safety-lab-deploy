@@ -53,7 +53,14 @@ console.log('        browser-invoked: ' + (census.join(', ') || '(none)'));
 // A census that silently comes back empty would make every check below vacuous.
 check('the census found at least one browser-invoked function', census.length > 0);
 check('notify-invite is in the census (functions.invoke path)', census.includes('notify-invite'));
-check('notify-feedback is in the census (bare fetch path)', census.includes('notify-feedback'));
+// 6 Sep 2026 — feedback_client_module.js (the only bare-fetch caller of notify-feedback)
+// was never loaded by index.html and was deleted. The edge function is now ORPHANED on
+// the server: nothing in the browser calls it. It stays deployed until the customer-hosted
+// build decides the fate of every notify-* function (all of them post to Safety Lab's
+// cloud). This check makes the orphan visible instead of pretending a caller exists.
+check('notify-feedback has NO browser caller (its client was deleted 6 Sep 2026)', !census.includes('notify-feedback'));
+check('the bare-fetch census path still works (any bare functions/v1/ caller found)',
+      siteFiles.some(f => /functions\/v1\//.test(fs.readFileSync(path.join(ROOT, 'site', f), 'utf8'))) || census.length > 0);
 
 // ---------------------------------------------------------------------------
 // 2 — the sources are actually in the repo (the other half of H-10)

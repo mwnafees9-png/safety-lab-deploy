@@ -165,8 +165,19 @@
     function _sb() {
         try { return (typeof window !== 'undefined' && typeof window.getSupabaseClient === 'function') ? window.getSupabaseClient() : null; } catch (_) { return null; }
     }
+    // 6 Sep 2026 — the PROJECT-level answer, shared with the Save fence (helpers) and the
+    // AI client. Fails CLOSED: no shared check reachable and no readable project
+    // configuration means "controlled", so the cross-device cache is never consulted.
+    function _projectControlled() {
+        try {
+            if (typeof window !== 'undefined' && window.SLControlled && typeof window.SLControlled.blocksCloud === 'function') return !!window.SLControlled.blocksCloud(null);
+            if (typeof projectConfig !== 'undefined' && projectConfig) return !!projectConfig.isITARControlled;
+            return true;
+        } catch (_) { return true; }
+    }
     function _reqControlled(req) {
         try {
+            if (_projectControlled()) return true;
             if (/(controlled|itar|ear|cui|restricted)/i.test(String(req.data_classification || ''))) return true;
             if (typeof window !== 'undefined' && typeof window.exportControlSystems === 'function') {
                 var hot = window.exportControlSystems();
