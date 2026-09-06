@@ -1,3 +1,27 @@
+## 05 Sep 2026 (night) — BUILD 1 APPLIED AND VERIFIED LIVE. The membership hole is closed in production. A real bug was caught by the POSITIVE test, not the refusals.
+
+**Waqas: "you can wire yourself up to my supabase and run all three steps."** Project `fhrqkhdrwbfnizkepkch` (Safety-Lab), the same one the app points at. Order kept: read-only pre-flight, show the result, then apply.
+
+**STEP 1 — PRE-FLIGHT: 0 ROWS.** No membership row exists that is neither the workspace's owner nor backed by a redeemed invitation. **Nobody entered through the open policy.** The same read confirmed the defect live — `ws_members_self_join` WITH CHECK was `((SELECT auth.uid()) = user_id)` and nothing more; `ws_members_admin_update` had **no WITH CHECK at all**; `ws_members_admin_delete` had no role restriction. Scale before: 47 workspaces, 48 memberships (47 owner rows + 1, and the pre-flight explains that one as invited), 579 projects.
+
+**STEP 2 — APPLIED.** Two migrations: `workspace_membership_and_ownership`, then `transfer_workspace_ownership_fix_ambiguous_workspace_id`.
+
+**THE BUG, AND HOW IT WAS CAUGHT.** The first transfer function failed live with **42702 "column reference workspace_id is ambiguous"** — `RETURNS TABLE (status, workspace_id, new_owner)` declares `workspace_id` as an OUT parameter and it collides with the column in the UPDATE statements. **Every refusal path returns BEFORE reaching an UPDATE, so all four refusal probes passed against a function that could not perform its one job.** Only the positive case — an owner actually transferring — reached the broken statement. This is the SAME defect the invitation RPC hit on 31 Aug, whose fix is quoted in a sibling migration this very file cites. Reading about a trap is not the same as avoiding it. Fixed by aliasing every UPDATE target and table-qualifying every WHERE column; pinned by a new check, mutation-proven by un-aliasing one statement.
+
+**A SECOND FALSE PASS, CAUGHT AND RE-RUN.** Probe (d) — self-join at a non-owner role — first refused with **23505, a duplicate key** left by the previous probe's row. That proved the primary key, not the policy. Re-run against a workspace with no member rows: refused with **42501, by the policy**. Recorded in the migration so nobody re-reads the first result as a pass.
+
+**STEP 3 — ELEVEN LIVE PROBES, EVERY ONE ROLLED BACK, ALL PASSED.** (a) a stranger self-joining a workspace they do not own → 42501; (b) `owns_workspace` true for the owner, false for a stranger; (c) create workspace + owner row + read it back → works (this also proves the `workspaces_owner_read` policy was needed — the client's fallback create path does a RETURNING and had no SELECT permission); (d) self-join at a non-owner role → 42501; (d2) the owner row itself still inserts; (e) promote a member to owner by ordinary update → 0 rows; (f) delete the owner's membership row → 0 rows; (g) transfer by a non-owner → `not_owner`; (h) `erase_project` as an ordinary signed-in user → 42501; (i) transfer by the owner → `ok`, `owner_id` moves, old owner becomes admin, new owner becomes owner; (j) transfer to a non-member → `not_a_member`; (k) the former owner trying to take it back → `not_owner`.
+
+**ROW COUNTS IDENTICAL EITHER SIDE: 47 / 48 / 579 / 47.** Nothing was written — every probe raised a deliberate exception to roll back.
+
+**FINAL LIVE STATE.** `ws_members_self_join` = `auth.uid() = user_id AND private.owns_workspace(workspace_id) AND role = 'owner'`; `ws_members_admin_update` carries the owner exclusion in BOTH `USING` and `WITH CHECK`; `ws_members_admin_delete` excludes the owner row; `workspaces_owner_read` added; `erase_project` executable by **service_role only** (the disk had granted it to `authenticated`, i.e. the repo was more dangerous than production).
+
+**THE REPO NOW MATCHES PRODUCTION** — the migration file carries the fixed function plus the full live evidence, because a file that disagrees with the server is the exact drift this whole night has been about. `tests/regression_workspace_membership.test.js` is 33 checks; the "marked not-yet-applied" check became "states its real status, and it is applied", for the same reason the 20260831 guard's stale header mattered.
+
+**WALL: 275 suites, 2 real fails (both the environment-only proxy-sibling checks), 0 crashed** — 0 on Waqas's machine.
+
+**BUILD 1 IS DONE.** No `ship.sh` needed — no app code changed. Next: build 2, the collaborative workspace.
+
 ## 05 Sep 2026 (night) — BUILD 1: the cross-tenant membership hole is closed in a migration. WRITTEN AND GUARDED, **NOT APPLIED** — pre-flight query is Waqas's to run first.
 
 **THE MIGRATION:** `supabase/migrations/20260905_workspace_membership_and_ownership.sql` (233 lines, heavily commented with the evidence). It does six things:

@@ -110,8 +110,21 @@ check('it refuses a caller who is not the owner',
       /not_owner/.test(M) && /w\.owner_id = v_uid/.test(M));
 check('the new owner must ALREADY be a member — so ownership can only reach someone invited',
       /not_a_member/.test(M) && /from public\.workspace_members m[\s\S]{0,120}user_id = p_new_owner/.test(M));
+// Added after the live run. The first version of this function failed with
+// 42702 "column reference workspace_id is ambiguous": RETURNS TABLE declares
+// workspace_id as an OUT parameter and it collides with the column of the same
+// name in the UPDATE statements. Every refusal path returns BEFORE any UPDATE,
+// so all four refusal tests passed against a function that could not do its one
+// job — only the positive test caught it. The invitation RPC hit exactly this on
+// 31 Aug and the fix is quoted in a sibling migration; reading about a trap is
+// not the same as avoiding it, so it is pinned here instead.
+check('every UPDATE in the transfer RPC is aliased and table-qualified (42702)',
+      /update public\.workspaces as w[\s\S]{0,80}where w\.id = p_workspace/.test(M) &&
+      (M.match(/update public\.workspace_members as m/g) || []).length === 2 &&
+      (M.match(/where m\.workspace_id = p_workspace/g) || []).length >= 2,
+      'RETURNS TABLE(status, workspace_id, new_owner) makes a bare workspace_id ambiguous');
 check('it swaps both role rows, not just the workspace',
-      /update public\.workspaces  set owner_id = p_new_owner/.test(M) &&
+      /update public\.workspaces as w[\s\S]{0,60}set owner_id = p_new_owner/.test(M) &&
       /set role = 'admin'/.test(M) && /set role = 'owner'/.test(M));
 check('anon and public cannot execute it',
       /revoke execute on function public\.transfer_workspace_ownership\(uuid, uuid\) from anon, public/.test(M));
@@ -141,8 +154,21 @@ check('it carries the pre-flight query for rows that already walked through',
       'this migration shuts the door; it does not remove anyone already inside');
 check('it carries a post-apply verification checklist',
       /POST-APPLY VERIFICATION/.test(M) && /must be refused \(42501\)/.test(M));
-check('it is marked not-yet-applied, honestly',
-      /NOT YET APPLIED/.test(M));
+// Was 'it is marked not-yet-applied, honestly' until the migration was applied
+// on 5 Sep 2026. The point of the check is unchanged — the file must state its
+// real status rather than leaving a reader to guess — and it is the same point
+// as the 20260831 guard whose header claimed NOT YET APPLIED for five days
+// after it was applied, which then propagated into a build plan. A status line
+// that has stopped being true is worse than no status line.
+check('the file states its real status, and it is applied',
+      /STATUS: APPLIED 5 Sep 2026/.test(M) && !/NOT YET APPLIED/.test(M));
+check('the live evidence is recorded in the file, not just in a chat log',
+      /VERIFIED LIVE against the server/.test(M) &&
+      /Pre-flight returned 0 rows/.test(M) &&
+      /Row counts unchanged either side/.test(M));
+check('the 23505 false-positive is recorded so nobody re-reads it as a pass',
+      /proved the primary key, not the policy/.test(M),
+      'the first run of probe (d) was refused by a duplicate key, not by the policy');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

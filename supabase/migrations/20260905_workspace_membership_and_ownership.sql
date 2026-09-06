@@ -1,6 +1,27 @@
 -- ============================================================================
 -- 05 Sep 2026 — S1. Close the cross-tenant membership hole; make ownership real.
--- STATUS: READY TO APPLY, AWAITING WAQAS. NOT YET APPLIED.
+-- STATUS: APPLIED 5 Sep 2026, and VERIFIED LIVE against the server.
+--   Pre-flight returned 0 rows — nobody had entered through the open policy.
+--   Applied as two migrations: workspace_membership_and_ownership, then
+--   transfer_workspace_ownership_fix_ambiguous_workspace_id (see section 6).
+--   Live probes, each rolled back, all passed:
+--     a) a stranger self-joining a workspace they do not own -> 42501
+--     b) owns_workspace(owner)=true, owns_workspace(stranger)=false
+--     c) create workspace + owner row + read it back -> works
+--     d) self-join at a non-owner role into a FRESH workspace -> 42501
+--        (the first run of this refused with 23505, a duplicate key from the
+--        previous probe's row — that proved the primary key, not the policy,
+--        so it was re-run against a workspace with no member rows)
+--     e) promote a member to owner by ordinary update -> 0 rows
+--     f) delete the owner's membership row -> 0 rows
+--     g) transfer by a non-owner -> not_owner
+--     h) erase_project as an ordinary signed-in user -> 42501
+--     i) transfer by the owner -> ok; owner_id moves; old owner becomes admin,
+--        new owner becomes owner
+--     j) transfer to a non-member -> not_a_member
+--     k) the former owner trying to take it back -> not_owner
+--   Row counts unchanged either side: 47 workspaces, 48 memberships, 579
+--   projects, 47 owner rows.
 --
 -- RUN THE PRE-FLIGHT QUERY AT THE BOTTOM OF THIS FILE FIRST. This migration
 -- shuts the door; it does not remove anyone who already walked through it.
@@ -171,11 +192,27 @@ begin
 
   -- One statement each, one transaction: the workspace never has two owners and
   -- never has none.
-  update public.workspaces  set owner_id = p_new_owner where id = p_workspace;
-  update public.workspace_members set role = 'admin'
-     where workspace_id = p_workspace and user_id = v_uid;
-  update public.workspace_members set role = 'owner'
-     where workspace_id = p_workspace and user_id = p_new_owner;
+  --
+  -- EVERY update target is ALIASED and every WHERE column table-qualified. The
+  -- first version was not, and it failed live with 42702 "column reference
+  -- workspace_id is ambiguous" — RETURNS TABLE declares workspace_id as an OUT
+  -- parameter and it collides with the column. Found by the POSITIVE test (an
+  -- owner actually transferring); every refusal path returns before reaching an
+  -- UPDATE, so all four refusal tests passed against a function that could not
+  -- perform its one job. THE SAME DEFECT the invitation RPC hit on 31 Aug, and
+  -- this file's sibling quotes that fix in its own comments. Reading about a
+  -- trap is not the same as avoiding it.
+  update public.workspaces as w
+     set owner_id = p_new_owner
+   where w.id = p_workspace;
+
+  update public.workspace_members as m
+     set role = 'admin'
+   where m.workspace_id = p_workspace and m.user_id = v_uid;
+
+  update public.workspace_members as m
+     set role = 'owner'
+   where m.workspace_id = p_workspace and m.user_id = p_new_owner;
 
   return query select 'ok'::text, p_workspace, p_new_owner;
 end;
