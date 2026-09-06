@@ -25,3 +25,8 @@ screenshot-*.jpg
 
 # miniflare/wrangler local cache — never commit (5 Sep 2026)
 .wrangler/
+
+# licence material never enters the repo (6 Sep 2026): private signing key lives in ~/.safetylab; signed .lic files go to the customer, not here
+*.lic
+license_signing_key*
+*.license.json

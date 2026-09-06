@@ -3996,6 +3996,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          Loads first: it has no dependencies and every wrap site calls into it. -->
     <!-- 6 Sep 2026 — the ONE backend-config surface. MUST load before any backend reader; it hard-stops a customer install that still points at Safety Lab. -->
     <script src="slab_config.js?v=1.0" defer></script>
+    <!-- 6 Sep 2026 — offline signed-license verification (needs SLConfig; must precede the tier readers). -->
+    <script src="slab_license.js?v=1.0" defer></script>
     <script src="fn_wrap.js?v=1.0" defer></script>
     <script src="numbering.js?v=1.0.1" defer></script>
     <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
@@ -4065,7 +4067,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.30" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.88" defer></script>
+    <script src="helpers_modules.js?v=2.89" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
     <script src="severity_axes.js?v=1.3" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4387,7 +4389,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          Loads AFTER program_plan.js (wraps renderScopeSection) and numbering_ui.js. -->
     <script src="numbering_plan.js?v=1.2" defer></script>
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
-    <script src="auth_gate.js?v=62.68" defer></script>
+    <script src="auth_gate.js?v=62.69" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the
          auth gate itself (auth_gate.js ssoBlockHTML) and calls window.signInWithMicrosoft.

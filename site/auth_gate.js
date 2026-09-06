@@ -936,6 +936,13 @@
     let _licenseSyncPromise = null;
     function _syncLicenseTokenFromSupabase() {
       const run = (async function () {
+        // 6 Sep 2026 — when a signed license is the authority (every customer install),
+        // the cloud license row must NOT override or clear it. Wait for verification, then
+        // stand down. The demo cloud (no signed license) keeps the row path below.
+        try {
+          if (typeof window.__slabSignedLicenseReady === 'object' && window.__slabSignedLicenseReady && typeof window.__slabSignedLicenseReady.then === 'function') { await window.__slabSignedLicenseReady; }
+          if (window.SLLicense && window.SLLicense.authoritative) return { ok: true, signed: true, token: !!window.SLLicense.valid };
+        } catch (_) {}
         try {
           const { data, error } = await sb.from('license_tokens').select('token,plan,expires_at').limit(1).maybeSingle();
           if (error) { console.warn('[auth-gate] license_tokens query error (keeping the stored token):', error.message || error); return { ok: false, kept: true }; }

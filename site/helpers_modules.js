@@ -172,6 +172,13 @@ function _slResetNumbering() {
 }
 
 function getLicenseTier() {
+    // 6 Sep 2026 — a verified signed license is the authority. On a customer install
+    // (self-hosted / browser-only / desktop) it is the ONLY authority: absent or invalid
+    // → 'unpaid' (fail closed). On the hosted demo it applies only when valid.
+    try {
+        const L = (typeof window !== 'undefined') ? window.SLLicense : null;
+        if (L && L.authoritative) return L.valid ? L.tier : 'unpaid';
+    } catch (_) {}
     try {
         const tier = localStorage.getItem('safetyLab.license.tier');
         if (tier && LICENSE_TIER_RANK.hasOwnProperty(tier)) return tier;
