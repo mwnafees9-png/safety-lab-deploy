@@ -1106,7 +1106,10 @@ window.renderCMA = function() {
     if (!tbody) return;
     // Filter rows in-place by matching data attribute we'll add: re-render manually instead.
     const rows = (cmaData || []).filter(r => ((r.scope || 'aircraft') === _cmaScopeFilter));
-    tbody.innerHTML = rows.map(row => {
+    // 6 Sep 2026 — the scope-filtered view pages through the shared pager like the unfiltered
+    // one (it used to render every filtered row at once). Key carries the scope so each
+    // filter remembers its own page.
+    const _cmaRowHtml = row => {
         const actions = rowActionsHTML('editCMA', 'deleteCMA', row.internalId);
         // Phase 53.73 — Review column on filtered CMA rows.
         const reviewTd = reviewCellHtml('cma', row.internalId, null);
@@ -1123,7 +1126,13 @@ window.renderCMA = function() {
             '<td>' + _renderCmaStatusCell(row.status) + '</td>' +
             reviewTd +
         '</tr>';
-    }).join('');
+    };
+    if (typeof SLPaginate !== 'undefined' && typeof SLPaginate.pageTbody === 'function') {
+        SLPaginate.pageTbody({ key: 'cma-' + _cmaScopeFilter, tbody, rows, rowHtml: _cmaRowHtml,
+            label: (f, t, n) => 'rows ' + f.toLocaleString() + '–' + t.toLocaleString() + ' of ' + n.toLocaleString() + ' in this scope — counts computed over the full set' });
+    } else {
+        tbody.innerHTML = rows.map(_cmaRowHtml).join('');
+    }
 };
 
 window.detectResourceCommonModes = function () {

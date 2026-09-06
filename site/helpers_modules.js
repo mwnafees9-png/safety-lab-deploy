@@ -7712,7 +7712,11 @@ function refreshSigninChip() {
     const label = document.getElementById('signin-chip-label');
     if (!chip || !label) return;
     let email = getSignupEmail();
+    // 6 Sep 2026 — your own avatar (initials or picture) sits in the chip, drawn by the ONE
+    // avatar renderer (SLAvatar in presence.js). Removed when signed out.
+    const _av = document.getElementById('signin-chip-avatar');
     if (!email) {
+        if (_av) _av.remove();
         chip.className = 'signin-chip';
         label.textContent = 'Sign in';
         chip.title = 'Sign in or sign up';
@@ -7735,6 +7739,16 @@ function refreshSigninChip() {
     const short = email.split('@')[0];
     label.textContent = short + ' · ' + tierLabel;
     chip.title = 'Signed in as ' + email + ' (' + tierLabel + ' tier). Click to view your account.';
+    try {
+        if (window.SLAvatar && typeof window.SLAvatar.html === 'function') {
+            const me = (typeof window.SLAvatar.me === 'function' && window.SLAvatar.me()) || { name: (localStorage.getItem('safetyLab.signup.name') || short), email: email, avatar: (localStorage.getItem('safetyLab.profile.avatar') || '') };
+            const holder = _av || document.createElement('span');
+            holder.id = 'signin-chip-avatar';
+            holder.style.cssText = 'display:inline-flex; align-items:center; margin-right:2px;';
+            holder.innerHTML = window.SLAvatar.html(me, 22, 'border-width:1px;');
+            if (!_av) chip.insertBefore(holder, label);
+        }
+    } catch (_) {}
     // Clicking a signed-in chip opens the Account panel (profile + plan + sign out).
     chip.onclick = function() { try { openAccountPanel(); } catch (_) {} };
 }
@@ -7763,6 +7777,66 @@ function _acctOpenInRow(esc) {
         return '<div style="font-size:12px;"><a id="acct-open-in" href="' + esc(href) + '" target="_blank" rel="noopener" style="color:var(--color-accent,#0A63CC);text-decoration:none;font-weight:600;">' + label + ' ↗</a></div>';
     } catch (_) { return ''; }
 }
+// ---- profile picture (6 Sep 2026) ----------------------------------------------------
+// The picture is resized on the user's machine to a 96px square JPEG (a few KB) and saved on
+// the ACCOUNT (auth user_metadata.avatar) in whichever backend this install uses — so it
+// follows the person to every device and never touches our cloud on a customer install —
+// with a local copy for the chip when offline. Drawn everywhere by the one SLAvatar renderer.
+function _acctAvatarHtml(email, name, meta) {
+    try {
+        const av = (meta && meta.avatar) || localStorage.getItem('safetyLab.profile.avatar') || '';
+        if (window.SLAvatar && typeof window.SLAvatar.html === 'function') return window.SLAvatar.html({ name: name || email, email: email, avatar: av }, 64);
+    } catch (_) {}
+    return '';
+}
+function _resizeImageToDataUrl(file, px, cb) {
+    try {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = function () {
+            try {
+                const c = document.createElement('canvas'); c.width = px; c.height = px;
+                const ctx = c.getContext('2d');
+                const s = Math.min(img.naturalWidth, img.naturalHeight);          // centre square crop
+                const sx = (img.naturalWidth - s) / 2, sy = (img.naturalHeight - s) / 2;
+                ctx.drawImage(img, sx, sy, s, s, 0, 0, px, px);
+                URL.revokeObjectURL(url);
+                cb(null, c.toDataURL('image/jpeg', 0.82));
+            } catch (e) { cb(e); }
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); cb(new Error('That file is not an image this browser can read.')); };
+        img.src = url;
+    } catch (e) { cb(e); }
+}
+async function _saveAvatar(dataUrl, email, nameFn, msgEl) {
+    const fail = function (t) { if (msgEl) { msgEl.style.color = '#c0392b'; msgEl.textContent = t; } };
+    if (dataUrl && dataUrl.length > 20000) { fail('That picture is too large even after resizing — try a simpler image.'); return false; }
+    try { if (dataUrl) localStorage.setItem('safetyLab.profile.avatar', dataUrl); else localStorage.removeItem('safetyLab.profile.avatar'); } catch (_) {}
+    try {
+        const client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
+        if (client && client.auth && typeof client.auth.updateUser === 'function') {
+            const { error } = await client.auth.updateUser({ data: { avatar: dataUrl || null } });
+            if (error) throw error;
+        }
+        if (msgEl) { msgEl.style.color = '#1e7e34'; msgEl.textContent = dataUrl ? 'Picture saved.' : 'Picture removed.'; }
+    } catch (e) { fail('Saved on this device; account update failed: ' + ((e && e.message) || e)); }
+    try { const holder = document.getElementById('acct-avatar'); if (holder && window.SLAvatar) holder.innerHTML = window.SLAvatar.html({ name: nameFn() || email, email: email, avatar: dataUrl || '' }, 64); } catch (_) {}
+    try { refreshSigninChip(); } catch (_) {}
+    try { if (window.SLPresence && typeof window.SLPresence.refresh === 'function') window.SLPresence.refresh(); } catch (_) {}
+    return true;
+}
+function _wireAvatarControls(email, nameFn) {
+    const file = document.getElementById('acct-avatar-file'), rm = document.getElementById('acct-avatar-remove'), msg = document.getElementById('acct-msg');
+    if (file) file.onchange = function () {
+        const f = file.files && file.files[0]; if (!f) return;
+        if (!/^image\//.test(f.type)) { if (msg) { msg.style.color = '#c0392b'; msg.textContent = 'Please choose an image file.'; } return; }
+        _resizeImageToDataUrl(f, 96, function (err, dataUrl) {
+            if (err) { if (msg) { msg.style.color = '#c0392b'; msg.textContent = String(err.message || err); } return; }
+            _saveAvatar(dataUrl, email, nameFn, msg);
+        });
+    };
+    if (rm) rm.onclick = function () { _saveAvatar('', email, nameFn, msg); };
+}
 function openAccountPanel() {
     const existing = document.getElementById('account-panel'); if (existing) existing.remove();
     const email = (typeof getSignupEmail === 'function' ? getSignupEmail() : '') || '';
@@ -7787,6 +7861,17 @@ function openAccountPanel() {
       +     '<button type="button" id="acct-x" aria-label="Close" style="border:none;background:transparent;font-size:24px;line-height:.8;cursor:pointer;color:var(--color-text-secondary,#667085);">×</button>'
       +   '</div>'
       +   '<div style="padding:16px 18px;display:flex;flex-direction:column;gap:12px;">'
+      +     '<div style="display:flex; align-items:center; gap:14px;">'
+      +       '<span id="acct-avatar" style="display:inline-flex;">' + _acctAvatarHtml(email, curName, meta) + '</span>'
+      +       '<div style="display:flex; flex-direction:column; gap:6px; font-size:12px;">'
+      +         '<span style="' + lblCss + '">Profile picture</span>'
+      +         '<div style="display:flex; gap:8px; align-items:center;">'
+      +           '<label style="border:1px solid var(--color-border-hair,rgba(0,0,0,.15));border-radius:9px;padding:6px 12px;font-size:12.5px;cursor:pointer;">Choose picture…<input id="acct-avatar-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;"></label>'
+      +           '<button type="button" id="acct-avatar-remove" style="border:1px solid var(--color-border-hair,rgba(0,0,0,.15));background:transparent;color:var(--color-text-secondary,#667085);border-radius:9px;padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer;">Remove</button>'
+      +         '</div>'
+      +         '<span style="font-size:11px;color:var(--color-text-secondary,#667085);">Shown to your teammates in this project. Stored with your account.</span>'
+      +       '</div>'
+      +     '</div>'
       +     '<label style="' + lblCss + '">Full name<input id="acct-name" type="text" value="' + esc(curName) + '" placeholder="Jane Doe" style="' + inputCss + '"></label>'
       +     '<label style="' + lblCss + '">Organization<input id="acct-org" type="text" value="' + esc(curOrg) + '" placeholder="Company or institution" style="' + inputCss + '"></label>'
       +     '<label style="' + lblCss + '">Email<input type="email" value="' + esc(email) + '" disabled style="' + inputCss + 'background:var(--color-surface-3,rgba(0,0,0,.04));color:var(--color-text-secondary,#667085);"></label>'
@@ -7807,6 +7892,7 @@ function openAccountPanel() {
     document.body.appendChild(ov);
     // Two-factor authentication section (born-modular; mfa.js populates the mount).
     try { if (window.SafetyLabMFA && typeof window.SafetyLabMFA.mount === 'function') window.SafetyLabMFA.mount('acct-mfa-mount'); } catch(_){}
+    _wireAvatarControls(email, function () { try { return (document.getElementById('acct-name') || {}).value || curName; } catch (_) { return curName; } });
     const close = function(){ try { ov.remove(); } catch(_){} };
     ov.addEventListener('mousedown', function(e){ if (e.target === ov) close(); });
     const xb = document.getElementById('acct-x'); if (xb) xb.onclick = close;
@@ -7838,6 +7924,7 @@ function openAccountPanel() {
             save.disabled = false; save.textContent = orig;
         }
         try { refreshSigninChip(); } catch(_){}
+        try { if (window.SLPresence && typeof window.SLPresence.refresh === 'function') window.SLPresence.refresh(); } catch (_) {}
     };
 }
 

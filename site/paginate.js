@@ -1,5 +1,5 @@
 // ============================================================================
-// paginate.js — v1.0 — ENG-2 phase 1: shared table pagination.
+// paginate.js — v1.3 — ENG-2 phase 1: shared table pagination. (1.3, 6 Sep 2026: one aligned control style)
 //
 // One pager, every big table. 50 rows per page by default (one screen — the
 // reviewer-friendly unit), selector to 100/250/500, jump-to-page, and an
@@ -73,24 +73,36 @@
             // information, e.g. materiality counts); navigation would be dead
             // chrome. Found in live browser testing on small K350 trees.
             if (pages === 1) {
-                host.innerHTML = '<div style="display:flex; padding:6px 2px;"><span style="margin-left:auto; color:var(--color-text-secondary,#4A5568); font-size:11px;">' + _esc(labelTxt) + '</span></div>';
+                host.innerHTML = '<div class="slp-bar" style="display:flex; align-items:center; padding:8px 0; min-height:44px;"><span style="margin-left:auto; color:var(--color-text-secondary,#4A5568); font-size:12px; line-height:28px;">' + _esc(labelTxt) + '</span></div>';
                 renderPage(0, total, { page: 1, pages: 1, pageSize, from: 0, to: total, total });
                 return;
             }
-            const btn = 'font-size:11px; padding:2px 10px; border:1px solid var(--color-border-strong,#B9C2D0); background:var(--color-surface-2,#F3F5F9); color:var(--color-text-primary,#16213A); cursor:pointer;';
-            const dis = 'opacity:0.4; cursor:default;';
+            // 1.3 (6 Sep 2026, Waqas: "lined up and clean") — ONE control style for every
+            // element in the bar. Same height, same corners, same type, same borders; the
+            // page box and the size picker are sized like the buttons so nothing sits high or
+            // low; disabled buttons dim but keep their size, so the row never shifts.
+            const CTL = 'box-sizing:border-box; height:28px; line-height:26px; padding:0 10px; font:inherit; font-size:12px; ' +
+                        'border:1px solid var(--color-border-hair,rgba(0,0,0,.18)); border-radius:6px; ' +
+                        'background:var(--color-surface-2,#F3F5F9); color:var(--color-text-primary,#16213A); ' +
+                        'vertical-align:middle; margin:0; appearance:none; -webkit-appearance:none;';
+            const btn = CTL + ' cursor:pointer; white-space:nowrap;';
+            const dis = ' opacity:0.4; cursor:default;';
+            const inp = CTL + ' width:56px; text-align:center; font-variant-numeric:tabular-nums; padding:0 6px;';
+            const sel = CTL + ' padding:0 26px 0 10px; cursor:pointer; background-image:url("data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%226%22><path d=%22M0 0l5 6 5-6z%22 fill=%22%23667085%22/></svg>"); background-repeat:no-repeat; background-position:right 9px center;';
+            const txt = 'font-size:12px; color:var(--color-text-secondary,#4A5568); white-space:nowrap; line-height:28px;';
             host.innerHTML =
-                '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 2px; font-size:11.5px;">' +
-                '<button type="button" data-pg="first" style="' + btn + (st.page <= 1 ? dis : '') + '" ' + (st.page <= 1 ? 'disabled' : '') + '>« First</button>' +
-                '<button type="button" data-pg="prev" style="' + btn + (st.page <= 1 ? dis : '') + '" ' + (st.page <= 1 ? 'disabled' : '') + '>‹ Prev</button>' +
-                '<span class="u-mono" style="font-size:11px;">page <input type="number" data-pg="jump" min="1" max="' + pages + '" value="' + st.page + '" style="width:56px; font-size:11px; padding:1px 4px; border:1px solid var(--color-border-strong,#B9C2D0);"> of ' + pages.toLocaleString() + '</span>' +
-                '<button type="button" data-pg="next" style="' + btn + (st.page >= pages ? dis : '') + '" ' + (st.page >= pages ? 'disabled' : '') + '>Next ›</button>' +
-                '<button type="button" data-pg="last" style="' + btn + (st.page >= pages ? dis : '') + '" ' + (st.page >= pages ? 'disabled' : '') + '>Last »</button>' +
-                '<span style="margin-left:6px;">' +
-                '<select data-pg="size" style="font-size:11px; padding:1px 4px; border:1px solid var(--color-border-strong,#B9C2D0);">' +
-                SIZES.map(s => '<option value="' + s + '"' + (s === pageSize ? ' selected' : '') + '>' + s + ' / page</option>').join('') +
-                '</select></span>' +
-                '<span style="margin-left:auto; color:var(--color-text-secondary,#4A5568); font-size:11px;">' + _esc(labelTxt) + '</span>' +
+                '<div class="slp-bar" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px 0; min-height:44px;">' +
+                '<button type="button" data-pg="first" title="First page" style="' + btn + (st.page <= 1 ? dis : '') + '" ' + (st.page <= 1 ? 'disabled' : '') + '>&laquo; First</button>' +
+                '<button type="button" data-pg="prev" title="Previous page" style="' + btn + (st.page <= 1 ? dis : '') + '" ' + (st.page <= 1 ? 'disabled' : '') + '>&lsaquo; Prev</button>' +
+                '<span style="' + txt + ' margin:0 2px 0 6px;">Page</span>' +
+                '<input type="number" data-pg="jump" aria-label="Page number" min="1" max="' + pages + '" value="' + st.page + '" style="' + inp + '">' +
+                '<span style="' + txt + ' margin:0 6px 0 2px;">of ' + pages.toLocaleString() + '</span>' +
+                '<button type="button" data-pg="next" title="Next page" style="' + btn + (st.page >= pages ? dis : '') + '" ' + (st.page >= pages ? 'disabled' : '') + '>Next &rsaquo;</button>' +
+                '<button type="button" data-pg="last" title="Last page" style="' + btn + (st.page >= pages ? dis : '') + '" ' + (st.page >= pages ? 'disabled' : '') + '>Last &raquo;</button>' +
+                '<select data-pg="size" aria-label="Rows per page" style="' + sel + ' margin-left:10px;">' +
+                SIZES.map(s => '<option value="' + s + '"' + (s === pageSize ? ' selected' : '') + '>' + s + ' per page</option>').join('') +
+                '</select>' +
+                '<span style="' + txt + ' margin-left:auto;">' + _esc(labelTxt) + '</span>' +
                 '</div>';
             host.querySelectorAll('[data-pg]').forEach(el => {
                 const act = el.getAttribute('data-pg');

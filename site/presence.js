@@ -1,5 +1,15 @@
 // ============================================================================
-// presence.js — v1.0 — COL-1: teammate presence (SLPresence).
+// presence.js — v2.0 — COL-1: teammate presence (SLPresence) + the shared avatar (SLAvatar).
+//
+// 2.0 (6 Sep 2026, Waqas): people show as ROUND AVATARS — two initials (first + last) or
+// their own picture — INLINE in the top bar at the same height as the buttons, to the
+// left of Preferences, like the people bubbles in Office. Full name (and where they are
+// working) on hover. Overlapping, "+N" past five. One bubble per PERSON (two tabs of the
+// same account collapse). NO anonymous bubbles: a session with no signed-in name is never
+// tracked and never shown (the "engineer" pill is gone). Identity comes from the account:
+// user_metadata.full_name / avatar (a small picture the person uploads in the Account
+// panel; it lives on the account in whichever backend the install uses — never on our
+// cloud for a customer install).
 //
 // Multiplayer safety engineering, layer one: WHO is in this project right
 // now, WHERE they're working, and — when two people share a fault-tree page —
@@ -63,12 +73,45 @@
     }
     function _proj() { try { return (typeof getActiveCloudProjectId === 'function' && getActiveCloudProjectId()) || window._activeCloudProjectId || null; } catch (_) { return null; } }
     function _ws() { try { return (typeof getActiveWorkspaceId === 'function' && getActiveWorkspaceId()) || null; } catch (_) { return null; } }
-    function _me() {
+    // ---- identity + the shared avatar --------------------------------------------
+    function _lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } }
+    function _identity() {
         try {
             const s = window._supabaseSession;
-            const email = s && s.user && s.user.email;
-            return (email || 'engineer').split('@')[0];
-        } catch (_) { return 'engineer'; }
+            const u = s && s.user;
+            const email = String((u && u.email) || '').trim().toLowerCase();
+            if (!email) return null;                                   // no account → no presence, no bubble
+            const meta = (u && u.user_metadata) || {};
+            const name = String(meta.full_name || _lsGet('safetyLab.signup.name') || email.split('@')[0]).trim();
+            const avatar = String(meta.avatar || _lsGet('safetyLab.profile.avatar') || '');
+            return { name, email, initials: initialsOf(name), avatar: /^data:image\//.test(avatar) && avatar.length < 20000 ? avatar : '' };
+        } catch (_) { return null; }
+    }
+    // Two initials: first letter of the first word + first letter of the last word ("Waqas
+    // Nafees" → WN). One word → its first letter. Never more than two characters.
+    function initialsOf(name) {
+        const parts = String(name || '').trim().split(/[\s._-]+/).filter(Boolean);
+        if (!parts.length) return '?';
+        const a = parts[0][0], b = parts.length > 1 ? parts[parts.length - 1][0] : '';
+        return (a + b).toUpperCase();
+    }
+    function _escAttr(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    // avatarHtml(person, size, extraStyle) — the ONE way an avatar is drawn anywhere in the app
+    // (presence strip, the sign-in chip, the Account panel). person = { name, email, initials?, avatar? }.
+    function avatarHtml(p, size, extra) {
+        size = size || 28;
+        const name = String((p && p.name) || '').trim() || 'Someone';
+        const ini = (p && p.initials) || initialsOf(name);
+        const seed = (p && (p.email || p.name)) || name;
+        const c = _colorFor(seed);
+        const base = 'display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; flex:0 0 auto; ' +
+            'width:' + size + 'px; height:' + size + 'px; border-radius:50%; overflow:hidden; ' +
+            'border:2px solid var(--color-surface-1,#fff); background:' + c + '; color:#fff; ' +
+            'font-size:' + Math.round(size * 0.4) + 'px; font-weight:700; letter-spacing:.02em; line-height:1; user-select:none; ' + (extra || '');
+        const pic = (p && p.avatar && /^data:image\//.test(p.avatar)) ? p.avatar : '';
+        return '<span class="sl-avatar" title="' + _escAttr(name) + '" aria-label="' + _escAttr(name) + '" style="' + base + '">' +
+            (pic ? '<img src="' + _escAttr(pic) + '" alt="" style="width:100%; height:100%; object-fit:cover; display:block;">' : _escAttr(ini)) +
+            '</span>';
     }
     function _colorFor(tok) {
         let h = 0; const s = String(tok || '');
@@ -78,30 +121,53 @@
     function _here() {
         let tab = null;
         try { const a = document.querySelector('.asb-item.active'); tab = a ? (a.querySelector('.asb-lbl') || {}).textContent : null; } catch (_) {}
-        return { name: _me(), tok: _tok, tab: tab || 'working', pageId: (typeof activeFTAPageId !== 'undefined' ? activeFTAPageId : null), at: Date.now() };
+        const me = _identity() || { name: '', email: '', initials: '', avatar: '' };
+        return { name: me.name, email: me.email, initials: me.initials, avatar: me.avatar, tok: _tok, tab: tab || 'working', pageId: (typeof activeFTAPageId !== 'undefined' ? activeFTAPageId : null), at: Date.now() };
     }
 
-    // ---- avatar strip ----------------------------------------------------------
+    // ---- avatar strip: inline in the top bar, left of Preferences ------------------
+    function _mountStrip() {
+        let strip = document.getElementById('pres-strip');
+        if (strip) return strip;
+        strip = document.createElement('div');
+        strip.id = 'pres-strip';
+        strip.setAttribute('aria-label', 'People in this project');
+        strip.style.cssText = 'display:none; align-items:center; height:30px; padding:0 4px; margin:0;';
+        try {
+            const group = document.querySelector('.export-group');
+            const pref = document.getElementById('userpref-wrap');
+            if (group && pref && pref.parentNode === group) group.insertBefore(strip, pref);
+            else if (group) group.insertBefore(strip, group.firstChild);
+            else { strip.style.cssText = 'position:fixed; top:10px; right:190px; z-index:9000; display:none; align-items:center;'; document.body.appendChild(strip); }
+        } catch (_) { try { document.body.appendChild(strip); } catch (__) {} }
+        return strip;
+    }
+    function _peopleFrom(state) {
+        // one bubble per PERSON: collapse several tabs of one account; skip anything unnamed
+        const byEmail = new Map();
+        Object.values(state || {}).flat().forEach(p => {
+            if (!p || p.tok === _tok || !p.email || !p.name) return;
+            const k = String(p.email).toLowerCase();
+            const cur = byEmail.get(k);
+            if (!cur || (p.at || 0) > (cur.at || 0)) byEmail.set(k, p);
+        });
+        return Array.from(byEmail.values()).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    }
     function _renderStrip() {
         try {
-            let strip = document.getElementById('pres-strip');
-            const peers = Object.values(_state).flat().filter(p => p.tok !== _tok);
-            if (!peers.length) { if (strip) strip.style.display = 'none'; return; }
-            if (!strip) {
-                strip = document.createElement('div');
-                strip.id = 'pres-strip';
-                strip.style.cssText = 'position:fixed; top:10px; right:190px; z-index:9000; display:flex; gap:6px; align-items:center;';
-                document.body.appendChild(strip);
-            }
-            strip.style.display = 'flex';
-            strip.innerHTML = peers.slice(0, 6).map(p => {
-                const c = _colorFor(p.tok);
-                return '<span title="' + String(p.name).replace(/"/g, '') + ' — ' + String(p.tab).replace(/"/g, '') + '" ' +
-                    'style="display:inline-flex; align-items:center; gap:5px; padding:3px 9px; font-size:11px; font-weight:700; border-radius:999px; ' +
-                    'background:var(--color-surface-1,#fff); border:1.5px solid ' + c + '; color:' + c + ';">' +
-                    '<span style="width:7px; height:7px; border-radius:50%; background:' + c + ';"></span>' +
-                    String(p.name).slice(0, 14) + '</span>';
-            }).join('') + (peers.length > 6 ? '<span style="font-size:11px;">+' + (peers.length - 6) + '</span>' : '');
+            const strip = _mountStrip();
+            const people = _peopleFrom(_state);
+            if (!people.length) { strip.style.display = 'none'; strip.innerHTML = ''; return; }
+            const MAX = 5;
+            const shown = people.slice(0, MAX);
+            strip.style.display = 'inline-flex';
+            strip.innerHTML = shown.map((p, i) => {
+                const where = p.tab ? ' — ' + String(p.tab) : '';
+                const html = avatarHtml({ name: p.name, email: p.email, initials: p.initials, avatar: p.avatar }, 28, (i ? 'margin-left:-8px; ' : '') + 'position:relative; z-index:' + (MAX - i) + ';');
+                return html.replace('title="' + _escAttr(p.name) + '"', 'title="' + _escAttr(p.name + where) + '"');
+            }).join('') + (people.length > MAX
+                ? '<span class="sl-avatar sl-avatar-more" title="' + _escAttr(people.slice(MAX).map(p => p.name).join(', ')) + '" style="display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; width:28px; height:28px; border-radius:50%; margin-left:-8px; border:2px solid var(--color-surface-1,#fff); background:var(--color-surface-3,#E5E9F2); color:var(--color-text-secondary,#4A5568); font-size:11px; font-weight:700;">+' + (people.length - MAX) + '</span>'
+                : '');
         } catch (_) {}
     }
 
@@ -154,7 +220,7 @@
         let client = null;
         try { client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null; } catch (_) {}
         const ws = _ws(), proj = _proj();
-        if (!client || !ws || !proj) { setTimeout(start, 4000); return; }
+        if (!client || !ws || !proj || !_identity()) { setTimeout(start, 4000); return; }   // no signed-in name → not yet
         _tok = (crypto.randomUUID ? crypto.randomUUID() : 'p' + Math.random().toString(36).slice(2)).slice(0, 8);
         _chan = client.channel('slab-presence:' + ws + ':' + proj, { config: { presence: { key: _tok } } });
         _chan.on('presence', { event: 'sync' }, function () {
@@ -186,7 +252,8 @@
     _ready(function () { setTimeout(start, 3000); });   // after auth + project resolve
 
     // ------------------------------------------------------------- exports
-    const api = { start, _here, _colorFor, _renderCursor, _renderStrip, peers: () => Object.values(_state).flat().filter(p => p.tok !== _tok), COLORS };
-    if (typeof window !== 'undefined') window.SLPresence = api;
-    if (typeof globalThis !== 'undefined') globalThis.SLPresence = api;
+    const api = { start, refresh: _retrack, _here, _colorFor, _renderCursor, _renderStrip, _identity, peers: () => Object.values(_state).flat().filter(p => p.tok !== _tok), people: () => _peopleFrom(_state), COLORS };
+    const avatarApi = { html: avatarHtml, initials: initialsOf, color: _colorFor, me: _identity };
+    if (typeof window !== 'undefined') { window.SLPresence = api; window.SLAvatar = avatarApi; }
+    if (typeof globalThis !== 'undefined') { globalThis.SLPresence = api; globalThis.SLAvatar = avatarApi; }
 })();

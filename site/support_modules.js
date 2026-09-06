@@ -1382,6 +1382,21 @@ function _slCaptureAiEdit(oldRow, newRow, crudKey) {
     } catch (_) { return null; }
 }
 window._slCaptureAiEdit = _slCaptureAiEdit;
+// Pager host for a CRUD table: the bar mounts directly above the table once the store exceeds
+// one page; below that any stale bar is retired. Returns the host element or null.
+function _crudPagerHost(tbody, tableBody, total) {
+    if (typeof SLPaginate === 'undefined') return null;
+    if (!(total > 50)) { const stale = document.getElementById('crud-pager-' + tableBody); if (stale) stale.innerHTML = ''; return null; }
+    let pager = document.getElementById('crud-pager-' + tableBody);
+    if (!pager) {
+        pager = document.createElement('div');
+        pager.id = 'crud-pager-' + tableBody;
+        const tbl = tbody.closest ? tbody.closest('table') : null;
+        if (tbl && tbl.parentNode) tbl.parentNode.insertBefore(pager, tbl);
+        else return null;   // detached tbody — caller falls through to the legacy paths
+    }
+    return pager;
+}
 function makeCRUD(config) {
     const { key, store, formIds, submitBtn, cancelBtn, defaultText, tableBody,
             renderCells, renderRows, afterChange, validate, transform, storePrecondition,
@@ -1514,6 +1529,21 @@ function makeCRUD(config) {
         // function's identity (ID / name / definition) across all of its sub-functions
         // via rowspan — Excel-style merged cells. Everything else falls back to one <tr>/row.
         if (typeof renderRows === 'function') {
+            // 6 Sep 2026 (Waqas: "every page should be able to paginate") — the merged-cell
+            // tables (aircraft functions with rowspan-grouped sub-functions) used to return here
+            // UNPAGED. They now page like every other worksheet: the pager windows the array
+            // and the group renderer draws that window, so a function whose sub-functions
+            // straddle a page boundary repeats its identity cell on the next page — the way
+            // a printed spreadsheet does. Counts, gates and rollups still read the full store.
+            const pagerRR = _crudPagerHost(tbody, tableBody, arr.length);
+            if (pagerRR) {
+                SLPaginate.attach({
+                    key: 'crud:' + key, host: pagerRR, total: arr.length,
+                    label: (f, t, n) => 'rows ' + f.toLocaleString() + '–' + t.toLocaleString() + ' of ' + n.toLocaleString() + ' — counts, gates and rollups computed over the full set',
+                    renderPage: (from, to) => { tbody.innerHTML = renderRows(arr.slice(from, to), { actionsFor, reviewFor, renderCells }); }
+                });
+                return;
+            }
             tbody.innerHTML = renderRows(arr, { actionsFor, reviewFor, renderCells });
             return;
         }
@@ -1527,15 +1557,10 @@ function makeCRUD(config) {
         // surgical row-patch fast path self-disables while paginated (its
         // shown-vs-total eligibility check fails), falling back to this render —
         // which is cheap again, because it's one page.
-        if (typeof SLPaginate !== 'undefined' && arr.length > 50) {
-            let pager = document.getElementById('crud-pager-' + tableBody);
-            if (!pager) {
-                pager = document.createElement('div');
-                pager.id = 'crud-pager-' + tableBody;
-                const tbl = tbody.closest ? tbody.closest('table') : null;
-                if (tbl && tbl.parentNode) tbl.parentNode.insertBefore(pager, tbl);
-                else pager = null;   // detached tbody — fall through to legacy paths
-            }
+        {
+            // One host helper for both paths (_crudPagerHost): mounts the bar past one page,
+            // retires it below, returns null for a detached tbody so the legacy paths run.
+            const pager = _crudPagerHost(tbody, tableBody, arr.length);
             if (pager) {
                 SLPaginate.attach({
                     key: 'crud:' + key, host: pager, total: arr.length,
@@ -1548,10 +1573,6 @@ function makeCRUD(config) {
                 });
                 return;
             }
-        } else {
-            // Shrunk back under one page — retire a stale pager bar if present.
-            const stale = document.getElementById('crud-pager-' + tableBody);
-            if (stale) stale.innerHTML = '';
         }
         if (_virtualizeEnabled() && arr.length > _VIRTUALIZE_MIN_ROWS) {
             _virtualRender(tbody, arr.length, rowHtmlAt);

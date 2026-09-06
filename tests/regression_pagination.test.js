@@ -172,7 +172,29 @@ console.log('\n[5] fallback + [6] wiring (source-level)');
   check('Budget ledger attaches with its own key', /key: 'budget'/.test(SITE('budget_ledger.js')) && /budget-pager/.test(SITE('budget_ledger.js')));
   // Phase 1b — factory + custom renders.
   const sup = SITE('support_modules.js');
-  check('CRUD factory paginates every standard worksheet (>50 rows)', /key: 'crud:' \+ key/.test(sup) && /arr\.length > 50/.test(sup));
+  check('CRUD factory paginates every standard worksheet (>50 rows, via _crudPagerHost)', /key: 'crud:' \+ key/.test(sup) && /function _crudPagerHost/.test(sup) && /total > 50/.test(sup));
+  // 6 Sep 2026 — merged-cell (renderRows) worksheets page too: the pager windows the array and
+  // the group renderer draws the window. Previously they returned unpaged.
+  check('CRUD factory paginates merged-cell (renderRows) worksheets too', /renderRows\(arr\.slice\(from, to\), \{ actionsFor, reviewFor, renderCells \}\)/.test(sup) && (sup.match(/_crudPagerHost\(tbody, tableBody, arr\.length\)/g) || []).length === 2);
+  check('CMA scope-filtered view pages through the shared pager', /SLPaginate\.pageTbody\(\{ key: 'cma-' \+ _cmaScopeFilter/.test(SITE('bindings_modules.js')));
+  // EXEC: a 137-row merged-cell store through makeCRUD renders one page of groups + a bar
+  if (jsdomOk) (function () {
+    const supSrc = sup; const vm = require('vm');
+    const { JSDOM } = require('/tmp/jsdom-env/node_modules/jsdom');
+    const doc = new JSDOM('<!DOCTYPE html><body><div><table id="t"><tbody id="mc-body"></tbody></table></div></body>').window.document;
+    const store = []; for (let i = 0; i < 137; i++) store.push({ internalId: 'i' + i, funcId: 'F' + i });
+    const sb = { document: doc, window: { document: doc }, localStorage: { getItem: () => null, setItem() {} }, SLPaginate: globalThis.SLPaginate, formConfigs: {}, _CRUD_KEY_TO_KIND: {}, rowActionsHTML: () => '', reviewCellHtml: () => '', _crudEmptyRowHtml: () => '', _virtualizeEnabled: () => false, _VIRTUALIZE_MIN_ROWS: 1e9, console };
+    const extract = (src, name) => { const at = src.indexOf('function ' + name + '('); const open = src.indexOf('{', at); let d = 0; for (let i = open; i < src.length; i++) { if (src[i] === '{') d++; else if (src[i] === '}') { d--; if (!d) return src.slice(at, i + 1); } } };
+    vm.createContext(sb);
+    vm.runInContext(extract(supSrc, '_crudPagerHost') + ';' + extract(supSrc, 'makeCRUD') + ';globalThis.__mk = makeCRUD;', sb);
+    let calls = [];
+    const crud = vm.runInContext('__mk', sb)({ key: 'mc', store: () => store, formIds: {}, tableBody: 'mc-body', renderRows: (arr) => { calls.push(arr.length); return arr.map(r => '<tr><td>' + r.funcId + '</td></tr>').join(''); } });
+    crud.render();
+    const bar = doc.getElementById('crud-pager-mc-body');
+    check('EXEC merged-cell: page 1 = 50 groups, bar mounted above the table', calls[0] === 50 && doc.getElementById('mc-body').querySelectorAll('tr').length === 50 && !!bar && /data-pg="next"/.test(bar.innerHTML));
+    bar.querySelector('[data-pg="last"]').click();
+    check('EXEC merged-cell: Last → the remaining 37 groups', calls[calls.length - 1] === 37 && doc.getElementById('mc-body').querySelectorAll('tr')[0].textContent === 'F100');
+  })();
   check('CRUD surgical fast-path documented as self-disabling under pagination', /self-disables while paginated/.test(sup));
   check('sys-FHA + FMEA paginate via pageTbody', /key: 'fha-sys'/.test(SITE('helpers_modules.js')) && /key: 'fmea'/.test(SITE('bindings_modules.js')));
   check('FMEA coverage banner rides every page (prefixHtml)', /prefixHtml: _fmeaBanner/.test(SITE('bindings_modules.js')) && /prefix \+ h/.test(SITE('paginate.js')));
