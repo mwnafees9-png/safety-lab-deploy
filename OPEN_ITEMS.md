@@ -820,6 +820,50 @@ this register — the ids below are this register's, and do not correspond.
   is Standing NSE / Taxi Maj-Haz / airborne forward-looking CAT / Landing immediate CAT — groups
   come from each condition's effects).
 
+- **F25 — THE TEMPERATURE LEVER IS INERT ON THE SHIPPED MODEL (found 5 Sep 2026, night; half-fixed
+  the same night; a DECISION is open).** Lever 1 on 5 Sep set every analytical drafter to
+  temperature 0. `AiClient` omits temperature entirely for Opus 4.7+ because those models reject
+  it with a 400 (`core_modules.js` `_modelAcceptsTemperature`), and `MODELS.reason` defaults to
+  `claude-opus-4-8`. **So the setting never reached the model.** Confirmed independently by the
+  exported draws, which record `requestModel: claude-opus-4-8`. DONE: the omission is no longer
+  silent — every call records `temperatureAsked` / `temperatureApplied` in the AI audit log, and
+  the two comments asserting the old premise are corrected (core_modules 1.3, ai_assistant 76.60,
+  shipped and verified served). **OPEN, for Waqas:** making the lever real means changing the
+  drafting model to one that accepts the parameter (Sonnet, or Opus <= 4.6), which is eval-gated
+  against the reigning golden — a decision about drafting quality, not a tweak.
+  WHAT THIS DOES **NOT** INVALIDATE: e1/e2/e3 remain a sound baseline. They measured three
+  identical-input draws under the provider's default sampling, which is exactly the configuration
+  still shipping, so F22/F23 improvements are measurable against them. What changed is only the
+  LABEL — they are not "temperature 0" runs, and the README filed with them says so.
+
+- **F26 — THE FHA PROMPT CONTRADICTED ITSELF; CLOSED 5 Sep 2026 (ai_assistant 76.60, served).**
+  `_ABSTAIN_RULE` ("any field you cannot ground must be returned as an EMPTY STRING ... leaving a
+  field empty is a GOOD outcome") and the shipped `fha.draft` body ("WHEN THE INFORMATION IS THIN,
+  JUDGE - DO NOT ABSTAIN ... an empty level silently drops the row from every downstream check")
+  rode in the SAME assembled request, and no code decided which won — the same defect class as the
+  five arguing row-instructions found on 5 Sep morning. Waqas: "the abstain instruction needs to
+  be removed, we have judgement call flags now." Scoped by him, after the evidence was put to him,
+  to **fha.draft and sfha.draft only** — the only 2 of 25 registered skills carrying the
+  judgementCall/judgementNote contract; the other 23 keep `_ABSTAIN_RULE`, because stripping it
+  there trades a visible blank for a silent guess. Five sites changed (`_fhaSystemPrompt`, rules
+  2b and 2c, `_FEATURE_DIRECTIVE.fha`, and the batch's per-lane gate). Guarded by
+  `tests/regression_fha_no_abstain_and_temp.test.js`, 27 checks, mutation-proven seven ways.
+  **Note for the next measurement:** every draw before 5 Sep was taken under the contradiction, so
+  an abstention rate from those runs measures a coin flip between two instructions rather than the
+  model's judgement. E2's abstention findings should be read with that in mind.
+
+- **F27 — THE WALL COULD MIS-REPORT ITS OWN FAILURES; CLOSED 5 Sep 2026.** `ship.sh` anchors on
+  `^  FAIL  ` (two spaces each side) because the bare word FAIL appears inside check NAMES. 28
+  suites emitted `'  FAIL '` with one trailing space and were invisible to that grep. Measured
+  before fixing (rule 9): a forced failure still exited non-zero, so the crash detector caught it
+  and the wall DID go red — the defect was MIS-REPORTING (a real assertion failure announced as
+  "suite did not run to completion"), not silence. The cleanup inventory said 2 suites; it was 28.
+  All canonicalised; `tests/regression_wall_hygiene.test.js` (12 checks, mutation-proven four
+  ways) now polices the format, that every suite can fail the process, and that `ship.sh` still
+  anchors at BOTH call sites. `ship.sh` also widened to `tests/*.test.js eval/*.test.js`, so
+  `eval/regression_ai_repeatability` — the scorer's own mutation proofs — runs on a deploy for the
+  first time (Waqas: "widen it").
+
 - **F22 — "FELT YET" AS A PROPERTY OF THE FUNCTION (consistency lever A; Waqas, 5 Sep 2026: "yes"
   to A then B; not started).** After the three identical-input draws on the lever build (e1/e2/e3,
   5 Sep) the judged number — class per condition per phase (eval_core 1.9) — sat at 0.72 / 0.66 /
@@ -845,8 +889,13 @@ this register — the ids below are this register's, and do not correspond.
   severity and phase split informational). Whatever is left is judgement on malfunctions and the
   occupant axis — Waqas: the drafter says "no passengers" consistently on Aeolus, so option C
   (occupant axis by rule) is OFF the table. If malfunctions carry the residual, that is the next
-  derivation to design, not a prompt to tune. Also file e1/e2/e3 exports under eval/runs/goldens/
-  (they sit in the draws tab's IndexedDB `slab.draw5.*` and in Waqas's Downloads).
+  derivation to design, not a prompt to tune.
+  **DONE 5 Sep 2026 — the exports are out of the browser.** Pulled from the live site's IndexedDB
+  (`slab.draw5.e1/.e2/.e3`), verified as valid JSON with row counts matching the log (199/200/197),
+  and filed on Waqas's OneDrive at `Safety Lab Aero - measurement data/2026-09-05 FHA consistency
+  draws (e1 e2 e3)` — md5-verified copies plus a README recording what they cost, what was measured
+  from them, and the F25 temperature caveat. Rule 26 satisfied. STILL OPEN if wanted: a second copy
+  under `eval/runs/goldens/` (~8 MB in git) — Waqas to say whether OneDrive alone is enough.
 
 - **F19 — THE SFHA (classic path) HAS NO PHASE-COVERAGE RE-ASK (4 Sep 2026).** The AFHA's
   unified path now checks that a condition's rows together cover every phase of the mission
@@ -1139,6 +1188,33 @@ page say. Order: S1–S6 (defects), then S7–S12, then S13–S18 (Enterprise bu
 - **S19 — "Thin browser" mode (Enterprise setting, ~1 week).** No persistent browser storage: project in memory while the tab is open, saves straight to the server, sign-out/close leaves nothing (no autosave, ring, caches, AI memory; licence token session-only). Closes S8 and half of S9 by construction.
 - **S20 — Customer-hosted backend (~2–3 weeks).** Database, sign-in, real-time and the AI gateway run in the customer's own Supabase org / AWS account; we host only the static app (or they do). Needs: backend URL/key as an installation setting (today hard-coded in `safety_lab.js:3088`, `labs_thread_config.js`, and the CSP connect-src); packaged migrations (depends on S12); packaged edge functions and proxy; a licence check that does not phone home; their Entra SSO; their model endpoint (Bedrock / Azure / vLLM). Deployment guide.
 - **S21 — Fully self-hosted / air-gapped (S20 + ~1–2 weeks).** App container + open-weights model on their hardware; packaged installer; what the paper already promises as the fourth tier.
+
+### Desktop application (audited 5 Sep 2026; Waqas: "desktop app definitely needs to get fixed")
+
+- **S23 — Nothing authorizes a desktop user but a file on their own disk.** `safety-lab-desktop`
+  is an Electron shell around a bundled copy of the web app. A signed licence file is verified
+  offline (`license.js`) — no server call, no seat check, no machine binding — and
+  `preload-app.js` then writes `license.tier` (**defaulting to `pro-plus`**) plus a self-typed
+  identity into the page's localStorage. `auth_gate.js:873` lifts the sign-in gate on
+  `__SLAB_DESKTOP__` before MFA can run and `:403` disarms idle sign-out, so MFA and session
+  expiry are web-only claims. **Waqas's ruling: fix it; notify him when a user signs in; a user
+  without a licence is PAYWALLED.** The sign-in notification machinery already exists
+  (`notify-signin`) — desktop never triggers it because desktop never signs in, so a real sign-in
+  delivers both the notification and the paywall as consequences rather than as new features.
+- **S24 — The update channel is unsigned (do this one first).** Auto-update is on with
+  `autoDownload` / `autoInstallOnAppQuit`, verified by a SHA-512 fetched from the same R2 host as
+  the update itself — no code signature. Whoever controls that host can push code to every desktop
+  user. Smaller than S23 and higher consequence.
+- **S25 — Electron shell posture.** `contextIsolation:false` on the main window (with a "harden
+  before ship" comment carried since v1), `sandbox:false`, **no CSP anywhere**, DevTools in the
+  production menu, and `will-navigate` handing any non-`file://` scheme to `shell.openExternal`.
+  Never notarized; Windows builds unsigned.
+- **S26 — Plaintext on disk, and a stale bundle.** `config.json` holds an AI bearer token and the
+  database key; localStorage holds the licence token, the session and **Jama username+password**.
+  Separately: `app/` is 16 modules behind `site/` and is **missing `cloud_writer.js`**, i.e. still
+  on the pre-consolidation two-writer cloud path — a data-integrity divergence, not tidiness.
+- **S27 — The desktop repo is not backed up.** One commit, 5 Jul 2026, **no git remote**;
+  everything since is uncommitted.
 
 ### Paper and pages
 
