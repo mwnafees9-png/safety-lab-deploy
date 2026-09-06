@@ -1,3 +1,17 @@
+## 06 Sep 2026 (morning) — a restored login now answers for the time it was away. NOT YET DEPLOYED (auth_gate 62.68). Waqas found it: "I signed in 7 hours later and it didnt ask me for my user name and password."
+
+**HE WAS RIGHT TO EXPECT IT TO, AND NOTHING FROM 5 SEP TOUCHED THIS CODE** (checked: no commit since `dcf2a1d` touches `auth_gate.js` or `mfa.js`). The "20-minute timeout" was never a session limit. It is an INACTIVITY timer that only runs while a tab is open: close the laptop before 20 minutes elapse and `setInterval` simply stops, while the stored login (`persistSession: true`, `autoRefreshToken: true`) stays valid indefinitely. On the next open, `getSession()` hands back that login, the gate lifts, `armIdleTimeout()` runs — and its FIRST act was `_idleBump()`, overwriting the seven-hour-old shared timestamp with "now". The one piece of evidence that the user had been away was destroyed before anyone read it. On the desktop build the timer is not armed at all (`__SLAB_DESKTOP__` returns early — S23).
+
+**THE FIX.** `_idleAbandonedSince()` reads the shared activity timestamp BEFORE the arm can overwrite it, and the RESTORED-login path (the `getSession()` branch in `init`) consults it before `_mfaGateThenLift`: if the last recorded activity is older than `IDLE_MS`, sign out LOCALLY (this browser only — never revoke the phone), set a plain-language reason ("You were away for 7 hours, so you were signed out. Please sign in again."), render the gate, return. Typing the password raises `SIGNED_IN`, which lifts and starts a fresh clock — that path is deliberately untouched, because a fresh credential is the thing that legitimately resets the clock.
+
+**WHY A MISSING TIMESTAMP MEANS ALLOW, NOT BOUNCE.** `_idleWriteShared` fails silently when localStorage is unavailable. If 0 bounced, such a browser could never stay signed in: every open a bounce, every bounce a re-sign-in, forever. Fail-closed is right for a data fence; for a sign-in gate a loop is a lockout. Only a timestamp that EXISTS and is STALE counts as abandoned.
+
+**`tests/regression_idle_restore_gate.test.js` — 16 checks, six of which EXECUTE the real decider in a VM** with a controllable clock, storage and desktop flag (7 hours → bounce; exactly 20 min → bounce; 19 min → allow; 5 s → allow; no timestamp → allow; desktop → allow). **Mutation-proven five ways:** stop consulting the check → red; treat a missing timestamp as stale → red; off-by-one at exactly 20 min → red; make the sign-out global → red; move the check after the MFA step → red.
+
+**WALL: 278 suites, 2 real fails (the environment-only proxy-sibling pair), 0 crashed.**
+
+**DEPLOY, THEN PROVE IT IN A BROWSER:** sign in, close the tab, set the shared timestamp back — `localStorage.setItem('safetyLab.idle.lastActivity', String(Date.now() - 25*60*1000))` — reopen, and the gate must show the "You were away" message rather than the app. Then sign in with the password and confirm the app opens.
+
 ## START HERE — 6 Sep 2026. One command, then two checks. Everything below this block is history.
 
 **FIRST THING: DEPLOY.** Three commits are built, tested and committed but NOT served. Waqas stopped for the night before shipping ("we will deploy tomorrow I am way too tired").

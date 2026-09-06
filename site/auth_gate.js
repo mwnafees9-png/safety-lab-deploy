@@ -371,6 +371,41 @@
     try { localStorage.setItem(IDLE_LS_KEY, String(now)); } catch (_) {}
   }
   function _idleNewest() { const shared = _idleReadShared(); return shared > _idleLast ? shared : _idleLast; }
+
+  // 6 Sep 2026 — WAS THE PREVIOUS SESSION ABANDONED, NOT ENDED?
+  //
+  // Waqas: "I signed in 7 hours later and it didn't ask me for my user name and
+  // password." He was right to expect it to. The idle clock only runs while a
+  // tab is OPEN: close the laptop before the 20 minutes elapse and the timer
+  // simply stops, while the stored login (persistSession + autoRefresh) stays
+  // valid indefinitely. On the next open, getSession() hands back that login,
+  // the gate lifts, armIdleTimeout() runs — and the FIRST thing it did was
+  // _idleBump(), overwriting the seven-hour-old timestamp with "now". The one
+  // piece of evidence that the user had been away was destroyed before anyone
+  // read it. So the "20-minute timeout" was a walked-away-from-an-open-tab
+  // rule, never a you-must-sign-in-again rule.
+  //
+  // This reads that evidence BEFORE the arm overwrites it. It is consulted on
+  // the RESTORED-login path only (the getSession() branch in init): a SIGNED_IN
+  // event means the user just typed a password, and a fresh credential is the
+  // very thing that legitimately resets the clock.
+  //
+  // WHY 0 MEANS "ALLOW", NOT "BOUNCE". A missing timestamp is a browser that
+  // has never recorded activity — a first sign-in, or localStorage that was
+  // cleared or is disabled. _idleWriteShared fails silently when storage is
+  // unavailable, so if 0 bounced, such a browser could NEVER stay signed in:
+  // every open would be a bounce, every bounce a re-sign-in, forever. Fail
+  // closed is right for a data fence; for a sign-in gate a loop is a lockout.
+  // Only a timestamp that EXISTS and is STALE is treated as an abandoned session.
+  function _idleAbandonedSince() {
+    try {
+      if (typeof window !== 'undefined' && window.__SLAB_DESKTOP__) return 0;   // desktop has its own lock (S23)
+      const last = _idleReadShared();
+      if (!last) return 0;
+      const away = Date.now() - last;
+      return away >= IDLE_MS ? away : 0;
+    } catch (_) { return 0; }
+  }
   function _idleStorageEvent(e) {
     if (!e || e.key !== IDLE_LS_KEY) return;
     const v = parseInt(e.newValue || '0', 10);
@@ -991,6 +1026,24 @@
     try {
       const { data: { session } } = await sb.auth.getSession();
       if (session && session.user && session.user.email) {
+        // 6 Sep 2026 — a RESTORED login must answer for the time it was away.
+        // See _idleAbandonedSince(). If the last recorded activity in this
+        // browser is older than the idle limit, the previous session was
+        // abandoned, not ended, and it does not get to walk back in: sign out
+        // LOCALLY (this browser only — never revoke the user's phone), say why,
+        // and show the gate. Typing the password then raises SIGNED_IN, which
+        // lifts the gate and starts a fresh clock, exactly as a new sign-in
+        // should. The check runs BEFORE the MFA step so an abandoned session is
+        // never asked for a second factor on top of a first it no longer holds.
+        const _away = _idleAbandonedSince();
+        if (_away > 0) {
+          const _mins = Math.max(20, Math.round(_away / 60000));
+          _idleLockMessage = 'You were away for ' + (_mins >= 120 ? Math.round(_mins / 60) + ' hours' : _mins + ' minutes') + ', so you were signed out. Please sign in again.';
+          try { console.info('[auth-gate] restored login refused: last activity ' + _mins + ' min ago (limit ' + (IDLE_MS / 60000) + ')'); } catch (_) {}
+          try { await sb.auth.signOut({ scope: 'local' }); } catch (_) { try { await sb.auth.signOut(); } catch (__) {} }
+          renderGate();
+          return;
+        }
         try {
           if (typeof window.setSignupEmail === 'function') window.setSignupEmail(session.user.email);
           else localStorage.setItem('safetyLab.signup.email', String(session.user.email).toLowerCase());
