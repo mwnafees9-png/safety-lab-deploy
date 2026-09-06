@@ -1,0 +1,8 @@
+{
+  "kid": "slab-2026-09-06",
+  "alg": "ES256",
+  "kty": "EC",
+  "x": "JBEcOWNzJqwfwZIZiRbCb8PEH2CYhronJ-UuKsB-nAM",
+  "y": "N3yo7Sbc5Gm5VYGo-IWbGHWukiPMmEJtAQIhZRgc0Ys",
+  "crv": "P-256"
+}

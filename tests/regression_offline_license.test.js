@@ -91,7 +91,21 @@ const V = (blob, o) => verify(blob, Object.assign({}, base, o || {}));
   check('cloud license sync waits for the signed verdict and STANDS DOWN when authoritative', /__slabSignedLicenseReady/.test(sync) && /SLLicense\.authoritative/.test(sync) && before(sync, 'SLLicense.authoritative', "from('license_tokens')"));
   const SREF = f => '<script src="' + f;
   check('slab_license loads right after slab_config and before helpers/auth_gate', before(idx, SREF('slab_config.js'), SREF('slab_license.js')) && before(idx, SREF('slab_license.js'), SREF('helpers_modules.js')) && before(idx, SREF('slab_license.js'), SREF('auth_gate.js')));
-  check('shipped PUBLIC_KEYS is EMPTY until keygen (fails closed on customer installs)', /var PUBLIC_KEYS = \[\s*(\/\/[^\n]*\n\s*)*\];/.test(licSrc));
+  // ---- the SHIPPED key: the app's baked PUBLIC_KEYS must match the file copy under tools/license
+  // byte-for-byte (the key was typed into the app from that file on 6 Sep 2026; if either side ever
+  // drifts, every customer license silently stops verifying — so the two are held together here).
+  const shipped = loadVerifier().win.SLLicensePublicKeys || [];
+  const keyFiles = fs.readdirSync(path.join(ROOT, 'tools', 'license')).filter(f => /\.jwk\.json$/.test(f));
+  check('at least one public key file ships under tools/license/*.jwk.json', keyFiles.length >= 1, keyFiles.join(','));
+  check('the app bakes at least one PUBLIC key (no longer the empty pre-keygen list)', shipped.length >= 1);
+  for (const f of keyFiles) {
+    const k = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools', 'license', f), 'utf8'));
+    check(f + ' is a PUBLIC P-256/ES256 key with NO private part', k.kty === 'EC' && k.crv === 'P-256' && k.alg === 'ES256' && !('d' in k) && /^[A-Za-z0-9_-]{43}$/.test(k.x) && /^[A-Za-z0-9_-]{43}$/.test(k.y));
+    const m = shipped.find(s => s.kid === k.kid);
+    check(f + ' (' + k.kid + ') is baked into the app with identical x/y/crv/alg', !!m && m.x === k.x && m.y === k.y && m.crv === k.crv && m.alg === k.alg, m ? 'x/y differ' : 'kid not in PUBLIC_KEYS');
+  }
+  check('no private-key material anywhere in the shipped module', !/"d"\s*:/.test(licSrc) && !/PRIVATE KEY/.test(licSrc));
+  check('a license signed by an ephemeral key does NOT verify against the SHIPPED keys', !(await V(sign(lic(), KX), { keys: shipped })).valid);
   check('module fails CLOSED on customer modes: authoritative when self-hosted/browser-only/desktop', /m === 'self-hosted' \|\| m === 'browser-only' \|\| m === 'desktop'/.test(strip(licSrc)));
   check('invalid on a customer install writes tier unpaid + drops the token', /setItem\('safetyLab\.license\.tier', 'unpaid'\)/.test(licSrc) && /removeItem\('safetyLab\.license\.token'\)/.test(licSrc));
   check('exposes SLLicenseCheckIdentity for re-check at sign-in', /SLLicenseCheckIdentity = async function/.test(licSrc));
@@ -120,7 +134,7 @@ const V = (blob, o) => verify(blob, Object.assign({}, base, o || {}));
   check('tool rejects a bad tier', cp.spawnSync(process.execPath, [tool, 'sign', (() => { const p2 = path.join(tmp, 'bad.json'); fs.writeFileSync(p2, JSON.stringify(Object.assign({}, payload, { tier: 'god' }))); return p2; })()], { env, encoding: 'utf8' }).status !== 0);
 
   console.log('\n[license] pins');
-  check('slab_license pinned', /slab_license\.js\?v=1\.0/.test(idx));
+  check('slab_license >= 1.1 (1.1 = first shipped public key)', PIN.atLeast(idx, 'slab_license.js', '1.1'));
   check('helpers_modules >= 2.89', PIN.atLeast(idx, 'helpers_modules.js', '2.89'));
   check('auth_gate >= 62.69', PIN.atLeast(idx, 'auth_gate.js', '62.69'));
 

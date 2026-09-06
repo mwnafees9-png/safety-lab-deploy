@@ -30,10 +30,11 @@
 
   // Safety Lab's PUBLIC signing keys (JWK). Public keys are not secret. Add the next key
   // here BEFORE rotating so already-issued licenses keep verifying; remove old ones when
-  // no license signed with them remains valid. EMPTY until the first keygen — with no
-  // key, no license can verify, which fails CLOSED on customer installs.
+  // no license signed with them remains valid. With no key, no license can verify, which
+  // fails CLOSED on customer installs. The file copy of each key lives in
+  // tools/license/<name>.jwk.json and regression_offline_license proves this list matches it.
   var PUBLIC_KEYS = [
-    // { "kid": "slab-YYYY-MM-DD", "alg": "ES256", "kty": "EC", "crv": "P-256", "x": "...", "y": "..." }
+    { "kid": "slab-2026-09-06", "alg": "ES256", "kty": "EC", "crv": "P-256", "x": "JBEcOWNzJqwfwZIZiRbCb8PEH2CYhronJ-UuKsB-nAM", "y": "N3yo7Sbc5Gm5VYGo-IWbGHWukiPMmEJtAQIhZRgc0Ys" }
   ];
 
   var TIERS = { edu: 0, pro: 1, 'pro-plus': 2, enterprise: 3 };
