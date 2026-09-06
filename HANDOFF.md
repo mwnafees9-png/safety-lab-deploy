@@ -1,3 +1,11 @@
+## 06 Sep 2026 (afternoon) — schema baseline WRITTEN and PROVEN on a local rebuild. NOT APPLIED anywhere. For Waqas's review.
+
+`supabase/schema_capture_2026-09-06/baseline/0000_schema_baseline.sql` reconstructs the ENTIRE current production schema (read-only from the catalog) into ONE file, so a customer database rebuilds from files — closing the 18-table gap. Proven: applied clean (ON_ERROR_STOP) into an empty Postgres 16 with Supabase's built-ins stubbed (`local_stubs.sql`), then diffed against production: 24 tables, 1 view, 39 functions, 20 triggers, 35 FKs, 14 checks, RLS on 24 — and all 59 RLS policy BODIES byte-identical (the silent-auth-change check). Full result in `PROOF_REPORT.md`.
+
+SECURITY FINDING (flagged to Waqas): production's three notify-review triggers embed a live service_role JWT in plaintext in the schema. It is REDACTED to <SERVICE_ROLE_JWT> in the baseline (never in the repo). That production token should be ROTATED — anyone who can read the schema or a dump has full DB access.
+
+DESIGN NOTE: 0000 is a FULL-STATE squash (source of truth for a customer install), not a diff. 0001/0008 must never touch production; on a clean DB the baseline already carries their end-state, so they become history. The exact clean-install order + edge-function packaging still need the throwaway Supabase project (real auth/roles/pgcrypto, not stubs) — Waqas approved creating it ($10/mo, deleted after; local proof done first per his call). NEXT after his review: spin the throwaway, apply 0000 there, diff against production on genuine Supabase, then the single config surface + offline licence + packaged AI proxy (Claude/Bedrock + Azure) + door-three file mode.
+
 ## 06 Sep 2026 (afternoon) — schema captured; the foundation gap is now EXACT. No code shipped, no production change (read-only census).
 
 **WHY THIS MATTERS.** "No customer data on our cloud" rests on the customer running their own database, which cannot happen until the database rebuilds from files in this repo. It does not today. This session measured exactly why, read-only, against production `fhrqkhdrwbfnizkepkch`.
