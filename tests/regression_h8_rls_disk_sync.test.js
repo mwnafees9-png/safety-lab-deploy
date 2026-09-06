@@ -83,6 +83,68 @@ console.log('[h8] 3 — no policy in the FINAL state calls a helper unqualified'
   check('every unqualified-helper policy in 0001 is superseded by the sync file',
         stale.length === 0, 'not re-emitted: ' + stale.join(', '));
 
+  // WIDENED 5 Sep 2026 — THE BLIND SPOT THAT COST US S1.
+  //
+  // The loop above skips any policy line that does not name a helper
+  // (`if (!m || !bare.test(line)) continue;`), because its job was to prove the
+  // private-schema qualification. ws_members_self_join reads
+  // `with check (auth.uid() = user_id)` and names no helper, so the ONE broken
+  // policy in the tree was invisible to this suite BY CONSTRUCTION — and stayed
+  // invisible through three reviews. Any signed-in user who learned a workspace
+  // id could insert themselves into it as owner.
+  //
+  // So: account for EVERY policy 0001 defines, helper or not. A policy is
+  // accounted for when a later migration re-emits it. Anything genuinely meant
+  // to survive from 0001 unchanged must be named in KEPT_FROM_0001 below, which
+  // makes "we meant that" an explicit, reviewable statement rather than a gap.
+  //
+  // THE TEST FOR ADDING A NAME HERE, and it is the one S1 failed:
+  // a policy may survive from 0001 unchanged only if it is scoped to the
+  // CALLER'S OWN ROW *and* granting it cannot give the caller access to
+  // anything belonging to another tenant. ws_members_self_join passed the
+  // first half and failed the second — it was "your own row", but the row it
+  // inserted was a GRANT OF ACCESS to someone else's workspace. Reading your
+  // own usage row is not that. Inserting a membership is.
+  //
+  // Each of the six below was read on 5 Sep 2026 against that test:
+  const KEPT_FROM_0001 = [
+    'users_self_read',            // select on users        · auth.uid() = id
+    'ai_usage_self_read',         // select on ai_usage     · own rows
+    'audit_self_read',            // select on audit_log    · own rows
+    'license_tokens_self_select', // select on license_tokens · own licence
+    'workspaces_self_insert',     // insert a workspace you own — the intended
+                                  //   self-service action, and the ONLY one left
+    'feedback_insert_own'         // insert feedback as yourself
+  ];
+  const later = files.filter(f => f !== '0001_rls_baseline.sql').map(read).join('\n');
+  const unaccounted = [];
+  for (const line of p0001.split('\n')) {
+    const m = /^create policy (\w+) on public\.(\w+)/.exec(line.trim());
+    if (!m) continue;
+    if (KEPT_FROM_0001.indexOf(m[1]) >= 0) continue;
+    if (!new RegExp('create policy ' + m[1] + ' on public\\.' + m[2]).test(later)) unaccounted.push(m[1]);
+  }
+  check('EVERY policy 0001 defines is re-emitted later or explicitly kept — helper or not',
+        unaccounted.length === 0,
+        'unaccounted: ' + unaccounted.join(', ') + ' (this is the check that would have caught S1)');
+
+  // The allowlist must not become a dumping ground. Nothing kept from 0001 may
+  // be an INSERT on a table that grants access — that is the exact shape of S1,
+  // and it is the one thing the list is never allowed to excuse.
+  const GRANT_TABLES = ['workspace_members', 'invitations', 'workspaces'];
+  const keptGrantInserts = [];
+  for (const name of KEPT_FROM_0001) {
+    const line = (p0001.split('\n').find(l => l.trim().indexOf('create policy ' + name + ' ') === 0) || '');
+    const t = /on public\.(\w+)/.exec(line);
+    if (!t) continue;
+    if (/ for insert /.test(line) && GRANT_TABLES.indexOf(t[1]) >= 0 && t[1] !== 'workspaces') {
+      keptGrantInserts.push(name + ' -> ' + t[1]);
+    }
+  }
+  check('no kept-from-0001 policy inserts into a table that grants access',
+        keptGrantInserts.length === 0,
+        keptGrantInserts.join(', ') + ' — this is the S1 shape and the allowlist may never excuse it');
+
   // And the sync file itself must never introduce an unqualified call.
   const syncBare = sync.split('\n').filter(l => /^create policy /.test(l.trim()) && bare.test(l));
   check('the sync file itself qualifies every helper call it makes',
