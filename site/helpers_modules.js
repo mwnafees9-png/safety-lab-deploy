@@ -8440,6 +8440,10 @@ function __crdtCapture() {
         projectConfig:     clone(projectConfig),
         mlData:            clone(mlData),
         projectName:       (typeof projectName === 'string' ? projectName : ''),
+        acAsmCounter:      (typeof acAsmCounter === 'number' ? acAsmCounter : 0),
+        fmeaCounter:       (typeof fmeaCounter === 'number' ? fmeaCounter : 0),
+        reviewCounter:     (typeof reviewCounter === 'number' ? reviewCounter : 0),
+        internalIdCounter: (typeof internalIdCounter === 'number' ? internalIdCounter : 0),
         systemsData:       clone(systemsData),
         ftaPages:          clone(ftaPages)
     };
@@ -8465,6 +8469,14 @@ function __crdtApply(partial) {
         if (partial.projectConfig && typeof partial.projectConfig === 'object') projectConfig = partial.projectConfig;
         if (partial.mlData && typeof partial.mlData === 'object')               mlData        = partial.mlData;
         if (typeof partial.projectName === 'string')                            projectName   = partial.projectName;
+        // id counters — MAX merge (monotonic: never reissue a lower number)
+        if (partial.__counters) {
+            var _c = partial.__counters;
+            if (typeof _c.acAsmCounter === 'number')      acAsmCounter      = Math.max(acAsmCounter || 0, _c.acAsmCounter);
+            if (typeof _c.fmeaCounter === 'number')       fmeaCounter       = Math.max(fmeaCounter || 0, _c.fmeaCounter);
+            if (typeof _c.reviewCounter === 'number')     reviewCounter     = Math.max(reviewCounter || 0, _c.reviewCounter);
+            if (typeof _c.internalIdCounter === 'number') internalIdCounter = Math.max(internalIdCounter || 0, _c.internalIdCounter);
+        }
         if (Array.isArray(partial.systemsData))       systemsData       = partial.systemsData;
         if (Array.isArray(partial.ftaPages))          ftaPages          = partial.ftaPages;
         // re-render only the collections that arrived in this delta

@@ -48,6 +48,12 @@
   // backup until they get proper repaint handling. __crdtApply renders each on arrival.
   var WHOLE = ['projectConfig', 'mlData', 'projectName'];
 
+  // COUNTERS (7 Sep 2026): id-minting counters (next ASM-N, FMEA-N, review, internalId).
+  // Merged MAX (never backward) via one 'counters' Y.Map — two people adding at once must
+  // not reissue the same number. Monotonic: pushLocal only ever raises the map value, and
+  // __crdtApply takes max(local, incoming), so the loop converges to the true high-water mark.
+  var COUNTERS = ['acAsmCounter', 'fmeaCounter', 'reviewCounter', 'internalIdCounter'];
+
   var Y = null, ydoc = null, chan = null, _client = null, _idb = null;
   var _started = false, _applying = false, _wsId = null, _projId = null;
   var _saveTimer = null, _pushTimer = null;
@@ -180,6 +186,11 @@
         var next = JSON.stringify(cap[name] === undefined ? null : cap[name]);
         if (wmap.get(name) !== next) wmap.set(name, next);
       });
+      var cmap = ydoc.getMap('counters');
+      COUNTERS.forEach(function (name) {
+        var v = cap[name];
+        if (typeof v === 'number') { var cur = cmap.get(name); if (cur === undefined || v > cur) cmap.set(name, v); }
+      });
     }, 'local');
   }
 
@@ -204,6 +215,10 @@
     WHOLE.forEach(function (name) {
       if (wmap.has(name)) { try { partial[name] = JSON.parse(wmap.get(name)); } catch (_) {} }
     });
+    var cmap = ydoc.getMap('counters');
+    var counters = {};
+    COUNTERS.forEach(function (name) { var v = cmap.get(name); if (typeof v === 'number') counters[name] = v; });
+    partial.__counters = counters;
     _applying = true;
     try { if (window.__crdtApply) window.__crdtApply(partial); } finally { _applying = false; }
   }
