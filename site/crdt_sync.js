@@ -32,6 +32,10 @@
     { name: 'zsaData',           key: 'internalId' },
     { name: 'cmaData',           key: 'internalId' },
     { name: 'fmeaData',          key: 'internalId' },
+    { name: 'acFcimData',        key: 'internalId' },
+    { name: 'routingData',       key: 'internalId' },
+    { name: 'resourcesData',     key: 'internalId' },
+    { name: 'itemsData',         key: 'internalId' },
     { name: 'systemsData',       key: 'id' },
     { name: 'ftaPages',          key: 'id' }   // page-level merge (whole-page value); node-level = future
   ];
@@ -146,7 +150,14 @@
         var ord = ydoc.getMap('ord:' + c.name);   // key -> order index. KEYED (not a Y.Array) so two
         var live = {};                             // peers seeding the same keys can't duplicate order.
         arr.forEach(function (item, i) {
-          var k = String(item[c.key]);
+          // 7 Sep 2026 (COL rebuild) — NEVER collapse keyless rows. A row whose stable
+          // key is missing/blank would stringify to "undefined" and every such row would
+          // overwrite the last into one slot (silent row loss). Skip it from live-merge —
+          // the snapshot backup still carries it — rather than corrupt the map. A no-op for
+          // collections whose rows always carry their key (the original 10).
+          var kv = item ? item[c.key] : null;
+          if (kv == null || kv === '') return;
+          var k = String(kv);
           live[k] = 1;
           var next = JSON.stringify(item);
           if (map.get(k) !== next) map.set(k, next);

@@ -8432,6 +8432,10 @@ function __crdtCapture() {
         zsaData:           clone(zsaData),
         cmaData:           clone(cmaData),
         fmeaData:          clone(fmeaData),
+        acFcimData:        clone(acFcimData),
+        routingData:       clone(routingData),
+        resourcesData:     clone(resourcesData),
+        itemsData:         clone(itemsData),
         systemsData:       clone(systemsData),
         ftaPages:          clone(ftaPages)
     };
@@ -8448,6 +8452,10 @@ function __crdtApply(partial) {
         if (Array.isArray(partial.zsaData))           zsaData           = partial.zsaData;
         if (Array.isArray(partial.cmaData))           cmaData           = partial.cmaData;
         if (Array.isArray(partial.fmeaData))          fmeaData          = partial.fmeaData;
+        if (Array.isArray(partial.acFcimData))        acFcimData        = partial.acFcimData;
+        if (Array.isArray(partial.routingData))       routingData       = partial.routingData;
+        if (Array.isArray(partial.resourcesData))     resourcesData     = partial.resourcesData;
+        if (Array.isArray(partial.itemsData))         itemsData         = partial.itemsData;
         if (Array.isArray(partial.systemsData))       systemsData       = partial.systemsData;
         if (Array.isArray(partial.ftaPages))          ftaPages          = partial.ftaPages;
         // re-render only the collections that arrived in this delta
@@ -8459,6 +8467,10 @@ function __crdtApply(partial) {
         try { if (partial.zsaData           && typeof renderZSA             === 'function') renderZSA(); } catch (_) {}
         try { if (partial.cmaData           && typeof renderCMA             === 'function') renderCMA(); } catch (_) {}
         try { if (partial.fmeaData          && typeof renderFMEA            === 'function') renderFMEA(); } catch (_) {}
+        try { if (partial.acFcimData        && typeof renderACFcim          === 'function') renderACFcim(); } catch (_) {}
+        try { if (partial.routingData       && typeof renderRouting         === 'function') renderRouting(); } catch (_) {}
+        try { if (partial.resourcesData     && typeof renderResources       === 'function') renderResources(); } catch (_) {}
+        try { if (partial.itemsData         && typeof renderItems           === 'function') renderItems(); } catch (_) {}
         try { if (partial.systemsData       && typeof renderSystemDirectory === 'function') renderSystemDirectory(); } catch (_) {}
         try { if (partial.ftaPages) { if (typeof renderFTASidebar === 'function') renderFTASidebar(); if (typeof updateD3 === 'function') updateD3(); } } catch (_) {}
         try { if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) {}
