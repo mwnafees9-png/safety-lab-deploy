@@ -29,7 +29,7 @@ with the ITAR options in **Part B**.
 - **Somewhere to run the small AI proxy:** a Cloudflare account, *or* any host
   that runs Node 18+ (a container or VM in your own cloud).
 - **The app files** and the **AI proxy files** (Safety Lab provides both).
-- **Your licence file** (`.lic`) and your **public key** (Safety Lab provides
+- **Your license file** (`.lic`) and your **public key** (Safety Lab provides
   both; the public key is safe to share and is not a secret).
 
 ### Step 1 — Stand up the database
@@ -50,7 +50,7 @@ Your database is ready. Nothing here contacted Safety Lab.
 
 ### Step 2 — Deploy the AI proxy
 The proxy holds your AI key so the browser never sees it, and it checks your
-signed licence before doing anything. Pick **one** of the two ways to run it.
+signed license before doing anything. Pick **one** of the two ways to run it.
 
 **Configuration (both ways use these):**
 - `LICENSE_MODE=offline`
@@ -93,8 +93,8 @@ If any of these still points at a Safety Lab address, the app **refuses to
 start** and names the setting — that is the guardrail that keeps your data off
 our cloud.
 
-### Step 4 — Load your licence and sign in
-Open the app. On first run it asks for your licence file (`.lic`) — load it.
+### Step 4 — Load your license and sign in
+Open the app. On first run it asks for your license file (`.lic`) — load it.
 Create your account, sign in, and make a test project. Confirm:
 - the project appears in **your** Supabase tables (not ours),
 - the AI drafting works (it is going through **your** proxy to **your** AI).
