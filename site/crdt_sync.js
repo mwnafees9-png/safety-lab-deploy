@@ -36,6 +36,7 @@
     { name: 'routingData',       key: 'internalId' },
     { name: 'resourcesData',     key: 'internalId' },
     { name: 'itemsData',         key: 'internalId' },
+    { name: 'flightPhasesData',  key: 'phase' },
     { name: 'systemsData',       key: 'id' },
     { name: 'ftaPages',          key: 'id' }   // page-level merge (whole-page value); node-level = future
   ];
