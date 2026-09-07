@@ -41,6 +41,13 @@
     { name: 'ftaPages',          key: 'id' }   // page-level merge (whole-page value); node-level = future
   ];
 
+  // WHOLE-VALUE stores (7 Sep 2026 COL rebuild): single objects/strings, not row lists.
+  // Merged last-write-wins via one Y.Map ('whole'), keyed by store name. Safe for settings
+  // that a field lock guards while actively edited. Only stores with a clean repaint are
+  // listed here; murkier ones (stpaData, ftaConfig, mirror objects) stay on the snapshot
+  // backup until they get proper repaint handling. __crdtApply renders each on arrival.
+  var WHOLE = ['projectConfig', 'mlData', 'projectName'];
+
   var Y = null, ydoc = null, chan = null, _client = null, _idb = null;
   var _started = false, _applying = false, _wsId = null, _projId = null;
   var _saveTimer = null, _pushTimer = null;
@@ -167,6 +174,12 @@
         Array.from(map.keys()).forEach(function (k) { if (!live[k]) map.delete(k); });
         Array.from(ord.keys()).forEach(function (k) { if (!live[k]) ord.delete(k); });
       });
+      var wmap = ydoc.getMap('whole');
+      WHOLE.forEach(function (name) {
+        if (!(name in cap)) return;
+        var next = JSON.stringify(cap[name] === undefined ? null : cap[name]);
+        if (wmap.get(name) !== next) wmap.set(name, next);
+      });
     }, 'local');
   }
 
@@ -186,6 +199,10 @@
       var arr = [];
       keys.forEach(function (k) { var v = map.get(k); if (v != null) { try { arr.push(JSON.parse(v)); } catch (_) {} } });
       partial[c.name] = arr;
+    });
+    var wmap = ydoc.getMap('whole');
+    WHOLE.forEach(function (name) {
+      if (wmap.has(name)) { try { partial[name] = JSON.parse(wmap.get(name)); } catch (_) {} }
     });
     _applying = true;
     try { if (window.__crdtApply) window.__crdtApply(partial); } finally { _applying = false; }

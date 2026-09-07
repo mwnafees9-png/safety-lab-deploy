@@ -8437,6 +8437,9 @@ function __crdtCapture() {
         resourcesData:     clone(resourcesData),
         itemsData:         clone(itemsData),
         flightPhasesData:  clone(flightPhasesData),
+        projectConfig:     clone(projectConfig),
+        mlData:            clone(mlData),
+        projectName:       (typeof projectName === 'string' ? projectName : ''),
         systemsData:       clone(systemsData),
         ftaPages:          clone(ftaPages)
     };
@@ -8458,6 +8461,10 @@ function __crdtApply(partial) {
         if (Array.isArray(partial.resourcesData))     resourcesData     = partial.resourcesData;
         if (Array.isArray(partial.itemsData))         itemsData         = partial.itemsData;
         if (Array.isArray(partial.flightPhasesData))  flightPhasesData  = partial.flightPhasesData;
+        // whole-value stores (objects / string) — apply only a well-typed value
+        if (partial.projectConfig && typeof partial.projectConfig === 'object') projectConfig = partial.projectConfig;
+        if (partial.mlData && typeof partial.mlData === 'object')               mlData        = partial.mlData;
+        if (typeof partial.projectName === 'string')                            projectName   = partial.projectName;
         if (Array.isArray(partial.systemsData))       systemsData       = partial.systemsData;
         if (Array.isArray(partial.ftaPages))          ftaPages          = partial.ftaPages;
         // re-render only the collections that arrived in this delta
@@ -8474,6 +8481,9 @@ function __crdtApply(partial) {
         try { if (partial.resourcesData     && typeof renderResources       === 'function') renderResources(); } catch (_) {}
         try { if (partial.itemsData         && typeof renderItems           === 'function') renderItems(); } catch (_) {}
         try { if (partial.flightPhasesData  && typeof renderFlightPhases    === 'function') renderFlightPhases(); } catch (_) {}
+        try { if (partial.projectConfig  && typeof renderProjectConfigUI === 'function') renderProjectConfigUI(); } catch (_) {}
+        try { if (partial.mlData         && typeof renderMarkovModels     === 'function') renderMarkovModels(); } catch (_) {}
+        try { if (typeof partial.projectName === 'string' && typeof _refreshProjectNameUI === 'function') _refreshProjectNameUI(); } catch (_) {}
         try { if (partial.systemsData       && typeof renderSystemDirectory === 'function') renderSystemDirectory(); } catch (_) {}
         try { if (partial.ftaPages) { if (typeof renderFTASidebar === 'function') renderFTASidebar(); if (typeof updateD3 === 'function') updateD3(); } } catch (_) {}
         try { if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) {}
