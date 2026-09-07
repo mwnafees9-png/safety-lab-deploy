@@ -4462,12 +4462,24 @@ function submitACFHA() {
     renderACFHA();
     renderACAssumptions(); // refresh Linked Failure Conditions column
 }
-function editACFHA(iId) {
+async function editACFHA(iId) {
     // 28 Aug 2026 — String() both sides: the kebab onclick always passes the id as a
     // string, while seeded/legacy rows store numbers. Strict === made Edit AND Delete
     // a silent no-op on every numeric-id row. Same coercion the rest of the codebase
     // already uses (String(x.internalId) === String(id)).
     const item = acFhaData.find(x => String(x.internalId) === String(iId)); if (!item) return;
+    // COL-2 field lock (7 Sep 2026) — one writer per FHA row. Claim it before opening the
+    // editor; if another user holds it, refuse to open and show who has it. Fails OPEN (claim
+    // returns {ok:true}) in local mode, on an outage, or for ITAR projects — the save-time
+    // guard (COL-3) is the hard backstop; this is just the live "someone's in here" UX.
+    if (window.SLLocks) {
+        const _lk = await SLLocks.claim('acfha:' + iId);
+        if (_lk && _lk.ok === false) {
+            const _who = _lk.name || SLLocks.heldBy('acfha:' + iId) || 'another user';
+            if (typeof showToast === 'function') showToast('\u201c' + (item.fcId || 'This row') + '\u201d is being edited by ' + _who + ' right now \u2014 it\u2019ll free up when they\u2019re done.', 'info', 5200);
+            return;
+        }
+    }
     document.getElementById('ac-fha-subfunc').value = item.subId;
     // Filter the FC list to this sub-function BEFORE restoring the row's own FC. Assigning
     // .value directly does not fire onchange, so without this the edit form would show the
@@ -5156,12 +5168,21 @@ function submitSysFHA() {
     renderSysFHA();
     renderSysAssumptions();
 }
-function editSysFHA(iId) {
+async function editSysFHA(iId) {
     // 28 Aug 2026 — String() both sides: the kebab onclick always passes the id as a
     // string, while seeded/legacy rows store numbers. Strict === made Edit AND Delete
     // a silent no-op on every numeric-id row. Same coercion the rest of the codebase
     // already uses (String(x.internalId) === String(id)).
     const item = sys().fha.find(x => String(x.internalId) === String(iId)); if (!item) return;
+    // COL-2 field lock (7 Sep 2026) - twin of editACFHA. One writer per System-FHA row.
+    if (window.SLLocks) {
+        const _lk = await SLLocks.claim('sysfha:' + iId);
+        if (_lk && _lk.ok === false) {
+            const _who = _lk.name || SLLocks.heldBy('sysfha:' + iId) || 'another user';
+            if (typeof showToast === 'function') showToast('\u201c' + (item.fcId || 'This row') + '\u201d is being edited by ' + _who + ' right now \u2014 it\u2019ll free up when they\u2019re done.', 'info', 5200);
+            return;
+        }
+    }
     document.getElementById('sys-fha-ac-trace').value = item.acTrace || '';
     document.getElementById('sys-fha-subfunc').value = item.subId;
     // See editACFHA — filter to the selected function, keeping this row's own FC visible.

@@ -1607,6 +1607,10 @@ function initThemeFromStorage() {
 }
 
 function cancelEdit(module) {
+    // COL-2 field lock (7 Sep 2026) — release the FHA row lock when its editor closes. Save AND
+    // cancel both land here (save calls cancelEdit('acFha') after writing back), so this is the
+    // single release seam. Capture the id BEFORE the reset nulls editStates[module].
+    if (window.SLLocks && editStates[module] != null && (module === 'acFha' || module === 'sysFha')) { try { SLLocks.release((module === 'acFha' ? 'acfha:' : 'sysfha:') + editStates[module]); } catch (_) {} }
     editStates[module] = null; const config = formConfigs[module];
     if(config) {
         config.fields.forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
