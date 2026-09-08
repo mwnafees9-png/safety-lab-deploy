@@ -192,6 +192,11 @@
             }
             _setToken(nextVersion);
             try { var hist = _fn('_recordSaveHistory'); if (hist) await hist(projectId, nextVersion, snapshot, userId); } catch (_) {}
+            // 8 Sep 2026 — Stage 2: a CONFIRMED backup write means the CRDT doc is now
+            // known to be at least as fresh as snapshot vN; advance the reconcile stamp
+            // so the next open lets the live CRDT win instead of re-seeding. Inert while
+            // the authority flag is off (noteSnapshotVersion self-gates).
+            try { if (G.SafetyLabCRDT && typeof G.SafetyLabCRDT.noteSnapshotVersion === 'function') G.SafetyLabCRDT.noteSnapshotVersion(projectId, nextVersion); } catch (_) {}
             return { ok: true, version: nextVersion };
         } catch (e) {
             return { ok: false, reason: 'error', error: e };

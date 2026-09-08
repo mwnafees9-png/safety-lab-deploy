@@ -126,6 +126,18 @@ function sandbox(opts) {
   {
     let sb = sandbox({ token: 5, version: 5 }); let r = await sb.write('manual');
     check('matching token: one conditional write at 6, ok, history recorded, no prompt', r.ok && r.version === 6 && sb.writes().length === 1 && sb.writes()[0].eqs.some(e => e[0] === 'version' && e[1] === 5) && sb.events.includes('history') && !sb.events.includes('confirm'), JSON.stringify(r) + ' ' + sb.events.join(','));
+    // Stage 2 (8 Sep 2026) — a CONFIRMED write advances the CRDT reconcile stamp so the
+    // next open lets the live CRDT win instead of re-seeding. Spy on SafetyLabCRDT.
+    { const spy = []; sb = sandbox({ token: 5, version: 5 });
+      sb.ctx.SafetyLabCRDT = { noteSnapshotVersion: (pid, v) => spy.push([pid, v]) };
+      r = await sb.write('manual');
+      check('stage2: a landed write calls noteSnapshotVersion(projectId, version)', r.ok && spy.length === 1 && spy[0][0] === 'p1' && spy[0][1] === r.version, JSON.stringify(spy) + ' v=' + r.version);
+    }
+    { const spy = []; sb = sandbox({ token: 3, version: 5 });       // silent refusal — no write lands
+      sb.ctx.SafetyLabCRDT = { noteSnapshotVersion: (pid, v) => spy.push([pid, v]) };
+      r = await sb.write('silent');
+      check('stage2: a REFUSED write never advances the stamp', !r.ok && spy.length === 0, JSON.stringify(spy));
+    }
     sb = sandbox({ token: null, version: 5 }); r = await sb.write('manual');
     check('null token over an existing doc ADOPTS the server version: writes 6, never 1', r.ok && r.version === 6 && sb.writes()[0].p.version === 6);
     sb = sandbox({ token: null, version: null }); r = await sb.write('silent');

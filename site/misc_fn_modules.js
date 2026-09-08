@@ -3373,7 +3373,10 @@ async function _applyServerRestore(client, projectId, res) {
     // 31 Aug 2026 — and the CRDT doc must mirror the restored model, or the
     // per-project IndexedDB doc unions the pre-restore rows straight back in
     // (the same resurrection _loadCloudProject suffered).
-    try { if (window.SafetyLabCRDT && typeof window.SafetyLabCRDT.adoptModel === 'function') window.SafetyLabCRDT.adoptModel(); } catch (_) {}
+    // 8 Sep 2026 — a version restore is a DELIBERATE rollback: pass force so that under
+    // the Stage 2 authority flag the snapshot WINS over the CRDT doc (else CRDT would
+    // instantly undo the rollback). No-op difference while the flag is off.
+    try { if (window.SafetyLabCRDT && typeof window.SafetyLabCRDT.adoptModel === 'function') window.SafetyLabCRDT.adoptModel({ force: true }); } catch (_) {}
 }
 
 async function restoreSavedVersion(version) {

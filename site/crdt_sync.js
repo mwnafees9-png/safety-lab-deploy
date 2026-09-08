@@ -70,6 +70,17 @@
   // live peer creates AFTER the window merge normally.
   var ADOPT_WINDOW_MS = 15000;
   var _adoptProj = null, _adoptUntil = 0;
+
+  // ---- Stage 2 (authoritative-CRDT) state ----------------------------------
+  // FLAG-GATED, DEFAULT OFF (window.SL_CRDT_AUTHORITATIVE !== true). When OFF this
+  // whole block is inert and adoptModel/start behave exactly as they did in Stage 1
+  // (snapshot authoritative on open, CRDT mirrors). When ON, the live CRDT doc is
+  // the source of truth on open and the whole-doc snapshot is a periodic BACKUP —
+  // reconciled by a self-healing version STAMP so a stale CRDT copy can never win
+  // over a newer snapshot. See safety-lab-sync design note (8 Sep 2026).
+  var _reconcileProj = null;    // project awaiting a stamp-compare reconcile on the next start()
+  var _reconcileVer = null;     // the snapshot version (_activeCloudDocVersion) captured at the open
+  var _forceSeedProj = null;    // project that must snapshot-WIN regardless of stamp (a deliberate restore/rollback)
   var _tok = (function () { try { return (crypto.randomUUID ? crypto.randomUUID() : 'c' + Math.random().toString(36).slice(2)).slice(0, 8); } catch (_) { return 'c' + Date.now().toString(36).slice(-6); } })();
 
   // Default ON (further gated by _ready: signed-in + active cloud project + not ITAR). Kill-switch:
@@ -81,6 +92,59 @@
       if (localStorage.getItem('SLA_CRDT') === '0') return false;
       return true;
     } catch (_) { return true; }
+  }
+
+  // ---- Stage 2 helpers (all no-ops / inert while the flag is OFF) -----------
+  // The authority flag. DEFAULT OFF — absent flag = false = Stage 1 behavior.
+  function authOn() {
+    try { return (typeof window !== 'undefined') && window.SL_CRDT_AUTHORITATIVE === true; } catch (_) { return false; }
+  }
+  // The snapshot version the model was just loaded at. _activeCloudDocVersion is a
+  // top-level `let` in bindings_modules.js (shared global lexical scope, like
+  // projectConfig in _itar), so a typeof-guarded bare read reaches it without eval.
+  function _docVer() {
+    try {
+      var E = (typeof SLEnv !== 'undefined') ? SLEnv : (typeof window !== 'undefined' ? window.SLEnv : null);
+      if (E && typeof E.get === 'function') { var v = E.get('_activeCloudDocVersion'); if (v !== undefined) return (v == null ? null : v); }
+    } catch (_) {}
+    try { return (typeof _activeCloudDocVersion !== 'undefined' && _activeCloudDocVersion != null) ? _activeCloudDocVersion : null; } catch (_) { return null; }
+  }
+  // The self-healing STAMP: the project_documents.version this CRDT doc was last
+  // reconciled against. Lives INSIDE the Yjs doc (meta Y.Map) so it travels with the
+  // doc through idb + server persistence and merges LWW like any Y.Map value.
+  function _stampGet() { try { return ydoc ? ydoc.getMap('meta').get('docVersion') : null; } catch (_) { return null; } }
+  function _stampSet(v) { try { if (ydoc && typeof v === 'number') ydoc.getMap('meta').set('docVersion', v); } catch (_) {} }
+
+  // The reconcile decision, run on open when the flag is ON. The model already holds
+  // the snapshot at version V. SEED (snapshot -> CRDT, protected by the adopt window)
+  // when the snapshot is newer-or-unstamped (legacy project, a non-CRDT writer, or a
+  // deliberate restore) — worst case this is exactly Stage 1's snapshot-wins. PULL
+  // (CRDT -> model) only when the stamp PROVES the CRDT doc is at least as fresh as
+  // snapshot V, so a live teammate's merged edit wins instead of being tombstoned.
+  function _reconcileAuth(force, V) {
+    if (V == null) V = _docVer();
+    var stamp = _stampGet();
+    var seed = force || stamp == null || (V != null && V > stamp);
+    if (seed) {
+      _adoptUntil = Date.now() + ADOPT_WINDOW_MS;     // protect the seed from a stale server-union pull
+      try { pushLocal(); } catch (_) {}
+      if (V != null) _stampSet(V);
+    } else {
+      _adoptUntil = 0;
+      try { pullToModel(); } catch (_) {}
+    }
+  }
+
+  // Called by the ONE snapshot writer (cloud_writer) and the silent autosave
+  // (cloud_sync) after a CONFIRMED write at version N. Advances the stamp so the
+  // CRDT doc stays in lockstep with the backup: after this, CRDT is known to be at
+  // least as fresh as snapshot N. MAX-merge (never regress). Inert while flag OFF.
+  function noteSnapshotVersion(projId, version) {
+    try {
+      if (!authOn() || !ydoc || _projId !== projId || typeof version !== 'number') return;
+      var cur = _stampGet();
+      if (cur == null || version > cur) _stampSet(version);
+    } catch (_) {}
   }
   // 5 Sep 2026 — THIS FENCE HAD NEVER FIRED ONCE.
   // `projectConfig` is a top-level `let` in a classic script (bindings_modules.js),
@@ -253,6 +317,34 @@
       try { if (Y.IndexeddbPersistence) _idb = new Y.IndexeddbPersistence('slab-crdt-' + _projId, ydoc); } catch (_) { _idb = null; }
 
       var afterLocal = function () {
+        // ---- Stage 2 (flag ON): stamp-based reconcile. The MODEL already holds the
+        // snapshot at version V; SEED when the snapshot is newer-or-unstamped (safe,
+        // = Stage 1), PULL only when the stamp proves the CRDT doc is at least as fresh.
+        if (authOn()) {
+          var isTarget = (_reconcileProj != null && _reconcileProj === _projId);
+          var force = isTarget && (_forceSeedProj === _projId);
+          var V = isTarget ? _reconcileVer : null;
+          _reconcileProj = null; _reconcileVer = null; _forceSeedProj = null;
+          var seedFresh = function () {
+            _adoptUntil = Date.now() + ADOPT_WINDOW_MS; try { pushLocal(); } catch (_) {}
+            var vv = (V != null) ? V : _docVer(); if (vv != null) _stampSet(vv);
+          };
+          if (_docHasContent()) {
+            _reconcileAuth(force, V);
+            if (_online()) _goOnline();
+          } else if (_online()) {
+            _loadState(function (had) {
+              if (!had) seedFresh(); else _reconcileAuth(force, V);
+              if (!chan) _openChannel();
+            });
+          } else {
+            seedFresh();
+          }
+          _renderOfflineBadge();
+          try { console.info('[CRDT] (auth) active on slab-crdt:' + _wsId + ':' + _projId + ' stamp=' + _stampGet() + (_online() ? '' : ' (OFFLINE)')); } catch (_) {}
+          return;
+        }
+        // ---- Stage 1 (flag OFF, DEFAULT): adopt-model posture, unchanged. -------
         // adopt-model: this start follows an authoritative load of _projId — the
         // MODEL is the working copy; the idb/server docs get mirrored to it.
         var adopt = (_adoptProj != null && _adoptProj === _projId);
@@ -384,9 +476,25 @@
   // replaced the model: if CRDT is already live on that project, mirror NOW;
   // otherwise arm the next start()-reconcile. Either way the adopt window
   // covers the merges that follow.
-  function adoptModel() {
+  function adoptModel(opts) {
     var p = _proj();
     if (!p) return;
+    var force = !!(opts && opts.force);   // a deliberate restore/rollback: snapshot must WIN even under the flag
+    if (authOn()) {
+      // Stage 2: reconcile the live CRDT doc against the just-loaded snapshot by STAMP.
+      // Capture V now (= _activeCloudDocVersion, set by the caller just before this).
+      _reconcileVer = _docVer();
+      if (force) _forceSeedProj = p;
+      if (_started && ydoc && _projId === p) {
+        try { _reconcileAuth(force, _reconcileVer); } catch (_) {}
+        _reconcileVer = null; _forceSeedProj = null;
+      } else {
+        _reconcileProj = p;                 // afterLocal reconciles (reads _reconcileVer/_forceSeedProj)
+        if (_started && _projId !== p) { try { refresh(); } catch (_) {} }
+      }
+      return;
+    }
+    // Stage 1 (flag OFF, DEFAULT): adopt-window posture, unchanged.
     _adoptUntil = Date.now() + ADOPT_WINDOW_MS;
     if (_started && ydoc && _projId === p) { try { pushLocal(); } catch (_) {} _adoptProj = null; }
     else {
@@ -401,7 +509,8 @@
 
   window.SafetyLabCRDT = {
     start: start, stop: stop, refresh: refresh, onLocalChange: onLocalChange, enabled: flagOn, adoptModel: adoptModel,
-    status: function () { return { flag: flagOn(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId }; },
+    noteSnapshotVersion: noteSnapshotVersion, authoritative: authOn,
+    status: function () { return { flag: flagOn(), authoritative: authOn(), stamp: _stampGet(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId }; },
     _doc: function () { return ydoc; }
   };
 
