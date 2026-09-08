@@ -1728,7 +1728,7 @@ function refreshTopAllocatorReadout() {
     };
     const missionSourceLabel = sourceLabels[tc.missionSource] || '';
     const phaseChip = tc.hasFhaNormalization
-        ? `<span class="exposure-badge" style="background: rgba(10,132,255,0.16); color: #3D8BFF;" title="Exposure pulled from FHA phases: ${esc((tc.matchedPhases || []).join(', '))}">FHA-normalized · r = ${(tc.phaseRatio * 100).toFixed(2)}%</span>`
+        ? `<span class="exposure-badge" style="background: rgba(10,132,255,0.16); color: #6D7CF0;" title="Exposure pulled from FHA phases: ${esc((tc.matchedPhases || []).join(', '))}">FHA-normalized · r = ${(tc.phaseRatio * 100).toFixed(2)}%</span>`
         : `<span class="exposure-badge" style="background: var(--color-surface-2); color: var(--color-text-tertiary);">no phase restriction (r = 100%)</span>`;
     // Multi-line block so each quantity sits on its own row — easier to read at a glance.
     host.innerHTML =

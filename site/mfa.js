@@ -75,7 +75,7 @@
             'box-shadow:0 24px 64px rgba(0,0,0,.35);overflow:hidden;';
         return c;
     }
-    var BTN_PRIMARY = 'border:none;border-radius:9px;background:var(--color-accent,#0A63CC);color:#fff;font:inherit;font-weight:600;padding:9px 16px;cursor:pointer;font-size:13.5px;';
+    var BTN_PRIMARY = 'border:none;border-radius:9px;background:var(--color-accent,#4E63D8);color:#fff;font:inherit;font-weight:600;padding:9px 16px;cursor:pointer;font-size:13.5px;';
     var BTN_GHOST = 'border:1px solid var(--color-border-hair,rgba(0,0,0,.15));background:transparent;color:var(--color-text-secondary,#667085);border-radius:9px;padding:9px 14px;font:inherit;font-size:13.5px;cursor:pointer;';
     var CODE_INPUT = 'width:100%;box-sizing:border-box;margin-top:8px;padding:11px 13px;border:1px solid var(--color-border-hair,rgba(0,0,0,.18));border-radius:9px;font:inherit;font-size:20px;letter-spacing:6px;text-align:center;background:var(--color-surface-2,#fff);color:inherit;';
 

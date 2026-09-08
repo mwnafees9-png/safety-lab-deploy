@@ -34,7 +34,7 @@
     'use strict';
 
     // Fixed categorical palette (assigned by stable hash, never cycled).
-    const COLORS = ['#0A63CC', '#B34700', '#1B7F4B', '#7C3AED', '#B3005E', '#00707E'];
+    const COLORS = ['#4E63D8', '#B34700', '#1B7F4B', '#7C3AED', '#B3005E', '#00707E'];
     const CURSOR_MS = 150;      // cursor stream throttle
     let _chan = null, _state = {}, _tok = null, _lastCur = 0, _started = false;
 

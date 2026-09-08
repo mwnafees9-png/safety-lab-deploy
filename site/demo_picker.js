@@ -7,7 +7,7 @@
 
     var DEMOS = [
         {
-            id: 'k350', badge: 'Part 23 · Class III', accent: '#0A63CC',
+            id: 'k350', badge: 'Part 23 · Class III', accent: '#4E63D8',
             title: 'K350 Kestrel — Program Showcase',
             desc: 'The flagship worked example: every assessment threaded end to end, MAC rules compiled live to MF&MS trees, reliability (RAM), human factors and sign-offs. A King Air 350-class turboprop.',
             loader: 'loadSampleProject',

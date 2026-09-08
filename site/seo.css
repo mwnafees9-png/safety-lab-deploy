@@ -109,4 +109,4 @@ footer{margin-top:56px; border-top:1px solid var(--border-hair);
 body{font-family:var(--font-sans);}
 body::before{content:"";position:fixed;top:0;left:0;right:0;height:3px;background:var(--grad);z-index:2000;pointer-events:none;}
 .nav{background:rgba(247,244,236,0.88) !important;}
-a{color:#0A63CC;}
+a{color:#4E63D8;}

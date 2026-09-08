@@ -178,7 +178,7 @@
             const a = pos.get(e.from), b = pos.get(e.to);
             if (!a || !b) return;
             const onPath = sel && (e.from === sel || (reach && reach.has(e.from))) && reach && reach.has(e.to);
-            const color = onPath ? '#8E2A2A' : (e.kind === 'interface' ? '#0A63CC' : e.kind === 'provides' ? '#9A6200' : '#4A6741');
+            const color = onPath ? '#8E2A2A' : (e.kind === 'interface' ? '#4E63D8' : e.kind === 'provides' ? '#9A6200' : '#4A6741');
             const op = sel && !onPath ? 0.14 : 0.75;
             let x1, y1, x2, y2;
             if (e.kind === 'interface') {   // sys→sys: arc left of the column
@@ -286,7 +286,7 @@
             ' · drag to pan · ⌘/Ctrl+scroll to zoom · double-click to reset</span></div>' +
             _svgGraph(g) +
             '<div style="font-size:10.5px; color:var(--color-text-tertiary); font-family:var(--font-mono); margin-top:4px;">' +
-            '<span style="color:#9A6200;">━</span> provides · <span style="color:#4A6741;">━</span> feeds · <span style="color:#0A63CC;">━</span> interface · <span style="color:#8E2A2A;">━</span> selected cascade</div></div>';
+            '<span style="color:#9A6200;">━</span> provides · <span style="color:#4A6741;">━</span> feeds · <span style="color:#4E63D8;">━</span> interface · <span style="color:#8E2A2A;">━</span> selected cascade</div></div>';
 
         if (sel) {
             const casc = ceaCascade(sel, g);

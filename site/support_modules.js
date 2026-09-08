@@ -3023,7 +3023,7 @@ function renderGoldenThreadView(){
         const _ifaces = (typeof projectConfig !== 'undefined' && projectConfig && Array.isArray(projectConfig.interfaces)) ? projectConfig.interfaces : [];
         if (_ifaces.length) {
             const _sysNode = {}; graph.nodes.forEach(n => { if (n.kind === 'sys') _sysNode[String(n.id)] = n; });
-            const _IKC = { interface: '#0A63CC', functional: '#7c3aed', resource: '#d97706' };
+            const _IKC = { interface: '#4E63D8', functional: '#7c3aed', resource: '#d97706' };
             const _ov = g.append('g').attr('fill', 'none').attr('opacity', 0.8);
             _ifaces.forEach(i => {
                 const a = _sysNode[String(i.fromSystemId)], b = _sysNode[String(i.toSystemId)];

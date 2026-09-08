@@ -522,7 +522,7 @@ const getAllSysFha = () => systemsData.flatMap(s => s.fha);
 const getAllSysReq = () => systemsData.flatMap(s => s.req);
 
 const _DERIV_PALETTE = {
-    'top-level': { bg: 'rgba(0, 122, 255, 0.14)',  fg: 'var(--color-accent, #0A63CC)' },
+    'top-level': { bg: 'rgba(0, 122, 255, 0.14)',  fg: 'var(--color-accent, #4E63D8)' },
     'allocated': { bg: 'rgba(52, 199, 89, 0.14)',  fg: 'var(--sev-min-fg, #2db150)' },
     'derived':   { bg: 'rgba(94, 92, 230, 0.14)',  fg: '#5e5ce6' },
     'refined':   { bg: 'rgba(255, 149, 0, 0.14)',  fg: 'var(--sev-haz-fg, #c47100)' }
@@ -567,7 +567,7 @@ window.openSignoffPanel = async function (kind, id, systemId) {
     const staleBadge = _stale ? ('<div style="margin-top:8px;font-size:12px;font-weight:700;color:#b45309;background:#fdf4e7;border:1px solid #f0d9b5;border-radius:8px;padding:8px 10px;">⚠ This artifact has been EDITED since the last sign-off (' + esc(chain[chain.length - 1].stage) + ' by ' + esc(chain[chain.length - 1].signer) + '). The sign-off no longer reflects the current content — re-sign to re-attest.</div>') : '';
     const signArea = allDone
         ? '<div style="font-size:13px;color:#0a7f4f;font-weight:600;">All stages signed.</div>'
-        : '<label style="font-size:12px;color:#5b6675;">Sign as <b>' + esc(nextStage) + '</b> — your name:</label><div style="display:flex;gap:8px;margin-top:5px;"><input id="signoff-name" type="text" value="' + esc(_signoffReviewerName()) + '" style="flex:1;border:1px solid #d8dee8;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;"><button id="signoff-go" style="border:none;border-radius:8px;background:#0A63CC;color:#fff;font:inherit;font-weight:600;padding:8px 14px;cursor:pointer;">Sign</button></div><div style="font-size:11px;color:#5b6675;margin-top:6px;">Signing attests this artifact at the "' + esc(nextStage) + '" stage — recorded with a tamper-evident timestamp + hash.</div>';
+        : '<label style="font-size:12px;color:#5b6675;">Sign as <b>' + esc(nextStage) + '</b> — your name:</label><div style="display:flex;gap:8px;margin-top:5px;"><input id="signoff-name" type="text" value="' + esc(_signoffReviewerName()) + '" style="flex:1;border:1px solid #d8dee8;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;"><button id="signoff-go" style="border:none;border-radius:8px;background:#4E63D8;color:#fff;font:inherit;font-weight:600;padding:8px 14px;cursor:pointer;">Sign</button></div><div style="font-size:11px;color:#5b6675;margin-top:6px;">Signing attests this artifact at the "' + esc(nextStage) + '" stage — recorded with a tamper-evident timestamp + hash.</div>';
     ov.innerHTML = '<div style="background:#fff;color:#1a2230;border-radius:14px;width:min(520px,96vw);max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.3);padding:20px 22px;">'
         + '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-size:16px;font-weight:700;color:#0a1f44;">Sign-off chain</div><button id="signoff-x" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#5b6675;">×</button></div>'
         + '<div style="font-size:12px;color:#5b6675;margin:2px 0 12px;">' + esc(String(kind)) + ' · ' + esc(String(id)) + (systemId ? (' · ' + esc(String(systemId))) : '') + '</div>'

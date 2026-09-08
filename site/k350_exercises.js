@@ -174,7 +174,7 @@
         btn.id = 'exq-launch';
         btn.type = 'button';
         btn.textContent = '🎓 K350 exercise track — six hands-on drills, checked for real';
-        btn.style.cssText = 'display:block; width:100%; margin-top:8px; font-size:11.5px; font-weight:700; padding:7px 10px; cursor:pointer; border:1px solid var(--color-border-strong,#B9C2D0); background:var(--color-surface-2,#F3F5F9); color:var(--color-accent,#0A63CC);';
+        btn.style.cssText = 'display:block; width:100%; margin-top:8px; font-size:11.5px; font-weight:700; padding:7px 10px; cursor:pointer; border:1px solid var(--color-border-strong,#B9C2D0); background:var(--color-surface-2,#F3F5F9); color:var(--color-accent,#4E63D8);';
         btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); open(); });
         body.appendChild(btn);
     }

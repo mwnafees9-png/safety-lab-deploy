@@ -655,17 +655,17 @@ function openPasteReviewModal(branchRoot) {
 
     const rowHtml = rows.map(r => {
         const indent = '&nbsp;'.repeat(r.depth * 3);
-        const tag = (r.stricter === 'source') ? '<span style="color:#3D8BFF;font-weight:600;">source kept</span>'
+        const tag = (r.stricter === 'source') ? '<span style="color:#6D7CF0;font-weight:600;">source kept</span>'
                  : (r.stricter === 'destination') ? '<span style="color:#34c759;font-weight:600;">destination kept</span>'
                  : (r.stricter === 'equal') ? '<span style="color:var(--color-text-secondary);">equal</span>'
-                 : (r.stricter === 'source-only') ? '<span style="color:#3D8BFF;">source only</span>'
+                 : (r.stricter === 'source-only') ? '<span style="color:#6D7CF0;">source only</span>'
                  : '<span style="color:var(--color-text-tertiary);">—</span>';
         const dalCmp = (r.snapDAL && r.naturalDAL && r.snapDAL !== r.naturalDAL)
             ? (r.snapDAL + ' / ' + r.naturalDAL)
             : (r.snapDAL || r.naturalDAL || '—');
         return [
             '<tr>',
-            '<td style="padding:6px 8px;font-family:ui-monospace,Menlo,monospace;font-size:12px;">' + indent + esc(r.label) + (r.isBranchRoot ? ' <span style="font-size:10px;background:#3D8BFF;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">branch root</span>' : '') + '</td>',
+            '<td style="padding:6px 8px;font-family:ui-monospace,Menlo,monospace;font-size:12px;">' + indent + esc(r.label) + (r.isBranchRoot ? ' <span style="font-size:10px;background:#6D7CF0;color:#fff;padding:1px 5px;border-radius:3px;margin-left:4px;">branch root</span>' : '') + '</td>',
             '<td style="padding:6px 8px;text-align:right;font-family:ui-monospace,Menlo,monospace;font-size:12px;">' + _pasteReviewFmtP(r.snapProb) + '</td>',
             '<td style="padding:6px 8px;text-align:right;font-family:ui-monospace,Menlo,monospace;font-size:12px;">' + _pasteReviewFmtP(r.naturalProb) + '</td>',
             '<td style="padding:6px 8px;text-align:center;">' + tag + '</td>',
@@ -685,7 +685,7 @@ function openPasteReviewModal(branchRoot) {
         '  </div>',
         '  <div style="padding:14px 22px;border-bottom:1px solid var(--color-border-thin,#e5e5e7);display:flex;gap:18px;font-size:12px;color:var(--color-text-secondary,#666);">',
         '    <span><strong>' + rows.length + '</strong> pasted nodes</span>',
-        '    <span style="color:#3D8BFF;"><strong>' + totalStrictFromSrc + '</strong> kept source</span>',
+        '    <span style="color:#6D7CF0;"><strong>' + totalStrictFromSrc + '</strong> kept source</span>',
         '    <span style="color:#34c759;"><strong>' + totalStrictFromDst + '</strong> kept destination</span>',
         '  </div>',
         '  <div style="padding:14px 22px;border-bottom:1px solid var(--color-border-thin,#e5e5e7);">',
@@ -728,7 +728,7 @@ function openPasteReviewModal(branchRoot) {
         '    <p style="margin:0;font-size:11px;color:var(--color-text-tertiary,#888);">Default behavior keeps the conservative merge. Revert strips the source snapshots from this pasted branch — destination reallocates natural targets and any sibling rebalance reverses.</p>',
         '    <div style="display:flex;gap:8px;">',
         '      <button onclick="revertPasteToNatural()" style="background:transparent;border:1px solid var(--color-border-thin,#e5e5e7);color:var(--color-text-primary,#111);padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;">Revert to natural</button>',
-        '      <button onclick="acceptPasteReview()" style="background:#3D8BFF;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;">Accept merge</button>',
+        '      <button onclick="acceptPasteReview()" style="background:#6D7CF0;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;">Accept merge</button>',
         '    </div>',
         '  </div>',
         '</div>'
@@ -6099,10 +6099,10 @@ function _refreshAiAllowance(){
     if (fill) {
         fill.style.width = (unlimited ? 100 : pct).toFixed(1) + '%';
         // Calm "all-clear" gradient when uncapped; warning gradient as a capped bar fills.
-        if (unlimited)     fill.style.background = 'linear-gradient(90deg, #34c759, #0A63CC)';
+        if (unlimited)     fill.style.background = 'linear-gradient(90deg, #34c759, #4E63D8)';
         else if (pct > 90) fill.style.background = 'linear-gradient(90deg, #ff9500, #ff3b30)';
         else if (pct > 70) fill.style.background = 'linear-gradient(90deg, #6366f1, #ff9500)';
-        else               fill.style.background = 'linear-gradient(90deg, #6366f1, #0A63CC)';
+        else               fill.style.background = 'linear-gradient(90deg, #6366f1, #4E63D8)';
     }
     if (txt) txt.textContent = unlimited
         ? (Math.round(u.used).toLocaleString() + ' tokens used this month · Unlimited')
@@ -6755,7 +6755,7 @@ function getNodeColors(d) {
         pand:     { fill: '#ff6482', stroke: '#e8456a' },     // pink
         spare:    { fill: '#5ac8fa', stroke: '#3aa7d8' },     // teal-cyan
         fdep:     { fill: '#bf5af2', stroke: '#9d3fd0' },     // magenta-purple
-        and:      { fill: '#0A63CC', stroke: '#084FA3' },     // iOS blue
+        and:      { fill: '#4E63D8', stroke: '#3D4FB0' },     // iOS blue
         or:       { fill: '#ff9500', stroke: '#e08400' },     // iOS orange
         xor:      { fill: '#ff9500', stroke: '#e08400' },
         voting:   { fill: '#5856d6', stroke: '#403fb8' },     // indigo
@@ -6773,7 +6773,7 @@ function getNodeColors(d) {
         pand:     { fill: '#ff7a96', stroke: '#ffa3b6' },
         spare:    { fill: '#64d2ff', stroke: '#8ee0ff' },
         fdep:     { fill: '#d18cf9', stroke: '#e2b3fb' },
-        and:      { fill: '#3D8BFF', stroke: '#66A5FF' },
+        and:      { fill: '#6D7CF0', stroke: '#8A97F5' },
         or:       { fill: '#ff9f0a', stroke: '#ffba47' },
         xor:      { fill: '#ff9f0a', stroke: '#ffba47' },
         voting:   { fill: '#7d7aff', stroke: '#9d9bff' },
@@ -7802,7 +7802,7 @@ function _acctOpenInRow(esc) {
         const href = isDesk ? openInWebLink() : openInDesktopLink();
         if (!href) return '';
         const label = isDesk ? 'Open this project on the web' : 'Open this project in the desktop app';
-        return '<div style="font-size:12px;"><a id="acct-open-in" href="' + esc(href) + '" target="_blank" rel="noopener" style="color:var(--color-accent,#0A63CC);text-decoration:none;font-weight:600;">' + label + ' ↗</a></div>';
+        return '<div style="font-size:12px;"><a id="acct-open-in" href="' + esc(href) + '" target="_blank" rel="noopener" style="color:var(--color-accent,#4E63D8);text-decoration:none;font-weight:600;">' + label + ' ↗</a></div>';
     } catch (_) { return ''; }
 }
 // ---- profile picture (6 Sep 2026) ----------------------------------------------------
@@ -7914,7 +7914,7 @@ function openAccountPanel() {
       +   '</div>'
       +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 18px;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.1));">'
       +     '<button type="button" id="acct-signout" style="border:1px solid var(--color-border-hair,rgba(0,0,0,.15));background:transparent;color:var(--color-text-secondary,#667085);border-radius:9px;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer;">Sign out</button>'
-      +     '<button type="button" id="acct-save" style="border:none;border-radius:9px;background:var(--color-accent,#0A63CC);color:#fff;font:inherit;font-weight:600;padding:8px 18px;cursor:pointer;">Save</button>'
+      +     '<button type="button" id="acct-save" style="border:none;border-radius:9px;background:var(--color-accent,#4E63D8);color:#fff;font:inherit;font-weight:600;padding:8px 18px;cursor:pointer;">Save</button>'
       +   '</div>'
       + '</div>';
     document.body.appendChild(ov);
@@ -8064,7 +8064,7 @@ function _wsRequirePassword(actionLabel){
             +'<div id="ws-pw-msg" style="font-size:12px;color:#b3261e;min-height:14px;margin-top:6px;"></div></div>'
             +'<div style="display:flex;justify-content:flex-end;gap:8px;padding:10px 18px;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.1));">'
             +'<button id="ws-pw-cancel" type="button" style="border:1px solid var(--color-border-hair,rgba(0,0,0,.15));background:transparent;color:inherit;border-radius:9px;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer;">Cancel</button>'
-            +'<button id="ws-pw-ok" type="button" style="border:none;border-radius:9px;background:var(--color-accent,#0A63CC);color:#fff;font:inherit;font-weight:600;font-size:13px;padding:8px 16px;cursor:pointer;">Confirm</button>'
+            +'<button id="ws-pw-ok" type="button" style="border:none;border-radius:9px;background:var(--color-accent,#4E63D8);color:#fff;font:inherit;font-weight:600;font-size:13px;padding:8px 16px;cursor:pointer;">Confirm</button>'
             +'</div></div>';
         document.body.appendChild(ov);
         const inp=document.getElementById('ws-pw-input'); try{ inp.focus(); }catch(_){}
@@ -8102,7 +8102,7 @@ function openWorkspacesPanel(){
         +'<div style="font-weight:600;font-size:13px;margin-bottom:8px;">Areas</div><div id="ws-areas"></div>'
         +'<div style="font-weight:600;font-size:13px;margin:16px 0 8px;">Activity <span style="font-weight:400;color:var(--color-text-secondary,#667085);font-size:11.5px;">— who changed what, when</span></div><div id="ws-activity"></div>'
         +'</div>'
-        +'<div style="padding:11px 18px;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.1));display:flex;justify-content:flex-end;"><button type="button" id="ws-done" style="border:none;border-radius:9px;background:var(--color-accent,#0A63CC);color:#fff;font:inherit;font-weight:600;padding:8px 18px;cursor:pointer;">Done</button></div>'
+        +'<div style="padding:11px 18px;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.1));display:flex;justify-content:flex-end;"><button type="button" id="ws-done" style="border:none;border-radius:9px;background:var(--color-accent,#4E63D8);color:#fff;font:inherit;font-weight:600;padding:8px 18px;cursor:pointer;">Done</button></div>'
         +'</div>';
     document.body.appendChild(ov);
     const close=function(){ try{ov.remove();}catch(_){} try{ if(typeof renderSystemDirectory==='function') renderSystemDirectory(); }catch(_){} try{ _wsApplyReadonlyNotice(_wsActiveArea.scope, _wsActiveArea.sysId); }catch(_){} };
@@ -11309,7 +11309,7 @@ function _aiBusyEnsureStyle() {
         '.ai-busy-elapsed{opacity:.55;font-variant-numeric:tabular-nums;margin-left:6px;font-size:11px}' +
         '.ai-busy-quip{font-size:11px;opacity:.72;font-style:italic;animation:slAiQuip 5s ease-in-out infinite}' +
         '@media (prefers-reduced-motion: reduce){.ai-busy-quip{animation:none;opacity:.72}.ai-busy-spinner{animation-duration:2.4s}}' +
-        '.ai-busy-spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--color-border-hair,#d0d5dd);border-top-color:var(--color-accent,#3D8BFF);display:inline-block;animation:slAiSpin .7s linear infinite;flex:none;margin-right:9px;vertical-align:middle}' +
+        '.ai-busy-spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--color-border-hair,#d0d5dd);border-top-color:var(--color-accent,#6D7CF0);display:inline-block;animation:slAiSpin .7s linear infinite;flex:none;margin-right:9px;vertical-align:middle}' +
         '.ai-busy-count{opacity:.65;font-size:11px;margin-left:7px}';
     document.head.appendChild(st);
 }

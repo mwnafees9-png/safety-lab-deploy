@@ -3483,7 +3483,7 @@ function _renderHistoryTab(body, subtitleEl) {
         if (a === 'restore') return '#34c759';
         if (a === 'archive') return '#ff9500';
         if (a === 'auto-update') return '#5e5ce6';
-        return '#0A63CC';
+        return '#4E63D8';
     };
     let html = '<div class="reqhist-timeline">';
     history.forEach((entry, idx) => {

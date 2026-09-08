@@ -39,7 +39,7 @@
 // If you don't see this exact version in console after a hard refresh, you're
 // still running cached code — close all tabs of this file and reopen.
 const SAFETY_LAB_VERSION = 'p56.5 (2026-05-26) — Phase 56.13 Paywall enforcement. Must subscribe to access (Electra and other comped domains stay free Pro+). Default license tier changed from "pro-plus" to "unpaid"; after the existing 10-day trial expires, isPaywalled() returns true and a full-screen Subscribe modal blocks the app. Existing signups (signupDate < 2026-05-26) get a 30-day grandfather window granting Pro+ access from enforcement start; a persistent orange banner counts down days remaining. EDU tier repriced from free to $49/month. Trial users see a yellow banner counting down trial days. Signup date stamped automatically on first sign-in via setSignupEmail. Plus prior: p56.3 Reports nav dropdown, p56.10 AI bulk-draft review, p56.1 section editor, p56.0 Reports module + 9 ARP 4761A artifacts.';
-try { console.log('%c[Safety Lab Aero] ' + SAFETY_LAB_VERSION, 'color: #0A63CC; font-weight: 600;'); } catch(_) {}
+try { console.log('%c[Safety Lab Aero] ' + SAFETY_LAB_VERSION, 'color: #4E63D8; font-weight: 600;'); } catch(_) {}
 // [P2 batch 5] L43-43 moved verbatim to bindings_modules.js
 let selectedNodeData = null;
 
@@ -6843,7 +6843,7 @@ window._bulkSel = new Set();
             '.sl-tpl-modal { background: var(--color-surface-1, #fff); color: var(--color-text-primary, #000); border-radius: 14px; box-shadow: 0 28px 80px rgba(0,0,0,0.45); width: 100%; max-width: 1100px; display: flex; flex-direction: column; overflow: hidden; }',
             '.sl-tpl-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--color-border-thin, #e5e7eb); }',
             '.sl-tpl-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; }',
-            '.sl-tpl-pill { background: linear-gradient(135deg, #0A63CC 0%, #af52de 100%); color: #fff; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; letter-spacing: 0.2px; }',
+            '.sl-tpl-pill { background: linear-gradient(135deg, #4E63D8 0%, #af52de 100%); color: #fff; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; letter-spacing: 0.2px; }',
             '.sl-tpl-filename { font-weight: 500; color: var(--color-text-secondary, #555); }',
             '.sl-tpl-icon-btn { background: transparent; border: 0; font-size: 22px; cursor: pointer; color: var(--color-text-secondary, #666); padding: 4px 10px; border-radius: 8px; }',
             '.sl-tpl-icon-btn:hover { background: var(--color-surface-2, #f3f4f6); color: var(--color-text-primary, #000); }',
@@ -6851,14 +6851,14 @@ window._bulkSel = new Set();
             '.sl-tpl-toolbar { display: flex; align-items: center; gap: 4px; padding: 10px 16px; border-bottom: 1px solid var(--color-border-thin, #e5e7eb); background: var(--color-surface-2, #f9fafb); flex-wrap: wrap; }',
             '.sl-tpl-tb-btn { background: var(--color-surface-1, #fff); border: 1px solid var(--color-border-thin, #e5e7eb); color: var(--color-text-primary, #000); padding: 6px 12px; border-radius: 7px; cursor: pointer; font-size: 13px; min-width: 32px; }',
             '.sl-tpl-tb-btn:hover { background: var(--color-surface-3, #f3f4f6); }',
-            '.sl-tpl-tb-btn.is-active { background: rgba(0,122,255,0.12); border-color: rgba(0,122,255,0.4); color: #0A63CC; }',
+            '.sl-tpl-tb-btn.is-active { background: rgba(0,122,255,0.12); border-color: rgba(0,122,255,0.4); color: #4E63D8; }',
             '.sl-tpl-tb-btn b, .sl-tpl-tb-btn i, .sl-tpl-tb-btn u { font-size: 13px; }',
             '.sl-tpl-tb-sep { width: 1px; height: 22px; background: var(--color-border-thin, #e5e7eb); margin: 0 4px; }',
             '.sl-tpl-tb-spacer { flex: 1; }',
             '.sl-tpl-tb-ghost { background: transparent; border-color: transparent; color: var(--color-text-secondary, #777); }',
 
             '.sl-tpl-token-picker { position: relative; }',
-            '.sl-tpl-tb-token-btn { background: linear-gradient(135deg, rgba(0,122,255,0.12), rgba(175,82,222,0.12)); color: #0A63CC; border: 1px solid rgba(0,122,255,0.3); padding: 6px 12px; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500; }',
+            '.sl-tpl-tb-token-btn { background: linear-gradient(135deg, rgba(0,122,255,0.12), rgba(175,82,222,0.12)); color: #4E63D8; border: 1px solid rgba(0,122,255,0.3); padding: 6px 12px; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500; }',
             '.sl-tpl-tb-token-btn:hover { background: linear-gradient(135deg, rgba(0,122,255,0.2), rgba(175,82,222,0.2)); }',
             '.sl-tpl-caret { margin-left: 4px; font-size: 10px; }',
             '.sl-tpl-token-menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 320px; max-height: 380px; overflow: auto; background: var(--color-surface-1, #fff); border: 1px solid var(--color-border-thin, #d5d5d5); border-radius: 10px; box-shadow: 0 14px 40px rgba(0,0,0,0.18); padding: 8px; z-index: 10; }',
@@ -6885,9 +6885,9 @@ window._bulkSel = new Set();
             '.sl-tpl-canvas strong, .sl-tpl-canvas b { font-weight: 700; }',
             '.sl-tpl-canvas em, .sl-tpl-canvas i { font-style: italic; }',
 
-            '.sl-tpl-chip { display: inline-block; background: linear-gradient(135deg, rgba(0,122,255,0.14), rgba(175,82,222,0.14)); border: 1px solid rgba(0,122,255,0.35); color: #0A63CC; padding: 1px 7px; margin: 0 1px; border-radius: 5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.5; white-space: nowrap; user-select: all; cursor: default; }',
+            '.sl-tpl-chip { display: inline-block; background: linear-gradient(135deg, rgba(0,122,255,0.14), rgba(175,82,222,0.14)); border: 1px solid rgba(0,122,255,0.35); color: #4E63D8; padding: 1px 7px; margin: 0 1px; border-radius: 5px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.5; white-space: nowrap; user-select: all; cursor: default; }',
             '.sl-tpl-chip:hover { background: linear-gradient(135deg, rgba(0,122,255,0.22), rgba(175,82,222,0.22)); }',
-            '.sl-tpl-mini-chip { background: rgba(0,122,255,0.12); border: 1px solid rgba(0,122,255,0.3); color: #0A63CC; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }',
+            '.sl-tpl-mini-chip { background: rgba(0,122,255,0.12); border: 1px solid rgba(0,122,255,0.3); color: #4E63D8; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }',
 
             '.sl-tpl-footer { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-top: 1px solid var(--color-border-thin, #e5e7eb); background: var(--color-surface-2, #f9fafb); gap: 16px; }',
             '.sl-tpl-help-text { font-size: 12px; color: var(--color-text-secondary, #666); flex: 1; }',
@@ -6895,7 +6895,7 @@ window._bulkSel = new Set();
             '.sl-tpl-btn { padding: 9px 16px; border-radius: 8px; border: 1px solid var(--color-border-thin, #d5d5d5); background: var(--color-surface-1, #fff); color: var(--color-text-primary, #000); cursor: pointer; font-size: 13px; font-weight: 500; }',
             '.sl-tpl-btn:hover { background: var(--color-surface-2, #f3f4f6); }',
             '.sl-tpl-btn:disabled { opacity: 0.5; cursor: wait; }',
-            '.sl-tpl-btn-primary { background: linear-gradient(135deg, #0A63CC 0%, #5856d6 100%); color: #fff; border: 0; }',
+            '.sl-tpl-btn-primary { background: linear-gradient(135deg, #4E63D8 0%, #5856d6 100%); color: #fff; border: 0; }',
             '.sl-tpl-btn-primary:hover { background: linear-gradient(135deg, #006ce0 0%, #4e4bc7 100%); }',
             '.sl-tpl-btn-ghost { background: transparent; }',
 
@@ -6981,7 +6981,7 @@ window._bulkSel = new Set();
                 'margin-top:10px',
                 'padding:9px 14px',
                 'background:linear-gradient(135deg, rgba(0,122,255,0.14), rgba(175,82,222,0.14))',
-                'color:#0A63CC',
+                'color:#4E63D8',
                 'border:1px solid rgba(0,122,255,0.35)',
                 'border-radius:8px',
                 'cursor:pointer',
@@ -7129,7 +7129,7 @@ window._bulkSel = new Set();
         if (allDone) {
             el.innerHTML = head + '<div class="sl-onramp-body"><div class="sl-onramp-done-banner"><b>✓ You traced the thread.</b>'
                 + 'Functions → hazards → systems → fault tree → requirements are all linked. Open the '
-                + '<a href="#" data-go="golden-thread" style="color:var(--color-accent,#0A63CC);font-weight:600;">Golden Thread</a> to see it end to end.</div></div>';
+                + '<a href="#" data-go="golden-thread" style="color:var(--color-accent,#4E63D8);font-weight:600;">Golden Thread</a> to see it end to end.</div></div>';
             _wire(el); return;
         }
         var body = '';

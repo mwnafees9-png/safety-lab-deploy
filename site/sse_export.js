@@ -137,7 +137,7 @@
 
     // ---------------------------------------------------------------- page
     const _KIND_STYLE = { condition: ['#8E2A2A', 'rgba(255,59,48,0.10)'], latent: ['#9A6200', 'rgba(255,149,0,0.11)'],
-        dispatch: ['#0A63CC', 'rgba(10,99,204,0.10)'], assumption: ['#7c3aed', 'rgba(124,58,237,0.10)'], fracas: ['#4A6741', 'rgba(74,103,65,0.12)'] };
+        dispatch: ['#4E63D8', 'rgba(78, 99, 216,0.10)'], assumption: ['#7c3aed', 'rgba(124,58,237,0.10)'], fracas: ['#4A6741', 'rgba(74,103,65,0.12)'] };
 
     function renderSsePage() {
         const host = document.getElementById('sse-host');
