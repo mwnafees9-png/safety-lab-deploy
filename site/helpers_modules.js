@@ -3548,6 +3548,13 @@ function renderCockpitPage(key) {
 }
 
 function updateDashboard() {
+    // GTA-style lazy compute (8 Sep 2026): the dashboard is PURE DISPLAY — recomputed
+    // from the live stores every time it is shown (switchTab('dashboard') calls this).
+    // 20 call sites fire it on every edit even when another tab is on screen, writing to
+    // hidden DOM for nothing. Skip unless the dashboard is the visible tab; it always
+    // recomputes fresh on entry, so nothing can go stale. Unknown tab (pre-first-switch)
+    // falls through and computes.
+    try { if (typeof window !== 'undefined' && window._slCurrentTab && window._slCurrentTab !== 'dashboard') return; } catch (_) {}
     try {
         // Phase 53.70 — render the ARP 4761A process strip first so it lands above
         // the headline tiles and worklist.
@@ -11476,8 +11483,12 @@ function _maybeDecompress(stored) {
 }
 
 function _projectHealthLevel(bytes, rows) {
-    if (bytes >= _PROJECT_SIZE_CRIT_BYTES) return { level: 'crit', msg: 'This project is very large (' + (bytes / 1e6).toFixed(1) + ' MB). It is safely stored, but consider splitting it or capturing a baseline — the UI may slow down.' };
-    if (bytes >= _PROJECT_SIZE_WARN_BYTES || (rows | 0) >= _PROJECT_ROWS_WARN) return { level: 'warn', msg: 'This project is getting large (' + (bytes / 1e6).toFixed(1) + ' MB' + (rows ? ', ' + rows + ' rows' : '') + '). Safely stored; consider a baseline or split for performance.' };
+    // 8 Sep 2026 — the project-size nag is RETIRED (Waqas: projects will be enormous;
+    // "I don't ever wanna see that toast again"). The old 4.5 MB threshold reflected a
+    // localStorage-mirror limit, not the cloud save (gzip-compressed, stored in Postgres,
+    // which handles large projects fine). Large projects are handled the right way now:
+    // lazy compute (only the on-screen analysis calculates) + compression + the cloud DB
+    // as source of truth. Always OK; no size toast ever.
     return { level: 'ok', msg: '' };
 }
 function _projectRowCount() {
