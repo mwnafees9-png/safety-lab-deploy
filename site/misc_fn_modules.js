@@ -166,7 +166,32 @@ function isCompedEmail(email) {
         const re = new RegExp('@' + COMPED_FREE_DOMAINS[i].replace(/\./g, '\\.') + '$');
         if (re.test(e)) return true;
     }
+    // Staff domains comped at enterprise are ALSO comped emails.
+    try {
+        if (typeof COMPED_ENTERPRISE_DOMAINS !== 'undefined') {
+            for (let i = 0; i < COMPED_ENTERPRISE_DOMAINS.length; i++) {
+                const re = new RegExp('@' + COMPED_ENTERPRISE_DOMAINS[i].replace(/\./g, '\\.') + '$');
+                if (re.test(e)) return true;
+            }
+        }
+    } catch(_) {}
     return false;
+}
+// The tier a comped account is granted. Staff domains (COMPED_ENTERPRISE_DOMAINS)
+// are comped at the top tier; every other comped account gets Pro+. Returns null
+// when the address is not comped at all (block list already handled by isCompedEmail).
+function compedTierFor(email) {
+    if (typeof isCompedEmail !== 'function' || !isCompedEmail(email)) return null;
+    const e = String(email || '').trim().toLowerCase();
+    try {
+        if (typeof COMPED_ENTERPRISE_DOMAINS !== 'undefined') {
+            for (let i = 0; i < COMPED_ENTERPRISE_DOMAINS.length; i++) {
+                const re = new RegExp('@' + COMPED_ENTERPRISE_DOMAINS[i].replace(/\./g, '\\.') + '$');
+                if (re.test(e)) return 'enterprise';
+            }
+        }
+    } catch(_) {}
+    return 'pro-plus';
 }
 
 function showUpgradeRequiredToast(feature, requiredTier) {

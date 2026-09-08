@@ -4006,6 +4006,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script>window.SL_SHOWCASE_KESTREL25_SRC = 'demo_showcase_kestrel25.js?v=1';</script>
     <script>window.SL_SHOWCASE_HL1_SRC = 'demo_showcase_hl1.js?v=6';</script>
     <script>window.SL_SHOWCASE_HALCYON_SRC = 'demo_showcase_halcyon.js?v=5';</script>
+    <script>window.SL_SHOWCASE_VAYU_SRC = 'demo_showcase_vayu.js?v=1';</script>
     <!-- MFA enforcement master switch — set false to drop MFA (no challenge, no forced enrollment). -->
     <!-- #19 — shared cut-set engine (single source for the page + the cut-set Web Worker). Must load before safety_lab.js. -->
     <!-- ENG-2 phase 1 — shared table pagination (50/page default; honesty label; display-lane only). Loads before every consumer. -->
@@ -4066,16 +4067,16 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.31" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.91" defer></script>
+    <script src="helpers_modules.js?v=2.92" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
     <script src="severity_axes.js?v=1.3" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.1" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.39" defer></script>
+    <script src="bindings_modules.js?v=1.40" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.56" defer></script>
-    <script src="safety_lab.js?v=65.52" defer></script>
+    <script src="misc_fn_modules.js?v=66.57" defer></script>
+    <script src="safety_lab.js?v=65.53" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4184,7 +4185,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Recovery ring + session resume (born modular; rides the autosave cadence). -->
     <script src="session_resume.js?v=1.3" defer></script>
     <!-- Continuous cloud autosave + first-edit project provisioning (born modular; wraps _writeAutosave). -->
-    <script src="cloud_sync.js?v=2.0" defer></script>
+    <script src="cloud_sync.js?v=2.1" defer></script>
     <!-- ReqIF import — Polarion et al. (born modular; own XML parser; idempotent). -->
     <script src="reqif_import.js?v=1.2" defer></script>
     <!-- M8 — status-back: verdicts return to Jama/Polarion/DOORS via ReqIF. -->
@@ -4265,8 +4266,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="demo_kit.js?v=2" defer></script>
     <script src="hl1_showcase.js?v=6" defer></script>
     <script src="halcyon_showcase.js?v=5" defer></script>
-    <script src="demo_picker.js?v=4" defer></script>
-    <script src="first_run.js?v=1" defer></script>
+    <script src="vayu_showcase.js?v=1" defer></script>
+    <script src="demo_picker.js?v=5" defer></script>
+    <script src="first_run.js?v=2" defer></script>
     <script src="continue_session.js?v=1.0" defer></script>
     <script src="stpa_panel.js?v=1.4" defer></script>
     <script src="stpa_report.js?v=1.2" defer></script>
@@ -4388,6 +4390,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          Loads AFTER program_plan.js (wraps renderScopeSection) and numbering_ui.js. -->
     <script src="numbering_plan.js?v=1.2" defer></script>
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
+    <!-- 8 Sep 2026: Microsoft SSO turned ON — Azure provider configured on the
+         Safety-Lab Supabase project (app "Safety Lab Aero – Web Sign-in",
+         client bb5194ab-9e8d-49e8-835a-4dbc26bd7467, any-tenant). This is the
+         single switch ms_sso.js and auth_gate.js ssoBlockHTML both read. -->
+    <script>window.SL_MS_SSO_ENABLED = true;</script>
     <script src="auth_gate.js?v=62.70" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the

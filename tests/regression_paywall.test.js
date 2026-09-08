@@ -53,5 +53,44 @@ check('comp block list paywalls a blocked address even at a comped domain',
   /COMPED_BLOCKED_EMAILS\s*=\s*\[[^\]]*ali\.salim@electra\.aero/.test(bindings) &&
   /COMPED_BLOCKED_EMAILS.*indexOf\(e\)\s*>=\s*0\)\s*return false/.test(misc));
 
+
+// ---- Enterprise comp for the staff domain (8 Sep 2026) ---------------------
+// The verdict must carry an enterprise comp tier through, and the default comp
+// (no compedTier) must still be Pro+ so partner orgs are unaffected.
+check('comped WITH compedTier=enterprise -> enterprise',
+  verdict({ comped:true, compedTier:'enterprise' }).tier === 'enterprise');
+check('comped WITHOUT a compedTier still -> pro-plus (partners unchanged)',
+  verdict({ comped:true }).tier === 'pro-plus');
+
+// Execute the ACTUAL shipped comp functions (isCompedEmail + compedTierFor) with
+// the ACTUAL shipped comp lists — no stubs, so a drift in either is caught here.
+const _b = bindings.slice(bindings.indexOf('const COMPED_FREE_DOMAINS'),
+                          bindings.indexOf('];', bindings.indexOf('const COMPED_FREE_EMAILS')) + 2);
+const _m = misc.slice(misc.indexOf('function _compEntryEmail'),
+                      misc.indexOf('function showUpgradeRequiredToast'));
+let compFns = { isCompedEmail: () => false, compedTierFor: () => null };
+try { compFns = new Function(_b + '\n' + _m + '\n return { isCompedEmail: isCompedEmail, compedTierFor: compedTierFor };')(); }
+catch (e) { check('comp functions eval', false, e.message); }
+const { isCompedEmail, compedTierFor } = compFns;
+
+check('staff domain @safetylabaero.com is comped', isCompedEmail('waqas.nafees@safetylabaero.com') === true);
+check('staff domain is comped at ENTERPRISE', compedTierFor('waqas.nafees@safetylabaero.com') === 'enterprise');
+check('any @safetylabaero.com address (not just the founder) is enterprise-comped',
+  compedTierFor('someone.else@safetylabaero.com') === 'enterprise');
+check('partner domain electra.aero stays comped at PRO-PLUS (not enterprise)',
+  isCompedEmail('eng@electra.aero') === true && compedTierFor('eng@electra.aero') === 'pro-plus');
+check('a non-comped address is not comped and has no comp tier',
+  isCompedEmail('random@gmail.com') === false && compedTierFor('random@gmail.com') === null);
+check('the block list still overrides the domain comp',
+  isCompedEmail('ali.salim@electra.aero') === false && compedTierFor('ali.salim@electra.aero') === null);
+
+// Wiring: the effective-tier + sync paths must honor compedTierFor, not hardcode pro-plus.
+check('getEffectiveTier resolves the comp tier via compedTierFor',
+  /compedTierFor\(email\)/.test(helpers) && /LICENSE_TIER_RANK\[want\]/.test(helpers));
+check('the server sync passes compedTier into the verdict',
+  /compedTier: compedTier/.test(helpers));
+check('window.compedTierFor is exported', /window\.compedTierFor\s*=\s*compedTierFor/.test(S('safety_lab.js')));
+
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exitCode = fail ? 1 : 0;

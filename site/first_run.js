@@ -13,7 +13,7 @@
 // underneath the gate, then liftGate() immediately stacks the EULA on top, and
 // the signup modal can queue 600 ms after that. The one automatic worked-example
 // offer in the product arrives buried under two or three overlays, on the single
-// load where it matters most. The richer four-demo chooser, openDemoPicker(),
+// load where it matters most. The richer five-demo chooser, openDemoPicker(),
 // is reachable only from a dropdown menu item and is never shown proactively.
 //
 // WHAT THIS DOES. Waits for the overlay stack to actually clear, re-checks that
@@ -147,7 +147,7 @@
             var btn = document.createElement('button');
             btn.id = 'sl-demo-launch';
             btn.type = 'button';
-            btn.textContent = '★ Load a demo project — four worked programmes';
+            btn.textContent = '★ Load a demo project — five worked programmes';
             btn.style.cssText = 'display:block; width:100%; margin-top:6px; font-size:11.5px; font-weight:700; padding:7px 10px; cursor:pointer; border:1px solid var(--color-border-strong,#B9C2D0); background:var(--color-surface-2,#F3F5F9); color:var(--color-accent,#4E63D8);';
             btn.addEventListener('click', function (e) {
                 e.preventDefault(); e.stopPropagation();

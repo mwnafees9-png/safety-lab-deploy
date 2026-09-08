@@ -227,6 +227,10 @@ const LICENSE_TIERS = ['edu', 'pro', 'pro-plus', 'enterprise'];
 const LICENSE_TIER_RANK = { 'edu': 0, 'pro': 1, 'pro-plus': 2, 'enterprise': 3 };
 
 const COMPED_FREE_DOMAINS = ['electra.aero'];
+// Staff domain — comped at the TOP tier (enterprise), not Pro+. Every
+// @safetylabaero.com address (8 Sep 2026, Waqas). isCompedEmail() also matches
+// these; compedTierFor() returns 'enterprise' for them.
+const COMPED_ENTERPRISE_DOMAINS = ['safetylabaero.com'];
 // Explicit block list — overrides ANY comp (domain or email). For a former
 // member of a comped partner org who should no longer get free access.
 const COMPED_BLOCKED_EMAILS = ['ali.salim@electra.aero'];

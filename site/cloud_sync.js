@@ -311,7 +311,7 @@
     // wrap now, and retry shortly for loaders defined by later-loading modules
     // Keep this list in step with DEMOS in demo_picker.js — a loader missing from
     // here provisions a junk cloud row the instant its showcase is opened.
-    var _DEMO_LOADERS = ['loadSampleProject', 'loadKestrelRj', 'loadSoraShowcase', 'loadHL1Demo', 'loadHalcyonDemo'];
+    var _DEMO_LOADERS = ['loadSampleProject', 'loadKestrelRj', 'loadSoraShowcase', 'loadHL1Demo', 'loadHalcyonDemo', 'loadVayuDemo'];
     // Defect 3 (spec 14 Aug, landed 30 Aug 2026) — plain FILE OPENS were missed.
     // loadProject (web file-input AND desktop File > Open via __slabLoadProjectJSON)
     // restored a snapshot while KEEPING _activeCloudProjectId, so the next 12 s

@@ -198,7 +198,8 @@ function getEffectiveTier() {
             // below the tier they actually hold — an enterprise/owner account stays
             // enterprise (otherwise the comp would silently cap it at Pro+).
             const held = getLicenseTier();
-            return (LICENSE_TIER_RANK[held] || 0) >= LICENSE_TIER_RANK['pro-plus'] ? held : 'pro-plus';
+            const want = ((typeof compedTierFor === 'function' && compedTierFor(email)) || 'pro-plus');
+            return (LICENSE_TIER_RANK[held] || 0) >= LICENSE_TIER_RANK[want] ? held : want;
         }
     } catch(_) {}
     if (isOnTrial()) return 'edu';
@@ -218,7 +219,7 @@ function getEffectiveTier() {
 function _slEntitlementVerdict(o) {
     o = o || {};
     if (o.activeLicense) return { paywalled: false, tier: o.licensePlan || 'pro-plus' };
-    if (o.comped)        return { paywalled: false, tier: 'pro-plus' };
+    if (o.comped)        return { paywalled: false, tier: o.compedTier || 'pro-plus' };
     if (o.academic)      return { paywalled: false, tier: 'edu' };
     if (o.onTrial)       return { paywalled: false, tier: 'edu' };
     return { paywalled: true, tier: 'unpaid' };
@@ -7304,7 +7305,7 @@ function _onSupabaseSignedIn(user) {
         // Provisional tier from the email class (instant, no round-trip). The authoritative
         // tier comes from the license_tokens.plan lookup below and overrides this.
         if (typeof isCompedEmail === 'function' && isCompedEmail(email)) {
-            if (typeof setLicenseTier === 'function') setLicenseTier('pro-plus');
+            if (typeof setLicenseTier === 'function') setLicenseTier(((typeof compedTierFor === 'function' && compedTierFor(email)) || 'pro-plus'));
         } else if (typeof isEduEmail === 'function' && isEduEmail(email)) {
             if (typeof setLicenseTier === 'function') setLicenseTier('edu');
         } else {
@@ -7337,11 +7338,12 @@ function _onSupabaseSignedIn(user) {
                     const nowMs = Date.now();
                     const activeLicense = !!(lic && lic.plan && !(lic.expires_at && new Date(lic.expires_at).getTime() <= nowMs));
                     const comped   = (typeof isCompedEmail === 'function') && isCompedEmail(email);
+                    const compedTier = (typeof compedTierFor === 'function') ? compedTierFor(email) : null;
                     const academic = (typeof isEduEmail === 'function') && isEduEmail(email);
                     const trialEndsAt = (usr && usr.trial_ends_at) ? new Date(usr.trial_ends_at).getTime() : null;
                     const onTrial = (trialEndsAt != null) && (trialEndsAt > nowMs);
                     const verdict = (typeof _slEntitlementVerdict === 'function')
-                        ? _slEntitlementVerdict({ activeLicense: activeLicense, licensePlan: (lic && lic.plan) || null, comped: comped, academic: academic, onTrial: onTrial })
+                        ? _slEntitlementVerdict({ activeLicense: activeLicense, licensePlan: (lic && lic.plan) || null, comped: comped, compedTier: compedTier, academic: academic, onTrial: onTrial })
                         : { paywalled: false, tier: null };
                     if (verdict.paywalled) {
                         if (typeof endTrial === 'function') endTrial();
@@ -7617,7 +7619,7 @@ async function submitSignup() {
     try { endTrial(); } catch(_) {}
     let landed = '';
     if (isCompedEmail(email)) {
-        setLicenseTier('pro-plus');
+        setLicenseTier(((typeof compedTierFor === 'function' && compedTierFor(email)) || 'pro-plus'));
         landed = 'welcome aboard';
     } else if (isEduEmail(email)) {
         setLicenseTier('edu');

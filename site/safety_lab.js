@@ -499,6 +499,7 @@ window.isEduEmail = isEduEmail;
 // [P2 batch 6] L546-576 moved verbatim to misc_fn_modules.js
 window.isElectraEmail = isElectraEmail;
 window.isCompedEmail = isCompedEmail;
+window.compedTierFor = compedTierFor;
 
 // Signup persistence — separate from license tier so the signup flow can decide the tier
 // after seeing the email. The signup record itself is just identity (email/name/org).

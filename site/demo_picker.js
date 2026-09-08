@@ -43,6 +43,13 @@
             loader: 'loadHalcyonDemo',
             gate: 'slHalcyonVisible',
         },
+        {
+            id: 'vayu', badge: 'Powered-lift \u00b7 eVTOL air taxi', accent: '#B7791F',
+            title: 'Vayu V-1 \u2014 eVTOL Air Taxi',
+            desc: 'A five-seat lift-plus-cruise eVTOL on urban vertiport routes \u2014 eight lift rotors, two cruise propellers, six battery packs and full fly-by-wire with no mechanical reversion. Nineteen systems threaded end to end: AFHA through ASA with allocation trees and their verification mirrors, a Markov model on the in-flight cross-tie energy reconfiguration, the full CCA set, FMEA, reliability and human factors, and the battery thermal-runaway hazard carried through fault tree, event tree and bow-tie. A fictional aircraft on a thin specification: every gap is a declared assumption, marked as such.',
+            loader: 'loadVayuDemo',
+            gate: 'slVayuVisible',
+        },
     ];
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
