@@ -927,8 +927,16 @@
     try {
       // Master switch: window.SL_MFA_REQUIRED === false drops MFA entirely (no
       // step-up challenge and no forced enrollment). Defaults ON when unset.
-      const _mfaOn = (typeof window.SL_MFA_REQUIRED === 'undefined') ? true : (window.SL_MFA_REQUIRED !== false);
-      if (_mfaOn && window.SafetyLabMFA) {
+      // 8 Sep 2026 — two INDEPENDENT controls (posture: available + enforced if enabled):
+      //  - STEP-UP (default ON): an account that HAS a verified factor is always
+      //    challenged to AAL2 at sign-in. Kill switch: window.SL_MFA_REQUIRED === false.
+      //  - FORCED ENROLLMENT (default OFF): only when the org opts in via
+      //    window.SL_MFA_MANDATORY === true is a factor-less account made to enroll
+      //    before the app opens. Default forces 2FA on no one; it is offered in the
+      //    account panel and honored at sign-in for anyone who turns it on.
+      const _stepUpOn    = (typeof window.SL_MFA_REQUIRED === 'undefined') ? true : (window.SL_MFA_REQUIRED !== false);
+      const _forceEnroll = (window.SL_MFA_MANDATORY === true);
+      if (_stepUpOn && window.SafetyLabMFA) {
         // (1) Account already has a factor → step up from AAL1 to AAL2.
         if (typeof window.SafetyLabMFA.needsChallenge === 'function') {
           const need = await window.SafetyLabMFA.needsChallenge();
@@ -937,10 +945,11 @@
             if (!ok) { await _signOutToGate(); return; }
           }
         }
-        // (2) An account with NO factor must enroll before the app opens ("grace
-        // enrollment"). promptEnroll fails OPEN if MFA infra is unavailable, so
-        // this can never lock everyone out.
-        if (typeof window.SafetyLabMFA.hasVerifiedFactor === 'function'
+        // (2) Forced "grace enrollment" — ONLY under the mandatory policy (_forceEnroll).
+        // promptEnroll fails OPEN if MFA infra is unavailable, so this can never lock
+        // everyone out. Off by default: no one is forced to set up 2FA.
+        if (_forceEnroll
+                     && typeof window.SafetyLabMFA.hasVerifiedFactor === 'function'
                      && typeof window.SafetyLabMFA.promptEnroll === 'function') {
           const has = await window.SafetyLabMFA.hasVerifiedFactor();
           if (!has) {
