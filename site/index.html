@@ -4007,6 +4007,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script>window.SL_SHOWCASE_HL1_SRC = 'demo_showcase_hl1.js?v=6';</script>
     <script>window.SL_SHOWCASE_HALCYON_SRC = 'demo_showcase_halcyon.js?v=5';</script>
     <script>window.SL_SHOWCASE_VAYU_SRC = 'demo_showcase_vayu.js?v=1';</script>
+    <!-- Stage 2 (9 Sep 2026): live CRDT co-editing is the source of truth on open;
+         the whole-document snapshot becomes a periodic backup. Self-healing reconcile
+         (a stale copy can never overwrite good data) — see crdt_sync.js authOn(). -->
+    <script>window.SL_CRDT_AUTHORITATIVE = true;</script>
     <!-- MFA enforcement master switch — set false to drop MFA (no challenge, no forced enrollment). -->
     <!-- #19 — shared cut-set engine (single source for the page + the cut-set Web Worker). Must load before safety_lab.js. -->
     <!-- ENG-2 phase 1 — shared table pagination (50/page default; honesty label; display-lane only). Loads before every consumer. -->
