@@ -2505,6 +2505,80 @@ function _gtMark(html, isHit){
         + ' <span style="font-size:10px; font-weight:700; color:var(--color-accent); letter-spacing:0.04em;">&#9679; HERE</span></span>';
 }
 
+// ---- Golden Thread right column: Human Factors + RAM linkage (9 Sep 2026) ----
+// Read-only, defensive: never throws into the thread render; degrades to a plain
+// "unavailable / none linked" line. HF reads projectConfig.hf.{alloc,hea,alerts};
+// RAM reuses the RAM suite's own resolver (window.ramTraceRows) so it can't disagree
+// with the R&M pages.
+function _gtHFSection(fha, domain, highlight){
+    var res = { html:'', warns:0, gaps:0 };
+    try {
+        var pc = (typeof projectConfig !== 'undefined' && projectConfig) ? projectConfig : {};
+        var hf = pc.hf || {};
+        var fcId = String(fha.fcId || '');
+        var inFc = function(csv){ return String(csv||'').split(',').map(function(x){ return x.trim(); }).filter(Boolean).indexOf(fcId) >= 0; };
+        var alloc  = (hf.alloc  && hf.alloc.rows)  || [];
+        var hea    = ((hf.hea   && hf.hea.rows)    || []).filter(function(r){ return r && inFc(r.fcIds); });
+        var alerts = ((hf.alerts && hf.alerts.rows) || []).filter(function(r){ return r && inFc(r.fcIds); });
+        var arow   = alloc.filter(function(r){ return r && String(r.subId) === String(fha.subId); })[0];
+        var lines = [];
+        if (arow && arow.allocation) {
+            lines.push('Function <strong>' + esc(fha.subId||'') + '</strong> &rarr; allocation <strong>' + esc(arow.allocation) + '</strong>' + (arow.rationale ? ' &middot; ' + esc(arow.rationale) : ''));
+        } else if (hea.length) {
+            lines.push('Function <strong>' + esc(fha.subId||'') + '</strong> has crew-error analysis but no crew/shared allocation' + _gtChip('allocate', 'warn'));
+            res.warns++;
+        }
+        if (hea.length) {
+            lines.push('<span style="color:var(--color-text-tertiary);">Human error</span>');
+            hea.slice(0,6).forEach(function(r){
+                var chip = '';
+                if (r.errorMode && (!r.detection || !r.recovery)) { chip = _gtChip('no detection/recovery', 'warn'); res.warns++; }
+                lines.push('&middot; <strong>' + esc(r.heaId||'') + '</strong> ' + esc(r.task||'') + (r.errorMode ? ' &mdash; ' + esc(r.errorMode) : '') + chip);
+            });
+            if (hea.length > 6) lines.push('<span style="color:var(--color-text-tertiary);">+' + (hea.length-6) + ' more</span>');
+        }
+        if (alerts.length) {
+            lines.push('<span style="color:var(--color-text-tertiary);">Crew alerting</span>');
+            alerts.slice(0,6).forEach(function(r){
+                lines.push('&middot; <strong>' + esc(r.alertId||'') + '</strong> ' + esc(r.name||'') + (r.priority ? ' &mdash; ' + esc(r.priority) : '') + (r.modality ? ' / ' + esc(r.modality) : ''));
+            });
+        }
+        var body = lines.length ? lines.join('<br>') : 'No human-factors analysis linked to this failure condition.';
+        res.html = _gtStage('Human factors', body, res.warns ? 'warn' : 'info');
+    } catch (e) {
+        res.html = _gtStage('Human factors', 'HF linkage unavailable.', 'info');
+    }
+    return res;
+}
+function _gtRAMSection(fha){
+    var res = { html:'', warns:0, gaps:0 };
+    try {
+        var fcId = String(fha.fcId || '');
+        var rows = [];
+        if (typeof window !== 'undefined' && typeof window.ramTraceRows === 'function') {
+            rows = (window.ramTraceRows() || []).filter(function(r){ return r && (r.fcs||[]).some(function(f){ return String(f.fcId) === fcId; }); });
+        }
+        var lines = [];
+        rows.slice(0,8).forEach(function(r){
+            var head = '<strong>' + esc(r.ref || '') + '</strong>' + (r.item ? ' &middot; ' + esc(r.item.itemId || r.item.name || '') : '');
+            var bits = [];
+            (r.tasks||[]).slice(0,3).forEach(function(t){ bits.push(esc(t.name || ('task ' + t.id)) + (t.interval ? ' @ ' + esc(String(t.interval)) : '')); });
+            if ((r.field||[]).length) bits.push(r.field.length + ' FRACAS');
+            if ((r.mmel||[]).length && r.mmel[0]) bits.push('MMEL ' + esc(String(r.mmel[0].category || '')));
+            if ((r.msg3||[]).length) bits.push((r.msg3.length) + ' MSG-3');
+            var gapc = '';
+            if (r.gaps && r.gaps.length) { gapc = _gtChip(r.gaps.length + ' gap' + (r.gaps.length===1?'':'s'), 'warn'); res.warns++; }
+            lines.push(head + (bits.length ? '<br><span style="color:var(--color-text-tertiary);">' + bits.join(' &middot; ') + '</span>' : '') + gapc);
+        });
+        if (rows.length > 8) lines.push('<span style="color:var(--color-text-tertiary);">+' + (rows.length-8) + ' more R&amp;M chains</span>');
+        var body = lines.length ? lines.join('<br>') : 'No reliability / maintainability chain reaches this failure condition.';
+        res.html = _gtStage('Reliability &amp; maintainability', body, res.warns ? 'warn' : 'info');
+    } catch (e) {
+        res.html = _gtStage('Reliability &amp; maintainability', 'RAM linkage unavailable.', 'info');
+    }
+    return res;
+}
+
 function _renderGoldenThread(fha, domain, highlight){
     window._gtJumps = [];
     const isAC = domain === 'AC';
@@ -2626,13 +2700,21 @@ function _renderGoldenThread(fha, domain, highlight){
     asmBody = asmLines.length ? asmLines.join('<br>') : 'No assumptions linked to this hazard.';
     html += _gtStage('Assumptions', asmBody, asmStatus, true);
 
+    // HF + RAM linkage (right column) — their open items count toward the thread total
+    const _hf = _gtHFSection(fha, domain, highlight); warns += _hf.warns; gaps += _hf.gaps;
+    const _ram = _gtRAMSection(fha); warns += _ram.warns; gaps += _ram.gaps;
+
     // Gap banner
     const total = gaps + warns;
     let banner;
     if(total === 0){ banner = '<div style="margin-top:8px; padding:10px 12px; border-radius:var(--r-md); border-left:3px solid var(--color-success); background:var(--color-surface-2); color:var(--color-success); font-size:12.5px; font-weight:600;">Thread complete — no open gaps on this failure condition.</div>'; }
     else { const col = gaps>0 ? 'var(--color-danger)' : 'var(--color-warning)'; banner = '<div style="margin-top:8px; padding:10px 12px; border-radius:var(--r-md); border-left:3px solid ' + col + '; background:var(--color-surface-2); color:' + col + '; font-size:12.5px;"><strong>' + total + ' open item' + (total===1?'':'s') + ' on this thread</strong>' + (gaps>0 ? ' — ' + gaps + ' budget/critical gap' + (gaps===1?'':'s') : '') + (warns>0 ? ' · ' + warns + ' incomplete link' + (warns===1?'':'s') : '') + '</div>'; }
 
-    return '<div style="font-size:13px; font-weight:600; margin-bottom:10px; color:var(--color-text-primary);">' + esc(fha.fcId||'') + ' — ' + esc(fha.severity||'') + '</div>' + html + banner;
+    return '<div style="font-size:13px; font-weight:600; margin-bottom:10px; color:var(--color-text-primary);">' + esc(fha.fcId||'') + ' — ' + esc(fha.severity||'') + '</div>'
+        + '<div class="gt-cols" style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">'
+        + '<div style="flex:1 1 460px; min-width:0;">' + html + banner + '</div>'
+        + '<div style="flex:1 1 380px; min-width:0;">' + _hf.html + _ram.html + '</div>'
+        + '</div>';
 }
 
 function openGoldenThreadModal(internalId, domain, highlight) {
