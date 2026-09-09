@@ -44,16 +44,21 @@ create index if not exists problem_report_events_project_idx on public.problem_r
 create index if not exists problem_report_events_report_idx  on public.problem_report_events (project_id, report_id, id);
 
 -- ======================================================================= chain triggers (per project)
+-- server sets actor := auth.uid() AND actor_email := the JWT email claim so neither is client-forgeable,
+-- and both are folded into row_hash so the displayed attribution is tamper-evident, not just the UUID.
 create or replace function public.change_journal_chain()
   returns trigger language plpgsql security definer set search_path to 'public','extensions','pg_temp' as $$
-declare last_hash text;
+declare last_hash text; claims jsonb;
 begin
-  new.actor := coalesce(auth.uid(), new.actor);          -- server-authoritative identity + time
-  new.ts    := now();
+  claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
+  new.actor       := coalesce(auth.uid(), new.actor);    -- server-authoritative identity + time
+  new.actor_email := coalesce(claims->>'email', new.actor_email);
+  new.ts          := now();
   select row_hash into last_hash from public.change_journal where project_id = new.project_id order by id desc limit 1;
   new.prev_hash := coalesce(last_hash, '');
   new.row_hash  := encode(digest(
       coalesce(new.prev_hash,'') || coalesce(new.project_id::text,'') || coalesce(new.actor::text,'')
+      || coalesce(new.actor_email,'')
       || coalesce(new.action,'') || coalesce(new.entity_kind,'') || coalesce(new.entity_id,'')
       || coalesce(new.summary::text,'') || coalesce(new.ts::text,''), 'sha256'), 'hex');
   return new;
@@ -61,15 +66,18 @@ end $$;
 
 create or replace function public.problem_report_events_chain()
   returns trigger language plpgsql security definer set search_path to 'public','extensions','pg_temp' as $$
-declare last_hash text;
+declare last_hash text; claims jsonb;
 begin
-  new.actor := coalesce(auth.uid(), new.actor);
-  new.ts    := now();
+  claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
+  new.actor       := coalesce(auth.uid(), new.actor);
+  new.actor_email := coalesce(claims->>'email', new.actor_email);
+  new.ts          := now();
   select row_hash into last_hash from public.problem_report_events where project_id = new.project_id order by id desc limit 1;
   new.prev_hash := coalesce(last_hash, '');
   new.row_hash  := encode(digest(
       coalesce(new.prev_hash,'') || coalesce(new.project_id::text,'') || coalesce(new.report_id,'')
-      || coalesce(new.event,'') || coalesce(new.actor::text,'') || coalesce(new.payload::text,'')
+      || coalesce(new.event,'') || coalesce(new.actor::text,'') || coalesce(new.actor_email,'')
+      || coalesce(new.payload::text,'')
       || coalesce(new.ts::text,''), 'sha256'), 'hex');
   return new;
 end $$;
