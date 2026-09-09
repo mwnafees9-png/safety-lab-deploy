@@ -46,7 +46,7 @@
   // that a field lock guards while actively edited. Only stores with a clean repaint are
   // listed here; murkier ones (stpaData, ftaConfig, mirror objects) stay on the snapshot
   // backup until they get proper repaint handling. __crdtApply renders each on arrival.
-  var WHOLE = ['projectConfig', 'mlData', 'projectName'];
+  var WHOLE = ['projectConfig', 'mlData', 'projectName', 'stpaData'];  // stpaData added 9 Sep — repaint via window.STPA_PANEL.render()
 
   // COUNTERS (7 Sep 2026): id-minting counters (next ASM-N, FMEA-N, review, internalId).
   // Merged MAX (never backward) via one 'counters' Y.Map — two people adding at once must
@@ -255,6 +255,15 @@
         var v = cap[name];
         if (typeof v === 'number') { var cur = cmap.get(name); if (cur === undefined || v > cur) cmap.set(name, v); }
       });
+      // typeCounters (object of per-node-type counts) — each key MAX-merged under 'tc:<type>'
+      // in the same counters map, so two users adding different node types never collide.
+      var tc = cap.typeCounters;
+      if (tc && typeof tc === 'object') {
+        Object.keys(tc).forEach(function (t) {
+          var tv = tc[t];
+          if (typeof tv === 'number') { var tk = 'tc:' + t; var tcur = cmap.get(tk); if (tcur === undefined || tv > tcur) cmap.set(tk, tv); }
+        });
+      }
     }, 'local');
   }
 
@@ -283,6 +292,9 @@
     var counters = {};
     COUNTERS.forEach(function (name) { var v = cmap.get(name); if (typeof v === 'number') counters[name] = v; });
     partial.__counters = counters;
+    var tcOut = {};
+    Array.from(cmap.keys()).forEach(function (key) { if (key.indexOf('tc:') === 0) { var tv = cmap.get(key); if (typeof tv === 'number') tcOut[key.slice(3)] = tv; } });
+    partial.__typeCounters = tcOut;
     _applying = true;
     try { if (window.__crdtApply) window.__crdtApply(partial); } finally { _applying = false; }
   }

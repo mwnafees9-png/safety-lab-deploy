@@ -190,6 +190,22 @@ console.log('[auth] 7 — flag ON but noteSnapshotVersion is inert without a doc
 }
 
 // ---------------------------------------------------------------------------
+console.log('[auth] 8 — live-sync completion (9 Sep): stpaData in WHOLE + typeCounters namespaced');
+{
+  const m = mk([{ internalId: 'a' }]);
+  m.stpaData = { losses: [{ id: 'L-1' }], meta: { scope: 'demo' } };
+  m.typeCounters = { gate: 5, basic: 3, house: 1 };
+  const e = boot(m, 'proj-1');                                   // start() seeds the doc from the model
+  const whole = e.docs[0].getMap('whole');
+  const counters = e.docs[0].getMap('counters');
+  let sp = null; try { sp = JSON.parse(whole.get('stpaData')); } catch (_) {}
+  check('stpaData pushed into the whole map (it is in WHOLE)', !!sp && sp.meta && sp.meta.scope === 'demo', String(whole.get('stpaData')));
+  check('typeCounters gate namespaced as tc:gate=5', counters.get('tc:gate') === 5);
+  check('typeCounters basic namespaced as tc:basic=3', counters.get('tc:basic') === 3);
+  check('typeCounters house namespaced (tc:house=1) — coexists with scalar counters', counters.get('tc:house') === 1);
+}
+
+// ---------------------------------------------------------------------------
 console.log('\n[auth] MUTATION PROOFS (these SHOULD be caught by the checks above)');
 check('mutation guard: p1 != p2 rows', 'p1-a,p1-b' !== 'p2-x');
 check('mutation guard: stamp compare is strict (7 > undefined-safe)', (undefined == null));

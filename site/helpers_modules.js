@@ -8484,7 +8484,9 @@ function __crdtCapture() {
         reviewCounter:     (typeof reviewCounter === 'number' ? reviewCounter : 0),
         internalIdCounter: (typeof internalIdCounter === 'number' ? internalIdCounter : 0),
         systemsData:       clone(systemsData),
-        ftaPages:          clone(ftaPages)
+        ftaPages:          clone(ftaPages),
+        stpaData:          (typeof stpaData === 'object' && stpaData) ? clone(stpaData) : {},
+        typeCounters:      (typeof typeCounters === 'object' && typeCounters) ? clone(typeCounters) : {}
     };
 }
 function __crdtApply(partial) {
@@ -8508,6 +8510,7 @@ function __crdtApply(partial) {
         if (partial.projectConfig && typeof partial.projectConfig === 'object') projectConfig = partial.projectConfig;
         if (partial.mlData && typeof partial.mlData === 'object')               mlData        = partial.mlData;
         if (typeof partial.projectName === 'string')                            projectName   = partial.projectName;
+        if (partial.stpaData && typeof partial.stpaData === 'object')            stpaData      = partial.stpaData;
         // id counters — MAX merge (monotonic: never reissue a lower number)
         if (partial.__counters) {
             var _c = partial.__counters;
@@ -8515,6 +8518,12 @@ function __crdtApply(partial) {
             if (typeof _c.fmeaCounter === 'number')       fmeaCounter       = Math.max(fmeaCounter || 0, _c.fmeaCounter);
             if (typeof _c.reviewCounter === 'number')     reviewCounter     = Math.max(reviewCounter || 0, _c.reviewCounter);
             if (typeof _c.internalIdCounter === 'number') internalIdCounter = Math.max(internalIdCounter || 0, _c.internalIdCounter);
+        }
+        // typeCounters (per-node-type id minting) — per-key MAX so concurrent adds never reissue
+        if (partial.__typeCounters && typeof partial.__typeCounters === 'object') {
+            if (typeof typeCounters !== 'object' || !typeCounters) typeCounters = {};
+            var _tc = partial.__typeCounters;
+            Object.keys(_tc).forEach(function (t) { if (typeof _tc[t] === 'number') typeCounters[t] = Math.max((typeCounters[t] || 0), _tc[t]); });
         }
         if (Array.isArray(partial.systemsData))       systemsData       = partial.systemsData;
         if (Array.isArray(partial.ftaPages))          ftaPages          = partial.ftaPages;
@@ -8535,6 +8544,7 @@ function __crdtApply(partial) {
         try { if (partial.projectConfig  && typeof renderProjectConfigUI === 'function') renderProjectConfigUI(); } catch (_) {}
         try { if (partial.mlData         && typeof renderMarkovModels     === 'function') renderMarkovModels(); } catch (_) {}
         try { if (typeof partial.projectName === 'string' && typeof _refreshProjectNameUI === 'function') _refreshProjectNameUI(); } catch (_) {}
+        try { if (partial.stpaData && typeof window !== 'undefined' && window.STPA_PANEL && typeof window.STPA_PANEL.render === 'function') window.STPA_PANEL.render(); } catch (_) {}
         try { if (partial.systemsData       && typeof renderSystemDirectory === 'function') renderSystemDirectory(); } catch (_) {}
         try { if (partial.ftaPages) { if (typeof renderFTASidebar === 'function') renderFTASidebar(); if (typeof updateD3 === 'function') updateD3(); } } catch (_) {}
         try { if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) {}
