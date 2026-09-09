@@ -45,6 +45,13 @@
       if (r.error) return { ok: true };                      // outage → fail OPEN (save-guard backstops)
       var row = (r.data && r.data[0]) || r.data || {};
       if (row.ok) { var exp = new Date(row.expires_at).getTime() || (Date.now() + TTL * 1000); _mine.set(String(key), exp); _peers.delete(String(key)); _send('claim', String(key), exp); _ensureHb(); _notify(key); return { ok: true }; }
+      // 9 Sep 2026 — ok:false with NO held_by is NOT a competing editor. The RPC returns it when
+      // the caller can't hold the lock at all — signed out, not a member of the project's
+      // workspace, or a showcase/demo project — and the client used to treat it as "someone else
+      // is editing" and BLOCK the editor (Daniel couldn't edit the demo SFHA/ACFHA at all since
+      // the 7 Sep field-lock hookup). Only a REAL holder (held_by set) blocks; otherwise fail OPEN,
+      // exactly like local/outage/ITAR mode — the save-time guard (COL-3) is the hard backstop.
+      if (!row.held_by) return { ok: true };
       var p = _peers.get(String(key)); _notify(key); return { ok: false, held_by: row.held_by, name: p ? p.name : null };
     } catch (_) { return { ok: true }; }
   }
