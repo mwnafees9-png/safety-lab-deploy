@@ -344,30 +344,20 @@
     function ensure() {
         if (pop) return pop;
         pop = document.createElement('div'); pop.id = 'fdef-pop';
-        pop.style.cssText = 'position:fixed;z-index:2147483001;max-width:360px;pointer-events:none;display:none;background:#16283F;color:#F5F2EA;border:1px solid rgba(255,255,255,.18);border-radius:3px;padding:8px 11px;font:12px/1.45 var(--font-system,system-ui),sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);';
+        pop.style.cssText = 'position:fixed;z-index:2147483001;max-width:340px;pointer-events:none;display:none;background:#16283F;color:#F5F2EA;border:1px solid rgba(255,255,255,.18);border-radius:9px;padding:8px 11px;font:12px/1.45 var(--font-system,system-ui),sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.35);';
         document.body.appendChild(pop); return pop;
     }
-    function place() { if (!pop) return; var x = lx + 14, y = ly + 18, w = pop.offsetWidth, ht = pop.offsetHeight; if (x + w > innerWidth - 8) x = lx - w - 14; if (y + ht > innerHeight - 8) y = ly - ht - 18; if (x < 6) x = 6; if (y < 6) y = 6; pop.style.left = x + 'px'; pop.style.top = y + 'px'; }
-    // 9 Sep 2026 (Daniel: "the definition completely blocks the field you're hovering") —
-    // element definitions anchor to the LABEL/HEADER's rect, not the pointer, so the popover
-    // never lands on the field. Prefer directly ABOVE the element; if there's no room, sit just
-    // BELOW its bottom edge (clearing the element and its row). Pointer-anchored tokens keep place().
-    function placeFor(el) {
-        if (!pop || !el || !el.getBoundingClientRect) { place(); return; }
-        var r = el.getBoundingClientRect(), w = pop.offsetWidth, ht = pop.offsetHeight, gap = 8;
-        var x = r.left; if (x + w > innerWidth - 8) x = innerWidth - 8 - w; if (x < 6) x = 6;
-        var y = r.top - ht - gap;                       // above the element
-        if (y < 6) y = r.bottom + gap;                  // no room above -> below the element
-        if (y + ht > innerHeight - 8) y = Math.max(6, innerHeight - 8 - ht);
-        pop.style.left = x + 'px'; pop.style.top = y + 'px';
-    }
+    // 9 Sep 2026 (Daniel/Waqas: "make these pop up as toasts, they cover the field") — the HF/RAM
+    // field definition parks in a fixed toast spot just above the feedback button (same spot as the
+    // global glossary), out of the workspace, rather than tracking the pointer onto the field.
+    function place() { if (!pop) return; pop.style.left = Math.max(8, innerWidth - pop.offsetWidth - 24) + 'px'; pop.style.top = Math.max(8, innerHeight - pop.offsetHeight - 84) + 'px'; }
     function show(el) {
         var d = el.getAttribute('data-def'); if (!d) return;
         var p = ensure();
         var extra = el.getAttribute('data-def-extra');
         p.innerHTML = '<b>' + esc(el.getAttribute('data-def-label') || el.textContent) + '</b><br><span style="opacity:.88;">' + esc(d) + '</span>' +
             (extra ? '<div style="margin-top:7px; padding-top:6px; border-top:1px solid rgba(255,255,255,.18); opacity:.85; white-space:pre-line;">' + esc(extra) + '</div>' : '');
-        p.style.display = 'block'; placeFor(el);
+        p.style.display = 'block'; place();
         window.__slFieldDefActive = true;
         try { var g = document.getElementById('gloss-pop'); if (g) g.style.display = 'none'; } catch (_) {}
     }
