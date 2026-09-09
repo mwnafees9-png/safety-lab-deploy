@@ -2602,6 +2602,7 @@ function _renderGoldenThread(fha, domain, highlight){
     if(tree && tree.root){ try { computed = computeExactProbability(tree.root).prob; } catch(e){ computed = (tree.root.probability || null); } }
 
     let html = '';
+    let rightHtml = '';
 
     // 1 — Failure condition
     html += _gtStage('Failure condition',
@@ -2675,7 +2676,7 @@ function _renderGoldenThread(fha, domain, highlight){
     let reqBody;
     if(reqRefs.length){ reqBody = reqRefs.slice(0,6).map(r => _gtMark(_gtLink(r.label || ('REQ ' + r.id), r), _gtMatch(r, highlight))).join('<br>'); }
     else { reqBody = 'No safety requirements traced to this failure condition.' + _gtChip('derive requirements', 'warn'); warns++; }
-    html += _gtStage('Requirements', reqBody, reqRefs.length ? 'info' : 'warn');
+    rightHtml += _gtStage('Requirements', reqBody, reqRefs.length ? 'info' : 'warn');
 
     // 8 — Verification
     const resolveReq = (d) => { if(d.kind==='acReq') return (acReqData||[]).find(r=>r.internalId===d.id); const sys=(systemsData||[]).find(s=>s.id===d.systemId); return sys ? (sys.req||[]).find(r=>r.internalId===d.id) : null; };
@@ -2686,7 +2687,7 @@ function _renderGoldenThread(fha, domain, highlight){
         if(total && verified < total){ warns++; vStatus='warn'; }
         vBody = lines.length ? lines.join('<br>') : 'Requirements carry no verification status yet.';
     } else { vBody = 'No requirements to verify yet.'; }
-    html += _gtStage('Verification', vBody, vStatus);
+    rightHtml += _gtStage('Verification', vBody, vStatus);
 
     // 9 — Assumptions
     const asmRefs = (byKind['acAsm']||[]).concat(byKind['sysAsm']||[]);
@@ -2698,7 +2699,7 @@ function _renderGoldenThread(fha, domain, highlight){
     linkedAsm.forEach(a => { const open = (a.state && a.state.toLowerCase()!=='validated' && a.state.toLowerCase()!=='closed'); if(open){ warns++; asmStatus='warn'; } asmLines.push('<strong>' + esc(a.asmId||'') + '</strong> ' + esc(a.text||a.statement||'') + _gtChip(a.state||'open', open?'warn':'ok')); });
     asmRefs.forEach(r => { if(!linkedAsm.some(a => (a.asmId||'')===String(r.id))) asmLines.push(_gtLink(r.label || ('ASM ' + r.id), r)); });
     asmBody = asmLines.length ? asmLines.join('<br>') : 'No assumptions linked to this hazard.';
-    html += _gtStage('Assumptions', asmBody, asmStatus, true);
+    rightHtml += _gtStage('Assumptions', asmBody, asmStatus, true);
 
     // HF + RAM linkage (right column) — their open items count toward the thread total
     const _hf = _gtHFSection(fha, domain, highlight); warns += _hf.warns; gaps += _hf.gaps;
@@ -2712,9 +2713,10 @@ function _renderGoldenThread(fha, domain, highlight){
 
     return '<div style="font-size:13px; font-weight:600; margin-bottom:10px; color:var(--color-text-primary);">' + esc(fha.fcId||'') + ' — ' + esc(fha.severity||'') + '</div>'
         + '<div class="gt-cols" style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">'
-        + '<div style="flex:1 1 460px; min-width:0;">' + html + banner + '</div>'
-        + '<div style="flex:1 1 380px; min-width:0;">' + _hf.html + _ram.html + '</div>'
-        + '</div>';
+        + '<div style="flex:1 1 0; min-width:280px;">' + html + '</div>'
+        + '<div style="flex:1 1 0; min-width:280px;">' + rightHtml + _hf.html + _ram.html + '</div>'
+        + '</div>'
+        + banner;
 }
 
 function openGoldenThreadModal(internalId, domain, highlight) {
