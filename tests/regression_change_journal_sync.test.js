@@ -125,6 +125,27 @@ function boot(opts) {
     check('problemEvent no-ops without reportId', (function(){ const b = boot(); b.api.problemEvent('', 'opened', {}); return b.inserts.length === 0; })());
   }
 
+  console.log('[cjs] read UI: chain-linkage verify + exports');
+  {
+    const e = boot();
+    check('showHistory + _verifyLinkage exported', typeof e.api.showHistory === 'function' && typeof e.api._verifyLinkage === 'function');
+    // newest-first rows (as fetchJournal returns them)
+    const intact = [
+      { id: 3, prev_hash: 'h2', row_hash: 'h3' },
+      { id: 2, prev_hash: 'h1', row_hash: 'h2' },
+      { id: 1, prev_hash: '',   row_hash: 'h1' }
+    ];
+    check('intact chain verifies ok', e.api._verifyLinkage(intact).ok === true);
+    const broken = [
+      { id: 3, prev_hash: 'h2',    row_hash: 'h3' },
+      { id: 2, prev_hash: 'WRONG', row_hash: 'h2' },   // prev_hash no longer links to id1.row_hash
+      { id: 1, prev_hash: '',      row_hash: 'h1' }
+    ];
+    const bv = e.api._verifyLinkage(broken);
+    check('broken chain detected + names the broken record', bv.ok === false && bv.brokenAt === 2, JSON.stringify(bv));
+    check('empty / single-row inputs are ok (no false break)', e.api._verifyLinkage([]).ok === true && e.api._verifyLinkage([intact[0]]).ok === true);
+  }
+
   // -------------------------------------------------------------- MUTATION GUARD
   // If the allowlist gate is removed (mirror EVERY jrnl kind), the noise-not-mirrored checks fail.
   console.log('[cjs] mutation guard (self-check of the allowlist gate)');
