@@ -133,3 +133,8 @@ revoke all on public.change_journal        from anon, authenticated;
 revoke all on public.problem_report_events from anon, authenticated;
 grant select, insert on public.change_journal        to authenticated;
 grant select, insert on public.problem_report_events to authenticated;
+
+-- Trigger functions fire as the table owner inside the trigger; they never need to be directly
+-- callable, so keep them off the exposed PostgREST RPC surface (matches audit_log_chain / signoffs_chain).
+revoke execute on function public.change_journal_chain()        from public, anon, authenticated;
+revoke execute on function public.problem_report_events_chain() from public, anon, authenticated;
