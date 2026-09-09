@@ -21,6 +21,7 @@ This runs the SQL files in order:
 5. `04_harden_api_surface.sql` — trims the exposed API surface.
 6. `05_change_journal_problem_events.sql` — append-only, hash-chained change journal + problem-report event log.
 7. `06_grants_lockdown.sql` — locks the function/RPC surface to the app's real client calls (runs last).
+8. `07_verify_functions.sql` — server-side integrity check for the change journal / problem-report log (recomputes each record's fingerprint to catch content tampering).
 
 ## After install
 Make yourself an administrator:

@@ -97,6 +97,20 @@
         } catch (_) { return []; }
     }
 
+    // Server-side deep integrity check (recomputes every row's hash inside Postgres, so it
+    // catches CONTENT tampering, not just deletion/reorder). Returns {ok, first_bad_id, checked}
+    // or null on failure. Member-gated server-side.
+    async function deepVerify() {
+        try {
+            var client = _client(), projectId = _proj();
+            if (!client || !projectId) return null;
+            var res = await client.rpc('verify_change_journal', { p_project: projectId });
+            if (res && res.error) return null;
+            var row = (res && res.data && res.data[0]) || null;
+            return row ? { ok: !!row.ok, first_bad_id: row.first_bad_id, checked: row.checked } : null;
+        } catch (_) { return null; }
+    }
+
     // ---- mirror the app's own meaningful-action stream (window.jrnl) ----
     // ALLOWLIST — the consequential ENGINEERING acts only, never dev/verification
     // noise (fuzz, self-test, replay-verify, checkpoint, load, compaction).
@@ -190,10 +204,21 @@
                 '</tr>';
         }).join('');
         body.innerHTML = banner +
+            '<div style="margin:-4px 0 12px;"><button id="sl-cj-deep" style="font-size:11px;padding:3px 12px;cursor:pointer;">Deep verify (server)</button>' +
+            '<span id="sl-cj-deep-out" style="font-size:11px;color:var(--color-text-tertiary,#888);margin-left:8px;">recomputes every record’s fingerprint on the database — catches edited contents, not just deleted rows.</span></div>' +
             '<table style="border-collapse:collapse;width:100%;font-size:12px;">' +
             '<thead><tr>' +
             ['When', 'Who', 'Action', 'Entity', 'Summary'].map(function (h) { return '<th style="text-align:left;padding:5px 8px;border-bottom:2px solid var(--color-text-primary,#333);font-size:10.5px;text-transform:uppercase;color:var(--color-text-tertiary,#777);">' + h + '</th>'; }).join('') +
             '</tr></thead><tbody>' + trs + '</tbody></table>';
+        var deepBtn = body.querySelector('#sl-cj-deep'), deepOut = body.querySelector('#sl-cj-deep-out');
+        if (deepBtn) deepBtn.onclick = async function () {
+            deepBtn.disabled = true; if (deepOut) { deepOut.textContent = 'Checking on the server…'; deepOut.style.color = 'var(--color-text-tertiary,#888)'; }
+            var r = await deepVerify();
+            if (!deepOut) return;
+            if (!r) { deepOut.textContent = 'Could not run the server check (sign in on a cloud project).'; deepBtn.disabled = false; return; }
+            if (r.ok) { deepOut.textContent = 'Verified on the server — all ' + r.checked + ' record' + (r.checked === 1 ? '' : 's') + ' intact, contents included.'; deepOut.style.color = '#1a8f3c'; }
+            else { deepOut.textContent = 'TAMPER DETECTED on the server at record #' + r.first_bad_id + ' — its contents or place in the chain were altered.'; deepOut.style.color = '#c0392b'; }
+        };
     }
 
     // Inject a launcher into the existing hash-chained journal panel (Thread Integrity tab).
@@ -230,6 +255,7 @@
         problemEvent: problemEvent,
         fetchJournal: fetchJournal,
         fetchProblemEvents: fetchProblemEvents,
+        deepVerify: deepVerify,
         showHistory: showHistory,
         _verifyLinkage: _verifyLinkage,
         _meaningful: JRNL_MEANINGFUL

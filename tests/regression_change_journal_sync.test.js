@@ -23,13 +23,14 @@ const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } els
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'site', 'change_journal_sync.js'), 'utf8');
 
 // A fake PostgREST-ish client. from(table).insert(row) records the call and returns a thenable.
-function makeClient(inserts) {
+function makeClient(inserts, rpcResult) {
   return {
     from: (table) => ({
       insert: (row) => { inserts.push({ table, row }); return Promise.resolve({ data: [row], error: null }); },
       select: function () { return this; }, eq: function () { return this; },
       order: function () { return this; }, limit: function () { return Promise.resolve({ data: [], error: null }); }
-    })
+    }),
+    rpc: (name, args) => { inserts.push({ rpc: name, args }); return Promise.resolve(rpcResult || { data: [{ ok: true, first_bad_id: null, checked: 3 }], error: null }); }
   };
 }
 
@@ -144,6 +145,20 @@ function boot(opts) {
     const bv = e.api._verifyLinkage(broken);
     check('broken chain detected + names the broken record', bv.ok === false && bv.brokenAt === 2, JSON.stringify(bv));
     check('empty / single-row inputs are ok (no false break)', e.api._verifyLinkage([]).ok === true && e.api._verifyLinkage([intact[0]]).ok === true);
+  }
+
+  console.log('[cjs] deepVerify: calls the server verify RPC for the active project');
+  {
+    const e = boot();
+    check('deepVerify exported', typeof e.api.deepVerify === 'function');
+    const r = await e.api.deepVerify();
+    const call = e.inserts.find(i => i.rpc === 'verify_change_journal');
+    check('deepVerify called verify_change_journal RPC', !!call, JSON.stringify(e.inserts));
+    check('RPC passed the active project id', call && call.args && call.args.p_project === 'proj-1');
+    check('deepVerify returns {ok,first_bad_id,checked}', r && r.ok === true && r.checked === 3);
+    // fail-soft: no project -> null, no throw
+    const np = boot({ noProj: true });
+    check('deepVerify no-project -> null', (await np.api.deepVerify()) === null);
   }
 
   // -------------------------------------------------------------- MUTATION GUARD
