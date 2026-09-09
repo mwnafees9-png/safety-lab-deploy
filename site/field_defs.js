@@ -348,13 +348,26 @@
         document.body.appendChild(pop); return pop;
     }
     function place() { if (!pop) return; var x = lx + 14, y = ly + 18, w = pop.offsetWidth, ht = pop.offsetHeight; if (x + w > innerWidth - 8) x = lx - w - 14; if (y + ht > innerHeight - 8) y = ly - ht - 18; if (x < 6) x = 6; if (y < 6) y = 6; pop.style.left = x + 'px'; pop.style.top = y + 'px'; }
+    // 9 Sep 2026 (Daniel: "the definition completely blocks the field you're hovering") —
+    // element definitions anchor to the LABEL/HEADER's rect, not the pointer, so the popover
+    // never lands on the field. Prefer directly ABOVE the element; if there's no room, sit just
+    // BELOW its bottom edge (clearing the element and its row). Pointer-anchored tokens keep place().
+    function placeFor(el) {
+        if (!pop || !el || !el.getBoundingClientRect) { place(); return; }
+        var r = el.getBoundingClientRect(), w = pop.offsetWidth, ht = pop.offsetHeight, gap = 8;
+        var x = r.left; if (x + w > innerWidth - 8) x = innerWidth - 8 - w; if (x < 6) x = 6;
+        var y = r.top - ht - gap;                       // above the element
+        if (y < 6) y = r.bottom + gap;                  // no room above -> below the element
+        if (y + ht > innerHeight - 8) y = Math.max(6, innerHeight - 8 - ht);
+        pop.style.left = x + 'px'; pop.style.top = y + 'px';
+    }
     function show(el) {
         var d = el.getAttribute('data-def'); if (!d) return;
         var p = ensure();
         var extra = el.getAttribute('data-def-extra');
         p.innerHTML = '<b>' + esc(el.getAttribute('data-def-label') || el.textContent) + '</b><br><span style="opacity:.88;">' + esc(d) + '</span>' +
             (extra ? '<div style="margin-top:7px; padding-top:6px; border-top:1px solid rgba(255,255,255,.18); opacity:.85; white-space:pre-line;">' + esc(extra) + '</div>' : '');
-        p.style.display = 'block'; place();
+        p.style.display = 'block'; placeFor(el);
         window.__slFieldDefActive = true;
         try { var g = document.getElementById('gloss-pop'); if (g) g.style.display = 'none'; } catch (_) {}
     }

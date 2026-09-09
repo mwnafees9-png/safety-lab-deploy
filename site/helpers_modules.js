@@ -4488,6 +4488,18 @@ async function editACFHA(iId) {
             return;
         }
     }
+    // 9 Sep 2026 — same guard as editSysFHA: a legacy/imported row can reference a sub-function
+    // or FC that is not in the current pool; a <select> set to an unknown value blanks silently
+    // and a save writes the blank back. Make the row's own values selectable so nothing is lost.
+    const _acfhaEnsureOpt = (selId, value, label) => {
+        if (value == null || value === '') return;
+        const sel = document.getElementById(selId); if (!sel) return;
+        if (!Array.from(sel.options).some(o => o.value === String(value))) {
+            const o = document.createElement('option'); o.value = String(value);
+            o.textContent = label || String(value); sel.appendChild(o);
+        }
+    };
+    _acfhaEnsureOpt('ac-fha-subfunc', item.subId, (typeof _fhaSubFunctionDisplay === 'function' ? _fhaSubFunctionDisplay(item.subId) : null));
     document.getElementById('ac-fha-subfunc').value = item.subId;
     // Filter the FC list to this sub-function BEFORE restoring the row's own FC. Assigning
     // .value directly does not fire onchange, so without this the edit form would show the
@@ -4495,6 +4507,7 @@ async function editACFHA(iId) {
     // legacy row whose FC disagrees still opens with its own value intact rather than blank.
     document.getElementById('ac-fha-fcid').value = item.fcId;
     if (typeof _refreshFhaFcOptions === 'function') _refreshFhaFcOptions('ac');
+    _acfhaEnsureOpt('ac-fha-fcid', item.fcId, item.fcId);
     document.getElementById('ac-fha-fcid').value = item.fcId;
     document.getElementById('ac-fha-fcdesc').value = item.fcDesc;
     // Build the grid around this row's stored phases first: a value no longer in
@@ -5192,10 +5205,26 @@ async function editSysFHA(iId) {
         }
     }
     document.getElementById('sys-fha-ac-trace').value = item.acTrace || '';
+    // 9 Sep 2026 (Daniel: "the SFHA modal is empty for pre-populated stuff", "editing is glitchy")
+    // A pre-populated/imported SFHA row can carry a function id or FC id that is NOT in this
+    // system's current function list or extracted-FC pool. Setting a <select> to a value with no
+    // matching <option> silently blanks it — so the Function + Failure Condition fields showed
+    // empty AND a subsequent save read those blanks back, WIPING the row's function/FC linkage.
+    // Make the row's own values always selectable so the editor shows them and a save keeps them.
+    const _sfhaEnsureOpt = (selId, value, label) => {
+        if (value == null || value === '') return;
+        const sel = document.getElementById(selId); if (!sel) return;
+        if (!Array.from(sel.options).some(o => o.value === String(value))) {
+            const o = document.createElement('option'); o.value = String(value);
+            o.textContent = label || String(value); sel.appendChild(o);
+        }
+    };
+    _sfhaEnsureOpt('sys-fha-subfunc', item.subId, (typeof _fhaSubFunctionDisplay === 'function' ? _fhaSubFunctionDisplay(item.subId) : null));
     document.getElementById('sys-fha-subfunc').value = item.subId;
     // See editACFHA — filter to the selected function, keeping this row's own FC visible.
     document.getElementById('sys-fha-fcid').value = item.fcId;
     if (typeof _refreshFhaFcOptions === 'function') _refreshFhaFcOptions('sys');
+    _sfhaEnsureOpt('sys-fha-fcid', item.fcId, item.fcId);
     document.getElementById('sys-fha-fcid').value = item.fcId;
     document.getElementById('sys-fha-fcdesc').value = item.fcDesc;
     renderFhaPhaseGrid('sys-fha-phases', item.phases);

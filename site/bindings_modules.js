@@ -2626,7 +2626,17 @@ window.openBetaFeedback = function() {
     const mailto = 'mailto:' + BETA_FEEDBACK_EMAIL +
         '?subject=' + encodeURIComponent(subject) +
         '&body=' + encodeURIComponent(body);
-    if (typeof window !== 'undefined' && window.open) window.open(mailto, '_blank');
+    // 9 Sep 2026 — window.open(mailto,'_blank') opens a blank tab that many browsers
+    // then refuse to navigate to a mailto: (popup-blocked or left blank), so the button
+    // "did nothing" for Daniel. An anchor click is the reliable cross-browser trigger;
+    // location.href is the fallback. Neither navigates the SPA away for a mailto:.
+    try {
+        var _a = document.createElement('a');
+        _a.href = mailto; _a.style.display = 'none';
+        document.body.appendChild(_a); _a.click(); _a.remove();
+    } catch (_) {
+        try { window.location.href = mailto; } catch (_) {}
+    }
 };
 
 let _backrefTarget = null;
