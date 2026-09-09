@@ -3043,6 +3043,7 @@ function _wsEditable(scope, systemId){ const l=_wsGetLock(scope,systemId); if(!l
 function _wsLog(scope, systemId, action, summary){
     try{ _wsEnsure(); const u=_wsUser();
         projectConfig.changeLog.push({ ts:Date.now(), by:u.email, name:u.name, scope:scope, systemId:systemId||'', action:action, summary:summary });
+        try{ if(window.SLJournal) SLJournal.record(action,{entity_kind:scope,entity_id:systemId||null,summary:{text:summary,name:u.name}}); }catch(_){}
         if (projectConfig.changeLog.length > 500) projectConfig.changeLog.splice(0, projectConfig.changeLog.length - 500);
     }catch(_){}
 }
@@ -3655,6 +3656,7 @@ async function submitSignoff(reviewId, baselineSha, roleAtSigning) {
             user_agent: (typeof navigator !== 'undefined' ? navigator.userAgent : null)
         });
         if (error) throw error;
+        try{ if(window.SLJournal) SLJournal.record('signoff',{entity_kind:'review',entity_id:reviewId,summary:{text:'Signed: '+decision,decision:decision,meaning:meaning||null,role_at_signing:roleAtSigning,baseline_sha256:baselineSha}}); }catch(_){}
         closeSignoffModal();
         await openReviewDetail(reviewId);
         if (typeof showToast === 'function') showToast('Signed: ' + decision + '.', 'success', 4000);

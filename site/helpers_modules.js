@@ -8314,6 +8314,7 @@ async function createProjectRevision(label, note) {
             .single();
         if (error) throw error;
         const rev = created && created.version_no;
+        try{ if(window.SLJournal) SLJournal.record('baseline.cut',{entity_kind:'baseline',entity_id:rev,summary:{text:'Revision '+rev+(label?' - '+label:''),label:label||null,note:note||null,version_no:rev}}); }catch(_){}
         if (typeof showToast === 'function') showToast('Revision ' + rev + ' created' + (label ? ' — ' + label : ''), 'success', 4500);
         return rev;
     } catch (e) {

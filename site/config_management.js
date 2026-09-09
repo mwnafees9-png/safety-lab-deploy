@@ -244,7 +244,9 @@ function raisePR(o) {
     o = o || {}; const m = _cm(); if (!m) return null;
     const pr = { prId: _uid('pr'), againstCiId: o.againstCiId || '', title: o.title || '', description: o.description || '',
         safetyImpact: !!o.safetyImpact, status: 'open', raisedBy: _actor(), raisedAt: _now(), resolution: '', ecnId: null };
-    m.problemReports.push(pr); _save(); return pr;
+    m.problemReports.push(pr); _save();
+    try{ if(window.SLJournal) SLJournal.problemEvent(pr.prId,'opened',{status:'open',title:pr.title,description:pr.description,safetyImpact:pr.safetyImpact,againstCiId:pr.againstCiId,raisedBy:pr.raisedBy}); }catch(_){}
+    return pr;
 }
 function raiseECN(o) {
     o = o || {}; const m = _cm(); if (!m) return null;
@@ -254,7 +256,8 @@ function raiseECN(o) {
         description: o.description || '', reason: o.reason || '', substantiation: o.substantiation || (pr ? ('PR ' + pr.prId) : ''),
         approvedBy: o.approvedBy || _actor(), date: _now() };
     m.changeNotices.push(ecn);
-    if (pr) { pr.ecnId = ecn.ecnId; pr.status = 'closed'; pr.resolution = 'Resolved via ECN ' + ecn.ecnId; }
+    if (pr) { pr.ecnId = ecn.ecnId; pr.status = 'closed'; pr.resolution = 'Resolved via ECN ' + ecn.ecnId;
+        try{ if(window.SLJournal) SLJournal.problemEvent(pr.prId,'resolved',{status:'closed',resolution:pr.resolution,ecnId:ecn.ecnId,ciId:ecn.ciId}); }catch(_){} }
     if (ecn.ciId) { try { establishCIBaseline(ecn.ciId, { force: true, note: 'ECN ' + ecn.ecnId }); } catch (_) {} }
     _save(); return ecn;
 }
