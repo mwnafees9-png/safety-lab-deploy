@@ -14,7 +14,9 @@
  * bundle is missing or the flag is off, this module does nothing and the app is unaffected.
  *
  * v1 scope: item-level merge for the aircraft-level flat tables (functions / FHA / requirements),
- * proving the loop. Persistence + more collections + fault trees follow (see Phase 1 spec).
+ * proving the loop. As of 11 Sep 2026 fault trees also merge at NODE level: each page is
+ * decomposed into a shell + one record per node (keyed pageId:nodeId), so two people editing
+ * different nodes of the same tree no longer overwrite each other (see _ftaDecompose below).
  *
  * Model coupling lives in safety_lab.js via window.__crdtCapture() / window.__crdtApply(partial);
  * this module is model-agnostic (Y.Doc + transport + per-item diff/merge only).
@@ -37,8 +39,10 @@
     { name: 'resourcesData',     key: 'internalId' },
     { name: 'itemsData',         key: 'internalId' },
     { name: 'flightPhasesData',  key: 'phase' },
-    { name: 'systemsData',       key: 'id' },
-    { name: 'ftaPages',          key: 'id' }   // page-level merge (whole-page value); node-level = future
+    { name: 'systemsData',       key: 'id' }
+    // ftaPages is NOT in this generic list: fault trees get node-level merge below
+    // (decomposed into a page shell + one record per node), so two people editing
+    // different nodes of the SAME tree no longer overwrite each other.
   ];
 
   // WHOLE-VALUE stores (7 Sep 2026 COL rebuild): single objects/strings, not row lists.
@@ -53,6 +57,145 @@
   // not reissue the same number. Monotonic: pushLocal only ever raises the map value, and
   // __crdtApply takes max(local, incoming), so the loop converges to the true high-water mark.
   var COUNTERS = ['acAsmCounter', 'fmeaCounter', 'reviewCounter', 'internalIdCounter'];
+
+  // --- fault-tree NODE-LEVEL merge -------------------------------------------
+  // A fault-tree PAGE carries a nested node tree under .root. Storing the whole
+  // page as one value made two people editing the SAME tree last-write-wins — one
+  // editor's node change silently lost the other's. We DECOMPOSE each page into a
+  // flat "shell" (page fields minus .root) plus one record per node, keyed
+  // pageId:nodeId. Node ids come from internalIdCounter (already MAX-merged), so
+  // the key is stable and collision-free. Editing DIFFERENT nodes now touches
+  // DIFFERENT keys and both survive; the SAME node is last-write-wins (guard it
+  // with a node lock). The whole-page snapshot backup is untouched — this changes
+  // only the live representation. Pure (no model/DOM), so it unit-tests hard.
+  var FTA_SHELL = 'ftaPages';   // col: page shells,  keyed by page id
+  var FTA_NODE  = 'ftaNodes';   // col: flat nodes,   keyed by 'pageId:nodeId'
+
+  function _ftaStrip(n) {
+    var o = {};
+    for (var k in n) { if (k === 'children' || k === '_children') continue; if (Object.prototype.hasOwnProperty.call(n, k)) o[k] = n[k]; }
+    return o;
+  }
+  // nested pages  ->  { shells:[page-without-root...], nodes:[flat node record...] }
+  function _ftaDecompose(pages) {
+    var shells = [], nodes = [];
+    (pages || []).forEach(function (pg) {
+      if (!pg || pg.id == null || pg.id === '') return;   // keyless page: snapshot carries it
+      var shell = {};
+      for (var k in pg) { if (k === 'root') continue; if (Object.prototype.hasOwnProperty.call(pg, k)) shell[k] = pg[k]; }
+      shell.__hasTree = (pg.root != null);
+      shells.push(shell);
+      if (pg.root == null) return;
+      (function walk(n, parentId, order) {
+        if (!n || n.id == null || n.id === '') return;    // keyless node can't be merged (rare/legacy) — dropped from live, snapshot keeps it
+        var kids = Array.isArray(n.children) ? n.children : null;
+        var collapsed = false;
+        if (!kids && Array.isArray(n._children)) { kids = n._children; collapsed = true; }
+        nodes.push({
+          nodeKey: String(pg.id) + ':' + String(n.id),
+          pageId: pg.id, nodeId: n.id,
+          parentId: (parentId == null ? null : parentId),
+          order: order, kidsCollapsed: collapsed,
+          node: _ftaStrip(n)
+        });
+        (kids || []).forEach(function (c, i) { walk(c, n.id, i); });
+      })(pg.root, null, 0);
+    });
+    return { shells: shells, nodes: nodes };
+  }
+  // rebuild ONE page's nested root from its flat node records
+  function _ftaRebuildTree(recs) {
+    var byId = {}, ids = [];
+    (recs || []).forEach(function (r) {
+      if (!r || r.nodeId == null) return;
+      var id = String(r.nodeId);
+      if (byId[id]) return;                              // dedupe (defensive)
+      var n = {}, src = r.node || {};
+      for (var k in src) if (Object.prototype.hasOwnProperty.call(src, k)) n[k] = src[k];
+      byId[id] = { id: id, node: n, parentId: (r.parentId == null ? null : String(r.parentId)),
+                   order: (typeof r.order === 'number' ? r.order : 0), kidsCollapsed: !!r.kidsCollapsed, kids: [] };
+      ids.push(id);
+    });
+    if (ids.length === 0) return null;
+    var cmp = function (a, b) {
+      if (a.order !== b.order) return a.order - b.order;
+      var na = Number(a.id), nb = Number(b.id);
+      if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+      return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+    };
+    // attach each node to its parent; a null/missing parent makes it a root candidate
+    var roots = [];
+    ids.forEach(function (id) {
+      var e = byId[id], pid = e.parentId;
+      if (pid != null && byId[pid]) byId[pid].kids.push(e);
+      else roots.push(e);
+    });
+    // the true root is an explicit null-parent node; extra candidates are orphans
+    // (parent concurrently deleted, or a 2nd top event) — reattach them UNDER the
+    // root so they stay VISIBLE and are never silently lost.
+    var explicit = roots.filter(function (e) { return e.parentId == null; });
+    var pool = (explicit.length ? explicit : roots).slice().sort(cmp);
+    var root = pool[0];
+    roots.forEach(function (e) { if (e !== root) { e.node._orphanReattached = true; root.kids.push(e); } });
+    var seen = {};
+    function assemble(e) {
+      if (seen[e.id]) return null;                       // cycle / double-parent guard
+      seen[e.id] = 1;
+      var out = e.node, built = [];
+      e.kids.slice().sort(cmp).forEach(function (c) { var b = assemble(c); if (b) built.push(b); });
+      if (built.length === 0) out.children = [];
+      else if (e.kidsCollapsed) { out._children = built; out.children = null; }
+      else out.children = built;
+      return out;
+    }
+    var tree = assemble(root);
+    // any node never reached (pure cycle island) -> surface under root, never drop
+    ids.forEach(function (id) {
+      if (seen[id]) return;
+      var b = assemble(byId[id]); if (!b) return;
+      b._orphanReattached = true;
+      if (!Array.isArray(tree.children)) {
+        if (Array.isArray(tree._children)) { tree.children = tree._children; tree._children = null; }
+        else tree.children = [];
+      }
+      tree.children.push(b);
+    });
+    return tree;
+  }
+  // { shells, nodes }  ->  nested pages  (legacy shells that still carry .root pass through)
+  function _ftaRecompose(shells, nodes) {
+    var byPage = {};
+    (nodes || []).forEach(function (r) { if (!r || r.pageId == null) return; var pid = String(r.pageId); (byPage[pid] = byPage[pid] || []).push(r); });
+    return (shells || []).map(function (sh) {
+      var pg = {};
+      for (var k in sh) { if (k === '__hasTree') continue; if (Object.prototype.hasOwnProperty.call(sh, k)) pg[k] = sh[k]; }
+      var recs = byPage[String(sh.id)] || [];
+      if (recs.length === 0) { pg.root = (sh.root != null ? sh.root : null); return pg; }   // legacy/skew: keep embedded root
+      pg.root = _ftaRebuildTree(recs);
+      return pg;
+    });
+  }
+  // write a keyed array into col:/ord: maps (same posture as the generic loop)
+  function _ftaWriteKeyed(name, arr, keyField) {
+    var map = ydoc.getMap('col:' + name), ord = ydoc.getMap('ord:' + name), live = {};
+    (arr || []).forEach(function (item, i) {
+      var kv = item ? item[keyField] : null;
+      if (kv == null || kv === '') return;
+      var k = String(kv); live[k] = 1;
+      var next = JSON.stringify(item);
+      if (map.get(k) !== next) map.set(k, next);
+      if (ord.get(k) !== i) ord.set(k, i);
+    });
+    Array.from(map.keys()).forEach(function (k) { if (!live[k]) map.delete(k); });
+    Array.from(ord.keys()).forEach(function (k) { if (!live[k]) ord.delete(k); });
+  }
+  function _ftaReadKeyed(name) {
+    var map = ydoc.getMap('col:' + name), ord = ydoc.getMap('ord:' + name);
+    var keys = Array.from(map.keys()).sort(function (a, b) { var oa = ord.get(a), ob = ord.get(b); return (oa != null ? oa : 1e9) - (ob != null ? ob : 1e9); });
+    var arr = [];
+    keys.forEach(function (k) { var v = map.get(k); if (v != null) { try { arr.push(JSON.parse(v)); } catch (_) {} } });
+    return arr;
+  }
 
   var Y = null, ydoc = null, chan = null, _client = null, _idb = null;
   var _started = false, _applying = false, _wsId = null, _projId = null;
@@ -244,6 +387,10 @@
         Array.from(map.keys()).forEach(function (k) { if (!live[k]) map.delete(k); });
         Array.from(ord.keys()).forEach(function (k) { if (!live[k]) ord.delete(k); });
       });
+      // fault trees: node-level merge — decompose page trees into shells + flat nodes
+      var _fta = _ftaDecompose(cap.ftaPages || []);
+      _ftaWriteKeyed(FTA_SHELL, _fta.shells, 'id');
+      _ftaWriteKeyed(FTA_NODE, _fta.nodes, 'nodeKey');
       var wmap = ydoc.getMap('whole');
       WHOLE.forEach(function (name) {
         if (!(name in cap)) return;
@@ -284,6 +431,8 @@
       keys.forEach(function (k) { var v = map.get(k); if (v != null) { try { arr.push(JSON.parse(v)); } catch (_) {} } });
       partial[c.name] = arr;
     });
+    // fault trees: recompose shells + flat nodes back into nested pages
+    partial.ftaPages = _ftaRecompose(_ftaReadKeyed(FTA_SHELL), _ftaReadKeyed(FTA_NODE));
     var wmap = ydoc.getMap('whole');
     WHOLE.forEach(function (name) {
       if (wmap.has(name)) { try { partial[name] = JSON.parse(wmap.get(name)); } catch (_) {} }
@@ -397,7 +546,7 @@
   }
 
   function _online() { try { return navigator.onLine !== false; } catch (_) { return true; } }
-  function _docHasContent() { try { return COLLECTIONS.some(function (c) { return ydoc.getMap('col:' + c.name).size > 0; }); } catch (_) { return false; } }
+  function _docHasContent() { try { if (COLLECTIONS.some(function (c) { return ydoc.getMap('col:' + c.name).size > 0; })) return true; return ydoc.getMap('col:' + FTA_SHELL).size > 0 || ydoc.getMap('col:' + FTA_NODE).size > 0; } catch (_) { return false; } }
   function _renderOfflineBadge() {
     var show = _started && !_online();
     var el = document.getElementById('crdt-offline');
@@ -523,7 +672,8 @@
     start: start, stop: stop, refresh: refresh, onLocalChange: onLocalChange, enabled: flagOn, adoptModel: adoptModel,
     noteSnapshotVersion: noteSnapshotVersion, authoritative: authOn,
     status: function () { return { flag: flagOn(), authoritative: authOn(), stamp: _stampGet(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId }; },
-    _doc: function () { return ydoc; }
+    _doc: function () { return ydoc; },
+    _fta: { decompose: _ftaDecompose, recompose: _ftaRecompose, rebuildTree: _ftaRebuildTree }
   };
 
   // Boot: if enabled, start once the app + session settle, and poll cheaply for ws/project changes.
