@@ -77,8 +77,23 @@ Put it behind your normal HTTPS front door and note that address.
 Confirm it's alive: `GET <proxy-url>/v1/ai/health` returns `{"ok":true,...}`.
 
 ### Step 3 — Point the app at your backend
-Serve the app files from your own web host. Add a tiny config script **before**
-the app's own scripts in `index.html`, filling in your two addresses:
+Serve the app files from your own web host. The app needs a tiny config script
+**before** its own scripts in `index.html`. You can either **generate it** (easiest)
+or write it by hand.
+
+**Generate it (recommended).** Copy `install.env.example` to `install.env`, fill
+in your addresses, and run the generator from the `customer-install` folder:
+
+```
+cp install.env.example install.env   # then edit install.env
+node configure.js                     # writes slab_env.js
+```
+
+Include the `slab_env.js` it produces **before** the app's own scripts. The
+generator refuses to write a file that points anything at a Safety Lab address,
+and it catches the one easy mistake — leaving the AI endpoint blank in
+self-hosted mode, which would otherwise fall back to our AI. If you'd rather do
+it by hand, add this instead, filling in your two addresses:
 
 ```html
 <script>
@@ -106,7 +121,17 @@ SLConfigEgress()
 ```
 It lists every address the app will contact. Every one should be **yours** —
 your database, your proxy. If anything shows a Safety Lab address, fix the
-matching `__SLAB_*` value in Step 3. Done.
+matching `__SLAB_*` value in Step 3.
+
+To confirm the **database** side is healthy without opening the app, run the
+checker from the `customer-install` folder against your connection string:
+
+```
+./verify.sh "postgresql://postgres:PASSWORD@db.YOURREF.supabase.co:5432/postgres"
+```
+
+It checks the tables, security rules, and admin account are all in place and
+prints a pass/fail summary. Done.
 
 ---
 
