@@ -1,5 +1,7 @@
 # Safety Lab Aero: next-session handoff (12 Sep 2026)
 
+> **STATUS UPDATE, 12 Sep afternoon session:** item 1 DONE (985167a). Item 2 PREPARED (the "Open in desktop" switch was missing and is restored + guarded, 038d93a; desktop 0.17.0 committed; Waqas runs `./ship.sh` then `./release.sh` — note release.sh already calls pull-web.sh). Item 16 BUILT byte-identical (f7a8c00 + proxy 23ae01c; deploys + live proof pending). Read the top entry of HANDOFF.md for the detail; the rest of this file stands.
+
 Read this first, then `WORKING_RULES.md` (rules 27 to 30 are new), then the 12 Sep entry at the top of `HANDOFF.md`. `OPEN_ITEMS.md` section R holds the same items in register form; this file is the long version with the how-to for each.
 
 Repo: `~/dev/safety-lab-deploy` (mounted at `$HOME/mnt/dev/safety-lab-deploy` over the device bridge). Deploy is only ever `cd ~/dev/safety-lab-deploy && ./ship.sh`, run by Waqas. ship.sh builds the WORKING TREE, so uncommitted changes deploy. The wall is `tests/*.test.js` + `eval/*.test.js`; a suite that exits non-zero counts as a failure even with no FAIL line (rule 27).
