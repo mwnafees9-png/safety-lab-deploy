@@ -163,10 +163,11 @@ const AiClient = (function(){
         return projectConfig.aiTokenUsage;
     }
     function getTokenUsage() { return _tokenUsage(); }
-    function _consumeTokens(model, tokensIn, tokensOut) {
+    function _consumeTokens(model, tokensIn, tokensOut, cacheWrite, cacheRead) {
         if (!isProxyMode()) return;       // BYO key — user pays the provider directly; no allowance tracking
         const weight = MODEL_TOKEN_WEIGHTS[model] || 1.0;
-        const weighted = ((tokensIn || 0) + (tokensOut || 0)) * weight;
+        const weighted = _billableTokens({ input_tokens: tokensIn, output_tokens: tokensOut,
+                                           cache_creation_input_tokens: cacheWrite, cache_read_input_tokens: cacheRead }) * weight;
         const u = _tokenUsage();
         u.used = (u.used || 0) + weighted;
     }
@@ -187,10 +188,28 @@ const AiClient = (function(){
         };
     }
 
-    function _addCost(model, tokensIn, tokensOut){
+    // 12 Sep 2026 — prompt caching. Anthropic bills a cached prefix at these multiples of
+    // the plain input price: a cache WRITE (first sight of the prefix, 5-minute life) at
+    // 1.25x, a cache READ (every repeat within the window) at 0.10x. Kept in one place so the
+    // session cost, the Pro+ allowance and the proxy's meter all price the same way.
+    const CACHE_WRITE_MULT = 1.25;
+    const CACHE_READ_MULT  = 0.10;
+    // Sonnet-equivalent tokens for one call, cache-aware: what the allowance and the
+    // proxy count. usage = { input_tokens, output_tokens, cache_creation_input_tokens?,
+    // cache_read_input_tokens? }. Missing cache fields (pre-caching responses, Azure
+    // translations) count as zero, so old response shapes bill exactly as before.
+    function _billableTokens(usage){
+        const u = usage || {};
+        return (u.input_tokens || 0) + (u.output_tokens || 0)
+             + (u.cache_creation_input_tokens || 0) * CACHE_WRITE_MULT
+             + (u.cache_read_input_tokens || 0) * CACHE_READ_MULT;
+    }
+    function _addCost(model, tokensIn, tokensOut, cacheWrite, cacheRead){
         const price = AI_PRICES_USD_PER_MTOK[model];
         if (!price) return 0;
-        const cost = (tokensIn / 1e6) * price.input + (tokensOut / 1e6) * price.output;
+        const cost = (tokensIn / 1e6) * price.input + (tokensOut / 1e6) * price.output
+                   + ((cacheWrite || 0) / 1e6) * price.input * CACHE_WRITE_MULT
+                   + ((cacheRead  || 0) / 1e6) * price.input * CACHE_READ_MULT;
         try {
             const cur = parseFloat(localStorage.getItem(AI_LS_COST) || '0');
             localStorage.setItem(AI_LS_COST, String(cur + cost));
@@ -221,7 +240,9 @@ const AiClient = (function(){
         const reader = response.body.getReader();
         const dec = new TextDecoder();
         let buf = '', text = '', model = '', stopReason = null, streamErr = null;
-        const usage = { input_tokens: 0, output_tokens: 0 };
+        // 12 Sep 2026 — the two prompt-cache counters ride message_start next to input_tokens
+        // (which, once caching is on, counts only the tokens AFTER the last cached prefix).
+        const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
         const handle = function(raw){
             const line = raw.split('\n').find(function(l){ return l.indexOf('data:') === 0; });
             if (!line) return;
@@ -233,6 +254,8 @@ const AiClient = (function(){
                 if (p.message.usage) {
                     usage.input_tokens  = p.message.usage.input_tokens  || usage.input_tokens;
                     usage.output_tokens = p.message.usage.output_tokens || usage.output_tokens;
+                    usage.cache_creation_input_tokens = p.message.usage.cache_creation_input_tokens || usage.cache_creation_input_tokens;
+                    usage.cache_read_input_tokens     = p.message.usage.cache_read_input_tokens     || usage.cache_read_input_tokens;
                 }
             } else if (p.type === 'content_block_delta' && p.delta && p.delta.type === 'text_delta') {
                 text += p.delta.text || '';
@@ -315,6 +338,43 @@ const AiClient = (function(){
         try { return AI_PROXY_BASE_URL ? null : 'AI is not set up on this install. Choose an AI backend under Settings (your own Claude, Azure, or on-prem endpoint).'; }
         catch (_) { return 'AI is not set up on this install.'; }
     }
+    // 12 Sep 2026 — PROMPT CACHING, packaging only. The system prompt arrives here as the
+    // one string the caller assembled (every lane, the chat, and the customer's own
+    // OpenAI-style endpoint all speak strings; that contract does not change). What
+    // changes is the WIRE SHAPE for Anthropic: opts.cacheBreaks is an ascending list of
+    // character offsets into that string, each one the end of a prefix that repeats from
+    // call to call (the skill body; the uploaded source document). The string is cut at
+    // those offsets into text blocks, and every block except the last carries a cache
+    // marker, so Anthropic stores the prefix once (5-minute life, refreshed on every hit)
+    // and bills repeats at a tenth of the input price. The text is not touched: the
+    // blocks joined back together ARE the original string, byte for byte — this is not a
+    // prompt change and needs no eval (rule 29). A break that is not a clean cut (out of
+    // range, out of order, not on a paragraph seam) is dropped rather than guessed at;
+    // with no usable break the string goes as it always did.
+    const CACHE_MAX_MARKERS = 4;   // Anthropic's limit per request; the user turn carries none
+    function systemBlocks(system, cacheBreaks){
+        if (typeof system !== 'string' || !system) return system;
+        if (!Array.isArray(cacheBreaks) || !cacheBreaks.length) return system;
+        const len = system.length;
+        const cuts = [];
+        for (let i = 0; i < cacheBreaks.length; i++) {
+            const o = cacheBreaks[i];
+            if (typeof o !== 'number' || !isFinite(o) || o !== Math.floor(o)) continue;
+            if (o <= 0 || o >= len) continue;                          // nothing before, or nothing after
+            if (cuts.length && o <= cuts[cuts.length - 1]) continue;   // ascending only
+            // Cut only on a paragraph seam, with the seam kept in the EARLIER block, so the
+            // model sees paragraph then paragraph exactly as the string had them.
+            if (system.slice(o - 2, o) !== '\n\n') continue;
+            cuts.push(o);
+            if (cuts.length === CACHE_MAX_MARKERS) break;
+        }
+        if (!cuts.length) return system;
+        const blocks = [];
+        let from = 0;
+        cuts.forEach(function(o){ blocks.push({ type: 'text', text: system.slice(from, o), cache_control: { type: 'ephemeral' } }); from = o; });
+        blocks.push({ type: 'text', text: system.slice(from) });
+        return blocks;
+    }
     async function messages(opts){
         const s = _settings();
         const _cap = Number(s.costCap) || 0;   // 0 = uncapped (default); a per-customer cap is honored when set
@@ -353,7 +413,8 @@ const AiClient = (function(){
         const _tempAsked = (typeof opts.temperature === 'number') ? opts.temperature : 0.2;
         const _tempApplied = _modelAcceptsTemperature(model);
         if (_tempApplied) body.temperature = _tempAsked;
-        if (opts.system) body.system = opts.system;
+        if (opts.system) body.system = systemBlocks(opts.system, opts.cacheBreaks);
+        const _cached = Array.isArray(body.system) ? (body.system.length - 1) : 0;   // markers on the wire
         const startedAt = Date.now();
         // One request send (proxy or BYO). Extracted so we can retry cleanly.
         async function _send(b) {
@@ -425,9 +486,12 @@ const AiClient = (function(){
             json = await response.json();
         }
         const usage = json.usage || {};
-        const incCost = _addCost(model, usage.input_tokens || 0, usage.output_tokens || 0);
-        _consumeTokens(model, usage.input_tokens || 0, usage.output_tokens || 0);
-        _logCall({ feature: opts.feature || 'messages', model, ok: true, tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
+        const _cw = usage.cache_creation_input_tokens || 0, _cr = usage.cache_read_input_tokens || 0;
+        const incCost = _addCost(model, usage.input_tokens || 0, usage.output_tokens || 0, _cw, _cr);
+        _consumeTokens(model, usage.input_tokens || 0, usage.output_tokens || 0, _cw, _cr);
+        // The audit record carries the cache counters so a run's own trail answers "did the
+        // cache hit?" — cacheRead large and tokensIn small on the second call is the proof.
+        _logCall({ feature: opts.feature || 'messages', model, ok: true, tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cacheWrite: _cw, cacheRead: _cr, cacheMarkers: _cached, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
         return json;
     }
 
@@ -498,7 +562,7 @@ const AiClient = (function(){
     }
     function getAuditLog(){ return (projectConfig && projectConfig.aiAuditLog) || []; }
 
-    return { isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage, unconfiguredRefusal };
+    return { isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage, unconfiguredRefusal, systemBlocks, billableTokens: _billableTokens };
 })();
 window.AiClient = AiClient;
 

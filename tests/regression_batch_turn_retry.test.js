@@ -71,7 +71,7 @@ console.log('\n[2] EXECUTED — the real _runSlice against a fake provider');
     const _slices = [['u1'], ['u2'], ['u3']];
     const _results = new Array(_slices.length);
     const _chunk = { noun: 'failure condition', label: u => String(u), units: ['u1','u2','u3'] };
-    const _CHUNK_TURN_TOKENS = 4000, _sysExtra = '';
+    const _CHUNK_TURN_TOKENS = 4000, _sysExtra = '', _sysBreaks = [];   // 12 Sep 2026: the slice passes the prompt-cache breaks through
     const _mkMessages = x => [{ role: 'user', content: x }];
     globalThis.__calls = [];
     let _anemRun = async function (m) {

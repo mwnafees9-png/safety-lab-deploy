@@ -58,7 +58,7 @@ console.log('\n[budget] the ceiling that caused the rationing');
 // Scoped to _anemComplete — other, classic lanes legitimately run at 8000 and are
 // not what rationed the AFHA.
 check('the batch engine DEFAULTS to 16,000 output tokens, matching doc.review',
-  /feature: 'chat\.edit', model: MODELS\.reason, system: sys, messages: messages, maxTokens: \(typeof maxTokens === 'number' \? maxTokens : 16000\)/.test(ai),
+  /feature: 'chat\.edit', model: MODELS\.reason, system: sys, cacheBreaks: _breaks, messages: messages, maxTokens: \(typeof maxTokens === 'number' \? maxTokens : 16000\)/.test(ai),   // 12 Sep 2026: + prompt-cache breaks
   '8000 could not hold a full sweep for an unchunked lane, so the model rationed and announced it');
 
 console.log('\n[chunking] the app sizes the work, not the model');
@@ -102,13 +102,13 @@ check('a chunked turn asks for a smaller budget than a one-shot lane',
   parseInt(ai.match(/const _CHUNK_TURN_TOKENS = (\d+);/)[1], 10) < 16000,
   'asking a reasoning model for 16,000 tokens per small turn is most of the latency');
 check('…and that budget is actually threaded to the provider call',
-  /_anemRun\(_mkMessages\(_extra\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0\)/.test(ai) &&   // 5 Sep: + temperature 0
-  /async function _anemRun\(messages, systemExtra, maxTokens, temperature\)/.test(ai) &&
-  /async function _anemComplete\(messages, systemExtra, maxTokens, temperature\)/.test(ai) &&
+  /_anemRun\(_mkMessages\(_extra\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks\)/.test(ai) &&   // 5 Sep: + temperature 0; 12 Sep: + prompt-cache breaks
+  /async function _anemRun\(messages, systemExtra, maxTokens, temperature, extraBreaks\)/.test(ai) &&
+  /async function _anemComplete\(messages, systemExtra, maxTokens, temperature, extraBreaks\)/.test(ai) &&
   /maxTokens: \(typeof maxTokens === 'number' \? maxTokens : 16000\)/.test(ai),
   'a budget computed and not passed would look identical to a grep');
 check('…including on the parse-fail retry, which would otherwise jump back to 16,000',
-  /no prose, no markdown fences\.', maxTokens, temperature\);/.test(ai));
+  /no prose, no markdown fences\.', maxTokens, temperature, extraBreaks\);/.test(ai));
 check('the busy indicator is begun ONCE for the whole chunked run and ended once',
   (ai.match(/window\.slabAiBusyBegin\('drafting '/g) || []).length === 1 &&
   /if \(_chunk && window\.slabAiBusyEnd\) window\.slabAiBusyEnd\(\);/.test(ai),

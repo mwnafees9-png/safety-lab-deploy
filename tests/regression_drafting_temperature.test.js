@@ -36,9 +36,9 @@ const t = (f) => vm.runInContext('_featureTemp(' + JSON.stringify(f) + ')', ctx)
 check('analytical drafting runs at 0 (fha.populate, fcim.populate, arch.decompose, mac.draft, coffe.draft, hf.draftlane)', ['fha.populate', 'fcim.populate', 'arch.decompose', 'mac.draft', 'coffe.draft', 'hf.draftlane', 'interdep.sweep'].every(f => t(f) === 0));
 check('validators and the judge stay at 0', t('eval.judge') === 0 && t('validate.verifier') === 0);
 check('only the conversational chat keeps 0.3', t('chat.edit') === 0.3);
-check('_anemComplete takes an explicit temperature and passes it to the provider', /async function _anemComplete\(messages, systemExtra, maxTokens, temperature\)/.test(ai) && /temperature: \(typeof temperature === 'number' \? temperature : undefined\)/.test(ai));
-check('the batch slices and the phase-coverage pass run at 0', /_anemRun\(_mkMessages\(_extra\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0\)/.test(ai) && /_anemRun\(_mkMessages\(_steer\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0\)/.test(ai));
-check('the retry after an unparseable reply keeps the same temperature', /maxTokens, temperature\);/.test(ai));
+check('_anemComplete takes an explicit temperature and passes it to the provider', /async function _anemComplete\(messages, systemExtra, maxTokens, temperature, extraBreaks\)/.test(ai) && /temperature: \(typeof temperature === 'number' \? temperature : undefined\)/.test(ai));
+check('the batch slices and the phase-coverage pass run at 0', /_anemRun\(_mkMessages\(_extra\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks\)/.test(ai) && /_anemRun\(_mkMessages\(_steer\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks\)/.test(ai));
+check('the retry after an unparseable reply keeps the same temperature', /maxTokens, temperature, extraBreaks\);/.test(ai));
 check('the ANEM chat passes no temperature (keeps its tier)', /const attempt = await _anemRun\(msgs, _cbGround\);/.test(ai));
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

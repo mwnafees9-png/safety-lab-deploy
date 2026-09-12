@@ -240,6 +240,7 @@
                 }
                 const r = await ac.messages({
                     system:      opts.system,
+                    cacheBreaks: opts.cacheBreaks,   // 12 Sep 2026 — where the wire may be cut for the prompt cache (see _assembleAnalysisContext)
                     messages:    opts.messages || [],
                     feature:     opts.feature || 'ai.sandbox',
                     maxTokens:   opts.maxTokens,
@@ -1091,9 +1092,22 @@
         // Every block is guarded HERE, not only inside the providers: a failing
         // block yields LESS context, never a dead completion (proven executed by
         // regression_f2_context_assembly P4).
+        // 12 Sep 2026 — PROMPT-CACHE BREAKS. This assembler is the one place that knows
+        // which parts of the finished string repeat from call to call, so it is the one
+        // place that says where the wire may be cut (AiClient.systemBlocks does the
+        // cutting; the text is never reordered or reworded — rule 29). Two prefixes
+        // repeat: (1) the caller's prompt plus the skill body — identical for every batch
+        // of a run and every run on the same project; (2) everything through the
+        // uploaded source document — the bulk of the tokens, identical for a whole
+        // session on one project. Each offset is recorded right after its block is
+        // appended, and only when the block was actually appended, so an offset always
+        // sits on the paragraph seam that follows the block it names. The golden-thread
+        // block between the two can vary per batch (its requirements list); when it
+        // does, prefix (2) misses and prefix (1) still hits — the byte-identical choice.
+        const _breaks = [];
         try {
             const _spec = _skillBodyFor(feature) || _FEATURE_SPECS[feature];
-            if (_spec) sys = sys + '\n\n' + _spec;   // standards grounding per assessment
+            if (_spec) { sys = sys + '\n\n' + _spec; _breaks.push(sys.length + 2); }   // standards grounding per assessment
         } catch (_) {}
         try {
             const _gt = _goldenThreadContext(feature, opts);    // Foundation #131 — connected-model (golden-thread) context
@@ -1112,7 +1126,7 @@
                 return b;
             } catch (_) { return ''; }
         })();
-        if (_dc) sys = sys + '\n\n' + _dc;
+        if (_dc) { sys = sys + '\n\n' + _dc; _breaks.push(sys.length + 2); }
         // E2.8 — tenant exemplars: the program's own manual/signed rows as
         // few-shot style anchors (learning loop 1: retrieval, never weights).
         try {
@@ -1179,6 +1193,10 @@
         // spec-level rule for a genuinely empty project (_SPEC_DECOMP
         // REQUIRED INPUTS). Assumptions + basis contracts still apply.
         if (String(feature || '') !== 'arch.decompose') sys = _withInsufficiencyClause(sys);
+        // Hand the break offsets back on the caller's opts (the return stays the string
+        // every consumer expects). A break beyond the end (nothing was appended after the
+        // block) is not a cut and is left out.
+        try { opts.cacheBreaks = _breaks.filter(function (o) { return o < sys.length; }); } catch (_) {}
         return sys;
     }
 
@@ -10812,7 +10830,9 @@
         };
     }
 
-    function _chatSystemPrompt() {
+    function _chatSystemPrompt() { return _chatSystemPromptParts(_chatSystemPromptRole()).text; }
+    // The fixed ANEM role text (no project data) — one block, identical for every chat on every project.
+    function _chatSystemPromptRole() {
         const role = [
             'ROLE — You are ANEM (Advisory Notes & Evidence Module), the Safety Lab Aero conversational safety-analysis editor working DIRECTLY on the connected safety model (the golden thread AFHA -> PASA -> SFHA -> PSSA -> SSA -> ASA, with PRA/ZSA/CMA in parallel). You discuss, plan, and APPLY edits to the project on request.',
             '',
@@ -10864,9 +10884,23 @@
             '',
             'Keep replies concise and engineer-to-engineer. Prefer a few precise edits over many speculative ones. If you are missing an id or scope, ASK rather than guess.'
         ].join('\n');
-        return [_standardsPreamble(), '', role, '',
-            'CURRENT PROJECT STATE (JSON, read-only — reference these ids). The connected spine is included: each fault-tree page carries its allocTarget / allocDAL and its ccfGroups / repeatedEvents; system functions carry tracesUpTo and system FCs carry rollsUpTo; requirements carry traceTo. Inherit allocated targets (never a severity-class guess when a real target exists), preserve every up-link, and never break an existing CCF grouping or independence claim.',
-            JSON.stringify(_chatProjectState())].join('\n');
+        return role;
+    }
+    // 12 Sep 2026 — the chat prompt with its prompt-cache break points. Same text, same
+    // join, as _chatSystemPrompt always produced (that function now returns .text of
+    // this). Two prefixes repeat from turn to turn: the fixed role text (identical for
+    // every chat on every project) and the project-state JSON (identical until an edit
+    // lands). Each break sits on the '\n\n' seam that follows its block, seam kept in
+    // the earlier block, so AiClient.systemBlocks can cut there without changing a byte.
+    function _chatSystemPromptParts(role) {
+        const head = [_standardsPreamble(), '', role].join('\n');
+        const stateNote = 'CURRENT PROJECT STATE (JSON, read-only — reference these ids). The connected spine is included: each fault-tree page carries its allocTarget / allocDAL and its ccfGroups / repeatedEvents; system functions carry tracesUpTo and system FCs carry rollsUpTo; requirements carry traceTo. Inherit allocated targets (never a severity-class guess when a real target exists), preserve every up-link, and never break an existing CCF grouping or independence claim.';
+        const text = [head, '', stateNote, JSON.stringify(_chatProjectState())].join('\n');
+        // head + '\n' + '' + '\n' = head followed by the '\n\n' seam; the break is just past it.
+        // The state break is just past the seam the CALLER appends after the JSON (every
+        // systemExtra and the OUTPUT FORMAT footer begin with '\n\n'); systemBlocks drops
+        // it when no seam is there.
+        return { text: text, breaks: [head.length + 2, text.length + 2] };
     }
 
     // ---- live action executor (reuses the same writers the review panels use) ----
@@ -12203,7 +12237,11 @@
     // and the batch surface (_anemBatch, routes to a review panel → Accept). Same
     // unified system prompt + action schema + executor (_chatRunActions) + safeguards.
     // ========================================================================
-    async function _anemComplete(messages, systemExtra, maxTokens, temperature) {
+    // 12 Sep 2026 — extraBreaks: prompt-cache break offsets INSIDE systemExtra (from
+    // _assembleAnalysisContext, relative to that string); they are shifted by the chat
+    // prompt's length and joined with the chat prompt's own breaks. Optional; a plain chat
+    // turn passes none and still caches the fixed role text and the project state.
+    async function _anemComplete(messages, systemExtra, maxTokens, temperature, extraBreaks) {
         // Newer models (Opus 4.7+/extended-thinking) reject an assistant-message prefill, so we no
         // longer prefill "{". Instead we instruct strict-JSON output and rely on the hardened parser
         // (_safeParseJson: balanced extraction + truncation repair) plus the one-shot retry in
@@ -12223,9 +12261,11 @@
                 }
             }
         } catch (_) {}
-        const sys = _chatSystemPrompt() + (systemExtra || '')
+        const _chat = _chatSystemPromptParts(_chatSystemPromptRole());
+        const sys = _chat.text + (systemExtra || '')
             + (_lastUser ? _ftaKbBlock(_lastUser.slice(0, 4000), 5, 'chat') : '')
             + '\n\nOUTPUT FORMAT: reply with ONLY the strict JSON object (start with { and end with }). No preamble, no explanation, no markdown code fences.';
+        const _breaks = _chat.breaks.concat((Array.isArray(extraBreaks) ? extraBreaks : []).map(function (o) { return _chat.text.length + o; }));
         // 26 Aug 2026 — 8000 was the ceiling that made the model self-ration: an FHA
         // row costs ~350 output tokens, so a full sweep never fit and it drafted a
         // batch and offered to continue. Chunking is the real fix; this matches the
@@ -12233,7 +12273,7 @@
         // 5 Sep 2026 — this call is labelled chat.edit for the spec/context injection keyed on it, so
         // it silently ran at the CHAT temperature (0.3) for every analysis batch — the FHA on the
         // golden thread included. The batch passes 0 explicitly; the chat passes nothing and keeps 0.3.
-        const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, messages: messages, maxTokens: (typeof maxTokens === 'number' ? maxTokens : 16000), temperature: (typeof temperature === 'number' ? temperature : undefined) });
+        const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, cacheBreaks: _breaks, messages: messages, maxTokens: (typeof maxTokens === 'number' ? maxTokens : 16000), temperature: (typeof temperature === 'number' ? temperature : undefined) });
         return { rr: rr, parsed: _safeParseJson(String(rr.text || '')) };
     }
     // 6 Sep 2026 — the controlled-document guard that used to live here (chat lane only;
@@ -12244,12 +12284,12 @@
     // A chunked turn covers a handful of units, not a whole project — asking a
     // reasoning model for 16,000 tokens it will not use is most of the latency.
     const _CHUNK_TURN_TOKENS = 8000;
-    async function _anemRun(messages, systemExtra, maxTokens, temperature) {
+    async function _anemRun(messages, systemExtra, maxTokens, temperature, extraBreaks) {
         const ex = systemExtra || '';
-        let attempt = await _anemComplete(messages, ex, maxTokens, temperature);
+        let attempt = await _anemComplete(messages, ex, maxTokens, temperature, extraBreaks);
         if (!attempt.parsed) {   // one retry on parse-fail, mirroring the chat reliability path
             const truncated = !!(attempt.rr && attempt.rr.raw && attempt.rr.raw.stop_reason === 'max_tokens');
-            attempt = await _anemComplete(messages, ex + '\n\nCRITICAL: your previous reply could not be parsed' + (truncated ? ' (it was cut off — be more concise, fewer actions this turn)' : '') + '. Return ONLY one strict JSON object {reply,actions,choices,assumptions}, every string properly escaped, no prose, no markdown fences.', maxTokens, temperature);
+            attempt = await _anemComplete(messages, ex + '\n\nCRITICAL: your previous reply could not be parsed' + (truncated ? ' (it was cut off — be more concise, fewer actions this turn)' : '') + '. Return ONLY one strict JSON object {reply,actions,choices,assumptions}, every string properly escaped, no prose, no markdown fences.', maxTokens, temperature, extraBreaks);   // the retry appends AFTER the extra, so its break offsets still hold
         }
         return attempt;
     }
@@ -12349,11 +12389,13 @@
         // this code. Every other batch lane keeps it (Waqas's scoping, 5 Sep).
         const _isFhaLane = /^s?fha$/i.test(String(cfg.analysis || ''));
         const _abstainForLane = _isFhaLane ? '' : ('\n\n' + _ABSTAIN_RULE);
-        const _sysExtra = await _assembleAnalysisContext(cfg.analysis || '', String(cfg.systemExtra || '') + _abstainForLane, {
+        const _asmOpts = {
             thread: cfg.thread, zonal: cfg.zonal, specSecs: cfg.specSecs,
             data_classification: cfg.data_classification, dedupeContext: _ctxStr,
             messages: [{ role: 'user', content: String(taskDirective || '') }]
-        });
+        };
+        const _sysExtra = await _assembleAnalysisContext(cfg.analysis || '', String(cfg.systemExtra || '') + _abstainForLane, _asmOpts);
+        const _sysBreaks = _asmOpts.cacheBreaks || [];   // 12 Sep 2026 — prompt-cache breaks inside _sysExtra
         // The re-run closure: a choice the model offered becomes the engineer's next
         // steer on the SAME directive, so clicking one continues the analysis rather
         // than making them retype the request.
@@ -12452,7 +12494,7 @@
             let _lastErr = null;
             for (let _try = 1; _try <= _TURN_TRIES; _try++) {
                 try {
-                    _results[_ci] = { ok: true, a: await _anemRun(_mkMessages(_extra), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0), tries: _try };   // 5 Sep — analysis batches at temperature 0
+                    _results[_ci] = { ok: true, a: await _anemRun(_mkMessages(_extra), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks), tries: _try };   // 5 Sep — analysis batches at temperature 0
                     if (_try > 1) _retried++;
                     return;
                 } catch (e) {
@@ -12571,7 +12613,7 @@
                 const _steer = '\n\nPHASE COVERAGE — for one failure condition, every phase of the mission profile belongs to EXACTLY ONE row: one effect, one class. The rows returned for the conditions below leave phases unassessed, or assess a phase twice. For each condition: where phases are UNASSESSED, return ONLY the additional add_fha rows that cover them (group phases that share the same effects and class on one row; where the effect is not realised and the flight can be aborted or the condition escaped, that is a No Safety Effect row; where the effect is not realised yet but cannot be escaped, the row carries the end effect and its class). Where a phase is ASSESSED TWICE, return the condition\'s COMPLETE set of rows again with each phase on exactly one row — those rows replace the ones you returned before. Echo srcCondId and fcDesc exactly.\n'
                     + _gaps.map(function (g) { return '- ' + g.label + (g.missing && g.missing.length ? ' — phases unassessed: ' + g.missing.join(', ') : '') + (g.twice && g.twice.length ? ' — phases assessed twice: ' + g.twice.join(', ') : ''); }).join('\n');
                 try {
-                    const _a2 = await _anemRun(_mkMessages(_steer), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0);
+                    const _a2 = await _anemRun(_mkMessages(_steer), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks);
                     const _pp2 = (_a2 && _a2.parsed) || {};
                     if (Array.isArray(_pp2.actions)) Array.prototype.push.apply(actions, _pp2.actions);
                     if (_pp2.reply) _replies.push(String(_pp2.reply));
