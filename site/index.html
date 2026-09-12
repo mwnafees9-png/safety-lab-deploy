@@ -4012,6 +4012,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          the whole-document snapshot becomes a periodic backup. Self-healing reconcile
          (a stale copy can never overwrite good data) — see crdt_sync.js authOn(). -->
     <script>window.SL_CRDT_AUTHORITATIVE = true;</script>
+    <!-- 7 Sep 2026: desktop 0.16.0 registers safetylab://, so the web may offer "Open in desktop" (helpers_modules _acctOpenInRow). Flipped 7 Sep, lost to an uncommitted-file revert, restored 12 Sep. -->
+    <script>window.SL_DESKTOP_APP_READY = true;</script>
     <!-- MFA enforcement master switch — set false to drop MFA (no challenge, no forced enrollment). -->
     <!-- #19 — shared cut-set engine (single source for the page + the cut-set Web Worker). Must load before safety_lab.js. -->
     <!-- ENG-2 phase 1 — shared table pagination (50/page default; honesty label; display-lane only). Loads before every consumer. -->
