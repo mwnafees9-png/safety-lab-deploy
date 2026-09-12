@@ -378,6 +378,28 @@ function applicableParticularRisks(projectConfig, ctx) {
     return { applicable, notApplicable };
 }
 
+// ── Severity pill (11 Sep 2026) — the ONE way a severity is rendered anywhere in
+// the app: solid bright pill (red / orange / yellow / green), black text, dot.
+// opts.dal = true appends the "drives DAL X" caption from the project's cert basis.
+function sevPillHtml(sev, opts) {
+    opts = opts || {};
+    const raw = String(sev || '').trim();
+    const key = ({ 'Catastrophic': 'cat', 'Hazardous': 'haz', 'Major': 'maj', 'Minor': 'min',
+                   'Negligible': 'neg', 'No Safety Effect': 'neg' })[raw] || '';
+    const _e = (typeof esc === 'function') ? esc : (x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+    if (!key) return raw ? '<span class="sev-pill">' + _e(raw) + '</span>' : '';
+    const label = key === 'neg' ? 'No Safety Effect' : raw;
+    let html = '<span class="sev-pill sev-' + key + '" data-sev="' + key + '">' + _e(label) + '</span>';
+    if (opts.dal) {
+        let dal = null;
+        try { const t = (typeof getSafetyTarget === 'function') ? getSafetyTarget(key === 'neg' ? 'Negligible' : raw) : null; dal = t && t.dal ? String(t.dal) : null; } catch (_) { dal = null; }
+        if (key === 'neg' || !dal) html += '<div class="sev-dal">no DAL driven</div>';
+        else html += '<div class="sev-dal">drives <b>DAL ' + _e(dal) + '</b></div>';
+    }
+    return html;
+}
+window.sevPillHtml = sevPillHtml;
+
 function dalDecrement(dal, n) {
     if (!dal) return null;
     const i = DAL_ORDER.indexOf(dal);
@@ -924,7 +946,7 @@ function renderProbTable() {
         const probCell = t.prob === null
             ? '<span class="u-muted-italic">No quantitative requirement</span>'
             : `&lt; ${t.prob.toExponential(0)} /fh`;
-        return `<tr><td class="cell-${sev}">${sev === 'Negligible' ? 'No Safety Effect' : sev}</td><td>${probCell}</td><td><strong>DAL ${t.dal}</strong></td></tr>`;
+        return `<tr><td class="cell-${sev}">${sevPillHtml(sev)}</td><td>${probCell}</td><td><strong>DAL ${t.dal}</strong></td></tr>`;
     }).join('');
     // Phase 29.2 + 53.51 — DAL guidance summary. Qualitative descriptions only; the formal
     // objective counts and table references live in the source standards (RTCA DO-178C / DO-254).
@@ -1881,7 +1903,7 @@ function renderCcmrPage() {
                 '<td>' + esc(r.pageName) + '</td>' +
                 '<td>' + esc(r.system) + '</td>' +
                 '<td class="u-mono">' + esc(r.fcId || '') + '</td>' +
-                '<td><span class="sla-stamp" style="color: var(--sev-' + (r.severity === 'Catastrophic' ? 'cat' : 'haz') + '-fg);">' + (r.severity === 'Catastrophic' ? 'CAT' : 'HAZ') + '</span></td>' +
+                '<td>' + sevPillHtml(r.severity) + '</td>' +
                 '<td>' + esc(r.detection) + '</td>' +
                 '<td class="u-mono" style="text-align:right;">' + (r.lambda > 0 ? r.lambda.toExponential(2) : '—') + '</td>' +
                 '<td class="u-mono" style="text-align:right;">' + _ccmrFmtH(r.interval) + '</td>' +
@@ -2492,7 +2514,7 @@ function renderInterdepPage() {
             : (unrev ? '<span style="font-size:10.5px; color: var(--color-warning); font-family: var(--font-mono);">' + unrev + ' unreviewed</span>'
                      : '<span style="font-size:10.5px; color: var(--color-text-tertiary); font-family: var(--font-mono);">' + (n === 1 ? 'single' : '—') + '</span>');
         html += '<tr><td>' + esc(funcName.funcName || funcName.subName || fc.subId || '—') + '</td>' +
-            '<td><span class="u-mono">' + esc(fc.fcId || '') + '</span> <span class="sla-stamp" style="color: var(--sev-' + sevCls + '-fg); font-size:9px;">' + esc((fc.severity || '?').slice(0, 3).toUpperCase()) + '</span></td>' +
+            '<td><span class="u-mono">' + esc(fc.fcId || '') + '</span> ' + (fc.severity ? sevPillHtml(fc.severity) : '<span class="sla-stamp">?</span>') + '</td>' +
             cellsHtml + '<td>' + chip + '</td></tr>';
     });
     html += '</tbody></table></div>';
@@ -4812,7 +4834,7 @@ function renderACFHA() {
         // opens the Comments cell of the group head instead, so nothing is lost. Sub-Function
         // a bit wider; Effects and Comments much wider.
         const _findingHtml = _grpBadge ? `<div style="margin:0 0 4px 0;">${_grpBadge.replace('margin-left:6px;', 'margin-left:0;')}</div>` : '';
-        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${esc(row.severity)}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'fha-ac', tbody, rows: _fhaGrouping.ordered, rowHtml: _fhaRowHtml,
@@ -5281,7 +5303,7 @@ function renderSysFHA() {
                   _l1Fns.map(f => `<option value="${esc(f.funcId)}"${_l1Sugg === String(f.funcId) ? ' selected-suggested' : ''}>${esc(f.funcName || f.funcId)}${_l1Sugg === String(f.funcId) ? ' (FCIM match)' : ''}</option>`).join('') + `</select>`
                 : `<div style="font-size:10px; color:var(--color-text-tertiary);">declare functions on this system first</div>`)
         ;
-        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${esc(row.severity)}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
     };
     // 31 Aug 2026 — same ordered view as the AC table: natural ascending fcId,
     // same-id phase rows clustered, blank ids last.
@@ -5522,6 +5544,7 @@ function _resourceSeverityRank(sev) {
 function _resourceSevChip(sev) {
     const key = { 'Catastrophic': 'cat', 'Hazardous': 'haz', 'Major': 'maj', 'Minor': 'min', 'Negligible': 'neg', 'No Safety Effect': 'neg' }[sev] || 'neg';
     const label = sev || '—';
+    if (sev) return sevPillHtml(sev);
     return '<span style="display: inline-block; padding: 1px 8px; border-radius: var(--r-full); font-size: 10.5px; font-weight: 700; background: var(--sev-' + key + '-bg); color: var(--sev-' + key + '-fg);">' + esc(label) + '</span>';
 }
 // Compute the loss-of-resource impact for a resource row: for each consumed
@@ -5954,10 +5977,10 @@ function generateTraceMatrix() {
         return '<tr>' +
             '<td><strong>' + esc(sf.fcId || '') + '</strong><br>' + esc((sf.fcDesc || '').slice(0, 80)) + '</td>' +
             '<td>' + esc(scopeLabel(e.source)) + '</td>' +
-            '<td class="cell-' + esc(sf.severity || '') + '">' + esc(sf.severity || '') + '</td>' +
+            '<td class="cell-' + esc(sf.severity || '') + '">' + sevPillHtml(sf.severity) + '</td>' +
             '<td><strong>' + esc(tf.fcId || '') + '</strong><br>' + esc((tf.fcDesc || '').slice(0, 80)) + '</td>' +
             '<td>' + esc(scopeLabel(e.target)) + '</td>' +
-            '<td class="cell-' + esc(tf.severity || '') + '">' + esc(tf.severity || '') + '</td>' +
+            '<td class="cell-' + esc(tf.severity || '') + '">' + sevPillHtml(tf.severity) + '</td>' +
             '<td>' + esc(e.target.function || '') + '</td>' +
             '<td>' + (basisLabel[e.basis] || esc(e.basis)) + '</td>' +
         '</tr>';
@@ -8010,13 +8033,13 @@ async function _openEraseAccountModal(email) {
       +     '<li><b>' + (m.owned_workspaces||0) + '</b> owned workspace(s) + your memberships</li>'
       +     '<li>your name / org / email (anonymized in our records)</li>'
       +   '</ul>'
-      +   '<div style="font-size:12px;color:#6b7280;margin-top:10px;">You will receive a <b>certificate of destruction</b>. This cannot be undone.</div>'
+      +   '<div style="font-size:12px;color:var(--color-text-primary);margin-top:10px;">You will receive a <b>certificate of destruction</b>. This cannot be undone.</div>'
       +   '<div style="font-size:12px;color:#374151;margin-top:12px;">Type <b>DELETE</b> to confirm:</div>'
       +   '<input id="erase-confirm" type="text" autocomplete="off" style="margin-top:6px;width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #e4e8f1;border-radius:9px;font:inherit;font-size:14px;">'
-      +   '<div id="erase-msg" style="font-size:12px;min-height:14px;margin-top:8px;color:#6b7280;"></div>'
+      +   '<div id="erase-msg" style="font-size:12px;min-height:14px;margin-top:8px;color:var(--color-text-primary);"></div>'
       + '</div>'
       + '<div id="erase-foot" style="display:flex;justify-content:flex-end;gap:10px;padding:12px 20px;border-top:1px solid rgba(0,0,0,.08);">'
-      +   '<button type="button" id="erase-cancel" style="border:1px solid #d4d8e3;background:#fff;color:#555b6b;border-radius:9px;padding:8px 16px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>'
+      +   '<button type="button" id="erase-cancel" style="border:1px solid var(--color-border-hair);background:#fff;color:var(--color-text-primary);border-radius:9px;padding:8px 16px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>'
       +   '<button type="button" id="erase-go" disabled style="border:none;background:#fca5a5;color:#fff;border-radius:9px;padding:8px 18px;font:inherit;font-size:13px;font-weight:700;cursor:not-allowed;">Delete forever</button>'
       + '</div></div>';
     document.body.appendChild(ov);
@@ -8042,7 +8065,7 @@ async function _openEraseAccountModal(email) {
               + '<div style="font-size:12.5px;color:#374151;margin-top:8px;line-height:1.5;">Your data has been permanently deleted.</div>'
               + '<div style="font-size:11.5px;color:#374151;margin-top:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;">'
               +   '<b>Certificate of destruction</b><br>ID: ' + esc(String(cert)) + '<br>SHA-256: <span style="word-break:break-all;">' + esc(String(hash)) + '</span><br>Issued: ' + new Date().toISOString().slice(0,19).replace('T',' ') + ' UTC</div>'
-              + '<div style="font-size:12px;color:#6b7280;margin-top:10px;">Signing you out…</div>';
+              + '<div style="font-size:12px;color:var(--color-text-primary);margin-top:10px;">Signing you out…</div>';
             const f = document.getElementById('erase-foot'); if (f) f.remove();
             setTimeout(function(){ try { supabaseSignOut(); } catch(_){} try { setSignupEmail(''); } catch(_){} try { refreshSigninChip(); } catch(_){} close(); try { location.reload(); } catch(_){} }, 5000);
         } catch (e) {

@@ -24,6 +24,7 @@
 // tree already exists; every act is journaled. No monolith edits.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) {
@@ -191,7 +192,7 @@
             const routeColor = route.route === 'quant' ? (tree ? '#1D9E75' : '#B7791F') : 'var(--color-text-tertiary)';
             return '<tr><td class="u-mono"><b>' + _esc(f.fcId || '') + '</b></td>' +
                 '<td>' + _esc((f.fcDesc || '').slice(0, 60)) + '</td>' +
-                '<td class="cell-' + _esc(f.severity || '') + '">' + _esc(f.severity || '—') + '</td>' +
+                '<td class="cell-' + _esc(f.severity || '') + '">' + (f.severity ? _sevPill(f.severity) : '—') + '</td>' +
                 '<td style="font-size:11px; color:' + routeColor + ';">' + _esc(route.label) + (tree ? ' · tree in place ✓' : '') + '</td>' +
                 '<td>' + action + '</td></tr>';
         }).join('');

@@ -25,6 +25,7 @@
 // ETA structures stay edited in their own editors — single source of truth.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) { if (typeof esc === 'function') return esc(s); return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -274,7 +275,7 @@
             const eta = _matchEta(p, fc);
             const pair = pages.find(x => x && x.verifies === p.id) || (p.verifies ? pages.find(x => x.id === p.verifies) : null);
             const hints =
-                (fc ? chip(_esc(fc.fcId) + ' · ' + _esc(fc.severity), /cat/i.test(fc.severity) ? '#b42318' : '#c4530a') : chip('no FHA link', 'var(--color-text-tertiary,#999)')) +
+                (fc ? chip(_esc(fc.fcId), 'var(--color-text-primary)') + ' ' + _sevPill(fc.severity) : chip('no FHA link', 'var(--color-text-tertiary,#999)')) +
                 (eta ? chip('⇄ ' + _esc(eta.id), 'var(--color-link,#0b57d0)') : chip('no event tree match', 'var(--color-text-tertiary,#999)')) +
                 (pair ? chip('two-lane knot ✓', 'var(--color-success,#1a7f37)') : '');
             return '<button onclick="btAutoBuildFrom(\'' + _esc(p.id) + '\')" style="display:block;width:100%;text-align:left;padding:9px 12px;margin-bottom:6px;border:1px solid var(--color-border-hair,rgba(0,0,0,.15));border-radius:8px;background:var(--color-surface,#fff);cursor:pointer;">' +
@@ -450,7 +451,7 @@
     async function _ask(m, d) { try { if (typeof slPrompt === 'function') return await slPrompt(m, d || ''); } catch (_) {} return window.prompt(m, d || ''); }
 
     // ---- render --------------------------------------------------------------
-    function _sevColor(s) { s = String(s || '').toLowerCase(); return /cat/.test(s) ? '#b42318' : /haz/.test(s) ? '#c4530a' : /maj/.test(s) ? '#b7791f' : /min/.test(s) ? '#3b7' : 'var(--color-text-tertiary,#888)'; }
+    function _sevColor(s) { s = String(s || '').toLowerCase(); return /cat/.test(s) ? '#F2928C' : /haz/.test(s) ? '#F5B878' : /maj/.test(s) ? '#F2DB74' : /min/.test(s) ? '#F8ECB0' : (/neg|no safety/.test(s) ? '#A6DFB4' : 'var(--color-text-tertiary,#888)'); } // 11 Sep — the app-wide severity fills
 
     // ---- the curved-ribbon diagram (pure SVG, compiled from the evaluation) ----
     // Left ribbons: one per minimal cut set (SPFs red, thicker). Right ribbons:
@@ -776,7 +777,7 @@
             '<button onclick="btAddBarrier(\'mitigative\')" style="font-size:11px;padding:4px 8px;border:1px dashed var(--color-border-hair,rgba(0,0,0,.3));border-radius:6px;background:transparent;cursor:pointer;">+ mitigative barrier</button>' +
             (ev.etaLinked
                 ? '<div style="margin-top:10px;"><div style="font-size:11px;color:var(--color-text-tertiary,#888);margin-bottom:4px;">Consequence paths (initiator sourced from P above' + (ev.etaClosed ? '' : ' · <span style="color:#b42318;">paths do not sum to 1</span>') + '):</div>' +
-                    ev.outcomes.slice(0, 6).map(o => '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><span style="color:' + _sevColor(o.severity) + ';">' + _esc(o.severity || 'unassessed') + '</span><span style="font-family:var(--font-mono,monospace);">' + _fmt(o.freq) + '</span></div>').join('') +
+                    ev.outcomes.slice(0, 6).map(o => '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));">' + (o.severity ? _sevPill(o.severity) : '<span style="color:var(--color-text-tertiary);">unassessed</span>') + '<span style="font-family:var(--font-mono,monospace);">' + _fmt(o.freq) + '</span></div>').join('') +
                     (ev.outcomes.length > 6 ? '<div style="font-size:10px;color:#888;">+' + (ev.outcomes.length - 6) + ' more</div>' : '') + '</div>'
                 : '<div style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary,#888);">No event tree linked — pick one above to compile consequence paths.</div>');
 

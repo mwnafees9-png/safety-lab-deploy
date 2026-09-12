@@ -204,7 +204,7 @@
         var devChip = '';
         if (ver) {
             var d = s.disp[id];
-            devChip = '<span style="font-size:9.5px;color:#8a8a8a;border:1px dashed #C9D2E0;border-radius:5px;padding:0 5px;margin-right:2px;" title="development-phase disposition">dev: ' + (d === 'concern' ? 'Concern' : d === 'mitigated' ? 'Mitigated' : 'N/A') + '</span>';
+            devChip = '<span style="font-size:9.5px;color:var(--color-text-primary);border:1px dashed #C9D2E0;border-radius:5px;padding:0 5px;margin-right:2px;" title="development-phase disposition">dev: ' + (d === 'concern' ? 'Concern' : d === 'mitigated' ? 'Mitigated' : 'N/A') + '</span>';
         }
         return devChip + opt.map(function (o) {
             var on = cur === o[0];
@@ -228,7 +228,7 @@
         var ip = _ipFor(ctx);
         var ver = s.phase === 'ver';
         var q = _m1Effective().map(function (grp) {
-            return '<div style="margin-top:8px;"><div style="font-weight:700;font-size:12px;color:#0B2545;border-bottom:1px solid #EEF2F8;padding-bottom:2px;">' + _esc(grp.g) + '</div>' +
+            return '<div style="margin-top:8px;"><div style="font-weight:700;font-size:12px;color:var(--color-text-primary);border-bottom:1px solid #EEF2F8;padding-bottom:2px;">' + _esc(grp.g) + '</div>' +
                 grp.items.map(function (it) {
                     return '<div style="display:flex;align-items:center;gap:6px;font-size:11.5px;padding:3px 0;">' +
                         '<span>' + _esc(it[1]) + '</span><span style="margin-left:auto;white-space:nowrap;">' + _dispBtns(ctx, it[0]) + '</span></div>';
@@ -240,14 +240,14 @@
         }).join('');
         var dev = ['logic', 'field', 'generic'].map(function (d) {
             var on = (s.deviceType || 'field') === d;
-            return '<button onclick="_cmaSetDevice(\'' + ctx + '\',\'' + d + '\')" style="font-size:10px;padding:1px 8px;border:1px solid #0B2545;border-radius:5px;cursor:pointer;margin-left:3px;' + (on ? 'background:#0B2545;color:#fff;' : 'background:transparent;color:#0B2545;') + '">' + d + '</button>';
+            return '<button onclick="_cmaSetDevice(\'' + ctx + '\',\'' + d + '\')" style="font-size:10px;padding:1px 8px;border:1px solid #0B2545;border-radius:5px;cursor:pointer;margin-left:3px;' + (on ? 'background:#0B2545;color:#fff;' : 'background:transparent;color:var(--color-text-primary);') + '">' + d + '</button>';
         }).join('');
         var br = s.betaResult;
         var betaBox = br
             ? '<div style="font-size:12.5px;"><span style="font-size:20px;font-weight:800;color:' + (br.gated ? '#8E2A2A' : '#0B2545') + ';">β = ' + br.betaPct + '%</span>' +
               ' <span style="color:#55555C;">(' + br.deviceType + ' band, defense score ' + Math.round(br.score * 100) + '%' + (br.gated ? ', gated' : '') + ')</span>' +
               '<div style="font-size:11px;color:#55555C;margin-top:3px;">' + _esc(br.rationale) + '</div></div>'
-            : '<div style="font-size:12px;color:#8a8a8a;">Score the defenses to get a recommended β.</div>';
+            : '<div style="font-size:12px;color:var(--color-text-primary);">Score the defenses to get a recommended β.</div>';
         var dispSet = ver ? s.verDisp : s.disp;
         var concerns = Object.keys(dispSet).filter(function (k) { return dispSet[k] === 'concern'; }).length;
         // Phase toggle (M.3.2.2) — the verification pass is the ASA checklist.
@@ -255,7 +255,7 @@
             ['dev', 'ver'].map(function (ph) {
                 var on = (s.phase || 'dev') === ph;
                 var lab = ph === 'dev' ? 'Development (PASA/PSSA)' : 'Verification — ASA checklist';
-                return '<button onclick="_cmaSetPhase(\'' + ctx + '\',\'' + ph + '\')" style="font-size:10.5px;padding:2px 10px;border:1px solid #0B2545;border-radius:6px;cursor:pointer;' + (on ? 'background:#0B2545;color:#fff;' : 'background:transparent;color:#0B2545;') + '">' + lab + '</button>';
+                return '<button onclick="_cmaSetPhase(\'' + ctx + '\',\'' + ph + '\')" style="font-size:10.5px;padding:2px 10px;border:1px solid #0B2545;border-radius:6px;cursor:pointer;' + (on ? 'background:#0B2545;color:#fff;' : 'background:transparent;color:var(--color-text-primary);') + '">' + lab + '</button>';
             }).join('') +
             (ver ? '<span style="font-size:10.5px;color:#55555C;">as-built examination — dev answers shown for review (M.3.2.2.3)</span>' : '') + '</div>';
         // Per-principle banner (M.3.2.1.3 / Table M2).
@@ -268,7 +268,7 @@
         var groupOpts = M1.map(function (g) { return '<option>' + _esc(g.g) + '</option>'; }).join('') + '<option>Project-specific</option>';
         var removable = _m1Effective().reduce(function (acc, g) { return acc.concat(g.items); }, []).map(function (it) { return '<option value="' + _esc(it[0]) + '">' + _esc(it[1]) + '</option>'; }).join('');
         var tailorBox =
-            '<details style="margin-top:10px;"><summary style="font-size:11.5px;color:#0B2545;cursor:pointer;font-weight:700;">Tailor the questionnaire (M.3.1 — ' + t.added.length + ' added · ' + removedIds.length + ' removed)</summary>' +
+            '<details style="margin-top:10px;"><summary style="font-size:11.5px;color:var(--color-text-primary);cursor:pointer;font-weight:700;">Tailor the questionnaire (M.3.1 — ' + t.added.length + ' added · ' + removedIds.length + ' removed)</summary>' +
             '<div style="font-size:11px;padding:6px 2px;">Table M1 is explicitly not exhaustive. Additions and removals need a recorded rationale.</div>' +
             '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;font-size:11px;padding:3px 0;">' +
               '<input id="cma-tl-label" placeholder="new category label" style="flex:1;min-width:130px;font-size:11px;padding:2px 6px;border:1px solid #C9D2E0;border-radius:5px;">' +
@@ -285,11 +285,11 @@
             '</details>';
         m.querySelector('#cma-wt-body').innerHTML =
             phaseBar + ipBar +
-            '<div style="font-weight:700;color:#0B2545;font-size:12.5px;">1 · Common-cause questionnaire (Table M1' + (ver ? ' as ASA checklist' : '') + ' — ' + concerns + ' concern' + (concerns === 1 ? '' : 's') + ')</div>' + q + tailorBox +
-            '<div style="margin-top:14px;font-weight:700;color:#0B2545;font-size:12.5px;">2 · Defense posture → β</div>' +
+            '<div style="font-weight:700;color:var(--color-text-primary);font-size:12.5px;">1 · Common-cause questionnaire (Table M1' + (ver ? ' as ASA checklist' : '') + ' — ' + concerns + ' concern' + (concerns === 1 ? '' : 's') + ')</div>' + q + tailorBox +
+            '<div style="margin-top:14px;font-weight:700;color:var(--color-text-primary);font-size:12.5px;">2 · Defense posture → β</div>' +
             '<div style="display:flex;align-items:center;gap:6px;font-size:11.5px;padding:3px 0;"><span>Device type</span><span style="margin-left:auto;">' + dev + '</span></div>' + defs +
-            '<div style="margin-top:10px;padding:10px;border:1px solid #D8DEE9;border-radius:8px;background:#F7F9FC;">' +
-              '<div style="font-weight:700;color:#0B2545;font-size:12px;margin-bottom:4px;">Recommended β (CCF)</div>' + betaBox + '</div>' +
+            '<div style="margin-top:10px;padding:10px;border:1px solid var(--color-border-hair);border-radius:8px;background:var(--color-surface-2);">' +
+              '<div style="font-weight:700;color:var(--color-text-primary);font-size:12px;margin-bottom:4px;">Recommended β (CCF)</div>' + betaBox + '</div>' +
             '<div style="margin-top:10px;text-align:right;"><button onclick="_cmaSaveWalk(\'' + ctx + '\')" style="font-size:12px;padding:5px 14px;border:1px solid #007AFF;border-radius:6px;background:#007AFF;color:#fff;cursor:pointer;">Save assessment</button></div>';
     }
 
@@ -300,7 +300,7 @@
         ov.style.cssText = 'position:fixed;inset:0;z-index:2147483601;display:flex;align-items:center;justify-content:center;background:rgba(8,12,20,.5);padding:24px;';
         ov.innerHTML = '<div style="background:#fff;color:#202024;border-radius:14px;max-width:660px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.32);">' +
             '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #EEF2F8;">' +
-              '<div><div style="font-weight:700;color:#0B2545;">CMA walkthrough — ' + _esc(label || ctx) + '</div>' +
+              '<div><div style="font-weight:700;color:var(--color-text-primary);">CMA walkthrough — ' + _esc(label || ctx) + '</div>' +
               '<div style="font-size:11.5px;color:#55555C;">ARP4761A Appendix M — 37-category questionnaire → recommended β (IEC 61508-6 / NUREG).</div></div>' +
               '<button onclick="_cmaCloseWalk()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#888;">&times;</button></div>' +
             '<div id="cma-wt-body" style="padding:12px 18px;overflow:auto;"></div></div>';

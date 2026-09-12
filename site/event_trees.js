@@ -50,6 +50,7 @@
 //     alone (pFail is per-demand; P(top) is per-FH — units are the user's call).
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) {
@@ -61,9 +62,10 @@
     function _jr(k, m) { try { if (typeof window.jrnl === 'function') window.jrnl(k, m); } catch (_) {} }
     function _save() { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
     const SEVS = ['No Safety Effect', 'Minor', 'Major', 'Hazardous', 'Catastrophic'];
+    // 11 Sep — the app-wide bright severity fills (see --sev-*-fill in safety_lab.css)
     const SEV_COLORS = {
-        'No Safety Effect': '#2E9E6B', 'Minor': '#63B98A', 'Major': '#E0A317',
-        'Hazardous': '#E4772B', 'Catastrophic': '#E24B4A'
+        'No Safety Effect': '#A6DFB4', 'Minor': '#F8ECB0', 'Major': '#F2DB74',
+        'Hazardous': '#F5B878', 'Catastrophic': '#F2928C'
     };
     function _num(v) { const x = parseFloat(v); return Number.isFinite(x) ? x : null; }
     function _clamp01(v) { return Math.min(1, Math.max(0, v)); }
@@ -417,8 +419,7 @@
     // ------------------------------------------------------------ diagram
     function _sevChip(sev) {
         if (!sev) return '<span style="color:var(--color-text-tertiary); font-size:11px;">unassessed</span>';
-        const c = SEV_COLORS[sev] || '#64748b';
-        return '<span style="display:inline-block; padding:1px 8px; border-radius:10px; background:' + c + '; color:#fff; font-size:10.5px; font-weight:700; white-space:nowrap;">' + _esc(sev) + '</span>';
+        return _sevPill(sev);
     }
     // poster-style tree: barriers as columns, success up / fail down, leaves
     // coloured by severity. Limited to n≤5 (2^5 = 32 leaves) for readability.

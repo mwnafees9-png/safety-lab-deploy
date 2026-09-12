@@ -4,6 +4,7 @@
 // zero load-time code. Each segment was machine-validated (standalone parse +
 // monolith-minus-segment parse) before the move; reconstruction diff proves the
 // original file is byte-recoverable. Segment map: see [P2 batch 6] markers in safety_lab.js.
+var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
 function _slabGuardSourceDoc(doc, budgetRef) {
     const out = {
         id: doc && doc.id, name: (doc && doc.name) || 'document', addedAt: (doc && doc.addedAt) || Date.now(),
@@ -407,25 +408,25 @@ function _renderBaselineDiff(b, diff, curHash) {
     const old = document.getElementById('baseline-diff-panel'); if (old) old.remove();
     const names = Object.keys(diff);
     const clip = function (s) { s = String(s == null ? '' : s); return s.length > 80 ? s.slice(0, 80) + '…' : s; };
-    let body = names.length ? '' : '<div style="color:#5b6675;">Hash differs but no row-level changes in the tracked arrays (e.g. config/FTA-config only).</div>';
+    let body = names.length ? '' : '<div style="color:var(--color-text-primary);">Hash differs but no row-level changes in the tracked arrays (e.g. config/FTA-config only).</div>';
     names.forEach(function (name) {
         const d = diff[name];
         body += '<div style="margin-top:12px;"><div style="font-weight:700;color:#0a1f44;font-size:13px;">' + esc(_DIFF_LABELS[name] || name) + ' — <span style="color:#0a7f4f;">+' + d.added.length + '</span> · <span style="color:#b91c1c;">−' + d.removed.length + '</span> · <span style="color:#b45309;">' + d.changed.length + ' changed</span></div>';
         d.changed.slice(0, 40).forEach(function (c) {
             body += '<div style="margin:6px 0 6px 8px;font-size:12px;"><b>' + esc(c.key) + '</b>';
             Object.keys(c.fields).slice(0, 12).forEach(function (f) {
-                body += '<div style="margin-left:10px;color:#5b6675;">' + esc(f) + ': <span style="color:#b91c1c;text-decoration:line-through;">' + esc(clip(c.fields[f][0])) + '</span> → <span style="color:#0a7f4f;">' + esc(clip(c.fields[f][1])) + '</span></div>';
+                body += '<div style="margin-left:10px;color:var(--color-text-primary);">' + esc(f) + ': <span style="color:#b91c1c;text-decoration:line-through;">' + esc(clip(c.fields[f][0])) + '</span> → <span style="color:#0a7f4f;">' + esc(clip(c.fields[f][1])) + '</span></div>';
             });
             body += '</div>';
         });
-        if (d.changed.length > 40) body += '<div style="margin-left:8px;color:#5b6675;font-size:11px;">…and ' + (d.changed.length - 40) + ' more changed rows.</div>';
+        if (d.changed.length > 40) body += '<div style="margin-left:8px;color:var(--color-text-primary);font-size:11px;">…and ' + (d.changed.length - 40) + ' more changed rows.</div>';
         body += '</div>';
     });
     const ov = document.createElement('div'); ov.id = 'baseline-diff-panel';
     ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
     ov.innerHTML = '<div style="background:#fff;color:#1a2230;border-radius:14px;width:min(680px,96vw);max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.3);padding:20px 22px;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-size:16px;font-weight:700;color:#0a1f44;">Redline vs baseline "' + esc(b.name) + '"</div><button id="bdiff-x" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#5b6675;">×</button></div>'
-        + '<div style="font-size:11px;color:#5b6675;margin:2px 0 8px;font-family:monospace;">baseline ' + esc(b.hash.slice(0, 16)) + '… → current ' + esc(curHash.slice(0, 16)) + '…</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-size:16px;font-weight:700;color:#0a1f44;">Redline vs baseline "' + esc(b.name) + '"</div><button id="bdiff-x" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--color-text-primary);">×</button></div>'
+        + '<div style="font-size:11px;color:var(--color-text-primary);margin:2px 0 8px;font-family:monospace;">baseline ' + esc(b.hash.slice(0, 16)) + '… → current ' + esc(curHash.slice(0, 16)) + '…</div>'
         + body + '</div>';
     document.body.appendChild(ov);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) ov.remove(); });
@@ -2384,7 +2385,7 @@ function renderWsPssaPanel() {
             const fr = _ccmrPageFha(t);
             const mirror = (ftaPages || []).find(p => p.verifies === t.id);
             html += '<tr><td>' + esc(t.name || t.id) + '</td>' +
-                '<td class="u-mono">' + esc(fr ? (fr.fha.fcId || '') : '—') + (fr && (fr.fha.severity === 'Catastrophic' || fr.fha.severity === 'Hazardous') ? ' <span class="sla-stamp" style="color: var(--sev-' + (fr.fha.severity === 'Catastrophic' ? 'cat' : 'haz') + '-fg); font-size:9px;">' + fr.fha.severity.slice(0, 3).toUpperCase() + '</span>' : '') + '</td>' +
+                '<td class="u-mono">' + esc(fr ? (fr.fha.fcId || '') : '—') + (fr && (fr.fha.severity === 'Catastrophic' || fr.fha.severity === 'Hazardous') ? ' ' + _sevPill(fr.fha.severity) : '') + '</td>' +
                 '<td class="u-mono">' + esc((t.root && t.root.allocatedDAL) || '—') + '</td>' +
                 '<td>' + (mirror ? '<span style="color: var(--color-success);">✓</span>' : '<span style="color: var(--color-text-tertiary);">—</span>') + '</td>' +
                 '<td><button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="openFTAPageById(\'' + esc(t.id) + '\')">Open ↗</button></td></tr>';

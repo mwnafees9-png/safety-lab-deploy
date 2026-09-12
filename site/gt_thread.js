@@ -35,7 +35,7 @@
     const IS_FEEDER = { ram: 1, hf: 1 };
 
     const SAF_C = '#586472', RAM_C = '#C88A00', HF_C = '#7A3EA8';
-    const INK = '#101216', INK3 = '#586472', MUTE = '#8A94A2', HAIR = '#D9DFE8';
+    const INK = '#101216', INK3 = '#14171c', MUTE = '#14171c', HAIR = '#14171c';
     const RED = '#C0231D', GREEN = '#0E7A3C', AMBER = '#C88A00', BLUE = '#2E6BD6';
     const FLAG = { compromised: RED, stale: AMBER, obsolete: INK3 };
     const PROVC = { human: '#2E6BD6', ai: '#7A3EA8', engine: '#0E7490' };

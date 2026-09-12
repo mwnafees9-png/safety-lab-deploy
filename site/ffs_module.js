@@ -20,6 +20,7 @@
 // exports ffsRows()/ffsStats() for reports and tests. Zero monolith edits.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -129,7 +130,7 @@
                 return '<tr><td>—</td><td>' + _esc(r.pageName) + '</td><td colspan="5" style="color:#8E2A2A; font-size:11px;">Cut-set enumeration refused (explosion guard) — the qualitative lane for this tree could not be enumerated. Simplify or partition the tree.</td></tr>';
             }
             const fcTxt = r.fcs.length ? r.fcs.map(f => '<strong>' + _esc(f.fcId) + '</strong> <span style="color:var(--color-text-tertiary);">(' + _esc(f.scope) + ')</span>').join('<br>') : '<span style="color:var(--color-text-tertiary);">unlinked</span>';
-            const sevTxt = r.fcs.length ? r.fcs.map(f => '<span class="cell-' + _esc(f.severity) + '">' + _esc(f.severity) + '</span>').join('<br>') : '—';
+            const sevTxt = r.fcs.length ? r.fcs.map(f => _sevPill(f.severity)).join('<br>') : '—';
             const memTxt = r.members.map(m => (m.devError ? '<span style="color:#0E7490; font-weight:700;">◇ ' : '<span>') + _esc(m.displayId) + '</span> <span style="color:var(--color-text-tertiary);">' + _esc(String(m.name).slice(0, 60)) + '</span>' + (m.dal ? ' <span style="font-family:var(--font-mono); font-size:10px; border:1px solid var(--color-border-strong); padding:0 4px;">DAL ' + _esc(m.dal) + '</span>' : '')).join('<br>');
             const devTxt = r.devMembers.map(_esc).join(', ');
             return '<tr style="border-left:3px solid #0E7490;"><td>' + rowNo + '</td><td>' + _esc(r.pageName) + '</td><td>' + fcTxt + '</td><td>' + sevTxt + '</td><td class="u-mono">' + r.order + '</td><td>' + memTxt + '</td><td style="color:#0E7490; font-weight:600;">' + devTxt + '</td></tr>';

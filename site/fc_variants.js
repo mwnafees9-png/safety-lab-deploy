@@ -29,6 +29,7 @@
 //                       severity changed since creation (stale).
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) { if (typeof esc === 'function') return esc(s); return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -174,7 +175,7 @@
         if (combined.length) {
             html += '<div style="font-size:11px;color:var(--color-text-tertiary,#888);margin:6px 0 2px;">COMBINED (ordinary FHA rows — trees/budgets/DAL apply as usual)</div>';
             combined.forEach(f => {
-                html += '<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><strong>' + _esc(f.fcId) + '</strong> [' + _esc(f.severity) + '] = ' + _esc((f.combinedOf || []).join(' + ')) + ' — ' + _esc(f.fcDesc) + '</div>';
+                html += '<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><strong>' + _esc(f.fcId) + '</strong> ' + _sevPill(f.severity) + ' = ' + _esc((f.combinedOf || []).join(' + ')) + ' — ' + _esc(f.fcDesc) + '</div>';
             });
         }
         if (tagged.length) {

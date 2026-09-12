@@ -19,6 +19,7 @@
 // exports budgetLedgerRows()/budgetLedgerStats() for ASA, reports, tests.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -308,7 +309,7 @@
         function _rowHtml(r) {
             return '<tr><td><strong>' + _esc(r.fcId) + '</strong><div style="font-size:11px; color:var(--color-text-tertiary); max-width:260px;">' + _esc(String(r.fcDesc).slice(0, 90)) + '</div></td>' +
                 '<td>' + _esc(r.scope) + '</td>' +
-                '<td class="cell-' + _esc(r.severity) + '">' + _esc(r.severity) + '</td>' +
+                '<td class="cell-' + _esc(r.severity) + '">' + _sevPill(r.severity) + '</td>' +
                 '<td class="u-mono">' + _exp(r.objective) + '</td>' +
                 '<td class="u-mono">' + (r.allocPage ? _exp(r.allocated) + '<div style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(r.allocPage.name) + '</div>' : '—') + '</td>' +
                 '<td class="u-mono">' + (r.mirrorPage ? _exp(r.achieved) + '<div style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(r.mirrorPage.name) + '</div>' : '—') + '</td>' +

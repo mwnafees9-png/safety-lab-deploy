@@ -2900,7 +2900,7 @@
         return { offered: _FHA_ASKED.length, populated: _FHA_ASKED.length - ab.length, abstained: ab.length };
     }
     function _sevColor(sev) {
-        return ({ Catastrophic: '#b91c1c', Hazardous: '#c2410c', Major: '#a16207', Minor: '#2563eb', Negligible: '#15803d' })[sev] || '#555';
+        return ({ Catastrophic: 'var(--sev-cat-fg, #E00000)', Hazardous: 'var(--sev-haz-fg, #E85D00)', Major: 'var(--sev-maj-fg, #B98900)', Minor: 'var(--sev-min-fg, #1E9E3E)', Negligible: 'var(--sev-neg-fg, #14171C)', 'No Safety Effect': 'var(--sev-neg-fg, #14171C)' })[sev] || 'var(--color-text-primary, #14171C)';
     }
     // Theme detection that does NOT rely on the app's class/var names: check the
     // known theme classes first, else sample the body's actual background luminance.
@@ -11938,7 +11938,7 @@
                 const btns = card.querySelector('.cvc-btns');
                 const hold = document.createElement('button');
                 hold.type = 'button'; hold.textContent = 'Hold — don’t apply';
-                hold.style.cssText = 'font:inherit;font-size:13px;font-weight:600;border:1px solid #d4d8e3;background:#fff;color:#555b6b;border-radius:9px;padding:8px 16px;cursor:pointer;';
+                hold.style.cssText = 'font:inherit;font-size:13px;font-weight:600;border:1px solid var(--color-border-hair);background:#fff;color:var(--color-text-primary);border-radius:9px;padding:8px 16px;cursor:pointer;';
                 const go = document.createElement('button');
                 go.type = 'button'; go.textContent = 'Apply edits';
                 go.style.cssText = 'font:inherit;font-size:13px;font-weight:700;border:none;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border-radius:9px;padding:8px 18px;cursor:pointer;';

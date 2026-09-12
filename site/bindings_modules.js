@@ -7,6 +7,7 @@
 //      the codebase, VM-pure, and screened against load-time reads in every
 //      remaining monolith IIFE/listener/declaration.
 // Load order: BEFORE safety_lab.js. Zero behavior change.
+var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
 const BETA_BUILD_ID = 'dev-build';         // e.g. 'beta-2026-05-jane.smith'
 
 const BETA_TESTER_LABEL = 'Internal dev';  // human-readable label
@@ -335,10 +336,10 @@ window.SafetyLabAssumptionsGate = function (actionLabel) {
             const btns = card.querySelector('.slag-btns');
             const review = document.createElement('button');
             review.type = 'button'; review.textContent = 'Review assumptions';
-            review.style.cssText = 'font:inherit;font-size:13px;font-weight:700;border:1px solid #d4d8e3;background:#fff;color:#0a1f44;border-radius:9px;padding:8px 16px;cursor:pointer;';
+            review.style.cssText = 'font:inherit;font-size:13px;font-weight:700;border:1px solid var(--color-border-hair);background:#fff;color:#0a1f44;border-radius:9px;padding:8px 16px;cursor:pointer;';
             const cancel = document.createElement('button');
             cancel.type = 'button'; cancel.textContent = 'Cancel';
-            cancel.style.cssText = 'font:inherit;font-size:13px;font-weight:600;border:1px solid #d4d8e3;background:#fff;color:#555b6b;border-radius:9px;padding:8px 16px;cursor:pointer;';
+            cancel.style.cssText = 'font:inherit;font-size:13px;font-weight:600;border:1px solid var(--color-border-hair);background:#fff;color:var(--color-text-primary);border-radius:9px;padding:8px 16px;cursor:pointer;';
             const proceed = document.createElement('button');
             proceed.type = 'button'; proceed.textContent = 'Proceed anyway';
             proceed.style.cssText = 'font:inherit;font-size:13px;font-weight:700;border:none;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border-radius:9px;padding:8px 18px;cursor:pointer;';
@@ -564,17 +565,17 @@ window.openSignoffPanel = async function (kind, id, systemId) {
     const ov = document.createElement('div'); ov.id = 'signoff-panel';
     ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
     const rows = chain.length ? chain.map(function (s) {
-        return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #e4e8f1;font-size:13px;"><div><b>' + esc(s.stage) + '</b> — ' + esc(s.signer) + '</div><div style="color:#5b6675;font-size:12px;">' + esc(rel(s.at)) + '</div></div>';
-    }).join('') : '<div style="color:#5b6675;font-size:13px;padding:6px 0;">No sign-offs yet.</div>';
+        return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #e4e8f1;font-size:13px;"><div><b>' + esc(s.stage) + '</b> — ' + esc(s.signer) + '</div><div style="color:var(--color-text-primary);font-size:12px;">' + esc(rel(s.at)) + '</div></div>';
+    }).join('') : '<div style="color:var(--color-text-primary);font-size:13px;padding:6px 0;">No sign-offs yet.</div>';
     const verifyBadge = chain.length ? ('<div style="margin-top:8px;font-size:12px;font-weight:600;color:' + (ok ? '#0a7f4f' : '#b91c1c') + ';">' + (ok ? '✓ Chain intact — tamper-evident hashes verified' : '⚠ Chain BROKEN — a sign-off was altered') + '</div>') : '';
     const _stale = chain.length ? isStaleSinceSignoff(kind, id, systemId) : false;
     const staleBadge = _stale ? ('<div style="margin-top:8px;font-size:12px;font-weight:700;color:#b45309;background:#fdf4e7;border:1px solid #f0d9b5;border-radius:8px;padding:8px 10px;">⚠ This artifact has been EDITED since the last sign-off (' + esc(chain[chain.length - 1].stage) + ' by ' + esc(chain[chain.length - 1].signer) + '). The sign-off no longer reflects the current content — re-sign to re-attest.</div>') : '';
     const signArea = allDone
         ? '<div style="font-size:13px;color:#0a7f4f;font-weight:600;">All stages signed.</div>'
-        : '<label style="font-size:12px;color:#5b6675;">Sign as <b>' + esc(nextStage) + '</b> — your name:</label><div style="display:flex;gap:8px;margin-top:5px;"><input id="signoff-name" type="text" value="' + esc(_signoffReviewerName()) + '" style="flex:1;border:1px solid #d8dee8;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;"><button id="signoff-go" style="border:none;border-radius:8px;background:#4E63D8;color:#fff;font:inherit;font-weight:600;padding:8px 14px;cursor:pointer;">Sign</button></div><div style="font-size:11px;color:#5b6675;margin-top:6px;">Signing attests this artifact at the "' + esc(nextStage) + '" stage — recorded with a tamper-evident timestamp + hash.</div>';
+        : '<label style="font-size:12px;color:var(--color-text-primary);">Sign as <b>' + esc(nextStage) + '</b> — your name:</label><div style="display:flex;gap:8px;margin-top:5px;"><input id="signoff-name" type="text" value="' + esc(_signoffReviewerName()) + '" style="flex:1;border:1px solid #d8dee8;border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;"><button id="signoff-go" style="border:none;border-radius:8px;background:#4E63D8;color:#fff;font:inherit;font-weight:600;padding:8px 14px;cursor:pointer;">Sign</button></div><div style="font-size:11px;color:var(--color-text-primary);margin-top:6px;">Signing attests this artifact at the "' + esc(nextStage) + '" stage — recorded with a tamper-evident timestamp + hash.</div>';
     ov.innerHTML = '<div style="background:#fff;color:#1a2230;border-radius:14px;width:min(520px,96vw);max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.3);padding:20px 22px;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-size:16px;font-weight:700;color:#0a1f44;">Sign-off chain</div><button id="signoff-x" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#5b6675;">×</button></div>'
-        + '<div style="font-size:12px;color:#5b6675;margin:2px 0 12px;">' + esc(String(kind)) + ' · ' + esc(String(id)) + (systemId ? (' · ' + esc(String(systemId))) : '') + '</div>'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-size:16px;font-weight:700;color:#0a1f44;">Sign-off chain</div><button id="signoff-x" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:var(--color-text-primary);">×</button></div>'
+        + '<div style="font-size:12px;color:var(--color-text-primary);margin:2px 0 12px;">' + esc(String(kind)) + ' · ' + esc(String(id)) + (systemId ? (' · ' + esc(String(systemId))) : '') + '</div>'
         + rows + verifyBadge + staleBadge + '<div style="margin-top:14px;">' + signArea + '</div></div>';
     document.body.appendChild(ov);
     ov.addEventListener('mousedown', function (e) { if (e.target === ov) ov.remove(); });
@@ -898,7 +899,7 @@ window.openFhaChartModal = function(internalId, scope) {
     const ctx = document.getElementById('fha-chart-context');
     if (ctx) {
         ctx.innerHTML =
-            '<strong>' + esc(fha.fcId || '') + '</strong> · <span class="cell-' + esc(sev) + '">' + esc(sev) + '</span><br>' +
+            '<strong>' + esc(fha.fcId || '') + '</strong> · ' + _sevPill(sev) + '<br>' +
             esc(fha.fcDesc || '') +
             '<div style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--color-border-hair); font-size: 11px; color: var(--color-text-tertiary);">' +
                 'Cert basis: <strong>' + esc(certLabel) + '</strong> · Decision per <strong>' + esc(acRef) + '</strong> Figure 2' +

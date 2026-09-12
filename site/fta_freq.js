@@ -50,6 +50,7 @@
 // quant engine it refuses with a named reason instead of half an answer.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _enginesPresent() {
@@ -191,7 +192,7 @@
                 return '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); border-radius:8px; padding:10px 14px; margin-bottom:10px;">' +
                     '<div style="display:flex; justify-content:space-between; align-items:center;">' +
                     '<b style="font-size:12.5px;">' + esc(t.page) + '</b><span>' +
-                    (t.severity ? chip(t.severity.toUpperCase(), t.severity === 'Catastrophic' ? '#B91C1C' : '#B7791F') + ' ' : '') +
+                    (t.severity ? _sevPill(t.severity) + ' ' : '') +
                     (r.ok ? chip('w = ' + fmt(r.wTop) + ' /FH', '#1F3A5F') : (r.allocation ? chip('ALLOCATION — no frequency lane', '#7C8797') : chip('REFUSED', '#B91C1C'))) + '</span></div>' +
                     (!r.ok ? '<div style="font-size:11.5px; color:' + (r.allocation ? 'var(--color-text-tertiary)' : '#B91C1C') + '; margin-top:4px;">' + esc(r.reason) + '</div>' :
                         '<div class="u-mono" style="font-size:11px; color:var(--color-text-secondary); margin-top:4px;">Q(top) = ' + fmt(r.pTop) + ' · w(top) = ' + fmt(r.wTop) + ' /FH · expected failures per flight ≈ ' + fmt(r.nPerFlight) + ' (T = ' + r.T + ' FH)' + (r.lowerBound ? ' · <b style="color:#B7791F;">LOWER BOUND — ' + r.flags.ccfGroups + ' CCF group row(s) not decomposed</b>' : '') + '</div>' +

@@ -97,6 +97,7 @@
 // Namespace: stpa-*. Styling: site tokens, no stylesheet of its own.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function esc(s) {
@@ -691,7 +692,7 @@
             '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th>FHA failure condition</th><th>Class</th><th>Scope</th><th style="text-align:right;">In STPA scope</th><th style="text-align:right;"></th></tr></thead><tbody>' +
             cands.map(f =>
                 '<tr><td><span class="u-mono" style="font-weight:700;">' + esc(f.fcId) + '</span> — ' + esc(f.desc) + '</td>' +
-                '<td>' + esc(f.severity) + '</td><td style="font-size:11px; color:var(--color-text-tertiary);">' + esc(f.scope) + '</td>' +
+                '<td>' + _sevPill(f.severity) + '</td><td style="font-size:11px; color:var(--color-text-tertiary);">' + esc(f.scope) + '</td>' +
                 '<td style="text-align:right;"><button class="u-mono" style="font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:6px; cursor:pointer; border:1px solid ' +
                 (inScope.has(f.fcId) ? GREEN + '; color:' + GREEN + '; background:' + GREEN + '14;' : 'var(--color-border-strong); color:var(--color-text-secondary); background:var(--color-surface-2);') +
                 '" onclick="STPA_PANEL.toggleFc(\'' + esc(f.fcId) + '\')">' + (inScope.has(f.fcId) ? 'IN SCOPE' : 'ADD') + '</button></td>' +

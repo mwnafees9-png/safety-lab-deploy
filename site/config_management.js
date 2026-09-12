@@ -273,7 +273,7 @@ function _bucketStats(leaves, m) { let comp = 0, obs = 0, base = 0, locked = 0; 
 function _leafHtml(ci, m) {
     const st = m && m.ciBaselines[ci.ciId];
     const ver = st ? st.version : '—'; const locked = !!(st && st.locked), obs = !!(st && st.obsolete), comp = !!ci.compromised;
-    const scCls = ci.sc === 'SC1' ? 'background:#0a84ff;color:#fff' : (ci.sc === 'SC2' ? 'background:var(--color-surface-2,#e5e7eb);color:#374151' : 'background:transparent;color:#9ca3af');
+    const scCls = ci.sc === 'SC1' ? 'background:#0a84ff;color:#fff' : (ci.sc === 'SC2' ? 'background:var(--color-surface-2,#e5e7eb);color:#374151' : 'background:transparent;color:var(--color-text-primary)');
     const openPRs = (m ? m.problemReports : []).filter(pr => pr.againstCiId === ci.ciId && pr.status !== 'closed').length;
     let flags = '';
     if (comp) flags += ' <span class="cm-badge comp" title="Compromised — Golden-Thread finding">⚠</span>';
@@ -286,7 +286,7 @@ function _leafHtml(ci, m) {
         '<div class="cm-col">' + _esc(ci.fdal || '—') + '</div>' +
         '<div class="cm-col">' + ((ci.sc === 'SC1' || ci.sc === 'SC2')
             ? '<span class="cm-sc" data-sc="' + ci.sc + '" data-ci="' + _esc(ci.ciId) + '" title="What ' + ci.sc + ' requires for compliance — click" style="' + scCls + ';padding:1px 7px;border-radius:9px;font-weight:600;font-size:11px;cursor:pointer;">' + ci.sc + '</span>'
-            : '<span style="color:#9ca3af;font-size:11px;">—</span>') + '</div>' +
+            : '<span style="color:var(--color-text-primary);font-size:11px;">—</span>') + '</div>' +
         '<div class="cm-col">' + _esc(ver) + '</div>' +
         '<div class="cm-col" style="text-align:right;">' + action + '</div></div>';
 }

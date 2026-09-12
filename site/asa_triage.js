@@ -26,6 +26,7 @@
 // pattern problem_reports.js uses for the SSA gate).
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -187,7 +188,7 @@
                 : r.cls === 'aircraft-level' ? '<span style="color:#0e7490; font-family:var(--font-mono); font-size:11px; font-weight:600;">AIRCRAFT-LEVEL analysis</span>'
                 : '<span style="color:#8E2A2A; font-family:var(--font-mono); font-size:11px; font-weight:700;">OPEN</span>';
             html += '<tr><td><strong>' + _esc(r.fcId) + '</strong><div style="font-size:11px; color:var(--color-text-tertiary); max-width:280px;">' + _esc(String(r.fcDesc).slice(0, 90)) + '</div></td>' +
-                '<td class="cell-' + _esc(r.severity) + '">' + _esc(r.severity) + '</td><td>' + cls + '</td>' +
+                '<td class="cell-' + _esc(r.severity) + '">' + _sevPill(r.severity) + '</td><td>' + cls + '</td>' +
                 '<td style="font-size:11.5px;">' + _esc(r.why) + '</td>' +
                 '<td class="u-mono" style="font-size:10.5px;">' + (r.mfms.length ? r.mfms.map(p => _esc(p.name)).join('<br>') : (r.cls === 'aircraft-level' ? '<span style="color:#8E2A2A;">none — compile from MAC</span>' : '—')) + '</td></tr>';
         });

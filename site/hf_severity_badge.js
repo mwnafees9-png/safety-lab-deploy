@@ -24,6 +24,7 @@
 // in any order, no-ops without its stores.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     // ---- mirrors of the engine's row logic (asserted in tests) --------------
@@ -147,7 +148,7 @@
             '<b style="font-size:13.5px;">Workload ↔ severity divergence</b>' +
             '<button style="font-size:12px; border:1px solid var(--color-border,#dde3ea); background:none; border-radius:4px; cursor:pointer; padding:2px 9px;" onclick="HFW_UI.close()">✕</button></div>' +
             '<div style="font-size:12.5px; margin-top:8px; line-height:1.55;">' +
-            '<span class="u-mono" style="font-weight:700;">' + esc(row.fcId || '?') + '</span> is classified <b>' + esc(hfw.severity) + '</b>, ' +
+            '<span class="u-mono" style="font-weight:700;">' + esc(row.fcId || '?') + '</span> is classified ' + _sevPill(hfw.severity) + ', ' +
             'but its crew workload reads <b>“' + esc(hfw.band) + '”</b> (' + esc(hfw.src) + ') — which by the AC 25.1309 workload ladder implies at most <b>' + esc(hfw.impliedSev) + '</b>.' +
             (hfw.aware ? ' The FCIM marks the crew <b>' + esc(hfw.aware) + '</b>' + (/unaware/i.test(hfw.aware) ? ' — a severe-but-low-workload pairing with an unaware crew is especially worth the second look.' : '.') : '') + '</div>' +
             '<div style="font-size:11px; color:var(--color-text-tertiary,#7c8797); margin-top:6px;">Advisory — it asks you to reconcile the two lanes; it never rewrites either. Two honest exits:</div>' +

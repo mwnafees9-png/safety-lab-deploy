@@ -116,7 +116,7 @@
 
       // Brand pane (left) — gradient stays for the marketing-side feel; theme adjusts the
       // overlay strength so the contrast holds in both modes.
-      '#' + GATE_ID + ' .sl-brand-pane { flex: 0 0 44%; background: linear-gradient(155deg, #14224A 0%, #3457A2 45%, #7247B1 85%, #9B55BE 100%); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.45), 0 0 1px rgba(0,0,0,0.30); padding: 56px 56px 40px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }',
+      '#' + GATE_ID + ' .sl-brand-pane { flex: 0 0 44%; background: linear-gradient(165deg, #0a0c14 0%, #0a0a0d 52%, #110b16 100%); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.45), 0 0 1px rgba(0,0,0,0.30); padding: 56px 56px 40px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }',
       '#' + GATE_ID + ' .sl-brand-pane::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.12), transparent 60%); pointer-events: none; }',
 
       // Brand mark — matches safety_lab.css .brand-mark (gradient square with white triangle).

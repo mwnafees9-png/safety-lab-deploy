@@ -33,6 +33,7 @@
 // a signed-acceptance modal.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) {
@@ -270,7 +271,7 @@
             const badge = r.state === 'accepted' ? 'ACCEPTED' : (r.state === 'reopened' ? 'REOPENED' : 'OPEN');
             return '<div style="padding:7px 14px; border-top:1px solid var(--color-border-hair); font-size:12px;">' +
                 '<span class="u-mono" style="font-weight:700; color:' + color + ';">' + badge + '</span> · ' +
-                '<b>' + _esc(r.name) + '</b> → ' + _esc(r.fcIds.join(', ')) + ' [' + _esc(r.severity) + '] ' +
+                '<b>' + _esc(r.name) + '</b> → ' + _esc(r.fcIds.join(', ')) + ' ' + _sevPill(r.severity) + ' ' +
                 '<span style="color:var(--color-text-tertiary);">(' + _esc(r.pages.join(' · ')) + ')</span>' +
                 (r.state === 'accepted'
                     ? '<div style="color:var(--color-text-tertiary); margin-top:2px;">Accepted by ' + _esc(r.rec.by) + ' on ' + _esc(String(r.rec.at).slice(0, 10)) + (r.rec.basis ? ' — ' + _esc(r.rec.basis) : '') + '</div>'
@@ -320,7 +321,7 @@
         const modal = _ensureModal();
         modal._mcKey = key;
         document.getElementById('mc-spf-pair').innerHTML =
-            '<b>' + _esc(r.name) + '</b><div style="color:var(--color-text-secondary); margin-top:4px;">Single failure reaches ' + _esc(r.fcIds.join(', ')) + ' [' + _esc(r.severity) + '] on: ' + _esc(r.pages.join(' · ')) + '</div>';
+            '<b>' + _esc(r.name) + '</b><div style="color:var(--color-text-secondary); margin-top:4px;">Single failure reaches ' + _esc(r.fcIds.join(', ')) + ' ' + _sevPill(r.severity) + ' on: ' + _esc(r.pages.join(' · ')) + '</div>';
         document.getElementById('mc-spf-err').style.display = 'none';
         modal.style.display = 'flex';
         setTimeout(() => modal.classList.add('show'), 10);

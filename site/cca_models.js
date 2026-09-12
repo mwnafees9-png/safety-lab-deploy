@@ -24,6 +24,7 @@
 // the fault simulator on the Cascading Effects page. Read-only throughout.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) {
@@ -122,7 +123,7 @@
     };
 
     // ------------------------------------------------------------ rendering
-    const sevSpan = s => '<span class="cell-' + _esc(s || '') + '">' + _esc(s || '—') + '</span>';
+    const sevSpan = s => s ? _sevPill(s) : '—';
 
     function renderZsaModels() {
         const view = document.getElementById('view-zsa');
@@ -147,7 +148,7 @@
                     ' <button class="ckpt-m-btn" style="font-size:11px; padding:2px 10px; margin-left:8px;" onclick="ccaSimulate(\'zone:' + _esc(m.zoneId) + '\')">Simulate →</button>' +
                     '<div style="color:var(--color-text-secondary); margin-top:4px;" class="u-mono">downs: ' + (m.downs.length ? m.downs.map(_esc).join(', ') : '—') +
                     (m.routes.length ? ' · routes: ' + m.routes.map(r => _esc(r.id)).join(', ') : '') +
-                    (m.tripped.length ? ' · trips: ' + m.tripped.map(t => _esc(t.fcId) + '[' + _esc(t.severity) + ']').join(', ') : ' · no FC trips') +
+                    (m.tripped.length ? ' · trips: ' + m.tripped.map(t => _esc(t.fcId) + ' ' + _sevPill(t.severity)).join(', ') : ' · no FC trips') +
                     (m.findings.length ? ' · disposition: ' + m.findings.map(f => _esc(f.state)).join(', ') : '') + '</div>' +
                     (m.ambiguous.length ? '<div style="color:#B7791F; font-size:11px;">⚠ ' + m.ambiguous.map(_esc).join('<br>⚠ ') + '</div>' : '') +
                     '</div>';
@@ -176,7 +177,7 @@
                     '<b>' + _esc(m.praId) + '</b> ' + _esc(m.threat.slice(0, 56)) + ' · zones ' + m.zones.map(_esc).join(', ') +
                     ' <button class="ckpt-m-btn" style="font-size:11px; padding:2px 10px; margin-left:8px;" onclick=\'ccaSimulate(' + JSON.stringify(m.zones.map(z => 'zone:' + z)) + ')\'>Simulate →</button>' +
                     '<div style="color:var(--color-text-secondary); margin-top:4px;" class="u-mono">downs: ' + (m.downSystems.length ? m.downSystems.map(_esc).join(', ') : '—') +
-                    ' · trips: ' + (m.tripped.length ? m.tripped.map(t => _esc(t.fcId) + '[' + _esc(t.severity) + ']').join(', ') : 'none') +
+                    ' · trips: ' + (m.tripped.length ? m.tripped.map(t => _esc(t.fcId) + ' ' + _sevPill(t.severity)).join(', ') : 'none') +
                     ' · MAC ' + m.rules.holding + '/' + m.rules.evaluated + ' holding · cascade ' + m.cascade + '</div>' +
                     '<div style="margin-top:2px;">' + ret + '</div></div>';
             }).join('') + '</div>';

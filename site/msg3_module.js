@@ -192,7 +192,7 @@
     }
 
     // --------------------------------------------------------------- render
-    const _tern = v => v == null ? '<span style="color:#8A8B90;">?</span>' : v ? '<b style="color:#1D9E75;">YES</b>' : '<b style="color:#8E2A2A;">NO</b>';
+    const _tern = v => v == null ? '<span style="color:var(--color-text-primary);">?</span>' : v ? '<b style="color:#1D9E75;">YES</b>' : '<b style="color:#8E2A2A;">NO</b>';
     function renderMsg3Page() {
         const host = document.getElementById('ram-msg3-host');
         if (!host) return;

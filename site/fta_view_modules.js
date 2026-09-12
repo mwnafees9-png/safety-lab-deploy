@@ -1629,6 +1629,7 @@ function slRenderEventReuse() {
             try {
                 if (typeof openFTAPageById === 'function') openFTAPageById(pid);
                 setTimeout(function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
                     try { if (typeof _slHighlightFtaNode === 'function') _slHighlightFtaNode(nid, '◀ SAME EVENT'); } catch (_) {}
                 }, 320);
             } catch (_) {}
@@ -2029,7 +2030,7 @@ function refreshFTARequiredTarget() {
     const target = getSafetyTarget(fha.severity);
     const probTxt = target.prob === null
         ? '<span class="u-muted">No quantitative requirement (severity = ' + esc(fha.severity || 'unknown') + ')</span>'
-        : `Severity: <strong>${esc(fha.severity)}</strong> &middot; Top-event target: <strong>&lt; ${target.prob.toExponential(0)} /FH</strong> &middot; Required <strong>DAL ${target.dal}</strong>`;
+        : `Severity: ${_sevPill(fha.severity)} &middot; Top-event target: <strong>&lt; ${target.prob.toExponential(0)} /FH</strong> &middot; Required <strong>DAL ${target.dal}</strong>`;
 
     detail.innerHTML = `${probTxt}<br><span class="u-muted">Basis: ${esc(target.scope)} &middot; Hazard: ${esc(fha.fcId || '(no FC ID)')}</span>`;
     panel.style.display = 'block';

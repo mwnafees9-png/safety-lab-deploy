@@ -61,11 +61,11 @@
     function _zoneChips(libId, row) {
         var Z = _Z(); if (!Z) return '';
         var chips = (row.zones || []).map(function (zid) {
-            return '<span style="display:inline-flex;align-items:center;gap:3px;background:#EEF2F8;border:1px solid #D8DEE9;border-radius:12px;padding:1px 8px;margin:2px;font-size:11px;">' +
+            return '<span style="display:inline-flex;align-items:center;gap:3px;background:var(--color-surface-2);border:1px solid var(--color-border-hair);border-radius:12px;padding:1px 8px;margin:2px;font-size:11px;">' +
                 _esc(_zoneCode(zid)) + '<span onclick="_praRemoveZone(\'' + libId + '\',\'' + zid + '\')" style="cursor:pointer;color:#8E2A2A;font-weight:700;">×</span></span>'; }).join('');
         var opts = Z.all().filter(function (z) { return (row.zones || []).indexOf(z.id) < 0; })
             .map(function (z) { return '<option value="' + z.id + '">' + _esc((z.code || '') + ' ' + (z.name || '')) + '</option>'; }).join('');
-        var sel = opts ? '<select onchange="_praAddZone(\'' + libId + '\',this)" style="font-size:11px;padding:1px;margin:2px;border:1px solid #D8DEE9;border-radius:5px;"><option value="">+ zone in footprint…</option>' + opts + '</select>' : '<i style="font-size:11px;color:#8a8a8a;">define zones on the Zonal Model page first</i>';
+        var sel = opts ? '<select onchange="_praAddZone(\'' + libId + '\',this)" style="font-size:11px;padding:1px;margin:2px;border:1px solid var(--color-border-hair);border-radius:5px;"><option value="">+ zone in footprint…</option>' + opts + '</select>' : '<i style="font-size:11px;color:var(--color-text-primary);">define zones on the Zonal Model page first</i>';
         return '<div style="margin-top:3px;">' + chips + sel + '</div>';
     }
 
@@ -87,7 +87,7 @@
                 else if (disp === 'na') detail = '<div style="font-size:11px;color:#1E7A34;margin-top:2px;">N/A — ' + _esc(row.naReason || '') + '</div>';
                 return '<div style="border-bottom:1px solid #EEF2F8;padding:7px 0;">' +
                     '<div style="display:flex;align-items:center;gap:8px;">' +
-                      '<div><b style="font-size:12.5px;color:#0B2545;">' + _esc(lib.name) + '</b> <i style="font-size:11px;color:#55555C;">(' + _esc(lib.condition) + ')</i></div>' +
+                      '<div><b style="font-size:12.5px;color:var(--color-text-primary);">' + _esc(lib.name) + '</b> <i style="font-size:11px;color:#55555C;">(' + _esc(lib.condition) + ')</i></div>' +
                       '<span style="margin-left:auto;white-space:nowrap;">' + btns + '</span>' +
                     '</div>' + detail + '</div>';
             }).join('');
@@ -100,7 +100,7 @@
         ov.style.cssText = 'position:fixed;inset:0;z-index:2147483601;display:flex;align-items:center;justify-content:center;background:rgba(8,12,20,.5);padding:24px;';
         ov.innerHTML = '<div style="background:#fff;color:#202024;border-radius:14px;max-width:680px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.32);">' +
             '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #EEF2F8;">' +
-              '<div><div style="font-weight:700;color:#0B2545;">PRA impact canvas — ' + _esc(_certBasis()) + '</div>' +
+              '<div><div style="font-weight:700;color:var(--color-text-primary);">PRA impact canvas — ' + _esc(_certBasis()) + '</div>' +
               '<div style="font-size:11.5px;color:#55555C;">Standard particular-risk set (ARP4761A App L / AMC 25.1309). Disposition each; author the footprint as zones for the cross-check.</div></div>' +
               '<button onclick="_praCloseCanvas()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#888;">&times;</button></div>' +
             '<div id="pra-canvas-body" style="padding:12px 18px;overflow:auto;"></div></div>';

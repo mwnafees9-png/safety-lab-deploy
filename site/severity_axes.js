@@ -43,10 +43,10 @@
             anchors: ['NSE-1', 'MIN-1', 'MAJ-1', 'HAZ-1', 'CAT-1'],
             defs: [
                 'No effect on safety margins or functional capabilities (No Safety Effect).',
-                'Slight reduction in safety margins or functional capabilities (Minor).',
+                'Slight reduction in functional capabilities or safety margins (Minor).',
                 'Significant reduction in safety margins or functional capabilities (Major).',
-                'Large reduction in safety margins or functional capabilities (Hazardous).',
-                'Loss of the aircraft — hull loss (Catastrophic).'
+                'Large reduction in functional capabilities or safety margins (Hazardous).',
+                'Normally with hull loss; a condition that would prevent continued safe flight and landing (Catastrophic).'
             ],
             evidence: 'How many independent means remain after this failure, and how many further failures until a catastrophic outcome (from the architecture and the fault tree where one exists).'
         },
@@ -55,23 +55,23 @@
             levels: ['none', 'slight', 'significant', 'large', 'fatalities or incapacitation'],
             anchors: ['NSE-1', 'MIN-2', 'MAJ-2', 'HAZ-2', 'CAT-1'],
             defs: [
-                'No increase in crew workload (No Safety Effect).',
-                'Slight increase in crew workload (Minor).',
-                'Significant increase in crew workload (Major).',
-                'Physical distress or excessive workload such that the crew cannot be relied upon to perform their tasks accurately or completely (Hazardous).',
-                'Fatalities or incapacitation of the flight crew (Catastrophic).'
+                'No effect on flightcrew workload (No Safety Effect).',
+                'Slight increase in workload, such as routine flight plan changes (Minor).',
+                'A physical discomfort or significant increase in workload or in conditions impairing the efficiency of the flightcrew (Major).',
+                'Physical distress or excessive workload such that the flightcrew cannot be relied upon to perform their tasks accurately or completely (Hazardous).',
+                'Fatalities or incapacitation (Catastrophic).'
             ],
             evidence: 'The human-factors data for this condition: the credited crew tasks, their response time against the time available, phase occupancy, the alerting that supports detection.'
         },
         pax: {
-            key: 'effPaxLevel', label: 'Occupants', question: 'Effect on occupants',
+            key: 'effPaxLevel', label: 'Occupants', question: 'Effect on occupants or other persons excluding flightcrew',
             levels: ['none or slight inconvenience', 'discomfort', 'minor injuries', 'severe injuries or few fatalities', 'multiple fatalities'],
             anchors: ['NSE-1', 'MIN-3', 'MAJ-3', 'HAZ-3', 'CAT-1'],
             defs: [
-                'Inconvenience at most (No Safety Effect).',
-                'Physical discomfort to occupants (Minor).',
-                'Physical distress to occupants, possibly including minor injuries (Major).',
-                'Serious or fatal injury to a relatively small number of occupants (Hazardous).',
+                'Inconvenience (No Safety Effect).',
+                'Physical discomfort (Minor).',
+                'Physical distress, possibly including injuries (Major).',
+                'Serious or fatal injury to a small number of persons other than the flightcrew (Hazardous).',
                 'Multiple fatalities (Catastrophic).'
             ],
             evidence: 'The physical consequence of the aircraft effect in that phase.'
@@ -180,11 +180,12 @@
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
     // ---- the Effects cell: level chip + the sentence that justifies it ----------
-    var CHIP = { 0: 'background:#E8F0E6;color:#2E5A2A;', 1: 'background:#EEF2E4;color:#4A5D1E;', 2: 'background:#FBF0D5;color:#7A5300;', 3: 'background:#F8DCD0;color:#8E2A2A;', 4: 'background:#8E2A2A;color:#fff;' };
+    // 11 Sep 2026 — level chips take the app-wide severity fills (safety_lab.css .sev-axis-chip[data-level]); no private colours here.
+    var CHIP = { 0: '', 1: '', 2: '', 3: '', 4: '' };
     function effectsHtml(row) {
         return ORDER.map(function (ax) {
             var a = AXES[ax], i = levelIndex(ax, row && row[a.key]);
-            var chip = i >= 0 ? '<span class="sev-axis-chip" title="' + esc(a.question + ': ' + a.defs[i]) + '" style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:999px;margin-right:6px;' + CHIP[i] + '">' + esc(a.levels[i]) + '</span>' : '';
+            var chip = i >= 0 ? '<span class="sev-axis-chip" data-level="' + i + '" title="' + esc(a.question + ': ' + a.defs[i]) + '" style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:999px;margin-right:6px;' + CHIP[i] + '">' + esc(a.levels[i]) + '</span>' : '';
             // 5 Sep 2026 (levers 2 + 3) — a level set BY RULE says so beside the chip: from the
             // MAC rule, from the Task Analysis, or by the escape rule (No Safety Effect).
             var _dv = (row && row.derived && row.derived[ax]) ? String(row.derived[ax]) : '';

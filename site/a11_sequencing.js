@@ -197,8 +197,8 @@
             return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid #e7eaf1;' + (_running === s.id ? 'background:#f2f6ff;' : '') + '">'
                 + '<span style="font-size:10.5px;font-weight:800;letter-spacing:.04em;color:#fff;background:' + chip[1] + ';border-radius:999px;padding:2px 9px;flex:none;">' + chip[0] + '</span>'
                 + '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;">' + s.label + '</div>'
-                + '<div style="font-size:11px;color:#6b7280;">' + s.std + '</div></div>'
-                + (runnable ? '<button data-a11-run="' + s.id + '" style="font:inherit;font-size:12px;font-weight:600;border:1px solid #d4d8e3;background:#fff;border-radius:8px;padding:5px 12px;cursor:pointer;flex:none;">Run</button>' : '')
+                + '<div style="font-size:11px;color:var(--color-text-primary);">' + s.std + '</div></div>'
+                + (runnable ? '<button data-a11-run="' + s.id + '" style="font:inherit;font-size:12px;font-weight:600;border:1px solid var(--color-border-hair);background:#fff;border-radius:8px;padding:5px 12px;cursor:pointer;flex:none;">Run</button>' : '')
                 + '</div>';
         }).join('');
     }
@@ -212,10 +212,10 @@
         ov.innerHTML = '<div style="background:#fff;color:#181b22;width:100%;max-width:640px;max-height:88vh;border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden;">'
             + '<div style="padding:16px 20px 12px;border-bottom:1px solid #e7eaf1;display:flex;align-items:center;gap:12px;">'
             + '<div style="flex:1;"><div style="font-size:16px;font-weight:700;">Run the ARP4761A workflow</div>'
-            + '<div style="font-size:11.5px;color:#6b7280;margin-top:2px;">The sequence is the standard’s, not the model’s. Every step lands in its own review panel — nothing enters the model without your Accept.</div></div>'
+            + '<div style="font-size:11.5px;color:var(--color-text-primary);margin-top:2px;">The sequence is the standard’s, not the model’s. Every step lands in its own review panel — nothing enters the model without your Accept.</div></div>'
             + '<label style="display:flex;align-items:center;gap:6px;font-size:12px;flex:none;cursor:pointer;"><input type="checkbox" id="a11-auto"' + (_cfg().auto ? ' checked' : '') + '>Auto-advance</label>'
-            + '<button id="a11-x" style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#6b7280;flex:none;">×</button></div>'
-            + '<div id="a11-note" style="padding:7px 20px;font-size:12px;color:#6b7280;border-bottom:1px solid #e7eaf1;' + (dirty ? 'color:#8E2A2A;font-weight:600;' : '') + '">'
+            + '<button id="a11-x" style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:var(--color-text-primary);flex:none;">×</button></div>'
+            + '<div id="a11-note" style="padding:7px 20px;font-size:12px;color:var(--color-text-primary);border-bottom:1px solid #e7eaf1;' + (dirty ? 'color:#8E2A2A;font-weight:600;' : '') + '">'
             + (dirty ? 'Rename desk has unresolved entries — lanes are blocked until you resolve them (stale references).' : 'Statuses read the live model — a step is DONE when its artifacts exist, never because it was “run”.') + '</div>'
             + '<div id="a11-steps" style="overflow-y:auto;"></div>'
             + '<div style="padding:12px 20px;border-top:1px solid #e7eaf1;display:flex;justify-content:flex-end;gap:10px;background:#f7f8fb;">'

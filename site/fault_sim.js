@@ -22,6 +22,7 @@
 // leaving the page restores the ordinary CEA view untouched.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) {
@@ -323,7 +324,7 @@
         const modal = _ensureZonalModal();
         modal._fsKey = key;
         document.getElementById('fs-zonal-pair').innerHTML =
-            '<b>Zone ' + _esc(r.zone) + ' → ' + _esc(r.fcId) + ' [' + _esc(r.severity) + ']</b>' +
+            '<b>Zone ' + _esc(r.zone) + ' → ' + _esc(r.fcId) + '</b> ' + _sevPill(r.severity) +
             '<div style="color:var(--color-text-secondary); margin-top:4px;">' + _esc(r.detail) + '<br>' + _esc(r.via) + '</div>';
         document.getElementById('fs-zonal-err').style.display = 'none';
         modal.style.display = 'flex';
@@ -397,7 +398,7 @@
 
         if (failed.size) {
             const r = fsEvaluate();
-            const sevColor = s => s === 'Catastrophic' ? '#8E2A2A' : (s === 'Hazardous' ? '#B7791F' : 'var(--color-text-secondary)');
+            const sevColor = s => s === 'Catastrophic' ? 'var(--sev-cat-fg)' : (s === 'Hazardous' ? 'var(--sev-haz-fg)' : (s === 'Major' ? 'var(--sev-maj-fg)' : (s === 'Minor' ? 'var(--sev-min-fg)' : 'var(--color-text-primary)')));
             body += '<div style="border-top:1px solid var(--color-border-strong); margin-top:12px; padding-top:10px;">';
             // zone expansions
             if (r.zoneNotes.length) {
@@ -410,7 +411,7 @@
             body += '<div style="font-size:13px; margin-bottom:6px;"><b>' +
                 (r.trippedFcs.length
                     ? r.trippedFcs.length + ' failure condition(s) tripped: ' + r.trippedFcs.map(fc =>
-                        '<span class="u-mono" style="font-weight:700; color:' + sevColor(fc.severity) + ';">' + _esc(fc.fcId) + ' [' + _esc(fc.severity) + ']</span>').join(' · ')
+                        '<span class="u-mono" style="font-weight:700;">' + _esc(fc.fcId) + '</span> ' + _sevPill(fc.severity)).join(' · ')
                     : 'No modeled failure condition tripped') + '</b>' +
                 ' <span style="color:var(--color-text-tertiary); font-size:11px;" class="u-mono">(' + r.rulesHolding + '/' + r.rulesEvaluated + ' MAC rules holding · ' + r.downSystems.length + ' system(s) down)</span></div>';
             // breach arithmetic
@@ -445,10 +446,10 @@
             zonal = '<div style="border-top:1px solid var(--color-border-strong); margin-top:12px; padding-top:10px;">' +
                 '<b style="font-size:12.5px;">Zonal single-event findings</b> <span class="u-mono" style="font-size:11px;' + (openN ? ' color:#8E2A2A;' : ' color:var(--color-text-tertiary);') + '">' + (zf.length - openN) + '/' + zf.length + ' dispositioned</span>' +
                 zf.map(x => {
-                    const color = x.state === 'accepted' ? 'var(--color-text-tertiary)' : (x.severity === 'Catastrophic' ? '#8E2A2A' : '#B7791F');
+                    const color = x.state === 'accepted' ? 'var(--color-text-tertiary)' : (x.severity === 'Catastrophic' ? 'var(--sev-cat-fg)' : 'var(--sev-haz-fg)');
                     return '<div style="font-size:12px; padding:4px 0;">' +
                         '<span class="u-mono" style="font-weight:700; color:' + color + ';">' + (x.state === 'accepted' ? 'ACCEPTED' : x.state.toUpperCase()) + '</span> · ' +
-                        'Zone <b>' + _esc(x.zone) + '</b> → ' + _esc(x.fcId) + ' [' + _esc(x.severity) + '] <span style="color:var(--color-text-tertiary);" class="u-mono">' + _esc(x.detail) + '</span>' +
+                        'Zone <b>' + _esc(x.zone) + '</b> → ' + _esc(x.fcId) + ' ' + _sevPill(x.severity) + ' <span style="color:var(--color-text-tertiary);" class="u-mono">' + _esc(x.detail) + '</span>' +
                         (x.state === 'accepted'
                             ? '<div style="color:var(--color-text-tertiary); font-size:11px;">Accepted by ' + _esc(x.rec.by) + ' on ' + _esc(String(x.rec.at).slice(0, 10)) + (x.rec.basis ? ' — ' + _esc(x.rec.basis) : '') + '</div>'
                             : ' <button class="ckpt-m-btn" style="font-size:11px; padding:2px 10px; margin-left:6px;" onclick="fsZonalAcceptUi(\'' + _esc(x.key) + '\')">Accept with basis…</button>') +

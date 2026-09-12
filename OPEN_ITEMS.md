@@ -1325,3 +1325,22 @@ page say. Order: S1–S6 (defects), then S7–S12, then S13–S18 (Enterprise bu
 
 - **S22 — SL-WP-0003 Data Security → Rev 3.0, trust.html and security.html rewritten to match, AI data policy page, sub-processor list (add Voyage AI, Microsoft/Teams, AWS GovCloud planned, Resend, Stripe).** Written AFTER the builds ("we build then we write the papers"). Must not claim: Azure as the ITAR backend (it is Bedrock GovCloud, unprovisioned — today ITAR requests are refused); MFA enforced; AI calls audited; customer-managed keys (until S18); signed certificates; pen test done; "nothing leaves the browser in local mode" (corpus search, cache, autosave, notify); "only excerpts sent" (whole documents are sent).
 
+## R · Redesign, severity system, and the September carry-overs (opened 12 Sep 2026)
+
+Everything below is OPEN on 12 Sep 2026. The redesign itself is DONE and live (HANDOFF 12 Sep); these are what it left behind plus the 7–11 Sep items that never made it into this register.
+
+- **R1 — COMMIT THE REDESIGN.** 59 files uncommitted against ab73d55, all deployed. First action of the next session. Rename a stale `.git/index.lock` aside (the mount forbids unlink), then commit.
+- **R2 — Desktop catch-up.** `cd ~/dev/safety-lab-desktop && bash pull-web.sh && ./release.sh` after R1, so the desktop app carries the Terminal look and the severity pills.
+- **R3 — Demo data regeneration.** Every demo SFHA row references a system function and FC that do not exist in that system (extractedFCs = 0 per system); the 9 Sep editor fix hides it but the data is wrong. Regenerate demos so SFHA → functions/FCs link.
+- **R4 — American English, surgical.** UI-visible strings first (guard all-caps identifiers, dot-property accesses and object keys — `CATALOGUE`/`PP.CATALOGUE` broke 14 suites in the bulk pass); then kb_data + prompt files as ONE eval-gated batch (golden eval ≈ $5). Never a blanket replace.
+- **R5 — MAC screen rework** (item 16 from 5 Sep; B-section here). Parked by Waqas: "needs more of my brain cells". The 11 Sep mockup put the minimum-configuration set and flight phases on one screen — a starting point only.
+- **R6 — Sync Stage 4.** Delete the `SL_CRDT_AUTHORITATIVE` flag-off rollback branch once live co-editing has baked on real projects (Waqas: "after it bakes"). Nothing else in the old sync stack is deletable — cloud_sync autosave is the backup writer and the browser lock is the CM-lock substrate.
+- **R7 — Customer-install live AI round-trip.** DB half proven on real Supabase (yiisexbngnjakkqkmctw, still running at $10/mo); needs one AI key from Waqas for the end-to-end proof. Parked.
+- **R8 — Service-key rotation.** The service_role JWT sits in five db-webhook trigger definitions. Big-bang (anon key + redeploy + edge env + recreate 5 triggers) — do it choreographed with Waqas.
+- **R9 — Staff AI entitlement on the proxy.** @safetylabaero.com is comped Enterprise in the app but safety-lab-proxy-deploy meters by DB rate_limit_rpm, not domain.
+- **R10 — Google Fonts hot-link.** index.html and landing.html still link fonts.googleapis.com (IBM Plex / Inter); the self-host rule for ITAR installs says drop it or ship the woff2 files (build.sh already allowlists *.woff2). Newsreader is unreachable through the org proxy either way.
+- **R11 — Entra client secret** for Microsoft sign-in expires ~Feb 2027. Renew before.
+- **R12 — Search Console + Bing Webmaster Tools.** Only genuinely useful item in the 8 Sep SEO report. Waqas creates the two accounts; Claude places verification file/DNS, submits sitemap.xml, adds IndexNow. No outside party gets repo/CMS/DNS access.
+- **R13 — Report exports (docx/pdf) still use the old severity colours.** Severity pills are app-only by choice; decide whether exports follow.
+- **R14 — Golden run 2.** Three fresh FHA draws on identical inputs after the severity fixes, judged ≥90%, then the wider thread run (systems → interdependence → MAC → CoFFE → compiled trees). Measurement data is never deleted (rule 26).
+- **R15 — SL-WP-0003 v3.0 hold.** Written as-built ahead of the build; do not send to Boom/ZeroAvia/Aero Vodochody/Boeing until customer-hosted (R7) and the packaged AI backends are live and Waqas has eyeballed them.

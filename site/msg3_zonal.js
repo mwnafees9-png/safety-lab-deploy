@@ -62,13 +62,13 @@
                 return '<option value="' + t + '"' + (t === task ? ' selected' : '') + '>' + t + '</option>';
             }).join('');
             return '<div style="border-bottom:1px solid #EEF2F8;padding:6px 0;display:flex;align-items:center;gap:8px;font-size:11.5px;">' +
-                '<div style="min-width:150px;"><b style="color:#0B2545;">' + _esc(c.code || '') + ' ' + _esc(c.name || '') + '</b>' +
+                '<div style="min-width:150px;"><b style="color:var(--color-text-primary);">' + _esc(c.code || '') + ' ' + _esc(c.name || '') + '</b>' +
                   '<div style="color:#55555C;font-size:10.5px;">' + _esc(c.equipment.join(', ') || 'no equipment') + '</div></div>' +
                 '<div style="flex:1;color:#55555C;">' + (c.envFactors.length ? _esc(c.envFactors.join(', ')) : '—') + (c.ewis ? ' <b style="color:#8E2A2A;">· EWIS</b>' : '') + '</div>' +
-                '<select onchange="_m3SetTask(\'' + c.zoneId + '\',this.value)" style="font-size:11px;padding:2px;border:1px solid #D8DEE9;border-radius:5px;">' + taskSel + '</select>' +
+                '<select onchange="_m3SetTask(\'' + c.zoneId + '\',this.value)" style="font-size:11px;padding:2px;border:1px solid var(--color-border-hair);border-radius:5px;">' + taskSel + '</select>' +
                 '<button onclick="_m3Accept(\'' + c.zoneId + '\')" style="font-size:10px;padding:1px 8px;border:1px solid ' + (st.accepted ? '#1E7A34' : '#8a8a8a') + ';border-radius:5px;cursor:pointer;background:transparent;color:' + (st.accepted ? '#1E7A34' : '#8a8a8a') + ';">' + (st.accepted ? 'in program ✓' : 'accept') + '</button>' +
                 '</div>';
-        }).join('') || '<div style="color:#8a8a8a;font-size:12px;padding:12px;">No zones yet — define them on the Zonal Model page. The same tree drives this program.</div>';
+        }).join('') || '<div style="color:var(--color-text-primary);font-size:12px;padding:12px;">No zones yet — define them on the Zonal Model page. The same tree drives this program.</div>';
         m.querySelector('#m3z-body').innerHTML =
             '<div style="font-size:11.5px;color:#55555C;margin-bottom:6px;">Derived from the shared zonal model — GVI (general visual), DET (detailed), or EZAP (enhanced, for EWIS). Confirm/override the task and accept it into the program.</div>' + rows;
     }
@@ -79,7 +79,7 @@
         ov.style.cssText = 'position:fixed;inset:0;z-index:2147483601;display:flex;align-items:center;justify-content:center;background:rgba(8,12,20,.5);padding:24px;';
         ov.innerHTML = '<div style="background:#fff;color:#202024;border-radius:14px;max-width:720px;width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.32);">' +
             '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #EEF2F8;">' +
-              '<div><div style="font-weight:700;color:#0B2545;">MSG-3 Zonal Inspection program</div>' +
+              '<div><div style="font-weight:700;color:var(--color-text-primary);">MSG-3 Zonal Inspection program</div>' +
               '<div style="font-size:11.5px;color:#55555C;">Reuses the same zone tree + equipment as ZSA — authored once, two consumers.</div></div>' +
               '<button onclick="_m3CloseModal()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#888;">&times;</button></div>' +
             '<div id="m3z-body" style="padding:12px 18px;overflow:auto;"></div></div>';

@@ -92,18 +92,18 @@
             '<div style="display:flex;justify-content:space-between;align-items:baseline;">' +
               '<div style="font-weight:800;font-size:15px;">' + _esc(row.subId || '') + ' — combined conditions &amp; pairing</div>' +
               '<button type="button" id="fcim-cb-close" style="font:inherit;border:1px solid #ccd;background:#fff;border-radius:8px;padding:4px 12px;cursor:pointer;">Close</button></div>' +
-            '<h4 style="margin:12px 0 4px;font-size:13px;">Combined failure conditions <span style="font-weight:400;color:#667;">(ARP4761A Table A3 — related sub-functions)</span></h4>' +
-            '<p style="font-size:11.5px;color:#667;margin:0 0 6px;">Known sub-functions: ' + (_esc(partners.join(', ')) || '—') + '</p>' +
+            '<h4 style="margin:12px 0 4px;font-size:13px;">Combined failure conditions <span style="font-weight:400;color:var(--color-text-primary);">(ARP4761A Table A3 — related sub-functions)</span></h4>' +
+            '<p style="font-size:11.5px;color:var(--color-text-primary);margin:0 0 6px;">Known sub-functions: ' + (_esc(partners.join(', ')) || '—') + '</p>' +
             '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr><th style="text-align:left;">FC ID</th><th style="text-align:left;">Condition</th><th style="text-align:left;">Combined with</th><th></th></tr></thead>' +
             '<tbody id="fcim-cb-rows">' + comboRows + '</tbody></table>' +
             '<button type="button" id="fcim-cb-add" style="font:inherit;font-size:12px;margin-top:6px;border:1px dashed #8896AB;background:transparent;border-radius:8px;padding:3px 10px;cursor:pointer;">+ add combined condition</button>' +
-            '<h4 style="margin:16px 0 4px;font-size:13px;">Additional conditions <span style="font-weight:400;color:#667;">(Table A3 multiplicity — beyond the primary in each cell)</span></h4>' +
-            '<p style="font-size:11.5px;color:#667;margin:0 0 6px;">Partial Loss: under a complete-loss TL, split the degraded mode — one within MAC limits, one outside. Malfunction: MF2…MFn. Each gets its own FC id and traces to the FHA like the primaries. Never merge distinct conditions into one phrase.</p>' +
+            '<h4 style="margin:16px 0 4px;font-size:13px;">Additional conditions <span style="font-weight:400;color:var(--color-text-primary);">(Table A3 multiplicity — beyond the primary in each cell)</span></h4>' +
+            '<p style="font-size:11.5px;color:var(--color-text-primary);margin:0 0 6px;">Partial Loss: under a complete-loss TL, split the degraded mode — one within MAC limits, one outside. Malfunction: MF2…MFn. Each gets its own FC id and traces to the FHA like the primaries. Never merge distinct conditions into one phrase.</p>' +
             '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr><th style="text-align:left;">Cell</th><th style="text-align:left;">FC ID</th><th style="text-align:left;">Condition</th><th></th></tr></thead>' +
             '<tbody id="fcim-ex-rows">' +
             ['plExtra', 'mExtra'].map(k => (Array.isArray(row[k]) ? row[k] : []).map((e, i) =>
                 '<tr data-ex-k="' + k + '">' +
-                '<td style="white-space:nowrap;color:#667;">' + (k === 'plExtra' ? 'Partial Loss' : 'Malfunction') + '</td>' +
+                '<td style="white-space:nowrap;color:var(--color-text-primary);">' + (k === 'plExtra' ? 'Partial Loss' : 'Malfunction') + '</td>' +
                 '<td><input data-ex="id" value="' + _esc(e.id || '') + '" placeholder="FC ID" style="width:110px;font:inherit;font-size:12px;"></td>' +
                 '<td><input data-ex="desc" value="' + _esc(e.desc || '') + '" placeholder="Distinct condition" style="width:100%;font:inherit;font-size:12px;"></td>' +
                 '<td><button type="button" data-ex-del="1" style="font:inherit;font-size:11px;border:none;background:transparent;color:#B03030;cursor:pointer;">remove</button></td></tr>').join('')).join('') +
@@ -111,7 +111,7 @@
             '<button type="button" id="fcim-ex-add-pl" style="font:inherit;font-size:12px;margin-top:6px;border:1px dashed #8896AB;background:transparent;border-radius:8px;padding:3px 10px;cursor:pointer;">+ partial-loss condition</button> ' +
             '<button type="button" id="fcim-ex-add-mf" style="font:inherit;font-size:12px;margin-top:6px;border:1px dashed #8896AB;background:transparent;border-radius:8px;padding:3px 10px;cursor:pointer;">+ malfunction condition</button>' +
             '<h4 style="margin:16px 0 4px;font-size:13px;">Aware / Unaware pair</h4>' +
-            '<p style="font-size:11.5px;color:#667;margin:0 0 6px;">A standalone Unaware is legitimate. Pair two rows of this sub-function when awareness affects severity, then record which risk governs — taking the aware (lower) credit owes the monitoring requirement AutoReq will generate.</p>' +
+            '<p style="font-size:11.5px;color:var(--color-text-primary);margin:0 0 6px;">A standalone Unaware is legitimate. Pair two rows of this sub-function when awareness affects severity, then record which risk governs — taking the aware (lower) credit owes the monitoring requirement AutoReq will generate.</p>' +
             '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;">' +
               '<label>Partner row: <select id="fcim-cb-pair" style="font:inherit;font-size:12px;"><option value="">— unpaired —</option>' + pairOpts + '</select></label>' +
               '<label>Governing risk: <select id="fcim-cb-governs" style="font:inherit;font-size:12px;">' +
@@ -142,7 +142,7 @@
         const _exAdd = k => function () {
             card.querySelector('#fcim-ex-rows').insertAdjacentHTML('beforeend',
                 '<tr data-ex-k="' + k + '">' +
-                '<td style="white-space:nowrap;color:#667;">' + (k === 'plExtra' ? 'Partial Loss' : 'Malfunction') + '</td>' +
+                '<td style="white-space:nowrap;color:var(--color-text-primary);">' + (k === 'plExtra' ? 'Partial Loss' : 'Malfunction') + '</td>' +
                 '<td><input data-ex="id" placeholder="FC ID" style="width:110px;font:inherit;font-size:12px;"></td>' +
                 '<td><input data-ex="desc" placeholder="Distinct condition" style="width:100%;font:inherit;font-size:12px;"></td>' +
                 '<td><button type="button" data-ex-del="1" style="font:inherit;font-size:11px;border:none;background:transparent;color:#B03030;cursor:pointer;">remove</button></td></tr>');

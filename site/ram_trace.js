@@ -19,6 +19,7 @@
 // so the matrix can never disagree with the RAM pages.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     function _esc(s) {
@@ -230,7 +231,7 @@
         const on = rows.filter(r => r.onThread).length;
         const bodyRows = rows.length ? rows.map(r => {
             const fcCell = r.fcs.length
-                ? r.fcs.map(f => '<strong>' + _esc(f.fcId) + '</strong> <span class="cell-' + _esc(f.severity) + '">' + _esc(f.severity) + '</span>').join('<br>')
+                ? r.fcs.map(f => '<strong>' + _esc(f.fcId) + '</strong> ' + _sevPill(f.severity)).join('<br>')
                 : '<span style="color:var(--color-text-tertiary);">—</span>';
             const beCell = r.be
                 ? '<strong>' + _esc(r.ref) + '</strong><br><span style="color:var(--color-text-secondary);">' + _esc(r.be.name.slice(0, 60)) + '</span>'

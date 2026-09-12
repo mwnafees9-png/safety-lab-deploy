@@ -141,3 +141,27 @@ declares identity on a node sitting on an aircraft page. Max theoretical movers 
     it must go, move it aside under a dated key or `_to_delete/`. Measurement data is the one
     thing that cannot be regenerated — a draw costs money and a moment in the model's life that
     does not come back.
+
+27. **The wall counts CRASHES, not just FAIL lines (12 Sep 2026).** ship.sh refuses on a suite
+    that cannot start (non-zero exit with no FAIL line). A loop that greps only `^  FAIL  ` reports
+    green on a crashed suite — that happened with `regression_budget_margin` (it runs
+    budget_ledger.js in a sandbox without helpers). Any local wall run must treat a non-zero exit
+    as a failure, exactly as ship.sh does, before anything is called green.
+
+28. **Two files are version-locked and never swept: `eula_modal.js` (1.2.0) and
+    `license_modal.js` (1.0.7) (12 Sep 2026).** Their `?v=` pins must equal the exported
+    EULA_VERSION/rev and agree across index.html + legal.html (`regression_eula_gate_chain`,
+    `regression_no_training_guarantee`). Colour sweeps and cache bumps must skip them; if touched,
+    restore with `git show HEAD:"$f" > "$f"` (checkout fails on the device mount).
+
+29. **AI-facing verbiage is never edited outside the eval (Waqas, 12 Sep 2026).** The severity
+    rubric, the effect-level vocabulary, prompt and kb_data text are what the AI classifies against;
+    changing a word there is an eval-gated change. User-facing definition text MAY be aligned to
+    the authority (AC 25.1309-1B / AC 23.1309-1E), and when it is, our own context is ADDED beneath
+    the authority wording, never removed.
+
+30. **One severity renderer (12 Sep 2026).** Every place a severity class is shown goes through
+    `sevPillHtml()` (or a module's `_sevPill` shim); no module picks its own hex colour for a
+    class (`regression_severity_pills` guards it). Fills live in `--sev-*-fill` in BOTH theme
+    blocks of safety_lab.css. Reports/exports and the FRACAS incident scale are the two deliberate
+    exceptions.

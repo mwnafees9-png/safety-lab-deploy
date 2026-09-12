@@ -558,7 +558,7 @@
 
         return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Evidence Package — ' + _esc(pkg.meta.project) + '</title><style>' +
             'body{font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;color:#0B0B0C;background:#fff;margin:34px auto;font-size:13px;line-height:1.5;}' +
-            '.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;} .dim{color:#8A8B90;}' +
+            '.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;} .dim{color:var(--color-text-primary);}' +
             '.head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0B0B0C;padding-bottom:14px;gap:20px;}' +
             '.ttl{font-size:22px;font-weight:700;letter-spacing:0.04em;} .sub{font-size:14px;color:#45464A;margin-top:4px;}' +
             '.meta{font-size:10px;text-align:right;color:#45464A;word-break:break-all;max-width:420px;}' +

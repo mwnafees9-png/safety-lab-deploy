@@ -204,6 +204,7 @@ window.SafetyLabAiAssumptions = {
                 // ai_skills.js registry, resolved via the entry's analysis key —
                 // '' when the registry is absent or the analysis has no skill).
                 skill: (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
                     try {
                         if (typeof window !== 'undefined' && window.SLABSkills && typeof window.SLABSkills.stampFor === 'function') {
                             // V2 — basis-aware: a Part 23 project's variant (when one
@@ -2258,7 +2259,7 @@ const zsaCRUD = makeCRUD({
             '<td><strong>' + esc(row.zoneId) + '</strong></td>' +
             '<td>' + esc(row.desc) + '</td>' +
             '<td>' + esc(row.equip) + '</td>' +
-            '<td class="' + sevClass + '">' + esc(row.severity) + '</td>' +
+            '<td class="' + sevClass + '">' + (row.severity === 'Catastrophic' ? _sevPill('Catastrophic') : esc(row.severity)) + '</td>' +
             '<td>' + _renderZsaHousedFunctionsCell(row.housedFunctions) + '</td>' +
             '<td>' + esc(row.interference) + '</td>' +
             '<td>' + esc(row.mitigation) + '</td>';

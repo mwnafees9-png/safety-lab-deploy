@@ -110,7 +110,7 @@
               '<div><div style="font-weight:800;font-size:15px;">Per-phase effects — ' + _esc(row.fcId || '') + '</div>' +
               '<div style="font-size:12px;color:#555;">' + _esc(row.fcDesc || '') + '</div></div>' +
               '<button type="button" id="fha-a5-close" style="font:inherit;border:1px solid #ccd;background:#fff;border-radius:8px;padding:4px 12px;cursor:pointer;">Close</button></div>' +
-            '<p style="font-size:11.5px;color:#667;margin:10px 0 8px;">ARP4761A Table A5 shape — effects per flight phase for THIS failure condition. The row’s governing severity stays the single value everything downstream reads; INV-43 flags a governing severity milder than the worst phase here. Leave a phase blank if it adds nothing.</p>' +
+            '<p style="font-size:11.5px;color:var(--color-text-primary);margin:10px 0 8px;">ARP4761A Table A5 shape — effects per flight phase for THIS failure condition. The row’s governing severity stays the single value everything downstream reads; INV-43 flags a governing severity milder than the worst phase here. Leave a phase blank if it adds nothing.</p>' +
             '<table style="width:100%;border-collapse:collapse;font-size:12px;" class="a5-grid"><thead><tr>' +
               '<th style="text-align:left;">Phase</th><th style="text-align:left;">Effect on Aircraft</th><th style="text-align:left;">Effect on Flight Crew</th><th style="text-align:left;">Effect on Occupants</th><th style="text-align:left;">Severity (this phase)</th>' +
             '</tr></thead><tbody>' + grid + '</tbody></table>' +

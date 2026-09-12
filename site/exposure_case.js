@@ -31,6 +31,7 @@
 // REFUSED: an unexplained exposure is a guess wearing a suit.
 // ============================================================================
 (function () {
+    var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
     'use strict';
 
     // ---- the named cases ----------------------------------------------------
@@ -231,7 +232,7 @@
             (!rows.length ? '<div style="font-size:12px; color:var(--color-text-tertiary); padding:14px;">No basic events on Catastrophic/Hazardous trees yet — the sweep populates when the classical lane does.</div>' :
             '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th>Tree · severity</th><th>Basic event</th><th style="min-width:230px;">G.11.1.3 case</th><th>Derived T · source</th><th>Consistency</th></tr></thead><tbody>' +
             rows.map(r =>
-                '<tr><td class="u-mono" style="font-size:10.5px;">' + esc(r.page) + '<br><span style="color:' + (r.severity === 'Catastrophic' ? '#B91C1C' : '#B7791F') + '; font-weight:700;">' + esc(r.severity.toUpperCase()) + '</span></td>' +
+                '<tr><td class="u-mono" style="font-size:10.5px;">' + esc(r.page) + '<br>' + _sevPill(r.severity) + '</td>' +
                 '<td>' + esc(r.name) + ' <span class="u-mono" style="font-size:9.5px; color:var(--color-text-tertiary);">' + esc(String(r.lid)) + '</span></td>' +
                 '<td><select style="font:inherit; font-size:11px; width:100%; padding:3px 6px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:4px;" onchange="EXPOSURE_CASE.uiSet(\'' + esc(String(r.pageId)) + '\',\'' + esc(String(r.lid)) + '\', this.value)">' + opts(r.sel) + '</select>' +
                 (r.sel && r.sel.rationale ? '<div style="font-size:10px; color:var(--color-text-tertiary); margin-top:2px;" title="' + esc(r.sel.rationale) + '">rationale on file</div>' : '') + '</td>' +

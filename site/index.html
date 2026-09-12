@@ -30,7 +30,7 @@
     <!-- Phase 53.8 — cache-busting query string. Chrome caches file:// resources
          aggressively even with DevTools "Disable cache" on; bumping this string
          forces a re-fetch. Update the number when CSS/JS changes need to land. -->
-    <link rel="stylesheet" href="safety_lab.css?v=65.57">
+    <link rel="stylesheet" href="safety_lab.css?v=65.66">
     <!-- Phase 56.30 — Boot splash. Hides the app shell behind a brand-mark
          overlay until auth_gate.js (or safety_lab.js, for already-signed-in
          users) calls window.__slDismissBootSplash(). Prevents the app from
@@ -663,7 +663,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button class="action-btn" onclick="autoFillFcIdsForActiveSystem()" title="Walk every FHA row in this system, find the best-matching FCIM TL/PL/M by description token-overlap, and fill in blank FC IDs.">Auto-fill FC IDs from FCIM</button>
                     <span style="font-size: 11px; color: var(--color-text-tertiary);">Fills blank cells only; existing FC IDs are preserved.</span>
                 </div>
-                <div class="sev-legend" aria-label="Severity color key"><span class="sev-legend-label">Severity</span><span class="sev-chip cell-Catastrophic">Catastrophic</span><span class="sev-chip cell-Hazardous">Hazardous</span><span class="sev-chip cell-Major">Major</span><span class="sev-chip cell-Minor">Minor</span><span class="sev-chip cell-Negligible">Negligible</span></div>
+                <div class="sev-legend" aria-label="Severity color key"><span class="sev-legend-label">Severity</span><span class="sev-chip cell-Catastrophic">Catastrophic</span><span class="sev-chip cell-Hazardous">Hazardous</span><span class="sev-chip cell-Major">Major</span><span class="sev-chip cell-Minor">Minor</span><span class="sev-chip cell-Negligible">No Safety Effect</span></div>
                 <div style="overflow-x: auto;">
                     <table id="sys-fha-table">
                         <thead><tr><th>Actions</th><th>Function</th><th>FC ID</th><th>Failure Condition</th><th>Phases</th><th>Effects</th><th>Severity</th><th>Assumptions</th><th>Comments</th></tr></thead>
@@ -914,16 +914,17 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             </div>
 
             <h4 style="color: var(--header-color); border-bottom: 1px solid var(--border-primary); padding-bottom: 5px;">Qualitative Severity Classifications</h4>
-            <table class="reference-table" style="margin-bottom: 30px;">
-                <thead><tr><th style="width: 15%;">Classification</th><th style="width: 25%;">Effect on Aircraft</th><th style="width: 30%;">Effect on Occupants</th><th style="width: 30%;">Effect on Flight Crew</th></tr></thead>
+            <table class="reference-table" style="margin-bottom: 8px;">
+                <thead><tr><th style="width: 13%;">Classification</th><th style="width: 22%;">Effect on Aircraft</th><th style="width: 22%;">Effect on Occupants or Other Persons Excluding Flightcrew</th><th style="width: 29%;">Effect on Flightcrew</th><th style="width: 14%;">Allowable Qualitative Probability</th></tr></thead>
                 <tbody>
-                    <tr><td class="cell-Catastrophic">Catastrophic</td><td>Normally with hull loss / Loss of continued safe flight and landing.</td><td>Multiple fatalities.</td><td>Fatalities or incapacitation.</td></tr>
-                    <tr><td class="cell-Hazardous">Hazardous</td><td>Large reduction in safety margins or functional capabilities.</td><td>Serious or fatal injury to a relatively small number of the occupants.</td><td>Physical distress or higher workload.</td></tr>
-                    <tr><td class="cell-Major">Major</td><td>Significant reduction in safety margins or functional capabilities.</td><td>Physical discomfort, possibly including injuries.</td><td>Physical discomfort or a significant increase in workload.</td></tr>
-                    <tr><td class="cell-Minor">Minor</td><td>Slight reduction in safety margins or functional capabilities.</td><td>Physical discomfort.</td><td>Slight increase in workload or use of emergency procedures.</td></tr>
-                    <tr><td class="cell-Negligible">No Safety Effect</td><td>No effect on operational capabilities or safety.</td><td>Inconvenience.</td><td>No effect on flight crew workload.</td></tr>
+                    <tr><td class="cell-Catastrophic"><span class="sev-pill sev-cat">Catastrophic</span></td><td>Normally with hull loss.<div style="font-size:11.5px; margin-top:4px;">A failure condition that would prevent continued safe flight and landing is Catastrophic (AC 25.1309-1B §3.1.5 Note 1; AC 23.1309-1E: incapacitation or fatal injury to a flight crewmember, normally with loss of the airplane).</div></td><td>Multiple fatalities.</td><td>Fatalities or incapacitation.</td><td>Extremely improbable</td></tr>
+                    <tr><td class="cell-Hazardous"><span class="sev-pill sev-haz">Hazardous</span></td><td>Large reduction in functional capabilities or safety margins.</td><td>Serious or fatal injury to a small number of persons other than the flightcrew.</td><td>Physical distress or excessive workload such that the flightcrew cannot be relied upon to perform their tasks accurately or completely.</td><td>Extremely remote</td></tr>
+                    <tr><td class="cell-Major"><span class="sev-pill sev-maj">Major</span></td><td>Significant reduction in safety margins or functional capabilities.</td><td>Physical distress, possibly including injuries.</td><td>A physical discomfort or significant increase in workload or in conditions impairing the efficiency of the flightcrew.</td><td>Remote</td></tr>
+                    <tr><td class="cell-Minor"><span class="sev-pill sev-min">Minor</span></td><td>Slight reduction in functional capabilities or safety margins.</td><td>Physical discomfort.</td><td>Slight increase in workload.<div style="font-size:11.5px; margin-top:4px;">Includes routine flight plan changes and emergency procedures well within crew capability.</div></td><td>Probable</td></tr>
+                    <tr><td class="cell-Negligible"><span class="sev-pill sev-neg">No Safety Effect</span></td><td>No effect on operational capabilities or safety.</td><td>Inconvenience.</td><td>No effect on flightcrew workload.</td><td>No probability requirement</td></tr>
                 </tbody>
             </table>
+                <p style="font-size:12px; margin:0 0 30px;">Effect wording per FAA AC 25.1309-1B Table 4-1; AC 23.1309-1E paragraph 8 defines the same five classes in the same terms. The qualitative probability terms are common to the FAA and EASA bases; the numeric probability targets and DAL assignment vary by certification basis and are set in the Certification basis block above. The AI assistant classifies against the verbatim AC 25.1309-1B / AC 23.1309-1E definitions for the project's basis on every severity-assigning pass.</p>
 
             <h4 style="color: var(--header-color); border-bottom: 1px solid var(--border-primary); padding-bottom: 5px;">Applicable Quantitative Targets</h4>
             <p class="cfg-hint" title="Targets reflect the selection above. Probabilities are upper bounds (failures per flight hour); the design must demonstrate < target. DAL per SAE ARP4754A.">Upper bounds per flight hour · design must show &lt; target · DAL per ARP4754A.</p>
@@ -1282,7 +1283,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button id="btn-cancel-ac-fha" onclick="cancelEdit('acFha')" style="display:none; background:#94a3b8;">Cancel Edit</button>
                 </div>
             </div>
-            <div class="sev-legend" aria-label="Severity color key"><span class="sev-legend-label">Severity</span><span class="sev-chip cell-Catastrophic">Catastrophic</span><span class="sev-chip cell-Hazardous">Hazardous</span><span class="sev-chip cell-Major">Major</span><span class="sev-chip cell-Minor">Minor</span><span class="sev-chip cell-Negligible">Negligible</span></div>
+            <div class="sev-legend" aria-label="Severity color key"><span class="sev-legend-label">Severity</span><span class="sev-chip cell-Catastrophic">Catastrophic</span><span class="sev-chip cell-Hazardous">Hazardous</span><span class="sev-chip cell-Major">Major</span><span class="sev-chip cell-Minor">Minor</span><span class="sev-chip cell-Negligible">No Safety Effect</span></div>
             <div style="overflow-x: auto;">
                 <table id="ac-fha-table">
                     <thead id="ac-fha-thead"><tr><th>Actions</th><th>Sub-Function</th><th>FC ID</th><th>Failure Condition</th><th>Phases</th><th>Effects</th><th>Severity</th><th>Assumptions</th><th>Comments</th><th data-tmpl-review="1">Review</th></tr></thead>
@@ -4064,23 +4065,23 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.0" defer></script>
     <script src="node_identity_ui.js?v=1.4" defer></script>
-    <script src="fta_view_modules.js?v=66.36" defer></script>
+    <script src="fta_view_modules.js?v=66.37" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
-    <script src="gt_thread.js?v=0.9" defer></script>
-    <script src="data_ops_modules.js?v=66.36" defer></script>
+    <script src="gt_thread.js?v=0.91" defer></script>
+    <script src="data_ops_modules.js?v=66.41" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.31" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.94" defer></script>
+    <script src="helpers_modules.js?v=2.98" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
-    <script src="severity_axes.js?v=1.3" defer></script>
+    <script src="severity_axes.js?v=1.34" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.1" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.41" defer></script>
+    <script src="bindings_modules.js?v=1.45" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.57" defer></script>
-    <script src="safety_lab.js?v=65.53" defer></script>
+    <script src="misc_fn_modules.js?v=66.60" defer></script>
+    <script src="safety_lab.js?v=65.54" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4111,7 +4112,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          (seeded per MC-SEED). A forecast, not a demonstration: claimed-lane by construction. -->
     <script src="ops_mc.js?v=0.2" defer></script>
     <!-- Phase F4 — MSG-3 scheduled-maintenance analysis (born modular; pushes into the RAM ledger). Pro+ gated. -->
-    <script src="msg3_module.js?v=1.3" defer></script>
+    <script src="msg3_module.js?v=1.5" defer></script>
     <!-- Phase F5-F7 — the complete R&M analytics suite (born modular). Pro+ gated. -->
     <script src="rel_analytics.js?v=1.3" defer></script>
     <script src="mx_analytics.js?v=1.1" defer></script>
@@ -4126,7 +4127,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase D gap 4 (D1) — Interdependence AI sweep: proposals over EMPTY cells only, engineer signature decides (born modular). -->
     <script src="interdep_ai.js?v=1.2" defer></script>
     <!-- Phase P1 — evidence package export (born modular). -->
-    <script src="evidence_package.js?v=2.6" defer></script>
+    <script src="evidence_package.js?v=2.8" defer></script>
     <!-- Phase P3 — 4754B App A objectives matrix (born modular; paraphrased summaries, live evidence). -->
     <script src="objectives_matrix.js?v=1.1" defer></script>
     <!-- Phase P2 — problem reports / OPRs (born modular; upgrades the SSA E.4.d gate at runtime). -->
@@ -4156,7 +4157,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- RAM cockpit — seventh dashboard card (continuous track; feeds the gates). -->
     <script src="ram_cockpit.js?v=1.1" defer></script>
     <!-- Phase D gap 3 (§3.6) — Budget Ledger: allocated vs achieved as a first-class object (born modular; self-registering page). -->
-    <script src="budget_ledger.js?v=1.4" defer></script>
+    <script src="budget_ledger.js?v=1.42" defer></script>
     <!-- UX-1 — importance heatmap overlay: FV heat on basic events, display lane only (born modular; toolbar toggle injection). -->
     <script src="importance_heat.js?v=2.1" defer></script>
     <!-- UX-4 — leading-indicators strip on the dashboard: early warnings, display + routing only (born modular; counts from invRun / etaCouplingFindings / the engine's feasibility lane). -->
@@ -4170,9 +4171,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Backlog #6b — K350 guided tour: spotlight walkthrough of the golden thread over the showcase (born modular; on-ramp trigger injection). -->
     <script src="onboarding_tour.js?v=1.5" defer></script>
     <!-- Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1): FFS lane surface (born modular; self-registering page + {{ffs_table}} token source). -->
-    <script src="ffs_module.js?v=1.3" defer></script>
+    <script src="ffs_module.js?v=1.32" defer></script>
     <!-- Phase D gap 1 (§3.5) — ASA working surface: deterministic triage + measured MF&MS re-run (born modular; upgrades the ASA F.4 gate). -->
-    <script src="asa_triage.js?v=1.1" defer></script>
+    <script src="asa_triage.js?v=1.12" defer></script>
     <script src="idp_seed_trees.js?v=1.0" defer></script>
     <!-- Golden Thread integrity sweep + link bindings (born modular). -->
     <script src="gt_integrity.js?v=1.5" defer></script>
@@ -4224,9 +4225,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ram_predict.js?v=0.6" defer></script>
     <script src="ram_hub.js?v=1.1" defer></script>
     <script src="engine_selftest.js?v=1.0" defer></script>
-    <script src="ram_trace.js?v=1.1" defer></script>
-    <script src="model_checks.js?v=1.0" defer></script>
-    <script src="fault_sim.js?v=1.2" defer></script>
+    <script src="ram_trace.js?v=1.12" defer></script>
+    <script src="model_checks.js?v=1.01" defer></script>
+    <script src="fault_sim.js?v=1.22" defer></script>
     <script src="tab_guard.js?v=1.0" defer></script>
     <script src="journal.js?v=1.0" defer></script>
     <script src="change_journal_sync.js?v=1.1" defer></script>
@@ -4242,13 +4243,13 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="hf_evidence.js?v=0.2" defer></script>
     <!-- INV-HFW — crew workload ↔ FHA severity consistency (born modular; registers into the invariants sweep). -->
     <script src="hf_severity_check.js?v=1.2" defer></script>
-    <script src="hf_severity_badge.js?v=1.2" defer></script>
+    <script src="hf_severity_badge.js?v=1.21" defer></script>
     <!-- Table A5 — per-phase effects on the AFHA workbook (born modular; wraps renderACFHA,
          registers INV-43 into the invariants sweep). Additive: row.severity stays governing. -->
-    <script src="fha_a5.js?v=1.2" defer></script>
+    <script src="fha_a5.js?v=1.4" defer></script>
     <!-- FCIM Combined column editor + aware/unaware pairing desk (born modular; ARP4761A §A.3). -->
-    <script src="fcim_combined.js?v=1.3" defer></script>
-    <script src="a11_sequencing.js?v=1.1" defer></script>
+    <script src="fcim_combined.js?v=1.5" defer></script>
+    <script src="a11_sequencing.js?v=1.3" defer></script>
     <script src="corpus_retrieve.js?v=1.2" defer></script>
     <!-- STPA system lane — engine (deployed inert since v0.1) + the walkthrough panel that
          makes it user-visible. Registers INV-32 into the invariant sweep. -->
@@ -4275,7 +4276,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="demo_picker.js?v=5" defer></script>
     <script src="first_run.js?v=2" defer></script>
     <script src="continue_session.js?v=1.0" defer></script>
-    <script src="stpa_panel.js?v=1.4" defer></script>
+    <script src="stpa_panel.js?v=1.41" defer></script>
     <script src="stpa_report.js?v=1.2" defer></script>
     <script src="stpa_ai_apply.js?v=0.2" defer></script>
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
@@ -4300,14 +4301,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="physical_independence.js?v=1.1" defer></script>
     <script src="independence_claims.js?v=1.0" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
-    <script src="zonal_ui.js?v=1.9" defer></script>
+    <script src="zonal_ui.js?v=1.12" defer></script>
     <script src="equipment_hazards.js?v=1.0" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>
     <script src="zsa_walkthrough.js?v=1.1" defer></script>
-    <script src="cma_walkthrough.js?v=1.1" defer></script>
+    <script src="cma_walkthrough.js?v=1.31" defer></script>
     <script src="pra_library.js?v=1.2" defer></script>
-    <script src="pra_canvas.js?v=1.0" defer></script>
-    <script src="msg3_zonal.js?v=1.0" defer></script>
+    <script src="pra_canvas.js?v=1.21" defer></script>
+    <script src="msg3_zonal.js?v=1.21" defer></script>
     <script src="mac_l3.js?v=1.0" defer></script>
     <!-- M1 phase 2 — L3 cockpit: flow editor, per-deviation BDD corroboration, FMEA sign desk. -->
     <script src="mac_flows.js?v=1.1" defer></script>
@@ -4342,11 +4343,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="do_credit.js?v=1.0" defer></script>
     <script src="do160_ledger.js?v=1.0" defer></script>
     <script src="ewis_lane.js?v=1.0" defer></script>
-    <script src="event_trees.js?v=1.5" defer></script>
+    <script src="event_trees.js?v=1.55" defer></script>
     <!-- Bow-Tie Analysis — unified FTA↔ETA. Born-modular: creates its own view + nav,
          joins the fault tree's BDD-exact top probability to the event tree initiator,
          checks cross-side common cause against cut sets, lints generic barriers. -->
-    <script src="bowtie.js?v=2.7" defer></script>
+    <script src="bowtie.js?v=2.71" defer></script>
     <!-- Global UI text-size control (A−/A/A+, Ctrl±). Born-modular; scales the whole
          app via body zoom, persisted. Addresses the "text too small" default. -->
     <script src="text_scale.js?v=2.2" defer></script>
@@ -4354,7 +4355,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          records on credit-taking events, imperfect-coverage split, monitor-channel
          independence checks feeding the IP ledger, stats tile on the MBSA cockpit. -->
     <script src="monitor_spec.js?v=1.4" defer></script>
-    <script src="exposure_case.js?v=1.2" defer></script>
+    <script src="exposure_case.js?v=1.22" defer></script>
     <script src="cra_matrix.js?v=1.3" defer></script>
     <script src="fta_proposals.js?v=1.0" defer></script>
     <script src="prove_tabs.js?v=1.5" defer></script>
@@ -4365,7 +4366,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          declare them (fta_view_modules, helpers_modules, support_modules) —
          it also re-wraps on a short poll, so defer order is belt and braces. -->
     <script src="nav_return.js?v=1.0" defer></script>
-    <script src="fta_freq.js?v=1.3" defer></script>
+    <script src="fta_freq.js?v=1.32" defer></script>
     <script src="markov_ctmc.js?v=1.1" defer></script>
     <script src="mil217f_stress.js?v=1.1" defer></script>
     <!-- Jama live bridge — push FCs into Jama as items, pull the relationship
@@ -4376,9 +4377,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="toolchain_plan.js?v=1.4" defer></script>
     <!-- Combined & conditioned FCs — M6 (A.8.3-5). Born-modular: combined-FC rows,
          operational/environmental tags, coupling-derived candidates, INV-29/30. -->
-    <script src="fc_variants.js?v=1.0" defer></script>
-    <script src="fc_tree_flow.js?v=1.0" defer></script>
-    <script src="cca_models.js?v=1.0" defer></script>
+    <script src="fc_variants.js?v=1.01" defer></script>
+    <script src="fc_tree_flow.js?v=1.02" defer></script>
+    <script src="cca_models.js?v=1.03" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its
          first completion; the engine falls back to inline specs if absent. -->
@@ -4386,8 +4387,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.12" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.52" defer></script>
-    <script src="config_management.js?v=1.8" defer></script>
+    <script src="ai_loader.js?v=8.53" defer></script>
+    <script src="config_management.js?v=1.10" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.1" defer></script>
     <!-- Programme ID schemes on Program Planning — function / failure-condition / FCIM-cell
@@ -4400,7 +4401,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          client bb5194ab-9e8d-49e8-835a-4dbc26bd7467, any-tenant). This is the
          single switch ms_sso.js and auth_gate.js ssoBlockHTML both read. -->
     <script>window.SL_MS_SSO_ENABLED = true;</script>
-    <script src="auth_gate.js?v=62.70" defer></script>
+    <script src="auth_gate.js?v=62.73" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the
          auth gate itself (auth_gate.js ssoBlockHTML) and calls window.signInWithMicrosoft.

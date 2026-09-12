@@ -404,7 +404,7 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
     // AC table's Comments cell opens with the group finding when there is one.
     (helpers.match(/<td style="min-width:480px;width:34%;">\$\{effectsHtml\}<\/td>/g) || []).length === 2
     && (helpers.match(/<td style="min-width:480px;width:34%;">(\$\{_findingHtml\})?\$\{_fhaCommentsCell\(row\)\}<\/td>/g) || []).length === 2
-    && (helpers.match(/style="width:1%;white-space:nowrap;">\$\{esc\(row\.severity\)\}/g) || []).length === 2
+    && (helpers.match(/style="width:1%;white-space:nowrap;">\$\{sevPillHtml\(row\.severity, \{ dal: true \}\)\}/g) || []).length === 2
     && (helpers.match(/<td style="width:1%;white-space:nowrap;">\$\{_fhaPhasesCell\(row\)\}/g) || []).length === 2);
 }
 

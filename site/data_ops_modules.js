@@ -4,6 +4,7 @@
 // load-time code. Contents: CSV/Excel import + migrations, autosave recovery,
 // PDF export suite, sample project builder, DO-330 benchmark runner, backref +
 // review-summary renderers.
+var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
 function triggerCSVImport(moduleTarget) {
     currentImportTarget = moduleTarget;
     if (moduleTarget.startsWith('Sys_') && !activeSystemId) { alert("Please open a specific System Folder first."); return; }
@@ -281,11 +282,11 @@ function exportData(moduleName, format) {
                 return downloadCSV(file('AC_1309_Definitions'),
                     ['Classification','Effect on Aircraft','Effect on Occupants','Effect on Flight Crew'],
                     [
-                        ['Catastrophic','Normally with hull loss / Loss of continued safe flight and landing.','Multiple fatalities.','Fatalities or incapacitation.'],
-                        ['Hazardous','Large reduction in safety margins or functional capabilities.','Serious or fatal injury to a relatively small number of the occupants.','Physical distress or higher workload.'],
-                        ['Major','Significant reduction in safety margins or functional capabilities.','Physical discomfort, possibly including injuries.','Physical discomfort or a significant increase in workload.'],
-                        ['Minor','Slight reduction in safety margins or functional capabilities.','Physical discomfort.','Slight increase in workload or use of emergency procedures.'],
-                        ['No Safety Effect','No effect on operational capabilities or safety.','Inconvenience.','No effect on flight crew workload.']
+                        ['Catastrophic','Normally with hull loss. A failure condition that would prevent continued safe flight and landing is Catastrophic.','Multiple fatalities.','Fatalities or incapacitation.'],
+                        ['Hazardous','Large reduction in functional capabilities or safety margins.','Serious or fatal injury to a small number of persons other than the flightcrew.','Physical distress or excessive workload such that the flightcrew cannot be relied upon to perform their tasks accurately or completely.'],
+                        ['Major','Significant reduction in safety margins or functional capabilities.','Physical distress, possibly including injuries.','A physical discomfort or significant increase in workload or in conditions impairing the efficiency of the flightcrew.'],
+                        ['Minor','Slight reduction in functional capabilities or safety margins.','Physical discomfort.','Slight increase in workload (routine flight plan changes, emergency procedures well within crew capability).'],
+                        ['No Safety Effect','No effect on operational capabilities or safety.','Inconvenience.','No effect on flightcrew workload.']
                     ]);
             // 30 Aug 2026 — EXPORT PARITY batch 1 (Waqas directive, 18 Aug: everything
             // on offer can get exported). These three buttons existed and fell through
@@ -2017,11 +2018,11 @@ function _pdfDataForModule(moduleName) {
             return { title: 'AC 1309 Severity Definitions',
                 headers: ['Classification','Effect on Aircraft','Effect on Occupants','Effect on Flight Crew'],
                 rows: [
-                    ['Catastrophic','Normally with hull loss / Loss of continued safe flight and landing.','Multiple fatalities.','Fatalities or incapacitation.'],
-                    ['Hazardous','Large reduction in safety margins or functional capabilities.','Serious or fatal injury to a relatively small number of the occupants.','Physical distress or higher workload.'],
-                    ['Major','Significant reduction in safety margins or functional capabilities.','Physical discomfort, possibly including injuries.','Physical discomfort or a significant increase in workload.'],
-                    ['Minor','Slight reduction in safety margins or functional capabilities.','Physical discomfort.','Slight increase in workload or use of emergency procedures.'],
-                    ['No Safety Effect','No effect on operational capabilities or safety.','Inconvenience.','No effect on flight crew workload.']
+                    ['Catastrophic','Normally with hull loss. A failure condition that would prevent continued safe flight and landing is Catastrophic.','Multiple fatalities.','Fatalities or incapacitation.'],
+                    ['Hazardous','Large reduction in functional capabilities or safety margins.','Serious or fatal injury to a small number of persons other than the flightcrew.','Physical distress or excessive workload such that the flightcrew cannot be relied upon to perform their tasks accurately or completely.'],
+                    ['Major','Significant reduction in safety margins or functional capabilities.','Physical distress, possibly including injuries.','A physical discomfort or significant increase in workload or in conditions impairing the efficiency of the flightcrew.'],
+                    ['Minor','Slight reduction in functional capabilities or safety margins.','Physical discomfort.','Slight increase in workload (routine flight plan changes, emergency procedures well within crew capability).'],
+                    ['No Safety Effect','No effect on operational capabilities or safety.','Inconvenience.','No effect on flightcrew workload.']
                 ] };
     }
     return null;
@@ -3373,7 +3374,7 @@ function _renderAutoDerivedHazardSiblings(target) {
                   + 'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault(); this.click();}">';
             html += '<div class="backref-row-label">'
                   + '<strong>' + esc(tgtFha.fcId || '') + '</strong> · ' + esc(scopeLabel)
-                  + (sev ? ' <span class="cell-' + esc(sev) + '" style="padding: 1px 6px; border-radius: 3px; font-size: 11px;">' + esc(sev) + '</span>' : '')
+                  + (sev ? ' ' + _sevPill(sev) : '')
                   + '</div>';
             const desc = (tgtFha.fcDesc || '').slice(0, 80);
             if (desc) html += '<div class="backref-row-detail">' + esc(desc) + '</div>';
