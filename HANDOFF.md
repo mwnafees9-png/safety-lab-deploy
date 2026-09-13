@@ -1,4 +1,4 @@
-## 13 Sep 2026 (late night) — R19 STEP 3: NO NATIVE DIALOGS. 353 alert/confirm/prompt sites in 69 files rewritten onto the app's own dialogs. BUILT, WALL 305/0/0 ON THE MAC, RUNTIME SWEEP 86 tabs / 0 click errors / 0 native dialogs, AWAITING DEPLOY.
+## 13 Sep 2026 (late night) — R19 STEP 3: NO NATIVE DIALOGS. 353 alert/confirm/prompt sites in 69 files rewritten onto the app's own dialogs. BUILT, WALL 305/0/0 ON THE MAC, RUNTIME SWEEP 86 tabs / 0 click errors / 0 native dialogs. DEPLOYED 13 Sep late night with steps 1+2 (3d9d700): served misc_fn_modules 202,891 B, safety_lab 161,404 B, helpers 535,875 B, error_watch 3,136 B, mass_actions 9,287 B, index 350,566 B, all equal to the build; live page has slAlert, SLErrorWatch and the alert guard.
 
 **WHAT WAS THERE.** The precise scanner (comments, strings and regex literals excluded) found 353 native sites, not the 264 the first sweep counted: 157 `alert(`, 196 `confirm(`/`prompt(` (42 of those inside a "use slConfirm if it exists, else the native one" fallback). alert() had been swapped at runtime for a toast whose COLOR WAS GUESSED FROM KEYWORDS and whose text vanished after a few seconds, however long the explanation. confirm() and prompt() were the browser's gray boxes; on the desktop app (Electron) prompt() returns null without asking, so every prompt-driven flow silently did nothing there. There was no slAlert at all, and two dialogs asked back to back fought over the one overlay (the second replaced the first before it was read; the first promise never settled).
 
@@ -16,7 +16,7 @@
 
 **NEXT.** Deploy + verify served bytes (misc_fn_modules, safety_lab, helpers_modules). Then, from the R19 list: explicit scheduleAutosave for the 23 hygiene writers; remove the legacy view-resources dead panel and oos_independence.js; extend the runtime sweep to per-system sub-tabs and modal-internal buttons; the 89 cosmetic pin/header mismatches.
 
-## 13 Sep 2026 (night) — R19 FULL TOOL-WIDE SWEEP, STEPS 1 + 2: the findings, the runtime sweep tool, the global error catcher, and the silent failures closed. BUILT, WALL 304/0/0 ON THE MAC, AWAITING DEPLOY.
+## 13 Sep 2026 (night) — R19 FULL TOOL-WIDE SWEEP, STEPS 1 + 2: the findings, the runtime sweep tool, the global error catcher, and the silent failures closed. BUILT, WALL 304/0/0, DEPLOYED 13 Sep late night together with step 3 (served bytes verified there).
 
 **THE ASK.** Waqas, 13 Sep: "at some point we will need a full tool wide sweep" (registered as R19 after the R18 data-loss sweep). Ruled tonight: "all three, in that order" — runtime sweep + global error catcher first, then the 92 silent failures, then the 264 native dialogs.
 
