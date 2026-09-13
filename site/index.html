@@ -4074,7 +4074,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.32" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.0" defer></script>
+    <script src="helpers_modules.js?v=3.1" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
     <script src="severity_axes.js?v=1.35" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4095,7 +4095,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          never hit TDZ. -->
     <script src="project_stores.js?v=1.0" defer></script>
     <script src="crdt_gc.js?v=1.1" defer></script>
-    <script src="crdt_sync.js?v=2.0" defer></script>
+    <script src="crdt_sync.js?v=2.1" defer></script>
     <script src="save_watch.js?v=1.1" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>

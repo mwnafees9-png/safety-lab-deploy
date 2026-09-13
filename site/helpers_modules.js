@@ -12208,7 +12208,15 @@ function _restoreSnap(snapStr) {
     // in this tab until an unrelated edit and a sync pull reverted it.
     try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
 }
+// 13 Sep 2026 — while co-editing is live, undo/redo are PER USER (crdt_sync.js): they take
+// back this tab's own changes and never touch a teammate's, as in Word/Excel co-authoring.
+// The snapshot undo below stays for solo and offline work (no live doc).
+function _liveUndo() { try { return !!(window.SafetyLabCRDT && window.SafetyLabCRDT.liveUndo && window.SafetyLabCRDT.liveUndo()); } catch (_) { return false; } }
 function undo() {
+    if (_liveUndo()) {
+        if (!window.SafetyLabCRDT.undo()) return showToast('Nothing of yours to undo.', 'info', 2000);
+        return showToast('Undid your last change (teammates\u2019 work untouched).', 'info', 2000);
+    }
     if(!_undoStack.length) return showToast('Nothing to undo.', 'info', 2000);
     const current = JSON.stringify(_snapshotProject());
     const prev = _undoStack.pop();
@@ -12217,6 +12225,10 @@ function undo() {
     showToast('Undid: ' + prev.label, 'info', 2000);
 }
 function redo() {
+    if (_liveUndo()) {
+        if (!window.SafetyLabCRDT.redo()) return showToast('Nothing of yours to redo.', 'info', 2000);
+        return showToast('Redid your change.', 'info', 2000);
+    }
     if(!_redoStack.length) return showToast('Nothing to redo.', 'info', 2000);
     const current = JSON.stringify(_snapshotProject());
     const next = _redoStack.pop();

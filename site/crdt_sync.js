@@ -229,6 +229,37 @@
   // never discard an edit made here, however it was made.
   var _base = null;
   function _baseReset() { _base = { col: {}, ord: {}, whole: {} }; }
+  // 13 Sep 2026 — PER-USER UNDO (Waqas: "if I hit undo I want it to restore mine but not
+  // impact teammates' work ... exactly how it is in Microsoft documents"). The snapshot undo
+  // in helpers_modules restores the WHOLE project as this tab last saw it, which rolls a
+  // teammate's newer rows back. While co-editing is live, undo/redo go here instead: a Yjs
+  // UndoManager scoped to the synced tables, tracking only this tab's own transactions
+  // ('local'). Undo removes this tab's change from the shared history and leaves everything
+  // a teammate wrote standing — including a later edit of the same row, which wins, as in
+  // Word/Excel co-authoring (a step a co-author has since overwritten cannot be taken back;
+  // the manager walks on to this tab's previous own step, exactly as Word does). Seeds carry origin 'seed' and the stamp lives in the meta map,
+  // so neither is ever an undo step. The undone state reaches the screen through the same
+  // pull a teammate's edit would.
+  var _undoMgr = null;
+  var UNDO_CAPTURE_MS = 500;      // edits landing within this window form one undo step (the push debounce is 350 ms)
+  function _undoScopes() {
+    var scopes = [];
+    COLLECTIONS.forEach(function (c) { scopes.push(ydoc.getMap('col:' + c.name), ydoc.getMap('ord:' + c.name)); });
+    scopes.push(ydoc.getMap('col:' + FTA_SHELL), ydoc.getMap('ord:' + FTA_SHELL), ydoc.getMap('col:' + FTA_NODE), ydoc.getMap('ord:' + FTA_NODE), ydoc.getMap('whole'));
+    return scopes;
+  }
+  function _makeUndo() {
+    try { if (Y && Y.UndoManager) return new Y.UndoManager(_undoScopes(), { trackedOrigins: new Set(['local']), captureTimeout: UNDO_CAPTURE_MS }); } catch (_) {}
+    return null;
+  }
+  function liveUndo() { return !!(_started && ydoc && _undoMgr); }
+  // stopCapturing after each undo/redo: the manager groups changes within UNDO_CAPTURE_MS
+  // into one step, and an edit typed right after a redo must never be glued to it (the
+  // next undo would take both back).
+  function undo() { if (!liveUndo() || !_undoMgr.canUndo()) return false; _undoMgr.undo(); _undoMgr.stopCapturing(); return true; }
+  function redo() { if (!liveUndo() || !_undoMgr.canRedo()) return false; _undoMgr.redo(); _undoMgr.stopCapturing(); return true; }
+  function canUndo() { return liveUndo() && _undoMgr.canUndo(); }
+  function canRedo() { return liveUndo() && _undoMgr.canRedo(); }
   function _baseCol(name) { return _base.col[name] || (_base.col[name] = new Map()); }
   function _baseOrd(name) { return _base.ord[name] || (_base.ord[name] = new Map()); }
   _baseReset();
@@ -434,7 +465,7 @@
           if (typeof tv === 'number') { var tk = 'tc:' + t; var tcur = cmap.get(tk); if (tcur === undefined || tv > tcur) cmap.set(tk, tv); }
         });
       }
-    }, 'local');
+    }, full ? 'seed' : 'local');
   }
 
   // pullToModel(opts): opts.load = the doc is being adopted onto a model that was just
@@ -496,9 +527,14 @@
       _wsId = _ws(); _projId = _proj();
       _baseReset();
       ydoc = new Y.Doc();
+      _undoMgr = _makeUndo();
       ydoc.on('update', function (update, origin) {
-        if (origin === 'local') _broadcast('yupdate', { u: b64enc(update), t: _tok });
-        else if (origin !== _idb) pullToModel();   // idb-origin updates reconciled once after load
+        // ours: an edit ('local'), a seed ('seed'), or our own undo/redo (the UndoManager is
+        // the origin) — all broadcast to peers. An undo/redo ALSO pulls: its result reaches
+        // the model the way a teammate's change would.
+        var ours = (origin === 'local' || origin === 'seed' || (_undoMgr && origin === _undoMgr));
+        if (ours) _broadcast('yupdate', { u: b64enc(update), t: _tok });
+        if (origin !== 'local' && origin !== 'seed' && origin !== _idb) pullToModel();   // idb-origin updates reconciled once after load
         if (origin !== _idb) _scheduleSave();       // don't re-save what we just read back from idb
         // H-1 (31 Aug 2026) — the GC ledger. `t` is the last time this project's
         // local doc changed; crdt_gc will not retire a doc unless the server is
@@ -650,6 +686,7 @@
     try { if (chan) chan.unsubscribe(); } catch (_) {}
     chan = null;
     try { if (_idb && _idb.destroy) _idb.destroy(); } catch (_) {} _idb = null;
+    try { if (_undoMgr && _undoMgr.destroy) _undoMgr.destroy(); } catch (_) {} _undoMgr = null;
     try { if (ydoc) ydoc.destroy(); } catch (_) {}
     ydoc = null; _started = false; _baseReset();
     try { var b = document.getElementById('crdt-offline'); if (b) b.remove(); } catch (_) {}
@@ -710,6 +747,7 @@
     status: function () { return { flag: flagOn(), authoritative: authOn(), stamp: _stampGet(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId }; },
     _doc: function () { return ydoc; },
     keys: function () { var o = {}; COLLECTIONS.forEach(function (c) { o[c.name] = c.key; }); return o; },
+    undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo, liveUndo: liveUndo, _undoMgr: function () { return _undoMgr; },
     _base: function () { return _base; },
     _fta: { decompose: _ftaDecompose, recompose: _ftaRecompose, rebuildTree: _ftaRebuildTree }
   };
