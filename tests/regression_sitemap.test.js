@@ -50,8 +50,9 @@ const locs = t => [...t.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
         if (dup || noindex) { if (listedFiles.has(f)) problems.push(f + ' is a duplicate/noindex page but is listed'); }
         else if (!listedFiles.has(f)) problems.push(f + ' is an indexable page but is NOT listed');
         if (!canon) problems.push(f + ' has no canonical');
+        if (!dup && !/application\/ld\+json/.test(s)) problems.push(f + ' has no page schema (ld+json)');
     }
-    check('every indexable marketing page is listed, duplicates are not, all carry a canonical', problems.length === 0, problems.join('; '));
+    check('every indexable marketing page is listed, duplicates are not, all carry a canonical and page schema', problems.length === 0, problems.join('; '));
     check('security.html is the unlinked duplicate of /trust (canonical there, not listed)', !listedFiles.has('security.html') && /href="https:\/\/safetylabaero\.com\/trust"/.test(fs.readFileSync(path.join(SITE, 'security.html'), 'utf8')));
 
     console.log('\n[S4] build');
