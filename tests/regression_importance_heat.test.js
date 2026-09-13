@@ -146,7 +146,7 @@ console.log('\n[2] thermal semantics');
   check('compute failures are surfaced, never swallowed', /catch\(e => \{/.test(src21) && /engine declined the importance sweep/.test(src21));
   check('stale-page guard: paint recomputes when the active root changed', /_forRootId !== null && String\(cur\.id\) !== _forRootId/.test(src21));
   check('toggle-on unpaints the previous page before computing', /_unpaint\(\);[\s\S]{0,120}_recompute\(\)\.then\(\(\) => \{ _paint\(\); _legend\(true\); \}\)/.test(src21));
-  check('index.html loads importance_heat v2.1', /importance_heat\.js\?v=2\.1/.test(SITE('index.html')));
+  check('index.html loads importance_heat at v2.1 or later (pins are floors; 2.2 = R19 catch-and-report)', (function () { var m = SITE('index.html').match(/importance_heat\.js\?v=(\d+\.\d+)/); return !!m && parseFloat(m[1]) >= 2.1; })());
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // fta_proposals.js — v1.0 — CRA structural repairs as DRAFT-AND-ACCEPT
 // proposals (23 Aug 2026, Waqas's ruling: anything that edits an EXISTING
@@ -238,7 +239,7 @@
                 if (by == null) return;
                 var r = accept(id, by);
                 try { if (typeof showToast === 'function') showToast(r.ok ? 'Repair applied — enter the resource λ on the new event.' : r.reason, r.ok ? 'success' : 'error', 4200); } catch (_) {}
-            });
+            }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fta_proposals'); });
     }
     function uiDismiss(id) {
         var ask = (typeof slPrompt === 'function') ? slPrompt : function (m, d) { return Promise.resolve(window.prompt(m, d)); };
@@ -250,7 +251,7 @@
                     var r = dismiss(id, by, rat);
                     try { if (typeof showToast === 'function') showToast(r.ok ? 'Dismissed — kept on the record.' : r.reason, r.ok ? 'success' : 'error', 4200); } catch (_) {}
                 });
-            });
+            }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fta_proposals'); });
     }
 
     // ---- wiring -------------------------------------------------------------

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 /* save_watch.js — the safety net for "the project changed and nobody said so" (13 Sep 2026, R18 rebuild).
  *
  * Saving in this app hangs off ONE call, scheduleAutosave(): local save, cloud autosave,
@@ -57,7 +58,7 @@
     _settleQueued = true;
     var run = function () { _settleQueued = false; var fp = _fp(); if (fp != null) _last = fp; };
     if (typeof queueMicrotask === 'function') queueMicrotask(run);
-    else if (typeof Promise !== 'undefined') Promise.resolve().then(run);
+    else if (typeof Promise !== 'undefined') Promise.resolve().then(run).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'save_watch'); });
     else setTimeout(run, 0);
   }
 

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // mass_actions.js — v0.6 — MASS ACTIONS FOR TABULATED ANALYSES (beta demand).
 //
@@ -265,7 +266,7 @@
                     _saveRender(t);
                     _toast(done + ' deleted' + (refused.length ? ' · ' + refused.length + ' refused: ' + refused.slice(0, 3).join(' · ') + (refused.length > 3 ? ' …' : '') : '.'),
                            refused.length ? 'info' : 'success', 8000);
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'mass_actions'); });
         },
         _augmentAll: function () { TARGETS.forEach(augment); },
         TARGETS: TARGETS, _sel: sel

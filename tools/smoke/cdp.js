@@ -90,6 +90,7 @@ async function launch() {
         '--no-first-run', '--no-default-browser-check', '--no-sandbox',
         '--disable-gpu', '--disable-dev-shm-usage', '--disable-extensions',
         '--disable-background-networking', '--disable-sync', '--mute-audio',
+        ...(process.env.SWEEP_OFFLINE === '1' ? ['--proxy-server=direct://', '--proxy-bypass-list=*'] : []),
         'about:blank'
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 

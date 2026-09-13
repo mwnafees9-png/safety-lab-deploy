@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // continue_session.js — v1.0 — "Continue where you left off" (3 Sep 2026).
 //
@@ -181,7 +182,7 @@
             '<button type="button" class="btn-cyan" id="sl-continue-open" style="font-size:12px; white-space:nowrap;">Open</button>' +
             '<button type="button" class="btn-ghost" id="sl-continue-later" style="font-size:12px; white-space:nowrap;">Not now</button>';
         document.body.appendChild(el); _card = el;
-        el.querySelector('#sl-continue-open').onclick = function () { var b = this; b.disabled = true; b.textContent = 'Opening…'; open(p).then(function (ok) { if (ok) _dismiss(p.id); else { b.disabled = false; b.textContent = 'Open'; try { if (typeof showToast === 'function') showToast('Could not open that project — use File → Open from cloud.', 'warning', 5000); } catch (_) {} } }); };
+        el.querySelector('#sl-continue-open').onclick = function () { var b = this; b.disabled = true; b.textContent = 'Opening…'; open(p).then(function (ok) { if (ok) _dismiss(p.id); else { b.disabled = false; b.textContent = 'Open'; try { if (typeof showToast === 'function') showToast('Could not open that project — use File → Open from cloud.', 'warning', 5000); } catch (_) {} } }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'continue_session'); }); };
         el.querySelector('#sl-continue-later').onclick = function () { _dismiss(p.id); };
     }
 
@@ -202,7 +203,7 @@
                         _state.checked = true; _state.candidate = p;
                         // a returning engineer's own project outranks the worked-example offer
                         if (p && p.hasDoc) { try { if (!localStorage.getItem(FIRST_RUN_FLAG)) localStorage.setItem(FIRST_RUN_FLAG, 'skipped-has-cloud-project'); } catch (_) {} }
-                    });
+                    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'continue_session'); });
                     return;
                 }
                 if (!_state.checked) return;                                // query in flight

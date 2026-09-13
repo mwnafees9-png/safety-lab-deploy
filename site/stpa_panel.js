@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // stpa_panel.js — v1.0 — THE STPA WALKTHROUGH (system lane, user-visible).
 //
@@ -1219,7 +1220,7 @@
             const d = DATA(); if (!d) return;
             const labels = { mission: 'Mission statement — what the system exists to do:', scope: 'System scope — what is INSIDE this analysis:', boundary: 'Boundary statement — where the system ends and the environment begins:', abstractionLevel: 'Abstraction level (App E) — system, subsystem, or component. The analysis is re-derived as it descends; higher-level results constrain lower ones:' };
             _ask(labels[field] || field, d.meta[field] || '', { title: 'Analysis purpose (J3307 Step 1)', okText: 'Save' })
-                .then(v => { if (v == null) return; _author.setMeta(field, v); });
+                .then(v => { if (v == null) return; _author.setMeta(field, v); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         confirmScope: function () {
             const d = DATA(); if (!d) return;
@@ -1246,7 +1247,7 @@
                     const lossIds = String(ls).split(',').map(x => x.trim()).filter(Boolean);
                     return _ask('Group (optional — 1b-2 rollup; empty clears it):', h.group || '', { title: 'Hazard group', okText: 'Save' })
                         .then(g => { if (g == null) return; _author.editHazardLinks(id, lossIds, String(g)); });
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         addConstraintUi: function () {
             const hazardIds = _val('stpa-c-haz').split(',').map(x => x.trim()).filter(Boolean);
@@ -1312,7 +1313,7 @@
             const d = DATA(); if (!d) return;
             const cur = (d.cs.precedence.find(pr => pr.processId === processId) || {}).rule || '';
             _ask('Precedence rule for ' + processId + ' — when its controllers disagree, WHO wins and WHEN (empty clears the rule):', cur, { title: 'Precedence — ' + processId, okText: 'Save' })
-                .then(rule => { if (rule == null) return; _author.setPrecedence(processId, String(rule)); });
+                .then(rule => { if (rule == null) return; _author.setPrecedence(processId, String(rule)); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         addRespUi: function () {
             const conIds = _val('stpa-r-con').split(',').map(x => x.trim()).filter(Boolean);
@@ -1331,7 +1332,7 @@
                     if (state === 'na') { _author.setSip(itemId, 'na', cur.note || ''); return null; }
                     return _ask('Note — what does item (' + itemId + ') in YOUR licensed copy of Appendix D ask, and how do you meet it? (The tool never stores the standard\'s wording; your note is the record.):', cur.note || '', { title: 'SIP (' + itemId + ') evidence note', okText: 'Save' })
                         .then(note => { if (note == null) return; _author.setSip(itemId, state, String(note)); });
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         sipClear: function (itemId) { _author.setSip(itemId, null); },
         assess: function (key) {
@@ -1357,14 +1358,14 @@
                                                                   fcIds: prev.fcIds || [], scenarios: prev.scenarios || [] });
                                 });
                         });
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         dismiss: function (key) {
             _ask('Dismiss UCA ' + key + ' — rationale (required; the engine refuses a silent dismissal):', '', { title: 'Dismiss with rationale', okText: 'Dismiss' })
                 .then(rat => {
                     if (rat == null || !String(rat).trim()) { _toast('Not dismissed — a silent dismissal is a hole, not a disposition.', 'info'); return; }
                     _author.setDisposition(key, { status: 'dismissed', rationale: String(rat).trim() });
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         reopen: function (key) { _author.setDisposition(key, null); },
         // STPA-BRIDGE — declare the UCA's failure-mode counterparts, or declare
@@ -1396,7 +1397,7 @@
                                 ? 'Bridged — the classical lane quantifies the counterpart; STPA keeps the context.'
                                 : 'Declared a pure interaction hazard — first-class, owned by this lane.', 'info');
                         });
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         fixContext: function (key) {
             const d = DATA(); if (!d || !d.dispositions[key]) return;
@@ -1405,7 +1406,7 @@
                 .then(cx => {
                     if (cx == null || !String(cx).trim()) { _toast('Unchanged — the context clause is required, and an empty one is not a clause.', 'info'); return; }
                     _author.setDisposition(key, Object.assign({}, prev, { context: String(cx).trim() }));
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         addScenario: function (key, causeTag) {
             const d = DATA(); if (!d || !d.dispositions[key]) return;
@@ -1425,14 +1426,14 @@
                     const next = { status: disp.status, hazard: disp.hazard, context: disp.context, hazardIds: disp.hazardIds || [], fcIds: disp.fcIds || [], rationale: disp.rationale,
                                    scenarios: (disp.scenarios || []).concat([scen]) };
                     _author.setDisposition(key, next);
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         dismissCause: function (dk) {
             _ask('Dismiss cause ' + dk + ' — rationale (required; J3307 says these causes SHALL be evaluated, so a dismissal must say WHY this one cannot produce the UCA):', '', { title: 'Dismiss enumerated cause', okText: 'Dismiss' })
                 .then(rat => {
                     if (rat == null) return;
                     _author.setCauseDismissal(dk, String(rat));
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         reopenCause: function (dk) { _author.setCauseDismissal(dk, null); },
         addFactor: function (key, idx) {
@@ -1456,7 +1457,7 @@
                     // FIX (W3): preserve context/hazardIds — the old rebuild dropped them,
                     // which would have tripped the §7.3.1.2 refusal on the next render.
                     _author.setDisposition(key, { status: disp.status, hazard: disp.hazard, context: disp.context, hazardIds: disp.hazardIds || [], fcIds: disp.fcIds || [], rationale: disp.rationale, scenarios: scenarios });
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         copySc: function (btn, i) {
             try {
@@ -1482,7 +1483,7 @@
                 .then(rat => {
                     if (rat == null) return;
                     _author.setTestDisposition(ucaId, 'non-critical', String(rat));
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         draftAllSc: function () {
             try {

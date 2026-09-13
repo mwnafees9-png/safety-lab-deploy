@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // fracas_ledger.js — v0.1 — FRACAS-2: the incident ledger + workflow layer.
 //
@@ -287,7 +288,7 @@
                         setStatus(recId, incId, 'closed', { verifiedBy: String(vb).trim() });
                         renderLedger(); try { renderRamRelPage(); } catch (_) {}
                     } catch (e) { _toast(e.message, 'error', 6000); }
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fracas_ledger'); });
         },
         uiEdit: function (recId, incId) {
             Promise.resolve(_ask('Edit field — format: field | value\nfields: containment / corrective / preventive / responsible / lesson / repairHrs / downtimeHrs', ''))
@@ -296,7 +297,7 @@
                     const kf = String(v).split('|')[0].trim(); const val = String(v).split('|').slice(1).join('|').trim();
                     try { const p = {}; p[kf] = val; setFields(recId, incId, p); renderLedger(); _toast('Updated ' + kf + '.', 'success', 2600); }
                     catch (e) { _toast(e.message, 'error', 5200); }
-                });
+                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fracas_ledger'); });
         },
         copySeed: function (recId, incId, btn) {
             const seed = assumptionSeed(recId, incId);

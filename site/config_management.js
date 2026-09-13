@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 /* ============================================================================
  * config_management.js — ARP4754B §5.6 System Control Category (SC) configuration management.
  * ----------------------------------------------------------------------------
@@ -323,7 +324,7 @@ function exportIndexPDF() {
                     doc.text(String((st && st.version) || '—'), 450, y); doc.text(flags, 490, y); y += 11;
                 });
                 if (typeof _savePdf === 'function') _savePdf(doc, 'Configuration_Index.pdf'); else doc.save('Configuration_Index.pdf');
-            });
+            }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'config_management'); });
         } else { _toast('PDF export unavailable.', 'warning'); }
     } catch (e) { _toast('Export failed: ' + e, 'warning'); }
 }

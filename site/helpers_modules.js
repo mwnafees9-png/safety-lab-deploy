@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // helpers_modules.js — v1.0 — Phase P2 batch 4: runtime helper layer (bulk pass).
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). 100%% pure runtime function declarations —
@@ -4070,7 +4071,7 @@ function createMissionProfile() {
         if (typeof refreshFtaMissionProfileDropdown === 'function') refreshFtaMissionProfileDropdown();
         if (typeof showToast === 'function') showToast('Created mission profile "' + name + '" — adjust its phase durations below.', 'success', 4000);
         if (typeof scheduleAutosave === 'function') scheduleAutosave();
-    });
+    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'helpers_modules'); });
 }
 function renameMissionProfile() {
     if (!_phasesProfileId) return;
@@ -4083,7 +4084,7 @@ function renameMissionProfile() {
         renderFlightPhases();
         if (typeof refreshFtaMissionProfileDropdown === 'function') refreshFtaMissionProfileDropdown();
         if (typeof scheduleAutosave === 'function') scheduleAutosave();
-    });
+    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'helpers_modules'); });
 }
 function deleteMissionProfile() {
     if (!_phasesProfileId) return;
@@ -4100,7 +4101,7 @@ function deleteMissionProfile() {
         renderFlightPhases();
         if (typeof refreshFtaMissionProfileDropdown === 'function') refreshFtaMissionProfileDropdown();
         if (typeof scheduleAutosave === 'function') scheduleAutosave();
-    });
+    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'helpers_modules'); });
 }
 function addPhaseRow() {
     slPrompt('New flight phase name (e.g. Extended Cruise):', '', { title: 'Add nominal flight phase', okText: 'Add' }).then(v => {
@@ -4113,7 +4114,7 @@ function addPhaseRow() {
         renderFlightPhases();
         if (typeof refreshFhaPhaseGrids === 'function') refreshFhaPhaseGrids();
         if (typeof scheduleAutosave === 'function') scheduleAutosave();
-    });
+    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'helpers_modules'); });
 }
 
 // Contingency phases come from a catalogue rather than a free-text box: they are a
@@ -4140,7 +4141,7 @@ function addContingencyPhase() {
         if (typeof refreshFhaPhaseGrids === 'function') refreshFhaPhaseGrids();
         if (typeof scheduleAutosave === 'function') scheduleAutosave();
         if (typeof showToast === 'function') showToast('Added "' + avail[n - 1].phase + '" — excluded from the mission total; FHA rows naming it keep the full-flight exposure window.', 'success', 6000);
-    });
+    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'helpers_modules'); });
 }
 function deletePhaseRow(idx) {
     const tbl = _phasesActiveTable();
@@ -4154,7 +4155,7 @@ function deletePhaseRow(idx) {
         // (see renderFhaPhaseGrid) so the engineer sees it and decides.
         if (typeof refreshFhaPhaseGrids === 'function') refreshFhaPhaseGrids();
         if (typeof scheduleAutosave === 'function') scheduleAutosave();
-    });
+    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'helpers_modules'); });
 }
 
 function calcExposureFromFHA(fhaId) {

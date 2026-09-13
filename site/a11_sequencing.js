@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // a11_sequencing.js — A11: agentic sequencing over the ARP4761A workflow.
 //
@@ -178,7 +179,7 @@
                     _render();
                 }
             }, 2500);
-        });
+        }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'a11_sequencing'); });
     }
 
     // ---- desk UI -------------------------------------------------------------

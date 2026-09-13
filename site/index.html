@@ -3999,6 +3999,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 6 Sep 2026 — offline signed-license verification (needs SLConfig; must precede the tier readers). -->
     <script src="slab_license.js?v=1.2" defer></script>
     <script src="fn_wrap.js?v=1.0" defer></script>
+    <!-- 13 Sep 2026 (R19) — the ONE global error catcher: records uncaught errors and unhandled rejections, tells the person once in plain language, never blocks. Loads before every app module so boot errors are caught too. -->
+    <script src="error_watch.js?v=1.0" defer></script>
     <script src="numbering.js?v=1.0.1" defer></script>
     <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
          so it stays off the critical path for real users. It self-installs (SL_SHOWCASE) on execution. -->
@@ -4067,14 +4069,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.0" defer></script>
     <script src="node_identity_ui.js?v=1.4" defer></script>
-    <script src="fta_view_modules.js?v=66.39" defer></script>
+    <script src="fta_view_modules.js?v=66.40" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
     <script src="data_ops_modules.js?v=66.43" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.32" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.1" defer></script>
+    <script src="helpers_modules.js?v=3.2" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
     <script src="severity_axes.js?v=1.35" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4082,7 +4084,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.46" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.62" defer></script>
+    <script src="misc_fn_modules.js?v=66.63" defer></script>
     <script src="safety_lab.js?v=65.55" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4096,7 +4098,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="project_stores.js?v=1.0" defer></script>
     <script src="crdt_gc.js?v=1.1" defer></script>
     <script src="crdt_sync.js?v=2.1" defer></script>
-    <script src="save_watch.js?v=1.1" defer></script>
+    <script src="save_watch.js?v=1.2" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
     <script src="assurance_modules.js?v=1.32" defer></script>
@@ -4109,7 +4111,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ram_modules.js?v=1.8" defer></script>
     <!-- FRACAS-2 — the incident ledger (case manager) under the statistical FRACAS;
          events feed failure counts, closure requires a named effectiveness verifier. -->
-    <script src="fracas_ledger.js?v=0.1" defer></script>
+    <script src="fracas_ledger.js?v=0.2" defer></script>
     <script src="fracas_slas.js?v=0.2" defer></script>
     <!-- OPS-MC — operational forecast Monte Carlo fed by the ledger's own empirical data
          (seeded per MC-SEED). A forecast, not a demonstration: claimed-lane by construction. -->
@@ -4162,7 +4164,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase D gap 3 (§3.6) — Budget Ledger: allocated vs achieved as a first-class object (born modular; self-registering page). -->
     <script src="budget_ledger.js?v=1.42" defer></script>
     <!-- UX-1 — importance heatmap overlay: FV heat on basic events, display lane only (born modular; toolbar toggle injection). -->
-    <script src="importance_heat.js?v=2.1" defer></script>
+    <script src="importance_heat.js?v=2.2" defer></script>
     <!-- UX-4 — leading-indicators strip on the dashboard: early warnings, display + routing only (born modular; counts from invRun / etaCouplingFindings / the engine's feasibility lane). -->
     <script src="ux_leading.js?v=1.2" defer></script>
     <!-- UX-2 — contextual micro-tours: per-surface first-visit orientation (born modular; pill invite, never a takeover; concepts only). -->
@@ -4187,7 +4189,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          (born modular; OFF by default per project). MUST load after
          q_completeness.js: it wraps renderGtIntegrityPage last so its config
          card appends below the Q map on the Thread Integrity page. -->
-    <script src="notify_agents.js?v=1.7" defer></script>
+    <script src="notify_agents.js?v=1.8" defer></script>
     <!-- Delete guard — referential integrity at the write + SSA thread gate. -->
     <script src="delete_guard.js?v=1.1" defer></script>
     <!-- Recovery ring + session resume (born modular; rides the autosave cadence). -->
@@ -4252,7 +4254,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fha_a5.js?v=1.4" defer></script>
     <!-- FCIM Combined column editor + aware/unaware pairing desk (born modular; ARP4761A §A.3). -->
     <script src="fcim_combined.js?v=1.5" defer></script>
-    <script src="a11_sequencing.js?v=1.3" defer></script>
+    <script src="a11_sequencing.js?v=1.4" defer></script>
     <script src="corpus_retrieve.js?v=1.2" defer></script>
     <!-- STPA system lane — engine (deployed inert since v0.1) + the walkthrough panel that
          makes it user-visible. Registers INV-32 into the invariant sweep. -->
@@ -4278,8 +4280,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="vayu_showcase.js?v=2" defer></script>
     <script src="demo_picker.js?v=6" defer></script>
     <script src="first_run.js?v=3" defer></script>
-    <script src="continue_session.js?v=1.0" defer></script>
-    <script src="stpa_panel.js?v=1.41" defer></script>
+    <script src="continue_session.js?v=1.1" defer></script>
+    <script src="stpa_panel.js?v=1.42" defer></script>
     <script src="stpa_report.js?v=1.2" defer></script>
     <script src="stpa_ai_apply.js?v=0.2" defer></script>
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
@@ -4298,7 +4300,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ml_assurance.js?v=0.5" defer></script>
     <!-- Mass actions for tabulated analyses — selection layer over the worksheet tables;
          every write routes through each worksheet's own helpers. -->
-    <script src="mass_actions.js?v=0.6" defer></script>
+    <script src="mass_actions.js?v=0.7" defer></script>
     <script src="mbsa_schema.js?v=1.1" defer></script>
     <script src="zonal_model.js?v=1.1" defer></script>
     <script src="physical_independence.js?v=1.1" defer></script>
@@ -4358,9 +4360,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          records on credit-taking events, imperfect-coverage split, monitor-channel
          independence checks feeding the IP ledger, stats tile on the MBSA cockpit. -->
     <script src="monitor_spec.js?v=1.4" defer></script>
-    <script src="exposure_case.js?v=1.22" defer></script>
-    <script src="cra_matrix.js?v=1.3" defer></script>
-    <script src="fta_proposals.js?v=1.0" defer></script>
+    <script src="exposure_case.js?v=1.23" defer></script>
+    <script src="cra_matrix.js?v=1.4" defer></script>
+    <script src="fta_proposals.js?v=1.1" defer></script>
     <script src="prove_tabs.js?v=1.5" defer></script>
     <script src="fta_tree_picker.js?v=1.2" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
@@ -4391,7 +4393,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ai_skills.js?v=2.14" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
     <script src="ai_loader.js?v=8.57" defer></script>
-    <script src="config_management.js?v=1.10" defer></script>
+    <script src="config_management.js?v=1.11" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.1" defer></script>
     <!-- Programme ID schemes on Program Planning — function / failure-condition / FCIM-cell
@@ -4412,7 +4414,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ms_sso.js?v=1.1" defer></script>
     <!-- Two-factor authentication (TOTP). Born-modular; adds a 2FA section to the
          account panel and a sign-in step-up (AAL2) consumed by auth_gate.js. -->
-    <script src="mfa.js?v=1.1" defer></script>
+    <script src="mfa.js?v=1.2" defer></script>
     <!-- One-time EULA acceptance modal (defines window.SafetyLab.checkEula; called from auth_gate liftGate). -->
     <script src="eula_modal.js?v=1.2.0" defer></script>
     <!-- Software License & Subscription Agreement — a SECOND one-time acceptance shown right

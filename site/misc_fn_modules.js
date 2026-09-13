@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // misc_fn_modules.js — v1.0 — Phase P2 batch 6: residual function layer (full sweep).
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). 100%% pure runtime function declarations —
@@ -4564,7 +4565,7 @@ function scheduleAutosave() {
     // Microtask = end of the current synchronous burst, before any timer or paint. rAF
     // (which waits ~16ms for a frame) is the fallback where queueMicrotask is absent.
     if (typeof queueMicrotask === 'function') queueMicrotask(_flush);
-    else if (typeof Promise !== 'undefined') Promise.resolve().then(_flush);
+    else if (typeof Promise !== 'undefined') Promise.resolve().then(_flush).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'misc_fn_modules'); });
     else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_flush);
     else setTimeout(_flush, 0);
     return true;

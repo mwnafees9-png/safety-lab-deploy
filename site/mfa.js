@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // mfa.js — v1.0 — Two-factor authentication (TOTP / authenticator app) for Safety Lab Aero.
 // BORN MODULAR: new file, minimal monolith seams. Uses Supabase's built-in MFA
 // (auth.mfa.*) so the secret and verification live server-side; the app only drives
@@ -213,7 +214,7 @@
 
     // Account-panel entry point: enroll (non-mandatory), then refresh the section.
     function _enrollFlow(containerId) {
-        promptEnroll({ mandatory: false }).then(function () { try { mount(containerId); } catch (_) {} });
+        promptEnroll({ mandatory: false }).then(function () { try { mount(containerId); } catch (_) {} }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'mfa'); });
     }
 
     function _confirmRemove(factor, containerId) {

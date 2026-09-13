@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // importance_heat.js — v2.1 — UX-1: thermal importance heatmap on the FTA canvas.
 //
@@ -201,7 +202,7 @@
             if (cur && _forRootId !== null && String(cur.id) !== _forRootId) {
                 if (!_repaintScheduled) {
                     _repaintScheduled = true;
-                    _recompute().then(() => { _repaintScheduled = false; _paint(); _legend(_on); });
+                    _recompute().then(() => { _repaintScheduled = false; _paint(); _legend(_on); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'importance_heat'); });
                 }
                 return;
             }
@@ -310,7 +311,7 @@
         }
         if (_on) {
             _unpaint();                              // previous page's glow never survives into the compute window
-            _recompute().then(() => { _paint(); _legend(true); });
+            _recompute().then(() => { _paint(); _legend(true); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'importance_heat'); });
         } else {
             _byLid = null; _shareById = null;
             _legend(false);
@@ -340,7 +341,7 @@
         const orig = window.calculateAllProbabilities;
         const wrapped = function () {
             const r = orig.apply(this, arguments);
-            try { if (_on) _recompute().then(_paint); } catch (_) {}
+            try { if (_on) _recompute().then(_paint).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'importance_heat'); }); } catch (_) {}
             return r;
         };
         wrapped._heatWrapped = true;

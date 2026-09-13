@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // notify_agents.js — v1.3 — the integrity sentinel (Teams bot + webhook + email).
 //
@@ -267,7 +268,7 @@
             read(); _save(); status('Sending test…');
             naSend({ test: true }).then(function (r) {
                 status(r && r.ok ? 'Test delivered.' : 'Test failed: ' + ((r && (r.skipped || r.error || (r.error_detail || ''))) || 'see console'));
-            });
+            }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'notify_agents'); });
         });
         document.getElementById('na-ack').addEventListener('click', function () {
             cfg.ackKeys = naCollect().map(naKey);

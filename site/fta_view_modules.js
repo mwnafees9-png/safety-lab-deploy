@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // fta_view_modules.js — v1.0 — Phase P2 batch 2a: FTA & golden-thread view layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). Pure runtime function declarations — zero
@@ -2252,7 +2253,7 @@ function _generateCutsetReportAsync(rootNode) {
         if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err);
         const summary = document.getElementById('cutset-summary');
         if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:#b91c1c;">Cut-set computation failed: ' + esc((err && err.message) || String(err)) + '</div>';
-    });
+    }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fta_view_modules'); });
 }
 
 function _generateCutsetReportSync(rootNode) {
