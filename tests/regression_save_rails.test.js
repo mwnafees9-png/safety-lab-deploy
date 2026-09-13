@@ -15,7 +15,7 @@
  *   S3  commitSaveChanges announces the change through scheduleAutosave BEFORE it writes
  *   S4  every writer the sweep named now calls scheduleAutosave inside its own body
  *   S5  save_watch.js: a silent change is saved within one tick; an announced change is not saved
- *       twice; a refused call (autosave suspended) is retried; a hidden tab is left alone
+ *       twice; a refused call (autosave suspended) is retried; a hidden tab is watched more slowly
  *   S6  wiring: save_watch.js is loaded after crdt_sync.js; __crdtFingerprint is exported
  *   S7  mutations go red (settle removed -> double save; acceptance check removed -> refused path lost)
  *
@@ -128,10 +128,24 @@ function bootWatch(src) {
   e.accept = true;
   check('retried and saved once the suspension lifts', e.W.tick() === 'saved' && e.saves === 4);
   e.fp = 'F'; e.hidden = true;
-  check('a hidden tab is left alone', e.W.tick() === 'hidden' && e.saves === 4);
+  check('a hidden tab is still watched (an AI accept can land while the engineer is elsewhere)', e.W.tick() === 'saved' && e.saves === 5);
+  check('but at a slower period (>= 5 s) while hidden', e.W.period() >= 5000);
   e.hidden = false;
-  check('and caught up when visible again', e.W.tick() === 'saved' && e.saves === 5);
+  check('the period is 1 s while a tick is cheap', e.W.period() === 1000);
   check('status reports the counts', e.W.status().caught === 4 && e.W.status().refused === 1);
+}
+
+{
+  // the adaptive period: a fingerprint that costs 100 ms -> a 5 s period; 400 ms -> capped at 10 s
+  const e = bootWatch(); e.W._reset(); e.fp = 'X';
+  // the vm shares the host Date: drive the measured cost through Date.now() (read before and after _fp())
+  let cost = 0; global.__t = 0;
+  const dn = Date.now; Date.now = () => { const v = global.__t; global.__t += cost; return v; };
+  cost = 100; e.W.tick(); const p100 = e.W.period();
+  cost = 400; e.fp = 'Y'; e.W.tick(); const p400 = e.W.period();
+  Date.now = dn;
+  check('a 100 ms fingerprint stretches the period to 5 s', p100 === 5000, String(p100));
+  check('a 400 ms fingerprint is capped at 10 s', p400 === 10000, String(p400));
 }
 
 console.log('\n[S6] wiring');

@@ -31,10 +31,12 @@
   }
   function _hidden() { try { return typeof document !== 'undefined' && document.visibilityState === 'hidden'; } catch (_) { return false; } }
 
-  // One comparison. Returns what it did: 'first' | 'same' | 'saved' | 'refused' | 'hidden' | 'nofp'.
+  // One comparison. Returns what it did: 'first' | 'same' | 'saved' | 'refused' | 'nofp'.
+  // A hidden tab is watched too (13 Sep live read: an AI accept can land while the
+  // engineer is on another tab); the browser throttles the timer there anyway, and the
+  // adaptive period below keeps the cost bounded.
   function tick() {
     _ticks++;
-    if (_hidden()) return 'hidden';
     var t0 = Date.now();
     var fp = _fp();
     _lastCostMs = Date.now() - t0;
@@ -63,15 +65,23 @@
     try { tick(); } catch (_) {}
     _schedule();
   }
+  // The period adapts to the fingerprint's cost so the watcher never takes more than
+  // ~2% of the tab's time: 1 s while a tick costs under 20 ms (a 600 KB project reads
+  // 10-14 ms live), up to 10 s on a very large project; longer again while hidden.
+  function period() {
+    var p = Math.max(PERIOD_MS, Math.min(10000, _lastCostMs * 50));
+    return _hidden() ? Math.max(p, 5000) : p;
+  }
   function _schedule() {
     if (!_armed) return;
-    if (typeof requestIdleCallback === 'function') setTimeout(function () { requestIdleCallback(_loop, { timeout: 1500 }); }, PERIOD_MS);
-    else setTimeout(_loop, PERIOD_MS);
+    var p = period();
+    if (typeof requestIdleCallback === 'function') setTimeout(function () { requestIdleCallback(_loop, { timeout: 1500 }); }, p);
+    else setTimeout(_loop, p);
   }
   function start() { if (_armed) return; _armed = true; _schedule(); }
   function stop() { _armed = false; }
-  function status() { return { armed: _armed, ticks: _ticks, caught: _caught, refused: _refused, lastCostMs: _lastCostMs, hasBaseline: _last !== null }; }
+  function status() { return { armed: _armed, ticks: _ticks, caught: _caught, refused: _refused, lastCostMs: _lastCostMs, periodMs: period(), hasBaseline: _last !== null }; }
 
-  window.SLSaveWatch = { PERIOD_MS: PERIOD_MS, tick: tick, settle: settle, start: start, stop: stop, status: status, _reset: function () { _last = null; } };
+  window.SLSaveWatch = { PERIOD_MS: PERIOD_MS, tick: tick, settle: settle, start: start, stop: stop, status: status, period: period, _reset: function () { _last = null; } };
   try { window.addEventListener('load', function () { setTimeout(start, 2500); }); } catch (_) {}
 })();
