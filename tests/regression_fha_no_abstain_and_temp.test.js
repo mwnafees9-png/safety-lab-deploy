@@ -65,7 +65,7 @@ check('rule 2b no longer orders an EMPTY STRING severity',
 check('rule 2c no longer lets a level stay EMPTY',
       !/A level you cannot ground stays EMPTY/.test(ai));
 check('rule 2c routes an ungrounded level to judgement + flag',
-      /A level you cannot ground from the context is set by JUDGEMENT/.test(ai));
+      /A level you cannot ground from the context is set by JUDGMENT/.test(ai));
 check('the unified FHA directive no longer orders an EMPTY STRING severity',
       !/emit the row with severity as an EMPTY STRING/.test(ai));
 check('the unified FHA directive asks for judgementCall instead',

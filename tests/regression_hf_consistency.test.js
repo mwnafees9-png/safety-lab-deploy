@@ -221,8 +221,8 @@ ok('everything else HF finds stays advisory, and says so', /but dispositionable,
     const f = find(s);
     const by = l => f.filter(x => new RegExp(l, 'i').test(x.label))[0];
 
-    ok('1. a step identified and never analysed is found', !!by('identified but never analysed') &&
-        /TSK-001/.test(by('identified but never analysed').items.join('|')));
+    ok('1. a step identified and never analysed is found', !!by('identified but never analyzed') &&
+        /TSK-001/.test(by('identified but never analyzed').items.join('|')));
     ok('2. a task analysed with no procedure behind it is found', !!by('no identified procedure step covers'));
     ok('3. an error row citing an FC the FHA does not carry is found', !!by('non-existent failure condition') &&
         /FC-99/.test(by('non-existent failure condition').items.join('|')));
@@ -246,7 +246,7 @@ ok('everything else HF finds stays advisory, and says so', /but dispositionable,
     HA.setTid(0, 'taskName', 'Arm the spoilers');         // matches the analysed task
     const f2 = find(s);
     ok('a step whose wording differs only in punctuation still matches',
-        !f2.some(x => /identified but never analysed/.test(x.label)));
+        !f2.some(x => /identified but never analyzed/.test(x.label)));
     HA.setAllocBySubId('SF-1', 'crew', 'pilot judgement');
     ok('reallocating the function to the crew clears the contradiction',
         !find(s).some(x => /allocated to automation/.test(x.label)));

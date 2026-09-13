@@ -405,7 +405,7 @@ console.log('\n[citations] the fault-tree construction rules');
     /NO MIRACLES, which is a separate rule/.test(ai),
     'the synthesis prompt had fused the two — they are distinct rules in FTH §4.5 and mean different things');
   check('No Miracles is stated correctly — normal function must be DEFEATED by a fault',
-    /must be DEFEATED by a modelled fault/.test(ai),
+    /must be DEFEATED by a modeled fault/.test(ai),
     'not "elements behave normally", which is only half of it');
   check('AND-independence is attributed to ARP4761A, not to the Handbook',
     /that is an independence requirement, not one of the Handbook construction rules/.test(ai),
@@ -514,7 +514,7 @@ console.log('\n[citations] the PRA method text');
   check('…while still keeping the model itself out of the numbers',
     /assert NO probabilities or failure rates yourself/.test(spec));
   check('NEW — every risk resolves to eliminated, minimised, or shown acceptable',
-    /ELIMINATED, MINIMISED, or SHOWN TO BE ACCEPTABLE/.test(spec),
+    /ELIMINATED, MINIMIZED, or SHOWN TO BE ACCEPTABLE/.test(spec),
     'L.1.2 gives exactly these three; a study ending without one has not finished');
   check('NEW — the lifecycle and evidence-maturity rule',
     /drawings and models first, then mockups, then the actual aircraft/.test(spec) &&

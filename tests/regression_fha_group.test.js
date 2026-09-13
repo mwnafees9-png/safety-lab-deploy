@@ -283,9 +283,9 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
   ctx.__ap({ subId: 'SF-011', fcDesc: 'Judged row', phases: ['Cruise'], srcCondId: 'SF-001-TL', severity: 'Major', judgementCall: true, judgementNote: 'No gear retraction data; assumed retractable per class.' });
   const jr = ctx.acFhaData[ctx.acFhaData.length - 1];
   check('judgementCall lands on the row as a first-class field', jr && jr.judgementCall === true && /gear retraction/.test(jr.judgementNote));
-  check('the judgement note is filed as an assumption of type judgement', promoted.some(a => a.type === 'judgement' && /JUDGEMENT CALL/.test(a.text)));
+  check('the judgement note is filed as an assumption of type judgement', promoted.some(a => a.type === 'judgement' && /JUDGMENT CALL/.test(a.text)));
   check('… and the row cites it in its assumptions column', Array.isArray(jr.assumptionIds) && jr.assumptionIds.length === 1);
-  check('the comment shouts it too', /⚠ JUDGEMENT CALL/.test(jr.comments));
+  check('the comment shouts it too', /⚠ JUDGMENT CALL/.test(jr.comments));
 })();
 
 // ---- EXECUTED: a group must PROVE it partitions the phases (3 Sep 2026) --------

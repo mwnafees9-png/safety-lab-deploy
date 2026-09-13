@@ -155,7 +155,7 @@
           objective: 'Provide confidence the planned processes were followed and produced the intended data.',
           dischargedBy: ['review', 'appa'], related: [] },
         { id: '4754B-6', fw: 'ARP4754B', ref: 'ARP4754B §6', title: 'Modifications to Aircraft or Systems',
-          objective: 'Classify changes, analyse their impact, and reuse prior-certification evidence where justified.',
+          objective: 'Classify changes, analyze their impact, and reuse prior-certification evidence where justified.',
           dischargedBy: ['mod', 'pr'], related: ['FAA AC 20-189'] },
 
         // ---- ARP4761A — the safety-assessment methods toolbox --------------
@@ -190,10 +190,10 @@
           objective: 'Deductive top-down failure logic to a failure condition; DD is its success-path dual — both quantify probability and cutsets.',
           dischargedBy: ['fta', 'eta'], related: ['ARP4761A §4.1 (MA)'] },
         { id: '4761A-4.1-ma', fw: 'ARP4761A', ref: 'ARP4761A §4.1', title: 'Markov Analysis (MA)',
-          objective: 'State-transition modelling for sequence- and time-dependent failures that a static fault tree cannot capture.',
+          objective: 'State-transition modeling for sequence- and time-dependent failures that a static fault tree cannot capture.',
           dischargedBy: ['markov', 'rbd-mc'], related: ['ARP4761A §4.1 (FTA)'] },
         { id: '4761A-4.2', fw: 'ARP4761A', ref: 'ARP4761A §4.2', title: 'FMEA / FMES',
-          objective: 'Inductive bottom-up: enumerate failure modes and effects (FMEA), then summarise to failure-condition contributions (FMES).',
+          objective: 'Inductive bottom-up: enumerate failure modes and effects (FMEA), then summarize to failure-condition contributions (FMES).',
           dischargedBy: ['fmes'], related: ['ARP4761A §3.6'] },
         { id: '4761A-4.3', fw: 'ARP4761A', ref: 'ARP4761A §4.3', title: 'Common Cause Analysis (CCA) — overview',
           objective: 'Verify the independence claimed in FTA/PSSA actually holds — decomposed into ZSA, PRA and CMA. Failure here breaks the golden thread.',
@@ -202,7 +202,7 @@
           objective: 'Check installation effects within each physical zone — interference, cascade, maintenance error — against independence assumptions.',
           dischargedBy: ['zsa'], related: ['ARP4761A §4.3'] },
         { id: '4761A-4.5', fw: 'ARP4761A', ref: 'ARP4761A §4.5', title: 'Particular Risks Analysis (PRA)',
-          objective: 'Assess external/common threats (fire, rotor burst, HIRF, bird strike, tyre burst) that defeat redundancy across zones.',
+          objective: 'Assess external/common threats (fire, rotor burst, HIRF, bird strike, tire burst) that defeat redundancy across zones.',
           dischargedBy: ['pra'], related: ['ARP4761A §4.3'] },
         { id: '4761A-4.6', fw: 'ARP4761A', ref: 'ARP4761A §4.6', title: 'Common Mode Analysis (CMA)',
           objective: 'Confirm redundant elements do not share a common failure mode — design, manufacturing, maintenance, or environmental.',
@@ -279,7 +279,7 @@
           objective: 'Requires a documented system-safety program — hazard identification, risk management, tracking — which the safety program plan lane can host.',
           coverage: 'partial', dischargedBy: ['spp'], related: ['14 CFR §450.107'] },
         { id: 'far-450.107', fw: 'Part 450', ref: '14 CFR §450.107', title: 'Flight safety analysis (commercial space)',
-          objective: 'Mission-based public-risk analysis — debris dispersion, casualty-area and probability-of-casualty modelling. A distinct method the aircraft FTA lane does NOT run; pointer-only.',
+          objective: 'Mission-based public-risk analysis — debris dispersion, casualty-area and probability-of-casualty modeling. A distinct method the aircraft FTA lane does NOT run; pointer-only.',
           coverage: 'pointer-only', dischargedBy: [], related: ['14 CFR §450.101', '14 CFR §450.108'] },
         { id: 'far-450.108', fw: 'Part 450', ref: '14 CFR §450.108', title: 'Flight termination system (FTS)',
           objective: 'FTS reliability requirement — the one Part 450 element whose quantitative reliability target the fault-tree lane can genuinely support.',
@@ -298,7 +298,7 @@
           objective: 'The ladder behind VTOL.2510: per-flight-hour objective + FDAL per class — one row for Enhanced, three for Basic by passenger seats (Basic 1: 0–1, Basic 2: 2–6, Basic 3: 7–9). Numbers live in safety_targets.js.',
           dischargedBy: ['ac-fha', 'pssa', 'ssa'], related: ['VTOL.2510', 'VTOL.2005', 'MOC VTOL.2510 §7'] },
         { id: 'scvtol-2521', fw: 'SC-VTOL', ref: 'MOC VTOL.2510 §9–§10', title: 'Safety assessment and development assurance process (eVTOL)',
-          objective: 'MOC §9 accepts the ARP4754A + ARP4761 process (FHA → requirements → verification incl. single-failure → independence) with §9(b) CMA per ARP4761 App. K; §10 allocates FDAL/IDAL and recognises AMC 20-115/20-152/20-189.',
+          objective: 'MOC §9 accepts the ARP4754A + ARP4761 process (FHA → requirements → verification incl. single-failure → independence) with §9(b) CMA per ARP4761 App. K; §10 allocates FDAL/IDAL and recognizes AMC 20-115/20-152/20-189.',
           dischargedBy: ['pssa', 'ssa', 'fta', 'cea'], related: ['ARP4761A', 'MOC VTOL.2510 §8 Table 1'] },
         { id: 'scvtol-2526', fw: 'SC-VTOL', ref: 'MOC VTOL.2510 §7(a)', title: 'Failure-condition classification (eVTOL — category-dependent Hazardous/Catastrophic)',
           objective: 'MOC §7(a) five classes; Hazardous/Catastrophic depend on category — Enhanced: any fatality is Catastrophic, Hazardous excludes fatalities; Basic: tracks AC 23.1309-1E. Loss of CS&FL / controlled emergency landing is Catastrophic.',
@@ -342,7 +342,7 @@
         // analyst-declared. Containment computes for the 1 m/25 m/s UA class
         // only (two-source verified for that slice); larger classes refuse.
         { id: 'sora-grc', fw: 'Part 107', ref: 'SORA GRC', title: 'Ground Risk Class (GRC)',
-          objective: 'Intrinsic ground risk from UAS dimension/speed and population density, cut by M1(A/B/C)/M2 credits with the column-floor rule. COMPUTED live by the SORA Thread (SORA 2.5 iGRC); grey/out-of-table points refuse to Certified.',
+          objective: 'Intrinsic ground risk from UAS dimension/speed and population density, cut by M1(A/B/C)/M2 credits with the column-floor rule. COMPUTED live by the SORA Thread (SORA 2.5 iGRC); gray/out-of-table points refuse to Certified.',
           coverage: 'full', dischargedBy: ['sora-thread'], related: ['SORA ARC', 'SORA Containment', 'JARUS SORA 2.5'] },
         { id: 'sora-arc', fw: 'Part 107', ref: 'SORA ARC', title: 'Air Risk Class (ARC)',
           objective: 'Traffic-encounter likelihood in the op volume. Initial ARC now COMPUTED from the AEC decision tree (Annex C Table 1, single-source) as a suggestion; residual ARC stays DECLARED by the operator and feeds SAIL.',
@@ -372,13 +372,13 @@
           objective: 'Requires critical E/E systems to tolerate the external HIRF environment — a common external threat that can defeat redundancy.',
           dischargedBy: ['pra', 'zsa'], related: ['AC 20-158A', 'ARP4761A §4.5'] },
         { id: 'far-25.903d1', fw: 'Part 25', ref: '14 CFR §25.903(d)(1)', title: 'Engine isolation — uncontained rotor debris',
-          objective: 'Requires design to minimise hazards from uncontained engine debris — the rotor-burst debris cone that must not sever redundant flight-critical channels.',
+          objective: 'Requires design to minimize hazards from uncontained engine debris — the rotor-burst debris cone that must not sever redundant flight-critical channels.',
           dischargedBy: ['pra', 'routing'], related: ['AC 20-128A', '14 CFR §25.901(c)'] },
         { id: 'far-25.734', fw: 'Part 25', ref: '14 CFR §25.734', title: 'Tire burst & tread failure',
           objective: 'Requires protection against tire-burst / flailing-tread debris — a zone-spanning threat routed away from redundant services.',
           dischargedBy: ['pra', 'routing'], related: ['AC 25.734-1', 'ARP4761A §4.5'] },
         { id: 'far-25.841', fw: 'Part 25', ref: '14 CFR §25.841', title: 'Pressurized cabin — decompression',
-          objective: 'Requires the pressurised cabin to tolerate credible decompression — a particular risk affecting structure, occupants and equipment simultaneously.',
+          objective: 'Requires the pressurized cabin to tolerate credible decompression — a particular risk affecting structure, occupants and equipment simultaneously.',
           dischargedBy: ['pra'], related: ['14 CFR §25.365', '14 CFR §25.571(d)'] },
 
         // ---- Common-cause β-factor quantification (IEC 61508-6 Annex D + NUREG) ----
@@ -386,7 +386,7 @@
         // from IEC 61508-6 Annex D (scored method) and the NUREG series (generic anchors),
         // which the tool's own beta_scoring.js implements. betaGuidance() serves the anchors.
         { id: 'ccf-beta', fw: 'IEC 61508-6', ref: 'IEC 61508-6 Annex D', title: 'Common-cause β-factor quantification',
-          objective: 'Quantify the β fraction of failures shared by redundant members from a scored defence checklist; a low β demands BOTH physical separation AND design diversity — otherwise β is floored.',
+          objective: 'Quantify the β fraction of failures shared by redundant members from a scored defense checklist; a low β demands BOTH physical separation AND design diversity — otherwise β is floored.',
           dischargedBy: ['cma', 'cea'], related: ['NUREG/CR-4780', 'NUREG/CR-5485', 'ARP4761A §4.6'] }
     ];
 
@@ -478,8 +478,8 @@
         'AC 27-1B':      { id: 'AC 27-1B',      title: 'Certification of Normal Category Rotorcraft', advisesOn: 'Part 27', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Rotorcraft §27.1309 means of compliance; MG-series guidance material.' },
         'AC 29-2C':      { id: 'AC 29-2C',      title: 'Certification of Transport Category Rotorcraft', advisesOn: 'Part 29', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Transport rotorcraft §29.1309 means of compliance.' },
         'AC 20-174':     { id: 'AC 20-174',     title: 'Development of Civil Aircraft and Systems', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-174.pdf', note: '09/30/2011. FAA recognition of ARP 4754A as the development-assurance process (Parts 23/25/27/29/33/35). Precedence: FDAL/IDAL assignments in the basis ACs (23.1309-1, etc.) override ARP 4754A §5.2 — never allocate below the AC floor.' },
-        'AC 20-115D':    { id: 'AC 20-115D',    title: 'Airborne Software Development Assurance Using EUROCAE ED-12( ) and RTCA DO-178( )', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-115D.pdf', note: '07/21/2017, cancels 20-115C. Recognises DO-178C/ED-12C, DO-330/ED-215 tool qualification (TQL-1..5) and the DO-331/332/333 supplements; legacy DO-178/A/B reuse rules; harmonised with EASA AMC 20-115D.' },
-        'AC 20-152A':    { id: 'AC 20-152A',    title: 'Development Assurance for Airborne Electronic Hardware', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-152A.pdf', note: '10/7/22, cancels AC 20-152. Recognises DO-254/ED-80 for AEH at DAL A/B/C (not required for DAL D) and adds objectives CD-i (custom devices), IP-i (COTS IP), COTS-i (COTS devices), CBA-i (circuit boards); COTS-6 feeds device failure modes and common modes to the SSA.' },
+        'AC 20-115D':    { id: 'AC 20-115D',    title: 'Airborne Software Development Assurance Using EUROCAE ED-12( ) and RTCA DO-178( )', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-115D.pdf', note: '07/21/2017, cancels 20-115C. Recognizes DO-178C/ED-12C, DO-330/ED-215 tool qualification (TQL-1..5) and the DO-331/332/333 supplements; legacy DO-178/A/B reuse rules; harmonized with EASA AMC 20-115D.' },
+        'AC 20-152A':    { id: 'AC 20-152A',    title: 'Development Assurance for Airborne Electronic Hardware', advisesOn: 'all', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_20-152A.pdf', note: '10/7/22, cancels AC 20-152. Recognizes DO-254/ED-80 for AEH at DAL A/B/C (not required for DAL D) and adds objectives CD-i (custom devices), IP-i (COTS IP), COTS-i (COTS devices), CBA-i (circuit boards); COTS-6 feeds device failure modes and common modes to the SSA.' },
         'AC 23.2010-1':  { id: 'AC 23.2010-1',  title: 'Aircraft-Level Safety Assessment (Part 23)', advisesOn: 'Part 23', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'Performance-based aircraft-level safety-assessment methodology for the amended Part 23.' },
         'AC 21-101':     { id: 'AC 21-101',     title: 'Establishing the Certification Basis of Changed Aeronautical Products', advisesOn: 'Part 21', authority: 'FAA', licensed: false, link: 'https://www.faa.gov/regulations_policies/advisory_circulars', note: 'The changed-product rule + how a per-applicant cert basis (special conditions, issue papers) is assembled and recorded.' },
         'JARUS SORA 2.5': { id: 'JARUS SORA 2.5', title: 'Specific Operations Risk Assessment (SORA) — GRC/ARC/SAIL methodology', advisesOn: 'Part 107', authority: 'JARUS', licensed: false, link: 'http://jarus-rpas.org/publications/', note: 'Operational-risk method for specific-category UAS: Ground Risk Class × Air Risk Class → SAIL → Operational Safety Objectives → containment. The SORA Thread computes GRC, mitigations, SAIL, and the OSO robustness matrix live (two-source verified); initial ARC and containment (1 m UA class) also compute, each carrying its own confidence tag (single-source / two-source) rather than being presented as equal to the rest — see sora-arc / sora-containment above.' }
@@ -605,7 +605,7 @@
         const ceiling = (g && typeof g.high === 'number') ? g.high : BETA_ANCHORS.poorlyDefended;
         return {
             floor: floor, ordinary: BETA_ANCHORS.ordinary, ceiling: ceiling,
-            rule: 'A low β is not defensible unless BOTH physical separation AND design diversity are credited (NUREG/CR-4780). Above the ceiling, treat it as no credible redundancy — redesign for separation/diversity rather than modelling a higher β.',
+            rule: 'A low β is not defensible unless BOTH physical separation AND design diversity are credited (NUREG/CR-4780). Above the ceiling, treat it as no credible redundancy — redesign for separation/diversity rather than modeling a higher β.',
             cite: 'IEC 61508-6 Annex D (scored β method) · NUREG/CR-4780 & CR-5485 (generic β anchors)',
             note: (g ? 'Bands from Safety Lab\'s verified β model (beta_scoring.js).'
                     : 'NUREG generic anchors — inject the tool\'s β bands for the project-tuned values.')

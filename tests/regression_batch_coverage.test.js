@@ -69,7 +69,7 @@ check('…and runs one call per slice, accumulating actions',
   /for \(let _ci = 0; _ci < _slices\.length; _ci\+\+\)/.test(ai) &&
   /Array\.prototype\.push\.apply\(actions, pp\.actions\)/.test(ai));
 check('each turn is told to cover its slice and NOT to stop early',
-  /never omit a row, never summarise, and never stop early/.test(ai));   // 4 Sep: "a row" — several rows per condition are the rule now
+  /never omit a row, never summarize, and never stop early/.test(ai));   // 4 Sep: "a row" — several rows per condition are the rule now
 check('…and told not to offer to continue (that offer is what the app now owns)',
   /do NOT offer to continue/.test(ai));
 check('an unchunked caller still runs exactly one turn (no behaviour change)',
@@ -187,7 +187,7 @@ console.log('\n[panel] the decision stays above the narration');
 // 3 Sep 2026 (evening) — the one-liner now carries a judgement-row count on the end; it
 // is still the fixed sentence, still never the model's replies.
 check('the disclaimer is a fixed one-liner, not the model\'s concatenated replies',
-  /return 'Advisory drafts from the unified AI engine\./.test(ai) && /classified by JUDGEMENT on limited information/.test(ai) &&
+  /return 'Advisory drafts from the unified AI engine\./.test(ai) && /classified by JUDGMENT on limited information/.test(ai) &&
   !/disclaimer: \(parsed\.reply \? _esc\(String\(parsed\.reply\)\)/.test(ai),
   'one paragraph per turn in the disclaimer pushes the first row off the screen');
 check('…and the narration is passed separately, collapsed',

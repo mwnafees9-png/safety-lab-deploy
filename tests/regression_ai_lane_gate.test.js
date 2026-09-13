@@ -71,7 +71,7 @@ console.log('\n[lane] where the gate actually sits');
     'one seam covers chat AND unified batch — every action crosses _chatRunActions');
 }
 check('a blocked op names the lane and where to turn it on',
-  /out of programme scope — the ' \+ _offLane \+ ' lane/.test(ai) && /Program Planning tab/.test(ai));
+  /out of program scope — the ' \+ _offLane \+ ' lane/.test(ai) && /Program Planning tab/.test(ai));
 check('all four Markov ops map to the markov lane',
   /add_markov_state: 'markov', delete_markov_state: 'markov',\s*\n\s*add_markov_transition: 'markov', delete_markov_transition: 'markov'/.test(ai));
 check('add_fmea maps by payload level — item → ppfmea, else ffmea',

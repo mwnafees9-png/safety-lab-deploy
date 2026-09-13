@@ -95,7 +95,8 @@ test('E2 — severity commitment: the rejected v3 rule and its gate', () => {
   // above still prove the rejected E2 text never landed. A campaign scoring v6 must
   // score judgement rows SEPARATELY from grounded ones, because E2 says they agree less.
   // 4 Sep 2026 — v7#3404f569 defines GROUNDED vs JUDGEMENT (golden run 1 flagged 121/129).
-  check('fha.draft stamps the shipped v7#3404f569 (grounded vs judgement defined), not the rejected E2 take', global.window.SLABSkills.stampFor('fha.populate', '') === 'fha.draft@v7#3404f569', global.window.SLABSkills.stampFor('fha.populate', ''));
+  // 13 Sep 2026 — v8#e2e0d112 is v7 in American English (R4 batch B): spelling only, eval-gated.
+  check('fha.draft stamps the shipped v8#e2e0d112 (v7 grounded-vs-judgement text, American spelling), not the rejected E2 take', global.window.SLABSkills.stampFor('fha.populate', '') === 'fha.draft@v8#e2e0d112', global.window.SLABSkills.stampFor('fha.populate', ''));
   check('the abstention clause is replaced by FLAGGED judgement, never by silent commitment',
     !/leave severity EMPTY rather than reaching for a plausible value/.test(body) && /WHEN THE INFORMATION IS THIN, JUDGE - DO NOT ABSTAIN/.test(body) && /judgementCall: true and a judgementNote/.test(body));
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regression — WAQAS'S PHASE RULE + JUDGEMENT OVER ABSTENTION (3 Sep 2026).
+ * Regression — WAQAS'S PHASE RULE + JUDGMENT OVER ABSTENTION (3 Sep 2026).
  *
  * Rulings, verbatim in intent:
  *   · every failure condition applies to every flight phase; rows come from
@@ -13,7 +13,7 @@
  *     assumption the same way a human one is filed.
  *   · every AI assumption logged for the AFHA/SFHA reaches the FHA register.
  *   · a phase the model names that the project cannot hold must not vanish.
- * Run: node tests/regression_phase_rule_judgement.test.js
+ * Run: node tests/regression_phase_rule_judgment.test.js
  */
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const SITE = path.join(__dirname, '..', 'site');
@@ -49,37 +49,37 @@ console.log('[1] the drafting instructions');
   check('do not grind one condition against every phase into one row each', /Do not evaluate a condition against every phase and hand back one row per phase/.test(sk));
   check('abortable + unrealised = No Safety Effect', /can be aborted or the condition escaped, that phase is No Safety Effect/.test(sk));
   check('not abortable + unrealised = the END effect (the gear-in-cruise case)', /landing-gear failure in cruise/.test(sk) && /classify by the END EFFECT/.test(sk));
-  check('the end effect is set by the certification basis in force', /set by the certification basis in force/.test(sk) && /Part 25 transport and a Part 23 aeroplane do not share a class/.test(sk));
+  check('the end effect is set by the certification basis in force', /set by the certification basis in force/.test(sk) && /Part 25 transport and a Part 23 airplane do not share a class/.test(sk));
   check('never the worst class of one phase on the row that lists every phase — exposure', /NEVER GIVE THE ROW THAT LISTS EVERY PHASE THE WORST CLASS OF ONE PHASE/.test(sk) && /pins that exposure to the whole flight/.test(sk));
   check('thin information: judge, do not abstain', /WHEN THE INFORMATION IS THIN, JUDGE - DO NOT ABSTAIN/.test(sk));
-  check('a judgement is marked with judgementCall + a note saying what was assumed', /judgementCall: true and a judgementNote/.test(sk));
+  check('a judgment is marked with judgementCall + a note saying what was assumed', /judgementCall: true and a judgementNote/.test(sk));
   check('the old "leave severity EMPTY rather than reaching" instruction is GONE', !/leave severity EMPTY rather than reaching for a plausible value/.test(sk));
   check('the old "classify per phase, then take the worst" instruction is GONE', !/CLASSIFY PER FLIGHT PHASE, THEN TAKE THE WORST/.test(sk));
-  check('the levels tail judges instead of leaving empty (skill)', /set it by judgement and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/.test(sk));
-  check('the levels tail judges instead of leaving empty (inline copy in ai_assistant, byte-identical)', (ai.match(/set it by judgement and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/g) || []).length === 1);
+  check('the levels tail judges instead of leaving empty (skill)', /set it by judgment and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/.test(sk));
+  check('the levels tail judges instead of leaving empty (inline copy in ai_assistant, byte-identical)', (ai.match(/set it by judgment and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/g) || []).length === 1);
   check('the anchor is still required on a judged class', /on a row you have JUDGED rather than grounded, the anchor is still required/.test(sk));
-  check('fha.draft and sfha.draft stamp as v7 — the body changed again', /'fha\.draft': 7,\s*\n\s*'sfha\.draft': 7,/.test(sk));
+  check('fha.draft and sfha.draft stamp as v8 (v7 text, American spelling, 13 Sep) — the body changed again', /'fha\.draft': 8,\s*\n\s*'sfha\.draft': 8,/.test(sk));
   // 4 Sep 2026 — golden run 1 flagged 121 of 129 rows, 18 of 22 hull-loss rows among them.
   // v6 never said what GROUNDED means, so the model flagged classification itself.
   check('v7 defines grounded: objective + failure + rubric + joint top step + ordinary reasoning', /A class is GROUNDED when it follows from the function objective/.test(sk));
-  check('choosing the credited outcome is classification, not judgement', /Choosing the credited outcome IS classification, not judgement/.test(sk));
-  check('the top step is never a judgement', /The top step is never a judgement/.test(sk));
-  check('a judgement is a SPECIFIC missing fact the class turns on, named in the note', /A class is a JUDGEMENT when a SPECIFIC FACT it turns on is absent/.test(sk) && /Name that fact in judgementNote/.test(sk));
+  check('choosing the credited outcome is classification, not judgement', /Choosing the credited outcome IS classification, not judgment/.test(sk));
+  check('the top step is never a judgement', /The top step is never a judgment/.test(sk));
+  check('a judgment is a SPECIFIC missing fact the class turns on, named in the note', /A class is a JUDGMENT when a SPECIFIC FACT it turns on is absent/.test(sk) && /Name that fact in judgementNote/.test(sk));
   check('a sheet flagged everywhere is called out as defeating the flag', /a sheet where nearly every row is flagged has flagged classification itself/.test(sk));
-  check('the inline copy carries the same paragraph (byte parity is proven in regression_ai_skills)', /WHAT IS GROUNDED AND WHAT IS A JUDGEMENT/.test(ai));
-  check('the returned row shape carries judgementCall / judgementNote', /"judgementCall": <true ONLY where you set a level or the class by judgement/.test(ai) && /"judgementNote": "<when judgementCall is true/.test(ai));
-  check('the unified add_fha op spec asks for them too', /judgementCall\(true ONLY where a level or the class was set by judgement/.test(ai));
+  check('the inline copy carries the same paragraph (byte parity is proven in regression_ai_skills)', /WHAT IS GROUNDED AND WHAT IS A JUDGMENT/.test(ai));
+  check('the returned row shape carries judgementCall / judgementNote', /"judgementCall": <true ONLY where you set a level or the class by judgment/.test(ai) && /"judgementNote": "<when judgementCall is true/.test(ai));
+  check('the unified add_fha op spec asks for them too', /judgementCall\(true ONLY where a level or the class was set by judgment/.test(ai));
 }
 
 // ---- 2. the flag travels: parse → card → accept → row → register --------------
-console.log('\n[2] the judgement travels the whole way');
+console.log('\n[2] the judgment travels the whole way');
 {
   check('the parsed row carries judgementCall / judgementNote', /judgementCall: x\.judgementCall === true \|\| String\(x\.judgementCall\)\.toLowerCase\(\) === 'true'/.test(ai) && /judgementNote: String\(x\.judgementNote \|\| ''\)\.trim\(\)\.slice\(0, 600\)/.test(ai));
-  check('the review card shows the amber badge and the note BEFORE accept', /const _judge = \(op === 'add_fha' && a\.judgementCall === true\)/.test(ai) && /Judgement call on limited information:/.test(ai));
-  check('the review panel header counts judgement rows', /classified by JUDGEMENT on limited information/.test(ai));
+  check('the review card shows the amber badge and the note BEFORE accept', /const _judge = \(op === 'add_fha' && a\.judgementCall === true\)/.test(ai) && /Judgment call on limited information:/.test(ai));
+  check('the review panel header counts judgment rows', /classified by JUDGMENT on limited information/.test(ai));
   check('accept persists the flag on the row', /judgementCall: !!s\.judgementCall,\s*\n\s*judgementNote: String\(s\.judgementNote \|\| ''\)/.test(ai));
-  check('accept files the note as an assumption of type judgement', /type: 'judgement', appliesTo: 'all'/.test(ai) && /judgement: 'AI judgement'/.test(ai));
-  check('accept shouts it in the comments column too', /⚠ JUDGEMENT CALL — classified on limited information; engineer to confirm/.test(ai));
+  check('accept files the note as an assumption of type judgement', /type: 'judgement', appliesTo: 'all'/.test(ai) && /judgement: 'AI judgment'/.test(ai));
+  check('accept shouts it in the comments column too', /⚠ JUDGMENT CALL — classified on limited information; engineer to confirm/.test(ai));
   check('the action executor passes the flag AND the assumptions through (the Vayu gap)', /judgementCall: a\.judgementCall === true, judgementNote: a\.judgementNote, realized: a\.realized, escape: a\.escape, escapeDefeated: a\.escapeDefeated, _assumptions: Array\.isArray\(a\._assumptions\)/.test(ai));
   check('the panel per-item accept attaches the batch assumptions to the action', /a\._assumptions = _assumptionsFor\(_batchAsms, String\(a\.fcDesc \|\| ''\)\.trim\(\), \[a\.subId, a\.srcCondId\]\)/.test(ai));
   check("a protected row is reported as blocked, not as 'add_fha failed'", /edited by hand — not overwritten; newer draft noted on it/.test(ai));

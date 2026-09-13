@@ -340,7 +340,7 @@ const has = re => re.test(ALL);
     check('EASA CS-23 chunk: Levels 1–4 by seats, CS 23.2510 verbatim objective, F3230 Table 3 electric-propulsion variance',
         has(/Level 1 \(0–1\), Level 2 \(2–6\), Level 3 \(7–9\), Level 4 \(10–19\)/) && has(/each catastrophic failure condition extremely improbable, each hazardous extremely remote, each major remote/) && has(/EASA has not yet accepted Table 3 of F3230-25/));
     check('EASA CS-29 chunk: Category A loss of CS&FL catastrophic by rule; AMC = AC 29-2C Chg 7 + AMC 20-115/152/189/170',
-        has(/for Category A rotorcraft, the occurrence of any failure condition which would prevent the continued safe flight and landing of the rotorcraft is considered catastrophic/) && has(/AMC 20-115 recognised for software/) && has(/AMC 20-152 for AEH/));
+        has(/for Category A rotorcraft, the occurrence of any failure condition which would prevent the continued safe flight and landing of the rotorcraft is considered catastrophic/) && has(/AMC 20-115 recognized for software/) && has(/AMC 20-152 for AEH/));
     check('EASA CS-E 510 chunk: hazardous < 10^-7/EFH (individual ≤ 10^-8), major < 10^-5, Engine Critical Parts via CS-E 515, seven hazardous effects',
         has(/probability LESS THAN 10\^-7 per engine flight hour \(the FAA rule states the 10\^-7 to 10\^-9 range\)/) && has(/not greater than 10\^-8 per engine flight hour/) && has(/CS-E 515 \(Engine Critical Parts\)/) && has(/complete inability to shut down/i));
     check('EASA chunks quote no reproduced prose (source-keyed guard holds for the four new EASA chunks)',
