@@ -143,5 +143,10 @@ if [ "$RC" = "0" ]; then
   echo "Deployed.  https://safetylabaero.com/app"
   echo "Verify with a byte-size control probe, not a bare 200 — the Cloudflare"
   echo "SPA fallback returns 200 + the app shell for any missing file."
+  # 12 Sep 2026 — IndexNow: tell Bing (and the engines sharing its feed) that the public
+  # pages just changed. Runs ONLY after a successful deploy, and can never fail the ship:
+  # the script always exits 0 and prints what happened (tools/indexnow/ping.mjs).
+  echo
+  node tools/indexnow/ping.mjs
 fi
 exit $RC

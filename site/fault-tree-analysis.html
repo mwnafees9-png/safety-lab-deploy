@@ -5,19 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0b0d12" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="description" content="Build and quantify fault trees for aircraft certification — static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.">
+<meta name="description" content="Build and quantify fault trees for aircraft certification: static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.">
 <meta name="keywords" content="fault tree analysis software, FTA software, aerospace fault tree, top event probability, minimal cut sets, importance measures, ARP 4761A FTA, DAL allocation">
 <title>Fault Tree Analysis Software for Aerospace | Safety Lab Aero</title>
 <link rel="canonical" href="https://safetylabaero.com/fault-tree-analysis">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Safety Lab Aero">
 <meta property="og:title" content="Fault Tree Analysis Software for Aerospace | Safety Lab Aero">
-<meta property="og:description" content="Build and quantify fault trees for aircraft certification — static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.">
+<meta property="og:description" content="Build and quantify fault trees for aircraft certification: static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.">
 <meta property="og:url" content="https://safetylabaero.com/fault-tree-analysis">
 <meta property="og:image" content="https://safetylabaero.com/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Fault Tree Analysis Software for Aerospace | Safety Lab Aero">
-<meta name="twitter:description" content="Build and quantify fault trees for aircraft certification — static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.">
+<meta name="twitter:description" content="Build and quantify fault trees for aircraft certification: static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.">
 <meta name="twitter:image" content="https://safetylabaero.com/og.png">
 <script type="application/ld+json">
 {
@@ -115,28 +115,28 @@
 <header class="page-hero"><div class="container">
   <p class="eyebrow">Fault Tree Analysis</p>
   <h1>Fault tree analysis software, built for <span class="grad-text">aircraft certification</span></h1>
-  <p class="lede">Construct, quantify and trace fault trees for every failure condition — and keep them connected to the FHA, FMEA and requirements they depend on.</p>
+  <p class="lede">Construct, quantify and trace fault trees for every failure condition, and keep them connected to the FHA, FMEA and requirements they depend on.</p>
   <div class="related"><a href="/arp-4761a">ARP 4761A process</a><a href="/fmea-software">FMEA</a><a href="/common-cause-analysis">Common-cause analysis</a></div>
 </div></header>
 <main class="container"><article>
 
-<p>Fault Tree Analysis (FTA) is the quantitative backbone of an aircraft safety assessment. For each failure condition identified in the Functional Hazard Assessment, you build a top-down logic model of how component, system and environmental failures combine to cause it — then quantify the probability and compare it against the certification target for that severity.</p>
+<p>Fault Tree Analysis (FTA) is the quantitative backbone of an aircraft safety assessment. For each failure condition identified in the Functional Hazard Assessment, you build a top-down logic model of how component, system and environmental failures combine to cause it, then quantify the probability and compare it against the certification target for that severity.</p>
 <p>Safety Lab Aero gives you a full FTA environment that does not stop at drawing the tree. Every tree links to its failure condition, carries the certification-basis target, and stays connected to the FMEA evidence, component library and requirements underneath it.</p>
 
 <h2>Build the tree</h2>
 <ul>
-<li>Static gates — AND, OR, INHIBIT, VOTING / k-of-n, XOR — and dynamic gates PAND, SPARE and FDEP for time-ordered behavior.</li>
-<li>Event types — basic, undeveloped, conditioning and house events.</li>
+<li>Static gates (AND, OR, INHIBIT, VOTING / k-of-n, XOR) and dynamic gates PAND, SPARE and FDEP for time-ordered behavior.</li>
+<li>Event types: basic, undeveloped, conditioning and house events.</li>
 <li>Link the top event to its failure condition, so the tree inherits the severity classification and quantitative target.</li>
 <li>Span large analyses across multiple pages with TRANSFER gates; the combined cross-page tree is evaluated as one model.</li>
 </ul>
 
 <h2>Quantify it rigorously</h2>
-<p>Safety Lab Aero computes the top-event probability directly, not just a minimal-cut-set upper-bound approximation. That matters whenever a basic event repeats across cutsets or when common-cause coupling is present — the cases where the simple upper bound quietly over- or under-states the result.</p>
+<p>Safety Lab Aero computes the top-event probability directly, not just a minimal-cut-set upper-bound approximation. That matters whenever a basic event repeats across cutsets or when common-cause coupling is present: the cases where the simple upper bound quietly over- or under-states the result.</p>
 <ul>
 <li>Top-event probability with the minimal-cut-set upper bound shown alongside for reference.</li>
 <li>Minimal cutsets, including common-cause-expanded cutsets where an order-1 common-cause term can dominate.</li>
-<li>Importance measures per basic event — Birnbaum, Fussell-Vesely, Risk Achievement Worth and Risk Reduction Worth.</li>
+<li>Importance measures per basic event: Birnbaum, Fussell-Vesely, Risk Achievement Worth and Risk Reduction Worth.</li>
 <li>Uncertainty propagation via Monte Carlo over lognormal failure-rate distributions.</li>
 </ul>
 
@@ -146,10 +146,10 @@
 <h2>Allocate DAL top-down</h2>
 <p>Development Assurance Levels flow from the failure-condition severity down through the tree, honoring gate logic, with support for the ARP 4754B allocation options on AND gates. See <a href="/arp-4754b">ARP 4754B &amp; DAL allocation</a> for how that fits the development-assurance flow.</p>
 
-<h2>Frequently asked questions</h2><h3>Does Safety Lab Aero compute exact top-event probability or just the cut-set upper bound?</h3><p>It computes the top-event probability directly and shows the minimal-cut-set upper bound alongside it for reference. The direct result is what you need when basic events repeat across cutsets or when common-cause coupling is present, where the upper bound is no longer a good approximation.</p><h3>Can it handle dynamic fault trees?</h3><p>Yes. PAND, SPARE and FDEP gates are supported, with a Monte Carlo simulator that samples failure times and honors time-ordered semantics for dynamic behavior.</p><h3>Does the fault tree connect to FMEA and requirements?</h3><p>Yes. Piece-part FMEA modes feed basic-event rates, the component library sources failure data, and safety requirements derive from the tree — all kept in one connected model so a change in one place flags what it affects elsewhere.</p>
+<h2>Frequently asked questions</h2><h3>Does Safety Lab Aero compute exact top-event probability or just the cut-set upper bound?</h3><p>It computes the top-event probability directly and shows the minimal-cut-set upper bound alongside it for reference. The direct result is what you need when basic events repeat across cutsets or when common-cause coupling is present, where the upper bound is no longer a good approximation.</p><h3>Can it handle dynamic fault trees?</h3><p>Yes. PAND, SPARE and FDEP gates are supported, with a Monte Carlo simulator that samples failure times and honors time-ordered semantics for dynamic behavior.</p><h3>Does the fault tree connect to FMEA and requirements?</h3><p>Yes. Piece-part FMEA modes feed basic-event rates, the component library sources failure data, and safety requirements derive from the tree: all kept in one connected model so a change in one place flags what it affects elsewhere.</p>
 <div class="cta-band">
   <h2>See it on your own analysis</h2>
-  <p>Safety Lab Aero keeps functions, hazards, fault trees, FMEA, common-cause, requirements and verification in one connected model — from FHA to a certification-ready evidence package.</p>
+  <p>Safety Lab Aero keeps functions, hazards, fault trees, FMEA, common-cause, requirements and verification in one connected model, from FHA to a certification-ready evidence package.</p>
   <p><a href="/app" class="btn btn-primary">Start free trial</a></p>
 </div>
 </article></main>
