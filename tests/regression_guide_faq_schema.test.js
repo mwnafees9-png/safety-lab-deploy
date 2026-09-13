@@ -47,5 +47,25 @@ for (const [f, n] of Object.entries(PAGES)) {
     check('the definitional questions from the report are present', MUST[f].every(q => vis.some(x => x.q === q)));
     check('no em dash in any question or answer', !vis.concat(sch).some(x => (x.q + x.a).indexOf('—') >= 0));
 }
+
+// trust.html (13 Sep): the six reviewer questions moved from the unlinked duplicate security.html
+// into a visible "Common questions" card, with a FAQPage schema generated from the same text.
+{
+    const f = 'trust.html';
+    const s = fs.readFileSync(path.join(SITE, f), 'utf8');
+    console.log('\n[' + f + ']');
+    const card = s.slice(s.indexOf('Common questions'), s.indexOf('<div class="contact">'));
+    const vis = [...card.matchAll(/<li><b>([\s\S]*?)<\/b>\s*([\s\S]*?)<\/li>/g)].map(m => ({ q: norm(m[1]), a: norm(m[2]) }));
+    let ld = null; try { ld = JSON.parse((s.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/) || [])[1]); } catch (e) { ld = null; }
+    const faq = ld && (ld['@graph'] || []).find(g => g['@type'] === 'FAQPage');
+    const sch = faq ? faq.mainEntity.map(q => ({ q: norm(q.name), a: norm(q.acceptedAnswer && q.acceptedAnswer.text) })) : [];
+    check('six visible questions in the Common questions card', vis.length === 6, String(vis.length));
+    check('schema has the same six', sch.length === 6 && JSON.stringify(vis.map(x => x.q)) === JSON.stringify(sch.map(x => x.q)));
+    check('answers match, word for word', vis.every((x, i) => sch[i] && x.a === sch[i].a));
+    check('no em dash', !vis.concat(sch).some(x => (x.q + x.a).indexOf('—') >= 0));
+    const sec = fs.readFileSync(path.join(SITE, 'security.html'), 'utf8');
+    check('security.html (unlinked duplicate) canonicalizes to /trust', /<link rel="canonical" href="https:\/\/safetylabaero\.com\/trust">/.test(sec));
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

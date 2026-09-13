@@ -3,7 +3,107 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Trust &amp; Security: Safety Lab Aero</title>
+<title>Trust and Security | Safety Lab Aero</title>
+<link rel="canonical" href="https://safetylabaero.com/trust">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Safety Lab Aero">
+<meta property="og:title" content="Trust and Security | Safety Lab Aero">
+<meta property="og:description" content="How Safety Lab Aero protects certification-grade safety data: tenant isolation, encryption, access control, AI guardrails, data residency, and lifecycle.">
+<meta property="og:url" content="https://safetylabaero.com/trust">
+<meta property="og:image" content="https://safetylabaero.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Trust and Security | Safety Lab Aero">
+<meta name="twitter:description" content="How Safety Lab Aero protects certification-grade safety data: tenant isolation, encryption, access control, AI guardrails, data residency, and lifecycle.">
+<meta name="twitter:image" content="https://safetylabaero.com/og.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "@id": "https://safetylabaero.com/trust#webpage",
+      "url": "https://safetylabaero.com/trust",
+      "name": "Trust and Security | Safety Lab Aero",
+      "description": "How Safety Lab Aero protects certification-grade safety data: tenant isolation, encryption, access control, AI guardrails, data residency, and lifecycle.",
+      "isPartOf": {
+        "@id": "https://safetylabaero.com/#website"
+      },
+      "inLanguage": "en-US"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://safetylabaero.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Trust and security",
+          "item": "https://safetylabaero.com/trust"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does the AI decide λ, DAL, or severity?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Those are owned by the deterministic engine and the engineer. The AI may propose a severity with rationale for you to confirm, and may build fault‑tree structure with rates left blank, but it never establishes a safety number as fact."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is the AI part of the certification argument?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No, by design. The AI drafts, traces, and connects; the deterministic engine and the engineer own the numbers, the allocation, and the safety case. Requirements are allocated by interpreting the fault‑tree logic, not by the AI."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Where does my data go?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The model and engine run locally in your browser or desktop app. Only an explicit AI request sends the relevant context to your configured backend: hosted proxy, your own key, or on‑premise. For ITAR projects, cloud backends are blocked server‑side (US‑sovereign cloud routing is planned)."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I use it on ITAR or controlled programs?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Mark the relevant documents controlled; the AI is then restricted to an on‑premise backend and blocked from every cloud path, enforced server‑side (a US‑sovereign cloud option is planned). For fully air‑gapped work, the on‑premise backend keeps everything inside your boundary."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it replace my DER or my engineers?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. It is a tool your engineers and DER use; the human owns every judgment and signs the safety case. The platform's job is to make the work faster and the golden thread complete and traceable."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What standards does it follow?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "ARP 4754B and ARP 4761A, the means of compliance for your cert basis (AC 23.1309 / AC 25.1309 / AC 27 / AC 29 / SC‑VTOL, ASTM F3230), and DO‑178C / DO‑254 development assurance."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+
 <meta name="description" content="How Safety Lab Aero protects certification-grade safety data: tenant isolation, encryption, access control, AI guardrails, data residency, and lifecycle.">
 <style>
   :root{
@@ -212,6 +312,19 @@
         <li><b>On-prem / air-gapped tier</b>: a deployment where data never leaves the customer's environment, for ITAR &amp; defense programs.</li>
         <li><b>Published trust portal</b>: self-serve access to this documentation and evidence.</li>
         <li><b>GCC High tenancy</b>: Azure Government SSO for customers who require it.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h3><span class="dot"></span>Common questions</h3>
+      <div class="lead">Short answers to what reviewers ask first. The detail is in the sections above.</div>
+      <ul class="road-list faq-list">
+        <li><b>Does the AI decide λ, DAL, or severity?</b> No. Those are owned by the deterministic engine and the engineer. The AI may propose a severity with rationale for you to confirm, and may build fault‑tree structure with rates left blank, but it never establishes a safety number as fact.</li>
+        <li><b>Is the AI part of the certification argument?</b> No, by design. The AI drafts, traces, and connects; the deterministic engine and the engineer own the numbers, the allocation, and the safety case. Requirements are allocated by interpreting the fault‑tree logic, not by the AI.</li>
+        <li><b>Where does my data go?</b> The model and engine run locally in your browser or desktop app. Only an explicit AI request sends the relevant context to your configured backend: hosted proxy, your own key, or on‑premise. For ITAR projects, cloud backends are blocked server‑side (US‑sovereign cloud routing is planned).</li>
+        <li><b>Can I use it on ITAR or controlled programs?</b> Mark the relevant documents controlled; the AI is then restricted to an on‑premise backend and blocked from every cloud path, enforced server‑side (a US‑sovereign cloud option is planned). For fully air‑gapped work, the on‑premise backend keeps everything inside your boundary.</li>
+        <li><b>Does it replace my DER or my engineers?</b> No. It is a tool your engineers and DER use; the human owns every judgment and signs the safety case. The platform's job is to make the work faster and the golden thread complete and traceable.</li>
+        <li><b>What standards does it follow?</b> ARP 4754B and ARP 4761A, the means of compliance for your cert basis (AC 23.1309 / AC 25.1309 / AC 27 / AC 29 / SC‑VTOL, ASTM F3230), and DO‑178C / DO‑254 development assurance.</li>
       </ul>
     </div>
 

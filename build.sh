@@ -62,6 +62,11 @@ find "$SRC" -maxdepth 1 -type f ! -name '.*' \( \
    -o -name '*.woff' -o -name '*.woff2' -o -name '*.map'                     \
    \) -exec cp {} "$OUT"/ \;
 
+# 2a) 13 Sep 2026 — the shipped sitemap carries REAL last-modified dates: regenerate it into
+#     dist/ from the page list, lastmod = last git commit per page (today if uncommitted).
+#     The committed site/sitemap.xml keeps the same URL list (the wall holds them equal).
+node tools/seo/sitemap.mjs --out "$OUT/sitemap.xml"
+
 # 2b) Say out loud what did NOT get published. A new asset type must be added
 #     to the allowlist above rather than silently vanishing, and new junk must
 #     be visible rather than shipped. Read this list on every build.
