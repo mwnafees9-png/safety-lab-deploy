@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /*!
  * Safety Lab Aero — Aerospace safety analysis tool
@@ -4902,6 +4903,7 @@ window._bulkSel = new Set();
             }
             window.autoReqTemplateOverrides = newOverrides;
         } catch (_) {}
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R19 hygiene) — autoReqTemplateOverrides is a per-project store; "saved" must mean saved
         close();
         try { if (typeof showToast === 'function') showToast('AutoReq templates saved. Re-run generation to apply.', 'success'); } catch(_) {}
     }
@@ -4913,6 +4915,7 @@ window._bulkSel = new Set();
             }
             window.autoReqTemplateOverrides = {};
         } catch (_) {}
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R19 hygiene) — clearing the overrides is a write too
         open();   // re-render with cleared state
     }
 

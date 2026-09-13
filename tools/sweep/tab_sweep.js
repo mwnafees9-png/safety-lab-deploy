@@ -11,10 +11,16 @@
  *   - tabs whose panel is missing, hidden, or renders empty
  *   - native dialogs (alert/confirm/prompt) that a click would have opened —
  *     they are stubbed so the run cannot block, and counted
+ * 13 Sep 2026 (R19, second pass) — the sweep now goes DEEPER than the top-level tabs:
+ *   - every System Workspace sub-tab (functions, FCIM, FHA, FMEA, requirements,
+ *     assumptions, PSSA) for the first systems of the sample project
+ *   - every PASA sub-panel (cockpit, interdependence + resources, MAC, MF&MS, CoFFE)
+ *   - one level INSIDE any modal a click opens: its own buttons are pressed too
+ *     (deny list applies), then the modal is closed
  * Nothing here is a gate; it is a finding generator. Output: a summary on stdout
  * and tools/sweep/last_sweep.json.
  *
- * Usage:  node tools/sweep/tab_sweep.js [--src] [--tabs a,b,c] [--no-clicks]
+ * Usage:  node tools/sweep/tab_sweep.js [--src] [--tabs a,b,c] [--no-clicks] [--no-deep] [--systems=N]
  * ==========================================================================*/
 'use strict';
 const fs = require('fs'), path = require('path'), http = require('http');
@@ -23,6 +29,8 @@ const ROOT = path.join(__dirname, '..', '..');
 const USE_SRC = process.argv.includes('--src');
 const NO_CLICKS = process.argv.includes('--no-clicks');
 const ONLY = (process.argv.find(a => a.startsWith('--tabs=')) || '').slice(7).split(',').filter(Boolean);
+const NO_DEEP = process.argv.includes('--no-deep');
+const N_SYSTEMS = parseInt((process.argv.find(a => a.startsWith('--systems=')) || '--systems=2').slice(10), 10) || 2;
 const SERVE_DIR = path.join(ROOT, USE_SRC ? 'site' : 'dist');
 
 function productionCsp() {
@@ -59,9 +67,11 @@ async function run() {
     const csp = productionCsp(); const port = await freePort();
     const server = serve(SERVE_DIR, csp); await new Promise(r => server.listen(port, '127.0.0.1', r));
     const base = 'http://127.0.0.1:' + port + '/';
-    const tabs = ONLY.length ? ONLY : allTabIds();
+    const tabIds = ONLY.length ? ONLY : allTabIds();
+    // a TARGET is anything the sweep can open: { key, open (js), panel (element id), kind }
+    const targets = tabIds.map(t => ({ key: t, kind: 'tab', open: `switchTab('${t}')`, panel: 'view-' + t }));
     console.log('── R19 runtime tab sweep ─────────────────────────────');
-    console.log('serving : ' + path.relative(ROOT, SERVE_DIR) + '/   tabs: ' + tabs.length + (NO_CLICKS ? '   (no clicks)' : ''));
+    console.log('serving : ' + path.relative(ROOT, SERVE_DIR) + '/   tabs: ' + tabIds.length + (NO_CLICKS ? '   (no clicks)' : '') + (NO_DEEP ? '   (no deep)' : ''));
     let browser = null, cdp = null; const report = { startedAt: new Date().toISOString(), tabs: {}, boot: {} };
     try {
         browser = await launch(); cdp = await Cdp.connect(browser.wsUrl);
@@ -84,56 +94,96 @@ async function run() {
         report.sample = sample; console.log('sample  : ' + sample + '   boot exceptions: ' + report.boot.exceptions.length + '   boot console errors: ' + report.boot.consoleErrors.length);
         errors = []; consoleErrors = [];
         if (process.env.PROBE) { console.log('probe   : ' + await evaluate(cdp, sessionId, process.env.PROBE)); return; }
-        for (const tab of tabs) {
-            const rec = { switchErrors: [], stacked: [], panel: null, clicks: [], dialogs: [] };
+        if (!NO_DEEP && !ONLY.length) {
+            // System Workspace sub-tabs for the first N systems of the sample, and the PASA sub-panels
+            let sys = [];
+            try { sys = JSON.parse(await evaluate(cdp, sessionId, `JSON.stringify((typeof systemsData !== 'undefined' && Array.isArray(systemsData) ? systemsData : []).slice(0, ${N_SYSTEMS}).map(function (s) { return { id: s.id, name: s.name }; }))`)); } catch (_) {}
+            for (const sy of sys) for (const sub of ['func', 'fcim', 'fha', 'fmea', 'req', 'asm', 'pssa'])
+                targets.push({ key: 'ws:' + sy.id + ':' + sub, kind: 'ws', open: `openSystemWorkspace(${JSON.stringify(sy.id)}); switchWorkspaceTab('${sub}')`, panel: 'ws-view-' + sub });
+            for (const [sub, panel] of [['cockpit', 'pasa-sub-cockpit'], ['interdep', 'view-interdep'], ['mac', 'view-mac'], ['mfms', 'pasa-sub-mfms'], ['coffe', 'pasa-sub-coffe']])
+                targets.push({ key: 'pasa:' + sub, kind: 'pasa', open: `switchTab('pasa'); pasaSub('${sub}')`, panel });
+            console.log('deep    : ' + sys.length + ' system(s) x 7 workspace sub-tabs + 5 PASA sub-panels' + (sys.length ? '  (' + sys.map(s => s.name).join(', ') + ')' : ''));
+        }
+        const panelInfo = (id) => `(function(){ var panel = document.getElementById(${JSON.stringify(id)}); return JSON.stringify(panel ? { visible: panel.offsetParent !== null, text: (panel.innerText || '').trim().length, buttons: panel.querySelectorAll('button, [onclick], a[href="#"]').length } : null); })()`;
+        // a modal that a click opened: the overlay with .show, or a visible [role=dialog] outside every panel
+        const openModal = `(function(){ var all = document.querySelectorAll('.modal-overlay, .sl-modal, .sl-modal-overlay, .sl-tpl-overlay, .sl-edit-modal-scrim, [role="dialog"], .is-modal'); for (var i = 0; i < all.length; i++) { var m = all[i]; if (m.id && /^(view-|ws-view-|pasa-sub-)/.test(m.id)) continue; var cs = getComputedStyle(m); if (cs.display === 'none' || cs.visibility === 'hidden' || m.getBoundingClientRect().height < 20) continue; return m; } return null; })`;
+        const listButtons = (rootExpr) => `(function(){ var root = ${rootExpr}; if (!root) return '[]'; var out = []; var els = root.querySelectorAll('button, [onclick]');
+                    for (var i = 0; i < els.length && out.length < 80; i++) { var el = els[i]; if (el.offsetParent === null) continue; if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') continue;
+                      var label = ((el.innerText || el.value || el.title || el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('onclick') || '')).replace(/\\s+/g,' ').trim().slice(0, 90); el.setAttribute('data-sweep-idx', String(i)); out.push({ idx: i, label: label }); }
+                    return JSON.stringify(out); })()`;
+        const closeModals = async () => {
+            await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, sessionId).catch(() => {});
+            await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, sessionId).catch(() => {});
+            // hide, never remove, what has an id (the app reuses those shells); mark it so the next click can un-hide it
+            await evaluate(cdp, sessionId, `(function(){ document.querySelectorAll('.modal-overlay, .sl-modal, .sl-modal-overlay, .sl-tpl-overlay, .sl-edit-modal-scrim, .modal-backdrop, [role="dialog"], .is-modal').forEach(function(m){ if (m.id && /^(view-|ws-view-|pasa-sub-)/.test(m.id)) return; try { if (m.id) { m.classList.remove('show'); m.style.display = 'none'; m.setAttribute('data-sweep-hid', '1'); } else m.remove(); } catch(_){} }); return true; })()`).catch(() => {});
+        };
+        // before every click: give back the shells the previous close hid, so a modal can open again
+        const unhide = () => evaluate(cdp, sessionId, `(function(){ document.querySelectorAll('[data-sweep-hid]').forEach(function(m){ m.style.display = ''; m.removeAttribute('data-sweep-hid'); }); return true; })()`).catch(() => {});
+        for (const tg of targets) {
+            const tab = tg.key;
+            const rec = { kind: tg.kind, switchErrors: [], stacked: [], panel: null, clicks: [], modalClicks: 0, dialogs: [] };
             try {
-                const info = await evaluate(cdp, sessionId, `(function(){ try { switchTab('${tab}'); } catch (e) { return JSON.stringify({ threw: String(e).slice(0,160) }); }
-                    var panel = document.getElementById('view-${tab}');
-                    var vis = Array.prototype.filter.call(document.querySelectorAll('[id^="view-"]'), function(el){ if (el.offsetParent === null || el.getBoundingClientRect().height <= 40) return false; if (panel && (panel.contains(el) || el.contains(panel))) return false; return true; }).map(function(el){ return el.id; });
+                const info = await evaluate(cdp, sessionId, `(function(){ try { ${tg.open}; } catch (e) { return JSON.stringify({ threw: String(e).slice(0,160) }); }
+                    var panel = document.getElementById(${JSON.stringify(tg.panel)});
+                    var vis = ${tg.kind === 'tab' ? `Array.prototype.filter.call(document.querySelectorAll('[id^="view-"]'), function(el){ if (el.offsetParent === null || el.getBoundingClientRect().height <= 40) return false; if (panel && (panel.contains(el) || el.contains(panel))) return false; return true; }).map(function(el){ return el.id; })` : '[]'};
                     return JSON.stringify({ visible: vis, panel: panel ? { visible: panel.offsetParent !== null, text: (panel.innerText || '').trim().length, buttons: panel.querySelectorAll('button, [onclick], a[href="#"]').length } : null }); })()`);
                 const p = JSON.parse(info);
                 if (p.threw) rec.switchErrors.push(p.threw);
-                rec.panel = p.panel; rec.stacked = (p.visible || []).filter(v => v !== 'view-' + tab);
+                rec.panel = p.panel; rec.stacked = (p.visible || []).filter(v => v !== tg.panel);
             } catch (e) { rec.switchErrors.push(String(e.message || e).slice(0, 160)); }
             await sleep(600);
-            try { const again = JSON.parse(await evaluate(cdp, sessionId, `(function(){ var panel = document.getElementById('view-${tab}'); return JSON.stringify(panel ? { visible: panel.offsetParent !== null, text: (panel.innerText || '').trim().length, buttons: panel.querySelectorAll('button, [onclick], a[href="#"]').length } : null); })()`)); if (again) rec.panel = again; } catch (_) {}
+            try { const again = JSON.parse(await evaluate(cdp, sessionId, panelInfo(tg.panel))); if (again) rec.panel = again; } catch (_) {}
             rec.switchErrors.push(...errors.splice(0)); rec.switchConsole = consoleErrors.splice(0);
             if (!NO_CLICKS && rec.panel && rec.panel.visible) {
                 // enumerate clickable things inside the panel, press each one that is not on the deny list
-                const list = JSON.parse(await evaluate(cdp, sessionId, `(function(){ var panel = document.getElementById('view-${tab}'); var out = []; var els = panel.querySelectorAll('button, [onclick]');
-                    for (var i = 0; i < els.length && out.length < 80; i++) { var el = els[i]; if (el.offsetParent === null) continue; if (el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.tagName === 'TEXTAREA') continue;
-                      var label = ((el.innerText || el.value || el.title || el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('onclick') || '')).replace(/\\s+/g,' ').trim().slice(0, 90); el.setAttribute('data-sweep-idx', String(i)); out.push({ idx: i, label: label }); }
-                    return JSON.stringify(out); })()`));
+                const list = JSON.parse(await evaluate(cdp, sessionId, listButtons(`document.getElementById(${JSON.stringify(tg.panel)})`)));
                 for (const b of list) {
                     if (DENY.test(b.label)) continue;
                     const before = await evaluate(cdp, sessionId, `window.__sweepDialogs.length`);
+                    await unhide();
                     try {
-                        await evaluate(cdp, sessionId, `(function(){ var el = document.querySelector('#view-${tab} [data-sweep-idx="${b.idx}"]'); if (!el) return 'gone'; el.click(); return 'clicked'; })()`);
+                        await evaluate(cdp, sessionId, `(function(){ var el = document.querySelector('#${tg.panel} [data-sweep-idx="${b.idx}"]'); if (!el) return 'gone'; el.click(); return 'clicked'; })()`);
                     } catch (e) { errors.push('click threw: ' + String(e.message || e).slice(0, 160)); }
                     await sleep(120);
-                    // close whatever opened: Escape, then remove obvious modal shells
-                    await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, sessionId).catch(() => {});
-                    await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 }, sessionId).catch(() => {});
-                    await evaluate(cdp, sessionId, `(function(){ document.querySelectorAll('.modal-overlay, .sl-modal, .modal-backdrop, [role="dialog"], .is-modal').forEach(function(m){ if (m.id && /^view-/.test(m.id)) return; try { if (m.id) m.style.display = 'none'; else m.remove(); } catch(_){} }); return true; })()`).catch(() => {});
+                    let ex = errors.splice(0), ce = consoleErrors.splice(0), modalErrs = [];
+                    // one level inside: if the click opened a modal, press its buttons too (deny list applies), then close it
+                    if (!NO_DEEP) {
+                        try {
+                            const inner = JSON.parse(await evaluate(cdp, sessionId, listButtons(`${openModal}()`)));
+                            for (const ib of inner) {
+                                if (DENY.test(ib.label)) continue;
+                                try { await evaluate(cdp, sessionId, `(function(){ var m = ${openModal}(); if (!m) return 'closed'; var el = m.querySelector('[data-sweep-idx="${ib.idx}"]'); if (!el) return 'gone'; el.click(); return 'clicked'; })()`); } catch (e) { errors.push('modal click threw: ' + String(e.message || e).slice(0, 160)); }
+                                await sleep(80); rec.modalClicks++;
+                                const iex = errors.splice(0), ice = consoleErrors.splice(0);
+                                if (iex.length || ice.length) modalErrs.push({ label: ib.label, exceptions: iex, consoleErrors: ice });
+                                // a modal button may have closed the modal or opened another; stop at depth one
+                                if (!(await evaluate(cdp, sessionId, `!!${openModal}()`))) break;
+                            }
+                        } catch (_) {}
+                    }
+                    await closeModals();
                     const after = await evaluate(cdp, sessionId, `window.__sweepDialogs.length`);
-                    const ex = errors.splice(0), ce = consoleErrors.splice(0);
-                    if (ex.length || ce.length || after > before) rec.clicks.push({ label: b.label, exceptions: ex, consoleErrors: ce, dialogs: after - before });
-                    // make sure we are still on the tab (a click may have navigated)
-                    await evaluate(cdp, sessionId, `(function(){ try { if (window._slCurrentTab !== '${tab}') switchTab('${tab}'); } catch(_){} return true; })()`).catch(() => {});
+                    ex = ex.concat(errors.splice(0)); ce = ce.concat(consoleErrors.splice(0));
+                    if (ex.length || ce.length || after > before || modalErrs.length) rec.clicks.push({ label: b.label, exceptions: ex, consoleErrors: ce, dialogs: after - before, modal: modalErrs });
+                    // make sure we are still on the target (a click may have navigated)
+                    await evaluate(cdp, sessionId, `(function(){ try { ${tg.kind === 'tab' ? `if (window._slCurrentTab !== '${tab}') switchTab('${tab}');` : tg.open + ';'} } catch(_){} return true; })()`).catch(() => {});
                     errors.splice(0); consoleErrors.splice(0);
                 }
             }
             report.tabs[tab] = rec;
             const flag = rec.switchErrors.length ? 'ERR ' : rec.stacked.length ? 'STACK ' : (!rec.panel ? 'NO-PANEL ' : !rec.panel.visible ? 'HIDDEN ' : rec.panel.text === 0 ? 'EMPTY ' : '');
-            const bad = rec.clicks.filter(c => c.exceptions.length || c.consoleErrors.length).length, dlg = rec.clicks.reduce((n, c) => n + c.dialogs, 0);
+            const bad = rec.clicks.filter(c => c.exceptions.length || c.consoleErrors.length || (c.modal && c.modal.length)).length, dlg = rec.clicks.reduce((n, c) => n + c.dialogs, 0);
             console.log(('  ' + flag + tab).padEnd(28) + (rec.panel ? ('text ' + String(rec.panel.text).padStart(6) + '  buttons ' + String(rec.panel.buttons).padStart(3)) : '                          ') + (rec.stacked.length ? '  stacked with ' + rec.stacked.join(',') : '') + (bad ? '  click errors ' + bad : '') + (dlg ? '  native dialogs ' + dlg : '') + (rec.switchErrors.length ? '  ' + rec.switchErrors[0].slice(0, 90) : ''));
         }
     } finally { try { server.close(); } catch (_) {} try { if (cdp) cdp.close(); } catch (_) {} try { if (browser) browser.kill(); } catch (_) {} }
     fs.writeFileSync(path.join(__dirname, 'last_sweep.json'), JSON.stringify(report, null, 1));
     const t = Object.entries(report.tabs);
-    console.log('\nsummary: ' + t.length + ' tabs · switch errors ' + t.filter(([, r]) => r.switchErrors.length).length + ' · stacked ' + t.filter(([, r]) => r.stacked.length).length + ' · missing panel ' + t.filter(([, r]) => !r.panel).length + ' · hidden ' + t.filter(([, r]) => r.panel && !r.panel.visible).length + ' · empty ' + t.filter(([, r]) => r.panel && r.panel.visible && r.panel.text === 0).length + ' · clicks with errors ' + t.reduce((n, [, r]) => n + r.clicks.filter(c => c.exceptions.length || c.consoleErrors.length).length, 0) + ' · native dialogs hit ' + t.reduce((n, [, r]) => n + r.clicks.reduce((m, c) => m + c.dialogs, 0), 0));
+    console.log('\nsummary: ' + t.length + ' targets (' + t.filter(([, r]) => r.kind === 'tab').length + ' tabs) · switch errors ' + t.filter(([, r]) => r.switchErrors.length).length + ' · stacked ' + t.filter(([, r]) => r.stacked.length).length + ' · missing panel ' + t.filter(([, r]) => !r.panel).length + ' · hidden ' + t.filter(([, r]) => r.panel && !r.panel.visible).length + ' · empty ' + t.filter(([, r]) => r.panel && r.panel.visible && r.panel.text === 0).length + ' · clicks with errors ' + t.reduce((n, [, r]) => n + r.clicks.filter(c => c.exceptions.length || c.consoleErrors.length || (c.modal && c.modal.length)).length, 0) + ' · modal buttons pressed ' + t.reduce((n, [, r]) => n + (r.modalClicks || 0), 0) + ' · native dialogs hit ' + t.reduce((n, [, r]) => n + r.clicks.reduce((m, c) => m + c.dialogs, 0), 0));
     console.log('missing panels: ' + t.filter(([, r]) => !r.panel).map(([k]) => k).join(', ') + '\nhidden panels : ' + t.filter(([, r]) => r.panel && !r.panel.visible).map(([k]) => k).join(', ') + '\nempty panels  : ' + t.filter(([, r]) => r.panel && r.panel.visible && r.panel.text === 0).map(([k]) => k).join(', '));
-    for (const [k, r] of t) for (const c of r.clicks) if (c.exceptions.length || c.consoleErrors.length) console.log('  click error  ' + k + ' :: ' + c.label + ' :: ' + (c.exceptions[0] || c.consoleErrors[0]).slice(0, 160));
+    for (const [k, r] of t) for (const c of r.clicks) {
+        if (c.exceptions.length || c.consoleErrors.length) console.log('  click error  ' + k + ' :: ' + c.label + ' :: ' + (c.exceptions[0] || c.consoleErrors[0]).slice(0, 160));
+        for (const m of (c.modal || [])) console.log('  modal error  ' + k + ' :: ' + c.label + ' > ' + m.label + ' :: ' + (m.exceptions[0] || m.consoleErrors[0]).slice(0, 160));
+    }
     console.log('detail : tools/sweep/last_sweep.json');
 }
 run().catch(e => { console.error('sweep crashed: ' + (e && e.stack || e)); process.exit(1); });

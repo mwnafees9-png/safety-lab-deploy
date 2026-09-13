@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // helpers_modules.js — v1.0 — Phase P2 batch 4: runtime helper layer (bulk pass).
@@ -10346,6 +10347,7 @@ function onExposureInputChange() {
                 ftaConfig.exposureSource = 'manual';
             }
         }
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R19 hygiene) — ftaConfig is persisted; the toolbar onchange has no other saver
     }
     refreshTopAllocatorReadout();
     calculateAllProbabilities();
@@ -10367,6 +10369,7 @@ function onExposureAutoToggle() {
     } else {
         ftaConfig.exposureSource = 'manual';
     }
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R19 hygiene) — ftaConfig is persisted; the toolbar onchange has no other saver
     refreshTopAllocatorReadout();
     calculateAllProbabilities();
     updateD3();
