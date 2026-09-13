@@ -34,7 +34,7 @@
         if (!s.params) s.params = { years: 20, discount: 0.05, laborRate: 120, downtimeRate: 2500, turnaroundDays: 30 };
         return s;
     }
-    const _save = () => { try { if (typeof saveState === 'function') saveState(); } catch (_) {} };
+    const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     function _settings() {
         const rs = (typeof projectConfig !== 'undefined' && projectConfig.ramSettings) || {};

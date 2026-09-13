@@ -2793,6 +2793,7 @@ function updateNodeData() {
     calculateAllProbabilities(); updateD3();
     // Phase 32a — refresh the BE derived display (P at t, etc.).
     refreshBasicEventDerived();
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — a node edit is a project change; it used to save only by accident
 }
 
 // Phase 32a — show "P at t = X" next to the λ input on the BE config panel. For

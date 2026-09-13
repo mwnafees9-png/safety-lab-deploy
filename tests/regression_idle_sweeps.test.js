@@ -71,7 +71,7 @@ check('autosave no longer idle-schedules a debounced write (per-change cadence)'
   !/SLIdle\.schedule\('autosave', _writeAutosave/.test(misc));
 check('the 2s debounce and 30s max-wait timers are gone from scheduleAutosave',
   !/_autosaveDebounceTimer = setTimeout/.test(misc) && !/_autosaveMaxWaitTimer = setTimeout/.test(misc));
-check('scheduleAutosave writes on a coalesced microtask instead', /queueMicrotask\(_flush\)/.test(misc) && /if \(_autosaveFlushQueued\) return;/.test(misc));
+check('scheduleAutosave writes on a coalesced microtask instead', /queueMicrotask\(_flush\)/.test(misc) && /if \(_autosaveFlushQueued\) return true;/.test(misc));
 check('the exit flush still cancels any pending idle job then writes sync', /SLIdle\.cancel\('autosave'\); \} catch \(_\) \{\}\n        _writeAutosave\(\);/.test(misc));
 
 console.log('\n[3] leading-indicators rewire (behavioral)');

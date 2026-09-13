@@ -1181,6 +1181,7 @@ const SysMLImport = (function() {
         });
 
         close();
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
         // Refresh whatever tab is open so the new records show up.
         try { if (typeof renderItems === 'function') renderItems(); } catch (_) {}
         try { if (typeof renderAcFunctions === 'function') renderAcFunctions(); } catch (_) {}
@@ -1424,6 +1425,7 @@ const JamaConnect = (function() {
             added++;
         });
         close();
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
         try { if (typeof renderAcReq === 'function') renderAcReq(); } catch (_) {}
         try { if (typeof renderRequirementsRepository === 'function') renderRequirementsRepository(); } catch (_) {}
         try { if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) {}

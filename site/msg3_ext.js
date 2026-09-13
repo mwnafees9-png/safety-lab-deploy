@@ -45,7 +45,7 @@
         if (!Array.isArray(s.lhirf)) s.lhirf = [];
         return s;
     }
-    const _save = () => { try { if (typeof saveState === 'function') saveState(); } catch (_) {} };
+    const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     // push into the shared maintenance ledger (one task list for the program)
     function _pushLedger(name, taskType, interval, ref) {

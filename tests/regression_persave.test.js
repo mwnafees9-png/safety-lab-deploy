@@ -40,7 +40,7 @@ const idx = R('site/index.html');
 // ---------------------------------------------------- 1. per-change immediate save
 ok('the 2-second debounce is gone from scheduleAutosave', !/_autosaveDebounceTimer = setTimeout\(\(\) => \{[\s\S]*?\}, 2000\)/.test(misc));
 ok('the coalesce flag is declared', /let _autosaveFlushQueued = false;/.test(bind));
-ok('scheduleAutosave queues a single microtask flush', /if \(_autosaveFlushQueued\) return;[\s\S]*?_autosaveFlushQueued = true;/.test(misc) && /queueMicrotask\(_flush\)/.test(misc));
+ok('scheduleAutosave queues a single microtask flush', /if \(_autosaveFlushQueued\) return true;[\s\S]*?_autosaveFlushQueued = true;/.test(misc) && /queueMicrotask\(_flush\)/.test(misc));
 ok('the flush writes through the real _writeAutosave', /var _flush = function \(\) \{[\s\S]*?_writeAutosave\(\);/.test(misc));
 ok('the loss-window reason is recorded', /That window was the loss/.test(misc));
 ok('the burst-coalesce reason is recorded', /accepting 44 drafted rows calls this 44 times/.test(misc));

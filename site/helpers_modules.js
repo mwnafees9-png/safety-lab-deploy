@@ -1539,6 +1539,7 @@ function loadProject(event) {
             renderACFunctions(); renderACFCIM(); renderACFHA(); renderACReq(); renderACAssumptions();
             renderPRA(); renderZSA(); renderFMEA(); renderFlightPhases();
             switchTab('dashboard'); renderFTASidebar(); calculateAllProbabilities(); document.getElementById('load-file').value = '';
+            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — the opened file is now the project: announce it (sync push, local + cloud save)
         } catch (err) { alert("Error loading project file."); console.error(err); }
     }; reader.readAsText(file);
 }
@@ -2885,6 +2886,7 @@ function macCompile(ruleId) {
         missionProfileId: (typeof ftaConfig === 'object' && ftaConfig && ftaConfig.missionProfileId) || ''
     };
     if (existing !== -1) ftaPages[existing] = page; else ftaPages.push(page);
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — a compiled tree is a project change
     const verified = _macVerify(rule, root);
     store[rule.id] = { fp, pageId, breach, verified, at: new Date().toISOString() };
     return { ok: true, pageId, verified, added, removed, breachCount: breach.length };
@@ -3751,6 +3753,7 @@ async function promptCreateSystem() {
         const role = /^r/i.test(roleIn) ? 'resource' : /^b/i.test(roleIn) ? 'both' : 'function';
         const newSys = { id: 'sys-' + Date.now(), name: sysName.trim(), role, asmCounter: 1, functions: [], fcim: [], extractedFCs: [], fha: [], req: [], asm: [] };
         systemsData.push(newSys);
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — a new system never saved until something else did
         // The plan is seeded from the aircraft scope, then shown — inheritance
         // becomes a decision the engineer sees and can tailor, instead of a
         // silent default nobody could find. (#15)
@@ -4928,7 +4931,7 @@ function _asmRouteSelect(scopeKind, asmId, row) {
 }
 function updateACAsmRoute(id, val) {
     const a = acAssumptionsData.find(x => x.asmId === id);
-    if (a) { a.routeTo = val; a.routeAt = val ? new Date().toISOString() : ''; a.routeBy = val ? (_signoffReviewerName() || '') : ''; }
+    if (a) { a.routeTo = val; a.routeAt = val ? new Date().toISOString() : ''; a.routeBy = val ? (_signoffReviewerName() || '') : ''; try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
     renderACAssumptions();
 }
 function updateSysAsmRoute(id, val) {
@@ -5019,11 +5022,12 @@ function renderACAssumptions() {
     }
     _asmRenderFindings('ac-asm-table');
 }
-function updateACAsmState(id, newState) { const asm = acAssumptionsData.find(a => a.asmId === id); if(asm) asm.state = newState; renderACAssumptions(); }
+function updateACAsmState(id, newState) { const asm = acAssumptionsData.find(a => a.asmId === id); if(asm) asm.state = newState; try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} renderACAssumptions(); }   // 13 Sep 2026 (R18): saves
 function updateACAsmText(id, field, val) {
     const asm = acAssumptionsData.find(a => a.asmId === id); if(asm) asm[field] = val;
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — every field, not only the three that re-render
     // type / posture change what "holds now" and the credit findings read — re-render for those
-    if (field === 'type' || field === 'credited' || field === 'uncredited') { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} renderACAssumptions(); }
+    if (field === 'type' || field === 'credited' || field === 'uncredited') { renderACAssumptions(); }
 }
 
 
@@ -6866,7 +6870,7 @@ function getNodeColors(d) {
 }
 
 function updateNodeDataInline() { 
-    calculateAllProbabilities(); updateD3(); 
+    calculateAllProbabilities(); updateD3(); try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
     if(selectedNodeData) { document.getElementById('config-name').value = selectedNodeData.name; document.getElementById('config-lambda').value = selectedNodeData.lambda || 0; } 
 }
 
@@ -8512,28 +8516,130 @@ function __crdtCapture() {
         typeCounters:      (typeof typeCounters === 'object' && typeCounters) ? clone(typeCounters) : {}
     };
 }
+// 13 Sep 2026 — A PULL MERGES IN PLACE (R18 rebuild). The old apply REASSIGNED every
+// synced store to the doc's fresh array, so every reference held anywhere in the app
+// (the node the fault-tree editor is editing, the table a dialog captured before it
+// awaited, the requirement rows a preview holds until Accept) pointed at a discarded
+// copy, and the next write into it was silently lost. Now the arrays keep their
+// identity and so does every row whose key survives: rows are updated field by field,
+// new rows are added, rows the doc no longer holds are dropped, order follows the doc.
+// Nested objects (a system's own function/FHA/requirement lists, projectConfig's
+// sub-stores) merge the same way, so their references hold too.
+var _CRDT_KEYS_FALLBACK = { acFunctionsData: 'subId', acFhaData: 'internalId', acReqData: 'internalId', acAssumptionsData: 'asmId', praData: 'internalId', zsaData: 'internalId', cmaData: 'internalId', fmeaData: 'internalId', acFcimData: 'internalId', routingData: 'internalId', resourcesData: 'internalId', itemsData: 'internalId', flightPhasesData: 'phase', systemsData: 'id' };
+function _crdtKeys() { try { if (window.SafetyLabCRDT && typeof window.SafetyLabCRDT.keys === 'function') return window.SafetyLabCRDT.keys(); } catch (_) {} return _CRDT_KEYS_FALLBACK; }
+function _isPlainObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v) && Object.prototype.toString.call(v) === '[object Object]' && !(v instanceof Date); }
+// Make `target` equal `src` without replacing `target` (or any nested object/array that
+// exists in both). Arrays of KEYED rows go through _mergeRowsInPlace by the caller;
+// here arrays are aligned by index (both plain objects at an index merge, else assign).
+function _assignDeepInPlace(target, src) {
+    if (Array.isArray(target) && Array.isArray(src)) {
+        for (var i = 0; i < src.length; i++) {
+            var t = target[i], v = src[i];
+            if (_isPlainObj(t) && _isPlainObj(v)) _assignDeepInPlace(t, v);
+            else if (Array.isArray(t) && Array.isArray(v)) _assignDeepInPlace(t, v);
+            else target[i] = v;
+        }
+        target.length = src.length;
+        return target;
+    }
+    if (_isPlainObj(target) && _isPlainObj(src)) {
+        Object.keys(target).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(src, k)) delete target[k]; });
+        Object.keys(src).forEach(function (k) {
+            var t = target[k], v = src[k];
+            if (_isPlainObj(t) && _isPlainObj(v)) _assignDeepInPlace(t, v);
+            else if (Array.isArray(t) && Array.isArray(v)) _assignDeepInPlace(t, v);
+            else target[k] = v;
+        });
+        return target;
+    }
+    return src;
+}
+// Keyed rows: the row object with the same key survives (updated in place); order = incoming.
+function _mergeRowsInPlace(target, incoming, keyField) {
+    if (!Array.isArray(target)) return incoming.slice();
+    var byKey = new Map();
+    target.forEach(function (r) { var k = r ? r[keyField] : null; if (k != null && k !== '' && !byKey.has(String(k))) byKey.set(String(k), r); });
+    var out = incoming.map(function (inc) {
+        var k = inc ? inc[keyField] : null;
+        var ex = (k != null && k !== '') ? byKey.get(String(k)) : null;
+        if (ex && _isPlainObj(ex) && _isPlainObj(inc)) { _assignDeepInPlace(ex, inc); return ex; }
+        return inc;
+    });
+    target.length = 0;
+    for (var i = 0; i < out.length; i++) target.push(out[i]);   // no apply(): huge tables exceed the argument limit
+    return target;
+}
+// Fault-tree pages: page shells by id, and inside each page the node tree by node id, so
+// the node object the editor holds (selectedNodeData) is the same object after a pull.
+function _mergeTreeInPlace(ex, inc) {
+    if (!_isPlainObj(ex) || !_isPlainObj(inc)) return inc;
+    var exKids = (ex.children || ex._children || []), byId = new Map();
+    exKids.forEach(function (n) { if (n && n.id != null && !byId.has(String(n.id))) byId.set(String(n.id), n); });
+    var shape = Array.isArray(inc.children) ? 'children' : (Array.isArray(inc._children) ? '_children' : null);
+    var incKids = shape ? inc[shape] : [];
+    // scalars first (without the child arrays), then the children by identity
+    var incScalars = {}; Object.keys(inc).forEach(function (k) { if (k !== 'children' && k !== '_children') incScalars[k] = inc[k]; });
+    Object.keys(ex).forEach(function (k) { if (k !== 'children' && k !== '_children' && !Object.prototype.hasOwnProperty.call(incScalars, k)) delete ex[k]; });
+    _assignDeepInPlace(ex, incScalars);
+    var kids = incKids.map(function (c) { var e = (c && c.id != null) ? byId.get(String(c.id)) : null; return e ? _mergeTreeInPlace(e, c) : c; });
+    if (shape === 'children') { ex.children = kids; if ('_children' in ex) ex._children = (inc._children === null ? null : undefined); if (ex._children === undefined) delete ex._children; }
+    else if (shape === '_children') { ex._children = kids; ex.children = (inc.children === null ? null : inc.children); if (ex.children === undefined) delete ex.children; }
+    else { if (inc.children !== undefined) ex.children = inc.children; else delete ex.children; if (inc._children !== undefined) ex._children = inc._children; else delete ex._children; }
+    return ex;
+}
+function _mergePagesInPlace(target, incoming) {
+    if (!Array.isArray(target)) return incoming.slice();
+    var byId = new Map();
+    target.forEach(function (p) { if (p && p.id != null && !byId.has(String(p.id))) byId.set(String(p.id), p); });
+    var out = incoming.map(function (inc) {
+        var ex = (inc && inc.id != null) ? byId.get(String(inc.id)) : null;
+        if (!ex || !_isPlainObj(ex) || !_isPlainObj(inc)) return inc;
+        var root = (ex.root && inc.root) ? _mergeTreeInPlace(ex.root, inc.root) : inc.root;
+        var scal = {}; Object.keys(inc).forEach(function (k) { if (k !== 'root') scal[k] = inc[k]; });
+        Object.keys(ex).forEach(function (k) { if (k !== 'root' && !Object.prototype.hasOwnProperty.call(scal, k)) delete ex[k]; });
+        _assignDeepInPlace(ex, scal);
+        if (inc.root === undefined) delete ex.root; else ex.root = root;
+        return ex;
+    });
+    target.length = 0;
+    for (var i = 0; i < out.length; i++) target.push(out[i]);
+    return target;
+}
+// Cheap change fingerprint of the synced stores (no clone, no parse): what the save
+// watcher compares once a second so a writer that forgot to say "changed" still saves.
+function __crdtFingerprint() {
+    var h = 0x811c9dc5, n = 0;
+    var mix = function (str) { for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } n += str.length; };
+    var S = function (v) { try { return JSON.stringify(v === undefined ? null : v); } catch (_) { return '!'; } };
+    // direct references only, no dynamic lookup (the production CSP forbids it); the same set __crdtCapture reads
+    var stores = [acFunctionsData, acFhaData, acReqData, acAssumptionsData, praData, zsaData, cmaData, fmeaData, acFcimData, routingData, resourcesData, itemsData, flightPhasesData, systemsData, ftaPages, projectConfig, mlData, (typeof stpaData === 'object' ? stpaData : null), (typeof typeCounters === 'object' ? typeCounters : null)];
+    for (var i = 0; i < stores.length; i++) { mix(String(i)); mix(S(stores[i])); }
+    mix(S([typeof projectName === 'string' ? projectName : '', acAsmCounter, fmeaCounter, reviewCounter, internalIdCounter]));
+    return n + ':' + h.toString(16);
+}
 function __crdtApply(partial) {
     if (!partial || typeof partial !== 'object') return;
     var prev = _autosaveSuspended; _autosaveSuspended = true;
     try {
-        if (Array.isArray(partial.acFunctionsData))   acFunctionsData   = partial.acFunctionsData;
-        if (Array.isArray(partial.acFhaData))         acFhaData         = partial.acFhaData;
-        if (Array.isArray(partial.acReqData))         acReqData         = partial.acReqData;
-        if (Array.isArray(partial.acAssumptionsData)) acAssumptionsData = partial.acAssumptionsData;
-        if (Array.isArray(partial.praData))           praData           = partial.praData;
-        if (Array.isArray(partial.zsaData))           zsaData           = partial.zsaData;
-        if (Array.isArray(partial.cmaData))           cmaData           = partial.cmaData;
-        if (Array.isArray(partial.fmeaData))          fmeaData          = partial.fmeaData;
-        if (Array.isArray(partial.acFcimData))        acFcimData        = partial.acFcimData;
-        if (Array.isArray(partial.routingData))       routingData       = partial.routingData;
-        if (Array.isArray(partial.resourcesData))     resourcesData     = partial.resourcesData;
-        if (Array.isArray(partial.itemsData))         itemsData         = partial.itemsData;
-        if (Array.isArray(partial.flightPhasesData))  flightPhasesData  = partial.flightPhasesData;
-        // whole-value stores (objects / string) — apply only a well-typed value
-        if (partial.projectConfig && typeof partial.projectConfig === 'object') projectConfig = partial.projectConfig;
-        if (partial.mlData && typeof partial.mlData === 'object')               mlData        = partial.mlData;
+        var K = _crdtKeys();
+        if (Array.isArray(partial.acFunctionsData))   acFunctionsData   = _mergeRowsInPlace(acFunctionsData,   partial.acFunctionsData,   K.acFunctionsData);
+        if (Array.isArray(partial.acFhaData))         acFhaData         = _mergeRowsInPlace(acFhaData,         partial.acFhaData,         K.acFhaData);
+        if (Array.isArray(partial.acReqData))         acReqData         = _mergeRowsInPlace(acReqData,         partial.acReqData,         K.acReqData);
+        if (Array.isArray(partial.acAssumptionsData)) acAssumptionsData = _mergeRowsInPlace(acAssumptionsData, partial.acAssumptionsData, K.acAssumptionsData);
+        if (Array.isArray(partial.praData))           praData           = _mergeRowsInPlace(praData,           partial.praData,           K.praData);
+        if (Array.isArray(partial.zsaData))           zsaData           = _mergeRowsInPlace(zsaData,           partial.zsaData,           K.zsaData);
+        if (Array.isArray(partial.cmaData))           cmaData           = _mergeRowsInPlace(cmaData,           partial.cmaData,           K.cmaData);
+        if (Array.isArray(partial.fmeaData))          fmeaData          = _mergeRowsInPlace(fmeaData,          partial.fmeaData,          K.fmeaData);
+        if (Array.isArray(partial.acFcimData))        acFcimData        = _mergeRowsInPlace(acFcimData,        partial.acFcimData,        K.acFcimData);
+        if (Array.isArray(partial.routingData))       routingData       = _mergeRowsInPlace(routingData,       partial.routingData,       K.routingData);
+        if (Array.isArray(partial.resourcesData))     resourcesData     = _mergeRowsInPlace(resourcesData,     partial.resourcesData,     K.resourcesData);
+        if (Array.isArray(partial.itemsData))         itemsData         = _mergeRowsInPlace(itemsData,         partial.itemsData,         K.itemsData);
+        if (Array.isArray(partial.flightPhasesData))  flightPhasesData  = _mergeRowsInPlace(flightPhasesData,  partial.flightPhasesData,  K.flightPhasesData);
+        // whole-value stores (objects / string) — apply only a well-typed value, in place
+        if (partial.projectConfig && typeof partial.projectConfig === 'object') projectConfig = _isPlainObj(projectConfig) ? _assignDeepInPlace(projectConfig, partial.projectConfig) : partial.projectConfig;
+        if (partial.mlData && typeof partial.mlData === 'object')               mlData        = _isPlainObj(mlData) ? _assignDeepInPlace(mlData, partial.mlData) : partial.mlData;
         if (typeof partial.projectName === 'string')                            projectName   = partial.projectName;
-        if (partial.stpaData && typeof partial.stpaData === 'object')            stpaData      = partial.stpaData;
+        if (partial.stpaData && typeof partial.stpaData === 'object')            stpaData      = _isPlainObj(stpaData) ? _assignDeepInPlace(stpaData, partial.stpaData) : partial.stpaData;
         // id counters — MAX merge (monotonic: never reissue a lower number)
         if (partial.__counters) {
             var _c = partial.__counters;
@@ -8548,8 +8654,8 @@ function __crdtApply(partial) {
             var _tc = partial.__typeCounters;
             Object.keys(_tc).forEach(function (t) { if (typeof _tc[t] === 'number') typeCounters[t] = Math.max((typeCounters[t] || 0), _tc[t]); });
         }
-        if (Array.isArray(partial.systemsData))       systemsData       = partial.systemsData;
-        if (Array.isArray(partial.ftaPages))          ftaPages          = partial.ftaPages;
+        if (Array.isArray(partial.systemsData))       systemsData       = _mergeRowsInPlace(systemsData, partial.systemsData, K.systemsData);
+        if (Array.isArray(partial.ftaPages))          ftaPages          = _mergePagesInPlace(ftaPages, partial.ftaPages);
         // re-render only the collections that arrived in this delta
         try { if (partial.acFunctionsData   && typeof renderACFunctions     === 'function') renderACFunctions(); } catch (_) {}
         try { if (partial.acFhaData         && typeof renderACFHA           === 'function') renderACFHA(); } catch (_) {}
@@ -11257,6 +11363,9 @@ function autoReqAccept(mode){
 
     const n = AutoReq.applyMerge(merge, choices);
     AutoReq.recomputeFlags(merge.scope);
+    // 13 Sep 2026 (R18) — this Accept wrote rows to the screen and called NO save of any
+    // kind; the next sync pull deleted them (Waqas lost a generated set this way).
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
 
     // Re-render the appropriate table.
     if(merge.scope === 'ac' && typeof renderACReq === 'function') renderACReq();
@@ -11948,6 +12057,11 @@ function _updateSaveIndicator(state) {
 // SaveFs), pushes to the Supabase cloud when signed in, then clears the dirty state. Background
 // autosave is unchanged — this is the user-driven commit the new UI asks for.
 async function commitSaveChanges() {
+    // 13 Sep 2026 — built ON scheduleAutosave (R18 rebuild). This path wrote the local
+    // and cloud snapshots but never told the live sync, so ~40 modules' edits reached
+    // the cloud and were then overwritten on screen by the next sync pull. One rail:
+    // the change is announced (sync push, dirty, activity), THEN saved explicitly.
+    try { scheduleAutosave(); } catch (_) {}
     _dirtySinceSave = false;
     _updateSaveIndicator('saving');
     try { _writeAutosave(); } catch (e) { console.warn('Local save failed:', e); }
@@ -12089,6 +12203,10 @@ function _restoreSnap(snapStr) {
         _applyProjectData(JSON.parse(snapStr));
         _lastUndoSnap = snapStr;
     } finally { _undoSuspended = false; }
+    // 13 Sep 2026 (R18) — an undo/redo is an edit like any other: it restored the
+    // project with autosave suspended and never announced the result, so it lived only
+    // in this tab until an unrelated edit and a sync pull reverted it.
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
 }
 function undo() {
     if(!_undoStack.length) return showToast('Nothing to undo.', 'info', 2000);

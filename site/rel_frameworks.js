@@ -70,7 +70,7 @@
         if (!Array.isArray(s.accel)) s.accel = [];
         return s;
     }
-    const _save = () => { try { if (typeof saveState === 'function') saveState(); } catch (_) {} };
+    const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     // ------------------------------------------------------------ actions
     window.relFwAdd = async function () {

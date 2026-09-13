@@ -423,7 +423,7 @@ console.log('\n[3c] cloud_sync shrink guard + history on the automatic path');
         code.indexOf('_wouldGut(snap)') > 0 &&
         code.indexOf('return { client: client, projectId: pid, userId: uid, snapshot: snap }') > 0 &&
         code.indexOf('_wouldGut(snap)') < code.indexOf('return { client: client, projectId: pid, userId: uid, snapshot: snap }'));
-  check('a gutting push RETURNS null instead of writing', /if \(_wouldGut\(snap\)\) \{[\s\S]*?return null;\s*\}/.test(code));
+  check('a gutting push RETURNS null instead of writing (13 Sep 2026: either guard, total or per-table)', /if \(_wouldGut\(snap\) \|\| gutTable\) \{[\s\S]*?return null;\s*\}/.test(code));
   check('the automatic path records version history — through the writer, after a landed write',
         /W\.write\(\{ mode: 'silent'/.test(code) && /_recordSaveHistory[\s\S]{0,80}\(projectId, nextVersion, snapshot, userId\)/.test(cw) &&
         cw.indexOf('_setToken(nextVersion)') < cw.indexOf('_recordSaveHistory'));
@@ -647,7 +647,7 @@ check('no "System lane" category survives anywhere in the rail',
 // 226 -> 227 (5 Sep 2026): fha_derive.js — escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis (levers 2 + 3).
 // 227 -> 228 (6 Sep 2026): slab_config.js — the ONE backend-config surface + hard-stop egress guard (customer-hosted build; loads first).
 // 228 -> 229 (6 Sep 2026): slab_license.js — offline signed-license verification (ES256; loads right after slab_config).
-check('script tag count unchanged (232 — …edit_locks.js 7 Sep; vayu_showcase.js 8 Sep; change_journal_sync.js 9 Sep)', tags === 232, 'got ' + tags);
+check('script tag count unchanged (233 — …edit_locks.js 7 Sep; vayu_showcase.js 8 Sep; change_journal_sync.js 9 Sep; save_watch.js 13 Sep)', tags === 233, 'got ' + tags);
   check('HTML comments balanced', (html.match(/<!--/g) || []).length === (html.match(/-->/g) || []).length);
   // Floors, not equality — a later build must not silently serve a stale cached file.
   // COMPONENT-WISE, not parseFloat: `>= 2.40` read as a float is `>= 2.4`, which a stale 2.9

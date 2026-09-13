@@ -88,7 +88,7 @@ check('cloud_sync _wrapLoader preserves markers from `fn` (the bug: `orig` was o
 check('cloud_sync wrapWrite still preserves from its own `orig` (correct in THAT scope)',
   /var orig = window\._writeAutosave;[\s\S]*?SLWrap\.preserve\(orig, wrapped\)/.test(cloud));
 check('cloud_sync exposes __slCloudSyncRebase clearing the shrink baseline',
-  /__slCloudSyncRebase\s*=\s*function \(\) \{ _lastPushedItems = null; \}/.test(cloud));
+  /__slCloudSyncRebase\s*=\s*function \(\) \{ _lastPushedItems = null; _lastPushedByTable = null; \}/.test(cloud));
 
 // ---- pins as floors (rule 12) ----------------------------------------------
 const pin = name => parseFloat(((idx.match(new RegExp(name.replace('.', '\\.') + '\\?v=([0-9.]+)')) || [])[1]) || '0');

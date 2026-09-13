@@ -264,7 +264,7 @@
             if (confirm('Withdraw the validation attestation on ' + (r.id || r.traceId || reqKey) + '? (Authored checklist answers are kept.)')) {
                 delete rec.by; delete rec.at; delete rec.independent;
                 if (r.valArtifact && /^VAL-CHK/.test(r.valArtifact)) delete r.valArtifact;
-                if (typeof saveState === 'function') saveState();
+                if (typeof scheduleAutosave === 'function') scheduleAutosave();
                 renderValMatrix();
             }
             return;
@@ -285,7 +285,7 @@
         // Record the evidence reference on the row itself (elicited act, signed
         // above) — the 4754B objectives matrix reads it as validation evidence.
         if (reqValConclusion(r, set).conclusion === 'valid') r.valArtifact = 'VAL-CHK ' + new Date().toISOString().slice(0, 10);
-        if (typeof saveState === 'function') saveState();
+        if (typeof scheduleAutosave === 'function') scheduleAutosave();
         renderValMatrix();
     }
 
@@ -395,7 +395,7 @@
     }
 
     // --------------------------------------------------------------- page
-    const _saveAndRender = () => { try { if (typeof saveState === 'function') saveState(); else if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} try { renderValMatrix(); _renderPop(); } catch (_) {} };
+    const _saveAndRender = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} try { renderValMatrix(); _renderPop(); } catch (_) {} };
     const _toast = (m, t) => { try { if (typeof showToast === 'function') { showToast(m, t || 'info', 5200); return; } } catch (_) {} };
 
     window._vvValScope = window._vvValScope || 'aircraft';

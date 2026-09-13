@@ -121,6 +121,30 @@
         return n;
     }
     var _lastPushedItems = null;   // content count of the last snapshot we shipped
+    // 13 Sep 2026 (R18) — PER-TABLE counts of the last shipped snapshot. The total-only
+    // guard let a whole table vanish: a project with 18 functions and 32 FCIM rows that
+    // lost all 184 FHA rows reads 50 of 234 = 21% and passed. Now any ONE table that
+    // drops from 10+ rows to under a fifth of what we shipped is refused and named,
+    // whatever the rest of the project looks like.
+    var _lastPushedByTable = null;
+    function _countsByTable(s) {
+        var o = {};
+        if (!s) return o;
+        for (var i = 0; i < _CONTENT_KEYS.length; i++) { var a = s[_CONTENT_KEYS[i]]; o[_CONTENT_KEYS[i]] = Array.isArray(a) ? a.length : 0; }
+        return o;
+    }
+    // The table (if any) whose collapse would be refused: { key, from, to } or null.
+    var _TABLE_LABELS = { acFunctionsData: 'aircraft functions', acFcimData: 'FCIM', acFhaData: 'aircraft FHA', acReqData: 'requirements', acAssumptionsData: 'assumptions', systemsData: 'systems', ftaPages: 'fault trees', fmeaData: 'FMEA', itemsData: 'items', praData: 'PRA', zsaData: 'ZSA', cmaData: 'CMA', routingData: 'routing', resourcesData: 'resources' };
+    function _tableLabel(k) { return _TABLE_LABELS[k] || k; }
+    function _gutTable(snap) {
+        if (!_lastPushedByTable) return null;
+        var now = _countsByTable(snap);
+        for (var i = 0; i < _CONTENT_KEYS.length; i++) {
+            var k = _CONTENT_KEYS[i], was = _lastPushedByTable[k] || 0, is = now[k] || 0;
+            if (was >= 10 && is < was * 0.2) return { key: k, from: was, to: is };
+        }
+        return null;
+    }
     // Defect 1 — the honest posture, said ONCE per session instead of the
     // "autosaving to the cloud" story an ITAR project must never be told.
     var _itarNoticeShown = false;
@@ -174,7 +198,7 @@
         try { await _push(client, ws, uid, W); } catch (_) {} finally { _inFlight = false; }
     }
     async function _push(client, ws, uid, W) {
-        var lw = 0, snapItems = null;
+        var lw = 0, snapItems = null, snapByTable = null;
         var prepare = async function () {
             var pid = _pid();
             lw = _lastLocalWrite();
@@ -214,24 +238,27 @@
             // 20 Aug 2026 — never push a snapshot that guts what we last shipped.
             // Bail BEFORE the write rather than letting the server reject it, so the
             // user is told and the local copy is visibly the good one.
-            if (_wouldGut(snap)) {
+            var gutTable = _wouldGut(snap) ? null : _gutTable(snap);
+            if (_wouldGut(snap) || gutTable) {
                 try {
-                    console.error('[cloud-sync] REFUSED to push: content collapsed from '
+                    if (gutTable) console.error('[cloud-sync] REFUSED to push: ' + gutTable.key + ' collapsed from '
+                        + gutTable.from + ' rows to ' + gutTable.to + ' while the rest of the project held. The cloud copy is untouched and your work is still in this tab.');
+                    else console.error('[cloud-sync] REFUSED to push: content collapsed from '
                         + _lastPushedItems + ' items to ' + _contentItems(snap)
                         + '. The cloud copy is untouched and your work is still in this tab.');
-                    if (typeof showToast === 'function') showToast(
-                        'Cloud save paused — this tab’s project suddenly looks almost empty, so the saved copy was left alone. '
-                        + 'Reload before editing further; your last saved version is intact.', 'warning', 12000);
+                    if (typeof showToast === 'function') showToast(gutTable
+                        ? ('Cloud save paused: one table (' + _tableLabel(gutTable.key) + ') suddenly went from ' + gutTable.from + ' rows to ' + gutTable.to + ', so the saved copy was left alone. Reload before editing further; your last saved version is intact.')
+                        : ('Cloud save paused: this tab\u2019s project suddenly looks almost empty, so the saved copy was left alone. Reload before editing further; your last saved version is intact.'), 'warning', 12000);
                 } catch (_) {}
                 return null;
             }
-            snapItems = _contentItems(snap);
+            snapItems = _contentItems(snap); snapByTable = _countsByTable(snap);
             return { client: client, projectId: pid, userId: uid, snapshot: snap };
         };
         var r = await W.write({ mode: 'silent', prepare: prepare });
         if (r && r.ok) {
             _lastPushedTs = lw || Date.now();
-            _lastPushedItems = snapItems;
+            _lastPushedItems = snapItems; _lastPushedByTable = snapByTable;
         } else if (r && r.reason === 'error') {
             // The app is never disrupted — local autosave already succeeded.
             try { console.warn('[cloud-sync] push failed (local save is safe):', r.error && (r.error.message || r.error)); } catch (_) {}
@@ -284,7 +311,7 @@
         _lastPushedTs = 0;
         // Drop the shrink baseline with the identity — a demo/sample load legitimately
         // replaces content wholesale and must not be measured against the old project.
-        _lastPushedItems = null;
+        _lastPushedItems = null; _lastPushedByTable = null;
         try { if (typeof _rtUpdatePresenceProject === 'function') _rtUpdatePresenceProject(); } catch (_) {}
     }
     function _wrapLoader(fnName) {
@@ -344,5 +371,5 @@
     // smaller version leaves _lastPushedItems at the old, fuller count and the next
     // autosave trips _wouldGut — pausing cloud saves with a scary warning right
     // after a restore the user asked for. The restore flow calls this.
-    window.__slCloudSyncRebase = function () { _lastPushedItems = null; };
+    window.__slCloudSyncRebase = function () { _lastPushedItems = null; _lastPushedByTable = null; };
 })();

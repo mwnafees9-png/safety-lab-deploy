@@ -475,7 +475,7 @@
             const res = kind.trim() === 'fha'
                 ? reqifApplyFha(_pending.parsed, target, by)
                 : reqifApply(_pending.parsed, target, by);
-            try { if (typeof saveState === 'function') saveState(); } catch (_) {}
+            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
             alert('Imported "' + (_pending.parsed.title || _pending.fileName) + '" → ' + target + '\n\n' +
                 res.added + ' added · ' + res.updated + ' updated · ' + res.unchanged + ' unchanged · ' +
                 res.missing + ' missing-in-source flagged' +

@@ -4539,15 +4539,23 @@ function _ftaGoToSearchHit(hit) {
 //
 // _flushAutosave (pagehide/beforeunload/visibilitychange) stays as the synchronous belt-
 // and-braces for the rare case the microtask has not run yet; it is idempotent with this.
+// 13 Sep 2026 — THE ONE "the project changed" call (R18 rebuild). Local save, cloud
+// autosave, the live-sync push and the dirty flag all hang off this and nothing else.
+// commitSaveChanges (the explicit Save) is built ON it; the dead save name that ten
+// modules used to call is gone (tests/regression_save_rails.test.js refuses it); and save_watch.js calls this
+// whenever the synced stores differ from their last fingerprint, so a writer that
+// forgets to call it still gets saved within a second. Returns true when the change
+// was accepted, false while a load/merge has autosave suspended (the watcher retries).
 function scheduleAutosave() {
-    if(_autosaveSuspended) return;
+    if(_autosaveSuspended) return false;
     try { _quantClearCache(); } catch(_) {}   // #45 — any edit invalidates cached quant results (keeps cached refs valid)
     _dirtySinceSave = true;   // Phase 57 — any tracked edit makes the Save Changes control active
     try { if (window.SafetyLabCRDT && window.SafetyLabCRDT.onLocalChange) window.SafetyLabCRDT.onLocalChange(); } catch(_) {}   // Phase 1 — mirror the edit into the CRDT (no-op unless co-authoring is enabled)
     _autosavePending = true;  // there is now an unwritten change (flushed on tab hide/close)
+    try { if (window.SLSaveWatch) window.SLSaveWatch.settle(); } catch(_) {}   // 13 Sep 2026 — the watcher must not save this burst twice (save_watch.js)
     try { _wsTrackActivity(); } catch(_) {}   // attributed change log (coalesced ≤1/area/90s)
     _updateSaveIndicator('saving');
-    if (_autosaveFlushQueued) return;   // a write for this synchronous burst is already queued
+    if (_autosaveFlushQueued) return true;   // a write for this synchronous burst is already queued
     _autosaveFlushQueued = true;
     var _flush = function () {
         _autosaveFlushQueued = false;
@@ -4559,6 +4567,7 @@ function scheduleAutosave() {
     else if (typeof Promise !== 'undefined') Promise.resolve().then(_flush);
     else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_flush);
     else setTimeout(_flush, 0);
+    return true;
 }
 // Flush a pending debounced autosave SYNCHRONOUSLY before the tab is hidden/closed, so an
 // edit made inside the 2s debounce window can't be lost. localStorage writes are synchronous,

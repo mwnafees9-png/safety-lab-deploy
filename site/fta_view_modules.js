@@ -327,6 +327,7 @@ function renderFTASidebar() {
                 if (activeFTAPageId === page.id) activeFTAPageId = ftaPages.length > 0 ? ftaPages[0].id : null;
                 if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
                 renderFTASidebar(); calculateAllProbabilities(); updateD3();
+                try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — a deleted page used to come back on the next sync pull
             }
         };
         div.appendChild(left);

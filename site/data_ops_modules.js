@@ -802,6 +802,7 @@ function importTabularCSV(text, moduleName) {
     if(moduleName.startsWith('Sys_')) { renderSysFunctions(); renderSysFCIM(); renderSysFHA(); renderSysReq(); renderSysAssumptions(); }
     if(moduleName === 'PRA') renderPRA(); if(moduleName === 'ZSA') renderZSA(); if(moduleName === 'HW_FMEA') renderFMEA(); if(moduleName === 'Flight_Phases') renderFlightPhases();
     if(_HF_IMPORT_KEY) { try { const HX = (typeof window !== 'undefined') ? window.HF_ANALYSES : null; const fn = { hea:'renderHea', alerts:'renderAlerts', tasks:'renderTasks', ergo:'renderErgo', cd:'renderCd', sa:'renderSa', tid:'renderTid' }[_HF_IMPORT_KEY]; if (HX && typeof HX[fn] === 'function') HX[fn](); if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_) {} }
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — an import is a project change (only the HF allocation branch used to save)
     if(moduleName === 'HF_MFC') { try { const HX = (typeof window !== 'undefined') ? window.HF_ANALYSES : null; if (HX && typeof HX.renderMfc === 'function') HX.renderMfc(); if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_) {} }
 }
 
@@ -867,6 +868,7 @@ function importFaultTreeCSV(text) {
     ftaPages.push(newPage);
     activeFTAPageId = newPage.id;
     renderFTASidebar(); calculateAllProbabilities(); updateD3();
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
 }
 
 function migrateFHAAssumptions(fhaArr) {
@@ -1135,6 +1137,7 @@ function createNewAssumption(domain) {
     if (domain === 'ac') {
         newAsmId = `ASM-AC-${String(acAsmCounter++).padStart(3, '0')}`;
         acAssumptionsData.push({ asmId: newAsmId, text, state: 'Proposed', valStrategy: '', valArtifact: '', verArtifact: '', origin: 'AC FHA' });
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
         renderACAssumptions();
     } else {
         if (!sys()) return alert('Please open a system folder first.');

@@ -141,7 +141,7 @@
         if (!Array.isArray(projectConfig.rbdMc.cases)) projectConfig.rbdMc.cases = [];
         return projectConfig.rbdMc;
     }
-    const _save = () => { try { if (typeof saveState === 'function') saveState(); } catch (_) {} };
+    const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     // ------------------------------------------------------------ actions
     const EXAMPLE = JSON.stringify([

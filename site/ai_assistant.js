@@ -8068,7 +8068,7 @@
             onAccept: function (item) {
                 const res = (typeof window !== 'undefined' && window.STPA_AI_APPLY) ? window.STPA_AI_APPLY.apply(sd, item.parsed, { model: item._model, at: new Date().toISOString() }) : { ok: false, reason: 'stpa_ai_apply.js not loaded' };
                 if (!res.ok) { _toast(res.reason, 'warning'); return false; }
-                try { if (typeof saveState === 'function') saveState(); } catch (_) {}
+                try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
                 _toast(res.note, 'success');
                 return true;
             }, doneMsg: 'STPA seed applied' });

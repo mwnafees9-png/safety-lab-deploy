@@ -31,7 +31,7 @@
         if (!(s.kNonopDefault >= 0)) s.kNonopDefault = 0.03;
         return s;
     }
-    const _save = () => { try { if (typeof saveState === 'function') saveState(); } catch (_) {} };
+    const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     // hook other modules can consult
     window._ramConfidence = () => _store().confidence;

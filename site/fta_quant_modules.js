@@ -1291,11 +1291,13 @@ function addMarkovModel() {
         transitions: [{ from: 'Working', to: 'Failed', rate: 1e-5 }]
     };
     (projectConfig.markovModels = projectConfig.markovModels || []).push(m);
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
     renderMarkovModels();
 }
 function deleteMarkovModel(id) {
     if (!confirm('Delete this Markov model? Events using it will fall back to their repair model.')) return;
     projectConfig.markovModels = (projectConfig.markovModels || []).filter(m => m.id !== id);
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
     renderMarkovModels();
     calculateAllProbabilities();
     if (typeof updateD3 === 'function') updateD3();

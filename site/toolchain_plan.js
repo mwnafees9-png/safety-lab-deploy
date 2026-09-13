@@ -176,6 +176,7 @@
             if (name && name.trim() && typeof systemsData !== 'undefined' && Array.isArray(systemsData)) {
                 systemsData.push({ id: 'sys-' + Date.now(), name: name.trim(), role: 'function', asmCounter: 1, functions: [], fcim: [], extractedFCs: [], fha: [], req: [], asm: [] });
                 try { if (typeof renderSystemDirectory === 'function') renderSystemDirectory(); } catch (_) {}
+                try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
                 added = true;
             }
         }

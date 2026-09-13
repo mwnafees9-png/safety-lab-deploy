@@ -29,7 +29,7 @@
 //     bot's own identity instead of an anonymous workflow post, and revoking
 //     is removing the app. The webhook and email rails still work and are
 //     unchanged — a customer who cannot install an app is never locked out.
-//   · Debounced off saveState — a burst of edits collapses to one look.
+//   · Debounced off the autosave write — a burst of edits collapses to one look.
 //
 // Surfaces: a config card appended to the Thread Integrity page (renders after
 // gt_integrity's page + q_completeness's wrap — load order matters and is
@@ -40,7 +40,7 @@
 
     var VERSION = '1.2';
     // v1.1 (12 Aug 2026, found by EXECUTION on the deployed build, not review):
-    //   · the app has NO global `saveState` — that name was a sandbox stub in
+    //   · the app has NO global save function by any other name — a stub of that kind lived in
     //     the house tests. The real save rail is `_writeAutosave` (the same
     //     function cloud_sync wraps) with `scheduleAutosave` as the debounced
     //     entry. v1.0's hook found nothing and silently never armed. Now we
@@ -68,12 +68,7 @@
         }
         return projectConfig.notifyAgents;
     }
-    var _save = function () {
-        try {
-            if (typeof scheduleAutosave === 'function') { scheduleAutosave(); return; }
-            if (typeof saveState === 'function') saveState();
-        } catch (_) {}
-    };
+    var _save = function () { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     function _proxyBase() {
         try {
@@ -188,7 +183,7 @@
 
     // --------------------------------------------------- the debounced hook
     // Rides _writeAutosave — the REAL save rail (cloud_sync's precedent; the
-    // live app has no global saveState). Every autosave schedules one sentinel
+    // live app has one save rail, scheduleAutosave). Every autosave schedules one sentinel
     // look, bursts collapse, showcase stays silent (config is per project and
     // OFF by default — a demo project only ever notifies if someone
     // deliberately configured it to).
@@ -201,8 +196,7 @@
         }, DEBOUNCE_MS);
     }
     (function wrapSave(tries) {
-        var name = (typeof window._writeAutosave === 'function') ? '_writeAutosave'
-                 : (typeof window.saveState === 'function') ? 'saveState' : null;
+        var name = (typeof window._writeAutosave === 'function') ? '_writeAutosave' : null;
         if (name && !window[name]._naWrapped) {
             var orig = window[name];
             var wrapped = function () {

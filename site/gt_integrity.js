@@ -45,7 +45,7 @@
         return projectConfig.threadLinks;
     }
     function gtLink(key) { return _links()[key] || null; }
-    const _save = () => { try { if (typeof saveState === 'function') saveState(); } catch (_) {} };
+    const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     // ------------------------------------------------------------ helpers
     const _sys = () => (typeof systemsData !== 'undefined' && systemsData) || [];

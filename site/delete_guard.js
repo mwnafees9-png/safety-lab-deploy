@@ -51,7 +51,7 @@
         try {
             if (snap && typeof _applyProjectData === 'function') {
                 _applyProjectData(JSON.parse(snap));
-                try { if (typeof saveState === 'function') saveState(); } catch (_) {}
+                try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
                 return true;
             }
         } catch (e) { console.warn('[delete-guard] restore failed:', e); }

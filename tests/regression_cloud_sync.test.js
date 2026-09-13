@@ -368,6 +368,7 @@ const saveChecks = (async () => {
       function _docVer(){ return _activeCloudDocVersion; } function _lastLocalWrite(){ return _autosaveLastWrite; }
       function _snapshot(){ return _buildProjectSnapshot(); } function _hasRealContent(){ return true; } function _name(){ return projectName; }
       function _wouldGut(){ return false; } function _contentItems(){ return 1; } function _itarLocalOnlyNotice(){}
+      var _lastPushedByTable = null; function _gutTable(){ return null; } function _countsByTable(){ return {}; } function _tableLabel(k){ return k; }   // 13 Sep 2026 per-table guard stubs (proven in regression_cloud_shrink_per_table)
     `;
     vm.runInContext(w + ';' + FENCE_SRC + ';' + saveSrc + ';' + preamble + queueSrc + ';' + pushSrc + ';' + tickSrc + '; globalThis.__t = _tick; globalThis.__s = saveProjectToCloud;', ctx);
     // manual save first, autosave tick while it is in flight on its slow version read
@@ -509,8 +510,8 @@ function runCrdt(adopt) {
   // pass vacuously. (pullToModel is internal; its posture is pinned by source.)
   check('pullToModel defers to the model inside the adopt window (source posture)',
     /_adoptUntil && Date\.now\(\) < _adoptUntil[\s\S]{0,80}pushLocal/.test(crdtSrc));
-  check('afterLocal honors adopt on the content-bearing branch', /adopt\) pushLocal\(\); else pullToModel\(\)/.test(crdtSrc));
-  check('_loadState reconcile honors adopt', /adopt \|\| !had\) pushLocal\(\); else pullToModel\(\)/.test(crdtSrc));
+  check('afterLocal honors adopt on the content-bearing branch', /adopt\) pushLocal\(\{ full: true \}\); else pullToModel\(\{ load: true \}\)/.test(crdtSrc));
+  check('_loadState reconcile honors adopt', /adopt \|\| !had\) pushLocal\(\{ full: true \}\); else pullToModel\(\{ load: true \}\)/.test(crdtSrc));
   check('_applyServerRestore adopts too', /__slCloudSyncRebase[\s\S]{0,600}SafetyLabCRDT\.adoptModel/.test(misc));
 })();
 

@@ -38,7 +38,7 @@
         if (!projectConfig.sneak.dispositions) projectConfig.sneak.dispositions = {};
         return projectConfig.sneak;
     }
-    const _save = () => { try { if (typeof saveState === 'function') saveState(); } catch (_) {} };
+    const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     // ----------------------------------------------------- candidate mining
     function sneakCandidates() {

@@ -81,7 +81,7 @@ check('card stamped BEFORE the cut (rides inside the snapshot)', /stampReplayCar
 const helpers = SITE('helpers_modules.js');
 check('version-history rows carry the ⟲ Verify action', /_replayVerifyRevision\(/.test(helpers) && /Verify<\/button>/.test(helpers));
 const idx = SITE('index.html');
-check('wired: replay_verify v1.1 + helpers current', /replay_verify\.js\?v=1\.1/.test(idx) && /helpers_modules\.js\?v=2\./.test(idx));
+check('wired: replay_verify v1.1 + helpers current', /replay_verify\.js\?v=1\.1/.test(idx) && /helpers_modules\.js\?v=(2\.|[3-9]\.)/.test(idx));
 check('tolerance pinned at 1e-12 relative', R.REL_TOL === 1e-12);
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

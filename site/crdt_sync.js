@@ -176,30 +176,62 @@
     });
   }
   // write a keyed array into col:/ord: maps (same posture as the generic loop)
-  function _ftaWriteKeyed(name, arr, keyField) {
+  // Write a keyed array into col:/ord: maps. `full` = the seed posture (the model is
+  // authoritative: the doc is made to mirror it, doc-only keys deleted). Otherwise the
+  // three-way posture against the baseline (see _base above). Both leave the baseline
+  // equal to what was written. Shared by the generic collections and the FTA shells/nodes.
+  function _writeKeyed(name, arr, keyField, full) {
     var map = ydoc.getMap('col:' + name), ord = ydoc.getMap('ord:' + name), live = {};
+    var bcol = _baseCol(name), bord = _baseOrd(name);
     (arr || []).forEach(function (item, i) {
+      // NEVER collapse keyless rows (7 Sep 2026): a missing key would stringify to
+      // "undefined" and every such row would overwrite the last. Skip from live-merge;
+      // the snapshot backup still carries them.
       var kv = item ? item[keyField] : null;
       if (kv == null || kv === '') return;
       var k = String(kv); live[k] = 1;
       var next = JSON.stringify(item);
-      if (map.get(k) !== next) map.set(k, next);
-      if (ord.get(k) !== i) ord.set(k, i);
+      if (full ? (map.get(k) !== next) : (bcol.get(k) !== next)) map.set(k, next);
+      if (full ? (ord.get(k) !== i) : (bord.get(k) !== i)) ord.set(k, i);
+      bcol.set(k, next); bord.set(k, i);
     });
-    Array.from(map.keys()).forEach(function (k) { if (!live[k]) map.delete(k); });
-    Array.from(ord.keys()).forEach(function (k) { if (!live[k]) ord.delete(k); });
+    if (full) {
+      Array.from(map.keys()).forEach(function (k) { if (!live[k]) map.delete(k); });
+      Array.from(ord.keys()).forEach(function (k) { if (!live[k]) ord.delete(k); });
+    } else {
+      Array.from(bcol.keys()).forEach(function (k) { if (!live[k]) { if (map.has(k)) map.delete(k); if (ord.has(k)) ord.delete(k); } });
+    }
+    Array.from(bcol.keys()).forEach(function (k) { if (!live[k]) { bcol.delete(k); bord.delete(k); } });
   }
+  function _ftaWriteKeyed(name, arr, keyField, full) { _writeKeyed(name, arr, keyField, full); }
   function _ftaReadKeyed(name) {
     var map = ydoc.getMap('col:' + name), ord = ydoc.getMap('ord:' + name);
     var keys = Array.from(map.keys()).sort(function (a, b) { var oa = ord.get(a), ob = ord.get(b); return (oa != null ? oa : 1e9) - (ob != null ? ob : 1e9); });
-    var arr = [];
-    keys.forEach(function (k) { var v = map.get(k); if (v != null) { try { arr.push(JSON.parse(v)); } catch (_) {} } });
+    var arr = [], bcol = _baseCol(name), bord = _baseOrd(name);
+    bcol.clear(); bord.clear();
+    keys.forEach(function (k, i) { var v = map.get(k); if (v != null) { try { arr.push(JSON.parse(v)); bcol.set(k, v); bord.set(k, i); } catch (_) {} } });
     return arr;
   }
 
   var Y = null, ydoc = null, chan = null, _client = null, _idb = null;
   var _started = false, _applying = false, _wsId = null, _projId = null;
   var _saveTimer = null, _pushTimer = null;
+  // 13 Sep 2026 — THE SYNCED BASELINE (R18 rebuild). What every keyed row and every
+  // whole-value store looked like the last time this tab and the doc agreed (after a
+  // push of our own edit, or after a pull). pushLocal is a THREE-WAY comparison:
+  //   local != baseline            -> a LOCAL edit   -> write it to the doc
+  //   in baseline, gone locally    -> a LOCAL delete -> delete it from the doc
+  //   local == baseline, doc lacks -> a REMOTE delete already merged into the doc ->
+  //                                   leave it; the pull that follows removes it here
+  // The old two-way push ("write whatever the doc lacks") could not tell the last two
+  // apart and resurrected a teammate's delete whenever it ran after the delete had
+  // merged. With the baseline, pushing BEFORE a pull is always safe, so a pull can
+  // never discard an edit made here, however it was made.
+  var _base = null;
+  function _baseReset() { _base = { col: {}, ord: {}, whole: {} }; }
+  function _baseCol(name) { return _base.col[name] || (_base.col[name] = new Map()); }
+  function _baseOrd(name) { return _base.ord[name] || (_base.ord[name] = new Map()); }
+  _baseReset();
   // 31 Aug 2026 — adopt-model posture. An AUTHORITATIVE load (open-from-cloud,
   // server version restore) replaces the model wholesale; the CRDT doc must
   // MIRROR that model, not union stale local/server rows back into it. Without
@@ -256,7 +288,14 @@
   // reconciled against. Lives INSIDE the Yjs doc (meta Y.Map) so it travels with the
   // doc through idb + server persistence and merges LWW like any Y.Map value.
   function _stampGet() { try { return ydoc ? ydoc.getMap('meta').get('docVersion') : null; } catch (_) { return null; } }
-  function _stampSet(v) { try { if (ydoc && typeof v === 'number') ydoc.getMap('meta').set('docVersion', v); } catch (_) {} }
+  // 13 Sep 2026 — WRITTEN AS OUR OWN CHANGE. This set used to run outside any
+  // transaction, so Yjs fired 'update' with a null origin; the handler below reads
+  // null as "not ours" and ran a full pullToModel — every 12 s, on the cloud
+  // autosave's clock, replacing every synced table on screen with the doc's copy.
+  // A local edit still inside the 350 ms push debounce was wiped by that pull
+  // (184 accepted FHA rows, R18). The stamp is ours: it broadcasts and saves like
+  // any local write and never triggers a pull.
+  function _stampSet(v) { try { if (ydoc && typeof v === 'number') ydoc.transact(function () { ydoc.getMap('meta').set('docVersion', v); }, 'local'); } catch (_) {} }
 
   // The reconcile decision, run on open when the flag is ON. The model already holds
   // the snapshot at version V. SEED (snapshot -> CRDT, protected by the adopt window)
@@ -270,11 +309,11 @@
     var seed = force || stamp == null || (V != null && V > stamp);
     if (seed) {
       _adoptUntil = Date.now() + ADOPT_WINDOW_MS;     // protect the seed from a stale server-union pull
-      try { pushLocal(); } catch (_) {}
+      try { pushLocal({ full: true }); } catch (_) {}
       if (V != null) _stampSet(V);
     } else {
       _adoptUntil = 0;
-      try { pullToModel(); } catch (_) {}
+      try { pullToModel({ load: true }); } catch (_) {}
     }
   }
 
@@ -359,43 +398,27 @@
   }
 
   // ---- model <-> Y.Doc -------------------------------------------------------
-  function pushLocal() {
+  // pushLocal(opts): opts.full = seed posture (model wins, doc mirrors it) — used by
+  // the reconcile/adopt paths that have just replaced the model wholesale. The default
+  // is the three-way posture: only what changed HERE since the baseline goes out.
+  function pushLocal(opts) {
     if (!ydoc || _applying) return;
     if (_docStale()) return;                          // H-5: never write this model into another project's doc
+    var full = !!(opts && opts.full);
     var cap; try { cap = window.__crdtCapture ? window.__crdtCapture() : null; } catch (_) { cap = null; }
     if (!cap) return;
     ydoc.transact(function () {
-      COLLECTIONS.forEach(function (c) {
-        var arr = cap[c.name] || [];
-        var map = ydoc.getMap('col:' + c.name);
-        var ord = ydoc.getMap('ord:' + c.name);   // key -> order index. KEYED (not a Y.Array) so two
-        var live = {};                             // peers seeding the same keys can't duplicate order.
-        arr.forEach(function (item, i) {
-          // 7 Sep 2026 (COL rebuild) — NEVER collapse keyless rows. A row whose stable
-          // key is missing/blank would stringify to "undefined" and every such row would
-          // overwrite the last into one slot (silent row loss). Skip it from live-merge —
-          // the snapshot backup still carries it — rather than corrupt the map. A no-op for
-          // collections whose rows always carry their key (the original 10).
-          var kv = item ? item[c.key] : null;
-          if (kv == null || kv === '') return;
-          var k = String(kv);
-          live[k] = 1;
-          var next = JSON.stringify(item);
-          if (map.get(k) !== next) map.set(k, next);
-          if (ord.get(k) !== i)    ord.set(k, i);
-        });
-        Array.from(map.keys()).forEach(function (k) { if (!live[k]) map.delete(k); });
-        Array.from(ord.keys()).forEach(function (k) { if (!live[k]) ord.delete(k); });
-      });
+      COLLECTIONS.forEach(function (c) { _writeKeyed(c.name, cap[c.name] || [], c.key, full); });
       // fault trees: node-level merge — decompose page trees into shells + flat nodes
       var _fta = _ftaDecompose(cap.ftaPages || []);
-      _ftaWriteKeyed(FTA_SHELL, _fta.shells, 'id');
-      _ftaWriteKeyed(FTA_NODE, _fta.nodes, 'nodeKey');
+      _writeKeyed(FTA_SHELL, _fta.shells, 'id', full);
+      _writeKeyed(FTA_NODE, _fta.nodes, 'nodeKey', full);
       var wmap = ydoc.getMap('whole');
       WHOLE.forEach(function (name) {
         if (!(name in cap)) return;
         var next = JSON.stringify(cap[name] === undefined ? null : cap[name]);
-        if (wmap.get(name) !== next) wmap.set(name, next);
+        if (full ? (wmap.get(name) !== next) : (_base.whole[name] !== next)) wmap.set(name, next);
+        _base.whole[name] = next;
       });
       var cmap = ydoc.getMap('counters');
       COUNTERS.forEach(function (name) {
@@ -414,10 +437,21 @@
     }, 'local');
   }
 
-  function pullToModel() {
+  // pullToModel(opts): opts.load = the doc is being adopted onto a model that was just
+  // LOADED (open-from-cloud reconcile, start): the model holds a snapshot, not local
+  // edits, so nothing is pushed first. Default (a live update from a teammate): push
+  // first, then pull.
+  function pullToModel(opts) {
     if (!ydoc) return;
     if (_docStale()) return;                          // H-5: never apply another project's rows onto this model
-    if (_adoptUntil && Date.now() < _adoptUntil) { try { pushLocal(); } catch (_) {} return; }   // adopt window: model is authoritative
+    if (_adoptUntil && Date.now() < _adoptUntil) { try { pushLocal({ full: true }); } catch (_) {} return; }   // adopt window: model is authoritative
+    // 13 Sep 2026 — A PULL NEVER DISCARDS A LOCAL CHANGE (R18). Push FIRST, always: the
+    // three-way push writes exactly the edits made here since the baseline (and only
+    // those — it cannot resurrect a delete that has already merged into the doc), so
+    // the doc carries our rows before we read it back. The debounce timer, if armed,
+    // is consumed here rather than firing a second, redundant push later.
+    if (_pushTimer) { try { clearTimeout(_pushTimer); } catch (_) {} _pushTimer = null; }
+    if (!(opts && opts.load)) { try { pushLocal(); } catch (_) {} }
     var partial = {};
     COLLECTIONS.forEach(function (c) {
       var map = ydoc.getMap('col:' + c.name);
@@ -427,15 +461,16 @@
         var oa = ord.get(a), ob = ord.get(b);
         return (oa != null ? oa : 1e9) - (ob != null ? ob : 1e9);
       });
-      var arr = [];
-      keys.forEach(function (k) { var v = map.get(k); if (v != null) { try { arr.push(JSON.parse(v)); } catch (_) {} } });
+      var arr = [], bcol = _baseCol(c.name), bord = _baseOrd(c.name);
+      bcol.clear(); bord.clear();
+      keys.forEach(function (k, i) { var v = map.get(k); if (v != null) { try { arr.push(JSON.parse(v)); bcol.set(k, v); bord.set(k, i); } catch (_) {} } });
       partial[c.name] = arr;
     });
     // fault trees: recompose shells + flat nodes back into nested pages
     partial.ftaPages = _ftaRecompose(_ftaReadKeyed(FTA_SHELL), _ftaReadKeyed(FTA_NODE));
     var wmap = ydoc.getMap('whole');
     WHOLE.forEach(function (name) {
-      if (wmap.has(name)) { try { partial[name] = JSON.parse(wmap.get(name)); } catch (_) {} }
+      if (wmap.has(name)) { try { partial[name] = JSON.parse(wmap.get(name)); _base.whole[name] = wmap.get(name); } catch (_) {} }
     });
     var cmap = ydoc.getMap('counters');
     var counters = {};
@@ -459,6 +494,7 @@
       try { _client = window.getSupabaseClient && window.getSupabaseClient(); } catch (_) { _client = null; }
       if (!_client) return;
       _wsId = _ws(); _projId = _proj();
+      _baseReset();
       ydoc = new Y.Doc();
       ydoc.on('update', function (update, origin) {
         if (origin === 'local') _broadcast('yupdate', { u: b64enc(update), t: _tok });
@@ -487,7 +523,7 @@
           var V = isTarget ? _reconcileVer : null;
           _reconcileProj = null; _reconcileVer = null; _forceSeedProj = null;
           var seedFresh = function () {
-            _adoptUntil = Date.now() + ADOPT_WINDOW_MS; try { pushLocal(); } catch (_) {}
+            _adoptUntil = Date.now() + ADOPT_WINDOW_MS; try { pushLocal({ full: true }); } catch (_) {}
             var vv = (V != null) ? V : _docVer(); if (vv != null) _stampSet(vv);
           };
           if (_docHasContent()) {
@@ -512,17 +548,17 @@
         if (adopt) { _adoptProj = null; _adoptUntil = Date.now() + ADOPT_WINDOW_MS; }
         if (_docHasContent()) {
           // we have a local offline copy → it's the working doc; merge the server on top if online
-          if (adopt) pushLocal(); else pullToModel();
+          if (adopt) pushLocal({ full: true }); else pullToModel({ load: true });
           if (_online()) _goOnline();
         } else if (_online()) {
           // nothing local yet, online → let the server doc be authoritative (don't seed stale local)
           _loadState(function (had) {
-            if (adopt || !had) pushLocal(); else pullToModel();
+            if (adopt || !had) pushLocal({ full: true }); else pullToModel({ load: true });
             if (!chan) _openChannel();
           });
         } else {
           // nothing local, offline → seed from whatever model is on this device
-          pushLocal();
+          pushLocal({ full: true });
         }
         _renderOfflineBadge();
         try { console.info('[CRDT] active on slab-crdt:' + _wsId + ':' + _projId + (_online() ? '' : ' (OFFLINE — local only, will sync on reconnect)')); } catch (_) {}
@@ -615,7 +651,7 @@
     chan = null;
     try { if (_idb && _idb.destroy) _idb.destroy(); } catch (_) {} _idb = null;
     try { if (ydoc) ydoc.destroy(); } catch (_) {}
-    ydoc = null; _started = false;
+    ydoc = null; _started = false; _baseReset();
     try { var b = document.getElementById('crdt-offline'); if (b) b.remove(); } catch (_) {}
   }
 
@@ -657,7 +693,7 @@
     }
     // Stage 1 (flag OFF, DEFAULT): adopt-window posture, unchanged.
     _adoptUntil = Date.now() + ADOPT_WINDOW_MS;
-    if (_started && ydoc && _projId === p) { try { pushLocal(); } catch (_) {} _adoptProj = null; }
+    if (_started && ydoc && _projId === p) { try { pushLocal({ full: true }); } catch (_) {} _adoptProj = null; }
     else {
       _adoptProj = p;
       // H-5 — armed BEFORE refresh(), because refresh() stops the stale doc and
@@ -673,6 +709,8 @@
     noteSnapshotVersion: noteSnapshotVersion, authoritative: authOn,
     status: function () { return { flag: flagOn(), authoritative: authOn(), stamp: _stampGet(), ready: _ready(), started: _started, yjs: !!window.Y, idb: !!_idb, online: _online(), ws: _wsId, project: _projId }; },
     _doc: function () { return ydoc; },
+    keys: function () { var o = {}; COLLECTIONS.forEach(function (c) { o[c.name] = c.key; }); return o; },
+    _base: function () { return _base; },
     _fta: { decompose: _ftaDecompose, recompose: _ftaRecompose, rebuildTree: _ftaRebuildTree }
   };
 
