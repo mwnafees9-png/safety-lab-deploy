@@ -1756,7 +1756,7 @@
         'STANDARD GROUNDING - ARP4761A §3.2 and App A for an AFHA; §3.4 and App C for an SFHA.',
         'REQUIRED INPUTS (do not draft without them): a list of functions - aircraft-level for an AFHA, or the allocated system functions for an SFHA - each stated as an OBJECTIVE the aircraft or system must achieve. Without functions, return insufficient_information.',
         'IMPLEMENTATION-AGNOSTIC: the FHA is independent of design and of how functions are allocated to systems. State functions and failure conditions in terms of WHAT the function must achieve, never in terms of the equipment that achieves it.',
-        'NOTATION: a failure condition is a statement characterising an ABNORMAL STATE OF A FUNCTION, including the amount and type of impairment.',
+        'NOTATION: a failure condition is a statement characterizing an ABNORMAL STATE OF A FUNCTION, including the amount and type of impairment.',
         'A FAILURE CONDITION IS NOT A FAILURE MODE. A failure mode describes how a particular device fails - open-circuit resistor, valve jammed closed, fractured piece-part. That belongs in the FMEA, not here. If you find yourself naming a component, you have left the FHA.',
         'TWO CATEGORIES, BOTH REQUIRED: assess every function for LOSS OF FUNCTION and for MALFUNCTION. In general each function has at least one of each worth analyzing, so a function carrying only one category is usually incomplete. Loss may be TOTAL (the function cannot be performed by any means) or PARTIAL (still performed, but at reduced capability or with increased difficulty). Malfunction is operation different from intended, excluding loss - name the aspect performed incorrectly (erroneous, uncommanded, misleading).',
         'CREW AWARENESS SPLITS A FAILURE CONDITION: where the effect is significantly affected by crew action, create SEPARATE failure conditions for the crew being aware and unaware. For an aware condition, say how the crew becomes aware, how they are assumed to act, and the result of that action. For an unaware condition, assume the crew continue their duties normally and take NO action regarding it - which routinely changes the severity.',
@@ -1861,7 +1861,7 @@
         'NOTATION: zones use hierarchical numeric IDs (major zones 100-800, sub-zones 110, 120 ...). Assess each zone against the checkpoint categories: (1) separations & clearances, (2) maintenance & servicing, (3) drainage, (4) materials compatibility, (5) failure consequences — as general, system-specific, and zone-specific checkpoints.',
         'ZONE CONTENTS (use the structured ZONES context when provided): reflect the ITEMS housed in each zone and the FUNCTIONS those items perform (the zone->item->function join). State the FUNCTIONAL IMPACT — the functions performed directly in the zone and those reached indirectly (via a routing through it).',
         'TAILORED INSPECTOR QUESTIONNAIRE: produce a zone-tailored inspection CHECKLIST per ARP4761A Appendix K, tailored to THIS zone\'s actual contents (its items, fluids, energy sources, and functions) — concrete yes/no inspector questions, not generic boilerplate.',
-        'ZSA<->PRA CROSS-LINK: identify which APPLICABLE particular risks bear on the zone (cross-reference by affectedZones / co-location) so the zonal and particular-risk analyses reconcile. App K.3.1 gives the division of labour: well-established physical hazards that are both well known AND may extend BEYOND a single zone are typically handled by a PRA, while the ZSA owns what stays within the zone.',
+        'ZSA<->PRA CROSS-LINK: identify which APPLICABLE particular risks bear on the zone (cross-reference by affectedZones / co-location) so the zonal and particular-risk analyses reconcile. App K.3.1 gives the division of labor: well-established physical hazards that are both well known AND may extend BEYOND a single zone are typically handled by a PRA, while the ZSA owns what stays within the zone.',
         'DO NOT INVENT A ZONING SCHEME. App K.4.1 says zones may be defined outside the scope of the ZSA and should be CONSISTENT with the designations the aircraft already uses for other purposes. Use the zones you were given. If the layout supplied is incomplete, say which zones are missing rather than proposing a numbering of your own.',
         'PARTITIONING RULES (App K.4.1), for judging a layout you are given rather than authoring one: zones start from compartments isolated by structure; they may be segmented further by the presence or absence of a threat such as flammable fluids, or simply to keep the analysis manageable. The environment within a zone should be fairly UNIFORM - flag a zone whose sections differ significantly as a candidate for sub-partitioning. Equally, flag excessive partitioning: two zones with no physical boundary and a similar environment are candidates for consolidation.',
         'INHERENT PHYSICAL HAZARDS ARE ASSESSED REGARDLESS OF FUNCTIONAL CRITICALITY. App K.3.1 is explicit: identify physical hazards inherent to each system or equipment that could have effects OUTSIDE it, and do this whatever the functional hazard classification, precisely so that functionally non-critical equipment is not skipped. A galley or a lavatory heater has no interesting failure condition and can still start a fire next to something that does. Never scope a zone by which equipment matters functionally.',
@@ -2259,7 +2259,7 @@
         if (ok) return '<div class="aifh-meta">Method per <b>' + _esc(ok) + '</b></div>';
         const claimed = String((x && x.standardBasis) || '').trim();
         return claimed
-            ? ('<div class="aifh-meta"><span style="color:#B03030;border:1px dashed #B03030;padding:0 4px;" title="not a reference this product carries for this task">' + _esc(claimed) + ' — unrecognised citation, dropped</span></div>')
+            ? ('<div class="aifh-meta"><span style="color:#B03030;border:1px dashed #B03030;padding:0 4px;" title="not a reference this product carries for this task">' + _esc(claimed) + ' — unrecognized citation, dropped</span></div>')
             : '<div class="aifh-meta"><span style="color:#8A6D00;">no standard basis claimed</span></div>';
     }
 
@@ -6251,7 +6251,7 @@
             t._assessment = _assessment;
             return t;
         });
-        if (!valid.length) { _toast('No usable trees were synthesised — try again or narrow the list.', 'warning'); return; }
+        if (!valid.length) { _toast('No usable trees were synthesized — try again or narrow the list.', 'warning'); return; }
         const _asmLabel = _assessment ? (' · ' + _assessment) : '';
         _makeReviewPanel({
             id: 'ai-rev-panel-fta-synth',

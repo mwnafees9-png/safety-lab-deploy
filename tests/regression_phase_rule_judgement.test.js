@@ -58,7 +58,7 @@ console.log('[1] the drafting instructions');
   check('the levels tail judges instead of leaving empty (skill)', /set it by judgment and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/.test(sk));
   check('the levels tail judges instead of leaving empty (inline copy in ai_assistant, byte-identical)', (ai.match(/set it by judgment and flag the row \(judgementCall \/ judgementNote\) rather than leaving it empty/g) || []).length === 1);
   check('the anchor is still required on a judged class', /on a row you have JUDGED rather than grounded, the anchor is still required/.test(sk));
-  check('fha.draft and sfha.draft stamp as v8 (v7 text, American spelling, 13 Sep) — the body changed again', /'fha\.draft': 8,\s*\n\s*'sfha\.draft': 8,/.test(sk));
+  check('fha.draft and sfha.draft stamp as v9 (v7 text, American spelling, 13 Sep) — the body changed again', /'fha\.draft': 9,\s*\n\s*'sfha\.draft': 9,/.test(sk));
   // 4 Sep 2026 — golden run 1 flagged 121 of 129 rows, 18 of 22 hull-loss rows among them.
   // v6 never said what GROUNDED means, so the model flagged classification itself.
   check('v7 defines grounded: objective + failure + rubric + joint top step + ordinary reasoning', /A class is GROUNDED when it follows from the function objective/.test(sk));

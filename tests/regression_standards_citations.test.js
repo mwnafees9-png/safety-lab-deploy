@@ -288,7 +288,7 @@ console.log('\n[citations] the per-lane closed list');
   check('an off-list citation is DROPPED, not rendered',
     /function _basisOk\(feature, v\)/.test(ai) && /bases\.indexOf\(t\) >= 0 \? t : ''/.test(ai));
   check('and the drop is shown rather than hidden',
-    /unrecognised citation, dropped/.test(ai),
+    /unrecognized citation, dropped/.test(ai),
     'silently removing it would hide that the model cited something imaginary');
   check('the chip renders once, centrally, in the shared panel',
     /cfg\.cardHtml\(it\) \+ _basisChip\(it, cfg\.feature\)/.test(ai));

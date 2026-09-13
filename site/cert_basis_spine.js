@@ -73,7 +73,7 @@
             equivalents: ['EUROCAE ED-80'], recognizedBy: ['FAA AC 20-152A'],
             context: ['ARP4754B §5.2', '14 CFR §25.1309'],
             purchase: 'https://www.rtca.org/content/standards-guidance-materials',
-            note: 'DO-178C\'s hardware analogue: five levels A–E across planning, conceptual/detailed design, implementation, production transition, verification/validation, configuration management, process assurance and certification-liaison. Receives IDAL from ARP4754B §5.2; Safety Lab does not run hardware V&V — pointer-only.'
+            note: 'DO-178C\'s hardware analog: five levels A–E across planning, conceptual/detailed design, implementation, production transition, verification/validation, configuration management, process assurance and certification-liaison. Receives IDAL from ARP4754B §5.2; Safety Lab does not run hardware V&V — pointer-only.'
         },
         // ---- MIL-STD-882E — DoD system safety. Registered 6 Aug 2026: PUBLIC
         // DOMAIN (US Government work, distribution unlimited), verified directly
@@ -218,7 +218,7 @@
           objective: 'Planning, development (requirements/design/code/integration), verification, configuration management, quality assurance and certification-liaison — the process set a level\'s objectives are drawn from.',
           coverage: 'pointer-only', dischargedBy: [], related: ['DO-178C Table A-3–A-7'] },
         { id: 'do254-levels', fw: 'DO-254', ref: 'DO-254', title: 'Hardware design assurance levels (A-E)',
-          objective: 'DO-178C\'s hardware analogue: five levels A-E by failure-condition severity, across planning, conceptual/detailed design, implementation, production transition, and verification/validation.',
+          objective: 'DO-178C\'s hardware analog: five levels A-E by failure-condition severity, across planning, conceptual/detailed design, implementation, production transition, and verification/validation.',
           coverage: 'pointer-only', dischargedBy: [], related: ['DO-178C Table A-3–A-7', 'ARP4754B §5.2'] },
 
         // ---- MIL-STD-882E — DoD system safety. A different severity/probability
@@ -292,7 +292,7 @@
         // the fetched EASA texts: SC-VTOL-02 Issue 2 (10 June 2024) and MOC SC-VTOL Issue 2
         // (12 May 2021). Card ids are unchanged so stored references keep resolving.
         { id: 'scvtol-2510', fw: 'SC-VTOL', ref: 'VTOL.2510', title: 'Equipment, systems, and installations',
-          objective: 'SC-VTOL analogue of §25.1309(b): catastrophic extremely improbable and never from a single failure; hazardous extremely remote; major remote (VTOL.2510(a)). Enhanced adds in-service monitoring, VTOL.2510(c).',
+          objective: 'SC-VTOL analog of §25.1309(b): catastrophic extremely improbable and never from a single failure; hazardous extremely remote; major remote (VTOL.2510(a)). Enhanced adds in-service monitoring, VTOL.2510(c).',
           dischargedBy: ['ac-fha', 'asa', 'fta'], related: ['MOC VTOL.2510', 'VTOL.2500', 'VTOL.2005'] },
         { id: 'scvtol-2511', fw: 'SC-VTOL', ref: 'MOC VTOL.2510 §8 Table 1', title: 'Safety objectives per category (Enhanced · Basic 1/2/3)',
           objective: 'The ladder behind VTOL.2510: per-flight-hour objective + FDAL per class — one row for Enhanced, three for Basic by passenger seats (Basic 1: 0–1, Basic 2: 2–6, Basic 3: 7–9). Numbers live in safety_targets.js.',
