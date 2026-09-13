@@ -213,7 +213,7 @@
         const row = (tag, color, subId, desc) =>
             '<tr><td><span style="font-size:10px; font-weight:700; color:' + color + ';">' + tag + '</span></td>' +
             '<td class="u-mono" style="font-size:11px;">' + _esc(subId) + '</td><td style="font-size:11.5px;">' + _esc(desc) + '</td></tr>';
-        let html = '<p style="font-size:12.5px; color:var(--color-text-secondary); margin:0 0 10px;">Derived from the MAC breach enumeration (the same sets the compile verifies against the BDD engine). Entries land on the aware row\'s Partial-Loss extras with provenance; FC ids come from the programme\'s numbering scheme. Hand-authored conditions are never touched; conditions the model no longer produces are flagged, never deleted.</p>';
+        let html = '<p style="font-size:12.5px; color:var(--color-text-secondary); margin:0 0 10px;">Derived from the MAC breach enumeration (the same sets the compile verifies against the BDD engine). Entries land on the aware row\'s Partial-Loss extras with provenance; FC ids come from the program\'s numbering scheme. Hand-authored conditions are never touched; conditions the model no longer produces are flagged, never deleted.</p>';
         if (!prev.isNew.length && !prev.isUpdated.length && !prev.orphaned.length) {
             html += '<p style="font-size:12.5px;"><b>The matrix is current</b> — ' + prev.unchanged.length + ' condition(s) verified unchanged.</p>';
         } else {

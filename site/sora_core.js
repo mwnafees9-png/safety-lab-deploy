@@ -133,7 +133,7 @@
             if (ri === -1) ri = IGRC_ROWS.length - 1;   // > 50,000
         }
         const v = IGRC_VALUES[ri][ci];
-        if (v == null) throw new Error('sora: ' + IGRC_ROWS[ri].label + ' with a ' + IGRC_COLS[ci].dimM + ' m / ' + IGRC_COLS[ci].speedMps + ' m/s class aircraft is outside SORA — Certified category (grey cell, Main Body Table 2).');
+        if (v == null) throw new Error('sora: ' + IGRC_ROWS[ri].label + ' with a ' + IGRC_COLS[ci].dimM + ' m / ' + IGRC_COLS[ci].speedMps + ' m/s class aircraft is outside SORA — Certified category (gray cell, Main Body Table 2).');
         return {
             igrc: v,
             column: IGRC_COLS[ci], row: IGRC_ROWS[ri].label,

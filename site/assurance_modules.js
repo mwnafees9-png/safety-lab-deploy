@@ -2545,7 +2545,7 @@ const AutoReq = (function(){
             if (!e.fromSystemId || !e.toSystemId) missing.push('an endpoint is undefined, so the input has no source or the output no destination');
             if (!String(e.medium || '').trim())   missing.push('no medium or signal set is recorded, so the characteristics of the information communicated are undefined');
             if (!e.direction)                     missing.push('no direction is recorded');
-            if (!String(e.icdRef || '').trim())   missing.push('no ICD reference, so nothing fully describes the behaviour of the signals');
+            if (!String(e.icdRef || '').trim())   missing.push('no ICD reference, so nothing fully describes the behavior of the signals');
 
             const mediumClause = String(e.medium || '').trim() ? ` carrying ${e.medium}` : '';
             const dirClause = both ? ', in both directions' : '';
@@ -2557,8 +2557,8 @@ const AutoReq = (function(){
                     : '');
 
             out.push({
-                text: `The interface from ${arrow}${mediumClause}${dirClause} shall be defined${icdClause}, with the source of every input, the destination of every output, and the behaviour of the signals fully described.`,
-                rat: `ARP4754B §5.3.1.8 — interface requirements cover the interconnections and the relevant characteristics of the information communicated; inputs are to have a defined source and outputs a defined destination, and the descriptions are to fully describe signal behaviour.` +
+                text: `The interface from ${arrow}${mediumClause}${dirClause} shall be defined${icdClause}, with the source of every input, the destination of every output, and the behavior of the signals fully described.`,
+                rat: `ARP4754B §5.3.1.8 — interface requirements cover the interconnections and the relevant characteristics of the information communicated; inputs are to have a defined source and outputs a defined destination, and the descriptions are to fully describe signal behavior.` +
                      ` Derived from the project interface register (${e.kind || 'interface'} edge${e.id ? ' ' + e.id : ''}).` + kindNote +
                      (missing.length
                         ? ` INCOMPLETE against the clause: ${missing.join('; ')}. The requirement is generated anyway — an interface the safety case leans on that nobody has defined is exactly the gap this class exists to surface.`

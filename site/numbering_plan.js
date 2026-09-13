@@ -74,14 +74,14 @@
         }).join('');
         host.innerHTML =
             '<div style="border:1px solid var(--color-border-strong);margin-top:16px;">' +
-              '<div style="padding:8px 13px;border-bottom:2px solid var(--color-text-primary);"><b>ID numbering — programme schemes</b> ' +
+              '<div style="padding:8px 13px;border-bottom:2px solid var(--color-text-primary);"><b>ID numbering — program schemes</b> ' +
                 '<span style="font-size:11px;color:var(--color-text-tertiary);">one template per artifact; {SYS} is the system-level form and collapses at aircraft level · tokens: {TYPE} {SEQ:000} {SYS} {PARENT} {MODE} {PROGRAM}</span></div>' +
               '<div style="padding:9px 13px;">' +
                 '<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr>' +
                   '<th style="text-align:left;">Artifact</th><th style="text-align:left;">Pattern</th><th style="text-align:left;">Counter</th><th style="text-align:left;">Preview (aircraft · system)</th></tr></thead>' +
                 '<tbody>' + rows + '</tbody></table>' +
                 '<div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">' +
-                  '<span style="font-size:11px;color:var(--color-text-tertiary);flex-basis:100%;">Top events carry no template: a tree linked to a failure condition wears THAT condition\'s id (FCIM / A&#8203;FHA / S&#8203;FHA) as its top-event id — fixed by programme rule, 31 Aug 2026.</span>' +
+                  '<span style="font-size:11px;color:var(--color-text-tertiary);flex-basis:100%;">Top events carry no template: a tree linked to a failure condition wears THAT condition\'s id (FCIM / A&#8203;FHA / S&#8203;FHA) as its top-event id — fixed by program rule, 31 Aug 2026.</span>' +
                   '<button class="ckpt-m-btn" id="ppn-save">Apply to new IDs</button>' +
                   '<button class="ckpt-m-btn" style="opacity:.85;" onclick="try{openNumberingEditor()}catch(e){}">Full editor…</button>' +
                   '<span style="font-size:11.5px;color:var(--color-text-tertiary);">Forward-only: existing ids never renumber from here. Manual entries are respected; blank ids — typed or AI-accepted — are minted from these schemes.</span>' +

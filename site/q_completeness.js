@@ -127,7 +127,7 @@
 
         // Q.7 — see the header. Excluded by ruling, NAMED not deleted.
         { id: 'Q.7', title: 'Dependence Diagram (DD)', lane: null, excluded: true,
-          excludedWhy: 'out of scope by ruling (Waqas, 4 Aug 2026) — the DD lane is not part of this programme\'s output set. Q.7 is the standard\'s dependence-diagram example, an alternative means to the FTA for the SSA; the earlier record misread it as a Design Description.',
+          excludedWhy: 'out of scope by ruling (Waqas, 4 Aug 2026) — the DD lane is not part of this program\'s output set. Q.7 is the standard\'s dependence-diagram example, an alternative means to the FTA for the SSA; the earlier record misread it as a Design Description.',
           probe: () => ({ have: false, complete: false, detail: 'excluded by ruling' }) },
 
         { id: 'Q.8', title: 'Markov Analysis (MA)', lane: 'markov',
@@ -257,7 +257,7 @@
         const r = qCompleteness();
         const s = r.summary;
         let html = '<h4 style="margin-top: var(--s-5);">App Q output set — thread completeness</h4>' +
-            '<p style="font-size:11.5px; color: var(--color-text-tertiary); margin-top:0;">ARP4761A Appendix Q is the contiguous worked example: one aircraft, one system, carried through every analysis in the standard. Producing that whole output set on one project is the acceptance test — advisory, and scoped to the lanes this programme committed.</p>' +
+            '<p style="font-size:11.5px; color: var(--color-text-tertiary); margin-top:0;">ARP4761A Appendix Q is the contiguous worked example: one aircraft, one system, carried through every analysis in the standard. Producing that whole output set on one project is the acceptance test — advisory, and scoped to the lanes this program committed.</p>' +
             '<div class="ckpt-posture" style="margin-top:0;">' +
             '<div class="ckpt-tile"><div class="ckpt-tile-label">Outputs present</div><div class="ckpt-tile-value">' + s.present + ' / ' + s.inScope + '</div><div class="ckpt-tile-sub">in-scope boxes complete</div></div>' +
             '<div class="ckpt-tile' + (s.partial ? ' ckpt-tile-danger' : '') + '"><div class="ckpt-tile-label">Partial</div><div class="ckpt-tile-value">' + s.partial + '</div><div class="ckpt-tile-sub">started, not complete</div></div>' +

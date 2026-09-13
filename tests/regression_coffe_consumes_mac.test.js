@@ -102,7 +102,7 @@ window._coffeShowComputed = false;
 G.renderCoffePanel();
 check('panel renders', coffeHtml.length > 500);
 check('unmodelled call-out names the system', /No MAC clause models/.test(coffeHtml) && /Comms/.test(coffeHtml));
-check('elicit section header present', /Elicit — judgement residue/.test(coffeHtml));
+check('elicit section header present', /Elicit — judgment residue/.test(coffeHtml));
 const foldHdr = coffeHtml.match(/▸ (\d+) cases? answered by the MAC model/);
 check('model-answered cases are FOLDED with a count', !!foldHdr, coffeHtml.slice(0, 0));
 // folded rows are NOT rendered while collapsed: no "MAC: breaches" annotation visible

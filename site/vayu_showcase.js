@@ -45,7 +45,7 @@
             }
             var s = document.createElement('script');
             s.id = 'sl-vayu-lazy';
-            s.src = window.SL_SHOWCASE_VAYU_SRC || 'demo_showcase_vayu.js?v=1';
+            s.src = window.SL_SHOWCASE_VAYU_SRC || 'demo_showcase_vayu.js?v=2';
             s.onload = function () { resolve(); };
             s.onerror = function () { reject(new Error('Vayu showcase load failed')); };
             document.head.appendChild(s);

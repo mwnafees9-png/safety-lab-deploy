@@ -2132,7 +2132,7 @@ async function coffeConfirmDerived(fcInternalId, caseKey) {
     if (!fc) return;
     const parts = caseKey.split('\u2227').map(seg => { const i = seg.lastIndexOf('='); return { sysId: seg.slice(0, i), state: seg.slice(i + 1) }; });
     const c = coffeComputed(fc, { parts, key: caseKey });
-    if (c === null) { if (typeof showToast === 'function') showToast('No computed lane for this case — it needs a judgement.', 'warning', 3200); return; }
+    if (c === null) { if (typeof showToast === 'function') showToast('No computed lane for this case — it needs a judgment.', 'warning', 3200); return; }
     const by = (await slPrompt('Confirm the model\u2019s answer (' + c.toUpperCase() + ') and sign:', _signoffReviewerName() || '')) || '';
     if (!by.trim()) return;
     const store = _coffeStore();
@@ -4856,7 +4856,7 @@ function _renderReviewComment(c, depth) {
             '<span class="review-comment-author">' + esc(c.authorName) + '</span>' +
             // 8 Aug 2026 (SL-ARC-0001 §20 D6): AI-filed comments are badged in the
             // meta line — the byline alone must never read as an engineer's judgement.
-            (c.aiGenerated ? '<span class="review-comment-ai-badge" title="Drafted by the AI assistant' + (c.aiModel ? ' (' + esc(c.aiModel) + ')' : '') + ' — advisory, not an engineer\'s judgement" style="font-size:9px; font-weight:700; letter-spacing:0.4px; padding:1px 5px; border-radius:3px; border:1px solid var(--color-border-hair); color:var(--color-text-tertiary); cursor:help;">AI</span>' : '') +
+            (c.aiGenerated ? '<span class="review-comment-ai-badge" title="Drafted by the AI assistant' + (c.aiModel ? ' (' + esc(c.aiModel) + ')' : '') + ' — advisory, not an engineer\'s judgment" style="font-size:9px; font-weight:700; letter-spacing:0.4px; padding:1px 5px; border-radius:3px; border:1px solid var(--color-border-hair); color:var(--color-text-tertiary); cursor:help;">AI</span>' : '') +
             (c.aiGenerated && c.filedBy ? '<span style="font-size:10px; color:var(--color-text-tertiary);">· filed by ' + esc(c.filedBy) + '</span>' : '') +
             '<span>· ' + esc(Review.relTime(c.timestamp)) + '</span>' +
             statusTag +

@@ -162,7 +162,7 @@ const SYS = [{ id: 'sys-avi', name: 'Avionics' }, { id: 'sys-fcs', name: 'Flight
         /The interface from Avionics to Flight Controls carrying Attitude\/air data \(ARINC 429\) shall be defined in accordance with ICD-AVI-FCS-001/.test(out[0].text),
         out[0].text);
     check('…and demands source, destination and signal behaviour, as the clause does',
-        /the source of every input, the destination of every output, and the behaviour of the signals fully described/.test(out[0].text));
+        /the source of every input, the destination of every output, and the behavior of the signals fully described/.test(out[0].text));
     check('it is Interface class, L2, from the interface register',
         out[0].type === 'Interface' && out[0].level === 'L2' && out[0].analysis === 'Interface register');
     check('a complete edge says so rather than implying a gap',
@@ -179,7 +179,7 @@ const SYS = [{ id: 'sys-avi', name: 'Avionics' }, { id: 'sys-fcs', name: 'Flight
         /INCOMPLETE against the clause/.test(bare[0].rat) &&
         /no medium or signal set is recorded/.test(bare[0].rat) &&
         /no direction is recorded/.test(bare[0].rat) &&
-        /no ICD reference, so nothing fully describes the behaviour of the signals/.test(bare[0].rat));
+        /no ICD reference, so nothing fully describes the behavior of the signals/.test(bare[0].rat));
     check('…and the text does not pretend an ICD or medium exists',
         !/in accordance with/.test(bare[0].text) && !/carrying/.test(bare[0].text));
     check('a missing endpoint is reported, not crashed on',

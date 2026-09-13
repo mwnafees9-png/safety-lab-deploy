@@ -2325,7 +2325,7 @@ function _ensureShowcaseLoaded() {
         }
         var s = document.createElement('script');
         s.id = 'sl-showcase-lazy';
-        s.src = window.SL_SHOWCASE_SRC || 'demo_showcase.js?v=2';
+        s.src = window.SL_SHOWCASE_SRC || 'demo_showcase.js?v=65.42';
         s.onload = function () { resolve(); };
         s.onerror = function () { reject(new Error('showcase load failed')); };
         document.head.appendChild(s);

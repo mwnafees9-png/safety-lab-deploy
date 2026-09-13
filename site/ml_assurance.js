@@ -362,7 +362,7 @@
             }
         });
         if (d.constituents.length && !d.odd.length) {
-            out.push({ sev: 'open', id: '—', text: 'No ODD declared for the programme.' });
+            out.push({ sev: 'open', id: '—', text: 'No ODD declared for the program.' });
         }
         // #11 — a constituent nobody is watching in service. For LEARNING
         // constituents this is already raised as OPEN above (their adaptation is
@@ -502,7 +502,7 @@
         '<div style="border:1px solid var(--color-border-strong);margin-bottom:16px;">' +
           '<div style="padding:8px 13px;border-bottom:2px solid var(--color-text-primary);"><b>1 · ML constituents</b> ' +
             '<span style="font-size:11px;color:var(--color-text-tertiary);">the item under assurance, and the function it implements</span></div>' +
-          _table(['ID', 'Constituent', 'Implements', 'Level', 'Behaviour', 'Continuum', 'ODD'], mlcRows, 'No ML constituent recorded yet.') +
+          _table(['ID', 'Constituent', 'Implements', 'Level', 'Behavior', 'Continuum', 'ODD'], mlcRows, 'No ML constituent recorded yet.') +
           '<div style="padding:9px 13px;border-top:1px solid var(--color-border-hair);display:flex;gap:7px;flex-wrap:wrap;align-items:center;">' +
             '<input id="mlas-c-name" placeholder="Name (e.g. Runway detector)" style="flex:2;min-width:170px;padding:5px 8px;font-size:12px;">' +
             '<input id="mlas-c-fn" placeholder="Implements function (e.g. SF-07)" style="flex:1;min-width:150px;padding:5px 8px;font-size:12px;">' +

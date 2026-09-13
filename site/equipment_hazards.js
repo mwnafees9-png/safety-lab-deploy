@@ -28,27 +28,27 @@
     // hazard: { id, name, mechanism, state:'failed'|'unfailed'|'both', threat }
     var LIB = {
         battery:          { label: 'Battery / energy storage', hazards: [
-            { id: 'batt-fire', name: 'Thermal runaway / fire', mechanism: 'fire', state: 'failed', threat: 'Ignition and intense heat to neighbouring equipment and structure' },
+            { id: 'batt-fire', name: 'Thermal runaway / fire', mechanism: 'fire', state: 'failed', threat: 'Ignition and intense heat to neighboring equipment and structure' },
             { id: 'batt-vent', name: 'Toxic / flammable venting', mechanism: 'contamination', state: 'failed', threat: 'Gas/electrolyte release into the bay' },
             { id: 'batt-heat', name: 'Heat dissipation', mechanism: 'heat', state: 'unfailed', threat: 'Thermal load on co-located equipment' } ] },
         hydraulic:        { label: 'Hydraulic line / actuator / reservoir', hazards: [
-            { id: 'hyd-leak', name: 'High-pressure fluid leak / spray', mechanism: 'fluid', state: 'failed', threat: 'Fluid on neighbouring systems, EWIS, structure' },
+            { id: 'hyd-leak', name: 'High-pressure fluid leak / spray', mechanism: 'fluid', state: 'failed', threat: 'Fluid on neighboring systems, EWIS, structure' },
             { id: 'hyd-fire', name: 'Flammable fluid ignition near heat source', mechanism: 'fire', state: 'failed', threat: 'Fire in the zone' },
             { id: 'hyd-whip', name: 'Pipe whip / line burst', mechanism: 'mechanical', state: 'failed', threat: 'Mechanical damage to adjacent items' },
-            { id: 'hyd-compat', name: 'Fluid material incompatibility', mechanism: 'contamination', state: 'both', threat: 'Material susceptibility of exposed neighbours' } ] },
+            { id: 'hyd-compat', name: 'Fluid material incompatibility', mechanism: 'contamination', state: 'both', threat: 'Material susceptibility of exposed neighbors' } ] },
         fuel:             { label: 'Fuel line / tank / pump', hazards: [
-            { id: 'fuel-leak', name: 'Flammable fluid leak', mechanism: 'fluid', state: 'failed', threat: 'Fuel on neighbours; vapour accumulation' },
-            { id: 'fuel-fire', name: 'Fire / ignition of vapour', mechanism: 'fire', state: 'failed', threat: 'Zone fire' } ] },
+            { id: 'fuel-leak', name: 'Flammable fluid leak', mechanism: 'fluid', state: 'failed', threat: 'Fuel on neighbors; vapor accumulation' },
+            { id: 'fuel-fire', name: 'Fire / ignition of vapor', mechanism: 'fire', state: 'failed', threat: 'Zone fire' } ] },
         pneumatic_bleed:  { label: 'Bleed-air duct / valve', hazards: [
-            { id: 'bleed-heat', name: 'High temperature / hot surface', mechanism: 'heat', state: 'both', threat: 'Burns/ignition of neighbours; degraded qualification margins' },
+            { id: 'bleed-heat', name: 'High temperature / hot surface', mechanism: 'heat', state: 'both', threat: 'Burns/ignition of neighbors; degraded qualification margins' },
             { id: 'bleed-burst', name: 'HP air leak / duct burst', mechanism: 'pressure', state: 'failed', threat: 'Jet impingement / mechanical effect on adjacent items' } ] },
         rotating:         { label: 'Rotating machine (pump / generator / motor / engine)', hazards: [
-            { id: 'rot-burst', name: 'Uncontained debris / rotor burst', mechanism: 'debris', state: 'failed', threat: 'High-energy fragments to neighbours (couples to PRA)' },
+            { id: 'rot-burst', name: 'Uncontained debris / rotor burst', mechanism: 'debris', state: 'failed', threat: 'High-energy fragments to neighbors (couples to PRA)' },
             { id: 'rot-vib', name: 'Vibration', mechanism: 'vibration', state: 'both', threat: 'Fatigue/loosening of co-located equipment and structure' },
             { id: 'rot-shaft', name: 'Flailing shaft on disconnect', mechanism: 'mechanical', state: 'failed', threat: 'Mechanical damage / jams' } ] },
         electrical_power: { label: 'Electrical power (HV bus / generator / contactor)', hazards: [
             { id: 'elec-arc', name: 'Arcing / electrical short', mechanism: 'fire', state: 'failed', threat: 'Ignition and EWIS damage' },
-            { id: 'elec-em',  name: 'Electromagnetic emission', mechanism: 'em', state: 'unfailed', threat: 'EMI to sensitive neighbours' } ] },
+            { id: 'elec-em',  name: 'Electromagnetic emission', mechanism: 'em', state: 'unfailed', threat: 'EMI to sensitive neighbors' } ] },
         rf_emitter:       { label: 'RF emitter (radar / transmitter / antenna)', hazards: [
             { id: 'rf-em',   name: 'Electromagnetic radiation / EMI', mechanism: 'em', state: 'unfailed', threat: 'Interference with equipment sensitive to that spectrum' },
             { id: 'rf-heat', name: 'Heat', mechanism: 'heat', state: 'unfailed', threat: 'Thermal load' } ] },
@@ -56,22 +56,22 @@
             { id: 'o2-fire', name: 'Combustion enrichment / fire intensification', mechanism: 'fire', state: 'failed', threat: 'Any zone fire burns hotter/faster' },
             { id: 'o2-burst', name: 'High-pressure burst', mechanism: 'pressure', state: 'failed', threat: 'Fragments / overpressure' } ] },
         pyrotechnic:      { label: 'Pyrotechnic / high-energy device', hazards: [
-            { id: 'pyro-blast', name: 'Blast / fragments', mechanism: 'debris', state: 'failed', threat: 'Blast and fragments to neighbours' },
+            { id: 'pyro-blast', name: 'Blast / fragments', mechanism: 'debris', state: 'failed', threat: 'Blast and fragments to neighbors' },
             { id: 'pyro-energy', name: 'Stored-energy release', mechanism: 'stored-energy', state: 'failed', threat: 'Sudden energy release in the zone' } ] },
         hot_surface:      { label: 'Hot surface (heat exchanger / heater)', hazards: [
             { id: 'hot-ign', name: 'Heat / ignition source', mechanism: 'heat', state: 'both', threat: 'Ignition of flammable leaks; thermal load' } ] },
         pressure_vessel:  { label: 'Pressure vessel / accumulator', hazards: [
-            { id: 'pv-burst', name: 'Burst / fragments', mechanism: 'debris', state: 'failed', threat: 'Fragments to neighbours' },
+            { id: 'pv-burst', name: 'Burst / fragments', mechanism: 'debris', state: 'failed', threat: 'Fragments to neighbors' },
             { id: 'pv-energy', name: 'Stored-energy release', mechanism: 'stored-energy', state: 'failed', threat: 'Overpressure in the zone' } ] },
         avionics:         { label: 'Avionics / electronic LRU', hazards: [
             { id: 'av-heat', name: 'Heat dissipation', mechanism: 'heat', state: 'unfailed', threat: 'Thermal load on the bay' },
-            { id: 'av-em',   name: 'EMI', mechanism: 'em', state: 'unfailed', threat: 'Emission to sensitive neighbours' } ] },
+            { id: 'av-em',   name: 'EMI', mechanism: 'em', state: 'unfailed', threat: 'Emission to sensitive neighbors' } ] },
         mechanical_control:{ label: 'Mechanical control (cable / pushrod / torque shaft)', hazards: [
             { id: 'mech-jam', name: 'Flailing / jam on disconnect', mechanism: 'mechanical', state: 'failed', threat: 'Jams or damages adjacent controls' },
             { id: 'mech-interf', name: 'Mechanical interference', mechanism: 'mechanical', state: 'both', threat: 'Chafing/interference with moving parts' } ] },
         water_waste:      { label: 'Water / waste line (galley / lav)', hazards: [
             { id: 'wtr-leak', name: 'Fluid leak / cross-zone migration', mechanism: 'fluid', state: 'failed', threat: 'Water reaching other zones / connectors (cross-zonal, §K.4.5.2)' },
-            { id: 'wtr-corr', name: 'Corrosion / contamination', mechanism: 'contamination', state: 'both', threat: 'Corrosion of neighbours/structure' } ] }
+            { id: 'wtr-corr', name: 'Corrosion / contamination', mechanism: 'contamination', state: 'both', threat: 'Corrosion of neighbors/structure' } ] }
     };
 
     // heuristic type suggestion from a system name (convenience; the explicit tag is authoritative)

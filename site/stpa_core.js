@@ -138,7 +138,7 @@
         (cs.actions || []).forEach(e => edge(e, 'control action'));
         (cs.feedbacks || []).forEach(e => edge(e, 'feedback'));
         (cs.others || []).forEach(e => edge(e, 'other input/output'));   // W4 — the fifth element type
-        if (!(cs.actions || []).length) errs.push('no control actions — nothing to analyse');
+        if (!(cs.actions || []).length) errs.push('no control actions — nothing to analyze');
         (cs.precedence || []).forEach(pr => {
             if (!pr || !pr.processId) errs.push('precedence rule without a target process');
             else if (!ids.has(pr.processId)) errs.push('precedence rule targets unknown element "' + pr.processId + '"');
@@ -594,10 +594,10 @@
     // W6 — APPENDIX C SCENARIO ARCHETYPES (informative; the automation play).
     // ======================================================================
     const ARCHETYPE_CLASSES = [
-        { id: 'ctl', label: 'unsafe controller behaviour',            phase: '4a', side: 'controller' },
+        { id: 'ctl', label: 'unsafe controller behavior',            phase: '4a', side: 'controller' },
         { id: 'fbk', label: 'inadequate feedback and information',    phase: '4a', side: 'feedback' },
         { id: 'cpx', label: 'unsafe control path',                    phase: '4b', side: 'control-path' },
-        { id: 'prx', label: 'unsafe controlled-process behaviour',    phase: '4b', side: 'process' }
+        { id: 'prx', label: 'unsafe controlled-process behavior',    phase: '4b', side: 'process' }
     ];
     // The Scenario Archetype Table: four classes × four UCA types. Every cell
     // aggregates the enumerated causes (W3) for the assessed UCAs of that

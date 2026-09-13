@@ -213,7 +213,7 @@ const dsrc = S('sora_annex_e_data.js');
 {
     const idx = S('index.html');
     check('index loads the data module BEFORE the engine, engine bumped to v0.2',
-        idx.indexOf('sora_annex_e_data.js') < idx.indexOf('sora_core.js') && /sora_core\.js\?v=0\.2/.test(idx));
+        idx.indexOf('sora_annex_e_data.js') < idx.indexOf('sora_core.js') && /sora_core\.js\?v=0\.([2-9]|[1-9][0-9]+)/.test(idx));
     check('ai_loader FILES lists sora_kb_data before ai_assistant', (function () {
         const m = S('ai_loader.js').match(/const FILES = \[([^\]]*)\]/);
         if (!m) return false;

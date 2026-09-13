@@ -50,7 +50,7 @@
             }
             var s = document.createElement('script');
             s.id = 'sl-halcyon-lazy';
-            s.src = window.SL_SHOWCASE_HALCYON_SRC || 'demo_showcase_halcyon.js?v=5';
+            s.src = window.SL_SHOWCASE_HALCYON_SRC || 'demo_showcase_halcyon.js?v=6';
             s.onload = function () { resolve(); };
             s.onerror = function () { reject(new Error('Halcyon showcase load failed')); };
             document.head.appendChild(s);

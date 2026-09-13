@@ -147,7 +147,7 @@
             var btn = document.createElement('button');
             btn.id = 'sl-demo-launch';
             btn.type = 'button';
-            btn.textContent = '★ Load a demo project — five worked programmes';
+            btn.textContent = '★ Load a demo project — five worked programs';
             btn.style.cssText = 'display:block; width:100%; margin-top:6px; font-size:11.5px; font-weight:700; padding:7px 10px; cursor:pointer; border:1px solid var(--color-border-strong,#B9C2D0); background:var(--color-surface-2,#F3F5F9); color:var(--color-accent,#4E63D8);';
             btn.addEventListener('click', function (e) {
                 e.preventDefault(); e.stopPropagation();

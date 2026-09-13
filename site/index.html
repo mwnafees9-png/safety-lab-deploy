@@ -705,7 +705,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <div class="grid-2-col">
                         <div>
                             <label>Trace to System Function</label><select id="sys-req-trace"></select>
-                            <label>Requirement Level</label><select id="sys-req-level" title="L1 aircraft · L2 system · L3 item. L4 was offered here until 1 Aug 2026 and no other part of the product recognised it."><option>L1</option><option>L2</option><option>L3</option></select>
+                            <label>Requirement Level</label><select id="sys-req-level" title="L1 aircraft · L2 system · L3 item. L4 was offered here until 1 Aug 2026 and no other part of the product recognized it."><option>L1</option><option>L2</option><option>L3</option></select>
                             <!-- Requirement Type is the ARP4754B §5.3.1 class (req_taxonomy.js). It offered
                              Design Assurance / Probabilistic / Independence until 1 Aug 2026 — the
                              analysis vocabulary — while the requirements filter matched
@@ -1068,10 +1068,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     </div>
                 </div>
             </div>
-            <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 6px 0;">This table is the project's phase vocabulary — the FHA forms offer exactly these phases and nothing else. <strong>Nominal</strong> phases sum to the mission duration behind every exposure ratio; <strong>contingency</strong> phases (rejected take-off, go-around) are excluded from that total and hold the full-flight exposure window. The default profile is your project baseline. Add a <strong>special mission profile</strong> (e.g. Long-haul) to analyse extended-exposure / latent-failure risk — same phases, different durations — then a fault tree picks which profile it's built for.</p>
+            <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 6px 0;">This table is the project's phase vocabulary — the FHA forms offer exactly these phases and nothing else. <strong>Nominal</strong> phases sum to the mission duration behind every exposure ratio; <strong>contingency</strong> phases (rejected take-off, go-around) are excluded from that total and hold the full-flight exposure window. The default profile is your project baseline. Add a <strong>special mission profile</strong> (e.g. Long-haul) to analyze extended-exposure / latent-failure risk — same phases, different durations — then a fault tree picks which profile it's built for.</p>
             <div id="phases-profile-bar" style="display:flex; align-items:center; gap:10px; margin:6px 0 12px; flex-wrap:wrap;"></div>
             <table id="phases-table">
-                <thead><tr><th>Phase of Flight</th><th>Altitude From</th><th>Unit</th><th>Altitude To</th><th>Unit</th><th>Duration</th><th>Unit</th><th title="HF response window (seconds) — the time the crew actually has to respond in this phase. Feeds INV-36 workload saturation (HIDH §5.7.5.1, 80% red line). Duration is exposure; it is never read as a response window.">HF window (s)</th><th title="How the flight gets out of a failure condition whose effect has not yet been felt in this phase — stop on the ground, reject the take-off before V1, continue to a landing, go-around, or none. The FHA drafter is told these, and a row that is not yet realised, can be escaped, and whose failure does not defeat the escape is No Safety Effect by rule (4 Sep 2026 ruling).">Escape</th><th></th></tr></thead>
+                <thead><tr><th>Phase of Flight</th><th>Altitude From</th><th>Unit</th><th>Altitude To</th><th>Unit</th><th>Duration</th><th>Unit</th><th title="HF response window (seconds) — the time the crew actually has to respond in this phase. Feeds INV-36 workload saturation (HIDH §5.7.5.1, 80% red line). Duration is exposure; it is never read as a response window.">HF window (s)</th><th title="How the flight gets out of a failure condition whose effect has not yet been felt in this phase — stop on the ground, reject the take-off before V1, continue to a landing, go-around, or none. The FHA drafter is told these, and a row that is not yet realized, can be escaped, and whose failure does not defeat the escape is No Safety Effect by rule (4 Sep 2026 ruling).">Escape</th><th></th></tr></thead>
                 <tbody id="phases-body"></tbody>
             </table>
             <div style="margin-top: 10px; display:flex; gap:8px; flex-wrap:wrap;"><button type="button" class="action-btn" onclick="addPhaseRow()">+ Add phase</button><button type="button" class="action-btn" onclick="addContingencyPhase()" title="Rejected take-off, go-around, balked landing… — outside the nominal mission, excluded from the mission duration, and exposure stays the full flight.">+ Add contingency phase</button></div>
@@ -1626,7 +1626,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 <div class="grid-2-col">
                     <div>
                         <label>Trace to Aircraft Sub-Function</label><select id="ac-req-trace"></select>
-                        <label>Requirement Level</label><select id="ac-req-level" title="L1 aircraft · L2 system · L3 item. L4 was offered here until 1 Aug 2026 and no other part of the product recognised it."><option>L1</option><option>L2</option><option>L3</option></select>
+                        <label>Requirement Level</label><select id="ac-req-level" title="L1 aircraft · L2 system · L3 item. L4 was offered here until 1 Aug 2026 and no other part of the product recognized it."><option>L1</option><option>L2</option><option>L3</option></select>
                         <!-- Requirement Type is the ARP4754B §5.3.1 class (req_taxonomy.js). It offered
                              Design Assurance / Probabilistic / Independence until 1 Aug 2026 — the
                              analysis vocabulary — while the requirements filter matched
@@ -2280,7 +2280,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: var(--s-4); align-items: end; margin-top: var(--s-3);">
                             <div style="display: flex; flex-direction: column;">
                                 <label>Mission Profile</label>
-                                <select id="fta-mission-profile" onchange="onFtaMissionProfileChange()" style="margin-bottom: 0;" title="The mission this tree is analysed under. Its phase durations set the exposure window — the linked FHA still selects WHICH phases. A longer mission (e.g. Long-haul) raises latent / dormant contributions. Manage profiles on the Flight Phases tab.">
+                                <select id="fta-mission-profile" onchange="onFtaMissionProfileChange()" style="margin-bottom: 0;" title="The mission this tree is analyzed under. Its phase durations set the exposure window — the linked FHA still selects WHICH phases. A longer mission (e.g. Long-haul) raises latent / dormant contributions. Manage profiles on the Flight Phases tab.">
                                     <option value="">Standard (default)</option>
                                 </select>
                             </div>
@@ -2995,8 +2995,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
         <div id="view-hfa-cd" style="display: none;">
             <div class="header-with-export"><h3>Controls &amp; Displays &mdash; &sect;25.1302 / AC 25.1302-1</h3></div>
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0; ">
-                Each control, display and automation behaviour the crew uses, evaluated against the four &sect;25.1302 considerations
-                &mdash; the information to perform the task, usability by the qualified crew, predictable and unambiguous behaviour, and error management.
+                Each control, display and automation behavior the crew uses, evaluated against the four &sect;25.1302 considerations
+                &mdash; the information to perform the task, usability by the qualified crew, predictable and unambiguous behavior, and error management.
                 Considerations with no evaluated item are surfaced as a coverage finding.
             </p>
             <div id="hfa-cd-host"></div>
@@ -3394,7 +3394,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <label><input type="checkbox" id="ar-gen-gate" checked> <strong>Gate structure</strong> &rarr; AND-independence + OR-SPF requirements</label>
                         <label><input type="checkbox" id="ar-gen-pra" checked> <strong>PRA</strong> &rarr; zonal protection requirements <span style="font-weight: 400; color: var(--color-text-tertiary);">(AC scope only)</span></label>
                         <label><input type="checkbox" id="ar-gen-zsa" checked> <strong>ZSA</strong> &rarr; housed-function separation requirements <span style="font-weight: 400; color: var(--color-text-tertiary);">(AC scope only)</span></label>
-                        <label><input type="checkbox" id="ar-gen-iface" checked> <strong>Interface register</strong> &rarr; interface requirements <span style="font-weight: 400; color: var(--color-text-tertiary);" title="ARP4754B §5.3.1.8 — interconnections plus the characteristics of the information communicated; every input with a source, every output with a destination, and signal behaviour fully described. An edge missing a medium, a direction or an ICD reference still generates a requirement, and that requirement says what is missing.">(ARP4754B &sect;5.3.1.8 &middot; AC scope)</span></label>
+                        <label><input type="checkbox" id="ar-gen-iface" checked> <strong>Interface register</strong> &rarr; interface requirements <span style="font-weight: 400; color: var(--color-text-tertiary);" title="ARP4754B §5.3.1.8 — interconnections plus the characteristics of the information communicated; every input with a source, every output with a destination, and signal behavior fully described. An edge missing a medium, a direction or an ICD reference still generates a requirement, and that requirement says what is missing.">(ARP4754B &sect;5.3.1.8 &middot; AC scope)</span></label>
                         <label><input type="checkbox" id="ar-gen-hf" checked> <strong>HF register</strong> &rarr; operational requirements <span style="font-weight: 400; color: var(--color-text-tertiary);" title="ARP4754B §5.1.8 — a human-performed task relied on to ensure safety is to be identified and recorded in the certification data. §5.3.1.4 names actions, decisions, information requirements and timing; three of the four are derivable from the HF register. Decisions are not — there is no decision field, and deriving one would be invention.">(ARP4754B &sect;5.3.1.4 &middot; actions, timing, information)</span></label>
                         <label><input type="checkbox" id="ar-gen-fcim-mon" checked> <strong>FCIM pairs</strong> &rarr; crew-awareness monitoring requirements <span style="font-weight: 400; color: var(--color-text-tertiary);" title="An aware/unaware pair whose AWARE (lower) risk was chosen to govern takes credit for crew awareness — the credit holds only if the crew is made aware, so the annunciation requirement is owed. Unaware-governs, undecided pairs and standalone Unaware rows owe nothing. ARP4761A §A.3 awareness distinction / §xx.1309 warning information.">(ARP4761A &sect;A.3 &middot; AC scope)</span></label>
                     </div>
@@ -4002,12 +4002,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="numbering.js?v=1.0.1" defer></script>
     <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
          so it stays off the critical path for real users. It self-installs (SL_SHOWCASE) on execution. -->
-    <script>window.SL_SHOWCASE_SRC = 'demo_showcase.js?v=65.41';</script>
-    <script>window.SL_SHOWCASE_SORA_SRC = 'demo_showcase_sora.js?v=2';</script>
-    <script>window.SL_SHOWCASE_KESTREL25_SRC = 'demo_showcase_kestrel25.js?v=1';</script>
-    <script>window.SL_SHOWCASE_HL1_SRC = 'demo_showcase_hl1.js?v=6';</script>
-    <script>window.SL_SHOWCASE_HALCYON_SRC = 'demo_showcase_halcyon.js?v=5';</script>
-    <script>window.SL_SHOWCASE_VAYU_SRC = 'demo_showcase_vayu.js?v=1';</script>
+    <script>window.SL_SHOWCASE_SRC = 'demo_showcase.js?v=65.42';</script>
+    <script>window.SL_SHOWCASE_SORA_SRC = 'demo_showcase_sora.js?v=3';</script>
+    <script>window.SL_SHOWCASE_KESTREL25_SRC = 'demo_showcase_kestrel25.js?v=2';</script>
+    <script>window.SL_SHOWCASE_HL1_SRC = 'demo_showcase_hl1.js?v=7';</script>
+    <script>window.SL_SHOWCASE_HALCYON_SRC = 'demo_showcase_halcyon.js?v=6';</script>
+    <script>window.SL_SHOWCASE_VAYU_SRC = 'demo_showcase_vayu.js?v=2';</script>
     <!-- Stage 2 (9 Sep 2026): live CRDT co-editing is the source of truth on open;
          the whole-document snapshot becomes a periodic backup. Self-healing reconcile
          (a stale copy can never overwrite good data) — see crdt_sync.js authOn(). -->
@@ -4044,7 +4044,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="safety_targets.js?v=1.8" defer></script>
     <script src="severity_rubrics.js?v=1.3" defer></script>
     <script src="reliability_data.js?v=1.1" defer></script>
-    <script src="catalogue_data.js?v=1.10" defer></script>
+    <script src="catalogue_data.js?v=1.11" defer></script>
     <script src="ui_constants.js?v=1.0" defer></script>
     <script src="config_data.js?v=1.1" defer></script>
     <script src="ai_memory.js?v=1.0" defer></script>
@@ -4057,7 +4057,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
          declaration implies (total loss / partial loss / malfunction). Pure derivation;
          loaded before its consumers. -->
-    <script src="mac_lanes.js?v=1.1" defer></script>
+    <script src="mac_lanes.js?v=1.2" defer></script>
     <!-- B6 — SLFnResolve: the id classifier (function / system / item) mac_lanes was
          designed to be handed. Must load before helpers_modules.js (MAC editor) and,
          from A10 on, the interdependence table. -->
@@ -4067,22 +4067,22 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.0" defer></script>
     <script src="node_identity_ui.js?v=1.4" defer></script>
-    <script src="fta_view_modules.js?v=66.37" defer></script>
+    <script src="fta_view_modules.js?v=66.38" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
-    <script src="data_ops_modules.js?v=66.41" defer></script>
+    <script src="data_ops_modules.js?v=66.42" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.31" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=2.98" defer></script>
+    <script src="helpers_modules.js?v=2.99" defer></script>
     <script src="cloud_writer.js?v=1.0" defer></script>
-    <script src="severity_axes.js?v=1.34" defer></script>
+    <script src="severity_axes.js?v=1.35" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
-    <script src="fha_derive.js?v=1.1" defer></script>
+    <script src="fha_derive.js?v=1.2" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.45" defer></script>
+    <script src="bindings_modules.js?v=1.46" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.60" defer></script>
+    <script src="misc_fn_modules.js?v=66.61" defer></script>
     <script src="safety_lab.js?v=65.54" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4098,7 +4098,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="crdt_sync.js?v=1.9" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.31" defer></script>
+    <script src="assurance_modules.js?v=1.32" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
@@ -4181,7 +4181,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="gt_integrity.js?v=1.5" defer></script>
     <!-- App Q output-set harness. MUST load after gt_integrity.js: it wraps
          renderGtIntegrityPage to append the Q map to the Thread Integrity page. -->
-    <script src="q_completeness.js?v=1.0" defer></script>
+    <script src="q_completeness.js?v=1.1" defer></script>
     <!-- Phase 0 integrity sentinel — Teams + email fan-out on WORSENING only
          (born modular; OFF by default per project). MUST load after
          q_completeness.js: it wraps renderGtIntegrityPage last so its config
@@ -4225,7 +4225,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          per-table citations; the engine refuses without it. -->
     <script src="ram_predict_data.js?v=0.1" defer></script>
     <script src="ram_predict.js?v=0.6" defer></script>
-    <script src="ram_hub.js?v=1.1" defer></script>
+    <script src="ram_hub.js?v=1.2" defer></script>
     <script src="engine_selftest.js?v=1.0" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
     <script src="model_checks.js?v=1.01" defer></script>
@@ -4236,11 +4236,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="pssa_ssa_pages.js?v=1.0" defer></script>
     <script src="nav_sfha_tree.js?v=1.3" defer></script>
     <script src="assumption_moat.js?v=1.4" defer></script>
-    <script src="hf_ergo.js?v=0.1" defer></script>
+    <script src="hf_ergo.js?v=0.2" defer></script>
     <script src="hf_assumptions.js?v=0.9" defer></script>
-    <script src="hf_register_panel.js?v=1.8" defer></script>
-    <script src="hf_analyses.js?v=1.16" defer></script>
-    <script src="field_defs.js?v=1.4" defer></script>
+    <script src="hf_register_panel.js?v=1.9" defer></script>
+    <script src="hf_analyses.js?v=1.17" defer></script>
+    <script src="field_defs.js?v=1.5" defer></script>
     <script src="lane_ai_bar.js?v=1.2" defer></script>
     <script src="hf_evidence.js?v=0.2" defer></script>
     <!-- INV-HFW — crew workload ↔ FHA severity consistency (born modular; registers into the invariants sweep). -->
@@ -4255,7 +4255,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="corpus_retrieve.js?v=1.2" defer></script>
     <!-- STPA system lane — engine (deployed inert since v0.1) + the walkthrough panel that
          makes it user-visible. Registers INV-32 into the invariant sweep. -->
-    <script src="stpa_core.js?v=1.1" defer></script>
+    <script src="stpa_core.js?v=1.2" defer></script>
     <!-- SORA 2.5 engine (EU 2019/947 Specific category) — deployed INERT like stpa_core
          was: verified calculators (iGRC / mitigations / SAIL / adjacent area) + honest
          refusals for the not-yet-verified tables. Panel/walkthrough is the next increment.
@@ -4264,19 +4264,19 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="sora_annex_e_data.js?v=0.1" defer></script>
     <script src="cert_basis_spine.js?v=1.10" defer></script>
     <script src="cert_basis_router.js?v=1.0" defer></script>
-    <script src="sora_core.js?v=0.2" defer></script>
-    <script src="sora_showcase_view.js?v=0.2" defer></script>
+    <script src="sora_core.js?v=0.3" defer></script>
+    <script src="sora_showcase_view.js?v=0.3" defer></script>
     <!-- Kestrel RJ (Part 25 transport) showcase loader — born-modular; lazy-loads
          demo_showcase_kestrel25.js and applies it (window.loadKestrelRj). -->
-    <script src="kestrel_showcase.js?v=1" defer></script>
+    <script src="kestrel_showcase.js?v=2" defer></script>
     <!-- Demo-project picker — one chooser routing to every showcase loader. -->
     <!-- shared showcase authoring helpers; MUST load before any showcase builder runs -->
     <script src="demo_kit.js?v=2" defer></script>
-    <script src="hl1_showcase.js?v=6" defer></script>
-    <script src="halcyon_showcase.js?v=5" defer></script>
-    <script src="vayu_showcase.js?v=1" defer></script>
-    <script src="demo_picker.js?v=5" defer></script>
-    <script src="first_run.js?v=2" defer></script>
+    <script src="hl1_showcase.js?v=7" defer></script>
+    <script src="halcyon_showcase.js?v=6" defer></script>
+    <script src="vayu_showcase.js?v=2" defer></script>
+    <script src="demo_picker.js?v=6" defer></script>
+    <script src="first_run.js?v=3" defer></script>
     <script src="continue_session.js?v=1.0" defer></script>
     <script src="stpa_panel.js?v=1.41" defer></script>
     <script src="stpa_report.js?v=1.2" defer></script>
@@ -4289,12 +4289,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          and the SILENT ⌘K palette (23 Aug: the catalogue service and its residue
          are deleted — see nav_rail.js v1.2). Loads AFTER program_plan.js (reads
          PROGRAM_PLAN.CATALOGUE / laneOn) and never blocks the static nav. -->
-    <script src="nav_rail.js?v=1.6" defer></script>
+    <script src="nav_rail.js?v=1.7" defer></script>
     <!-- A11 — reads the plan above plus the live project state and says what is
          next. Must load AFTER program_plan.js: it consumes CATALOGUE, laneOn,
          laneData and the DERIVED map from it rather than keeping its own copy. -->
-    <script src="next_step.js?v=0.6" defer></script>
-    <script src="ml_assurance.js?v=0.4" defer></script>
+    <script src="next_step.js?v=0.7" defer></script>
+    <script src="ml_assurance.js?v=0.5" defer></script>
     <!-- Mass actions for tabulated analyses — selection layer over the worksheet tables;
          every write routes through each worksheet's own helpers. -->
     <script src="mass_actions.js?v=0.6" defer></script>
@@ -4304,17 +4304,17 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="independence_claims.js?v=1.0" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
     <script src="zonal_ui.js?v=1.12" defer></script>
-    <script src="equipment_hazards.js?v=1.0" defer></script>
+    <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>
-    <script src="zsa_walkthrough.js?v=1.1" defer></script>
+    <script src="zsa_walkthrough.js?v=1.2" defer></script>
     <script src="cma_walkthrough.js?v=1.31" defer></script>
-    <script src="pra_library.js?v=1.2" defer></script>
+    <script src="pra_library.js?v=1.3" defer></script>
     <script src="pra_canvas.js?v=1.21" defer></script>
     <script src="msg3_zonal.js?v=1.21" defer></script>
     <script src="mac_l3.js?v=1.0" defer></script>
     <!-- M1 phase 2 — L3 cockpit: flow editor, per-deviation BDD corroboration, FMEA sign desk. -->
     <script src="mac_flows.js?v=1.1" defer></script>
-    <script src="mac_fcim.js?v=1.0" defer></script>
+    <script src="mac_fcim.js?v=1.1" defer></script>
     <script src="lane_trees.js?v=1.3" defer></script>
     <script src="stale_watch.js?v=1.1" defer></script>
     <script src="mirror_modes.js?v=1.1" defer></script>
@@ -4369,7 +4369,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          it also re-wraps on a short poll, so defer order is belt and braces. -->
     <script src="nav_return.js?v=1.0" defer></script>
     <script src="fta_freq.js?v=1.32" defer></script>
-    <script src="markov_ctmc.js?v=1.1" defer></script>
+    <script src="markov_ctmc.js?v=1.2" defer></script>
     <script src="mil217f_stress.js?v=1.1" defer></script>
     <!-- Jama live bridge — push FCs into Jama as items, pull the relationship
          graph back; humans assert the links in Jama, we automate the rest. -->
@@ -4396,7 +4396,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Programme ID schemes on Program Planning — function / failure-condition / FCIM-cell
          templates at aircraft + system level, live dual preview, forward-only apply.
          Loads AFTER program_plan.js (wraps renderScopeSection) and numbering_ui.js. -->
-    <script src="numbering_plan.js?v=1.2" defer></script>
+    <script src="numbering_plan.js?v=1.3" defer></script>
     <!-- Phase 56.14 — Auth gate (must load AFTER safety_lab.js + Supabase). -->
     <!-- 8 Sep 2026: Microsoft SSO turned ON — Azure provider configured on the
          Safety-Lab Supabase project (app "Safety Lab Aero – Web Sign-in",

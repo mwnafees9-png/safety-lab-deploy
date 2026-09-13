@@ -120,7 +120,7 @@ check('the same gaps at L1A raise only the BASE findings, not the scaled ones',
 // ---- surfaces ---------------------------------------------------------------
 console.log('\n[mlb] surfaces');
 check('the constituent table gained Behaviour and Continuum columns',
-  /'ID', 'Constituent', 'Implements', 'Level', 'Behaviour', 'Continuum', 'ODD'/.test(src));
+  /'ID', 'Constituent', 'Implements', 'Level', 'Behavior', 'Continuum', 'ODD'/.test(src));
 check('the form offers both selects with the principle in their tooltips',
   /mlas-c-beh/.test(src) && /mlas-c-cont/.test(src) && /DIFFERENT assurance methodologies/.test(src));
 check('_addC passes both through', /_v\('mlas-c-beh'\), _v\('mlas-c-cont'\)/.test(src));

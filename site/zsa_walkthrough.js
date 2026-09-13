@@ -29,7 +29,7 @@
         { id: 'envcompat', label: 'Environmental & material compatibility', desc: 'Zone temperature, humidity, contamination vs. equipment qualification.' },
         { id: 'access',    label: 'Accessibility & maintenance-error',   desc: 'Damage from tools/GSE, incorrect reinstallation, use of structure as hand/footholds.' },
         { id: 'install',   label: 'Installation-guideline conformance',  desc: 'Correct fixtures, routing to avoid condensation tracking, adequate bend radii.' },
-        { id: 'housed',    label: 'Housed-equipment inherent hazards',   desc: 'Physical hazards inherent to the boxes in this zone (failed and unfailed) that threaten neighbours.' },
+        { id: 'housed',    label: 'Housed-equipment inherent hazards',   desc: 'Physical hazards inherent to the boxes in this zone (failed and unfailed) that threaten neighbors.' },
         { id: 'intrazone', label: 'Intra-zone interactions (EM etc.)',   desc: 'Undesirable interactions, e.g. an emitter next to equipment sensitive to that spectrum.' },
         { id: 'crosszone', label: 'Cross-zonal interactions',           desc: 'Effects propagating across zone boundaries, especially where boundaries don’t follow structure.' }
     ];

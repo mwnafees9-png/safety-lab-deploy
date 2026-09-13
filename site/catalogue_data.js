@@ -121,7 +121,7 @@ const COMPLIANCE_CATALOGUE = [
     { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §8 Table 1', title: 'Safety objectives per flight hour + FDAL — Enhanced, Basic 1 (0–1 pax), Basic 2 (2–6), Basic 3 (7–9)', appliesTo: ['SC-VTOL'] },
     { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §8(b)', title: 'Single failure and common-cause failure considerations', appliesTo: ['SC-VTOL'] },
     { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §9', title: 'Safety assessment process (ARP4754A/4761) incl. §9(b) common mode analysis', appliesTo: ['SC-VTOL'] },
-    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §10', title: 'Development assurance — FDAL/IDAL allocation; AMC 20-115 / 20-152 / 20-189 recognised', appliesTo: ['SC-VTOL'] },
+    { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §10', title: 'Development assurance — FDAL/IDAL allocation; AMC 20-115 / 20-152 / 20-189 recognized', appliesTo: ['SC-VTOL'] },
     { regulation: 'MOC SC-VTOL',    paragraph: 'MOC VTOL.2510 §12', title: 'Latent failure considerations — significant latent failures to be avoided', appliesTo: ['SC-VTOL'] },
     { regulation: 'MOC-5 SC-VTOL',  paragraph: 'MOC VTOL.2510 (rev.)', title: 'Fifth MOC publication (public consultation, 18 July 2025) — references moved to ARP4754B/ED-79B and ARP4761A/ED-135; MOC VTOL.2517 EWIS', appliesTo: ['SC-VTOL'] },
 
@@ -320,24 +320,24 @@ const PARTICULAR_RISK_CATALOGUE = [
       category: 'Wheels/Tyres',
       regulations: ['14 CFR §25.729', '14 CFR §25.734', '14 CFR §25.731', 'AC 25.734-1', 'CS 25.734'],
       typicalPhases: ['Taxi', 'Takeoff', 'Rejected Takeoff', 'Landing'],
-      defaultDesc: 'Liberation of a wheel flange or hub fragment as a discrete high-energy projectile, distinct from tyre burst and from tread flail: the fragment is metallic, heavier, and departs on a trajectory set by the wheel plane rather than by the tread envelope. It threatens the gear bay contents, the adjacent structure, and anything routed through the plane of the wheel.',
-      defaultMitigation: 'Apply the wheel-plane fragment envelope alongside the tyre-burst envelope, and show they are assessed as separate cases. Keep both channels of any redundant pair out of a single wheel plane. Demonstrate overpressure and thermal fuse-plug behaviour so that a brake energy event relieves pressure before the flange is loaded. Verify hub inspection intervals against the crack growth assumed in the structural substantiation.'
+      defaultDesc: 'Liberation of a wheel flange or hub fragment as a discrete high-energy projectile, distinct from tire burst and from tread flail: the fragment is metallic, heavier, and departs on a trajectory set by the wheel plane rather than by the tread envelope. It threatens the gear bay contents, the adjacent structure, and anything routed through the plane of the wheel.',
+      defaultMitigation: 'Apply the wheel-plane fragment envelope alongside the tire-burst envelope, and show they are assessed as separate cases. Keep both channels of any redundant pair out of a single wheel plane. Demonstrate overpressure and thermal fuse-plug behavior so that a brake energy event relieves pressure before the flange is loaded. Verify hub inspection intervals against the crack growth assumed in the structural substantiation.'
     },
     { id: 'chemical-container-rupture',
       name: 'Hazardous chemical container rupture',
       category: 'Fluid Systems',
       regulations: ['14 CFR §25.831(b)', '14 CFR §25.1309', '14 CFR §25.855', 'CS 25.831'],
       typicalPhases: ['Standing', 'Taxi', 'Takeoff', 'Climb', 'Cruise', 'Descent', 'Approach', 'Landing'],
-      defaultDesc: 'Rupture or leakage of a pressurised or hazardous-fluid container carried as part of the aircraft — oxygen, extinguishing agent, hydraulic accumulator, potable or waste system chemistry, or dangerous goods carried as cargo. The consequence is a chemical and pressure environment in a compartment assessed for neither, and in an occupied aircraft the occupant exposure case usually governs rather than the equipment case.',
-      defaultMitigation: 'Identify every pressurised or hazardous container in the type design, including those installed for another system’s benefit. Assess release into the containing compartment for pressure, chemical attack on adjacent equipment, and occupant exposure. Provide relief and drainage sized for the release, and keep containers out of zones where a release would reach a flight-critical channel or an occupied space.'
+      defaultDesc: 'Rupture or leakage of a pressurized or hazardous-fluid container carried as part of the aircraft — oxygen, extinguishing agent, hydraulic accumulator, potable or waste system chemistry, or dangerous goods carried as cargo. The consequence is a chemical and pressure environment in a compartment assessed for neither, and in an occupied aircraft the occupant exposure case usually governs rather than the equipment case.',
+      defaultMitigation: 'Identify every pressurized or hazardous container in the type design, including those installed for another system’s benefit. Assess release into the containing compartment for pressure, chemical attack on adjacent equipment, and occupant exposure. Provide relief and drainage sized for the release, and keep containers out of zones where a release would reach a flight-critical channel or an occupied space.'
     },
     { id: 'pressure-bulkhead-rupture',
       name: 'Pressure bulkhead rupture',
       category: 'Decompression',
       regulations: ['14 CFR §25.365', '14 CFR §25.571', '14 CFR §25.841', '14 CFR §25.843', 'CS 25.365', 'CS 25.571'],
       typicalPhases: ['Climb', 'Cruise', 'Descent'],
-      defaultDesc: 'Failure of a pressure boundary between the pressurised volume and an unpressurised one — an aft bulkhead, a door surround, a floor between compartments at different pressures. Beyond the decompression itself, the differential unloading applies a structural load case to surrounding structure and to anything mounted on the boundary, and the airflow can carry debris and displace equipment along the release path.',
-      defaultMitigation: 'Demonstrate the boundary against the §25.365(e) rupture case and show adjacent structure and control runs tolerate the resulting differential. Keep flight-critical control paths out of the release path, or show they survive it. Verify floor and partition venting is sized to prevent structural failure from a compartment-to-compartment differential. Establish the damage-tolerance inspection programme against the crack growth the substantiation assumes.'
+      defaultDesc: 'Failure of a pressure boundary between the pressurized volume and an unpressurised one — an aft bulkhead, a door surround, a floor between compartments at different pressures. Beyond the decompression itself, the differential unloading applies a structural load case to surrounding structure and to anything mounted on the boundary, and the airflow can carry debris and displace equipment along the release path.',
+      defaultMitigation: 'Demonstrate the boundary against the §25.365(e) rupture case and show adjacent structure and control runs tolerate the resulting differential. Keep flight-critical control paths out of the release path, or show they survive it. Verify floor and partition venting is sized to prevent structural failure from a compartment-to-compartment differential. Establish the damage-tolerance inspection program against the crack growth the substantiation assumes.'
     }
 ];
 
@@ -480,7 +480,7 @@ const PR_MODEL_SCHEMAS = {
         label: 'Tire Burst / Tread Failure Analysis Model (AC 25-22)',
         description: 'Tread debris, tire fragment, or wheel disintegration. Debris envelope sweeps from tire tangentially.',
         params: [
-            { id: 'gearStation',        label: 'Gear station',                   type: 'select', options: ['Nose', 'Main L', 'Main R', 'Centre Body'], default: 'Main L' },
+            { id: 'gearStation',        label: 'Gear station',                   type: 'select', options: ['Nose', 'Main L', 'Main R', 'Center Body'], default: 'Main L' },
             { id: 'failureMode',        label: 'Failure mode',                   type: 'select', options: ['Tread separation', 'Sidewall blowout', 'Wheel rim failure', 'Brake-induced'], default: 'Tread separation' },
             { id: 'debrisEnvelopeDeg',  label: 'Debris envelope angle',          type: 'number', unit: '°',   default: 90 },
             { id: 'phase',              label: 'Phase',                          type: 'select', options: ['Takeoff roll', 'Rejected takeoff', 'Landing roll', 'Taxi'], default: 'Takeoff roll' }

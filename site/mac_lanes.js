@@ -245,7 +245,7 @@
       // of failure, and reporting it as one cries wolf.
       var singleMemberClause = (rule && rule.clauses || []).some(function (cl) { return (cl && cl.of || []).length <= 1; });
       findings.push(singleMemberClause
-        ? { kind: 'unmodelled', msg: 'Order-1 route, but from a single-member clause — this reads "the function is required", i.e. the redundancy has not been modelled yet. Not a discovered single point of failure.' }
+        ? { kind: 'unmodelled', msg: 'Order-1 route, but from a single-member clause — this reads "the function is required", i.e. the redundancy has not been modeled yet. Not a discovered single point of failure.' }
         : { kind: 'spf', msg: 'Order-1 route to a Catastrophic condition from a multi-member clause — a single failure reaches the condition.' });
     }
 

@@ -80,7 +80,7 @@
                   what: 'Your first failure-rate estimate: pick part categories, get λ and MTBF with a handbook citation on every number.',
                   start: 'Start here when all you have is a parts list.' },
                 { tab: 'library', title: 'Component Library',
-                  what: 'The failure-rate catalogue your fault trees and rollups draw from.',
+                  what: 'The failure-rate catalog your fault trees and rollups draw from.',
                   start: 'Feed it as supplier data arrives.' },
                 { tab: 'ram-tol', gated: true, title: 'Tolerance · Derating',
                   what: 'Are parts operated inside their electrical and thermal ratings? Stress beyond rating quietly invalidates every prediction above.' },

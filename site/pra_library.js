@@ -21,7 +21,7 @@
     var CATALOG = [
         { id: 'rotor-burst',   name: 'Uncontained engine / rotor burst', condition: 'Turbine engine or APU', footprint: '±3° / ±5° / ±15° debris trajectory bands across zones in the rotor plane', src: 'ARP4761A App L; AC 20-128A' },
         { id: 'fan-blade-off', name: 'Fan / compressor blade release',   condition: 'Turbine engine',        footprint: 'Blade-off trajectory + downstream zones', src: 'AC 20-128A' },
-        { id: 'tyre-burst',    name: 'Tyre / wheel burst & tread throw',  condition: 'Any landing gear',      footprint: 'Gear bay + tyre-throw envelope (radial + tangential)', src: 'AC 25.734; ARP4761A App L' },
+        { id: 'tyre-burst',    name: 'Tire / wheel burst & tread throw',  condition: 'Any landing gear',      footprint: 'Gear bay + tire-throw envelope (radial + tangential)', src: 'AC 25.734; ARP4761A App L' },
         { id: 'wheel-brake',   name: 'Wheel / brake overheat or fire',    condition: 'Wheel brakes',          footprint: 'Gear bay and adjacent zones', src: 'AMC 25.1309' },
         { id: 'bird-strike',   name: 'Bird strike',                       condition: 'Forward-facing structure / windshield / inlets / leading edges', footprint: 'Frontal impact zones', src: '14 CFR/CS 25.631; ARP4761A App L' },
         { id: 'lightning',     name: 'Lightning strike',                  condition: 'All aircraft',          footprint: 'Attachment zones + conductive paths / EWIS', src: 'AC 20-136B; SAE ARP5577' },

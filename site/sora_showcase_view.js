@@ -257,7 +257,7 @@
     // ---- Step 5 · Strategic air mitigations (AEC summary) -----------------
     function _renderStrategic(t, s) {
         let body = t.arcCalc && !t.arcCalc.error
-            ? _kv('Airspace Encounter Category', 'AEC ' + t.arcCalc.aec) + _kv('Generalised density rating', String(t.arcCalc.density))
+            ? _kv('Airspace Encounter Category', 'AEC ' + t.arcCalc.aec) + _kv('Generalized density rating', String(t.arcCalc.density))
             : '<p style="font-size:12px;color:var(--color-text-secondary);">Fill in Step 4&rsquo;s calculator to see the AEC here.</p>';
         body += '<p style="font-size:11.5px;color:var(--color-text-secondary);margin:8px 0 0;">Strategic mitigations (operational restrictions, common structures/rules, coordination with ANSP or another common information service) act on the AEC/initial ARC before tactical mitigation is applied. Document the specific agreement or restriction relied on here.</p>';
         return _card('5 · Strategic air-risk mitigations', body, _ACCENT.arc);
@@ -420,7 +420,7 @@
             if (existing) { existing.addEventListener('load', () => resolve()); existing.addEventListener('error', () => reject(new Error('SORA showcase load failed'))); return; }
             const el = document.createElement('script');
             el.id = 'sl-showcase-sora-lazy';
-            el.src = window.SL_SHOWCASE_SORA_SRC || 'demo_showcase_sora.js?v=1';
+            el.src = window.SL_SHOWCASE_SORA_SRC || 'demo_showcase_sora.js?v=3';
             el.onload = () => resolve();
             el.onerror = () => reject(new Error('SORA showcase load failed'));
             document.head.appendChild(el);

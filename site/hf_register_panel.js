@@ -340,7 +340,7 @@
         if (document.getElementById('hfr-ref-script')) return;   // already in flight
         const s = document.createElement('script');
         s.id = 'hfr-ref-script';
-        s.src = 'hf_reference_data.js?v=1.1';
+        s.src = 'hf_reference_data.js?v=1.2';
         s.onload = cb;
         s.onerror = function () { const b = document.getElementById('hfr-ref-body');
             if (b) b.innerHTML = '<p style="color:#8E2A2A; font-size:12px; padding:8px 14px;">Could not load the reference library.</p>'; };
@@ -437,7 +437,7 @@
             '<input id="hfr-fitts-basis" style="flex:1; min-width:200px; font:inherit; font-size:11px; padding:3px 6px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); color:inherit; border-radius:4px;" placeholder="coefficient basis — your ISO 9241-9 trials, or a source you can defend">' +
             '<button class="u-mono" style="font-size:10.5px; font-weight:700; cursor:pointer; border:1px solid var(--color-text-primary); background:var(--color-surface-2); border-radius:5px; padding:3px 10px;" onclick="HF_REGISTER_PANEL.fittsCompute()">compute</button></div>' +
             '<div id="hfr-fitts-out" style="font-size:11.5px; color:var(--color-text-secondary); min-height:16px;">MT = a + b·log2(D/W + 1) — the formula ships; the coefficients are EMPIRICAL and must be cited. The result is a SEED for the task ledger; it never fills a field by itself.</div>' +
-            '<div style="margin-top:10px; border-top:1px dashed var(--color-border); padding-top:8px;"><b style="font-size:11.5px;">Seven-factor lens</b> <span style="font-size:11px; color:var(--color-text-tertiary);">(classify STPA causal factors; HFACS nanocodes stay the deep taxonomy — one class per factor, no double-modelling)</span><br>' +
+            '<div style="margin-top:10px; border-top:1px dashed var(--color-border); padding-top:8px;"><b style="font-size:11.5px;">Seven-factor lens</b> <span style="font-size:11px; color:var(--color-text-tertiary);">(classify STPA causal factors; HFACS nanocodes stay the deep taxonomy — one class per factor, no double-modeling)</span><br>' +
             '<div style="margin-top:4px; display:flex; gap:5px; flex-wrap:wrap;">' + legend + '</div></div>' +
             '</div></div>';
     }

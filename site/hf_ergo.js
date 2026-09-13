@@ -33,11 +33,11 @@
     // ---- the spine entries (metadata only — cite & point) -------------------
     const ISO_9241 = {
         family: 'ISO 9241 — Ergonomics of human-system interaction',
-        role: 'Usability, human-centred design, and efficient interaction for the crew-facing surfaces of the aircraft and its ground stations. Referenced by HF-typed assumptions and the HFA lane; text never stored — cite the designation and point at the licensed document.',
+        role: 'Usability, human-centered design, and efficient interaction for the crew-facing surfaces of the aircraft and its ground stations. Referenced by HF-typed assumptions and the HFA lane; text never stored — cite the designation and point at the licensed document.',
         parts: [
             { designation: 'ISO 9241-110', title: 'Interaction principles' },
             { designation: 'ISO 9241-112', title: 'Principles for the presentation of information' },
-            { designation: 'ISO 9241-210', title: 'Human-centred design for interactive systems' },
+            { designation: 'ISO 9241-210', title: 'Human-centered design for interactive systems' },
             { designation: 'ISO 9241-9',   title: 'Requirements for non-keyboard input devices (Fitts protocol lineage; superseded editions remain the multidirectional-tapping reference)' }
         ]
     };

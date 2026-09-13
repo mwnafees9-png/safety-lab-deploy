@@ -32,14 +32,14 @@
         {
             id: 'hl1', badge: 'Part 25 · Outsized freighter', accent: '#1E7A4D',
             title: 'Aeolus HL-1 — Outsized Freighter',
-            desc: 'A 109 m, four-engine outsized freighter that loads through the nose and lands on 1,800 m of graded dirt. Fourteen systems, payload restraint and centre-of-gravity control for a single 105 m item, the nose-door pressure boundary, PRA / ZSA / CMA, reliability and human factors. A fictional aircraft on a thin specification: every gap is a declared assumption, marked as such.',
+            desc: 'A 109 m, four-engine outsized freighter that loads through the nose and lands on 1,800 m of graded dirt. Fourteen systems, payload restraint and center-of-gravity control for a single 105 m item, the nose-door pressure boundary, PRA / ZSA / CMA, reliability and human factors. A fictional aircraft on a thin specification: every gap is a declared assumption, marked as such.',
             loader: 'loadHL1Demo',
             gate: 'slHL1Visible',
         },
         {
             id: 'halcyon', badge: 'Part 23 \u00b7 Hybrid-electric amphibian', accent: '#0E7C86',
             title: 'Halcyon HA-10 \u2014 Hybrid-Electric Amphibian',
-            desc: 'A ten-seat hybrid-electric amphibian on 100\u2013500 nm coastal routes, certified to AC 23.1309-1E Class III. A complete end-to-end programme: AFHA through ASA with allocation trees AND their verification mirrors, a Markov model on the dual-path powertrain, an MBSA architecture model, FMEA feeding FMES, the full CCA set, and requirements carried to verification. A fictional aircraft on a thin specification: every gap is a declared assumption, marked as such.',
+            desc: 'A ten-seat hybrid-electric amphibian on 100\u2013500 nm coastal routes, certified to AC 23.1309-1E Class III. A complete end-to-end program: AFHA through ASA with allocation trees AND their verification mirrors, a Markov model on the dual-path powertrain, an MBSA architecture model, FMEA feeding FMES, the full CCA set, and requirements carried to verification. A fictional aircraft on a thin specification: every gap is a declared assumption, marked as such.',
             loader: 'loadHalcyonDemo',
             gate: 'slHalcyonVisible',
         },

@@ -3076,7 +3076,7 @@ function renderCoffePanel() {
             '<td style="text-align:center;">' + det + '</td></tr>';
         return html;
     };
-    html += '<h4 style="margin: var(--s-3) 0 6px;">Elicit — judgement residue <span style="font-weight:400; font-size:11px; color:var(--color-text-tertiary);">(malfunction · unmodelled systems · disagreements)</span></h4>';
+    html += '<h4 style="margin: var(--s-3) 0 6px;">Elicit — judgment residue <span style="font-weight:400; font-size:11px; color:var(--color-text-tertiary);">(malfunction · unmodelled systems · disagreements)</span></h4>';
     html += elicitCases.length
         ? _coffeTableHead + elicitCases.map(_coffeRow).join('') + '</tbody></table></div>'
         : '<p style="color: var(--color-text-tertiary); font-size:13px;">Nothing left to elicit — every remaining case is answered by the MAC model below.</p>';
@@ -3086,7 +3086,7 @@ function renderCoffePanel() {
             ' <span style="font-weight:400; font-size:11px; color:var(--color-text-tertiary);">(' + foldYes + ' breach · ' + (foldedCases.length - foldYes) + ' survive — the same clause arithmetic the tree prover verifies; expand to review, sign as derived, or disagree)</span></h4>';
         if (window._coffeShowComputed) html += _coffeTableHead + foldedCases.map(_coffeRow).join('') + '</tbody></table></div>';
     }
-    html += '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">Table B2 format — one state column per contributing system, capability result, explicit determination. B4: the MAC model\'s answers fold away (and a model-computed YES single prunes its supersets from the walk); judgement is spent on malfunction, unmodelled systems and disagreements. Sign-derived records acceptance of the arithmetic, never an independent judgement; signed Yes determinations are locked constraints the model must keep breaching.</p>';
+    html += '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">Table B2 format — one state column per contributing system, capability result, explicit determination. B4: the MAC model\'s answers fold away (and a model-computed YES single prunes its supersets from the walk); judgment is spent on malfunction, unmodelled systems and disagreements. Sign-derived records acceptance of the arithmetic, never an independent judgment; signed Yes determinations are locked constraints the model must keep breaching.</p>';
     host.innerHTML = html;
 }
 
@@ -3703,7 +3703,7 @@ function renderFhaPhaseGrid(containerId, keepValue) {
 
     let html = '';
     if (!nominal.length && !contingency.length) {
-        html = '<div style="font-size:12px; color:var(--sev-haz-fg,#b91c1c);">No flight phases defined — add them on the Flight Phases tab. Until then this failure condition cannot be exposure-normalised.</div>';
+        html = '<div style="font-size:12px; color:var(--sev-haz-fg,#b91c1c);">No flight phases defined — add them on the Flight Phases tab. Until then this failure condition cannot be exposure-normalized.</div>';
     } else {
         html += nominal.map(n => box(n)).join('');
         if (contingency.length) {
@@ -4015,7 +4015,7 @@ function renderFlightPhases() {
             tbody.innerHTML += `<tr><td colspan="10" style="background:var(--color-surface-2); padding:8px 10px; border-top:1px solid var(--color-border-hair);">`
                 + `<span style="font-size:10px; text-transform:uppercase; letter-spacing:0.07em; font-weight:600; color:var(--color-text-tertiary);">Contingency phases</span>`
                 + `<div style="font-size:12px; color:var(--color-text-secondary); margin-top:3px; max-width:78ch;">`
-                + `Outside the nominal mission — flown on a small fraction of departures. Their durations are <strong>excluded from the mission total</strong>, and an FHA row that names one keeps the <strong>full-flight</strong> exposure window rather than shrinking to the manoeuvre: the function had to survive the whole flight to be available when the contingency was flown. A true per-flight figure needs P(demand) × duration, and there is no occurrence-frequency field yet — so the conservative bound is held instead of a frequency being guessed.`
+                + `Outside the nominal mission — flown on a small fraction of departures. Their durations are <strong>excluded from the mission total</strong>, and an FHA row that names one keeps the <strong>full-flight</strong> exposure window rather than shrinking to the maneuver: the function had to survive the whole flight to be available when the contingency was flown. A true per-flight figure needs P(demand) × duration, and there is no occurrence-frequency field yet — so the conservative bound is held instead of a frequency being guessed.`
                 + `</div></td></tr>`;
         }
         tbody.innerHTML += `<tr${_isSpecial(p) ? ' data-contingency="1"' : ''}><td><strong>${esc(p.phase)}</strong>${_isSpecial(p) ? ' <span title="Contingency phase — excluded from the mission total; exposure stays the full flight." style="font-size:10px; font-weight:600; color:var(--color-text-tertiary); border:1px solid var(--color-border-hair); border-radius:3px; padding:1px 4px; margin-left:5px; cursor:help;">CONTINGENCY</span>' : ''}</td><td><input type="number" class="table-input" value="${esc(p.altFrom)}" onchange="updatePhase(${idx}, 'altFrom', this.value)"></td><td><select class="table-select" onchange="updatePhase(${idx}, 'altFromUnit', this.value)"><option ${p.altFromUnit==='AGL'?'selected':''}>AGL</option><option ${p.altFromUnit==='ASL'?'selected':''}>ASL</option></select></td><td><input type="number" class="table-input" value="${esc(p.altTo)}" onchange="updatePhase(${idx}, 'altTo', this.value)"></td><td><select class="table-select" onchange="updatePhase(${idx}, 'altToUnit', this.value)"><option ${p.altToUnit==='AGL'?'selected':''}>AGL</option><option ${p.altToUnit==='ASL'?'selected':''}>ASL</option></select></td><td><input type="number" class="table-input" value="${esc(p.duration)}" onchange="updatePhase(${idx}, 'duration', this.value)"></td><td><select class="table-select" onchange="updatePhase(${idx}, 'durationUnit', this.value)"><option ${p.durationUnit==='seconds'?'selected':''}>seconds</option><option ${p.durationUnit==='mins'?'selected':''}>mins</option><option ${p.durationUnit==='hours'?'selected':''}>hours</option></select></td><td><input type="number" min="0" step="1" class="table-input" value="${esc(p.windowS==null?'':p.windowS)}" placeholder="—" title="HF response window (s) — feeds INV-17; leave empty and INV-17 stays silent for this phase" onchange="updatePhase(${idx}, 'windowS', this.value)"></td><td><input type="text" class="table-input" list="phase-escape-options" value="${esc((typeof SLFhaDerive !== 'undefined' && SLFhaDerive) ? SLFhaDerive.escapeOf(p) : (p.escape || ''))}" placeholder="none" title="How the flight gets out of a condition whose effect has not yet been felt in this phase. Type none when there is no way out (e.g. Landing)." onchange="updatePhase(${idx}, 'escape', this.value)"></td><td style="text-align:center;"><button type="button" title="Remove phase" onclick="deletePhaseRow(${idx})" style="color:var(--sev-haz-fg,#b91c1c); background:none; border:none; cursor:pointer; font-size:14px;">✕</button></td></tr>`;
@@ -4124,7 +4124,7 @@ function addContingencyPhase() {
     tbl.forEach(r => { have[String((r && r.phase) || '').trim().toLowerCase()] = 1; });
     const avail = cat.filter(c => !have[c.phase.toLowerCase()]);
     if (!avail.length) {
-        if (typeof showToast === 'function') showToast('Every catalogued contingency phase is already in this table.', 'info', 4000);
+        if (typeof showToast === 'function') showToast('Every cataloged contingency phase is already in this table.', 'info', 4000);
         return;
     }
     const menu = avail.map((c, i) => (i + 1) + '. ' + c.phase).join('\n');
@@ -4643,8 +4643,8 @@ function _fhaCommentsCell(row) {
 function _fhaJudgementBadge(row) {
     if (!row || !row.judgementCall) return '';
     const note = String(row.judgementNote || '').trim();
-    const edited = row.humanEdited ? (' (Row edited by hand ' + String(row.humanEditedAt || '').slice(0, 10) + ' — re-check whether the judgement still stands.)') : '';
-    return `<span class="fha-judgement-badge" title="${esc('JUDGEMENT CALL — the AI classified this on limited information; engineer to confirm. ' + (note || '(no note given)') + edited)}" style="display:inline-block;margin-left:6px;padding:2px 8px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;background:#F5B400;color:#1A1200;border:1px solid #B26A00;white-space:nowrap;vertical-align:middle;">⚠ Judgement</span>`;
+    const edited = row.humanEdited ? (' (Row edited by hand ' + String(row.humanEditedAt || '').slice(0, 10) + ' — re-check whether the judgment still stands.)') : '';
+    return `<span class="fha-judgement-badge" title="${esc('JUDGMENT CALL — the AI classified this on limited information; engineer to confirm. ' + (note || '(no note given)') + edited)}" style="display:inline-block;margin-left:6px;padding:2px 8px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-radius:4px;background:#F5B400;color:#1A1200;border:1px solid #B26A00;white-space:nowrap;vertical-align:middle;">⚠ Judgment</span>`;
 }
 function _fhaGroupRows(rows) {
     const rank = (typeof SEVERITY_RANK !== 'undefined') ? SEVERITY_RANK
@@ -6042,7 +6042,7 @@ function refreshFmeaModeButtons() {
         const on = fmeaModeInScope(pair[1]);
         el.disabled = !on;
         el.style.opacity = on ? '' : '0.45';
-        el.title = on ? '' : 'Out of programme scope — add this lane on the Program Planning tab to use it. ' +
+        el.title = on ? '' : 'Out of program scope — add this lane on the Program Planning tab to use it. ' +
             (pair[1] === 'piece-part'
                 ? 'ARP4761A J.3.2: a piece-part FMEA is performed as necessary to refine a failure rate, typically when the functional rates will not meet the FTA budget.'
                 : 'ARP4761A J.3.2: functional FMEAs are typically performed to support the safety analysis effort.');
@@ -6052,7 +6052,7 @@ function setFmeaMode(mode) {
     if (mode !== 'functional' && mode !== 'piece-part') return;
     if (!fmeaModeInScope(mode)) {
         if (typeof showToast === 'function') showToast(
-            (mode === 'piece-part' ? 'Piece-Part' : 'Functional') + ' FMEA is not in this programme\u2019s scope. Add the lane on Program Planning first \u2014 the scope record is what the SSPP prints.',
+            (mode === 'piece-part' ? 'Piece-Part' : 'Functional') + ' FMEA is not in this program\u2019s scope. Add the lane on Program Planning first \u2014 the scope record is what the SSPP prints.',
             'info', 6000);
         return;
     }

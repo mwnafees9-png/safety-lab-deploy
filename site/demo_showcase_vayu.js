@@ -52,11 +52,11 @@
             ['AF-06', 'Provide and manage electrical energy', 'SF-09', 'Store and deliver propulsion energy', 'Store and deliver high-voltage energy from six independent battery packs across the mission, temperature and state-of-charge envelope.'],
             ['AF-06', 'Provide and manage electrical energy', 'SF-10', 'Manage battery state and balance', 'Monitor cell state of charge, temperature and health, balance the packs and enforce the energy reserve.'],
             ['AF-07', 'Convert and control motor power', 'SF-11', 'Convert energy to shaft power', 'Convert battery energy to controlled shaft torque at each rotor and propeller through independent motor controllers.'],
-            ['AF-08', 'Provide flight control computing', 'SF-12', 'Compute and command the control laws', 'Run the fly-by-wire control laws that stabilise and command an aircraft with no natural stability in hover and no mechanical reversion.'],
+            ['AF-08', 'Provide flight control computing', 'SF-12', 'Compute and command the control laws', 'Run the fly-by-wire control laws that stabilize and command an aircraft with no natural stability in hover and no mechanical reversion.'],
             ['AF-09', 'Indicate flight parameters and alert the crew', 'SF-13', 'Display attitude, speed and energy state', 'Present primary attitude, airspeed, height and battery energy state to a single pilot.'],
             ['AF-09', 'Indicate flight parameters and alert the crew', 'SF-14', 'Alert the crew to hazardous states', 'Annunciate cautions and warnings, including low energy, rotor loss and thermal events, for conditions requiring pilot action.'],
             ['AF-10', 'Manage propulsion and energy thermal state', 'SF-15', 'Cool the batteries and motors', 'Keep battery cells, motors and controllers within their thermal limits across the flight and vertiport-turnaround envelope.'],
-            ['AF-11', 'Operate on the ground and at the vertiport', 'SF-16', 'Support, brake and steer on the ground', 'Support the aircraft, decelerate after landing and manoeuvre on a confined elevated vertipad.'],
+            ['AF-11', 'Operate on the ground and at the vertiport', 'SF-16', 'Support, brake and steer on the ground', 'Support the aircraft, decelerate after landing and maneuver on a confined elevated vertipad.'],
             ['AF-12', 'Navigate and guide to the vertiport', 'SF-17', 'Navigate and guide to a confined vertipad', 'Determine position and guide the aircraft to a confined, obstacle-rich elevated landing site.'],
             ['AF-13', 'Protect the occupants', 'SF-18', 'Restrain and protect the occupants', 'Restrain the five occupants and manage crash energy and post-crash egress.'],
             ['AF-14', 'Protect against fire and thermal runaway', 'SF-19', 'Detect and contain battery thermal runaway', 'Detect a cell thermal event and contain propagation to permit continued flight to a landing.'],
@@ -167,7 +167,7 @@
             F(1029, 'FC-29', 'SF-19', 'Thermal runaway propagates between battery packs', 'Catastrophic', ALLPH,
               'Propagation defeats the pack independence claim; multiple packs lost.', 'Suppression or isolation ineffective.', 'Fatalities.', ['ASM-AC-017', 'ASM-AC-018']),
             F(1030, 'FC-30', 'SF-20', 'Loss of ice protection in icing conditions', 'Hazardous', 'Transition to cruise, Cruise, Approach and hover',
-              'Ice on lift rotors and sensing surfaces; thrust and air-data degraded.', 'Exit icing; escape manoeuvre required.', 'Serious injuries possible.', ['ASM-AC-019']),
+              'Ice on lift rotors and sensing surfaces; thrust and air-data degraded.', 'Exit icing; escape maneuver required.', 'Serious injuries possible.', ['ASM-AC-019']),
         ];
 
         // ====================================================================
@@ -229,7 +229,7 @@
             A('ASM-AC-019', 'The icing envelope is the powered-lift equivalent of Part 23 Appendix C; supercooled large droplet is not assumed.', 'Assumed', 'Confirm the intended icing certification scope.', 'Cert — basis'),
             A('ASM-AC-020', 'The certification basis is assumed to be FAA §21.17(b) powered-lift with airworthiness criteria equivalent to EASA SC-VTOL Enhanced category. No basis has been agreed with the authority.', 'Assumed', 'This is the single largest open item; a named regulatory lead exists but no agreed basis or special conditions.', 'Cert — basis'),
             // ---- Human-factors assumptions (feed the HEA and task analyses) ----
-            Object.assign(A('ASM-HF-001', 'The single pilot recognises and reacts to an annunciated rotor-loss or thermal warning in the hover within 2 seconds, reconfiguring by procedure.', 'Assumed', 'Simulator campaign on the hover control law; not yet run.', 'Ops — AFM procedure'),
+            Object.assign(A('ASM-HF-001', 'The single pilot recognizes and reacts to an annunciated rotor-loss or thermal warning in the hover within 2 seconds, reconfiguring by procedure.', 'Assumed', 'Simulator campaign on the hover control law; not yet run.', 'Ops — AFM procedure'),
                 { type: 'Human Factors', hf: { direction: 'recovery', responsePhase: 'Approach and hover', crewmember: 'PF', taskTimeS: 2, taskTimeBasis: 'Assumed pending simulator evidence', coActivation: [], channels: ['visual', 'auditory', 'cognitive', 'motor'] } }),
             Object.assign(A('ASM-HF-002', 'The pilot correctly interprets the energy-state display and initiates a diversion before the reserve is committed, in cruise, within 10 seconds of a low-energy caution.', 'Assumed', 'Part-task study on the energy display; not yet run.', 'Ops — AFM procedure'),
                 { type: 'Human Factors', hf: { direction: 'recovery', responsePhase: 'Cruise', crewmember: 'PF', taskTimeS: 10, taskTimeBasis: 'Assumed pending part-task evidence', coActivation: [], channels: ['visual', 'cognitive'] } }),
@@ -607,7 +607,7 @@
             { internalId: id(), cmaId: 'CMA-003', subject: 'Battery pack independence (min 4 of 6)', claim: 'No single thermal, mechanical or electrical event takes more than one pack.', modes: ['zonal', 'thermal'], linkedGateIds: ['pg-bms-propagation:' + pVentB.id], findings: 'Three packs share each battery bay; a thermal runaway in one may reach the others before detection. This is the most consequential open finding in the model — it is the basis of REQ-AC-003.', mitigation: 'Per-pack enclosure and independent vent path; non-propagation demonstration required before the FC-13 budget is met. REQ-AC-010/011 open.', status: 'Open', scope: 'system', owningSystemId: 'sys-bms' },
             { internalId: id(), cmaId: 'CMA-004', subject: 'Cooling-loop independence', claim: 'Cooling loops A and B fail independently.', modes: ['zonal'], linkedGateIds: ['pg-thm-cooling:' + 0], findings: 'Both loops converge at the pump pack in Z-THM; a single event there takes both.', mitigation: 'Independent pumps and radiators; convergence length at the pump pack limited and reviewed.', status: 'Mitigated', scope: 'system', owningSystemId: 'sys-thm' },
             { internalId: id(), cmaId: 'CMA-005', subject: 'Pitch actuation lane independence', claim: 'Pitch EHA lanes A and B fail independently.', modes: ['zonal', 'design-error'], linkedGateIds: ['pg-fcs-pitch:' + pEhaA.id], findings: 'Both lanes are electro-hydrostatic actuators of the same type sharing the wing routing zone (Z-WING-L). A common design fault or a wing zonal event defeats the claim.', mitigation: 'Dissimilar lane monitoring; separate power and routing; β = 5% residual retained.', status: 'Closed — Accepted', scope: 'system', owningSystemId: 'sys-fcs' },
-            { internalId: id(), cmaId: 'CMA-006', subject: 'Air-data channel independence', claim: 'Three air-data channels fail independently in the erroneous sense.', modes: ['environmental', 'design-error'], linkedGateIds: ['pg-avi-mislead:' + pMonFail.id], findings: 'Common icing of multiple probes in the shared nose bay is a recognised environmental common mode; probe heating independence is the mitigation.', mitigation: 'Independently powered and monitored heaters per probe (REQ-AC-017); voting monitor.', status: 'Closed — Accepted', scope: 'system', owningSystemId: 'sys-avi' },
+            { internalId: id(), cmaId: 'CMA-006', subject: 'Air-data channel independence', claim: 'Three air-data channels fail independently in the erroneous sense.', modes: ['environmental', 'design-error'], linkedGateIds: ['pg-avi-mislead:' + pMonFail.id], findings: 'Common icing of multiple probes in the shared nose bay is a recognized environmental common mode; probe heating independence is the mitigation.', mitigation: 'Independently powered and monitored heaters per probe (REQ-AC-017); voting monitor.', status: 'Closed — Accepted', scope: 'system', owningSystemId: 'sys-avi' },
             { internalId: id(), cmaId: 'CMA-007', subject: 'Energy-state estimation independence', claim: 'The two state-of-charge estimation channels fail independently.', modes: ['design-error'], linkedGateIds: ['pg-eps-soc:' + pSoc1.id], findings: 'Both channels estimate from the same pack model with the same assumptions; a model error is common to both, and no independent coulomb-counting reference exists today (ASM-AC-009).', mitigation: 'Independent reference proposed; until it is in, the miscompare monitor cannot catch a common model error. REQ-AC-005 open.', status: 'Open', scope: 'system', owningSystemId: 'sys-eps' },
             { internalId: id(), cmaId: 'CMA-008', subject: 'Single-member configuration claims', claim: 'Where a MAC clause names one system, no further redundancy is required for the protected function.', modes: ['zonal'], linkedGateIds: [], findings: 'Nine clauses are single-member. Each is a claim that a single zonal event taking that system is acceptable, and the spatial model currently returns a set of single-zone paths to a Catastrophic condition.', mitigation: 'Each path to be dispositioned individually on the zonal desk with a signed engineering basis, or the architecture revised. Two are signed; the rest are open.', status: 'Open', scope: 'aircraft', owningSystemId: '' },
         ];
@@ -692,7 +692,7 @@
             fmeaRow('FM-FCS-02', 'sys-fcs', 'Pitch EHA lane A', 'Hardover', 'Uncommanded deflection', 'Pitch excursion', 'Miscompare monitor within 0.5 s', 'Hazardous', 4e-6, pEhaA.id, 'Monitor disengages the faulty lane'),
             fmeaRow('FM-AVI-01', 'sys-avi', 'Inertial/air-data channel', 'Erroneous output within range', 'One channel disagrees', 'Misleading data if two agree in error', 'Three-way voting monitor', 'Catastrophic', 7e-6, 0, 'Third channel votes out the faulty pair'),
             fmeaRow('FM-AVI-02', 'sys-avi', 'Air-data probe heater', 'Loss of heating', 'Probe exposed to icing', 'Erroneous air data from that probe', 'Heater current monitor', 'Hazardous', 1.1e-5, 0, 'Independent heaters per probe'),
-            fmeaRow('FM-THM-01', 'sys-thm', 'Coolant pump', 'Loss of output', 'One loop depressurised', 'Power derated; second loop carries', 'Flow and temperature monitor', 'Major', 3.5e-5, 0, 'Loss of one loop derates, not trips'),
+            fmeaRow('FM-THM-01', 'sys-thm', 'Coolant pump', 'Loss of output', 'One loop depressurized', 'Power derated; second loop carries', 'Flow and temperature monitor', 'Major', 3.5e-5, 0, 'Loss of one loop derates, not trips'),
             fmeaRow('FM-LDG-01', 'sys-ldg', 'Wheel brake channel A', 'Loss of braking', 'Half the brake units inoperative', 'Reduced deceleration on the pad', 'Brake pressure indication', 'Hazardous', 5e-5, pBrkA.id, 'Channel B plus the parking means'),
             fmeaRow('FM-IPS-01', 'sys-ips', 'Rotor ice-protection element', 'Loss of heating', 'Ice accretes on one rotor set', 'Thrust degradation in icing', 'Element current monitor', 'Hazardous', 1.3e-5, 0, 'Independent elements and monitoring'),
             fmeaRow('FM-EWS-01', 'sys-ews', 'HV routing spine', 'Arc fault', 'Local arc in the spine', 'Possible damage to a redundant run', 'Arc-fault detection and isolation', 'Catastrophic', 3e-6, 0, 'Open finding CMA-002 — routing zones to be separated'),
@@ -794,10 +794,10 @@
             macModels: [
                 { id: 'mac-lift', subId: 'SF-07', phase: 'Vertical takeoff, Approach and hover, Vertical landing',
                   clauses: [{ min: 3, of: ['sys-rot1', 'sys-rot2', 'sys-rot3', 'sys-rot4'] }],
-                  substantiation: { kind: 'assumed', ref: 'Seven-of-eight floor on the full rotor set; four drives modelled individually — REQ-AC-002 test pending' } },
+                  substantiation: { kind: 'assumed', ref: 'Seven-of-eight floor on the full rotor set; four drives modeled individually — REQ-AC-002 test pending' } },
                 { id: 'mac-energy', subId: 'SF-09', phase: 'all',
                   clauses: [{ min: 2, of: ['sys-pk1', 'sys-pk2', 'sys-pk3'] }],
-                  substantiation: { kind: 'assumed', ref: 'Four-of-six floor on the full pack set; three packs modelled individually — see CMA-003' } },
+                  substantiation: { kind: 'assumed', ref: 'Four-of-six floor on the full pack set; three packs modeled individually — see CMA-003' } },
                 { id: 'mac-compute', subId: 'SF-12', phase: 'all',
                   clauses: [{ min: 1, of: ['sys-fcc'] }],
                   substantiation: { kind: 'sdd', ref: 'VAYU-SDD-FCC-001' } },
@@ -1009,7 +1009,7 @@
                 initiator: { desc: 'A single cell enters thermal runaway in flight', freq: 1.0e-6 },
                 barriers: [
                     { name: 'Vent-gas and per-module sensing detects the event', pFail: 3.0e-2, note: 'Per-pack detection; any channel annunciates.', linkedPageId: 'pg-bms-undetected' },
-                    { name: 'Flight-deck annunciation presented and recognised', pFail: 5.0e-2, pCcf: 2.0e-1, note: 'Single pilot; response within 2 s per the human-factors assumption (ASM-HF-001).' },
+                    { name: 'Flight-deck annunciation presented and recognized', pFail: 5.0e-2, pCcf: 2.0e-1, note: 'Single pilot; response within 2 s per the human-factors assumption (ASM-HF-001).' },
                     { name: 'Pack enclosure contains propagation to the landing time', pFail: 3.0e-2, note: 'Per-pack enclosure and vent path.', linkedPageId: 'pg-bms-propagation' },
                     { name: 'Crew executes the land-as-soon-as-possible procedure', pFail: 1.0e-1, note: 'Divert and land per the AFM.' }
                 ],
@@ -1043,8 +1043,8 @@
                   trace: { kind: 'none', ref: '', logicalId: '' } },
                 { id: 'BT1-M1', side: 'mitigative', name: 'Vent-gas and per-module sensing detects the event', pFail: 3.0e-2,
                   trace: { kind: 'eta', ref: 'ET-001 · Vent-gas and per-module sensing detects the event', logicalId: '', pageId: 'pg-bms-undetected', etaId: 'ET-001' } },
-                { id: 'BT1-M2', side: 'mitigative', name: 'Flight-deck annunciation presented and recognised', pFail: 5.0e-2,
-                  trace: { kind: 'eta', ref: 'ET-001 · Flight-deck annunciation presented and recognised', logicalId: '', pageId: '', etaId: 'ET-001' } },
+                { id: 'BT1-M2', side: 'mitigative', name: 'Flight-deck annunciation presented and recognized', pFail: 5.0e-2,
+                  trace: { kind: 'eta', ref: 'ET-001 · Flight-deck annunciation presented and recognized', logicalId: '', pageId: '', etaId: 'ET-001' } },
                 { id: 'BT1-M3', side: 'mitigative', name: 'Pack enclosure contains propagation to the landing time', pFail: 3.0e-2,
                   trace: { kind: 'eta', ref: 'ET-001 · Pack enclosure contains propagation to the landing time', logicalId: '', pageId: 'pg-bms-propagation', etaId: 'ET-001' } },
                 { id: 'BT1-M4', side: 'mitigative', name: 'Crew executes the land-as-soon-as-possible procedure', pFail: 1.0e-1,

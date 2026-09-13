@@ -50,7 +50,7 @@
             }
             var s = document.createElement('script');
             s.id = 'sl-hl1-lazy';
-            s.src = window.SL_SHOWCASE_HL1_SRC || 'demo_showcase_hl1.js?v=6';
+            s.src = window.SL_SHOWCASE_HL1_SRC || 'demo_showcase_hl1.js?v=7';
             s.onload = function () { resolve(); };
             s.onerror = function () { reject(new Error('HL-1 showcase load failed')); };
             document.head.appendChild(s);

@@ -103,12 +103,12 @@ console.log('\n[fmea] the mode toggle obeys the programme plan');
         T.inScope('functional') === true);
 
     check('setFmeaMode refuses an out-of-scope mode instead of switching',
-        /if \(!fmeaModeInScope\(mode\)\) \{/.test(help) && /is not in this programme/.test(help));
+        /if \(!fmeaModeInScope\(mode\)\) \{/.test(help) && /is not in this program/.test(help));
     check('…and says where to change it, and what the record is for',
         /Add the lane on Program Planning first/.test(help) && /the scope record is what the SSPP prints/.test(help));
     check('the buttons are disabled and explain themselves',
         /function refreshFmeaModeButtons\(\)/.test(help) &&
-        /Out of programme scope/.test(help) &&
+        /Out of program scope/.test(help) &&
         /el\.disabled = !on;/.test(help));
     check('…and are refreshed on every FMEA render',
         /if \(typeof refreshFmeaModeButtons === 'function'\) refreshFmeaModeButtons\(\);/.test(bind),

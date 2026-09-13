@@ -259,7 +259,7 @@ check('the module says so in its own header', /It reads the state, says what\s*\
 console.log('\n[A11] degrades rather than throws');
 check('no programme plan → null, not an exception', N.assess({ PP: null }) === null);
 check('a malformed plan → null', N.assess({ PP: { CATALOGUE: 'nope' } }) === null);
-check('the UI says so instead of rendering an empty board', /Programme plan not loaded/.test(N.html({ PP: null })));
+check('the UI says so instead of rendering an empty board', /Program plan not loaded/.test(N.html({ PP: null })));
 check('a laneData that throws costs that lane its count, not the whole board',
   (() => { try { const a = N.assess({ PP: plan({ laneData: () => { throw new Error('boom'); } }), primitives: P({ functions: 2 }) }); return !!a && a.lanes.length === 4; } catch (_) { return false; } })());
 check('a basisNow that throws does not take the board with it',

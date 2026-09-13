@@ -117,7 +117,7 @@
         var notRealized = (s.realized === false || String(s.realized).toLowerCase() === 'false');
         if (!notRealized) return { kind: 'realized', note: '', escapes: esc };
         var unstated = esc.filter(function (e) { return !e.escape; }).map(function (e) { return e.phase; });
-        if (unstated.length) return { kind: 'unstated', escapes: esc, note: 'Effect not realised in these phases, but no escape is stated for ' + unstated.join(', ') + ' on Define → Flight Phases — the drafted level stands until the escape is entered.' };
+        if (unstated.length) return { kind: 'unstated', escapes: esc, note: 'Effect not realized in these phases, but no escape is stated for ' + unstated.join(', ') + ' on Define → Flight Phases — the drafted level stands until the escape is entered.' };
         var none = esc.filter(function (e) { return e.escape.toLowerCase() === ESCAPE_NONE; }).map(function (e) { return e.phase; });
         var open = esc.filter(function (e) { return e.escape.toLowerCase() !== ESCAPE_NONE; });
         var defeated = !!(s.escapeDefeated === true || String(s.escapeDefeated).toLowerCase() === 'true');
@@ -127,13 +127,13 @@
         // turned into No Safety Effect because only the profile's escape was read. The
         // drafter's "none" now counts as the escape being defeated.
         var saidNone = (s.escape != null) && String(s.escape).trim().toLowerCase() === ESCAPE_NONE;
-        if (saidNone && open.length) return { kind: 'end', escapes: esc, note: 'Effect not realised yet, and the drafter states no escape applies to this condition in these phases (the profile lists ' + open.map(function (e) { return e.escape; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' / ') + ') — the row carries the end effect and its class (4 Sep 2026 ruling).' };
-        if (none.length && !open.length) return { kind: 'end', escapes: esc, note: 'Effect not realised yet and there is no escape in ' + none.join(', ') + ' — the row carries the end effect and its class (4 Sep 2026 ruling).' };
-        if (none.length && open.length) return { kind: 'mixed', escapes: esc, note: 'Effect not realised yet; ' + none.join(', ') + ' has no escape while ' + open.map(function (e) { return e.phase; }).join(', ') + ' can be escaped — the row carries the end effect conservatively; split it so each phase sits on one row.' };
+        if (saidNone && open.length) return { kind: 'end', escapes: esc, note: 'Effect not realized yet, and the drafter states no escape applies to this condition in these phases (the profile lists ' + open.map(function (e) { return e.escape; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' / ') + ') — the row carries the end effect and its class (4 Sep 2026 ruling).' };
+        if (none.length && !open.length) return { kind: 'end', escapes: esc, note: 'Effect not realized yet and there is no escape in ' + none.join(', ') + ' — the row carries the end effect and its class (4 Sep 2026 ruling).' };
+        if (none.length && open.length) return { kind: 'mixed', escapes: esc, note: 'Effect not realized yet; ' + none.join(', ') + ' has no escape while ' + open.map(function (e) { return e.phase; }).join(', ') + ' can be escaped — the row carries the end effect conservatively; split it so each phase sits on one row.' };
         var names = open.map(function (e) { return e.escape; }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(' / ');
-        if (defeated) return { kind: 'end', escapes: esc, note: 'Effect not realised yet, but this failure defeats the escape (' + names + ') — the row carries the end effect and its class (4 Sep 2026 ruling).' };
+        if (defeated) return { kind: 'end', escapes: esc, note: 'Effect not realized yet, but this failure defeats the escape (' + names + ') — the row carries the end effect and its class (4 Sep 2026 ruling).' };
         var drafted = [s.effAcLevel, s.effCrewLevel, s.effPaxLevel].map(function (x) { return String(x || '').trim(); });
-        return { kind: 'nse', escapes: esc, note: 'Effect not realised in these phases and the flight can be escaped (' + names + '), which this failure does not defeat — No Safety Effect by rule (4 Sep 2026 ruling)' + (drafted.some(Boolean) ? '; the drafted levels (' + drafted.map(function (x) { return x || '—'; }).join(' / ') + ') describe the end effect and are recorded here, not on the row' : '') + '.' };
+        return { kind: 'nse', escapes: esc, note: 'Effect not realized in these phases and the flight can be escaped (' + names + '), which this failure does not defeat — No Safety Effect by rule (4 Sep 2026 ruling)' + (drafted.some(Boolean) ? '; the drafted levels (' + drafted.map(function (x) { return x || '—'; }).join(' / ') + ') describe the end effect and are recorded here, not on the row' : '') + '.' };
     }
 
     // ---- MAC → aircraft axis -----------------------------------------------------

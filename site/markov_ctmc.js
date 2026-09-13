@@ -223,7 +223,7 @@
         const tot = acc.reduce((a, x) => a + x, 0);
         const pi = tot > 0 ? acc.map(x => x / tot) : acc;
         return { ok: true, pi, pFailed: pFrom(pi), t,
-                 receipt: { method: 'uniformization (mode-centred Poisson weights)', Lambda, t, terms: R - L + 1, kRange: [L, R], tol } };
+                 receipt: { method: 'uniformization (mode-centered Poisson weights)', Lambda, t, terms: R - L + 1, kRange: [L, R], tol } };
     }
 
     // ========================================================================

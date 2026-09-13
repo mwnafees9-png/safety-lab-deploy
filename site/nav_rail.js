@@ -134,7 +134,7 @@
             if (PP && PP.CATALOGUE && typeof PP.laneOn === 'function') {
                 PP.CATALOGUE.forEach(function (l) {
                     if (PP.laneOn(l.id)) return;
-                    out.push({ label: l.name, kind: 'cat', tag: 'in catalogue — add via SPP', run: function () { if (typeof switchTab === 'function') switchTab('spp'); } });
+                    out.push({ label: l.name, kind: 'cat', tag: 'in catalog — add via SPP', run: function () { if (typeof switchTab === 'function') switchTab('spp'); } });
                 });
             }
         } catch (_) {}
@@ -150,7 +150,7 @@
         var box = document.createElement('div');
         box.style.cssText = 'width:min(560px,92vw);background:var(--color-surface-1,#fff);border:1px solid var(--color-border-strong,#c8cfdd);box-shadow:0 24px 64px rgba(0,0,0,.35);border-radius:var(--r-lg,0);overflow:hidden;';
         var inp = document.createElement('input');
-        inp.placeholder = 'Find a page, a system, or a catalogue lane…';
+        inp.placeholder = 'Find a page, a system, or a catalog lane…';
         inp.setAttribute('aria-label', 'Search');
         inp.style.cssText = 'width:100%;border:none;border-bottom:1px solid var(--color-border-hair,#e3e7f0);padding:14px 16px;font:inherit;font-size:15px;outline:none;background:transparent;color:inherit;';
         var list = document.createElement('div');

@@ -599,7 +599,7 @@ function _ftaCullPill(shown, total, capped) {
         }
         pill.style.display = 'block';
         pill.textContent = 'viewport rendering: ' + shown.toLocaleString() + ' of ' + total.toLocaleString() + ' nodes mounted' +
-            (capped ? ' (zoomed out — nearest to view centre; zoom in for full local detail)' : '') +
+            (capped ? ' (zoomed out — nearest to view center; zoom in for full local detail)' : '') +
             ' — layout and math cover the full tree';
     } catch (_) {}
 }
@@ -2080,11 +2080,11 @@ function _renderEventAllocBasisPanel(fha) {
             `<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--color-text-tertiary); font-weight: 600; margin-bottom: 4px;">Exposure Window &mdash; contingency phase</div>` +
             `<div style="font-size: 13px; color: var(--color-text-primary);">` +
                 `This hazard is scoped to <em>${esc((exp.specialPhases || []).join(', '))}</em>, which is outside the nominal mission. ` +
-                `The exposure window is held at the <strong>full ${exp.totalHours.toFixed(2)} h flight</strong> (r = 100%), not the manoeuvre's own duration.` +
+                `The exposure window is held at the <strong>full ${exp.totalHours.toFixed(2)} h flight</strong> (r = 100%), not the maneuver's own duration.` +
             `</div>` +
             `<div style="font-size: 12px; color: var(--color-text-secondary); margin-top: 4px;">` +
                 `The function had to survive the whole flight to be available when the contingency was flown, so the failure accrues across the flight and is revealed at the demand. ` +
-                `Scaling t down to the manoeuvre would understate the probability by roughly two orders of magnitude. ` +
+                `Scaling t down to the maneuver would understate the probability by roughly two orders of magnitude. ` +
                 `A tighter figure needs P(demand) × duration; there is no occurrence-frequency field yet, so the conservative bound is held rather than a frequency assumed.` +
             `</div>` +
             (exp.unmatchedPhases.length
@@ -2223,7 +2223,7 @@ window.ftaCancelCompute = function () {
     // the next request spawns a fresh one.
     try { if (typeof _cutsetWorker !== 'undefined' && _cutsetWorker) { _cutsetWorker.terminate(); _cutsetWorker = null; } } catch (_) {}
     const summary = document.getElementById('cutset-summary');
-    if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:var(--text-secondary);">Computation cancelled. Nothing was rendered — run Calculate Minimal Cutsets again when ready.</div>';
+    if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:var(--text-secondary);">Computation canceled. Nothing was rendered — run Calculate Minimal Cutsets again when ready.</div>';
 };
 function _generateCutsetReportAsync(rootNode) {
     const token = ++_ftaComputeSeq;

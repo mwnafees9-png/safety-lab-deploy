@@ -297,11 +297,11 @@
 
     function html(inject) {
         const a = assess(inject);
-        if (!a) return '<div style="padding:14px;color:var(--color-text-tertiary);font-size:12px;">Programme plan not loaded.</div>';
+        if (!a) return '<div style="padding:14px;color:var(--color-text-tertiary);font-size:12px;">Program plan not loaded.</div>';
 
         let out = '<h3>What\'s next</h3>'
             + '<p style="font-size:12.5px;color:var(--color-text-secondary);margin:2px 0 8px;">'
-            + 'Read from the programme plan and the current project state, against ' + _esc(a.basis) + '. '
+            + 'Read from the program plan and the current project state, against ' + _esc(a.basis) + '. '
             + 'The ordering comes from ARP4754B and ARP4761A, not from a model — nothing here was inferred, and nothing runs on its own.</p>';
 
         out += _S('Waiting on you', a.waiting.length ? _plural(a.waiting.length, 'decision') : 'nothing outstanding');

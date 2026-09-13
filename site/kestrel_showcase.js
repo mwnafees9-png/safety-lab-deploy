@@ -22,7 +22,7 @@
             if (ex) { ex.addEventListener('load', function () { resolve(); }); ex.addEventListener('error', function () { reject(new Error('load failed')); }); return; }
             var s = document.createElement('script');
             s.id = 'sl-kestrel25-lazy';
-            s.src = window.SL_SHOWCASE_KESTREL25_SRC || 'demo_showcase_kestrel25.js?v=1';
+            s.src = window.SL_SHOWCASE_KESTREL25_SRC || 'demo_showcase_kestrel25.js?v=2';
             s.onload = function () { resolve(); };
             s.onerror = function () { reject(new Error('load failed')); };
             document.head.appendChild(s);

@@ -74,7 +74,7 @@ check('focused inline editor blocks remounts', /TEXTAREA' \|\| ae\.tagName === '
 check('honesty pill states full-tree coverage', /layout and math cover the full tree/.test(fv));
 check('opt-out documented (?cull=0 / SLA_FTA_CULL)', /\?cull=0 or SLA_FTA_CULL/.test(fv));
 check('mount cap guards zoomed-out full remounts (600, nearest-to-centre)', /_CULL_MOUNT_CAP = 350/.test(fv) && /nearest the view centre/.test(fv) && /_cullCapped = true/.test(fv));
-check('capped state spoken on the pill', /zoomed out — nearest to view centre/.test(fv));
+check('capped state spoken on the pill', /zoomed out — nearest to view center/.test(fv));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

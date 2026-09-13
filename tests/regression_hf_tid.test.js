@@ -100,7 +100,7 @@ ok('CSV import button wired', /triggerCSVImport\(\\'HF_TaskIdentification\\'\)/.
 // review column and its binding are pinned where they live.
 ok('review column head present', /\(cfg\.kind \? _revTh\(\) : ''\)/.test(src));
 ok('review cell bound to hfTid + taskId', /tid: \{\s*\n\s*title: 'task step', store: 'tid', idField: 'taskId', kind: 'hfTid'/.test(src));
-ok('footer disclaims judgement — identification only', /it makes no judgement about difficulty, workload, error or consequence/.test(src));
+ok('footer disclaims judgement — identification only', /it makes no judgment about difficulty, workload, error or consequence/.test(src));
 
 // ---------------------------------------------------------------- wiring
 ok('API exports the lane', /addTid: addTid, setTid: setTid, removeTid: removeTid, renderTid: renderTid, tidFindings: tidFindings, TID_MODES: TID_MODES, TID_CREW: TID_CREW/.test(src));

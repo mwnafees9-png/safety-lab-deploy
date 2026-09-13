@@ -551,7 +551,7 @@
         if (!st.rows.length) {
             teach = '<div class="hfx-teach" style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); border-radius:6px; padding:14px 18px; margin-bottom:12px; ">' +
                 '<b style="font-size:13px;">The controls and displays the crew actually uses &mdash; judged against &sect;25.1302.</b>' +
-                '<p style="font-size:12.5px; color:var(--color-text-secondary); margin:6px 0 0; line-height:1.5;">One row per evaluated control, display or automation behaviour: which of the four &sect;25.1302 considerations it is judged against &mdash; (a) the information to do the task, (b) usability by the qualified crew, (c) predictable and unambiguous behaviour, (d) error management &mdash; the finding, and its disposition. AC 25.1302-1 is the means-of-compliance guidance.</p></div>';
+                '<p style="font-size:12.5px; color:var(--color-text-secondary); margin:6px 0 0; line-height:1.5;">One row per evaluated control, display or automation behavior: which of the four &sect;25.1302 considerations it is judged against &mdash; (a) the information to do the task, (b) usability by the qualified crew, (c) predictable and unambiguous behavior, (d) error management &mdash; the finding, and its disposition. AC 25.1302-1 is the means-of-compliance guidance.</p></div>';
         }
         var findHtml = '';
         if (st.rows.length && find.gaps.length) {
@@ -819,7 +819,7 @@
             (st.rows.length ? '<button class="btn-cyan" style="font-size:11px;" onclick="exportData(\'HF_TaskIdentification\', \'csv\')" title="Export the identified task steps as CSV">&#8595; Export CSV</button>' : '') +
             '<span class="u-mono" style="font-size:10px; color:var(--color-text-tertiary);">' + find.count + ' task step' + (find.count === 1 ? '' : 's') + ' &middot; ' + (4 - find.modeGaps.length) + ' / 4 operating modes covered &middot; ' + (find.count - find.uncited.length) + ' cited</span></div>' +
             _hfTableHtml('tid') +
-            '<p class="u-mono" style="font-size:10.5px; color:var(--color-text-tertiary); margin-top:6px;">Identification only. This lane records what the crew is required to do and where that requirement comes from; it makes no judgement about difficulty, workload, error or consequence &mdash; those are the Task Analysis and Task Hazard Assessment lanes, and they read this one.</p>';
+            '<p class="u-mono" style="font-size:10.5px; color:var(--color-text-tertiary); margin-top:6px;">Identification only. This lane records what the crew is required to do and where that requirement comes from; it makes no judgment about difficulty, workload, error or consequence &mdash; those are the Task Analysis and Task Hazard Assessment lanes, and they read this one.</p>';
     }
 
     // ========================= THE COLUMN SCHEMA =========================
