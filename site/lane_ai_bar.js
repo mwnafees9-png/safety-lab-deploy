@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // lane_ai_bar.js — v1.2 — THE AI ACTION BAR, IN THE LANE ITSELF.
 //
@@ -207,7 +208,7 @@
                 Promise.resolve().then(a.run).catch(function (e) {
                     try {
                         if (typeof showToast === 'function') showToast((e && e.message) || String(e), 'warning', 4000);
-                        else if (typeof alert === 'function') alert((e && e.message) || String(e));
+                        else slAlert((e && e.message) || String(e));
                     } catch (_) {}
                 });
             };

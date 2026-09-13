@@ -35,8 +35,11 @@ check('every delete/render helper exists in the codebase', MA.TARGETS.every(t =>
 
 // ---- [2] doctrine in source ------------------------------------------------------
 check('typed DELETE gate on bulk delete', /Type DELETE to proceed/.test(src) && /!== 'DELETE'/.test(src.replace(/\\'/g, "'")) || /trim\(\) !== 'DELETE'/.test(src));
-check('confirm suppression is SCOPED (finally restores window.confirm)',
-  /const _confirm = window\.confirm/.test(src) && /finally \{\s*\n\s*window\.confirm = _confirm/.test(src));
+// R19 step 3 (13 Sep 2026): the per-row delete helpers ask through the app's slConfirm (async), so the
+// batch answers THAT dialog, awaits each delete in order, and restores the dialog in finally.
+check('confirm suppression is SCOPED (finally restores window.slConfirm) and the deletes are awaited in order',
+  /const _slConfirm = window\.slConfirm/.test(src) && /finally \{\s*\n\s*window\.slConfirm = _slConfirm/.test(src)
+  && /for \(const id of ids\)/.test(src) && /await del\(row\.internalId\); done\+\+/.test(src) && !/window\.confirm/.test(src));
 check('guards refuse with names, never silently', /has a linked fault tree/.test(src) && /already in the Deleted bin/.test(src) && /refused/.test(src));
 check('computed tables excluded on principle', /UCA seeds, HFA items\) are deliberately NOT targets/.test(src));
 check('writes route through the worksheets: delete via helper fn, render via helper fn',

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // ram_settings.js — Phase R10: one place for the program-level utilization
 // and statistical-policy numbers every R&M module currently assumes.
@@ -46,11 +47,11 @@
         ['kNonopDefault', 'Default nonoperating ratio K', 'λ_storage = K·λ_op default for the frameworks page'],
     ];
 
-    window.ramSettingsEdit = function (key) {
+    window.ramSettingsEdit = async function (key) {
         const s = _store();
         const f = FIELDS.find(x => x[0] === key);
         if (!f) return;
-        const v = parseFloat(window.prompt(f[1] + ':', String(s[key])));
+        const v = parseFloat(await slPrompt(f[1] + ':', String(s[key])));
         if (!(v > 0) && !(key === 'dutyDefault' && v === 0)) return;
         if ((key === 'confidence' || key === 'dutyDefault') && v > 1) return;
         s[key] = v;

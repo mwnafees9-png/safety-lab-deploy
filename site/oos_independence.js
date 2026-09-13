@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /*!
  * Safety Lab Aero — OOS Independence module
  * EASA AI Concept Paper Proposed Issue 03 (June 2026) — Operational Oversight System (OOS).
@@ -541,9 +542,9 @@
             });
         });
         host.querySelectorAll('[data-accept]').forEach(function (el) {
-            el.addEventListener('click', function () {
+            el.addEventListener('click', async function () {
                 var ref = el.getAttribute('data-accept');
-                var j = (typeof prompt === 'function') ? prompt('Justification for accepting this shared-resource coupling as not defeating independence:') : '';
+                var j = await slPrompt('Justification for accepting this shared-resource coupling as not defeating independence:', '');
                 if (j == null) return;
                 acceptResidual(_activeClaimId, ref, j, 'Waqas Nafees');
                 _renderBody();

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // fta_quant_modules.js — v1.0 — Phase P2 batch 1: FTA quantification math layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script, all names remain
 // global exactly as before). Runtime-only pure function declarations — zero
@@ -1294,8 +1295,8 @@ function addMarkovModel() {
     try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
     renderMarkovModels();
 }
-function deleteMarkovModel(id) {
-    if (!confirm('Delete this Markov model? Events using it will fall back to their repair model.')) return;
+async function deleteMarkovModel(id) {
+    if (!(await slConfirm('Delete this Markov model? Events using it will fall back to their repair model.', { danger: true, okText: 'Delete' }))) return;
     projectConfig.markovModels = (projectConfig.markovModels || []).filter(m => m.id !== id);
     try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
     renderMarkovModels();
@@ -1563,7 +1564,7 @@ function effectiveProb(node, exposureTime) {
 function runDFTMonteCarlo() {
     const root = getActiveFTARoot();
     const out = document.getElementById('dft-summary');
-    if (!root) { if (out) out.innerHTML = ''; return alert('Tree is empty.'); }
+    if (!root) { if (out) out.innerHTML = ''; showToast('Tree is empty.', 'warning', 4000); return; }
     const r = simulateDFT(root, ftaConfig.exposureTime || 1, 20000);
     if (!out) return;
     const dynCount = r.dynGateCount || 0;
@@ -1591,7 +1592,7 @@ function runDFTMonteCarlo() {
 function runUncertaintyDisplay() {
     const root = getActiveFTARoot();
     const out = document.getElementById('uncertainty-summary');
-    if (!root) { if (out) out.innerHTML = ''; return alert('Tree is empty.'); }
+    if (!root) { if (out) out.innerHTML = ''; showToast('Tree is empty.', 'warning', 4000); return; }
     // Warn if no basic event has a non-trivial EF — the sampler will produce a delta at the point estimate.
     const anyEF = (function check(n) {
         if (!n) return false;

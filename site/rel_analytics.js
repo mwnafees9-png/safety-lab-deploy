@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // rel_analytics.js — Phase F5: the reliability analytics suite.
 // BORN MODULAR: new file, zero monolith edits; store under
 // projectConfig.relAnalytics (auto-serialized); wraps switchTab for its views.
@@ -29,10 +30,7 @@
     }
     function _save() { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} }
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _access() { return (typeof window._ramHasAccess === 'function') ? window._ramHasAccess() : true; }
     const _gate = host => { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; "><h3 style="margin:0 0 10px; border:none; padding:0;">Reliability analytics is a Pro+ capability</h3><p style="font-size:13px; color:var(--color-text-secondary);">Weibull life data, Crow-AMSAA growth, allocation, spares and demonstration planning.</p></div>'; };
@@ -213,23 +211,25 @@
     // ============================================================== actions
     async function relAddLifeSet() {
         if (!_access()) return;
-        const name = await _ask('Life-data set name (e.g. "Brake shuttle valve — bench + field"):'); if (!name || !name.trim()) return;
+        const name = await _ask('Life-data set name (e.g. "Brake shuttle valve, bench + field"):'); if (!name || !name.trim()) return;
         const ft = (await _ask('Failure times (hours, comma-separated):', '150, 320, 480, 710, 990')) || '';
-        const st = (await _ask('Suspension times (hours, comma-separated — units removed unfailed; blank if none):', '')) || '';
+        const st = (await _ask('Suspension times (hours, comma-separated: units removed unfailed; blank if none):', '')) || '';
         const failures = ft.split(',').map(x => parseFloat(x)).filter(x => x > 0);
         const susp = st.split(',').map(x => parseFloat(x)).filter(x => x > 0);
         if (failures.length < 2) { _toast('Need at least two failure times.', 'warning'); return; }
         _store().lifeData.push({ id: 'LD-' + Date.now(), name: name.trim(), failures, suspensions: susp });
         _save(); renderRamWeibullPage();
     }
-    function relDeleteLifeSet(id) {
+    async function relDeleteLifeSet(id) {
         const s = _store();
         const i = s.lifeData.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this data set?')) { s.lifeData.splice(i, 1); _save(); renderRamWeibullPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this data set?', { danger: true, okText: 'Remove' }))) return;
+        s.lifeData.splice(i, 1); _save(); renderRamWeibullPage();
     }
     async function relAddGrowth() {
         if (!_access()) return;
-        const name = await _ask('Growth test name (e.g. "DVT campaign — prototype 2"):'); if (!name || !name.trim()) return;
+        const name = await _ask('Growth test name (e.g. "DVT campaign, prototype 2"):'); if (!name || !name.trim()) return;
         const ft = (await _ask('Cumulative failure times (test hours, ascending, comma-separated):', '12, 45, 110, 260, 480')) || '';
         const T = parseFloat(await _ask('Total accumulated test time (hours):', '600')) || 0;
         const times = ft.split(',').map(x => parseFloat(x)).filter(x => x > 0).sort((a, b) => a - b);
@@ -237,14 +237,16 @@
         _store().growth.push({ id: 'GR-' + Date.now(), name: name.trim(), times, T });
         _save(); renderRamGrowthPage();
     }
-    function relDeleteGrowth(id) {
+    async function relDeleteGrowth(id) {
         const s = _store();
         const i = s.growth.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this growth test?')) { s.growth.splice(i, 1); _save(); renderRamGrowthPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this growth test?', { danger: true, okText: 'Remove' }))) return;
+        s.growth.splice(i, 1); _save(); renderRamGrowthPage();
     }
     async function relAddGrowthGrouped() {
         if (!_access()) return;
-        const name = await _ask('Grouped growth test name (e.g. "Field campaign — monthly cumulative"):'); if (!name || !name.trim()) return;
+        const name = await _ask('Grouped growth test name (e.g. "Field campaign, monthly cumulative"):'); if (!name || !name.trim()) return;
         const ts = (await _ask('Cumulative test times at each inspection (hours, ascending, comma-separated):', '1000, 2000, 3000, 4000, 5000, 6000')) || '';
         const Ns = (await _ask('Cumulative failure count at each of those times (comma-separated, same order):', '4, 7, 9, 11, 12, 13')) || '';
         const tArr = ts.split(',').map(x => parseFloat(x)).filter(x => x > 0);
@@ -260,7 +262,7 @@
         const target = parseFloat(await _ask('System failure-rate budget to allocate (λ per hour, series architecture):', '1e-4'));
         if (!(target > 0)) return;
         const names = (await _ask('Subsystems (comma-separated):', 'Flight controls, Avionics, Electrical, Landing gear')) || '';
-        const weights = (await _ask('Feasibility/complexity weights (comma-separated, same order — heavier weight = more budget):', '2, 3, 2, 1')) || '';
+        const weights = (await _ask('Feasibility/complexity weights (comma-separated, same order, heavier weight = more budget):', '2, 3, 2, 1')) || '';
         const ns = names.split(',').map(x => x.trim()).filter(Boolean);
         const ws = weights.split(',').map(x => parseFloat(x) || 1);
         if (!ns.length) return;
@@ -276,8 +278,8 @@
         const Rsys = parseFloat(await _ask('System reliability requirement R\'(T) at mission time (0–1):', '0.98'));
         if (!(Rsys > 0 && Rsys < 1)) { _toast('Reliability requirement must be between 0 and 1.', 'warning'); return; }
         const names = (await _ask('Subsystems (comma-separated):', 'Flight controls, Avionics, Landing gear')) || '';
-        const modules = (await _ask('Module/component count nᵢ per subsystem (comma-separated, same order — complexity):', '120, 250, 60')) || '';
-        const imp = (await _ask('Importance factor Eᵢ per subsystem (0–1 — fraction of mission-critical failures that fail the system):', '1, 1, 0.8')) || '';
+        const modules = (await _ask('Module/component count nᵢ per subsystem (comma-separated, same order: complexity):', '120, 250, 60')) || '';
+        const imp = (await _ask('Importance factor Eᵢ per subsystem (0–1, fraction of mission-critical failures that fail the system):', '1, 1, 0.8')) || '';
         const ts = (await _ask('Operating time tᵢ per subsystem over the mission (hours, same order):', '10, 10, 10')) || '';
         const ns = names.split(',').map(x => x.trim()).filter(Boolean);
         const nn = modules.split(',').map(x => parseFloat(x));

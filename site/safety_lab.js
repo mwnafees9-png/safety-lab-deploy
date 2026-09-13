@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /*!
  * Safety Lab Aero — Aerospace safety analysis tool
  * (FHA, FTA / BDD, DAL allocation per ARP 4754A/4754B, AutoReq generation,
@@ -1151,7 +1152,7 @@ if (typeof window !== 'undefined') {
             const f = new File([String(str)], 'project.slab', { type: 'application/json' });
             loadProject({ target: { files: [f] } });
             return true;
-        } catch (e) { try { alert('Could not open project: ' + e); } catch (_) {} return false; }
+        } catch (e) { try { slAlert('Could not open project: ' + e, { title: 'Open failed' }); } catch (_) {} return false; }
     };
 }
 
@@ -1731,12 +1732,12 @@ const _origSubmitACReq = acReqCRUD.submit;
 // [P2 batch 5] L3979-4017 moved verbatim to bindings_modules.js
 window.editACReq = acReqCRUD.edit;
 // Phase 53.56 — soft delete with history; physical delete is gated behind a separate purge action.
-window.deleteACReq = function(internalId){
+window.deleteACReq = async function(internalId){
     const r = (acReqData || []).find(x => String(x.internalId) === String(internalId));
     if (!r) return;
     if (r.deleted) {
         // Already in the Deleted bin — offer to restore instead of double-deleting.
-        if (confirm('This requirement is already deleted. Restore it?')) {
+        if (await slConfirm('This requirement is already deleted. Restore it?', { okText: 'Restore' })) {
             ReqHistory.restore(r);
             if (typeof window.renderACReq === 'function') window.renderACReq();
             if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -1744,7 +1745,7 @@ window.deleteACReq = function(internalId){
         }
         return;
     }
-    if (!confirm('Delete requirement ' + (r.traceId || ('REQ-' + r.internalId)) + '? It will move to the Deleted filter and can be restored from there.')) return;
+    if (!(await slConfirm('Delete requirement ' + (r.traceId || ('REQ-' + r.internalId)) + '? It will move to the Deleted filter and can be restored from there.', { danger: true, okText: 'Delete' }))) return;
     ReqHistory.softDelete(r);
     if (typeof window.renderACReq === 'function') window.renderACReq();
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -2123,12 +2124,12 @@ const _origSubmitSysReq = sysReqCRUD.submit;
 // [P2 batch 5] L4467-4504 moved verbatim to bindings_modules.js
 window.editSysReq = sysReqCRUD.edit;
 // Phase 53.56 — soft delete + restore for sys requirements.
-window.deleteSysReq = function(internalId){
+window.deleteSysReq = async function(internalId){
     const s = sys(); if (!s) return;
     const r = (s.req || []).find(x => String(x.internalId) === String(internalId));
     if (!r) return;
     if (r.deleted) {
-        if (confirm('This requirement is already deleted. Restore it?')) {
+        if (await slConfirm('This requirement is already deleted. Restore it?', { okText: 'Restore' })) {
             ReqHistory.restore(r);
             if (typeof window.renderSysReq === 'function') window.renderSysReq();
             if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -2136,7 +2137,7 @@ window.deleteSysReq = function(internalId){
         }
         return;
     }
-    if (!confirm('Delete requirement ' + (r.traceId || ('REQ-' + r.internalId)) + '? It will move to the Deleted filter and can be restored from there.')) return;
+    if (!(await slConfirm('Delete requirement ' + (r.traceId || ('REQ-' + r.internalId)) + '? It will move to the Deleted filter and can be restored from there.', { danger: true, okText: 'Delete' }))) return;
     ReqHistory.softDelete(r);
     if (typeof window.renderSysReq === 'function') window.renderSysReq();
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -2348,7 +2349,7 @@ window.submitCMA = function() {
     const scope = (scopeEl && scopeEl.value) || 'aircraft';
     if (scope === 'system') {
         const owner = (document.getElementById('cma-owning-system') || {}).value || '';
-        if (!owner) return alert('System-scope CMAs require an owning System Folder. Pick one or switch the scope to Aircraft.');
+        if (!owner) { showToast('System-scope CMAs require an owning System Folder. Pick one or switch the scope to Aircraft.', 'warning', 4000); return; }
     }
     const modes = _getCmaModesSelection();
     const linkedGateIds = _getCmaLinkedGatesSelection();
@@ -2475,9 +2476,9 @@ window.editRouting = function (internalId) {
     const row = (routingData || []).find(r => String(r.internalId) === String(internalId));
     _populateRoutingMultiselects(row || {});
 };
-window.deleteRouting = function (internalId) {
+window.deleteRouting = async function (internalId) {
     const row = (routingData || []).find(r => String(r.internalId) === String(internalId));
-    if (row && typeof confirm === 'function' && !confirm('Delete routing ' + (row.routingId || internalId) + '?')) return;
+    if (row && !(await slConfirm('Delete routing ' + (row.routingId || internalId) + '?', { danger: true, okText: 'Delete' }))) return;
     routingCRUD.deleteItem(internalId);
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
 };
@@ -2547,9 +2548,9 @@ window.editResource = function (internalId) {
     const row = (resourcesData || []).find(r => String(r.internalId) === String(internalId));
     _populateResourceMultiselects(row || {});
 };
-window.deleteResource = function (internalId) {
+window.deleteResource = async function (internalId) {
     const row = (resourcesData || []).find(r => String(r.internalId) === String(internalId));
-    if (row && typeof confirm === 'function' && !confirm('Delete resource ' + (row.resId || internalId) + '?')) return;
+    if (row && !(await slConfirm('Delete resource ' + (row.resId || internalId) + '?', { danger: true, okText: 'Delete' }))) return;
     resourcesCRUD.deleteItem(internalId);
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
 };
@@ -2819,8 +2820,8 @@ window.submitItem = function(){
         engineMount:    checked('item-is-engine') ? get('item-engine-mount')    : '',
         comments:       ''
     };
-    if (!data.itemId) return alert('Item ID is required.');
-    if (!data.name)   return alert('Display Name is required.');
+    if (!data.itemId) { showToast('Item ID is required.', 'warning', 4000); return; }
+    if (!data.name)   { showToast('Display Name is required.', 'warning', 4000); return; }
     const editingId = editStates.item;
     if (editingId != null) {
         const idx = itemsData.findIndex(r => String(r.internalId) === String(editingId));
@@ -2864,10 +2865,10 @@ window.editItem = function(internalId){
     window.scrollTo(0, 0);
 };
 
-window.deleteItem = function(internalId){
+window.deleteItem = async function(internalId){
     const row = (itemsData || []).find(r => String(r.internalId) === String(internalId));
     if (!row) return;
-    if (!confirm('Delete item ' + (row.itemId || internalId) + '? Any FTA basic events or FMEA rows that reference this item will lose the link.')) return;
+    if (!(await slConfirm('Delete item ' + (row.itemId || internalId) + '? Any FTA basic events or FMEA rows that reference this item will lose the link.', { danger: true, okText: 'Delete' }))) return;
     const idx = itemsData.findIndex(r => String(r.internalId) === String(internalId));
     if (idx >= 0) itemsData.splice(idx, 1);
     renderItems();
@@ -2879,19 +2880,19 @@ window.deleteItem = function(internalId){
 window.submitFMEA = function() {
     const data = _readFmeaForm();
     // Phase 68 — FMEA is always filed under the open System Folder (no aircraft-level FMEA).
-    if (!activeSystemId) { return alert('Open a System Folder first — FMEA is filed per system.'); }
+    if (!activeSystemId) { showToast('Open a System Folder first. FMEA is filed per system.', 'warning', 4000); return; }
     data.scope = 'system';
     data.owningSystemId = activeSystemId;
     if (data.scope === 'system' && !data.owningSystemId) {
-        return alert('System-scope FMEAs require an owning System Folder. Pick one or switch the scope to Aircraft.');
+        showToast('System-scope FMEAs require an owning System Folder. Pick one or switch the scope to Aircraft.', 'warning', 4000); return;
     }
     if (_fmeaActiveMode === 'functional') {
-        if (!data.fmeaId || !data.funcSubId) return alert('Provide an FMEA ID and link to a sub-function.');
+        if (!data.fmeaId || !data.funcSubId) { showToast('Provide an FMEA ID and link to a sub-function.', 'warning', 4000); return; }
     } else {
-        if (!data.fmeaId) return alert('Provide an FMEA ID.');
-        if (!data.beId || !data.part) return alert('Select a Basic Event and enter a component name.');
-        if (data.rate < 0) return alert('Failure rate (λ) must be ≥ 0.');
-        if (data.time < 0) return alert('Exposure time must be ≥ 0.');
+        if (!data.fmeaId) { showToast('Provide an FMEA ID.', 'warning', 4000); return; }
+        if (!data.beId || !data.part) { showToast('Select a Basic Event and enter a component name.', 'warning', 4000); return; }
+        if (data.rate < 0) { showToast('Failure rate (λ) must be ≥ 0.', 'error', 4000); return; }
+        if (data.time < 0) { showToast('Exposure time must be ≥ 0.', 'error', 4000); return; }
     }
     const editingId = editStates.fmea;
     if (editingId != null) {
@@ -3529,9 +3530,9 @@ function addCustomLibraryEntry() {
     const name = (document.getElementById('lib-new-name').value || '').trim();
     const group = (document.getElementById('lib-new-group').value || 'Custom').trim();
     const lambda = parseFloat(document.getElementById('lib-new-lambda').value);
-    if (!key || !name) return alert('Provide both a key and a name.');
-    if (getActiveLibrary()[key]) return alert('That key already exists. Pick a different one.');
-    if (isNaN(lambda) || lambda < 0) return alert('Provide a non-negative λ value.');
+    if (!key || !name) { showToast('Provide both a key and a name.', 'warning', 4000); return; }
+    if (getActiveLibrary()[key]) { showToast('That key already exists. Pick a different one.', 'error', 4000); return; }
+    if (isNaN(lambda) || lambda < 0) { showToast('Provide a non-negative λ value.', 'warning', 4000); return; }
     // Phase 56.x (#4) — optional repair model carried on the library entry; nodes inherit it.
     const entry = { name, lambda, source: 'custom', group };
     const repairModel = ((document.getElementById('lib-new-repair') || {}).value) || '';
@@ -3550,8 +3551,8 @@ function addCustomLibraryEntry() {
     ['lib-new-repair','lib-new-mu','lib-new-tau'].forEach(id => { const el = document.getElementById(id); if (el) el.value = (id === 'lib-new-repair' ? '' : ''); });
     renderLibraryTable();
 }
-function deleteLibraryEntry(key) {
-    if (!confirm(`Delete custom entry "${key}"? Nodes using it will fall back to λ = 0.`)) return;
+async function deleteLibraryEntry(key) {
+    if (!(await slConfirm(`Delete custom entry "${key}"? Nodes using it will fall back to λ = 0.`, { danger: true, okText: 'Delete' }))) return;
     delete projectConfig.customLibrary[key];
     refreshLibraryDependentNodes();
     renderLibraryTable();
@@ -3587,7 +3588,7 @@ function importComponentLibraryCSV(text) {
     });
     refreshLibraryDependentNodes();
     renderLibraryTable();
-    alert(`Library import complete: ${added} new entry/entries, ${overridden} override(s).`);
+    slAlert(`Library import complete: ${added} new entry/entries, ${overridden} override(s).`, { title: 'Library import' });
 }
 // Populate the (config-panel) component library dropdown once. Idempotent.
 function populateComponentLibrary() {
@@ -3708,8 +3709,8 @@ function onInputModeChange() {
 function changeNodeType() {
     if(!selectedNodeData) return; let val = document.getElementById('config-node-type').value; let isGate = ['AND','OR','XOR','VOTING','INHIBIT','TRANSFER','PAND','SPARE','FDEP'].includes(val);
     let activeChildren = selectedNodeData.children || selectedNodeData._children;
-    if(!isGate && activeChildren && activeChildren.length > 0) { alert("Delete children first."); document.getElementById('config-node-type').value = selectedNodeData.type === 'gate' ? selectedNodeData.gateType : selectedNodeData.type; return; }
-    if(val === 'TRANSFER' && activeChildren && activeChildren.length > 0) { alert("Transfer gates cannot have children."); document.getElementById('config-node-type').value = selectedNodeData.type === 'gate' ? selectedNodeData.gateType : selectedNodeData.type; return; }
+    if(!isGate && activeChildren && activeChildren.length > 0) { showToast("Delete children first.", 'warning', 4000); document.getElementById('config-node-type').value = selectedNodeData.type === 'gate' ? selectedNodeData.gateType : selectedNodeData.type; return; }
+    if(val === 'TRANSFER' && activeChildren && activeChildren.length > 0) { showToast("Transfer gates cannot have children.", 'warning', 4000); document.getElementById('config-node-type').value = selectedNodeData.type === 'gate' ? selectedNodeData.gateType : selectedNodeData.type; return; }
     // Dynamic gate types are also gates.
 const isDyn = ['PAND','SPARE','FDEP'].includes(val);
 const isGateAny = isGate || isDyn;
@@ -4142,17 +4143,16 @@ try {
     });
 } catch (_) {}
 
-// Replace native alert() / confirm() with toast-friendly versions, but keep semantic intent.
-// confirm() needs a blocking yes/no, so we keep native confirm. alert() becomes a toast.
+// 13 Sep 2026 (R19 step 3) — the app no longer calls the native alert() anywhere (regression_native_dialogs
+// pins zero call sites): one-line notices are toasts with an explicit type, real explanations are slAlert.
+// Until tonight window.alert was swapped for a toast whose color was GUESSED from keywords, and a long
+// message vanished after a few seconds. This guard stays as the last line for anything outside the
+// app's own scripts (a vendor file, the console): it routes to the app's notice dialog and logs it.
 window._origAlert = window.alert;
-window.alert = function(msg) {
-    // Heuristic: errors usually start with words like "Please", "Error", contain "must", "first", "select"
-    const m = (msg || '').toString();
-    let type = 'info';
-    if(/error|invalid|fail/i.test(m)) type = 'error';
-    else if(/please|first|select|need to/i.test(m)) type = 'warning';
-    else if(/saved|loaded|generated|complete|success/i.test(m)) type = 'success';
-    showToast(m, type);
+window.alert = function (msg) {
+    const m = (msg == null ? '' : msg).toString();
+    try { console.warn('[safety_lab] native alert() reached the guard: ' + m.slice(0, 120)); } catch (_) {}
+    if (typeof slAlert === 'function') slAlert(m); else if (typeof showToast === 'function') showToast(m, 'info');
 };
 
 // ----- 5.4 Autosave + recovery -----
@@ -4905,8 +4905,8 @@ window._bulkSel = new Set();
         close();
         try { if (typeof showToast === 'function') showToast('AutoReq templates saved. Re-run generation to apply.', 'success'); } catch(_) {}
     }
-    function resetAll() {
-        if (!confirm('Clear all template overrides? AutoReq generators will revert to default wording.')) return;
+    async function resetAll() {
+        if (!(await slConfirm('Clear all template overrides? AutoReq generators will revert to default wording.', { danger: true, okText: 'Clear' }))) return;
         try {
             if (typeof autoReqTemplateOverrides !== 'undefined') {
                 Object.keys(autoReqTemplateOverrides).forEach(k => delete autoReqTemplateOverrides[k]);
@@ -6829,7 +6829,7 @@ window._bulkSel = new Set();
         if (typeof window.showToast === 'function') {
             window.showToast(text, 'info', { sticky: true });
         } else {
-            alert(text);
+            slAlert(text, { title: 'Tokens' });
         }
     }
 

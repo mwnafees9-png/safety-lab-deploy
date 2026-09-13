@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // support_modules.js — v1.0 — Phase P2 batch 3: cross-cutting support layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). Pure runtime function declarations — zero
@@ -379,13 +380,13 @@ function resolveTransferOutTarget(gate) {
 }
 
 function transferOutSelectedGate() {
-    if (!selectedNodeData) return alert('Select a gate first.');
+    if (!selectedNodeData) { showToast('Select a gate first.', 'warning', 4000); return; }
     if (selectedNodeData.type !== 'gate' || selectedNodeData.gateType === 'TRANSFER') {
-        return alert('Pick a logical gate (AND, OR, XOR, VOTING, INHIBIT) — the pure TRANSFER type is for cross-tree pointers.');
+        slAlert('Pick a logical gate (AND, OR, XOR, VOTING, INHIBIT). The pure TRANSFER type is for cross-tree pointers.', { title: 'Transfer out' }); return;
     }
-    if (selectedNodeData.transferOutTo) return alert('This gate is already transferred out.');
+    if (selectedNodeData.transferOutTo) { showToast('This gate is already transferred out.', 'info', 4000); return; }
     const sourceKids = selectedNodeData.children || selectedNodeData._children || [];
-    if (!sourceKids.length) return alert('Add at least one child to the gate first, then Transfer Out.');
+    if (!sourceKids.length) { showToast('Add at least one child to the gate first, then Transfer Out.', 'warning', 4000); return; }
 
     const sourcePageId = activeFTAPageId;
     const sourceGate = selectedNodeData;
@@ -431,7 +432,7 @@ function transferOutSelectedGate() {
 }
 
 function copySelectedBranch() {
-    if (!selectedNodeData) return alert('Select a node to copy.');
+    if (!selectedNodeData) { showToast('Select a node to copy.', 'warning', 4000); return; }
     // Anything is copyable — leaf, gate, or whole tree via the top event.
     // Phase 56.38 — capture an allocation snapshot on every node in the copied
     // subtree. When this branch is later pasted into a *different* fault tree,
@@ -483,7 +484,7 @@ function copySelectedBranch() {
 //   • If a non-transfer gate is selected, paste under it.
 //   • Otherwise, user needs to either select a gate or clear the top event first.
 function pasteAsChild() {
-    if (!nodeClipboard) return alert('Clipboard is empty. Copy a node first.');
+    if (!nodeClipboard) { showToast('Clipboard is empty. Copy a node first.', 'warning', 4000); return; }
     const root = getActiveFTARoot();
     const sameTree = nodeClipboard.sourceTreeId === activeFTAPageId;
     const cloned = cloneSubtree(nodeClipboard.subtree, sameTree);
@@ -508,7 +509,7 @@ function pasteAsChild() {
 
     if (!root) {
         const page = ftaPages.find(p => p.id === activeFTAPageId);
-        if (!page) return alert('No active fault tree.');
+        if (!page) { showToast('No active fault tree.', 'warning', 4000); return; }
         page.root = cloned;
         page.name = cloned.name || page.name;
         renderFTASidebar();
@@ -518,7 +519,7 @@ function pasteAsChild() {
         if (!target.children) target.children = [];
         target.children.push(cloned);
     } else {
-        return alert('Select a non-transfer gate to paste under, or delete the top event first to paste as the new root.');
+        slAlert('Select a non-transfer gate to paste under, or delete the top event first to paste as the new root.', { title: 'Paste' }); return;
     }
     calculateAllProbabilities();
     updateD3();
@@ -541,7 +542,7 @@ function pasteAsChild() {
 // open the paste review modal with the cloned subtree so the engineer can
 // pick a different mode if they want.
 function pasteSpecial() {
-    if (!nodeClipboard) return alert('Clipboard is empty. Copy a node first.');
+    if (!nodeClipboard) { showToast('Clipboard is empty. Copy a node first.', 'warning', 4000); return; }
     const root = getActiveFTARoot();
     const sameTree = nodeClipboard.sourceTreeId === activeFTAPageId;
     // For Paste Special we force the modal to open regardless of same/cross tree.
@@ -573,7 +574,7 @@ function pasteSpecial() {
 
     if (!root) {
         const page = ftaPages.find(p => p.id === activeFTAPageId);
-        if (!page) return alert('No active fault tree.');
+        if (!page) { showToast('No active fault tree.', 'warning', 4000); return; }
         page.root = cloned;
         page.name = cloned.name || page.name;
         renderFTASidebar();
@@ -582,7 +583,7 @@ function pasteSpecial() {
         if (!target.children) target.children = [];
         target.children.push(cloned);
     } else {
-        return alert('Select a non-transfer gate to paste under, or delete the top event first to paste as the new root.');
+        slAlert('Select a non-transfer gate to paste under, or delete the top event first to paste as the new root.', { title: 'Paste' }); return;
     }
     calculateAllProbabilities();
     updateD3();
@@ -1438,7 +1439,7 @@ function makeCRUD(config) {
     function submit() {
         if (storePrecondition) {
             const err = storePrecondition();
-            if (err) return alert(err);
+            if (err) { slAlert(err); return; }
         }
         const arr = store(); if (!arr) return;
         const editId = editStates[key];
@@ -1447,7 +1448,7 @@ function makeCRUD(config) {
         if (!editId) data = _slAutoNumber(key, data); // auto-fill blank IDs on create only
         if (validate) {
             const err = validate(data);
-            if (err) return alert(err);
+            if (err) { slAlert(err); return; }
         }
         if (editId) {
             const idx = arr.findIndex(i => String(i.internalId) === String(editId));

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // fta_view_modules.js — v1.0 — Phase P2 batch 2a: FTA & golden-thread view layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
@@ -321,9 +322,9 @@ function renderFTASidebar() {
 
         const delBtn = document.createElement('button');
         delBtn.className = 'action-btn btn-red'; delBtn.style.padding = '2px 5px'; delBtn.innerText = 'X';
-        delBtn.onclick = (e) => {
+        delBtn.onclick = async (e) => {
             e.stopPropagation();
-            if (confirm(`Delete page ${page.name}?`)) {
+            if (await slConfirm(`Delete page ${page.name}?`, { danger: true, okText: 'Delete' })) {
                 ftaPages = ftaPages.filter(p => p.id !== page.id);
                 if (activeFTAPageId === page.id) activeFTAPageId = ftaPages.length > 0 ? ftaPages[0].id : null;
                 if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
@@ -388,10 +389,11 @@ function renderFTASidebar() {
 async function _promoteStandaloneTree(pageId) {
     const page = ftaPages.find(p => p.id === pageId);
     if (!page) return;
-    const stepOne = confirm(
+    const stepOne = await slConfirm(
         'Promote "' + (page.name || 'this tree') + '" to:\n\n' +
-        'OK — Aircraft Fault Tree (rolls into aircraft-level cert)\n' +
-        'Cancel — System Fault Tree (you\'ll pick the system on the next step)'
+        'OK: Aircraft Fault Tree (rolls into aircraft-level cert)\n' +
+        'Cancel: System Fault Tree (you\'ll pick the system on the next step)',
+        { title: 'Promote tree' }
     );
     if (stepOne) {
         page.treeLevel = 'aircraft';
@@ -406,7 +408,7 @@ async function _promoteStandaloneTree(pageId) {
     }
     const systems = systemsData || [];
     if (systems.length === 0) {
-        alert('No systems defined yet. Create a system first in the Systems Safety workspace, then come back to promote this tree.');
+        await slAlert('No systems defined yet. Create a system first in the Systems Safety workspace, then come back to promote this tree.');
         return;
     }
     const list = systems.map((s, i) => `${i + 1}. ${s.name || '(unnamed system)'}`).join('\n');
@@ -417,7 +419,7 @@ async function _promoteStandaloneTree(pageId) {
     if (pick === null || pick === '') return;
     const idx = parseInt(pick, 10) - 1;
     if (isNaN(idx) || idx < 0 || idx >= systems.length) {
-        alert('Invalid selection — promotion canceled. Use the number from the list (1–' + systems.length + ').');
+        await slAlert('Invalid selection, promotion canceled. Use the number from the list (1–' + systems.length + ').');
         return;
     }
     page.treeLevel = 'system';
@@ -2199,7 +2201,7 @@ function _quantCachedImportance(root) {
 // any worker failure the async wrappers fall back to the synchronous engine —
 // to correctness, never to approximation.
 function generateCutsetReport() {
-    const rootNode = getActiveFTARoot(); if (!rootNode) return alert("Tree is empty.");
+    const rootNode = getActiveFTARoot(); if (!rootNode) { showToast('Tree is empty.', 'warning', 4000); return; }
     try {
         const big = (typeof _countTreeNodes === 'function') && (typeof _CUTSET_WORKER_MIN_NODES !== 'undefined') && _countTreeNodes(rootNode) >= _CUTSET_WORKER_MIN_NODES;
         const workerOk = (typeof enumerateCutsetsAsync === 'function') && (typeof _cutsetWorkerEnabled === 'function') && _cutsetWorkerEnabled() && (typeof Worker !== 'undefined');

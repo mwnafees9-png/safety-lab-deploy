@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // rbd_mc.js — Phase R2: Monte Carlo simulation for the configurations the
 // exact RBD engine cannot fold into a product form — standby redundancy with
@@ -153,18 +154,18 @@
     ], null, 1);
 
     window.rbdMcAdd = async function () {
-        const name = window.prompt('Simulation case name:', 'Hydraulic pump standby pair — full mission');
+        const name = await slPrompt('Simulation case name:', 'Hydraulic pump standby pair, full mission');
         if (!name || !name.trim()) return;
-        const json = window.prompt('Phased-mission model (JSON — see the example on the page):', EXAMPLE.replace(/\n\s*/g, ' '));
+        const json = await slPrompt('Phased-mission model (JSON, see the example on the page):', EXAMPLE.replace(/\n\s*/g, ' '));
         if (!json) return;
         let phases;
         try {
             phases = JSON.parse(json);
             if (!Array.isArray(phases) || !phases.every(p => p.duration > 0 && p.model)) throw new Error('need [{name,duration,model}…]');
-        } catch (e) { alert('Model rejected: ' + e.message); return; }
-        const nStr = window.prompt('Trials N (reproducible; SE ∝ 1/√N):', '200000');
+        } catch (e) { slAlert('Model rejected: ' + e.message, { title: 'Model rejected' }); return; }
+        const nStr = await slPrompt('Trials N (reproducible; SE ∝ 1/√N):', '200000');
         const n = Math.max(1000, parseInt(nStr, 10) || 200000);
-        const seedStr = window.prompt('Seed (same seed ⇒ same result, always):', '42');
+        const seedStr = await slPrompt('Seed (same seed ⇒ same result, always):', '42');
         _store().cases.push({ id: 'MC-' + Date.now(), name: name.trim(), phases, n, seed: parseInt(seedStr, 10) || 42, result: null });
         _save(); renderRbdMcPage();
     };
@@ -175,10 +176,12 @@
         c.ranAt = new Date().toISOString();
         _save(); renderRbdMcPage();
     };
-    window.rbdMcDelete = function (id) {
+    window.rbdMcDelete = async function (id) {
         const s = _store();
         const i = s.cases.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this simulation case?')) { s.cases.splice(i, 1); _save(); renderRbdMcPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this simulation case?', { danger: true, okText: 'Remove' }))) return;
+        s.cases.splice(i, 1); _save(); renderRbdMcPage();
     };
 
     // ---------------------------------------------------------------- page

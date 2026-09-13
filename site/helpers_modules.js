@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // helpers_modules.js — v1.0 — Phase P2 batch 4: runtime helper layer (bulk pass).
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
@@ -1533,7 +1534,7 @@ function loadProject(event) {
             // Backfill logicalId on every FTA node (older projects predate the field).
             backfillLogicalIds();
 
-            selectedNodeData = null; document.getElementById('node-config-panel').style.display = 'none'; alert("Project successfully loaded!");
+            selectedNodeData = null; document.getElementById('node-config-panel').style.display = 'none'; showToast("Project successfully loaded!", 'success', 4000);
             Object.keys(formConfigs).forEach(mod => cancelEdit(mod));
             // Re-evaluate stale + compromised flags on all auto-generated requirements before first render.
             try { AutoReq.recomputeFlags('ac'); systemsData.forEach(s => AutoReq.recomputeFlags('sys-' + s.id)); } catch(e){ console.warn('AutoReq.recomputeFlags failed on load:', e); }
@@ -1541,7 +1542,7 @@ function loadProject(event) {
             renderPRA(); renderZSA(); renderFMEA(); renderFlightPhases();
             switchTab('dashboard'); renderFTASidebar(); calculateAllProbabilities(); document.getElementById('load-file').value = '';
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — the opened file is now the project: announce it (sync push, local + cloud save)
-        } catch (err) { alert("Error loading project file."); console.error(err); }
+        } catch (err) { showToast("Error loading project file.", 'error', 4000); console.error(err); }
     }; reader.readAsText(file);
 }
 
@@ -2626,9 +2627,8 @@ async function macRepointMember(ruleId, oldId, newFuncId) {
     if (!newFuncId) return;
     const r = ((projectConfig.macModels) || []).find(x => String(x.id) === String(ruleId));
     if (!r) return;
-    const ask = (typeof slPrompt === 'function') ? slPrompt : ((m, d) => Promise.resolve(window.prompt(m, d)));
     const oldL = _macSysName(oldId), newL = _macSysName(newFuncId);
-    const by = (await ask('Re-point MAC member \u201C' + oldL + '\u201D at system function \u201C' + newL + '\u201D across this rule (clauses, weights, fidelity basis, arbitration). Sign with your name:', _signoffReviewerName() || '')) || '';
+    const by = (await slPrompt('Re-point MAC member \u201C' + oldL + '\u201D at system function \u201C' + newL + '\u201D across this rule (clauses, weights, fidelity basis, arbitration). Sign with your name:', _signoffReviewerName() || '')) || '';
     if (!String(by).trim()) { renderMacPage(); return; }
     (r.clauses || []).forEach(cl => {
         const at = (cl.of || []).indexOf(oldId);
@@ -2693,7 +2693,7 @@ async function macSubstantiate(id) {
     const r = _macStore().find(x => x.id === id);
     if (!r) return;
     if (r.substantiation && r.substantiation.kind === 'sdd') {
-        const yes = await (typeof slConfirm === 'function' ? slConfirm('Revert to assumption (clear SDD substantiation ' + (r.substantiation.ref || '') + ')?') : Promise.resolve(confirm('Revert?')));
+        const yes = await slConfirm('Revert to assumption (clear SDD substantiation ' + (r.substantiation.ref || '') + ')?', { okText: 'Revert' });
         if (yes) r.substantiation = { kind: 'assumption', ref: '', by: r.substantiation.by || '', at: new Date().toISOString() };
     } else {
         const ref = (await slPrompt('SDD reference substantiating this rule (e.g., SDD-BRK-041 rev C):', '')) || '';
@@ -2706,7 +2706,7 @@ async function macSubstantiate(id) {
     renderMacPage();
 }
 async function macDeleteRule(id) {
-    const yes = await (typeof slConfirm === 'function' ? slConfirm('Delete this MAC rule? Its breach set disappears from downstream analyses.') : Promise.resolve(confirm('Delete?')));
+    const yes = await slConfirm('Delete this MAC rule? Its breach set disappears from downstream analyses.', { danger: true, okText: 'Delete' });
     if (!yes) return;
     const s = _macStore();
     const i = s.findIndex(x => x.id === id);
@@ -3436,7 +3436,7 @@ async function macFidSetBasis(id, ci, key, kind) {
     if (!cl.basis) cl.basis = {};
     if (kind === 'sdd') {
         let ref = '';
-        try { ref = (typeof slPrompt === 'function') ? await slPrompt('SDD reference substantiating this value (doc / §):', '') : window.prompt('SDD reference:', ''); } catch (_) {}
+        try { ref = await slPrompt('SDD reference substantiating this value (doc / §):', ''); } catch (_) {}
         if (!ref || !String(ref).trim()) return renderMacPage();   // no ref → stays assumed
         cl.basis[key] = 'sdd:' + String(ref).trim();
     } else cl.basis[key] = 'assumed';
@@ -3457,7 +3457,7 @@ async function macFidSetDeg(id, i, field, v) {
     else if (field === 'basis') {
         if (v === 'sdd') {
             let ref = '';
-            try { ref = (typeof slPrompt === 'function') ? await slPrompt('SDD reference for this degraded-state weight:', '') : window.prompt('SDD reference:', ''); } catch (_) {}
+            try { ref = await slPrompt('SDD reference for this degraded-state weight:', ''); } catch (_) {}
             if (!ref || !String(ref).trim()) return renderMacPage();
             d.basis = 'sdd:' + String(ref).trim();
         } else d.basis = 'assumed';
@@ -4455,10 +4455,10 @@ function submitACFHA() {
         const _fc  = document.getElementById('ac-fha-fcid').value;
         const _chk = _fhaPairCheck('ac', _sub, _fc, null);
         if (!_chk.ok) {
-            alert('Cannot log this FHA row.\n\n' + _chk.reason +
+            slAlert('Cannot log this FHA row.\n\n' + _chk.reason +
                   '\n\nAn FHA row asserts that THIS sub-function has THIS failure condition. ' +
                   'Pick the failure condition that belongs to ' + _sub + ', or change the sub-function to ' +
-                  _fcOwnerSubId('ac', _fc, null).subId + '.');
+                  _fcOwnerSubId('ac', _fc, null).subId + '.', { title: 'FHA row not logged' });
             return;
         }
     }
@@ -4589,9 +4589,8 @@ async function sysFhaRekey(sysId, internalId, funcId) {
     const s = (systemsData || []).find(x => x.id === sysId);
     const row = s && (s.fha || []).find(r => String(r.internalId) === String(internalId));
     if (!row) return;
-    const ask = (typeof slPrompt === 'function') ? slPrompt : ((m, d) => Promise.resolve(window.prompt(m, d)));
     const fnLabel = _fhaSubFunctionDisplay(funcId);
-    const by = (await ask('Re-key ' + (row.fcId || 'this row') + ' to system function \u201C' + fnLabel + '\u201D? The aircraft trace (acTrace) is unchanged; the old key is recorded. Sign with your name:', _signoffReviewerName() || '')) || '';
+    const by = (await slPrompt('Re-key ' + (row.fcId || 'this row') + ' to system function \u201C' + fnLabel + '\u201D? The aircraft trace (acTrace) is unchanged; the old key is recorded. Sign with your name:', _signoffReviewerName() || '')) || '';
     if (!String(by).trim()) { renderSysFHA(); return; }
     row.rekeyed = { from: row.subId || null, to: funcId, by: String(by).trim(), at: new Date().toISOString() };
     row.subId = funcId;
@@ -5169,7 +5168,7 @@ function autoFillFcIdsForActiveSystem() {
 
 function syncSysFHACondition() { const t = sys().extractedFCs.find(fc => fc.id === document.getElementById('sys-fha-fcid').value); document.getElementById('sys-fha-fcdesc').value = t ? t.desc : ''; }
 function submitSysFHA() {
-    if (!sys()) return alert('Please open a system folder first.');
+    if (!sys()) { showToast('Please open a system folder first.', 'warning', 4000); return; }
     // 20 Aug 2026 — same agreement guard as the aircraft form. At system level the pairing is
     // system function ↔ system failure condition; the defect and the consequence are identical.
     {
@@ -5177,10 +5176,10 @@ function submitSysFHA() {
         const _fc  = document.getElementById('sys-fha-fcid').value;
         const _chk = _fhaPairCheck('sys', _sub, _fc, sys().id);
         if (!_chk.ok) {
-            alert('Cannot log this system FHA row.\n\n' + _chk.reason +
+            slAlert('Cannot log this system FHA row.\n\n' + _chk.reason +
                   '\n\nAn SFHA row asserts that THIS system function has THIS failure condition. ' +
                   'Pick the failure condition that belongs to ' + _sub + ', or change the system function to ' +
-                  _fcOwnerSubId('sys', _fc, sys().id).subId + '.');
+                  _fcOwnerSubId('sys', _fc, sys().id).subId + '.', { title: 'SFHA row not logged' });
             return;
         }
     }
@@ -6695,13 +6694,13 @@ function _ftaCcfRenderMultiBar() {
     document.getElementById('ccf-multi-group').onclick = _ftaCcfGroupSelected;
     document.getElementById('ccf-multi-clear').onclick = _ftaCcfClearMulti;
 }
-function _ftaCcfGroupSelected() {
+async function _ftaCcfGroupSelected() {
     const nodes = [..._ftaCcfMultiSel];
     if (nodes.length < 2) return;
     // Reuse an existing group name if one of the selected events already belongs to a group.
     const existing = nodes.map(n => n.ccfGroup).find(g => g && g.trim());
     const suggested = existing || ('CCF-GRP-' + String(Date.now()).slice(-4));
-    const name = (typeof prompt === 'function') ? prompt('Common-cause group name:', suggested) : suggested;
+    const name = await slPrompt('Common-cause group name:', suggested);
     if (!name || !name.trim()) return;
     nodes.forEach(n => { n.ccfGroup = name.trim(); if (!(n.beta > 0)) n.beta = 0.1; });
     _ftaCcfClearMulti();
@@ -7630,8 +7629,7 @@ async function submitSignup() {
     const org   = ((orgEl   && orgEl.value)   || '').trim();
     if (!email || !/@[\w.-]+\.[a-z]{2,}$/i.test(email)) {
         if (emailEl) { try { emailEl.focus(); } catch(_) {} }
-        if (typeof showToast === 'function') showToast('Please enter a valid email address.', 'warning', 3500);
-        else alert('Please enter a valid email address.');
+        showToast('Please enter a valid email address.', 'warning', 3500);
         return;
     }
     // Cache identity locally regardless of which path we take — the chip needs it.
@@ -7659,11 +7657,9 @@ async function submitSignup() {
             // Hard fail (rate-limited, bad email rejected by Supabase, etc.) — toast
             // and let the user retry. Don't fall through to local-only since the
             // session won't actually be authenticated.
-            if (typeof showToast === 'function') {
+            {
                 const msg = (e && e.message) ? e.message : 'Magic-link send failed';
                 showToast('Sign-in failed: ' + msg, 'warning', 6000);
-            } else {
-                alert('Sign-in failed: ' + ((e && e.message) || 'unknown error'));
             }
             if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = initialBtnText; }
             return;
@@ -7772,8 +7768,7 @@ async function _submitSignupVerifyCode() {
     const email = _signupAwaitingCode;
     const raw = ((codeEl && codeEl.value) || '').trim();
     if (!_parseAuthInput(raw)) {
-        if (typeof showToast === 'function') showToast('Enter the sign-in code from your email, or paste the sign-in link.', 'warning', 4500);
-        else alert('Enter the sign-in code from your email, or paste the sign-in link.');
+        showToast('Enter the sign-in code from your email, or paste the sign-in link.', 'warning', 4500);
         if (codeEl) { try { codeEl.focus(); } catch (_) {} }
         return;
     }
@@ -7787,8 +7782,7 @@ async function _submitSignupVerifyCode() {
     } catch (e) {
         console.error('[Safety Lab Aero] verifyEmailOtp failed:', e);
         const msg = (e && e.message) ? e.message : 'invalid or expired code';
-        if (typeof showToast === 'function') showToast('Code verification failed: ' + msg, 'warning', 6000);
-        else alert('Code verification failed: ' + msg);
+        showToast('Code verification failed: ' + msg, 'warning', 6000);
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = prev || 'Verify code'; }
     }
 }
@@ -7984,7 +7978,7 @@ function openAccountPanel() {
     ov.addEventListener('mousedown', function(e){ if (e.target === ov) close(); });
     const xb = document.getElementById('acct-x'); if (xb) xb.onclick = close;
     const signout = document.getElementById('acct-signout');
-    if (signout) signout.onclick = function(){ if (!confirm('Sign out of Safety Lab Aero?\n\n(' + email + ')')) return; close(); try { supabaseSignOut(); } catch(_){} try { setSignupEmail(''); } catch(_){} try { refreshSigninChip(); } catch(_){} };
+    if (signout) signout.onclick = async function(){ if (!(await slConfirm('Sign out of Safety Lab Aero?\n\n(' + email + ')', { okText: 'Sign out' }))) return; close(); try { supabaseSignOut(); } catch(_){} try { setSignupEmail(''); } catch(_){} try { refreshSigninChip(); } catch(_){} };
     const del = document.getElementById('acct-delete');
     if (del) del.onclick = function(){ close(); _openEraseAccountModal(email); };
     const save = document.getElementById('acct-save');
@@ -8856,8 +8850,7 @@ async function saveProjectToCloud() {
     const prepare = async function () {
         const client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
         if (!client || _cloudSignedOut()) {
-            if (typeof showToast === 'function') showToast('Sign in to save to cloud — your work is still saved locally.', 'warning', 4500);
-            else alert('Sign in to save to cloud.');
+            showToast('Sign in to save to cloud — your work is still saved locally.', 'warning', 4500);
             return null;
         }
         const wsId = getActiveWorkspaceId();
@@ -8926,8 +8919,7 @@ async function archiveCloudProject(projectId, projectName) {
     if (!client || !projectId) return;
     // Reversible, and the wording says so — an irreversible-sounding prompt for a
     // reversible action trains people to fear the button.
-    if (typeof window.confirm === 'function' &&
-        !window.confirm('Archive "' + (projectName || 'this project') + '"?\n\nIt disappears from this list and from everyone else in the workspace. Nothing is deleted — an owner or admin can restore it from "Show archived".')) return;
+    if (!(await slConfirm('Archive "' + (projectName || 'this project') + '"?\n\nIt disappears from this list and from everyone else in the workspace. Nothing is deleted: an owner or admin can restore it from "Show archived".', { okText: 'Archive' }))) return;
     try {
         const { data, error } = await client.rpc('archive_project', { p_project: projectId });
         if (error) throw error;
@@ -9759,7 +9751,7 @@ function _fcPageName(fha) {
     const desc = fha.fcDesc ? fha.fcDesc.trim().slice(0, 40) : '';
     return id + (desc ? ' — ' + desc : '');
 }
-function autoGenerateTopGateForFha(page, fha, opts) {
+async function autoGenerateTopGateForFha(page, fha, opts) {
     opts = opts || {};
     if (!page || !fha) return false;
     const hasChildren = page.root && ((page.root.children && page.root.children.length > 0) || (page.root._children && page.root._children.length > 0));
@@ -9792,7 +9784,7 @@ function autoGenerateTopGateForFha(page, fha, opts) {
         page.name = _fcPageName(fha);
         return true;
     }
-    const ok = confirm('This fault tree already has events.\n\nUpdate the top-event name to "' + _fcTopGateName(fha) + '"? (children are preserved.)');
+    const ok = await slConfirm('This fault tree already has events.\n\nUpdate the top-event name to "' + _fcTopGateName(fha) + '"? (children are preserved.)', { okText: 'Update' });
     if (ok) {
         page.root.name = _fcTopGateName(fha);
         page.root.displayId = _fcTopGateDisplayId(fha, page.root.id);
@@ -9802,7 +9794,7 @@ function autoGenerateTopGateForFha(page, fha, opts) {
     }
     return false;
 }
-function onFtaFhaLinkChange() {
+async function onFtaFhaLinkChange() {
     const sel = document.getElementById('fta-fha-link');
     const linkedFhaId = sel ? sel.value : '';
     // Always run the existing sync so the toolbar/target/phase math stays in step.
@@ -9850,7 +9842,7 @@ function onFtaFhaLinkChange() {
     }
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
 
-    const changed = autoGenerateTopGateForFha(page, fha);
+    const changed = await autoGenerateTopGateForFha(page, fha);
     // Phase 57 — the FHA link is part of the mirror's inherited context; keep it in step
     // (this also re-syncs the mirror's exposure source through its own page link).
     if (typeof _syncMirrorOwnershipFromSource === 'function') _syncMirrorOwnershipFromSource(page);
@@ -9877,7 +9869,7 @@ function _findParentOfNode(root, targetId) {
 
 // Phase 53.49 — Q1: when a sibling BE is added to a VERIFICATION mirror and has no
 // allocation counterpart, prompt the user with three choices.
-function _handleVerificationSideAdd(newNode, mirrorPage, parentInMirror) {
+async function _handleVerificationSideAdd(newNode, mirrorPage, parentInMirror) {
     if (!mirrorPage || !mirrorPage.verifies) return;
     const sourcePage = (ftaPages || []).find(p => p.id === mirrorPage.verifies);
     if (!sourcePage || !sourcePage.root) return;
@@ -9889,14 +9881,15 @@ function _handleVerificationSideAdd(newNode, mirrorPage, parentInMirror) {
     const mirrorParentLid = parentInMirror && (parentInMirror.logicalId != null ? parentInMirror.logicalId : parentInMirror.id);
     const sourceParent = _findNodeByLogicalId(sourcePage.root, mirrorParentLid);
     const sourceParentDesc = sourceParent ? ('"' + (sourceParent.name || sourceParent.displayId || 'gate') + '"') : 'a gate that has no allocation counterpart';
-    const choice = prompt(
+    const choice = await slPrompt(
         'You added a basic event ("' + (newNode.name || newNode.displayId || 'new event') + '") to the verification tree as a sibling under ' + sourceParentDesc + '.\n\n' +
-        'This component has no corresponding entry in the allocation tree — no requirement was ever generated to cover it. Choose how to reconcile:\n\n' +
-        '  1 — Auto-add a matching BE to the allocation tree (so AutoReq generates a target for it on next run).\n' +
-        '  2 — Jump to the allocation tree (the parent gate will be highlighted; you add it manually).\n' +
-        '  3 — Informational only (leaves the verification mirror as-is; the new node renders as "Unmapped"; no requirement target).\n\n' +
+        'This component has no corresponding entry in the allocation tree: no requirement was ever generated to cover it. Choose how to reconcile:\n\n' +
+        '  1: Auto-add a matching BE to the allocation tree (so AutoReq generates a target for it on next run).\n' +
+        '  2: Jump to the allocation tree (the parent gate will be highlighted; you add it manually).\n' +
+        '  3: Informational only (leaves the verification mirror as-is; the new node renders as "Unmapped"; no requirement target).\n\n' +
         'Type 1, 2, or 3 and press OK. Cancel to leave as-is (same as 3).',
-        '1'
+        '1',
+        { title: 'Reconcile with the allocation tree' }
     );
     if (choice === '1' && sourceParent) {
         // Auto-add to allocation tree using a fresh clone (preserve logicalId so future
@@ -9908,6 +9901,8 @@ function _handleVerificationSideAdd(newNode, mirrorPage, parentInMirror) {
         sourceParent.children.push(allocClone);
         if (typeof showToast === 'function') showToast('Component "' + (newNode.name || 'new event') + '" auto-added to the allocation tree. Re-run AutoReq to generate the target.', 'success', 3600);
         _markStructureChangeObsolete('Component added to allocation (auto-mirrored from verification side).');
+        // The answer is asynchronous now: the caller's render already ran before the choice, so re-render here.
+        try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); if (typeof updateD3 === 'function') updateD3(); } catch (_) {}
     } else if (choice === '2' && sourceParent) {
         activeFTAPageId = sourcePage.id;
         if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
@@ -10007,17 +10002,20 @@ function addSelectedEvent() {
 }
 
 function deleteNodeRecursive(node, targetId) { let actualChildren = node.children || node._children; if (!actualChildren) return false; for (let i = 0; i < actualChildren.length; i++) { if (actualChildren[i].id === targetId) { actualChildren.splice(i, 1); return true; } if (deleteNodeRecursive(actualChildren[i], targetId)) return true; } return false; }
-function deleteSelectedNode() {
+async function deleteSelectedNode() {
     if (!selectedNodeData) return;
     const rootNode = getActiveFTARoot();
     if (rootNode && selectedNodeData.id === rootNode.id) {
-        if(confirm("Clear top event?")) {
+        if (await slConfirm("Clear top event?", { danger: true, okText: 'Clear' })) {
             const page = ftaPages.find(p => p.id === activeFTAPageId);
             if(page) page.root = null;
             selectedNodeData = null;
             document.getElementById('node-config-panel').style.display = 'none';
             // Phase 53.49 — root cleared → all reqs from this tree are obsoleted.
             if (typeof _markStructureChangeObsolete === 'function') _markStructureChangeObsolete('Top event cleared.');
+            // The answer is asynchronous now: the undo/autosave wrapper's scheduleAutosave ran before the
+            // person answered, so re-arm it after the actual change.
+            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
         }
     } else {
         deleteNodeRecursive(rootNode, selectedNodeData.id);
@@ -10215,7 +10213,7 @@ function integrateTransferredSubtree(gateId, flattenNested) {
 
 async function runDALAllocation() {
     const root = getActiveFTARoot();
-    if (!root) return alert('No active fault tree.');
+    if (!root) { showToast('No active fault tree.', 'warning', 4000); return; }
     // Resolve the link from the toolbar control, falling back to the active page's stored link
     // (ftaConfig.linkedFhaId) so the allocator seeds even when the Calculation panel isn't open.
     const linkedFhaId = ((document.getElementById('fta-fha-link') || {}).value)
@@ -11139,7 +11137,7 @@ function _scopeForReq(row) {
 }
 
 // Archive a requirement — sets status='archived' but never deletes the row.
-function archiveRequirement(internalId, scope) {
+async function archiveRequirement(internalId, scope) {
     const stores = [];
     if (acReqData) stores.push({ data: acReqData, scope: 'ac' });
     (systemsData || []).forEach(s => stores.push({ data: s.req || [], scope: 'sys-' + s.id }));
@@ -11148,7 +11146,7 @@ function archiveRequirement(internalId, scope) {
         if (idx < 0) continue;
         const row = st.data[idx];
         if (row.status === 'archived') return showToast('Already archived.', 'info', 2000);
-        if (!confirm(`Archive requirement ${row.traceId || 'REQ-' + row.internalId}? It will be retained in the project for audit but hidden from the active filter view.`)) return;
+        if (!(await slConfirm(`Archive requirement ${row.traceId || 'REQ-' + row.internalId}? It will be retained in the project for audit but hidden from the active filter view.`, { okText: 'Archive' }))) return;
         row.status = 'archived';
         row.archivedAt = Date.now();
         row.archivedReason = (row.reqSource && row.reqSource.obsolete)
@@ -11341,7 +11339,7 @@ function autoReqPreview(){
 // text, and bundling the two would make clicking through equivalent to consent.
 function autoReqApplyMigrations(){
     const merge = window._autoReqPendingMerge;
-    if(!merge || !(merge.migrations || []).length) return alert('Run Preview first.');
+    if(!merge || !(merge.migrations || []).length) { showToast('Run Preview first.', 'warning', 4000); return; }
     const n = AutoReq.applyBucketMigration({ moves: merge.migrations });
     AutoReq.recomputeFlags(merge.scope);
     if(typeof renderACReq === 'function') renderACReq();
@@ -11355,7 +11353,7 @@ function autoReqApplyMigrations(){
 
 function autoReqAccept(mode){
     const merge = window._autoReqPendingMerge;
-    if(!merge) return alert('Run Preview first.');
+    if(!merge) { showToast('Run Preview first.', 'warning', 4000); return; }
     const choices = { acceptNew:false, acceptUpdates:false, acceptOrphanRemoval:false };
     if(mode === 'all'){ choices.acceptNew = true; choices.acceptUpdates = true; choices.acceptOrphanRemoval = true; }
     if(mode === 'new') choices.acceptNew = true;

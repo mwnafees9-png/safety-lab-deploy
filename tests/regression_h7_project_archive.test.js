@@ -104,7 +104,7 @@ console.log('[h7] 5 — the client');
   check('_canAdminActiveWorkspace reads myRole', /function _canAdminActiveWorkspace[\s\S]{0,300}myRole/.test(helpers));
   check('the Archive button is not rendered for a non-admin at all',
         /_canAdminActiveWorkspace\(\)\s*\n?\s*\?\s*'<button[^']*Archive/.test(helpers));
-  check('archiveCloudProject confirms first', /function archiveCloudProject[\s\S]{0,900}window\.confirm/.test(helpers));
+  check('archiveCloudProject confirms first (through the app\'s own dialog since R19 step 3, never the native confirm)', /function archiveCloudProject[\s\S]{0,900}await slConfirm\(/.test(helpers) && !/function archiveCloudProject[\s\S]{0,900}window\.confirm/.test(helpers));
   check('...and the prompt says it is REVERSIBLE — an irreversible-sounding prompt for a reversible action trains people to fear the button',
         /Nothing is deleted/.test(helpers));
   check('archive calls the RPC, never a raw update on projects',

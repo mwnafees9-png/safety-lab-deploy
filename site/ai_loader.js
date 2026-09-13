@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // ai_loader.js — v1.2 — O1: the AI lane loads on demand, not on boot.
 //
@@ -17,7 +18,7 @@
 (function () {
     'use strict';
 
-    const FILES = ['fta_kb_data.js?v=1.2', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.12', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'ai_assistant.js?v=76.66', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.4'];
+    const FILES = ['fta_kb_data.js?v=1.2', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.12', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'ai_assistant.js?v=76.67', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.4'];
     let _loading = null;
 
     window.slLoadAI = function () {
@@ -48,13 +49,13 @@
                 if (typeof showToast === 'function') showToast('The AI assistant is a Pro+ feature. Opening AI settings — check your tier or enable AI for this browser.', 'warning', 5200);
                 if (typeof switchTab === 'function') switchTab('ai');
             } catch (_) {}
-        }).catch(() => { try { alert('AI module could not be loaded.'); } catch (_) {} });
+        }).catch(() => { try { showToast('AI module could not be loaded.', 'error', 4000); } catch (_) {} });
     };
     window.slAiRun = function (fn) {
         window.slLoadAI().then(() => {
             try { window.SafetyLabAI[fn](); }
-            catch (e) { try { alert('AI module not ready — enable AI (Pro+) first.'); } catch (_) {} }
-        }).catch(() => { try { alert('AI module could not be loaded.'); } catch (_) {} });
+            catch (e) { try { showToast('AI module not ready. Enable AI (Pro+) first.', 'warning', 4000); } catch (_) {} }
+        }).catch(() => { try { showToast('AI module could not be loaded.', 'error', 4000); } catch (_) {} });
     };
 
     // The AI tab: show the shell immediately, re-dispatch once the lane is in

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // mx_analytics.js — Phase F6: the maintainability analytics suite.
 // BORN MODULAR: new file, zero monolith edits; store under
 // projectConfig.mxAnalytics; wraps switchTab for its views.
@@ -22,10 +23,7 @@
     }
     function _save() { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} }
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _access() { return (typeof window._ramHasAccess === 'function') ? window._ramHasAccess() : true; }
     const _gate = host => { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; "><h3 style="margin:0 0 10px; border:none; padding:0;">Maintainability analytics is a Pro+ capability</h3><p style="font-size:13px; color:var(--color-text-secondary);">PM interval optimization against the CCMR bounds, testability coverage, and level-of-repair economics.</p></div>'; };
@@ -176,10 +174,12 @@
         _store().lora.push({ id: 'LR-' + Date.now(), name: name.trim(), lambda, units, annualFH, discardCost, lineCost, lineFixed, shopCost, shopFixed });
         _save(); renderRamLoraPage();
     }
-    function loraDelete(id) {
+    async function loraDelete(id) {
         const s = _store();
         const i = s.lora.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this LORA case?')) { s.lora.splice(i, 1); _save(); renderRamLoraPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this LORA case?', { danger: true, okText: 'Remove' }))) return;
+        s.lora.splice(i, 1); _save(); renderRamLoraPage();
     }
     function renderRamLoraPage() {
         const host = document.getElementById('ram-lora-host');

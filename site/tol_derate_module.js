@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // tol_derate_module.js — Phase F8: tolerance accumulation & derating audit.
 // Coverage closers for NASA/TP-2000-207428 ch.4 (derating, application
 // factors) and ch.5 (normal distribution, tolerance accumulation / worst-case).
@@ -24,10 +25,7 @@
     }
     function _save() { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} }
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _access() { return (typeof window._ramHasAccess === 'function') ? window._ramHasAccess() : true; }
     const _chip = (l, v, warn) => '<div style="height:32px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--color-border-strong); font-family:var(--font-mono); font-size:12px;">' + l + ' <b style="margin-left:6px;' + (warn ? ' color:#B45309;' : '') + '">' + v + '</b></div>';
@@ -75,7 +73,7 @@
     async function tolAddStack() {
         if (!_access()) return;
         const name = await _ask('Stack name (e.g. "Actuator end-play chain" or "Reference voltage chain"):'); if (!name || !name.trim()) return;
-        const raw = (await _ask('Contributors — name:nominal:±tol, semicolon-separated:', 'Housing:10.00:0.05; Bearing:5.00:0.03; Shaft:-14.90:0.04')) || '';
+        const raw = (await _ask('Contributors, name:nominal:±tol, semicolon-separated:', 'Housing:10.00:0.05; Bearing:5.00:0.03; Shaft:-14.90:0.04')) || '';
         const contributors = raw.split(';').map(seg => {
             const p = seg.split(':');
             return { name: (p[0] || '').trim(), nominal: parseFloat(p[1]), tol: Math.abs(parseFloat(p[2])) };
@@ -87,28 +85,30 @@
             limits: { lower: isFinite(lo) ? lo : null, upper: isFinite(hi) ? hi : null } });
         _save(); renderRamTolPage();
     }
-    function tolDeleteStack(id) {
+    async function tolDeleteStack(id) {
         const s = _store();
         const i = s.stacks.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this stack?')) { s.stacks.splice(i, 1); _save(); renderRamTolPage(); }
+        if (i < 0) return;
+        if (await slConfirm('Remove this stack?', { danger: true, okText: 'Remove' })) { s.stacks.splice(i, 1); _save(); renderRamTolPage(); }
     }
     async function derateAdd() {
         if (!_access()) return;
-        const part = await _ask('Part (e.g. "R42 — load resistor"):'); if (!part || !part.trim()) return;
+        const part = await _ask('Part (e.g. "R42, load resistor"):'); if (!part || !part.trim()) return;
         const cats = Object.keys(DERATE_TYPICAL);
         const pick = (await _ask('Stress category:\n' + cats.map((c, i) => (i + 1) + '. ' + c + ' (typical ≤ ' + (DERATE_TYPICAL[c] * 100) + '%)').join('\n'), '1')) || '';
         const idx = parseInt(pick) - 1;
         if (!(idx >= 0 && idx < cats.length)) return;
         const rated = parseFloat(await _ask('Rated value (datasheet):', '1')); if (!(rated > 0)) return;
         const applied = parseFloat(await _ask('Applied (worst-case operating) value:', '0.4')); if (!(applied >= 0)) return;
-        const guideline = parseFloat(await _ask('Guideline fraction — confirm against YOUR derating standard:', DERATE_TYPICAL[cats[idx]])) || DERATE_TYPICAL[cats[idx]];
+        const guideline = parseFloat(await _ask('Guideline fraction. Confirm against YOUR derating standard:', DERATE_TYPICAL[cats[idx]])) || DERATE_TYPICAL[cats[idx]];
         _store().derate.push({ id: 'DR-' + Date.now(), part: part.trim(), category: cats[idx], rated, applied, guideline });
         _save(); renderRamTolPage();
     }
-    function derateDelete(id) {
+    async function derateDelete(id) {
         const s = _store();
         const i = s.derate.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this derating row?')) { s.derate.splice(i, 1); _save(); renderRamTolPage(); }
+        if (i < 0) return;
+        if (await slConfirm('Remove this derating row?', { danger: true, okText: 'Remove' })) { s.derate.splice(i, 1); _save(); renderRamTolPage(); }
     }
 
     // --------------------------------------------------------------- render

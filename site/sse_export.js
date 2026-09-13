@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // sse_export.js — Phase P8 (gap M14): the safety-significant events list for
 // in-service monitoring, in the spirit of ARP4754B/4761A §8 continued
@@ -132,7 +133,7 @@
             a.download = name + '_safety_significant_events.csv';
             document.body.appendChild(a); a.click();
             setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
-        } catch (e) { alert('Export failed: ' + e.message); }
+        } catch (e) { slAlert('Export failed: ' + e.message, { title: 'SSE export' }); }
     }
 
     // ---------------------------------------------------------------- page

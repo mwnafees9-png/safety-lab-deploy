@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // event_trees.js — v1.3 — C4: Event Tree Analysis. Sequence-consequence
 // arithmetic, deterministic, reconciled against the FHA.
@@ -608,10 +609,9 @@
         if (!r.ok) { try { showToast(r.err, 'error', 3000); } catch (_) {} return; }
         _render();
     };
-    window._etaDeleteUi = function (tid) {
-        const go = () => { const r = window.etaDelete(tid); if (r.ok) _render(); };
-        if (typeof window.confirmModal === 'function') { window.confirmModal('Delete ' + tid + '? This cannot be undone.', go); }
-        else if (window.confirm('Delete ' + tid + '? This cannot be undone.')) { go(); }
+    window._etaDeleteUi = async function (tid) {
+        if (!(await slConfirm('Delete ' + tid + '? This cannot be undone.', { danger: true, okText: 'Delete' }))) return;
+        const r = window.etaDelete(tid); if (r.ok) _render();
     };
     window._etaAssessUi = function (tid, key) {
         const t = _store().find(x => x.id === tid) || { consequences: {} };

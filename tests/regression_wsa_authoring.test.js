@@ -18,6 +18,7 @@ function check(name, cond, detail) {
   else { fail++; console.log('  FAIL  ' + name + (detail ? '  — ' + detail : '')); }
 }
 
+(async function main() {   // R19 step 3: the remove step awaits the app dialog
 globalThis.window = globalThis;
 globalThis.projectConfig = {};
 globalThis.projectName = 'K350';
@@ -51,9 +52,13 @@ R._wsa.add(n0 - 1);
 check('add appends a section', R._wsa.state().sections.length === n0 + 1 && /New section/.test(R._wsa.state().sections[n0].heading));
 R._wsa.move(n0, -1);
 check('move swaps order', R._wsa.state().sections[n0 - 1].heading === 'New section');
-globalThis.confirm = () => true;
-R._wsa.remove(n0 - 1);
+// R19 step 3 (13 Sep 2026): remove asks through the app's slConfirm (async) and is awaited here
+globalThis.slConfirm = () => Promise.resolve(true);
+await R._wsa.remove(n0 - 1);
 check('remove deletes it', R._wsa.state().sections.length === n0 && !R._wsa.state().sections.some(s => s.heading === 'New section'));
+globalThis.slConfirm = () => Promise.resolve(false);
+await R._wsa.remove(n0 - 2);
+check('a declined confirm removes nothing', R._wsa.state().sections.length === n0);
 
 console.log('\n[3] program template library');
 R._wsa.state().sections[1].heading = '1. Purpose (Program Style)';
@@ -68,3 +73,4 @@ check('reset clears it and restores the default sections', R._wsa.programTemplat
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
+})().catch(function (e) { console.log('  FAIL  suite threw: ' + (e && e.stack || e)); process.exit(1); });

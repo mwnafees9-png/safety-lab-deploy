@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // bindings_modules.js — v1.0 — Phase P2 batch 5: self-contained constants + API bindings.
 // MOVED VERBATIM from safety_lab.js (byte-exact). Two machine-proven classes:
 //   1. const/let data declarations whose initializers evaluate in an EMPTY VM
@@ -297,7 +298,7 @@ window.addMoCEntry = function(scope, internalId) {
         status:     (document.getElementById('_mocStatusSel')  || {}).value || 'Pending',
         notes:      (document.getElementById('_mocNotesInput') || {}).value || ''
     };
-    if (!entry.regulation || !entry.paragraph) return alert('Pick a catalog entry or fill in the regulation + paragraph manually.');
+    if (!entry.regulation || !entry.paragraph) { showToast('Pick a catalog entry or fill in the regulation + paragraph manually.', 'warning', 4000); return; }
     req.mocEntries.push(entry);
     closeMoCManager();
     openMoCManager(scope, internalId);   // reopen with the new entry visible
@@ -415,7 +416,7 @@ window.verifyBaseline = async function(id) {
     if (recomputed === b.hash) {
         if (typeof showToast === 'function') showToast('Baseline "' + b.name + '" integrity verified — SHA-256 matches.', 'success', 3500);
     } else {
-        alert('INTEGRITY CHECK FAILED for "' + b.name + '"\n\nStored hash:      ' + b.hash + '\nRecomputed hash:  ' + recomputed + '\n\nThe baseline data has been altered since capture.');
+        slAlert('INTEGRITY CHECK FAILED for "' + b.name + '"\n\nStored hash:      ' + b.hash + '\nRecomputed hash:  ' + recomputed + '\n\nThe baseline data has been altered since capture.', { title: 'Integrity check failed' });
     }
 };
 
@@ -426,14 +427,14 @@ window.diffBaselineToCurrent = async function(id) {
     if (!b) return;
     const current = { acFunctionsData, acFcimData, acFhaData, acReqData, acAssumptionsData, systemsData, praData, zsaData, cmaData, fmeaData, ftaPages, ftaConfig, projectConfig, flightPhasesData };
     const curHash = await _sha256Hex(JSON.stringify(current));
-    if (curHash === b.hash) { alert('No changes since "' + b.name + '" was captured.\nHash: ' + curHash); return; }
+    if (curHash === b.hash) { slAlert('No changes since "' + b.name + '" was captured.\nHash: ' + curHash, { title: 'No changes' }); return; }
     _renderBaselineDiff(b, _baselineFieldDiff(b.snapshot, current), curHash);
 };
 
-window.deleteBaseline = function(id) {
+window.deleteBaseline = async function(id) {
     const b = projectBaselines.find(x => x.id === id);
     if (!b) return;
-    if (!confirm('Delete baseline "' + b.name + '"? This cannot be undone.')) return;
+    if (!(await slConfirm('Delete baseline "' + b.name + '"? This cannot be undone.', { danger: true, okText: 'Delete' }))) return;
     projectBaselines = projectBaselines.filter(x => x.id !== id);
     renderBaselines();
 };
@@ -973,7 +974,7 @@ window.submitACReq = function(){
     // Phase 53.63 — cycle prevention before mutating the store.
     const candidateParent = (document.getElementById('ac-req-parent') || {}).value;
     if (editingId != null && candidateParent && typeof _wouldCreateCycle === 'function' && _wouldCreateCycle(editingId, candidateParent)) {
-        return alert('Cannot set this parent — it would create a circular derivation chain.');
+        showToast('Cannot set this parent: it would create a circular derivation chain.', 'warning', 4000); return;
     }
     const sizeBefore = acReqData.length;
     _origSubmitACReq();
@@ -1042,7 +1043,7 @@ window.submitSysReq = function(){
     // Phase 53.63 — cycle prevention before mutating the store.
     const candidateParent = (document.getElementById('sys-req-parent') || {}).value;
     if (editingId != null && candidateParent && typeof _wouldCreateCycle === 'function' && _wouldCreateCycle(editingId, candidateParent)) {
-        return alert('Cannot set this parent — it would create a circular derivation chain.');
+        showToast('Cannot set this parent: it would create a circular derivation chain.', 'warning', 4000); return;
     }
     const sizeBefore = s ? s.req.length : 0;
     _origSubmitSysReq();
@@ -1557,7 +1558,7 @@ window.saveAiSettings = function(){
         const vKey = get('ai-voyage-key').trim();
         if (aKey) localStorage.setItem(AI_LS_ANTHROPIC, aKey); else localStorage.removeItem(AI_LS_ANTHROPIC);
         if (vKey) localStorage.setItem(AI_LS_VOYAGE, vKey);    else localStorage.removeItem(AI_LS_VOYAGE);
-    } catch(_) { return alert('Could not write to localStorage. Check browser privacy settings.'); }
+    } catch(_) { showToast('Could not write to localStorage. Check browser privacy settings.', 'error', 4000); return; }
     // Self-hosted / on-prem backend (#56) — provider mode + local endpoints/model/key.
     // These are read directly by the AI module's Provider (cloud / itar-cloud / local).
     try {
@@ -1584,8 +1585,8 @@ window.saveAiSettings = function(){
     setTimeout(() => { if (status) status.innerHTML = ''; }, 3000);
 };
 
-window.clearAiKeys = function(){
-    if (!confirm('Clear both Anthropic and Voyage API keys from this browser? AI features will be disabled until you paste new keys.')) return;
+window.clearAiKeys = async function(){
+    if (!(await slConfirm('Clear both Anthropic and Voyage API keys from this browser? AI features will be disabled until you paste new keys.', { danger: true, okText: 'Clear' }))) return;
     try { localStorage.removeItem(AI_LS_ANTHROPIC); localStorage.removeItem(AI_LS_VOYAGE); } catch(_) {}
     document.getElementById('ai-anthropic-key').value = '';
     document.getElementById('ai-voyage-key').value = '';
@@ -1677,12 +1678,12 @@ window.exportAiMemory = async function(){
         const a = document.createElement('a');
         a.href = url; a.download = 'safety_lab_correction_dataset.json'; a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch(e) { alert('Export failed: ' + e); }
+    } catch(e) { slAlert('Export failed: ' + e, { title: 'Export failed' }); }
 };
 
 window.clearAiMemory = async function(){
-    if (!confirm('Clear all AI review memory from this browser? Cannot be undone. Past audit-log entries on the project file are unaffected.')) return;
-    try { await AiMemory.clear(); _refreshAiMemoryCount(); showToast('AI memory cleared.', 'success', 2500); } catch(e) { alert('Clear failed: ' + e); }
+    if (!(await slConfirm('Clear all AI review memory from this browser? Cannot be undone. Past audit-log entries on the project file are unaffected.', { danger: true, okText: 'Clear' }))) return;
+    try { await AiMemory.clear(); _refreshAiMemoryCount(); showToast('AI memory cleared.', 'success', 2500); } catch(e) { slAlert('Clear failed: ' + e, { title: 'Clear failed' }); }
 };
 
 window.onItemIsEngineToggle = function(){
@@ -1819,13 +1820,13 @@ const NODE_DRAWER_MIN_W = 340;
 
 const _libFilterState = { search: '', group: '', source: '', category: '' };
 
-window.createCcfGroupFromLibrary = function(key) {
+window.createCcfGroupFromLibrary = async function(key) {
     const nodes = _basicEventsUsingLibraryKey(key);
     if (nodes.length < 2) { if (typeof showToast === 'function') showToast('Need at least 2 basic events sharing this library entry to form a CCF group.', 'warning', 3500); return; }
     const def = getActiveLibrary()[key] || {};
     const groupName = 'CCF-' + key;
     const beta = 0.1;
-    const ok = confirm('Create CCF group "' + groupName + '" (β = ' + beta + ') across ' + nodes.length + ' basic events that share component library entry "' + (def.name || key) + '"?\n\nThis sets ccfGroup + β on each event (γ/δ default to 0). Tune β/γ/δ per event afterward.');
+    const ok = await slConfirm('Create CCF group "' + groupName + '" (β = ' + beta + ') across ' + nodes.length + ' basic events that share component library entry "' + (def.name || key) + '"?\n\nThis sets ccfGroup + β on each event (γ/δ default to 0). Tune β/γ/δ per event afterward.', { okText: 'Create' });
     if (!ok) return;
     nodes.forEach(n => { n.ccfGroup = groupName; n.beta = beta; if (n.gamma == null) n.gamma = 0; if (n.delta == null) n.delta = 0; });
     if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities();
@@ -1995,17 +1996,19 @@ window.onFtaSysFcChange = function() {
     );
 };
 
-window.integrateSelectedTransferredSubtree = function() {
-    if (!selectedNodeData) return alert('Select the transferred-out gate first.');
-    if (!selectedNodeData.transferOutTo) return alert('This gate has not been transferred out.');
-    const flatten = confirm('Move the subtree back into this tree?\n\nClick OK to keep nested transfers nested.\nClick Cancel to abort.\n\n(Hold the Alt key when clicking the toolbar button to also flatten any nested transferred-out gates.)');
+window.integrateSelectedTransferredSubtree = async function() {
+    if (!selectedNodeData) { showToast('Select the transferred-out gate first.', 'warning', 4000); return; }
+    if (!selectedNodeData.transferOutTo) { showToast('This gate has not been transferred out.', 'warning', 4000); return; }
+    const flatten = await slConfirm('Move the subtree back into this tree?\n\nClick OK to keep nested transfers nested.\nClick Cancel to abort.\n\n(Hold the Alt key when clicking the toolbar button to also flatten any nested transferred-out gates.)', { okText: 'Move back' });
     if (!flatten) return;
+    if (!selectedNodeData || !selectedNodeData.transferOutTo) return;   // the selection may have changed while the dialog was open
     integrateTransferredSubtree(selectedNodeData.id, false);
 };
 
-window.integrateSelectedTransferredSubtreeFlatten = function() {
+window.integrateSelectedTransferredSubtreeFlatten = async function() {
     if (!selectedNodeData || !selectedNodeData.transferOutTo) return;
-    if (!confirm('Move the subtree back AND flatten any nested transferred-out gates?')) return;
+    if (!(await slConfirm('Move the subtree back AND flatten any nested transferred-out gates?', { okText: 'Move back and flatten' }))) return;
+    if (!selectedNodeData || !selectedNodeData.transferOutTo) return;   // the selection may have changed while the dialog was open
     integrateTransferredSubtree(selectedNodeData.id, true);
 };
 
@@ -2910,8 +2913,8 @@ window.reopenReviewComment = function(commentId) {
     _refreshReviewSummaryIfOpen();
 };
 
-window.deleteReviewComment = function(commentId) {
-    if (!confirm('Delete this comment (and any replies under it)?')) return;
+window.deleteReviewComment = async function(commentId) {
+    if (!(await slConfirm('Delete this comment (and any replies under it)?', { danger: true, okText: 'Delete' }))) return;
     Review.deleteComment(commentId);
     renderReviewPanelBody();
     _refreshCommentTriggersFor(_reviewTarget);
@@ -3026,10 +3029,12 @@ window.bulkClear = function(view) {
     _renderBulkBar(view);
 };
 
-window.bulkAction = function(view, action) {
+window.bulkAction = async function(view, action) {
     const selectedIds = Array.from(window._bulkSel).filter(k => k.indexOf(view + ':') === 0).map(k => parseInt(k.slice(view.length + 1), 10));
     if (!selectedIds.length) return;
-    if (action === 'delete' && !confirm('Delete ' + selectedIds.length + ' selected item' + (selectedIds.length === 1 ? '' : 's') + '?')) return;
+    if (action === 'delete') {
+        if (!(await slConfirm('Delete ' + selectedIds.length + ' selected item' + (selectedIds.length === 1 ? '' : 's') + '?', { danger: true, okText: 'Delete' }))) return;
+    }
 
     const removeFromStore = (store) => { for (let i = store.length - 1; i >= 0; i--) if (selectedIds.includes(store[i].internalId)) store.splice(i, 1); };
 

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /*!
  * Safety Lab Aero — AI Assistant module
  * Copyright © 2026. All rights reserved.
@@ -3739,11 +3740,11 @@
         if (_decompNeedVC) { const _b = p.querySelector('.rv-vc-box'); if (_b) _b.addEventListener('change', _decompVcSync); }   // #260
         document.getElementById('ai-fn-close2').onclick = function () { p.remove(); };
         document.getElementById('ai-fn-dismiss-all').onclick = function () { _decompGroups = []; p.remove(); _toast('Dismissed.', 'info'); };
-        document.getElementById('ai-fn-accept-all').onclick = function () {
+        document.getElementById('ai-fn-accept-all').onclick = async function () {
             if (_decompNeedVC && !_decompVcOk()) { _toast('Tick the verification box first — confirm you checked these against the source diagram.', 'warning'); return; }   // #260
             // Phase E2.6 — bulk accept over linter flags needs an explicit override.
             const nfAll = _decompGroups.reduce(function (a, g) { return a + ((g._lint && !g._lint.ok) ? 1 : 0) + (g.subs || []).filter(function (s) { return s._lint && !s._lint.ok; }).length; }, 0);
-            if (nfAll && !confirm('The abstraction linter flagged ' + nfAll + ' name(s) (verb-object form / implementation nouns). Accept all anyway?')) return;
+            if (nfAll && !(await slConfirm('The abstraction linter flagged ' + nfAll + ' name(s) (verb-object form / implementation nouns). Accept all anyway?', { okText: 'Accept all' }))) return;
             if (nfAll && window.AiFidelity) { try { window.AiFidelity.recordProvenance({ kind: 'lint-override', feature: 'arch.decompose', group: '(accept all)', flags: nfAll }); } catch (_) {} }
             let n = 0; _decompGroups.slice().forEach(function (g) { n += _applyDecompGroup(g); });
             _decompGroups = []; p.remove(); _toast(n + ' function row(s) added — open ' + dest + '.', 'success');
@@ -3769,7 +3770,7 @@
                 '</div>';
         }).join('');
         body.querySelectorAll('button[data-act]').forEach(function (btn) {
-            btn.onclick = function () {
+            btn.onclick = async function () {
                 const fid = btn.getAttribute('data-fid');
                 const idx = _decompGroups.findIndex(function (x) { return x._fid === fid; });
                 if (idx < 0) return;
@@ -3777,7 +3778,7 @@
                 if (btn.getAttribute('data-act') === 'accept') {   // Phase E2.6 — flagged names need an explicit override
                     const g0 = _decompGroups[idx];
                     const nf = ((g0._lint && !g0._lint.ok) ? 1 : 0) + (g0.subs || []).filter(function (s) { return s._lint && !s._lint.ok; }).length;
-                    if (nf && !confirm('The abstraction linter flagged ' + nf + ' name(s) in this group (verb-object form / implementation nouns — ARP 4761A functions are behaviors, not equipment). Accept anyway?')) return;
+                    if (nf && !(await slConfirm('The abstraction linter flagged ' + nf + ' name(s) in this group (verb-object form / implementation nouns: ARP 4761A functions are behaviors, not equipment). Accept anyway?', { okText: 'Accept' }))) return;
                     if (nf && window.AiFidelity) { try { window.AiFidelity.recordProvenance({ kind: 'lint-override', feature: 'arch.decompose', group: g0.funcName, flags: nf }); } catch (_) {} }
                 }
                 if (btn.getAttribute('data-act') === 'accept') { const n = _applyDecompGroup(_decompGroups[idx]); if (n) _toast(n + ' row(s) added' + (_decompScope.systemId ? (' to ' + _decompScope.systemName) : ' to Aircraft Functions') + '.', 'success'); }

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // objectives_matrix.js — Phase P3: ARP4754B process-objectives compliance
 // matrix (Appendix A structure). The artifact authority audits open with:
 // every development-assurance objective against LIVE evidence from the model.
@@ -21,10 +22,7 @@
 
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     function _store() {
         if (!projectConfig.appA) projectConfig.appA = { attests: {} };
         if (!projectConfig.appA.attests) projectConfig.appA.attests = {};
@@ -120,14 +118,14 @@
     async function appAAttest(id) {
         const o = OBJECTIVES.find(x => x.id === id);
         if (!o || o.kind !== 'attest') return;
-        const by = (await _ask('Attest ' + id + ' — ' + o.text + '\n\nSign with your name:', '')) || '';
+        const by = (await _ask('Attest ' + id + ': ' + o.text + '\n\nSign with your name:', '')) || '';
         if (!by.trim()) return;
         const note = (await _ask('Evidence reference / note (optional):', '')) || '';
         _store().attests[id] = { by: by.trim(), note: note.trim(), at: new Date().toISOString() };
         _save(); renderAppAPage();
     }
-    function appAClearAttest(id) {
-        if (!confirm('Clear the attestation on ' + id + '?')) return;
+    async function appAClearAttest(id) {
+        if (!(await slConfirm('Clear the attestation on ' + id + '?', { danger: true, okText: 'Clear' }))) return;
         delete _store().attests[id];
         _save(); renderAppAPage();
     }

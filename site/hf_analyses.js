@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // hf_analyses.js — v1.13 — HF'S OWN ANALYSES (30 Aug 2026, Waqas: "human
 // factors is not just about assumptions, that is one angle linking it to the
@@ -1308,15 +1309,16 @@
     // (the pager and any future sort reorder the array under the handler); the whole
     // reason the worksheets key on an id is that a row survives a re-render and a
     // position does not.
-    function deleteRow(lane, id) {
+    async function deleteRow(lane, id) {
         var cfg = _HF_LANES[lane]; if (!cfg) return false;
         var i = _laneIndexOf(lane, id);
         if (i < 0) return false;
         // Suppressible for a batch: mass_actions sets one gate for N rows and puts
         // the per-row confirm back in a finally. Same contract as the worksheets.
         if (!(typeof window !== 'undefined' && window.__hfBatchDelete) &&
-            typeof confirm === 'function' && !confirm('Delete ' + id + '? This cannot be undone from here.')) return false;
+            !(await slConfirm('Delete ' + id + '? This cannot be undone from here.', { danger: true, okText: 'Delete' }))) return false;
         var st = _ensure(lane); if (!st) return false;
+        i = _laneIndexOf(lane, id); if (i < 0) return false;   // re-resolve after the await: the array may have moved
         st.rows.splice(i, 1);
         _save(); _rerenderLane(lane);
         return true;

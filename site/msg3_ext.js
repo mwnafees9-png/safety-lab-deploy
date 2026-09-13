@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // msg3_ext.js — Phase R9: the three MSG-3 programs beyond systems/powerplant
 // — Structures, Zonal (standard + enhanced), and L/HIRF protection — as a
@@ -64,14 +65,14 @@
     }
 
     // ------------------------------------------------------------ structures
-    window.msg3xAddSsi = function () {
-        const name = window.prompt('SSI name (e.g. "Wing front spar lower cap, WS 120–180"):', '');
+    window.msg3xAddSsi = async function () {
+        const name = await slPrompt('SSI name (e.g. "Wing front spar lower cap, WS 120–180"):', '');
         if (!name || !name.trim()) return;
-        const mat = window.prompt('Material — "metallic" or "composite":', 'metallic');
+        const mat = await slPrompt('Material, "metallic" or "composite":', 'metallic');
         if (!mat || !['metallic', 'composite'].includes(mat.trim())) return;
-        const ad = window.prompt('Accidental-damage exposure — "high", "medium", "low" (ground handling, doors, spillage…):', 'medium');
-        const ed = mat.trim() === 'metallic' ? window.prompt('Environmental-damage susceptibility — "high", "medium", "low" (drainage, dissimilar metals, sealant…):', 'medium') : 'n/a';
-        const fd = mat.trim() === 'metallic' ? window.prompt('Fatigue rating — "damage-tolerant" (inspectable) or "safe-life":', 'damage-tolerant') : 'n/a';
+        const ad = await slPrompt('Accidental-damage exposure, "high", "medium", "low" (ground handling, doors, spillage…):', 'medium');
+        const ed = mat.trim() === 'metallic' ? await slPrompt('Environmental-damage susceptibility, "high", "medium", "low" (drainage, dissimilar metals, sealant…):', 'medium') : 'n/a';
+        const fd = mat.trim() === 'metallic' ? await slPrompt('Fatigue rating, "damage-tolerant" (inspectable) or "safe-life":', 'damage-tolerant') : 'n/a';
         _store().ssis.push({ id: 'SSI-' + Date.now(), name: name.trim(), material: mat.trim(),
             ad: (ad || 'medium').trim(), ed: String(ed || 'n/a').trim(), fd: String(fd || 'n/a').trim(), tasks: [] });
         _save(); renderMsg3xPage();
@@ -95,12 +96,15 @@
         let n = 0;
         _ssiTasks(s).forEach((t, i) => { if (_pushLedger(s.name + ' — ' + t.label, t.type, t.interval, id + ':' + i)) n++; });
         _save(); renderMsg3xPage();
-        alert(n ? n + ' task(s) pushed to the maintenance ledger.' : 'Already pushed (idempotent).');
+        if (n) showToast(n + ' task(s) pushed to the maintenance ledger.', 'success', 4000);
+        else showToast('Already pushed (idempotent).', 'info', 4000);
     };
-    window.msg3xDeleteSsi = function (id) {
+    window.msg3xDeleteSsi = async function (id) {
         const s = _store();
         const i = s.ssis.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this SSI?')) { s.ssis.splice(i, 1); _save(); renderMsg3xPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this SSI?', { danger: true, okText: 'Remove' }))) return;
+        s.ssis.splice(i, 1); _save(); renderMsg3xPage();
     };
 
     // ---------------------------------------------------------------- zonal
@@ -124,28 +128,29 @@
         if (row.enhanced && _pushLedger('Zone ' + row.z.zoneId + ' — enhanced zonal (detailed wiring inspection)', 'DET', 8000, 'zone:' + zoneId + ':enh')) n++;
         _store().zonesDone[zoneId] = { at: new Date().toISOString() };
         _save(); renderMsg3xPage();
-        alert(n ? n + ' zonal task(s) pushed.' : 'Already pushed (idempotent).');
+        if (n) showToast(n + ' zonal task(s) pushed.', 'success', 4000);
+        else showToast('Already pushed (idempotent).', 'info', 4000);
     };
 
     // ---------------------------------------------------------------- L/HIRF
-    window.msg3xAddLhirf = function () {
-        const name = window.prompt('Protection feature (e.g. "Elevator servo harness overbraid + backshell bonding"):', '');
+    window.msg3xAddLhirf = async function () {
+        const name = await slPrompt('Protection feature (e.g. "Elevator servo harness overbraid + backshell bonding"):', '');
         if (!name || !name.trim()) return;
-        const deg = window.prompt('Degradation mode — "corrosion", "vibration/chafing", "maintenance disturbance", "aging":', 'corrosion');
-        const protects = window.prompt('Protects (function / FC reference, e.g. SF-01 or FC-01):', '');
-        const interval = parseFloat(window.prompt('Inspection/test interval (FH):', '6000'));
-        const method = window.prompt('Method — "GVI", "DET", or "FNC" (functional bonding/shielding test):', 'DET');
+        const deg = await slPrompt('Degradation mode, "corrosion", "vibration/chafing", "maintenance disturbance", "aging":', 'corrosion');
+        const protects = await slPrompt('Protects (function / FC reference, e.g. SF-01 or FC-01):', '');
+        const interval = parseFloat(await slPrompt('Inspection/test interval (FH):', '6000'));
+        const method = await slPrompt('Method, "GVI", "DET", or "FNC" (functional bonding/shielding test):', 'DET');
         _store().lhirf.push({ id: 'LH-' + Date.now(), name: name.trim(), deg: (deg || '').trim(),
             protects: (protects || '').trim(), interval: interval > 0 ? interval : 6000, method: (method || 'DET').trim(), accepted: null });
         _save(); renderMsg3xPage();
     };
-    window.msg3xLhirfAccept = function (id) {
+    window.msg3xLhirfAccept = async function (id) {
         const f = _store().lhirf.find(x => x.id === id);
         if (!f) return;
-        if (f.accepted) { if (confirm('Withdraw the interval acceptance?')) { f.accepted = null; _save(); renderMsg3xPage(); } return; }
-        const by = window.prompt('The interval must be justified against the degradation rate for a feature protecting a severe function. Signature (name):', '');
+        if (f.accepted) { if (await slConfirm('Withdraw the interval acceptance?', { okText: 'Withdraw' })) { f.accepted = null; _save(); renderMsg3xPage(); } return; }
+        const by = await slPrompt('The interval must be justified against the degradation rate for a feature protecting a severe function. Signature (name):', '');
         if (!by || !by.trim()) return;
-        const note = window.prompt('Justification basis (degradation data, similarity, test):', '') || '';
+        const note = (await slPrompt('Justification basis (degradation data, similarity, test):', '')) || '';
         f.accepted = { by: by.trim(), note, at: new Date().toISOString() };
         _save(); renderMsg3xPage();
     };
@@ -154,12 +159,15 @@
         if (!f) return;
         const ok = _pushLedger('L/HIRF — ' + f.name + ' (' + f.deg + ')', f.method, f.interval, 'lhirf:' + id);
         _save(); renderMsg3xPage();
-        alert(ok ? 'Pushed to the maintenance ledger.' : 'Already pushed (idempotent).');
+        if (ok) showToast('Pushed to the maintenance ledger.', 'success', 4000);
+        else showToast('Already pushed (idempotent).', 'info', 4000);
     };
-    window.msg3xDeleteLhirf = function (id) {
+    window.msg3xDeleteLhirf = async function (id) {
         const s = _store();
         const i = s.lhirf.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this protection feature?')) { s.lhirf.splice(i, 1); _save(); renderMsg3xPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this protection feature?', { danger: true, okText: 'Remove' }))) return;
+        s.lhirf.splice(i, 1); _save(); renderMsg3xPage();
     };
 
     // ----------------------------------------------------------------- page

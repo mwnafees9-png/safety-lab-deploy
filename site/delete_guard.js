@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // delete_guard.js — referential integrity at the WRITE, not just the sweep.
 //
@@ -61,10 +62,14 @@
     function _guard(fnName) {
         const orig = window[fnName];
         if (typeof orig !== 'function' || orig._delGuardWrapped) return;
-        const wrapped = function () {
+        // 13 Sep 2026 (R19 step 3) — the wrapper is async and returns a Promise: the wrapped
+        // delete may itself be async now (it awaits slConfirm), so the post-delete sweep waits
+        // for it to settle, and the "keep / undo" question is the app's own confirm dialog.
+        // Every caller is an onclick attribute (rowActionsHTML) or a fire-and-forget call.
+        const wrapped = async function () {
             let before = null, snap = null;
             try { before = gtIntegrity(); snap = _snapshot(); } catch (_) {}
-            const r = orig.apply(this, arguments);
+            const r = await orig.apply(this, arguments);
             try {
                 if (before && snap) {
                     const after = gtIntegrity();
@@ -72,16 +77,17 @@
                     const broke = d.newDangling.length + d.newOrphans.length;
                     if (broke > 0) {
                         const lines = d.newDangling.slice(0, 6).map(x => '· DANGLING: ' + x.where + ' → ' + x.ref + ' (' + x.detail + ')')
-                            .concat(d.newOrphans.slice(0, 4).map(x => '· ORPHANED: ' + x.where + ' ' + x.ref + ' — ' + x.detail));
-                        const keep = confirm(
+                            .concat(d.newOrphans.slice(0, 4).map(x => '· ORPHANED: ' + x.where + ' ' + x.ref + ': ' + x.detail));
+                        const keep = await slConfirm(
                             'This deletion broke ' + broke + ' golden-thread edge(s):\n\n' +
                             lines.join('\n') + (broke > lines.length ? '\n· … ' + (broke - lines.length) + ' more' : '') +
-                            '\n\nOK = keep the deletion (breaks stay visible on Thread Integrity)\nCancel = UNDO the deletion');
+                            '\n\nOK = keep the deletion (breaks stay visible on Thread Integrity)\nCancel = UNDO the deletion',
+                            { title: 'Golden thread broken', okText: 'Keep the deletion', cancelText: 'Undo the deletion', danger: true });
                         if (!keep) {
                             if (_restore(snap)) {
                                 try { if (typeof showToast === 'function') showToast('Deletion undone — the thread is intact.', 'info', 3500); } catch (_) {}
                             } else {
-                                alert('Undo failed — check Thread Integrity for the broken edges.');
+                                await slAlert('Undo failed. Check Thread Integrity for the broken edges.', { title: 'Undo failed' });
                             }
                         }
                     }

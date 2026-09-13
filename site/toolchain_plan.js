@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // toolchain_plan.js — v1.4 — SPP toolchain & interface declarations.
 // v1.4: scope table can ADD systems (reuses promptCreateSystem) → new system
@@ -29,7 +30,7 @@
     function _esc(s) { if (typeof esc === 'function') return esc(s); return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function _pc() { return (typeof projectConfig !== 'undefined' ? projectConfig : {}) || {}; }
     function _save() { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} }
-    async function _ask(m, d) { try { if (typeof slPrompt === 'function') return await slPrompt(m, d || ''); } catch (_) {} return window.prompt(m, d || ''); }
+    function _ask(m, d) { return slPrompt(m, d || ''); }
     function _appVersion() {
         try { const s = document.querySelector('script[src*="safety_lab.js"]'); const m = s && s.src.match(/v=([\d.]+)/); if (m) return 'v' + m[1]; } catch (_) {}
         return '';

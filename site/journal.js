@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // journal.js — v1.0 — Q7: append-only, hash-chained project journal.
 //
@@ -175,7 +176,7 @@
                 showToast(r.ok ? 'Chain intact: ' + r.entries + ' entr' + (r.entries === 1 ? 'y' : 'ies') + ' verified ✓'
                     : 'CHAIN BROKEN at entry #' + r.brokenAt + ' — the journal was modified.', r.ok ? 'success' : 'error', r.ok ? 3200 : 8000);
             }
-        } catch (e) { alert('Verification failed to run: ' + e.message); }
+        } catch (e) { slAlert('Verification failed to run: ' + e.message, { title: 'Journal verification' }); }
     };
     (function wrap() {
         if (typeof window.switchTab === 'function' && !window.switchTab._jrnlWrapped) {

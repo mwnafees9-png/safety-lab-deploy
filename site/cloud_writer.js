@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // cloud_writer.js — v1.0 — THE one writer of project_documents (3 Sep 2026).
 //
@@ -106,11 +107,12 @@
         try { console.warn('[cloud-writer] LOCK BREACH on ' + projectId + ': ' + summary + ' (' + locks.map(function (l) { return l.label; }).join(', ') + ')'); } catch (_) {}
     }
 
-    var CONFLICT_MSG = 'The saved cloud copy of this project changed after this tab loaded it (another tab, another device, or a teammate).\n\nOK = overwrite the cloud copy with THIS tab\'s version\nCancel = load the cloud copy (this tab\'s current state was banked to the recovery ring first — Thread Integrity page)';
+    var CONFLICT_MSG = 'The saved cloud copy of this project changed after this tab loaded it (another tab, another device, or a teammate).\n\nOK = overwrite the cloud copy with THIS tab\'s version\nCancel = load the cloud copy (this tab\'s current state was banked to the recovery ring first: Thread Integrity page)';
     async function _ask(msg) {
-        try { var c = _fn('slConfirm'); if (c) return !!(await c(msg)); } catch (_) {}
-        try { if (typeof window !== 'undefined' && window && typeof window.confirm === 'function') return !!window.confirm(msg); } catch (_) {}
-        return true;
+        // R19 step 3 — the app's own confirm dialog only; the native confirm fallback is gone.
+        // (_fn keeps the vm-test seam: a harness without the dialog engine answers "overwrite", as before.)
+        var c = _fn('slConfirm'); if (!c) return true;
+        return !!(await c(msg, { title: 'Cloud copy changed', danger: true }));
     }
 
     // ---- the queued run ----------------------------------------------------

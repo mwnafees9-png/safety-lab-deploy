@@ -267,7 +267,8 @@ function runSave(opts) {
     _bankWorkingState: () => { events.push('bank'); },
     _loadCloudProject: () => { events.push('load'); return Promise.resolve(); },
     showToast: () => {}, setTimeout, clearTimeout, Object, Array, String, __slabCloudQuietMs: 5,
-    window: { confirm: (msg) => { events.push('confirm'); ctx._confirmMsg = msg; return opts.confirmAnswer; } }
+    // R19 step 3: the conflict question goes through the app's own slConfirm (a Promise), never the native confirm
+    slConfirm: (msg) => { events.push('confirm'); ctx._confirmMsg = msg; return Promise.resolve(opts.confirmAnswer); }, window: {}
   };
   vm.createContext(ctx);
   vm.runInContext(w + ';' + FENCE_SRC + ';' + src + '; globalThis.__p = saveProjectToCloud();', ctx);
@@ -326,7 +327,7 @@ const saveChecks = (async () => {
       projectConfig: {}, projectName: 'proj', _activeCloudProjectId: 'pid-1', _activeCloudDocVersion: 5,
       _ensureCloudProject: () => Promise.resolve('pid-1'), _recordSaveHistory: () => Promise.resolve(),
       _bankWorkingState: () => { events.push('bank'); }, _loadCloudProject: () => { events.push('load'); return Promise.resolve(); },
-      showToast: () => {}, setTimeout, clearTimeout, Object, Array, String, __slabCloudQuietMs: 5, window: { confirm: () => { events.push('confirm'); return true; } }
+      showToast: () => {}, setTimeout, clearTimeout, Object, Array, String, __slabCloudQuietMs: 5, slConfirm: () => { events.push('confirm'); return Promise.resolve(true); }, window: {}
     };
     vm.createContext(ctx);
     vm.runInContext(w + ';' + FENCE_SRC + ';' + src + '; globalThis.__p1 = saveProjectToCloud();', ctx);
@@ -358,7 +359,7 @@ const saveChecks = (async () => {
       projectConfig: {}, projectName: 'proj', _activeCloudProjectId: 'pid-1', _activeCloudDocVersion: 5, _dirtySinceSave: true, _autosaveLastWrite: 100,
       _ensureCloudProject: () => Promise.resolve('pid-1'), _recordSaveHistory: () => Promise.resolve(),
       _bankWorkingState: () => { events.push('bank'); }, _loadCloudProject: () => { events.push('load'); return Promise.resolve(); },
-      showToast: () => {}, setTimeout, clearTimeout, __slabCloudQuietMs: 5, window: { confirm: () => { events.push('confirm'); return true; }, SL_CLOUD_AUTOSAVE: true }
+      showToast: () => {}, setTimeout, clearTimeout, __slabCloudQuietMs: 5, slConfirm: () => { events.push('confirm'); return Promise.resolve(true); }, window: { SL_CLOUD_AUTOSAVE: true }
     };
     vm.createContext(ctx);
     const preamble = `
@@ -387,7 +388,7 @@ const saveChecks = (async () => {
     // the other order: autosave tick first, manual save while it is in flight
     const state2 = { doc: { version: 5 }, slowMs: 8 }; const events2 = [];
     ctx.getSupabaseClient = () => fakeClient(state2); ctx._activeCloudDocVersion = 5; ctx._autosaveLastWrite = 200;
-    ctx._bankWorkingState = () => { events2.push('bank'); }; ctx.window.confirm = () => { events2.push('confirm'); return true; };
+    ctx._bankWorkingState = () => { events2.push('bank'); }; ctx.slConfirm = () => { events2.push('confirm'); return Promise.resolve(true); };
     vm.runInContext('_lastPushedTs = 0; globalThis.__p3 = __t();', ctx);
     await new Promise(r => setTimeout(r, 2));
     vm.runInContext('globalThis.__p4 = __s();', ctx);

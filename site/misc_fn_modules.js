@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // misc_fn_modules.js — v1.0 — Phase P2 batch 6: residual function layer (full sweep).
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
@@ -212,13 +213,11 @@ function showUpgradeRequiredToast(feature, requiredTier) {
         const targetLabel = ({'pro':'Pro','pro-plus':'Pro+','enterprise':'Enterprise'})[target] || 'a paid plan';
         const msg = (feature || 'This feature') + ' unlocks when your trial converts to ' + targetLabel +
             '. Trial has ' + days + ' day' + (days === 1 ? '' : 's') + ' left.';
-        if (typeof showToast === 'function') showToast(msg, 'warning', 5200);
-        else alert(msg);
+        showToast(msg, 'warning', 5200);
         return;
     }
     const msg = (feature || 'This feature') + ' requires ' + tierLabel + '. Your current tier is ' + currentLabel + '.';
-    if (typeof showToast === 'function') showToast(msg, 'warning', 5200);
-    else alert(msg);
+    showToast(msg, 'warning', 5200);
 }
 
 function getLicenseToken() {
@@ -434,16 +433,16 @@ function _renderBaselineDiff(b, diff, curHash) {
     const xb = document.getElementById('bdiff-x'); if (xb) xb.onclick = function () { ov.remove(); };
 }
 
-function makeNodeIndependent(node) {
+async function makeNodeIndependent(node) {
     node = node || selectedNodeData;
-    if (!node) { alert('Select a node first.'); return; }
+    if (!node) { showToast('Select a node first.', 'warning', 4000); return; }
     const lid = node.logicalId != null ? node.logicalId : node.id;
     const group = repeatedEventGroups().get(lid);
     if (!group || group.length < 2) {
-        alert('This node is not part of a common-mode group.');
+        showToast('This node is not part of a common-mode group.', 'info', 4000);
         return;
     }
-    if (!confirm(`Make "${node.displayId || node.name || 'this node'}" independent? It will no longer share failures with the other ${group.length - 1} instance(s). The other instances stay linked to each other.`)) return;
+    if (!(await slConfirm(`Make "${node.displayId || node.name || 'this node'}" independent? It will no longer share failures with the other ${group.length - 1} instance(s). The other instances stay linked to each other.`, { okText: 'Make independent' }))) return;
 
     // Mint a fresh logicalId + displayId for the selected node only.
     const typeKey = node.type === 'gate' ? 'gate' : node.type;
@@ -541,7 +540,7 @@ function acceptPasteReview() {
         const name = (nameEl && nameEl.value || '').trim();
         const beta = Math.max(0, Math.min(1, parseFloat(betaEl && betaEl.value) || 0.1));
         if (!name) {
-            alert('Please enter a CCF group name (e.g., BATT-PROPLOT-2024Q1).');
+            showToast('Please enter a CCF group name (e.g., BATT-PROPLOT-2024Q1).', 'warning', 4000);
             if (nameEl) nameEl.focus();
             return;
         }
@@ -807,8 +806,8 @@ function changeCustomColumnType(columnId, newType) {
     }
 }
 
-function deleteCustomColumn(columnId) {
-    if (!confirm('Delete this column? Any values stored for this column on existing rows will be removed on next save.')) return;
+async function deleteCustomColumn(columnId) {
+    if (!(await slConfirm('Delete this column? Any values stored for this column on existing rows will be removed on next save.', { danger: true, okText: 'Delete' }))) return;
     const o = _activeOverrides();
     o.customColumns = o.customColumns.filter(c => c.id !== columnId);
     _persistActiveScope();
@@ -1395,7 +1394,7 @@ async function ckptAttest(key, itemId) {
     if (!projectConfig.ckptAttest) projectConfig.ckptAttest = {};
     const existing = projectConfig.ckptAttest[k];
     if (existing) {
-        const yes = await (typeof slConfirm === 'function' ? slConfirm('Clear attestation signed by ' + (existing.by || 'unknown') + '?') : Promise.resolve(confirm('Clear attestation?')));
+        const yes = await slConfirm('Clear attestation signed by ' + (existing.by || 'unknown') + '?', { danger: true, okText: 'Clear' });
         if (yes) delete projectConfig.ckptAttest[k];
     } else {
         const by = (await slPrompt('Attest — sign with your name:', _signoffReviewerName() || '')) || '';
@@ -1519,7 +1518,7 @@ async function ipDisposition(key) {
         const summary = existing.answers
             ? Object.keys(existing.answers).filter(k => existing.answers[k] !== 'independent').map(k => k + ': ' + existing.answers[k]).join(', ') || 'independent in every category'
             : (existing.susceptible || '');
-        const yes = await (typeof slConfirm === 'function' ? slConfirm('Clear disposition signed by ' + (existing.by || '?') + ' (' + summary + ')?') : Promise.resolve(confirm('Clear disposition?')));
+        const yes = await slConfirm('Clear disposition signed by ' + (existing.by || '?') + ' (' + summary + ')?', { danger: true, okText: 'Clear' });
         if (yes) { delete projectConfig.ipDispositions[key]; try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} ipLedger(true); renderIpLedgerPage(); }
         return;
     }
@@ -2149,7 +2148,7 @@ async function coffeVerdict(fcInternalId, caseKey) {
     const k = String(fcInternalId) + '§' + caseKey;
     const cur = store.verdicts[k];
     if (cur) {
-        const yes = await (typeof slConfirm === 'function' ? slConfirm('Clear verdict "' + cur.verdict + '" signed by ' + (cur.by || '?') + '?') : Promise.resolve(confirm('Clear?')));
+        const yes = await slConfirm('Clear verdict "' + cur.verdict + '" signed by ' + (cur.by || '?') + '?', { danger: true, okText: 'Clear' });
         if (yes) delete store.verdicts[k];
     } else {
         const v = (await slPrompt('Does this combination result in the failure condition? yes / no:', 'yes')) || '';
@@ -2250,7 +2249,7 @@ async function sppTailorItem() {
 
 async function sppClearTailoring(k) {
     const t = (projectConfig.ckptTailored || {})[k];
-    const yes = await (typeof slConfirm === 'function' ? slConfirm('Reinstate "' + k + '" (clear tailoring signed by ' + (t && t.by || '?') + ')?') : Promise.resolve(confirm('Reinstate?')));
+    const yes = await slConfirm('Reinstate "' + k + '" (clear tailoring signed by ' + (t && t.by || '?') + ')?', { okText: 'Reinstate' });
     if (!yes) return;
     delete projectConfig.ckptTailored[k];
     try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
@@ -3387,8 +3386,7 @@ async function restoreSavedVersion(version) {
     if (!client || version == null) return;
     const projectId = (typeof _activeCloudProjectId !== 'undefined') ? _activeCloudProjectId : null;
     if (!projectId) { if (typeof showToast === 'function') showToast('Open the cloud project first.', 'warning', 4000); return; }
-    if (typeof window.confirm === 'function' &&
-        !window.confirm('Restore version ' + version + ' as your current working copy? Your current state is banked first, so this can be undone.')) return;
+    if (!(await slConfirm('Restore version ' + version + ' as your current working copy? Your current state is banked first, so this can be undone.', { okText: 'Restore' }))) return;
     try {
         const { data, error } = await client.rpc('sl_restore_project_version', { p_project: projectId, p_version: Number(version) });
         if (error) throw error;
@@ -3408,8 +3406,7 @@ async function restoreRevision(id) {
     if (!client || !id) return;
     const projectId = (typeof _activeCloudProjectId !== 'undefined') ? _activeCloudProjectId : null;
     if (!projectId) { if (typeof showToast === 'function') showToast('Open the cloud project first.', 'warning', 4000); return; }
-    if (typeof window.confirm === 'function' &&
-        !window.confirm('Restore this revision as your current working copy? Your current state is banked first, so this can be undone; the sealed revision itself is unchanged.')) return;
+    if (!(await slConfirm('Restore this revision as your current working copy? Your current state is banked first, so this can be undone; the sealed revision itself is unchanged.', { okText: 'Restore' }))) return;
     try {
         const { data, error } = await client.rpc('sl_restore_project_baseline', { p_project: projectId, p_baseline: id });
         if (error) throw error;
@@ -3430,9 +3427,9 @@ async function promptCreateRevision() {
         if (typeof showToast === 'function') showToast('Save the project to cloud before creating a revision.', 'warning', 4000);
         return;
     }
-    const label = (typeof window.prompt === 'function') ? window.prompt('Name this revision (e.g. "Rev A — PDR baseline"):', '') : '';
-    if (label === null) return;   // cancelled
-    const note = (typeof window.prompt === 'function') ? (window.prompt('Optional note (what changed / why):', '') || null) : null;
+    const label = await slPrompt('Name this revision (e.g. "Rev A: PDR baseline"):', '');
+    if (label == null) return;   // cancelled
+    const note = (await slPrompt('Optional note (what changed / why):', '')) || null;
     await createProjectRevision(label || null, note);
     await _renderVersionHistory();
 }
@@ -3787,8 +3784,7 @@ async function removeWorkspaceMember(userId) {
     if (!client || !userId) return;
     const wsId = getActiveWorkspaceId();
     if (!wsId) return;
-    if (typeof window.confirm === 'function' &&
-        !window.confirm('Remove this member from the workspace? They will lose access to its projects.')) return;
+    if (!(await slConfirm('Remove this member from the workspace? They will lose access to its projects.', { danger: true, okText: 'Remove' }))) return;
     try {
         const { error } = await client
             .from('workspace_members')
@@ -3845,7 +3841,7 @@ function _autoMirrorIntoVerification(newNode, sourcePage, parentInSource) {
     return true;
 }
 
-function onFtaCalcModeChange() {
+async function onFtaCalcModeChange() {
     const sel = document.getElementById('fta-calc-mode');
     if (!sel) return;
     const newMode = sel.value;
@@ -3859,14 +3855,15 @@ function onFtaCalcModeChange() {
     // Phase 53.69 — EDU tier doesn't have V&V mirror trees, so we skip the offer entirely.
     const canMirror = (typeof canUseVerificationTree !== 'function') || canUseVerificationTree();
     if (newMode === 'bottom-up' && oldMode === 'top-down' && hasContent && page && canMirror) {
-        const wantsMirror = confirm(
+        const wantsMirror = await slConfirm(
             'You\'re on a top-down allocation tree. Switching this tree to Bottom-Up would lose the apportioned λ values you\'ve built.\n\n' +
-            'OK — Create a Verification Mirror tree:\n' +
+            'OK: Create a Verification Mirror tree:\n' +
             '  • clones the structure to a new page\n' +
             '  • blanks every leaf so you can enter real implementation values\n' +
             '  • mode is set to Bottom-Up\n' +
             '  • the calculated top-event probability becomes verification evidence for your allocations\n\n' +
-            'Cancel — keep this tree as-is and abort the mode switch.'
+            'Cancel: keep this tree as-is and abort the mode switch.',
+            { title: 'Switch to Bottom-Up?' }
         );
         if (wantsMirror) {
             // Build the mirror without flipping the current page's mode.
@@ -4468,19 +4465,37 @@ function expandEntryForm(id) {
     if (b) b.click(); else p.classList.remove('is-collapsed');
 }
 
+// 13 Sep 2026 (R19 step 3) — dialogs queue. Two questions asked back to back (an import that reports its
+// counts and then its result, a delete that asks and then warns) used to fight over the one overlay: the second
+// replaced the first before it was read and the first promise never settled. Now a dialog asked while another is
+// open waits its turn; each resolves in order. _slDialogQueue() tells tests how many are waiting.
+var _slDialogBusy = false, _slDialogWaiting = [];
+function _slDialogQueue() { return _slDialogWaiting.length + (_slDialogBusy ? 1 : 0); }
 function _slDialog(opts) {
+    if (_slDialogBusy) return new Promise(resolve => { _slDialogWaiting.push({ opts: opts, resolve: resolve }); });
+    _slDialogBusy = true;
+    const settle = (val) => {
+        _slDialogBusy = false;
+        const next = _slDialogWaiting.shift();
+        if (next) { _slDialog(next.opts).then(next.resolve).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'misc_fn_modules'); }); }
+        return val;
+    };
+    return _slDialogShow(opts).then(settle, (e) => { settle(); throw e; });
+}
+function _slDialogShow(opts) {
     return new Promise(resolve => {
         let ov = document.getElementById('sl-dialog-overlay');
         if (!ov) { ov = document.createElement('div'); ov.id = 'sl-dialog-overlay'; ov.className = 'modal-overlay'; document.body.appendChild(ov); }
         if (ov._hideTimer) { clearTimeout(ov._hideTimer); ov._hideTimer = null; }   // cancel a prior dialog's pending hide
         const isPrompt = opts.type === 'prompt';
+        const isAlert = opts.type === 'alert';          // R19 step 3: one OK button, nothing to cancel
         ov.innerHTML =
             '<div class="sl-dialog-card" role="dialog" aria-modal="true">'
             + (opts.title ? '<h3 class="sl-dialog-title">' + esc(opts.title) + '</h3>' : '')
             + '<div class="sl-dialog-msg">' + esc(opts.message || '').replace(/\n/g, '<br>') + '</div>'
             + (isPrompt ? '<input type="text" id="sl-dialog-input" class="sl-dialog-input" value="' + esc(opts.def || '') + '">' : '')
             + '<div class="sl-dialog-actions">'
-            + '<button type="button" class="sl-dialog-cancel">' + esc(opts.cancelText || 'Cancel') + '</button>'
+            + (isAlert ? '' : '<button type="button" class="sl-dialog-cancel">' + esc(opts.cancelText || 'Cancel') + '</button>')
             + '<button type="button" class="sl-dialog-ok' + (opts.danger ? ' sl-danger' : '') + '">' + esc(opts.okText || 'OK') + '</button>'
             + '</div></div>';
         ov.style.display = 'flex';
@@ -4493,19 +4508,25 @@ function _slDialog(opts) {
             resolve(val);
         };
         const onOk = () => finish(isPrompt ? (input ? input.value : '') : true);
-        const onCancel = () => finish(isPrompt ? null : false);
+        const onCancel = () => finish(isPrompt ? null : isAlert ? true : false);   // dismissing a notice is the same as reading it
         function onKey(e) {
             if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); onCancel(); }
             else if (e.key === 'Enter') { e.preventDefault(); onOk(); }
         }
         ov.querySelector('.sl-dialog-ok').addEventListener('click', onOk);
-        ov.querySelector('.sl-dialog-cancel').addEventListener('click', onCancel);
+        const cancelBtn = ov.querySelector('.sl-dialog-cancel'); if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
         ov.addEventListener('click', e => { if (e.target === ov) onCancel(); });
         document.addEventListener('keydown', onKey, true);
         setTimeout(() => { if (input) { input.focus(); input.select(); } else { const b = ov.querySelector('.sl-dialog-ok'); if (b) b.focus(); } }, 40);
     });
 }
 function slConfirm(message, opts) { opts = opts || {}; return _slDialog({ type: 'confirm', message: message, title: opts.title, okText: opts.okText, cancelText: opts.cancelText, danger: opts.danger }); }
+// 13 Sep 2026 (R19 step 3) — slAlert: the app's own notice dialog. One OK button; resolves true when
+// dismissed (OK, Enter, Escape or a click outside). Replaces every native alert() that carried a real
+// explanation (multi-line text, lists, results); one-line validation notices stay as toasts with an
+// explicit type. Nothing in the app calls the native alert/confirm/prompt any more (regression_native_dialogs).
+function slAlert(message, opts) { opts = opts || {}; return _slDialog({ type: 'alert', message: message, title: opts.title, okText: opts.okText || 'OK', danger: opts.danger }); }
+try { if (typeof window !== 'undefined') window.slAlert = slAlert; } catch (_) {}
 
 function _ftaGoToSearchHit(hit) {
     if (!hit || !hit.node) return;

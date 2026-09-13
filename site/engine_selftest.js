@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // engine_selftest.js — v1.0 — Q6: in-app engine self-test attestation.
 //
@@ -71,7 +72,7 @@
                 }
             } catch (_) {}
             _injectPanel();
-        } catch (e) { alert('Self-test failed to run: ' + e.message); }
+        } catch (e) { slAlert('Self-test failed to run: ' + e.message, { title: 'Engine self-test' }); }
     };
 
     // ------------------------------------------- panel on Thread Integrity

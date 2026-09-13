@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // reqif_import.js — ReqIF import (Polarion / DOORS / any OMG-ReqIF tool).
 //
@@ -442,19 +443,19 @@
                 let text;
                 if (/\.(reqifz|zip)$/i.test(f.name)) {
                     if (typeof JSZip === 'undefined') {
-                        alert('.reqifz is a zip archive — unzip it and drop the .reqif inside (archive support needs the zip library, not loaded on this build).');
+                        slAlert('.reqifz is a zip archive: unzip it and drop the .reqif inside (archive support needs the zip library, not loaded on this build).');
                         return;
                     }
                     const zip = await JSZip.loadAsync(f);
                     const entry = Object.values(zip.files).find(e => /\.(reqif|xml)$/i.test(e.name));
-                    if (!entry) { alert('No .reqif file inside the archive.'); return; }
+                    if (!entry) { showToast('No .reqif file inside the archive.', 'error', 4000); return; }
                     text = await entry.async('string');
                 } else {
                     text = await f.text();
                 }
                 _pending = { parsed: reqifParse(text), fileName: f.name };
                 renderReqifPage();
-            } catch (e) { alert('Parse failed: ' + e.message); }
+            } catch (e) { slAlert('Parse failed: ' + e.message, { title: 'ReqIF import' }); }
         };
         inp.click();
     };
@@ -463,27 +464,30 @@
         if (!_pending) return;
         const systems = ((typeof systemsData !== 'undefined' && systemsData) || []);
         const looksFha = reqifLooksLikeFha(_pending.parsed);
-        const kind = window.prompt('What is this document?\n  req — requirements\n  fha — failure conditions (FHA)' +
-            (looksFha ? '\n\n(severity attributes detected — FHA suggested)' : ''), looksFha ? 'fha' : 'req');
+        const kind = await slPrompt('What is this document?\n  req: requirements\n  fha: failure conditions (FHA)' +
+            (looksFha ? '\n\n(severity attributes detected, FHA suggested)' : ''), looksFha ? 'fha' : 'req');
         if (!kind || !['req', 'fha'].includes(kind.trim())) return;
-        const dest = window.prompt('Import destination — type "aircraft" or a system id:\n' +
-            ['aircraft'].concat(systems.map(s => s.id + ' — ' + s.name)).join('\n'), 'aircraft');
+        if (!_pending) return;
+        const dest = await slPrompt('Import destination: type "aircraft" or a system id:\n' +
+            ['aircraft'].concat(systems.map(s => s.id + ': ' + s.name)).join('\n'), 'aircraft');
         if (!dest) return;
-        const target = dest.trim().split(' — ')[0].trim();
-        const by = window.prompt('Import signature (name):', '') || '';
+        // accept "id", "id: name" (as listed) or the older "id — name" spelling
+        const target = dest.trim().split(/\s+—\s+|:\s+/)[0].trim();
+        const by = (await slPrompt('Import signature (name):', '')) || '';
+        if (!_pending) return;
         try {
             const res = kind.trim() === 'fha'
                 ? reqifApplyFha(_pending.parsed, target, by)
                 : reqifApply(_pending.parsed, target, by);
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
-            alert('Imported "' + (_pending.parsed.title || _pending.fileName) + '" → ' + target + '\n\n' +
+            slAlert('Imported "' + (_pending.parsed.title || _pending.fileName) + '" → ' + target + '\n\n' +
                 res.added + ' added · ' + res.updated + ' updated · ' + res.unchanged + ' unchanged · ' +
                 res.missing + ' missing-in-source flagged' +
-                (res.unclassified ? '\n⚠ ' + res.unclassified + ' severity value(s) unrecognized — imported UNCLASSIFIED, classify manually' : '') +
-                '\n' + res.relations + ' relation(s) · ' + res.headings + ' heading(s) skipped');
+                (res.unclassified ? '\n⚠ ' + res.unclassified + ' severity value(s) unrecognized, imported UNCLASSIFIED, classify manually' : '') +
+                '\n' + res.relations + ' relation(s) · ' + res.headings + ' heading(s) skipped', { title: 'ReqIF import' });
             _pending = null;
             renderReqifPage();
-        } catch (e) { alert('Import failed: ' + e.message); }
+        } catch (e) { slAlert('Import failed: ' + e.message, { title: 'ReqIF import' }); }
     };
     window.reqifDiscard = function () { _pending = null; renderReqifPage(); };
 

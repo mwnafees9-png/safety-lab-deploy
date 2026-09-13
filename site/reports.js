@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // reports.js — Reports module (v1 namespace + v2 §56.9 section editor + v3 §56.10 AI
 // bulk-draft), extracted verbatim from safety_lab.js (Phase 76). Classic script, loaded
 // AFTER safety_lab.js so v1 reads the real SEVERITY_RANK/DAL_RANK_MAP (typeof-guarded) and
@@ -3334,10 +3335,10 @@ window.Reports = Reports;
             if (inp) { inp.focus(); inp.select(); }
         } catch (_) {}
     }
-    function _wsaRemoveSection(idx) {
+    async function _wsaRemoveSection(idx) {
         const st = _modalState; if (!st) return;
         const sec = st.sections[idx]; if (!sec) return;
-        if (!confirm('Remove section "' + (sec.heading || 'Untitled') + '" from this report?\n(The template default is unaffected unless you save the program template.)')) return;
+        if (!(await slConfirm('Remove section "' + (sec.heading || 'Untitled') + '" from this report?\n(The template default is unaffected unless you save the program template.)', { danger: true, okText: 'Remove' }))) return;
         st.sections.splice(idx, 1);
         _buildSectionEditor();
     }
@@ -5210,12 +5211,11 @@ window.Reports = Reports;
                     if (AF && draft._afKey) {
                         let overrideNote = '';
                         const nf = (draft.review && draft.review.total) || 0;
-                        const ask = (msg, dflt) => (typeof slPrompt === 'function') ? slPrompt(msg, dflt || '') : Promise.resolve(window.prompt(msg, dflt || ''));
                         if (nf) {
-                            overrideNote = (await ask('The checker flagged ' + nf + ' claim(s) in this draft. Accepting anyway requires a rationale (recorded in the tailoring spirit — an act, not an absence):', '')) || '';
+                            overrideNote = (await slPrompt('The checker flagged ' + nf + ' claim(s) in this draft. Accepting anyway requires a rationale (recorded in the tailoring spirit: an act, not an absence):', '')) || '';
                             if (!overrideNote.trim()) return;
                         }
-                        const by = (await ask('Sign the acceptance with your name:', '')) || '';
+                        const by = (await slPrompt('Sign the acceptance with your name:', '')) || '';
                         if (!by.trim()) return;
                         AF.acceptDraft(draft._afKey, { by: by.trim(), overrideNote: overrideNote.trim() });
                     }

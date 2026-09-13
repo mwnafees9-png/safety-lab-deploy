@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // program_plan.js — v1.1 — THE PLAN DRIVES THE NAV.
 //
@@ -574,10 +575,7 @@
         if (!turningOff) { setLane(id, true); finish(); return; }
         const needsSignoff = isExpected(id) && laneData(id) > 0;
         if (!needsSignoff) { setLane(id, false); finish(); return; }
-        const ask = (typeof slPrompt === 'function')
-            ? slPrompt
-            : function (m) { return Promise.resolve(typeof prompt === 'function' ? prompt(m) : null); };
-        Promise.resolve(ask('Tailoring opt-out — "' + l.name + '" is expected under ' + basisNow() +
+        Promise.resolve(slPrompt('Tailoring opt-out: "' + l.name + '" is expected under ' + basisNow() +
                 ' and holds ' + laneData(id) + ' item(s).\n\nWhy is this lane out of scope for this program? (≥10 characters)', '',
                 { title: 'Signed tailoring opt-out', okText: 'Continue' }))
             .then(function (rat) {
@@ -585,7 +583,7 @@
                     if (typeof showToast === 'function') showToast('Kept in program — a tailoring opt-out needs a real rationale.', 'info', 4200);
                     return null;
                 }
-                return Promise.resolve(ask('Signature — name and role (e.g., W. Nafees — Head of Safety):', '',
+                return Promise.resolve(slPrompt('Signature, name and role (e.g., W. Nafees, Head of Safety):', '',
                         { title: 'Sign the tailoring record', okText: 'Sign & remove' }))
                     .then(function (sig) {
                         if (sig == null || !String(sig).trim()) {
@@ -911,12 +909,11 @@
         const finish = function () { try { renderSystemPlans(); } catch (_) {} try { if (opts.after) opts.after(); } catch (_) {} };
         if (!turningOff) { setSystemLane(sysId, laneId, true); finish(); return Promise.resolve(true); }
         if (!isExpected(laneId)) { setSystemLane(sysId, laneId, false); finish(); return Promise.resolve(true); }
-        const ask = (typeof slPrompt === 'function') ? slPrompt : function () { return Promise.resolve(null); };
         const lane = _byId[laneId] || {};
-        return Promise.resolve(ask('Tailoring opt-out — "' + (lane.name || laneId) + '" is expected under ' + basisNow() + '.\n\nWhy is it out of scope for THIS system? (>=10 characters)', '', { title: 'Signed tailoring opt-out', okText: 'Continue' }))
+        return Promise.resolve(slPrompt('Tailoring opt-out: "' + (lane.name || laneId) + '" is expected under ' + basisNow() + '.\n\nWhy is it out of scope for THIS system? (>=10 characters)', '', { title: 'Signed tailoring opt-out', okText: 'Continue' }))
             .then(function (rat) {
                 if (rat == null || String(rat).trim().length < 10) { if (typeof showToast === 'function') showToast('Kept in the system plan — a tailoring opt-out needs a real rationale.', 'info', 4200); return; }
-                return Promise.resolve(ask('Signature — name and role (e.g., W. Nafees — Head of Safety):', '', { title: 'Sign the tailoring record', okText: 'Sign & remove' })).then(function (sig) {
+                return Promise.resolve(slPrompt('Signature, name and role (e.g., W. Nafees, Head of Safety):', '', { title: 'Sign the tailoring record', okText: 'Sign & remove' })).then(function (sig) {
                     if (sig == null || !String(sig).trim()) { if (typeof showToast === 'function') showToast('Kept — unsigned tailoring does not count.', 'info', 4200); return; }
                     setSystemLane(sysId, laneId, false, { rationale: String(rat).trim(), sig: String(sig).trim() });
                     if (typeof showToast === 'function') showToast('"' + (lane.name || laneId) + '" tailored out of this system — signed, recorded, reversible.', 'success', 5000);

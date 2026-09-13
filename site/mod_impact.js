@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // mod_impact.js — v1.6 — Phase P6: Modification Impact Wizard (inline picker + P6.3 wiring: journal acts, REG §5c, carried PRs, INV-28).
 // BORN MODULAR: new file, zero monolith edits; store under projectConfig.mods.
 //
@@ -25,10 +26,7 @@
 
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     function _store() {
         if (!Array.isArray(projectConfig.mods)) projectConfig.mods = [];
         return projectConfig.mods;
@@ -450,10 +448,12 @@
         _jr('mod-advance', m.id + ' \u2192 ' + next + (next === 're-verified' && m.carriedPRs && m.carriedPRs.length ? ' \u2014 carried by ' + m.carriedPRs.join(', ') : '') + ' \u2014 signed ' + by.trim());
         _save(); renderModPage();
     }
-    function modDelete(id) {
+    async function modDelete(id) {
         const s = _store();
         const i = s.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this modification record?')) { s.splice(i, 1); _save(); renderModPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this modification record?', { danger: true, okText: 'Remove' }))) return;
+        s.splice(i, 1); _save(); renderModPage();
     }
 
     // --------------------------------------------------------------- render

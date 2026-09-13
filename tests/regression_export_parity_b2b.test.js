@@ -50,7 +50,11 @@ function sandbox(overrides) {
   const captured = [];
   const sb = {
     console, Date, Array, JSON, String, Number, Object, Math, isNaN, parseFloat,
-    alert: (m) => captured.push({ alert: String(m) }),
+    // R19 step 3 (13 Sep 2026): exportData no longer calls the native alert(); a refusal is a typed toast
+    // (one-line notice) or slAlert (explanation with details). Both land in the same 'alert' bucket so every
+    // check below keeps its original meaning: "refused with this message, no CSV".
+    slAlert: (m) => captured.push({ alert: String(m) }),
+    showToast: (m) => captured.push({ alert: String(m) }),
     downloadCSV: (fname, headers, rows) => captured.push({ fname, headers, rows }),
     acReqData: [], systemsData: [], itemsData: [], flightPhasesData: [], praData: [],
     zsaData: [], cmaData: [], fmeaData: [], ftaPages: [], acFhaData: [], activeSystemId: '',

@@ -978,13 +978,14 @@
         try { if (typeof deriveMsg3 === 'function') deriveMsg3(true); } catch (_) {}
         try { if (typeof mmelDerive === 'function') mmelDerive(true); } catch (_) {}
         try { if (typeof window !== 'undefined' && typeof window.rbdMcRun === 'function') window.rbdMcRun('MC-BRK-001'); } catch (_) {}
-        // zonal pushes fire user-facing alerts — silence them for the load
+        // zonal pushes announce themselves with a toast (R19 step 3: they used to be native alerts);
+        // silence the toast for the demo load so the person is not told about work they did not do
         try {
             if (typeof window !== 'undefined' && typeof window.msg3xPushZone === 'function') {
-                const _alert = window.alert;
-                window.alert = function () {};
+                const _toast = window.showToast;
+                window.showToast = function () {};
                 try { window.msg3xPushZone('Z-MLGW'); window.msg3xPushZone('Z-NACL'); }
-                finally { window.alert = _alert; }
+                finally { window.showToast = _toast; }
             }
         } catch (_) {}
         // ---- M3/MC-03: reject the non-eligible derived MMEL candidate ------

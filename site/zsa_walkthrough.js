@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // zsa_walkthrough.js — v1.0 — ZSA-B: guided per-zone ZSA walkthrough (ARP4761A
 // Appendix K, Table K1 checkpoints + §K.4.5.1 inspection points). BORN MODULAR:
@@ -37,10 +38,10 @@
     function _zone(zoneId) { return (window.ZONES && window.ZONES.get(zoneId)) || null; }
     function _findings(zoneId, cpId) { return _zsa().filter(function (r) { return r && r.zoneId === zoneId && r.zsaCheckpoint === cpId; }); }
 
-    window._zsaRecordFinding = function (zoneId, cpId) {
+    window._zsaRecordFinding = async function (zoneId, cpId) {
         var cp = CHECKPOINTS.find(function (c) { return c.id === cpId; });
-        var desc = prompt('Finding / threat — ' + (cp ? cp.label : cpId) + ':'); if (desc === null || !desc.trim()) return;
-        var mit = prompt('Mitigation / disposition (optional):', '') || '';
+        var desc = await slPrompt('Finding / threat, ' + (cp ? cp.label : cpId) + ':', ''); if (desc == null || !desc.trim()) return;
+        var mit = (await slPrompt('Mitigation / disposition (optional):', '')) || '';
         _zsa().push({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: cpId, origin: 'walkthrough',
             desc: desc.trim(), equip: '', severity: (typeof normSeverity === 'function') ? normSeverity('Major') : 'Major',
             interference: '', mitigation: mit.trim() });

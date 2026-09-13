@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // fta_proposals.js — v1.0 — CRA structural repairs as DRAFT-AND-ACCEPT
@@ -233,8 +234,7 @@
     }
 
     function uiAccept(id) {
-        var ask = (typeof slPrompt === 'function') ? slPrompt : function (m, d) { return Promise.resolve(window.prompt(m, d)); };
-        ask('Sign to accept — the gate becomes OR(existing AND, common-resource event). Your name:', '')
+        slPrompt('Sign to accept: the gate becomes OR(existing AND, common-resource event). Your name:', '')
             .then(function (by) {
                 if (by == null) return;
                 var r = accept(id, by);
@@ -242,11 +242,10 @@
             }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fta_proposals'); });
     }
     function uiDismiss(id) {
-        var ask = (typeof slPrompt === 'function') ? slPrompt : function (m, d) { return Promise.resolve(window.prompt(m, d)); };
-        ask('Rationale for dismissing this repair (≥10 chars — stays permanently visible):', '')
+        slPrompt('Rationale for dismissing this repair (≥10 chars, stays permanently visible):', '')
             .then(function (rat) {
                 if (rat == null) return;
-                return ask('Your name:', '').then(function (by) {
+                return slPrompt('Your name:', '').then(function (by) {
                     if (by == null) return;
                     var r = dismiss(id, by, rat);
                     try { if (typeof showToast === 'function') showToast(r.ok ? 'Dismissed — kept on the record.' : r.reason, r.ok ? 'success' : 'error', 4200); } catch (_) {}

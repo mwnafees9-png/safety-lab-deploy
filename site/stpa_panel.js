@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // stpa_panel.js — v1.0 — THE STPA WALKTHROUGH (system lane, user-visible).
@@ -421,10 +422,7 @@
         });
         return prefix + '-' + (n + 1);
     }
-    function _ask(msg, def, opts) {
-        if (typeof slPrompt === 'function') return slPrompt(msg, def, opts);
-        return Promise.resolve(typeof prompt === 'function' ? prompt(msg, def) : null);
-    }
+    function _ask(msg, def, opts) { return slPrompt(msg, def, opts); }
 
     // ----------------------------------------------------------- data reads
     function candidateFcs() {
@@ -1241,11 +1239,11 @@
         linkHazard: function (id) {
             const d = DATA(); if (!d) return;
             const h = d.hazards.find(x => x.id === id); if (!h) return;
-            _ask('Losses this hazard leads to (comma-separated loss ids — ' + (d.losses.map(l => l.id).join(', ') || 'none authored yet') + '):', (h.lossIds || []).join(', '), { title: 'Trace ' + id + ' upward', okText: 'Next' })
+            _ask('Losses this hazard leads to (comma-separated loss ids: ' + (d.losses.map(l => l.id).join(', ') || 'none authored yet') + '):', (h.lossIds || []).join(', '), { title: 'Trace ' + id + ' upward', okText: 'Next' })
                 .then(ls => {
                     if (ls == null) return null;
                     const lossIds = String(ls).split(',').map(x => x.trim()).filter(Boolean);
-                    return _ask('Group (optional — 1b-2 rollup; empty clears it):', h.group || '', { title: 'Hazard group', okText: 'Save' })
+                    return _ask('Group (optional, 1b-2 rollup; empty clears it):', h.group || '', { title: 'Hazard group', okText: 'Save' })
                         .then(g => { if (g == null) return; _author.editHazardLinks(id, lossIds, String(g)); });
                 }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
@@ -1281,18 +1279,18 @@
             if (!n) return;
             const isCtl = d.cs.controllers.some(x => x.id === id);
             const patch = {};
-            _ask('Description for ' + id + ' (2f-3 — a bare label is not an element definition):', n.desc || '', { title: 'Element detail — ' + id, okText: 'Next' })
+            _ask('Description for ' + id + ' (2f-3: a bare label is not an element definition):', n.desc || '', { title: 'Element detail: ' + id, okText: 'Next' })
                 .then(desc => {
                     if (desc == null) return null;
                     patch.desc = String(desc).trim();
                     if (!isCtl) { _author.setNodeDetail(id, patch); return null; }
-                    return _ask('Authority rank (1 = highest; relative authority between controllers — empty to clear):', (n.authority != null ? String(n.authority) : ''), { title: 'Authority — ' + id, okText: 'Next' })
+                    return _ask('Authority rank (1 = highest; relative authority between controllers; empty to clear):', (n.authority != null ? String(n.authority) : ''), { title: 'Authority: ' + id, okText: 'Next' })
                         .then(auth => {
                             if (auth == null) { _author.setNodeDetail(id, patch); return null; }
                             const a = String(auth).trim();
                             if (a && (isNaN(+a) || +a < 1)) { _toast('Authority is a rank — a positive number, 1 highest. Detail saved without it.', 'error'); _author.setNodeDetail(id, patch); return null; }
                             patch.authority = a === '' ? null : +a;
-                            return _ask('Process model — the beliefs this controller\'s algorithm acts on (semicolon-separated; e.g. "commanded surface position; sensed load state"):', (n.processModel || []).join('; '), { title: 'Process model — ' + id, okText: n.kind === 'human' ? 'Next' : 'Save' })
+                            return _ask('Process model: the beliefs this controller\'s algorithm acts on (semicolon-separated; e.g. "commanded surface position; sensed load state"):', (n.processModel || []).join('; '), { title: 'Process model: ' + id, okText: n.kind === 'human' ? 'Next' : 'Save' })
                                 .then(pm => {
                                     if (pm == null) { _author.setNodeDetail(id, patch); return null; }
                                     patch.processModel = String(pm).split(';').map(x => x.trim()).filter(Boolean);
@@ -1301,7 +1299,7 @@
                                     const mm = Object.assign({}, n.mentalModels || {});
                                     const chain = e.MENTAL_MODELS.reduce((pr, t) => pr.then(cont => {
                                         if (cont === false) return false;
-                                        return _ask('Mental model — ' + t.label + (t.id === 'otherControllers' ? ' (the one usually missed — mode confusion lives here)' : '') + ':', mm[t.id] || '', { title: 'Human controller ' + id, okText: 'Next' })
+                                        return _ask('Mental model: ' + t.label + (t.id === 'otherControllers' ? ' (the one usually missed; mode confusion lives here)' : '') + ':', mm[t.id] || '', { title: 'Human controller ' + id, okText: 'Next' })
                                             .then(v => { if (v == null) return false; mm[t.id] = String(v).trim(); return true; });
                                     }), Promise.resolve(true));
                                     return chain.then(() => { patch.mentalModels = mm; _author.setNodeDetail(id, patch); });
@@ -1312,7 +1310,7 @@
         editPrecedence: function (processId) {
             const d = DATA(); if (!d) return;
             const cur = (d.cs.precedence.find(pr => pr.processId === processId) || {}).rule || '';
-            _ask('Precedence rule for ' + processId + ' — when its controllers disagree, WHO wins and WHEN (empty clears the rule):', cur, { title: 'Precedence — ' + processId, okText: 'Save' })
+            _ask('Precedence rule for ' + processId + ': when its controllers disagree, WHO wins and WHEN (empty clears the rule):', cur, { title: 'Precedence: ' + processId, okText: 'Save' })
                 .then(rule => { if (rule == null) return; _author.setPrecedence(processId, String(rule)); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         addRespUi: function () {
@@ -1324,13 +1322,13 @@
         sipAssess: function (itemId) {
             const d = DATA(); if (!d) return;
             const cur = d.sip[itemId] || {};
-            _ask('SIP item (' + itemId + ') — state one of: yes / partial / no / na', cur.state || '', { title: 'SIP self-assessment (' + itemId + ') — NOT required for compliance', okText: 'Next' })
+            _ask('SIP item (' + itemId + '): state one of: yes / partial / no / na', cur.state || '', { title: 'SIP self-assessment (' + itemId + '), NOT required for compliance', okText: 'Next' })
                 .then(st => {
                     if (st == null) return null;
                     const state = String(st).trim().toLowerCase();
                     if (['yes', 'partial', 'no', 'na'].indexOf(state) < 0) { _toast('State must be yes / partial / no / na.', 'error'); return null; }
                     if (state === 'na') { _author.setSip(itemId, 'na', cur.note || ''); return null; }
-                    return _ask('Note — what does item (' + itemId + ') in YOUR licensed copy of Appendix D ask, and how do you meet it? (The tool never stores the standard\'s wording; your note is the record.):', cur.note || '', { title: 'SIP (' + itemId + ') evidence note', okText: 'Save' })
+                    return _ask('Note: what does item (' + itemId + ') in YOUR licensed copy of Appendix D ask, and how do you meet it? (The tool never stores the standard\'s wording; your note is the record.):', cur.note || '', { title: 'SIP (' + itemId + ') evidence note', okText: 'Save' })
                         .then(note => { if (note == null) return; _author.setSip(itemId, state, String(note)); });
                 }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
@@ -1338,16 +1336,16 @@
         assess: function (key) {
             const d = DATA(); if (!d) return;
             const prev = d.dispositions[key] || {};
-            _ask('Assess UCA ' + key + ' — name the hazard outcome (what goes wrong at system level):', prev.hazard || '', { title: 'Assess UCA', okText: 'Next' })
+            _ask('Assess UCA ' + key + ': name the hazard outcome (what goes wrong at system level):', prev.hazard || '', { title: 'Assess UCA', okText: 'Next' })
                 .then(hz => {
                     if (hz == null || !String(hz).trim()) { _toast('Assessment needs a stated hazard.', 'info'); return null; }
-                    return _ask('Context (J3307 §7.3.1.2, required) — the ACTUAL system state that makes this action unsafe. State what is TRUE of the system, not what the controller believes (e.g., "during gust encounter with airspeed above VMO", not "when the crew thinks GLA is engaged"):',
+                    return _ask('Context (J3307 §7.3.1.2, required): the ACTUAL system state that makes this action unsafe. State what is TRUE of the system, not what the controller believes (e.g., "during gust encounter with airspeed above VMO", not "when the crew thinks GLA is engaged"):',
                             prev.context || '', { title: 'The context clause', okText: 'Next' })
                         .then(cx => {
                             if (cx == null || !String(cx).trim()) { _toast('Not assessed — J3307 §7.3.1.2: a UCA without its context clause is not a UCA. The engine refuses it, so the panel does too.', 'info'); return null; }
                             const dd = DATA();
                             const hazOpts = dd ? dd.hazards.map(h => h.id).join(', ') : '';
-                            return _ask('Link spine hazards (comma-separated hazard ids — ' + (hazOpts || 'none authored yet; author them in Step 1') + '). The register is the target class now; an id not on the register is refused:',
+                            return _ask('Link spine hazards (comma-separated hazard ids: ' + (hazOpts || 'none authored yet; author them in Step 1') + '). The register is the target class now; an id not on the register is refused:',
                                     (prev.hazardIds || []).join(', '), { title: 'Thread it to the spine', okText: 'Assess' })
                                 .then(hzIds => {
                                     const hazardIds = (hzIds == null ? '' : String(hzIds)).split(',').map(x => x.trim()).filter(Boolean);
@@ -1361,7 +1359,7 @@
                 }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         dismiss: function (key) {
-            _ask('Dismiss UCA ' + key + ' — rationale (required; the engine refuses a silent dismissal):', '', { title: 'Dismiss with rationale', okText: 'Dismiss' })
+            _ask('Dismiss UCA ' + key + ': rationale (required; the engine refuses a silent dismissal):', '', { title: 'Dismiss with rationale', okText: 'Dismiss' })
                 .then(rat => {
                     if (rat == null || !String(rat).trim()) { _toast('Not dismissed — a silent dismissal is a hole, not a disposition.', 'info'); return; }
                     _author.setDisposition(key, { status: 'dismissed', rationale: String(rat).trim() });
@@ -1379,7 +1377,7 @@
                     (pb.ftaRefs || []).join(', '), { title: 'Bridge to the fault trees', okText: 'Next' })
                 .then(fta => {
                     if (fta == null) return;
-                    return _ask('Bridge UCA ' + key + ' → FMEA: comma-separated row IDs. Leave EMPTY if none. (Both empty = declaring a PURE INTERACTION hazard — first-class, owned by this lane; that declaration is the data.)',
+                    return _ask('Bridge UCA ' + key + ' → FMEA: comma-separated row IDs. Leave EMPTY if none. (Both empty = declaring a PURE INTERACTION hazard, first-class, owned by this lane; that declaration is the data.)',
                             (pb.fmeaRefs || []).join(', '), { title: 'Bridge to the FMEA', okText: 'Declare' })
                         .then(fmea => {
                             if (fmea == null) return;
@@ -1402,7 +1400,7 @@
         fixContext: function (key) {
             const d = DATA(); if (!d || !d.dispositions[key]) return;
             const prev = d.dispositions[key];
-            _ask('Context for UCA ' + key + ' (J3307 §7.3.1.2) — the ACTUAL system state that makes this action unsafe, not what the controller believes:', '', { title: 'Add the context clause', okText: 'Save' })
+            _ask('Context for UCA ' + key + ' (J3307 §7.3.1.2): the ACTUAL system state that makes this action unsafe, not what the controller believes:', '', { title: 'Add the context clause', okText: 'Save' })
                 .then(cx => {
                     if (cx == null || !String(cx).trim()) { _toast('Unchanged — the context clause is required, and an empty one is not a clause.', 'info'); return; }
                     _author.setDisposition(key, Object.assign({}, prev, { context: String(cx).trim() }));
@@ -1417,7 +1415,7 @@
                 const c = (e.CAUSES_4A.concat(e.CAUSES_4B)).find(x => x.id === cid);
                 causeLabel = c ? ('\n\nThis scenario COVERS the enumerated cause: ' + c.cause) : '';
             }
-            _ask('Loss scenario for UCA ' + key + ' — describe HOW this unsafe action actually happens:' + causeLabel, '', { title: causeTag ? 'Scenario covering ' + causeTag : 'New loss scenario', okText: 'Add' })
+            _ask('Loss scenario for UCA ' + key + ': describe HOW this unsafe action actually happens:' + causeLabel, '', { title: causeTag ? 'Scenario covering ' + causeTag : 'New loss scenario', okText: 'Add' })
                 .then(desc => {
                     if (desc == null || !String(desc).trim()) return;
                     const disp = d.dispositions[key];
@@ -1429,7 +1427,7 @@
                 }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         dismissCause: function (dk) {
-            _ask('Dismiss cause ' + dk + ' — rationale (required; J3307 says these causes SHALL be evaluated, so a dismissal must say WHY this one cannot produce the UCA):', '', { title: 'Dismiss enumerated cause', okText: 'Dismiss' })
+            _ask('Dismiss cause ' + dk + ': rationale (required; J3307 says these causes SHALL be evaluated, so a dismissal must say WHY this one cannot produce the UCA):', '', { title: 'Dismiss enumerated cause', okText: 'Dismiss' })
                 .then(rat => {
                     if (rat == null) return;
                     _author.setCauseDismissal(dk, String(rat));
@@ -1438,7 +1436,7 @@
         reopenCause: function (dk) { _author.setCauseDismissal(dk, null); },
         addFactor: function (key, idx) {
             const d = DATA(); if (!d || !d.dispositions[key]) return;
-            _ask('Causal factor — format: description | assumption id | factor class\n(e.g., "IMU latency exceeds budget | AS-041 | technological". asmId cites the register (omit = FLAGGED as unregistered). Factor class is the seven-factor lens: physiological / psychological / cognitive / environmental / organizational / technological / procedural — optional, one only; HFACS detail lives on the assumption.)', '', { title: 'Add causal factor', okText: 'Add' })
+            _ask('Causal factor. Format: description | assumption id | factor class\n(e.g., "IMU latency exceeds budget | AS-041 | technological". asmId cites the register (omit = FLAGGED as unregistered). Factor class is the seven-factor lens: physiological / psychological / cognitive / environmental / organizational / technological / procedural; optional, one only; HFACS detail lives on the assumption.)', '', { title: 'Add causal factor', okText: 'Add' })
                 .then(v => {
                     if (v == null || !String(v).trim()) return;
                     const parts = String(v).split('|');
@@ -1479,7 +1477,7 @@
         },
         testCritical: function (ucaId) { _author.setTestDisposition(ucaId, 'critical'); },
         testNonCritical: function (ucaId) {
-            _ask('NON-CRITICAL for testing — §7.4.3.2 demands the documented rationale: WHY does this derived requirement not need test evidence (analysis/inspection/demonstration covers it, and how)?', '', { title: 'Non-critical for testing — rationale required', okText: 'Dispose' })
+            _ask('NON-CRITICAL for testing: §7.4.3.2 demands the documented rationale: WHY does this derived requirement not need test evidence (analysis/inspection/demonstration covers it, and how)?', '', { title: 'Non-critical for testing: rationale required', okText: 'Dispose' })
                 .then(rat => {
                     if (rat == null) return;
                     _author.setTestDisposition(ucaId, 'non-critical', String(rat));

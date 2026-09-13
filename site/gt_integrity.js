@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // gt_integrity.js — Golden Thread integrity: the referee for "pristine".
 //
@@ -411,11 +412,11 @@
     })(25);
 
     // -------------------------------------------------------- bind action
-    window.gtBind = function (linkKey, kind) {
+    window.gtBind = async function (linkKey, kind) {
         const rep = gtIntegrity();
         const row = rep.fragile.find(x => x.linkKey === linkKey);
         const cands = (row && row.candidates) || [];
-        const pick = window.prompt('Bind ' + linkKey + ' — enter the id (candidates):\n' + cands.slice(0, 14).join('\n'), '');
+        const pick = await slPrompt('Bind ' + linkKey + '. Enter the id (candidates):\n' + cands.slice(0, 14).join('\n'), '', { title: 'Bind thread link' });
         if (!pick || !pick.trim()) return;
         const id = pick.trim().split(' — ')[0].trim();
         const L = _links();
@@ -423,7 +424,7 @@
             const cur = L[linkKey] || { systemIds: [] };
             if (!cur.systemIds.includes(id)) cur.systemIds.push(id);
             L[linkKey] = cur;
-            if (confirm('Bound ' + id + '. Bind another system to this PRA row?')) { _save(); window.gtBind(linkKey); return; }
+            if (await slConfirm('Bound ' + id + '. Bind another system to this PRA row?', { okText: 'Bind another' })) { _save(); window.gtBind(linkKey); return; }
         } else if (linkKey.startsWith('mmel:') || linkKey.startsWith('swrel:') || linkKey.startsWith('lcc:')) {
             L[linkKey] = { itemId: id, by: 'bound', at: new Date().toISOString() };
         } else if (linkKey.startsWith('lhirf:')) {
@@ -433,8 +434,8 @@
         }
         _save(); renderGtIntegrityPage();
     };
-    window.gtUnbind = function (linkKey) {
-        if (!confirm('Remove the binding ' + linkKey + '?')) return;
+    window.gtUnbind = async function (linkKey) {
+        if (!(await slConfirm('Remove the binding ' + linkKey + '?', { danger: true, okText: 'Remove' }))) return;
         delete _links()[linkKey];
         _save(); renderGtIntegrityPage();
     };

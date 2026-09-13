@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // exposure_case.js — v1.0 — ARP-EXP: the G.11.1.3 NAMED at-risk cases.
@@ -248,8 +249,7 @@
     const API = { CASES: CASES, caseOf: caseOf, deriveT: deriveT, consistency: consistency, sweep: sweep, setCase: setCase,
         uiSet: function (pageId, lid, caseId) {
             if (caseId === 'ov') {
-                const ask = (typeof slPrompt === 'function') ? slPrompt : (m, d) => Promise.resolve(typeof prompt === 'function' ? prompt(m, d) : null);
-                ask('Override exposure basis — the documented rationale (required): WHY does this event’s at-risk time deviate from every named case?', '', { title: 'G.11.1.3 override', okText: 'Set' })
+                slPrompt('Override exposure basis: the documented rationale (required): WHY does this event’s at-risk time deviate from every named case?', '', { title: 'G.11.1.3 override', okText: 'Set' })
                     .then(r => { if (r != null) setCase(pageId, lid, 'ov', String(r)); else _render(); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'exposure_case'); });
             } else setCase(pageId, lid, caseId || null);
         },

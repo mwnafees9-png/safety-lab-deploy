@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // cra_matrix.js — v1.1 — ARP-CRA: Common Resource Analysis (ARP4761A B.4.3.2).
@@ -240,10 +241,7 @@
         // find nothing.
         return true;
     }
-    function _ask(msg, def, opts) {
-        if (typeof slPrompt === 'function') return slPrompt(msg, def, opts);
-        return Promise.resolve(typeof prompt === 'function' ? prompt(msg, def) : null);
-    }
+    function _ask(msg, def, opts) { return slPrompt(msg, def, opts); }
     function _render() {
         if (typeof document === 'undefined') return;
         const host = document.getElementById('view-cra'); if (!host) return;
@@ -285,11 +283,11 @@
 
     const API = { model: model, rows: rows, consumersOf: consumersOf, fcsOf: fcsOf, findings: findings, author: author, render: _render,
         uiAssess: function (key) {
-            _ask('Effect on this consumer — what happens when the resource fails this way? (State the effect; ripple severity in words.)', '', { title: 'Assess B.4.3.2 cell', okText: 'Assess' })
+            _ask('Effect on this consumer: what happens when the resource fails this way? (State the effect; ripple severity in words.)', '', { title: 'Assess B.4.3.2 cell', okText: 'Assess' })
                 .then(v => { if (v != null) author.assess(key, String(v)); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'cra_matrix'); });
         },
         uiDismiss: function (key) {
-            _ask('Dismiss — rationale REQUIRED (why is this consumer genuinely unaffected, and per what analysis?):', '', { title: 'Dismiss with rationale', okText: 'Dismiss' })
+            _ask('Dismiss: rationale REQUIRED (why is this consumer genuinely unaffected, and per what analysis?):', '', { title: 'Dismiss with rationale', okText: 'Dismiss' })
                 .then(v => { if (v != null) author.dismiss(key, String(v)); }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'cra_matrix'); });
         },
         uiReopen: function (key) { author.reopen(key); },

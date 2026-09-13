@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // mass_actions.js — v0.6 — MASS ACTIONS FOR TABULATED ANALYSES (beta demand).
@@ -241,32 +242,33 @@
             const ids = Array.from(sel[t.key]);
             const del = _fn(t.deleteFn);
             if (!del) { _toast('Delete helper unavailable for ' + t.label + '.', 'error'); return; }
-            const ask = (typeof slPrompt === 'function') ? slPrompt : (m => Promise.resolve(typeof prompt === 'function' ? prompt(m) : null));
-            Promise.resolve(ask('Mass delete — ' + ids.length + ' ' + t.label + ' row' + (ids.length === 1 ? '' : 's') + ' selected.\n\nType DELETE to proceed. Rows with downstream links are refused by name, never silently dropped.', '', { title: 'Mass delete', okText: 'Delete selected' }))
-                .then(v => {
-                    if (String(v).trim() !== 'DELETE') { _toast('Nothing deleted — the typed gate is the point.', 'info', 3600); return; }
-                    const rows = t.store();
-                    const refused = [];
-                    let done = 0;
-                    // ONE typed gate for the batch: per-row confirm() prompts are
-                    // suppressed strictly inside this loop and restored in finally.
-                    const _confirm = window.confirm;
-                    try {
-                        window.confirm = function () { return true; };
-                        ids.forEach(id => {
-                            const row = rows.find(r => r && String(r.internalId) === String(id));
-                            if (!row) { refused.push(id + ': not found (already gone?)'); return; }
-                            const why = t.guardDelete ? t.guardDelete(row) : null;
-                            if (why) { refused.push(why); return; }
-                            try { del(row.internalId); done++; sel[t.key].delete(id); } catch (e) { refused.push((row.fcId || row.traceId || id) + ': ' + e.message); }
-                        });
-                    } finally {
-                        window.confirm = _confirm;
+            (async function () {
+                const v = await slPrompt('Mass delete: ' + ids.length + ' ' + t.label + ' row' + (ids.length === 1 ? '' : 's') + ' selected.\n\nType DELETE to proceed. Rows with downstream links are refused by name, never silently dropped.', '', { title: 'Mass delete', okText: 'Delete selected' });
+                if (String(v).trim() !== 'DELETE') { _toast('Nothing deleted, the typed gate is the point.', 'info', 3600); return; }
+                const rows = t.store();
+                const refused = [];
+                let done = 0;
+                // ONE typed gate for the batch: the per-row delete helpers ask through
+                // slConfirm (async), so that dialog is answered "yes" strictly for the
+                // duration of this loop and restored in finally. The deletes run one
+                // after another (await) so `done` counts rows that were actually deleted.
+                const _slConfirm = window.slConfirm;
+                try {
+                    window.slConfirm = function () { return Promise.resolve(true); };
+                    for (const id of ids) {
+                        const row = rows.find(r => r && String(r.internalId) === String(id));
+                        if (!row) { refused.push(id + ': not found (already gone?)'); continue; }
+                        const why = t.guardDelete ? t.guardDelete(row) : null;
+                        if (why) { refused.push(why); continue; }
+                        try { await del(row.internalId); done++; sel[t.key].delete(id); } catch (e) { refused.push((row.fcId || row.traceId || id) + ': ' + e.message); }
                     }
-                    _saveRender(t);
-                    _toast(done + ' deleted' + (refused.length ? ' · ' + refused.length + ' refused: ' + refused.slice(0, 3).join(' · ') + (refused.length > 3 ? ' …' : '') : '.'),
-                           refused.length ? 'info' : 'success', 8000);
-                }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'mass_actions'); });
+                } finally {
+                    window.slConfirm = _slConfirm;
+                }
+                _saveRender(t);
+                _toast(done + ' deleted' + (refused.length ? ' · ' + refused.length + ' refused: ' + refused.slice(0, 3).join(' · ') + (refused.length > 3 ? ' …' : '') : '.'),
+                       refused.length ? 'info' : 'success', 8000);
+            })().catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'mass_actions'); });
         },
         _augmentAll: function () { TARGETS.forEach(augment); },
         TARGETS: TARGETS, _sel: sel

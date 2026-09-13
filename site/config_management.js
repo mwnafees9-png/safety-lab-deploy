@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 /* ============================================================================
  * config_management.js — ARP4754B §5.6 System Control Category (SC) configuration management.
@@ -443,13 +444,13 @@ function render(host) {
         let n = 0; sel.forEach(ci => { if (establishCIBaseline(ci.ciId, { cis })) n++; });
         _toast('Baselined ' + n + ' item' + (n !== 1 ? 's' : '') + ' in ' + key.split(SEP).pop(), 'success'); render(host);
     }));
-    const rp = $('#cm-raise-pr'); if (rp) rp.addEventListener('click', () => {
-        const cis = enumerateCIs(); const ciId = (typeof prompt === 'function') ? prompt('Configuration item ID to raise a PR against (e.g. ' + (cis[0] ? cis[0].ciId : 'fta:...') + '):', cis[0] ? cis[0].ciId : '') : '';
-        if (!ciId) return; const title = (typeof prompt === 'function') ? prompt('Problem report title:') : 'issue'; if (title == null) return;
+    const rp = $('#cm-raise-pr'); if (rp) rp.addEventListener('click', async () => {
+        const cis = enumerateCIs(); const ciId = await slPrompt('Configuration item ID to raise a PR against (e.g. ' + (cis[0] ? cis[0].ciId : 'fta:...') + '):', cis[0] ? cis[0].ciId : '');
+        if (!ciId) return; const title = await slPrompt('Problem report title:', ''); if (title == null) return;
         raisePR({ againstCiId: ciId, title: title }); _toast('Problem report raised.', 'success'); render(host);
     });
-    host.querySelectorAll('[data-ecn]').forEach(btn => btn.addEventListener('click', () => {
-        const prId = btn.getAttribute('data-ecn'); const reason = (typeof prompt === 'function') ? prompt('ECN reason / change description:') : ''; if (reason == null) return;
+    host.querySelectorAll('[data-ecn]').forEach(btn => btn.addEventListener('click', async () => {
+        const prId = btn.getAttribute('data-ecn'); const reason = await slPrompt('ECN reason / change description:', ''); if (reason == null) return;
         raiseECN({ prId: prId, reason: reason, description: reason }); _toast('ECN raised; CI baseline rolled, downstream obsoleted.', 'success'); render(host);
     }));
 }

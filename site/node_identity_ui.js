@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /* ============================================================================
  * node_identity_ui.js — v1.0 — the "what is this node?" editor.
  * ----------------------------------------------------------------------------
@@ -336,9 +337,9 @@
   async function createInline(kind) {
     var node = g('selectedNodeData'); if (!node) return null;
     var id = node.identity || (node.identity = {});
-    var ask = window.slPrompt || function (m, d) { return Promise.resolve(window.prompt(m, d)); };
+    var ask = window.slPrompt;
     if (kind === 'functionId') {
-      var name = (await ask('New system function — name:', '')) || '';
+      var name = (await ask('New system function, name:', '')) || '';
       if (!name.trim()) return null;
       var sys = (g('systemsData') || []).find(function (s) { return s.id === id.systemId; });
       if (!sys) return null;
@@ -348,7 +349,7 @@
       return fid;
     }
     if (kind === 'fcId') {
-      var d1 = (await ask('New failure condition — description:', '')) || '';
+      var d1 = (await ask('New failure condition, description:', '')) || '';
       if (!d1.trim()) return null;
       var sys2 = (g('systemsData') || []).find(function (s) { return s.id === id.systemId; });
       if (!sys2) return null;
@@ -358,7 +359,7 @@
       return fcid;
     }
     if (kind === 'itemId') {
-      var n2 = (await ask('New item — name:', '')) || '';
+      var n2 = (await ask('New item, name:', '')) || '';
       if (!n2.trim()) return null;
       var items = g('itemsData'); if (!Array.isArray(items)) return null;
       var iid = 'IT-' + (items.length + 1);

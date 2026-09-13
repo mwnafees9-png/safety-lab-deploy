@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /* ============================================================================
  * Safety Lab Aero — IDs & Numbering scheme editor (UI)
  * ----------------------------------------------------------------------------
@@ -25,7 +26,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
   function open() {
-    if (!N() || !State()) { alert('Numbering engine is not loaded yet — try reloading the page.'); return; }
+    if (!N() || !State()) { showToast('Numbering engine is not loaded yet. Try reloading the page.', 'error', 4000); return; }
     working = N().cloneScheme(State().getScheme() || N().DEFAULT_SCHEME);
     render();
     var m = byId('sl-numbering-modal'); if (m) m.style.display = 'flex';
@@ -120,10 +121,10 @@
 
   function apply() {
     var v = N().validateScheme(working);
-    if (!v.ok) { alert('Please fix the highlighted template errors before applying.'); return; }
+    if (!v.ok) { showToast('Please fix the highlighted template errors before applying.', 'warning', 4000); return; }
     State().setScheme(N().cloneScheme(working));
     close();
-    alert('Numbering scheme applied. New items will use it — existing IDs are unchanged. Save the project to keep this scheme.');
+    slAlert('Numbering scheme applied. New items will use it. Existing IDs are unchanged. Save the project to keep this scheme.', { title: 'Numbering scheme' });
   }
 
   function exportScheme() {
@@ -133,7 +134,7 @@
       a.href = URL.createObjectURL(blob);
       a.download = 'safety_lab_numbering_scheme.json';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    } catch (e) { alert('Export failed: ' + e.message); }
+    } catch (e) { slAlert('Export failed: ' + e.message, { title: 'Numbering scheme' }); }
   }
 
   function importScheme(e) {
@@ -144,7 +145,7 @@
         var s = JSON.parse(ev.target.result);
         if (!s || !s.templates) throw new Error('not a numbering scheme');
         working = s; render();
-      } catch (err) { alert('Invalid scheme file: ' + err.message); }
+      } catch (err) { slAlert('Invalid scheme file: ' + err.message, { title: 'Numbering scheme' }); }
     };
     r.readAsText(f);
     e.target.value = '';

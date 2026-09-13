@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ram_derive.js — Phase F9: the deterministic R&M auto-derivation engine.
 // BORN MODULAR: new file, zero edits to other modules (buttons are injected
 // by wrapping the render functions, same discipline as the switchTab chain).
@@ -365,7 +366,7 @@
             .concat(p.items.slice(0, 8).map(x => '  Item ' + x.ref + ': ' + (x.from == null ? '(none)' : x.from) + ' → ' + x.rate.toExponential(2) + ' /FH (Σλ over ' + x.events + ' event' + (x.events === 1 ? '' : 's') + ')'))
             .concat(p.skipped.length ? ['', 'Skipped (protected / not derivable): ' + p.skipped.length] : [])
             .concat(['', 'Apply? A value you later edit by hand is never re-written.']);
-        const yes = await (typeof slConfirm === 'function' ? slConfirm(lines.join('\n')) : Promise.resolve(confirm(lines.join('\n'))));
+        const yes = await slConfirm(lines.join('\n'), { title: 'Rate writes', okText: 'Apply' });
         if (!yes) return;
         const done = deriveRates(true);
         _toast('Rates written: ' + done.fmea.length + ' FMEA row(s) · ' + done.items.length + ' item(s) — provenance on each (rateSource).', 'success', 5000);
@@ -404,14 +405,14 @@
         const r = deriveRbdAll(false).length;
         const m = deriveMsg3(false).length;
         const a = deriveAlloc(false);
-        const summary = ['Deterministic derivation sweep — proposals from the live model:',
+        const summary = ['Deterministic derivation sweep: proposals from the live model:',
             '  ' + t + ' maintenance task(s) from CCMR latents/wear-outs',
             '  ' + s + ' spares case(s) from ledger-linked LRUs',
             '  ' + r + ' RBD dual(s) for cat/haz trees',
             '  ' + m + ' MSG-3 MSI candidate(s) (hidden/safety derived; ops/econ stay yours)',
             '  ' + (a ? 'allocation seed over ' + a.rows.length + ' system(s)' : 'no allocation seed (no as-built λ)'),
             '', 'Adopt all? Every record carries its derivation provenance.'].join('\n');
-        const yes = await (typeof slConfirm === 'function' ? slConfirm(summary) : Promise.resolve(confirm(summary)));
+        const yes = await slConfirm(summary, { title: 'Derivation sweep', okText: 'Adopt all' });
         if (!yes) return;
         deriveMaintTasks(true); deriveSpares(true); deriveRbdAll(true); deriveMsg3(true); if (a) deriveAlloc(true);
         _toast('Adopted: ' + t + ' tasks · ' + s + ' spares · ' + r + ' RBDs · ' + m + ' MSIs' + (a ? ' · allocation seed' : '') + ' — all with derived-provenance.', 'success', 5000);

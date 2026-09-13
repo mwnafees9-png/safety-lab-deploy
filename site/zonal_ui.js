@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // zonal_ui.js — v1.0 — Z3: the Zonal Model page (authoring UI for the
 // hierarchical zone tree + equipment register). BORN MODULAR: new file, zero
@@ -25,10 +26,10 @@
     function _save() { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
 
     // ---- mutations (window-exposed for inline handlers) ------------------
-    window.zoneAddMajor = function () { var c = prompt('Major zone code (e.g. 100):'); if (c === null) return; var n = prompt('Zone name:', '') || ''; _Z().addZone({ code: c, name: n }); _save(); _render(); };
-    window.zoneAddSub = function (pid) { var c = prompt('Sub-zone code (e.g. 110):'); if (c === null) return; var n = prompt('Sub-zone name:', '') || ''; _Z().addZone({ code: c, name: n, parentId: pid }); _save(); _render(); };
-    window.zoneRename = function (id) { var z = _Z().get(id); var n = prompt('Zone name:', z ? z.name : ''); if (n === null) return; _Z().rename(id, n); var c = prompt('Zone code:', z ? z.code : ''); if (c !== null) _Z().setCode(id, c); _save(); _render(); };
-    window.zoneDelete = function (id) { if (!confirm('Delete this zone and all its sub-zones? Equipment assignments here are removed.')) return; _Z().remove(id); _save(); _render(); };
+    window.zoneAddMajor = async function () { var c = await slPrompt('Major zone code (e.g. 100):', ''); if (c == null) return; var n = (await slPrompt('Zone name:', '')) || ''; _Z().addZone({ code: c, name: n }); _save(); _render(); };
+    window.zoneAddSub = async function (pid) { var c = await slPrompt('Sub-zone code (e.g. 110):', ''); if (c == null) return; var n = (await slPrompt('Sub-zone name:', '')) || ''; _Z().addZone({ code: c, name: n, parentId: pid }); _save(); _render(); };
+    window.zoneRename = async function (id) { var z = _Z().get(id); var n = await slPrompt('Zone name:', z ? z.name : ''); if (n == null) return; _Z().rename(id, n); var c = await slPrompt('Zone code:', z ? z.code : ''); if (c != null) _Z().setCode(id, c); _save(); _render(); };
+    window.zoneDelete = async function (id) { if (!(await slConfirm('Delete this zone and all its sub-zones? Equipment assignments here are removed.', { danger: true, okText: 'Delete' }))) return; _Z().remove(id); _save(); _render(); };
     window.zoneAssign = function (id, sel) { if (sel && sel.value) { _Z().assign(id, sel.value); _save(); _render(); } };
     window.zoneUnassign = function (id, sys) { _Z().unassign(id, sys); _save(); _render(); };
     window.zoneAddBarrier = function () { var a = document.getElementById('zbar-a'), b = document.getElementById('zbar-b'), t = document.getElementById('zbar-type'); if (!a || !b) return; var r = _Z().addBarrier(a.value, b.value, t ? t.value : 'firewall', false); if (!r.ok) { try { if (typeof showToast === 'function') showToast(r.err, 'warning'); } catch (_) {} return; } _save(); _render(); };

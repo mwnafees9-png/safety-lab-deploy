@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ram_modules.js — Phase F (F1–F3): Reliability · Availability · Maintainability
 // for Safety Lab Aero. BORN MODULAR: this file never edits the monolith — it
 // reads its globals (classic-script load order), stores under projectConfig.ram
@@ -52,10 +53,7 @@
     }
     function _save() { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} }
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
     // ------------------------------------------------------------- helpers
@@ -122,8 +120,8 @@
         if (_gated()) return;
         const name = await _ask('Maintenance task name (e.g. "Elevator servo LRU swap"):'); if (!name || !name.trim()) return;
         const items = (typeof itemsData !== 'undefined' ? itemsData : []) || [];
-        const itemId = (await _ask('Linked LRU / item id (optional):\n' + items.slice(0, 12).map(i => '  ' + i.itemId + ' — ' + i.name).join('\n'), '')) || '';
-        const beRef = (await _ask('Linked fault-tree basic event (displayId / logicalId, optional — enables Ai + the CCMR τ bridge):', '')) || '';
+        const itemId = (await _ask('Linked LRU / item id (optional):\n' + items.slice(0, 12).map(i => '  ' + i.itemId + ': ' + i.name).join('\n'), '')) || '';
+        const beRef = (await _ask('Linked fault-tree basic event (displayId / logicalId, optional; enables Ai + the CCMR τ bridge):', '')) || '';
         const act = parseFloat(await _ask('Active repair time (hours):', '0.5')) || 0;
         const log = parseFloat(await _ask('Logistics delay (hours):', '0.25')) || 0;
         const adm = parseFloat(await _ask('Admin delay (hours):', '0.1')) || 0;
@@ -143,10 +141,12 @@
         t.demonstrated = v; t.by = by.trim();
         _save(); renderRamPage();
     }
-    function ramDeleteTask(id) {
+    async function ramDeleteTask(id) {
         const s = _ramStore();
         const i = s.tasks.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this task?')) { s.tasks.splice(i, 1); _save(); renderRamPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this task?', { danger: true, okText: 'Remove' }))) return;
+        s.tasks.splice(i, 1); _save(); renderRamPage();
     }
     // The bridge: push a task's inspection interval onto its linked basic event
     // as a periodic-test τ — the CCMR latent sweep then bounds it live.

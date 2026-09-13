@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // roundtrip_proof.js — Q5: the save/load pipeline proves itself.
 //
@@ -113,19 +114,19 @@
     }
 
     // ------------------------------------------------------------ UI action
-    window.rtProveUi = function () {
-        if (!confirm('Prove the save/load round-trip?\n\nThe live project is serialized, re-applied through the exact refresh path, and re-serialized — any field that fails to survive is named. The pre-proof state is captured to the recovery ring first.')) return;
+    window.rtProveUi = async function () {
+        if (!(await slConfirm('Prove the save/load round-trip?\n\nThe live project is serialized, re-applied through the exact refresh path, and re-serialized: any field that fails to survive is named. The pre-proof state is captured to the recovery ring first.', { okText: 'Prove' }))) return;
         try {
             const r = rtProve();
             if (r.ok) {
-                alert('ROUND-TRIP PROVEN ✓\n\n' + r.stores + ' top-level stores · ' + Math.round(r.bytes / 1024) + ' KB · ' + r.ms + ' ms\nEvery field survived serialize → apply → serialize.');
+                await slAlert('ROUND-TRIP PROVEN ✓\n\n' + r.stores + ' top-level stores · ' + Math.round(r.bytes / 1024) + ' KB · ' + r.ms + ' ms\nEvery field survived serialize → apply → serialize.', { title: 'Round-trip proof' });
             } else {
-                alert('ROUND-TRIP FAILED — ' + r.mismatches.length + ' field(s) did not survive:\n\n' +
+                await slAlert('ROUND-TRIP FAILED: ' + r.mismatches.length + ' field(s) did not survive:\n\n' +
                     r.mismatches.slice(0, 8).map(m => '· ' + m.path + '\n    saved: ' + m.a + '\n    after: ' + m.b).join('\n') +
-                    '\n\nThese fields would be lost on refresh. The pre-proof state is in the recovery ring.');
+                    '\n\nThese fields would be lost on refresh. The pre-proof state is in the recovery ring.', { title: 'Round-trip proof' });
             }
             try { renderGtIntegrityPage(); } catch (_) {}
-        } catch (e) { alert('Proof failed to run: ' + e.message); }
+        } catch (e) { await slAlert('Proof failed to run: ' + e.message, { title: 'Round-trip proof' }); }
     };
 
     // -------------------------------------- panel on the Thread Integrity page

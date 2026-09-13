@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // budget_ledger.js — v1.3 — Phase D gap 3 (§3.6): the Budget Ledger,
 // + A9 (21 Aug 2026): the budget-decision register (SLBudgetDecisions).
@@ -206,16 +207,15 @@
         const factor = (m.achieved > 0 && m.target > 0) ? (m.target / m.achieved) : null;
         const impact = _impactReqs(free);
         const evid = impact.filter(i => i.evidenced);
-        const ask = (typeof slPrompt === 'function') ? slPrompt : (msg, d) => Promise.resolve(window.prompt(msg, d));
         if (m.state === 'over-committed') {
             // No fake fix on offer: an over-commit is resolved by changing the
             // constraint or the target, not by arithmetic. The review is logged.
-            const sentence = (await ask('OVER-COMMITTED — ' + (gate.displayId || gate.id) + ' on ' + page.name +
+            const sentence = (await slPrompt('OVER-COMMITTED: ' + (gate.displayId || gate.id) + ' on ' + page.name +
                 '\nTarget ' + Number(m.target).toExponential(2) + ' vs committed ' + Number(m.achieved).toExponential(2) +
                 '\n\nThe gate\u2019s constraints exceed its budget. Resolve by revisiting the constraint (prescribed value / external link) or the tree\u2019s target. ' +
-                'This prompt only LOGS your review \u2014 one attributed sentence:', '')) || '';
+                'This prompt only LOGS your review, one attributed sentence:', '')) || '';
             if (!String(sentence).trim()) return;
-            const by = (await ask('Sign with your name:', (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '')) || '';
+            const by = (await slPrompt('Sign with your name:', (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '')) || '';
             if (!String(by).trim()) return;
             bdRecord({ gateId: gate.id, pageId: page.id, kind: 'dismissed', by, sentence });
             if (typeof showToast === 'function') showToast('Review logged \u2014 the gate stays RED until the constraint or target moves.', 'info', 3500);
@@ -229,22 +229,22 @@
         }).join('\n');
         const impactLine = impact.length
             ? impact.length + ' issued requirement(s) reference the siblings that would move (' + evid.length + ' EVIDENCED' +
-              (impact.length ? ' \u2014 e.g. ' + impact.slice(0, 3).map(i => i.traceId).join(', ') : '') + ')'
+              (impact.length ? ', e.g. ' + impact.slice(0, 3).map(i => i.traceId).join(', ') : '') + ')'
             : 'no issued requirements reference the siblings that would move';
-        const pick = (await ask('MARGIN HELD \u2014 ' + (gate.displayId || gate.id) + ' on ' + page.name +
+        const pick = (await slPrompt('MARGIN HELD: ' + (gate.displayId || gate.id) + ' on ' + page.name +
             '\nTarget ' + Number(m.target).toExponential(2) + ' \u00b7 allocated ' + Number(m.achieved).toExponential(2) +
             (factor != null ? ' \u00b7 freed \u00d7' + factor.toPrecision(2) : '') +
             '\n\nCandidates:' +
-            '\n 1) ABSORB into the free siblings (proportional \u2014 preview):\n' + previewLines +
+            '\n 1) ABSORB into the free siblings (proportional, preview):\n' + previewLines +
             '\n    Impact: ' + impactLine +
-            '\n 2) HOLD as deliberate reserve (signed \u2014 the amber goes quiet)' +
+            '\n 2) HOLD as deliberate reserve (signed, the amber goes quiet)' +
             '\n 0) Do nothing (logged as reviewed)\n\nChoose 1 / 2 / 0:', '0')) || '';
         const choice = String(pick).trim();
         if (choice !== '1' && choice !== '2' && choice !== '0') return;
         const kind = choice === '1' ? 'absorb' : choice === '2' ? 'reserve' : 'dismissed';
-        const sentence = (await ask('One attributed sentence for the record (why):', '')) || '';
+        const sentence = (await slPrompt('One attributed sentence for the record (why):', '')) || '';
         if (!String(sentence).trim()) return;
-        const by = (await ask('Sign with your name:', (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '')) || '';
+        const by = (await slPrompt('Sign with your name:', (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '')) || '';
         if (!String(by).trim()) return;
         bdRecord({ gateId: gate.id, pageId: page.id, kind, by, sentence,
             candidates: ['absorb-proportional', 'hold-reserve', 'dismiss'], chosen: kind });
@@ -254,8 +254,7 @@
         renderBudgetLedgerPage();
     }
     async function slBudgetRevert(id) {
-        const ask = (typeof slPrompt === 'function') ? slPrompt : (msg, d) => Promise.resolve(window.prompt(msg, d));
-        const by = (await ask('Revert this budget decision \u2014 the record stays on the books, marked reverted. Sign with your name:',
+        const by = (await slPrompt('Revert this budget decision. The record stays on the books, marked reverted. Sign with your name:',
             (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '')) || '';
         if (!String(by).trim()) return;
         bdRevert(id, by);

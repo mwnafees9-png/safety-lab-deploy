@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // fracas_ledger.js — v0.1 — FRACAS-2: the incident ledger + workflow layer.
@@ -249,10 +250,7 @@
             '</div>';
     }
 
-    function _ask(msg, dflt) {
-        if (typeof slPrompt === 'function') return slPrompt(msg, dflt || '');
-        return Promise.resolve(typeof prompt === 'function' ? prompt(msg, dflt || '') : null);
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     const API = {
         addIncident, setStatus, setFields, kpis, effectiveFailures, assumptionSeed, renderLedger,
         SEVERITIES, STATUSES, RCA_METHODS,
@@ -273,12 +271,12 @@
                 try { setStatus(recId, incId, 'investigating'); renderLedger(); } catch (e) { _toast(e.message, 'error'); }
                 return;
             }
-            Promise.resolve(_ask('Close ' + incId + ' — corrective action on record:\n"' + (inc.corrective || 'NONE') + '"\n\nName the effectiveness VERIFIER (required; empty aborts):', ''))
+            Promise.resolve(_ask('Close ' + incId + ', corrective action on record:\n"' + (inc.corrective || 'NONE') + '"\n\nName the effectiveness VERIFIER (required; empty aborts):', ''))
                 .then(vb => {
                     if (vb == null || !String(vb).trim()) { _toast('Not closed — unverified effectiveness is a claim, not a closure.', 'info'); return; }
                     try {
                         if (!inc.corrective) {
-                            return Promise.resolve(_ask('No corrective action on record — state it first:', '')).then(ca => {
+                            return Promise.resolve(_ask('No corrective action on record. State it first:', '')).then(ca => {
                                 if (ca == null || !String(ca).trim()) { _toast('Not closed — nothing to verify.', 'info'); return; }
                                 setFields(recId, incId, { corrective: ca });
                                 setStatus(recId, incId, 'closed', { verifiedBy: String(vb).trim() });
@@ -291,7 +289,7 @@
                 }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fracas_ledger'); });
         },
         uiEdit: function (recId, incId) {
-            Promise.resolve(_ask('Edit field — format: field | value\nfields: containment / corrective / preventive / responsible / lesson / repairHrs / downtimeHrs', ''))
+            Promise.resolve(_ask('Edit field. Format: field | value\nfields: containment / corrective / preventive / responsible / lesson / repairHrs / downtimeHrs', ''))
                 .then(v => {
                     if (v == null || String(v).indexOf('|') < 0) return;
                     const kf = String(v).split('|')[0].trim(); const val = String(v).split('|').slice(1).join('|').trim();

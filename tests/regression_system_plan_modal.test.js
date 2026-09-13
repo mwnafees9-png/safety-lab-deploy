@@ -58,7 +58,7 @@ check('every sub-lane parent resolves', subs.every(([, p]) => ids.has(p)),
 // ---- the machinery underneath is unchanged ---------------------------------
 check('writes still go through setSystemLane', /_sysToggle\(sysId, laneId, \{ silent: true \}\)/.test(pp));
 check('_sysToggle returns a promise so the modal re-renders after the write lands',
-  /return Promise\.resolve\(ask\('Tailoring opt-out/.test(pp) && /return Promise\.resolve\(true\)/.test(pp));
+  /return Promise\.resolve\(slPrompt\('Tailoring opt-out/.test(pp) && /return Promise\.resolve\(true\)/.test(pp));   // R19 step 3: slPrompt directly, no native fallback alias
 check('the checkbox is reverted until the write lands',
   /cb\.checked = !want;/.test(pp),
   'a refused tailoring opt-out must not leave a ticked box behind');

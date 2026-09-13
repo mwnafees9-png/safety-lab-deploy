@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // phys_hazards.js — v1.0 — the physical hazard as a FIRST-CLASS thread object
 // (Waqas's architecture ruling, 8 Aug 2026; SL-ARC-0001 §12 / §17.1 / §23).
@@ -148,7 +149,7 @@
         return ph;
     }
     async function phAdd() {
-        const ask = async (m, d) => { try { if (typeof slPrompt === 'function') return await slPrompt(m, d || ''); } catch (_) {} return window.prompt(m, d || ''); };
+        const ask = (m, d) => slPrompt(m, d || '');
         const title = (await ask('Physical hazard title:', '')) || '';
         if (!title.trim()) return;
         const mech = (await ask('Mechanism (' + MECHANISMS.join(' / ') + '):', 'other')) || 'other';
@@ -173,7 +174,7 @@
     async function phVerify(internalId) {
         const ph = store().find(p => p && String(p.internalId) === String(internalId));
         if (!ph) return;
-        const ask = async (m, d) => { try { if (typeof slPrompt === 'function') return await slPrompt(m, d || ''); } catch (_) {} return window.prompt(m, d || ''); };
+        const ask = (m, d) => slPrompt(m, d || '');
         const v = ph.verification || {};
         const method = (await ask('Verification method (Inspection / Test / Analysis):', v.method || 'Inspection')) || '';
         const status = (await ask('Verification status (Planned / In work / Passed):', v.status || 'Planned')) || '';
@@ -182,17 +183,17 @@
         ph.verification = { method: method.trim(), status: status.trim(), evidence: evidence.trim(), by: by.trim(), at: new Date().toISOString() };
         _save(); _render();
     }
-    function phDelete(internalId) {
+    async function phDelete(internalId) {
         const i = store().findIndex(p => p && String(p.internalId) === String(internalId));
         if (i < 0) return;
-        if (!confirm('Delete ' + store()[i].phId + '? Requirements tracing to it will be marked stale by the delete net.')) return;
+        if (!(await slConfirm('Delete ' + store()[i].phId + '? Requirements tracing to it will be marked stale by the delete net.', { danger: true, okText: 'Delete' }))) return;
         store().splice(i, 1);
         _save(); _render();
     }
     async function phRename(internalId) {
         const ph = store().find(p => p && String(p.internalId) === String(internalId));
         if (!ph) return;
-        const to = window.prompt('Physical hazard ID:', ph.phId);
+        const to = await slPrompt('Physical hazard ID:', ph.phId);
         if (!to || !to.trim() || to.trim() === ph.phId) return;
         if (store().some(p => p && p !== ph && p.phId === to.trim())) { _toast('"' + to.trim() + '" is already in use.', 'warning'); return; }
         ph.phId = to.trim();   // rename_guard's phId kind carries the references

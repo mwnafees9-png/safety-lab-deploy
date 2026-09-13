@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // bowtie.js — v1.0 — Bow-Tie Analysis: the unified FTA ↔ ETA view.
 // BORN MODULAR: new file, zero monolith edits. Creates its own view + nav entry
@@ -448,7 +449,7 @@
         _save(); _render();
     }
     function removeBarrier(bid) { const bt = _bt(); if (!bt) return; bt.barriers = (bt.barriers || []).filter(x => x.id !== bid); _save(); _render(); }
-    async function _ask(m, d) { try { if (typeof slPrompt === 'function') return await slPrompt(m, d || ''); } catch (_) {} return window.prompt(m, d || ''); }
+    function _ask(m, d) { return slPrompt(m, d || ''); }
 
     // ---- render --------------------------------------------------------------
     function _sevColor(s) { s = String(s || '').toLowerCase(); return /cat/.test(s) ? '#F2928C' : /haz/.test(s) ? '#F5B878' : /maj/.test(s) ? '#F2DB74' : /min/.test(s) ? '#F8ECB0' : (/neg|no safety/.test(s) ? '#A6DFB4' : 'var(--color-text-tertiary,#888)'); } // 11 Sep — the app-wide severity fills

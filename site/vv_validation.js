@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // vv_validation.js — v2.0 — ARP-G2: the full §5.4.3/§5.4.4 validation split.
 //
@@ -261,7 +262,7 @@
         const st = _store();
         const rec = st[String(reqKey)];
         if (rec && rec.by) {
-            if (confirm('Withdraw the validation attestation on ' + (r.id || r.traceId || reqKey) + '? (Authored checklist answers are kept.)')) {
+            if (await slConfirm('Withdraw the validation attestation on ' + (r.id || r.traceId || reqKey) + '? (Authored checklist answers are kept.)', { danger: true, okText: 'Withdraw' })) {
                 delete rec.by; delete rec.at; delete rec.independent;
                 if (r.valArtifact && /^VAL-CHK/.test(r.valArtifact)) delete r.valArtifact;
                 if (typeof scheduleAutosave === 'function') scheduleAutosave();
@@ -270,17 +271,19 @@
             return;
         }
         const c0 = reqValConclusion(r, set);
-        if (c0.rigor.level !== 'basic' && !c0.checklist.complete &&
-            !confirm('The §5.4.3 checklist is authored ' + c0.checklist.answered + '/' + c0.checklist.total +
+        if (c0.rigor.level !== 'basic' && !c0.checklist.complete) {
+            const goOn = await slConfirm('The §5.4.3 checklist is authored ' + c0.checklist.answered + '/' + c0.checklist.total +
                 (c0.checklist.noes.length ? ' with NO standing on ' + c0.checklist.noes.join(', ') : '') +
                 '. You can sign now, but the conclusion stays ' + (c0.checklist.noes.length ? 'FLAGGED' : 'AWAITING') +
-                ' until the checklist is complete — the signature cannot stand in for the judgment. Continue?')) return;
-        if (!c0.autosPass && !confirm('Correctness checks are FAILING on this requirement. Signing now records the attestation but the conclusion stays FLAGGED. Continue?')) return;
-        const by = window.prompt('Attest correctness of ' + (r.id || r.traceId || reqKey) + ' — signature (name):', '');
+                ' until the checklist is complete. The signature cannot stand in for the judgment. Continue?', { okText: 'Continue' });
+            if (!goOn) return;
+        }
+        if (!c0.autosPass && !(await slConfirm('Correctness checks are FAILING on this requirement. Signing now records the attestation but the conclusion stays FLAGGED. Continue?', { okText: 'Continue' }))) return;
+        const by = await slPrompt('Attest correctness of ' + (r.id || r.traceId || reqKey) + '. Signature (name):', '');
         if (!by || !by.trim()) return;
         let independent = false;
         if (c0.rigor.level === 'independent')
-            independent = confirm('This requirement ' + c0.rigor.why + ' — independence of the validator is demanded.\n\nOK = I did not author this requirement (independent)\nCancel = record without the independence claim');
+            independent = await slConfirm('This requirement ' + c0.rigor.why + '. Independence of the validator is demanded.\n\nOK = I did not author this requirement (independent)\nCancel = record without the independence claim');
         st[String(reqKey)] = Object.assign(rec || {}, { by: by.trim(), at: new Date().toISOString(), independent });
         // Record the evidence reference on the row itself (elicited act, signed
         // above) — the 4754B objectives matrix reads it as validation evidence.
@@ -411,11 +414,12 @@
     function _closePop() { const el = document.getElementById('vv-543-pop'); if (el && el.parentNode) el.parentNode.removeChild(el); _popCtx = null; }
     window.vv543Open = function (scopeKey, reqKey) { _popCtx = { scope: scopeKey, reqKey: String(reqKey) }; _renderPop(); };
     window.vv543Close = _closePop;
-    window.vv543Answer = function (aspectId, ans) {
+    window.vv543Answer = async function (aspectId, ans) {
         if (!_popCtx) return;
         let note = '';
-        if (ans === 'no') { note = window.prompt('NO on this aspect — what exactly is wrong? (required)', '') || ''; if (!note.trim()) return; }
-        if (ans === 'na') { note = window.prompt('N-A — why does this aspect not apply here? (required)', '') || ''; if (!note.trim()) return; }
+        if (ans === 'no') { note = (await slPrompt('NO on this aspect: what exactly is wrong? (required)', '')) || ''; if (!note.trim()) return; }
+        if (ans === 'na') { note = (await slPrompt('N-A: why does this aspect not apply here? (required)', '')) || ''; if (!note.trim()) return; }
+        if (!_popCtx) return;
         vvAnswer(_popCtx.scope, _popCtx.reqKey, aspectId, ans, note);
     };
     window.vv543Withdraw = function (aspectId) { if (_popCtx) vvAnswer(_popCtx.scope, _popCtx.reqKey, aspectId, null); };
@@ -457,15 +461,15 @@
     }
 
     // ---- §5.4.4 judge action ------------------------------------------------
-    window.vvJudgeSetUI = function (scope) {
+    window.vvJudgeSetUI = async function (scope) {
         const j = vvSetJudgment(scope);
         if (j && j.by) {
-            if (confirm('Withdraw the §5.4.4 completeness judgment on this set (by ' + j.by + ')?')) vvJudgeSet(scope);
+            if (await slConfirm('Withdraw the §5.4.4 completeness judgment on this set (by ' + j.by + ')?', { danger: true, okText: 'Withdraw' })) vvJudgeSet(scope);
             return;
         }
-        const by = window.prompt('Judge this requirement SET complete (§5.4.4) — signature (name):', '');
+        const by = await slPrompt('Judge this requirement SET complete (§5.4.4). Signature (name):', '');
         if (!by || !by.trim()) return;
-        const basis = window.prompt('BASIS for the judgment — what did you review to conclude nothing is missing? (≥15 chars)', '');
+        const basis = await slPrompt('BASIS for the judgment: what did you review to conclude nothing is missing? (≥15 chars)', '');
         if (basis == null) return;
         vvJudgeSet(scope, by, basis);
     };

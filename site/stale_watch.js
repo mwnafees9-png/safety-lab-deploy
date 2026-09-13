@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // stale_watch.js — v1.1 — + C2 (22 Aug 2026): the [fmes] watcher learns the
 // DECOMPOSED shape — Σ(mode children λ) vs the group's current Σλ.
@@ -257,8 +258,7 @@
         var res = sweep();
         var f = res.flags.find(function (x) { return x.key === key; });
         if (!f) return false;
-        var askFn = (typeof slPrompt === 'function') ? slPrompt : function (m, d) { return Promise.resolve(window.prompt(m, d)); };
-        var by = (await askFn('Acknowledge this stale flag — it stays quiet until the value moves AGAIN. Sign with your name:\n\n' + f.msg,
+        var by = (await slPrompt('Acknowledge this stale flag. It stays quiet until the value moves AGAIN. Sign with your name:\n\n' + f.msg,
             (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || '')) || '';
         if (!String(by).trim()) return false;
         ackStore()[key] = { ackBy: String(by).trim(), ackAt: new Date().toISOString(), ackFp: f.fp };

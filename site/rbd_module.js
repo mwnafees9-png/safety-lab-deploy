@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // rbd_module.js — Phase F7: Reliability Block Diagrams.
 // BORN MODULAR: new file, zero monolith edits; store under projectConfig.rbd.
 //
@@ -26,10 +27,7 @@
     }
     function _save() { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} }
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _access() { return (typeof window._ramHasAccess === 'function') ? window._ramHasAccess() : true; }
     const _chip = (l, v, warn) => '<div style="height:32px; display:inline-flex; align-items:center; padding:0 12px; border:1px solid var(--color-border-strong); font-family:var(--font-mono); font-size:12px;">' + l + ' <b style="margin-left:6px;' + (warn ? ' color:#B45309;' : '') + '">' + v + '</b></div>';
@@ -202,7 +200,7 @@
     async function rbdAddManual() {
         if (!_access()) return;
         const name = await _ask('RBD name:'); if (!name || !name.trim()) return;
-        const dsl = await _ask('Structure DSL — series(...), parallel(...), koon(k, ...), block(name, λ):',
+        const dsl = await _ask('Structure DSL: series(...), parallel(...), koon(k, ...), block(name, λ):',
             'series( block(Engine, 1e-4), parallel( block(Pump A, 2e-5), block(Pump B, 2e-5) ) )');
         if (!dsl || !dsl.trim()) return;
         try { parseDsl(dsl.trim()); } catch (e) { _toast('DSL error: ' + e.message, 'error', 5000); return; }
@@ -213,15 +211,17 @@
         if (!_access()) return;
         const pages = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(p => p.root);
         if (!pages.length) { _toast('No fault trees to derive from.', 'warning'); return; }
-        const pick = (await _ask('Derive the RBD dual of which tree?\n' + pages.slice(0, 15).map(p => '  ' + p.id + ' — ' + (p.name || '')).join('\n') + '\n\nEnter page id:', pages[0].id)) || '';
+        const pick = (await _ask('Derive the RBD dual of which tree?\n' + pages.slice(0, 15).map(p => '  ' + p.id + ': ' + (p.name || '')).join('\n') + '\n\nEnter page id:', pages[0].id)) || '';
         if (!rbdFromPage(pick.trim())) { _toast('No tree with that id (or empty root).', 'warning'); return; }
         _store().models.push({ id: 'RBD-' + Date.now(), name: 'RBD dual · ' + pick.trim(), dsl: null, fromPage: pick.trim() });
         _save(); renderRamRbdPage();
     }
-    function rbdDelete(id) {
+    async function rbdDelete(id) {
         const s = _store();
         const i = s.models.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this RBD?')) { s.models.splice(i, 1); _save(); renderRamRbdPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this RBD?', { danger: true, okText: 'Remove' }))) return;
+        s.models.splice(i, 1); _save(); renderRamRbdPage();
     }
 
     function renderRamRbdPage() {

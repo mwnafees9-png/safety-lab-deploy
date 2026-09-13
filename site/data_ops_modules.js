@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // data_ops_modules.js — v1.0 — Phase P2 batch 2b: data operations layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). Pure runtime function declarations — zero
@@ -7,7 +8,7 @@
 var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
 function triggerCSVImport(moduleTarget) {
     currentImportTarget = moduleTarget;
-    if (moduleTarget.startsWith('Sys_') && !activeSystemId) { alert("Please open a specific System Folder first."); return; }
+    if (moduleTarget.startsWith('Sys_') && !activeSystemId) { showToast("Please open a specific System Folder first.", 'warning', 4000); return; }
     document.getElementById('global-csv-import').click();
 }
 
@@ -20,8 +21,8 @@ function processCSVUpload(event) {
             if (currentImportTarget === 'Fault_Tree') importFaultTreeCSV(text);
             else if (currentImportTarget === 'Library') importComponentLibraryCSV(text);
             else importTabularCSV(text, currentImportTarget);
-            alert(`Successfully imported data into ${currentImportTarget.replace('_', ' ')}.`);
-        } catch(error) { alert("Import Error: " + error.message); }
+            slAlert(`Successfully imported data into ${currentImportTarget.replace('_', ' ')}.`, { title: 'Import complete' });
+        } catch(error) { slAlert("Import Error: " + error.message, { title: 'Import error' }); }
         document.getElementById('global-csv-import').value = '';
     };
     reader.readAsText(file);
@@ -33,7 +34,7 @@ function processCSVUpload(event) {
 // same per-tab importers (importTabularCSV / importFaultTreeCSV / importComponentLibraryCSV).
 function triggerExcelImport(moduleTarget) {
     currentImportTarget = moduleTarget;
-    if (moduleTarget && moduleTarget.startsWith('Sys_') && !activeSystemId) { alert("Please open a specific System Folder first."); return; }
+    if (moduleTarget && moduleTarget.startsWith('Sys_') && !activeSystemId) { showToast("Please open a specific System Folder first.", 'warning', 4000); return; }
     // Use the full Excel mapping importer (sheet → data type + per-column mapping + saved
     // templates) so users can map their own column headers when they don't match exactly.
     const mapInput = document.getElementById('import-xlsx-file');
@@ -61,12 +62,12 @@ function processExcelUpload(event) {
                 if (currentImportTarget === 'Fault_Tree') importFaultTreeCSV(text);
                 else if (currentImportTarget === 'Library') importComponentLibraryCSV(text);
                 else importTabularCSV(text, currentImportTarget);
-                alert(`Successfully imported data into ${currentImportTarget.replace('_', ' ')} from Excel.`);
-            } catch (error) { alert("Excel Import Error: " + error.message); }
+                slAlert(`Successfully imported data into ${currentImportTarget.replace('_', ' ')} from Excel.`, { title: 'Import complete' });
+            } catch (error) { slAlert("Excel Import Error: " + error.message, { title: 'Import error' }); }
             input.value = '';
         };
         reader.readAsArrayBuffer(file);
-    }).catch(function(err) { alert("Could not load the Excel reader: " + (err && err.message || err)); input.value = ''; });
+    }).catch(function(err) { slAlert("Could not load the Excel reader: " + (err && err.message || err), { title: 'Import error' }); input.value = ''; });
 }
 
 // ==========================================
@@ -145,7 +146,7 @@ function exportData(moduleName, format) {
                         return [r.asmId, r.origin, r.text, r.state, links, r.valStrategy, r.valArtifact, r.verArtifact];
                     }));
             case 'Sys_Functions': {
-                if (!sys()) return alert('Open a system folder first.');
+                if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 return downloadCSV(file(`${sys().name}_Functions`),
                     ['AC Trace IDs','Function ID','Function','Definition'],
                     sys().functions.map(r => [
@@ -154,26 +155,26 @@ function exportData(moduleName, format) {
                     ]));
             }
             case 'Sys_FCIM': {
-                if (!sys()) return alert('Open a system folder first.');
+                if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 return downloadCSV(file(`${sys().name}_FCIM`),
                     ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
                     sys().fcim.map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]));
             }
             case 'Sys_FHA': {
-                if (!sys()) return alert('Open a system folder first.');
+                if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 const _sysOrd = (typeof _fhaGroupRows === 'function') ? _fhaGroupRows(sys().fha).ordered : sys().fha;
                 return downloadCSV(file(`${sys().name}_FHA`),
                     ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
                     _sysOrd.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.effAcLevel || '', r.effCrewLevel || '', r.effPaxLevel || '', r.severity, (r.assumptionIds || []).join('; '), r.comments]));
             }
             case 'Sys_Requirements': {
-                if (!sys()) return alert('Open a system folder first.');
+                if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 return downloadCSV(file(`${sys().name}_Requirements`),
                     ['Trace','Level','Type','Requirement Statement','Rationale'],
                     sys().req.map(r => [r.traceId, r.level, r.type, r.text, r.rat]));
             }
             case 'Sys_Assumptions': {
-                if (!sys()) return alert('Open a system folder first.');
+                if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 return downloadCSV(file(`${sys().name}_Assumptions`),
                     ['Assumption ID','Origin','Statement','State','Linked Failure Conditions','Validation Strategy','Validation Artifacts','Verification Artifacts'],
                     sys().asm.map(r => {
@@ -236,10 +237,10 @@ function exportData(moduleName, format) {
             }
             case 'Cutset_Analysis': {
                 const rootNode = getActiveFTARoot();
-                if (!rootNode) return alert('No active fault tree to analyze.');
+                if (!rootNode) { showToast('No active fault tree to analyze.', 'warning', 4000); return; }
                 let raw;
                 try { raw = getCutsets(rootNode); }
-                catch (err) { if (err && err.name === 'CutsetExplosionError') return alert('Fault tree too complex to enumerate cut sets (exceeds ' + _CUTSET_BUDGET.toLocaleString() + ' combinations). Simplify deep AND nesting / large voting gates or split with transfer gates — cut-set export aborted. Exact P(top) is still available in FTA quantification.'); throw err; }
+                catch (err) { if (err && err.name === 'CutsetExplosionError') { slAlert('Fault tree too complex to enumerate cut sets (exceeds ' + _CUTSET_BUDGET.toLocaleString() + ' combinations). Simplify deep AND nesting / large voting gates or split with transfer gates; cut-set export aborted. Exact P(top) is still available in FTA quantification.', { title: 'Cut-set export aborted' }); return; } throw err; }
                 const valid = raw.filter(c => c.length > 0).sort((a, b) => a.length - b.length);
                 const min = [];
                 for (let curr of valid) {
@@ -386,12 +387,12 @@ function exportData(moduleName, format) {
                 // compute): per-part rows with handbook citations, then the totals the
                 // page states. Refusals surface the ENGINE'S message verbatim.
                 const RP = (typeof window !== 'undefined' && window.RAM_PREDICT) || null;
-                if (!RP || typeof RP.predict !== 'function') return alert('Reliability prediction engine not loaded in this session.');
+                if (!RP || typeof RP.predict !== 'function') { showToast('Reliability prediction engine not loaded in this session.', 'warning', 4000); return; }
                 const st = (projectConfig && projectConfig.ram && projectConfig.ram.predict) || null;
-                if (!st || !Array.isArray(st.rows) || !st.rows.length) return alert('No parts in the prediction yet — add part categories on the R&M prediction page first.');
+                if (!st || !Array.isArray(st.rows) || !st.rows.length) { showToast('No parts in the prediction yet. Add part categories on the R&M prediction page first.', 'warning', 4000); return; }
                 let r;
                 try { r = RP.predict(st.rows, st.env); }
-                catch (e) { return alert('Export refused, same as the engine: ' + e.message); }
+                catch (e) { slAlert('Export refused, same as the engine: ' + e.message, { title: 'Export refused' }); return; }
                 const rows = r.rows.map(x => [
                     String(x.name || ''), String(x.qty), String(x.lambdaG),
                     String(x.quality || ''), String(x.piQ),
@@ -410,9 +411,9 @@ function exportData(moduleName, format) {
                 // plus a Notes column carrying what the renderer inlines in the Model
                 // cell (warnings, REFUSED reasons, the phased §I.2.9 line).
                 const models = (projectConfig && projectConfig.markovModels) || [];
-                if (!models.length) return alert('No Markov models in this project yet.');
+                if (!models.length) { showToast('No Markov models in this project yet.', 'warning', 4000); return; }
                 const canSolve = (typeof window !== 'undefined') && typeof window.validateMarkovModel === 'function' && typeof window.solveMarkovTransient === 'function';
-                if (!canSolve) return alert('Markov solver not loaded in this session — open the Markov Models tab once, then export.');
+                if (!canSolve) { showToast('Markov solver not loaded in this session. Open the Markov Models tab once, then export.', 'warning', 4000); return; }
                 const T = (typeof ftaConfig === 'object' && ftaConfig && parseFloat(ftaConfig.exposureTime)) || 1;
                 const rows = models.map(m => {
                     const v = window.validateMarkovModel(m);
@@ -450,9 +451,9 @@ function exportData(moduleName, format) {
                 // Assumption | Type | credited/uncredited lanes | Holds now | State,
                 // plus Scope and the HFA task detail the hf rows expose.
                 const HF = (typeof window !== 'undefined' && window.HF_ASSUMPTIONS) || null;
-                if (!HF || typeof HF.asmAllTyped !== 'function') return alert('HF register engine not loaded in this session — open the Human Factors page once, then export.');
+                if (!HF || typeof HF.asmAllTyped !== 'function') { showToast('HF register engine not loaded in this session. Open the Human Factors page once, then export.', 'warning', 4000); return; }
                 const all = HF.asmAllTyped().filter(a => a.type || a.credited != null || a.uncredited != null);
-                if (!all.length) return alert('No typed assumptions in the HF register yet.');
+                if (!all.length) { showToast('No typed assumptions in the HF register yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_Register'),
                     ['Scope','Assumption','Type','Credited lane','Uncredited lane','Holds now','State','HFA detail'],
                     all.map(a => {
@@ -473,9 +474,9 @@ function exportData(moduleName, format) {
             // renderer, inherit its refusal posture, invent nothing.
             case 'HF_Allocation': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Function Allocation page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Function Allocation page once, then export.', 'warning', 4000); return; }
                 const fns = (typeof acFunctionsData !== 'undefined' && Array.isArray(acFunctionsData)) ? acFunctionsData : [];
-                if (!fns.length) return alert('No functions to allocate yet — build the Functions lane first.');
+                if (!fns.length) { showToast('No functions to allocate yet. Build the Functions lane first.', 'warning', 4000); return; }
                 const byKey = {};
                 HX._read('alloc').rows.forEach(r => { byKey[String(r.key)] = r; });
                 return downloadCSV(file('HF_Allocation'),
@@ -487,9 +488,9 @@ function exportData(moduleName, format) {
             }
             case 'HF_HEA': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Human Error Analysis page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Human Error Analysis page once, then export.', 'warning', 4000); return; }
                 const rows = HX._read('hea').rows;
-                if (!rows.length) return alert('No error rows in the human error analysis yet.');
+                if (!rows.length) { showToast('No error rows in the human error analysis yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_HEA'),
                     ['ID','Task assumption','Task','Error mode (NUREG/CR-1278)','Effect','Detection','Recovery','Feeds FC'],
                     rows.map(r => [String(r.heaId || ''), String(r.asmId || ''), String(r.task || ''), String(r.errorMode || ''),
@@ -497,9 +498,9 @@ function exportData(moduleName, format) {
             }
             case 'HF_Alerts': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Crew Alerting page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Crew Alerting page once, then export.', 'warning', 4000); return; }
                 const rows = HX._read('alerts').rows;
-                if (!rows.length) return alert('No alerts in the crew alerting inventory yet.');
+                if (!rows.length) { showToast('No alerts in the crew alerting inventory yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_Alerts'),
                     ['ID','Alert','Priority (25.1322)','Modality','Cited by FC','Notes'],
                     rows.map(r => [String(r.alertId || ''), String(r.name || ''), String(r.priority || ''), String(r.modality || ''),
@@ -510,9 +511,9 @@ function exportData(moduleName, format) {
                 // start with just an assumption"). Authored crew tasks; the
                 // credited link (asmId) shows which earned register places.
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Task Analysis page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Task Analysis page once, then export.', 'warning', 4000); return; }
                 const rows = HX._read('tasks').rows;
-                if (!rows.length) return alert('No crew tasks authored yet.');
+                if (!rows.length) { showToast('No crew tasks authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_Tasks'),
                     ['ID','Phases','Crewmember','Task','Reaction (s)','Execution (s)','Response (s)','Time basis','Channels (HIDH)','Credited as','Notes'],
                     rows.map(r => [String(r.taskId || ''), String(r.phase || ''), String(r.crewmember || ''), String(r.task || ''),
@@ -520,27 +521,27 @@ function exportData(moduleName, format) {
             }
             case 'HF_Ergo': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Ergonomics page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Ergonomics page once, then export.', 'warning', 4000); return; }
                 const rows = HX._read('ergo').rows;
-                if (!rows.length) return alert('No ergonomics evaluations authored yet.');
+                if (!rows.length) { showToast('No ergonomics evaluations authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_Ergo'),
                     ['ID','Item','Criterion (cite)','Finding','Status','Notes'],
                     rows.map(r => [String(r.ergoId || ''), String(r.item || ''), String(r.clause || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
             }
             case 'HF_ControlsDisplays': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Controls & Displays page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Controls & Displays page once, then export.', 'warning', 4000); return; }
                 const rows = HX._read('cd').rows;
-                if (!rows.length) return alert('No controls & displays evaluations authored yet.');
+                if (!rows.length) { showToast('No controls & displays evaluations authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_ControlsDisplays'),
                     ['ID','Item','Kind','§25.1302 consideration','Supports','Finding','Status','Notes'],
                     rows.map(r => [String(r.cdId || ''), String(r.item || ''), String(r.kind || ''), String(r.consideration || ''), String(r.supports || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
             }
             case 'HF_FunctionAllocation': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function' || typeof HX._functions !== 'function') return alert('HF analyses module not loaded in this session \u2014 open the Function Allocation page once, then export.');
+                if (!HX || typeof HX._read !== 'function' || typeof HX._functions !== 'function') { showToast('HF analyses module not loaded in this session. Open the Function Allocation page once, then export.', 'warning', 4000); return; }
                 const fns = HX._functions();
-                if (!fns.length) return alert('No aircraft sub-functions defined yet \u2014 allocation is keyed to the functions lane.');
+                if (!fns.length) { showToast('No aircraft sub-functions defined yet. Allocation is keyed to the functions lane.', 'warning', 4000); return; }
                 const byKey = {};
                 HX._read('alloc').rows.forEach(r => { byKey[String(r.key)] = r; });
                 // Every sub-function is a line, allocated or not: an unallocated row exporting
@@ -551,32 +552,32 @@ function exportData(moduleName, format) {
             }
             case 'HF_TaskIdentification': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session \u2014 open the Task Identification page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Task Identification page once, then export.', 'warning', 4000); return; }
                 const rows = HX._read('tid').rows;
-                if (!rows.length) return alert('No task steps identified yet.');
+                if (!rows.length) { showToast('No task steps identified yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_TaskIdentification'),
                     ['Task ID','Proc ID','Procedure','Mode','Phase','Task step','Definition','Crew','Trigger','Source','Notes'],
                     rows.map(r => [String(r.taskId || ''), String(r.procId || ''), String(r.procName || ''), String(r.opsMode || ''), String(r.phase || ''), String(r.taskName || ''), String(r.taskDef || ''), String(r.crew || ''), String(r.trigger || ''), String(r.source || ''), String(r.notes || '')]));
             }
             case 'HF_SituationAwareness': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Situation Awareness page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Situation Awareness page once, then export.', 'warning', 4000); return; }
                 const rows = HX._read('sa').rows;
-                if (!rows.length) return alert('No situation-awareness elements authored yet.');
+                if (!rows.length) { showToast('No situation-awareness elements authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_SituationAwareness'),
                     ['ID','SA element','Level','Cue / source','Phase','Finding','Status','Notes'],
                     rows.map(r => [String(r.saId || ''), String(r.element || ''), String(r.level || ''), String(r.cue || ''), String(r.phase || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
             }
             case 'HF_MFC': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
-                if (!HX || typeof HX._read !== 'function') return alert('HF analyses module not loaded in this session — open the Minimum Flight Crew page once, then export.');
+                if (!HX || typeof HX._read !== 'function') { showToast('HF analyses module not loaded in this session. Open the Minimum Flight Crew page once, then export.', 'warning', 4000); return; }
                 const st = HX._read('mfc') || {};
                 const fnRows = st.rows || [], factors = st.factors || {}, concl = st.conclusion || {};
                 const byKey = {}; fnRows.forEach(r => { byKey[String(r.key)] = r; });
                 const FN = HX.MFC_FUNCTIONS || [], FAC = HX.MFC_FACTORS || [];
                 const anyFn = fnRows.some(r => r.role || r.bedford || r.note);
                 const anyFac = Object.keys(factors).some(k => String(factors[k] || '').trim());
-                if (!anyFn && !anyFac && !concl.minCrew && !concl.rationale) return alert('No minimum-flight-crew determination authored yet.');
+                if (!anyFn && !anyFac && !concl.minCrew && !concl.rationale) { showToast('No minimum-flight-crew determination authored yet.', 'warning', 4000); return; }
                 const out = [];
                 FN.forEach(f => { const r = byKey[f.key] || {}; out.push(['Basic workload function', String(f.label || ''), String(r.role || ''), 'Bedford ' + String(r.bedford || '') + (r.note ? (' — ' + r.note) : '')]); });
                 FAC.forEach((f, i) => { out.push(['Workload factor', '(' + (i + 1) + ') ' + String(f), String(factors[i] || ''), '']); });
@@ -592,8 +593,8 @@ function exportData(moduleName, format) {
                 // (2^n outcome budget) exports as one REFUSED row carrying the
                 // engine's own message — never a partial enumeration.
                 const trees = (typeof window !== 'undefined' && typeof window.etaStore === 'function') ? window.etaStore() : ((projectConfig && projectConfig.eventTrees) || []);
-                if (!trees.length) return alert('No event trees in this project yet.');
-                if (typeof window === 'undefined' || typeof window.etaEvaluate !== 'function') return alert('Event-tree engine not loaded in this session — open the Event Trees page once, then export.');
+                if (!trees.length) { showToast('No event trees in this project yet.', 'warning', 4000); return; }
+                if (typeof window === 'undefined' || typeof window.etaEvaluate !== 'function') { showToast('Event-tree engine not loaded in this session. Open the Event Trees page once, then export.', 'warning', 4000); return; }
                 const rows = [];
                 trees.forEach(t => {
                     let ev;
@@ -621,12 +622,12 @@ function exportData(moduleName, format) {
                 // without context, dangling hazard link) surface VERBATIM — an export
                 // must not launder a register the engine itself rejects.
                 const ENG2 = (typeof window !== 'undefined' && window.STPA) || null;
-                if (!ENG2 || typeof ENG2.ucaSeeds !== 'function') return alert('STPA engine not loaded in this session — open the STPA page once, then export.');
+                if (!ENG2 || typeof ENG2.ucaSeeds !== 'function') { showToast('STPA engine not loaded in this session. Open the STPA page once, then export.', 'warning', 4000); return; }
                 const sd = (typeof stpaData !== 'undefined' && stpaData) || null;
-                if (!sd || !sd.cs || !(sd.cs.actions || []).length) return alert('No STPA control structure yet — author control actions on the STPA page first.');
+                if (!sd || !sd.cs || !(sd.cs.actions || []).length) { showToast('No STPA control structure yet. Author control actions on the STPA page first.', 'warning', 4000); return; }
                 let seeds;
                 try { seeds = ENG2.ucaSeeds(sd.cs, sd.dispositions || {}, sd); }
-                catch (e) { return alert('Export refused, same as the engine: ' + e.message); }
+                catch (e) { slAlert('Export refused, same as the engine: ' + e.message, { title: 'Export refused' }); return; }
                 return downloadCSV(file('STPA_UCAs'),
                     ['UCA ID','Controller','Control action','Guide phrase','Status','Context (J3307 §7.3.1.2)','Hazard links','FC links (legacy)','Rationale','UCA statement'],
                     seeds.map(u => [
@@ -642,7 +643,7 @@ function exportData(moduleName, format) {
                 // TLD max | (m)/(o) procedures | State.
                 const mm = (projectConfig && projectConfig.mmel) || null;
                 const items = (mm && Array.isArray(mm.items)) ? mm.items : [];
-                if (!items.length) return alert('No MMEL/MLAS items in this project yet.');
+                if (!items.length) { showToast('No MMEL/MLAS items in this project yet.', 'warning', 4000); return; }
                 return downloadCSV(file('MMEL_MLAS'),
                     ['Item','Equipment','ATA','Installed','Required','Category','TLD max (days)','Protection check','Quantitative (dispatched)','(m) procedure','(o) procedure','State'],
                     items.map(it => [
@@ -654,11 +655,11 @@ function exportData(moduleName, format) {
                     ]));
             }
             default:
-                alert(`Export for "${moduleName}" is not yet implemented.`);
+                slAlert(`Export for "${moduleName}" is not yet implemented.`, { title: 'Export' });
         }
     } catch (err) {
         console.error('Export error', err);
-        alert('Export failed: ' + err.message);
+        slAlert('Export failed: ' + err.message, { title: 'Export failed' });
     }
 }
 
@@ -790,7 +791,7 @@ function importTabularCSV(text, moduleName) {
             const HX = (typeof window !== 'undefined') ? window.HF_ANALYSES : null;
             if (HX && typeof HX.renderAlloc === 'function') HX.renderAlloc();
             if (typeof scheduleAutosave === 'function') scheduleAutosave();
-            if (_allocMisses.length) alert('Imported. ' + _allocMisses.length + ' row(s) named a sub-function that is not in the functions lane and were refused rather than orphaned: ' + _allocMisses.slice(0, 8).join(', ') + (_allocMisses.length > 8 ? '\u2026' : ''));
+            if (_allocMisses.length) slAlert('Imported. ' + _allocMisses.length + ' row(s) named a sub-function that is not in the functions lane and were refused rather than orphaned: ' + _allocMisses.slice(0, 8).join(', ') + (_allocMisses.length > 8 ? '\u2026' : ''));
         } catch(_) {}
     }
 
@@ -1140,7 +1141,7 @@ function createNewAssumption(domain) {
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
         renderACAssumptions();
     } else {
-        if (!sys()) return alert('Please open a system folder first.');
+        if (!sys()) { showToast('Please open a system folder first.', 'warning', 4000); return; }
         newAsmId = `ASM-SYS-${String(sys().asmCounter++).padStart(3, '0')}`;
         sys().asm.push({ asmId: newAsmId, text, state: 'Proposed', valStrategy: '', valArtifact: '', verArtifact: '', origin: 'Sys FHA' });
         renderSysAssumptions();
@@ -1882,7 +1883,7 @@ function _pdfDataForModule(moduleName) {
                     return [r.asmId, r.origin, r.text, r.state, links, r.valStrategy, r.valArtifact, r.verArtifact];
                 }) };
         case 'Sys_Functions': {
-            if (!sys()) { alert('Open a system folder first.'); return null; }
+            if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }
             return { title: sName + ' Functions',
                 headers: ['AC Trace IDs','Function ID','Function','Definition'],
                 rows: sys().functions.map(r => [
@@ -1891,25 +1892,25 @@ function _pdfDataForModule(moduleName) {
                 ]) };
         }
         case 'Sys_FCIM': {
-            if (!sys()) { alert('Open a system folder first.'); return null; }
+            if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }
             return { title: sName + ' FCIM',
                 headers: ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
                 rows: sys().fcim.map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]) };
         }
         case 'Sys_FHA': {
-            if (!sys()) { alert('Open a system folder first.'); return null; }
+            if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }
             return { title: sName + ' FHA',
                 headers: ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
                 rows: sys().fha.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, r.effAcLevel || '', r.effCrewLevel || '', r.effPaxLevel || '', r.severity, (r.assumptionIds || []).join('; '), r.comments]) };
         }
         case 'Sys_Requirements': {
-            if (!sys()) { alert('Open a system folder first.'); return null; }
+            if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }
             return { title: sName + ' Safety Requirements',
                 headers: ['Trace','Level','Type','Requirement Statement','Rationale'],
                 rows: sys().req.map(r => [r.traceId, r.level, r.type, r.text, r.rat]) };
         }
         case 'Sys_Assumptions': {
-            if (!sys()) { alert('Open a system folder first.'); return null; }
+            if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }
             return { title: sName + ' Assumptions Log',
                 headers: ['Assumption ID','Origin','Statement','State','Linked Failure Conditions','Validation Strategy','Validation Artifacts','Verification Artifacts'],
                 rows: sys().asm.map(r => {
@@ -1983,10 +1984,10 @@ function _pdfDataForModule(moduleName) {
         }
         case 'Cutset_Analysis': {
             const rootNode = (typeof getActiveFTARoot === 'function') ? getActiveFTARoot() : null;
-            if (!rootNode) { alert('No active fault tree to analyze.'); return null; }
+            if (!rootNode) { showToast('No active fault tree to analyze.', 'warning', 4000); return null; }
             let raw;
             try { raw = getCutsets(rootNode); }
-            catch (err) { if (err && err.name === 'CutsetExplosionError') { alert('Fault tree too complex to enumerate cut sets (exceeds ' + _CUTSET_BUDGET.toLocaleString() + ' combinations). Cut-set export aborted; simplify or split the tree.'); return null; } throw err; }
+            catch (err) { if (err && err.name === 'CutsetExplosionError') { slAlert('Fault tree too complex to enumerate cut sets (exceeds ' + _CUTSET_BUDGET.toLocaleString() + ' combinations). Cut-set export aborted; simplify or split the tree.', { title: 'Cut-set export aborted' }); return null; } throw err; }
             const valid = raw.filter(c => c.length > 0).sort((a, b) => a.length - b.length);
             const min = [];
             for (let curr of valid) {
@@ -2328,7 +2329,7 @@ function _ensureShowcaseLoaded() {
         }
         var s = document.createElement('script');
         s.id = 'sl-showcase-lazy';
-        s.src = window.SL_SHOWCASE_SRC || 'demo_showcase.js?v=65.42';
+        s.src = window.SL_SHOWCASE_SRC || 'demo_showcase.js?v=65.43';
         s.onload = function () { resolve(); };
         s.onerror = function () { reject(new Error('showcase load failed')); };
         document.head.appendChild(s);

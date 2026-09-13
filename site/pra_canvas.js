@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // pra_canvas.js — v1.0 — PRA-B: the PRA impact canvas. BORN MODULAR: modal
 // launched from the Zonal Model page. Pre-suggests the standard particular-risk
@@ -26,7 +27,7 @@
     function _row(libId) { return _pra().find(function (r) { return r && r.origin === 'pra-canvas' && r.praLibId === libId; }); }
     function _zoneCode(id) { var z = _Z() && _Z().get(id); return z ? (z.code || z.name || id) : id; }
 
-    window._praSetDisp = function (libId, disp) {
+    window._praSetDisp = async function (libId, disp) {
         var lib = window.PRA_LIBRARY.get(libId); if (!lib) return;
         var row = _row(libId);
         if (disp === 'applies') {
@@ -35,8 +36,8 @@
                 disposition: 'applies', naReason: '', zones: [], affectedZones: [], mitigation: '' });
             else { row.disposition = 'applies'; }
         } else if (disp === 'na') {
-            var reason = prompt('Why is "' + lib.name + '" not applicable to this configuration?', (row && row.naReason) || '');
-            if (reason === null) return;
+            var reason = await slPrompt('Why is "' + lib.name + '" not applicable to this configuration?', (row && row.naReason) || '');
+            if (reason == null) return;
             if (!row) _pra().push({ internalId: _rowId(), praId: _aid(), praLibId: libId, origin: 'pra-canvas',
                 threat: lib.name, desc: lib.condition, condition: lib.condition, footprintHint: lib.footprint, src: lib.src,
                 disposition: 'na', naReason: reason, zones: [], affectedZones: [], mitigation: '' });

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // session_resume.js — two persistence upgrades:
 //
@@ -95,20 +96,20 @@
 
     window.ringRestore = async function (slot) {
         const db = _sldb();
-        if (!db) { alert('IndexedDB unavailable — the ring needs it.'); return; }
-        if (!confirm('Restore this autosave generation? The CURRENT state is captured to the ring first, so this is reversible.')) return;
+        if (!db) { showToast('IndexedDB unavailable, the ring needs it.', 'error', 4000); return; }
+        if (!(await slConfirm('Restore this autosave generation? The CURRENT state is captured to the ring first, so this is reversible.', { okText: 'Restore' }))) return;
         try {
             // capture "now" before overwriting it — restoring must never destroy
             _sessionRingDone = false;
             await _ringCapture();
             let p = await db.get(RING_KEY(slot));
             if (typeof _maybeDecompress === 'function') p = await _maybeDecompress(p);
-            if (!p) { alert('That generation is empty.'); return; }
+            if (!p) { showToast('That generation is empty.', 'warning', 4000); return; }
             _applyProjectData(JSON.parse(p));
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
             try { if (typeof showToast === 'function') showToast('Generation restored — current state was ringed first.', 'info', 4000); } catch (_) {}
             try { renderGtIntegrityPage(); } catch (_) {}
-        } catch (e) { alert('Restore failed: ' + e.message); }
+        } catch (e) { await slAlert('Restore failed: ' + e.message, { title: 'Restore' }); }
     };
 
     // wrap the autosave write — the ring rides the app's own save cadence

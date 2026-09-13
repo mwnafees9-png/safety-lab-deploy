@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // importers.js — ExcelImport / SysMLImport / JamaConnect, extracted verbatim from
 // safety_lab.js (Phase 76 modularization). Classic script, shared global scope, loaded
 // BEFORE safety_lab.js. Self-contained at definition; refs to monolith globals run
@@ -1000,7 +1001,7 @@ const SysMLImport = (function() {
             } catch (err) {
                 console.error('[SysMLImport] parse failed:', err);
                 if (typeof showToast === 'function') showToast('Could not parse SysML file: ' + (err.message || err), 'error', 4500);
-                else alert('Could not parse SysML file: ' + (err.message || err));
+                else slAlert('Could not parse SysML file: ' + (err.message || err), { title: 'SysML import' });
             }
             // Reset input so the same file can be picked again next time.
             try { event.target.value = ''; } catch (_) {}

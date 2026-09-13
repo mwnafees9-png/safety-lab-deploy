@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // sneak_module.js — Phase R7: sneak circuit analysis as a guided register
 // with deterministic candidates mined from the model's own topology.
@@ -113,22 +114,22 @@
     }
 
     // ------------------------------------------------------------ actions
-    window.sneakDisposition = function (id) {
+    window.sneakDisposition = async function (id) {
         const st = _store();
         const cur = st.dispositions[id];
         if (cur && cur.by) {
-            if (confirm('Withdraw the disposition on ' + id + '?')) { delete st.dispositions[id]; _save(); renderSneakPage(); }
+            if (await slConfirm('Withdraw the disposition on ' + id + '?', { danger: true, okText: 'Withdraw' })) { delete st.dispositions[id]; _save(); renderSneakPage(); }
             return;
         }
-        const verdict = window.prompt('Disposition — type "examined" (no sneak found), "confirmed" (sneak exists → raise a Problem Report), or "not-credible":', 'examined');
+        const verdict = await slPrompt('Disposition: type "examined" (no sneak found), "confirmed" (sneak exists → raise a Problem Report), or "not-credible":', 'examined');
         if (!verdict || !['examined', 'confirmed', 'not-credible'].includes(verdict.trim())) return;
-        const by = window.prompt('Signature (name):', '');
+        const by = await slPrompt('Signature (name):', '');
         if (!by || !by.trim()) return;
-        const note = window.prompt('Basis (what was checked — drawings, ICDs, bench test):', '') || '';
+        const note = (await slPrompt('Basis (what was checked: drawings, ICDs, bench test):', '')) || '';
         st.dispositions[id] = { verdict: verdict.trim(), by: by.trim(), note, at: new Date().toISOString() };
         _save(); renderSneakPage();
         if (verdict.trim() === 'confirmed' && typeof window.prRaise === 'function')
-            alert('Confirmed sneak — raise a Problem Report from the Problem Reports page and reference ' + id + '.');
+            slAlert('Confirmed sneak: raise a Problem Report from the Problem Reports page and reference ' + id + '.', { title: 'Confirmed sneak' });
     };
 
     // ---------------------------------------------------------------- page

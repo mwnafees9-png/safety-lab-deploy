@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // swrel_module.js — Phase R8: quantitative software reliability growth models
 // on the CSCI failure logs the program collects during integration and test.
@@ -104,25 +105,27 @@
     const _save = () => { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
 
     // ------------------------------------------------------------ actions
-    window.swrelAdd = function () {
+    window.swrelAdd = async function () {
         // seed the picker from software items
         const swItems = ((typeof itemsData !== 'undefined' && itemsData) || []).filter(i => /soft/i.test(i.daType || ''));
         const hint = swItems.length ? ' (software items: ' + swItems.map(i => i.itemId).join(', ') + ')' : '';
-        const name = window.prompt('CSCI / software item name' + hint + ':', swItems.length ? swItems[0].name : '');
+        const name = await slPrompt('CSCI / software item name' + hint + ':', swItems.length ? swItems[0].name : '');
         if (!name || !name.trim()) return;
-        const ft = window.prompt('Cumulative failure times (execution hours, comma-separated):', '10, 28, 45, 70, 95, 130, 175, 230, 300, 390, 500, 640');
+        const ft = await slPrompt('Cumulative failure times (execution hours, comma-separated):', '10, 28, 45, 70, 95, 130, 175, 230, 300, 390, 500, 640');
         if (!ft) return;
         const times = ft.split(',').map(x => parseFloat(x)).filter(x => x > 0);
-        if (times.length < 3) { alert('Need at least three failure times.'); return; }
-        const T = parseFloat(window.prompt('Total execution time observed T (h, ≥ last failure):', String(Math.ceil(Math.max.apply(null, times) * 1.1))));
-        if (!(T > 0) || T < Math.max.apply(null, times)) { alert('T must cover the last failure.'); return; }
+        if (times.length < 3) { showToast('Need at least three failure times.', 'warning', 4000); return; }
+        const T = parseFloat(await slPrompt('Total execution time observed T (h, ≥ last failure):', String(Math.ceil(Math.max.apply(null, times) * 1.1))));
+        if (!(T > 0) || T < Math.max.apply(null, times)) { showToast('T must cover the last failure.', 'warning', 4000); return; }
         _store().cscis.push({ id: 'SW-' + Date.now(), name: name.trim(), times, T });
         _save(); renderSwrelPage();
     };
-    window.swrelDelete = function (id) {
+    window.swrelDelete = async function (id) {
         const s = _store();
         const i = s.cscis.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this failure log?')) { s.cscis.splice(i, 1); _save(); renderSwrelPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this failure log?', { danger: true, okText: 'Remove' }))) return;
+        s.cscis.splice(i, 1); _save(); renderSwrelPage();
     };
 
     // ---------------------------------------------------------------- page

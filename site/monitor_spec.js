@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // monitor_spec.js — v1.0 — M7: monitor/coverage modeling (ARP4761A D.4.3.1,
 // G.11.1.3.4). BORN MODULAR: new file, zero monolith edits. Creates its own
@@ -179,7 +180,7 @@
     }
 
     // ---- editor actions ---------------------------------------------------------
-    async function _ask(m, d) { try { if (typeof slPrompt === 'function') return await slPrompt(m, d || ''); } catch (_) {} return window.prompt(m, d || ''); }
+    function _ask(m, d) { return slPrompt(m, d || ''); }
     async function monEditSpec(pageId, lid) {
         let s = specFor(pageId, lid);
         if (!s) {
@@ -188,11 +189,11 @@
                   by: (typeof currentUserName !== 'undefined' ? currentUserName : ''), at: new Date().toISOString() };
             _store().push(s);
         }
-        const th = await _ask('Detection threshold (what the monitor trips on — free text, e.g. "servo current > 2.5 A for 50 ms"):', s.threshold); if (th === null) return; s.threshold = th;
+        const th = await _ask('Detection threshold (what the monitor trips on; free text, e.g. "servo current > 2.5 A for 50 ms"):', s.threshold); if (th === null) return; s.threshold = th;
         const cy = await _ask('Monitor cycle time, seconds (how often it looks):', s.cycleSec); if (cy === null) return; s.cycleSec = cy;
-        const cv = await _ask('Coverage — fraction of failure modes the monitor actually detects (0–1, e.g. 0.95):', String(s.coverage)); if (cv === null) return; s.coverage = Math.max(0, Math.min(1, parseFloat(cv) || 0));
+        const cv = await _ask('Coverage: fraction of failure modes the monitor actually detects (0–1, e.g. 0.95):', String(s.coverage)); if (cv === null) return; s.coverage = Math.max(0, Math.min(1, parseFloat(cv) || 0));
         const sc = await _ask('Scrub / inspection interval for the UNDETECTED fraction, flight hours (blank = event dormancy, then mission time):', s.scrubFH); if (sc === null) return; s.scrubFH = sc;
-        const ml = await _ask('Monitor channel logicalId (the element doing the watching — used for the independence check):', s.monitorLid); if (ml === null) return; s.monitorLid = String(ml || '').trim();
+        const ml = await _ask('Monitor channel logicalId (the element doing the watching, used for the independence check):', s.monitorLid); if (ml === null) return; s.monitorLid = String(ml || '').trim();
         s.at = new Date().toISOString();
         _save(); _render();
         try { if (typeof _ipCache !== 'undefined') _ipCache = {}; } catch (_) {}

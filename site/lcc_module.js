@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // lcc_module.js — Phase R4: life-cycle cost on the reliability data the
 // program already maintains. The point of an LCC module inside a safety
@@ -80,37 +81,39 @@
     }
 
     // ------------------------------------------------------------ actions
-    window.lccAdd = function () {
+    window.lccAdd = async function () {
         // offer ledger/library items
         const lib = (typeof projectConfig !== 'undefined' && projectConfig.customLibrary) || {};
-        const name = window.prompt('Item name (free text, or a component-library key: ' + Object.keys(lib).slice(0, 4).join(', ') + '…):', '');
+        const name = await slPrompt('Item name (free text, or a component-library key: ' + Object.keys(lib).slice(0, 4).join(', ') + '…):', '');
         if (!name || !name.trim()) return;
         const it = { id: 'LCC-' + Date.now(), name: name.trim() };
         const libHit = lib[name.trim()];
-        it.lambda = libHit && libHit.lambda > 0 ? libHit.lambda : parseFloat(window.prompt('Failure rate λ (/FH):', '5e-6'));
+        it.lambda = libHit && libHit.lambda > 0 ? libHit.lambda : parseFloat(await slPrompt('Failure rate λ (/FH):', '5e-6'));
         if (libHit) it.name = libHit.name;
-        it.mttr = parseFloat(window.prompt('MTTR (h):', '2')) || 0;
-        it.mdt = parseFloat(window.prompt('MDT incl. logistics (h; blank = MTTR):', '')) || 0;
-        it.acquisition = parseFloat(window.prompt('Acquisition cost per shipset ($):', '50000')) || 0;
-        it.unitCost = parseFloat(window.prompt('Spare unit cost ($):', '25000')) || 0;
-        it.materialCost = parseFloat(window.prompt('Repair material cost per event ($):', '3000')) || 0;
+        it.mttr = parseFloat(await slPrompt('MTTR (h):', '2')) || 0;
+        it.mdt = parseFloat(await slPrompt('MDT incl. logistics (h; blank = MTTR):', '')) || 0;
+        it.acquisition = parseFloat(await slPrompt('Acquisition cost per shipset ($):', '50000')) || 0;
+        it.unitCost = parseFloat(await slPrompt('Spare unit cost ($):', '25000')) || 0;
+        it.materialCost = parseFloat(await slPrompt('Repair material cost per event ($):', '3000')) || 0;
         _store().items.push(it);
         _save(); renderLccPage();
     };
-    window.lccDelete = function (id) {
+    window.lccDelete = async function (id) {
         const s = _store();
         const i = s.items.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this LCC item?')) { s.items.splice(i, 1); _save(); renderLccPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this LCC item?', { danger: true, okText: 'Remove' }))) return;
+        s.items.splice(i, 1); _save(); renderLccPage();
     };
-    window.lccParams = function () {
+    window.lccParams = async function () {
         const s = _store();
         const p = s.params;
-        p.years = parseFloat(window.prompt('Support period (years):', String(p.years))) || p.years;
-        p.discount = parseFloat(window.prompt('Discount rate (fraction, e.g. 0.05):', String(p.discount)));
+        p.years = parseFloat(await slPrompt('Support period (years):', String(p.years))) || p.years;
+        p.discount = parseFloat(await slPrompt('Discount rate (fraction, e.g. 0.05):', String(p.discount)));
         if (!(p.discount >= 0)) p.discount = 0.05;
-        p.laborRate = parseFloat(window.prompt('Labor rate ($/h):', String(p.laborRate))) || p.laborRate;
-        p.downtimeRate = parseFloat(window.prompt('Downtime cost ($/h out of service):', String(p.downtimeRate))) || p.downtimeRate;
-        p.turnaroundDays = parseFloat(window.prompt('Spares turnaround (days):', String(p.turnaroundDays))) || p.turnaroundDays;
+        p.laborRate = parseFloat(await slPrompt('Labor rate ($/h):', String(p.laborRate))) || p.laborRate;
+        p.downtimeRate = parseFloat(await slPrompt('Downtime cost ($/h out of service):', String(p.downtimeRate))) || p.downtimeRate;
+        p.turnaroundDays = parseFloat(await slPrompt('Spares turnaround (days):', String(p.turnaroundDays))) || p.turnaroundDays;
         _save(); renderLccPage();
     };
 

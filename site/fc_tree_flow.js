@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // fc_tree_flow.js — v1.0 — the 1309 chart DRIVES the tree decision (systems).
 //
@@ -161,8 +162,8 @@
         if (p && typeof openFTAPageById === 'function') openFTAPageById(p.id);
         _renderPanel();
     };
-    window.fcFlowDispo = function (sysId, iid, kind) {
-        const by = prompt('Sign the ' + kind.toLowerCase() + ' disposition:');
+    window.fcFlowDispo = async function (sysId, iid, kind) {
+        const by = await slPrompt('Sign the ' + kind.toLowerCase() + ' disposition:', '');
         if (!by || !by.trim()) return;
         const m = document.getElementById('fc-trade-modal'); if (m) m.remove();
         _disposition(sysId, iid, kind, by.trim());

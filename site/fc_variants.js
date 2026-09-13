@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // fc_variants.js — v1.0 — M6: combined & conditioned failure conditions
 // (ARP4761A A.3.1, A.8.3–A.8.5). BORN MODULAR: zero monolith edits — injects a
@@ -39,7 +40,7 @@
     function _rank(s) { return (typeof SEVERITY_RANK !== 'undefined' ? SEVERITY_RANK[s] : 0) || 0; }
     function _isCatHaz(s) { return /catastrophic|hazardous/i.test(String(s || '')); }
     function _disp() { const pc = _pc(); if (!pc.fcCombDispositions) pc.fcCombDispositions = {}; return pc.fcCombDispositions; }
-    async function _ask(m, d) { try { if (typeof slPrompt === 'function') return await slPrompt(m, d || ''); } catch (_) {} return window.prompt(m, d || ''); }
+    function _ask(m, d) { return slPrompt(m, d || ''); }
 
     const OP_SUGGEST = 'RTO / rejected landing / diversion / go-around / single-engine taxi / ferry';
     const ENV_SUGGEST = 'icing / HIRF / lightning / bird strike / volcanic ash / heavy rain';
@@ -102,7 +103,7 @@
     // ---- actions ----------------------------------------------------------------
     async function fcvTagContext(internalId) {
         const f = _fha().find(x => String(x.internalId) === String(internalId)); if (!f) return;
-        const kind = await _ask('Condition kind — "operational" (' + OP_SUGGEST + ') or "environmental" (' + ENV_SUGGEST + '). Blank clears the tag:', (f.eventContext && f.eventContext.kind) || '');
+        const kind = await _ask('Condition kind: "operational" (' + OP_SUGGEST + ') or "environmental" (' + ENV_SUGGEST + '). Blank clears the tag:', (f.eventContext && f.eventContext.kind) || '');
         if (kind === null) return;
         if (!String(kind).trim()) { delete f.eventContext; _save(); _render(); return; }
         const k = /^env/i.test(kind) ? 'environmental' : 'operational';
@@ -112,7 +113,7 @@
         _save(); _render();
     }
     async function fcvCombine(prefill) {
-        const ids = await _ask('Combine failure conditions — comma-separated FC ids (e.g. FC-01, FC-03):', prefill || '');
+        const ids = await _ask('Combine failure conditions, comma-separated FC ids (e.g. FC-01, FC-03):', prefill || '');
         if (!ids) return;
         const parents = String(ids).split(/[,\s]+/).filter(Boolean).map(_parentOf);
         if (parents.length < 2 || parents.some(p => !p)) { try { showToast('Need ≥2 valid FC ids.', 'warn'); } catch (_) {} return; }
@@ -141,12 +142,12 @@
     async function fcvDisposition(key) {
         const d = _disp();
         if (d[key]) {
-            const yes = await (typeof slConfirm === 'function' ? slConfirm('Clear disposition signed by ' + (d[key].by || '?') + '?') : Promise.resolve(confirm('Clear?')));
+            const yes = await slConfirm('Clear disposition signed by ' + (d[key].by || '?') + '?', { danger: true, okText: 'Clear' });
             if (yes) { delete d[key]; _save(); _render(); }
             return;
         }
-        const by = await _ask('Disposition "' + key + '" — sign with your name:', (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || ''); if (!by || !by.trim()) return;
-        const note = await _ask('Basis — why is this combination not credible / already covered?', ''); if (note === null) return;
+        const by = await _ask('Disposition "' + key + '", sign with your name:', (typeof _signoffReviewerName === 'function' && _signoffReviewerName()) || ''); if (!by || !by.trim()) return;
+        const note = await _ask('Basis: why is this combination not credible / already covered?', ''); if (note === null) return;
         d[key] = { by: by.trim(), at: new Date().toISOString(), note: String(note).trim() };
         _save(); _render();
     }

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // msg3_module.js — Phase F4: MSG-3 scheduled-maintenance analysis (systems &
 // powerplant logic). BORN MODULAR: new file, zero monolith edits; loads after
 // ram_modules.js and pushes selected tasks into the RAM task ledger, from
@@ -26,10 +27,7 @@
     }
     function _save() { try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {} }
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _access() { return (typeof window._ramHasAccess === 'function') ? window._ramHasAccess() : true; }
 
@@ -123,10 +121,12 @@
         _save(); renderMsg3Page();
     }
     function msg3IsMsi(sel) { return !!(sel && (sel.hidden || sel.safety || sel.ops || sel.econ)); }
-    function msg3DeleteMsi(id) {
+    async function msg3DeleteMsi(id) {
         const s = _store();
         const i = s.msis.findIndex(m => m.id === id);
-        if (i >= 0 && confirm('Remove this MSI and its analysis?')) { s.msis.splice(i, 1); _save(); renderMsg3Page(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this MSI and its analysis?', { danger: true, okText: 'Remove' }))) return;
+        s.msis.splice(i, 1); _save(); renderMsg3Page();
     }
     async function msg3AddFf(msiId) {
         const m = _store().msis.find(x => x.id === msiId); if (!m) return;

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // problem_reports.js — Phase P2: Problem Reports / OPRs.
 // The open-problem-report lifecycle the certification close-out demands:
 // nothing ships with an unexplained open problem, and deferral is a SIGNED
@@ -20,10 +21,7 @@
 
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     function _store() {
         if (!Array.isArray(projectConfig.problemReports)) projectConfig.problemReports = [];
         return projectConfig.problemReports;
@@ -57,10 +55,10 @@
     // ------------------------------------------------------------- actions
     async function prAdd() {
         const title = await _ask('Problem title (what is wrong):'); if (!title || !title.trim()) return;
-        const desc = (await _ask('Description — observed behavior, conditions, evidence:', '')) || '';
-        const safety = /^y/i.test(((await _ask('Safety-related? (y/n) — does it touch a safety requirement, analysis result, or protective function:', 'y')) || '').trim());
-        const src = (await _ask('Source — ' + SOURCES.join(' / ') + ':', 'analysis')) || 'analysis';
-        const linked = (await _ask('Linked artifact (FC id, requirement id, basic event, tree — optional):', '')) || '';
+        const desc = (await _ask('Description: observed behavior, conditions, evidence:', '')) || '';
+        const safety = /^y/i.test(((await _ask('Safety-related? (y/n): does it touch a safety requirement, analysis result, or protective function:', 'y')) || '').trim());
+        const src = (await _ask('Source: ' + SOURCES.join(' / ') + ':', 'analysis')) || 'analysis';
+        const linked = (await _ask('Linked artifact (FC id, requirement id, basic event, tree; optional):', '')) || '';
         const by = (await _ask('Raised by (name):', '')) || '';
         if (!by.trim()) return;
         const now = new Date().toISOString();

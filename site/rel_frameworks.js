@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // rel_frameworks.js — Phases R3 + R5 + R6:
 //   R3 — prediction-framework breadth: Telcordia-style and FIDES-style
@@ -74,61 +75,63 @@
 
     // ------------------------------------------------------------ actions
     window.relFwAdd = async function () {
-        const kind = window.prompt('Framework — type "telcordia" (λ·πQ·πS·πT shape), "fides" (Σphysical·Πprocess shape), or "duty" (operating/storage composition):', 'telcordia');
+        const kind = await slPrompt('Framework: type "telcordia" (λ·πQ·πS·πT shape), "fides" (Σphysical·Πprocess shape), or "duty" (operating/storage composition):', 'telcordia');
         if (!kind) return;
         const k = kind.trim().toLowerCase();
-        const name = window.prompt('Component / item name:', '');
+        const name = await slPrompt('Component / item name:', '');
         if (!name || !name.trim()) return;
         const e = { id: 'FW-' + Date.now(), kind: k, name: name.trim() };
         if (k === 'telcordia') {
-            e.base = parseFloat(window.prompt('Base failure rate λ_base (/h) — from YOUR licensed SR-332 tables:', '1e-7'));
-            e.piQ = parseFloat(window.prompt('Quality factor π_Q:', '1'));
-            e.piS = parseFloat(window.prompt('Stress factor π_S:', '1'));
-            e.piT = parseFloat(window.prompt('Temperature factor π_T:', '1'));
+            e.base = parseFloat(await slPrompt('Base failure rate λ_base (/h), from YOUR licensed SR-332 tables:', '1e-7'));
+            e.piQ = parseFloat(await slPrompt('Quality factor π_Q:', '1'));
+            e.piS = parseFloat(await slPrompt('Stress factor π_S:', '1'));
+            e.piT = parseFloat(await slPrompt('Temperature factor π_T:', '1'));
         } else if (k === 'fides') {
-            const cs = window.prompt('Physical contributions (/h, comma-separated — thermal, mechanical, humidity, … from YOUR FIDES guide):', '2e-8, 1e-8, 5e-9');
+            const cs = await slPrompt('Physical contributions (/h, comma-separated: thermal, mechanical, humidity, … from YOUR FIDES guide):', '2e-8, 1e-8, 5e-9');
             if (!cs) return;
             e.contribs = cs.split(',').map(x => parseFloat(x)).filter(x => x > 0);
-            e.piPM = parseFloat(window.prompt('Part-manufacturing factor Π_PM:', '1'));
-            e.piProcess = parseFloat(window.prompt('Process factor Π_process:', '1'));
+            e.piPM = parseFloat(await slPrompt('Part-manufacturing factor Π_PM:', '1'));
+            e.piProcess = parseFloat(await slPrompt('Process factor Π_process:', '1'));
         } else if (k === 'duty') {
-            e.lambdaOp = parseFloat(window.prompt('Operating failure rate λ_op (/h):', '5e-6'));
-            e.duty = parseFloat(window.prompt('Duty cycle d (fraction of calendar time operating, 0–1):', '0.4'));
-            e.kNonop = parseFloat(window.prompt('Nonoperating ratio K (λ_storage = K·λ_op; program-specific, typically ≪ 1):', '0.03'));
-        } else { alert('Unknown framework.'); return; }
+            e.lambdaOp = parseFloat(await slPrompt('Operating failure rate λ_op (/h):', '5e-6'));
+            e.duty = parseFloat(await slPrompt('Duty cycle d (fraction of calendar time operating, 0–1):', '0.4'));
+            e.kNonop = parseFloat(await slPrompt('Nonoperating ratio K (λ_storage = K·λ_op; program-specific, typically ≪ 1):', '0.03'));
+        } else { showToast('Unknown framework.', 'error', 4000); return; }
         _store().entries.push(e);
         _save(); renderRelFwPage();
     };
-    window.relFwAccelAdd = function () {
-        const name = window.prompt('Test-plan name:', 'FCC thermal accelerated life test');
+    window.relFwAccelAdd = async function () {
+        const name = await slPrompt('Test-plan name:', 'FCC thermal accelerated life test');
         if (!name || !name.trim()) return;
         const e = { id: 'AC-' + Date.now(), name: name.trim() };
-        e.ea = parseFloat(window.prompt('Activation energy Ea (eV) — failure-mechanism specific:', '0.7'));
-        e.tUse = parseFloat(window.prompt('Use temperature (°C):', '40'));
-        e.tTest = parseFloat(window.prompt('Test temperature (°C):', '85'));
-        const v = window.prompt('Optional second stress — inverse power law: enter "S_use, S_test, n" (blank to skip):', '');
+        e.ea = parseFloat(await slPrompt('Activation energy Ea (eV), failure-mechanism specific:', '0.7'));
+        e.tUse = parseFloat(await slPrompt('Use temperature (°C):', '40'));
+        e.tTest = parseFloat(await slPrompt('Test temperature (°C):', '85'));
+        const v = await slPrompt('Optional second stress, inverse power law: enter "S_use, S_test, n" (blank to skip):', '');
         if (v && v.trim()) {
             const p = v.split(',').map(x => parseFloat(x));
             if (p.length === 3 && p.every(x => x > 0)) { e.sUse = p[0]; e.sTest = p[1]; e.n = p[2]; }
         }
-        e.fieldHours = parseFloat(window.prompt('Field hours to demonstrate:', '100000'));
+        e.fieldHours = parseFloat(await slPrompt('Field hours to demonstrate:', '100000'));
         _store().accel.push(e);
         _save(); renderRelFwPage();
     };
-    window.relFwDelete = function (id) {
+    window.relFwDelete = async function (id) {
         const s = _store();
-        ['entries', 'accel'].forEach(kk => {
+        for (const kk of ['entries', 'accel']) {
             const i = s[kk].findIndex(x => x.id === id);
-            if (i >= 0 && confirm('Remove this row?')) { s[kk].splice(i, 1); _save(); renderRelFwPage(); }
-        });
+            if (i < 0) continue;
+            if (!(await slConfirm('Remove this row?', { danger: true, okText: 'Remove' }))) continue;
+            s[kk].splice(i, 1); _save(); renderRelFwPage();
+        }
     };
     // push a computed rate into the component library (single truth for trees)
-    window.relFwPush = function (id) {
+    window.relFwPush = async function (id) {
         const e = _store().entries.find(x => x.id === id);
         if (!e) return;
         const lam = _entryLambda(e);
         if (!(lam > 0)) return;
-        const key = window.prompt('Component-library key to create/update:', 'FW-' + e.name.replace(/[^\w]+/g, '-').toUpperCase().slice(0, 18));
+        const key = await slPrompt('Component-library key to create/update:', 'FW-' + e.name.replace(/[^\w]+/g, '-').toUpperCase().slice(0, 18));
         if (!key || !key.trim()) return;
         if (!projectConfig.customLibrary) projectConfig.customLibrary = {};
         projectConfig.customLibrary[key.trim()] = {
@@ -137,7 +140,7 @@
             source: 'rel_frameworks — user-entered factors, formula-only framework', category: 'framework',
         };
         _save();
-        alert('Pushed λ = ' + lam.toExponential(3) + '/h to the component library as "' + key.trim() + '".');
+        slAlert('Pushed λ = ' + lam.toExponential(3) + '/h to the component library as "' + key.trim() + '".', { title: 'Pushed to library' });
     };
 
     function _entryLambda(e) {

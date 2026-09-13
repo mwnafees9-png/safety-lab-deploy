@@ -136,8 +136,11 @@ ok('index: hf_analyses cache-bust bumped', pinAtLeast(idx, 'hf_analyses', '1.8')
 ok('index: data_ops cache-bust bumped', pinAtLeast(idx, 'data_ops_modules', '66.31'));
 
 // --------------------------------------------------------------- behaviour
-(function behaviour() {
+(async function behaviour() {
     global.window = undefined; global.document = undefined;
+    // R19 step 3 (13 Sep 2026): deleteRow asks through the app's slConfirm (async) and returns a Promise; the
+    // harness answers "yes" and awaits, so the same checks stand: success, the row gone, unknown id refused.
+    global.slConfirm = () => Promise.resolve(true);
     global.projectConfig = { hf: {} };
     global.scheduleAutosave = function () {};
     let API;
@@ -159,9 +162,11 @@ ok('index: data_ops cache-bust bumped', pinAtLeast(idx, 'data_ops_modules', '66.
     ok('the copy carries the original consideration', rows[1].consideration === '(c) predictable & unambiguous behavior');
     ok('the copy gets a fresh id', rows[0].cdId === 'CD-001' && rows[1].cdId !== 'CD-001');
 
-    ok('delete by id reports success', API.deleteRow('cd', 'CD-003') === true);
+    ok('delete by id reports success', (await API.deleteRow('cd', 'CD-003')) === true);
     ok('the row is gone', API._read('cd').rows.map(r => r.cdId).join(',') === 'CD-001,CD-002');
-    ok('deleting an unknown id is refused, not thrown', API.deleteRow('cd', 'CD-999') === false);
+    ok('deleting an unknown id is refused, not thrown', (await API.deleteRow('cd', 'CD-999')) === false);
+    global.slConfirm = () => Promise.resolve(false);
+    ok('a declined confirm deletes nothing', (await API.deleteRow('cd', 'CD-002')) === false && API._read('cd').rows.length === 2);
     ok('an unknown lane is refused', API.duplicateRow('not-a-lane', 'X') === false);
 
     // the credit must not be duplicated — one task, one assumption
@@ -181,7 +186,7 @@ ok('index: data_ops cache-bust bumped', pinAtLeast(idx, 'data_ops_modules', '66.
     ok('the rationale lands with it', !!a && a.rationale === 'flown manually');
     ok('an off-vocabulary allocation is refused by the existing guard',
         (API.setAllocBySubId('SF-PITCH', 'telepathy', ''), API._read('alloc').rows.find(r => r.subId === 'SF-PITCH').allocation === 'crew'));
-})();
+})().then(function () {
 
 
 // ============================================================================
@@ -305,3 +310,4 @@ ok('bindings cache-bust bumped again for the re-render', pinAtLeast(idx, 'bindin
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail ? 1 : 0);
+}).catch(function (e) { console.log('  FAIL  behaviour block threw: ' + (e && e.message)); process.exit(1); });

@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // onboarding_tour.js — v1.0 — Backlog #6b: the K350 guided tour.
 //
@@ -208,7 +209,7 @@
         }
         _show(0);
     }
-    function start() {
+    async function start() {
         if (isActive()) return;
         if (_isShowcaseLoaded() || !_hasData()) {
             _begin(!_isShowcaseLoaded());
@@ -216,9 +217,8 @@
         }
         // Session already holds user data — replacing it needs an explicit yes.
         const msg = 'The guided tour runs on the K350 Kestrel sample, which will REPLACE the data currently in this session (export or save first if you need it). Load the sample and start the tour?';
-        const go = () => _begin(true);
-        if (typeof window.confirmModal === 'function') window.confirmModal(msg, go);
-        else if (window.confirm(msg)) go();
+        if (!(await slConfirm(msg, { title: 'Guided tour', danger: true, okText: 'Replace and start' }))) return;
+        _begin(true);
     }
 
     // ------------------------------------------- trigger: on-ramp injection

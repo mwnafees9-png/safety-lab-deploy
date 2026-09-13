@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // fracas_slas.js — v0.1 — FRACAS-3: timeliness SLAs, safety-relevance triage,
 // KPI trending — the PROCESS layer over the FRACAS-2 case manager.
@@ -256,15 +257,15 @@
     }
 
     // ---- UI edge ------------------------------------------------------------
-    function uiTriage(recId, incId) {
-        const rel = confirm('Safety triage for ' + incId + ':\n\nOK = SAFETY-RELEVANT (you will be asked for the FC id)\nCancel = not safety-relevant (you will be asked for the rationale)');
-        const by = prompt('Triage signature (name):', '');
+    async function uiTriage(recId, incId) {
+        const rel = await slConfirm('Safety triage for ' + incId + ':\n\nOK = SAFETY-RELEVANT (you will be asked for the FC id)\nCancel = not safety-relevant (you will be asked for the rationale)', { title: 'Safety triage' });
+        const by = await slPrompt('Triage signature (name):', '');
         if (!by || !by.trim()) return;
         if (rel) {
-            const fc = prompt('Failure-condition id this incident touches (e.g. FC-012) — leave empty to link later (it will flag as unlinked):', '') || '';
+            const fc = (await slPrompt('Failure-condition id this incident touches (e.g. FC-012). Leave empty to link later (it will flag as unlinked):', '')) || '';
             if (setTriage(recId, incId, { relevant: true, linkedFcId: fc, by: by })) renderSlaPanel();
         } else {
-            const why = prompt('Rationale — WHY is this not safety-relevant? (≥10 chars, this is a safety decision):', '') || '';
+            const why = (await slPrompt('Rationale: WHY is this not safety-relevant? (≥10 chars, this is a safety decision):', '')) || '';
             if (setTriage(recId, incId, { relevant: false, rationale: why, by: by })) renderSlaPanel();
         }
     }

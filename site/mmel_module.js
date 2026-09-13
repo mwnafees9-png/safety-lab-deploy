@@ -1,3 +1,4 @@
+// 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // mmel_module.js — Phase P7: MMEL / Time-Limited Dispatch analysis.
 // BORN MODULAR: new file, zero monolith edits; store under projectConfig.mmel.
 //
@@ -32,10 +33,7 @@
 
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _toast(m, k, t) { try { if (typeof showToast === 'function') showToast(m, k || 'info', t || 3000); } catch (_) {} }
-    async function _ask(msg, dflt) {
-        try { if (typeof slPrompt === 'function') return await slPrompt(msg, dflt || ''); } catch (_) {}
-        return window.prompt(msg, dflt || '');
-    }
+    function _ask(msg, dflt) { return slPrompt(msg, dflt || ''); }
     function _store() {
         if (!projectConfig.mmel) projectConfig.mmel = { items: [], budgetShare: 0.10 };
         if (!Array.isArray(projectConfig.mmel.items)) projectConfig.mmel.items = [];
@@ -199,10 +197,12 @@
         if (kind === 'm') it.mProc = v.trim(); else it.oProc = v.trim();
         _save(); renderMmelPage();
     }
-    function mmelDelete(id) {
+    async function mmelDelete(id) {
         const s = _store();
         const i = s.items.findIndex(x => x.id === id);
-        if (i >= 0 && confirm('Remove this MMEL item?')) { s.items.splice(i, 1); _save(); renderMmelPage(); }
+        if (i < 0) return;
+        if (!(await slConfirm('Remove this MMEL item?', { danger: true, okText: 'Remove' }))) return;
+        s.items.splice(i, 1); _save(); renderMmelPage();
     }
     // Deterministic derivation: candidates from LRUs with linked events, pre-run
     // through the protection check. Rejected items are still shown as candidates
@@ -261,7 +261,7 @@
 
         html += '<div style="margin:0 0 12px;"><button class="btn-cyan" onclick="mmelAdd()">+ MMEL item</button> ' +
             '<button class="btn-cyan" onclick="const n = mmelDerive(true).length; showToast(n ? n + \' candidate(s) derived from ledger-linked LRUs, each pre-screened through the protection check.\' : \'No new derivable candidates.\', \'info\', 4500); renderMmelPage();">⚙ Derive candidates' + (derivable ? ' (' + derivable + ')' : '') + '</button> ' +
-            '<button class="btn-cyan" onclick="(async () => { const v = parseFloat(await (typeof slPrompt === \'function\' ? slPrompt(\'TLD budget share — fraction of the FC probability budget the dispatched configuration may consume (agree with the authority):\', String(_mmelStore().budgetShare)) : Promise.resolve(prompt(\'share:\', \'0.1\')))); if (v > 0 && v < 1) { _mmelStore().budgetShare = v; if (typeof commitSaveChanges === \'function\') commitSaveChanges(); renderMmelPage(); } })()">Set TLD share</button> ' +
+            '<button class="btn-cyan" onclick="(async () => { const v = parseFloat(await slPrompt(\'TLD budget share: fraction of the FC probability budget the dispatched configuration may consume (agree with the authority):\', String(_mmelStore().budgetShare))); if (v > 0 && v < 1) { _mmelStore().budgetShare = v; if (typeof commitSaveChanges === \'function\') commitSaveChanges(); renderMmelPage(); } })()">Set TLD share</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">protection check is exact (cut sets); quantitative check forces the event TRUE through the live engine; nothing here is prose</span></div>';
 
         html += '<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12px;"><thead><tr>' +
