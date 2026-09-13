@@ -28,7 +28,7 @@
       "@id": "https://safetylabaero.com/fault-tree-analysis#webpage",
       "url": "https://safetylabaero.com/fault-tree-analysis",
       "name": "Fault Tree Analysis Software for Aerospace | Safety Lab Aero",
-      "description": "Build and quantify fault trees for aircraft certification \u2014 static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.",
+      "description": "Build and quantify fault trees for aircraft certification — static and dynamic gates, repeated events, common-cause coupling, importance measures and cutsets, linked to your FHA and requirements.",
       "isPartOf": {
         "@id": "https://safetylabaero.com/#software"
       },
@@ -65,6 +65,30 @@
       "mainEntity": [
         {
           "@type": "Question",
+          "name": "What is fault tree analysis?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Fault tree analysis (FTA) is a top-down method that starts from an undesired event, such as a failure condition from the functional hazard assessment, and works out which combinations of lower-level failures can cause it. The logic is drawn as gates (AND, OR and others) over basic events. Once the tree is built, it is quantified with failure rates and exposure times to give the probability of the top event, which is then compared against the certification target for that failure condition."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is a basic event in a fault tree?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A basic event is a leaf of the tree: a failure that is not broken down any further, such as the failure of a component, a human action, or an environmental condition. Each basic event carries a failure rate (or a fixed probability) and an exposure time, and those numbers, combined through the gates above it, produce the probability of the top event. In Safety Lab Aero, basic-event rates can come from piece-part FMEA rows or the component library."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is a dynamic fault tree?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "A dynamic fault tree adds gates whose outcome depends on the order or timing of failures, not just on which failures occur. The common dynamic gates are PAND (priority AND, where inputs must fail in sequence), SPARE (a spare takes over when the primary fails), and FDEP (a trigger event forces its dependent events to fail). Static gates cannot express these behaviors, so dynamic trees are quantified by simulation rather than by cut sets. Safety Lab Aero supports PAND, SPARE and FDEP with a Monte Carlo simulator."
+          }
+        },
+        {
+          "@type": "Question",
           "name": "Does Safety Lab Aero compute exact top-event probability or just the cut-set upper bound?",
           "acceptedAnswer": {
             "@type": "Answer",
@@ -84,7 +108,7 @@
           "name": "Does the fault tree connect to FMEA and requirements?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes. Piece-part FMEA modes feed basic-event rates, the component library sources failure data, and safety requirements derive from the tree \u2014 all kept in one connected model so a change in one place flags what it affects elsewhere."
+            "text": "Yes. Piece-part FMEA modes feed basic-event rates, the component library sources failure data, and safety requirements derive from the tree: all kept in one connected model so a change in one place flags what it affects elsewhere."
           }
         }
       ]
@@ -146,7 +170,7 @@
 <h2>Allocate DAL top-down</h2>
 <p>Development Assurance Levels flow from the failure-condition severity down through the tree, honoring gate logic, with support for the ARP 4754B allocation options on AND gates. See <a href="/arp-4754b">ARP 4754B &amp; DAL allocation</a> for how that fits the development-assurance flow.</p>
 
-<h2>Frequently asked questions</h2><h3>Does Safety Lab Aero compute exact top-event probability or just the cut-set upper bound?</h3><p>It computes the top-event probability directly and shows the minimal-cut-set upper bound alongside it for reference. The direct result is what you need when basic events repeat across cutsets or when common-cause coupling is present, where the upper bound is no longer a good approximation.</p><h3>Can it handle dynamic fault trees?</h3><p>Yes. PAND, SPARE and FDEP gates are supported, with a Monte Carlo simulator that samples failure times and honors time-ordered semantics for dynamic behavior.</p><h3>Does the fault tree connect to FMEA and requirements?</h3><p>Yes. Piece-part FMEA modes feed basic-event rates, the component library sources failure data, and safety requirements derive from the tree: all kept in one connected model so a change in one place flags what it affects elsewhere.</p>
+<h2>Frequently asked questions</h2><h3>What is fault tree analysis?</h3><p>Fault tree analysis (FTA) is a top-down method that starts from an undesired event, such as a failure condition from the functional hazard assessment, and works out which combinations of lower-level failures can cause it. The logic is drawn as gates (AND, OR and others) over basic events. Once the tree is built, it is quantified with failure rates and exposure times to give the probability of the top event, which is then compared against the certification target for that failure condition.</p><h3>What is a basic event in a fault tree?</h3><p>A basic event is a leaf of the tree: a failure that is not broken down any further, such as the failure of a component, a human action, or an environmental condition. Each basic event carries a failure rate (or a fixed probability) and an exposure time, and those numbers, combined through the gates above it, produce the probability of the top event. In Safety Lab Aero, basic-event rates can come from piece-part FMEA rows or the component library.</p><h3>What is a dynamic fault tree?</h3><p>A dynamic fault tree adds gates whose outcome depends on the order or timing of failures, not just on which failures occur. The common dynamic gates are PAND (priority AND, where inputs must fail in sequence), SPARE (a spare takes over when the primary fails), and FDEP (a trigger event forces its dependent events to fail). Static gates cannot express these behaviors, so dynamic trees are quantified by simulation rather than by cut sets. Safety Lab Aero supports PAND, SPARE and FDEP with a Monte Carlo simulator.</p><h3>Does Safety Lab Aero compute exact top-event probability or just the cut-set upper bound?</h3><p>It computes the top-event probability directly and shows the minimal-cut-set upper bound alongside it for reference. The direct result is what you need when basic events repeat across cutsets or when common-cause coupling is present, where the upper bound is no longer a good approximation.</p><h3>Can it handle dynamic fault trees?</h3><p>Yes. PAND, SPARE and FDEP gates are supported, with a Monte Carlo simulator that samples failure times and honors time-ordered semantics for dynamic behavior.</p><h3>Does the fault tree connect to FMEA and requirements?</h3><p>Yes. Piece-part FMEA modes feed basic-event rates, the component library sources failure data, and safety requirements derive from the tree: all kept in one connected model so a change in one place flags what it affects elsewhere.</p>
 <div class="cta-band">
   <h2>See it on your own analysis</h2>
   <p>Safety Lab Aero keeps functions, hazards, fault trees, FMEA, common-cause, requirements and verification in one connected model, from FHA to a certification-ready evidence package.</p>

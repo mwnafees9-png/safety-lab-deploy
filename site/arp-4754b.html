@@ -28,7 +28,7 @@
       "@id": "https://safetylabaero.com/arp-4754b#webpage",
       "url": "https://safetylabaero.com/arp-4754b",
       "name": "ARP 4754B Software & DAL Allocation | Safety Lab Aero",
-      "description": "Allocate Development Assurance Levels top-down under ARP 4754B, with the \u00a75.4 AND-gate options, external-source linkage and automatic sibling rebalancing \u2014 connected to your fault trees and requirements.",
+      "description": "Allocate Development Assurance Levels top-down under ARP 4754B, with the §5.4 AND-gate options, external-source linkage and automatic sibling rebalancing — connected to your fault trees and requirements.",
       "isPartOf": {
         "@id": "https://safetylabaero.com/#software"
       },
@@ -65,10 +65,18 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "Does Safety Lab Aero support the ARP 4754B \u00a75.4 AND-gate options?",
+          "name": "What does ARP 4754B cover?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Yes \u2014 Options 1, 2 and 3 are supported for AND gates, including a carrier-child designation for Option 1, with siblings rebalancing automatically to honor the parent budget."
+            "text": "SAE ARP 4754B, \"Guidelines for Development of Civil Aircraft and Systems,\" is the 2023 revision of the development assurance standard. It covers the development planning, requirements capture and validation, verification, configuration management and process assurance for aircraft and systems, and it defines how development assurance levels (FDAL for functions, IDAL for items) are assigned from the severity of the failure conditions found in the ARP 4761A safety assessment. The two standards are written to be used together."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does Safety Lab Aero support the ARP 4754B §5.4 AND-gate options?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, Options 1, 2 and 3 are supported for AND gates, including a carrier-child designation for Option 1, with siblings rebalancing automatically to honor the parent budget."
           }
         },
         {
@@ -128,7 +136,7 @@
 <h2>From function to item</h2>
 <p>ARP 4754B is a two-level story: aircraft functions realized by systems, systems realized by items. Safety Lab Aero mirrors that: system functions trace up to aircraft functions, system failure conditions trace up to aircraft failure conditions, and development-assurance allocation stays traceable from the aircraft function down to the line-replaceable unit.</p>
 
-<h2>Frequently asked questions</h2><h3>Does Safety Lab Aero support the ARP 4754B §5.4 AND-gate options?</h3><p>Yes, Options 1, 2 and 3 are supported for AND gates, including a carrier-child designation for Option 1, with siblings rebalancing automatically to honor the parent budget.</p><h3>What is the difference between FDAL and IDAL?</h3><p>FDAL is the functional development assurance level assigned to a function; IDAL is the item development assurance level assigned to the hardware or software item that implements it. Safety Lab Aero carries both and keeps them traceable from aircraft function to item.</p>
+<h2>Frequently asked questions</h2><h3>What does ARP 4754B cover?</h3><p>SAE ARP 4754B, "Guidelines for Development of Civil Aircraft and Systems," is the 2023 revision of the development assurance standard. It covers the development planning, requirements capture and validation, verification, configuration management and process assurance for aircraft and systems, and it defines how development assurance levels (FDAL for functions, IDAL for items) are assigned from the severity of the failure conditions found in the ARP 4761A safety assessment. The two standards are written to be used together.</p><h3>Does Safety Lab Aero support the ARP 4754B §5.4 AND-gate options?</h3><p>Yes, Options 1, 2 and 3 are supported for AND gates, including a carrier-child designation for Option 1, with siblings rebalancing automatically to honor the parent budget.</p><h3>What is the difference between FDAL and IDAL?</h3><p>FDAL is the functional development assurance level assigned to a function; IDAL is the item development assurance level assigned to the hardware or software item that implements it. Safety Lab Aero carries both and keeps them traceable from aircraft function to item.</p>
 <div class="cta-band">
   <h2>See it on your own analysis</h2>
   <p>Safety Lab Aero keeps functions, hazards, fault trees, FMEA, common-cause, requirements and verification in one connected model, from FHA to a certification-ready evidence package.</p>
