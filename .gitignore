@@ -30,3 +30,4 @@ screenshot-*.jpg
 *.lic
 license_signing_key*
 *.license.json
+supabase/.temp/

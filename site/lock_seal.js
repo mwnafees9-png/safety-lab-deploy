@@ -88,7 +88,18 @@
     // ------------------------------------------ gate content scoping (L1)
     // THE CONTRACT — what each gate's seal covers. Deterministic, documented,
     // re-derivable: JSON.stringify of the stores below, in this order.
-    function _g(name) { try { return (0, eval)('typeof ' + name + ' !== "undefined" ? ' + name + ' : null'); } catch (_) { return null; } }
+    // S5 (14 Sep 2026): read the live store through SLEnv (rule 5), NOT eval. eval is blocked by the
+    // app CSP (no unsafe-eval), so the old eval-only _g returned null for every store and the seal
+    // hashed nothing — a locked gate's content check was meaningless. SLEnv.get resolves the real
+    // binding (its own SLStores fallback covers every sealed store); eval stays only for a non-CSP
+    // test harness with no SLEnv.
+    function _g(name) {
+        try {
+            var E = (typeof SLEnv !== 'undefined') ? SLEnv : (typeof window !== 'undefined' ? window.SLEnv : null);
+            if (E && typeof E.get === 'function') { var v = E.get(name); if (v !== undefined) return v; }
+        } catch (_) {}
+        try { return (0, eval)('typeof ' + name + ' !== "undefined" ? ' + name + ' : null'); } catch (_) { return null; }
+    }
     function _acTrees(verifies) {
         return (((typeof ftaPages !== 'undefined' ? ftaPages : []) || []))
             .filter(p => p && p.treeLevel !== 'system' && p.treeLevel !== 'standalone' && !!p.verifies === verifies);
