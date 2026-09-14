@@ -155,5 +155,15 @@ console.log('\n[5] no external font hot-links on any page');
   check('no site/*.html references fonts.googleapis / fonts.gstatic (' + glob.length + ' pages)', offenders.length === 0, offenders.join(', '));
 }
 
+// ---- [6] trust page tells the truth about training (S6) --------------------------
+console.log('\n[6] trust.html does not claim it may train on customer content');
+{
+  const trust = S('trust.html');
+  check('no "may be used to train / improve our models / opt out" claim',
+    !/may be used to train|improve our models|opt out at any time/i.test(trust));
+  check('states plainly that customer content is never used for training',
+    /never train on your content|never uses your projects[\s\S]{0,120}train/i.test(trust));
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exitCode = fail ? 1 : 0;
