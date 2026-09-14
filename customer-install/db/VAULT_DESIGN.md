@@ -13,7 +13,7 @@ So no client, not even the owner, can read a secret back. Portable plain-Postgre
 
 ## Phases
 - [x] **1. Schema + access model** — `07_user_secrets_vault.sql`, proven on local Postgres. NOT applied to any live DB yet.
-- [ ] **2. Real-auth proof on a throwaway Supabase** — apply the migration to a fresh Supabase, test the functions with real JWTs (needs the ~$10/mo throwaway project, like the customer-hosted proof).
+- [x] **2. Real-auth proof on a throwaway Supabase** — DONE 14 Sep on the existing throwaway yiisexbngnjakkqkmctw (safety-lab-staging-stage3): migration applied, all vault checks passed with REAL authenticated/service_role roles and real auth.uid() (save/delete via functions, no raw table read/write, status hides the value, cross-user isolation, service_role reads). Test rows cleaned up.
 - [ ] **3. App write path** (safety-lab-deploy) — AI-key entry (bindings_modules) and Jama connect (live_bridge) call `save_secret`/`delete_secret`/`my_secrets_status` instead of localStorage; UI shows "saved" from status. Fallbacks: browser-only door → local secure store; desktop → OS keychain (with S26).
 - [ ] **4. Server read path** — Jama bridge (worker.js) reads the user's `jama_token` via service_role using the caller's JWT, builds the Basic auth server-side (browser stops sending it). AI proxy (safety-lab-proxy-deploy) authenticates the user and reads their AI key from the vault for the BYO path.
 - [ ] **5. customer-install kit + prod** — ship `07_user_secrets_vault.sql` in customer-install/db and apply to prod, staging-proven first.
