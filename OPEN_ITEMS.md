@@ -8,6 +8,33 @@ Rationale for the design decisions behind most of these lives in
 and the single ordered build list), `UPGRADES_Requirement_Bucketing.md` (U-1 … U-7) and
 `BUILD_SPEC_Structured_Nodes_and_Bucketing.md`.
 
+## 14 Sep 2026 — LIVE + CODE RECONCILIATION (Waqas: "confirm from the live app and code, what's built and what is not"). Full evidence table in `BUILD_STATE_2026-09-14.md`.
+
+Checked every open entry against the running site, the three repos (safety-lab-deploy, -proxy-deploy, -desktop), the migrations, and HANDOFF. Corrections to this register:
+
+**Now CLOSED (were still listed open below — verified built):**
+- S1 membership hole — migrations 20260905/20260907 x3, applied and verified live 5 Sep.
+- S2 MFA — auth_gate step-up ON unless SL_MFA_REQUIRED===false; live page has the flag unset. (Server-side AAL enforcement not separately confirmed — see BUILD_STATE §3.)
+- S3 ITAR fences — commits 65c185a, e7275ed, a0d6c86 (ONE fence at the AI choke point; chat-lane guard retired; itar-cloud refused; answer cache honours the flag); regression_controlled_ai_fences 36 checks.
+- S12 served-tree leak — build.sh allowlist; stale artefacts out of the served tree. (DDL/migration-capture half still open.)
+- S19–S21 customer-hosted — see the superseded note at those entries.
+- S23 desktop sign-in bypass — auth_gate Electron bypass gone; desktop signs in at the gate.
+- A12 data half — consumedBySystems read by cea_graph and carried in demo data. (Write-back path still open.)
+- H-8b — erase_my_account / erase_project / verify chain fns are in migrations 0005/0006/0008.
+
+**Confirmed STILL OPEN and visible live today (highest signal):**
+- S4 — unknown /app/<path> serves the app with NO security headers (only /app/ and / carry them).
+- S6 — trust.html still says "customer content may be used to improve our models" (and elsewhere "no training") — it contradicts itself.
+- S10 — notify-feedback and notify-invite accept any bearer; the other four check a secret.
+- R10 — the app page still hot-links fonts.googleapis (2 links; landing 4).
+- S5 audit writer (S7) not written; S8 creds still in localStorage; S5 sealed baselines still use eval.
+
+**Desktop (safety-lab-desktop): all update/hardening infra is WIRED but inert —**
+- S24 signed updates: AUTO_UPDATE_SIGNED=false; notarize.js + release.sh + package.json ready, waiting on a code-signing CERTIFICATE only Waqas can procure (see BUILD_STATE §S24).
+- S25 contextIsolation:false on the app window (gate/settings windows are isolated); notarize+hardenedRuntime configured.
+- S26 config.json plaintext; the bundled app is web 0e0d3f1 (helpers 2.98) — THREE web releases behind: it predates R18 (save/sync data-loss fix), per-user undo and all of R19. cloud_writer.js is in the bundle; error_watch.js is not.
+- S27 no git remote (4 commits).
+
 ## Governing design decisions (rescued 5 Sep 2026 from `ROADMAP_Process_Layer.md`, which was scrapped)
 
 Written 2 Jul 2026 against v61.00. Waqas, 5 Sep: "scrap the road map." Its PHASE LIST was stale —
