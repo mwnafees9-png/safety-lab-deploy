@@ -29,7 +29,8 @@ Checked every open entry against the running site, the three repos (safety-lab-d
 - S6 — DONE + LIVE (dbfd458, verified: /trust reads 'never train on your content', old claim gone). trust.html now states we never use customer content to train/fine-tune any model; the self-contradiction is gone. Pinned in regression_marketing_routes. Deploys via ship.sh.
 
 **Confirmed STILL OPEN and visible live today (highest signal):**
-- S5 sealed baselines still read stores via eval; S7 no audit writer; S8 creds still in localStorage. (Cluster 2.)
+- S5 — DONE (505cd65, wall 309/0/0). lock_seal now reads sealed stores via SLEnv (CSP-safe) not eval; the seal hashed nothing before. Behavioural test regression_seal_content (7). Deploys via ship.sh.
+- S7 (no audit-log writer) and S8 (credentials in localStorage) still open. NOTE: S7 is really the S13 enterprise activity-log build (hash-chained rows, app + gateway writers, RLS) — a large multi-part effort, belongs with the enterprise block, not a quick fix. S8 needs an approach ruling (credential storage strategy).
 
 **Desktop (safety-lab-desktop): all update/hardening infra is WIRED but inert —**
 - S24 signed updates: INDEPENDENT signed-manifest lock BUILT 14 Sep (desktop 68d79e5, update_verify.js, wall 106/0); still needs Waqas keygen+paste and a native cert. See DESKTOP_SIGNING_CHECKLIST.md.
