@@ -22,11 +22,11 @@ Checked every open entry against the running site, the three repos (safety-lab-d
 - A12 data half — consumedBySystems read by cea_graph and carried in demo data. (Write-back path still open.)
 - H-8b — erase_my_account / erase_project / verify chain fns are in migrations 0005/0006/0008.
 
-**DONE 14 Sep 2026 (this session, committed; deploy pending):**
-- S4 — DONE (cf006e8). Worker now owns the SPA fallback: assets not_found_handling 'none', a missing /app/<file> is a real 404 with the hardening headers, an extensionless deep link gets the shell via serveHtml (CSP + headers), every asset stamped nosniff/frame/HSTS. Behavioural test regression_app_headers (16). Deploys via ship.sh.
+**DONE 14 Sep 2026 — S4/S6/R10 DEPLOYED + VERIFIED LIVE (via ship.sh); S10 committed, its own `supabase functions deploy` + a real-signin check still to run:**
+- S4 — DONE + LIVE (cf006e8, verified in-browser: unknown /app path now carries all headers, a missing .js is a real 404). Worker now owns the SPA fallback: assets not_found_handling 'none', a missing /app/<file> is a real 404 with the hardening headers, an extensionless deep link gets the shell via serveHtml (CSP + headers), every asset stamped nosniff/frame/HSTS. Behavioural test regression_app_headers (16). Deploys via ship.sh.
 - S10 — DONE (e7dcbe2). CORRECTION to the earlier note here: it was the four DB-webhook functions (notify-signin/-signup/-expiry/-review) that accepted any Bearer >= 16 chars; notify-feedback/-invite already verify a real user JWT and were fine. The four now verify the caller's token equals SUPABASE_SERVICE_ROLE_KEY in constant time (the triggers/cron send exactly that), fail closed. regression_notify_auth (42). DEPLOYS SEPARATELY via `supabase functions deploy`; verify a real sign-in still emails after.
-- R10 — DONE (cf006e8). Google Fonts <link>/preconnect removed from all 12 pages; pinned in regression_marketing_routes. Deploys via ship.sh.
-- S6 — DONE (dbfd458, Waqas ruled 14 Sep: never train, period). trust.html now states we never use customer content to train/fine-tune any model; the self-contradiction is gone. Pinned in regression_marketing_routes. Deploys via ship.sh.
+- R10 — DONE + LIVE (cf006e8, verified: 0 google-font refs served). Google Fonts <link>/preconnect removed from all 12 pages; pinned in regression_marketing_routes. Deploys via ship.sh.
+- S6 — DONE + LIVE (dbfd458, verified: /trust reads 'never train on your content', old claim gone). trust.html now states we never use customer content to train/fine-tune any model; the self-contradiction is gone. Pinned in regression_marketing_routes. Deploys via ship.sh.
 
 **Confirmed STILL OPEN and visible live today (highest signal):**
 - S5 sealed baselines still read stores via eval; S7 no audit writer; S8 creds still in localStorage. (Cluster 2.)
