@@ -39,6 +39,15 @@ Checked every open entry against the running site, the three repos (safety-lab-d
 - S26 config.json plaintext; the bundled app is web 0e0d3f1 (helpers 2.98) — THREE web releases behind: it predates R18 (save/sync data-loss fix), per-user undo and all of R19. cloud_writer.js is in the bundle; error_watch.js is not.
 - S27 no git remote (4 commits).
 
+## 14 Sep 2026 (evening) — SECOND RECONCILIATION, verified live + across all three repos
+
+- **S5 is DEPLOYED and LIVE.** The register said "deploys via ship.sh" and the last note said not yet shipped. Checked the served file: `lock_seal.js?v=1.0` on safetylabaero.com/app carries the minified `_g` that reads `SLEnv` first. Sealed baselines hash real content in production now. Nothing left on S5.
+- **NO REPO HAS A GIT REMOTE.** S27 was filed as a desktop-only problem. It is not: `safety-lab-deploy`, `safety-lab-desktop` and `safety-lab-proxy-deploy` all report an empty `git remote -v`. The entire product — web app, desktop shell, AI proxy, the customer install kit, every migration — exists on exactly one Mac, in three working copies, with no off-machine copy of the history. A disk failure loses the company. This is the cheapest item on this register and the most expensive one to skip: one private remote per repo and three pushes.
+- **safety-lab-proxy-deploy has an uncommitted `wrangler.jsonc`.** Check and commit or revert.
+- **customer-install carries two untracked files** (SL-DG-0001 Deployment and Setup Guide v2.0 .docx/.pdf, written 14 Sep) — commit them with the guide work.
+- **SL-DG-0001 is now Rev 2.0** (Deployment and Setup Guide): adds the desktop application, the two AI-key paths, a data-residency table for the three ways to run it, and team setup; reformatted to the white-paper family spec. Status Draft. HOLD before it reaches Radia: (a) R7, the live AI round-trip, has still never been run; (b) it tells Windows users to run an installer that has not been built. Both are listed below.
+- **CODE FINDING behind the guide's section 15 (per-user AI keys):** on a customer's own server, and in the desktop app, a personal Anthropic key pasted into Advanced settings CANNOT work by design — the desktop egress allowlist only admits the configured backend and AI endpoint, and an unconfigured AI refuses before the send. Bring-your-own-key is a trial-cloud path only. This is correct behaviour and is now documented, but it means the customer-deployed proxy is the ONLY AI path for a real install, which raises the stakes on R7.
+
 ## Governing design decisions (rescued 5 Sep 2026 from `ROADMAP_Process_Layer.md`, which was scrapped)
 
 Written 2 Jul 2026 against v61.00. Waqas, 5 Sep: "scrap the road map." Its PHASE LIST was stale —
