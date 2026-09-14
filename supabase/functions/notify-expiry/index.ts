@@ -259,11 +259,26 @@ function digestEmail(upcoming: any[], lapsed: any[], warned: any[]) {
 }
 
 // ---------------------------------------------------------------------------
+
+// S10 (14 Sep 2026): this function is invoked ONLY by a database trigger / cron that sends the
+// project service-role key as the Bearer token. Verify it in constant time. The previous check
+// accepted ANY Bearer of 16+ characters, so anyone who knew the URL could trigger it.
+function _ctEq(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length || a.length === 0) return false;
+  let diff = 0; for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+function _authorizedBySvc(authHeader: string): boolean {
+  if (!SERVICE_ROLE_KEY) return false;                 // fail closed if the key is not injected
+  const m = /^Bearer\s+(.+)$/.exec(authHeader ?? '');
+  return !!m && _ctEq(m[1].trim(), SERVICE_ROLE_KEY);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return jsonResponse(405, { error: 'method not allowed' });
 
   const auth = req.headers.get('authorization') ?? '';
-  if (!auth.startsWith('Bearer ') || auth.length < 16) {
+  if (!_authorizedBySvc(auth)) {
     return jsonResponse(401, { error: 'unauthorized' });
   }
 
