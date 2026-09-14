@@ -112,6 +112,22 @@ async function serveHtml(respPromise, opts) {
     return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
 }
 
+// Stamp the hardening headers (not the CSP — that is for documents) onto any non-document response:
+// static assets and the 404s below. Defense in depth so nothing served from our origin is missing
+// nosniff / frame / HSTS. (14 Sep 2026, S4.)
+function withHardening(r) {
+    const h = new Headers(r.headers);
+    for (const [k, v] of Object.entries(SEC_HEADERS)) h.set(k, v);
+    return new Response(r.body, { status: r.status, statusText: r.statusText, headers: h });
+}
+// A real 404 that still carries the hardening headers. Until now a missing /app/<path> fell to the
+// assets binding's single-page-application handling and came back as 200 + the app shell with NO
+// headers (S4). The worker now owns the fallback (assets not_found_handling is "none") and returns
+// this instead — or the shell, through serveHtml, for a genuine extensionless deep link.
+function notFound() {
+    return new Response('Not found', { status: 404, headers: Object.assign({ 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }, SEC_HEADERS) });
+}
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -331,7 +347,15 @@ export default {
             const stripped = path.substring('/app'.length);  // keeps the leading /
             const rewritten = new URL(stripped, url.origin);
             rewritten.search = url.search;
-            return env.ASSETS.fetch(rewritten);
+            const assetResp = await env.ASSETS.fetch(rewritten);
+            if (assetResp.status === 404) {
+                // assets not_found_handling is "none", so a miss is a real 404 here (not the shell).
+                // A missing path WITH a file extension is a genuine 404; an extensionless deep link
+                // gets the app shell (SPA behaviour) through the header chokepoint.
+                if (/\.[a-z0-9]+$/i.test(stripped)) return notFound();
+                return serveHtml(env.ASSETS.fetch(new URL('/index.html', url.origin)), { noStore: true });
+            }
+            return withHardening(assetResp);
         }
 
         // -----------------------------------------------------------------
@@ -339,6 +363,9 @@ export default {
         // any other static asset that the marketing page or crawlers ask
         // for) — pass through to the assets binding as-is.
         // -----------------------------------------------------------------
-        return env.ASSETS.fetch(request);
+        {
+            const assetResp = await env.ASSETS.fetch(request);
+            return assetResp.status === 404 ? notFound() : withHardening(assetResp);
+        }
     }
 };

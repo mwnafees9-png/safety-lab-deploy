@@ -46,6 +46,6 @@
     // Fallback only kicks in when the Worker delegates to
     // env.ASSETS.fetch() and no asset matches — keeps SPA deep links
     // working under /app/.
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "none"
   }
 }

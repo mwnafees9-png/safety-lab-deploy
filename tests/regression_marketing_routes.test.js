@@ -145,5 +145,15 @@ check('BOOKING_URL is a named constant, so a regenerated id is a one-line fix',
 check('the booking URL keeps its anonymous param',
   /BOOKING_URL = '[^']*[?&]anonymous(&|')/.test(w));
 
+// ---- [5] no external font hot-links (R10) --------------------------------------
+// Google Fonts links/preconnects leak a request to Google on any self-hosted (ITAR) install and
+// are CSP-blocked on the hosted site anyway. Pinned so they cannot return.
+console.log('\n[5] no external font hot-links on any page');
+{
+  const glob = require('fs').readdirSync(path.join(__dirname, '..', 'site')).filter(f => f.endsWith('.html'));
+  const offenders = glob.filter(f => /fonts\.googleapis|fonts\.gstatic/.test(S(f)));
+  check('no site/*.html references fonts.googleapis / fonts.gstatic (' + glob.length + ' pages)', offenders.length === 0, offenders.join(', '));
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exitCode = fail ? 1 : 0;
