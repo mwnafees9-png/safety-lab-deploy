@@ -30,7 +30,7 @@ Checked every open entry against the running site, the three repos (safety-lab-d
 - S5 audit writer (S7) not written; S8 creds still in localStorage; S5 sealed baselines still use eval.
 
 **Desktop (safety-lab-desktop): all update/hardening infra is WIRED but inert —**
-- S24 signed updates: AUTO_UPDATE_SIGNED=false; notarize.js + release.sh + package.json ready, waiting on a code-signing CERTIFICATE only Waqas can procure (see BUILD_STATE §S24).
+- S24 signed updates: INDEPENDENT signed-manifest lock BUILT 14 Sep (desktop 68d79e5, update_verify.js, wall 106/0); still needs Waqas keygen+paste and a native cert. See DESKTOP_SIGNING_CHECKLIST.md.
 - S25 contextIsolation:false on the app window (gate/settings windows are isolated); notarize+hardenedRuntime configured.
 - S26 config.json plaintext; the bundled app is web 0e0d3f1 (helpers 2.98) — THREE web releases behind: it predates R18 (save/sync data-loss fix), per-user undo and all of R19. cloud_writer.js is in the bundle; error_watch.js is not.
 - S27 no git remote (4 commits).
@@ -1334,10 +1334,7 @@ page say. Order: S1–S6 (defects), then S7–S12, then S13–S18 (Enterprise bu
   without a licence is PAYWALLED.** The sign-in notification machinery already exists
   (`notify-signin`) — desktop never triggers it because desktop never signs in, so a real sign-in
   delivers both the notification and the paywall as consequences rather than as new features.
-- **S24 — The update channel is unsigned (do this one first).** Auto-update is on with
-  `autoDownload` / `autoInstallOnAppQuit`, verified by a SHA-512 fetched from the same R2 host as
-  the update itself — no code signature. Whoever controls that host can push code to every desktop
-  user. Smaller than S23 and higher consequence.
+- **S24 — Update channel signing. INDEPENDENT LOCK BUILT 14 Sep 2026 (safety-lab-desktop 68d79e5); native cert still needed.** Was: auto-update verified only by a SHA-512 from the same R2 host, so whoever controls that host could push code. BUILT: an independent ECDSA P-256 signature over the update manifest, verified in-app (update_verify.js) against a baked-in public key before any manifest is believed — a compromised host cannot forge it. Fail-closed, domain-separated from the licence key, mutation-proven (tests/update_verify.test.js 20, desktop wall 106/0). publish-desktop.sh signs each manifest and refuses to publish unsigned. TWO THINGS LEFT: (a) Waqas runs `node tools/update-signing/sign-manifest.mjs keygen` and pastes the printed public key into update_verify.js (private key stays on his Mac) — same dance as the licence key; (b) a native code-signing CERTIFICATE (Apple Developer ID + notarization for mac; Windows Authenticode) to flip AUTO_UPDATE_SIGNED and enable silent auto-install with the OS verifying the payload too. Procurement steps in DESKTOP_SIGNING_CHECKLIST.md. Claude cannot handle either credential.
 - **S25 — Electron shell posture.** `contextIsolation:false` on the main window (with a "harden
   before ship" comment carried since v1), `sandbox:false`, **no CSP anywhere**, DevTools in the
   production menu, and `will-navigate` handing any non-`file://` scheme to `shell.openExternal`.
