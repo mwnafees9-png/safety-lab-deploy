@@ -6,7 +6,7 @@
  * clause to match." The EULA's old §5 "Model Development" paragraph granted a
  * broad, sublicensable right to train and fine-tune on Customer Data — a right
  * the product deliberately does not exercise (31 Jul ruling: no training;
- * learning is RETRIEVAL, per-browser, never weights). SL-EULA-0003-A replaces
+ * learning is RETRIEVAL, per-browser, never weights). SL-EULA-0004-A replaces
  * it with "Personalization; No Model Training". This suite pins BOTH sides:
  *
  *  [1] the EULA says only what the product does (and the broad grant is gone);
@@ -51,8 +51,8 @@ check('§8 aggregated-statistics no longer defers to a training license',
   eula.includes('This paragraph does not permit any use of Customer Data for model training or fine-tuning, which Section 5 excludes'));
 check('any future training use requires a separate express OPT-IN agreement',
   eula.includes('separate, express, opt-in written agreement'));
-check('EULA_VERSION bumped to SL-EULA-0003-A (users re-accept)',
-  /var EULA_VERSION = 'SL-EULA-0003-A';/.test(eula) && !eula.includes('SL-EULA-0002-A'));
+check('EULA_VERSION bumped to SL-EULA-0004-A (users re-accept)',
+  /var EULA_VERSION = 'SL-EULA-0004-A';/.test(eula) && !eula.includes('SL-EULA-0002-A'));
 check('the clause claims only controls that EXIST: count, cap, clear',
   eula.includes('counted, capped (including set to zero), or cleared') &&
   /ai-memory-count/.test(helpers) &&                 // the running count in Settings
@@ -144,7 +144,7 @@ check('the assembler call feeds the request, keyed by feature',
 
 // ---- [6] wiring -------------------------------------------------------------
 console.log('\n[no-train] wiring');
-check('index.html pins eula_modal 1.2.0', idx.includes('eula_modal.js?v=1.2.0'));
+check('index.html pins eula_modal 1.3.0', idx.includes('eula_modal.js?v=1.3.0'));
 check('EULA_VERSION and the exported rev still agree',
   (() => { const v = (eula.match(/EULA_VERSION = '([^']+)'/) || [])[1]; const r = (eula.match(/rev: '([^']+)'/) || [])[1]; return !!v && !!r && v.endsWith('-' + r); })());
 

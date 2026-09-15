@@ -92,30 +92,24 @@
     <p class="sub">Safety Lab Aero, Inc., a Delaware corporation · safetylabaero.com</p>
     <p class="sub">The agreements below govern access to and use of the Safety Lab Aero software and hosted service. By creating an account, signing in, or using the software, you agree to them.</p>
     <div class="toc">
-      <a href="#eula">End User License Agreement</a>
-      <a href="#license">Software License &amp; Subscription Agreement</a>
+      <a href="#eula">End User License and Subscription Agreement</a>
     </div>
 
     <section class="doc" id="eula">
-      <h2>End User License Agreement</h2>
-      <p class="docmeta" id="eula-meta">SL-EULA-0003 · Rev A</p>
+      <h2>End User License and Subscription Agreement</h2>
+      <p class="docmeta" id="eula-meta">SL-EULA-0004 · Rev A</p>
       <div class="agreement" id="eula-body"><p class="sub">Loading…</p></div>
     </section>
 
-    <section class="doc" id="license">
-      <h2>Software License &amp; Subscription Agreement</h2>
-      <p class="docmeta" id="license-meta">SL-LICENSE-0001 · Rev C</p>
-      <div class="agreement" id="license-body"><p class="sub">Loading…</p></div>
-    </section>
   </main>
   <footer class="legal">
     <div class="wrap">&copy; <span id="year">2026</span> Safety Lab Aero, Inc. · <a href="/">safetylabaero.com</a> · All rights reserved.</div>
   </footer>
 
   <!-- The agreement text is the SAME source the in-app acceptance modals use:
-       these scripts expose window.SL_EULA / window.SL_LICENSE (they do not auto-display). -->
-  <script src="/eula_modal.js?v=1.2.0"></script>
-  <script src="/license_modal.js?v=1.0.7"></script>
+       this script exposes window.SL_EULA (it does not auto-display). SL-LICENSE-0001 was
+       withdrawn on 15 Sep 2026 and folded into SL-EULA-0004: one agreement, one acceptance. -->
+  <script src="/eula_modal.js?v=1.3.0"></script>
   <script>
     (function () {
       try { document.getElementById('year').textContent = new Date().getFullYear(); } catch (e) {}
@@ -125,7 +119,6 @@
         else if (el) el.innerHTML = '<p class="sub">This agreement is available in the application. If it does not load, please <a href="mailto:waqas.nafees@safetylabaero.com">contact us</a>.</p>';
       }
       put('eula-body', window.SL_EULA);
-      put('license-body', window.SL_LICENSE);
       function meta(id, obj) {
         try {
           var el = document.getElementById(id);
@@ -133,7 +126,6 @@
         } catch (e) {}
       }
       meta('eula-meta', window.SL_EULA);
-      meta('license-meta', window.SL_LICENSE);
     })();
   </script>
 </body>

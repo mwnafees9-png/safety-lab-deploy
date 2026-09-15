@@ -4412,11 +4412,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Two-factor authentication (TOTP). Born-modular; adds a 2FA section to the
          account panel and a sign-in step-up (AAL2) consumed by auth_gate.js. -->
     <script src="mfa.js?v=1.2" defer></script>
-    <!-- One-time EULA acceptance modal (defines window.SafetyLab.checkEula; called from auth_gate liftGate). -->
-    <script src="eula_modal.js?v=1.2.0" defer></script>
-    <!-- Software License & Subscription Agreement — a SECOND one-time acceptance shown right
-         after the EULA on first sign-in. Must load AFTER eula_modal.js (it chains off checkEula). -->
-    <script src="license_modal.js?v=1.0.7" defer></script>
+    <!-- One-time acceptance modal for the single End User License and Subscription Agreement
+         (defines window.SafetyLab.checkEula; called from auth_gate liftGate). SL-LICENSE-0001 was
+         withdrawn on 15 Sep 2026 and folded into the EULA as SL-EULA-0004; there is ONE gate now.
+         Text is generated from legal/SL-EULA-0004.html by legal/build_agreement.mjs -- never hand-edit. -->
+    <script src="eula_modal.js?v=1.3.0" defer></script>
     <!-- THE LABS golden-thread bus (estate lane) — restored 20 Jul 2026 after the 19 Jul
          index ship unknowingly clobbered the wiring (the trio + suite lived only on the
          Desktop; the container mirror predated them — see HANDOFF lesson). Order matters:

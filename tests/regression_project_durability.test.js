@@ -647,8 +647,8 @@ check('no "System lane" category survives anywhere in the rail',
 // 226 -> 227 (5 Sep 2026): fha_derive.js — escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis (levers 2 + 3).
 // 227 -> 228 (6 Sep 2026): slab_config.js — the ONE backend-config surface + hard-stop egress guard (customer-hosted build; loads first).
 // 228 -> 229 (6 Sep 2026): slab_license.js — offline signed-license verification (ES256; loads right after slab_config).
-// 233 -> 234 (13 Sep 2026, R19): error_watch.js — the ONE global error catcher, loaded right after fn_wrap.js.
-check('script tag count unchanged (234 — …change_journal_sync.js 9 Sep; save_watch.js 13 Sep; error_watch.js 13 Sep)', tags === 234, 'got ' + tags);
+// 233 -> 233 (13 Sep 2026, R19): error_watch.js — the ONE global error catcher, loaded right after fn_wrap.js.
+check('script tag count unchanged (233 — license_modal.js removed 15 Sep when SL-LICENSE-0001 was folded into SL-EULA-0004; …change_journal_sync.js 9 Sep; save_watch.js 13 Sep; error_watch.js 13 Sep)', tags === 233, 'got ' + tags);
   check('HTML comments balanced', (html.match(/<!--/g) || []).length === (html.match(/-->/g) || []).length);
   // Floors, not equality — a later build must not silently serve a stale cached file.
   // COMPONENT-WISE, not parseFloat: `>= 2.40` read as a float is `>= 2.4`, which a stale 2.9

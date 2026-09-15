@@ -148,11 +148,19 @@ declares identity on a node sitting on an aircraft page. Max theoretical movers 
     budget_ledger.js in a sandbox without helpers). Any local wall run must treat a non-zero exit
     as a failure, exactly as ship.sh does, before anything is called green.
 
-28. **Two files are version-locked and never swept: `eula_modal.js` (1.2.0) and
-    `license_modal.js` (1.0.7) (12 Sep 2026).** Their `?v=` pins must equal the exported
-    EULA_VERSION/rev and agree across index.html + legal.html (`regression_eula_gate_chain`,
-    `regression_no_training_guarantee`). Colour sweeps and cache bumps must skip them; if touched,
-    restore with `git show HEAD:"$f" > "$f"` (checkout fails on the device mount).
+28. **The agreement is GENERATED, never hand-edited (15 Sep 2026).** `legal/SL-EULA-0004.html` is
+    the single source of the legal text. `site/eula_modal.js` (pinned 1.3.0) and the desktop's
+    `agreements/eula.html` + `eula.version` are written from it by `node legal/build_agreement.mjs`,
+    which pull-web.sh re-runs on every sync. Edit the source and rebuild; never type into a copy.
+    The `?v=` pin must equal the exported EULA_VERSION/rev and agree across index.html + legal.html.
+    Colour sweeps and cache bumps must skip eula_modal.js; if touched, rebuild rather than restore.
+    WHY: SL-LICENSE-0001 was a SECOND agreement holding its own copy of clauses the EULA also had.
+    On 3 Aug the broad training grant was removed from the EULA and pinned by a test that read only
+    eula_modal.js. The same grant sat in license_modal.js, worded one word differently, and survived
+    six weeks. It was withdrawn on 15 Sep and folded into SL-EULA-0004. There is ONE agreement, ONE
+    acceptance gate, and ONE source file. `regression_agreement_single_source` finds agreement text
+    by SCANNING both repos rather than by a file list, and flags any sentence pairing a training
+    verb with customer data that is not phrased as a refusal.
 
 29. **AI-facing verbiage is never edited outside the eval (Waqas, 12 Sep 2026).** The severity
     rubric, the effect-level vocabulary, prompt and kb_data text are what the AI classifies against;

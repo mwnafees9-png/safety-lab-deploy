@@ -35,7 +35,7 @@ git commit -m "feat(ui): Terminal redesign (app + landing + marketing), severity
 
 What is in it, so the message can be split if preferred: `site/safety_lab.css` (tokens, dark nav, black table heads, serif titles, gradient buttons, severity pills, alias tokens, 2px table borders); `site/index.html` (cache pins, legend chips, cert-basis table); `site/landing.html` (light identity, centering, separators, dropdown, About layout, em dashes, founder card back to "MW"); `site/marketing.css` (new) + 13 marketing pages linking it; `site/seo.css`; `site/auth_gate.js`; helpers_modules (sevPillHtml + 5 sites), and the modules carrying a `_sevPill` shim: asa_triage, budget_ledger, fc_tree_flow, data_ops_modules, cca_models, ffs_module, ram_trace, bindings_modules, event_trees, exposure_case, fta_freq, fault_sim, stpa_panel, bowtie, fta_view_modules, model_checks, fc_variants, hf_severity_badge, misc_fn_modules, safety_lab, severity_axes, gt_thread, zonal_ui, pra_canvas, cma_walkthrough, msg3_zonal, ai_assistant (color map only), ai_loader (pin). New tests: `regression_severity_pills`, plus guard updates in `regression_landing_paginate`, `regression_fha_group`, `regression_fha_derive`. Docs: HANDOFF.md, OPEN_ITEMS.md, WORKING_RULES.md.
 
-Verify: `git status --short | wc -l` returns 0; the two version-locked files `site/eula_modal.js` and `site/license_modal.js` show NO diff (rule 28).
+Verify: `git status --short | wc -l` returns 0; `site/eula_modal.js` shows no diff unless `legal/SL-EULA-0004.html` changed and was rebuilt (rule 28; `license_modal.js` was withdrawn 15 Sep).
 
 ## 2. Desktop app catch-up
 

@@ -46,16 +46,16 @@ check('tier prices are readable', proPrice !== undefined && plusPrice !== undefi
 const money = n => '$' + n.toLocaleString('en-US');
 
 check('EULA states the same Pro price as the tier table',
-  eula.indexOf(money(proPrice) + ' per seat per month') >= 0, 'expected ' + money(proPrice));
+  eula.toLowerCase().indexOf(money(proPrice).toLowerCase() + ' per seat per month') >= 0, 'expected ' + money(proPrice));
 check('EULA states the same Pro+ price as the tier table',
-  eula.indexOf(money(plusPrice) + ' per seat per month') >= 0, 'expected ' + money(plusPrice));
+  eula.toLowerCase().indexOf(money(plusPrice).toLowerCase() + ' per seat per month') >= 0, 'expected ' + money(plusPrice));
 check('EULA does not quote a superseded Pro/Pro+ price',
   eula.indexOf('$299 per seat') < 0 && eula.indexOf('$449 per seat') < 0);
 
 // EDU is free in the tier table; the EULA must not invoice for it.
 if (eduPrice === 0) {
   check('EULA describes EDU as free, matching the tier table',
-    /EDU \\u2014 free|EDU — free/.test(eula), 'EULA still prices EDU');
+    /EDU, free,/.test(eula) && !/\\u2014/.test(eula), "EULA still prices EDU, or carries a raw backslash-u2014 escape");
   check('EULA does not quote the withdrawn $49 EDU price', eula.indexOf('$49 per seat') < 0);
 } else {
   check('EULA states the same EDU price as the tier table',
@@ -98,7 +98,7 @@ check('the proxy repo is checked out beside this one, so the EULA claim can be c
   'safety-lab-proxy-deploy/worker.js not found at ' + proxyPath + ' (' + proxyErr + ') — clone it beside safety-lab-deploy. Until then the EULA sovereign-inference claim is NOT being checked.');
 if (proxy) {
   const itarStillRefused = /itar_not_implemented|itar_unconfigured/.test(proxy);
-  const eulaSaysNotYet = /US-sovereign hosted inference option is planned but not yet available/i.test(eula);
+  const eulaSaysNotYet = /Licensor does not at present operate a United-States-sovereign hosted inference endpoint/i.test(eula);
   check('EULA sovereign-inference claim matches the proxy',
     itarStillRefused === eulaSaysNotYet,
     itarStillRefused
