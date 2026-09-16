@@ -282,9 +282,13 @@ const AiClient = (function(){
                  stop_reason: stopReason, content: [{ type: 'text', text: text }], usage: usage };
     }
 
-    // Anthropic deprecated temperature/top_p/top_k on Opus 4.7+ (e.g. claude-opus-4-8): sending
-    // them returns 400 "temperature is deprecated for this model". Omit (don't retune) for those;
-    // Sonnet/Haiku and Opus ≤4.6 still accept a custom sampling temperature.
+    // Anthropic deprecates temperature/top_p/top_k model family by model family: sending them
+    // returns 400 "temperature is deprecated for this model". Opus 4.7+ was the first (e.g.
+    // claude-opus-4-8); Sonnet 4.6 does it too, observed live on 16 Sep 2026 during the first
+    // customer-path run — every Sonnet-4.6 call sent temperature, took a 400, and was rescued by
+    // the retry below, so the model never received a temperature anyway and each AI call uploaded
+    // its (130 KB) payload twice. Omitting it here changes nothing the model sees; it removes a
+    // guaranteed failed round-trip. Opus <=4.6 and Sonnet <=4.5 still accept one.
     //
     // CONSEQUENCE, established 5 Sep 2026 and worth stating here because it cost
     // three paid measurement runs: the DEFAULT analytical model is
@@ -297,7 +301,38 @@ const AiClient = (function(){
         var m = String(model || '');
         var om = m.match(/opus-(\d+)-(\d+)/i);
         if (om) { var maj = +om[1], min = +om[2]; if (maj > 4 || (maj === 4 && min >= 7)) return false; }
+        var sm = m.match(/sonnet-(\d+)-(\d+)/i);
+        if (sm) { var smaj = +sm[1], smin = +sm[2]; if (smaj > 4 || (smaj === 4 && smin >= 6)) return false; }
         return true;
+    }
+    // The family rules above are a fast path, and a fast path is all they can ever be: they only
+    // recognise ids carrying an "opus-N-N" or "sonnet-N-N" token. On 16 Sep 2026 the customer-path
+    // run drafted an FHA on the HL-1 demo project, whose configured model is claude-fable-5 — no
+    // family token at all — so the predicate said yes, the request took a 400, and the self-heal
+    // retry below rescued it by re-uploading the whole 130 KB payload. Correct output, doubled
+    // upload, on every single call. Widening the family list only moves the goalposts to the next
+    // id nobody predicted, so the retry LEARNS instead: the first 400 records the model id here,
+    // and no later call on this install sends the parameter to it. Cost of an unknown deprecating
+    // model drops from one wasted round-trip per call to one, ever.
+    var _TEMP_DENY_KEY = 'safetyLab.ai.temperatureDeprecated';
+    var _tempDenyMem = null;
+    function _tempDenySet(){
+        if (_tempDenyMem) return _tempDenyMem;
+        _tempDenyMem = {};
+        try {
+            var raw = localStorage.getItem(_TEMP_DENY_KEY);
+            if (raw) { var a = JSON.parse(raw); if (Array.isArray(a)) a.forEach(function (k) { _tempDenyMem[String(k)] = true; }); }
+        } catch (_) {}   // private mode, blocked storage, corrupt value: an empty set is correct
+        return _tempDenyMem;
+    }
+    function _tempDenied(model){ try { return !!_tempDenySet()[String(model || '')]; } catch (_) { return false; } }
+    function _denyTemperature(model){
+        try {
+            var k = String(model || ''); if (!k) return;
+            var set = _tempDenySet(); if (set[k]) return;
+            set[k] = true;
+            try { localStorage.setItem(_TEMP_DENY_KEY, JSON.stringify(Object.keys(set))); } catch (_) {}
+        } catch (_) {}
     }
     // 6 Sep 2026 — THE controlled-data fence for every AI request that leaves the
     // browser. This function is the one place chat, drafts, batch, report prose, the
@@ -411,7 +446,7 @@ const AiClient = (function(){
         // quietly is not. Record both the value asked for and whether it landed,
         // so a run's own audit trail answers the question.
         const _tempAsked = (typeof opts.temperature === 'number') ? opts.temperature : 0.2;
-        const _tempApplied = _modelAcceptsTemperature(model);
+        const _tempApplied = _modelAcceptsTemperature(model) && !_tempDenied(model);
         if (_tempApplied) body.temperature = _tempAsked;
         if (opts.system) body.system = systemBlocks(opts.system, opts.cacheBreaks);
         const _cached = Array.isArray(body.system) ? (body.system.length - 1) : 0;   // markers on the wire
@@ -458,6 +493,7 @@ const AiClient = (function(){
                 let ej = {}; try { ej = await response.json(); } catch (_) {}
                 const em = (ej.error && ej.error.message) || ('HTTP ' + response.status);
                 if (response.status === 400 && /temperature/i.test(em)) {
+                    _denyTemperature(model);   // so this install never pays this round-trip for this model again
                     delete body.temperature;
                     response = await _send(body);   // retry once, without the sampling param
                 } else {

@@ -106,7 +106,13 @@ if (m) accepts = new Function('return (' + m[0] + ')')();
 check('claude-opus-4-8 (the shipped default) does NOT accept temperature', accepts('claude-opus-4-8') === false);
 check('claude-opus-4-7 does not accept it either', accepts('claude-opus-4-7') === false);
 check('claude-opus-4-6 still accepts it', accepts('claude-opus-4-6') === true);
-check('sonnet still accepts it', accepts('claude-sonnet-4-5') === true);
+check('sonnet 4.5 still accepts it', accepts('claude-sonnet-4-5') === true);
+// 16 Sep 2026 — observed live: claude-sonnet-4-6 returns 400 "temperature is deprecated for this
+// model". The retry rescued the call, so the model never got a temperature either way; the cost was
+// a doubled 130 KB upload on EVERY AI call. The predicate has to know, not the retry.
+check('claude-sonnet-4-6 does NOT accept temperature', accepts('claude-sonnet-4-6') === false);
+check('a future sonnet does not either', accepts('claude-sonnet-5-0') === false);
+check('haiku is untouched', accepts('claude-haiku-4-5-20251001') === true);
 
 check('the client records the temperature it asked for', /_tempAsked/.test(core));
 check('the client records whether it was applied', /_tempApplied/.test(core));
@@ -120,6 +126,49 @@ check('_featureTemp says what is ASKED for, not what the model receives',
       /analytical drafting ASKS for 0\.0/.test(ai));
 check('the false premise in the severity-anchor block is corrected',
       !/The model classifies at temperature > 0, so a condition re-drafted/.test(ai));
+
+
+// ---- the learned deny list --------------------------------------------------------------------
+// 16 Sep 2026, customer-path run: the HL-1 demo project is configured for claude-fable-5, an id
+// carrying neither an "opus-N-N" nor a "sonnet-N-N" token, so the family predicate passed it, the
+// request took a 400 and the self-heal retry re-uploaded 130 KB. Widening the family list would
+// only defer the same failure to the next unforeseen id, so the retry has to REMEMBER. These
+// checks pin that it does: the memory exists, it is consulted before the parameter is attached,
+// the 400 handler writes to it, and it survives a page load.
+console.log('\n[temperature] the retry learns, so an unknown model costs one round-trip, not every one');
+
+check('the family predicate is documented as a fast path only, not the whole rule',
+      /fast path, and a fast path is all they can ever be/.test(core));
+check('claude-fable-5 gets past the family rules (which is the point of the deny list)',
+      accepts('claude-fable-5') === true);
+check('a persisted deny list exists', /_TEMP_DENY_KEY = 'safetyLab\.ai\.temperatureDeprecated'/.test(core));
+check('the parameter is attached only when BOTH the family rules and the deny list allow it',
+      /const _tempApplied = _modelAcceptsTemperature\(model\) && !_tempDenied\(model\);/.test(core));
+check('the 400 handler records the model before retrying',
+      /_denyTemperature\(model\);[\s\S]{0,120}delete body\.temperature;/.test(core));
+
+// Execute the real helpers against a stub localStorage: the memory has to persist, and it has to
+// survive storage being unavailable (private mode, blocked site data) without taking the app down.
+const helpers = core.match(/var _TEMP_DENY_KEY[\s\S]*?\n    function _denyTemperature\(model\)\{[\s\S]*?\n    \}/);
+check('the helpers are extractable as a unit', !!helpers);
+if (helpers) {
+  const mk = (store) => new Function('localStorage', helpers[0] + '; return { denied: _tempDenied, deny: _denyTemperature };')(store);
+  const mem = {};
+  const ls = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); } };
+  const a = mk(ls);
+  check('an unknown model is not denied to begin with', a.denied('claude-fable-5') === false);
+  a.deny('claude-fable-5');
+  check('after a 400 it is denied', a.denied('claude-fable-5') === true);
+  check('other models are unaffected', a.denied('claude-sonnet-4-5') === false);
+  const b = mk(ls);   // a fresh page load, same storage
+  check('the memory survives a reload, so the cost is once per model per install, not once per session',
+        b.denied('claude-fable-5') === true);
+  const boom = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+  const c = mk(boom);
+  let threw = false;
+  try { c.deny('claude-fable-5'); c.denied('claude-fable-5'); } catch (_) { threw = true; }
+  check('storage being blocked degrades to the family rules, it does not throw', threw === false);
+}
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

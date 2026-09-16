@@ -17,9 +17,17 @@ const src = fs.readFileSync(path.join(SITE, 'corpus_retrieve.js'), 'utf8');
 const ai = fs.readFileSync(path.join(SITE, 'ai_assistant.js'), 'utf8');
 const idx = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
 
-function world(itar, fetchImpl) {
+// 16 Sep 2026 — corpus_retrieve no longer carries an address of its own. It used to fall back to
+// api.safetylabaero.com whenever none was configured, and CORPUS_ENDPOINT is blank in the shipped
+// install.env, so every self-hosted install sent the first 500 characters of every drafting prompt
+// to Safety Lab in a query string. slab_config.js is the one authority now (it is also what reads
+// the __SLAB_CORPUS_ENDPOINT__ override, so the address lands in SLConfigEgress where the customer
+// can see it). This world therefore has to supply a CONFIGURED corpus, the way a customer who
+// actually wants retrieval would; the unconfigured case is its own check below.
+function world(itar, fetchImpl, corpus) {
     const sb = { console, JSON, Math, String, Array, Promise, encodeURIComponent, fetch: fetchImpl };
     sb.window = sb;
+    sb.SLConfig = Object.freeze({ corpusEndpoint: corpus === undefined ? 'https://corpus.example.test' : corpus });
     vm.createContext(sb);
     vm.runInContext('let projectConfig = ' + JSON.stringify({ isITARControlled: itar }) + ';', sb);
     vm.runInContext(src, sb);
@@ -52,7 +60,20 @@ check('the grounding block is cited-reference framed (authoritative, cite-by-id,
 const wDown = world(false, async () => { throw new Error('net down'); });
 check('corpus down → empty, never a throw (drafting must not block on retrieval)',
   (await wDown.A15_CORPUS.search('x')).length === 0 && (await wDown.A15_CORPUS.groundingBlock('x')) === '');
-check('endpoint overridable for desktop/air-gap (__SLAB_CORPUS_ENDPOINT__)', src.includes('__SLAB_CORPUS_ENDPOINT__'));
+const cfgSrc = fs.readFileSync(path.join(SITE, 'slab_config.js'), 'utf8');
+check('the desktop/air-gap override still exists, now read by the ONE authority',
+  cfgSrc.includes('__SLAB_CORPUS_ENDPOINT__') && cfgSrc.includes('corpusEndpoint:'));
+check('corpus_retrieve reads that authority and carries no address of its own',
+  /window\.SLConfig && window\.SLConfig\.corpusEndpoint/.test(src) &&
+  !/api\.safetylabaero\.com/.test(src.replace(/\/\/[^\n]*/g, '')));
+calls = [];
+const wOff = world(false, okFetch(calls), '');
+check('NO corpus configured = retrieval off, never a fallback to ours (the 16 Sep leak)',
+  (await wOff.A15_CORPUS.search('failure condition')).length === 0 &&
+  (await wOff.A15_CORPUS.groundingBlock('x')) === '' && calls.length === 0);
+check('a configured corpus is the ONLY host contacted',
+  calls.length === 0 && (await world(false, okFetch(calls)).A15_CORPUS.search('x')).length === 2 &&
+  calls.every((u) => u.startsWith('https://corpus.example.test/')), calls.join(' '));
 
 console.log('\n[a15c] the Provider injection');
 check('injection rides Provider.complete beside the memory exemplars, AWAITED and guarded',

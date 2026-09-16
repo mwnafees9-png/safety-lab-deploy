@@ -12,11 +12,18 @@
 (function () {
     'use strict';
 
-    const ENDPOINT = (typeof window !== 'undefined' && window.SLConfig && window.SLConfig.corpusEndpoint)
-        ? String(window.SLConfig.corpusEndpoint).replace(/\/+$/, '')
-        : (typeof window !== 'undefined' && window.__SLAB_CORPUS_ENDPOINT__)
-        ? String(window.__SLAB_CORPUS_ENDPOINT__).replace(/\/+$/, '')
-        : 'https://api.safetylabaero.com';   // path-scoped route to the corpus worker (CSP-allowlisted)
+    // SLConfig is the ONLY authority for this address (slab_config.js 1.3). It supplies the hosted
+    // default on the hosted demo and NOTHING on a customer install, so a blank address means the
+    // corpus is off rather than "ours". This module must never carry a fallback of its own: the one
+    // it used to carry (api.safetylabaero.com) sent the first 500 characters of every drafting
+    // prompt to Safety Lab from self-hosted installs, which is the one thing customer-hosted exists
+    // to prevent. Retrieval is advisory — off simply means drafting proceeds without it.
+    const ENDPOINT = (function () {
+        try {
+            var c = (window.SLConfig && window.SLConfig.corpusEndpoint) || '';
+            return c ? String(c).replace(/\/+$/, '') : '';
+        } catch (_) { return ''; }
+    })();
 
     function _itarBlocked() {
         try { return !!(typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled); }
@@ -24,6 +31,7 @@
     }
 
     async function search(q, k) {
+        if (!ENDPOINT) return [];       // not configured = off, never a silent fallback to ours
         if (_itarBlocked()) return [];
         q = String(q || '').trim().slice(0, 500);
         if (!q) return [];

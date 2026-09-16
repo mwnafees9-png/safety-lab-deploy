@@ -41,6 +41,7 @@
   var HOSTED_KEY = 'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ';
   var HOSTED_AI  = 'https://api.safetylabaero.com/v1/ai';
   var HOSTED_WEB = 'https://safetylabaero.com/app';
+  var HOSTED_CORPUS = 'https://api.safetylabaero.com';   // the method corpus, hosted demo ONLY
 
   function str(v) { return (v == null) ? '' : String(v); }
   function trim(u) { return str(u).replace(/\/+$/, ''); }
@@ -76,7 +77,13 @@
     supabaseUrl: browserOnly ? '' : (rawDbUrl || HOSTED_DB),
     supabaseKey: browserOnly ? '' : (rawDbKey || HOSTED_KEY),
     aiEndpoint:  aiOff ? '' : (browserOnly ? (pointsAtSafetyLab(rawAi) ? '' : rawAi) : (rawAi || HOSTED_AI)),
-    corpusEndpoint: browserOnly ? '' : rawCorpus,
+    // 16 Sep 2026 — a blank corpus address is FINAL on every customer install, exactly as a blank
+    // AI address became final on 6 Sep (config 1.2). corpus_retrieve.js used to default to
+    // api.safetylabaero.com when this was empty, so a self-hosted install sent the first 500
+    // characters of every drafting prompt to Safety Lab in a query string: a leak the hard-stop
+    // could not see (the configured value is empty) and SLConfigEgress did not list. Found by the
+    // first live customer-path run (R7). Hosted demo keeps the default; everything else means OFF.
+    corpusEndpoint: (mode === 'hosted-demo') ? (rawCorpus || HOSTED_CORPUS) : rawCorpus,
     // Where "Open in web" goes. Hosted/trial → our site. Self-hosted → ONLY what the
     // customer named (blank = the button stays hidden; never a silent fallback to us).
     webAppUrl: selfHosted ? rawWeb : (browserOnly ? '' : (rawWeb || HOSTED_WEB))
@@ -116,7 +123,7 @@
   }
 
   var cfg = {
-    version: '1.2',
+    version: '1.3',
     mode: mode,
     aiOff: aiOff,
     isDesktop: isDesktop,
