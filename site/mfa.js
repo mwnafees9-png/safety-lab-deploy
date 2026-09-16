@@ -14,6 +14,11 @@
 //
 // Non-disruptive by design: 2FA is opt-in per user. Enforcement (e.g. requiring it
 // org-wide) is a policy decision layered on top of this — see MFA_NOTES in /trust.
+//
+// 16 Sep 2026 — v1.3. needsChallenge() was asking the client library a question it
+// answers from a cached session that never carries the factor list, so it returned
+// false for every account and the step-up built on 6 Sep had never run once. See the
+// comment on needsChallenge for the mechanism and the production evidence.
 (function () {
     'use strict';
 
@@ -49,16 +54,72 @@
         }
     }
 
-    // Is a step-up challenge required to reach AAL2 for the current session?
-    async function needsChallenge() {
-        var sb = _sb();
-        if (!sb || !sb.auth || !sb.auth.mfa || typeof sb.auth.mfa.getAuthenticatorAssuranceLevel !== 'function') return false;
+    // A local note that this account HAS enrolled a factor. Not a security control -- a
+    // hint, so that a network failure cannot silently turn 2FA off. It is written
+    // whenever we positively determine the factor state, and read only when we cannot.
+    // Someone signing in with a stolen password on their OWN machine has no hint, which
+    // is exactly the case 2FA exists to stop.
+    function _enrolledKey(email) { return 'safetyLab.mfa.enrolled.' + String(email || '').toLowerCase(); }
+    async function _sessionEmail() {
         try {
+            var sb = _sb();
+            var r = await sb.auth.getSession();
+            return (r && r.data && r.data.session && r.data.session.user && r.data.session.user.email) || '';
+        } catch (_) { return ''; }
+    }
+    function _rememberEnrolled(email, yes) {
+        if (!email) return;
+        try {
+            if (yes) localStorage.setItem(_enrolledKey(email), '1');
+            else localStorage.removeItem(_enrolledKey(email));
+        } catch (_) {}
+    }
+    function _wasEnrolled(email) {
+        if (!email) return false;
+        try { return localStorage.getItem(_enrolledKey(email)) === '1'; } catch (_) { return false; }
+    }
+
+    // Is a step-up challenge required to reach AAL2 for the current session?
+    //
+    // 16 Sep 2026 -- REWRITTEN, because the old body returned false for everyone, always.
+    // It read:
+    //     var d = (await sb.auth.mfa.getAuthenticatorAssuranceLevel()).data;
+    //     return d.currentLevel === 'aal1' && d.nextLevel === 'aal2';
+    // In supabase-js the NO-ARGUMENT form of getAuthenticatorAssuranceLevel derives
+    // nextLevel from the CACHED session:
+    //     (session.user.factors ?? []).filter(f => f.status === 'verified').length > 0 && (next = 'aal2')
+    // The session persisted by a password sign-in carries no `factors` array -- factors
+    // are attached by the /user endpoint, which only mfa.listFactors() calls. So nextLevel
+    // stayed equal to currentLevel and this returned false even for an account with a
+    // working authenticator. The step-up shipped 6 Sep and was never once reached.
+    // EVIDENCE on production before this fix: two verified TOTP factors (one enrolled
+    // 10 Sep, that user signed in 14 Sep), 30 sessions, and auth.mfa_amr_claims holding
+    // 20 `password` + 10 `email/signup` and ZERO `totp`. Not one second factor had ever
+    // been used in the life of the product.
+    // currentLevel is sound -- it reads the `aal` claim out of the token. Only the factor
+    // list has to come from the network-backed source, which _factors() already is.
+    async function needsChallenge() {
+        var email = await _sessionEmail();
+        var st = await _factors();
+        if (!st.supported) return false;                 // no MFA API on this client at all
+
+        if (st.error) {
+            // We could not determine the factor state. FAIL CLOSED if we have ever seen a
+            // factor on this account, rather than repeat the bug this function just had.
+            return _wasEnrolled(email);
+        }
+        _rememberEnrolled(email, st.verified.length > 0);
+        if (!st.verified.length) return false;           // no factor -> nothing to step up to
+
+        // The account HAS a factor from here on, so every remaining path fails CLOSED.
+        var sb = _sb();
+        try {
+            if (!sb || !sb.auth || !sb.auth.mfa || typeof sb.auth.mfa.getAuthenticatorAssuranceLevel !== 'function') return true;
             var res = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-            if (res && res.error) return false;
+            if (res && res.error) return true;
             var d = (res && res.data) || {};
-            return d.currentLevel === 'aal1' && d.nextLevel === 'aal2';
-        } catch (_) { return false; }
+            return d.currentLevel !== 'aal2';
+        } catch (_) { return true; }
     }
 
     // ----------------------------------------------------------- small helpers
@@ -258,6 +319,12 @@
         return new Promise(async function (resolve) {
             var sb = _sb();
             var st = await _factors();
+            // 16 Sep 2026 -- "could not tell" is no longer treated as "no factor". If the
+            // factor list failed to load and this account is known to have enrolled one,
+            // we cannot verify a second factor, so the sign-in does not proceed; auth_gate
+            // signs out on false. An account with no factor still passes straight through,
+            // so a network blip never locks out the people who never turned 2FA on.
+            if (st.error && _wasEnrolled(await _sessionEmail())) { resolve(false); return; }
             if (!st.supported || !st.verified.length) { resolve(true); return; }   // nothing to challenge
             var factor = st.verified[0];
 
@@ -307,6 +374,8 @@
         promptChallenge: promptChallenge,
         hasVerifiedFactor: hasVerifiedFactor,
         promptEnroll: promptEnroll,
-        _factors: _factors
+        _factors: _factors,
+        _wasEnrolled: _wasEnrolled,
+        _rememberEnrolled: _rememberEnrolled
     };
 })();

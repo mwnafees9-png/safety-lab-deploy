@@ -936,6 +936,15 @@
       //    account panel and honored at sign-in for anyone who turns it on.
       const _stepUpOn    = (typeof window.SL_MFA_REQUIRED === 'undefined') ? true : (window.SL_MFA_REQUIRED !== false);
       const _forceEnroll = (window.SL_MFA_MANDATORY === true);
+      // 16 Sep 2026 — if the step-up is on and the MFA module is missing, that is a
+      // broken build, not a reason to open the app. Previously this condition simply
+      // fell through to onLift() and nobody was ever challenged.
+      if (_stepUpOn && !window.SafetyLabMFA) {
+        try { console.error('[auth-gate] MFA step-up is enabled but mfa.js did not load — refusing to lift the gate'); } catch (_) {}
+        try { if (window.SLErrorWatch) window.SLErrorWatch.report(new Error('mfa.js missing with step-up enabled'), 'auth_gate'); } catch (_) {}
+        await _signOutToGate();
+        return;
+      }
       if (_stepUpOn && window.SafetyLabMFA) {
         // (1) Account already has a factor → step up from AAL1 to AAL2.
         if (typeof window.SafetyLabMFA.needsChallenge === 'function') {
@@ -958,7 +967,21 @@
           }
         }
       }
-    } catch (_) { /* fail open to prior behavior */ }
+    } catch (e) {
+      // 16 Sep 2026 — this used to swallow everything and lift the gate. A security gate
+      // that cannot run must not open. It now opens ONLY for an account we can positively
+      // say has no second factor; anything else goes back to the sign-in screen. That
+      // keeps a network blip from locking out the people who never turned 2FA on, while
+      // an account with a factor can no longer be let in by an exception.
+      try { console.error('[auth-gate] MFA step-up failed', e); } catch (_) {}
+      try { if (window.SLErrorWatch) window.SLErrorWatch.report(e, 'auth_gate'); } catch (_) {}
+      let _known = false;
+      try {
+        _known = (window.SafetyLabMFA && typeof window.SafetyLabMFA.hasVerifiedFactor === 'function')
+                   ? await window.SafetyLabMFA.hasVerifiedFactor() : true;
+      } catch (_) { _known = true; }
+      if (_known) { await _signOutToGate(); return; }
+    }
     try { onLift(); } catch (_) {}
   }
 
