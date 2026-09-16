@@ -62,6 +62,19 @@ check('the cache is stamped with an ARRAY, because one hash is reachable from se
 console.log('\n[erasure] the two faults that made it fail outright');
 check('the append-only maintenance hatch is opened by the erase',
   /allow_journal_maintenance/.test(sql) && /allow_problem_maintenance/.test(sql));
+// 16 Sep 2026, caught before it shipped: the first version of this migration DESCRIBED the hatch
+// in a comment and never opened it in either function body. Applying that file would have fixed
+// digest(), left the append-only abort in place, and looked complete. Assert the call, in both
+// bodies, and assert the helper is defined ABOVE the functions that call it.
+check('BOTH erase functions actually CALL the hatch, not just mention it',
+  (sql.match(/^\s*perform private\.allow_journal_maintenance\(\);/gm) || []).length === 2,
+  'found ' + (sql.match(/^\s*perform private\.allow_journal_maintenance\(\);/gm) || []).length);
+check('the helper is defined before the functions that call it',
+  sql.indexOf('create or replace function private.allow_journal_maintenance') <
+  sql.indexOf('create or replace function public.erase_project'));
+check('expiry_watch is NOT deleted from: it is a view, and a view cannot be destroyed',
+  !/delete from public\.expiry_watch/.test(sql));
+check('expiry_watch is NOT counted as destroyed either', !/'expiry_watch',\s*v_/.test(sql));
 check('the hatch is transaction-local, so it cannot outlive the erase',
   /set_config\('app\.allow_journal_maintenance','on', true\)/.test(sql));
 check('digest() resolves: extensions is on the search path of BOTH erase functions',

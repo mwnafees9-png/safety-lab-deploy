@@ -30,6 +30,20 @@
 
 begin;
 
+-- ---- 0. the append-only escape hatch, defined BEFORE the functions that use it -------------
+-- change_journal and problem_report_events have BEFORE DELETE triggers that raise. Deleting a
+-- project cascades into them, the trigger fires, and the whole erase aborts having deleted
+-- nothing. Both triggers already honour a session setting; nothing ever set it. Transaction-local
+-- (is_local = true) so it cannot outlive the erase that opened it.
+create or replace function private.allow_journal_maintenance() returns void
+language sql
+as $function$
+  select set_config('app.allow_journal_maintenance','on', true),
+         set_config('app.allow_problem_maintenance','on', true);
+$function$;
+
+revoke execute on function private.allow_journal_maintenance() from public;
+
 -- ---- 1. give the cache and the notification log something to be erased BY -------------------
 -- Arrays, not single columns. ai_org_cache is keyed (user_id, h): an identical request hash
 -- reached from two projects lands on ONE row, so a single project_id would record only whoever
@@ -172,6 +186,8 @@ begin
 
   if not p_confirm then return jsonb_build_object('dry_run',true,'manifest',v_manifest); end if;
 
+  perform private.allow_journal_maintenance();   -- or the cascade into the journals aborts everything
+
   -- feedback is ON DELETE SET NULL, so it must go BEFORE the project row or it survives with
   -- its message text and only its project link cleared. That was the actual bug.
   delete from public.feedback         where project_id = p_project_id;
@@ -219,7 +235,7 @@ declare
   v_owned uuid[]; v_projects uuid[];
   v_ws int; v_proj int; v_docs int; v_yjs int; v_base int; v_vers int; v_crdt int;
   v_rev int; v_sign int; v_fb int; v_cache int; v_notif int; v_lic int; v_mem int;
-  v_chg int; v_prob int; v_waud int; v_sec int; v_exp int;
+  v_chg int; v_prob int; v_waud int; v_sec int;
   v_manifest jsonb; v_hash text; v_cert uuid; v_ret jsonb; v_complete timestamptz;
 begin
   if v_uid is null then raise exception 'not signed in'; end if;
@@ -246,7 +262,9 @@ begin
   select count(*) into v_prob from public.problem_report_events      where project_id = any(v_projects);
   select count(*) into v_waud from public.workspace_audit            where workspace_id = any(v_owned);
   select count(*) into v_sec  from public.user_secrets               where user_id = v_uid;
-  select count(*) into v_exp  from public.expiry_watch               where user_id = v_uid;
+  -- expiry_watch is a VIEW over users and license_tokens, not a table. It cannot be deleted from
+  -- and it empties itself once those rows go, so it is neither deleted nor counted: a manifest
+  -- line claiming a view was destroyed would be one more false statement on a signed certificate.
 
   v_manifest := jsonb_build_object('scope','account','user',v_uid,'at',now(),
     'deleted', jsonb_build_object(
@@ -255,9 +273,11 @@ begin
       'reviews',v_rev,'signoffs',v_sign,'feedback',v_fb,'ai_org_cache',v_cache,
       'notification_log',v_notif,'license_tokens',v_lic,'workspace_members',v_mem,
       'change_journal',v_chg,'problem_report_events',v_prob,'workspace_audit',v_waud,
-      'user_secrets',v_sec,'expiry_watch',v_exp));
+      'user_secrets',v_sec));
 
   if not p_confirm then return jsonb_build_object('dry_run',true,'manifest',v_manifest); end if;
+
+  perform private.allow_journal_maintenance();   -- or the cascade into the journals aborts everything
 
   delete from public.feedback         where user_id = v_uid or project_id = any(v_projects) or workspace_id = any(v_owned);
   delete from public.notification_log where target_email = v_email or workspace_id = any(v_owned);
@@ -272,7 +292,6 @@ begin
   -- user_secrets holds this user's stored credentials; expiry_watch their trial state. Neither
   -- is Customer Data, but both are theirs and neither survives an account erasure.
   delete from public.user_secrets     where user_id = v_uid;
-  delete from public.expiry_watch     where user_id = v_uid;
 
   v_hash := encode(digest(coalesce(v_email,'')||v_uid::text||now()::text,'sha256'),'hex');
   update public.users set email = 'redacted+'||left(v_hash,16)||'@deleted.invalid' where id = v_uid;
@@ -312,18 +331,7 @@ begin;
 --      hashing line, for every project, with or without journal rows.
 --
 -- Either one alone made the Section 7 destruction promise unperformable.
-create or replace function private.allow_journal_maintenance() returns void
-language sql
-as $function$
-  select set_config('app.allow_journal_maintenance','on', true),
-         set_config('app.allow_problem_maintenance','on', true);
-$function$;
-
-revoke execute on function private.allow_journal_maintenance() from public;
-
--- erase_project and erase_my_account each gain `perform private.allow_journal_maintenance();`
--- as the first statement after the dry-run return. Applied to the throwaway project as
--- erasure_completeness_part3_append_only_hatch; see that migration for the full bodies.
+-- The hatch itself is opened inside both function bodies above; it is defined in section 0.
 
 alter function public.erase_project(uuid, boolean) set search_path to 'public', 'extensions', 'pg_temp';
 alter function private.erase_my_account(boolean)   set search_path to 'public', 'extensions', 'pg_temp';
