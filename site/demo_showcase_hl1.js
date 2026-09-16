@@ -459,6 +459,104 @@
                 [sysReq(2271, 'FC-OXY02', 'Monitoring', 'Oxygen quantity shall be indicated continuously and checked as a dispatch item.', 'The undetected case is what raises this to Catastrophic.', 'Pending')]),
         ];
 
+        // ---- FCIM ---------------------------------------------------------------
+        // 16 Sep 2026. These systems shipped with an EMPTY matrix, so every SFHA row
+        // below pointed at a failure condition that existed nowhere: extractedFCs is
+        // derived from fcim and rebuilt on every load, so there was nothing to derive.
+        // Every id and description here is the one already written on the SFHA row it
+        // belongs to — this matrix states which column each of those conditions sits in.
+        const DEMO_FCIM = {
+            'sys-fcs': [
+                { subId: 'SF-01', tlId: 'FC-FCS01', tlDesc: 'Loss of pitch control output', mId: 'FC-FCS02', mDesc: 'Uncommanded or reversed pitch output' },
+                { subId: 'SF-02', tlId: 'FC-FCS03', tlDesc: 'Loss of roll control output' },
+                { subId: 'SF-03', tlId: 'FC-FCS04', tlDesc: 'Loss of rudder output on both fins' },
+                { subId: 'SF-06', tlId: 'FC-FCS05', tlDesc: 'Loss of lift-dump contribution to deceleration' },
+            ],
+            'sys-prp': [
+                { subId: 'SF-04', tlId: 'FC-PRP01', tlDesc: 'In-flight shutdown of one powerplant' },
+                { subId: 'SF-04', tlId: 'FC-PRP02', tlDesc: 'In-flight shutdown of both powerplants on one side' },
+                { subId: 'SF-04', tlId: 'FC-PRP03', tlDesc: 'In-flight shutdown of all four powerplants' },
+                { subId: 'SF-06', tlId: 'FC-PRP04', tlDesc: 'Loss of reverse thrust on all powerplants' },
+            ],
+            'sys-eps': [
+                { subId: 'SF-20', tlId: 'FC-EPS01', tlDesc: 'Loss of all generated electrical power', mId: 'FC-EPS03', mDesc: 'Undetected bus over-voltage' },
+                { subId: 'SF-20', tlId: 'FC-EPS02', tlDesc: 'Loss of one generation channel' },
+            ],
+            'sys-hyd': [
+                { subId: 'SF-21', tlId: 'FC-HYD01', tlDesc: 'Loss of all hydraulic systems', mId: 'FC-HYD03', mDesc: 'Undetected loss of system pressure' },
+                { subId: 'SF-21', tlId: 'FC-HYD02', tlDesc: 'Loss of one hydraulic system' },
+            ],
+            'sys-prp1': [
+                { subId: 'SF-04', tlId: 'FC-PRP1-01', tlDesc: 'In-flight shutdown of powerplant 1' },
+            ],
+            'sys-prp2': [
+                { subId: 'SF-04', tlId: 'FC-PRP2-01', tlDesc: 'In-flight shutdown of powerplant 2' },
+            ],
+            'sys-prp3': [
+                { subId: 'SF-04', tlId: 'FC-PRP3-01', tlDesc: 'In-flight shutdown of powerplant 3' },
+            ],
+            'sys-prp4': [
+                { subId: 'SF-04', tlId: 'FC-PRP4-01', tlDesc: 'In-flight shutdown of powerplant 4' },
+            ],
+            'sys-hyd-a': [
+                { subId: 'SF-21', tlId: 'FC-HYDA-01', tlDesc: 'Loss of hydraulic system A' },
+            ],
+            'sys-hyd-b': [
+                { subId: 'SF-21', tlId: 'FC-HYDB-01', tlDesc: 'Loss of hydraulic system B' },
+            ],
+            'sys-hyd-c': [
+                { subId: 'SF-21', tlId: 'FC-HYDC-01', tlDesc: 'Loss of hydraulic system C' },
+            ],
+            'sys-fue': [
+                { subId: 'SF-11', tlId: 'FC-FUE01', tlDesc: 'Loss of fuel delivery to all powerplants', mId: 'FC-FUE03', mDesc: 'Undetected fuel imbalance beyond lateral limits' },
+                { subId: 'SF-11', tlId: 'FC-FUE02', tlDesc: 'Loss of feed to one powerplant' },
+            ],
+            'sys-ldg': [
+                { subId: 'SF-12', tlId: 'FC-LDG01', tlDesc: 'Gear fails to extend or lock' },
+                { subId: 'SF-06', tlId: 'FC-LDG02', tlDesc: 'Loss of wheel braking' },
+                { subId: 'SF-07', tlId: 'FC-LDG03', tlDesc: 'Loss of nose-wheel steering' },
+                { subId: 'SF-22', tlId: 'FC-LDG04', tlDesc: 'Gear structural failure from soft-field loading' },
+                { subId: 'SF-22', tlId: 'FC-LDG05', tlDesc: 'Multiple tire failure on the semi-prepared strip' },
+            ],
+            'sys-avi': [
+                { subId: 'SF-08', tlId: 'FC-AVI01', tlDesc: 'Loss of all primary display', mId: 'FC-AVI02', mDesc: 'Misleading attitude or airspeed without annunciation' },
+                { subId: 'SF-09', tlId: 'FC-AVI03', tlDesc: 'Loss of hazard alerting' },
+                { subId: 'SF-13', mId: 'FC-AVI04', mDesc: 'Misleading position guidance' },
+            ],
+            'sys-ips': [
+                { subId: 'SF-10', tlId: 'FC-IPS01', tlDesc: 'Loss of protection on the lifting surfaces', mId: 'FC-IPS02', mDesc: 'Undetected loss of protection on a sensing surface' },
+            ],
+            'sys-ecs': [
+                { subId: 'SF-16', tlId: 'FC-ECS01', tlDesc: 'Loss of hold pressurization' },
+                { subId: 'SF-16', tlId: 'FC-ECS02', tlDesc: 'Hold over-pressure beyond structural limits' },
+                { subId: 'SF-17', tlId: 'FC-ECS03', tlDesc: 'Loss of flight-deck pressurization' },
+            ],
+            'sys-crg': [
+                { subId: 'SF-14', tlId: 'FC-CRG01', tlDesc: 'Loss of payload restraint in flight', mId: 'FC-CRG02', mDesc: 'Progressive restraint slippage without indication' },
+                { subId: 'SF-15', tlId: 'FC-CRG03', tlDesc: 'Center of gravity outside the envelope at take-off', mId: 'FC-CRG04', mDesc: 'Erroneous weight and balance indication' },
+            ],
+            'sys-nzd': [
+                { subId: 'SF-18', tlId: 'FC-NZD01', tlDesc: 'Door unlocks or opens in flight', mId: 'FC-NZD04', mDesc: 'Uncommanded actuation on the ground' },
+                { subId: 'SF-19', tlId: 'FC-NZD03', tlDesc: 'Loss of lock indication', mId: 'FC-NZD02', mDesc: 'Door indicated locked when it is not' },
+            ],
+            'sys-ews': [
+                { subId: 'SF-20', tlId: 'FC-EWS01', tlDesc: 'Wiring failure defeating a redundancy claim' },
+                { subId: 'SF-20', tlId: 'FC-EWS02', tlDesc: 'Wiring arcing in a routing zone' },
+            ],
+            'sys-fpr': [
+                { subId: 'SF-23', tlId: 'FC-FPR02', tlDesc: 'Suppression unavailable or exhausted', mId: 'FC-FPR01', mDesc: 'Undetected fire in a nacelle or the hold' },
+                { subId: 'SF-23', mId: 'FC-FPR03', mDesc: 'False fire warning' },
+            ],
+            'sys-oxy': [
+                { subId: 'SF-17', tlId: 'FC-OXY01', tlDesc: 'Loss of crew oxygen supply', mId: 'FC-OXY02', mDesc: 'Undetected oxygen depletion' },
+            ],
+        };
+        systemsData.forEach(function (s) {
+            s.fcim = (DEMO_FCIM[s.id] || []).map(function (r, i) {
+                return Object.assign({ internalId: 90000 + i, awareness: '', rationale: '' }, r);
+            });
+        });
+
         // ====================================================================
         // FAULT TREES — PASA at aircraft level, PSSA at system level
         // ====================================================================

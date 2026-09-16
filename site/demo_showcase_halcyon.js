@@ -323,6 +323,64 @@
                 [ sysReq('REQ-LG-001', 'LG-FC-01', 'L2', 'Safety', 'Gear position shall be sensed by two independent means and any disagreement shall be annunciated to the crew.', 'Prevents the surface/configuration mismatch in SF-08-M.', 'Test', 'Passed') ])
         ];
 
+        // ---- FCIM ---------------------------------------------------------------
+        // 16 Sep 2026. These systems shipped with an EMPTY matrix, so every SFHA row
+        // below pointed at a failure condition that existed nowhere: extractedFCs is
+        // derived from fcim and rebuilt on every load, so there was nothing to derive.
+        // Every id and description here is the one already written on the SFHA row it
+        // belongs to — this matrix states which column each of those conditions sits in.
+        const DEMO_FCIM = {
+            'prop-l': [
+                { subId: 'PRL-01', tlId: 'PRL-FC-01', tlDesc: 'Loss of left propulsion unit output' },
+                { subId: 'PRL-02', mId: 'PRL-FC-02', mDesc: 'Left thrust does not follow the commanded setting' },
+            ],
+            'prop-r': [
+                { subId: 'PRR-01', tlId: 'PRR-FC-01', tlDesc: 'Loss of right propulsion unit output' },
+                { subId: 'PRR-02', mId: 'PRR-FC-02', mDesc: 'Right thrust does not follow the commanded setting' },
+            ],
+            'estore': [
+                { subId: 'EST-01', tlId: 'EST-FC-01', tlDesc: 'Loss of energy delivery from the store' },
+                { subId: 'EST-02', mId: 'EST-FC-02', mDesc: 'Energy store operated outside its declared envelope undetected' },
+            ],
+            'egen': [
+                { subId: 'EGN-01', tlId: 'EGN-FC-01', tlDesc: 'Loss of turbogenerator output' },
+            ],
+            'fcs-a': [
+                { subId: 'FCA-01', tlId: 'FCA-FC-01', tlDesc: 'Loss of flight-control channel A' },
+                { subId: 'FCA-02', mId: 'FCA-FC-02', mDesc: 'Undetected erroneous channel A control response' },
+            ],
+            'fcs-b': [
+                { subId: 'FCB-01', tlId: 'FCB-FC-01', tlDesc: 'Loss of flight-control channel B' },
+            ],
+            'elec-1': [
+                { subId: 'EL1-01', tlId: 'EL1-FC-01', tlDesc: 'Loss of channel 1 distribution' },
+            ],
+            'elec-2': [
+                { subId: 'EL2-01', tlId: 'EL2-FC-01', tlDesc: 'Loss of channel 2 distribution' },
+            ],
+            'disp-p': [
+                { subId: 'DPP-01', mId: 'DPP-FC-01', mDesc: 'Erroneous attitude or air data presented as valid' },
+            ],
+            'disp-s': [
+                { subId: 'DPS-01', tlId: 'DPS-FC-01', tlDesc: 'Loss of the standby display' },
+            ],
+            'hull-f': [
+                { subId: 'HUF-01', tlId: 'HUF-FC-01', tlDesc: 'Flooding of the forward compartment' },
+            ],
+            'hull-a': [
+                { subId: 'HUA-01', tlId: 'HUA-FC-01', tlDesc: 'Flooding of the aft compartment' },
+                { subId: 'HUA-02', tlId: 'HUA-FC-02', tlDesc: 'Loss of water-rudder authority' },
+            ],
+            'gear': [
+                { subId: 'LG-02', mId: 'LG-FC-01', mDesc: 'Erroneous gear-position indication' },
+            ],
+        };
+        systemsData.forEach(function (s) {
+            s.fcim = (DEMO_FCIM[s.id] || []).map(function (r, i) {
+                return Object.assign({ internalId: 90000 + i, awareness: '', rationale: '' }, r);
+            });
+        });
+
         const S = (sid) => systemsData.find(x => x.id === sid);
 
         // ====================================================================

@@ -386,6 +386,94 @@
                 [sysReq(2211, 'FC-EWS01', 'Independence', 'Redundant energy and control paths shall be routed in separate zones with no shared connector, bundle or penetration.', 'Underlies every independence claim in the PSSA set.', 'Pending')]),
         ];
 
+        // ---- FCIM ---------------------------------------------------------------
+        // 16 Sep 2026. These systems shipped with an EMPTY matrix, so every SFHA row
+        // below pointed at a failure condition that existed nowhere: extractedFCs is
+        // derived from fcim and rebuilt on every load, so there was nothing to derive.
+        // Every id and description here is the one already written on the SFHA row it
+        // belongs to — this matrix states which column each of those conditions sits in.
+        const DEMO_FCIM = {
+            'sys-fcc': [
+                { subId: 'SF-12', tlId: 'FC-FCC01', tlDesc: 'Loss of all control-law output', mId: 'FC-FCC02', mDesc: 'Erroneous control-law output not annunciated' },
+                { subId: 'SF-05', mId: 'FC-FCC03', mDesc: 'Incorrect control allocation after a rotor loss' },
+                { subId: 'SF-06', tlId: 'FC-FCC04', tlDesc: 'Loss of transition-corridor protection' },
+            ],
+            'sys-dep': [
+                { subId: 'SF-07', tlId: 'FC-DEP01', tlDesc: 'Loss of more than one lift rotor in hover' },
+                { subId: 'SF-07', tlId: 'FC-DEP02', tlDesc: 'Loss of a single lift rotor' },
+                { subId: 'SF-11', mId: 'FC-DEP03', mDesc: 'Uncommanded torque from a rotor drive' },
+            ],
+            'sys-rot1': [
+                { subId: 'SF-07', tlId: 'FC-R1-01', tlDesc: 'Loss of lift-rotor drive 1' },
+            ],
+            'sys-rot2': [
+                { subId: 'SF-07', tlId: 'FC-R2-01', tlDesc: 'Loss of lift-rotor drive 2' },
+            ],
+            'sys-rot3': [
+                { subId: 'SF-07', tlId: 'FC-R3-01', tlDesc: 'Loss of lift-rotor drive 3' },
+            ],
+            'sys-rot4': [
+                { subId: 'SF-07', tlId: 'FC-R4-01', tlDesc: 'Loss of lift-rotor drive 4' },
+            ],
+            'sys-eps': [
+                { subId: 'SF-09', tlId: 'FC-EPS01', tlDesc: 'Total loss of propulsion energy' },
+                { subId: 'SF-09', tlId: 'FC-EPS02', tlDesc: 'Loss of more than two of six packs' },
+                { subId: 'SF-10', mId: 'FC-EPS03', mDesc: 'Erroneous state-of-charge or reserve indication' },
+            ],
+            'sys-pk1': [
+                { subId: 'SF-09', tlId: 'FC-PK1-01', tlDesc: 'Loss of battery pack 1' },
+                { subId: 'SF-19', mId: 'FC-PK1-02', mDesc: 'Thermal runaway initiated in pack 1' },
+            ],
+            'sys-pk2': [
+                { subId: 'SF-09', tlId: 'FC-PK2-01', tlDesc: 'Loss of battery pack 2' },
+                { subId: 'SF-19', mId: 'FC-PK2-02', mDesc: 'Thermal runaway initiated in pack 2' },
+            ],
+            'sys-pk3': [
+                { subId: 'SF-09', tlId: 'FC-PK3-01', tlDesc: 'Loss of battery pack 3' },
+                { subId: 'SF-19', mId: 'FC-PK3-02', mDesc: 'Thermal runaway initiated in pack 3' },
+            ],
+            'sys-mca': [
+                { subId: 'SF-11', tlId: 'FC-MCA01', tlDesc: 'Loss of more than two motor controllers', mId: 'FC-MCA02', mDesc: 'Uncommanded torque from a controller' },
+            ],
+            'sys-fcs': [
+                { subId: 'SF-01', tlId: 'FC-FCS01', tlDesc: 'Loss of pitch actuation in cruise' },
+                { subId: 'SF-02', tlId: 'FC-FCS02', tlDesc: 'Loss of roll actuation in cruise' },
+                { subId: 'SF-03', tlId: 'FC-FCS03', tlDesc: 'Loss of yaw actuation in cruise' },
+            ],
+            'sys-avi': [
+                { subId: 'SF-13', tlId: 'FC-AVI01', tlDesc: 'Loss of all primary display', mId: 'FC-AVI02', mDesc: 'Misleading attitude, speed or energy without annunciation' },
+                { subId: 'SF-14', tlId: 'FC-AVI03', tlDesc: 'Loss of hazard alerting' },
+                { subId: 'SF-17', mId: 'FC-AVI04', mDesc: 'Misleading guidance to a vertipad' },
+            ],
+            'sys-thm': [
+                { subId: 'SF-15', tlId: 'FC-THM01', tlDesc: 'Loss of battery and motor cooling', mId: 'FC-THM02', mDesc: 'Undetected loss of cooling to one loop' },
+            ],
+            'sys-bms': [
+                { subId: 'SF-19', tlId: 'FC-BMS02', tlDesc: 'Propagation between packs', mId: 'FC-BMS01', mDesc: 'Undetected thermal runaway' },
+                { subId: 'SF-10', mId: 'FC-BMS03', mDesc: 'Erroneous cell health estimate' },
+            ],
+            'sys-ldg': [
+                { subId: 'SF-16', tlId: 'FC-LDG01', tlDesc: 'Loss of ground braking on an elevated pad' },
+                { subId: 'SF-16', tlId: 'FC-LDG02', tlDesc: 'Gear collapse on a hard vertical landing' },
+            ],
+            'sys-occ': [
+                { subId: 'SF-18', tlId: 'FC-OCC01', tlDesc: 'Loss of occupant restraint in a survivable impact' },
+                { subId: 'SF-18', tlId: 'FC-OCC02', tlDesc: 'Impeded egress after a landing with a thermal event' },
+            ],
+            'sys-ips': [
+                { subId: 'SF-20', tlId: 'FC-IPS01', tlDesc: 'Loss of rotor ice protection in icing', mId: 'FC-IPS02', mDesc: 'Undetected loss of protection on a sensing surface' },
+            ],
+            'sys-ews': [
+                { subId: 'SF-09', tlId: 'FC-EWS01', tlDesc: 'Wiring fault defeating a redundancy claim' },
+                { subId: 'SF-09', tlId: 'FC-EWS02', tlDesc: 'High-voltage arc in a routing zone' },
+            ],
+        };
+        systemsData.forEach(function (s) {
+            s.fcim = (DEMO_FCIM[s.id] || []).map(function (r, i) {
+                return Object.assign({ internalId: 90000 + i, awareness: '', rationale: '' }, r);
+            });
+        });
+
         // ====================================================================
         // FAULT TREES — PASA at aircraft level, PSSA at system level
         // ====================================================================

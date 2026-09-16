@@ -135,6 +135,39 @@
                 [sysReq(7227, 'FC-PROP01', 'Independence', 'The two powerplants and their fuel feeds shall be independent so that no single event causes a dual shutdown.', 'Bounds the dual-engine-loss condition.', 'Pending')]),
         ];
 
+        // ---- FCIM ---------------------------------------------------------------
+        // 16 Sep 2026. These systems shipped with an EMPTY matrix, so every SFHA row
+        // below pointed at a failure condition that existed nowhere: extractedFCs is
+        // derived from fcim and rebuilt on every load, so there was nothing to derive.
+        // Every id and description here is the one already written on the SFHA row it
+        // belongs to — this matrix states which column each of those conditions sits in.
+        const DEMO_FCIM = {
+            'sys-fcs': [
+                { subId: 'SF-01', tlId: 'FC-FCS01', tlDesc: 'Loss of pitch-axis control output', mId: 'FC-FCS02', mDesc: 'Erroneous pitch-axis control output' },
+                { subId: 'SF-02', tlId: 'FC-FCS03', tlDesc: 'Loss of roll-axis control output' },
+            ],
+            'sys-avi': [
+                { subId: 'SF-04', tlId: 'FC-AVI01', tlDesc: 'Loss of both air-data computers', mId: 'FC-AVI02', mDesc: 'Undetected erroneous air-data output' },
+            ],
+            'sys-eps': [
+                { subId: 'SF-05', tlId: 'FC-EPS01', tlDesc: 'Loss of both main generators' },
+            ],
+            'sys-hyd': [
+                { subId: 'SF-06', tlId: 'FC-HYD01', tlDesc: 'Loss of a flight-control hydraulic system' },
+            ],
+            'sys-ldg': [
+                { subId: 'SF-07', tlId: 'FC-LDG01', tlDesc: 'Loss of normal wheel braking' },
+            ],
+            'sys-prop': [
+                { subId: 'SF-08', tlId: 'FC-PROP01', tlDesc: 'In-flight shutdown of an engine' },
+            ],
+        };
+        systemsData.forEach(function (s) {
+            s.fcim = (DEMO_FCIM[s.id] || []).map(function (r, i) {
+                return Object.assign({ internalId: 90000 + i, awareness: '', rationale: '' }, r);
+            });
+        });
+
         // ---- resources (drive the interfaces) -----------------------------------
         const resourcesData = [
             { internalId: id(), resId: 'RES-1', name: '28 VDC essential bus', type: 'Electrical', providedBy: ['sys-eps'], consumedBy: [], consumedBySystems: ['sys-fcs', 'sys-avi'] },

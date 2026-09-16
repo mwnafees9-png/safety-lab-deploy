@@ -137,6 +137,38 @@
                 [sysReq(6226, 'FC-PROP01', 'Architecture', 'Energy reserve shall be sufficient to reach the ground-risk buffer after a single power fault.', 'Bounds the loss-of-propulsion condition.', 'Pending')]),
         ];
 
+        // ---- FCIM ---------------------------------------------------------------
+        // 16 Sep 2026. These systems shipped with an EMPTY matrix, so every SFHA row
+        // below pointed at a failure condition that existed nowhere: extractedFCs is
+        // derived from fcim and rebuilt on every load, so there was nothing to derive.
+        // Every id and description here is the one already written on the SFHA row it
+        // belongs to — this matrix states which column each of those conditions sits in.
+        const DEMO_FCIM = {
+            'sys-auto': [
+                { subId: 'UF-01', tlId: 'FC-AUTO01', tlDesc: 'Loss of flight-control output', mId: 'FC-AUTO02', mDesc: 'Erroneous flight-control output' },
+            ],
+            'sys-nav': [
+                { subId: 'UF-02', tlId: 'FC-NAV01', tlDesc: 'Loss or corruption of the position solution' },
+            ],
+            'sys-c2': [
+                { subId: 'UF-03', tlId: 'FC-C201', tlDesc: 'Loss of the C2 link' },
+            ],
+            'sys-daa': [
+                { subId: 'UF-04', tlId: 'FC-DAA01', tlDesc: 'Loss of the detect-and-avoid function' },
+            ],
+            'sys-fts': [
+                { subId: 'UF-06', tlId: 'FC-FTS01', tlDesc: 'FTS fails to terminate on command', mId: 'FC-FTS02', mDesc: 'Inadvertent termination' },
+            ],
+            'sys-prop': [
+                { subId: 'UF-07', tlId: 'FC-PROP01', tlDesc: 'Loss of propulsive thrust' },
+            ],
+        };
+        systemsData.forEach(function (s) {
+            s.fcim = (DEMO_FCIM[s.id] || []).map(function (r, i) {
+                return Object.assign({ internalId: 90000 + i, awareness: '', rationale: '' }, r);
+            });
+        });
+
         // ---- resources (drive the interfaces) --------------------------------
         const resourcesData = [
             { internalId: id(), resId: 'RES-U1', name: '28 VDC vehicle power', type: 'Electrical', providedBy: ['sys-prop'], consumedBy: [], consumedBySystems: ['sys-auto', 'sys-nav', 'sys-c2', 'sys-daa'] },
