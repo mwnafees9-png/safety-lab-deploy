@@ -9118,7 +9118,10 @@ async function _renderVersionHistory() {
         const ids = Array.from(new Set([].concat(revisions.map(r => r.created_by), saves.map(s => s.saved_by)).filter(Boolean)));
         const emailMap = {};
         if (ids.length) {
-            const { data: us } = await client.from('users').select('id, email').in('id', ids);
+            // Same reason as the member list: reading public.users returns only your own row, so
+            // every other person's action rendered as a dash. Resolves an id only when that person
+            // shares a workspace with you; anyone else is simply absent and still renders a dash.
+            const { data: us } = await client.rpc('user_emails_for_ids', { p_ids: ids });
             (us || []).forEach(u => { emailMap[u.id] = u.email; });
         }
         const who = id => (id && emailMap[id]) ? emailMap[id] : '—';
@@ -9177,7 +9180,7 @@ async function _emailsForIds(client, ids) {
     const uniq = Array.from(new Set((ids || []).filter(Boolean)));
     if (!uniq.length) return map;
     try {
-        const { data } = await client.from('users').select('id, email').in('id', uniq);
+        const { data } = await client.rpc('user_emails_for_ids', { p_ids: uniq });
         (data || []).forEach(u => { map[u.id] = u.email; });
     } catch (_) { /* non-fatal */ }
     return map;
@@ -9317,10 +9320,14 @@ async function _renderWorkspaceMembers() {
     if (!wsId) { list.innerHTML = ''; return; }
     list.innerHTML = 'Loading…';
     try {
-        const { data, error } = await client
-            .from('workspace_members')
-            .select('user_id, role, joined_at, users:users!inner(email)')
-            .eq('workspace_id', wsId);
+        // 16 Sep 2026 — this used to join users directly. public.users allows you to read your OWN
+        // row and nobody else's, and the join was INNER, so every other member was dropped
+        // entirely rather than merely showing a blank email. In the reviewer picker that meant the
+        // list was always empty and a review could never be requested by anyone, ever: reviews,
+        // review_comments and signoffs are all at zero in production. The directory function
+        // returns members only to someone already inside the workspace, so the table policy stays
+        // exactly as tight as it was.
+        const { data, error } = await client.rpc('workspace_member_directory', { p_workspace: wsId });
         if (error) throw error;
         if (!data || !data.length) { list.innerHTML = '<div style="padding: 8px; color: var(--color-text-tertiary); font-style: italic;">No members yet.</div>'; return; }
         const myId = _supabaseSession && _supabaseSession.user && _supabaseSession.user.id;
@@ -9328,10 +9335,10 @@ async function _renderWorkspaceMembers() {
         const canManage = (myRole === 'owner' || myRole === 'admin');
         const ROLES = ['admin', 'editor', 'reviewer', 'viewer'];   // owner transfer is a separate flow
         list.innerHTML = data.map(m => {
-            const email = (m.users && m.users.email) || '(unknown)';
+            const email = m.email || '(unknown)';
             const role = m.role || '—';
             const joined = m.joined_at ? new Date(m.joined_at).toLocaleDateString() : '—';
-            const isSelf = m.user_id === myId;
+            const isSelf = m.id === myId;
             const isOwnerRow = role === 'owner';
             const editable = canManage && !isOwnerRow && !isSelf;  // never change the owner or yourself
             const roleCell = editable

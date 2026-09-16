@@ -3492,11 +3492,17 @@ async function _rvShowRequestForm() {
     const wsId = getActiveWorkspaceId();
     body.innerHTML = 'Loading team&hellip;';
     try {
-        const { data: members, error } = await client.from('workspace_members')
-            .select('user_id, role, users:users!inner(email)').eq('workspace_id', wsId);
+        // 16 Sep 2026 — this used to join users directly. public.users allows you to read your OWN
+        // row and nobody else's, and the join was INNER, so every other member was dropped
+        // entirely rather than merely showing a blank email. In the reviewer picker that meant the
+        // list was always empty and a review could never be requested by anyone, ever: reviews,
+        // review_comments and signoffs are all at zero in production. The directory function
+        // returns members only to someone already inside the workspace, so the table policy stays
+        // exactly as tight as it was.
+        const { data: members, error } = await client.rpc('workspace_member_directory', { p_workspace: wsId });
         if (error) throw error;
         const myId = _supabaseSession && _supabaseSession.user && _supabaseSession.user.id;
-        const pickable = (members || []).filter(m => m.user_id !== myId).map(m => ({ id: m.user_id, email: (m.users && m.users.email) || m.user_id, role: m.role }));
+        const pickable = (members || []).filter(m => m.id !== myId).map(m => ({ id: m.id, email: m.email || m.id, role: m.role }));
         let html = '<div style="font-weight:600;font-size:14px;margin-bottom:12px;">Request a review</div>';
         html += '<label style="display:block;font-size:12px;color:var(--color-text-tertiary);margin-bottom:4px;">Title</label>';
         html += '<input id="rv-title" type="text" placeholder="e.g. FHA for PDR" style="width:100%;padding:8px;border:1px solid var(--color-border-hair);border-radius:6px;margin-bottom:14px;font:inherit;box-sizing:border-box;">';
