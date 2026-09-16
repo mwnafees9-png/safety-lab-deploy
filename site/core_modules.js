@@ -587,6 +587,23 @@ const AiClient = (function(){
 
     // ----- Audit log (lives on projectConfig so it travels with the file) -----
     function _logCall(entry){
+        // 16 Sep 2026 — the per-call record ALSO goes to the server audit ledger. This local copy
+        // lives inside projectConfig, which means it is ordinary project data: editable by anyone
+        // who can edit the project, capped at 500, and gone with the project. SL-WP-0003 section
+        // 17 describes something stronger than that — hash-chained, append-only, enforced by
+        // database privilege — and that is audit_log, which until today nothing ever wrote to.
+        // Fire and forget: an audit write must never fail the AI call it is recording.
+        try {
+            if (window.SLAudit && typeof window.SLAudit.aiCall === 'function') {
+                window.SLAudit.aiCall({
+                    feature: entry && entry.feature, model: entry && entry.model,
+                    tokensIn: entry && entry.tokensIn, tokensOut: entry && entry.tokensOut,
+                    itar: entry && entry.itar, ok: entry ? entry.ok !== false : true,
+                    error: entry && entry.error,
+                    latencyMs: (entry && entry.startedAt) ? (Date.now() - entry.startedAt) : null
+                });
+            }
+        } catch (_) {}
         if (!projectConfig) return;
         if (!Array.isArray(projectConfig.aiAuditLog)) projectConfig.aiAuditLog = [];
         const e = Object.assign({ ts: Date.now() }, entry);

@@ -3552,6 +3552,7 @@ async function submitReviewRequest() {
             const { error: aErr } = await client.from('review_assignments').insert(rows);
             if (aErr) throw aErr;
         }
+        try { window.SLAudit.workspace('review.requested', review.id, { title: title, reviewers: rows.length }); } catch (_) {}
         if (typeof showToast === 'function') showToast('Review requested: ' + title, 'success', 4000);
         openReviewDetail(review.id);
     } catch (e) {
@@ -3569,6 +3570,7 @@ async function recordMyReviewDecision(reviewId, decision) {
             .update({ decision: decision, decided_at: new Date().toISOString() })
             .eq('review_id', reviewId).eq('user_id', userId);
         if (error) throw error;
+        try { window.SLAudit.workspace('review.decided', reviewId, { decision: decision }); } catch (_) {}
         await openReviewDetail(reviewId);
         if (typeof showToast === 'function') showToast(decision === 'approved' ? 'Approved.' : 'Changes requested.', 'success', 3500);
     } catch (e) {

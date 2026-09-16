@@ -8338,6 +8338,7 @@ async function createProjectRevision(label, note) {
         if (error) throw error;
         const rev = created && created.version_no;
         try{ if(window.SLJournal) SLJournal.record('baseline.cut',{entity_kind:'baseline',entity_id:rev,summary:{text:'Revision '+rev+(label?' - '+label:''),label:label||null,note:note||null,version_no:rev}}); }catch(_){}
+        try { window.SLAudit.workspace('baseline.cut', projectId, { version_no: rev, label: label || null }); } catch (_) {}
         if (typeof showToast === 'function') showToast('Revision ' + rev + ' created' + (label ? ' — ' + label : ''), 'success', 4500);
         return rev;
     } catch (e) {
@@ -9174,6 +9175,42 @@ async function _renderVersionHistory() {
         body.innerHTML = '<div style="padding:12px;color:var(--color-danger);">Failed to load history: ' + esc(_cloudErrText(e)) + '</div>';
     }
 }
+
+// 16 Sep 2026 — the audit writer. SL-WP-0003 section 17 and the trust page both say workspace and
+// review activity is recorded; nothing wrote a single row, in the product's whole life, because
+// no writer existed. These two calls are the writer.
+//
+// FIRE AND FORGET, ALWAYS. An audit write must never be able to fail the action it is recording:
+// a reviewer being unable to sign off because the audit insert failed would be a worse outcome
+// than a missing audit row. Errors are swallowed deliberately.
+//
+// CONTENT NEVER GOES IN. The AI record carries feature, model, token counts, latency and outcome.
+// There is no prompt and no response, and the database function offers no column for one.
+window.SLAudit = {
+    workspace: function (event, targetId, details) {
+        try {
+            var client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
+            var ws = (typeof getActiveWorkspaceId === 'function') ? getActiveWorkspaceId() : null;
+            if (!client || !ws || !event) return;
+            client.rpc('audit_workspace_event', { p_workspace: ws, p_event: String(event),
+                p_target: targetId || null, p_details: details || null }).then(function () {}, function () {});
+        } catch (_) {}
+    },
+    aiCall: function (e) {
+        try {
+            var client = (typeof getSupabaseClient === 'function') ? getSupabaseClient() : null;
+            if (!client || !e) return;
+            client.rpc('audit_ai_call', {
+                p_feature: e.feature || null, p_model: e.model || null,
+                p_tokens_in: e.tokensIn == null ? null : e.tokensIn,
+                p_tokens_out: e.tokensOut == null ? null : e.tokensOut,
+                p_weighted: e.weighted == null ? null : e.weighted,
+                p_itar: !!e.itar, p_latency_ms: e.latencyMs == null ? null : e.latencyMs,
+                p_ok: e.ok !== false, p_error: e.error ? String(e.error).slice(0, 500) : null
+            }).then(function () {}, function () {});
+        } catch (_) {}
+    }
+};
 
 async function _emailsForIds(client, ids) {
     const map = {};

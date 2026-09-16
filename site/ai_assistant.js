@@ -4881,7 +4881,7 @@
         ft:['fault','tree'], fta:['fault','tree','analysis'], fmea:['failure','mode','effect'],
         fha:['functional','hazard','assessment'], spf:['single','point','failure'], spof:['single','point','failure'],
         mcs:['minimal','cut','set'], cutset:['cut','set'], cutsets:['cut','set'],
-        dal:['development','assurance','level'], fdal:['function','development','assurance'], idal:['item','development','assurance'],
+        dal:['development','assurance','level'],
         cca:['common','cause','analysis'], zsa:['zonal','safety','analysis'], pra:['particular','risk','analysis'], cma:['common','mode','analysis'],
         inhibit:['conditional','enabling'], dependent:['common','cause','dependency'], dependency:['common','cause','dependent'],
         redundant:['redundancy','independent'], redundancy:['redundant','independent'], independence:['independent','separation'],
@@ -4899,9 +4899,9 @@
         // acronyms and "AC"/"CFR"/"MoC" must reach the Part 23 chunks that spell
         // them out; kept as tight as the STPA set above.
         ac:['advisory','circular'], acs:['advisory','circular'], cfr:['cfr','code','federal','regulations'],
-        moc:['means','compliance'], sre:['single','reciprocating','engine'], mre:['multiple','reciprocating','engines'],
+        sre:['single','reciprocating','engine'], mre:['multiple','reciprocating','engines'],
         ste:['single','turbine','engine'], mte:['multiple','turbine','engines'], commuter:['commuter','category','class'],
-        evtol:['vtol','sc-vtol','category','enhanced','basic'], vtol:['sc-vtol','vtol','category'], moc:['means','compliance','moc'], fdal:['fdal','development','assurance','level'], idal:['idal','development','assurance','level'], easa:['easa','moc','special','condition'], seats:['passenger','seating','basic'], seat:['passenger','seating','basic'],
+        evtol:['vtol','sc-vtol','category','enhanced','basic'], vtol:['sc-vtol','vtol','category'], moc:['means','compliance','moc'], fdal:['fdal','function','development','assurance','level'], idal:['idal','item','development','assurance','level'], easa:['easa','moc','special','condition'], seats:['passenger','seating','basic'], seat:['passenger','seating','basic'],
         slf:['significant','latent','failure'], helicopter:['rotorcraft','part','27','29'], heli:['rotorcraft','helicopter'], continuum:['safety','continuum','class','ps-asw-27-15'], efh:['engine','flight','hour'], tql:['tool','qualification','level'], phac:['plan','hardware','aspects','certification'], psac:['plan','software','aspects','certification'], aeh:['airborne','electronic','hardware'], fpga:['custom','device','aeh','do-254'], asic:['custom','device','aeh','do-254'], pfh:['propeller','flight','hour'], uncontainment:['non-containment','high-energy','debris'], burst:['non-containment','high-energy','debris','rotor'], csl:['catastrophic','single','latent','csl+1'], latency:['latent','exposure','time'], cmr:['certification','maintenance','requirement'], ccmr:['candidate','certification','maintenance','requirement'],
         uca:['unsafe','control','action'], ucas:['unsafe','control','action'],
         controller:['control','structure','process','model'], controllers:['control','structure','process','model'],
@@ -5685,7 +5685,7 @@
                 tlId: '', tlDesc: s.totalLoss || '',
                 plId: '', plDesc: s.partialLoss || (_pls && _pls[0]) || '',
                 mId: '', mDesc: s.malfunction || (_mfs && _mfs[0]) || '',
-                aiGenerated: true, aiFeature: 'fcim.populate', aiSkill: _skillStampFor('fcim.populate'), aiModel: s._model || null,
+                aiGenerated: true, aiFeature: 'fcim.populate', aiModel: s._model || null,
                 aiSkill: _skillStampFor('fcim.populate'),   // Skills V1 — which instructions drafted this row
                 aiInputScope: sysScoped ? ('System · ' + (s._systemName || '')) : 'Aircraft', aiAt: new Date().toISOString()
             };
