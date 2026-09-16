@@ -31,7 +31,17 @@ Checked every open entry against the running site, the three repos (safety-lab-d
 **Confirmed STILL OPEN and visible live today (highest signal):**
 - S5 — DONE (505cd65, wall 309/0/0). lock_seal now reads sealed stores via SLEnv (CSP-safe) not eval; the seal hashed nothing before. Behavioural test regression_seal_content (7). Deploys via ship.sh.
 - S8 (credentials off browser localStorage) — IN PROGRESS. Waqas ruled 14 Sep: build a server-side secret vault on the customer's own DB, for BOTH Jama and AI keys; prove local Postgres then throwaway Supabase. PHASE 1 DONE + PROVEN on local Postgres (commit 79452d0): user_secrets table, write-only-from-client via SECURITY DEFINER save_secret/delete_secret + read-only my_secrets_status (kind/meta, never a value), service_role reads server-side. Shipped in customer-install/db/08_user_secrets_vault.sql (apply.sh wired) + supabase/migrations (timestamped), NOT applied to any live DB. PHASE 2 DONE 14 Sep (real-auth proof on the existing throwaway yiisexbngnjakkqkmctw — all checks passed with real roles). PHASES LEFT: 3 app write path (rpc calls replace localStorage; browser-only->local store, desktop->keychain), 4 server read path (Jama bridge + AI proxy read via service_role), 5 customer-install+prod apply, 6 tests. Plan: customer-install/db/VAULT_DESIGN.md.
-- S7 (no audit-log writer) still open — it is really the S13 enterprise activity-log build (hash-chained rows, app + gateway writers, RLS); belongs with the enterprise block, not a quick fix.
+- S7 (no audit-log writer) — DONE 16 Sep (3dc9f50). The judgement above was wrong: it was not an
+  enterprise build, it was two SECURITY DEFINER functions and four client call sites. The table,
+  the chain trigger, the immutability trigger and the read policies had all existed and been
+  correct the whole time; nothing had ever written a row. Shipped with it: DEFINER wrappers so
+  verify_signoff_chain stops erroring for every real user, TRUNCATE/UPDATE/DELETE revoked on all
+  five append-only ledgers (anon held TRUNCATE on signoffs and UPDATE+DELETE+TRUNCATE on
+  project_baselines and destruction_certificates on PRODUCTION), a daily pg_cron verification
+  recorded in public.chain_verifications, and a trail on the break-glass hatches. Migrations
+  20260916c/d APPLIED TO PRODUCTION and verified there as an ordinary authenticated role;
+  customer bundle 09/10 wired into apply.sh. trust.html corrected. regression_audit_writers (96),
+  eight mutations run against it. Client side needs ./ship.sh to reach browsers.
 
 **Desktop (safety-lab-desktop): all update/hardening infra is WIRED but inert —**
 - S24 signed updates: INDEPENDENT signed-manifest lock BUILT 14 Sep (desktop 68d79e5, update_verify.js, wall 106/0); still needs Waqas keygen+paste and a native cert. See DESKTOP_SIGNING_CHECKLIST.md.
