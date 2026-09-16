@@ -1590,9 +1590,9 @@ function _loadSheetJS() {
     if (_xlsxLoading) return _xlsxLoading;
     _xlsxLoading = new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.src = 'vendor/xlsx.full.min.js';
         s.onload = () => resolve(window.XLSX);
-        s.onerror = () => reject(new Error('Could not load SheetJS (network required)'));
+        s.onerror = () => reject(new Error('Could not load SheetJS (vendor/xlsx.full.min.js is missing from this build)'));
         document.head.appendChild(s);
     });
     return _xlsxLoading;

@@ -7350,14 +7350,18 @@
     // lower-assurance supplement and triggers a hard verify-against-model warning.
     // =========================================================================
     // ---- Document text extraction (Word .docx via mammoth, PDF via pdf.js) ----
-    // Libraries are lazy-loaded only when a user actually picks a file. The loader tries a
-    // local vendored copy first (so it can work in the offline/air-gap desktop build once the
-    // two libs are vendored under app/vendor/), then falls back to CDN for the online builds.
+    // Libraries are lazy-loaded only when a user actually picks a file, and they are loaded from
+    // this build and nowhere else. The CDN fallbacks that used to sit second in these lists were
+    // removed on 16 Sep 2026: a fallback that fires when a local file is missing is a silent
+    // reach-out no guard can see, which is the defect class behind the corpus-endpoint leak. It
+    // also never worked where it mattered, because the desktop egress allowlist admits only the
+    // configured backend and AI endpoint and refused every one of these. A missing vendored file
+    // now fails loudly with the file name instead. Run vendor-libs.sh to (re)populate site/vendor.
     const _SLAB_DOCLIBS = {
-        mammoth: ['vendor/mammoth.browser.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js'],
-        pdfjsLib: ['vendor/pdf.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js']
+        mammoth: ['vendor/mammoth.browser.min.js'],
+        pdfjsLib: ['vendor/pdf.min.js']
     };
-    const _SLAB_PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const _SLAB_PDF_WORKER = 'vendor/pdf.worker.min.js';
     const _loadedDocLibs = {};
     function _loadScriptOnce(globalName, urls) {
         if (typeof window !== 'undefined' && window[globalName]) return Promise.resolve(window[globalName]);

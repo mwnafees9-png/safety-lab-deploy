@@ -6178,7 +6178,7 @@ window._bulkSel = new Set();
 (function() {
     'use strict';
 
-    const MAMMOTH_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+    const MAMMOTH_LIB = 'vendor/mammoth.browser.min.js';
 
     let _mammothLoading = null;
     function _loadMammoth() {
@@ -6186,9 +6186,9 @@ window._bulkSel = new Set();
         if (_mammothLoading) return _mammothLoading;
         _mammothLoading = new Promise((resolve, reject) => {
             const s = document.createElement('script');
-            s.src = MAMMOTH_CDN;
+            s.src = MAMMOTH_LIB;
             s.onload = () => resolve(window.mammoth);
-            s.onerror = () => reject(new Error('Could not load mammoth.js (network required)'));
+            s.onerror = () => reject(new Error('Could not load mammoth.js (vendor/mammoth.browser.min.js is missing from this build)'));
             document.head.appendChild(s);
         });
         return _mammothLoading;

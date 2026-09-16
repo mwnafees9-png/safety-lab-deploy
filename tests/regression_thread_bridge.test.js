@@ -39,7 +39,13 @@ const idx = read('index.html');
 const iCfg = idx.indexOf('labs_thread_config.js');
 const iCli = idx.indexOf('thread_client.js');
 const iBr = idx.indexOf('thread_bridge.js');
-const iSdk = idx.indexOf('@supabase/supabase-js@2');
+// 16 Sep 2026 — the SDK used to arrive from cdn.jsdelivr.net and this line looked for
+// '@supabase/supabase-js@2' to find it. Every library is vendored into the build now (nothing is
+// fetched from outside it; see regression_no_external_hosts), so the marker is the local path.
+// The ORDER is what this check is about and that is unchanged: the SDK has to be parsed before
+// the config, client and bridge that use it.
+const iSdk = idx.indexOf('vendor/supabase.min.js');
+check('the Supabase SDK is loaded from this build, not a CDN', iSdk > -1 && !/src="https?:\/\/[^"]*supabase-js/.test(idx));
 check('index.html loads SDK, then config → client → bridge, cache-busted',
     iSdk > -1 && iSdk < iCfg && iCfg < iCli && iCli < iBr &&
     /labs_thread_config\.js\?v=/.test(idx) && /thread_client\.js\?v=1\.1/.test(idx) && /thread_bridge\.js\?v=/.test(idx));

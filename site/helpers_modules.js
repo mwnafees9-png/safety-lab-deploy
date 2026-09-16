@@ -12256,9 +12256,9 @@ function _loadJsPDF() {
     if(_jspdfLoading) return _jspdfLoading;
     _jspdfLoading = new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+        s.src = 'vendor/jspdf.umd.min.js';
         s.onload = () => resolve(window.jspdf);
-        s.onerror = () => reject(new Error('Could not load jsPDF (network required)'));
+        s.onerror = () => reject(new Error('Could not load jsPDF (vendor/jspdf.umd.min.js is missing from this build)'));
         document.head.appendChild(s);
     });
     return _jspdfLoading;

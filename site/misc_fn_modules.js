@@ -5060,9 +5060,9 @@ function _loadDocxLib() {
     if (_docxLibLoading) return _docxLibLoading;
     _docxLibLoading = new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'https://unpkg.com/docx@8.5.0/build/index.umd.js';
+        s.src = 'vendor/docx.umd.js';
         s.onload = () => resolve(window.docx);
-        s.onerror = () => reject(new Error('Could not load docx (network required)'));
+        s.onerror = () => reject(new Error('Could not load docx (vendor/docx.umd.js is missing from this build)'));
         document.head.appendChild(s);
     });
     return _docxLibLoading;
@@ -5074,9 +5074,9 @@ function _loadJSZip() {
     if (_jszipLoading) return _jszipLoading;
     _jszipLoading = new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        s.src = 'vendor/jszip.min.js';
         s.onload = () => resolve(window.JSZip);
-        s.onerror = () => reject(new Error('Could not load JSZip (network required)'));
+        s.onerror = () => reject(new Error('Could not load JSZip (vendor/jszip.min.js is missing from this build)'));
         document.head.appendChild(s);
     });
     return _jszipLoading;

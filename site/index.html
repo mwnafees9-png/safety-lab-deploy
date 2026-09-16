@@ -22,8 +22,8 @@
          in-app .brand-mark element so the identity is consistent. -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg?v=56.6i">
     <link rel="apple-touch-icon" href="favicon.svg?v=56.6i">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="vendor/d3.v7.min.js"></script>
+    <script src="vendor/chart.umd.min.js"></script>
     <!-- Phase 53.8 — cache-busting query string. Chrome caches file:// resources
          aggressively even with DevTools "Disable cache" on; bumping this string
          forces a re-fetch. Update the number when CSS/JS changes need to land. -->
@@ -3986,7 +3986,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     </div>
 
     <!-- Phase 55.0.3 — Supabase JS SDK for magic-link auth + cloud project sync. -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="vendor/supabase.min.js"></script>
     <!-- IDs & Numbering engine — must load BEFORE safety_lab.js so window.SafetyLabNumbering exists. -->
     <!-- 20 Aug 2026 — nine modules monkey-patch globals by name and each carried only
          its own idempotence marker, so the last wrapper erased everyone else's guard.
@@ -4069,11 +4069,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fta_view_modules.js?v=66.41" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
-    <script src="data_ops_modules.js?v=66.44" defer></script>
+    <script src="data_ops_modules.js?v=66.45" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.33" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.4" defer></script>
+    <script src="helpers_modules.js?v=3.5" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.35" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4081,8 +4081,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.47" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.65" defer></script>
-    <script src="safety_lab.js?v=65.57" defer></script>
+    <script src="misc_fn_modules.js?v=66.66" defer></script>
+    <script src="safety_lab.js?v=65.58" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4389,7 +4389,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.14" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.58" defer></script>
+    <script src="ai_loader.js?v=8.59" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.2" defer></script>
