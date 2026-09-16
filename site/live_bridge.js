@@ -10,10 +10,25 @@
 //     idempotent apply discipline as Q10. Nothing writes on its own, ever.
 //   · Every check and every apply is journaled.
 //
-// CREDENTIALS: connector config (URL, project, user, token) lives in
-// localStorage ONLY — never in the project file, never in autosave, never
-// on any server. The Worker proxy (/api/bridge) is a stateless relay the
-// browser needs for CORS; the desktop app fetches the tool directly.
+// CREDENTIALS. 16 Sep 2026 — the username and token are no longer kept in
+// localStorage. On the DESKTOP they go into the OS keychain (Electron
+// safeStorage via window.slabSecrets) and the request itself is made by the
+// main process, which is the only place the credential is ever decrypted.
+// Only the non-secret part of the connector config — base URL, project id,
+// poll setting — stays in localStorage. Never in the project file, never in
+// autosave, never on Safety Lab's servers.
+//
+// AND THE DESKTOP BRIDGE NEVER WORKED BEFORE THIS. The line that used to be
+// here said "the desktop app fetches the tool directly". It cannot: the
+// desktop's egress fence (shell_rules allowedHosts) admits only the configured
+// backend host and AI endpoint host, and webRequest.onBeforeRequest cancels
+// everything else in the app partition. A Jama host is in that set under none
+// of the three backend configurations. The connector screen was fillable and
+// no request ever left. Routing through the main process fixes it without
+// widening the fence by a single host.
+//
+// The Worker proxy (/api/bridge) remains the stateless relay the BROWSER needs
+// for CORS on the web doors.
 //
 // Write-back stays the M8 ReqIF file until phase 2 earns API writes.
 // ============================================================================
@@ -29,19 +44,64 @@
     function bridgeConfig() {
         try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null') || {}; } catch (_) { return {}; }
     }
+    // Only the NON-SECRET part is written here. On the desktop the username and token
+    // go to the keychain instead (bridgeSaveUi); on the web doors they are still needed
+    // per request, because the relay is stateless and has nowhere to keep them.
     function bridgeConfigSave(c) {
-        try { localStorage.setItem(CFG_KEY, JSON.stringify(c || {})); } catch (_) {}
+        const o = Object.assign({}, c || {});
+        if (_isDesktop()) { delete o.user; delete o.token; }
+        try { localStorage.setItem(CFG_KEY, JSON.stringify(o)); } catch (_) {}
     }
+
+    function _baseHost(baseUrl) {
+        try { return new URL(String(baseUrl)).hostname.toLowerCase(); } catch (_) { return ''; }
+    }
+
+    // One-time move of a credential this install saved before 16 Sep 2026, so the
+    // plaintext copy does not simply sit there forever. Runs once, on the desktop only.
+    async function _migrateStoredCredential() {
+        if (!_isDesktop() || !_hasKeychain()) return;
+        let raw = null;
+        try { raw = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (_) { return; }
+        if (!raw || !raw.token) return;
+        try {
+            const r = await window.slabSecrets.save('jama', { user: raw.user || '', token: raw.token },
+                { baseHost: _baseHost(raw.baseUrl), user: raw.user || '' });
+            if (!r || !r.ok) return;                       // keychain unavailable: leave it, say nothing yet
+            delete raw.user; delete raw.token;
+            localStorage.setItem(CFG_KEY, JSON.stringify(raw));
+            try { console.info('[bridge] connector credential moved into the OS keychain'); } catch (_) {}
+        } catch (_) {}
+    }
+    try {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _migrateStoredCredential);
+        else _migrateStoredCredential();
+    } catch (_) {}
 
     // ------------------------------------------------------------ transport
     function _isDesktop() {
         try { return !!(window.__slabDesktop || (navigator.userAgent || '').indexOf('Electron') >= 0); } catch (_) { return false; }
     }
+    function _hasKeychain() {
+        try { return !!(window.slabSecrets && window.slabBridge && typeof window.slabBridge.get === 'function'); } catch (_) { return false; }
+    }
     async function _get(targetUrl, cfg) {
+        // Desktop: the main process holds the credential and makes the call. Nothing
+        // here ever sees the token, and the page makes no cross-origin request at all.
+        if (_isDesktop()) {
+            if (!_hasKeychain()) {
+                throw new Error('This version of the desktop app cannot reach the connector. Update the app and reconnect the tool.');
+            }
+            const r = await window.slabBridge.get(targetUrl);
+            if (!r || !r.ok) throw new Error((r && r.error) || 'bridge request failed');
+            return r.data;
+        }
+        // Web doors: same-origin relay, credential supplied per request.
         const auth = 'Basic ' + btoa((cfg.user || '') + ':' + (cfg.token || ''));
-        const u = _isDesktop() ? targetUrl : ('/api/bridge?target=' + encodeURIComponent(targetUrl));
-        const res = await fetch(u, { headers: { 'Authorization': auth, 'Accept': 'application/json' } });
-        if (!res.ok) throw new Error('HTTP ' + res.status + ' from ' + (_isDesktop() ? 'Jama' : 'bridge'));
+        const res = await fetch('/api/bridge?target=' + encodeURIComponent(targetUrl), {
+            headers: { 'Authorization': auth, 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' from bridge');
         return res.json();
     }
 
@@ -193,9 +253,36 @@
     }
 
     // ------------------------------------------------------------ UI verbs
-    window.bridgeSaveUi = function () {
+    window.bridgeSaveUi = async function () {
         const g = id => { const el = document.getElementById(id); return el ? (el.type === 'checkbox' ? el.checked : el.value.trim()) : ''; };
-        bridgeConfigSave({ kind: 'jama', baseUrl: g('lb-url'), projectId: g('lb-pid'), user: g('lb-user'), token: g('lb-token'), auto: g('lb-auto') });
+        const baseUrl = g('lb-url'), user = g('lb-user'), token = g('lb-token');
+        const cfg = { kind: 'jama', baseUrl: baseUrl, projectId: g('lb-pid'), user: user, token: token, auto: g('lb-auto') };
+
+        if (_isDesktop()) {
+            if (!_hasKeychain()) {
+                try { showToast('Update the desktop app to connect a tool — this version cannot store the credential safely.', 'error', 5200); } catch (_) {}
+                return;
+            }
+            if (!_baseHost(baseUrl)) {
+                try { showToast('Enter the tool\'s address first, for example https://yourcompany.jamacloud.com', 'error', 4200); } catch (_) {}
+                return;
+            }
+            // Keep the existing credential if the token box was left blank on a re-save.
+            if (token) {
+                const r = await window.slabSecrets.save('jama', { user: user, token: token }, { baseHost: _baseHost(baseUrl), user: user });
+                if (!r || !r.ok) {
+                    try { showToast((r && r.error) || 'The credential could not be stored. Nothing was saved.', 'error', 6200); } catch (_) {}
+                    return;                                  // fail CLOSED: no keychain, no connector
+                }
+            }
+            bridgeConfigSave(cfg);
+            _armPoll();
+            try { showToast('Connector saved. The credential is in this computer\'s keychain.', 'success', 3200); } catch (_) {}
+            _render();
+            return;
+        }
+
+        bridgeConfigSave(cfg);
         _armPoll();
         try { showToast('Connector saved (this browser only).', 'success', 2600); } catch (_) {}
         _render();
