@@ -340,7 +340,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     </div>
                 </div>
 
-                <input type="file" id="load-file" style="display:none" accept=".sl,.json" onchange="loadProject(event)">
+                <input type="file" id="load-file" style="display:none" accept=".sl,.slab,.json" onchange="loadProject(event)">
                 <input type="file" id="import-xlsx-file" style="display:none" accept=".xlsx,.xls,.xlsm" onchange="ExcelImport.onFilePicked(event)">
                 <!-- Phase 56.32a — SysML XMI file input. -->
                 <input type="file" id="import-xmi-file" style="display:none" accept=".xmi,.xml,.uml" onchange="window.SysMLImport && window.SysMLImport.onFilePicked(event)">

@@ -789,6 +789,7 @@ const SaveFs = (function() {
         const ext = (name.split('.').pop() || '').toLowerCase();
         const map = {
             sl:   { description: 'Safety Lab project', accept: { 'application/json': ['.sl'] } },
+            slab: { description: 'Safety Lab project', accept: { 'application/json': ['.slab'] } },   // files the desktop wrote before 16 Sep 2026
             json: { description: 'JSON project', accept: { 'application/json': ['.json'] } },
             pdf:  { description: 'PDF',           accept: { 'application/pdf':  ['.pdf']  } },
             csv:  { description: 'CSV',           accept: { 'text/csv':         ['.csv']  } },
