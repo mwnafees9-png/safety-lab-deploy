@@ -139,7 +139,7 @@ create or replace function public.erase_project(p_project_id uuid, p_confirm boo
 returns jsonb
 language plpgsql
 security definer
-set search_path to 'public', 'pg_temp'
+set search_path to 'public', 'extensions', 'pg_temp'   -- digest() lives in extensions
 as $function$
 declare
   v_ws uuid; v_name text; v_manifest jsonb; v_hash text; v_cert uuid;
@@ -228,7 +228,7 @@ create or replace function private.erase_my_account(p_confirm boolean default fa
 returns jsonb
 language plpgsql
 security definer
-set search_path to 'public', 'pg_temp'
+set search_path to 'public', 'extensions', 'pg_temp'   -- digest() lives in extensions
 as $function$
 declare
   v_uid uuid := auth.uid(); v_email text := auth.jwt()->>'email';
