@@ -261,7 +261,16 @@ begin
   select count(*) into v_chg  from public.change_journal             where project_id = any(v_projects);
   select count(*) into v_prob from public.problem_report_events      where project_id = any(v_projects);
   select count(*) into v_waud from public.workspace_audit            where workspace_id = any(v_owned);
-  select count(*) into v_sec  from public.user_secrets               where user_id = v_uid;
+  -- user_secrets exists on the throwaway project and on customer installs but NOT on production
+  -- (checked 16 Sep 2026). plpgsql resolves table names at RUN time, so a direct reference would
+  -- have created cleanly here and then raised "relation does not exist" the first time anyone
+  -- tried to erase an account on production. Guarded so the same file is correct on a database
+  -- that has it and one that does not.
+  if to_regclass('public.user_secrets') is not null then
+    execute 'select count(*) from public.user_secrets where user_id = $1' into v_sec using v_uid;
+  else
+    v_sec := 0;
+  end if;
   -- expiry_watch is a VIEW over users and license_tokens, not a table. It cannot be deleted from
   -- and it empties itself once those rows go, so it is neither deleted nor counted: a manifest
   -- line claiming a view was destroyed would be one more false statement on a signed certificate.
@@ -289,9 +298,11 @@ begin
   delete from public.workspaces       where id = any(v_owned);
   delete from public.workspace_members where user_id = v_uid;
   delete from public.license_tokens   where user_id = v_uid;
-  -- user_secrets holds this user's stored credentials; expiry_watch their trial state. Neither
-  -- is Customer Data, but both are theirs and neither survives an account erasure.
-  delete from public.user_secrets     where user_id = v_uid;
+  -- user_secrets holds this user's stored credentials. Not Customer Data, but theirs, and it does
+  -- not survive an account erasure on a database that has the table.
+  if to_regclass('public.user_secrets') is not null then
+    execute 'delete from public.user_secrets where user_id = $1' using v_uid;
+  end if;
 
   v_hash := encode(digest(coalesce(v_email,'')||v_uid::text||now()::text,'sha256'),'hex');
   update public.users set email = 'redacted+'||left(v_hash,16)||'@deleted.invalid' where id = v_uid;
