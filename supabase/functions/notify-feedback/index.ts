@@ -249,6 +249,10 @@ Deno.serve(async (req: Request) => {
     resend_id: send.ok ? send.id : null,
     status: send.ok ? 'sent' : 'failed',
     error: send.ok ? null : send.error,
+    // Stamped so erase_project can reach this row: the feedback row it mirrors is deleted on
+    // erasure, and this copy of the same content must go with it.
+    project_id: feedbackRow.project_id ?? null,
+    workspace_id: feedbackRow.workspace_id ?? null,
     payload: { feedback_id: feedbackRow.id, user_id: userId, category, rating },
   });
 

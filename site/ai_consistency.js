@@ -200,9 +200,23 @@
             return (r && r.data && r.data.body) || null;
         } catch (_) { return null; }
     }
+    // 16 Sep 2026 — this used to upsert ai_org_cache directly, which left the row with no link
+    // to the project whose documents produced the answer. Erasure could not reach it: the table
+    // had no project or workspace column at all, so a customer's cached AI output survived the
+    // deletion of everything it was derived from. The row now records every project that reached
+    // it (an array, because the key is (user_id, h) and one hash can be reached from more than
+    // one project), and erase_project drops this project's claim and deletes the row once no
+    // project is left holding it. The append has to happen server side or two tabs race, so the
+    // write goes through the ai_cache_put RPC.
     function _remotePut(h, rec, feature) {
         var sb = _sb(); if (!sb) return;
-        try { sb.from('ai_org_cache').upsert({ h: h, feature: feature || '', body: rec, at: new Date().toISOString() }).then(function () {}, function () {}); } catch (_) {}
+        var proj = null, ws = null;
+        try { if (typeof window.getActiveCloudProjectId === 'function') proj = window.getActiveCloudProjectId() || null; } catch (_) {}
+        try { if (typeof window.getActiveWorkspaceId    === 'function') ws   = window.getActiveWorkspaceId()    || null; } catch (_) {}
+        try {
+            sb.rpc('ai_cache_put', { p_h: h, p_feature: feature || '', p_body: rec, p_project: proj, p_workspace: ws })
+              .then(function () {}, function () {});
+        } catch (_) {}
     }
 
     // ------------------------------------------------------ the provider wrap

@@ -65,7 +65,15 @@ async function sendViaResend(opts: { to: string; replyTo?: string; subject: stri
   return { ok: true, id: body?.id ?? '' };
 }
 
+// 16 Sep 2026 — stamp the project and workspace on every notification row. Without them a
+// notification about a review or a piece of feedback kept the project's name and identifiers in
+// its subject and payload AFTER the project was erased, because erase_project had nothing to
+// match on. logNotification derives the stamps from the payload it is already given, so callers
+// need no change and a payload that carries neither simply stamps null rather than guessing.
 async function logNotification(row: any) {
+  row = { ...row,
+    project_id:   row.project_id   ?? row.payload?.project_id   ?? null,
+    workspace_id: row.workspace_id ?? row.payload?.workspace_id ?? null };
   try { await sb.from('notification_log').insert(row); }
   catch (e) { console.error('[notify-review] notification_log insert failed', e); }
 }
