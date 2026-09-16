@@ -174,6 +174,9 @@
     } catch (_) {}
     return result;
   }
+  // The AI proxy in offline-licence mode (customer-hosted) verifies the SIGNED LICENSE ITSELF as
+  // the bearer credential. getLicenseToken() reads it through here. Nothing else needs the blob.
+  W.SLLicenseBlob = function () { return readBlob(); };
   W.__slabSignedLicenseReady = ready;
   // Re-check with the signed-in identity (auth_gate calls this once the session is known).
   W.SLLicenseCheckIdentity = async function (email, tenant) {

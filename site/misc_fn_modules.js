@@ -220,7 +220,24 @@ function showUpgradeRequiredToast(feature, requiredTier) {
     showToast(msg, 'warning', 5200);
 }
 
+// The credential the AI plumbing sends as its bearer. Two worlds:
+//   hosted demo  - the cloud-issued token auth_gate stored in safetyLab.license.token; the proxy
+//                  looks it up in license_tokens.
+//   customer     - the SIGNED LICENSE BLOB. The customer's own proxy runs in offline-licence mode
+//                  and verifies that blob against Safety Lab's public key; it has no database to
+//                  look a token up in. slab_license.js writes only a 'signed:<id>' MARKER into the
+//                  token slot for the rest of the app, and until 16 Sep 2026 that marker was what
+//                  went out as the bearer: the app said 'signed:SL-LIC-...', the proxy said
+//                  "Token not recognized", and no AI call could ever have succeeded on a
+//                  customer install. Found by the first live end-to-end run (R7).
 function getLicenseToken() {
+    try {
+        var L = window.SLLicense;
+        if (L && L.valid && L.present && typeof window.SLLicenseBlob === 'function') {
+            var blob = window.SLLicenseBlob();
+            if (blob) return String(blob);
+        }
+    } catch (_) {}
     try { return localStorage.getItem('safetyLab.license.token') || ''; } catch(_) { return ''; }
 }
 

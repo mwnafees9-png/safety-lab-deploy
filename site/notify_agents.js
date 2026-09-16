@@ -79,6 +79,9 @@
         return 'https://api.safetylabaero.com/v1/ai';
     }
     function _licenseToken() {
+        // ONE accessor (misc_fn_modules.getLicenseToken): on a customer install the bearer is the
+        // signed licence blob, not the token slot. Reading the slot here sent the wrong credential.
+        try { if (typeof window !== 'undefined' && typeof window.getLicenseToken === 'function') return String(window.getLicenseToken() || ''); } catch (_) {}
         try { return (typeof localStorage !== 'undefined' && localStorage.getItem('safetyLab.license.token')) || ''; } catch (_) { return ''; }
     }
 
