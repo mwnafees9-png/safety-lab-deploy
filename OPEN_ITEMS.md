@@ -43,6 +43,23 @@ Checked every open entry against the running site, the three repos (safety-lab-d
   customer bundle 09/10 wired into apply.sh. trust.html corrected. regression_audit_writers (96),
   eight mutations run against it. Client side needs ./ship.sh to reach browsers.
 
+- S2b (MFA step-up never fired) — FOUND + FIXED 16 Sep (e40e2d4). The sign-in step-up shipped
+  6 Sep and had NEVER run: needsChallenge() read nextLevel from supabase-js's cached session,
+  which carries no factor list, so it returned false for everyone. Production before the fix:
+  two verified TOTP factors, 30 sessions, auth.mfa_amr_claims = 20 password + 10 email/signup
+  and ZERO totp. Fixed to read the factor list from listFactors() and fail closed in four
+  places; mfa 1.3, auth_gate 62.74; regression_mfa_step_up (25), six mutations.
+  POLICY (Waqas, 16 Sep): 2FA stays OPT-IN. SL_MFA_MANDATORY is deliberately unset, and
+  SL-WP-0003 section 19 + the two other "enforced multi-factor authentication" claims were
+  corrected in the document to match. NOTE ON DEPLOY: the two accounts that HAVE enrolled will
+  now actually be challenged for a code — if either has lost the authenticator they need the
+  factor removed before they can sign in.
+- DOC CONTROL: two different files are both named "SL-WP-0003 Data Security v3.0" — the one on
+  the Desktop (current, has the workspace-security section) and an older, shorter one in
+  Downloads with its PDF, which predates that section and still claims MFA is enforced for
+  every account. Only the Desktop copy was corrected. The stale pair should be replaced or
+  removed before anything gets attached to an email by mistake.
+
 **Desktop (safety-lab-desktop): all update/hardening infra is WIRED but inert —**
 - S24 signed updates: INDEPENDENT signed-manifest lock BUILT 14 Sep (desktop 68d79e5, update_verify.js, wall 106/0); still needs Waqas keygen+paste and a native cert. See DESKTOP_SIGNING_CHECKLIST.md.
 - S25 contextIsolation:false on the app window (gate/settings windows are isolated); notarize+hardenedRuntime configured.
