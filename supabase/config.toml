@@ -1,0 +1,38 @@
+# Supabase CLI project config.  Created 17 Sep 2026.
+#
+# WHY THIS FILE EXISTS: verify_jwt.
+#
+# The four notify-* functions are called by DATABASE TRIGGERS, not by a signed-in browser. They
+# were running with the platform's JWT gate on (verify_jwt = true, the default), which means the
+# Supabase gateway rejects the request before our code sees it unless the Authorization header is
+# a valid Supabase JWT.
+#
+# That gate buys nothing here. The anon key is a valid JWT and is published in every client
+# bundle, so anyone at all can get past it. The thing that actually decides is our own
+# constant-time comparison inside each function (_authorizedBySvc), which fails closed.
+#
+# What the gate DID do was force the caller to hold a JWT, which is why these triggers carried a
+# service-role JWT baked into their definitions -- and that literal drifting out of step with the
+# key the function compares against is what killed every email in the product from 14 to 17 Sep.
+# Keeping verify_jwt on would mean the hook secret has to be a JWT, which means it has to be the
+# service-role key again, which is the coupling that caused the outage.
+#
+# So: the platform gate goes off for these four, exactly as it already is for stripe-webhook (also
+# called by a machine, also doing its own signature check), and our own check is the gate.
+#
+# notify-feedback and notify-invite are NOT listed here. They are called by a signed-in user from
+# the browser and verify a real user JWT with auth.getUser(). They keep the platform gate on.
+
+project_id = "fhrqkhdrwbfnizkepkch"
+
+[functions.notify-signin]
+verify_jwt = false
+
+[functions.notify-signup]
+verify_jwt = false
+
+[functions.notify-review]
+verify_jwt = false
+
+[functions.notify-expiry]
+verify_jwt = false

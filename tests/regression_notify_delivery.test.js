@@ -52,6 +52,26 @@ for (const f of NOTIFY) {
     !/length\s*>=?\s*16/.test(s));
 }
 
+console.log('\n[gateway] the platform JWT check is off for the machine-called functions');
+{
+  const cp = path.join(REPO, 'supabase', 'config.toml');
+  const c = fs.existsSync(cp) ? fs.readFileSync(cp, 'utf8') : '';
+  check('config.toml exists', !!c, 'without it every deploy silently re-enables the gateway check');
+  for (const f of NOTIFY) {
+    check(f + ': platform JWT check is off',
+      // [^\\[]* so the match cannot run past this section into the NEXT function's setting.
+      // The first version could, and passed with this very function's gate turned back on.
+      new RegExp('\\[functions\\.' + f + '\\][^\\[]*?verify_jwt = false').test(c),
+      'the gateway rejects a non-JWT bearer before our own check runs, which forces the hook '
+      + 'secret to be the service-role JWT again -- the exact coupling that caused the outage');
+  }
+  for (const f of ['notify-feedback', 'notify-invite']) {
+    check(f + ': platform JWT check stays ON',
+      !new RegExp('\\[functions\\.' + f + '\\]').test(c),
+      'these are called by a signed-in user from the browser, not by a trigger');
+  }
+}
+
 console.log('\n[migration] the credential is not in a trigger definition any more');
 {
   const mp = path.join(REPO, 'supabase', 'migrations', '20260917a_notify_hook_secret_and_health.sql');
