@@ -60,6 +60,46 @@ Checked every open entry against the running site, the three repos (safety-lab-d
   every account. Only the Desktop copy was corrected. The stale pair should be replaced or
   removed before anything gets attached to an email by mistake.
 
+## 17 Sep 2026 — S28: every email the product sends had been dead since 14 Sep. FIXED AND LIVE.
+
+FOUND by a deliberate sweep for controls that have never executed (the pattern behind the last
+ten defects), not by a report. notification_log has rows every day 5–14 Sep then nothing; the
+daily expiry cron reported SUCCEEDED on all fourteen runs including 17 Sep; every row in
+net._http_response was 401. Sign-in, signup, review and licence-expiry mail: all of it.
+
+CAUSE: the 14 Sep hardening (S10) doing exactly what it says. The notify-* functions began
+requiring an exact match against SUPABASE_SERVICE_ROLE_KEY, but the callers were five Dashboard
+webhooks whose headers are a STRING LITERAL inside the trigger definition, holding a legacy
+service-role JWT that no longer matched. Silent because net.http_post() queues and returns at
+once, so the cron never sees the reply.
+
+THIRD GATE, found only by testing against production: the platform's own verify_jwt was on, so
+Supabase's gateway refused a non-JWT bearer before our code ran. That is WHY the credential had
+to be the service-role key in the first place. Now off for the four machine-called functions
+(supabase/config.toml, in the repo so a deploy cannot silently restore the default); it protected
+nothing, since the anon key is a valid JWT and ships in every browser bundle.
+
+FIX: purpose-built secret in Vault, read at send time; sender cannot raise (auth.users is written
+on every sign-in); every send recorded with its function name; hourly sweep fills in the reply.
+Migration 20260917a APPLIED TO PRODUCTION. Proven end to end 17 Sep 20:05 UTC —
+notification_log shows status=sent with a Resend id, the first row since 14 Sep 01:59.
+
+STILL OPEN from this:
+- ROTATE notify_hook_secret. The value was visible in a screenshot pasted into the work session,
+  so it is in a chat log. It is only a notification trigger, not the database key — which is the
+  point of it not being the service-role key any more — but rotate it: one `openssl rand` piped
+  to pbcopy, `supabase secrets set`, and vault.update_secret('18364382-1b63-4d6e-bab2-805748217ec1', ...).
+- ai_usage has a writer (increment_ai_usage, service_role only) and NO CALLER anywhere in the
+  three repos. An AI usage meter that has never been incremented. Not yet chased.
+- audit_log is still 0 rows. The 16 Sep writers are called from helpers_modules.js on AI calls
+  and sign-offs; no sign-off has ever happened, so 0 may be honest. Needs one real AI call to
+  confirm audit_ai_call fires.
+- customer-install/db/00_schema_baseline.sql created three triggers on a CUSTOMER's database
+  pointing at OUR project URL, so a review action there POSTed the record to Safety Lab's cloud.
+  Credential was redacted so every call 401'd, which is why nobody saw it. REMOVED 17 Sep. The
+  file's own header had recorded the 6 Sep ruling to point them at the customer's endpoint; the
+  URL was never changed. A written ruling is not a control until something enforces it.
+
 **Desktop (safety-lab-desktop): all update/hardening infra is WIRED but inert —**
 - S24 signed updates: INDEPENDENT signed-manifest lock BUILT 14 Sep (desktop 68d79e5, update_verify.js, wall 106/0); still needs Waqas keygen+paste and a native cert. See DESKTOP_SIGNING_CHECKLIST.md.
 - S25 contextIsolation — CODE DONE 17 Sep (desktop d7804ca), NOT YET PROVEN AT RUNTIME. It is on for
