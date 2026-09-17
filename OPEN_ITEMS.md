@@ -62,9 +62,28 @@ Checked every open entry against the running site, the three repos (safety-lab-d
 
 **Desktop (safety-lab-desktop): all update/hardening infra is WIRED but inert —**
 - S24 signed updates: INDEPENDENT signed-manifest lock BUILT 14 Sep (desktop 68d79e5, update_verify.js, wall 106/0); still needs Waqas keygen+paste and a native cert. See DESKTOP_SIGNING_CHECKLIST.md.
-- S25 contextIsolation:false on the app window (gate/settings windows are isolated); notarize+hardenedRuntime configured.
-- S26 config.json plaintext; the bundled app is web 0e0d3f1 (helpers 2.98) — THREE web releases behind: it predates R18 (save/sync data-loss fix), per-user undo and all of R19. cloud_writer.js is in the bundle; error_watch.js is not.
-- S27 no git remote (4 commits).
+- S25 contextIsolation — CODE DONE 17 Sep (desktop d7804ca), NOT YET PROVEN AT RUNTIME. It is on for
+  all three windows now. The recorded reason it had been off for months (230 classic scripts sharing
+  window globals) was wrong: isolation separates the PRELOAD from the page, not the page's scripts
+  from each other, and not one of the 230 had to change. The one thing that genuinely had to move was
+  __slabAuthCallback, from the preload into the page. Still needs a Mac build that BOOTS.
+- S25b (found 17 Sep, fixed same day, desktop c5b4df8) — moving that handler broke the desktop
+  sign-in for one commit, and nothing caught it. The desktop ships a VENDORED copy of the web build;
+  that copy was at a6655ed, one commit before the move, so the handler existed in neither the preload
+  nor the bundle. main.js:267 calls it as `window.__slabAuthCallback ? ... : false`, so it failed
+  silently: browser opens, user authenticates, returns, app does nothing. Both walls were green the
+  whole time — each repo was internally consistent and nothing checked the seam. Bundle re-pulled at
+  80057bc; new suite tests/regression_shell_page_contract.test.js (12) walks main.js for that guard
+  pattern and requires every name it finds to be defined in exactly one of the preload or the bundle,
+  plus a BUILD_INFO md5 check so a hand-patched app/ is caught. Mutation-tested three ways.
+  NOTE: the same silent-guard pattern covers four other page functions (__slabGetProjectJSON,
+  __slabLoadProjectJSON, __slabOpenCloudProject, openInWebLink). All five resolve today; the suite
+  is what keeps that true.
+- S26 config.json plaintext — STILL OPEN. The backend key sits in plain text in the desktop's own
+  config file. The Jama credential half of this was fixed 16 Sep (OS keychain via safeStorage).
+  BUNDLE STALENESS half: CLOSED 17 Sep — app/ is now web 80057bc, current as of this session, which
+  is the first time the desktop has carried R18/R19, the demo FCIM fix and the .sl picker.
+- S27 no git remote — STILL OPEN AND WORSENING. Nothing is pushed anywhere, on ANY of the three repos (safety-lab-deploy 213, -proxy-deploy 17, -desktop 10 commits as of 17 Sep). The only copy of the company is one laptop. Waqas's action; needs his account.
 
 ## 14 Sep 2026 (evening) — SECOND RECONCILIATION, verified live + across all three repos
 
