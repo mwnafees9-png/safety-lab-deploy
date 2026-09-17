@@ -84,7 +84,34 @@ on every sign-in); every send recorded with its function name; hourly sweep fill
 Migration 20260917a APPLIED TO PRODUCTION. Proven end to end 17 Sep 20:05 UTC —
 notification_log shows status=sent with a Resend id, the first row since 14 Sep 01:59.
 
-STILL OPEN from this:
+## 17 Sep 2026 — S29: anon and authenticated could TRUNCATE every customer table. FIXED AND LIVE.
+
+RLS is enabled on all 29 public tables, which is exactly why this looked fine. Postgres RLS DOES
+NOT APPLY TO TRUNCATE: a policy can forbid deleting one row and say nothing about emptying the
+table. anon and authenticated held TRUNCATE on 19 of them, including projects, project_documents,
+project_document_versions, project_crdt, yjs_documents, workspaces, workspace_members, users and
+license_tokens.
+
+The 16 Sep lockdown (20260916c) revoked exactly this on five LEDGER tables, because the 5 Sep
+audit had named those five. The tables holding the actual work were never in scope. A fix aimed at
+the examples in a report rather than at the class of problem leaves the rest of the class.
+
+HONEST SEVERITY: not reachable through the public API. PostgREST has no verb that issues a
+TRUNCATE; neither role has CREATE on the schema, so neither can define a function to do it; and
+the one SECURITY DEFINER function authenticated can reach that runs dynamic SQL
+(private.erase_my_account) binds its user value as a parameter and is not injectable -- checked.
+So what stood between a published anon key and an empty projects table was that PostgREST happens
+not to offer the verb. Nobody chose that control, wrote it down, or could test it.
+
+FIXED: migration 20260917b sweeps pg_class rather than listing tables, and ALSO changes the
+default privileges -- Supabase grants ALL on new tables in public to anon and authenticated, so a
+revoke alone lasts until the next CREATE TABLE. Proven on the throwaway behaviourally as the real
+authenticated role: insert works, select works, TRUNCATE refused, rows intact; and a brand new
+table comes out without the privilege. APPLIED TO PRODUCTION, verified 0 tables truncatable by
+either role with select/insert/update/delete untouched. Bundled as customer-install 11_ and wired
+into apply.sh. regression_truncate_grants (13), mutation-tested.
+
+## From the same sweep, still open:
 - ROTATE notify_hook_secret. The value was visible in a screenshot pasted into the work session,
   so it is in a chat log. It is only a notification trigger, not the database key — which is the
   point of it not being the service-role key any more — but rotate it: one `openssl rand` piped
