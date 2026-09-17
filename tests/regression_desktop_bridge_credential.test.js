@@ -67,7 +67,14 @@ const main = readDesk('main.js');
 const pre = readDesk('preload-app.js');
 
 check('main.js registers the bridge channel', /ipcMain\.handle\('slab:bridgeGet'/.test(main));
-check('the preload exposes it to the page', /window\.slabBridge\s*=/.test(pre));
+// 17 Sep 2026: assert the NAME the page ends up with, not how it got there. This originally
+// read /window\.slabBridge\s*=/, which pinned the delivery mechanism -- so when the window
+// gained contextIsolation and the preload moved to contextBridge, a correct change turned this
+// red. What matters is that the page can reach slabBridge, by either route.
+const exposes = (name) =>
+  new RegExp('window\\.' + name + '\\s*=').test(pre) ||
+  new RegExp("exposeInMainWorld\\('" + name + "'").test(pre);
+check('the preload exposes it to the page', exposes('slabBridge'));
 check('the web bridge calls it on desktop', /window\.slabBridge\.get\(targetUrl\)/.test(web));
 check('the web bridge no longer fetches the tool directly',
   !/_isDesktop\(\) \? targetUrl :/.test(web),
@@ -82,7 +89,8 @@ check('there is no getSecret channel at all',
   'the page must not be able to ask for a value, not even its own');
 check('reveal() is not exported over IPC', !/ipcMain\.handle\([^)]*reveal/i.test(main));
 check('the preload exposes save/status/remove only',
-  /window\.slabSecrets = \{[\s\S]{0,400}?\};/.test(pre) &&
+  exposes('slabSecrets') &&
+  /save:\s*function/.test(pre) && /status:\s*function/.test(pre) && /remove:\s*function/.test(pre) &&
   !/get:\s*function[^}]*getSecret/.test(pre));
 check('status returns kind, meta and a date — never a value',
   /return \{ kind: kind, meta: e\.meta \|\| \{\}, updatedAt: e\.updatedAt \|\| null \};/.test(sec));

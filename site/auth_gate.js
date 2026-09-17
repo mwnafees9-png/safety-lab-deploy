@@ -994,6 +994,36 @@
   window.SafetyLab._authResendVerification = resendVerification;
   window.SafetyLab._authLiftGate = liftGate;
 
+  // ---- desktop SSO return (17 Sep 2026) ------------------------------------------------
+  // The shell receives safetylab://auth-callback?code=… from the system browser and calls this
+  // through webContents.executeJavaScript, which runs in this page's own world.
+  //
+  // This used to live in the desktop preload, which reached in here for getSupabaseClient().
+  // With contextIsolation now ON for the app window, the preload cannot reach into the page at
+  // all, so the handler belongs on this side — where the Supabase client already is. The shell
+  // side is unchanged: it still calls window.__slabAuthCallback(url).
+  window.__slabAuthCallback = async function (url) {
+    try {
+      const u = new URL(String(url));
+      const code = u.searchParams.get('code');
+      const sb = getSupabase();
+      if (!sb || !sb.auth) return false;
+      if (code && typeof sb.auth.exchangeCodeForSession === 'function') {
+        const r = await sb.auth.exchangeCodeForSession(code);
+        return !r.error;
+      }
+      const h = new URLSearchParams(String(u.hash || '').replace(/^#/, ''));
+      const at = h.get('access_token'), rt = h.get('refresh_token');
+      if (at && rt && typeof sb.auth.setSession === 'function') {
+        const r = await sb.auth.setSession({ access_token: at, refresh_token: rt });
+        return !r.error;
+      }
+    } catch (e) {
+      try { console.error('[auth-gate] SSO return failed', e); } catch (_) {}
+    }
+    return false;
+  };
+
   // -------------------------------------------------------------------------
   // Main: check session, gate or lift accordingly
   // -------------------------------------------------------------------------
