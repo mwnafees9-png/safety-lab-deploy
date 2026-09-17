@@ -268,10 +268,28 @@ function _ctEq(a: string, b: string): boolean {
   let diff = 0; for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+// 17 Sep 2026. Accept EITHER the purpose-built hook secret or the project service-role key.
+//
+// Why two. Requiring the service-role key exactly (14 Sep) was correct as far as it went, but
+// it tied every notification to the database master key, and the callers are database triggers
+// that carry their Bearer as a literal baked into the trigger definition. When the key the
+// platform injects here stopped matching the literal in those triggers, every send started
+// returning 401 and nothing noticed for three days: sign-in, signup, review and licence-expiry
+// mail all stopped. NOTIFY_HOOK_SECRET is a secret whose only power is to ask for a
+// notification, read from Vault by the trigger at send time, so rotating it is one row.
+//
+// The service-role branch stays so this can be deployed before or after the database side
+// without a window where mail is dead. Once the triggers are on the hook secret it can go.
+const HOOK_SECRET = Deno.env.get('NOTIFY_HOOK_SECRET') ?? '';
+
 function _authorizedBySvc(authHeader: string): boolean {
-  if (!SERVICE_ROLE_KEY) return false;                 // fail closed if the key is not injected
   const m = /^Bearer\s+(.+)$/.exec(authHeader ?? '');
-  return !!m && _ctEq(m[1].trim(), SERVICE_ROLE_KEY);
+  if (!m) return false;
+  const presented = m[1].trim();
+  // Evaluate both, always, so the answer does not depend on which one matched.
+  const okHook = HOOK_SECRET ? _ctEq(presented, HOOK_SECRET) : false;
+  const okSvc  = SERVICE_ROLE_KEY ? _ctEq(presented, SERVICE_ROLE_KEY) : false;
+  return okHook || okSvc;                              // fail closed when neither is configured
 }
 
 Deno.serve(async (req: Request) => {

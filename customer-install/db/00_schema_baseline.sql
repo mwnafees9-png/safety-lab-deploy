@@ -1462,9 +1462,26 @@ CREATE TRIGGER trg_baseline_immutable BEFORE UPDATE ON public.project_baselines 
 CREATE TRIGGER trg_signoffs_chain BEFORE INSERT ON public.signoffs FOR EACH ROW EXECUTE FUNCTION signoffs_chain();
 CREATE TRIGGER trg_audit_log_chain BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION audit_log_chain();
 CREATE TRIGGER trg_review_rollup AFTER INSERT OR DELETE OR UPDATE ON public.review_assignments FOR EACH ROW EXECUTE FUNCTION review_status_rollup();
-CREATE TRIGGER "notify-review-assigned" AFTER INSERT ON public.review_assignments FOR EACH ROW EXECUTE FUNCTION supabase_functions.http_request('https://fhrqkhdrwbfnizkepkch.supabase.co/functions/v1/notify-review', 'POST', '{"Content-type":"application/json","Authorization":"Bearer <SERVICE_ROLE_JWT>"}', '{}', '5000');
-CREATE TRIGGER "notify-review-status" AFTER UPDATE ON public.reviews FOR EACH ROW EXECUTE FUNCTION supabase_functions.http_request('https://fhrqkhdrwbfnizkepkch.supabase.co/functions/v1/notify-review', 'POST', '{"Content-type":"application/json","Authorization":"Bearer <SERVICE_ROLE_JWT>"}', '{}', '5000');
-CREATE TRIGGER "notify-review-comment" AFTER INSERT ON public.review_comments FOR EACH ROW EXECUTE FUNCTION supabase_functions.http_request('https://fhrqkhdrwbfnizkepkch.supabase.co/functions/v1/notify-review', 'POST', '{"Content-type":"application/json","Authorization":"Bearer <SERVICE_ROLE_JWT>"}', '{}', '5000');
+-- 17 Sep 2026: THE THREE notify-review TRIGGERS THAT STOOD HERE ARE GONE.
+--
+-- They were copied from production and still pointed at Safety Lab's own project URL. On a
+-- customer's install that meant: assign a reviewer, add a review comment or change a review's
+-- status, and their database POSTs the review record to our cloud. The credential had been
+-- redacted to <SERVICE_ROLE_JWT>, so every call would have been refused with a 401 -- which is
+-- why this was never noticed -- but the body goes over the wire before anyone refuses it.
+--
+-- That is a straight contradiction of the standing rule that customer data does not touch our
+-- cloud at any point. The comment at the top of this file already recorded the 6 Sep ruling
+-- that these must point at the customer's own endpoint. The URL was never changed; a written
+-- ruling is not a control until something enforces it.
+--
+-- They are not reinstated per-install either. Review notification is a Safety Lab SaaS feature
+-- and its edge functions are not part of this bundle, so on a customer install these triggers
+-- have nothing to call. A customer who wants review email adds it against their own endpoint,
+-- deliberately, rather than inheriting ours by accident.
+--
+-- The SaaS side keeps them, rebuilt to read their credential from Vault at send time:
+-- supabase/migrations/20260917a_notify_hook_secret_and_health.sql
 CREATE TRIGGER trg_ai_org_cache_trim AFTER INSERT ON public.ai_org_cache FOR EACH ROW EXECUTE FUNCTION ai_org_cache_trim();
 CREATE TRIGGER audit_log_immutable BEFORE DELETE OR UPDATE ON public.audit_log FOR EACH ROW EXECUTE FUNCTION private.audit_immutable();
 CREATE TRIGGER workspace_audit_immutable BEFORE DELETE OR UPDATE ON public.workspace_audit FOR EACH ROW EXECUTE FUNCTION private.audit_immutable();
