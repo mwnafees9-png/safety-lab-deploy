@@ -1,5 +1,5 @@
 // ============================================================================
-// live_bridge.js — v1.0 — J1: live tracking of Jama (connector-shaped for
+// live_bridge.js — v1.2 — J1: live tracking of Jama (connector-shaped for
 // Polarion/DOORS next). READ-ONLY phase 1 by decision.
 //
 // "Live" without breaking the deterministic core:
@@ -27,8 +27,14 @@
 // no request ever left. Routing through the main process fixes it without
 // widening the fence by a single host.
 //
-// The Worker proxy (/api/bridge) remains the stateless relay the BROWSER needs
-// for CORS on the web doors.
+// 20 Sep 2026 (S8) — the WEB doors stop building the credential in the page too.
+// On any door with a backend the token goes to the server-side vault through
+// save_secret() (write-only from here) and the request goes to the AI proxy's
+// /bridge with the user's session JWT; the proxy reads the token, builds the
+// Basic header, and makes the call. The browser never holds the token and the
+// site worker's Basic-auth relay (/api/bridge) is no longer used on those doors.
+// Browser-only (no backend, nowhere else to keep it) keeps the token in
+// sessionStorage for this tab and still uses /api/bridge, and says so.
 //
 // Write-back stays the M8 ReqIF file until phase 2 earns API writes.
 // ============================================================================
@@ -49,28 +55,38 @@
     // per request, because the relay is stateless and has nowhere to keep them.
     function bridgeConfigSave(c) {
         const o = Object.assign({}, c || {});
-        if (_isDesktop()) { delete o.user; delete o.token; }
+        // The credential NEVER goes to localStorage on any door any more (S8). The username is
+        // non-secret but pairs with the token, so it travels with it as meta.
+        delete o.user; delete o.token;
         try { localStorage.setItem(CFG_KEY, JSON.stringify(o)); } catch (_) {}
     }
+    function _store() { try { return window.SecretStore || null; } catch (_) { return null; } }
+    function _door() { const st = _store(); return st ? st.door() : (_isDesktop() ? 'desktop' : 'session'); }
 
     function _baseHost(baseUrl) {
         try { return new URL(String(baseUrl)).hostname.toLowerCase(); } catch (_) { return ''; }
     }
 
-    // One-time move of a credential this install saved before 16 Sep 2026, so the
-    // plaintext copy does not simply sit there forever. Runs once, on the desktop only.
+    // One-time move of a credential this install saved to localStorage before S8, so the
+    // plaintext copy does not simply sit there forever. Desktop → keychain (16 Sep); any
+    // backend door → vault; browser-only → this tab's sessionStorage (20 Sep).
     async function _migrateStoredCredential() {
-        if (!_isDesktop() || !_hasKeychain()) return;
         let raw = null;
         try { raw = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch (_) { return; }
         if (!raw || !raw.token) return;
+        const meta = { baseHost: _baseHost(raw.baseUrl), user: raw.user || '' };
+        let r = null, where = '';
         try {
-            const r = await window.slabSecrets.save('jama', { user: raw.user || '', token: raw.token },
-                { baseHost: _baseHost(raw.baseUrl), user: raw.user || '' });
-            if (!r || !r.ok) return;                       // keychain unavailable: leave it, say nothing yet
+            if (_isDesktop()) {
+                if (!_hasKeychain()) return;
+                r = await window.slabSecrets.save('jama', { user: raw.user || '', token: raw.token }, meta); where = 'the OS keychain';
+            } else if (_store()) {
+                r = await _store().save('jama_token', raw.token, meta); where = (_door() === 'vault') ? 'the server-side vault' : 'this tab only';
+            } else return;
+            if (!r || !r.ok) return;                       // store unavailable: leave it, say nothing yet
             delete raw.user; delete raw.token;
             localStorage.setItem(CFG_KEY, JSON.stringify(raw));
-            try { console.info('[bridge] connector credential moved into the OS keychain'); } catch (_) {}
+            try { console.info('[bridge] connector credential moved out of localStorage into ' + where); } catch (_) {}
         } catch (_) {}
     }
     try {
@@ -96,8 +112,32 @@
             if (!r || !r.ok) throw new Error((r && r.error) || 'bridge request failed');
             return r.data;
         }
-        // Web doors: same-origin relay, credential supplied per request.
-        const auth = 'Basic ' + btoa((cfg.user || '') + ':' + (cfg.token || ''));
+        const st = _store();
+        if (st && st.door() === 'vault') {
+            // Backend doors: the proxy holds the credential (vault, service_role) and makes
+            // the call. We send only who we are. The proxy also refuses any target whose host
+            // differs from the one saved with the credential.
+            if (!st.has('jama_token')) throw new Error('Connect the tool first: no credential is saved for this account.');
+            const jwt = st.sessionJwt();
+            if (!jwt) throw new Error('Sign in again to use the connector.');
+            const base = (window.SLConfig && window.SLConfig.aiEndpoint) || '';
+            if (!base) throw new Error('This install has no proxy configured, so the connector has nowhere to relay through.');
+            const res = await fetch(String(base).replace(/\/+$/, '') + '/bridge?target=' + encodeURIComponent(targetUrl), {
+                headers: { 'Authorization': 'Bearer ' + jwt, 'Accept': 'application/json' }
+            });
+            if (!res.ok) {
+                let msg = 'HTTP ' + res.status + ' from bridge';
+                try { const j = await res.json(); if (j && j.error && j.error.message) msg = j.error.message; } catch (_) {}
+                throw new Error(msg);
+            }
+            return res.json();
+        }
+        // Browser-only: no backend and no proxy. The token is in this tab's sessionStorage and
+        // the same-origin stateless relay is the only way past CORS.
+        const token = st ? st.get('jama_token') : '';
+        const meta = st ? (st.meta('jama_token') || {}) : {};
+        if (!token) throw new Error('Connect the tool first: no credential is saved in this tab.');
+        const auth = 'Basic ' + btoa((meta.user || '') + ':' + token);
         const res = await fetch('/api/bridge?target=' + encodeURIComponent(targetUrl), {
             headers: { 'Authorization': auth, 'Accept': 'application/json' }
         });
@@ -220,12 +260,16 @@
         const fieldCss = 'font-size:12px; padding:5px 9px; border:1px solid var(--color-border-strong); background:var(--color-surface-1); color:var(--color-text-primary);';
         let html = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); padding:10px 14px; margin-bottom:14px;">' +
             '<div style="font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; margin-bottom:6px;">Live bridge — Jama <span style="font-weight:400; text-transform:none;">(read-only phase; connector-shaped for Polarion/DOORS)</span></div>' +
-            '<div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:8px;">The bridge watches; you decide. Credentials live in this browser only — never in the project file, never on a server. ' + (_isDesktop() ? 'Desktop: direct connection.' : 'Web: relayed through the stateless /api/bridge proxy.') + '</div>' +
+            '<div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:8px;">The bridge watches; you decide. ' +
+                ({ desktop: 'Credential: this computer\'s keychain; the desktop app makes the call.',
+                   vault:   'Credential: stored server-side in your account, write-only from this page; the proxy makes the call.',
+                   session: 'Credential: this tab only (browser-only install, no server to hold it); relayed through the stateless /api/bridge.' }[_door()] || '') +
+                ' Never in the project file.</div>' +
             '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">' +
             '<input id="lb-url" type="text" placeholder="https://yourco.jamacloud.com" value="' + _esc(cfg.baseUrl || '') + '" style="' + fieldCss + ' width:230px;">' +
             '<input id="lb-pid" type="text" placeholder="project id" value="' + _esc(cfg.projectId || '') + '" style="' + fieldCss + ' width:90px;">' +
-            '<input id="lb-user" type="text" placeholder="username" value="' + _esc(cfg.user || '') + '" style="' + fieldCss + ' width:120px;">' +
-            '<input id="lb-token" type="password" placeholder="API token" value="' + _esc(cfg.token || '') + '" style="' + fieldCss + ' width:140px;">' +
+            '<input id="lb-user" type="text" placeholder="username" value="' + _esc((_store() && (_store().meta('jama_token') || {}).user) || cfg.user || '') + '" style="' + fieldCss + ' width:120px;">' +
+            '<input id="lb-token" type="password" placeholder="' + ((_store() && _store().has('jama_token')) ? 'saved — leave blank to keep' : 'API token') + '" value="" style="' + fieldCss + ' width:140px;">' +
             '<label style="display:inline-flex; align-items:center; gap:4px; font-size:11px;"><input id="lb-auto" type="checkbox"' + (cfg.auto ? ' checked' : '') + '> watch every 5 min</label>' +
             '<button class="ckpt-m-btn" style="font-size:11.5px; padding:3px 12px;" onclick="bridgeSaveUi()">Save</button>' +
             '<button class="ckpt-m-btn ckpt-m-btn-primary" style="font-size:11.5px; padding:3px 12px;" onclick="bridgeCheckUi()">Check Jama now</button>' +
@@ -282,9 +326,33 @@
             return;
         }
 
+        // Web doors (S8). The token goes to SecretStore: the vault on any backend door, this
+        // tab's sessionStorage on browser-only. A blank token box on a re-save keeps the one
+        // already stored. Fail CLOSED: if the store refuses, nothing is saved.
+        if (!_baseHost(baseUrl)) {
+            try { showToast('Enter the tool\'s address first, for example https://yourcompany.jamacloud.com', 'error', 4200); } catch (_) {}
+            return;
+        }
+        const st = _store();
+        if (!st) { try { showToast('The secret store is not available on this page. Reload and try again.', 'error', 4200); } catch (_) {} return; }
+        if (token) {
+            const r = await st.save('jama_token', token, { baseHost: _baseHost(baseUrl), user: user });
+            if (!r || !r.ok) {
+                try { showToast((r && r.error) || 'The credential could not be stored. Nothing was saved.', 'error', 6200); } catch (_) {}
+                return;
+            }
+        } else if (!st.has('jama_token')) {
+            try { showToast('Enter the API token.', 'error', 3200); } catch (_) {}
+            return;
+        }
         bridgeConfigSave(cfg);
         _armPoll();
-        try { showToast('Connector saved (this browser only).', 'success', 2600); } catch (_) {}
+        try {
+            showToast(st.door() === 'vault'
+                ? 'Connector saved. The token is stored server-side in your account; this page cannot read it back.'
+                : 'Connector saved for this tab only. This is a browser-only install with no server to hold it; the token is gone when the tab closes.',
+                'success', 4200);
+        } catch (_) {}
         _render();
     };
     window.bridgeCheckUi = function () {

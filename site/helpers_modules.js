@@ -6117,8 +6117,9 @@ function renderAiAssistant(){
     if (!proPlus) return;
     // Load keys + settings into form.
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); };
-    try { set('ai-anthropic-key', localStorage.getItem(AI_LS_ANTHROPIC) || ''); } catch(_) {}
-    try { set('ai-voyage-key',    localStorage.getItem(AI_LS_VOYAGE)    || ''); } catch(_) {}
+    // S8: the value is not readable here any more (vault door: by design; session door: we
+    // still do not echo it into the DOM). Show whether one is saved, and its last four.
+    try { set('ai-anthropic-key', ''); set('ai-voyage-key', ''); _refreshAiKeyStatus(); } catch(_) {}
     const ais = (projectConfig && projectConfig.aiSettings) || {};
     set('ai-anthropic-model', ais.anthropicModel || 'claude-opus-4-8');
     set('ai-voyage-model',    ais.voyageModel    || 'voyage-3-large');

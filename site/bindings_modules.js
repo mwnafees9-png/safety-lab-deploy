@@ -1553,12 +1553,24 @@ window.toggleAiITAR = function(){
 
 window.saveAiSettings = function(){
     const get = (id) => (document.getElementById(id) || {}).value || '';
+    // S8 (20 Sep 2026): keys go to SecretStore — the server-side vault on any door with a
+    // backend (write-only from here), sessionStorage on browser-only. Never localStorage.
+    // A blank box on re-save keeps what is already saved; the explicit way to clear a key is
+    // the Remove control. Fire-and-forget with a toast on failure; the settings save itself
+    // must not block on a network round trip.
     try {
-        const aKey = get('ai-anthropic-key').trim();
-        const vKey = get('ai-voyage-key').trim();
-        if (aKey) localStorage.setItem(AI_LS_ANTHROPIC, aKey); else localStorage.removeItem(AI_LS_ANTHROPIC);
-        if (vKey) localStorage.setItem(AI_LS_VOYAGE, vKey);    else localStorage.removeItem(AI_LS_VOYAGE);
-    } catch(_) { showToast('Could not write to localStorage. Check browser privacy settings.', 'error', 4000); return; }
+        const st = window.SecretStore;
+        if (st) {
+            const aKey = get('ai-anthropic-key').trim();
+            const vKey = get('ai-voyage-key').trim();
+            const after = (kind, r) => { if (r && !r.ok && r.error) { try { showToast('The ' + (kind === 'anthropic_key' ? 'Anthropic' : 'Voyage') + ' key was not saved: ' + r.error, 'error', 6000); } catch(_) {} } };
+            if (aKey) Promise.resolve(st.save('anthropic_key', aKey, { last4: aKey.slice(-4) })).then(r => after('anthropic_key', r));
+            if (vKey) Promise.resolve(st.save('voyage_key',    vKey, { last4: vKey.slice(-4) })).then(r => after('voyage_key', r));
+            // never leave a pasted value sitting in the input once it has been handed over
+            const ael = document.getElementById('ai-anthropic-key'); if (ael && aKey) ael.value = '';
+            const vel = document.getElementById('ai-voyage-key');    if (vel && vKey) vel.value = '';
+        }
+    } catch(_) { showToast('The key could not be stored.', 'error', 4000); return; }
     // Self-hosted / on-prem backend (#56) — provider mode + local endpoints/model/key.
     // These are read directly by the AI module's Provider (cloud / itar-cloud / local).
     try {
@@ -1630,10 +1642,40 @@ window.testAiConnection = async function(){
     }
 };
 
+// S8: paint "saved / not saved" under each key box from SecretStore's status (kinds only,
+// never a value), with where it lives and a Remove control. Re-painted on every store change.
+window._refreshAiKeyStatus = function(){
+    const st = window.SecretStore; if (!st) return;
+    const where = { vault: 'stored server-side in your account; this page cannot read it back',
+                    session: 'kept in this tab only (browser-only install: there is no server to hold it); gone when the tab closes',
+                    desktop: 'not used on the desktop: AI runs through your organization\'s proxy' }[st.door()] || '';
+    const paint = (kind, id) => {
+        const el = document.getElementById(id); if (!el) return;
+        if (st.door() === 'desktop') { el.textContent = where; return; }
+        if (st.has(kind)) {
+            const m = st.meta(kind) || {};
+            el.innerHTML = '<span style="color:var(--color-success); font-weight:600;">Saved</span>' + (m.last4 ? ' (…' + String(m.last4).replace(/[<>&]/g, '') + ')' : '') + ' · ' + where +
+                ' · <a href="#" onclick="removeAiKey(\'' + kind + '\'); return false;">Remove</a>';
+        } else {
+            el.textContent = 'Not saved · ' + where;
+        }
+    };
+    paint('anthropic_key', 'ai-anthropic-key-status');
+    paint('voyage_key',    'ai-voyage-key-status');
+};
+try { if (window.SecretStore) window.SecretStore.onChange(window._refreshAiKeyStatus); } catch(_) {}
+window.removeAiKey = async function(kind){
+    const st = window.SecretStore; if (!st) return;
+    const r = await st.remove(kind);
+    try { showToast(r && r.ok ? 'Key removed.' : ('Could not remove the key' + (r && r.error ? ': ' + r.error : '')), r && r.ok ? 'success' : 'error', 3200); } catch(_) {}
+    try { if (typeof _refreshAiKeyStatus === 'function') _refreshAiKeyStatus(); } catch(_) {}
+};
 window.testAiConnectionBYO = async function(){
     const status = document.getElementById('ai-status');
     saveAiSettings();
-    const hasKey = !!(localStorage.getItem(AI_LS_ANTHROPIC) || '').trim();
+    // S8: the page cannot read the key back on the vault door; it can only ask whether one is saved.
+    await new Promise(r => setTimeout(r, 250));     // let a just-issued vault save land before we look
+    const hasKey = !!(window.SecretStore && window.SecretStore.has('anthropic_key'));
     if (!hasKey) { if (status) status.innerHTML = '<span style="color: var(--sev-haz-fg);">No BYO Anthropic key pasted in Advanced. Paste a key first.</span>'; return; }
     // The proxy mode check looks at Pro+ license + license token, so if both are absent we'll fall through to BYO.
     // For an explicit BYO test, temporarily blank the license token.

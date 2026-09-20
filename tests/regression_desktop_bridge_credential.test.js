@@ -101,8 +101,13 @@ check('no keychain means no save, rather than a silent plaintext write',
 check('the stored file is owner-only', /chmodSync\(p, 0o600\)/.test(sec));
 
 console.log('\n[desktop] the page stops keeping the credential, and cleans up the old copy');
-check('config save strips the credential on desktop',
-  /if \(_isDesktop\(\)\) \{ delete o\.user; delete o\.token; \}/.test(web));
+// 20 Sep 2026 (S8): the strip is no longer desktop-only. On EVERY door the credential is
+// removed before the config touches localStorage — keychain on desktop, vault on backend
+// doors, this tab's sessionStorage on browser-only. Pinning the desktop-only form would now
+// fail a change that made things stricter, so pin the outcome: the two fields never reach
+// localStorage from bridgeConfigSave, on any door.
+check('config save strips the credential before anything reaches localStorage (every door)',
+  /function bridgeConfigSave\(c\) \{[\s\S]{0,400}?delete o\.user; delete o\.token;[\s\S]{0,200}?localStorage\.setItem\(CFG_KEY/.test(web));
 check('an existing plaintext credential is migrated into the keychain',
   /_migrateStoredCredential/.test(web) && /window\.slabSecrets\.save\('jama'/.test(web));
 check('...and the plaintext copy is removed once it is safely stored',

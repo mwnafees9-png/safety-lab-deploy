@@ -129,13 +129,21 @@ const ReqHistory = (function(){
 window.ReqHistory = ReqHistory;
 
 const AiClient = (function(){
-    function getAnthropicKey() { try { return localStorage.getItem(AI_LS_ANTHROPIC) || ''; } catch(_) { return ''; } }
-    function getVoyageKey()    { try { return localStorage.getItem(AI_LS_VOYAGE)    || ''; } catch(_) { return ''; } }
+    // S8 (20 Sep 2026) — the page no longer keeps AI keys in localStorage. SecretStore decides
+    // the door: on any door with a backend the key is in the server-side vault and the page
+    // can only ask WHETHER one is saved; the value is used by the proxy, never here. On the
+    // browser-only door (no backend, nowhere else to put it) it is in sessionStorage and the
+    // page still calls the provider directly, as it must.
+    function _store()          { return (typeof window !== 'undefined' && window.SecretStore) ? window.SecretStore : null; }
+    function _byoViaProxy()    { const st = _store(); return !!(st && st.door() === 'vault'); }
+    function getAnthropicKey() { const st = _store(); return st ? st.get('anthropic_key') : ''; }   // '' on the vault door, by design
+    function getVoyageKey()    { const st = _store(); return st ? st.get('voyage_key')    : ''; }
+    function _hasByo(kind)     { const st = _store(); return !!(st && st.has(kind)); }
     // Phase 53.66b — AI is available when EITHER the Pro+ hosted proxy is usable
-    // (license token + Pro+ tier active) OR the user has pasted a BYO Anthropic key.
+    // (license token + Pro+ tier active) OR the user has a BYO Anthropic key saved.
     function isProxyMode()     { return !!(typeof isProPlusLicensed === 'function' && isProPlusLicensed() && getLicenseToken()); }
-    function isConfigured()    { return isProxyMode() || !!getAnthropicKey(); }
-    function hasMemory()       { return isProxyMode() || !!getVoyageKey(); }
+    function isConfigured()    { return isProxyMode() || _hasByo('anthropic_key'); }
+    function hasMemory()       { return isProxyMode() || _hasByo('voyage_key'); }
 
     // Token allowance tracker — measured in Sonnet-equivalent tokens / calendar month.
     function _currentMonth() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
@@ -468,6 +476,25 @@ const AiClient = (function(){
                 });
             }
             // BYO Anthropic key path.
+            if (_byoViaProxy()) {
+                // S8: the key is in the vault. The proxy reads it with the user's session token,
+                // makes the call, and the same ITAR fence applies as for licensed traffic. The
+                // key never arrives in this process.
+                if (!_hasByo('anthropic_key')) throw new Error('No AI key saved for this account. Add your Anthropic key under Advanced.');
+                const jwt = _store().sessionJwt();
+                if (!jwt) throw new Error('Sign in again to use your saved AI key.');
+                return fetch(AI_PROXY_BASE_URL + '/anthropic/messages', {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        'authorization': 'Bearer ' + jwt,
+                        'x-safetylab-itar': itar ? '1' : '0',
+                        'x-safetylab-feature': opts.feature || 'messages'
+                    },
+                    body: JSON.stringify(b)
+                });
+            }
+            // Browser-only door: no backend, no proxy. The key is in sessionStorage for this tab.
             const key = getAnthropicKey();
             if (!key) throw new Error('No AI credentials configured. Either upgrade to Pro+ or paste a BYO Anthropic key in Advanced.');
             return fetch('https://api.anthropic.com/v1/messages', {
@@ -558,6 +585,16 @@ const AiClient = (function(){
                         'x-safetylab-itar': itar ? '1' : '0',
                         'x-safetylab-feature': 'embed'
                     },
+                    body: JSON.stringify({ input: inputArr, model, input_type: opts.inputType || 'document' })
+                });
+            } else if (_byoViaProxy()) {
+                // S8: vault-held Voyage key, used by the proxy.
+                if (!_hasByo('voyage_key')) throw new Error('No embeddings key saved for this account. Add your Voyage key under Advanced.');
+                const jwt = _store().sessionJwt();
+                if (!jwt) throw new Error('Sign in again to use your saved embeddings key.');
+                response = await fetch(AI_PROXY_BASE_URL + '/voyage/embeddings', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + jwt, 'x-safetylab-itar': itar ? '1' : '0', 'x-safetylab-feature': 'embed' },
                     body: JSON.stringify({ input: inputArr, model, input_type: opts.inputType || 'document' })
                 });
             } else {
