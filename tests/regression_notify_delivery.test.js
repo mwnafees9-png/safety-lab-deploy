@@ -119,5 +119,25 @@ console.log('\n[migration] the credential is not in a trigger definition any mor
     /revoke all on table private\.notify_outbox from public, anon, authenticated;/.test(m));
 }
 
+console.log('\n[timeout] a batch job gets a batch budget, and a timeout is not a refusal');
+{
+  const tp = path.join(REPO, 'supabase', 'migrations', '20260920a_notify_timeout_and_no_reply.sql');
+  const t = fs.existsSync(tp) ? fs.readFileSync(tp, 'utf8') : '';
+  check('the timeout migration exists', !!t);
+  check('the timeout is a parameter with the old default',
+    /p_timeout_ms integer default 5000/.test(t),
+    'the five-arg callers in the trigger bodies must keep working unchanged');
+  check('the old five-arg signature is dropped, so there is exactly one notify_post',
+    /drop function if exists private\.notify_post\(text, text, text, jsonb, jsonb\);/.test(t));
+  check('the expiry cron passes 30 seconds',
+    /notify-expiry', 'SCHEDULE', '', '\{\}'::jsonb, '\{\}'::jsonb, 30000\)/.test(t),
+    'the 5 s webhook default is what made two successful sends read as failures');
+  check('a null status is labelled "no reply", never "refused"',
+    /when r\.status_code is null\s+then 'no reply'/.test(t),
+    'nobody said no; we stopped listening. Conflating the two is how a monitor gets ignored');
+  check('the budget is clamped so a caller cannot pass something silly',
+    /greatest\(1000, least\(coalesce\(p_timeout_ms, 5000\), 120000\)\)/.test(t));
+}
+
 console.log('\n' + (fail ? 'FAIL ' + fail + ' / ' + (pass + fail) : 'PASS ' + pass + ' / ' + pass));
 process.exit(fail ? 1 : 0);
