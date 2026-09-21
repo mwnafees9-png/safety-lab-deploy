@@ -4001,7 +4001,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 13 Sep 2026 (R19) — the ONE global error catcher: records uncaught errors and unhandled rejections, tells the person once in plain language, never blocks. Loads before every app module so boot errors are caught too. -->
     <script src="error_watch.js?v=1.0" defer></script>
     <!-- S8 (20 Sep 2026) — the ONE place the page puts a secret: vault (any backend door), sessionStorage (browser-only), keychain (desktop). Never localStorage. Loads before every reader of an AI or connector key. -->
-    <script src="secret_store.js?v=1.0" defer></script>
+    <script src="secret_store.js?v=1.1" defer></script>
     <script src="numbering.js?v=1.0.1" defer></script>
     <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
          so it stays off the critical path for real users. It self-installs (SL_SHOWCASE) on execution. -->

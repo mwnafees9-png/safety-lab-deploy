@@ -153,7 +153,17 @@ export default {
         //   · target path must contain '/rest/' (ALM REST APIs only)
         //   · Authorization header REQUIRED and forwarded verbatim —
         //     nothing is stored, nothing is logged, no state exists here.
-        // The desktop app bypasses this route entirely (direct fetch).
+        // The desktop app bypasses this route entirely (main-process fetch).
+        //
+        // 20 Sep 2026 (S8): NARROWED, NOT REMOVED. Every door with a backend now
+        // uses the AI proxy's /v1/ai/bridge instead, where the credential is read
+        // from the vault server-side and the browser sends only its session JWT.
+        // This relay stays for exactly one door: browser-only (files on the
+        // machine, no backend, no proxy), where the browser has nowhere else to
+        // keep the token (it is in sessionStorage for that tab) and this is its
+        // only way past CORS. Removing it would delete the connector for that
+        // door. It was kept deliberately, and this note is so nobody "cleans it
+        // up" without knowing that.
         // -----------------------------------------------------------------
         // -----------------------------------------------------------------
         // /api/upload — D-PUB chunked release uploads into the DOWNLOADS

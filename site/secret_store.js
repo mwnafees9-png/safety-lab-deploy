@@ -1,5 +1,5 @@
 // ============================================================================
-// secret_store.js — v1.0 — S8 (20 Sep 2026). THE one place the page puts a secret.
+// secret_store.js — v1.1 — S8 (20 Sep 2026). THE one place the page puts a secret.
 //
 // A user's own credentials — their Anthropic key, their Voyage key, their Jama token — used
 // to sit in localStorage, which is persistent and readable by any script that runs on the
@@ -141,7 +141,15 @@
         if (moved.length) { try { console.info('[secrets] moved out of localStorage: ' + moved.join(', ') + ' (' + door() + ')'); } catch (_) {} }
     }
 
-    async function init() {
+    var _initP = null;
+    function init() {
+        // Idempotent even when called again while the first call is still awaiting: the
+        // load hook and an explicit caller must not both run the legacy migration.
+        if (_initP) return _initP;
+        _initP = _init();
+        return _initP;
+    }
+    async function _init() {
         if (_ready) return;
         if (door() === 'vault') {
             await _refreshJwt();
