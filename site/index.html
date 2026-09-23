@@ -4104,7 +4104,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="gt_thread.js?v=0.91" defer></script>
     <script src="data_ops_modules.js?v=66.47" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.37" defer></script>
+    <script src="support_modules.js?v=66.38" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
     <script src="helpers_modules.js?v=3.14" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
@@ -4133,6 +4133,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="render_pass.js?v=1.0" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
+    <script src="ai_audit.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
     <script src="assurance_modules.js?v=1.33" defer></script>
@@ -4427,7 +4428,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.14" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.61" defer></script>
+    <script src="ai_loader.js?v=8.62" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.2" defer></script>

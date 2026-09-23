@@ -1497,6 +1497,16 @@ function makeCRUD(config) {
             // signal the house-style memory was starved of. Captured before the
             // row is replaced; never blocks the save.
             if (idx >= 0) { try { _slCaptureAiEdit(arr[idx], data, key); } catch (_) {} }
+            // 23 Sep 2026 (G10) — the form holds only the visible fields, so replacing the row
+            // used to drop every AI marker: an edited AI row became a "manual" row with no trace
+            // of its drafting. Keep the provenance (every ai* field, incl. the audit trail's
+            // original and edit history) and mark the row engineer-edited, which is what counts
+            // it as reviewed (ai_badges.js) — the same way the FHA editor already merges.
+            if (idx >= 0 && arr[idx] && arr[idx].aiGenerated === true) {
+                const prev = arr[idx];
+                Object.keys(prev).forEach(k => { if (/^ai[A-Z]/.test(k) && data[k] === undefined) data[k] = prev[k]; });
+                data.humanEdited = true; data.humanEditedAt = new Date().toISOString();
+            }
             if (idx >= 0) arr[idx] = data; else arr.push(data);
         } else {
             arr.push(data);

@@ -253,10 +253,14 @@
                 result = { text: text.trim(), model: (r && r.model) || opts.model || null, raw: r };
             }
             try { _modelWatch(result.model); } catch (_) {}   // model gate — watch even on insufficient responses
+            // 23 Sep 2026 (G10) — the audit trail: every call is logged with its model, prompt
+            // version (skill stamp), input and output fingerprints and outcome (ai_audit.js).
+            const _insufNow = wantInsuf ? _detectInsufficient(result.text) : null;
+            _auditCall(opts, result, _insufNow ? 'insufficient' : 'ok');
             // Token saver: if the model determined the context is insufficient, surface a
             // clean, catchable flag instead of letting the caller parse a hollow analysis.
             if (wantInsuf) {
-                const insuf = _detectInsufficient(result.text);
+                const insuf = _insufNow;
                 if (insuf) {
                     const e = new Error('insufficient information for this analysis — ' + insuf.reason);
                     e.isInsufficient = true; e.insufficient = insuf;
@@ -265,10 +269,15 @@
                     // only a one-line reason meant every caller reduced a reasoned
                     // abstention to "AI error: …" and binned the rest.
                     try { e.parsed = _safeParseJson(String(result.text || '')) || null; } catch (_) { e.parsed = null; }
+                    e._aiAudited = true;
                     throw e;
                 }
             }
             return result;
+            } catch (err) {
+                // A failed call is part of the record too (not an insufficiency already logged above).
+                if (!(err && err._aiAudited)) _auditCall(opts, null, 'error', err);
+                throw err;
             } finally {
                 if (_busyTimer) { clearTimeout(_busyTimer); _busyTimer = null; }
                 if (_busyShown) { try { if (window.slabAiBusyEnd) window.slabAiBusyEnd(); } catch (_) {} }
@@ -284,6 +293,23 @@
             return ac.embed(opts.input, { model: opts.model, inputType: opts.inputType });
         }
     };
+
+    // 23 Sep 2026 (G10) — log one AI call to the project's audit trail (ai_audit.js). The
+    // unified batch completes as 'chat.edit'; _auditPurpose names what it is drafting.
+    let _auditPurpose = null;
+    function _auditCall(opts, result, outcome, err) {
+        try {
+            if (typeof window === 'undefined' || !window.SLAiAudit) return;
+            const feature = (opts && opts.feature) || 'ai.sandbox';
+            const skill = _skillStampFor(feature) || (_auditPurpose ? _skillStampFor(_auditPurpose) : null) || null;
+            window.SLAiAudit.recordCall({
+                feature: feature, purpose: _auditPurpose, model: (result && result.model) || (opts && opts.model) || null, skill: skill,
+                system: opts && opts.system, messages: opts && opts.messages,
+                text: result ? result.text : '', stopReason: (result && result.raw && result.raw.stop_reason) || null,
+                outcome: outcome, error: err ? ((err && err.message) || String(err)) : null
+            });
+        } catch (_) {}
+    }
 
     // ---- #79 — AI model gateway: one contract + policy router OVER Provider ----------
     // Additive. Gives the rest of the app (especially the #80 agent) a single provider-
@@ -10502,14 +10528,14 @@
     function _gatherProvenance() {
         const s = snapshot();
         const out = [];
-        const add = function (arr, type, labelFn) { (arr || []).forEach(function (r) { if (r && r.aiGenerated) out.push({ type: type, label: labelFn(r), model: r.aiModel || '', at: r.aiAt || '', feature: r.aiFeature || '', modality: r.aiInputModality || '' }); }); };
+        const add = function (arr, type, labelFn) { (arr || []).forEach(function (r) { if (r && r.aiGenerated) out.push({ row: r, type: type, label: labelFn(r), model: r.aiModel || '', at: r.aiAt || '', feature: r.aiFeature || '', modality: r.aiInputModality || '' }); }); };
         add(s.acFunctionsData, 'Function', function (r) { return r.funcName || r.subName || r.subId || ''; });
         add(s.acFcimData, 'FCIM', function (r) { return (r.subId || '') + ' — ' + (r.tlDesc || r.plDesc || r.mDesc || ''); });
         add(s.acFhaData, 'AFHA', function (r) { return (r.fcId ? r.fcId + ' ' : '') + (r.fcDesc || ''); });
         (s.systemsData || []).forEach(function (sys) { add(sys.fha, 'SFHA · ' + (sys.name || sys.id), function (r) { return (r.fcId ? r.fcId + ' ' : '') + (r.fcDesc || ''); }); });
         add(s.acReqData, 'Requirement', function (r) { return String(r.text || '').slice(0, 90); });
         add(s.praData, 'PRA', function (r) { return r.threat || ''; });
-        add(s.zsaData, 'ZSA', function (r) { return r.zone || ''; });
+        add(s.zsaData, 'ZSA', function (r) { return (r.zoneId || r.zone || '') + (r.desc ? ' — ' + r.desc : ''); });
         add(s.cmaData, 'CMA', function (r) { return r.subject || ''; });
         add(s.fmeaData, 'FMEA', function (r) { return (r.part || r.component || '') + ' — ' + (r.mode || r.failureMode || ''); });
         (s.ftaPages || []).forEach(function (p) { if (p && p.aiGenerated) out.push({ type: 'Fault tree', label: p.name || p.id || '', model: p.aiModel || '', at: p.aiAt || '', feature: p.aiFeature || '', modality: p.aiInputModality || '' }); });
@@ -10542,7 +10568,7 @@
         } catch (_) {}
         if (!items.length) { _toast('No AI-generated artifacts in this project yet.', 'info'); return; }
         _makeReviewPanel({ id: 'ai-rev-panel-prov', title: '✨ AI provenance · ' + items.length + ' artifact(s)', disclaimer: 'Audit trail: every item below was AI-drafted and accepted by a human reviewer. Model + timestamp travel with the project file.', items: items, getKey: function (x) { return x._k; },
-            cardHtml: function (x) { var imgChip = (x.modality === 'image' || x.modality === 'image+text') ? ' · <span style="color:#dc2626;font-weight:700;">⚠ from diagram — verify</span>' : ''; return '<h4>' + _esc(x.type) + '</h4>' + '<div class="aifh-eff">' + _esc(x.label || '(no label)') + '</div>' + '<div class="aifh-meta">' + _esc(x.model || 'model') + (x.at ? ' · ' + _esc(String(x.at).slice(0, 10)) : '') + (x.feature ? ' · ' + _esc(x.feature) : '') + imgChip + '</div>'; },
+            cardHtml: function (x) { var imgChip = (x.modality === 'image' || x.modality === 'image+text') ? ' · <span style="color:#dc2626;font-weight:700;">⚠ from diagram — verify</span>' : ''; return '<h4>' + _esc(x.type) + '</h4>' + '<div class="aifh-eff">' + _esc(x.label || '(no label)') + '</div>' + '<div class="aifh-meta">' + _esc(x.model || 'model') + (x.at ? ' · ' + _esc(String(x.at).slice(0, 10)) : '') + (x.feature ? ' · ' + _esc(x.feature) : '') + imgChip + '</div>' + ((x.row && window.SLAiAudit) ? window.SLAiAudit.cardLine(x.row) : ''); },
             onAccept: null });
     }
 
@@ -12791,6 +12817,16 @@
         });
         return p;
     }
+    // 23 Sep 2026 (G10) — the batch names what it drafts, so the audit trail can tie
+    // accepted rows (stamped e.g. 'fha.populate') to the 'chat.edit' calls that made them.
+    _anemBatch = (function (inner) {
+        return async function (taskDirective, cfg) {
+            const prev = _auditPurpose;
+            _auditPurpose = (cfg && cfg.analysis) || prev || null;
+            try { return await inner.apply(this, arguments); } finally { _auditPurpose = prev; }
+        };
+    })(_anemBatch);
+
     async function _anemBatchPrompt() {
         const d = await slPrompt('Describe what you want the AI to draft — it proposes changes for you to review & Accept:\n\ne.g. "Populate the aircraft FHA for the current functions"  ·  "Recommend safety requirements to close the open gaps"  ·  "Draft a PRA for bird strike and rotor burst"', '');
         if (!d || !String(d).trim()) return;
