@@ -685,7 +685,10 @@ function _cmaCompromisedIndex() {
 // `visited` tracks page IDs across TRANSFERs to prevent infinite recursion on cycles.
 // `cmaSet` (computed once at the top-level call) lets an open CMA common-mode finding drive a
 // gate to 'compromised' independence — overriding the manual claim.
-function allocateDAL(node, parentDal, visited, cmaSet) {
+// 23 Sep 2026 (G4) — `ctx` (optional) is the failure condition's F3061 Table 1 context from
+// SLF3061.contextFor(); when present, an independent AND gate gives its non-carrier members Table 1's
+// secondary DAL instead of an ARP4754B Option 1/2 reduction. Absent → ARP4754B as before.
+function allocateDAL(node, parentDal, visited, cmaSet, ctx) {
     if (!node || !parentDal) return;
     visited = visited || new Set();
     if (cmaSet === undefined) cmaSet = (typeof _cmaCompromisedIndex === 'function') ? _cmaCompromisedIndex()
@@ -708,7 +711,7 @@ function allocateDAL(node, parentDal, visited, cmaSet) {
         if (linkedId && !visited.has(linkedId)) {
             visited.add(linkedId);
             const linked = ftaPages.find(p => p.id === linkedId);
-            if (linked && linked.root) allocateDAL(linked.root, parentDal, visited, cmaSet);
+            if (linked && linked.root) allocateDAL(linked.root, parentDal, visited, cmaSet, ctx);
         }
         // For pure TRANSFER, the gate has no local children — return.
         // For a logical gate with transferOutTo, the local children are intentionally empty too
@@ -731,7 +734,7 @@ function allocateDAL(node, parentDal, visited, cmaSet) {
         node._dalReduced = false; node._dalProvisional = false; node._dalCompromised = false;
         node._probCompromised = false; node._probCompromiseReason = null;
         node._independenceReq = null;
-        kids.forEach(c => { c.isDALCarrier = false; c._dalDerivation = { basis: 'inherit' }; allocateDAL(c, propagateDal, visited, cmaSet); });
+        kids.forEach(c => { c.isDALCarrier = false; c._dalDerivation = { basis: 'inherit' }; allocateDAL(c, propagateDal, visited, cmaSet, ctx); });
         return;
     }
 
@@ -790,7 +793,7 @@ function allocateDAL(node, parentDal, visited, cmaSet) {
         } else {
             node._probCompromised = false; node._probCompromiseReason = null;
         }
-        kids.forEach(c => { c.isDALCarrier = false; c._dalDerivation = { basis: (indep === 'compromised' ? 'compromised' : 'no-independence'), independence: indep }; allocateDAL(c, propagateDal, visited, cmaSet); });
+        kids.forEach(c => { c.isDALCarrier = false; c._dalDerivation = { basis: (indep === 'compromised' ? 'compromised' : 'no-independence'), independence: indep }; allocateDAL(c, propagateDal, visited, cmaSet, ctx); });
         return;
     }
 
@@ -808,6 +811,26 @@ function allocateDAL(node, parentDal, visited, cmaSet) {
         members: kids.map(function (c) { return c.displayId || c.id; }),
         status: (indep === 'substantiated') ? 'substantiated' : 'claimed'
     };
+    // 23 Sep 2026 (G4) — Part 23 under ASTM F3061 Table 1: one member (the carrier) keeps the
+    // incoming DAL, the others get Table 1's SECONDARY DAL — never lower (Table 1 has no third
+    // level). Minor has no secondary, so no reduction. ARP4754B Options do not apply here.
+    if (ctx && ctx.method === 'f3061') {
+        const carrierId = node.dalCarrierChildId || (kids[0] && kids[0].id);
+        const secDal = (typeof SLF3061 !== 'undefined') ? SLF3061.secondaryFor(propagateDal, ctx) : propagateDal;
+        if (secDal === propagateDal) {
+            // No actual reduction here (Minor has no secondary; or this gate already sits at the
+            // secondary level): nothing rests on independence for the DAL, so no reduction flag
+            // and no DAL independence requirement at this gate.
+            node._dalReduced = false; node._independenceReq = null;
+        }
+        kids.forEach(c => {
+            const isCarrier = (c.id === carrierId);
+            c.isDALCarrier = isCarrier;
+            c._dalDerivation = { basis: 'f3061', independence: indep, role: isCarrier ? 'primary' : (ctx.secondary ? 'secondary' : 'no-secondary'), level: ctx.level, severity: ctx.severity };
+            allocateDAL(c, isCarrier ? propagateDal : secDal, visited, cmaSet, ctx);
+        });
+        return;
+    }
     const opt = node.dalOption || 'opt2';
     const oneDown  = dalDecrement(propagateDal, 1);   // top - 1
     const floorDal = dalDecrement(propagateDal, 2);   // ARP4754A Table 5-2: additional members TWO DAL levels below the FC DAL (relative; floored only at E). NOT an absolute Cat->C/Haz->D floor — those coincide only under Part 25 (A-2=C, B-2=D); e.g. Part 23 III Cat top B -> D.
@@ -815,15 +838,15 @@ function allocateDAL(node, parentDal, visited, cmaSet) {
         // Option 1: one carrier member at the top DAL; additional members at the floor.
         const carrierId = node.dalCarrierChildId || (kids[0] && kids[0].id);
         kids.forEach(c => {
-            if (c.id === carrierId) { c.isDALCarrier = true;  c._dalDerivation = { basis: 'option1', option: '1', independence: indep, role: 'top' };     allocateDAL(c, propagateDal, visited, cmaSet); }
-            else                    { c.isDALCarrier = false; c._dalDerivation = { basis: 'option1', option: '1', independence: indep, role: 'reduced' }; allocateDAL(c, floorDal, visited, cmaSet); }
+            if (c.id === carrierId) { c.isDALCarrier = true;  c._dalDerivation = { basis: 'option1', option: '1', independence: indep, role: 'top' };     allocateDAL(c, propagateDal, visited, cmaSet, ctx); }
+            else                    { c.isDALCarrier = false; c._dalDerivation = { basis: 'option1', option: '1', independence: indep, role: 'reduced' }; allocateDAL(c, floorDal, visited, cmaSet, ctx); }
         });
     } else {
         // Option 2: at least TWO members one level below the top; remaining members at the floor.
         kids.forEach((c, i) => {
             c.isDALCarrier = (i < 2);
             c._dalDerivation = { basis: 'option2', option: '2', independence: indep, role: (i < 2) ? 'upper' : 'reduced' };
-            allocateDAL(c, (i < 2) ? oneDown : floorDal, visited, cmaSet);
+            allocateDAL(c, (i < 2) ? oneDown : floorDal, visited, cmaSet, ctx);
         });
     }
 }
@@ -981,10 +1004,20 @@ function getSafetyTarget(severity) {
     }
     const probs = PROB_TARGETS[key] || PROB_TARGETS['Part 25'];
     const dals = DAL_TARGETS[key] || DAL_TARGETS['Part 25'];
+    // 23 Sep 2026 (G4) — Part 23 SW/AEH DALs follow the project's F3061 §4.2.5 method:
+    // Table 1 primary (default; the same values as DAL_TARGETS) or the ARP4754 ladder.
+    // Probability targets stay F3230 Table 5 either way (f3061_dal.js).
+    let dal = dals[severity] || null, dalMethod = null;
+    if (reg === 'Part 23' && typeof SLF3061 !== 'undefined') {
+        dalMethod = SLF3061.method(projectConfig);
+        const d = SLF3061.topDal(severity, projectConfig);
+        if (d) dal = d;
+    }
     return {
         prob: probs[severity] ?? null,
-        dal: dals[severity] || null,
-        scope: key
+        dal: dal,
+        scope: key,
+        dalMethod: dalMethod
     };
 }
 
@@ -1180,6 +1213,8 @@ function renderProjectConfigUI() {
     regSel.value = reg;
     // 23 Sep 2026 (G1) — Part 23 picker: certification level + propulsion → F3230 Table 3.
     if (p23Host && typeof SLP23 !== 'undefined') p23Host.innerHTML = reg === 'Part 23' ? SLP23.pickerHTML('proj-p23', projectConfig, 'onProjectConfigChange()') : '';
+    const dalMethodSel = document.getElementById('proj-part23-dal-method');
+    if (dalMethodSel) dalMethodSel.value = projectConfig.part23DalMethod === 'arp4754' ? 'arp4754' : 'f3061';
     if (scvtolSel) scvtolSel.value = projectConfig.scvtolCategory || 'Enhanced';
     if (p27Sel) p27Sel.value = part27IsLegacy(projectConfig.part27Class) ? '' : projectConfig.part27Class;
     if (p27Container) p27Container.style.display = reg === 'Part 27' ? 'block' : 'none';

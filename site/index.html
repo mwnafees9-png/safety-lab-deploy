@@ -861,6 +861,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                              Assessment Level comes from ASTM F3230 Table 3 (p23_assessment_level.js). -->
                         <label>Part 23 — certification level and propulsion (ASTM F3230 Table 3 sets the Assessment Level)</label>
                         <div id="proj-part23-host"></div>
+                        <!-- 23 Sep 2026 (standards gap G4) — ASTM F3061 §4.2.5: SW/AEH DALs from Table 1 (default) or the ARP4754 method (f3061_dal.js). -->
+                        <label>Software / hardware DAL method (ASTM F3061 §4.2.5)</label>
+                        <select id="proj-part23-dal-method" onchange="onProjectConfigChange()">
+                            <option value="f3061">ASTM F3061 Table 1 (primary + secondary DAL) — default</option>
+                            <option value="arp4754">ARP4754 DAL assignment (top A/B/C/D by severity, Options 1 and 2)</option>
+                        </select>
                     </div>
                     <!-- 31 Aug 2026 — Part 27 class selector (PS-ASW-27-15 safety continuum). Shown only when cert basis = Part 27. -->
                     <div id="proj-part27-container" style="display: none;">
@@ -4068,6 +4074,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
     <script src="safety_targets.js?v=1.8" defer></script>
     <script src="severity_rubrics.js?v=1.3" defer></script>
+    <script src="f3061_dal.js?v=1.0" defer></script>
     <script src="reliability_data.js?v=1.1" defer></script>
     <script src="catalogue_data.js?v=1.11" defer></script>
     <script src="ui_constants.js?v=1.0" defer></script>
@@ -4097,9 +4104,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="gt_thread.js?v=0.91" defer></script>
     <script src="data_ops_modules.js?v=66.47" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.36" defer></script>
+    <script src="support_modules.js?v=66.37" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.13" defer></script>
+    <script src="helpers_modules.js?v=3.14" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.35" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4107,7 +4114,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.49" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.72" defer></script>
+    <script src="misc_fn_modules.js?v=66.73" defer></script>
     <script src="safety_lab.js?v=65.60" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4128,7 +4135,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zsa_record.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.32" defer></script>
+    <script src="assurance_modules.js?v=1.33" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>

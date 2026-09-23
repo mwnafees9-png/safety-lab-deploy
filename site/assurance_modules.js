@@ -1643,6 +1643,13 @@ const AutoReq = (function(){
             const indepTxt = d.independence === 'substantiated' ? 'CMA-substantiated functional independence'
                 : d.independence === 'claimed' ? 'a claimed (CMA-pending) functional independence'
                 : 'functional independence';
+            // 23 Sep 2026 (G4) — Part 23 under ASTM F3061 §4.2.5 Table 1 (f3061_dal.js).
+            if (d.basis === 'f3061') {
+                const t1 = 'ASTM F3061 §4.2.5, Table 1 (Assessment Level ' + (d.level || '?') + ', ' + (d.severity || 'failure condition') + ')';
+                if (d.role === 'primary') return a.kind + ' ' + a.dal + ' held at the primary-system DAL under ' + t1 + '; the other members of this independent AND take the secondary-system DAL, predicated on ' + indepTxt + ' between the members.';
+                if (d.role === 'secondary') return a.kind + ' ' + a.dal + ' set at the secondary-system DAL under ' + t1 + ' (never lower: Table 1 has no level below the secondary), predicated on ' + indepTxt + ' between the members.';
+                return a.kind + ' ' + a.dal + ' held at the primary-system DAL under ' + t1 + ': Table 1 gives this class no secondary-system DAL, so no member is reduced.';
+            }
             if (d.basis === 'option1') return d.role === 'top'
                 ? a.kind + ' ' + a.dal + ' held at the failure condition’s top level under ' + tp2 + ' Option 1 (one member retains the top DAL), predicated on ' + indepTxt + ' between the members.'
                 : a.kind + ' ' + a.dal + ' reduced under ' + tp2 + ' Option 1 (additional members two development-assurance levels below the failure condition DAL, floored at DAL E), predicated on ' + indepTxt + ' between the members.';

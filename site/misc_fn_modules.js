@@ -3992,7 +3992,9 @@ function propagateDalAllRoots() {
         if (!fha) return;
         const topDal = (typeof getSafetyTarget === 'function') ? getSafetyTarget(fha.severity).dal : null;
         if (!topDal) return;
-        jobs.push({ page: p, topDal: topDal });
+        // 23 Sep 2026 (G4) — Part 23: the failure condition's F3061 Table 1 context (f3061_dal.js).
+        const dalCtx = (typeof SLF3061 !== 'undefined' && typeof projectConfig !== 'undefined') ? SLF3061.contextFor(fha.severity, projectConfig) : null;
+        jobs.push({ page: p, topDal: topDal, ctx: dalCtx });
     });
     if (!jobs.length) return 0;   // No seed anywhere — leave existing DALs untouched.
     clearAllAllocations();
@@ -4000,7 +4002,7 @@ function propagateDalAllRoots() {
     const cmaSet = (typeof _cmaCompromisedIndex === 'function') ? _cmaCompromisedIndex()
                  : ((typeof _cmaCompromisedGateIdSet === 'function') ? _cmaCompromisedGateIdSet() : null);
     jobs.forEach(j => {
-        allocateDAL(j.page.root, j.topDal, new Set(), cmaSet);
+        allocateDAL(j.page.root, j.topDal, new Set(), cmaSet, j.ctx);
         // Phase 56.48a — strictest DAL across shared logicalIds WITHIN the family
         // (one component must satisfy its strictest position in this derivation).
         _propagateStrictestDALAcrossSharedEvents(j.page.root);

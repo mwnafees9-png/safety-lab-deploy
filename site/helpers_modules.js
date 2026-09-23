@@ -828,6 +828,23 @@ function applyCCFGroupToNodes(memberRefs, groupName, beta, gamma, delta) {
 // Cat/Haz floor. (A−2=C and B−2=D under Part 25, which is where the misleading "Cat→C/Haz→D"
 // shorthand came from; for Part 23 Class III, Catastrophic top B correctly reduces to D.)
 function dalgebraOptionsTableHTML() {
+    // 23 Sep 2026 (G4) — a Part 23 project on the F3061 Table 1 method shows Table 1's primary /
+    // secondary DALs instead of the ARP4754B options, which do not apply to it (f3061_dal.js).
+    try {
+        if (typeof SLF3061 !== 'undefined' && typeof projectConfig === 'object' && SLF3061.method(projectConfig) === 'f3061') {
+            const lvl = projectConfig.part23Class;
+            const _e = (typeof esc === 'function') ? esc : (x => String(x));
+            const rows = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'Negligible'].map(sev => {
+                const c = SLF3061.cell(lvl, sev);
+                if (!c) return '';
+                if (sev === 'Negligible') return '<tr><td>No Safety Effect</td><td colspan="2"><span class="u-muted-italic">No SW / AEH DAL requirement.</span></td></tr>';
+                return '<tr><td>' + sev + '</td><td><strong>DAL ' + _e(c.P) + '</strong></td><td>' + (c.S ? '<strong>DAL ' + _e(c.S) + '</strong> &mdash; never lower' : '<span class="u-muted-italic">none &mdash; no reduction</span>') + '</td></tr>';
+            }).join('');
+            if (rows) return '<h4 style="margin-top: var(--s-5); margin-bottom: var(--s-2); color: var(--color-text-primary);">Primary and secondary DALs &mdash; ASTM F3061 Table 1, Assessment Level ' + _e(lvl) + '</h4>' +
+                '<p class="cfg-hint" style="margin-bottom: var(--s-2);">At an AND gate with independence between its members, one member keeps the primary DAL and the others take the secondary DAL. A secondary system is only needed when it is required to meet the F3230 probability targets. To use the ARP4754 method instead, change the DAL method above.</p>' +
+                '<table class="reference-table"><thead><tr><th style="width:25%;">Failure condition</th><th style="width:25%;">Primary system</th><th style="width:50%;">Secondary system</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        }
+    } catch (_) {}
     const dec = (dal, n) => (typeof dalDecrement === 'function') ? dalDecrement(dal, n) : dal;
     const SEVS = [
         { key: 'Catastrophic', label: 'Catastrophic' },
@@ -984,6 +1001,9 @@ function onProjectConfigChange() {
     if (regSel) projectConfig.regulation = regSel.value;
     // 23 Sep 2026 (G1) — Part 23 Assessment Level from certification level + propulsion (F3230 Table 3).
     if (typeof SLP23 !== 'undefined' && document.getElementById('proj-p23-level')) SLP23.syncPicker('proj-p23', projectConfig);
+    // 23 Sep 2026 (G4) — F3061 §4.2.5 DAL method (Table 1 default, or ARP4754).
+    const dalMethodSel = document.getElementById('proj-part23-dal-method');
+    if (dalMethodSel) projectConfig.part23DalMethod = dalMethodSel.value === 'arp4754' ? 'arp4754' : 'f3061';
     // Phase 53.55 — capture SC-VTOL category. Gate Custom behind isProLicensed().
     if (scvtolSel) projectConfig.scvtolCategory = scvtolSel.value;
     // 31 Aug 2026 — Part 27 class (PS-ASW-27-15 continuum split). Empty = legacy, banner shows.
@@ -10420,6 +10440,7 @@ async function runDALAllocation() {
 
     let topDal = null;
     let fcLabel = '';
+    let dalCtx = null;   // 23 Sep 2026 (G4) — F3061 Table 1 context for a Part 23 project (f3061_dal.js)
     if (linkedFhaId) {
         const isAC = linkedFhaId.startsWith('AC_');
         const realId = linkedFhaId.replace('AC_', '').replace('SYS_', '');
@@ -10427,7 +10448,10 @@ async function runDALAllocation() {
         const fha = isAC
             ? acFhaData.find(x => String(x.internalId) === String(realId))
             : getAllSysFha().find(x => String(x.internalId) === String(realId));
-        if (fha) { topDal = getSafetyTarget(fha.severity).dal; fcLabel = (fha.fcId || '') + (fha.severity ? ' · ' + fha.severity : ''); }
+        if (fha) {
+            topDal = getSafetyTarget(fha.severity).dal; fcLabel = (fha.fcId || '') + (fha.severity ? ' · ' + fha.severity : '');
+            dalCtx = (typeof SLF3061 !== 'undefined') ? SLF3061.contextFor(fha.severity, projectConfig) : null;
+        }
     }
     if (!topDal) {
         // #40 — DAL is derived from a failure condition's severity. Rather than block the canvas
@@ -10450,7 +10474,7 @@ async function runDALAllocation() {
         return;
     }
     clearAllAllocations();
-    allocateDAL(root, topDal, new Set());
+    allocateDAL(root, topDal, new Set(), undefined, dalCtx);
     updateD3();
     // #51 — "what happened" feedback: report the basis (FC/severity), top DAL, and P(top)
     // so the deterministic DAL-algebra pass narrates its own result.
