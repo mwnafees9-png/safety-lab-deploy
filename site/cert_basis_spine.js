@@ -100,11 +100,13 @@
         'ASTM F3230': {
             id: 'ASTM F3230', title: 'Standard Practice for Safety Assessment of Systems and Equipment in Small Aircraft',
             publisher: 'ASTM International', licensed: true, kind: 'methods',
-            rev: '21a', issued: '2017', revised: '2025',
-            equivalents: [], recognizedBy: ['FAA AC 23.1309-1E (accepted MoC for §23.2510)'],
+            // 23 Sep 2026 (standards gap G2): 21a is the FAA-accepted revision (90 FR 21392,
+            // 20 May 2025); ASTM has since published F3230-25, not yet on the FAA list.
+            rev: '21a', issued: '2017', latestRev: '25',
+            equivalents: [], recognizedBy: ['FAA accepted means of compliance for §23.2510 (F3230-21a; 90 FR 21392, 20 May 2025)', 'FAA AC 23.1309-1E'],
             context: ['14 CFR §23.2510', 'AC 23.1309-1E', 'ASTM F44.50'],
             purchase: 'https://store.astm.org/f3230-21a.html',
-            note: 'Internationally-accepted small-aircraft safety-assessment methods, a §23.2510 means of compliance alongside AC 23.1309-1E. Real F44.50 family (verified, not guessed): F3061 systems/equipment spec, F3309 simplified safety assessment, F3233 flight/nav instrumentation, F3367 HIRF/lightning effects, F3060 terminology. This tool holds the scope + family map, NOT F3230\'s internal sections — see the clause note.'
+            note: 'Internationally-accepted small-aircraft safety-assessment methods, a §23.2510 means of compliance alongside AC 23.1309-1E. Real F44.50 family (verified, not guessed): F3061 systems/equipment spec, F3309 simplified safety assessment, F3233 flight/nav instrumentation, F3367 HIRF/lightning effects, F3060 terminology. This tool holds F3230-21a\'s clause numbers and titles (never its text) and implements Table 3 (Assessment Level selection) and Table 5 (targets) — see the clause note.'
         }
         // NEXT: EUROCAE ED-79B/ED-135 as their own citable advisory entries (currently
         // only "equivalents" pointers on ARP4754B/4761A); ARP5150/5151 (rotorcraft
@@ -238,7 +240,7 @@
         // verified; internal sections are not (paywalled) — one representative
         // clause, same treatment IEC 61508-6's Annex D gets above.
         { id: 'astmf3230-method', fw: 'ASTM F3230', ref: 'ASTM F3230', title: 'Safety-assessment method for small aircraft',
-          objective: 'A §23.2510 means of compliance alongside AC 23.1309-1E, sized for small/normal-category aircraft. Method + family reference only; internal sections not reproduced (not sourced beyond the published scope).',
+          objective: 'A §23.2510 MoC alongside AC 23.1309-1E for small aircraft. FAA-accepted revision 21a (90 FR 21392). The tool implements Table 3 level selection and Table 5 targets; clause numbers and titles only, text not reproduced.',
           coverage: 'pointer-only', dischargedBy: [], related: ['14 CFR §23.2510', 'AC 23.1309-1E', 'ASTM F3061', 'ASTM F3309', 'ASTM F3233', 'ASTM F3367', 'ASTM F3060'] },
 
         // ---- 14 CFR regulatory anchors (public domain) — the rule the safety

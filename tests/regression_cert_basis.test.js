@@ -213,7 +213,7 @@ check('[11b] MIL-STD-882E registered PUBLIC (not licensed), Table I/II present, 
                prob && /Frequent \(A\)/.test(prob.objective) && /Improbable \(E\)/.test(prob.objective) &&
                proc && proc.coverage === 'pointer-only';
     })());
-check('[11c] ASTM F3230 registered with the REAL F44.50 family (F3061/F3309/F3233/F3367/F3060) and honestly flags no internal-section depth',
+check('[11c] ASTM F3230 registered with the REAL F44.50 family (F3061/F3309/F3233/F3367/F3060) and states its text is not reproduced',
     (function () {
         const fw = C.framework('ASTM F3230'), c = C.clause('astmf3230-method');
         const family = ['ASTM F3061', 'ASTM F3309', 'ASTM F3233', 'ASTM F3367', 'ASTM F3060'];

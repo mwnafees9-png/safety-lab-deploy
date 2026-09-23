@@ -417,8 +417,16 @@ const has = re => re.test(ALL);
         has(/NOT the same scale/) && has(/never (be )?mapped onto the other|never map/i));
     check('ASTM F3230 identified precisely: ASTM International, rev 21a, F44.50, §23.2510 MoC alongside AC 23.1309-1E',
         has(/ASTM International/) && has(/21a/) && has(/F44\.50/) && has(/§23\.2510/) && has(/AC 23\.1309-1E/));
-    check('ASTM F3230 honest depth limit stated — internal sections paywalled, not held, same treatment as IEC 61508-6 Annex D',
-        has(/paywall/i) && has(/IEC 61508-6/) && has(/does NOT carry clause-level depth/i));
+    // 23 Sep 2026 (standards gap G2): the owned 21a copy is read; the old "paywalled,
+    // not held" limit and the "revised 2025" claim were wrong and are pinned OUT.
+    check('ASTM F3230: the FAA-accepted revision is 21a (90 FR 21392, 20 May 2025); F3230-25 exists and is not on that list',
+        has(/FAA lists as accepted is F3230-21a/) && has(/90 FR 21392/) && has(/20 May 2025/) && has(/F3230-25, which is not on that FAA list/) && has(/Table 1 aircraft-type compliance matrix/));
+    check('ASTM F3230: clause numbers and titles held (4.1, 4.2, Tables 3/4/5, Appendix X2), never its text',
+        has(/4\.1 Failure Condition Classification/) && has(/Table 3 Assessment Level Selection Matrix/) && has(/Table 5 quantitative probability targets/) && has(/Appendix X2/) && has(/clause numbers and titles, never its text/));
+    check('ASTM F3230: the Table 3 lookup and its hybrid/eVTOL exclusion are described as implemented',
+        has(/implements two of these directly: the Table 3 lookup/) && has(/hybrids and eVTOL fall outside the table/));
+    check('ASTM F3230: the stale claims are gone (not sourced / paywalled / "revised 2025")',
+        !has(/F3230.{0,40}internal sections are not sourced/) && !has(/revised 2025/) && !has(/does NOT carry clause-level depth for F3230/));
     check('the real ASTM F44.50 family named: F3061, F3309, F3233, F3367, F3060',
         has(/F3061/) && has(/F3309/) && has(/F3233/) && has(/F3367/) && has(/F3060/));
     check('CS-25/CS-27/CS-29 identified as EASA equivalents mirroring §25/27/29.1309 respectively',
@@ -428,7 +436,7 @@ const has = re => re.test(ALL);
         has(/does not run software verification and validation/i) &&
         has(/does not run hardware verification and validation/i) &&
         has(/does not compute or maintain a DoD mishap-risk index/i) &&
-        has(/does not hold ASTM F3230.s internal section numbering/i) &&
+        has(/does not reproduce ASTM F3230.s text/i) &&
         has(/does not reproduce EASA CS-25\/27\/29 clause text/i));
 }
 
