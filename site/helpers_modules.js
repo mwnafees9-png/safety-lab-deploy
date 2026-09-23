@@ -1800,8 +1800,9 @@ function _ccmrNte(page, node, det, targetP) {
     const evalAt = v => {
         setI(v);
         node.probability = effectiveProb(node, tExp);
-        const r = computeExactProbability(page.root);
-        return (r && isFinite(r.prob)) ? r.prob : 1;
+        // perf fix 4: cached read-only P(top); the key includes the probability just set
+        const prob = (typeof exactTopProbability === 'function') ? exactTopProbability(page.root) : computeExactProbability(page.root).prob;
+        return isFinite(prob) ? prob : 1;
     };
     let out;
     try {
@@ -2273,7 +2274,45 @@ function _idpStore() {
 
 function _idpIsFnCol(colId) { return String(colId).indexOf('fn:') === 0; }
 function _idpColFuncId(colId) { return _idpIsFnCol(colId) ? String(colId).slice(3) : null; }
+// 23 Sep 2026 (perf fix 3) — BATCH-SCOPED LOOKUP INDEX. _idpFnOwner and
+// _idpSystemsImplementing were linear scans over every system's functions and
+// are called inside FC x system loops (combination candidates, the seed sweep,
+// idpStats), which made large projects quadratic-to-cubic. A read-only
+// computation wraps itself in idpIndexBatch(fn): inside it the two lookups are
+// answered from maps built ONCE from systemsData; outside any batch they scan
+// exactly as before. The index is dropped when the outermost batch ends, so no
+// in-place edit to systemsData can ever be answered from a stale map.
+// See tests/regression_perf_idp_index.test.js.
+var _idpIdx = null, _idpIdxDepth = 0;
+function idpIndexBatch(fn) {
+    _idpIdxDepth++;
+    try { return fn(); }
+    finally { if (--_idpIdxDepth === 0) _idpIdx = null; }
+}
+function _idpIndex() {
+    if (!_idpIdxDepth) return null;
+    const syss = systemsData || [];
+    if (_idpIdx && _idpIdx.src === syss) return _idpIdx;
+    const implBySub = new Map(), ownerByFn = new Map();
+    syss.forEach(s => {
+        if (!s) return;
+        const subs = new Set();
+        (s.functions || []).forEach(f => {
+            if (!f) return;
+            const k = String(f.funcId);
+            if (!ownerByFn.has(k)) ownerByFn.set(k, { system: s, fn: f });
+            const ids = Array.isArray(f.traceIds) ? f.traceIds : (f.traceId ? [f.traceId] : []);
+            ids.forEach(id => subs.add(id));
+        });
+        subs.forEach(id => { let a = implBySub.get(id); if (!a) { a = []; implBySub.set(id, a); } a.push(s.id); });
+    });
+    _idpIdx = { src: syss, implBySub, ownerByFn };
+    return _idpIdx;
+}
+
 function _idpFnOwner(funcId) {
+    const ix = _idpIndex();
+    if (ix) return ix.ownerByFn.get(String(funcId)) || null;
     const syss = systemsData || [];
     for (let i = 0; i < syss.length; i++) {
         const f = ((syss[i] || {}).functions || []).find(x => x && String(x.funcId) === String(funcId));
@@ -2285,7 +2324,10 @@ function _idpFnOwner(funcId) {
 // Systems implementing a given AC sub-function (via function trace edges).
 function _idpSystemsImplementing(subId) {
     if (!subId) return [];
-    return (systemsData || []).filter(s => (s.functions || []).some(f => {
+    const ix = _idpIndex();
+    if (ix) return (ix.implBySub.get(subId) || []).slice();
+    return (systemsData || []).filter(s => s && (s.functions || []).some(f => {
+        if (!f) return false;   // a null entry is skipped (both paths agree; it used to throw mid-scan)
         const ids = Array.isArray(f.traceIds) ? f.traceIds : (f.traceId ? [f.traceId] : []);
         return ids.indexOf(subId) !== -1;
     })).map(s => s.id);
@@ -2379,7 +2421,8 @@ function _idpCellRaw(fc, colId) {
 
 // The Q.4-1 column set: each system's declared functions, plus a system-level
 // column where legacy/coarse data needs a home (or no functions are declared).
-function idpColumns() {
+function idpColumns() { return idpIndexBatch(_idpColumnsImpl); }
+function _idpColumnsImpl() {
     const store = _idpStore();
     const legacyKeyed = new Set();
     Object.keys(store.cells).forEach(k => {
@@ -2417,7 +2460,8 @@ function idpCell(fc, id) {
 }
 
 // Contributing systems for an FC (pre-A10 shape — the CRA/MF&MS column set).
-function idpContributors(fc) {
+function idpContributors(fc) { return idpIndexBatch(() => _idpContributorsImpl(fc)); }
+function _idpContributorsImpl(fc) {
     return (systemsData || []).filter(s => idpCell(fc, s.id).state === 'contributes').map(s => s.id);
 }
 // Contributing FUNCTION columns for an FC (the Q.4-1 answer).
@@ -2427,7 +2471,8 @@ function idpContributorFns(fc) {
 
 // Full-table stats (drives the PASA checklist). Cells are FC × COLUMN now;
 // "multi" stays distinct contributing SYSTEMS ≥ 2 (the MF&MS/MAC trigger).
-function idpStats() {
+function idpStats() { return idpIndexBatch(_idpStatsImpl); }
+function _idpStatsImpl() {
     const fcs = acFhaData || [];
     const cols = idpColumns();
     let unreviewed = 0, contributes = 0, cleared = 0, multi = 0, proposed = 0, coarse = 0;

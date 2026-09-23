@@ -36,6 +36,7 @@
 //   · an FC that already has an MF&MS page (MAC-compiled or hand-built,
 //     per the same match the ASA triage uses) is never seeded.
 //
+// Sweeps are change-driven (see tick() below), not a blind timer.
 // BORN MODULAR: new file, zero monolith edits. Kill switch:
 // window.SL_IDP_SEED_OFF = true disables the sweep entirely.
 // ============================================================================
@@ -176,14 +177,58 @@
         };
     }
 
+    // 23 Sep 2026 (perf fix 2) — CHANGE-DRIVEN SWEEP. The sweep used to run every
+    // 8 s whether or not anything moved, re-deriving every FC x system cell; on a
+    // large project that was a multi-second stall every 8 s. It now runs only when
+    // its inputs changed, detected two ways that together cover every write path:
+    //   · an EDIT — every edit reaches scheduleAutosave (commitSaveChanges is built
+    //     on it, R18); a wrapper marks the sweep dirty;
+    //   · a REPLACEMENT — project load, sync pull, undo and demo loads assign new
+    //     store objects; the identity of each input store is compared per tick.
+    // The sweep's OWN save (after it seeds) does not re-dirty it. Boot is dirty.
+    // See tests/regression_perf_idp_sweep.test.js.
+    var _dirty = true, _running = false, _lastIds = null;
+    function _inputIds() {
+        var pc = (typeof projectConfig !== 'undefined' && projectConfig) || null;
+        return [
+            typeof acFhaData !== 'undefined' ? acFhaData : null,
+            typeof systemsData !== 'undefined' ? systemsData : null,
+            typeof resourcesData !== 'undefined' ? resourcesData : null,
+            pc, pc ? pc.interdep : null,
+            typeof ftaPages !== 'undefined' ? ftaPages : null
+        ];
+    }
+    function _idsChanged() {
+        var now = _inputIds();
+        var changed = !_lastIds || now.some(function (x, i) { return x !== _lastIds[i]; });
+        _lastIds = now;
+        return changed;
+    }
+    function markDirty() { if (!_running) _dirty = true; }
+    function _hookSave() {
+        if (typeof window === 'undefined' || typeof window.scheduleAutosave !== 'function' || window.scheduleAutosave._idpDirtyWrapped) return;
+        var orig = window.scheduleAutosave;
+        var wrapped = function () { markDirty(); return orig.apply(this, arguments); };
+        wrapped._idpDirtyWrapped = true;
+        window.scheduleAutosave = wrapped;
+    }
+    // One tick: sweep only if something changed since the last sweep.
+    function tick() {
+        _hookSave();
+        if (_idsChanged()) _dirty = true;
+        if (!_dirty) return { skipped: true };
+        _dirty = false;
+        _running = true;
+        try { return (typeof idpIndexBatch === 'function') ? idpIndexBatch(run) : run(); }
+        finally { _running = false; }
+    }
+
     if (typeof window !== 'undefined') {
-        window.SL_IDP = { run: run, status: status };
-        // Boot + steady sweep — cheap (fingerprint no-ops when nothing moved),
-        // guarded, and killable.
-        var _tick = function () { try { run(); } catch (_) {} };
+        window.SL_IDP = { run: run, status: status, tick: tick, markDirty: markDirty };
+        var _tick = function () { try { tick(); } catch (_) {} };
         if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(_tick, 2500);
         else document.addEventListener('DOMContentLoaded', function () { setTimeout(_tick, 2500); });
         setInterval(_tick, 8000);
     }
-    if (typeof module !== 'undefined' && module.exports) module.exports = { run: run, status: status };
+    if (typeof module !== 'undefined' && module.exports) module.exports = { run: run, status: status, tick: tick, markDirty: markDirty };
 })();

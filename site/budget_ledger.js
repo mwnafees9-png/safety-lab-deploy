@@ -79,8 +79,9 @@
     function _pTop(page) {
         try {
             if (page && page.root && typeof computeExactProbability === 'function') {
-                const r = computeExactProbability(page.root);
-                if (r && typeof r.prob === 'number' && isFinite(r.prob)) return r.prob;
+                // perf fix 4: the cached read-only P(top) (fta_quant_modules.js)
+                const prob = (typeof exactTopProbability === 'function') ? exactTopProbability(page.root) : computeExactProbability(page.root).prob;
+                if (typeof prob === 'number' && isFinite(prob)) return prob;
             }
         } catch (_) {}
         return null;

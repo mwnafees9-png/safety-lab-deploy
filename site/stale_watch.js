@@ -140,7 +140,8 @@
         var bases = baseStore();
         pages().forEach(function (p) {
             if (!p || !p.verifies || !p.root) return;
-            var prob = null; try { var r = cep(p.root); prob = r && r.prob; } catch (_) {}
+            var etp = G('exactTopProbability');   // perf fix 4: cached read-only P(top)
+            var prob = null; try { if (typeof etp === 'function') prob = etp(p.root); else { var r = cep(p.root); prob = r && r.prob; } } catch (_) {}
             if (!isFinite(prob) || prob <= 0) return;
             var key = 'alpha:' + p.id;
             var fp = prob.toExponential(3);

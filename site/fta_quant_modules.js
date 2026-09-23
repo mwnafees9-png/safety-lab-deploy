@@ -1000,6 +1000,70 @@ function computeExactProbability(rootNode) {
     return { prob, bdd: built.bdd, varOrder: built.varOrder, lidToVar: built.lidToVar, varMeta: built.varMeta, probMap, bddSize: BDD.size(built.bdd) };
 }
 
+// 23 Sep 2026 (perf fix 4) — P(top) RESULT CACHE for read-only callers.
+// Dashboard, PASA and FTA arrivals asked for the exact P(top) of every tree
+// on every arrival (budget ledger, CCMR NTE, stale watch), and each call
+// re-allocated the BDD tables and rebuilt the diagram from scratch: at 20x
+// that was ~0.5 s of the dashboard's arrival. exactTopProbability(root)
+// returns ONLY the number, keyed by a full-content key of everything
+// buildBDDFromFT and _probMapFor read (every reachable node's structure,
+// gate semantics, CCF parameters and probability, and every page reached
+// through a transfer). The key is the complete content, not a hash, so a
+// hit can only happen when the inputs are identical: any edit to the tree or
+// to a page it transfers into is a miss and a fresh BDD computation. Callers
+// that need the diagram itself (bdd, varOrder, probMap) keep calling
+// computeExactProbability, which is unchanged. Errors are never cached.
+// See tests/regression_perf_ptop_cache.test.js.
+const _ptopCache = new Map();
+const _PTOP_CACHE_MAX = 1000;
+// Every node field buildBDDFromFT / _probMapFor read. Each value is encoded
+// unambiguously (strings JSON-quoted), so two different inputs never share a key.
+const _PTOP_FIELDS = ['id', 'type', 'gateType', 'logicalId', 'votingK', 'probability', 'eventClass',
+    'ccfGroup', 'beta', 'gamma', 'delta', 'transferOutTo', 'linkedPageId'];
+function _ptopVal(v) {
+    if (v === undefined) return 'u';
+    if (v === null) return 'z';
+    if (typeof v === 'number') return 'n' + v;
+    if (typeof v === 'string') return JSON.stringify(v);
+    if (typeof v === 'boolean') return v ? 'T' : 'F';
+    return 'j' + JSON.stringify(v);   // throws on an unencodable value -> the caller bypasses the cache
+}
+function _ptopKey(rootNode) {
+    const out = [];
+    const pagesSeen = new Set();
+    const pages = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : [];
+    (function walk(n) {
+        if (!n) { out.push('~'); return; }
+        out.push('(');
+        for (let i = 0; i < _PTOP_FIELDS.length; i++) out.push(_ptopVal(n[_PTOP_FIELDS[i]]), ',');
+        if (n.type === 'gate' && (n.gateType === 'TRANSFER' || n.transferOutTo)) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !pagesSeen.has(String(linkedId))) {
+                pagesSeen.add(String(linkedId));
+                const page = pages.find(p => p && p.id === linkedId);
+                out.push('{');
+                if (page && page.root) walk(page.root); else out.push('∅');
+                out.push('}');
+            }
+        }
+        const kids = n.children || n._children;
+        if (kids) { out.push(kids === n.children ? '[' : '_['); kids.forEach(walk); out.push(']'); }
+        out.push(')');
+    })(rootNode);
+    return out.join('');
+}
+function exactTopProbability(rootNode) {
+    if (!rootNode) return computeExactProbability(rootNode).prob;
+    let key;
+    try { key = _ptopKey(rootNode); } catch (_) { return computeExactProbability(rootNode).prob; }
+    if (_ptopCache.has(key)) return _ptopCache.get(key);
+    const prob = computeExactProbability(rootNode).prob;
+    if (_ptopCache.size >= _PTOP_CACHE_MAX) _ptopCache.delete(_ptopCache.keys().next().value);
+    _ptopCache.set(key, prob);
+    return prob;
+}
+try { window.exactTopProbability = exactTopProbability; } catch (_) {}
+
 // Top-level wrappers invoked by the toolbar buttons. They render results into the dedicated
 // summary divs without disturbing the main cutset summary.
 // MC-SEED — every Monte Carlo in this file is SEEDED (mulberry32, same discipline as
