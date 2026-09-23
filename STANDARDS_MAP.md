@@ -138,7 +138,7 @@
   - The numbers are right; the way the class is chosen differs, so a user can pick the wrong row. Propose: ask for certification level and propulsion, and derive the class. Measure: the Table 3 grid as a regression.
 - **Gap G2 (stale knowledge-base entry).** `cert_std_kb_data.js` chunk certstd-10 says F3230's internal sections are "not sourced in this tool". It also says the standard was "revised 2025", while your copy is 21a.
   - Now that the owned copy is read, the chunk can state clause numbers and titles (never text).
-  - The "2025" revision claim should be checked against ASTM before it stays in.
+  - Checked 23 Sep: ASTM has published F3230-25; the FAA's accepted list (Part 23 MoC page; 90 FR 21392, 20 May 2025) names F3230-21a and F3061/F3061M-22b. The app follows 21a.
   - This is an AI-verbiage change, so it must be eval-gated (rule 29).
 - **Not in the app yet:** the X2 qualitative argument template for simple and conventional systems (conventional, simple, likelihood, then CCA). Proposal P1.
 
@@ -209,19 +209,21 @@ These rest on the agents' reading of EASA Issue 03, NIST AI RMF and MOC-5. They 
 
 ---
 
-## 6. Gaps and proposals (for your decision; none started)
+## 6. Gaps and proposals
+
+**Status, 23 Sep 2026:** G1, G2 and G9 are built and tested (G2 still needs its golden eval before it counts as shipped). The rest are not started.
 
 | # | Gap | Source | Size (my estimate) |
 |---|---|---|---|
-| G1 | Part 23 class chosen from AC 23.1309-1E wording instead of F3230 Table 3 (certification level × propulsion) | F3230 4.2, Table 3 | Small: wizard plus a regression |
-| G2 | KB chunk certstd-10 says F3230 is unsourced, and cites a "2025" revision | F3230 | Small, but eval-gated |
+| G1 | Part 23 class chosen from AC 23.1309-1E wording instead of F3230 Table 3 (certification level × propulsion) | F3230 4.2, Table 3 | **Done 23 Sep.** `p23_assessment_level.js`; wizard and project settings ask certification level + propulsion; hybrid/eVTOL recorded as a level agreed with the authority. `regression_p23_assessment_level.test.js` |
+| G2 | KB chunk certstd-10 says F3230 is unsourced, and cites a "2025" revision | F3230 | **Built 23 Sep, eval pending.** certstd-10/13 and the spine now say: FAA-accepted revision is 21a (90 FR 21392, 20 May 2025); F3230-25 exists but is not on the FAA list; clause numbers and titles held, text never. `regression_cert_std_kb.test.js` |
 | G3 | PRA requirement cascade (origin, rationale, allocation, interrelation flag) and PRA assumptions with impact are not first-class | 4761A Q.15.2.7.2, L | Medium |
 | G4 | F3061 Table 1 secondary-system DALs not checked end to end | F3061 4.2.5 | Small check |
 | G5 | No USOC workflow | F3061 4.2.6, X2 | Medium |
 | G6 | No integration-level strategy for unintended behaviour (stimuli list, results in the verification summary) | 4754B 4.6.4 | Medium |
 | G7 | No PA audit objects (issue / finding / action item, sampling) | 4754B 5.7, E.7 | Medium |
 | G8 | Common naming convention for FTA basic events across groups | 4754B App B.4.2.1 | Likely covered: `node_identity.js` gives each node a declared shared identity (system / function / FC). Confirm and close |
-| G9 | ZSA query sheets lack assessor, method, date and OPEN/closed per finding. **Verify** against `phys_hazards.js`, which has status and method | 4761A Q.14.4.6 | Small |
+| G9 | ZSA query sheets lack assessor, method, date and OPEN/closed per finding. **Verify** against `phys_hazards.js`, which has status and method | 4761A Q.14.4.6 | **Done 23 Sep.** Verified real (phys_hazards records promoted hazards, not findings). `zsa_record.js`: every finding carries assessor, method, date, open/closed; closing needs the full record; INV-51 advisory. `regression_zsa_record.test.js` |
 | G10 | Section 5 items for our own AI (audit trail, Level 1B, over-reliance, tool-qualification position) | Issue 03, NIST, MOC-5 | Decision first |
 | P1 | F3230 X2 qualitative argument template (conventional / simple / likelihood / CCA) | F3230 X2 | Medium |
 | P2 | USOC workflow (see G5) | F3061 X2 | — |

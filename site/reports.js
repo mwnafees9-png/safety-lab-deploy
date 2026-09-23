@@ -849,6 +849,11 @@ const Reports = (function() {
                 'Severity': z.severity || '',
                 'Interference': z.interference || '',
                 'Mitigation': z.mitigation || '',
+                // 23 Sep 2026 (G9) — the finding's record (zsa_record.js).
+                'Status': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.statusText(z) : (z.findingStatus || ''),
+                'Assessed By': z.assessedBy || '',
+                'Method': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.methodText(z) : (z.assessMethod || ''),
+                'Assessed On': z.assessedOn || '',
             })), zsa, 'zsa', null),
 
             cma_table: _aiOriginRows(cma.map(c => ({
@@ -2486,6 +2491,9 @@ const Reports = (function() {
                     const t = data.zsa_table || data._zsaForAppendix && data._zsaForAppendix.map(z => ({
                         'Zone': z.zoneId, 'Description': z.desc, 'Equipment': z.equip,
                         'Severity': z.severity, 'Interference': z.interference, 'Mitigation': z.mitigation,
+                        'Status': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.statusText(z) : (z.findingStatus || ''),
+                        'Assessed By': z.assessedBy || '', 'Method': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.methodText(z) : (z.assessMethod || ''),
+                        'Assessed On': z.assessedOn || '',
                     })) || [];
                     if (t.length) { children.push(_renderTable(t, Object.keys(t[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
                 } else if (b.name === 'pra') {

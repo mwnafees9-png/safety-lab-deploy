@@ -816,7 +816,7 @@
         } };
 
         const projectConfig = {
-            regulation: 'part-23', part23Class: 'III', missionDuration: 1.5, override: false,
+            regulation: 'part-23', part23Class: 'III', part23CertLevel: '3', part23Propulsion: 'turbine-multi', missionDuration: 1.5, override: false,
             piQ: 1, piE: 1, markovModels: [],
             libraryStandard: 'MIL-HDBK-217F', libraryEnv: 'AIC', libraryQuality: 'B2',
             useStressPrediction: false, operatingTempC: 25, activationEnergyEv: 0.4,

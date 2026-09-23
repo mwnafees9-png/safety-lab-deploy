@@ -149,3 +149,21 @@ Shipped and live-verified on production this date (see DO-330 TVR v0.2 addendum 
 - **SPP toolchain declarations**: the program plan now declares the analysis/RM/MBSE toolchain as signed live data; interfaces adapt to the declaration.
 
 Remaining open from the original Tier lists: A6 at-risk/exposure named cases, A8 qualitative development-error events → FFS, M8 failure-frequency methodology, M9 OPRs, M13 MMEL/dispatch, M14 in-service export, M2/CEA graph propagation.
+
+---
+
+## Closure addendum — 2026-09-23
+
+The 2026-07-05 "remaining open" list above is stale: all seven items now have a module in `site/`, loaded by `index.html`. Checked today by reading each module's header and searching the test wall for it. "Closed" means a module plus a regression test of its own; "built, untested" means the module exists but no test in `tests/` or `eval/` names it or its functions, so nothing stops a regression.
+
+| Item | Module | Test | Status |
+|---|---|---|---|
+| A6 at-risk / exposure named cases (G.11.1.3) | `exposure_case.js` | `regression_exp_cra.test.js` | Closed |
+| A8 qualitative development-error events → FFS | `ffs_module.js` | `regression_devError.test.js` | Closed |
+| M8 failure-frequency methodology (G.12) | `fta_freq.js` | `regression_freq.test.js` | Closed |
+| M13 MMEL / time-limited dispatch | `mmel_module.js` | `regression_mel_fha_crosscheck.test.js` | Closed |
+| M2 cascading effects analysis (graph propagation) | `cea_graph.js` | none | Built, untested |
+| M9 problem reports / OPRs | `problem_reports.js` | none | Built, untested |
+| M14 safety-significant events export | `sse_export.js` | none | Built, untested |
+
+Open from this addendum: regression tests for `cea_graph.js`, `problem_reports.js` and `sse_export.js`. The standards gaps found on 23 Sep 2026 are tracked in `STANDARDS_MAP.md` §6 (G1–G10), not here.

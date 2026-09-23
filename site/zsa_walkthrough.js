@@ -36,25 +36,28 @@
     ];
 
     function _zone(zoneId) { return (window.ZONES && window.ZONES.get(zoneId)) || null; }
+    // 23 Sep 2026 (G9) — a new finding starts open and dated today; the analyst adds
+    // who assessed it and how, in the ZSA tab (zsa_record.js).
+    function _recDefaults() { return (window.SLZsaRecord ? window.SLZsaRecord.newFindingDefaults() : { findingStatus: 'open' }); }
     function _findings(zoneId, cpId) { return _zsa().filter(function (r) { return r && r.zoneId === zoneId && r.zsaCheckpoint === cpId; }); }
 
     window._zsaRecordFinding = async function (zoneId, cpId) {
         var cp = CHECKPOINTS.find(function (c) { return c.id === cpId; });
         var desc = await slPrompt('Finding / threat, ' + (cp ? cp.label : cpId) + ':', ''); if (desc == null || !desc.trim()) return;
         var mit = (await slPrompt('Mitigation / disposition (optional):', '')) || '';
-        _zsa().push({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: cpId, origin: 'walkthrough',
+        _zsa().push(Object.assign({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: cpId, origin: 'walkthrough',
             desc: desc.trim(), equip: '', severity: (typeof normSeverity === 'function') ? normSeverity('Major') : 'Major',
-            interference: '', mitigation: mit.trim() });
+            interference: '', mitigation: mit.trim() }, _recDefaults()));
         _save(); _renderModal(zoneId);
     };
     window._zsaRecordHazard = function (zoneId, hazId) {
         var hz = (window.EQUIP_HAZARDS ? window.EQUIP_HAZARDS.zoneHazards(zoneId) : []).find(function (h) { return h.id === hazId; });
         if (!hz) return;
         var from = hz.from.map(function (f) { return f.name; }).join(', ');
-        _zsa().push({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: 'housed', origin: 'walkthrough',
+        _zsa().push(Object.assign({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: 'housed', origin: 'walkthrough',
             desc: hz.name + ' (' + hz.mechanism + ', ' + hz.state + ')', equip: from,
             severity: (typeof normSeverity === 'function') ? normSeverity('Major') : 'Major',
-            interference: hz.threat, mitigation: '' });
+            interference: hz.threat, mitigation: '' }, _recDefaults()));
         _save(); _renderModal(zoneId);
     };
     window._zsaDeleteFinding = function (zoneId, internalId) {
@@ -82,7 +85,8 @@
             }
             var findings = fs.map(function (r) {
                 return '<div style="font-size:11.5px;padding:2px 0;display:flex;gap:8px;">' +
-                    '<span>• ' + _esc(r.desc) + (r.mitigation ? ' — <i style="color:#55555C;">' + _esc(r.mitigation) + '</i>' : '') + '</span>' +
+                    '<span>• ' + _esc(r.desc) + (r.mitigation ? ' — <i style="color:#55555C;">' + _esc(r.mitigation) + '</i>' : '') +
+                    (window.SLZsaRecord ? ' <span style="font-size:10.5px;">[' + window.SLZsaRecord.statusCellHTML(r) + ((window.SLZsaRecord.missing(r).length) ? ' · <span style="color:#b45309;">record incomplete</span>' : '') + ']</span>' : '') + '</span>' +
                     '<button onclick="_zsaDeleteFinding(\'' + zoneId + '\',\'' + r.internalId + '\')" style="margin-left:auto;color:#8E2A2A;border:none;background:transparent;cursor:pointer;font-size:12px;">×</button></div>';
             }).join('');
             return '<div style="border-bottom:1px solid #EEF2F8;padding:8px 0;">' +

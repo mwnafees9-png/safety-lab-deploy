@@ -870,7 +870,7 @@ const formConfigs = {
     sysFha: { submitBtn: 'btn-submit-sys-fha', cancelBtn: 'btn-cancel-sys-fha', defaultText: 'Log System FHA', fields: ['sys-fha-ac-trace','sys-fha-subfunc','sys-fha-fcid','sys-fha-fcdesc','sys-fha-eff-ac','sys-fha-eff-crew','sys-fha-eff-pax','sys-fha-sev','sys-fha-asm','sys-fha-comments'], checkboxes: 'sys-fha-phases' },
     sysReq: { submitBtn: 'btn-submit-sys-req', cancelBtn: 'btn-cancel-sys-req', defaultText: 'Log Sys Requirement', fields: ['sys-req-trace', 'sys-req-level','sys-req-type','sys-req-analysis','sys-req-text','sys-req-rat'] },
     pra: { submitBtn: 'btn-submit-pra', cancelBtn: 'btn-cancel-pra', defaultText: 'Log PRA Evaluation', fields: ['pra-id','pra-threat','pra-desc','pra-systems','pra-csfl-impact','pra-mitigation'] },
-    zsa: { submitBtn: 'btn-submit-zsa', cancelBtn: 'btn-cancel-zsa', defaultText: 'Log Zonal Analysis', fields: ['zsa-zone-id','zsa-desc','zsa-equip','zsa-severity','zsa-interference','zsa-mitigation'] },
+    zsa: { submitBtn: 'btn-submit-zsa', cancelBtn: 'btn-cancel-zsa', defaultText: 'Log Zonal Analysis', fields: ['zsa-zone-id','zsa-desc','zsa-equip','zsa-severity','zsa-interference','zsa-mitigation','zsa-assessed-by','zsa-assess-method','zsa-assessed-on','zsa-finding-status'] },
     cma: { submitBtn: 'btn-submit-cma', cancelBtn: 'btn-cancel-cma', defaultText: 'Log CMA Entry', fields: ['cma-id','cma-subject','cma-claim','cma-status','cma-findings','cma-mitigation','cma-references'] },
     fmea: { submitBtn: 'btn-submit-fmea', cancelBtn: 'btn-cancel-fmea', defaultText: 'Log FMEA Entry', fields: ['fmea-id','fmea-function-link','fmea-func-mode','fmea-phase','fmea-basic-event','fmea-parent-lib','fmea-part','fmea-mode','fmea-alpha-fm','fmea-rate','fmea-time','fmea-local-effect','fmea-next-effect','fmea-end-effect','fmea-detection','fmea-severity','fmea-compensating','fmea-remarks'] }
 };
@@ -2249,7 +2249,12 @@ window.renderPRA = praCRUD.render;
 const zsaCRUD = makeCRUD({
     key: 'zsa',
     store: () => zsaData,
-    formIds: { zoneId: 'zsa-zone-id', desc: 'zsa-desc', equip: 'zsa-equip', severity: 'zsa-severity', interference: 'zsa-interference', mitigation: 'zsa-mitigation' },
+    formIds: { zoneId: 'zsa-zone-id', desc: 'zsa-desc', equip: 'zsa-equip', severity: 'zsa-severity', interference: 'zsa-interference', mitigation: 'zsa-mitigation',
+               // 23 Sep 2026 (G9) — the finding's record (zsa_record.js).
+               assessedBy: 'zsa-assessed-by', assessMethod: 'zsa-assess-method', assessedOn: 'zsa-assessed-on', findingStatus: 'zsa-finding-status' },
+    // A finding with no status chosen is open. Closing needs the full record (zsa_record.js).
+    transform: (d) => { if (d.findingStatus !== 'closed') d.findingStatus = 'open'; if (typeof d.assessedBy === 'string') d.assessedBy = d.assessedBy.trim(); return d; },
+    validate: (d) => (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.validate(d) : null,
     submitBtn: 'btn-submit-zsa', cancelBtn: 'btn-cancel-zsa', defaultText: 'Log Zonal Analysis',
     tableBody: 'zsa-body',
     editFnName: 'editZSA', deleteFnName: 'deleteZSA',
@@ -2264,7 +2269,9 @@ const zsaCRUD = makeCRUD({
             '<td class="' + sevClass + '">' + (row.severity === 'Catastrophic' ? _sevPill('Catastrophic') : esc(row.severity)) + '</td>' +
             '<td>' + _renderZsaHousedFunctionsCell(row.housedFunctions) + '</td>' +
             '<td>' + esc(row.interference) + '</td>' +
-            '<td>' + esc(row.mitigation) + '</td>';
+            '<td>' + esc(row.mitigation) + '</td>' +
+            '<td>' + (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.statusCellHTML(row) : esc(row.findingStatus || '')) + '</td>' +
+            '<td>' + (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.recordCellHTML(row) : '') + '</td>';
     },
 });
 const _origZsaSubmit = zsaCRUD.submit;
@@ -2275,12 +2282,18 @@ window.submitZSA = function(){
     const editingId = (typeof editStates !== 'undefined') ? editStates.zsa : null;
     // Phase 53.67 — snapshot adjacency hints BEFORE submit (cancelEdit may clear).
     const adjacency = _readZsaAdjacencyHints();
+    // 23 Sep 2026 (G9) — the form replaces the row; keep the fields it does not show
+    // (the walkthrough checkpoint tag and origin), or the finding drops out of its walkthrough.
+    const prevRow = editingId != null ? zsaData.find(r => String(r.internalId) === String(editingId)) : null;
+    const prevCopy = prevRow ? Object.assign({}, prevRow) : null;
+    const lenBefore = zsaData.length;
     _origZsaSubmit();
-    const target = editingId != null ? zsaData.find(r => String(r.internalId) === String(editingId)) : zsaData[zsaData.length - 1];
-    if (target) {
-        target.housedFunctions = housed;
-        target.adjacency = adjacency;
-    }
+    const target = editingId != null ? zsaData.find(r => String(r.internalId) === String(editingId)) : (zsaData.length > lenBefore ? zsaData[zsaData.length - 1] : null);
+    // Nothing saved (validation refused it): keep the whole form as the user left it.
+    if (!target || (editingId != null && target === prevRow)) return;
+    if (prevCopy && typeof SLZsaRecord !== 'undefined') SLZsaRecord.carryOver(prevCopy, target);
+    target.housedFunctions = housed;
+    target.adjacency = adjacency;
     populateZsaHousedFunctionsDropdown([]);
     _clearZsaAdjacencyHints();
     renderZSA();
@@ -6064,14 +6077,21 @@ window._bulkSel = new Set();
             // PRIOR to the original submit (which then clears editStates).
             const asmIds = _read(hostId);
             const editIdSnapshot = (typeof editStates !== 'undefined') ? editStates[editKey] : null;
+            // 23 Sep 2026 (G9) — a save the table's validation refuses changes nothing; never
+            // fall back to "the last row" then, or its assumptions are overwritten.
+            const arrBefore = getArr();
+            const lenBefore = arrBefore ? arrBefore.length : 0;
+            const rowBefore = editIdSnapshot ? (arrBefore || []).find(r => String(r.internalId) === String(editIdSnapshot)) : null;
             const result = orig.apply(this, arguments);
             try {
                 const arr = getArr();
                 let target;
                 if (editIdSnapshot) {
                     target = (arr || []).find(r => String(r.internalId) === String(editIdSnapshot));
+                    if (target && target === rowBefore) target = null;   // same object: not replaced, not saved
+                } else if (arr && arr.length > lenBefore) {
+                    target = arr[arr.length - 1];
                 }
-                if (!target) target = arr && arr[arr.length - 1];
                 if (target) {
                     target.assumptionIds = asmIds.slice();
                     if (scopeAware) {

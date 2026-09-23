@@ -979,11 +979,11 @@ function renderProbTable() {
 // target into the FTA toolbar if a hazard link is active.
 function onProjectConfigChange() {
     const regSel = document.getElementById('proj-regulation');
-    const classSel = document.getElementById('proj-part23-class');
     const scvtolSel = document.getElementById('proj-scvtol-category');
     const mdInput = document.getElementById('proj-mission-duration');
     if (regSel) projectConfig.regulation = regSel.value;
-    if (classSel) projectConfig.part23Class = classSel.value;
+    // 23 Sep 2026 (G1) — Part 23 Assessment Level from certification level + propulsion (F3230 Table 3).
+    if (typeof SLP23 !== 'undefined' && document.getElementById('proj-p23-level')) SLP23.syncPicker('proj-p23', projectConfig);
     // Phase 53.55 — capture SC-VTOL category. Gate Custom behind isProLicensed().
     if (scvtolSel) projectConfig.scvtolCategory = scvtolSel.value;
     // 31 Aug 2026 — Part 27 class (PS-ASW-27-15 continuum split). Empty = legacy, banner shows.

@@ -8149,6 +8149,9 @@
                 zoneId: zid, desc: x.desc || '', equip: equip,
                 severity: (typeof normSeverity === 'function') ? normSeverity(x.severity) : (x.severity || ''),   // A8.1 — never default a class
                 interference: interf, mitigation: mit,
+                // 23 Sep 2026 (G9) — an AI draft is an OPEN finding with no assessor: the
+                // engineer who reviews it records who, how and when (zsa_record.js).
+                findingStatus: 'open',
                 aiGenerated: true, aiFeature: 'zsa.draft', aiSkill: _skillStampFor('zsa.draft'), aiModel: x._model || null, aiAt: new Date().toISOString()
             };
             // FILL-IF-EMPTY housedFunctions (never write an empty array over a derivable one).

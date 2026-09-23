@@ -1162,7 +1162,7 @@ function projectScopeLabel() {
 // Set the AC 1309 tab dropdowns from current state and render the summary line + applicable table.
 function renderProjectConfigUI() {
     const regSel = document.getElementById('proj-regulation');
-    const classSel = document.getElementById('proj-part23-class');
+    const p23Host = document.getElementById('proj-part23-host');
     const classContainer = document.getElementById('proj-class-container');
     const scvtolContainer = document.getElementById('proj-scvtol-container');
     const scvtolSel = document.getElementById('proj-scvtol-category');
@@ -1172,13 +1172,14 @@ function renderProjectConfigUI() {
     const customContent = document.getElementById('proj-custom-content');
     const missionNote = document.getElementById('proj-mission-based-note');
     const summary = document.getElementById('proj-config-summary');
-    if (!regSel || !classSel) return;
+    if (!regSel) return;
     // 31 Aug 2026 — canonicalise the dialect ('sc-vtol' / 'part-23') so the picker,
     // the sub-category selector and the summary all agree with getSafetyTarget().
     const reg = canonRegulation(projectConfig.regulation);
     if (reg !== projectConfig.regulation && reg) projectConfig.regulation = reg;
     regSel.value = reg;
-    classSel.value = projectConfig.part23Class || 'IV';
+    // 23 Sep 2026 (G1) — Part 23 picker: certification level + propulsion → F3230 Table 3.
+    if (p23Host && typeof SLP23 !== 'undefined') p23Host.innerHTML = reg === 'Part 23' ? SLP23.pickerHTML('proj-p23', projectConfig, 'onProjectConfigChange()') : '';
     if (scvtolSel) scvtolSel.value = projectConfig.scvtolCategory || 'Enhanced';
     if (p27Sel) p27Sel.value = part27IsLegacy(projectConfig.part27Class) ? '' : projectConfig.part27Class;
     if (p27Container) p27Container.style.display = reg === 'Part 27' ? 'block' : 'none';
@@ -1197,6 +1198,11 @@ function renderProjectConfigUI() {
         } else if (reg === 'Part 107') {
             missionNote.style.display = 'block';
             missionNote.innerHTML = '⚠ <strong>Part 107 / UAS uses SORA methodology</strong> — risk-class-driven (SAIL 1-6 per JARUS SORA 2.5) rather than per-flight-hour severity. The per-FH severity ladder is hidden. System-level safety analysis still applies; the MoC catalog shows the relevant Part 107 and SORA paragraphs.';
+        } else if (reg === 'Part 23' && typeof SLP23 !== 'undefined' && SLP23.status(projectConfig).source === 'legacy') {
+            // 23 Sep 2026 (G1) — class picked before the app asked for certification level
+            // and propulsion. The saved class stays in force until both are given.
+            missionNote.style.display = 'block';
+            missionNote.innerHTML = '⚠ <strong>Part 23 needs the certification level and propulsion.</strong> ASTM F3230 Table 3 sets the Assessment Level from those two. This project was set up with Class ' + esc(projectConfig.part23Class) + ' directly; that class stays in force until you give both above.';
         } else if (reg === 'Part 27' && part27IsLegacy(projectConfig.part27Class)) {
             // 31 Aug 2026 — pre-split project. PS-ASW-27-15 splits Part 27 by class; the
             // legacy row resolves to Class III (never looser than the old row).

@@ -158,12 +158,21 @@ const ExcelImport = (function() {
             affectedZones: ['zones', 'affectedzones', 'zonesimpacted'],
             mitigation: ['mitigation', 'controls', 'mitigationapproach']
         },
+        // 23 Sep 2026 (G9) — keys are the ZSA table's own fields (the old zsaId/zone/threat
+        // keys matched nothing the ZSA tab reads, so imported zones showed blank), plus
+        // the finding record (zsa_record.js).
         zsa: {
-            zsaId:    ['zsaid', 'id', 'zsa#'],
-            zone:     ['zone', 'zoneid', 'arinczone', 'ata'],
-            threat:   ['threat', 'risk', 'hazard'],
+            zoneId:   ['zoneid', 'zone', 'arinczone', 'ata', 'zsaid', 'id', 'zsa#'],
+            desc:     ['description', 'boundaries', 'boundary', 'zonedescription'],
+            equip:    ['installedequipment', 'equipment', 'routing'],
+            severity: ['worstseverity', 'severity'],
+            interference: ['interferenceprofile', 'interference', 'interferences', 'threat', 'risk', 'hazard'],
             housedFunctions: ['housedfunctions', 'functionshoused'],
-            mitigation: ['mitigation', 'protection']
+            mitigation: ['separationmitigations', 'mitigation', 'mitigations', 'protection'],
+            assessedBy: ['assessedby', 'assessor', 'inspector'],
+            assessMethod: ['assessmentmethod', 'method', 'inspectionmethod'],
+            assessedOn: ['assessedon', 'assessmentdate', 'inspectiondate', 'date'],
+            findingStatus: ['findingstatus', 'status', 'state']
         },
         cma: {
             cmaId:    ['cmaid', 'id', 'cma#'],
@@ -708,13 +717,20 @@ const ExcelImport = (function() {
                 });
                 count++;
             } else if (kind === 'zsa') {
+                const _zr = (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord : null;
                 zsaData.push({
                     internalId: newRowId(),
-                    zsaId: String(r.zsaId || '').trim() || _newId('ZSA'),
-                    zone: String(r.zone || '').trim(),
-                    threat: String(r.threat || '').trim(),
+                    zoneId: String(r.zoneId || '').trim() || _newId('ZSA'),
+                    desc: String(r.desc || '').trim(),
+                    equip: String(r.equip || '').trim(),
+                    severity: String(r.severity || '').trim(),
+                    interference: String(r.interference || '').trim(),
                     housedFunctions: splitMulti(r.housedFunctions),
-                    mitigation: String(r.mitigation || '').trim()
+                    mitigation: String(r.mitigation || '').trim(),
+                    assessedBy: String(r.assessedBy || '').trim(),
+                    assessMethod: _zr ? _zr.methodFrom(r.assessMethod) : '',
+                    assessedOn: String(r.assessedOn || '').trim(),
+                    findingStatus: (_zr ? _zr.statusFrom(r.findingStatus) : '') || 'open'
                 });
                 count++;
             } else if (kind === 'cma') {

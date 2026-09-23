@@ -192,8 +192,10 @@ function exportData(moduleName, format) {
                     praData.map(r => [r.praId, r.threat, r.desc, r.systems, r.csfl, r.mitigation]));
             case 'ZSA':
                 return downloadCSV(file('ZSA'),
-                    ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Interference Profile','Separation & Mitigations'],
-                    zsaData.map(r => [r.zoneId, r.desc, r.equip, r.severity, r.interference, r.mitigation]));
+                    ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Interference Profile','Separation & Mitigations','Status','Assessed By','Assessment Method','Assessed On'],
+                    zsaData.map(r => [r.zoneId, r.desc, r.equip, r.severity, r.interference, r.mitigation,
+                        (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.statusText(r) : (r.findingStatus || '')), r.assessedBy || '',
+                        (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.methodText(r) : (r.assessMethod || '')), r.assessedOn || '']));
             case 'CMA':
                 // 17 Aug 2026 — CSV export was missing for CMA (fell through to the
                 // "not yet implemented" default) while the PDF table provider below
@@ -745,7 +747,11 @@ function importTabularCSV(text, moduleName) {
         } else if(moduleName === 'PRA') {
             praData.push({ internalId: newId, praId: getValue(row, ['PRA ID']), threat: getValue(row, ['Threat Source']), desc: getValue(row, ['Propagation Path']), systems: getValue(row, ['Target Systems']), csfl: getValue(row, ['CSFL Impact Analysis']), mitigation: getValue(row, ['Mitigation Strategy']) });
         } else if(moduleName === 'ZSA') {
-            zsaData.push({ internalId: newId, zoneId: getValue(row, ['Zone ID']), desc: getValue(row, ['Boundaries']), equip: getValue(row, ['Installed Equipment']), severity: getValue(row, ['Worst Severity']), interference: getValue(row, ['Interference Profile']), mitigation: getValue(row, ['Separation & Mitigations']) });
+            zsaData.push({ internalId: newId, zoneId: getValue(row, ['Zone ID']), desc: getValue(row, ['Boundaries']), equip: getValue(row, ['Installed Equipment']), severity: getValue(row, ['Worst Severity']), interference: getValue(row, ['Interference Profile']), mitigation: getValue(row, ['Separation & Mitigations']),
+                assessedBy: getValue(row, ['Assessed By']) || '',
+                assessMethod: (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.methodFrom(getValue(row, ['Assessment Method'])) : '',
+                assessedOn: getValue(row, ['Assessed On']) || '',
+                findingStatus: ((typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.statusFrom(getValue(row, ['Status'])) : '') || 'open' });
         } else if(moduleName === 'HW_FMEA') {
             const lRate = parseFloat(getValue(row, ['Rate (λ)', 'Rate'])) || 0; const tTime = parseFloat(getValue(row, ['Time (t)', 'Time'])) || 0;
             fmeaData.push({ internalId: newId, fmeaType: 'piece-part', scope: 'system', owningSystemId: activeSystemId || '', beId: getValue(row, ['FTA Link']), part: getValue(row, ['Component']), mode: getValue(row, ['Failure Mode']), rate: lRate, time: tTime, prob: -Math.expm1(-lRate * tTime) });
@@ -1928,8 +1934,10 @@ function _pdfDataForModule(moduleName) {
                 }) };
         case 'ZSA':
             return { title: 'Zonal Safety Analysis',
-                headers: ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Housed Functions','Interference','Mitigation'],
-                rows: (zsaData || []).map(z => [z.zoneId, z.desc, z.equip, z.severity, (z.housedFunctions || []).join(', '), z.interference, z.mitigation]) };
+                headers: ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Housed Functions','Interference','Mitigation','Status','Assessed (by / method / date)'],
+                rows: (zsaData || []).map(z => [z.zoneId, z.desc, z.equip, z.severity, (z.housedFunctions || []).join(', '), z.interference, z.mitigation,
+                    (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.statusText(z) : (z.findingStatus || '')),
+                    [z.assessedBy, (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.methodText(z) : z.assessMethod), z.assessedOn].filter(Boolean).join(' / ')]) };
         case 'CMA':
             return { title: 'Common Mode Analysis',
                 headers: ['Scope','CMA ID','Subject','Independence Claim','Linked Gates','Modes','Findings','Mitigation','Status'],
@@ -2833,7 +2841,7 @@ function _buildSampleProject() {
         typeCounters: { gate: 30, basic: 30, undeveloped: 1, conditioning: 1, house: 1 },
         ftaConfig: { mode: 'top-down', apportion: 'equal', targetP: 1e-9, linkedFhaId: 'AC_' + FHA_PITCH, exposureTime: 1, exposureSource: 'auto' },
         projectConfig: {
-            regulation: 'Part 23', part23Class: 'III', override: false,
+            regulation: 'Part 23', part23Class: 'III', part23CertLevel: '3', part23Propulsion: 'turbine-multi', override: false,
             customLibrary: {}, piQ: 1, piE: 1,
             missionDuration: 1,  // 1 hour, distributed across the flight phases above
             markovModels: []

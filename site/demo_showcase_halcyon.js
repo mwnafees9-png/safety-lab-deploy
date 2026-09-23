@@ -911,7 +911,9 @@
         // ====================================================================
         const projectConfig = {
             regulation: 'Part 23',
-            part23Class: 'III',
+            // Hybrid-electric is outside ASTM F3230 Table 3 (its note B): Assessment Level III
+            // is recorded as the level agreed with the authority (p23_assessment_level.js).
+            part23Class: 'III', part23CertLevel: '3', part23Propulsion: 'other', part23ManualLevel: 'III',
             missionDuration: 1.6,
             override: null, piQ: 1, piE: 1,
             libraryStandard: 'MIL-HDBK-217F', libraryEnv: 'AIC', libraryQuality: 'COMMERCIAL',

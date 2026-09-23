@@ -1099,8 +1099,9 @@ function openNewProjectWizard() {
         '<input type="text" id="npw-name" placeholder="Project name (e.g., HX-1 Hydrogen Demonstrator)" style="width:100%; margin-bottom:12px;">' +
         '<div class="ckpt-m-sec">Certification basis — drives every target, DAL floor, and depth-of-analysis default</div>' +
         '<select class="state-select" id="npw-basis" style="width:100%; margin-bottom:8px;" onchange="var v=this.value; document.getElementById(\'npw-p23\').style.display = v===\'Part 23\'?\'\':\'none\'; document.getElementById(\'npw-p27\').style.display = v===\'Part 27\'?\'\':\'none\'; document.getElementById(\'npw-vtol\').style.display = v===\'sc-vtol\'?\'\':\'none\'; try{PROGRAM_PLAN.renderWizardScope(\'npw-scope\', v);}catch(_){}">' + baseOpts + '</select>' +
-        '<select class="state-select" id="npw-p23" style="width:100%; margin-bottom:8px; display:none;">' +
-        '<option value="I">Class I — single recip ≤6,000 lb</option><option value="II">Class II — multi recip / single turboprop</option><option value="III">Class III — turbojets, ≥6,000 lb</option><option value="IV" selected>Class IV — commuter</option></select>' +
+        // 23 Sep 2026 (standards gap G1) — Part 23: certification level + propulsion,
+        // Assessment Level derived from ASTM F3230 Table 3 (p23_assessment_level.js).
+        '<div id="npw-p23" style="display:none;">' + (typeof SLP23 !== 'undefined' ? SLP23.pickerHTML('npw-p23x', (window._npwP23Cfg = {}), "SLP23.syncPicker('npw-p23x', window._npwP23Cfg)") : '') + '</div>' +
         '<select class="state-select" id="npw-p27" style="width:100%; margin-bottom:8px; display:none;">' +
         '<option value="I">Class I — reciprocating, ≤5 occupants</option><option value="II">Class II — single turbine, ≤5 occupants, ≤4,000 lb</option><option value="III" selected>Class III — single turbine, ≥6 occupants, 4,001–7,000 lb</option><option value="IV">Class IV — twin turbine</option></select>' +
         '<select class="state-select" id="npw-vtol" style="width:100%; margin-bottom:8px; display:none;">' +
@@ -1135,7 +1136,17 @@ function openNewProjectWizard() {
 async function npwCreate() {
     const name = (document.getElementById('npw-name') || {}).value || '';
     const basis = (document.getElementById('npw-basis') || {}).value || 'Part 25';
-    const p23 = (document.getElementById('npw-p23') || {}).value || 'IV';
+    // Part 23: the Assessment Level comes from F3230 Table 3 (or a recorded manual
+    // level for propulsion outside the table). Refuse to create without it.
+    const p23cfg = {};
+    if (basis === 'Part 23' && typeof SLP23 !== 'undefined') {
+        const pk = SLP23.readPicker('npw-p23x');
+        const st = SLP23.apply(p23cfg, pk.certLevel, pk.propulsion, pk.manual);
+        if (st.source !== 'table3' && st.source !== 'manual') {
+            if (typeof showToast === 'function') showToast('Part 23: pick the certification level and propulsion so the Assessment Level can be set from F3230 Table 3.', 'warning', 5200);
+            return;
+        }
+    }
     const p27 = (document.getElementById('npw-p27') || {}).value || 'III';
     const vtol = (document.getElementById('npw-vtol') || {}).value || 'Enhanced';
     const mission = parseFloat((document.getElementById('npw-mission') || {}).value) || 0;
@@ -1151,7 +1162,7 @@ async function npwCreate() {
     // 31 Aug 2026 — the wizard's basis id for eVTOL is 'sc-vtol'; the engine's key is
     // 'SC-VTOL'. Store the canonical form so getSafetyTarget() never falls back to Part 25.
     projectConfig.regulation = (basis === 'sc-vtol') ? 'SC-VTOL' : basis;
-    if (basis === 'Part 23') projectConfig.part23Class = p23;
+    if (basis === 'Part 23') { projectConfig.part23Class = p23cfg.part23Class; projectConfig.part23CertLevel = p23cfg.part23CertLevel; projectConfig.part23Propulsion = p23cfg.part23Propulsion; }
     if (basis === 'Part 27') projectConfig.part27Class = p27;
     if (basis === 'sc-vtol') projectConfig.scvtolCategory = vtol;
     if (mission > 0) projectConfig.missionDuration = mission;
@@ -4703,7 +4714,7 @@ function _injectHelpAttributes() {
         '.brand-mark': 'Safety Lab Aero — unified safety engineering environment',
         '#fta-fha-link': 'Link this fault tree to an FHA hazard for exposure time + DAL target',
         '#proj-regulation': 'Choose Part 23 or Part 25 — drives probability + DAL targets',
-        '#proj-part23-class': 'Part 23 aircraft class (drives DAL allocation per CAR 23.1309)'
+        '#proj-part23-host': 'Part 23 certification level and propulsion — ASTM F3230 Table 3 sets the Assessment Level, which drives the targets and DALs'
     };
     Object.entries(map).forEach(([sel, hint]) => {
         document.querySelectorAll(sel).forEach(el => { if(!el.getAttribute('data-help')) el.setAttribute('data-help', hint); });
