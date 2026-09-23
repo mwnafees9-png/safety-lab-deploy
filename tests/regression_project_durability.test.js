@@ -649,8 +649,9 @@ check('no "System lane" category survives anywhere in the rail',
 // 228 -> 229 (6 Sep 2026): slab_license.js — offline signed-license verification (ES256; loads right after slab_config).
 // 233 -> 233 (13 Sep 2026, R19): error_watch.js — the ONE global error catcher, loaded right after fn_wrap.js.
 // 234 -> 235 (23 Sep 2026): lazy_render.js — render only what is on screen; the pending render runs on arrival.
+// 236 -> 237 (23 Sep 2026): tree_warm.js — per-tree facts computed in the worker, off the UI thread.
 // 235 -> 236 (23 Sep 2026): data_change.js — the one shared "has the project data changed" detector for background sweeps.
-check('script tag count unchanged (236 — data_change.js added 23 Sep (shared change detector; loads right after save_watch.js); lazy_render.js added 23 Sep (render only what is on screen; loads right after error_watch.js); secret_store.js added 20 Sep (S8: the one place the page puts a secret); license_modal.js removed 15 Sep when SL-LICENSE-0001 was folded into SL-EULA-0004; …change_journal_sync.js 9 Sep; save_watch.js 13 Sep; error_watch.js 13 Sep)', tags === 236, 'got ' + tags);
+check('script tag count unchanged (237 — tree_warm.js added 23 Sep (worker warm-up of per-tree facts; loads right after model_checks.js); data_change.js added 23 Sep (shared change detector; loads right after save_watch.js); lazy_render.js added 23 Sep (render only what is on screen; loads right after error_watch.js); secret_store.js added 20 Sep (S8: the one place the page puts a secret); license_modal.js removed 15 Sep when SL-LICENSE-0001 was folded into SL-EULA-0004; …change_journal_sync.js 9 Sep; save_watch.js 13 Sep; error_watch.js 13 Sep)', tags === 237, 'got ' + tags);
   check('HTML comments balanced', (html.match(/<!--/g) || []).length === (html.match(/-->/g) || []).length);
   // Floors, not equality — a later build must not silently serve a stale cached file.
   // COMPONENT-WISE, not parseFloat: `>= 2.40` read as a float is `>= 2.4`, which a stale 2.9

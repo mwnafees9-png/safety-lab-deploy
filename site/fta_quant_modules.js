@@ -1092,10 +1092,14 @@ try { window.exactTopProbability = exactTopProbability; } catch (_) {}
 const _MCS_FIELDS = _PTOP_FIELDS.concat(['displayId', 'name']);
 const _MCS_CACHE_MAX = 20000;
 const _mcsCache = _boundedCache(_MCS_CACHE_MAX, 16e6);
-function _mcsSnap(n) {
+// Kept here (the page must not depend on the engine namespace at call time —
+// several harnesses load this file alone); fta_engine.js has the identical
+// cutsetSnapshot for the worker, held equal by tests/regression_engine_parity.
+function cutsetSnapshot(n) {
     return { id: n.id, logicalId: n.logicalId, displayId: n.displayId, name: n.name,
              ccfGroup: n.ccfGroup, beta: n.beta, eventClass: n.eventClass };
 }
+const _mcsSnap = cutsetSnapshot;
 function minimalCutsetSnapshots(rootNode) {
     let key = null;
     try { key = _ptopKey(rootNode, _MCS_FIELDS); } catch (_) { key = null; }
@@ -1107,6 +1111,12 @@ function minimalCutsetSnapshots(rootNode) {
     return snaps.map(cs => cs.map(m => Object.assign({}, m)));
 }
 try { window.minimalCutsetSnapshots = minimalCutsetSnapshots; } catch (_) {}
+// tree_warm.js hands in results the worker computed for an exact content key.
+// A key is the tree's full content, so a primed entry can only ever be read
+// back for identical content.
+function _ptopPrime(key, prob) { if (typeof key === 'string' && typeof prob === 'number') _ptopCache.set(key, prob); }
+function _mcsPrime(key, snaps) { if (typeof key === 'string' && Array.isArray(snaps)) _mcsCache.set(key, snaps); }
+try { window.ptopCachePrime = _ptopPrime; window.ptopCacheHas = k => _ptopCache.has(k); window.mcsCachePrime = _mcsPrime; window.mcsCacheHas = k => _mcsCache.has(k); } catch (_) {}
 
 // Top-level wrappers invoked by the toolbar buttons. They render results into the dedicated
 // summary divs without disturbing the main cutset summary.

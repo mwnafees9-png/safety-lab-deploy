@@ -4043,7 +4043,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- UNC-1 — SLUnc: P05-P95 uncertainty bands on the budget ledger (user-entered EFs only; idle-computed; display lane). -->
     <script src="unc_bands.js?v=1.0" defer></script>
     <script src="paginate.js?v=1.3" defer></script>
-    <script src="fta_engine.js?v=1.6" defer></script>
+    <script src="fta_engine.js?v=1.7" defer></script>
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
     <script src="safety_targets.js?v=1.8" defer></script>
     <script src="severity_rubrics.js?v=1.3" defer></script>
@@ -4055,7 +4055,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="importers.js?v=1.7" defer></script>
     <script src="core_modules.js?v=1.9" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
-    <script src="fta_quant_modules.js?v=66.21" defer></script>
+    <script src="fta_quant_modules.js?v=66.22" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
     <script src="event_reuse.js?v=1.2" defer></script>
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
@@ -4086,7 +4086,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.49" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.69" defer></script>
+    <script src="misc_fn_modules.js?v=66.70" defer></script>
     <script src="safety_lab.js?v=65.59" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4169,7 +4169,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- UX-1 — importance heatmap overlay: FV heat on basic events, display lane only (born modular; toolbar toggle injection). -->
     <script src="importance_heat.js?v=2.3" defer></script>
     <!-- UX-4 — leading-indicators strip on the dashboard: early warnings, display + routing only (born modular; counts from invRun / etaCouplingFindings / the engine's feasibility lane). -->
-    <script src="ux_leading.js?v=1.2" defer></script>
+    <script src="ux_leading.js?v=1.3" defer></script>
     <!-- UX-2 — contextual micro-tours: per-surface first-visit orientation (born modular; pill invite, never a takeover; concepts only). -->
     <script src="micro_tours.js?v=1.0" defer></script>
     <!-- UX-3 — K350 exercise track: six hands-on drills with read-only deterministic completion checks (born modular; Getting Started card trigger). -->
@@ -4234,7 +4234,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ram_hub.js?v=1.2" defer></script>
     <script src="engine_selftest.js?v=1.1" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
-    <script src="model_checks.js?v=1.02" defer></script>
+    <script src="model_checks.js?v=1.03" defer></script>
+    <script src="tree_warm.js?v=1.0" defer></script>
     <script src="fault_sim.js?v=1.22" defer></script>
     <script src="tab_guard.js?v=1.0" defer></script>
     <script src="journal.js?v=1.1" defer></script>
@@ -4365,7 +4366,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="monitor_spec.js?v=1.5" defer></script>
     <script src="exposure_case.js?v=1.24" defer></script>
     <script src="cra_matrix.js?v=1.5" defer></script>
-    <script src="fta_proposals.js?v=1.3" defer></script>
+    <script src="fta_proposals.js?v=1.4" defer></script>
     <script src="prove_tabs.js?v=1.5" defer></script>
     <script src="fta_tree_picker.js?v=1.2" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go

@@ -32,6 +32,7 @@
 
     let _lastSweep = null;      // { at:ms, inv: invRun() result }
     const SWEEP_TTL_MS = 4000;
+    const WARM_WAIT_MS = 30000;   // longest the background project check waits for tree_warm.js
 
     function _esc(s) {
         if (typeof esc === 'function') return esc(s);
@@ -48,12 +49,23 @@
         // sweep lands, re-render the tiles with fresh counts.
         if (typeof SLIdle !== 'undefined' && SLIdle) {
             const stale = _lastSweep ? _lastSweep.inv : null;
-            SLIdle.schedule('lead-sweep', function () {
+            // 23 Sep 2026 — while tree_warm.js is computing per-tree facts in the
+            // worker (after a load or an edit), wait for it (up to WARM_WAIT_MS)
+            // instead of computing the same trees again here on the UI thread.
+            // The tiles keep showing the last result meanwhile.
+            const firstAsked = Date.now();
+            const job = function () {
+                const warm = (typeof window !== 'undefined') ? window.SLTreeWarm : null;
+                if (warm && typeof warm.busy === 'function' && warm.busy() && (Date.now() - firstAsked) < WARM_WAIT_MS) {
+                    setTimeout(function () { SLIdle.schedule('lead-sweep', job, { timeout: 3000 }); }, 400);
+                    return;
+                }
                 let inv = null;
                 try { inv = invRun(); } catch (_) {}
                 _lastSweep = { at: Date.now(), inv };
                 try { render(); } catch (_) {}
-            }, { timeout: 3000 });
+            };
+            SLIdle.schedule('lead-sweep', job, { timeout: 3000 });
             return stale;
         }
         let inv = null;

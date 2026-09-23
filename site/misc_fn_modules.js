@@ -4172,7 +4172,7 @@ function _cutsetWorkerEnabled() {
 // Versioned spawn — same cache-busting discipline as the page's <script> tags,
 // so a deploy can never pair a fresh page with a stale cached worker. Bump this
 // (and the importScripts version inside fta_worker.js) whenever the engine bumps.
-function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.4'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
+function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.5'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
 function _countTreeNodes(node, seen) { if (!node) return 0; seen = seen || new Set(); if (seen.has(node.id)) return 0; seen.add(node.id); var n = 1; var kids = node.children || node._children; if (kids) for (var i = 0; i < kids.length; i++) n += _countTreeNodes(kids[i], seen); return n; }
 function _reconstructCutsets(encoded, index) {
     return encoded.map(function (c) {

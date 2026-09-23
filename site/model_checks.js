@@ -56,26 +56,10 @@
     // path counting only high (var=true) edges. Exact for ANY function the
     // gates can express — unmentioned variables default to false (weight 0).
     // fixedTrue: set of varIdx already failed at zero cost (MC-03).
-    function _minOrder(bdd, fixedTrue) {
-        const memo = new Map();
-        function go(n) {
-            if (n.isTerminal) return n.value ? 0 : Infinity;
-            const c = memo.get(n.id);
-            if (c !== undefined) return c;
-            let r;
-            if (fixedTrue && fixedTrue.has(n.varIdx)) r = go(n.high);
-            else r = Math.min(go(n.low), 1 + go(n.high));
-            memo.set(n.id, r);
-            return r;
-        }
-        return go(bdd);
-    }
-    // Does the assignment {v=true, everything else false} satisfy the BDD?
-    function _singleVarReaches(bdd, v) {
-        let n = bdd;
-        while (!n.isTerminal) n = (n.varIdx === v) ? n.high : n.low;
-        return n.value === true;
-    }
+    // _minOrder / _singleVarReaches / the single-event extraction live in
+    // fta_engine.js (23 Sep 2026): ONE implementation for the page and the
+    // worker that pre-computes these facts off the UI thread (tree_warm.js).
+    const _minOrder = (bdd, fixedTrue) => SLFTAEngine.minOrder(bdd, fixedTrue);
 
     // ---------------------------------------------------- page → FC context
     function _pageLinkedFcs(p) {
@@ -117,16 +101,15 @@
         if (!pc.spfAccepted) pc.spfAccepted = {};
         return pc.spfAccepted;
     }
-    // Enumerate every single-failure path to a Cat/Haz top. Keyed by the
-    // EVENT (logicalId / CCF group), not the page — one acceptance covers
-    // every tree the same physical event appears in.
     // 23 Sep 2026 (perf round 2) — each tree's single-failure events are
     // REMEMBERED, keyed by the tree's full content (the same content key as the
     // P(top) and cut-set caches, fta_quant_modules.js: structure, gate types,
     // CCF, probabilities, ids, names). The invariants sweep called this twice
     // per run (MC-01, MC-02) and rebuilt every Cat/Haz tree's BDD each time:
     // ~11 s per sweep on a 100x project. Any change to a tree is a miss.
-    // See tests/regression_perf_round2.test.js.
+    // 23 Sep 2026 (round 3): tree_warm.js pre-computes these in the worker and
+    // primes them (mcSinglesPrime), so the sweep rarely builds a BDD itself.
+    // See tests/regression_perf_round2.test.js, tests/regression_tree_warm.test.js.
     const _singlesMemo = new Map();
     function _singlesKey(root) {
         try { return (typeof _ptopKey === 'function' && typeof _MCS_FIELDS !== 'undefined') ? _ptopKey(root, _MCS_FIELDS) : null; } catch (_) { return null; }
@@ -134,35 +117,31 @@
     function _singlesOf(root) {
         const key = _singlesKey(root);
         if (key !== null && _singlesMemo.has(key)) return _singlesMemo.get(key);
-        const out = [];
         const built = _build(root);              // may throw: the caller skips the page, nothing is remembered
-        const ok = built && built.bdd && !built.bdd.isTerminal && _minOrder(built.bdd) <= 1;
-        if (ok) {
-            const { bdd, varOrder, varMeta } = built;
-            for (let v = 0; v < varOrder.length; v++) {
-                if (!_singleVarReaches(bdd, v)) continue;
-                const meta = varMeta[v] || {};
-                // β-modeled CCF tiers are single common causes BY CONSTRUCTION —
-                // the engineer declared the group and signed the β; that modeling
-                // (plus CMA coverage) IS the disposition, and the contribution is
-                // carried quantitatively in P(top). MC-01 targets INDEPENDENT
-                // single events, so group-tier variables are excluded here.
-                if (meta.type === 'group') continue;
-                const node = meta.node || varOrder[v];
-                const lid = node.logicalId != null ? node.logicalId : node.id;
-                // L0 MF&MS placeholders (macsys:*) are functional abstractions —
-                // "min 1 of [system]" compiles to a system-level single that the
-                // PSSA trees decompose. Flagging them would indict the fidelity
-                // level, not the design; INV-12 tracks model maturity instead.
-                if (String(lid).indexOf('macsys:') === 0) continue;
-                out.push({ lid, displayId: node.displayId, name: node.name, probability: node.probability });
-            }
-        }
-        if (key !== null && built) {
-            if (_singlesMemo.size >= 20000) _singlesMemo.clear();
-            _singlesMemo.set(key, out);
-        }
+        const out = SLFTAEngine.singleFailureEvents(built);
+        if (key !== null && built) _singlesPrime(key, out);
         return out;
+    }
+    // MC-03's per-tree facts, remembered the same way (same content key), and
+    // pre-computed in the worker by tree_warm.js. null = no BDD engine here.
+    const _mmelMemo = new Map();
+    function _mmelWrap(f) { return { terminal: f.terminal, lidSet: new Set(f.lids), aloneSet: new Set(f.alone) }; }
+    function _mmelFactsOf(root) {
+        const key = _singlesKey(root);
+        if (key !== null && _mmelMemo.has(key)) return _mmelMemo.get(key);
+        const built = _build(root);               // may throw: the caller skips the page
+        if (!built) return null;
+        const w = _mmelWrap(SLFTAEngine.mmelFacts(built));
+        if (key !== null) _mmelPrime(key, w);
+        return w;
+    }
+    function _mmelPrime(key, wrapped) {
+        if (_mmelMemo.size >= 20000) _mmelMemo.clear();
+        _mmelMemo.set(key, wrapped);
+    }
+    function _singlesPrime(key, list) {
+        if (_singlesMemo.size >= 20000) _singlesMemo.clear();
+        _singlesMemo.set(key, list);
     }
     // Enumerate every single-failure path to a Cat/Haz top. Keyed by the
     // EVENT (logicalId / CCF group), not the page — one acceptance covers
@@ -256,17 +235,14 @@
                     });
                 });
                 _checkablePages(true).forEach(({ page, worst }) => {
-                    let built;
-                    try { built = _build(page.root); } catch (_) { return; }
-                    if (!built) return;
-                    const { bdd, lidToVar } = built;
-                    if (!bdd || bdd.isTerminal) return;
+                    let facts;
+                    try { facts = _mmelFactsOf(page.root); } catch (_) { return; }
+                    if (!facts || facts.terminal) return;
                     items.forEach(m => {
                         const lid = lidFor.get(m.id);
-                        if (lid == null || !lidToVar.has(lid)) return;
+                        if (lid == null || !facts.lidSet.has(lid)) return;
                         checked++;
-                        const residual = _minOrder(bdd, new Set([lidToVar.get(lid)]));
-                        if (residual === 0)
+                        if (facts.aloneSet.has(lid))
                             fails.push(m.id + ' (' + m.beRef + ' inoperative): dispatch ALONE reaches the top of "' + page.name + '" [' + worst.severity + '] — no residual protection');
                     });
                 });
@@ -393,4 +369,8 @@
     window.mcSpfList = mcSpfList;
     window._mcAccept = _mcAccept;
     window._mcMinOrder = _minOrder;
+    // tree_warm.js hands in facts the worker computed for a tree's exact content key
+    window.mcSinglesPrime = function (key, list) { if (typeof key === 'string' && Array.isArray(list)) _singlesPrime(key, list); };
+    window.mcSinglesHas = function (key) { return _singlesMemo.has(key) && _mmelMemo.has(key); };
+    window.mcMmelPrime = function (key, f) { if (typeof key === 'string' && f && Array.isArray(f.lids) && Array.isArray(f.alone)) _mmelPrime(key, _mmelWrap(f)); };
 })();

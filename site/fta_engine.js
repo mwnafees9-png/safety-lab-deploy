@@ -526,19 +526,25 @@ function buildBDDFromFT(rootNode) {
 }
 function _probMapFor(varOrder, varMeta) {
     const map = new Map();
+    // Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1) enter the
+    // BDD at p = 0, whatever λ/P a stale field might carry: the quantified
+    // P(top) is explicitly P(top | no development error). The variables still
+    // exist in the BDD so cut-set structure (and the qualitative-FFS partition)
+    // is untouched.
+    const _q = n => (n && n.eventClass === 'dev-error') ? 0 : (n && n.probability) || 0;
     if (!varMeta || !varMeta.length) {
-        varOrder.forEach((node, varIdx) => map.set(varIdx, node.probability || 0));
+        varOrder.forEach((node, varIdx) => map.set(varIdx, _q(node)));
         return map;
     }
     varMeta.forEach((meta, varIdx) => {
         if (meta.type === 'indep') {
             const n = meta.node;
-            const q = n.probability || 0;
+            const q = _q(n);
             const b = (n.ccfGroup && n.beta > 0) ? n.beta : 0;
             map.set(varIdx, q * (1 - b));
         } else if (meta.type === 'group') {
             const r = meta.refNode;
-            const q = r.probability || 0;
+            const q = _q(r);
             const beta  = r.beta  || 0;
             const gamma = r.gamma || 0;
             const delta = r.delta || 0;
@@ -656,6 +662,146 @@ function computeFailureFrequency(rootNode) {
     return { wTE: wTE, cutsetCount: cutsets.length };
 }
 
+
+// ---- 23 Sep 2026 (perf round 3) — per-tree FACTS, one implementation for both threads.
+// bddCutsets / _minimizeBDDCutsets / bddMinimalCutsets are copied VERBATIM from
+// fta_quant_modules.js (which keeps its own copies bound to the page's BDD
+// instance); regression_engine_parity holds the two copies equal, comments aside.
+function bddCutsets(bdd, current, result) {
+    current = current || [];
+    result = result || [];
+    if (bdd === BDD.T0) return result;
+    if (bdd === BDD.T1) {
+        result.push([...current]);
+        // #7b hardening — the BDD 1-path enumeration had NO budget guard, so a
+        // compact BDD (thousands of nodes) with combinatorially many paths could
+        // grind the main thread indefinitely (ipLedger calls this on every Cat/Haz
+        // tree). Same discipline as the classic enumerator: ABORT deterministically
+        // at the budget, never truncate — an incomplete cut-set list would silently
+        // under-report failure combinations. P(top) is unaffected (BDD.probability
+        // never enumerates paths).
+        const _budget = (typeof _CUTSET_BUDGET !== 'undefined') ? _CUTSET_BUDGET : 200000;
+        if (result.length > _budget) {
+            if (typeof CutsetExplosionError === 'function') throw new CutsetExplosionError(result.length);
+            const e = new Error('BDD cut-set enumeration exceeds ' + _budget.toLocaleString() + ' sets.'); e.name = 'CutsetExplosionError'; e.count = result.length; throw e;
+        }
+        return result;
+    }
+    // Low branch — variable is false; do not add it.
+    bddCutsets(bdd.low, current, result);
+    // High branch — variable is true; add it to the current cutset.
+    current.push(bdd.varIdx);
+    bddCutsets(bdd.high, current, result);
+    current.pop();
+    return result;
+}
+function _minimizeBDDCutsets(cutsets) {
+    const sets = cutsets.map(c => new Set(c)).sort((a, b) => a.size - b.size);
+    const min = [];
+    for (const c of sets) {
+        let subsumed = false;
+        for (const m of min) {
+            if (m.size > c.size) continue;
+            let isSubset = true;
+            for (const k of m) if (!c.has(k)) { isSubset = false; break; }
+            if (isSubset) { subsumed = true; break; }
+        }
+        if (!subsumed) min.push(c);
+    }
+    return min.map(s => [...s]);
+}
+function bddMinimalCutsets(rootNode) {
+    const { bdd, varOrder } = buildBDDFromFT(rootNode);
+    if (!bdd || bdd === BDD.T0) return [];
+    const raw = bddCutsets(bdd);
+    const minimal = _minimizeBDDCutsets(raw);
+    return minimal.map(cs => cs.sort((a, b) => a - b).map(idx => varOrder[idx]));
+}
+
+// Minimum number of failures to reach the top event: shortest root→T1 path
+// counting only high (var=true) edges. fixedTrue: varIdx already failed at zero
+// cost (MC-03). Moved here from model_checks.js so the page and the worker
+// derive single-failure facts from ONE implementation.
+function _minOrder(bdd, fixedTrue) {
+    const memo = new Map();
+    function go(n) {
+        if (n.isTerminal) return n.value ? 0 : Infinity;
+        const c = memo.get(n.id);
+        if (c !== undefined) return c;
+        let r;
+        if (fixedTrue && fixedTrue.has(n.varIdx)) r = go(n.high);
+        else r = Math.min(go(n.low), 1 + go(n.high));
+        memo.set(n.id, r);
+        return r;
+    }
+    return go(bdd);
+}
+// Does the assignment {v=true, everything else false} satisfy the BDD?
+function _singleVarReaches(bdd, v) {
+    let n = bdd;
+    while (!n.isTerminal) n = (n.varIdx === v) ? n.high : n.low;
+    return n.value === true;
+}
+// The INDEPENDENT single events that alone reach the top of a built BDD
+// ({ bdd, varOrder, varMeta } from buildBDDFromFT). β-modeled CCF tiers are
+// single common causes BY CONSTRUCTION (the engineer declared the group and
+// signed the β; the contribution is carried in P(top)), so group-tier variables
+// are excluded. L0 MF&MS placeholders (macsys:*) are functional abstractions,
+// never flagged (INV-12 tracks model maturity instead).
+function singleFailureEvents(built) {
+    const out = [];
+    if (!built || !built.bdd || built.bdd.isTerminal) return out;
+    const { bdd, varOrder, varMeta } = built;
+    if (_minOrder(bdd) > 1) return out;
+    for (let v = 0; v < varOrder.length; v++) {
+        if (!_singleVarReaches(bdd, v)) continue;
+        const meta = varMeta[v] || {};
+        if (meta.type === 'group') continue;
+        const node = meta.node || varOrder[v];
+        const lid = node.logicalId != null ? node.logicalId : node.id;
+        if (String(lid).indexOf('macsys:') === 0) continue;
+        out.push({ lid: lid, displayId: node.displayId, name: node.name, probability: node.probability });
+    }
+    return out;
+}
+// MC-03 (MMEL dispatch) facts for a built BDD: every event variable's lid, and
+// the lids whose failure ALONE (fixed true, zero further failures) reaches the
+// top — computed with exactly the test MC-03 applies (_minOrder with that
+// variable fixed === 0). terminal: the tree has no decision structure (skipped).
+function mmelFacts(built) {
+    if (!built || !built.bdd || built.bdd.isTerminal) return { terminal: true, lids: [], alone: [] };
+    const lids = [], alone = [];
+    built.lidToVar.forEach(function (v, lid) {
+        lids.push(lid);
+        if (_minOrder(built.bdd, new Set([v])) === 0) alone.push(lid);
+    });
+    return { terminal: false, lids: lids, alone: alone };
+}
+// A cut-set member as the independence ledger reads it (never a live node).
+function cutsetSnapshot(n) {
+    return { id: n.id, logicalId: n.logicalId, displayId: n.displayId, name: n.name,
+             ccfGroup: n.ccfGroup, beta: n.beta, eventClass: n.eventClass };
+}
+// WORKER: every per-tree fact the page caches, for one tree. `pages` are the
+// pages its transfers reach (the engine follows transfers through ftaPages,
+// exactly as the page does). Each fact is independent: a budget refusal on
+// one (e.g. cut-set enumeration) is reported and never poisons the others.
+function treeFactsForWorker(rootNode, pages) {
+    const out = {};
+    const prev = root.ftaPages;
+    root.ftaPages = pages || [];
+    try {
+        try { out.ptop = computeExactProbability(rootNode).prob; } catch (e) { out.ptopError = (e && e.name) || 'Error'; }
+        try {
+            const built = buildBDDFromFT(rootNode);
+            out.singles = singleFailureEvents(built);
+            out.mmel = mmelFacts(built);
+        } catch (e) { out.singlesError = (e && e.name) || 'Error'; }
+        try { out.mcs = (bddMinimalCutsets(rootNode) || []).map(cs => cs.map(cutsetSnapshot)); } catch (e) { out.mcsError = (e && e.name) || 'Error'; }
+    } finally { root.ftaPages = prev; }
+    return out;
+}
+
 var SLFTAEngine = {
     CUTSET_BUDGET: _CUTSET_BUDGET,
     CutsetExplosionError: CutsetExplosionError,
@@ -671,7 +817,14 @@ var SLFTAEngine = {
     computeExactProbability: computeExactProbability,
     computeImportanceMeasures: computeImportanceMeasures,
     computeImportanceForWorker: computeImportanceForWorker,
-    computeFailureFrequency: computeFailureFrequency
+    computeFailureFrequency: computeFailureFrequency,
+    bddMinimalCutsets: bddMinimalCutsets,
+    minOrder: _minOrder,
+    singleVarReaches: _singleVarReaches,
+    singleFailureEvents: singleFailureEvents,
+    mmelFacts: mmelFacts,
+    cutsetSnapshot: cutsetSnapshot,
+    treeFactsForWorker: treeFactsForWorker
 };
 
 // Expose the namespace + the historical globals (so safety_lab.js's existing calls and the

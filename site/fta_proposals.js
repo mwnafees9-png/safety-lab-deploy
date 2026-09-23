@@ -279,11 +279,19 @@
         // changed (data_change.js); the generation is read after the sweep so its
         // own save does not re-trigger it. Arriving on the IP ledger tab still
         // sweeps unconditionally. See tests/regression_data_change.test.js.
-        var _seenGen = 0, _booted = false;
+        var _seenGen = 0, _booted = false, _waitSince = 0;
         var _tick = function () {
             try {
                 var dc = window.SLDataChange;
                 if (dc && _booted && dc.gen() === _seenGen) return;
+                // While tree_warm.js is computing cut sets in the worker, wait (up
+                // to 30 s) rather than computing the same trees here on the UI thread.
+                var warm = window.SLTreeWarm;
+                if (warm && typeof warm.busy === 'function' && warm.busy()) {
+                    if (!_waitSince) _waitSince = Date.now();
+                    if (Date.now() - _waitSince < 30000) return;
+                }
+                _waitSince = 0;
                 _booted = true;
                 try { sweep(); } finally { if (dc) _seenGen = dc.gen(); }
             } catch (_) {}
