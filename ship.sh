@@ -148,5 +148,18 @@ if [ "$RC" = "0" ]; then
   # the script always exits 0 and prints what happened (tools/indexnow/ping.mjs).
   echo
   node tools/indexnow/ping.mjs
+  # 23 Sep 2026 — the off-machine copy. Until today no repo had a remote (S27): 213 commits on
+  # one laptop. Every green deploy now pushes whatever is committed, so GitHub is never behind
+  # production. Cannot fail the ship (the deploy is already out); prints a warning instead.
+  echo
+  if git remote get-url origin >/dev/null 2>&1; then
+    if git push -q origin HEAD 2>/dev/null; then echo "Pushed to $(git remote get-url origin)"
+    else echo "WARNING: git push failed — run 'git push' by hand so GitHub has this build."; fi
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "WARNING: uncommitted changes shipped that are NOT on GitHub. Commit and push them."
+    fi
+  else
+    echo "WARNING: no git remote — this build exists only on this laptop."
+  fi
 fi
 exit $RC

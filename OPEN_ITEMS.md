@@ -60,6 +60,35 @@ Checked every open entry against the running site, the three repos (safety-lab-d
   every account. Only the Desktop copy was corrected. The stale pair should be replaced or
   removed before anything gets attached to an email by mistake.
 
+## 23 Sep 2026 — S27 CLOSED, S26 CLOSED (was not a secret), ai_usage DROPPED (throwaway; production pending)
+
+- **S27 git remote — CLOSED.** All three repos pushed to github.com/mwnafees9-png (safety-lab-deploy,
+  safety-lab-desktop, safety-lab-proxy-deploy), local HEAD == origin/master on each. ship.sh now
+  pushes after every successful deploy and warns if the push fails or uncommitted changes shipped,
+  so GitHub cannot fall behind production silently. The desktop and proxy repos are pushed by hand
+  (their release scripts are separate); `git push` after each commit there.
+- **S26 desktop config.json "plaintext backend key" — CLOSED, NOT A SECRET.** Read main.js,
+  shell_rules.js, settings.html: `backendKey` is the customer's PUBLISHABLE (anon) key, the one every
+  browser bundle carries by design, and shell_rules hands it to the page as __SLAB_SUPABASE_KEY__ on
+  every launch so the page can talk to the server at all. Encrypting it in the keychain would
+  decrypt it straight back into the renderer; nothing gained. The credential that WAS a secret
+  (Jama) went to the OS keychain 16 Sep (secrets.js). Hygiene only: config.json written owner-only
+  (0600) like secrets.json — done in this commit. RLS and the licence are what protect the data,
+  not the key.
+- **ai_usage / increment_ai_usage — DEAD, DROPPED.** Not a broken meter: the first per-user design,
+  superseded by consume_tokens on the licence row, which the proxy calls after every request and
+  which produces allowance_exhausted. No caller, no reader in any repo. Migration 20260923a +
+  customer-install 12_ (apply.sh wired). regression_h8_rls_disk_sync taught that a dropped table
+  accounts for its 0001 policies. APPLIED TO THROWAWAY yiisexbngnjakkqkmctw and verified (table
+  null, function 0, consume_tokens and set_updated_at intact, 30 public tables). PRODUCTION
+  fhrqkhdrwbfnizkepkch: NOT YET APPLIED — Waqas's word first, then apply_migration + the same
+  five-column check.
+- Still open from the 17 Sep sweep: ROTATE notify_hook_secret (Waqas; involves the value).
+- SEO (audit 23 Sep, 74/100): all code-side items shipped 6d34360 and verified live; sitemap
+  resubmitted to Google (16 pages) and Bing; indexing requested for the five changed pages; Rich
+  Results Test clean on / and /functional-hazard-assessment. Off-code levers left: inbound links,
+  a monthly content piece, per-page social images. Re-read Search Console ~21 Oct.
+
 ## 17 Sep 2026 — S28: every email the product sends had been dead since 14 Sep. FIXED AND LIVE.
 
 FOUND by a deliberate sweep for controls that have never executed (the pattern behind the last
@@ -146,11 +175,11 @@ into apply.sh. regression_truncate_grants (13), mutation-tested.
   NOTE: the same silent-guard pattern covers four other page functions (__slabGetProjectJSON,
   __slabLoadProjectJSON, __slabOpenCloudProject, openInWebLink). All five resolve today; the suite
   is what keeps that true.
-- S26 config.json plaintext — STILL OPEN. The backend key sits in plain text in the desktop's own
+- S26 config.json plaintext — CLOSED 23 Sep (see top: the key is publishable by design). Was: the backend key sits in plain text in the desktop's own
   config file. The Jama credential half of this was fixed 16 Sep (OS keychain via safeStorage).
   BUNDLE STALENESS half: CLOSED 17 Sep — app/ is now web 80057bc, current as of this session, which
   is the first time the desktop has carried R18/R19, the demo FCIM fix and the .sl picker.
-- S27 no git remote — STILL OPEN AND WORSENING. Nothing is pushed anywhere, on ANY of the three repos (safety-lab-deploy 213, -proxy-deploy 17, -desktop 10 commits as of 17 Sep). The only copy of the company is one laptop. Waqas's action; needs his account.
+- S27 no git remote — CLOSED 23 Sep (see top). Was: STILL OPEN AND WORSENING. Nothing is pushed anywhere, on ANY of the three repos (safety-lab-deploy 213, -proxy-deploy 17, -desktop 10 commits as of 17 Sep). The only copy of the company is one laptop. Waqas's action; needs his account.
 
 ## 14 Sep 2026 (evening) — SECOND RECONCILIATION, verified live + across all three repos
 

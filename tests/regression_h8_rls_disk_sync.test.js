@@ -109,7 +109,8 @@ console.log('[h8] 3 — no policy in the FINAL state calls a helper unqualified'
   // Each of the six below was read on 5 Sep 2026 against that test:
   const KEPT_FROM_0001 = [
     'users_self_read',            // select on users        · auth.uid() = id
-    'ai_usage_self_read',         // select on ai_usage     · own rows
+    // 'ai_usage_self_read' left this list 23 Sep 2026: the table was dropped (20260923a), so the
+    // 0001 policy is accounted for by the drop, and the test below treats a dropped table that way.
     'audit_self_read',            // select on audit_log    · own rows
     'license_tokens_self_select', // select on license_tokens · own licence
     'workspaces_self_insert',     // insert a workspace you own — the intended
@@ -122,6 +123,9 @@ console.log('[h8] 3 — no policy in the FINAL state calls a helper unqualified'
     const m = /^create policy (\w+) on public\.(\w+)/.exec(line.trim());
     if (!m) continue;
     if (KEPT_FROM_0001.indexOf(m[1]) >= 0) continue;
+    // A later migration that drops the table accounts for every policy on it (the policy goes
+    // with the table). 23 Sep 2026, 20260923a dropped public.ai_usage.
+    if (new RegExp('drop table if exists public\\.' + m[2] + '\\b').test(later)) continue;
     if (!new RegExp('create policy ' + m[1] + ' on public\\.' + m[2]).test(later)) unaccounted.push(m[1]);
   }
   check('EVERY policy 0001 defines is re-emitted later or explicitly kept — helper or not',
