@@ -80,6 +80,7 @@ function _bindFtaSidebarSearch() {
 }
 
 function renderFTASidebar() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('fta-sidebar-list', 'renderFTASidebar', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     try { if (typeof _renderSidebarContext === 'function') _renderSidebarContext(); } catch(_) {}
     const list = document.getElementById('fta-sidebar-list'); if (!list) return; list.innerHTML = '';
     _bindFtaSidebarSearch();
@@ -609,6 +610,7 @@ function _ftaCullPill(shown, total, capped) {
 }
 
 function updateD3() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('fta-svg', 'updateD3', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     try {
         try { _renderFtaLinkedChip(); } catch (_) {}
         try { _renderFtaConfigSummary(); } catch (_) {}

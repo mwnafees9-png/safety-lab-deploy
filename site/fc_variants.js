@@ -230,7 +230,7 @@
     function _wrap() {
         if (typeof window.renderACFHA !== 'function' || window.renderACFHA._fcvWrapped) return false;
         const orig = window.renderACFHA;
-        const wrapped = function () { const r = orig.apply(this, arguments); try { _render(); } catch (_) {} return r; };
+        const wrapped = function () { const r = orig.apply(this, arguments); if (typeof SLLazy !== 'undefined' && SLLazy.skipped('ac-fha-body')) return r; /* lazy_render.js: the original was deferred, so is this companion */ try { _render(); } catch (_) {} return r; };
         wrapped._fcvWrapped = true;
         window.renderACFHA = wrapped;
         return true;

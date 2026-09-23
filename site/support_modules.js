@@ -1778,6 +1778,10 @@ function switchTab(tabId) {
                 }
             } catch (_) {}
         }
+        // 23 Sep 2026 — lazy_render.js: anything that was asked to render while this view
+        // was off screen runs now, once, after the view is shown (the ResizeObserver in
+        // lazy_render would catch it a frame later; this is the same frame).
+        try { if (typeof SLLazy !== 'undefined') SLLazy.flush(); } catch (_) {}
     } catch (err) { console.error(err); }
 }
 
@@ -1998,6 +2002,7 @@ function updateSysAsmText(id, field, val) {
     if (field === 'type' || field === 'credited' || field === 'uncredited') { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} renderSysAssumptions(); }
 }
 function renderSysAssumptions() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('sys-asm-body', 'renderSysAssumptions', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     if (!sys()) return;
     const tbody = document.getElementById('sys-asm-body'); tbody.innerHTML = '';
     const activeSysId = sys().id;

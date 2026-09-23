@@ -300,6 +300,7 @@
             const orig = window.renderMacPage;
             const wrapped = function () {
                 const r = orig.apply(this, arguments);
+                if (typeof SLLazy !== 'undefined' && SLLazy.skipped('mac-host')) return r;   // lazy_render.js: the original was deferred, so is this companion
                 _rerender();
                 return r;
             };

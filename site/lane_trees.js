@@ -559,7 +559,7 @@
         var orig = window.renderMfmsPanel;
         if (typeof orig !== 'function') { if ((tries || 0) < 40) setTimeout(function () { wrapPanel((tries || 0) + 1); }, 250); return; }
         if (orig._laneWrapped) return;
-        var wrapped = function () { var r = orig.apply(this, arguments); try { renderDesk(); } catch (_) {} return r; };
+        var wrapped = function () { var r = orig.apply(this, arguments); if (typeof SLLazy !== 'undefined' && SLLazy.skipped('mfms-host')) return r; /* lazy_render.js: the original was deferred, so is this companion */ try { renderDesk(); } catch (_) {} return r; };
         wrapped._laneWrapped = true;
         try { if (window.SLWrap && SLWrap.preserve) SLWrap.preserve(orig, wrapped); } catch (_) {}
         window.renderMfmsPanel = wrapped;

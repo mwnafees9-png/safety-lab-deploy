@@ -300,6 +300,7 @@
                         const orig = w[fn];
                         const wrapped = function () {
                             const r = orig.apply(this, arguments);
+                            if (typeof SLLazy !== 'undefined' && SLLazy.skipped(fn === 'renderACAssumptions' ? 'ac-asm-body' : 'sys-asm-body')) return r;   // lazy_render.js: the original was deferred, so is this companion
                             try { setTimeout(sweep, 0); } catch (_) {}
                             try { setTimeout(renderThreadCard, 0); } catch (_) {}   // 4 Sep 2026 — the log render is the card's cue now
                             return r;

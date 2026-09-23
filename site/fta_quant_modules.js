@@ -1383,6 +1383,7 @@ function _markovClosedFormHtml(m, result) {
     } catch (_) { return ''; }
 }
 function renderMarkovModels() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('markov-models-container', 'renderMarkovModels', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const container = document.getElementById('markov-models-container');
     if (!container) return;
     const models = (projectConfig && projectConfig.markovModels) || [];

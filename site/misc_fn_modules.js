@@ -2449,6 +2449,7 @@ function pasaSub(name) {
     if (name === 'mac') { try { renderMacPage(); } catch (_) {} }
     if (name === 'mfms') { try { renderMfmsPanel(); } catch (_) {} }
     if (name === 'coffe') { try { renderCoffePanel(); } catch (_) {} }
+    try { if (typeof SLLazy !== 'undefined') SLLazy.flush(); } catch (_) {}   // lazy_render.js: the lane just shown renders its pending work now
 }
 
 function rateEquivalentForProb(P, t) {

@@ -328,6 +328,7 @@
         const orig = window.updateD3;
         const wrapped = function () {
             const r = orig.apply(this, arguments);
+            if (typeof SLLazy !== 'undefined' && SLLazy.skipped('fta-svg')) return r;   // lazy_render.js: the original was deferred, so is this companion
             try { if (_on) { _paint(); } } catch (_) {}
             return r;
         };

@@ -1675,6 +1675,7 @@ async function exportProjectAsPDF() {
             // (Rasterizing a non-active tree would require rendering it in a hidden d3 context — out of scope here.)
             if(page.id === activeFTAPageId) {
                 try {
+                    try { if (typeof SLLazy !== 'undefined') SLLazy.settle('fta-svg'); } catch (_) {}   // lazy_render.js: never photograph a stale canvas
                     const svgEl = document.getElementById('fta-svg');
                     const svgStr = new XMLSerializer().serializeToString(svgEl);
                     const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -2196,6 +2197,7 @@ async function _exportFtaPDF() {
     doc.setTextColor(0); y += 22;
 
     // Tree image
+    try { if (typeof SLLazy !== 'undefined') SLLazy.settle('fta-svg'); } catch (_) {}   // lazy_render.js: never photograph a stale canvas
     const svgEl = document.getElementById('fta-svg');
     if (svgEl && activePage) {
         const png = await _captureElementAsPng(svgEl, 1100);

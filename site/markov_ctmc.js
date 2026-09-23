@@ -486,6 +486,7 @@
         const orig = window.renderMarkovModels;
         const wrapped = function () {
             const r = orig.apply(this, arguments);
+            if (typeof SLLazy !== 'undefined' && SLLazy.skipped('markov-models-container')) return r;   // lazy_render.js: the original was deferred, so is this companion
             try {
                 const container = document.getElementById('markov-models-container');
                 const models = (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.markovModels) || [];

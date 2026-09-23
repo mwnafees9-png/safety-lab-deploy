@@ -2447,6 +2447,7 @@ function idpStats() {
 }
 
 function renderInterdepPage() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('interdep-host', 'renderInterdepPage', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('interdep-host');
     if (!host) return;
     const fcs = acFhaData || [];
@@ -2971,6 +2972,7 @@ function renderSppPage() {
 }
 
 function renderCoffePanel() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('coffe-host', 'renderCoffePanel', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('coffe-host');
     if (!host) return;
     const fcs = (acFhaData || []).filter(fc => idpContributors(fc).length >= 2);
@@ -3196,6 +3198,7 @@ function mfmsApplyRestructure(ruleId, spec) {
 }
 
 function renderMfmsPanel() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('mfms-host', 'renderMfmsPanel', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('mfms-host');
     if (!host) return;
     const rules = _macStore();
@@ -3281,6 +3284,7 @@ function renderMfmsPanel() {
 }
 
 function renderMacPage() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('mac-host', 'renderMacPage', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('mac-host');
     if (!host) return;
     const rules = _macStore();
@@ -3520,6 +3524,7 @@ function _ckptRefresh(key) {
 }
 
 function renderCockpitPage(key) {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('ckpt-page-' + String(key || '').toLowerCase(), 'renderCockpitPage', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('ckpt-page-' + key.toLowerCase());
     if (!host) return;
     let phases;
@@ -3783,6 +3788,7 @@ function _sysRoleBadge(s) {
 }
 
 function renderSystemDirectory() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('sys-directory-grid', 'renderSystemDirectory', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     try { if (typeof _renderSidebarContext === 'function') _renderSidebarContext(); } catch(_) {}
     const grid = document.getElementById('sys-directory-grid'); grid.innerHTML = '';
     // Workspace governance card moved to the Admin nav group (Admin → Workspaces & Locks → openWorkspacesPanel()).
@@ -3982,6 +3988,7 @@ function _prepFmeaForSystemContext() {
 function _phasesActiveTable() { return _missionProfilePhases(_phasesProfileId); }
 function _fmtMissionHours(h) { h = +h || 0; return h >= 1 ? (Math.round(h * 100) / 100) + ' h' : (Math.round(h * 60 * 10) / 10) + ' min'; }
 function renderFlightPhases() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('phases-body', 'renderFlightPhases', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     // Mission-profile bar (Phase 76) — switch / add / rename / delete the profile being edited.
     const bar = document.getElementById('phases-profile-bar');
     if (bar) {
@@ -4769,6 +4776,7 @@ function acFhaAddPhaseVariant(iId) {
 }
 
 function renderACFHA() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('ac-fha-body', 'renderACFHA', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     // The entry form's phase grid is derived from the project's phase table, so it
     // is rebuilt wherever the tab is. Non-destructive — see renderFhaPhaseGrid.
     renderFhaPhaseGrid('ac-fha-phases');
@@ -4999,6 +5007,7 @@ function _asmRenderFindings(tableId) {
     host.innerHTML = _asmFindingsHtml();
 }
 function renderACAssumptions() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('ac-asm-body', 'renderACAssumptions', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const tbody = document.getElementById('ac-asm-body'); tbody.innerHTML = '';
     const _wu = _asmMoatUses();   // one where-used pass per render, shared by every row
     // ENG-2 phase 1c — paginated via the shared pager (>50 rows).
@@ -5271,6 +5280,7 @@ function deleteSysFHA(iId) {
     renderSysAssumptions();
 }
 function renderSysFHA() {
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('sys-fha-body', 'renderSysFHA', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     renderFhaPhaseGrid('sys-fha-phases');
     if (!sys()) { const tb = document.getElementById('sys-fha-body'); if (tb) tb.innerHTML = ''; return; }
     const tbody = document.getElementById('sys-fha-body'); tbody.innerHTML = '';
@@ -6280,6 +6290,7 @@ function _readItemTraceList(){
 }
 
 function renderItems(){
+    if (typeof SLLazy !== 'undefined' && SLLazy.defer('item-body', 'renderItems', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const tbody = document.getElementById('item-body');
     if (!tbody) return;
     const sysName = (id) => {

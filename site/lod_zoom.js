@@ -119,7 +119,7 @@
     (function wrapRender() {
         if (typeof window.updateD3 !== 'function' || window.updateD3._lodWrapped) { setTimeout(wrapRender, 300); return; }
         const orig = window.updateD3;
-        const wrapped = function () { const r = orig.apply(this, arguments); _debounced(); return r; };
+        const wrapped = function () { const r = orig.apply(this, arguments); if (typeof SLLazy !== 'undefined' && SLLazy.skipped('fta-svg')) return r; /* lazy_render.js: the original was deferred, so is this companion */ _debounced(); return r; };
         wrapped._lodWrapped = true;
         window.updateD3 = wrapped;
     })();

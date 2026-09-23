@@ -648,7 +648,8 @@ check('no "System lane" category survives anywhere in the rail',
 // 227 -> 228 (6 Sep 2026): slab_config.js — the ONE backend-config surface + hard-stop egress guard (customer-hosted build; loads first).
 // 228 -> 229 (6 Sep 2026): slab_license.js — offline signed-license verification (ES256; loads right after slab_config).
 // 233 -> 233 (13 Sep 2026, R19): error_watch.js — the ONE global error catcher, loaded right after fn_wrap.js.
-check('script tag count unchanged (234 — secret_store.js added 20 Sep (S8: the one place the page puts a secret); license_modal.js removed 15 Sep when SL-LICENSE-0001 was folded into SL-EULA-0004; …change_journal_sync.js 9 Sep; save_watch.js 13 Sep; error_watch.js 13 Sep)', tags === 234, 'got ' + tags);
+// 234 -> 235 (23 Sep 2026): lazy_render.js — render only what is on screen; the pending render runs on arrival.
+check('script tag count unchanged (235 — lazy_render.js added 23 Sep (render only what is on screen; loads right after error_watch.js); secret_store.js added 20 Sep (S8: the one place the page puts a secret); license_modal.js removed 15 Sep when SL-LICENSE-0001 was folded into SL-EULA-0004; …change_journal_sync.js 9 Sep; save_watch.js 13 Sep; error_watch.js 13 Sep)', tags === 235, 'got ' + tags);
   check('HTML comments balanced', (html.match(/<!--/g) || []).length === (html.match(/-->/g) || []).length);
   // Floors, not equality — a later build must not silently serve a stale cached file.
   // COMPONENT-WISE, not parseFloat: `>= 2.40` read as a float is `>= 2.4`, which a stale 2.9

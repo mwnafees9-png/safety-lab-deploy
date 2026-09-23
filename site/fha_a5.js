@@ -178,7 +178,7 @@
     }
     if (typeof window !== 'undefined' && typeof window.renderACFHA === 'function') {
         const _orig = window.renderACFHA;
-        window.renderACFHA = function () { const r = _orig.apply(this, arguments); try { _inject(); } catch (_) {} return r; };
+        window.renderACFHA = function () { const r = _orig.apply(this, arguments); if (typeof SLLazy !== 'undefined' && SLLazy.skipped('ac-fha-body')) return r; /* lazy_render.js: the original was deferred, so is this companion */ try { _inject(); } catch (_) {} return r; };
     }
 
     // ------------------------------------------------------------- INV-43

@@ -4408,6 +4408,7 @@ window._stampBetaFooter = _stampBetaFooter;
     let _lastEmptyDisplay = null;
     window.updateD3 = function(){
         const r = orig.apply(this, arguments);
+        if (typeof SLLazy !== 'undefined' && SLLazy.skipped('fta-svg')) return r;   // lazy_render.js: the original was deferred, so is this companion
         if(!_emptyStateEl) _emptyStateEl = document.getElementById('fta-empty-state');
         if(_emptyStateEl) {
             const root = (typeof getActiveFTARoot === 'function') ? getActiveFTARoot() : null;

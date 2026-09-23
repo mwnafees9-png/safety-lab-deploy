@@ -206,10 +206,12 @@ console.log('\n[phases] the FHA form no longer carries its own list');
         /typeof flightPhasesData !== 'undefined' \? flightPhasesData : \[\]/.test(help));
 
     console.log('\n[phases] …and every path that shows the form rebuilds it');
+    // Windows widened 23 Sep 2026: each renderer now opens with the one-line lazy_render gate
+    // (~150 chars) before it reaches the grid; regression_lazy_render pins that line.
     check('renderACFHA rebuilds the AC grid',
-        /function renderACFHA\(\)\s*\{[\s\S]{0,300}renderFhaPhaseGrid\('ac-fha-phases'\)/.test(help));
+        /function renderACFHA\(\)\s*\{[\s\S]{0,480}renderFhaPhaseGrid\('ac-fha-phases'\)/.test(help));
     check('renderSysFHA rebuilds the System grid',
-        /function renderSysFHA\(\)\s*\{[\s\S]{0,120}renderFhaPhaseGrid\('sys-fha-phases'\)/.test(help));
+        /function renderSysFHA\(\)\s*\{[\s\S]{0,300}renderFhaPhaseGrid\('sys-fha-phases'\)/.test(help));
     check('editing a row builds the grid around THAT ROW\'s stored phases',
         /renderFhaPhaseGrid\('ac-fha-phases', item\.phases\)/.test(help) &&
         /renderFhaPhaseGrid\('sys-fha-phases', item\.phases\)/.test(help),
