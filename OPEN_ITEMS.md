@@ -81,8 +81,8 @@ Checked every open entry against the running site, the three repos (safety-lab-d
   customer-install 12_ (apply.sh wired). regression_h8_rls_disk_sync taught that a dropped table
   accounts for its 0001 policies. APPLIED TO THROWAWAY yiisexbngnjakkqkmctw and verified (table
   null, function 0, consume_tokens and set_updated_at intact, 30 public tables). PRODUCTION
-  fhrqkhdrwbfnizkepkch: NOT YET APPLIED — Waqas's word first, then apply_migration + the same
-  five-column check.
+  fhrqkhdrwbfnizkepkch: APPLIED 23 Sep 2026 (Waqas: "lets get it done"); verified table null,
+  function 0, consume_tokens 1, set_updated_at 1, 29 public tables, 7 licence rows intact.
 - Still open from the 17 Sep sweep: ROTATE notify_hook_secret (Waqas; involves the value).
 - SEO (audit 23 Sep, 74/100): all code-side items shipped 6d34360 and verified live; sitemap
   resubmitted to Google (16 pages) and Bing; indexing requested for the five changed pages; Rich

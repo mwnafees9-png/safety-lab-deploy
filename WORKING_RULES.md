@@ -173,3 +173,12 @@ declares identity on a node sitting on an aircraft page. Max theoretical movers 
     class (`regression_severity_pills` guards it). Fills live in `--sev-*-fill` in BOTH theme
     blocks of safety_lab.css. Reports/exports and the FRACAS incident scale are the two deliberate
     exceptions.
+
+31. **Say the plan and the time before anything longer than ten minutes, then report at that time
+    (23 Sep 2026).** Two silent hour-long runs (a browser sweep run twice, then open-ended timing
+    probes) had Waqas asking "what's going on" four times. Before a long job: one line on what it
+    is, why, and how long. At the estimate: a result, or a plain statement of what is still running
+    and why. A probe that has not returned by its time box is stopped and reported, not waited on.
+    The same day's corollary to rules 1-3: **propose a performance change only from a
+    measurement.** The "compute on every edit" pass was proposed from reading code; 30 real edits
+    measured 30 ms at 100x project size.
