@@ -74,7 +74,10 @@
     async function prAdvance(id) {
         const p = _store().find(x => x.id === id); if (!p) return;
         if (p.state === 'closed') { _toast('Already closed — reopen instead if the problem recurred.', 'info'); return; }
-        const cur = p.state === 'deferred' ? 'open' : p.state;
+        // 23 Sep 2026 — a deferred PR resumes from the state it was deferred FROM (recorded at
+        // deferral); it used to restart at 'analyzed' and lose its progress. Older deferrals
+        // carry no fromState and resume from 'open', as before.
+        const cur = p.state === 'deferred' ? ((p.deferral && STATES.indexOf(p.deferral.fromState) !== -1) ? p.deferral.fromState : 'open') : p.state;
         const next = STATES[Math.min(STATES.indexOf(cur) + 1, STATES.length - 1)];
         const note = (await _ask('Advance ' + p.id + ' → "' + next + '". Evidence / disposition note:', p.disposition || '')) || '';
         const by = (await _ask('Sign with your name:', '')) || '';
@@ -93,8 +96,9 @@
         const until = (await _ask('Review by (milestone or date):', 'next baseline')) || 'next baseline';
         const by = (await _ask('Sign with your name:', '')) || '';
         if (!by.trim()) return;
+        const fromState = p.state === 'deferred' ? ((p.deferral && p.deferral.fromState) || 'open') : p.state;
         p.state = 'deferred';
-        p.deferral = { rationale: rationale.trim(), until: until.trim(), by: by.trim(), at: new Date().toISOString() };
+        p.deferral = { rationale: rationale.trim(), until: until.trim(), by: by.trim(), at: new Date().toISOString(), fromState: fromState };
         p.history.push({ state: 'deferred', by: by.trim(), at: p.deferral.at, note: rationale.trim() + ' · review by ' + until.trim() });
         _save(); renderPrPage();
     }

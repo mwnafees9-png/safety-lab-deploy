@@ -162,8 +162,8 @@ The 2026-07-05 "remaining open" list above is stale: all seven items now have a 
 | A8 qualitative development-error events → FFS | `ffs_module.js` | `regression_devError.test.js` | Closed |
 | M8 failure-frequency methodology (G.12) | `fta_freq.js` | `regression_freq.test.js` | Closed |
 | M13 MMEL / time-limited dispatch | `mmel_module.js` | `regression_mel_fha_crosscheck.test.js` | Closed |
-| M2 cascading effects analysis (graph propagation) | `cea_graph.js` | none | Built, untested |
-| M9 problem reports / OPRs | `problem_reports.js` | none | Built, untested |
-| M14 safety-significant events export | `sse_export.js` | none | Built, untested |
+| M2 cascading effects analysis (graph propagation) | `cea_graph.js` | `regression_cea_graph.test.js` | Closed 23 Sep. Test found: FHA rows linked through `subIds[]` were never reconciled (fixed) |
+| M9 problem reports / OPRs | `problem_reports.js` | `regression_problem_reports.test.js` | Closed 23 Sep. Test found: a deferred PR restarted at 'analyzed' instead of resuming where it was deferred (fixed) |
+| M14 safety-significant events export | `sse_export.js` | `regression_sse_export.test.js` | Closed 23 Sep. Tests found: the achieved rate missed trees linked via `linkedFhaIds[]` or the `AC_` form and could take a verification mirror's value; the ASA item failed forever on a project with no severe FCs (all fixed) |
 
-Open from this addendum: regression tests for `cea_graph.js`, `problem_reports.js` and `sse_export.js`. The standards gaps found on 23 Sep 2026 are tracked in `STANDARDS_MAP.md` §6 (G1–G10), not here.
+All seven are now closed with tests (23 Sep 2026, same day). The standards gaps found on 23 Sep 2026 are tracked in `STANDARDS_MAP.md` §6 (G1–G10), not here.

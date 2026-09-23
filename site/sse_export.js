@@ -41,10 +41,20 @@
         // ---- 1. severe failure conditions --------------------------------
         const tExp = (typeof ftaConfig === 'object' && ftaConfig && ftaConfig.exposureTime) || 1;
         const target = sev => { try { const t = typeof getSafetyTarget === 'function' ? getSafetyTarget(sev) : null; return t && t.prob > 0 ? t.prob : null; } catch (_) { return null; } };
+        // 23 Sep 2026 — a tree links to its FC through linkedFhaIds[] (newer) or the legacy
+        // linkedFhaId, in either the bare or the 'AC_' form. Matching the legacy field verbatim
+        // left the "argued" rate blank for most trees; resolve every link the way the app does.
+        const _linksTo = (p, iid) => {
+            const links = (Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds : []).concat(p.linkedFhaId != null && p.linkedFhaId !== '' ? [p.linkedFhaId] : []);
+            return links.some(l => {
+                if (typeof _resolveLinkedFha === 'function') { const f = _resolveLinkedFha(l); return !!f && String(f.internalId) === String(iid); }
+                return String(l).replace(/^AC_/, '') === String(iid);
+            });
+        };
         const linkedProb = iid => {
             try {
                 const pg = ((typeof ftaPages !== 'undefined' && ftaPages) || []).find(p =>
-                    p.root && String(p.linkedFhaId) === String(iid) && p.treeLevel !== 'system');
+                    p.root && !p.verifies && p.treeLevel !== 'system' && _linksTo(p, iid));
                 return pg && pg.root && (pg.root.probability > 0) ? pg.root.probability : null;
             } catch (_) { return null; }
         };
@@ -186,7 +196,9 @@
                     const rows = sseRows();
                     const conds = rows.filter(r => r.kind === 'condition').length;
                     const severe = ((typeof acFhaData !== 'undefined' && acFhaData) || []).filter(f => f.severity === 'Catastrophic' || f.severity === 'Hazardous').length;
-                    return { pass: severe > 0 && conds >= severe,
+                    // 23 Sep 2026 — no severe condition means nothing to watch, not a failure.
+                    if (!severe) return { pass: true, detail: 'no Catastrophic or Hazardous conditions · ' + rows.length + ' rows total' };
+                    return { pass: conds >= severe,
                         detail: conds + ' condition(s) on the watch list · ' + rows.length + ' rows total' };
                 },
             });

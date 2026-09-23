@@ -107,7 +107,12 @@
         const subIds = new Set();
         (s.functions || []).forEach(f =>
             (Array.isArray(f.traceIds) ? f.traceIds : (f.traceId ? [f.traceId] : [])).forEach(t => subIds.add(t)));
-        acFha.forEach(f => { if (f.subId && subIds.has(f.subId)) out.push(f); });
+        // 23 Sep 2026 — AC FHA rows trace through subIds[] (legacy subId still honored);
+        // reading subId alone missed every row linked to more than one function.
+        acFha.forEach(f => {
+            const ids = (Array.isArray(f.subIds) && f.subIds.length) ? f.subIds : (f.subId ? [f.subId] : []);
+            if (ids.some(id => subIds.has(id))) out.push(f);
+        });
         (s.fha || []).forEach(f => {
             if (!f.acTrace) return;
             const ac = acFha.find(x => String(x.internalId) === String(f.acTrace));
