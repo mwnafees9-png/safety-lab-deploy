@@ -49,8 +49,9 @@ const locs = t => [...t.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
         const noindex = /<meta name="robots" content="[^"]*noindex/.test(s);
         if (dup || noindex) { if (listedFiles.has(f)) problems.push(f + ' is a duplicate/noindex page but is listed'); }
         else if (!listedFiles.has(f)) problems.push(f + ' is an indexable page but is NOT listed');
-        if (!canon) problems.push(f + ' has no canonical');
-        if (!dup && !/application\/ld\+json/.test(s)) problems.push(f + ' has no page schema (ld+json)');
+        // 23 Sep 2026 — a noindex page (404.html) is not a page in the index sense: no canonical, no schema.
+        if (!canon && !noindex) problems.push(f + ' has no canonical');
+        if (!dup && !noindex && !/application\/ld\+json/.test(s)) problems.push(f + ' has no page schema (ld+json)');
     }
     check('every indexable marketing page is listed, duplicates are not, all carry a canonical and page schema', problems.length === 0, problems.join('; '));
     check('security.html is the unlinked duplicate of /trust (canonical there, not listed)', !listedFiles.has('security.html') && /href="https:\/\/safetylabaero\.com\/trust"/.test(fs.readFileSync(path.join(SITE, 'security.html'), 'utf8')));

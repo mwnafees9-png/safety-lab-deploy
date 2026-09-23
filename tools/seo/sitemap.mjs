@@ -28,10 +28,12 @@ const SITE = path.join(ROOT, "site");
 export const PAGES = [
   { url: "/",                      file: "landing.html",               changefreq: "weekly",  priority: "1.0" },
   { url: "/fault-tree-analysis",   file: "fault-tree-analysis.html",   changefreq: "monthly", priority: "0.9" },
+  { url: "/functional-hazard-assessment", file: "functional-hazard-assessment.html", changefreq: "monthly", priority: "0.9" },
   { url: "/arp-4761a",             file: "arp-4761a.html",             changefreq: "monthly", priority: "0.9" },
   { url: "/arp-4754b",             file: "arp-4754b.html",             changefreq: "monthly", priority: "0.9" },
   { url: "/fmea-software",         file: "fmea-software.html",         changefreq: "monthly", priority: "0.9" },
   { url: "/common-cause-analysis", file: "common-cause-analysis.html", changefreq: "monthly", priority: "0.9" },
+  { url: "/medini-analyze-alternative", file: "medini-analyze-alternative.html", changefreq: "monthly", priority: "0.8" },
   { url: "/resources",             file: "resources.html",             changefreq: "monthly", priority: "0.7" },
   { url: "/roi",                   file: "roi.html",                   changefreq: "monthly", priority: "0.7" },
   { url: "/tools",                 file: "tools.html",                 changefreq: "monthly", priority: "0.7" },
@@ -39,6 +41,7 @@ export const PAGES = [
   { url: "/ai-guardrails",         file: "ai-guardrails.html",         changefreq: "monthly", priority: "0.7" },
   { url: "/trust",                 file: "trust.html",                 changefreq: "monthly", priority: "0.7" },
   { url: "/legal",                 file: "legal.html",                 changefreq: "yearly",  priority: "0.3" },
+  { url: "/privacy",               file: "privacy.html",               changefreq: "yearly",  priority: "0.3" },
 ];
 
 export function lastmod(file, root = ROOT) {

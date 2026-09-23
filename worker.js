@@ -127,10 +127,72 @@ function withHardening(r) {
 function notFound() {
     return new Response('Not found', { status: 404, headers: Object.assign({ 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }, SEC_HEADERS) });
 }
+// The branded 404 for a PAGE-shaped miss (no file extension): site/404.html through the same header
+// chokepoint as every other document, with the status kept at 404 so it is never indexed. A miss on a
+// path with an extension (an asset) keeps the plain-text 404 above. (23 Sep 2026, SEO read: unknown
+// URLs returned a 9-byte text/plain body with no way back into the site.)
+async function notFoundPage(env, url) {
+    const r = await env.ASSETS.fetch(new URL('/404.html', url.origin));
+    if (r.status !== 200) return notFound();
+    const h = new Headers(r.headers);
+    h.set('Cache-Control', 'no-store');
+    h.set(CSP_ENFORCE ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only', CSP_POLICY);
+    for (const [k, v] of Object.entries(SEC_HEADERS)) h.set(k, v);
+    return new Response(r.body, { status: 404, statusText: 'Not Found', headers: h });
+}
+
+// ONE address per page. Before this, http://, http://www, https://www and https:// all served the
+// full site with a 200, so every URL existed four times, and /x.html, /x/ and /index.html all served
+// the same document again under other names (the assets binding answered .html with a 307, which
+// search engines treat as temporary and keep re-checking). Everything below is a permanent 301 to
+// the one canonical form: https://safetylabaero.com/<slug>. (23 Sep 2026, SEO read, item 1.)
+const CANON_HOST = 'safetylabaero.com';
+function canonicalRedirect(url, contentPages) {
+    let changed = false;
+    if (url.hostname === 'www.' + CANON_HOST) { url.hostname = CANON_HOST; changed = true; }
+    if (url.protocol === 'http:' && url.hostname === CANON_HOST) { url.protocol = 'https:'; changed = true; }
+    let p = url.pathname;
+    if (p === '/index.html' || p === '/landing.html') { p = '/'; }
+    else if (p.length > 1) {
+        const m = p.match(/^\/([a-z0-9-]+)(\.html|\/+)$/);
+        if (m && (contentPages.has(m[1]))) p = '/' + m[1];
+    }
+    if (p !== url.pathname) { url.pathname = p; changed = true; }
+    return changed ? Response.redirect(url.toString(), 301) : null;
+}
+
+const CONTENT_PAGES = new Set([
+    'fault-tree-analysis',
+    'arp-4761a',
+    'arp-4754b',
+    'fmea-software',
+    'common-cause-analysis',
+    'resources',
+    'roi',
+    'legal',
+    'trust',
+    // Added 30 Jul: tools.html and templates.html shipped and are linked
+    // from the landing footer, but were never allowlisted — so /tools and
+    // /templates fell through to the assets binding, missed, and returned
+    // 200 + the APP SHELL via not_found_handling: "single-page-application".
+    // Silent: a 200 logs as success, so nothing ever flagged it.
+    'tools',
+    'templates',
+    'ai-guardrails',
+    // 23 Sep 2026 (SEO read): a page for the query nothing targeted, the comparison page,
+    // and the privacy policy the trust page referred to but the site never had.
+    'functional-hazard-assessment',
+    'medini-analyze-alternative',
+    'privacy',
+]);
 
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
+        {
+            const r = canonicalRedirect(new URL(request.url), CONTENT_PAGES);
+            if (r) return r;
+        }
         const path = url.pathname;
 
         // -----------------------------------------------------------------
@@ -309,25 +371,6 @@ export default {
         //   Explicit allowlist so unknown paths still fall through to the
         //   assets binding's not-found handling rather than serving a page.
         // -----------------------------------------------------------------
-        const CONTENT_PAGES = new Set([
-            'fault-tree-analysis',
-            'arp-4761a',
-            'arp-4754b',
-            'fmea-software',
-            'common-cause-analysis',
-            'resources',
-            'roi',
-            'legal',
-            'trust',
-            // Added 30 Jul: tools.html and templates.html shipped and are linked
-            // from the landing footer, but were never allowlisted — so /tools and
-            // /templates fell through to the assets binding, missed, and returned
-            // 200 + the APP SHELL via not_found_handling: "single-page-application".
-            // Silent: a 200 logs as success, so nothing ever flagged it.
-            'tools',
-            'templates',
-            'ai-guardrails',
-        ]);
         const slug = path.replace(/^\/+|\/+$/g, '');
         if (CONTENT_PAGES.has(slug)) {
             return serveHtml(env.ASSETS.fetch(new URL('/' + slug + '.html', url.origin)));
@@ -375,7 +418,14 @@ export default {
         // -----------------------------------------------------------------
         {
             const assetResp = await env.ASSETS.fetch(request);
-            return assetResp.status === 404 ? notFound() : withHardening(assetResp);
+            if (assetResp.status === 404) return /\.[a-z0-9]+$/i.test(path) ? notFound() : notFoundPage(env, url);
+            const r = withHardening(assetResp);
+            // Versioned assets (?v=) change their URL when they change, so the old URL can be cached
+            // forever; the marketing CSS/JS and the EULA script were being revalidated on every load.
+            // The favicon and the social image get a day. (23 Sep 2026, SEO read, item 14.)
+            if (url.searchParams.has('v')) r.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+            else if (/\.(png|svg|ico|webp|jpg)$/i.test(path)) r.headers.set('Cache-Control', 'public, max-age=86400');
+            return r;
         }
     }
 };

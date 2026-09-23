@@ -88,18 +88,22 @@ check('eula_modal dialog chrome uses the derived label',
   eula.includes("' + EULA_DOC_LABEL + '") && !/SL-EULA-\d{4} Rev [A-Z] &middot;/.test(eula));
 check('eula_modal carries NO hardcoded doc label literal',
   !/SL-EULA-\d{4} Rev [A-Z]/.test(eula.replace(/EULA_VERSION\.replace\([^)]*\)/g, '')));
-check('legal.html derives its docmeta label from the modal export',
-  legal.includes("meta('eula-meta', window.SL_EULA)"));
+// 23 Sep 2026 — legal.html no longer fetches the agreement at run time. build_agreement.mjs
+// renders the text and the docmeta label statically between EULA markers (SEO: the page was
+// 81 words to anything that did not run JavaScript). The label still derives from VERSION,
+// in the generator instead of in the browser; regression_seo_site proves the text is current.
+check('legal.html carries the agreement statically between generator markers (no run-time fetch)',
+  legal.includes('<!-- EULA:BEGIN') && legal.includes('<!-- EULA:END -->') && !/<script[^>]*eula_modal\.js/.test(legal));
 check('legal.html no longer renders a second agreement',
   !/SL_LICENSE|license-body|license-meta|id="license"/.test(legal));
-check('legal.html fallback label is current',
-  legal.includes('SL-EULA-0004 · Rev A') && !/SL-EULA-000[0-3]/.test(legal));
+check('legal.html docmeta label is current (written by the generator)',
+  legal.includes('id="eula-meta">SL-EULA-0004 &middot; Rev A</p>') && !/SL-EULA-000[0-3]/.test(legal));
 check('legal.html links the merged agreement by its real name',
   legal.includes('End User License and Subscription Agreement'));
 
 const pin = (t, f) => { const m = t.match(new RegExp(f + '\\.js\\?v=([0-9.]+)')); return m && m[1]; };
-check('index.html and legal.html load the SAME eula_modal pin',
-  pin(idx, 'eula_modal') === pin(legal, 'eula_modal') && pin(idx, 'eula_modal') === PIN,
+check('index.html loads the current eula_modal pin; legal.html loads none (static since 23 Sep 2026)',
+  pin(idx, 'eula_modal') === PIN && pin(legal, 'eula_modal') === null,
   `index=${pin(idx, 'eula_modal')} legal=${pin(legal, 'eula_modal')} expected=${PIN}`);
 check('the pin was bumped with the agreement (a stale pin serves the OLD terms from cache)',
   pin(idx, 'eula_modal') !== '1.2.0');
