@@ -105,6 +105,7 @@ check('identical to the old algorithm on 12 randomized projects (pairs, order, s
     let calls = 0;
     const real = W.sb._idpSystemsImplementing;
     W.sb._idpSystemsImplementing = function (s) { calls++; return real(s); };
+    W.sb.systemsData[0].functions.push({ funcId: 'FORCE', traceIds: ['SF-FORCE'] });   // a relevant change: the search must run
     const t0 = Date.now();
     const n = W.sb.fcvCandidates().length;
     const ms = Date.now() - t0;
@@ -137,6 +138,48 @@ check('identical to the old algorithm on 12 randomized projects (pairs, order, s
         rows2 === total && !/fcvShowMore\(\)/.test(h) && h.lastIndexOf('fcvCombine(') < h.indexOf('✍ W'), 'rows=' + rows2);
     const inv = W.invs['INV-30'] && W.invs['INV-30'].run();
     check('INV-30 still checks and reports every pair', inv && inv.checked === total && inv.fails.length === open, JSON.stringify(inv && { c: inv.checked, f: inv.fails.length }));
+}
+
+// ---- 4. the remembered pair list: hits only when every input is unchanged ------------------------
+{
+    const W = makeWorld(project(5, 120, 14, 16));
+    let calls = 0;
+    const real = W.sb._idpSystemsImplementing;
+    W.sb._idpSystemsImplementing = function (s) { calls++; return real(s); };
+    const base = sig(W.sb.fcvCandidates());
+    calls = 0;
+    const same = (name, mutate) => {
+        mutate(); calls = 0;
+        const got = W.sb.fcvCandidates();
+        check('memo HIT after ' + name + ' (no search) and the output still matches the old algorithm', calls === 0 && sig(got) === sig(oldCandidates(W.sb)), 'calls=' + calls);
+    };
+    const miss = (name, mutate) => {
+        mutate(); calls = 0;
+        const got = W.sb.fcvCandidates();
+        check('memo MISS after ' + name + ' and the output matches the old algorithm', calls > 0 && sig(got) === sig(oldCandidates(W.sb)), 'calls=' + calls);
+    };
+    const catHaz = () => W.sb.acFhaData.find(f => /catastrophic|hazardous/i.test(f.severity) && !f.deleted && !f.combinedOf);
+    same('an effect/description edit', () => { W.sb.acFhaData[0].fcDesc = 'changed text'; W.sb.acFhaData[0].effAc = 'x'; });
+    same('Major -> Minor on a non-Cat/Haz row', () => { const f = W.sb.acFhaData.find(x => x.severity === 'Major'); if (f) f.severity = 'Minor'; });
+    same('Catastrophic -> Hazardous (still eligible)', () => { const f = W.sb.acFhaData.find(x => x.severity === 'Catastrophic' && !x.combinedOf); if (f) f.severity = 'Hazardous'; });
+    miss('a Cat/Haz row demoted to Major', () => { catHaz().severity = 'Major'; });
+    miss('a row deleted', () => { catHaz().deleted = true; });
+    miss('a sub-function changed', () => { catHaz().subId = 'SF-3'; });
+    miss('an extra sub-function added', () => { catHaz().subIds = ['SF-5']; });
+    miss('an fcId renamed', () => { catHaz().fcId = 'FC-RENAMED'; });
+    miss('a system function trace changed', () => { W.sb.systemsData[2].functions[0].traceIds = W.sb.systemsData[2].functions[0].traceIds.concat(['SF-1']); });
+    miss('a legacy single trace added', () => { W.sb.systemsData[3].functions.push({ funcId: 'L', traceId: 'SF-2' }); });
+    miss('a system id changed', () => { W.sb.systemsData[4].id = 'S-NEW'; });
+    miss('a combined FC added (covers a pair)', () => { const c = W.sb.fcvCandidates()[0]; W.sb.acFhaData.push({ internalId: 7777, fcId: 'FC-CC', subId: 'SF-9', severity: 'Catastrophic', combinedOf: [c.a.fcId, c.b.fcId] }); });
+    miss('the FHA replaced by a copy with a new row', () => { W.sb.acFhaData = W.sb.acFhaData.concat([{ internalId: 8888, fcId: 'FC-NEW', subId: 'SF-1', severity: 'Hazardous' }]); vm.runInContext('acFhaData = window.acFhaData', W.sb); });
+    // dispositions are live, never remembered
+    const c0 = W.sb.fcvCandidates()[0];
+    W.sb.projectConfig.fcCombDispositions[c0.key] = { by: 'W', note: 'live' };
+    calls = 0;
+    const c1 = W.sb.fcvCandidates().find(c => c.key === c0.key);
+    check('a new disposition shows immediately without re-running the search', calls === 0 && c1 && c1.disposition && c1.disposition.note === 'live');
+    check('returned objects are the CURRENT rows (never objects from an older search)', c1 && W.sb.acFhaData.indexOf(c1.a) !== -1 && W.sb.acFhaData.indexOf(c1.b) !== -1);
+    void base;
 }
 
 check('the renderACFHA wrapper and lazy skip are intact', /_fcvWrapped/.test(FCV) && /SLLazy\.skipped\('ac-fha-body'\)/.test(FCV));

@@ -2074,7 +2074,8 @@ function ipLedger(force) {
         // (a) failure-independence from minimal cut sets (Cat/Haz trees, order 2–3)
         if (isCritical) {
             try {
-                const mcs = bddMinimalCutsets(page.root) || [];
+                // perf round 2: cached snapshots (fta_quant_modules.js) — same sets, same order
+                const mcs = (typeof minimalCutsetSnapshots === 'function') ? minimalCutsetSnapshots(page.root) : (bddMinimalCutsets(page.root) || []);
                 mcs.forEach(cs => {
                     // Backlog #4 — a cut set containing a qualitative development
                     // error (ARP 4761A 4.1.1.1) is an ERROR-independence claim:
@@ -2226,9 +2227,21 @@ function ipLedger(force) {
     // dependent artifact with an ADDITIVE derived flag (ipCompromised) that is
     // recomputed on every ledger run — it never touches AutoReq's own
     // `compromised` machinery, and it clears itself when the principle heals.
+    //
+    // 23 Sep 2026 — the flag KEEPS ITS ORIGINAL timestamp while it stays the same
+    // (same principle, same reason). It used to be rewritten with a new `at` on
+    // every ledger run, so the project changed on every background sweep: the
+    // save watcher saved and synced it every ~10 s forever, and each save
+    // re-triggered the sweeps. `at` now means what it says — when the artifact
+    // was first flagged for this principle. See tests/regression_perf_round2.test.js.
     try {
-        allReq.forEach(r => { if (r && r.ipCompromised) delete r.ipCompromised; });
-        (cmaData || []).forEach(c => { if (c && c.ipCompromised) delete c.ipCompromised; });
+        const prevFlag = new Map();
+        allReq.forEach(r => { if (r && r.ipCompromised) { prevFlag.set(r, r.ipCompromised); delete r.ipCompromised; } });
+        (cmaData || []).forEach(c => { if (c && c.ipCompromised) { prevFlag.set(c, c.ipCompromised); delete c.ipCompromised; } });
+        const flag = (obj, principle, why) => {
+            const was = prevFlag.get(obj);
+            obj.ipCompromised = (was && was.principle === principle && was.why === why) ? was : { principle, why, at: new Date().toISOString() };
+        };
         list.forEach(p => {
             if (p.state !== 'compromised') return;
             const label = p.members.map(m => m.label).join(' ⊥ ');
@@ -2237,10 +2250,10 @@ function ipLedger(force) {
                 : p.bowtieCC ? 'bow-tie cross-side common cause'
                 : p.monitorCC ? 'monitor shares its monitored element'
                 : 'open CMA finding against the claim';
-            (p.reqs || []).forEach(r => { if (r) r.ipCompromised = { principle: label, why, at: new Date().toISOString() }; });
+            (p.reqs || []).forEach(r => { if (r) flag(r, label, why); });
             (cmaData || []).forEach(row => {
                 const gids = (row.linkedGates || row.linkedGateIds || []).map(String);
-                if (gids.length && p.gateGids.some(g => gids.indexOf(g) !== -1)) row.ipCompromised = { principle: label, why, at: new Date().toISOString() };
+                if (gids.length && p.gateGids.some(g => gids.indexOf(g) !== -1)) flag(row, label, why);
             });
         });
     } catch (_) { /* cascade is derived decoration — never breaks the ledger */ }
@@ -2293,9 +2306,10 @@ function _idpIndex() {
     if (!_idpIdxDepth) return null;
     const syss = systemsData || [];
     if (_idpIdx && _idpIdx.src === syss) return _idpIdx;
-    const implBySub = new Map(), ownerByFn = new Map();
+    const implBySub = new Map(), ownerByFn = new Map(), sysById = new Map();
     syss.forEach(s => {
         if (!s) return;
+        if (!sysById.has(s.id)) sysById.set(s.id, s);
         const subs = new Set();
         (s.functions || []).forEach(f => {
             if (!f) return;
@@ -2306,10 +2320,16 @@ function _idpIndex() {
         });
         subs.forEach(id => { let a = implBySub.get(id); if (!a) { a = []; implBySub.set(id, a); } a.push(s.id); });
     });
-    _idpIdx = { src: syss, implBySub, ownerByFn };
+    _idpIdx = { src: syss, implBySub, ownerByFn, sysById };
     return _idpIdx;
 }
 
+// The system with this id (first match, as Array.find).
+function _idpSysById(id) {
+    const ix = _idpIndex();
+    if (ix) return ix.sysById.get(id) || undefined;
+    return (systemsData || []).find(s => s && s.id === id);
+}
 function _idpFnOwner(funcId) {
     const ix = _idpIndex();
     if (ix) return ix.ownerByFn.get(String(funcId)) || null;
@@ -2379,7 +2399,7 @@ function _idpDerivedFn(fc, funcId) {
 // Derived facts that name only the SYSTEM — everything the function columns
 // cannot honestly carry. These populate the system-level (coarse) column.
 function _idpDerivedSysOnly(fc, sysId) {
-    const sys = (systemsData || []).find(s => s.id === sysId);
+    const sys = _idpSysById(sysId);
     if (!sys) return null;
     const fnIds = (sys.functions || []).filter(f => f && f.funcId).map(f => String(f.funcId));
     // implements is always function-attributable when functions exist; with NO
@@ -2448,7 +2468,7 @@ function _idpColumnsImpl() {
 // column — so "does this system contribute to this FC" answers exactly as before.
 function idpCell(fc, id) {
     if (_idpIsFnCol(id)) return _idpCellRaw(fc, id);
-    const sys = (systemsData || []).find(s => s.id === id);
+    const sys = _idpSysById(id);
     const fnIds = sys ? (sys.functions || []).filter(f => f && f.funcId).map(f => 'fn:' + f.funcId) : [];
     const cells = fnIds.map(cid => _idpCellRaw(fc, cid));
     cells.push(_idpCellRaw(fc, id));
@@ -2460,7 +2480,46 @@ function idpCell(fc, id) {
 }
 
 // Contributing systems for an FC (pre-A10 shape — the CRA/MF&MS column set).
-function idpContributors(fc) { return idpIndexBatch(() => _idpContributorsImpl(fc)); }
+// 23 Sep 2026 (perf round 2) — CONTRIBUTOR MEMO, active only inside a batch that
+// a caller already opened (a sweep over every FC). The answer depends on exactly:
+// this FC's row, its interdependence cells, systemsData and resourcesData
+// (_idpCellRaw -> _idpDerivedFn / _idpDerivedSysOnly / _idpResConsumedFor read
+// nothing else). The memo is keyed by the FC row + its cells, and dropped
+// whenever the serialized systemsData + resourcesData differ from the last
+// batch's — so an edit to one FHA row re-derives that row only. IF YOU MAKE
+// idpCell READ ANOTHER STORE, ADD IT TO _idpContribCtx's global key.
+// See tests/regression_perf_round2.test.js.
+var _idpContribMemo = new Map(), _idpContribGlobal = null;
+function _idpContribCtx(ix) {
+    if (ix.contrib) return ix.contrib;
+    let g = null;
+    try { g = JSON.stringify([systemsData || [], resourcesData || []]); } catch (_) { g = null; }
+    if (g === null || g !== _idpContribGlobal) { _idpContribMemo = new Map(); _idpContribGlobal = g; }
+    const cellsBy = new Map();
+    try {
+        const cells = _idpStore().cells || {};
+        Object.keys(cells).forEach(key => {
+            const at = key.indexOf('§'); if (at === -1) return;
+            const fid = key.slice(0, at);
+            cellsBy.set(fid, (cellsBy.get(fid) || '') + JSON.stringify(key) + ':' + JSON.stringify(cells[key]) + ',');
+        });
+    } catch (_) { g = null; }
+    ix.contrib = { ok: g !== null, cellsBy };
+    return ix.contrib;
+}
+function idpContributors(fc) {
+    if (!_idpIdxDepth) return idpIndexBatch(() => _idpContributorsImpl(fc));   // a lone call: no memo
+    const c = _idpContribCtx(_idpIndex());
+    let k = null;
+    if (c.ok) { try { k = JSON.stringify(fc) + '\u0001' + (c.cellsBy.get(String(fc && fc.internalId)) || ''); } catch (_) { k = null; } }
+    if (k === null) return _idpContributorsImpl(fc);
+    const m = _idpContribMemo.get(k);
+    if (m) return m.slice();
+    const v = _idpContributorsImpl(fc);
+    if (_idpContribMemo.size >= 50000) _idpContribMemo.clear();   // bounded: superseded versions of edited rows
+    _idpContribMemo.set(k, v.slice());
+    return v;
+}
 function _idpContributorsImpl(fc) {
     return (systemsData || []).filter(s => idpCell(fc, s.id).state === 'contributes').map(s => s.id);
 }
@@ -3837,11 +3896,15 @@ function renderSystemDirectory() {
     try { if (typeof _renderSidebarContext === 'function') _renderSidebarContext(); } catch(_) {}
     const grid = document.getElementById('sys-directory-grid'); grid.innerHTML = '';
     // Workspace governance card moved to the Admin nav group (Admin → Workspaces & Locks → openWorkspacesPanel()).
+    // 23 Sep 2026 (perf round 2): the cards are built as ONE string and written
+    // once. `grid.innerHTML +=` per card re-parsed the whole grid every time
+    // (quadratic: ~0.9 s for 250 systems). Same markup, same order.
+    let html = '';
     systemsData.forEach(s => {
         let funcCount = s.functions.length; let hazCount = s.fha.length; let reqCount = s.req.length;
         let lockBadge = '';
         try { const lk = s.lock; if (lk) lockBadge = `<span class="sys-folder-metrics" style="background:#fde7e9;color:#b3261e;">🔒 ${esc(lk.name || lk.by || 'locked')}</span>`; else if (s.owner) lockBadge = `<span class="sys-folder-metrics" style="background:#e7f0ff;color:#0b57d0;">👤 ${esc(String(s.owner).split('@')[0])}</span>`; } catch (_) {}
-        grid.innerHTML += `
+        html += `
             <div class="sys-folder-card sys-card-nav" onclick="openSystemWorkspace('${esc(s.id)}')">
                 <h4 class="sys-folder-title">📁 ${esc(s.name)}</h4>
                 <div style="display:flex; gap: 5px; flex-wrap: wrap;">
@@ -3853,6 +3916,7 @@ function renderSystemDirectory() {
                 </div>
             </div>`;
     });
+    grid.innerHTML = html;
 }
 
 function openSystemWorkspace(id) {
@@ -8659,17 +8723,23 @@ function _mergePagesInPlace(target, incoming) {
     for (var i = 0; i < out.length; i++) target.push(out[i]);
     return target;
 }
-// Cheap change fingerprint of the synced stores (no clone, no parse): what the save
-// watcher compares once a second so a writer that forgot to say "changed" still saves.
+// Change fingerprint of the synced stores (no clone, no parse): what the save
+// watcher compares once a second so a writer that forgot to say "changed" still
+// saves. 23 Sep 2026 (perf round 2): the fingerprint IS the serialized stores,
+// compared as a whole string, instead of a 32-bit hash computed by a JavaScript
+// loop over every character. Measured at 100x the loop was ~60% of the
+// watcher's cost; a native string comparison replaces it. It is also exact: a
+// 32-bit hash can collide, and a collision is a change the watcher would miss.
+// The cost is holding one serialized copy of the synced stores in memory.
+// See tests/regression_crdt_merge_in_place.test.js (M5) and regression_save_rails.
 function __crdtFingerprint() {
-    var h = 0x811c9dc5, n = 0;
-    var mix = function (str) { for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } n += str.length; };
     var S = function (v) { try { return JSON.stringify(v === undefined ? null : v); } catch (_) { return '!'; } };
     // direct references only, no dynamic lookup (the production CSP forbids it); the same set __crdtCapture reads
     var stores = [acFunctionsData, acFhaData, acReqData, acAssumptionsData, praData, zsaData, cmaData, fmeaData, acFcimData, routingData, resourcesData, itemsData, flightPhasesData, systemsData, ftaPages, projectConfig, mlData, (typeof stpaData === 'object' ? stpaData : null), (typeof typeCounters === 'object' ? typeCounters : null)];
-    for (var i = 0; i < stores.length; i++) { mix(String(i)); mix(S(stores[i])); }
-    mix(S([typeof projectName === 'string' ? projectName : '', acAsmCounter, fmeaCounter, reviewCounter, internalIdCounter]));
-    return n + ':' + h.toString(16);
+    var parts = new Array(stores.length + 1);
+    for (var i = 0; i < stores.length; i++) parts[i] = S(stores[i]);
+    parts[stores.length] = S([typeof projectName === 'string' ? projectName : '', acAsmCounter, fmeaCounter, reviewCounter, internalIdCounter]);
+    return parts.join('\u0001');   // JSON escapes control characters, so the separator is unambiguous
 }
 function __crdtApply(partial) {
     if (!partial || typeof partial !== 'object') return;

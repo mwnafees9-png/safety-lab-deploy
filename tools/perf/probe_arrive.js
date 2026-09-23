@@ -193,17 +193,28 @@ async function runScale(cdp, port, scale) {
     }
     out.edit = e.ok ? e.value : (e.timeout ? { TIMEOUT: e.ms } : { error: e.error });
     log(`  edit on FHA tab: ${JSON.stringify(out.edit)}`);
-    if (IDLE > 0) {
+    // --idle ms: profile an idle window after the edit (background work only).
+    // --idle-rounds N: repeat edit + idle window N times; round 1 includes the
+    // first-time (cold cache) work, later rounds show the steady state.
+    const ROUNDS = Math.max(1, Number(opt('--idle-rounds', '1')));
+    for (let round = 1; IDLE > 0 && round <= ROUNDS; round++) {
+        if (round > 1) {
+            const e2 = await evalBoxed(cdp, sessionId, EDIT, BUDGET);
+            log(`  edit #${round}: ${JSON.stringify(e2.ok ? e2.value : (e2.timeout ? { TIMEOUT: e2.ms } : { error: e2.error }))}`);
+            (out.edits = out.edits || []).push(e2.ok ? e2.value : { TIMEOUT: e2.ms });
+        }
         // Nothing is evaluated during this window: whatever runs is background
         // work (timers, sweeps, observers). Long tasks are counted in-page.
-        await evalBoxed(cdp, sessionId, `window.__idleLT=[];try{new PerformanceObserver(l=>l.getEntries().forEach(e=>window.__idleLT.push(Math.round(e.duration)))).observe({type:'longtask'});}catch(_){};1`, 5000);
+        await evalBoxed(cdp, sessionId, `window.__idleLT=[];try{if(window.__idlePO)window.__idlePO.disconnect();window.__idlePO=new PerformanceObserver(l=>l.getEntries().forEach(e=>window.__idleLT.push(Math.round(e.duration))));window.__idlePO.observe({type:'longtask'});}catch(_){};1`, 5000);
         await cdp.send('Profiler.enable', {}, sessionId); await cdp.send('Profiler.setSamplingInterval', { interval: 500 }, sessionId);
         await cdp.send('Profiler.start', {}, sessionId);
         await sleep(IDLE);
         const lt = await evalBoxed(cdp, sessionId, 'window.__idleLT', 25000);
         let prof = null; try { prof = (await cdp.send('Profiler.stop', {}, sessionId)).profile; } catch (_) {}
-        out.idle = { ms: IDLE, longTasks: lt.ok ? lt.value : (lt.timeout ? 'page busy > 25 s' : lt.error) };
-        log(`  idle ${IDLE} ms, long tasks: ${JSON.stringify(out.idle.longTasks)}`);
+        out.idle = { ms: IDLE, round, longTasks: lt.ok ? lt.value : (lt.timeout ? 'page busy > 25 s' : lt.error) };
+        (out.idleRounds = out.idleRounds || []).push(out.idle);
+        const sum = Array.isArray(out.idle.longTasks) ? out.idle.longTasks.reduce((a, b) => a + b, 0) : null;
+        log(`  idle round ${round}, ${IDLE} ms: long tasks ${JSON.stringify(out.idle.longTasks)}  (total ${sum} ms)`);
         if (prof) {
             out.profiles.idle = summarizeProfile(prof, 25);
             log('  idle profile, inclusive (app code, wrappers hidden):');

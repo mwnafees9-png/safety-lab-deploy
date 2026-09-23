@@ -136,7 +136,7 @@ check('look-alike values do not collide (string vs number, quoted delimiters)', 
 // ---- 5. bounded; errors not cached ------------------------------------------------------------
 for (let i = 0; i < 1100; i++) p.exactTopProbability(be(i / 1e5));
 const size = vm.runInContext('_ptopCache.size', p);
-check('the cache is bounded (≤ 1000 entries)', size <= 1000, 'size=' + size);
+check('the cache is bounded (entries and total key size)', size <= vm.runInContext('_PTOP_CACHE_MAX', p) && vm.runInContext('_ptopCache.chars', p) <= 16e6, 'size=' + size);
 let calls = 0;
 p.buildBDDFromFT = function () { calls++; const e = new Error('x'); e.name = 'BDDExplosionError'; throw e; };
 const bad = gate('OR', [be(0.123456)]);

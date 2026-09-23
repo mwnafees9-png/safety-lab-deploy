@@ -82,8 +82,13 @@
         var st = _store(); if (!st) return { noStore: true };
         var proposed = 0, withdrawn = 0;
         var liveIds = {};
-        _findings().filter(function (f) { return f && f.principle; }).forEach(function (f) {
-            var p = _ledger().find(function (x) { return x && x.key === f.principle; });
+        // 23 Sep 2026 (perf): the ledger is built ONCE per sweep (it was rebuilt
+        // for every finding), and only when some finding names a principle.
+        var withPrinciple = _findings().filter(function (f) { return f && f.principle; });
+        var ledger = withPrinciple.length ? _ledger() : [];
+        var byKey = {}; ledger.forEach(function (x) { if (x && !(x.key in byKey)) byKey[x.key] = x; });
+        withPrinciple.forEach(function (f) {
+            var p = byKey[f.principle];
             if (!p) return;
             (p.sources || []).filter(function (s) { return s && s.type === 'gate'; }).forEach(function (s) {
                 var node = _node(s.pageId, s.nodeId);
@@ -268,7 +273,21 @@
             Object.keys(orig).forEach(function (k) { try { wrapped[k] = orig[k]; } catch (_) {} });
             window.switchTab = wrapped;
         })();
-        var _tick = function () { try { sweep(); } catch (_) {} };
+        // 23 Sep 2026 (perf): CHANGE-DRIVEN. The sweep ran every 10 s regardless;
+        // on a large project each run rebuilt every Cat/Haz tree's cut sets
+        // (seconds). It now runs at boot and then only when the project data
+        // changed (data_change.js); the generation is read after the sweep so its
+        // own save does not re-trigger it. Arriving on the IP ledger tab still
+        // sweeps unconditionally. See tests/regression_data_change.test.js.
+        var _seenGen = 0, _booted = false;
+        var _tick = function () {
+            try {
+                var dc = window.SLDataChange;
+                if (dc && _booted && dc.gen() === _seenGen) return;
+                _booted = true;
+                try { sweep(); } finally { if (dc) _seenGen = dc.gen(); }
+            } catch (_) {}
+        };
         if (document.readyState === 'complete' || document.readyState === 'interactive') setTimeout(_tick, 3000);
         else document.addEventListener('DOMContentLoaded', function () { setTimeout(_tick, 3000); });
         setInterval(_tick, 10000);

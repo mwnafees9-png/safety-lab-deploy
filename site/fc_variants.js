@@ -63,15 +63,19 @@
     // share a system, and the output (pairs, order, shared list) is identical:
     // a-index then b-index, shared in b's system order.
     // See tests/regression_perf_fcv_candidates.test.js.
-    function _candidatesImpl() {
-        const rows = _fha().filter(f => f && !f.deleted && _isCatHaz(f.severity) && !(f.combinedOf && f.combinedOf.length));
+    function _eligible() {
+        return _fha().filter(f => f && !f.deleted && _isCatHaz(f.severity) && !(f.combinedOf && f.combinedOf.length));
+    }
+    // The pair search proper. Returns pairs as row POSITIONS in _eligible()'s
+    // order plus the pair key and shared systems — no row objects, no dispositions.
+    function _pairsImpl() {
+        const rows = _eligible();
         const covered = new Set();
         _fha().forEach(f => {
             if (f && Array.isArray(f.combinedOf) && f.combinedOf.length >= 2) {
                 for (let i = 0; i < f.combinedOf.length; i++) for (let j = i + 1; j < f.combinedOf.length; j++) covered.add(_pairKey(f.combinedOf[i], f.combinedOf[j]));
             }
         });
-        const disp = _disp();
         const sys = rows.map(_implSystemsList);
         const subs = rows.map(_subsOf);
         const bySys = new Map();
@@ -85,19 +89,41 @@
             if (!js.size) continue;
             const subI = subs[i];
             [...js].sort((x, y) => x - y).forEach(j => {
-                const a = rows[i], b = rows[j];
                 if (subI.some(s => subs[j].indexOf(s) !== -1)) return;   // same function — that's one FC's own analysis
                 const shared = sys[j].filter(x => si.has(x));
                 if (!shared.length) return;
-                const key = _pairKey(a.fcId, b.fcId);
+                const key = _pairKey(rows[i].fcId, rows[j].fcId);
                 if (covered.has(key)) return;
-                out.push({ a, b, key, shared, disposition: disp[key] || null });
+                out.push({ i, j, key, shared });
             });
         }
         return out;
     }
+    // 23 Sep 2026 (perf round 2) — the pair list is REMEMBERED, keyed by every
+    // input the search reads: each FHA row's fcId, sub-functions, eligibility
+    // (Cat/Haz, not deleted, not itself combined) and combinedOf, plus every
+    // system's id and function traces (all _idpSystemsImplementing reads).
+    // Dispositions are NOT in the key: they are looked up live on every call.
+    // A large project can hold 100k+ coupled pairs; an FHA edit that does not
+    // touch those inputs (an effect text, a phase, Major -> Minor) no longer
+    // repeats the search. See tests/regression_perf_fcv_candidates.test.js.
+    let _pairsMemo = null;
+    function _pairsKey() {
+        const rowsSig = _fha().map(f => f ? [f.fcId, _subsOf(f), (!f.deleted && _isCatHaz(f.severity)) ? 1 : 0, f.combinedOf || null] : null);
+        const sysSig = ((typeof systemsData !== 'undefined' ? systemsData : null) || []).map(s => s ? [s.id, (s.functions || []).map(fn => fn ? [fn.traceIds || null, fn.traceId || null] : null)] : null);
+        return JSON.stringify([rowsSig, sysSig]);
+    }
+    function _pairs() {
+        let key = null;
+        try { key = _pairsKey(); } catch (_) { key = null; }
+        if (key !== null && _pairsMemo && _pairsMemo.key === key) return _pairsMemo.pairs;
+        const pairs = (typeof idpIndexBatch === 'function') ? idpIndexBatch(_pairsImpl) : _pairsImpl();
+        _pairsMemo = key === null ? null : { key, pairs };
+        return pairs;
+    }
     function combinationCandidates() {
-        return (typeof idpIndexBatch === 'function') ? idpIndexBatch(_candidatesImpl) : _candidatesImpl();
+        const rows = _eligible(), disp = _disp();
+        return _pairs().map(p => ({ a: rows[p.i], b: rows[p.j], key: p.key, shared: p.shared.slice(), disposition: disp[p.key] || null }));
     }
 
     // ---- combined-FC bookkeeping ----------------------------------------------
@@ -181,8 +207,16 @@
         if (!host) { host = document.createElement('div'); host.id = 'fcv-panel'; host.style.cssText = 'margin-top:18px;'; view.appendChild(host); }
         const combined = combinedRows();
         const tagged = _fha().filter(f => f && f.eventContext && f.eventContext.kind);
-        const cands = combinationCandidates();
-        const open = cands.filter(c => !c.disposition);
+        // Only the pairs on screen become objects; the counts cover every pair.
+        const pairs = _pairs(), rowsE = _eligible(), disp = _disp();
+        let openCount = 0;
+        const openShown = [], doneShown = [];
+        pairs.forEach(p => {
+            const d = disp[p.key];
+            if (!d) { openCount++; if (openShown.length < _candLimit) openShown.push(p); }
+            else if (doneShown.length < _candLimit) doneShown.push(p);
+        });
+        const toCand = p => ({ a: rowsE[p.i], b: rowsE[p.j], key: p.key, shared: p.shared, disposition: disp[p.key] || null });
         const iss = combinedIssues();
 
         let html = '<div style="border:1px solid var(--color-border-hair,rgba(0,0,0,.14));border-radius:var(--r-lg,12px);padding:14px 16px;background:var(--color-surface,#fff);">';
@@ -192,7 +226,7 @@
         html += '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;color:var(--color-text-secondary,#666);">' +
             '<span><strong>' + combined.length + '</strong> combined FC(s)</span>' +
             '<span><strong>' + tagged.length + '</strong> conditioned FC(s)</span>' +
-            '<span style="color:' + (open.length ? 'var(--color-warning,#b7791f)' : 'var(--color-success,#1a7f37)') + ';"><strong>' + open.length + '</strong> coupled Cat/Haz pair(s) undispositioned</span>' +
+            '<span style="color:' + (openCount ? 'var(--color-warning,#b7791f)' : 'var(--color-success,#1a7f37)') + ';"><strong>' + openCount + '</strong> coupled Cat/Haz pair(s) undispositioned</span>' +
             (iss.hard.length ? '<span style="color:var(--color-danger,#b42318);font-weight:600;">' + iss.hard.length + ' severity dilution(s) — INV-29</span>' : '') + '</div>';
 
         if (combined.length) {
@@ -210,13 +244,13 @@
         html += '<div style="font-size:11px;color:var(--color-text-tertiary,#888);margin:10px 0 2px;">TAG A CONDITION</div>' +
             '<div style="font-size:12px;">' + _fha().filter(f => f && !f.eventContext).slice(0, 200).map(f => '<a href="#" onclick="fcvTagContext(\'' + _esc(String(f.internalId)) + '\');return false;" style="display:inline-block;margin:2px 6px 2px 0;color:var(--color-link,#0b57d0);">' + _esc(f.fcId) + '</a>').join('') + '</div>';
 
-        if (cands.length) {
+        if (pairs.length) {
             // 23 Sep 2026 (perf fix 1) — undispositioned pairs first, CAND_PAGE at a
             // time with "show more". The counts above and INV-30 still cover ALL pairs.
-            const ordered = open.concat(cands.filter(c => c.disposition));
-            const shown = ordered.slice(0, _candLimit);
+            const total = pairs.length;
+            const shown = openShown.concat(doneShown).slice(0, _candLimit).map(toCand);
             html += '<div style="font-size:11px;color:var(--color-text-tertiary,#888);margin:12px 0 2px;">COUPLED CAT/HAZ PAIRS (share an implementing system — assess the combination or disposition it)' +
-                (ordered.length > shown.length ? ' · showing ' + shown.length + ' of ' + ordered.length + ', undispositioned first' : '') + '</div>';
+                (total > shown.length ? ' · showing ' + shown.length + ' of ' + total + ', undispositioned first' : '') + '</div>';
             shown.forEach(c => {
                 html += '<div style="display:flex;gap:8px;align-items:baseline;font-size:12px;padding:5px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));">' +
                     '<span style="flex:1;"><strong>' + _esc(c.a.fcId) + '</strong> + <strong>' + _esc(c.b.fcId) + '</strong> <span style="color:var(--color-text-tertiary,#888);">(via ' + _esc(c.shared.join(', ')) + ')</span>' +
@@ -226,8 +260,8 @@
                         : '<a href="#" onclick="fcvCombine(\'' + _esc(c.a.fcId) + ', ' + _esc(c.b.fcId) + '\');return false;" style="font-size:11px;color:var(--color-link,#0b57d0);">combine</a> <a href="#" onclick="fcvDisposition(\'' + _esc(c.key) + '\');return false;" style="font-size:11px;color:var(--color-warning,#b7791f);">disposition</a>') +
                     '</div>';
             });
-            if (ordered.length > shown.length) {
-                html += '<div style="padding:6px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><a href="#" onclick="fcvShowMore();return false;" style="font-size:12px;color:var(--color-link,#0b57d0);">Show ' + Math.min(CAND_PAGE, ordered.length - shown.length) + ' more (' + (ordered.length - shown.length) + ' not shown)</a></div>';
+            if (total > shown.length) {
+                html += '<div style="padding:6px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><a href="#" onclick="fcvShowMore();return false;" style="font-size:12px;color:var(--color-link,#0b57d0);">Show ' + Math.min(CAND_PAGE, total - shown.length) + ' more (' + (total - shown.length) + ' not shown)</a></div>';
             }
         }
         html += '</div>';

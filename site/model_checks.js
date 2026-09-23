@@ -120,16 +120,25 @@
     // Enumerate every single-failure path to a Cat/Haz top. Keyed by the
     // EVENT (logicalId / CCF group), not the page — one acceptance covers
     // every tree the same physical event appears in.
-    function mcSpfList() {
-        if (!_build) return [];
-        const found = new Map();   // key → row
-        _checkablePages().forEach(({ page, worst }) => {
-            let built;
-            try { built = _build(page.root); } catch (_) { return; }
-            if (!built) return;
+    // 23 Sep 2026 (perf round 2) — each tree's single-failure events are
+    // REMEMBERED, keyed by the tree's full content (the same content key as the
+    // P(top) and cut-set caches, fta_quant_modules.js: structure, gate types,
+    // CCF, probabilities, ids, names). The invariants sweep called this twice
+    // per run (MC-01, MC-02) and rebuilt every Cat/Haz tree's BDD each time:
+    // ~11 s per sweep on a 100x project. Any change to a tree is a miss.
+    // See tests/regression_perf_round2.test.js.
+    const _singlesMemo = new Map();
+    function _singlesKey(root) {
+        try { return (typeof _ptopKey === 'function' && typeof _MCS_FIELDS !== 'undefined') ? _ptopKey(root, _MCS_FIELDS) : null; } catch (_) { return null; }
+    }
+    function _singlesOf(root) {
+        const key = _singlesKey(root);
+        if (key !== null && _singlesMemo.has(key)) return _singlesMemo.get(key);
+        const out = [];
+        const built = _build(root);              // may throw: the caller skips the page, nothing is remembered
+        const ok = built && built.bdd && !built.bdd.isTerminal && _minOrder(built.bdd) <= 1;
+        if (ok) {
             const { bdd, varOrder, varMeta } = built;
-            if (!bdd || bdd.isTerminal) return;
-            if (_minOrder(bdd) > 1) return;   // no single-failure path here
             for (let v = 0; v < varOrder.length; v++) {
                 if (!_singleVarReaches(bdd, v)) continue;
                 const meta = varMeta[v] || {};
@@ -146,7 +155,26 @@
                 // PSSA trees decompose. Flagging them would indict the fidelity
                 // level, not the design; INV-12 tracks model maturity instead.
                 if (String(lid).indexOf('macsys:') === 0) continue;
-                const key = 'lid:' + lid;
+                out.push({ lid, displayId: node.displayId, name: node.name, probability: node.probability });
+            }
+        }
+        if (key !== null && built) {
+            if (_singlesMemo.size >= 20000) _singlesMemo.clear();
+            _singlesMemo.set(key, out);
+        }
+        return out;
+    }
+    // Enumerate every single-failure path to a Cat/Haz top. Keyed by the
+    // EVENT (logicalId / CCF group), not the page — one acceptance covers
+    // every tree the same physical event appears in.
+    function mcSpfList() {
+        if (!_build) return [];
+        const found = new Map();   // key → row
+        _checkablePages().forEach(({ page, worst }) => {
+            let singles;
+            try { singles = _singlesOf(page.root); } catch (_) { return; }
+            singles.forEach(node => {
+                const key = 'lid:' + node.lid;
                 const name = (node.displayId ? node.displayId + ' — ' : '') + (node.name || '');
                 const prob = node.probability || 0;
                 const fp = name + '|' + (typeof prob === 'number' ? prob.toExponential(6) : String(prob));
@@ -158,7 +186,7 @@
                 if (_sevRank(worst.severity) > _sevRank(row.severity)) row.severity = worst.severity;
                 if (row.pages.indexOf(page.name) < 0) row.pages.push(page.name);
                 if (worst.fcId && row.fcIds.indexOf(worst.fcId) < 0) row.fcIds.push(worst.fcId);
-            }
+            });
         });
         const store = _spfStore();
         const rows = Array.from(found.values());

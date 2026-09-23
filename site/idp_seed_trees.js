@@ -46,18 +46,69 @@
     function _fcs() { return (typeof acFhaData !== 'undefined' && acFhaData) || []; }
     function _sys() { return (typeof systemsData !== 'undefined' && systemsData) || []; }
     function _pages() { return (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : null; }
+    // ---- per-sweep context (23 Sep 2026, perf round 2) ------------------------
+    // A sweep used to re-derive every FC's contributing systems from scratch and
+    // scan the page list, the system list and each system's SFHA rows once per
+    // FC. On a large project that was seconds per sweep, after EVERY edit. Now:
+    //   · lookups are maps built once per sweep (_ctx);
+    //   · the sweep runs inside one idpIndexBatch, where idpContributors
+    //     remembers each FC's answer across sweeps (helpers_modules.js), so an
+    //     edit to one FHA row re-derives that row only.
+    // See tests/regression_perf_idp_sweep.test.js.
+    var _ctx = null;
     function _contribs(fc) {
         try { return (typeof idpContributors === 'function') ? (idpContributors(fc) || []) : []; } catch (_) { return []; }
     }
+    function _beginSweep() {
+        var sys = _sys();
+        var sysById = new Map();
+        sys.forEach(function (x) { if (x && !sysById.has(x.id)) sysById.set(x.id, x); });
+        var foreign = new Set();
+        (_pages() || []).forEach(function (p) {
+            if (!p || !p.root || String(p.id).indexOf('idp-pg-') === 0) return;
+            if (!(String(p.id).indexOf('mac-pg-') === 0 || /MF&MS/.test(p.name || ''))) return;
+            var lids = Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds : (p.linkedFhaId != null ? [p.linkedFhaId] : []);
+            lids.forEach(function (l) { foreign.add(String(l)); });
+        });
+        _ctx = { sysById: sysById, traced: new Map(), foreign: foreign, pageIdx: null };
+    }
+    function _endSweep() { _ctx = null; }
+    function _sysGet(id) {
+        if (_ctx) return _ctx.sysById.get(id);
+        return _sys().find(function (x) { return x && x.id === id; });
+    }
     function _sysName(id) {
-        var s = _sys().find(function (x) { return x && x.id === id; });
+        var s = _sysGet(id);
         return s ? (s.name || String(id)) : String(id);
     }
     function _tracedRows(sysId, fc) {
-        var s = _sys().find(function (x) { return x && x.id === sysId; });
+        if (_ctx) {
+            var byTrace = _ctx.traced.get(sysId);
+            if (!byTrace) {
+                byTrace = new Map();
+                var s0 = _sysGet(sysId);
+                ((s0 && s0.fha) || []).forEach(function (r) {
+                    if (!(r && r.acTrace != null)) return;
+                    var t = String(r.acTrace); var a = byTrace.get(t); if (!a) { a = []; byTrace.set(t, a); } a.push(r);
+                });
+                _ctx.traced.set(sysId, byTrace);
+            }
+            return (byTrace.get(String(fc.internalId)) || []).slice();
+        }
+        var s = _sysGet(sysId);
         return ((s && s.fha) || []).filter(function (r) {
             return r && r.acTrace != null && String(r.acTrace) === String(fc.internalId);
         });
+    }
+    function _pageIndex(pages, pid) {
+        if (!_ctx) return pages.findIndex(function (p) { return p && p.id === pid; });
+        if (!_ctx.pageIdx) {
+            var m = new Map();
+            pages.forEach(function (p, i) { if (p && !m.has(p.id)) m.set(p.id, i); });
+            _ctx.pageIdx = m;
+        }
+        var i = _ctx.pageIdx.get(pid);
+        return i == null ? -1 : i;
     }
 
     // Fingerprint of the SOURCE FACTS a seed is built from.
@@ -75,6 +126,7 @@
 
     // The same MF&MS-page match the ASA triage uses — plus our own seeds.
     function _hasForeignMfms(fc) {
+        if (_ctx) return _ctx.foreign.has(String(fc.internalId));
         return (_pages() || []).some(function (p) {
             if (!p || !p.root) return false;
             if (String(p.id).indexOf('idp-pg-') === 0) return false;
@@ -137,15 +189,17 @@
         if (!pages) return { noStore: true };
         var seeded = 0, regenerated = 0, removed = 0, stale = 0, kept = 0;
         var live = {};
+        _beginSweep();
+        try {
         _fcs().forEach(function (fc) {
             if (!fc || fc.internalId == null) return;
             var contribs = _contribs(fc);
             var pid = 'idp-pg-' + fc.internalId;
-            var idx = pages.findIndex(function (p) { return p && p.id === pid; });
+            var idx = _pageIndex(pages, pid);
             var multi = contribs.length >= 2;
             if (multi) live[pid] = 1;
             if (multi && !_hasForeignMfms(fc)) {
-                if (idx === -1) { pages.push(_seedPage(fc, contribs)); seeded++; return; }
+                if (idx === -1) { pages.push(_seedPage(fc, contribs)); if (_ctx && _ctx.pageIdx) _ctx.pageIdx.set(pid, pages.length - 1); seeded++; return; }
                 var pg = pages[idx];
                 if (pg._idpFp === _idpFp(fc, contribs)) { delete pg._idpStale; kept++; return; }
                 if (_rootFp(pg.root) === pg._idpRootFp) { pages[idx] = _seedPage(fc, contribs); regenerated++; return; }
@@ -156,11 +210,12 @@
             // Not multi-system any more (or covered by a real MF&MS page).
             if (idx !== -1) {
                 var p2 = pages[idx];
-                if (_rootFp(p2.root) === p2._idpRootFp) { pages.splice(idx, 1); removed++; }
+                if (_rootFp(p2.root) === p2._idpRootFp) { pages.splice(idx, 1); if (_ctx) _ctx.pageIdx = null; removed++; }
                 else if (!multi) { p2._idpStale = 'condition is no longer multi-system per the interdependence table'; stale++; }
                 else { p2._idpStale = 'a real MF&MS page now covers this condition'; stale++; }
             }
         });
+        } finally { _endSweep(); }
         if (seeded || regenerated || removed) {
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
             try { if (typeof renderFTASidebar === 'function') renderFTASidebar(); } catch (_) {}
@@ -177,50 +232,24 @@
         };
     }
 
-    // 23 Sep 2026 (perf fix 2) — CHANGE-DRIVEN SWEEP. The sweep used to run every
-    // 8 s whether or not anything moved, re-deriving every FC x system cell; on a
-    // large project that was a multi-second stall every 8 s. It now runs only when
-    // its inputs changed, detected two ways that together cover every write path:
-    //   · an EDIT — every edit reaches scheduleAutosave (commitSaveChanges is built
-    //     on it, R18); a wrapper marks the sweep dirty;
-    //   · a REPLACEMENT — project load, sync pull, undo and demo loads assign new
-    //     store objects; the identity of each input store is compared per tick.
-    // The sweep's OWN save (after it seeds) does not re-dirty it. Boot is dirty.
-    // See tests/regression_perf_idp_sweep.test.js.
-    var _dirty = true, _running = false, _lastIds = null;
-    function _inputIds() {
-        var pc = (typeof projectConfig !== 'undefined' && projectConfig) || null;
-        return [
-            typeof acFhaData !== 'undefined' ? acFhaData : null,
-            typeof systemsData !== 'undefined' ? systemsData : null,
-            typeof resourcesData !== 'undefined' ? resourcesData : null,
-            pc, pc ? pc.interdep : null,
-            typeof ftaPages !== 'undefined' ? ftaPages : null
-        ];
-    }
-    function _idsChanged() {
-        var now = _inputIds();
-        var changed = !_lastIds || now.some(function (x, i) { return x !== _lastIds[i]; });
-        _lastIds = now;
-        return changed;
-    }
-    function markDirty() { if (!_running) _dirty = true; }
-    function _hookSave() {
-        if (typeof window === 'undefined' || typeof window.scheduleAutosave !== 'function' || window.scheduleAutosave._idpDirtyWrapped) return;
-        var orig = window.scheduleAutosave;
-        var wrapped = function () { markDirty(); return orig.apply(this, arguments); };
-        wrapped._idpDirtyWrapped = true;
-        window.scheduleAutosave = wrapped;
-    }
-    // One tick: sweep only if something changed since the last sweep.
+    // 23 Sep 2026 (perf) — CHANGE-DRIVEN SWEEP. The sweep used to run every 8 s
+    // whether or not anything moved, re-deriving every FC x system cell; on a
+    // large project that was a multi-second stall every 8 s. It now runs only
+    // when the project data changed, per the shared detector in data_change.js
+    // (an edit via scheduleAutosave, or a replaced store: load, sync, undo).
+    // The generation is read AFTER the sweep, so the sweep's own save does not
+    // trigger a re-run. Boot always sweeps. Without data_change.js (a test
+    // sandbox) every tick sweeps, as before.
+    // See tests/regression_perf_idp_sweep.test.js, tests/regression_data_change.test.js.
+    var _seenGen = 0, _forced = true;
+    function _dc() { return (typeof window !== 'undefined' && window.SLDataChange) || null; }
+    function markDirty() { _forced = true; }
     function tick() {
-        _hookSave();
-        if (_idsChanged()) _dirty = true;
-        if (!_dirty) return { skipped: true };
-        _dirty = false;
-        _running = true;
+        var dc = _dc();
+        if (dc && !_forced && dc.gen() === _seenGen) return { skipped: true };
+        _forced = false;
         try { return (typeof idpIndexBatch === 'function') ? idpIndexBatch(run) : run(); }
-        finally { _running = false; }
+        finally { if (dc) _seenGen = dc.gen(); }
     }
 
     if (typeof window !== 'undefined') {

@@ -4,10 +4,10 @@
  *
  * idp_seed_trees.js swept every FC x system every 8 s whether or not anything
  * moved (a multi-second stall every 8 s on a large project). tick() now sweeps
- * only when an input changed:
- *   · an EDIT — every edit reaches scheduleAutosave; a wrapper marks dirty;
- *   · a REPLACEMENT — load / sync pull / undo assign new store objects;
- *     the identity of each input store is compared per tick.
+ * only when the project data changed, per the shared detector data_change.js
+ * (the real file is loaded here):
+ *   · an EDIT — every edit reaches scheduleAutosave;
+ *   · a REPLACEMENT — a load or undo assigns new store objects.
  * The sweep's own save does not re-dirty it; boot is dirty; the kill switch
  * still holds; the sweep runs inside one idpIndexBatch.
  * Run: node tests/regression_perf_idp_sweep.test.js
@@ -17,6 +17,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 let pass = 0, fail = 0;
 const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' — ' + d : '')); } };
 const SRC = fs.readFileSync(path.join(__dirname, '..', 'site', 'idp_seed_trees.js'), 'utf8');
+const DC = fs.readFileSync(path.join(__dirname, '..', 'site', 'data_change.js'), 'utf8');
 
 let contribCalls = 0, saves = 0, batches = 0;
 const CONTRIB = { 101: ['sysA', 'sysB'] };
@@ -38,6 +39,7 @@ const sb = {
 sb.window = sb;
 sb.scheduleAutosave = function () { saves++; };
 vm.createContext(sb);
+vm.runInContext(DC, sb, { filename: 'data_change.js' });       // index.html order: data_change before idp_seed_trees
 vm.runInContext(SRC, sb, { filename: 'idp_seed_trees.js' });
 const IDP = sb.SL_IDP;
 const tick = () => { contribCalls = 0; const r = IDP.tick(); return { r, calls: contribCalls }; };

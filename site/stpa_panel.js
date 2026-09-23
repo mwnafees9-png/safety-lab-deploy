@@ -1305,7 +1305,8 @@
                                     return chain.then(() => { patch.mentalModels = mm; _author.setNodeDetail(id, patch); });
                                 });
                         });
-                });
+                })
+                .catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         editPrecedence: function (processId) {
             const d = DATA(); if (!d) return;

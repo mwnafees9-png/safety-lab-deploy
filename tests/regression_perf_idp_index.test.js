@@ -97,10 +97,10 @@ check('an exception inside a batch still closes it', I._depth() === 0 && I._idx(
 
 // ---- 5. aggregate entry points are batched (same answers as before: regression_idp_functions pins them)
 check('idpColumns runs in a batch', /function idpColumns\(\) \{ return idpIndexBatch\(_idpColumnsImpl\); \}/.test(H));
-check('idpContributors runs in a batch', /function idpContributors\(fc\) \{ return idpIndexBatch\(\(\) => _idpContributorsImpl\(fc\)\); \}/.test(H));
+check('idpContributors runs in a batch', /function idpContributors\(fc\) \{\n    if \(!_idpIdxDepth\) return idpIndexBatch\(\(\) => _idpContributorsImpl\(fc\)\);/.test(H));
 check('idpStats runs in a batch', /function idpStats\(\) \{ return idpIndexBatch\(_idpStatsImpl\); \}/.test(H));
 check('the combination candidates and the seed sweep run in a batch',
-    /idpIndexBatch\(_candidatesImpl\)/.test(S('fc_variants.js')) && /idpIndexBatch\(run\)/.test(S('idp_seed_trees.js')));
+    /idpIndexBatch\(_pairsImpl\)/.test(S('fc_variants.js')) && /idpIndexBatch\(run\)/.test(S('idp_seed_trees.js')));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

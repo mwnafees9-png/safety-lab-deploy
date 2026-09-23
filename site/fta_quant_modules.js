@@ -1014,8 +1014,25 @@ function computeExactProbability(rootNode) {
 // that need the diagram itself (bdd, varOrder, probMap) keep calling
 // computeExactProbability, which is unchanged. Errors are never cached.
 // See tests/regression_perf_ptop_cache.test.js.
-const _ptopCache = new Map();
-const _PTOP_CACHE_MAX = 1000;
+// Bounded by entries AND by total key size (a key is the tree's full content),
+// evicting oldest first. Sized for a large project's whole tree set (seeded
+// MF&MS pages included) so a sweep over every tree does not thrash.
+function _boundedCache(maxEntries, maxChars) {
+    const m = new Map(); let chars = 0;
+    return {
+        has: k => m.has(k),
+        get: k => m.get(k),
+        set(k, v) {
+            if (m.has(k)) return;
+            m.set(k, v); chars += k.length;
+            while (m.size > maxEntries || (chars > maxChars && m.size > 1)) { const old = m.keys().next().value; chars -= old.length; m.delete(old); }
+        },
+        get size() { return m.size; },
+        get chars() { return chars; }
+    };
+}
+const _PTOP_CACHE_MAX = 20000;
+const _ptopCache = _boundedCache(_PTOP_CACHE_MAX, 16e6);
 // Every node field buildBDDFromFT / _probMapFor read. Each value is encoded
 // unambiguously (strings JSON-quoted), so two different inputs never share a key.
 const _PTOP_FIELDS = ['id', 'type', 'gateType', 'logicalId', 'votingK', 'probability', 'eventClass',
@@ -1028,14 +1045,15 @@ function _ptopVal(v) {
     if (typeof v === 'boolean') return v ? 'T' : 'F';
     return 'j' + JSON.stringify(v);   // throws on an unencodable value -> the caller bypasses the cache
 }
-function _ptopKey(rootNode) {
+function _ptopKey(rootNode, fields) {
+    fields = fields || _PTOP_FIELDS;
     const out = [];
     const pagesSeen = new Set();
     const pages = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : [];
     (function walk(n) {
         if (!n) { out.push('~'); return; }
         out.push('(');
-        for (let i = 0; i < _PTOP_FIELDS.length; i++) out.push(_ptopVal(n[_PTOP_FIELDS[i]]), ',');
+        for (let i = 0; i < fields.length; i++) out.push(_ptopVal(n[fields[i]]), ',');
         if (n.type === 'gate' && (n.gateType === 'TRANSFER' || n.transferOutTo)) {
             const linkedId = n.transferOutTo || n.linkedPageId;
             if (linkedId && !pagesSeen.has(String(linkedId))) {
@@ -1058,11 +1076,37 @@ function exactTopProbability(rootNode) {
     try { key = _ptopKey(rootNode); } catch (_) { return computeExactProbability(rootNode).prob; }
     if (_ptopCache.has(key)) return _ptopCache.get(key);
     const prob = computeExactProbability(rootNode).prob;
-    if (_ptopCache.size >= _PTOP_CACHE_MAX) _ptopCache.delete(_ptopCache.keys().next().value);
     _ptopCache.set(key, prob);
     return prob;
 }
 try { window.exactTopProbability = exactTopProbability; } catch (_) {}
+
+// 23 Sep 2026 (perf round 2) — MINIMAL CUT SETS, cached the same way, for the
+// independence ledger (ipLedger), which rebuilt every Cat/Haz tree's cut sets
+// on every call (the FTA-proposals sweep and the CRA called it on a timer).
+// Returns the cut sets as SNAPSHOTS of the member events (the fields the ledger
+// reads), never live node objects, so a cached answer cannot hand out a node
+// that has since been replaced. The key adds the label fields to the P(top)
+// key, so any change to what a snapshot carries is a miss.
+// See tests/regression_perf_round2.test.js.
+const _MCS_FIELDS = _PTOP_FIELDS.concat(['displayId', 'name']);
+const _MCS_CACHE_MAX = 20000;
+const _mcsCache = _boundedCache(_MCS_CACHE_MAX, 16e6);
+function _mcsSnap(n) {
+    return { id: n.id, logicalId: n.logicalId, displayId: n.displayId, name: n.name,
+             ccfGroup: n.ccfGroup, beta: n.beta, eventClass: n.eventClass };
+}
+function minimalCutsetSnapshots(rootNode) {
+    let key = null;
+    try { key = _ptopKey(rootNode, _MCS_FIELDS); } catch (_) { key = null; }
+    if (key !== null && _mcsCache.has(key)) return _mcsCache.get(key).map(cs => cs.map(m => Object.assign({}, m)));
+    const snaps = (bddMinimalCutsets(rootNode) || []).map(cs => cs.map(_mcsSnap));
+    if (key !== null) {
+        _mcsCache.set(key, snaps);
+    }
+    return snaps.map(cs => cs.map(m => Object.assign({}, m)));
+}
+try { window.minimalCutsetSnapshots = minimalCutsetSnapshots; } catch (_) {}
 
 // Top-level wrappers invoked by the toolbar buttons. They render results into the dedicated
 // summary divs without disturbing the main cutset summary.

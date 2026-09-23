@@ -1564,8 +1564,8 @@ window.saveAiSettings = function(){
             const aKey = get('ai-anthropic-key').trim();
             const vKey = get('ai-voyage-key').trim();
             const after = (kind, r) => { if (r && !r.ok && r.error) { try { showToast('The ' + (kind === 'anthropic_key' ? 'Anthropic' : 'Voyage') + ' key was not saved: ' + r.error, 'error', 6000); } catch(_) {} } };
-            if (aKey) Promise.resolve(st.save('anthropic_key', aKey, { last4: aKey.slice(-4) })).then(r => after('anthropic_key', r));
-            if (vKey) Promise.resolve(st.save('voyage_key',    vKey, { last4: vKey.slice(-4) })).then(r => after('voyage_key', r));
+            if (aKey) Promise.resolve(st.save('anthropic_key', aKey, { last4: aKey.slice(-4) })).then(r => after('anthropic_key', r)).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'bindings_modules'); });
+            if (vKey) Promise.resolve(st.save('voyage_key',    vKey, { last4: vKey.slice(-4) })).then(r => after('voyage_key', r)).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'bindings_modules'); });
             // never leave a pasted value sitting in the input once it has been handed over
             const ael = document.getElementById('ai-anthropic-key'); if (ael && aKey) ael.value = '';
             const vel = document.getElementById('ai-voyage-key');    if (vel && vKey) vel.value = '';
