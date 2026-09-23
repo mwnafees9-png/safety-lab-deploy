@@ -70,13 +70,27 @@ node tools/seo/sitemap.mjs --out "$OUT/sitemap.xml"
 # 2b) Say out loud what did NOT get published. A new asset type must be added
 #     to the allowlist above rather than silently vanishing, and new junk must
 #     be visible rather than shipped. Read this list on every build.
+#
+#     23 Sep 2026 — this listing used GNU find's -printf, which macOS find does
+#     not have. On the Mac (where every real build runs) find errored inside the
+#     process substitution, the loop read nothing, and the block printed
+#     "(none)" whatever was in site/ — the check was silently off. It now uses
+#     shell globs (portable; hidden files included on purpose, since hidden
+#     leftovers are exactly what this list exists to surface), and it refuses to
+#     say "(none)" unless it actually looked at files.
+#     See tests/regression_build_portable.test.js.
 echo "  Top-level files in site/ NOT published:"
 _unpublished=0
-while IFS= read -r _f; do
+_seen=0
+for _p in "$SRC"/* "$SRC"/.[!.]* "$SRC"/..?*; do
+    [ -f "$_p" ] || continue
+    _seen=$((_seen + 1))
+    _f="${_p##*/}"
     case "$_f" in *.js) continue;; esac
     if [ ! -e "$OUT/$_f" ]; then echo "      $_f"; _unpublished=1; fi
-done < <(find "$SRC" -maxdepth 1 -type f -printf '%f\n' | sort)
-[ "$_unpublished" = 0 ] && echo "      (none)"
+done
+if [ "$_seen" = 0 ]; then echo "ERROR: the unpublished-files check saw no files in $SRC — refusing to report (none)" >&2; exit 1; fi
+if [ "$_unpublished" = 0 ]; then echo "      (none)"; fi
 
 # 3) Copy any subdirectories verbatim.
 find "$SRC" -maxdepth 1 -mindepth 1 -type d -exec cp -R {} "$OUT"/ \;
