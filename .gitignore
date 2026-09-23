@@ -31,3 +31,8 @@ screenshot-*.jpg
 license_signing_key*
 *.license.json
 supabase/.temp/
+
+# Founder / legal agreements live outside the repo (23 Sep 2026)
+CertLab_*Agreement*
+*Founders_Agreement*
+*Shareholders_Agreement*
