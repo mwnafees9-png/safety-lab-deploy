@@ -279,10 +279,19 @@
             window.invRegister({
                 id: 'INV-30', name: 'Coupled Cat/Haz combinations assessed or dispositioned; combined FCs not stale', sev: 'advisory',
                 run: () => {
-                    const cands = combinationCandidates();
-                    const open = cands.filter(c => !c.disposition)
-                        .map(c => c.a.fcId + ' + ' + c.b.fcId + ' share implementing system(s) ' + c.shared.join(', ') + ' — no combined FC, no signed disposition (A.8.3)');
-                    return { checked: cands.length + combinedRows().length, fails: open.concat(combinedIssues().stale) };
+                    // 23 Sep 2026 (perf round 4): counts every pair but writes a message
+                    // only for the first ones; invRun keeps the first 10 and the full
+                    // count (failCount). A large project can hold 100k+ coupled pairs.
+                    const pairs = _pairs(), rowsE = _eligible(), disp = _disp();
+                    const SAMPLE = 20;
+                    let openCount = 0; const sample = [];
+                    pairs.forEach(p => {
+                        if (disp[p.key]) return;
+                        openCount++;
+                        if (sample.length < SAMPLE) sample.push(rowsE[p.i].fcId + ' + ' + rowsE[p.j].fcId + ' share implementing system(s) ' + p.shared.join(', ') + ' — no combined FC, no signed disposition (A.8.3)');
+                    });
+                    const stale = combinedIssues().stale;
+                    return { checked: pairs.length + combinedRows().length, fails: sample.concat(stale), failCount: openCount + stale.length };
                 }
             });
             return true;

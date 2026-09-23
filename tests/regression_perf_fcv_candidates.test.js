@@ -137,7 +137,7 @@ check('identical to the old algorithm on 12 randomized projects (pairs, order, s
     check('"show more" extends the list to all ' + total + ' and the dispositioned pair appears last',
         rows2 === total && !/fcvShowMore\(\)/.test(h) && h.lastIndexOf('fcvCombine(') < h.indexOf('✍ W'), 'rows=' + rows2);
     const inv = W.invs['INV-30'] && W.invs['INV-30'].run();
-    check('INV-30 still checks and reports every pair', inv && inv.checked === total && inv.fails.length === open, JSON.stringify(inv && { c: inv.checked, f: inv.fails.length }));
+    check('INV-30 still checks and COUNTS every pair (failCount), with sample messages for the first ones', inv && inv.checked === total && inv.failCount === open && inv.fails.length === Math.min(open, 20) && /FC-\d+ \+ FC-\d+ share implementing system\(s\) HUB/.test(inv.fails[0]), JSON.stringify(inv && { c: inv.checked, n: inv.failCount, f: inv.fails.length }));
 }
 
 // ---- 4. the remembered pair list: hits only when every input is unchanged ------------------------

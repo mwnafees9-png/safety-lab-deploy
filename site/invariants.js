@@ -67,21 +67,54 @@
         if (f.acTrace != null) ids.push(f.acTrace);
         return ids.map(String);
     }
+    // 23 Sep 2026 (perf round 4): inside a pass (render_pass.js; invRun opens one)
+    // the three project-wide lookups below are built ONCE instead of once per
+    // failure condition: the reverse acTrace map, the set of FC ids that have an
+    // allocation tree, and FC -> owning system. Same answers, same order;
+    // outside a pass SLPass.memo simply computes. See tests/regression_render_pass.
+    function _memo(key, fn) { return (typeof SLPass !== 'undefined' && SLPass) ? SLPass.memo('inv:' + key, fn) : fn(); }
+    function _sysFcsTracingTo() {           // AC FC internalId (string) -> [sys FC internalIds (string)], in system/row order
+        return _memo('sysFcsTracingTo', () => {
+            const m = new Map();
+            _sysList().forEach(s => (s.fha || []).forEach(sf => {
+                if (!sf) return;
+                const seen = new Set();
+                _acTraceIds(sf).forEach(id => {
+                    if (seen.has(id)) return; seen.add(id);          // one entry per sys FC, as indexOf() >= 0 gave
+                    let a = m.get(id); if (!a) { a = []; m.set(id, a); }
+                    a.push(String(sf.internalId));
+                });
+            }));
+            return m;
+        });
+    }
     function _linkedFcInternalIds(f, sys) {
         const out = [String(f.internalId)];
         if (sys) {
             _acTraceIds(f).forEach(id => out.push(id));                       // sys → its AC FCs
         } else {
-            _sysList().forEach(s => (s.fha || []).forEach(sf => {             // AC → sys FCs tracing to it
-                if (sf && _acTraceIds(sf).indexOf(String(f.internalId)) >= 0) out.push(String(sf.internalId));
-            }));
+            (_sysFcsTracingTo().get(String(f.internalId)) || []).forEach(id => out.push(id));   // AC → sys FCs tracing to it
         }
         return out;
     }
+    function _allocLinkedIds() {
+        return _memo('allocLinkedIds', () => {
+            const linked = new Set();
+            _pages().forEach(p => { if (p && p.root && !p.verifies) _pageLinkedIds(p).forEach(id => linked.add(String(id))); });
+            return linked;
+        });
+    }
+    function _ownerSystemOf(f) {
+        const m = _memo('ownerSystem', () => {
+            const o = new Map();
+            _sysList().forEach(s => (s.fha || []).forEach(sf => { if (sf && !o.has(sf)) o.set(sf, s); }));
+            return o;
+        });
+        return m.get(f) || null;
+    }
     function _fcTreeCovered(f) {
-        const linked = new Set();
-        _pages().forEach(p => { if (p && p.root && !p.verifies) _pageLinkedIds(p).forEach(id => linked.add(String(id))); });
-        const sys = _sysList().find(s => (s.fha || []).indexOf(f) >= 0) || null;
+        const linked = _allocLinkedIds();
+        const sys = _ownerSystemOf(f);
         return _linkedFcInternalIds(f, sys).some(id => linked.has(id));
     }
 
@@ -403,14 +436,21 @@
 
     // ------------------------------------------------------------ the sweep
     function invRun() {
+        return (typeof SLPass !== 'undefined' && SLPass) ? SLPass.run('invRun', _invRunImpl) : _invRunImpl();
+    }
+    function _invRunImpl() {
         const results = INVARIANTS.map(inv => {
             let r;
             try { r = inv.run(); } catch (e) { r = { checked: 0, fails: ['sweep error: ' + e.message] }; }
+            // 23 Sep 2026: a check with a very large number of findings may return
+            // `failCount` (the full count) with `fails` holding only the first ones,
+            // instead of building every message. Only the first 10 are kept anyway.
+            const failCount = (typeof r.failCount === 'number' && r.failCount >= r.fails.length) ? r.failCount : r.fails.length;
             return {
                 id: inv.id, name: inv.name, sev: inv.sev,
-                checked: r.checked, failCount: r.fails.length,
+                checked: r.checked, failCount,
                 failures: r.fails.slice(0, 10),
-                pass: r.fails.length === 0,
+                pass: failCount === 0,
                 // HF-2 (2 Sep 2026) — a check that could not run says so. `checked: 0`
                 // alone reads as "nothing to check"; the note says WHY, and `skipped`
                 // lets a reader tell a skip from a pass. Additive; absent on the

@@ -1045,6 +1045,10 @@ function _ptopVal(v) {
     if (typeof v === 'boolean') return v ? 'T' : 'F';
     return 'j' + JSON.stringify(v);   // throws on an unencodable value -> the caller bypasses the cache
 }
+// NOT memoized per render pass on purpose: code inside a pass (the CCMR interval
+// search, bindings checklist) changes leaf probabilities transiently and asks
+// for P(top) again; a key remembered by object identity would answer for the
+// old content. The key is always walked from the tree as it is now.
 function _ptopKey(rootNode, fields) {
     fields = fields || _PTOP_FIELDS;
     const out = [];

@@ -4055,7 +4055,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="importers.js?v=1.7" defer></script>
     <script src="core_modules.js?v=1.9" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
-    <script src="fta_quant_modules.js?v=66.22" defer></script>
+    <script src="fta_quant_modules.js?v=66.23" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
     <script src="event_reuse.js?v=1.2" defer></script>
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
@@ -4076,9 +4076,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="gt_thread.js?v=0.91" defer></script>
     <script src="data_ops_modules.js?v=66.46" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.34" defer></script>
+    <script src="support_modules.js?v=66.35" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.11" defer></script>
+    <script src="helpers_modules.js?v=3.12" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.35" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4086,7 +4086,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.49" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.70" defer></script>
+    <script src="misc_fn_modules.js?v=66.71" defer></script>
     <script src="safety_lab.js?v=65.59" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4102,6 +4102,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="crdt_sync.js?v=2.1" defer></script>
     <script src="save_watch.js?v=1.2" defer></script>
     <script src="data_change.js?v=1.0" defer></script>
+    <script src="render_pass.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
     <script src="assurance_modules.js?v=1.32" defer></script>
@@ -4165,7 +4166,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- RAM cockpit — seventh dashboard card (continuous track; feeds the gates). -->
     <script src="ram_cockpit.js?v=1.1" defer></script>
     <!-- Phase D gap 3 (§3.6) — Budget Ledger: allocated vs achieved as a first-class object (born modular; self-registering page). -->
-    <script src="budget_ledger.js?v=1.44" defer></script>
+    <script src="budget_ledger.js?v=1.45" defer></script>
     <!-- UX-1 — importance heatmap overlay: FV heat on basic events, display lane only (born modular; toolbar toggle injection). -->
     <script src="importance_heat.js?v=2.3" defer></script>
     <!-- UX-4 — leading-indicators strip on the dashboard: early warnings, display + routing only (born modular; counts from invRun / etaCouplingFindings / the engine's feasibility lane). -->
@@ -4184,7 +4185,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="asa_triage.js?v=1.12" defer></script>
     <script src="idp_seed_trees.js?v=1.2" defer></script>
     <!-- Golden Thread integrity sweep + link bindings (born modular). -->
-    <script src="gt_integrity.js?v=1.7" defer></script>
+    <script src="gt_integrity.js?v=1.8" defer></script>
     <!-- App Q output-set harness. MUST load after gt_integrity.js: it wraps
          renderGtIntegrityPage to append the Q map to the Thread Integrity page. -->
     <script src="q_completeness.js?v=1.1" defer></script>
@@ -4216,7 +4217,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Legacy-id renumber migration (slate #12). MUST load after rename_guard:
          it composes rgRenameOwner + rgApply and owns no reference logic itself. -->
     <script src="renumber_migration.js?v=1.1" defer></script>
-    <script src="invariants.js?v=1.4" defer></script>
+    <script src="invariants.js?v=1.5" defer></script>
     <!-- RBD-XCHECK — every RBD figure computed twice (minimal tie-sets vs minimal cut-sets),
          agreement asserted (INV-33, hard) before anything shows. Disagreement = refusal.
          MUST load after invariants.js (invRegister) and after rbd_module.js (_rbdR/_rbdParseDsl);
@@ -4234,7 +4235,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ram_hub.js?v=1.2" defer></script>
     <script src="engine_selftest.js?v=1.1" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
-    <script src="model_checks.js?v=1.03" defer></script>
+    <script src="model_checks.js?v=1.04" defer></script>
     <script src="tree_warm.js?v=1.0" defer></script>
     <script src="fault_sim.js?v=1.22" defer></script>
     <script src="tab_guard.js?v=1.0" defer></script>
@@ -4386,7 +4387,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="toolchain_plan.js?v=1.6" defer></script>
     <!-- Combined & conditioned FCs — M6 (A.8.3-5). Born-modular: combined-FC rows,
          operational/environmental tags, coupling-derived candidates, INV-29/30. -->
-    <script src="fc_variants.js?v=1.05" defer></script>
+    <script src="fc_variants.js?v=1.06" defer></script>
     <script src="fc_tree_flow.js?v=1.03" defer></script>
     <script src="cca_models.js?v=1.03" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,

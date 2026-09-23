@@ -66,6 +66,21 @@
         const frag = (where, ref, detail, linkKey, candidates) => out.fragile.push({ where, ref, detail, linkKey, candidates });
         const subs = _subIds(), sysIds = _sysIds(), fcs = _fcIds();
         const E = () => { out.edges++; };
+        // 23 Sep 2026 (perf round 4): lookups that were re-scanned once per failure
+        // condition are built once per sweep (same answers; nothing changes during it).
+        const acIds = new Set(_acFha().map(x => String(x.internalId)));
+        const reqTraced = new Set();
+        ((typeof acReqData !== 'undefined' && acReqData) || []).forEach(r => (Array.isArray(r.traceIds) ? r.traceIds : [r.traceId]).forEach(t => reqTraced.add(t)));
+        const treeLinked = new Set();
+        _pages().forEach(p => {
+            const ids = (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds : (p.linkedFhaId != null ? [p.linkedFhaId] : []);
+            ids.forEach(id => treeLinked.add(String(id)));
+        });
+        const sfhaTraced = new Set();
+        _sys().forEach(s => (s.fha || []).forEach(x => {
+            const traces = (Array.isArray(x.acTraces) && x.acTraces.length) ? x.acTraces : (x.acTrace ? [x.acTrace] : []);
+            traces.forEach(t => sfhaTraced.add(String(t)));
+        }));
 
         // ---- 1. id-based edges: every reference must resolve --------------
         _acFha().forEach(f => {
@@ -93,7 +108,7 @@
             // never reported. Same array-first-then-scalar read as _sysFhaAcTraces.
             (s.fha || []).forEach(f => {
                 const traces = (Array.isArray(f.acTraces) && f.acTraces.length) ? f.acTraces : (f.acTrace ? [f.acTrace] : []);
-                traces.forEach(t => { E(); if (!_acFha().some(x => String(x.internalId) === String(t))) dang(s.name + ' ' + f.fcId, String(t), 'AC FHA trace unresolved'); });
+                traces.forEach(t => { E(); if (!acIds.has(String(t))) dang(s.name + ' ' + f.fcId, String(t), 'AC FHA trace unresolved'); });
             });
             (s.req || []).forEach(r => reqTrace(r, s.name + ' req ' + (r.id || r.internalId)));
         });
@@ -283,16 +298,9 @@
 
         // ---- 3. orphans: artifacts with no thread edge at all -------------
         _acFha().forEach(f => {
-            const hasReq = ((typeof acReqData !== 'undefined' && acReqData) || []).some(r =>
-                (Array.isArray(r.traceIds) ? r.traceIds : [r.traceId]).includes(f.fcId));
-            const hasTree = _pages().some(p => {
-                const ids = (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds : (p.linkedFhaId != null ? [p.linkedFhaId] : []);
-                return ids.some(id => String(id) === String(f.internalId));
-            });
-            const hasSfha = _sys().some(s => (s.fha || []).some(x => {
-                const traces = (Array.isArray(x.acTraces) && x.acTraces.length) ? x.acTraces : (x.acTrace ? [x.acTrace] : []);
-                return traces.some(t => String(t) === String(f.internalId));
-            }));
+            const hasReq = reqTraced.has(f.fcId);
+            const hasTree = treeLinked.has(String(f.internalId));
+            const hasSfha = sfhaTraced.has(String(f.internalId));
             if (!hasReq && !hasTree && !hasSfha)
                 out.orphans.push({ where: 'AC FHA', ref: f.fcId, detail: (f.severity || '?') + ' condition with no requirement, no tree, no SFHA trace' });
         });

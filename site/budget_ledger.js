@@ -70,8 +70,11 @@
         return true;
     }
 
+    // perf round 4: candidates from the pass index (render_pass.js); the original
+    // predicate below still decides, the index only narrows the scan.
+    function _cand(kind, key) { return (typeof SLPass !== 'undefined' && SLPass) ? SLPass.pages(kind, key) : null; }
     function _treesFor(iid) {
-        return _pages().filter(p => {
+        return (_cand('link', iid) || _pages()).filter(p => {
             const links = (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds : (p.linkedFhaId != null ? [p.linkedFhaId] : []);
             return links.map(String).indexOf(String(iid)) !== -1;
         });
@@ -106,7 +109,7 @@
             return out;
         }
         allocs.forEach(alloc => {
-            const mirror = _pages().find(p => p && p.verifies === alloc.id && p.root) || null;
+            const mirror = (_cand('verifies', alloc.id) || _pages()).find(p => p && p.verifies === alloc.id && p.root) || null;
             const allocated = _pTop(alloc);
             const achieved = mirror ? _pTop(mirror) : null;
             let status;
@@ -145,6 +148,9 @@
 
     // budgetLedgerRows() — the ledger. Aircraft FCs + every system's FCs.
     function budgetLedgerRows() {
+        return (typeof SLPass !== 'undefined' && SLPass) ? SLPass.run('budgetLedgerRows', _budgetLedgerRowsImpl) : _budgetLedgerRowsImpl();
+    }
+    function _budgetLedgerRowsImpl() {
         const rows = [];
         try { ((typeof acFhaData !== 'undefined' && acFhaData) || []).forEach(f => { if (f) rows.push.apply(rows, _rowsForFc(f, 'aircraft', null)); }); } catch (_) {}
         try {

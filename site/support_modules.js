@@ -1792,6 +1792,10 @@ function switchTab(tabId) {
 // track. Renders into #dash-process-strip on dashboard refresh. Each card is
 // clickable and routes to the relevant scoped view via enterPhase().
 // ============================================================================
+// 23 Sep 2026 (perf round 4) — candidate pages from the pass index (render_pass.js):
+// a superset in page order, or null outside a pass. Callers keep their original
+// predicate, so the index only narrows the scan. See tests/regression_render_pass.
+function _pgCand(kind, key) { return (typeof SLPass !== 'undefined' && SLPass) ? SLPass.pages(kind, key) : null; }
 function computePhaseStatus() {
     const phases = {};
     const hasReview = (typeof Review !== 'undefined');
@@ -1828,7 +1832,7 @@ function computePhaseStatus() {
     // The line item is "approved" only when every top-down tree allocating that hazard is signed off.
     let pasaCovered = 0, pasaApproved = 0;
     acCritFhas.forEach(f => {
-        const linkedTrees = (ftaPages || []).filter(p =>
+        const linkedTrees = (_pgCand('link', f.internalId) || ftaPages || []).filter(p =>
             !p.systemId && !p.verifies &&
             ((Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.indexOf(f.internalId) !== -1) || p.linkedFhaId === f.internalId)
         );
@@ -1878,7 +1882,7 @@ function computePhaseStatus() {
     let pssaCovered = 0, pssaApproved = 0;
     let pssaLineItemsTotal = 0, pssaLineItemsApproved = 0;
     (systemsData || []).forEach(s => {
-        const sysTrees = (ftaPages || []).filter(p => p.systemId === s.id && !p.verifies);
+        const sysTrees = (_pgCand('system', s.id) || ftaPages || []).filter(p => p.systemId === s.id && !p.verifies);
         const topDownTrees = sysTrees.filter(t => (t.mode || 'top-down') === 'top-down' && t.root && ((t.root.children || []).length > 0 || (t.root._children || []).length > 0));
         if (topDownTrees.length > 0) {
             pssaCovered++;
@@ -1901,7 +1905,7 @@ function computePhaseStatus() {
 
     // ---- SSA — verification mirrors populated AND approved ----
     function _treeHasPopulatedMirror(srcTree) {
-        const mirror = (ftaPages || []).find(p => p.verifies === srcTree.id);
+        const mirror = (_pgCand('verifies', srcTree.id) || ftaPages || []).find(p => p.verifies === srcTree.id);
         if (!mirror || !mirror.root) return null;
         let populated = 0, totalLeaves = 0;
         (function walk(n) {
@@ -1918,7 +1922,7 @@ function computePhaseStatus() {
     let ssaCovered = 0, ssaApproved = 0;
     let ssaLineItemsTotal = 0, ssaLineItemsApproved = 0;
     (systemsData || []).forEach(s => {
-        const sysTrees = (ftaPages || []).filter(p => p.systemId === s.id && !p.verifies && (p.mode || 'top-down') === 'top-down');
+        const sysTrees = (_pgCand('system', s.id) || ftaPages || []).filter(p => p.systemId === s.id && !p.verifies && (p.mode || 'top-down') === 'top-down');
         if (sysTrees.length === 0) return;
         const mirrors = sysTrees.map(_treeHasPopulatedMirror).filter(Boolean);
         if (mirrors.length === sysTrees.length) {
@@ -1945,7 +1949,7 @@ function computePhaseStatus() {
     // ---- ASA — single ASA document for the project. Line items = cat/haz verification mirrors. ----
     let asaCovered = 0, asaApproved = 0;
     acCritFhas.forEach(f => {
-        const linkedTrees = (ftaPages || []).filter(p =>
+        const linkedTrees = (_pgCand('link', f.internalId) || ftaPages || []).filter(p =>
             !p.systemId && !p.verifies &&
             ((Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.indexOf(f.internalId) !== -1) || p.linkedFhaId === f.internalId)
         );

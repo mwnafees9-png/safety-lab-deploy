@@ -1366,7 +1366,24 @@ function evalCkptChecklist(key, phases, ctx) {
     return { items, ready };
 }
 
+// 23 Sep 2026 (perf round 4): the checklists are evaluated ONCE per pass
+// (render_pass.js). Every caller hands in a fresh computePhaseStatus(), and
+// nothing changes during a pass, so the first evaluation is recorded and later
+// calls in the same pass receive the same statuses, ratios, hand-offs and
+// checklists written onto their own phases object. The dashboard evaluated
+// the whole checklist set twice per render. Outside a pass: unchanged.
+// See tests/regression_render_pass.test.js.
+const _CKPT_APPLIED_FIELDS = ['status', 'ratio', 'handoff', 'checklist'];
 function applyCockpitStatuses(phases) {
+    if (!(typeof SLPass !== 'undefined' && SLPass && SLPass.active() && phases)) return _applyCockpitStatusesImpl(phases);
+    const applied = SLPass.memo('applyCockpitStatuses', () => _applyCockpitStatusesImpl(computePhaseStatus()));
+    Object.keys(CKPT_CHECKLISTS).forEach(key => {
+        if (!phases[key] || !applied[key]) return;
+        _CKPT_APPLIED_FIELDS.forEach(f => { if (Object.prototype.hasOwnProperty.call(applied[key], f)) phases[key][f] = applied[key][f]; });
+    });
+    return phases;
+}
+function _applyCockpitStatusesImpl(phases) {
     const H = (projectConfig && projectConfig.ckptHandoffs) || {};
     const ctx = _ckptEvalCtx(phases);
     Object.keys(CKPT_CHECKLISTS).forEach(key => {

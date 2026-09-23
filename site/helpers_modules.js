@@ -2489,12 +2489,12 @@ function idpCell(fc, id) {
 // batch's — so an edit to one FHA row re-derives that row only. IF YOU MAKE
 // idpCell READ ANOTHER STORE, ADD IT TO _idpContribCtx's global key.
 // See tests/regression_perf_round2.test.js.
-var _idpContribMemo = new Map(), _idpContribGlobal = null;
+var _idpContribMemo = new Map(), _idpStatsMemo = new Map(), _idpContribGlobal = null;
 function _idpContribCtx(ix) {
     if (ix.contrib) return ix.contrib;
     let g = null;
     try { g = JSON.stringify([systemsData || [], resourcesData || []]); } catch (_) { g = null; }
-    if (g === null || g !== _idpContribGlobal) { _idpContribMemo = new Map(); _idpContribGlobal = g; }
+    if (g === null || g !== _idpContribGlobal) { _idpContribMemo = new Map(); _idpStatsMemo = new Map(); _idpContribGlobal = g; }
     const cellsBy = new Map();
     try {
         const cells = _idpStore().cells || {};
@@ -2535,16 +2535,38 @@ function _idpStatsImpl() {
     const fcs = acFhaData || [];
     const cols = idpColumns();
     let unreviewed = 0, contributes = 0, cleared = 0, multi = 0, proposed = 0, coarse = 0;
-    fcs.forEach(fc => {
+    // 23 Sep 2026 (perf round 4): each FC's row of counts is remembered the same
+    // way as idpContributors (same inputs: the FC row, its cells, systemsData,
+    // resourcesData) plus the exact column list, so a render re-derives only the
+    // rows that changed. Dropped with the contributor memo whenever systems or
+    // resources change. See tests/regression_render_pass.test.js.
+    const rowOf = fc => {
+        const r = { unreviewed: 0, contributes: 0, cleared: 0, proposed: 0, coarse: 0, multi: 0 };
         const sysHit = new Set();
         cols.forEach(col => {
             const c = _idpCellRaw(fc, col.colId);
-            if (c.state === 'unreviewed') unreviewed++;
-            else if (c.state === 'contributes') { contributes++; sysHit.add(col.sysId); if (c.coarse || c.legacy) coarse++; }
-            else if (c.state === 'proposed') { proposed++; unreviewed++; }   // a proposal is NOT a review — still gates
-            else cleared++;
+            if (c.state === 'unreviewed') r.unreviewed++;
+            else if (c.state === 'contributes') { r.contributes++; sysHit.add(col.sysId); if (c.coarse || c.legacy) r.coarse++; }
+            else if (c.state === 'proposed') { r.proposed++; r.unreviewed++; }   // a proposal is NOT a review — still gates
+            else r.cleared++;
         });
-        if (sysHit.size >= 2) multi++;
+        if (sysHit.size >= 2) r.multi = 1;
+        return r;
+    };
+    const ctx = _idpIdxDepth ? _idpContribCtx(_idpIndex()) : null;
+    let bucket = null;
+    if (ctx && ctx.ok) {
+        const colsSig = cols.map(c => JSON.stringify([c.colId, c.sysId, !!c.legacy])).join(',');
+        bucket = _idpStatsMemo.get(colsSig);
+        if (!bucket) { if (_idpStatsMemo.size >= 8) _idpStatsMemo.clear(); bucket = new Map(); _idpStatsMemo.set(colsSig, bucket); }
+    }
+    fcs.forEach(fc => {
+        let r = null, k = null;
+        if (bucket) { try { k = JSON.stringify(fc) + '\u0001' + (ctx.cellsBy.get(String(fc && fc.internalId)) || ''); } catch (_) { k = null; } }
+        if (k !== null && bucket.has(k)) r = bucket.get(k);
+        else { r = rowOf(fc); if (k !== null) { if (bucket.size >= 50000) bucket.clear(); bucket.set(k, r); } }
+        unreviewed += r.unreviewed; contributes += r.contributes; cleared += r.cleared;
+        proposed += r.proposed; coarse += r.coarse; multi += r.multi;
     });
     return { fcs: fcs.length, systems: (systemsData || []).length, columns: cols.length,
              cells: fcs.length * cols.length, unreviewed, contributes, cleared, multi, proposed, coarse };
@@ -3683,7 +3705,12 @@ function renderCockpitPage(key) {
         '</div></div>';
 }
 
+// 23 Sep 2026 (perf round 4): one render = one read-only pass (render_pass.js),
+// so repeated lookups inside it (page links, checklists, ledger) are answered once.
 function updateDashboard() {
+    return (typeof SLPass !== 'undefined' && SLPass) ? SLPass.run('updateDashboard', _updateDashboardImpl) : _updateDashboardImpl();
+}
+function _updateDashboardImpl() {
     // GTA-style lazy compute (8 Sep 2026): the dashboard is PURE DISPLAY — recomputed
     // from the live stores every time it is shown (switchTab('dashboard') calls this).
     // 20 call sites fire it on every edit even when another tab is on screen, writing to

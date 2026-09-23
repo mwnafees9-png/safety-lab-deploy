@@ -66,15 +66,32 @@
         const ids = (Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds.slice() : []);
         if (p.linkedFhaId != null) ids.push(p.linkedFhaId);
         const out = [];
+        const byId = _fcById();
         ids.map(x => String(x).replace(/^(AC_|SYS_)/, '')).forEach(id => {
-            let f = (typeof acFhaData !== 'undefined' ? acFhaData : []).find(x => x && String(x.internalId) === id);
-            if (!f) for (const s of (typeof systemsData !== 'undefined' ? systemsData : [])) {
-                f = (s.fha || []).find(x => x && String(x.internalId) === id);
-                if (f) break;
+            let f;
+            if (byId) f = byId.ac.get(id) || byId.sys.get(id);
+            else {
+                f = (typeof acFhaData !== 'undefined' ? acFhaData : []).find(x => x && String(x.internalId) === id);
+                if (!f) for (const s of (typeof systemsData !== 'undefined' ? systemsData : [])) {
+                    f = (s.fha || []).find(x => x && String(x.internalId) === id);
+                    if (f) break;
+                }
             }
             if (f) out.push(f);
         });
         return out;
+    }
+    // 23 Sep 2026 (perf round 4): inside a pass (render_pass.js) FC lookups by id
+    // come from maps built once — first match wins, aircraft FHA before system
+    // FHAs in system order, exactly as the scans above. null outside a pass.
+    function _fcById() {
+        if (!(typeof SLPass !== 'undefined' && SLPass && SLPass.active())) return null;
+        return SLPass.memo('mc:fcById', () => {
+            const ac = new Map(), sys = new Map();
+            (typeof acFhaData !== 'undefined' ? acFhaData : []).forEach(x => { if (x) { const k = String(x.internalId); if (!ac.has(k)) ac.set(k, x); } });
+            (typeof systemsData !== 'undefined' ? systemsData : []).forEach(s => (s.fha || []).forEach(x => { if (x) { const k = String(x.internalId); if (!sys.has(k)) sys.set(k, x); } }));
+            return { ac, sys };
+        });
     }
     // Pages that feed a Cat or Haz FC, with the page's worst severity.
     // MC-01/02 read allocation trees (the fail-safe CLAIM); MC-03 also reads
@@ -146,7 +163,12 @@
     // Enumerate every single-failure path to a Cat/Haz top. Keyed by the
     // EVENT (logicalId / CCF group), not the page — one acceptance covers
     // every tree the same physical event appears in.
+    // Computed once per pass (MC-01 and MC-02 each asked for it in one sweep).
+    // Callers only read the rows.
     function mcSpfList() {
+        return (typeof SLPass !== 'undefined' && SLPass) ? SLPass.memo('mc:spfList', _mcSpfListImpl) : _mcSpfListImpl();
+    }
+    function _mcSpfListImpl() {
         if (!_build) return [];
         const found = new Map();   // key → row
         _checkablePages().forEach(({ page, worst }) => {
