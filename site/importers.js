@@ -152,11 +152,15 @@ const ExcelImport = (function() {
             mId:    ['mid', 'malfunctionid'], mDesc: ['mdesc', 'malfunctiondescription']
         },
         pra: {
+            // 23 Sep 2026 (G3) — keys are the PRA table's own fields (the old 'description' key
+            // matched nothing the PRA tab reads, so imported propagation paths showed blank).
             praId:    ['praid', 'id', 'pra#'],
-            threat:   ['threat', 'risktype', 'hazardtype', 'risk'],
-            description: ['description', 'details', 'scenario'],
+            threat:   ['threat', 'threatsource', 'risktype', 'hazardtype', 'risk'],
+            desc:     ['propagationpath', 'description', 'details', 'threatdescription'],
+            systems:  ['targetsystems', 'affectedsystems', 'systems', 'components'],
+            csfl:     ['csflimpact', 'csflimpactanalysis', 'csfl', 'impact'],
             affectedZones: ['zones', 'affectedzones', 'zonesimpacted'],
-            mitigation: ['mitigation', 'controls', 'mitigationapproach']
+            mitigation: ['mitigation', 'mitigationstrategy', 'controls', 'mitigationapproach']
         },
         // 23 Sep 2026 (G9) — keys are the ZSA table's own fields (the old zsaId/zone/threat
         // keys matched nothing the ZSA tab reads, so imported zones showed blank), plus
@@ -711,7 +715,9 @@ const ExcelImport = (function() {
                     internalId: newRowId(),
                     praId: String(r.praId || '').trim() || _newId('PRA'),
                     threat: String(r.threat || '').trim(),
-                    description: String(r.description || '').trim(),
+                    desc: String(r.desc || '').trim(),
+                    systems: String(r.systems || '').trim(),
+                    csfl: String(r.csfl || '').trim(),
                     affectedZones: splitMulti(r.affectedZones),
                     mitigation: String(r.mitigation || '').trim()
                 });

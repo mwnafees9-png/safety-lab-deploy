@@ -1502,10 +1502,16 @@ function makeCRUD(config) {
             // of its drafting. Keep the provenance (every ai* field, incl. the audit trail's
             // original and edit history) and mark the row engineer-edited, which is what counts
             // it as reviewed (ai_badges.js) — the same way the FHA editor already merges.
-            if (idx >= 0 && arr[idx] && arr[idx].aiGenerated === true) {
+            // 23 Sep 2026 (G3) — and more generally: the form edits the fields it SHOWS. Every other
+            // field of the row is kept (links, provenance, origin tags, sub-lists edited in their own
+            // editors). Replacing the whole row used to drop them: a PRA from the canvas lost its
+            // library link / zones / disposition, an auto-requirement edited without a text change
+            // lost its reqSource (and came back as a duplicate), a walkthrough finding lost its tag.
+            if (idx >= 0 && arr[idx]) {
                 const prev = arr[idx];
-                Object.keys(prev).forEach(k => { if (/^ai[A-Z]/.test(k) && data[k] === undefined) data[k] = prev[k]; });
-                data.humanEdited = true; data.humanEditedAt = new Date().toISOString();
+                const shown = new Set(Object.keys(formIds));
+                Object.keys(prev).forEach(k => { if (!shown.has(k) && data[k] === undefined) data[k] = prev[k]; });
+                if (prev.aiGenerated === true) { data.humanEdited = true; data.humanEditedAt = new Date().toISOString(); }
             }
             if (idx >= 0) arr[idx] = data; else arr.push(data);
         } else {

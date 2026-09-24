@@ -211,13 +211,13 @@ These rest on the agents' reading of EASA Issue 03, NIST AI RMF and MOC-5. They 
 
 ## 6. Gaps and proposals
 
-**Status, 23 Sep 2026:** G1, G2, G4, G8, G9 and G10 are done. G3, G5, G6, G7 are the feature builds still to do.
+**Status, 23 Sep 2026:** G1, G2, G3, G4, G8, G9 and G10 are done. G5, G6, G7 are the feature builds still to do.
 
 | # | Gap | Source | Size (my estimate) |
 |---|---|---|---|
 | G1 | Part 23 class chosen from AC 23.1309-1E wording instead of F3230 Table 3 (certification level × propulsion) | F3230 4.2, Table 3 | **Done 23 Sep.** `p23_assessment_level.js`; wizard and project settings ask certification level + propulsion; hybrid/eVTOL recorded as a level agreed with the authority. `regression_p23_assessment_level.test.js` |
 | G2 | KB chunk certstd-10 says F3230 is unsourced, and cites a "2025" revision | F3230 | **Done 23 Sep.** Shipped on retrieval evidence (Waqas: no further AI spend): the golden FHA eval cannot see this lane (the FHA draft never reads the cert-standards KB); a run of the real retriever old vs new over 283 queries changed 22 top-6 lists, none of the realistic FTA/HF task prompts, and F3230 questions now pull the corrected entry first — confirmed on the live build. certstd-10/13 and the spine now say: FAA-accepted revision is 21a (90 FR 21392, 20 May 2025); F3230-25 exists but is not on the FAA list; clause numbers and titles held, text never. `regression_cert_std_kb.test.js` |
-| G3 | PRA requirement cascade (origin, rationale, allocation, interrelation flag) and PRA assumptions with impact are not first-class | 4761A Q.15.2.7.2, L | Medium |
+| G3 | PRA requirement cascade (origin, rationale, allocation, interrelation flag) and PRA assumptions with impact are not first-class | 4761A Q.15.2.7.2, L | **Done 23 Sep.** `pra_scenarios.js`: per risk, scenarios (hit together → aircraft effect → linked FCs → classification → acceptable + rationale) and assumption impacts; one traced requirement per scenario (`pra-scenario`: origin, rationale, allocation to owning systems, interrelated risks); INV-53 advisory. Risks without scenarios keep the `pra-zonal` requirement. Fixed on the way: form saves dropped fields the form does not show (PRA canvas links/zones, auto-requirement sources); the PRA import wrote fields the PRA tab never reads. `regression_pra_scenarios.test.js` |
 | G4 | F3061 Table 1 secondary-system DALs not checked end to end | F3061 4.2.5 | **Done 23 Sep — was a real defect.** The app mixed F3061's two allowed methods (Table 1 top, then ARP4754 reductions), so a backup could fall below both (e.g. DAL E behind a Level I Catastrophic; both methods require C). Now `f3061_dal.js`: Part 23 uses Table 1 (carrier = primary, others = secondary, never lower) by default, or ARP4754 end to end if the project chooses it. Changed DAL requirements surface in the AutoReq review as updates. `regression_f3061_dal.test.js` |
 | G5 | No USOC workflow | F3061 4.2.6, X2 | Medium |
 | G6 | No integration-level strategy for unintended behaviour (stimuli list, results in the verification summary) | 4754B 4.6.4 | Medium |

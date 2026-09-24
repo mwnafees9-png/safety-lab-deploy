@@ -2252,6 +2252,11 @@ const AutoReq = (function(){
         const pras = (typeof praData !== 'undefined' ? praData : []) || [];
         pras.forEach(p => {
             if (!p) return;
+            // 23 Sep 2026 (G3) — a risk with SCENARIOS yields one traced requirement per scenario
+            // (origin, rationale, classification, allocation, interrelation — pra_scenarios.js);
+            // a risk without keeps the single zonal requirement below, so nothing churns.
+            if (typeof SLPraScenarios !== 'undefined' && SLPraScenarios.has(p)) { out.push(...SLPraScenarios.requirements(p, fp, scopeKey)); return; }
+            if (p.disposition === 'na') return;   // ruled not applicable on the PRA canvas
             const zones = Array.isArray(p.affectedZones) ? p.affectedZones.slice().sort() : [];
             if (!zones.length) return;   // PRAs without affected zones have nothing to constrain
             // Derive exposed sub-functions via the zone → housedFunctions join.
@@ -2835,6 +2840,7 @@ const AutoReq = (function(){
         'gate-indep-cma': { text: '${text}', rat: '${rat}' },
         'gate-indep-or':  { text: '${text}', rat: '${rat}' },
         'pra-zonal':      { text: '${text}', rat: '${rat}' },
+        'pra-scenario':   { text: '${text}', rat: '${rat}' },
         'zsa-separation': { text: '${text}', rat: '${rat}' },
         'zsa-phys':       { text: '${text}', rat: '${rat}' },
         'fcim-monitor':   { text: '${text}', rat: '${rat}' }
@@ -2963,7 +2969,7 @@ const AutoReq = (function(){
                 ((g === 'fta-event' || g === 'fta-interval' || g === 'fta-resource' || g === 'fta-resource-iface') && opts.ftaEvent) ||
                 (g.startsWith('dalgebra') && opts.dalgebra) ||
                 (g.startsWith('gate-indep') && opts.gateIndependence) ||
-                (g === 'pra-zonal' && opts.praZonal) ||
+                ((g === 'pra-zonal' || g === 'pra-scenario') && opts.praZonal) ||
                 (g.startsWith('zsa') && opts.zsaSeparation) ||
                 (g.startsWith('hf-op') && opts.hfOperational) ||
                 (g.startsWith('iface') && opts.iface) ||
@@ -3082,6 +3088,7 @@ const AutoReq = (function(){
         'gate-indep-cma':   'CMA → Common-mode preclusion',
         'gate-indep-or':    'Gate → No-single-failure check',
         'pra-zonal':        'PRA → Zonal protection',
+        'pra-scenario':     'PRA scenario → Traced protection requirement',
         'zsa-separation':   'ZSA → Housed-function separation',
         'zsa-phys':         'ZSA → Physical separation (Cat zone)',
         'fcim-monitor':     'FCIM pair → Crew-awareness monitoring (annunciation credit)'

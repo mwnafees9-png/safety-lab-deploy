@@ -840,6 +840,14 @@ const Reports = (function() {
                 'Affected Systems': Array.isArray(p.systems) ? p.systems.join(', ') : (p.systems || ''),
                 'CSFL':      p.csfl || '',
                 'Mitigation': p.mitigation || '',
+                // 23 Sep 2026 (G3) — scenarios: hit together → failure condition → acceptability
+                'Scenarios': (function () {
+                    try {
+                        if (typeof SLPraScenarios === 'undefined' || !Array.isArray(p.scenarios) || !p.scenarios.length) return p.disposition === 'na' ? 'Not applicable' + (p.naReason ? ': ' + p.naReason : '') : '';
+                        return p.scenarios.map(s => s.scnId + ': ' + ((s.fcIds || []).map(id => { const f = SLPraScenarios.fcsFor ? (typeof acFhaData !== 'undefined' ? acFhaData : []).find(x => String(x.internalId) === String(id)) : null; return f ? (f.fcId || id) : id; }).join(', ') || 'no FC') +
+                            (SLPraScenarios.classification(s) ? ' (' + SLPraScenarios.classification(s) + ')' : '') + ' — ' + (s.acceptable === 'yes' ? 'acceptable' : s.acceptable === 'no' ? 'NOT acceptable' : 'open')).join('; ');
+                    } catch (_) { return ''; }
+                })(),
             })), pra, 'pra', null),
 
             zsa_table: _aiOriginRows(zsa.map(z => ({
