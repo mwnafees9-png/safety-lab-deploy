@@ -196,6 +196,10 @@
         // Returns a NORMALIZED shape: { text, model, raw }.
         async complete(opts) {
             opts = opts || {};
+            // 23 Sep 2026 (G10) — AI switched off for THIS project (AI Settings): nothing is sent,
+            // on any backend, cloud or local. Checked here, the one path every AI call takes.
+            const _off = _projectAiOff();
+            if (_off) { const e = new Error(_off); e.projectAiOff = true; try { _auditCall(opts, null, 'refused', e); } catch (_) {} throw e; }
             // Structured-analysis features get the insufficient-information clause so the model
             // flags thin input instead of fabricating an analysis (token saver).
             const wantInsuf = _ANALYSIS_FEATURES[opts.feature] === 1;
@@ -287,6 +291,7 @@
         // Embeddings. opts = { input, model, inputType }. Returns vector | vectors.
         async embed(opts) {
             opts = opts || {};
+            const _off = _projectAiOff(); if (_off) { const e = new Error(_off); e.projectAiOff = true; throw e; }
             if (this.mode === 'local') return _localEmbed(opts);
             const ac = window.AiClient;
             if (!ac) throw new Error('[Safety Lab Aero AI] AiClient unavailable.');
@@ -297,6 +302,14 @@
     // 23 Sep 2026 (G10) — log one AI call to the project's audit trail (ai_audit.js). The
     // unified batch completes as 'chat.edit'; _auditPurpose names what it is drafting.
     let _auditPurpose = null;
+    // Per-project AI off switch (AI Settings → "Switch AI off for this project").
+    function _projectAiOff() {
+        try {
+            const pc = (typeof projectConfig !== 'undefined' && projectConfig) ? projectConfig : null;
+            return (pc && pc.aiSettings && pc.aiSettings.projectAiOff === true)
+                ? 'AI is switched off for this project (AI Settings). Nothing was sent.' : null;
+        } catch (_) { return null; }
+    }
     function _auditCall(opts, result, outcome, err) {
         try {
             if (typeof window === 'undefined' || !window.SLAiAudit) return;
@@ -4540,6 +4553,9 @@
         let p = document.getElementById(cfg.id); if (p) p.remove();
         p = document.createElement('div'); p.id = cfg.id; p.className = 'ai-rev-panel'; _applyPanelPalette(p);
         const hasAccept = typeof cfg.onAccept === 'function';
+        // 23 Sep 2026 (G10) — every decision on an AI draft is counted per project (over-reliance
+        // measure, ai_audit.js). Information-only panels (no Accept) make no decisions.
+        const _decide = function (act, bulk, n) { try { if (hasAccept && window.SLAiAudit) window.SLAiAudit.noteDecision(cfg.id, act, !!bulk, n || 1, cfg.title || ''); } catch (_) {} };
         const needVC = !!cfg.requireVisionConfirm && hasAccept;   // #260
         p.innerHTML =
             '<div class="aifh-head"><h3>' + _esc(cfg.title) + '</h3><button type="button" class="rv-close">Close</button></div>' +
@@ -4634,6 +4650,7 @@
                         editingKey = null;
                         const okSave = cfg.onAccept(it);
                         _logDelta(cfg.id, diff.length ? 'edit' : 'accept', diff.length ? { item: it, diff: diff } : it, _cov(it));
+                        if (okSave) _decide(diff.length ? 'edit' : 'accept');
                         if (okSave) { _toast(diff.length ? ('Edited and added — ' + diff.length + ' field' + (diff.length === 1 ? '' : 's') + ' corrected.') : 'Added.', 'success'); items.splice(idx, 1); }
                         else { _toast('Not applied — ' + (it._applyError || 'see the card') + '.', 'warning', 6000); }   // AIF-1
                         render();
@@ -4643,19 +4660,21 @@
                     if (act === 'accept' && hasAccept) {
                         const ok = cfg.onAccept(items[idx]);
                         _logDelta(cfg.id, 'accept', items[idx], _cov(items[idx]));
+                        if (ok) _decide('accept');
                         if (ok) { _toast('Added.', 'success'); items.splice(idx, 1); }
                         else { _toast('Not applied — ' + (items[idx]._applyError || 'see the card') + '.', 'warning', 6000); }   // AIF-1: keep it visible
                         render();
                         return;
                     }
                     _logDelta(cfg.id, 'dismiss', items[idx], _cov(items[idx]));
+                    _decide('dismiss');
                     items.splice(idx, 1); render();
                 };
             });
             _vc.sync();   // #260 — keep accept buttons disabled until vision-confirm is ticked
         }
         p.querySelector('.rv-close').onclick = function () { p.remove(); };
-        p.querySelector('.rv-dismiss-all').onclick = function () { items = []; p.remove(); };
+        p.querySelector('.rv-dismiss-all').onclick = function () { if (items.length) _decide('dismiss', true, items.length); items = []; p.remove(); };
         const accAll = p.querySelector('.rv-accept-all');
         // 31 Aug 2026 (AIF-1) — this used to clear the panel and toast only the
         // success count: rows the executor refused VANISHED (run 2 of the pair
@@ -4666,6 +4685,7 @@
             if (!_vc.ok()) { _toast('Tick the verification box first — confirm you checked these against the source diagram.', 'warning'); return; }
             let n = 0; const failed = [];
             items.slice().forEach(function (it) { _logDelta(cfg.id, 'accept', it, _cov(it)); if (cfg.onAccept(it)) n++; else failed.push(it); });
+            if (n) _decide('accept', true, n);
             if (failed.length) {
                 items = failed; render();
                 try {
@@ -10567,7 +10587,8 @@
             vlog.slice(-40).forEach(function (v, i) { items.push({ type: '2nd-model check', label: (v.kind || '') + ' — ' + (v.verdict === 'issues' ? ('issues (' + (v.issues || 0) + ')') : 'consistent'), model: v.model || '', at: v.at || '', feature: 'verifier', _k: 'vchk-' + i }); });
         } catch (_) {}
         if (!items.length) { _toast('No AI-generated artifacts in this project yet.', 'info'); return; }
-        _makeReviewPanel({ id: 'ai-rev-panel-prov', title: '✨ AI provenance · ' + items.length + ' artifact(s)', disclaimer: 'Audit trail: every item below was AI-drafted and accepted by a human reviewer. Model + timestamp travel with the project file.', items: items, getKey: function (x) { return x._k; },
+        let _rel = ''; try { if (window.SLAiAudit) _rel = ' ' + window.SLAiAudit.relianceLine(); } catch (_) {}
+        _makeReviewPanel({ id: 'ai-rev-panel-prov', title: '✨ AI provenance · ' + items.length + ' artifact(s)', disclaimer: 'Audit trail: every item below was AI-drafted and accepted into the project; an engineer edit or a reviewer approval marks it reviewed. Model, prompt version and edit history travel with the project file.' + _rel, items: items, getKey: function (x) { return x._k; },
             cardHtml: function (x) { var imgChip = (x.modality === 'image' || x.modality === 'image+text') ? ' · <span style="color:#dc2626;font-weight:700;">⚠ from diagram — verify</span>' : ''; return '<h4>' + _esc(x.type) + '</h4>' + '<div class="aifh-eff">' + _esc(x.label || '(no label)') + '</div>' + '<div class="aifh-meta">' + _esc(x.model || 'model') + (x.at ? ' · ' + _esc(String(x.at).slice(0, 10)) : '') + (x.feature ? ' · ' + _esc(x.feature) : '') + imgChip + '</div>' + ((x.row && window.SLAiAudit) ? window.SLAiAudit.cardLine(x.row) : ''); },
             onAccept: null });
     }

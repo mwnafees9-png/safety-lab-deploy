@@ -1590,6 +1590,9 @@ window.saveAiSettings = function(){
     projectConfig.aiSettings.voyageModel    = get('ai-voyage-model');
     projectConfig.aiSettings.maxTokens      = parseInt(get('ai-max-tokens')) || 4096;
     projectConfig.aiSettings.costCap        = parseFloat(get('ai-cost-cap')) || 0;   // blank / 0 = no cap
+    // 23 Sep 2026 (G10) — per-project AI off switch (checked in Provider.complete and AiClient.messages).
+    const _offEl = document.getElementById('ai-project-off');
+    if (_offEl) projectConfig.aiSettings.projectAiOff = !!_offEl.checked;
     projectConfig.aiSettings.topK           = parseInt(get('ai-top-k')) || 5;
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
     const status = document.getElementById('ai-status');

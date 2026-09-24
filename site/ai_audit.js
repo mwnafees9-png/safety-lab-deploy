@@ -1,5 +1,5 @@
 // ============================================================================
-// ai_audit.js — v1.0 — the audit trail behind every AI draft
+// ai_audit.js — v1.1 — the audit trail behind every AI draft
 // (23 Sep 2026, standards gap G10; EASA AI concept paper Issue 03, NIST AI RMF).
 //
 // POSITION (Waqas, 23 Sep 2026): Safety Lab's AI is ADVISORY ONLY. It proposes;
@@ -10,7 +10,7 @@
 //   originally said, every change the engineer made, and what it says now.
 //
 // WHAT THIS MODULE RECORDS
-//   1. CALL LOG — projectConfig.aiAuditLog: one entry per AI call (Provider.
+//   1. CALL LOG — projectConfig.aiDraftLog: one entry per AI call (Provider.
 //      complete calls recordCall): id AIC-000001…, feature, model, prompt
 //      version (the skill stamp id@vN#hash), time, a fingerprint + size of the
 //      exact input (system prompt + messages) and of the raw output, the
@@ -46,7 +46,25 @@
         return ('0000000' + h.toString(16)).slice(-8);
     }
     function _pc() { try { return (typeof projectConfig !== 'undefined' && projectConfig) ? projectConfig : null; } catch (_) { return null; } }
-    function _log() { var pc = _pc(); if (!pc) return null; if (!Array.isArray(pc.aiAuditLog)) pc.aiAuditLog = []; return pc.aiAuditLog; }
+    // v1.1 (23 Sep 2026): the log lives in projectConfig.aiDraftLog. v1.0 wrote to
+    // projectConfig.aiAuditLog, which core_modules.js's COST log already owns (capped at 500,
+    // shown in AI Settings): the two collided. On first use, any AIC-… entries found there
+    // are moved here, in order, and the counter resumes after the highest id.
+    function _log() {
+        var pc = _pc(); if (!pc) return null;
+        if (!Array.isArray(pc.aiDraftLog)) pc.aiDraftLog = [];
+        if (Array.isArray(pc.aiAuditLog) && pc.aiAuditLog.some(function (e) { return e && /^AIC-\d+$/.test(e.id || ''); })) {
+            var mine = pc.aiAuditLog.filter(function (e) { return e && /^AIC-\d+$/.test(e.id || ''); });
+            pc.aiAuditLog = pc.aiAuditLog.filter(function (e) { return !(e && /^AIC-\d+$/.test(e.id || '')); });
+            var have = {}; pc.aiDraftLog.forEach(function (e) { have[e.id] = 1; });
+            mine.forEach(function (e) { if (!have[e.id]) pc.aiDraftLog.push(e); });
+            pc.aiDraftLog.sort(function (a, b) { return parseInt(a.id.slice(4), 10) - parseInt(b.id.slice(4), 10); });
+            var top = pc.aiDraftLog.reduce(function (m, e) { return Math.max(m, parseInt(String(e.id).slice(4), 10) || 0); }, 0);
+            pc.aiDraftCounter = Math.max(pc.aiDraftCounter || 0, pc.aiAuditCounter || 0, top);
+            delete pc.aiAuditCounter;
+        }
+        return pc.aiDraftLog;
+    }
     function _me() { try { var m = root.SLAvatar && root.SLAvatar.me && root.SLAvatar.me(); return (m && m.name) || ''; } catch (_) { return ''; } }
     function _nowIso() { return new Date().toISOString(); }
 
@@ -56,11 +74,11 @@
             info = info || {};
             var log = _log(); if (!log) return null;
             var pc = _pc();
-            pc.aiAuditCounter = (pc.aiAuditCounter || 0) + 1;
+            pc.aiDraftCounter = (pc.aiDraftCounter || 0) + 1;
             var input = JSON.stringify({ system: info.system || '', messages: info.messages || [] });
             var text = String(info.text == null ? '' : info.text);
             var e = {
-                id: 'AIC-' + String(pc.aiAuditCounter).padStart(6, '0'),
+                id: 'AIC-' + String(pc.aiDraftCounter).padStart(6, '0'),
                 feature: String(info.feature || ''), purpose: info.purpose || null, model: info.model || null, skill: info.skill || null,
                 at: _nowIso(), inputHash: _fnv(input), inputChars: input.length,
                 outputHash: _fnv(text), outputChars: text.length, output: text,
@@ -70,7 +88,7 @@
             log.push(e);
             // keep the raw text only for the most recent KEEP_TEXT calls
             for (var i = log.length - KEEP_TEXT - 1; i >= 0; i--) { if (log[i].output == null) break; delete log[i].output; log[i].outputTrimmed = true; }
-            if (log.length > MAX_LOG) { var n = log.length - MAX_LOG; log.splice(0, n); pc.aiAuditDropped = (pc.aiAuditDropped || 0) + n; }
+            if (log.length > MAX_LOG) { var n = log.length - MAX_LOG; log.splice(0, n); pc.aiDraftDropped = (pc.aiDraftDropped || 0) + n; }
             try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {}
             return e.id;
         } catch (_) { return null; }
@@ -194,6 +212,55 @@
         return n;
     }
 
+    // ---- decisions on drafts (over-reliance measure) -------------------------------------------
+    // projectConfig.aiDecisions[panel] = { label, accepted, edited, dismissed, bulkAccepted, bulkDismissed }
+    // counted in the review panels (ai_assistant.js _makeReviewPanel). 'edited' = changed in the
+    // panel before accepting. Bulk = "Accept all" / "Dismiss all".
+    function noteDecision(panel, act, bulk, n, label) {
+        try {
+            var pc = _pc(); if (!pc) return;
+            if (!pc.aiDecisions || typeof pc.aiDecisions !== 'object') pc.aiDecisions = {};
+            var k = String(panel || 'unknown');
+            var d = pc.aiDecisions[k] || (pc.aiDecisions[k] = { label: '', accepted: 0, edited: 0, dismissed: 0, bulkAccepted: 0, bulkDismissed: 0 });
+            if (label) d.label = String(label).replace(/^[^A-Za-z0-9]+/, '').slice(0, 80);
+            n = Math.max(1, n | 0);
+            if (act === 'accept') { d.accepted += n; if (bulk) d.bulkAccepted += n; }
+            else if (act === 'edit') d.edited += n;
+            else if (act === 'dismiss') { d.dismissed += n; if (bulk) d.bulkDismissed += n; }
+        } catch (_) {}
+    }
+    // How much the engineers lean on the AI: at the panel (changed or rejected before
+    // accepting; accepted in bulk) and after it (accepted items edited later; accepted items
+    // never reviewed at all). Rates are null when there is nothing to divide.
+    function reliance() {
+        var pc = _pc() || {}, dec = pc.aiDecisions || {};
+        var panels = Object.keys(dec).map(function (k) {
+            var d = dec[k], shown = d.accepted + d.edited + d.dismissed;
+            return { panel: k, label: d.label || k, shown: shown, accepted: d.accepted, edited: d.edited, dismissed: d.dismissed,
+                bulkAccepted: d.bulkAccepted, overrideRate: shown ? (d.edited + d.dismissed) / shown : null };
+        });
+        var t = panels.reduce(function (a, p) { a.shown += p.shown; a.changed += p.edited + p.dismissed; a.bulk += p.bulkAccepted; a.accepted += p.accepted + p.edited; return a; }, { shown: 0, changed: 0, bulk: 0, accepted: 0 });
+        var rows = aiRows().map(function (x) { return x.row; });
+        var editedAfter = rows.filter(function (r) { return (r.aiEdits || []).length > 0 || r.humanEdited === true; }).length;
+        var unreviewed = rows.filter(function (r) {
+            try { if (root.AiBadges && typeof root.AiBadges.confidence === 'function') { var c = root.AiBadges.confidence(r); if (c && typeof c.reviewed === 'boolean') return !c.reviewed; } } catch (_) {}
+            return r.humanEdited !== true;
+        }).length;
+        return {
+            panels: panels,
+            drafted: t.shown, changedOrRejected: t.changed, overrideRate: t.shown ? t.changed / t.shown : null,
+            bulkAccepted: t.bulk, bulkShare: t.accepted ? t.bulk / t.accepted : null,
+            aiItems: rows.length, editedAfterAccept: editedAfter, neverReviewed: unreviewed
+        };
+    }
+    function relianceLine() {
+        var r = reliance(), pct = function (x) { return x == null ? '—' : Math.round(x * 100) + '%'; };
+        if (!r.drafted && !r.aiItems) return 'No AI drafts decided in this project yet.';
+        return 'Engineers changed or rejected ' + pct(r.overrideRate) + ' of ' + r.drafted + ' AI-drafted item(s) at review · ' +
+            pct(r.bulkShare) + ' of accepted items came in by "Accept all" · ' + r.editedAfterAccept + ' of ' + r.aiItems + ' AI item(s) edited after acceptance · ' +
+            r.neverReviewed + ' never reviewed (these block the hand-off gate).';
+    }
+
     // ---- reporting ----------------------------------------------------------------------------
     function summary(row) {
         if (!row || row.aiGenerated !== true) return null;
@@ -272,7 +339,8 @@
 
     var api = { KEEP_TEXT: KEEP_TEXT, MAX_LOG: MAX_LOG, recordCall: recordCall, call: call, matchCall: matchCall,
         fields: fields, replay: replay, observe: observe, aiRows: aiRows, sweep: sweep, tick: tick, hookSave: _hookSave,
-        summary: summary, cardLine: cardLine, csv: csv, callsCsv: callsCsv, fingerprint: _fnv };
+        summary: summary, cardLine: cardLine, csv: csv, callsCsv: callsCsv, fingerprint: _fnv,
+        noteDecision: noteDecision, reliance: reliance, relianceLine: relianceLine };
     try { root.SLAiAudit = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

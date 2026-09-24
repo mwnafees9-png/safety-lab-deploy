@@ -49,17 +49,17 @@ function mod(extra) {
     const id2 = A.recordCall({ feature: 'pra.draft', system: 'SYS', messages: [{ role: 'user', content: 'U2' }], text: 'x' });
     check('A1: a different input gives a different input fingerprint', A.call(id2).inputHash !== e1.inputHash);
     for (let i = 0; i < 40; i++) A.recordCall({ feature: 'doc.qa', text: 't' + i });
-    const log = M.projectConfig.aiAuditLog;
+    const log = M.projectConfig.aiDraftLog;
     check('A1: raw text is kept for the most recent ' + A.KEEP_TEXT + ' calls only; older ones keep the fingerprint',
         log.filter(e => e.output != null).length === A.KEEP_TEXT && log[0].output === undefined && log[0].outputTrimmed === true && log[0].outputHash === e1.outputHash);
     M = mod();
     for (let i = 0; i < M.SLAiAudit.MAX_LOG + 7; i++) M.SLAiAudit.recordCall({ feature: 'doc.qa', text: '' });
-    check('A1: beyond the cap the oldest entries are dropped and COUNTED', M.projectConfig.aiAuditLog.length === M.SLAiAudit.MAX_LOG && M.projectConfig.aiAuditDropped === 7 && M.projectConfig.aiAuditLog[0].id === 'AIC-000008');
+    check('A1: beyond the cap the oldest entries are dropped and COUNTED', M.projectConfig.aiDraftLog.length === M.SLAiAudit.MAX_LOG && M.projectConfig.aiDraftDropped === 7 && M.projectConfig.aiDraftLog[0].id === 'AIC-000008');
 
     // ---- A2 -----------------------------------------------------------------------------
     M = mod();
     const B = M.SLAiAudit;
-    const log2 = M.projectConfig.aiAuditLog = [
+    const log2 = M.projectConfig.aiDraftLog = [
         { id: 'AIC-1', feature: 'zsa.draft', at: '2026-09-23T10:00:00.000Z', outcome: 'ok' },
         { id: 'AIC-2', feature: 'zsa.draft', at: '2026-09-23T11:00:00.000Z', outcome: 'ok' },
         { id: 'AIC-3', feature: 'zsa.draft', at: '2026-09-23T11:30:00.000Z', outcome: 'error' },
@@ -106,7 +106,7 @@ function mod(extra) {
     M.praData = [old]; M.zsaData = [row];
     const csv = B.csv().split('\n');
     check('A4: the export labels it too, and lists every AI row with call, model, prompt, input, edits', csv.length === 3 && /drafted before the audit trail; as first seen/.test(csv.find(l => /PRA-1/.test(l))) && /"AIC-5"/.test(csv.find(l => /Z-110/.test(l))) && /"2"/.test(csv.find(l => /Z-110/.test(l))));
-    check('A4: the calls export lists every logged call', B.callsCsv().split('\n').length === M.projectConfig.aiAuditLog.length + 1);
+    check('A4: the calls export lists every logged call', B.callsCsv().split('\n').length === M.projectConfig.aiDraftLog.length + 1);
     M.zsaData = [{ zoneId: 'manual', desc: 'no ai' }];
     check('A4: manual rows are never touched', B.sweep().rows === 1 && M.zsaData[0].aiOriginal === undefined);
 
@@ -128,6 +128,26 @@ function mod(extra) {
         check('A4b: the queued sweep records the edit signed by this user', zr.aiEdits && zr.aiEdits.length === 1 && zr.aiEdits[0].by === 'K. Lee' && zr.aiEdits[0].via === 'edit');
     }
 
+    // ---- A4c: the cost log (core_modules.js aiAuditLog) and the draft log never mix -----
+    {
+        const C = mod();
+        // what v1.0 left behind: its AIC entries inside the cost log, among cost entries
+        C.projectConfig.aiAuditLog = [{ ts: 1, feature: 'doc.qa', model: 'm', cost: 0.01 }, { id: 'AIC-000001', feature: 'pra.draft', outcome: 'ok', at: '2026-09-23T10:00:00.000Z' },
+            { ts: 2, feature: 'embed', cost: 0 }, { id: 'AIC-000002', feature: 'zsa.draft', outcome: 'ok', at: '2026-09-23T10:01:00.000Z' }];
+        C.projectConfig.aiAuditCounter = 2;
+        const nid = C.SLAiAudit.recordCall({ feature: 'cma.draft', text: 'x' });
+        check('A4c: v1.0 entries move out of the cost log into the draft log, in order; cost entries stay', C.projectConfig.aiAuditLog.length === 2 && C.projectConfig.aiAuditLog.every(e => e.ts) &&
+            JSON.stringify(C.projectConfig.aiDraftLog.map(e => e.id)) === JSON.stringify(['AIC-000001', 'AIC-000002', 'AIC-000003']) && nid === 'AIC-000003' && !('aiAuditCounter' in C.projectConfig));
+        // the REAL cost-log writer (core_modules.js _logCall) alongside the draft log
+        const CORE = read('core_modules.js');
+        const at = CORE.indexOf('function _logCall('); const open = CORE.indexOf('{', at); let d = 0, end = open;
+        for (let i = open; i < CORE.length; i++) { if (CORE[i] === '{') d++; else if (CORE[i] === '}') { d--; if (d === 0) { end = i + 1; break; } } }
+        vm.runInContext(CORE.slice(at, end) + '; globalThis.__logCall = _logCall;', C);
+        for (let i = 0; i < 520; i++) C.__logCall({ feature: 'doc.qa', ok: true });
+        check('A4c: the cost log caps itself at 500 without touching a single draft-log entry', C.projectConfig.aiAuditLog.length === 500 && C.projectConfig.aiDraftLog.length === 3 && C.SLAiAudit.call('AIC-000001'));
+        check('A4c: ai_audit.js never writes the cost log field', !/pc\.aiAuditLog\.push|aiAuditLog = \[\]/.test(AUD));
+    }
+
     // ---- A5 EXEC ------------------------------------------------------------------------
     const store = { 'safetyLab.ai.enabled': '1' };
     let behavior = 'ok';
@@ -145,12 +165,35 @@ function mod(extra) {
     vm.runInContext(read('ai_assistant.js'), sb, { filename: 'ai_assistant.js' });
     const AI = sb.window.SafetyLabAI;
     const r = await AI.complete({ feature: 'doc.qa', system: 'You answer.', messages: [{ role: 'user', content: 'Q?' }] });
-    const L = sb.window.projectConfig.aiAuditLog || [];
+    const L = sb.window.projectConfig.aiDraftLog || [];
     check('A5 EXEC: the real Provider.complete logs a successful call (feature, model, output, outcome)',
         r.text === 'The answer.' && L.length === 1 && L[0].feature === 'doc.qa' && L[0].model === 'claude-test-1' && L[0].output === 'The answer.' && L[0].outcome === 'ok' && L[0].stopReason === 'end_turn', JSON.stringify(L));
     behavior = 'fail';
     let threw = null; try { await AI.complete({ feature: 'doc.qa', system: 'S', messages: [{ role: 'user', content: 'Q2' }] }); } catch (e) { threw = e; }
     check('A5 EXEC: a failed call is logged as an error and the failure still reaches the caller', threw && /502/.test(threw.message) && L.length === 2 && L[1].outcome === 'error' && /502/.test(L[1].error));
+
+    // ---- A5b EXEC: the per-project AI off switch ----------------------------------------
+    {
+        let calls = 0;
+        const sb2 = { console: sb.console, URLSearchParams, setTimeout, clearTimeout, location: { search: '' }, localStorage: sb.localStorage, navigator: sb.navigator, document: sb.document };
+        sb2.window = { projectConfig: { aiSettings: { projectAiOff: true } } };
+        ['localStorage', 'location', 'document', 'navigator', 'console'].forEach(k => sb2.window[k] = sb2[k]);
+        sb2.window.AiClient = { isConfigured: () => true, isProxyMode: () => true, messages: async () => { calls++; return { model: 'm', content: [{ text: 'x' }] }; }, embed: async () => { calls++; return [0]; } };
+        sb2.projectConfig = sb2.window.projectConfig;
+        vm.createContext(sb2);
+        vm.runInContext('(function(window){' + AUD + '\n})(window);', sb2);
+        vm.runInContext(read('ai_assistant.js'), sb2);
+        let err = null; try { await sb2.window.SafetyLabAI.complete({ feature: 'doc.qa', messages: [{ role: 'user', content: 'Q' }] }); } catch (e) { err = e; }
+        const L2 = sb2.window.projectConfig.aiDraftLog || [];
+        check('A5b EXEC: with the project switch on, Provider.complete sends NOTHING and says why', err && err.projectAiOff === true && /switched off for this project/.test(err.message) && calls === 0);
+        check('A5b EXEC: the refusal is itself on the record', L2.length === 1 && L2[0].outcome === 'refused');
+        sb2.window.projectConfig.aiSettings.projectAiOff = false;
+        const ok2 = await sb2.window.SafetyLabAI.complete({ feature: 'doc.qa', messages: [{ role: 'user', content: 'Q' }] });
+        check('A5b EXEC: unticked, calls flow again', ok2.text === 'x' && calls === 1);
+        const CORE = read('core_modules.js'), BND = read('bindings_modules.js'), HLP = read('helpers_modules.js'), IDX2 = read('index.html');
+        check('A5b: direct callers are guarded too (AiClient.messages checks the switch before anything is sent)', /projectConfig\.aiSettings\.projectAiOff === true\) throw new Error\('AI is switched off for this project/.test(CORE) && CORE.indexOf('projectAiOff === true) throw') < CORE.indexOf('const _refused = controlledRefusal();'));
+        check('A5b: the setting is on the AI Settings page, saved and loaded', /id="ai-project-off"/.test(IDX2) && /projectConfig\.aiSettings\.projectAiOff = !!_offEl\.checked/.test(BND) && /_offEl\.checked = ais\.projectAiOff === true/.test(HLP));
+    }
 
     // ---- A6 EXEC ------------------------------------------------------------------------
     const SUP = read('support_modules.js');
@@ -168,6 +211,29 @@ function mod(extra) {
     const ed = store2[0];
     check('A6 EXEC: a worksheet edit of an AI row keeps every AI marker and the audit fields', ed.threat === 'Bird strike (windshield)' && ed.aiGenerated === true && ed.aiFeature === 'pra.draft' && ed.aiCallId === 'AIC-9' && ed.aiOriginal.threat === 'Bird strike' && ed.aiSeen === 'abc', JSON.stringify(ed));
     check('A6 EXEC: …and marks it engineer-edited (which counts it as reviewed)', ed.humanEdited === true && /^\d{4}-/.test(ed.humanEditedAt));
+
+    // ---- A8: decisions and the reliance measure ------------------------------------------
+    {
+        const R = mod({ AiBadges: { confidence: r => ({ reviewed: r.humanEdited === true || r.approved === true }) } });
+        const S = R.SLAiAudit;
+        S.noteDecision('ai-rev-panel-pra', 'accept', false, 1, '✨ AI · PRA draft');
+        S.noteDecision('ai-rev-panel-pra', 'accept', true, 5);
+        S.noteDecision('ai-rev-panel-pra', 'edit');
+        S.noteDecision('ai-rev-panel-pra', 'dismiss', true, 3);
+        const d = R.projectConfig.aiDecisions['ai-rev-panel-pra'];
+        check('A8: decisions are counted per panel, bulk separately, label kept', d.accepted === 6 && d.bulkAccepted === 5 && d.edited === 1 && d.dismissed === 3 && d.bulkDismissed === 3 && d.label === 'AI · PRA draft');
+        R.praData = [{ aiGenerated: true, humanEdited: true }, { aiGenerated: true }, { aiGenerated: true, approved: true }, { aiGenerated: true }];
+        const rl = S.reliance();
+        check('A8: override rate = changed or rejected ÷ decided (4 of 10); bulk share of accepted (5 of 7)', rl.drafted === 10 && rl.changedOrRejected === 4 && Math.abs(rl.overrideRate - 0.4) < 1e-9 && Math.abs(rl.bulkShare - 5 / 7) < 1e-9);
+        check('A8: after acceptance — edited later, and never reviewed (per the badges\' own verdict)', rl.aiItems === 4 && rl.editedAfterAccept === 1 && rl.neverReviewed === 2);
+        check('A8: the one-line summary says all of it in plain words', /changed or rejected 40% of 10/.test(S.relianceLine()) && /71% of accepted items came in by "Accept all"/.test(S.relianceLine()) && /2 never reviewed/.test(S.relianceLine()));
+        check('A8: an empty project says so', /No AI drafts decided/.test(mod().SLAiAudit.relianceLine()));
+        const AS2 = read('ai_assistant.js');
+        const panel = AS2.slice(AS2.indexOf('function _makeReviewPanel('), AS2.indexOf('function _makeReviewPanel(') + 16000);
+        check('A8: the review panel counts accept, edit, dismiss, Accept all and Dismiss all — and only on panels that accept',
+            /if \(hasAccept && window\.SLAiAudit\) window\.SLAiAudit\.noteDecision/.test(panel) && /if \(okSave\) _decide\(diff\.length \? 'edit' : 'accept'\)/.test(panel) && /if \(ok\) _decide\('accept'\)/.test(panel) && /_decide\('dismiss'\);/.test(panel) && /_decide\('dismiss', true, items\.length\)/.test(panel) && /if \(n\) _decide\('accept', true, n\)/.test(panel));
+        check('A8: the provenance view shows the reliance line and no longer calls acceptance a review', /SLAiAudit\.relianceLine\(\)/.test(AS2) && !/every item below was AI-drafted and accepted by a human reviewer/.test(AS2));
+    }
 
     // ---- A7 -----------------------------------------------------------------------------
     const AS = read('ai_assistant.js'), IDX = read('index.html');

@@ -423,6 +423,9 @@ const AiClient = (function(){
         const _cap = Number(s.costCap) || 0;   // 0 = uncapped (default); a per-customer cap is honored when set
         if (_cap > 0 && getSessionCost() >= _cap) throw new Error('Session cost cap ($' + _cap + ') reached. Raise or clear the cap in AI Settings, or reset the session.');
         const model = opts.model || s.anthropicModel;
+        // 23 Sep 2026 (G10) — the per-project off switch also guards direct callers (reports,
+        // the settings connection test) that do not go through Provider.complete.
+        try { if (projectConfig && projectConfig.aiSettings && projectConfig.aiSettings.projectAiOff === true) throw new Error('AI is switched off for this project (AI Settings). Nothing was sent.'); } catch (e) { if (/switched off/.test(e.message)) throw e; }
         const _refused = controlledRefusal();
         if (_refused) throw new Error(controlledRefusalMessage(_refused));
         const _unset = unconfiguredRefusal();

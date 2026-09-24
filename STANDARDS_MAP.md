@@ -211,7 +211,7 @@ These rest on the agents' reading of EASA Issue 03, NIST AI RMF and MOC-5. They 
 
 ## 6. Gaps and proposals
 
-**Status, 23 Sep 2026:** G1, G2, G4, G8, G9 and the G10 audit trail are done. G3, G5, G6, G7 are features still to plan; the rest of G10 (over-reliance metrics, AI off switch per project) is open.
+**Status, 23 Sep 2026:** G1, G2, G4, G8, G9 and G10 are done. G3, G5, G6, G7 are the feature builds still to do.
 
 | # | Gap | Source | Size (my estimate) |
 |---|---|---|---|
@@ -224,7 +224,7 @@ These rest on the agents' reading of EASA Issue 03, NIST AI RMF and MOC-5. They 
 | G7 | No PA audit objects (issue / finding / action item, sampling) | 4754B 5.7, E.7 | Medium |
 | G8 | Common naming convention for FTA basic events across groups | 4754B App B.4.2.1 | **Closed 23 Sep (covered).** Display IDs are unique project-wide unless the nodes share one logicalId (the same physical event), which the BDD counts once across every tree; `node_identity.js` declares ownership. Tests: `regression_node_identity*`. Soft spot noted: an imported supplier tree naming the same physical thing under a different ID is not flagged |
 | G9 | ZSA query sheets lack assessor, method, date and OPEN/closed per finding. **Verify** against `phys_hazards.js`, which has status and method | 4761A Q.14.4.6 | **Done 23 Sep.** Verified real (phys_hazards records promoted hazards, not findings). `zsa_record.js`: every finding carries assessor, method, date, open/closed; closing needs the full record; INV-51 advisory. `regression_zsa_record.test.js` |
-| G10 | Section 5 items for our own AI (audit trail, Level 1B, over-reliance, tool-qualification position) | Issue 03, NIST, MOC-5 | **Audit trail done 23 Sep.** Position (Waqas): the AI is ADVISORY ONLY — no certification credit is claimed for its output, so no tool qualification. `ai_audit.js`: every AI call logged (model, prompt version, input/output fingerprints, outcome; raw text for the last 30); every AI artifact keeps its original as drafted and each edit (who/what/from/to; sync-arrived edits unnamed); worksheet edits no longer strip AI provenance. `regression_ai_audit.test.js`. Still open under G10: over-reliance metrics (override rate), per-project AI off switch check |
+| G10 | Section 5 items for our own AI (audit trail, Level 1B, over-reliance, tool-qualification position) | Issue 03, NIST, MOC-5 | **Audit trail done 23 Sep.** Position (Waqas): the AI is ADVISORY ONLY — no certification credit is claimed for its output, so no tool qualification. `ai_audit.js`: every AI call logged (model, prompt version, input/output fingerprints, outcome; raw text for the last 30); every AI artifact keeps its original as drafted and each edit (who/what/from/to; sync-arrived edits unnamed); worksheet edits no longer strip AI provenance. `regression_ai_audit.test.js`. Finished same day: over-reliance measure (decisions counted per project at every review panel incl. Accept all / Dismiss all; override rate, bulk share, edited-after-accept, never-reviewed — shown in the AI provenance view) and a per-project AI off switch (AI Settings; enforced in Provider.complete and AiClient.messages, every backend). The v1.0 log shared a field with the cost log and was moved to its own (`aiDraftLog`) with migration |
 | P1 | F3230 X2 qualitative argument template (conventional / simple / likelihood / CCA) | F3230 X2 | Medium |
 | P2 | USOC workflow (see G5) | F3061 X2 | — |
 

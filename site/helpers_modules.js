@@ -6291,6 +6291,7 @@ function renderAiAssistant(){
     set('ai-voyage-model',    ais.voyageModel    || 'voyage-3-large');
     set('ai-max-tokens',      ais.maxTokens      || 4096);
     set('ai-cost-cap',        ais.costCap        || '');
+    try { const _offEl = document.getElementById('ai-project-off'); if (_offEl) _offEl.checked = ais.projectAiOff === true; } catch (_) {}
     set('ai-top-k',           ais.topK           || 5);
     // Self-hosted / on-prem backend (#56) — device-level routing config (localStorage).
     try {
