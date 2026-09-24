@@ -82,6 +82,14 @@
         { id: 'A5-2', grp: 'A-5 Verification', kind: 'auto', text: 'Quantitative safety objectives are met by the as-built design (verification trees vs targets).',
           eval: () => { try { const rows = (typeof ccmrLatentSweep === 'function') ? ccmrLatentSweep(true) : []; const ex = rows.filter(r => r.exceeds).length; const g = _gateState(['SSA']); return _res(ex === 0 && g.done === 1 ? 'satisfied' : ex ? 'open' : 'partial', ex + ' latent bound(s) exceeded · SSA ' + g.detail.split(':')[1]); } catch (_) { return _res('open', 'sweep unavailable'); } } },
         { id: 'A5-3', grp: 'A-5 Verification', kind: 'attest', text: 'Verification independence is established where the assurance level demands it.' },
+        { id: 'A5-4', grp: 'A-5 Verification', kind: 'auto', text: 'Integration testing looks for unintended behavior with a stated strategy and a list of stimuli, and each result is recorded.',
+          eval: () => {
+              if (typeof SLStimuli === 'undefined') return _res('partial', 'integration stimuli module not loaded');
+              const s = SLStimuli.summary();
+              if (!s.strategy && !s.stimuli) return _res('open', 'no strategy or stimuli recorded; open Unintended behavior tests on the Requirements Repository page');
+              const line = (s.strategy ? 'strategy recorded' : 'no strategy') + ' · ' + s.stimuli + ' stimul' + (s.stimuli === 1 ? 'us' : 'i') + ', ' + s.run + ' run · ' + s.found + ' with unintended behavior found' + (s.problems ? ' · ' + s.problems + ' item(s) flagged by INV-56' : '');
+              return _res((s.strategy && s.stimuli && !s.problems) ? 'satisfied' : 'partial', line);
+          } },
         // ---- A-6 · Configuration management
         { id: 'A6-1', grp: 'A-6 Config management', kind: 'auto', text: 'Configuration items are identified and baselines established.',
           eval: () => { const b = (typeof projectBaselines !== 'undefined' ? projectBaselines : []); return b.length ? _res('satisfied', b.length + ' baseline(s), SHA-256 sealed') : _res('open', 'no baselines yet — baseline before major reviews'); } },

@@ -958,7 +958,7 @@ const Reports = (function() {
                         cma_grid:          _buildCmaGrid(cma),
                         coffe_table:       _buildCoffeTableV2(fhaSource, scope, sys, asmSource),
                         validation_matrix: _buildValidationMatrix(reqSource, funcSource),
-                        verification_matrix: _buildVerificationMatrix(reqSource),
+                        verification_matrix: _buildVerificationMatrix(reqSource, sys),
 
                         // Phase E1 — Q-format artifact family (Phase C/D stores)
                         interdep_table:        scope === 'aircraft' ? _buildInterdepTable() : [],
@@ -1973,14 +1973,19 @@ const Reports = (function() {
     }
 
     // ARP 4754B §5.5.6 verification tracking matrix.
-    function _buildVerificationMatrix(reqSource) {
+    // G6 (23 Sep 2026): integration stimuli looking for unintended behavior (ARP4754B
+    // §4.6.4) follow the requirement rows, same columns: all of them in an aircraft
+    // report, a system's own in that system's report.
+    function _buildVerificationMatrix(reqSource, sys) {
+        let stim = [];
+        try { if (typeof SLStimuli !== 'undefined') stim = SLStimuli.verificationRows(sys ? sys.id : null); } catch (_) { stim = []; }
         return (reqSource || []).map(r => ({
             'Requirement': (r.traceId || r.id || ('REQ-' + r.internalId)) + ' — ' + (r.text || ''),
             'Associated function': Array.isArray(r.traceIds) ? r.traceIds.join(', ') : (r.traceId || r.traceTo || ''),
             'Verification method(s) applied': r.verifMethod || r.verMethod || (Array.isArray(r.mocEntries) ? r.mocEntries.map(m => m.method).filter(Boolean).join(', ') : ''),
             'Verification procedure & results reference(s)': r.verArtifact || '',
             'Verification conclusion (pass/fail, coverage)': r.verifStatus || r.vvStatus || 'Pending',
-        }));
+        })).concat(stim);
     }
 
     // ========================================================================
