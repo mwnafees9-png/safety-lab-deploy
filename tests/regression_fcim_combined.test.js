@@ -75,7 +75,8 @@ const gen = (am.match(/function genFcimMonitoring\(scopeKey\)\{[\s\S]*?\n    \}/
 check('the generator exists', gen.length > 400);
 check('it is wired into generate()', /if\(opts\.fcimMonitor\) candidates\.push\(\.\.\.genFcimMonitoring\(scope\)\);/.test(am));
 check('the orphan sweep knows it (the §3.1 trap, not repeated)',
-  /\(g === 'fcim-monitor' && opts\.fcimMonitor\)/.test(am),
+  // 23 Sep 2026: the usoc-info generator (G5) joined the same family and the same sweep clause.
+  /\(g === 'fcim-monitor' && opts\.fcimMonitor\)/.test(am) || /\(\(g === 'fcim-monitor' \|\| g === 'usoc-info'\) && opts\.fcimMonitor\)/.test(am),
   'a generator outside the sweep leaves stale rows behind forever');
 check('the AutoReq panel offers it, defaulted on, AC-scope-gated',
   /ar-gen-fcim-mon/.test(idx) && /fcimMonitor: {6}cb\('ar-gen-fcim-mon'\)/.test(hlp.replace(/\s+cb/g, '      cb')) || /fcimMonitor:\s*cb\('ar-gen-fcim-mon'\)/.test(hlp));

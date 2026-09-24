@@ -4849,6 +4849,7 @@ window._bulkSel = new Set();
         'gate-indep-or':  'OR gate → No-single-failure claim',
         'pra-zonal':      'PRA hazard → Zonal protection requirement',
         'pra-scenario':   'PRA scenario → Traced protection requirement',
+        'usoc-info':      'Unsafe operating condition → Timely crew information requirement',
         'zsa-separation': 'ZSA zone → Housed-function separation requirement',
         'zsa-phys':       'ZSA Catastrophic zone → Physical separation requirement'
     };
@@ -4858,7 +4859,7 @@ window._bulkSel = new Set();
         'gate-indep-and', 'gate-indep-dev', 'gate-indep-phys',
         'gate-indep-ccf-lib', 'gate-indep-ccf-group', 'gate-indep-cma',
         'gate-indep-or',
-        'pra-zonal', 'pra-scenario', 'zsa-separation', 'zsa-phys'
+        'pra-zonal', 'pra-scenario', 'zsa-separation', 'zsa-phys', 'usoc-info'
     ];
 
     function _esc(s) {

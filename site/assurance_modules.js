@@ -2843,7 +2843,8 @@ const AutoReq = (function(){
         'pra-scenario':   { text: '${text}', rat: '${rat}' },
         'zsa-separation': { text: '${text}', rat: '${rat}' },
         'zsa-phys':       { text: '${text}', rat: '${rat}' },
-        'fcim-monitor':   { text: '${text}', rat: '${rat}' }
+        'fcim-monitor':   { text: '${text}', rat: '${rat}' },
+        'usoc-info':      { text: '${text}', rat: '${rat}' }
     };
 
     // Diff a previous req against the live generated candidate to figure out what changed.
@@ -2923,6 +2924,9 @@ const AutoReq = (function(){
         if(opts.hfOperational) candidates.push(...genHfOperational(scope));
         if(opts.iface) candidates.push(...genInterface(scope));
         if(opts.fcimMonitor) candidates.push(...genFcimMonitoring(scope));
+        // 23 Sep 2026 (G5) — unsafe system operating conditions owe timely crew information
+        // (F3061 §4.2.6); same crew-awareness family, same switch (usoc.js).
+        if(opts.fcimMonitor && typeof SLUsoc !== 'undefined') candidates.push(...SLUsoc.requirements(fp, scope));
 
         // Phase 55.0.8 — apply per-org template overrides to every candidate.
         // The override gets a snapshot of the default text+rat as ${text}/${rat}
@@ -2973,7 +2977,7 @@ const AutoReq = (function(){
                 (g.startsWith('zsa') && opts.zsaSeparation) ||
                 (g.startsWith('hf-op') && opts.hfOperational) ||
                 (g.startsWith('iface') && opts.iface) ||
-                (g === 'fcim-monitor' && opts.fcimMonitor)
+                ((g === 'fcim-monitor' || g === 'usoc-info') && opts.fcimMonitor)
             );
             // Pending a move out of this bucket — its source still exists, it just belongs
             // to someone else now. Reporting it as an orphan would invite the analyst to
@@ -3091,7 +3095,8 @@ const AutoReq = (function(){
         'pra-scenario':     'PRA scenario → Traced protection requirement',
         'zsa-separation':   'ZSA → Housed-function separation',
         'zsa-phys':         'ZSA → Physical separation (Cat zone)',
-        'fcim-monitor':     'FCIM pair → Crew-awareness monitoring (annunciation credit)'
+        'fcim-monitor':     'FCIM pair → Crew-awareness monitoring (annunciation credit)',
+        'usoc-info':        'USOC → Timely crew information (F3061 §4.2.6)'
     };
 
     // ========================================================================

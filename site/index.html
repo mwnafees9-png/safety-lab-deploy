@@ -1237,6 +1237,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <div onclick="exportData('AC_FHA', 'pdf')">Export PDF</div>
                         <div onclick="openTemplateEditor()">🧩 Templates…</div>
                         <div onclick="Reports.open('AFHA')">Generate AFHA Report…</div>
+                        <div onclick="SLUsoc.open()">Unsafe operating conditions (F3061 X2)…</div>
+                        <div onclick="SLUsoc.download()">Export unsafe operating conditions (CSV)</div>
                         <div onclick="Reports.open('PASA')">Generate PASA Report…</div>
                         <div onclick="Reports.open('ASA')">Generate ASA Report…</div>
                     </div>
@@ -4122,7 +4124,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="bindings_modules.js?v=1.50" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <script src="misc_fn_modules.js?v=66.73" defer></script>
-    <script src="safety_lab.js?v=65.61" defer></script>
+    <script src="safety_lab.js?v=65.62" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4142,9 +4144,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.1" defer></script>
     <script src="pra_scenarios.js?v=1.0" defer></script>
+    <script src="usoc.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.34" defer></script>
+    <script src="assurance_modules.js?v=1.35" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
