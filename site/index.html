@@ -3222,6 +3222,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
         <div id="view-appa" style="display: none;">
             <div class="header-with-export"><h3>ARP4754B Process Objectives — Appendix A Matrix</h3></div>
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">Every development-assurance objective against live evidence: computed rows recompute from the model on every view, attestation rows are signed human acts. The audit-opening artifact, always current.</p>
+            <div style="display:flex; gap:8px; margin: 0 0 var(--s-3) 0;"><button type="button" class="btn-cyan" style="font-size:12px;" onclick="SLPaAudit.open()">Process assurance audits…</button><button type="button" class="ckpt-m-btn" style="font-size:12px;" onclick="SLPaAudit.download()">Export audits (CSV)</button></div>
             <div id="appa-host"></div>
         </div>
 
@@ -4145,6 +4146,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ai_audit.js?v=1.1" defer></script>
     <script src="pra_scenarios.js?v=1.0" defer></script>
     <script src="usoc.js?v=1.0" defer></script>
+    <script src="pa_audit.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
     <script src="assurance_modules.js?v=1.35" defer></script>
@@ -4180,7 +4182,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase P1 — evidence package export (born modular). -->
     <script src="evidence_package.js?v=2.8" defer></script>
     <!-- Phase P3 — 4754B App A objectives matrix (born modular; paraphrased summaries, live evidence). -->
-    <script src="objectives_matrix.js?v=1.2" defer></script>
+    <script src="objectives_matrix.js?v=1.3" defer></script>
     <!-- Phase P2 — problem reports / OPRs (born modular; upgrades the SSA E.4.d gate at runtime). -->
     <script src="problem_reports.js?v=1.2" defer></script>
     <!-- Phase P7 — MMEL/TLD dispatch analysis (born modular; evaluated through the live trees). Pro+ gated. -->

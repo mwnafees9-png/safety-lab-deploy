@@ -96,6 +96,14 @@
           eval: () => { const t = Object.keys(projectConfig.ckptTailored || {}).length; return _res('satisfied', t + ' signed tailoring record(s) — zero is a valid answer, silence is not'); } },
         { id: 'A7-3', grp: 'A-7 Process assurance', kind: 'auto', text: 'AI-assisted content is provenance-logged and human-accepted before use.',
           eval: () => { try { const g = (typeof AiFidelity !== 'undefined') ? AiFidelity.gateEval('PASA') : { pass: true, detail: 'n/a' }; const prov = (projectConfig.aiProvenance || []).length; return _res(g.pass ? 'satisfied' : 'open', prov + ' provenance record(s) · ' + g.detail); } catch (_) { return _res('partial', 'fidelity layer off'); } } },
+        { id: 'A7-4', grp: 'A-7 Process assurance', kind: 'auto', text: 'Process assurance audits are held against the plan, sampled repeatably, and their findings closed with evidence.',
+          eval: () => {
+              if (typeof SLPaAudit === 'undefined') return _res('partial', 'process assurance module not loaded');
+              const s = SLPaAudit.summary();
+              if (!s.audits) return _res('open', 'no process assurance audits recorded; open Process assurance audits on this page');
+              const line = s.audits + ' audit(s) · ' + s.areasCovered + '/' + s.areasTotal + ' process areas · ' + s.findings + ' finding(s), ' + s.openFindings + ' open · ' + s.openActions + ' open action(s)' + (s.problems ? ' · ' + s.problems + ' item(s) flagged by INV-55' : '');
+              return _res((s.openFindings || s.problems) ? 'partial' : 'satisfied', line);
+          } },
         // ---- A-8 · Certification liaison
         { id: 'A8-1', grp: 'A-8 Certification liaison', kind: 'attest', text: 'Certification basis and means of compliance agreed with the authority.' },
         { id: 'A8-2', grp: 'A-8 Certification liaison', kind: 'attest', text: 'Authority visibility into development and safety data is arranged (stage involvements).' },
