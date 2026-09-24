@@ -1653,6 +1653,8 @@ const Reports = (function() {
             openRequirements: openRequirements,
             assumptions: assumptions,
             unconfirmedAssumptions: unconfirmedAssumptions,
+            // P1 (23 Sep 2026): the recorded ASTM F3230 X2 argument behind a qualitative-only call.
+            qualArgument: _safeCall(() => (typeof SLQualArg !== 'undefined' && fcRow) ? SLQualArg.line(fcRow) : '', ''),
         };
     }
 
@@ -1668,6 +1670,7 @@ const Reports = (function() {
             'Protective Strategy': e.protectiveStrategy ? e.protectiveStrategy.detail : '',
             'Open Requirements': e.openRequirements ? e.openRequirements.length : 0,
             'Unconfirmed Assumptions': e.unconfirmedAssumptions ? e.unconfirmedAssumptions.length : 0,
+            'Qualitative Argument (F3230 X2)': e.qualArgument || '',
         }));
     }
 
