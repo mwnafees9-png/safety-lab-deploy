@@ -1529,3 +1529,63 @@ Everything below is OPEN on 12 Sep 2026. The redesign itself is DONE and live (H
 - **R16 — Prompt caching BUILT 12 Sep (afternoon), f7a8c00 web + 23ae01c proxy (item 16 of NEXT_SESSION).** Byte-identical packaging: the assembler records two cache breaks (after the skill body, after the source document), AiClient cuts the string into marked blocks on the wire; proxy meters reads 0.10x / writes 1.25x and now weights claude-opus-4-8 at 5x (it was missing → metered at 1x). DEPLOYED and PROVEN LIVE 12 Sep (direct call: 9,906 tokens written then read, $0.187 → $0.016; real AFHA batch: 49,189-token prefix, $1.6 per writing slice → $0.29 per reading call). Improvement to make: the batch pool runs first-wave slices in parallel so each pays the cache write; prime the cache with the first slice alone, then fan out. Follow-up decision: the stable-first REORDER variant (bigger hit rate on the chat/batch path, eval-gated ~$5) once the Console shows the measured hit rate.
 - **R17 — Electra on the proxy (from Waqas's deals file, 12 Sep).** electra.aero is comped in the app but the proxy meters by license token, so an Electra account without its own AI key drafts on Safety Lab's Anthropic bill. Decision: a proxy rule refusing comped domains without a BYO key (pairs with R9).
 - **R15 — SL-WP-0003 v3.0 hold.** Written as-built ahead of the build; do not send to Boom/ZeroAvia/Aero Vodochody/Boeing until customer-hosted (R7) and the packaged AI backends are live and Waqas has eyeballed them.
+
+## Q · Common cause analysis hardening (opened 26 Sep 2026, from Waqas's read of an external CCA hands-on guide)
+
+Source note: the ideas below were taken from a CC BY-NC guide that forbids use in training software. NOTHING from that
+PDF is to be pasted into kb_data files, prompts, docs or tests. Every item here is written in our own words and the
+method is cited to ED-135 / ARP4761A (App K ZSA, App L PRA, App M CMA) and the CS/AMC clauses, never to the guide.
+Census 26 Sep: cma_walkthrough (M.3.1 tailoring with required rationale), pra_library (trajectory/proximity
+footprints), zsa_walkthrough (hand/foothold, maintenance access) and assumption_moat already exist; the items below
+are the gaps. All are engineering-only, none touch customer data paths.
+
+### Small (each under a day)
+- **Q1 — Promote assumption to requirement.** One click on an Assumptions row creates a requirement carrying the
+  assumption ID, its source analysis tag and its rationale, and links the two. Thread check: a CREDITED assumption
+  with neither a verification nor a requirement behind it is a thread gap. (Assumptions page already has
+  Credited/uncredited and Rests on.)
+- **Q2 — Rationale is a required field on safety requirements.** Wall/thread check flags any safety-derived
+  requirement with an empty rationale. Rationale is where the "why" lives; the statement carries only the "what".
+- **Q3 — Source-analysis tag on requirements and assumptions** (FHA, PSSA, CMA, PRA, ZSA, HF). Report exports
+  filter by tag to build the per-analysis appendix automatically and reference each item by ID in the body.
+- **Q4 — Alert-independence check.** Where a mitigation is "alert the crew", the CMA questionnaire gets a standing
+  item: can the alert fail from the same cause as the malfunction it announces? Unanswered = open item on the thread.
+- **Q5 — Crew-response timing flag.** For any failure condition whose mitigation rests on crew action, record the
+  alert class (Warning / Caution / Advisory per CS 25.1322) and the assumed response time; a Hazardous or
+  Catastrophic condition whose ONLY defence is crew action is flagged. Ties to the HF lane crew-task links.
+- **Q6 — Engine and propeller severity anchors.** When the product under analysis is an engine or a propeller,
+  offer the CS-E 510(g) Minor/Major/Hazardous engine-effect lists and CS-P 15 propeller-effect lists as severity
+  anchors in the FHA (clause + title only, no reproduced text).
+
+### Medium (1 to 3 days)
+- **Q7 — Critical AND-gate test (CMA scoping).** For every AND gate in a compiled tree, two mechanical tests
+  against the FC budget: (a) treat the gate as OR; (b) OR the gate with a certain event. If the top event still
+  meets its budget under both, the gate is non-critical and needs no common-mode review; otherwise it is critical
+  and its inputs are queued for the CMA questionnaire. Show the list of critical gates per FC on the CMA page and
+  on the Golden Thread. Uses the existing trees and budget check; pure computation, no AI.
+- **Q8 — Requirement quality linter.** On the requirements page: exactly one "shall" per statement; flag let-out
+  words (except, unless, although, not limited to), hedges (usually, generally, often, normally), possibility words
+  (may, might, should, ought), vagueness (as appropriate, capable of), indefinite pronouns (this, these) and
+  statements of fact (is, are, was). Warnings, not blocks. Plus EARS templates (ubiquitous / While / When / Where /
+  If-then) offered when writing a new requirement. EARS is a public notation; the checklist wording is ours.
+- **Q9 — Design-baseline stamp.** Every analysis records the design baseline (and mock-up/DMU version) it was done
+  against; a project-level "current baseline" field; anything analysed against an older baseline shows as a
+  re-check item on the thread. This is the "analysis lags a moving design" pain expressed as a feature.
+- **Q10 — ZSA per-item record.** For each equipment item in a zone, two fields: threats it emits (heat, fluid,
+  debris, EMI, vibration; normal / abnormal / failed) and threats it is susceptible to. Adjacent-zone carry-over
+  where a threat crosses a boundary. Extends zonal_model rows; zsa_walkthrough already covers maintenance items.
+- **Q11 — PRA survivability framing.** PRA page states the risk is taken as certain (probability 1) and the
+  analysis is about surviving it; group the library by proximity / trajectory / environmental / structural; where a
+  Catastrophic outcome cannot be eliminated (fire, rotor burst) the page requires a written minimisation argument.
+
+### AI lane ground rules (Waqas's lane only; eval-gated per the skill-body rule)
+- **Q12 — Prosecutor stance.** FHA and CMA prompts start from "assume this design is unsafe and look for the
+  evidence" rather than compiling evidence that it is safe.
+- **Q13 — No threat is far-fetched.** Common-mode candidates are never dismissed for being unlikely-sounding;
+  failure rates are treated as predictions, and the common mode may be more likely than either AND-gate input.
+- **Q14 — Defence order.** Design out first, safeguard second, inform the crew third; "inform the crew" is never
+  accepted as the only line of defence against Hazardous or Catastrophic.
+
+### Marketing (company voice, our own words, no text from the guide)
+- **Q15 — Accident series for LinkedIn:** TWA 800, Nimrod XV230, Austrian OF111 (2004), Air France 4590, Air India
+  171. One post each: the common-cause analysis that would have caught it and the Safety Lab page that runs it.
