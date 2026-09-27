@@ -1600,11 +1600,16 @@ are the gaps. All are engineering-only, none touch customer data paths.
   CMA page: panel above the table (critical first, "show all"; reviewed by which CMA, "Review in CMA" ticks the
   gate in the form and names the claim). Golden Thread: a "Critical gates" stage before Common cause, CHECK
   while a critical gate has no non-suggested CMA. INV-58 (advisory). Not shipped yet; Waqas ships.
-- **Q8 — Requirement quality linter.** On the requirements page: exactly one "shall" per statement; flag let-out
-  words (except, unless, although, not limited to), hedges (usually, generally, often, normally), possibility words
-  (may, might, should, ought), vagueness (as appropriate, capable of), indefinite pronouns (this, these) and
-  statements of fact (is, are, was). Warnings, not blocks. Plus EARS templates (ubiquitous / While / When / Where /
-  If-then) offered when writing a new requirement. EARS is a public notation; the checklist wording is ours.
+- **Q8 — Requirement quality linter. DONE 27 Sep 2026** (`site/req_lint.js` 1.0, `tests/regression_req_lint.test.js`
+  31/31, eight mutations proved red). `SLReqLint.lint(text)`: one "shall" (none = "reads as a statement", two or
+  more = "split"); let-outs, hedges, possibility words, vague phrases, indefinite pronouns, whole words any case,
+  phrases across whitespace; "is / are / was" is a statement of fact only when there is no "shall" (an "is" in a
+  When / While clause is fine); "shall not" is one shall. Warnings only. Surfaces: "wording n" chip in the
+  statement cell of both requirement tables (pager-safe), a summary line above each table (amber count or green
+  "all n statements read as one testable shall"), a live line under the statement field while typing, five EARS
+  buttons under the field (Ubiquitous / While / When / Where / If, then; our wording; an empty field takes the
+  template, a filled one asks for a second click), INV-63 advisory. Generated rows already follow the one-shall
+  house style, so this mostly catches hand-written rows.
 - **Q9 — Design-baseline stamp.** Every analysis records the design baseline (and mock-up/DMU version) it was done
   against; a project-level "current baseline" field; anything analysed against an older baseline shows as a
   re-check item on the thread. This is the "analysis lags a moving design" pain expressed as a feature.

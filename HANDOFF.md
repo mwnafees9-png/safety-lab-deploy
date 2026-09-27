@@ -1,3 +1,15 @@
+## 27 Sep 2026 — Q8 REQUIREMENT WORDING CHECK + EARS. BUILT, 31/31 + eight mutations red, wall 352/352, NOT YET DEPLOYED (Waqas ships).
+
+**THE ASK.** Section Q "medium" items in the order I proposed and Waqas accepted: Q8, Q11, Q10, Q9; Q12–Q14 (AI prompt stance) parked as eval-gated with no eval spend. Q8: one "shall" per statement; flag let-outs, hedges, possibility words, vagueness, indefinite pronouns and statements of fact; warnings not blocks; EARS templates on the form.
+
+**BUILT: `site/req_lint.js` 1.0 (loads after crew_credit.js; `SLReqLint`).** `lint(text)` → { shallCount, findings[{code, label, word, text}] }; codes no-shall, many-shall, let-out, hedge, possibility, vague, pronoun, fact. Word match is whole-word, case-insensitive, phrases across whitespace. Fact words only fire when there is no shall (a shall-sentence's When/While clause legitimately carries "is"). `lintStore` / `findingsAll` over live rows (deleted, archived, obsolete skipped) in aircraft and every system; INV-63 advisory. Surfaces: `decorateTable` chip in the statement cell (td 4) keyed by data-iid, observers on both req bodies, wraps renderACReq / renderSysReq; `renderSummary` line inserted before #ac-req-table / #sys-req-table; `installField` puts the EARS buttons and a live line under #ac-req-text / #sys-req-text (input listener); `applyEars` fills an empty field, asks for a second click on a filled one, selects the first placeholder. Script-count guard 250 → 251.
+
+**PROVED.** E1 the check (every word list, whole words, case, phrase across a line break, "shall not", fact-only-without-shall, blanks), E2 stores + INV-63, E3 chip + summary + pager observer, E4 form (install once, five templates each with one shall, empty vs filled field, live refresh), E5 wiring. Mutations red: two shalls allowed; no-shall off; substring match; fact words inside shall sentences; "capable of" dropped; no chip; template overwrites; deleted rows linted.
+
+**NOT DONE / KNOWN.** Not checked live yet. The pronoun rule fires on every "this / these", including "this aircraft"; it is a warning by design. No AI involved.
+
+**NEXT.** Ship, then Q11 (PRA survivability framing), Q10 (ZSA per-item threats), Q9 (design-baseline stamp).
+
 ## 27 Sep 2026 — Q4 + Q5 + Q6 CREW CREDIT (alert independence, crew response, engine/propeller anchors). BUILT, 61/61 + twelve mutations red, wall 351/351, NOT YET DEPLOYED (Waqas ships).
 
 **THE ASK.** Waqas: "download those standards and get a good read on them before touching anything". Downloaded and read in full (cloud workspace, not the repo): EASA Easy Access Rules CS-E Amendment 4 (CS-E 510 + AMC E 510), CS-P Amendment 1 (CS-P 15, CS-P 150, AMC P 150), FAA AC 25.1322-1, FAA AC 25.1309-1B; §33.75, §35.15, §25.1322 from the eCFR. Briefed him, plan confirmed ("go go go").
