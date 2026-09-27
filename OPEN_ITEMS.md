@@ -1547,8 +1547,8 @@ are the gaps. All are engineering-only, none touch customer data paths.
   assumption's first failure condition; `reqSource {generator:'assumption', sourceId:'asm:<id>'}` +
   `linkedAsmIds` one way, `asm.requirementIds` the other. Second click finds the existing row. Gap = credited
   (credited posture written) + alive + not Verified + no requirement: badge on the row, "Requirement basis"
-  stage on the Golden Thread (with a promote link), INV-59 advisory. Not yet: rows on pager pages 2+ of a
-  register over 50 assumptions are not decorated until the table re-renders.
+  stage on the Golden Thread (with a promote link), INV-59 advisory. v1.1: the four table bodies are
+  watched, so rows the pager or a single-row patch draws are decorated too (seen live on Barracuda page 2).
 - **Q2 — Rationale is a required field on safety requirements. DONE 27 Sep 2026** (same module). The two
   requirement forms refuse to log a Safety-class requirement with an empty rationale (toast + focus; other
   classes pass). Safety-derived = Safety class, or generated, or carries an analysis. Empty rationale → "no

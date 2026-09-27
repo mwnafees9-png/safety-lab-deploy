@@ -268,6 +268,25 @@ const req = (iid, extra) => Object.assign({ internalId: iid, type: 'Safety', tex
     check('B7: a render is wrapped once and still runs', RB._wrapRender('renderACAssumptions', () => {}) === true && RB._wrapRender('renderACAssumptions', () => {}) === false && (sb.renderACAssumptions(), n === 1));
 }
 
+// ---- B7b the pager: rows drawn without the renderer are still decorated ---------------
+{
+    const asms = [asm('P-1'), asm('P-2')];
+    const sb = load({ acReqData: [], acAssumptionsData: asms, acFhaData: [], systemsData: [] }, { setTimeout: f => { f(); return 0; } });
+    const RB = sb.SLReqBasis;
+    const doc = makeDoc(); sb.document = doc;
+    const cbs = {};
+    sb.MutationObserver = function (f) { this.observe = (el, opts) => { cbs[el.id] = f; this.opts = opts; }; };
+    const asmBody = doc.el('tbody', 'ac-asm-body'); doc.el('tbody', 'sys-asm-body'); doc.el('tbody', 'ac-req-body'); doc.el('tbody', 'sys-req-body');
+    check('B7b: the four bodies are watched once', RB.watchTables() === true && RB.watchTables() === false && Object.keys(cbs).sort().join(',') === 'ac-asm-body,ac-req-body,sys-asm-body,sys-req-body');
+    asmBody.children.push(asmRow(doc, 'P-1')); asmBody.children.push(asmRow(doc, 'P-2'));
+    check('B7b: rows are not decorated until the observer fires', asmBody.children.every(tr => tr.getAttribute('data-rb') !== '1'));
+    cbs['ac-asm-body']([]);
+    check('B7b: rows drawn by the pager are decorated on the next tick', asmBody.children.every(tr => tr.getAttribute('data-rb') === '1') && /promoteClick\('ac','P-2'\)/.test(asmBody.children[1].children[0].innerHTML));
+    cbs['ac-asm-body']([]);
+    check('B7b: a second fire decorates nothing twice', (asmBody.children[1].children[0].innerHTML.match(/promoteClick/g) || []).length === 1);
+    check('B7b: no document, no observer, no error', load({}).SLReqBasis.watchTables() === false);
+}
+
 // ---- B8 wiring ---------------------------------------------------------------------------------------
 {
     check('B8: req_basis.js is loaded right after critical_gates.js', /critical_gates\.js\?v=[\d.]+" defer><\/script>\s*(<!--[^>]*-->\s*)?<script src="req_basis\.js\?v=[\d.]+" defer><\/script>/.test(IDX));

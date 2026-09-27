@@ -1,5 +1,5 @@
 // ============================================================================
-// req_basis.js — v1.0 — Q1 + Q2 + Q3 (27 Sep 2026): the basis of a requirement.
+// req_basis.js — v1.1 — Q1 + Q2 + Q3 (27 Sep 2026): the basis of a requirement.
 //
 // Three small hardenings from the CCA list, one module, because they share the
 // requirements and assumptions pages:
@@ -425,8 +425,29 @@
         var w = function () { var r = orig.apply(this, arguments); try { fn(); } catch (_) {} return r; };
         w._rbWrapped = true; root[name] = w; return true;
     }
+    // The pager and the surgical single-row patch draw rows without calling the page
+    // renderer, so the wrappers alone miss pages 2+ and freshly added rows. Watch the
+    // four bodies: any row that arrives undecorated is decorated on the next tick.
+    var _observed = {};
+    function _observe(id, fn) {
+        var d = root.document; if (!d || typeof root.MutationObserver !== 'function' || _observed[id]) return false;
+        var tb = d.getElementById(id); if (!tb) return false;
+        var pending = false;
+        var mo = new root.MutationObserver(function () {
+            if (pending) return; pending = true;
+            setTimeout(function () { pending = false; try { fn(); } catch (_) {} }, 0);
+        });
+        mo.observe(tb, { childList: true });
+        _observed[id] = mo; return true;
+    }
+    function watchTables() {
+        return [_observe('ac-asm-body', function () { decorateAsmTable('ac'); }),
+                _observe('sys-asm-body', function () { decorateAsmTable('sys'); }),
+                _observe('ac-req-body', function () { decorateReqTable('ac'); }),
+                _observe('sys-req-body', function () { decorateReqTable('sys'); })].every(Boolean);
+    }
     (function hook(tries) {
-        var ok = [_wrapThread(),
+        var ok = [_wrapThread(), watchTables(),
                   _wrapRender('renderACAssumptions', function () { decorateAsmTable('ac'); }),
                   _wrapRender('renderSysAssumptions', function () { decorateAsmTable('sys'); }),
                   _wrapRender('renderACReq', function () { decorateReqTable('ac'); }),
@@ -443,6 +464,7 @@
                 INV_CREDIT: INV_CREDIT, INV_RAT: INV_RAT, byTag: byTag, appendixRows: appendixRows,
                 reqsForFc: reqsForFc, threadStage: threadStage, decorateAsmTable: decorateAsmTable, decorateReqTable: decorateReqTable,
                 setAsmTag: setAsmTag, tagSelectHtml: tagSelectHtml, tagPill: tagPill,
+                watchTables: watchTables, _observe: _observe,
                 _wrapThread: _wrapThread, _wrapRender: _wrapRender, _wrapSubmit: _wrapSubmit };
     try { root.SLReqBasis = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
