@@ -1613,9 +1613,16 @@ are the gaps. All are engineering-only, none touch customer data paths.
 - **Q9 — Design-baseline stamp.** Every analysis records the design baseline (and mock-up/DMU version) it was done
   against; a project-level "current baseline" field; anything analysed against an older baseline shows as a
   re-check item on the thread. This is the "analysis lags a moving design" pain expressed as a feature.
-- **Q10 — ZSA per-item record.** For each equipment item in a zone, two fields: threats it emits (heat, fluid,
-  debris, EMI, vibration; normal / abnormal / failed) and threats it is susceptible to. Adjacent-zone carry-over
-  where a threat crosses a boundary. Extends zonal_model rows; zsa_walkthrough already covers maintenance items.
+- **Q10 — ZSA per-item record. DONE 27 Sep 2026** (`site/zonal_threats.js` 1.0, `tests/regression_zonal_threats.test.js`
+  32/32 on the real zonal_model.js, nine mutations proved red). Per placed equipment item (systemsData id, the
+  zonal model's own identity): what it emits (heat, fluid, debris, EMI, vibration; in normal / abnormal / failed
+  operation) and what it is susceptible to; stored on projectConfig.zoneThreats. Computed: co-location (a
+  susceptible item shares a zone with an emitter; emitted in normal operation = permanent exposure, gap; only
+  abnormal / failed = failure sequence, check) and carry-over (the emitter sits in an adjacent zone: parent, child
+  or sibling in the containment tree, roots are siblings of roots; and no SUBSTANTIATED barrier stands between
+  the two zones; an unsubstantiated barrier changes nothing). "Per-item threats" section on the Zonal Model page:
+  an editor per placed item (15 emit boxes, 5 susceptible boxes, a note), findings with their kind, the placed
+  items with no record yet. INV-65 advisory names findings and unrecorded items. zsa_walkthrough untouched.
 - **Q11 — PRA survivability framing. DONE 27 Sep 2026** (`site/pra_framing.js` 1.0, `tests/regression_pra_framing.test.js`
   29/29, eight mutations proved red). Framing paragraph under the PRA page hint: each risk is taken as certain
   (probability 1), the analysis asks what it reaches, what it takes out together and whether CSFL survives (ARP4761A
