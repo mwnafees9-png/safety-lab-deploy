@@ -4,7 +4,9 @@
 
 **PROVED.** F1 nature (all 22 mapped, id before words, strip, pill), F2 minimization (accepted / open owe, not-acceptable / Hazardous / N/A / none do not, ok with argument, INV-64), F3 form (framing once, field once, gate refuse / pass, store on edit / new / refused, edit restore), F4 table + browser + render wrap, F5 wiring + framing text. Mutations red: not-acceptable still owes; hazardous owes; gap never raised; gate open; refused save writes; id map ignored; no badge; no nature strip. Two equivalent mutants survived by design (the word fallback covers a dropped id, "tread"/"flail" cover dropped "tire"). Wall caught "catalogue" in prose → "catalog".
 
-**NOT DONE / KNOWN.** Not checked live. The nature grouping is added beside the regulatory categories, not replacing them. The gate only knows about scenarios already on the row; a scenario added later shows as the badge + INV until the row is edited again.
+**LIVE CHECK (Barracuda, 27 Sep, after ship).** Module loaded, minimization field on the form, six of eight rows carried a nature pill, INV-64 0/0 (no scenarios on that project). Two things fixed in 1.1: the framing paragraph had gone inside the collapsible "Log PRA evaluation" form (the cfg-hint lives there), so it now sits right above the PRA table; and the two drone-specific threats were unclassified, so the word fallback learned jam / spoof / GNSS / interference / denial (environmental). "Recovery parachute inadvertent deployment" stays unclassified on purpose.
+
+**NOT DONE / KNOWN.** The nature grouping is added beside the regulatory categories, not replacing them. The gate only knows about scenarios already on the row; a scenario added later shows as the badge + INV until the row is edited again.
 
 **NEXT.** Ship, then Q10 (ZSA per-item threats), Q9 (design-baseline stamp).
 

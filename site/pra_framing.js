@@ -1,5 +1,5 @@
 // ============================================================================
-// pra_framing.js — v1.0 — Q11 (27 Sep 2026): the survivability framing of the
+// pra_framing.js — v1.1 — Q11 (27 Sep 2026): the survivability framing of the
 // particular risk analysis.
 //
 // A particular risk is not a failure with a rate. It is an event taken as
@@ -71,7 +71,7 @@
         if (NATURE_BY_ID[id]) return NATURE_BY_ID[id];
         var s = (id + ' ' + name).toLowerCase();
         if (/burst|blade|rotor|shaft|tread|tire|tyre|flail|shed|bird|debris|release|fragment/.test(s)) return 'trajectory';
-        if (/lightning|hirf|hail|ice|ash|electromagnetic|environment|rain|snow/.test(s)) return 'environmental';
+        if (/lightning|hirf|hail|ice|ash|electromagnetic|environment|rain|snow|jam|spoof|gnss|gps|interference|denial|radiation|solar/.test(s)) return 'environmental';
         if (/decompress|bulkhead|pressure boundary|structural/.test(s)) return 'structural';
         if (/fire|leak|thermal|runaway|duct|overheat|chemical|fluid|hot/.test(s)) return 'proximity';
         return '';
@@ -185,12 +185,14 @@
     function installFraming() {
         var d = root.document; if (!d) return false;
         if (d.getElementById('pf-framing')) return false;
-        var view = d.getElementById('view-pra'); if (!view) return false;
-        var hint = view.querySelector('.cfg-hint'); if (!hint || !hint.parentNode) return false;
+        // 1.1 (seen live): the page hint sits inside the collapsible "Log PRA evaluation" form, so the
+        // paragraph went out of sight with it. It now sits right above the PRA table, always visible.
+        var table = d.getElementById('pra-table'); var host = table && table.parentNode;
+        if (!host || !host.parentNode) return false;
         var box = d.createElement('div'); box.id = 'pf-framing';
         box.style.cssText = 'font-size:12px;line-height:1.5;color:var(--color-text-secondary);border:1px solid var(--color-border-hair);border-left:3px solid #9d174d;border-radius:var(--r-md);padding:8px 12px;margin:0 0 10px;';
         box.innerHTML = framingHtml();
-        hint.parentNode.insertBefore(box, hint.nextSibling);
+        host.parentNode.insertBefore(box, host);
         return true;
     }
     function installField() {
