@@ -3096,7 +3096,8 @@ const AutoReq = (function(){
         'zsa-separation':   'ZSA → Housed-function separation',
         'zsa-phys':         'ZSA → Physical separation (Cat zone)',
         'fcim-monitor':     'FCIM pair → Crew-awareness monitoring (annunciation credit)',
-        'usoc-info':        'USOC → Timely crew information (F3061 §4.2.6)'
+        'usoc-info':        'USOC → Timely crew information (F3061 §4.2.6)',
+        'assumption':       'Assumption → Promoted requirement (req_basis.js)'
     };
 
     // ========================================================================

@@ -14,12 +14,12 @@ const Reports = (function() {
     // allowedAppendices: which auxiliary analyses can be attached as appendices.
     // ------------------------------------------------------------------------
     const REPORT_DEFS = {
-        AFHA: { name: 'Aircraft Functional Hazard Assessment',          scope: 'aircraft', allowedAppendices: ['fta'] },
-        PASA: { name: 'Preliminary Aircraft Safety Assessment',         scope: 'aircraft', allowedAppendices: ['fta','zsa','pra','cma'] },
-        ASA:  { name: 'Aircraft Safety Assessment',                     scope: 'aircraft', allowedAppendices: ['fta','zsa','pra','cma'] },
-        SFHA: { name: 'System Functional Hazard Assessment',            scope: 'system',   allowedAppendices: ['fta'] },
-        PSSA: { name: 'Preliminary System Safety Assessment',           scope: 'system',   allowedAppendices: ['fta','cma'] },
-        SSA:  { name: 'System Safety Assessment',                       scope: 'system',   allowedAppendices: ['fta','cma'] },
+        AFHA: { name: 'Aircraft Functional Hazard Assessment',          scope: 'aircraft', allowedAppendices: ['fta','src'] },
+        PASA: { name: 'Preliminary Aircraft Safety Assessment',         scope: 'aircraft', allowedAppendices: ['fta','zsa','pra','cma','src'] },
+        ASA:  { name: 'Aircraft Safety Assessment',                     scope: 'aircraft', allowedAppendices: ['fta','zsa','pra','cma','src'] },
+        SFHA: { name: 'System Functional Hazard Assessment',            scope: 'system',   allowedAppendices: ['fta','src'] },
+        PSSA: { name: 'Preliminary System Safety Assessment',           scope: 'system',   allowedAppendices: ['fta','cma','src'] },
+        SSA:  { name: 'System Safety Assessment',                       scope: 'system',   allowedAppendices: ['fta','cma','src'] },
         ZSA:  { name: 'Zonal Safety Analysis',                          scope: 'aircraft', allowedAppendices: [] },
         PRA:  { name: 'Particular Risk Analysis',                       scope: 'aircraft', allowedAppendices: [] },
         CMA:  { name: 'Common Mode Analysis',                           scope: 'aircraft', allowedAppendices: [] },
@@ -131,6 +131,7 @@ const Reports = (function() {
             '{{appendix:zsa}}',
             '{{appendix:pra}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
                     '',
             '## 10. Functional Interdependence (ARP 4761A Table B1)',
             'Contributing systems per aircraft failure condition. Marks are derived from function traces, resource provide/consume mappings, and SFHA trace-backs, or asserted with signature; cleared cells record a signed review. Derived facts cannot be suppressed by manual clears.',
@@ -205,6 +206,7 @@ const Reports = (function() {
             '{{appendix:zsa}}',
             '{{appendix:pra}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
                     '',
             '## 9. Independence Principle Verification',
             'Final state of every independence principle claimed by the model. Compromised or unevaluated principles block the ASA gate.',
@@ -284,6 +286,7 @@ const Reports = (function() {
             '## 9. Appendices',
             '{{appendix:fta}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
                     '',
             '## 10. Latent Failure Bounds (D.4.2.1.1)',
             'Latent events in this system’s trees with their exposure intervals and not-to-exceed bounds.',
@@ -332,6 +335,7 @@ const Reports = (function() {
             '## 8. Appendices',
             '{{appendix:fta}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
                     '',
             '## 9. Failure Modes & Effects Summary (FMES)',
             'Derived grouping of FMEA rows by (end effect, detection) — the summary is generated from the live FMEA, never maintained by hand, so it cannot drift from its source.',
@@ -670,6 +674,21 @@ const Reports = (function() {
     // state, grade from input fidelity L0..L2. Guarded — reports render
     // identically if the badge module is absent.
     // ---------------------------------------------------------------------
+    // 27 Sep 2026 (Q3) — source-analysis tag and the by-source listing, from req_basis.js.
+    function _srcTag(kind, row, sys) {
+        try {
+            const RB = (typeof window !== 'undefined') ? window.SLReqBasis : null;
+            if (!RB) return String(row && row.sourceAnalysis || '');
+            if (kind === 'asm') return RB.tagOfAsm(row);
+            return RB.tagOfReq(row, RB.storeFor(sys ? 'sys-' + sys.id : 'ac'));
+        } catch (_) { return String(row && row.sourceAnalysis || ''); }
+    }
+    function _srcRows(sys) {
+        try {
+            const RB = (typeof window !== 'undefined') ? window.SLReqBasis : null;
+            return RB ? RB.appendixRows(sys ? 'sys-' + sys.id : 'ac') : [];
+        } catch (_) { return []; }
+    }
     function _aiOriginRows(built, src, kind, sysId) {
         try {
             const rows = Array.isArray(src) ? src : [];
@@ -807,13 +826,19 @@ const Reports = (function() {
                 'Requirement': r.text || '',
                 'Rationale':  r.rat || '',
                 'Verification': r.verifStatus || r.vvStatus || 'Pending',
+                'Source':     _srcTag('req', r, sys),
             })), reqSource, sys ? 'sysReq' : 'acReq', sys ? sys.id : null),
+
+            // 27 Sep 2026 (Q3) — the by-source-analysis appendix: every requirement and
+            // assumption in scope under its tag, referenced by ID (req_basis.js).
+            src_table: _srcRows(sys),
 
             assumptions_list: asmSource.map(a => ({
                 'ID':       a.asmId || '',
                 'Statement': a.text || a.statement || '',
                 'State':    a.state || '',
                 'Strategy': a.valStrategy || '',
+                'Source':   _srcTag('asm', a, sys),
             })),
 
             component_list: _aiOriginRows(items.map(it => ({
@@ -2360,6 +2385,8 @@ const Reports = (function() {
     //   { kind: 'listToken', name }  list placeholder (e.g. assumptions_list)
     //   { kind: 'appendix', name }   appendix anchor (fta, zsa, pra, cma)
     // ------------------------------------------------------------------------
+    // 27 Sep 2026 (Q3) — appendix headings; 'src' is the by-source-analysis listing (req_basis.js).
+    function _appxTitle(name) { return name === 'src' ? 'Requirements and assumptions by source analysis' : String(name || '').toUpperCase(); }
     function _parseTemplate(tpl) {
         const blocks = [];
         const lines = tpl.split(/\r?\n/);
@@ -2367,7 +2394,7 @@ const Reports = (function() {
             const ln = lines[i];
             const tab = ln.match(/^\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|goldenthread_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|sora_summary_table|sora_oso_table)\}\}$/);
             const list = ln.match(/^\{\{(assumptions_list)\}\}$/);
-            const appx = ln.match(/^\{\{appendix:(fta|zsa|pra|cma)\}\}$/);
+            const appx = ln.match(/^\{\{appendix:(fta|zsa|pra|cma|src)\}\}$/);
             const h    = ln.match(/^(#{1,4})\s+(.*)$/);
             if (tab)       blocks.push({ kind: 'tableToken', name: tab[1] });
             else if (list) blocks.push({ kind: 'listToken',  name: list[1] });
@@ -2483,7 +2510,7 @@ const Reports = (function() {
                 children.push(new Paragraph({
                     heading: HeadingLevel.HEADING_2,
                     spacing: { before: 320, after: 120 },
-                    children: [new TextRun({ text: 'Appendix — ' + b.name.toUpperCase(), bold: true })],
+                    children: [new TextRun({ text: 'Appendix — ' + _appxTitle(b.name), bold: true })],
                 }));
                 if (b.name === 'fta') {
                     const ftaImages = await _renderFTAAppendixImages(data._ftaPagesForAppendix || []);
@@ -2518,6 +2545,11 @@ const Reports = (function() {
                 } else if (b.name === 'cma') {
                     const t = data.cma_table || [];
                     if (t.length) { children.push(_renderTable(t, Object.keys(t[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
+                } else if (b.name === 'src') {
+                    // 27 Sep 2026 (Q3) — one table, grouped by the Source column (req_basis.js).
+                    const t = data.src_table || [];
+                    if (t.length) { children.push(_renderTable(t, Object.keys(t[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
+                    else children.push(new Paragraph({ children: [new TextRun({ text: '(No requirements or assumptions in scope.)', italics: true })] }));
                 }
             } else if (b.kind === 'blank') {
                 children.push(new Paragraph({ children: [new TextRun('')] }));
@@ -2643,7 +2675,7 @@ const Reports = (function() {
                 if (!wanted) continue;
                 doc.addPage(); y = M;
                 doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-                doc.text('Appendix — ' + b.name.toUpperCase(), M, y); y += 22;
+                doc.text('Appendix — ' + _appxTitle(b.name), M, y); y += 22;
                 if (b.name === 'fta') {
                     const ftaImages = await _renderFTAAppendixImages(data._ftaPagesForAppendix || []);
                     for (const img of ftaImages) {
@@ -2666,6 +2698,7 @@ const Reports = (function() {
                 } else if (b.name === 'zsa') _drawTable(data.zsa_table || [], data.zsa_table && data.zsa_table.length ? Object.keys(data.zsa_table[0]) : []);
                   else if (b.name === 'pra') _drawTable(data.pra_table || [], data.pra_table && data.pra_table.length ? Object.keys(data.pra_table[0]) : []);
                   else if (b.name === 'cma') _drawTable(data.cma_table || [], data.cma_table && data.cma_table.length ? Object.keys(data.cma_table[0]) : []);
+                  else if (b.name === 'src') _drawTable(data.src_table || [], data.src_table && data.src_table.length ? Object.keys(data.src_table[0]) : []);
             } else if (b.kind === 'blank') {
                 y += 6;
             }
@@ -2857,6 +2890,7 @@ const Reports = (function() {
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="zsa"><input type="checkbox" id="rpt-appx-zsa"  style="width:auto;margin:0;"> ZSA</label>',
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="pra"><input type="checkbox" id="rpt-appx-pra"  style="width:auto;margin:0;"> PRA</label>',
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="cma"><input type="checkbox" id="rpt-appx-cma"  style="width:auto;margin:0;"> CMA</label>',
+            '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="src" title="Every requirement and assumption listed under the analysis it comes from (FHA, PSSA, CMA, PRA, ZSA, HF)"><input type="checkbox" id="rpt-appx-src"  style="width:auto;margin:0;"> By source analysis</label>',
             '      </div>',
             '    </div>',
             '    <div><label>Custom Template (.docx, optional)</label>',
@@ -2912,7 +2946,7 @@ const Reports = (function() {
         const def = REPORT_DEFS[type];
         document.getElementById('rpt-system-row').style.display = (def && def.scope === 'system') ? 'block' : 'none';
         // Toggle appendix checkboxes by allowedAppendices
-        ['fta','zsa','pra','cma'].forEach(name => {
+        ['fta','zsa','pra','cma','src'].forEach(name => {
             const lbl = document.querySelector('label[data-appx="' + name + '"]');
             if (lbl) lbl.style.display = (def && def.allowedAppendices.includes(name)) ? 'inline-flex' : 'none';
             const cb = document.getElementById('rpt-appx-' + name);
@@ -2931,7 +2965,7 @@ const Reports = (function() {
             const systemId = (def.scope === 'system') ? document.getElementById('rpt-system').value : null;
             if (def.scope === 'system' && !systemId) { status.textContent = 'Select a system first.'; status.style.color = 'var(--color-danger, #dc2626)'; return; }
             const appendices = {};
-            ['fta','zsa','pra','cma'].forEach(n => { const cb = document.getElementById('rpt-appx-' + n); appendices[n] = cb && cb.checked; });
+            ['fta','zsa','pra','cma','src'].forEach(n => { const cb = document.getElementById('rpt-appx-' + n); appendices[n] = cb && cb.checked; });
             const fileInput = document.getElementById('rpt-custom-template');
             const customFile = (fileInput && fileInput.files && fileInput.files[0]) ? fileInput.files[0] : null;
             if (customFile && format !== 'docx') {
@@ -3211,7 +3245,7 @@ window.Reports = Reports;
         const type = document.getElementById('rpt-type').value;
         const def = window.Reports.REPORT_DEFS[type];
         document.getElementById('rpt-system-row').style.display = (def && def.scope === 'system') ? 'block' : 'none';
-        ['fta','zsa','pra','cma'].forEach(name => {
+        ['fta','zsa','pra','cma','src'].forEach(name => {
             const lbl = document.querySelector('label[data-appx="' + name + '"]');
             if (lbl) lbl.style.display = (def && def.allowedAppendices.includes(name)) ? 'inline-flex' : 'none';
             const cb = document.getElementById('rpt-appx-' + name);
@@ -3243,7 +3277,7 @@ window.Reports = Reports;
             const systemId = (def.scope === 'system') ? document.getElementById('rpt-system').value : null;
             if (def.scope === 'system' && !systemId) { status.textContent = 'Select a system first.'; status.style.color = 'var(--color-danger, #dc2626)'; return; }
             const appendices = {};
-            ['fta','zsa','pra','cma'].forEach(n => { const cb = document.getElementById('rpt-appx-' + n); appendices[n] = !!(cb && cb.checked); });
+            ['fta','zsa','pra','cma','src'].forEach(n => { const cb = document.getElementById('rpt-appx-' + n); appendices[n] = !!(cb && cb.checked); });
             const fileInput = document.getElementById('rpt-custom-template');
             const customFile = (fileInput && fileInput.files && fileInput.files[0]) ? fileInput.files[0] : null;
             if (customFile && format !== 'docx') {
@@ -3678,7 +3712,7 @@ window.Reports = Reports;
                         children.push(new Paragraph({
                             heading: HeadingLevel.HEADING_2,
                             spacing: { before: 320, after: 120 },
-                            children: [new TextRun({ text: 'Appendix — ' + ap.toUpperCase(), bold: true })],
+                            children: [new TextRun({ text: 'Appendix — ' + _appxTitle(ap), bold: true })],
                         }));
                         if (ap === 'fta') {
                             const imgs = await _renderFTAImagesV2(data._ftaPagesForAppendix || []);
@@ -3818,7 +3852,7 @@ window.Reports = Reports;
                     if ((opts.appendices || {})[ap]) {
                         doc.addPage(); y = M;
                         doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-                        doc.text('Appendix — ' + ap.toUpperCase(), M, y); y += 22;
+                        doc.text('Appendix — ' + _appxTitle(ap), M, y); y += 22;
                         if (ap === 'fta') {
                             const imgs = await _renderFTAImagesV2(data._ftaPagesForAppendix || []);
                             for (const img of imgs) {
@@ -4055,6 +4089,7 @@ window.Reports = Reports;
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="zsa"><input type="checkbox" id="rpt-appx-zsa"  style="width:auto;margin:0;"> ZSA</label>',
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="pra"><input type="checkbox" id="rpt-appx-pra"  style="width:auto;margin:0;"> PRA</label>',
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="cma"><input type="checkbox" id="rpt-appx-cma"  style="width:auto;margin:0;"> CMA</label>',
+            '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="src" title="Every requirement and assumption listed under the analysis it comes from (FHA, PSSA, CMA, PRA, ZSA, HF)"><input type="checkbox" id="rpt-appx-src"  style="width:auto;margin:0;"> By source analysis</label>',
             '      </div>',
             '    </div>',
             '    <div><label>Custom Template (.docx, optional)</label>',
@@ -4229,6 +4264,7 @@ window.Reports = Reports;
             '{{appendix:zsa}}',
             '{{appendix:pra}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
             '',
             '## 10. Combined Functional Failure Effects — CoFFE (ARP 4761A Table B2)',
             'The CoFFE table below scaffolds the combined effect of contributing functions for each catastrophic/hazardous aircraft failure condition. The "results in failure condition event?" column reflects the advisory single-failure posture derived from the linked fault tree(s); project-specific contributing-function columns should be refined by the analyst.',
@@ -4323,6 +4359,7 @@ window.Reports = Reports;
             '{{appendix:zsa}}',
             '{{appendix:pra}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
             '',
             '## 9. Final Failure-Condition List with Evidence (ARP 4761A App F)',
             'The final aircraft failure-condition list is presented in the FTA data-summary form, pairing each condition with its maximum allowable probability, allocated/achieved DAL, and the advisory posture rolled up from the supporting analyses. The Aircraft Safety Assessment is a traceability/confirmation report; the certifying authority makes the final compliance determination.',
@@ -4433,6 +4470,7 @@ window.Reports = Reports;
             '## 9. Appendices',
             '{{appendix:fta}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
             '',
             '## 10. Per-Failure-Condition Qualitative Evaluation (Advisory)',
             '{{fc_eval_narrative}}',
@@ -4505,6 +4543,7 @@ window.Reports = Reports;
             '## 8. Appendices',
             '{{appendix:fta}}',
             '{{appendix:cma}}',
+            '{{appendix:src}}',
             '',
             '## 9. Failure-Condition Quantitative Result Summary (ARP 4761A Table G9/G10)',
             'System failure conditions are presented against their maximum allowable probability and allocated/achieved DAL. Achieved top-event probabilities are owned by the fault-tree engine and shown in the FTA appendix; this summary carries the advisory posture and corrective-action path.',
@@ -4988,7 +5027,7 @@ window.Reports = Reports;
                 return;
             }
             const appendices = {};
-            ['fta','zsa','pra','cma'].forEach(n => { const cb = document.getElementById('rpt-appx-' + n); appendices[n] = !!(cb && cb.checked); });
+            ['fta','zsa','pra','cma','src'].forEach(n => { const cb = document.getElementById('rpt-appx-' + n); appendices[n] = !!(cb && cb.checked); });
             const fileInput = document.getElementById('rpt-custom-template');
             const customFile = (fileInput && fileInput.files && fileInput.files[0]) ? fileInput.files[0] : null;
             if (customFile && format !== 'docx') {

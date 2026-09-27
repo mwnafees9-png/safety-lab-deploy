@@ -1540,14 +1540,29 @@ footprints), zsa_walkthrough (hand/foothold, maintenance access) and assumption_
 are the gaps. All are engineering-only, none touch customer data paths.
 
 ### Small (each under a day)
-- **Q1 — Promote assumption to requirement.** One click on an Assumptions row creates a requirement carrying the
-  assumption ID, its source analysis tag and its rationale, and links the two. Thread check: a CREDITED assumption
-  with neither a verification nor a requirement behind it is a thread gap. (Assumptions page already has
-  Credited/uncredited and Rests on.)
-- **Q2 — Rationale is a required field on safety requirements.** Wall/thread check flags any safety-derived
-  requirement with an empty rationale. Rationale is where the "why" lives; the statement carries only the "what".
-- **Q3 — Source-analysis tag on requirements and assumptions** (FHA, PSSA, CMA, PRA, ZSA, HF). Report exports
-  filter by tag to build the per-analysis appendix automatically and reference each item by ID in the body.
+- **Q1 — Promote assumption to requirement. DONE 27 Sep 2026** (`site/req_basis.js` 1.0, shared with Q2/Q3;
+  `tests/regression_req_basis.test.js` 69/69, nine mutations proved red). "→ requirement" button in the ID cell
+  of every Assumptions row (aircraft and system): creates a Safety requirement (L1/L2) carrying the statement,
+  a rationale built from the assumption ID, origin, rationale and both postures, the source tag, traced to the
+  assumption's first failure condition; `reqSource {generator:'assumption', sourceId:'asm:<id>'}` +
+  `linkedAsmIds` one way, `asm.requirementIds` the other. Second click finds the existing row. Gap = credited
+  (credited posture written) + alive + not Verified + no requirement: badge on the row, "Requirement basis"
+  stage on the Golden Thread (with a promote link), INV-59 advisory. Not yet: rows on pager pages 2+ of a
+  register over 50 assumptions are not decorated until the table re-renders.
+- **Q2 — Rationale is a required field on safety requirements. DONE 27 Sep 2026** (same module). The two
+  requirement forms refuse to log a Safety-class requirement with an empty rationale (toast + focus; other
+  classes pass). Safety-derived = Safety class, or generated, or carries an analysis. Empty rationale → "no
+  rationale" badge on the row, the Golden Thread stage says CHECK, INV-60 advisory on the wall.
+- **Q3 — Source-analysis tag on requirements and assumptions. DONE 27 Sep 2026** (same module). Tags FHA,
+  PSSA, CMA, PRA, ZSA, HF. Generated requirements are tagged from their generator (gate-indep-cma → CMA, the
+  other gate/FTA/DALgebra/interface/FCIM/USOC generators → PSSA, pra-* → PRA, zsa-* → ZSA, hf-* → HF, fha-* →
+  FHA); a promoted assumption's requirement inherits the assumption's tag. Authored rows: "Source analysis"
+  select on both requirement forms (`sourceAnalysis`), a select in each assumption row; assumptions also infer
+  from an HF type or an FHA/PSSA/CMA/PRA/ZSA/HF word in their origin. Pill by the Type cell. Reports: "Source"
+  column on requirements_table and assumptions_list; new appendix `{{appendix:src}}` ("Requirements and
+  assumptions by source analysis": Source, Kind, ID, Statement, Rationale, Status, grouped in vocabulary order,
+  Untagged last) offered as "By source analysis" on AFHA, PASA, ASA, SFHA, PSSA, SSA, docx and PDF. Custom
+  .docx templates strip appendix tokens as before.
 - **Q4 — Alert-independence check.** Where a mitigation is "alert the crew", the CMA questionnaire gets a standing
   item: can the alert fail from the same cause as the malfunction it announces? Unanswered = open item on the thread.
 - **Q5 — Crew-response timing flag.** For any failure condition whose mitigation rests on crew action, record the

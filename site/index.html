@@ -711,6 +711,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                              analysis produced it now has its own field below. -->
                             <label>Requirement Type <span style="font-weight:400;color:var(--color-text-tertiary);font-size:11px;">— ARP4754B §5.3.1 class</span></label><select id="sys-req-type"><option>Safety</option><option>Functional</option><option>Customer</option><option>Operational</option><option>Performance</option><option>Physical and Installation</option><option>Maintainability</option><option>Interface</option><option>Certification</option><option>Derived</option><option>Re-Use</option></select>
                             <label>Derived from analysis <span style="font-weight:400;color:var(--color-text-tertiary);font-size:11px;">— optional</span></label><select id="sys-req-analysis"><option value=""></option><option>Probabilistic</option><option>Design Assurance</option><option>Independence</option><option>Maintenance</option><option>Human Factors</option></select>
+                            <label>Source analysis <span style="font-weight:400;color:var(--color-text-tertiary);font-size:11px;">— which analysis this comes from; generated rows are tagged automatically</span></label><select id="sys-req-source"><option value="">(from the generator, or none)</option><option>FHA</option><option>PSSA</option><option>CMA</option><option>PRA</option><option>ZSA</option><option>HF</option></select>
                             <!-- Phase 53.63 — derivation chain per ARP 4754B §6.1.1 -->
                             <label>Derivation Type</label>
                             <select id="sys-req-derivation-type">
@@ -1662,6 +1663,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                              analysis produced it now has its own field below. -->
                             <label>Requirement Type <span style="font-weight:400;color:var(--color-text-tertiary);font-size:11px;">— ARP4754B §5.3.1 class</span></label><select id="ac-req-type"><option>Safety</option><option>Functional</option><option>Customer</option><option>Operational</option><option>Performance</option><option>Physical and Installation</option><option>Maintainability</option><option>Interface</option><option>Certification</option><option>Derived</option><option>Re-Use</option></select>
                             <label>Derived from analysis <span style="font-weight:400;color:var(--color-text-tertiary);font-size:11px;">— optional</span></label><select id="ac-req-analysis"><option value=""></option><option>Probabilistic</option><option>Design Assurance</option><option>Independence</option><option>Maintenance</option><option>Human Factors</option></select>
+                            <label>Source analysis <span style="font-weight:400;color:var(--color-text-tertiary);font-size:11px;">— which analysis this comes from; generated rows are tagged automatically</span></label><select id="ac-req-source"><option value="">(from the generator, or none)</option><option>FHA</option><option>PSSA</option><option>CMA</option><option>PRA</option><option>ZSA</option><option>HF</option></select>
                         <!-- Phase 53.63 — derivation chain per ARP 4754B §6.1.1 -->
                         <label>Derivation Type <span style="font-weight: 400; color: var(--color-text-tertiary); text-transform: none; letter-spacing: 0;">— ARP 4754B §6.1.1</span></label>
                         <select id="ac-req-derivation-type">
@@ -4157,6 +4159,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          failure condition's budget depends on (as OR / as certain, BDD-exact). Panel on the CMA page, a stage on
          the Golden Thread, INV-58. Loads after qual_arg.js; wraps renderCMA and _renderGoldenThread lazily. -->
     <script src="critical_gates.js?v=1.0" defer></script>
+    <!-- 27 Sep 2026 (Q1-Q3) — assumption → requirement, rationale required, source-analysis tag. -->
+    <script src="req_basis.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
     <script src="assurance_modules.js?v=1.35" defer></script>

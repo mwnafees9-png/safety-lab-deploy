@@ -1709,6 +1709,8 @@ const acReqCRUD = makeCRUD({
     store: () => acReqData,
     formIds: {
         traceId: 'ac-req-trace', level: 'ac-req-level', type: 'ac-req-type', analysis: 'ac-req-analysis', text: 'ac-req-text', rat: 'ac-req-rat',
+        // 27 Sep 2026 (Q3) — which analysis the requirement comes from (req_basis.js).
+        sourceAnalysis: 'ac-req-source',
         // `type` is the ARP4754B §5.3.1 class; `analysis` is which analysis produced
         // it. They were one field until 1 Aug 2026 — see req_taxonomy.js.
         // Phase 29.1 — V&V fields per ARP 4754B §6.3 (validation) + §6.4 (verification).
@@ -2108,6 +2110,8 @@ const sysReqCRUD = makeCRUD({
     storePrecondition: () => sys() ? null : 'Please open a system folder first.',
     formIds: {
         traceId: 'sys-req-trace', level: 'sys-req-level', type: 'sys-req-type', analysis: 'sys-req-analysis', text: 'sys-req-text', rat: 'sys-req-rat',
+        // 27 Sep 2026 (Q3) — which analysis the requirement comes from (req_basis.js).
+        sourceAnalysis: 'sys-req-source',
         // `type` is the ARP4754B §5.3.1 class; `analysis` is which analysis produced
         // it. They were one field until 1 Aug 2026 — see req_taxonomy.js.
         // Phase 29.1 — V&V fields per ARP 4754B §6.3 + §6.4.
