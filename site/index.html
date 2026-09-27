@@ -4153,6 +4153,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="pa_audit.js?v=1.0" defer></script>
     <script src="ub_stimuli.js?v=1.0" defer></script>
     <script src="qual_arg.js?v=1.0" defer></script>
+    <!-- Q7 (26 Sep 2026) — the critical AND-gate test that scopes the CMA: which independence claims the
+         failure condition's budget depends on (as OR / as certain, BDD-exact). Panel on the CMA page, a stage on
+         the Golden Thread, INV-58. Loads after qual_arg.js; wraps renderCMA and _renderGoldenThread lazily. -->
+    <script src="critical_gates.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
     <script src="assurance_modules.js?v=1.35" defer></script>

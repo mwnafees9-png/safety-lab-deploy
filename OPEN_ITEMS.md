@@ -1558,11 +1558,14 @@ are the gaps. All are engineering-only, none touch customer data paths.
   anchors in the FHA (clause + title only, no reproduced text).
 
 ### Medium (1 to 3 days)
-- **Q7 — Critical AND-gate test (CMA scoping).** For every AND gate in a compiled tree, two mechanical tests
-  against the FC budget: (a) treat the gate as OR; (b) OR the gate with a certain event. If the top event still
-  meets its budget under both, the gate is non-critical and needs no common-mode review; otherwise it is critical
-  and its inputs are queued for the CMA questionnaire. Show the list of critical gates per FC on the CMA page and
-  on the Golden Thread. Uses the existing trees and budget check; pure computation, no AI.
+- **Q7 — Critical AND-gate test (CMA scoping). DONE 26 Sep 2026** (`site/critical_gates.js` 1.0,
+  `tests/regression_critical_gates.test.js` 35/35, four mutations proved red). For every AND-family gate
+  (AND, INHIBIT, PAND, SPARE) in a tree linked to a failure condition: P(top) with the gate as OR and with the
+  gate as certain, BDD-exact on a clone with transfers inlined, against the strictest objective among the
+  linked conditions (the Golden Thread's own budget check). Either result over the objective = critical.
+  CMA page: panel above the table (critical first, "show all"; reviewed by which CMA, "Review in CMA" ticks the
+  gate in the form and names the claim). Golden Thread: a "Critical gates" stage before Common cause, CHECK
+  while a critical gate has no non-suggested CMA. INV-58 (advisory). Not shipped yet; Waqas ships.
 - **Q8 — Requirement quality linter.** On the requirements page: exactly one "shall" per statement; flag let-out
   words (except, unless, although, not limited to), hedges (usually, generally, often, normally), possibility words
   (may, might, should, ought), vagueness (as appropriate, capable of), indefinite pronouns (this, these) and
