@@ -1616,9 +1616,16 @@ are the gaps. All are engineering-only, none touch customer data paths.
 - **Q10 — ZSA per-item record.** For each equipment item in a zone, two fields: threats it emits (heat, fluid,
   debris, EMI, vibration; normal / abnormal / failed) and threats it is susceptible to. Adjacent-zone carry-over
   where a threat crosses a boundary. Extends zonal_model rows; zsa_walkthrough already covers maintenance items.
-- **Q11 — PRA survivability framing.** PRA page states the risk is taken as certain (probability 1) and the
-  analysis is about surviving it; group the library by proximity / trajectory / environmental / structural; where a
-  Catastrophic outcome cannot be eliminated (fire, rotor burst) the page requires a written minimisation argument.
+- **Q11 — PRA survivability framing. DONE 27 Sep 2026** (`site/pra_framing.js` 1.0, `tests/regression_pra_framing.test.js`
+  29/29, eight mutations proved red). Framing paragraph under the PRA page hint: each risk is taken as certain
+  (probability 1), the analysis asks what it reaches, what it takes out together and whether CSFL survives (ARP4761A
+  App L). Nature of the risk added on top of the regulatory categories: proximity / trajectory / environmental /
+  structural, every catalog entry mapped (id map, then words in the threat name), a "By nature" strip in the
+  catalog browser with click-through, a pill by Threat Source on the row. Minimization argument: a row that KEEPS a
+  Catastrophic scenario (pra_scenarios classification = worst linked FC, accepted or still open; "not acceptable"
+  is a pending design change and owes nothing yet) needs `row.minimization`; textarea under Mitigation on the form,
+  restored on edit; the form refuses to log such a row with the argument empty; badge by Mitigation on the row
+  ("minimization argument needed" / "minimized"), INV-64 advisory.
 
 ### AI lane ground rules (Waqas's lane only; eval-gated per the skill-body rule)
 - **Q12 — Prosecutor stance.** FHA and CMA prompts start from "assume this design is unsafe and look for the
