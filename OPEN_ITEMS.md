@@ -1610,9 +1610,18 @@ are the gaps. All are engineering-only, none touch customer data paths.
   buttons under the field (Ubiquitous / While / When / Where / If, then; our wording; an empty field takes the
   template, a filled one asks for a second click), INV-63 advisory. Generated rows already follow the one-shall
   house style, so this mostly catches hand-written rows.
-- **Q9 — Design-baseline stamp.** Every analysis records the design baseline (and mock-up/DMU version) it was done
-  against; a project-level "current baseline" field; anything analysed against an older baseline shows as a
-  re-check item on the thread. This is the "analysis lags a moving design" pain expressed as a feature.
+- **Q9 — Design-baseline stamp. DONE 27 Sep 2026** (`site/design_baseline.js` 1.0, `tests/regression_design_baseline.test.js`
+  39/39, ten mutations proved red). The DESIGN baseline (release / DMU version the analysis looked at), distinct
+  from the Configuration Baselines page's analysis snapshots. `projectConfig.designBaseline = { current, history }`
+  (ids DB-1, DB-2 ...; "new baseline" moves the current record to history with a superseded stamp; editing the
+  current record's label / DMU / date / note does not mint). Per-page stamps `projectConfig.designStamps[key]` =
+  { baselineId, at, by }, keys afha, sfha:<sys>, fta:<page>, cma, pra, zsa, reqs:ac, reqs:<sys>; stamping is an
+  explicit click ("analyzed against DB-n"), never inferred; refused with no current baseline. Status current /
+  older (re-check) / not stated. Surfaces: Design baseline panel above the analysis baselines table (current
+  record, mint form, history, every analysis page with status and a stamp button, "state all"); a one-line strip
+  at the top of AFHA, FTA (follows the active tree), CMA, PRA, ZSA and Requirements; Golden Thread stage "Design
+  baseline" (the condition's FHA page, linked trees, requirements) with re-check links; INV-66 advisory (fails on
+  older stamps; not-stated reported beside, silent when no baseline is set).
 - **Q10 — ZSA per-item record. DONE 27 Sep 2026** (`site/zonal_threats.js` 1.0, `tests/regression_zonal_threats.test.js`
   32/32 on the real zonal_model.js, nine mutations proved red). Per placed equipment item (systemsData id, the
   zonal model's own identity): what it emits (heat, fluid, debris, EMI, vibration; in normal / abnormal / failed
