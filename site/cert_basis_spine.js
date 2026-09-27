@@ -268,8 +268,8 @@
           objective: 'Requires an engine-level safety analysis of failure effects (Hazardous Engine Effects held to an extremely-remote target per engine-flight-hour).',
           dischargedBy: ['fmes', 'fta', 'ssa'], related: ['14 CFR §33.28', 'CS-E 510'] },
         { id: 'far-35.15', fw: 'Part 35', ref: '14 CFR §35.15', title: 'Safety analysis — propellers',
-          objective: 'Requires a propeller failure-condition safety analysis on the Part 25 severity ladder.',
-          dischargedBy: ['fmes', 'fta'], related: ['14 CFR §35.21', 'CS-P 70'] },
+          objective: 'Requires a propeller failure-condition safety analysis on the propeller-level ladder of §35.15(g): hazardous and major propeller effects, not the aircraft five-class ladder (AMC P 150 (3)(a)).',
+          dischargedBy: ['fmes', 'fta'], related: ['14 CFR §35.21', 'CS-P 150'] },
         // Part 450 (commercial space) — mission-based public-risk regime. Safety Lab
         // runs the aircraft toolbox, NOT space FSA (debris dispersion / casualty
         // expectation), so these are honestly flagged pointer-only where the tool
@@ -360,9 +360,11 @@
         { id: 'cse-510', fw: 'CS-E', ref: 'CS-E 510', title: 'Safety analysis — engines (EASA)',
           objective: 'EASA engine safety-analysis requirement, the CS-E mirror of §33.75 (Hazardous/Major Engine Effects and their probabilities).',
           dischargedBy: ['fmes', 'fta', 'ssa'], related: ['14 CFR §33.75'] },
-        { id: 'csp-70', fw: 'CS-P', ref: 'CS-P 70', title: 'Safety analysis — propellers (EASA)',
-          objective: 'EASA propeller safety-analysis requirement, the CS-P mirror of §35.15.',
-          dischargedBy: ['fmes', 'fta'], related: ['14 CFR §35.15'] },
+        // 27 Sep 2026 — was 'csp-70' / 'CS-P 70', which is "Tests, History". Read from the EASA text: the
+        // safety analysis is CS-P 150 (see AMC P 150); the effect definitions are in CS-P 15 Terminology.
+        { id: 'csp-150', fw: 'CS-P', ref: 'CS-P 150', title: 'Propeller safety analysis (EASA)',
+          objective: 'EASA propeller safety-analysis requirement, the CS-P mirror of §35.15; Hazardous / Major Propeller Effects are defined in CS-P 15 (terminology).',
+          dischargedBy: ['fmes', 'fta'], related: ['14 CFR §35.15', 'CS-P 15'] },
 
         // ---- Particular-risk governing rules — the FARs behind ARP4761A §4.5 PRA.
         // Zone-spanning debris routes to the Routing lane; field/environmental
@@ -461,7 +463,7 @@
         'SC-VTOL':  { id: 'SC-VTOL',  cfr: 'EASA SC-VTOL', title: 'Special Condition for Small-Category VTOL-Capable Aircraft', authority: 'EASA', kind: 'special-condition', licensed: false, category: 'eVTOL / powered-lift (Basic & Enhanced)', certBases: ['SC-VTOL Basic 1', 'SC-VTOL Basic 2', 'SC-VTOL Basic 3', 'SC-VTOL Enhanced'], anchor: 'VTOL.2510 (equipment, systems, installations) · MOC VTOL.2510 §8 Table 1 (safety objectives)', link: 'https://www.easa.europa.eu/en/document-library/product-certification-consultations/special-condition-vtol', note: 'SC-VTOL-02 Issue 2 (10 June 2024): ≤9 passenger seats, MCTOM ≤5 700 kg. Two categories (VTOL.2005): Enhanced (continued safe flight and landing; mandatory for congested-area ops and commercial passenger transport) at Part 25 stringency; Basic (controlled emergency landing) split by seats into Basic 1/2/3 in MOC SC-VTOL Issue 2 Table 1. Tailors the 1309 approach to eVTOL — no single-Part precedent.' },
         // EASA Certification Specifications — public equivalents to the FAA engine/propeller Parts.
         'CS-E':     { id: 'CS-E',     cfr: 'EASA CS-E', title: 'Certification Specifications for Engines', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'aircraft engines (EU)', certBases: ['Part 33'], anchor: 'CS-E 510 (safety analysis)', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 33; CS-E 510 mirrors §33.75 engine safety analysis, CS-E 810 fan blade containment.' },
-        'CS-P':     { id: 'CS-P',     cfr: 'EASA CS-P', title: 'Certification Specifications for Propellers', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'propellers (EU)', certBases: ['Part 35'], anchor: 'CS-P 70 (safety analysis)', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 35; CS-P 70 mirrors §35.15 propeller failure-condition safety analysis.' },
+        'CS-P':     { id: 'CS-P',     cfr: 'EASA CS-P', title: 'Certification Specifications for Propellers', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'propellers (EU)', certBases: ['Part 35'], anchor: 'CS-P 150 (safety analysis); CS-P 15 (terminology)', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 35; CS-P 70 mirrors §35.15 propeller failure-condition safety analysis.' },
         // Registered 6 Aug 2026 — were "related:" name-drops on far-25.1309b/27.1309/29.1309
         // for a while without their own citable card; now first-class like CS-E/CS-P.
         'CS-25':    { id: 'CS-25',    cfr: 'EASA CS-25', title: 'Certification Specifications for Large Aeroplanes', authority: 'EASA', kind: 'airworthiness', licensed: false, category: 'transport-category aeroplanes (EU)', certBases: ['Part 25'], anchor: 'CS 25.1309', link: 'https://www.easa.europa.eu/en/document-library/certification-specifications', note: 'EASA equivalent of 14 CFR Part 25; CS 25.1309 mirrors §25.1309, the reference stringency other categories tailor down from.' },

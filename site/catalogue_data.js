@@ -100,7 +100,7 @@ const COMPLIANCE_CATALOGUE = [
     { regulation: '14 CFR Part 35', paragraph: '§35.15',          title: 'Safety analysis — propeller failure conditions', appliesTo: ['Part 35'] },
     { regulation: '14 CFR Part 35', paragraph: '§35.21',          title: 'Variable and reversible pitch propellers — failure modes', appliesTo: ['Part 35'] },
     { regulation: '14 CFR Part 35', paragraph: '§35.23',          title: 'Propeller control system requirements', appliesTo: ['Part 35'] },
-    { regulation: 'CS-P',           paragraph: 'CS-P 70',         title: 'EASA — Propeller safety analysis (equivalent to §35.15)', appliesTo: ['Part 35'] },
+    { regulation: 'CS-P',           paragraph: 'CS-P 150',        title: 'EASA — Propeller safety analysis (equivalent to §35.15)', appliesTo: ['Part 35'] },
 
     // Phase 53.55 — EASA SC-VTOL (eVTOL / AAM). 31 Aug 2026: paragraph numbers and titles
     // re-anchored on SC-VTOL-02 Issue 2 (10 June 2024) + MOC SC-VTOL Issue 2 (12 May 2021);

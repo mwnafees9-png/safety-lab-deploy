@@ -1563,14 +1563,33 @@ are the gaps. All are engineering-only, none touch customer data paths.
   assumptions by source analysis": Source, Kind, ID, Statement, Rationale, Status, grouped in vocabulary order,
   Untagged last) offered as "By source analysis" on AFHA, PASA, ASA, SFHA, PSSA, SSA, docx and PDF. Custom
   .docx templates strip appendix tokens as before.
-- **Q4 — Alert-independence check.** Where a mitigation is "alert the crew", the CMA questionnaire gets a standing
-  item: can the alert fail from the same cause as the malfunction it announces? Unanswered = open item on the thread.
-- **Q5 — Crew-response timing flag.** For any failure condition whose mitigation rests on crew action, record the
-  alert class (Warning / Caution / Advisory per CS 25.1322) and the assumed response time; a Hazardous or
-  Catastrophic condition whose ONLY defence is crew action is flagged. Ties to the HF lane crew-task links.
-- **Q6 — Engine and propeller severity anchors.** When the product under analysis is an engine or a propeller,
-  offer the CS-E 510(g) Minor/Major/Hazardous engine-effect lists and CS-P 15 propeller-effect lists as severity
-  anchors in the FHA (clause + title only, no reproduced text).
+- **Q4 — Alert-independence check. DONE 27 Sep 2026** (`site/crew_credit.js` 1.0, shared with Q5/Q6;
+  `tests/regression_crew_credit.test.js` 61/61, twelve mutations proved red). Standards read in full first
+  (AC 25.1322-1 §7b/§7d(3), AC 25.1309-1B §5.4.2, CS-E 510(d), CS-P 150(d)). The CMA questionnaire carries a
+  standing "Crew alerting" item (`al-common`: the alert can fail from the same cause as the malfunction it
+  announces). A failure condition relies on an alert when the crew alerting inventory names it, an FCIM
+  aware-governs pair credits it, or a recovery task is credited on it. Unanswered in that scope's
+  questionnaire (aircraft or the system) = open item on the Golden Thread ("Crew credit" stage, with a link
+  into the questionnaire) and INV-61 advisory. Second consequence of §5.4.2: a Cat/Haz condition relying on
+  an alert with no "loss of annunciation" failure condition in the FHA (found by wording) is named too.
+- **Q5 — Crew-response timing flag. DONE 27 Sep 2026** (same module). Crew credit = an HF-typed assumption
+  linked to the condition (the HF lane's crew task: direction, crewmember, task time, basis) or an FCIM
+  aware-governs pair. The three §5.3.5.1 verifications become three recorded facts, each a finding when
+  missing: an alert with a class (Warning / Caution / Advisory, §25.1322(b)) covering the condition; an
+  assumed response time on every credited task (a time with no basis is a check, not a gap); a sensory
+  modality on the alert (how the crew recognizes it). §5.4.3: Cat/Haz with a recovery task and only an
+  Advisory is flagged. §6.3.3.2: Cat/Haz whose only defense is crew action (no AND-family gate on any linked
+  tree, no non-HF Safety requirement traced) is flagged. Surfaces: "crew credit n" badge in the FHA severity
+  cell (both scopes, pager-safe), the Golden Thread stage, INV-62 advisory.
+- **Q6 — Engine and propeller severity anchors. DONE 27 Sep 2026** (same module). Cert basis Part 33 / CS-E:
+  panel under the FHA severity select with Minor / Major / Hazardous engine effect (§33.75(g)(1)-(3), CS-E
+  510(g)(1)-(3); the seven hazardous effects listed from the public-domain §33.75 text). Part 35 / CS-P:
+  Major and Hazardous propeller effects (§35.15(g), CS-P 15 terminology; analysis per §35.15 / CS-P 150).
+  Both note that Catastrophic is an aircraft-level class (AMC E 510 (3)(a), AMC P 150 (3)(a)) and that
+  §35.15 has no Major objective (CS-P 150(a)(4) does). No EASA text reproduced. Correction found while
+  reading: the cert basis spine and catalogue cited "CS-P 70" as the propeller safety analysis; CS-P 70 is
+  "Tests, History". Now CS-P 150, cross-referenced to CS-P 15, and §35.15's objective no longer claims the
+  Part 25 ladder.
 
 ### Medium (1 to 3 days)
 - **Q7 — Critical AND-gate test (CMA scoping). DONE 26 Sep 2026** (`site/critical_gates.js` 1.0,

@@ -62,6 +62,11 @@
         { g: 'Manufacturing', items: [
             ['mf-mfr', 'Common manufacturer'], ['mf-proc', 'Manufacturing procedures'], ['mf-process', 'Manufacturing process / control'], ['mf-tool', 'Manufacturing tools'] ] },
         { g: 'Operation', items: [ ['op-staff', 'Operations staff'], ['op-proc', 'Operating procedures'] ] },
+        // 27 Sep 2026 (Q4) — standing item, own words: a failure condition that relies on an alert owes the
+        // question whether the alert can fail from the same cause as the malfunction it announces
+        // (AC 25.1322-1 §7b / §7d(3); AC 25.1309-1B §5.4.2; CS-E 510(d) / CS-P 150(d)). crew_credit.js reads
+        // the disposition per scope; unanswered = open item on the Golden Thread (INV-61).
+        { g: 'Crew alerting', items: [ ['al-common', 'Alert can fail from the same cause as the malfunction it announces'] ] },
         { g: 'Maintenance', items: [ ['mt-staff', 'Maintenance staff'], ['mt-proc', 'Maintenance / calibration procedures'], ['mt-loc', 'Location (install / maint interaction)'] ] }
     ];
 
@@ -301,7 +306,7 @@
         ov.innerHTML = '<div style="background:#fff;color:#202024;border-radius:14px;max-width:660px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.32);">' +
             '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #EEF2F8;">' +
               '<div><div style="font-weight:700;color:var(--color-text-primary);">CMA walkthrough — ' + _esc(label || ctx) + '</div>' +
-              '<div style="font-size:11.5px;color:#55555C;">ARP4761A Appendix M — 37-category questionnaire → recommended β (IEC 61508-6 / NUREG).</div></div>' +
+              '<div style="font-size:11.5px;color:#55555C;">ARP4761A Appendix M — 37-category questionnaire + the standing crew-alerting item → recommended β (IEC 61508-6 / NUREG).</div></div>' +
               '<button onclick="_cmaCloseWalk()" style="border:none;background:transparent;font-size:22px;cursor:pointer;color:#888;">&times;</button></div>' +
             '<div id="cma-wt-body" style="padding:12px 18px;overflow:auto;"></div></div>';
         ov.addEventListener('mousedown', function (e) { if (e.target === ov) ov.remove(); });

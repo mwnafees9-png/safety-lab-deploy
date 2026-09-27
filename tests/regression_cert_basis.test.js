@@ -160,8 +160,8 @@ check('[9f] sora-containment registered — partial coverage (1 m class only), t
                /two-source verified/.test(c.objective) && /NOT yet sourced/.test(c.objective); })());
 check('[9g] the standalone JARUS SORA 2.5 standard note no longer contradicts the sora-grc/sora-sail entries ("does NOT compute" is gone)',
     C.advisory('JARUS SORA 2.5') && !/does NOT compute GRC\/ARC\/SAIL/.test(SRC));
-check('[9b] EASA CS-E 510 / CS-P 70 equivalents indexed, fully covered, cross-referenced to §33.75 / §35.15',
-    (function () { const e = C.clause('cse-510'), p = C.clause('csp-70');
+check('[9b] EASA CS-E 510 / CS-P 150 equivalents indexed, fully covered, cross-referenced to §33.75 / §35.15 (CS-P 70 is Tests, History; corrected 27 Sep 2026)',
+    (function () { const e = C.clause('cse-510'), p = C.clause('csp-150'); if (C.clause('csp-70')) return false;
         return e && p && C.reg('CS-E') && C.reg('CS-P') &&
             e.dischargedBy.indexOf('fmes') >= 0 && /§33\.75/.test(e.related.join(' ')) && /§35\.15/.test(p.related.join(' ')); })());
 check('[9c] particular-risk FARs indexed (lightning §25.1316 · HIRF §25.1317 · rotor debris §25.903(d)(1) · tire §25.734 · decompression §25.841)',
