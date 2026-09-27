@@ -4,7 +4,9 @@
 
 **PROVED.** G1 record (set / unset / order / refusals / normalization), G2 geometry (adjacency, barriers both ways), G3 findings (co-location normal vs failed, self-exclusion, carry-over with and without a substantiated barrier, non-adjacent quiet, moving the emitter next door, susceptibility with no emitter quiet, INV-65, zoneProfile), G4 section (15 + 5 boxes, marker, findings text, append then replace, render wrap), G5 wiring. Mutations red: emitter is own victim; normal never a gap; barriers ignored; unsubstantiated barrier blocks; children not adjacent; every zone adjacent; setEmit never sets; unrecorded not on the wall; (plus the INV test tightened after one survived).
 
-**NOT DONE / KNOWN.** Not checked live. Adjacency is the containment tree (no explicit adjacency list exists in the model); two zones that touch physically but sit in different branches are not adjacent here unless a barrier row names them, and a barrier is the only cross-branch relation the model has. No Golden Thread stage: zone findings are per item, not per failure condition. The zsaData rows (legacy ZSA table) are not touched.
+**LIVE CHECK (Barracuda, 27 Sep, after ship).** Module loaded, but the section did not appear on the Zonal Model tab: zonal_ui's switchTab wrapper calls its own inner `_render`, not `window._renderZonalPage`, so the render wrap never ran on a tab switch (calling `_renderZonalPage()` by hand did show it). Fixed in 1.1: a MutationObserver on #view-zonal re-appends the section whenever the page re-renders without it (three tests added, 35/35).
+
+**NOT DONE / KNOWN.** Adjacency is the containment tree (no explicit adjacency list exists in the model); two zones that touch physically but sit in different branches are not adjacent here unless a barrier row names them, and a barrier is the only cross-branch relation the model has. No Golden Thread stage: zone findings are per item, not per failure condition. The zsaData rows (legacy ZSA table) are not touched.
 
 **NEXT.** Ship, then Q9 (design-baseline stamp), the last non-AI item in section Q.
 

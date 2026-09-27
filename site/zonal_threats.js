@@ -1,5 +1,5 @@
 // ============================================================================
-// zonal_threats.js — v1.0 — Q10 (27 Sep 2026): the per-item threat record of
+// zonal_threats.js — v1.1 — Q10 (27 Sep 2026): the per-item threat record of
 // the zonal safety analysis.
 //
 // A zonal analysis asks two questions of every piece of equipment in a zone:
@@ -225,13 +225,28 @@
         var w = function () { var r = orig.apply(this, arguments); try { renderSection(); } catch (_) {} return r; };
         w._ztWrapped = true; root._renderZonalPage = w; return true;
     }
+    // 1.1 (seen live): zonal_ui's switchTab wrapper calls its own inner _render, not
+    // window._renderZonalPage, so the wrap above never ran on a tab switch. Watch the
+    // page itself: every re-render replaces its wrapper, and the section follows.
+    var _observed = false;
+    function _observe() {
+        var d = root.document; if (!d || typeof root.MutationObserver !== 'function' || _observed) return false;
+        var host = d.getElementById('view-zonal'); if (!host) return false;
+        var pending = false;
+        var mo = new root.MutationObserver(function () {
+            if (pending) return; pending = true;
+            setTimeout(function () { pending = false; try { if (!d.getElementById('zt-section')) renderSection(); } catch (_) {} }, 0);
+        });
+        mo.observe(host, { childList: true }); _observed = true; return true;
+    }
     (function hook(tries) {
-        if (!_wrapRender() && tries > 0 && typeof setTimeout === 'function') setTimeout(function () { hook(tries - 1); }, 100);
+        var ok = [_wrapRender(), _observe()];
+        if (ok.some(function (x) { return !x; }) && tries > 0 && typeof setTimeout === 'function') setTimeout(function () { hook(tries - 1); }, 100);
     })(50);
 
     var api = { THREATS: THREATS, STATES: STATES, record: record, has: has, setEmit: setEmit, setSusceptible: setSusceptible, setNote: setNote,
                 adjacent: adjacent, blocked: blocked, zoneProfile: zoneProfile, findings: findings, unrecorded: unrecorded, INV: INV,
-                itemEditorHtml: itemEditorHtml, sectionHtml: sectionHtml, renderSection: renderSection, _wrapRender: _wrapRender };
+                itemEditorHtml: itemEditorHtml, sectionHtml: sectionHtml, renderSection: renderSection, _wrapRender: _wrapRender, _observe: _observe };
     try { root.SLZonalThreats = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

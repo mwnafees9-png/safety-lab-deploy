@@ -121,6 +121,16 @@ function world() {
     let replaced = '';
     els['zt-section'] = { set outerHTML(h) { replaced = h; } };
     check('G4: on re-render the existing section is replaced in place', T.renderSection() === true && /id="zt-section"/.test(replaced) && wrapperHtml.indexOf('zt-section') === wrapperHtml.lastIndexOf('zt-section'));
+    // 1.1: the page observer. A re-render that wipes the section brings it back on the next tick.
+    let cb = null; sb.MutationObserver = function (f) { cb = f; this.observe = () => {}; };
+    sb.setTimeout = f => { f(); return 0; };
+    check('G4: the page is watched once', T._observe() === true && T._observe() === false);
+    delete els['zt-section']; wrapperHtml = '';
+    cb([]);
+    check('G4: a re-render that dropped the section gets it back', /id="zt-section"/.test(wrapperHtml));
+    els['zt-section'] = { set outerHTML(h) { replaced = h; } }; wrapperHtml = '';
+    cb([]);
+    check('G4: a render that kept the section is left alone', wrapperHtml === '');
     let n = 0; sb._renderZonalPage = () => { n++; };
     check('G4: the zonal page renderer is wrapped once and still runs', T._wrapRender() === true && T._wrapRender() === false && (sb._renderZonalPage(), n === 1));
 }
