@@ -8,6 +8,40 @@ Rationale for the design decisions behind most of these lives in
 and the single ordered build list), `UPGRADES_Requirement_Bucketing.md` (U-1 … U-7) and
 `BUILD_SPEC_Structured_Nodes_and_Bucketing.md`.
 
+## 28 Sep 2026 — ACTIVE SECURITY QUEUE (Waqas: "mark the security ones as items to do")
+
+The open security work, in the order it should be done. Everything not listed here is closed
+(see the 14 Sep reconciliation immediately below, and the 16/17/23 Sep entries). S13 to S18 are
+Enterprise builds, not defects, and stay parked at the bottom of this file.
+
+- [ ] **A1 (S8 phases 3 to 6) — get credentials out of browser localStorage.** Phases 1 and 2 are
+      done and proven with real roles on the throwaway. Left: the app write path (RPC calls replace
+      localStorage; browser-only to a local store, desktop to the keychain), the server read path
+      (Jama bridge and AI proxy read via service_role), apply to customer-install and production,
+      and tests. Plan in customer-install/db/VAULT_DESIGN.md. Biggest real exposure still open.
+- [ ] **A2 — rotate notify_hook_secret.** Due since 17 Sep. Needs Waqas; the value itself is his.
+- [ ] **A3 (S11) — proxy hygiene.** Rate limit fails OPEN on a KV error (decide: fail closed for
+      non-founder licences); the raw licence token is used as the KV key (hash it); CORS is `*`
+      (restrict to safetylabaero.com origins); `x-safetylab-feature` is still never read.
+- [ ] **A4 (S9) — erasure is narrower than the Data Security paper describes.** Self-service project
+      erasure via RPC, certificate persisted in destruction_certificates and shown on the account
+      page, local wipe on erase and sign-out, complete manifest, ai_org_cache stamped and cascaded.
+      This one is a documentation-accuracy risk as much as a security one.
+- [ ] **A5 (R8) — service-role key rotation.** The service_role JWT sits in five db-webhook trigger
+      definitions. Big-bang (anon key, redeploy, edge env, recreate the five triggers), choreographed
+      with Waqas. Note S28: the last change to this path killed every outbound email for three days.
+- [ ] **A6 (S12, remaining half) — capture the production-only DDL into the repo** (`supabase db dump`)
+      so the customer-install migrations stop drifting from production. S20 depends on it.
+- [ ] **A7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
+      `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
+      update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate
+      (Apple Developer ID plus notarization, Windows Authenticode). Claude cannot handle either.
+- [ ] **A8 (S25) — prove contextIsolation at runtime.** Code landed 17 Sep, never exercised on a
+      running shell.
+- [ ] **A9 (R7 residual) — one human click-through of an FHA draft on the reference install.** The
+      credential, transport and provider path is already proven headless; this is the last step
+      before the R15 hold on the Data Security paper can lift.
+
 ## 14 Sep 2026 — LIVE + CODE RECONCILIATION (Waqas: "confirm from the live app and code, what's built and what is not"). Full evidence table in `BUILD_STATE_2026-09-14.md`.
 
 Checked every open entry against the running site, the three repos (safety-lab-deploy, -proxy-deploy, -desktop), the migrations, and HANDOFF. Corrections to this register:
