@@ -89,6 +89,19 @@
         } catch (_) {}
         return null;
     }
+    // Populated = every leaf carries a rate, a probability or a Markov model. Delegates to
+    // the one shared definition; the local walk is the sandbox fallback only (same rule).
+    function _mirrorPopulated(page) {
+        try { if (typeof slMirrorIsPopulated === 'function') return slMirrorIsPopulated(page); } catch (_) {}
+        if (!page || !page.root) return false;
+        let pop = 0, tot = 0;
+        (function walk(n) {
+            if (!n) return;
+            if (n.type !== 'gate') { tot++; if ((n.lambda && n.lambda > 0) || (n.probability && n.probability > 0) || n.markovModelId) pop++; }
+            (n.children || n._children || []).forEach(walk);
+        })(page.root);
+        return tot > 0 && pop >= tot;
+    }
     function _objective(sev) {
         try { if (typeof getSafetyTarget === 'function') { const t = getSafetyTarget(sev); if (t && t.prob != null) return Number(t.prob); } } catch (_) {}
         return null;
@@ -111,7 +124,14 @@
         allocs.forEach(alloc => {
             const mirror = (_cand('verifies', alloc.id) || _pages()).find(p => p && p.verifies === alloc.id && p.root) || null;
             const allocated = _pTop(alloc);
-            const achieved = mirror ? _pTop(mirror) : null;
+            // 28 Sep 2026 — an UNPOPULATED mirror is not an achieved result of zero, it is
+            // no result at all. A fresh mirror is cloned with every leaf blanked (lambda 0,
+            // probability 0), so P(top) computes to exactly 0; zero is finite, so this used
+            // to pass straight through as `achieved` and 0 <= objective is always true. An
+            // empty mirror reported meets-objective and asa_triage then closed the failure
+            // condition as 'closed-by-ssa'. Populated is judged by the SAME rule the E.3 and
+            // F.3.7 checklist items use (slMirrorIsPopulated, helpers_modules.js).
+            const achieved = (mirror && _mirrorPopulated(mirror)) ? _pTop(mirror) : null;
             let status;
             if (achieved == null) status = 'unverified';
             else if (objective == null) status = 'no-objective';

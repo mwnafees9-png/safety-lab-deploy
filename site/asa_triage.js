@@ -78,6 +78,20 @@
     // replaced ONLY when its externalSource resolves to a system FHA row whose
     // allocation tree has a verification mirror with a computable P(top). No
     // verified source ⇒ the budget value stays and the leaf counts uncovered.
+    // Populated = every leaf carries a rate, a probability or a Markov model. One rule,
+    // shared with the budget ledger and the E.3 / F.3.7 checklist items; the local walk is
+    // the sandbox fallback only.
+    function _mirrorPopulated(page) {
+        try { if (typeof slMirrorIsPopulated === 'function') return slMirrorIsPopulated(page); } catch (_) {}
+        if (!page || !page.root) return false;
+        let pop = 0, tot = 0;
+        (function walk(n) {
+            if (!n) return;
+            if (n.type !== 'gate') { tot++; if ((n.lambda && n.lambda > 0) || (n.probability && n.probability > 0) || n.markovModelId) pop++; }
+            (n.children || n._children || []).forEach(walk);
+        })(page.root);
+        return tot > 0 && pop >= tot;
+    }
     function _achievedForSysFha(fhaInternalId) {
         try {
             for (const s of (systemsData || [])) {
@@ -88,6 +102,13 @@
                 for (const alloc of trees) {
                     const mirror = _pages().find(p => p && p.verifies === alloc.id && p.root);
                     if (!mirror) continue;
+                    // 28 Sep 2026 — an UNPOPULATED mirror is not a verified source. A fresh
+                    // mirror is cloned with every leaf blanked, so P(top) is exactly 0 and
+                    // isFinite(0) is true: substituting it would replace a real budget value
+                    // with zero and make the aircraft-level number OPTIMISTIC. The comment
+                    // above already says a leaf with no verified source keeps its budget
+                    // value and counts uncovered; this is what makes that true.
+                    if (!_mirrorPopulated(mirror)) continue;
                     try {
                         const r = computeExactProbability(mirror.root);
                         if (r && typeof r.prob === 'number' && isFinite(r.prob)) return { prob: r.prob, mirror: mirror.name || mirror.id, system: s.name || s.id };

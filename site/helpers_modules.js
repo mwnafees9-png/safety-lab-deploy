@@ -1021,6 +1021,16 @@ function onProjectConfigChange() {
         projectConfig.missionDuration = (!isNaN(v) && v > 0) ? v : null;
     }
     renderProjectConfigUI();
+    // 28 Sep 2026 — SYNC AGAIN, AFTER THE RENDER. The sync above reads the Part 23 picker,
+    // and renderProjectConfigUI is what CREATES that picker (support_modules, host
+    // 'proj-p23-host', drawn only while the basis is Part 23 and blanked otherwise). So on
+    // a switch INTO Part 23 the first sync finds nothing, part23Class is never derived, and
+    // getSafetyTarget falls back to 'Part 23 IV' or to a leftover class: the basis moves and
+    // the DAL and probability targets do not move with it. The picker only existed on the
+    // second interaction, which is why touching cert level or propulsion appeared to fix it.
+    // Both calls are needed: the one above captures a user editing the picker, this one
+    // captures a basis switch that has only just drawn it. syncPicker is idempotent.
+    if (typeof SLP23 !== 'undefined' && document.getElementById('proj-p23-level')) SLP23.syncPicker('proj-p23', projectConfig);
     // If the FTA is open and linked to a hazard, refresh the required-target display.
     if (typeof refreshFTARequiredTarget === 'function') refreshFTARequiredTarget();
     if (typeof refreshTopAllocatorReadout === 'function') refreshTopAllocatorReadout();
@@ -1765,13 +1775,9 @@ function _ckptEvalCtx(phases) {
         });
     });
     const sysWithTrees = (systemsData || []).filter(s => sysTopDown.some(t => t.systemId === s.id));
-    const mirrorPopulated = t => {
-        const m = (ftaPages || []).find(p => p.verifies === t.id);
-        if (!m || !m.root) return false;
-        let pop = 0, tot = 0;
-        (function walk(n) { if (!n) return; if (n.type !== 'gate') { tot++; if ((n.lambda && n.lambda > 0) || (n.probability && n.probability > 0) || n.markovModelId) pop++; } (n.children || n._children || []).forEach(walk); })(m.root);
-        return tot > 0 && pop >= tot;
-    };
+    // 28 Sep 2026 — delegates to slMirrorIsPopulated (the one definition, above
+    // _cloneSubtreeForVerification). The inline copy that used to live here is gone.
+    const mirrorPopulated = t => slMirrorIsPopulated((ftaPages || []).find(p => p.verifies === t.id));
     return { phases, acFhas, crit, allSysFha, acTopDown, sysTopDown, critLinked, reconViolations, sysWithTrees, mirrorPopulated,
              openAcAsm: (acAssumptionsData || []).filter(a => a.state === 'Proposed').length,
              nSys: (systemsData || []).length };
@@ -10272,6 +10278,37 @@ function closeNodeConfigModal() {
     } catch (_) {}
     if (typeof updateD3 === 'function') updateD3();
 }
+
+// ============================================================================
+// slMirrorIsPopulated(mirrorPage) — 28 Sep 2026. THE definition of "this
+// verification mirror actually contains data", used by the ARP checklist items
+// (E.3, F.3.7) AND by the budget ledger.
+//
+// WHY IT IS SHARED. _cloneSubtreeForVerification(root, blankValues=true) below
+// deliberately blanks every leaf to lambda 0 / probability 0 / inputValue 0, so
+// a fresh mirror computes P(top) = exactly 0. Zero is a finite number, so the
+// ledger read it as an achieved result rather than as "nothing entered yet",
+// and 0 <= objective is always true: an empty mirror reported meets-objective
+// and the ASA triage then closed the failure condition as verified. An analysis
+// containing no data must never read as a pass.
+//
+// The checklist already had this test inline. Two copies of a rule like this is
+// how they drift, so there is now one.
+// ============================================================================
+function slMirrorIsPopulated(mirrorPage) {
+    if (!mirrorPage || !mirrorPage.root) return false;
+    let pop = 0, tot = 0;
+    (function walk(n) {
+        if (!n) return;
+        if (n.type !== 'gate') {
+            tot++;
+            if ((n.lambda && n.lambda > 0) || (n.probability && n.probability > 0) || n.markovModelId) pop++;
+        }
+        (n.children || n._children || []).forEach(walk);
+    })(mirrorPage.root);
+    return tot > 0 && pop >= tot;
+}
+try { if (typeof window !== 'undefined') window.slMirrorIsPopulated = slMirrorIsPopulated; } catch (_) {}
 
 function _cloneSubtreeForVerification(node, blankValues) {
     if (!node) return null;
