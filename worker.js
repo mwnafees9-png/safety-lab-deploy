@@ -34,20 +34,28 @@
 // `connect-src 'none'`) so this Worker policy is the only one in effect.
 //
 // Allowlist derived from a full inventory of the app's origins:
-//   - script CDNs: cdnjs, jsdelivr, unpkg, d3js  (jspdf/xlsx/jszip/mammoth/pdf.js/
-//                  chart.js/vis-network/supabase-js/d3)
+//   - script CDNs: NONE. Removed 28 Sep 2026. vendor-libs.sh vendored all nine
+//                  libraries on 16 Sep and nothing has loaded from cdnjs, jsdelivr,
+//                  unpkg or d3js since; pdf.js takes its worker from
+//                  vendor/pdf.worker.min.js (_SLAB_PDF_WORKER, ai_assistant.js:7414).
+//                  Checked before removing: zero references to any of the four hosts
+//                  anywhere in site/ outside vendor/ itself, and zero runtime URL
+//                  construction. A policy is not somewhere to leave unused
+//                  permissions lying around, and SL-DG-0001 section 7.2 tells a
+//                  customer this list is every address the application will contact,
+//                  which was not true while four dead CDNs sat in it.
 //   - 'unsafe-inline' on script-src is REQUIRED: 159 inline event handlers + 15
 //                  inline <script> blocks. No eval/Function exists, so no 'unsafe-eval'.
 //   - connect-src: Supabase REST + wss realtime, the LLM proxy, Anthropic, Voyage,
-//                  Jama, plus the CDN hosts (pdf.js fetches its worker from cdnjs).
+//                  Jama. The two CDN entries went with the script ones.
 const CSP_ENFORCE = true;    // SEC-6: enforcing (flipped 2026-07-05 after report-only soak; set false to roll back)
 const CSP_POLICY = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://d3js.org",
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://fhrqkhdrwbfnizkepkch.supabase.co wss://fhrqkhdrwbfnizkepkch.supabase.co https://api.safetylabaero.com https://api.anthropic.com https://api.voyageai.com https://electra.jamacloud.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
+    "connect-src 'self' https://fhrqkhdrwbfnizkepkch.supabase.co wss://fhrqkhdrwbfnizkepkch.supabase.co https://api.safetylabaero.com https://api.anthropic.com https://api.voyageai.com https://electra.jamacloud.com",
     "worker-src 'self' blob:",
     "frame-src 'self' blob:",
     "object-src 'none'",

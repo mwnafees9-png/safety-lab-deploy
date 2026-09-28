@@ -105,6 +105,30 @@ const hasSec = (r) => r.headers.get('x-content-type-options') === 'nosniff' && r
     check('status 200 with headers', r.status === 200 && hasSec(r));
   }
 
+  console.log('\n[H8] the CSP admits no outside host it does not use (28 Sep 2026)');
+  {
+    const r = await call(B + '/app/');
+    const csp = r.headers.get('content-security-policy') || '';
+    // Every directive that can fetch or execute code must name no third-party host.
+    // img-src keeps https: on purpose (user-pasted images); form-action keeps Stripe.
+    const FETCHING = ['default-src', 'script-src', 'style-src', 'font-src', 'connect-src', 'worker-src', 'frame-src'];
+    const parts = {};
+    csp.split(';').forEach(d => { const s = d.trim(); if (!s) return; const i = s.indexOf(' '); parts[i < 0 ? s : s.slice(0, i)] = i < 0 ? '' : s.slice(i + 1); });
+    const OWN = /^(https:\/\/fhrqkhdrwbfnizkepkch\.supabase\.co|wss:\/\/fhrqkhdrwbfnizkepkch\.supabase\.co|https:\/\/api\.safetylabaero\.com|https:\/\/api\.anthropic\.com|https:\/\/api\.voyageai\.com|https:\/\/electra\.jamacloud\.com)$/;
+    const strays = [];
+    FETCHING.forEach(k => (String(parts[k] || '').match(/https?:\/\/[^\s]+/g) || []).forEach(h => { if (!OWN.test(h)) strays.push(k + ' ' + h); }));
+    check('no un-owned host in a fetching directive', strays.length === 0, strays.join(' | '));
+    // The four vendored-away CDNs must never come back without this test being edited.
+    ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'unpkg.com', 'd3js.org'].forEach(h => {
+      check('CSP does not mention ' + h, csp.indexOf(h) === -1);
+    });
+    // And the libraries they used to serve must actually be present locally.
+    ['d3.v7.min.js', 'pdf.min.js', 'pdf.worker.min.js', 'xlsx.full.min.js', 'jspdf.umd.min.js',
+     'jszip.min.js', 'mammoth.browser.min.js', 'docx.umd.js', 'chart.umd.min.js'].forEach(f => {
+      check('vendored: ' + f, fs.existsSync(path.join(ROOT, 'site', 'vendor', f)));
+    });
+  }
+
   console.log('\n[H7] the assets binding no longer owns the fallback (not_found_handling:"none")');
   for (const wf of ['wrangler.jsonc', 'wrangler.dist.jsonc']) {
     const t = fs.readFileSync(path.join(ROOT, wf), 'utf8');

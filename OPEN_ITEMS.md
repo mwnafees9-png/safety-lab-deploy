@@ -61,9 +61,22 @@ had drifted in both directions.
       defect class as the d3js finding in R7 that we thought was closed. Also: the live CSP still
       permits cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com and d3js.org in `script-src` and
       two of them in `connect-src`, although nothing loads from them since the 16 Sep vendoring —
-      a reviewer reads the policy, not the source. **Knock-on: SL-WP-0008 v1.2 section 7.3 claims
-      the guide's egress list is the whole list. That sentence is wrong and the paper is on the
-      Desktop; correct it before the paper goes anywhere.**
+      a reviewer reads the policy, not the source.
+      **RESOLVED IN CODE 28 Sep 2026, per Waqas: "fix the code to match the paper, unless it will
+      make the tool worse."** It does not make it worse. Checked first: zero references to any of
+      the four hosts anywhere in site/ outside vendor/, zero runtime URL construction, and pdf.js
+      already takes its worker from vendor/pdf.worker.min.js. So all four came out of script-src
+      and the two out of connect-src; the CSP now names only Supabase, the proxy, Anthropic, Voyage
+      and Jama. regression_app_headers gained H8 (30/30, three mutations proved red: a CDN put back
+      in script-src, a stray host in connect-src, a vendored library removed). The paper keeps its
+      strong claim and now earns it. NEEDS ./ship.sh to reach browsers.
+      **ONE PIECE LEFT, AND IT IS A DASHBOARD TOGGLE, NOT CODE:** Cloudflare still injects the
+      beacon tag into every app page at the edge. Measured live: it does NOT execute — transferSize
+      0, encodedBodySize 0, no __cfBeacon global, no collector request — because the app's own CSP
+      refuses it, so no analytics data leaves a customer's browser today. But the HTML carries a
+      third-party script tag, and a reviewer reads the page. Turn auto-injection off in Cloudflare
+      Web Analytics (cost: analytics on the marketing pages, which can be re-added to those pages
+      explicitly if wanted). Waqas's call.
 - [ ] **SEC-1 (S8 phases 3 to 6) — get credentials out of browser localStorage.** Phases 1 and 2 are
       done and proven with real roles on the throwaway. Left: the app write path (RPC calls replace
       localStorage; browser-only to a local store, desktop to the keychain), the server read path
