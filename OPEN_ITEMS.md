@@ -1644,12 +1644,16 @@ are the gaps. All are engineering-only, none touch customer data paths.
   ("minimization argument needed" / "minimized"), INV-64 advisory.
 
 ### AI lane ground rules (Waqas's lane only; eval-gated per the skill-body rule)
-- **Q12 — Prosecutor stance.** FHA and CMA prompts start from "assume this design is unsafe and look for the
-  evidence" rather than compiling evidence that it is safe.
-- **Q13 — No threat is far-fetched.** Common-mode candidates are never dismissed for being unlikely-sounding;
-  failure rates are treated as predictions, and the common mode may be more likely than either AND-gate input.
-- **Q14 — Defence order.** Design out first, safeguard second, inform the crew third; "inform the crew" is never
-  accepted as the only line of defence against Hazardous or Catastrophic.
+- **Q12 — Prosecutor stance. DONE 27 Sep 2026** (fha.draft / sfha.draft v10#ff757938, cma.draft v2#6f303f9c).
+  The FHA and CMA bodies start from "assume this design is unsafe and look for the evidence", and say explicitly
+  that the stance governs what the model looks for, not the class it assigns.
+- **Q13 — No threat is far-fetched. DONE 27 Sep 2026** (cma.draft v2). A category is excluded only when it does
+  not APPLY to the design, never because it seems improbable; both eval draws dropped nothing for being unlikely.
+- **Q14 — Defense order. DONE 27 Sep 2026** (fha.draft / sfha.draft v10). Design out first, safeguard second,
+  inform the crew third; "inform the crew" alone is never accepted against Hazardous or Catastrophic. This is the
+  one change the eval shows clearly: 17 rows naming a design defense against 0-1 on the goldens.
+- Eval filed under eval/runs/draws5 (draw5_f1_v10, draw5_f2_v10, cma_v1, cma_v2); the reading is in HANDOFF.md
+  under 27 Sep. All four FHA metrics sit inside the tool's own draw-to-draw band.
 
 ### Marketing (company voice, our own words, no text from the guide)
 - **Q15 — Accident series for LinkedIn:** TWA 800, Nimrod XV230, Austrian OF111 (2004), Air France 4590, Air India

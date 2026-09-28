@@ -1,0 +1,895 @@
+{
+ "skill": "cma.draft@v1#381333c0",
+ "capturedAt": "2026-09-28T00:52:51.313Z",
+ "project": "Aeolus HL-1 · FHA draws on run 3 inputs · 4 Sep",
+ "andGates": 25,
+ "coverage": {
+  "total": 25,
+  "covered": 25,
+  "noun": "independence claim (AND gate)",
+  "missing": []
+ },
+ "items": [
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-001-TL — {Engine 1 (ITM-001) left outboard ∧ …} below-floor engine independence",
+   "claim": "The engines grouped in the SF-001-TL below-floor MAC clause fail independently, so simultaneous loss is the product of independent engine failures.",
+   "principle": "Independence of redundant engines feeding the SF-001-TL total-loss-of-forward-thrust AND (below-floor MAC configuration).",
+   "findings": "Common Resource (fuel): all four engines are fed through the single spanwise cross-feed gallery in the wing box — the only path from one wing to the opposite engines — a shared-resource common cause. Common Resource (electrical/hydraulic): each engine drives one 150 kVA generator and one EDP through the accessory gearbox; generators are a single part number across all four positions (recorded design-level item). Development/Design: single generator part number is a common-design deficiency channel. Installation/Environment: left and right engine pairs sit in separate zones (610–640) and services are not commingled outboard of the wing root, which supports side-to-side separation; however the fuel gallery transits the common zone 300. Maintenance: single generator part number implies a common maintenance/overhaul action — staggered overhaul is applied per SDD. Table M2 concerns: [1] Cross-feed gallery single spanwise run | can starve multiple engines from one fuel event | mitigated by four isolation valves + gravity path <FL150 + collector cells, but gallery is retained as a particular-risk/zonal item. [2] Generator single part number | common latent design defect across four positions | mitigated by staggered overhaul intervals. [3] Bleed cross-bleed manifold in zone 300 | shared pneumatic node | not a direct thrust-loss path but a co-location item.",
+   "requirements": [
+    "The fuel cross-feed gallery isolation valves shall be shown to prevent propagation of a single fuel contamination or leak event to more than the engines on the affected side. [independence requirement, dev/PASA — pending substantiation]",
+    "The single-part-number generator installation across the four engine positions shall be shown, with staggered overhaul, not to introduce a common-cause failure that defeats the SF-001-TL engine independence. [independence requirement, dev/PASA]"
+   ],
+   "findings2": "",
+   "principle2": "",
+   "mitigation": "Four fuel isolation valves + gravity feed path below FL150 + dedicated collector cells; separate left/right engine zones with no outboard commingling; staggered generator overhaul intervals. Cross-feed gallery and generator commonality both recorded as items requiring particular-risk / zonal and design-level attention.",
+   "status": "Open — development-phase independence requirement, pending substantiation",
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "The gallery is the only path by which fuel from one side reaches an engine on the other."
+   },
+   "_k": "anemb-1790556051731-0",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-001-TL — {Engine 3 (ITM-003) right inboard ∧ …} below-floor engine independence",
+   "claim": "The engines grouped in the SF-001-TL below-floor MAC clause including engine 3 fail independently.",
+   "principle": "Independence of redundant engines (engine-3 branch) feeding the SF-001-TL total-loss-of-forward-thrust AND (below-floor MAC configuration).",
+   "findings": "Common Resource (fuel): engine 3 is fed via the same single spanwise cross-feed gallery; a single gallery event is a shared-resource common cause across sides. Common Resource (electrical/hydraulic): engine 3 drives a single-part-number 150 kVA generator and an EDP; generator part-number commonality is a recorded design-level item. Development/Design: common generator part number is a common-design channel. Installation/Environment: engine 3 nacelle (zone 630) is a separate fire zone from the opposite side, supporting separation; inboard pylons at ~0.18 semi-span. Note engine 3 also drives HYD system B (pumps on engines 3,4) — a coupling to be examined where the MAC clause spans engines 3 and 4. Maintenance: single-part-number generator implies common maintenance action, mitigated by staggered overhaul. Table M2 concerns: [1] Cross-feed gallery single spanwise run | starves engine 3 and others from one fuel event | mitigated by isolation valves/gravity/collectors. [2] HYD B pumped by engines 3 and 4 | same-side engine coupling | separate hydraulic concern, flagged. [3] Generator single part number | common latent defect | staggered overhaul.",
+   "requirements": [
+    "The fuel cross-feed gallery shall be shown not to propagate a single fuel event to engine 3 together with engines on the opposite side. [independence requirement, dev/PASA]",
+    "The engine-3/engine-4 HYD B pumping commonality shall be examined so it does not create an undeclared common cause in the SF-001-TL engine independence. [independence requirement, dev/PASA]"
+   ],
+   "mitigation": "Four fuel isolation valves + gravity path + dedicated collectors; separate nacelle fire zones; staggered generator overhaul. Cross-feed gallery recorded as particular-risk/zonal item.",
+   "status": "Open — development-phase independence requirement, pending substantiation",
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "system B by engine-driven pumps on engines 3 and 4"
+   },
+   "_k": "anemb-1790556051731-1",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-002-TL — {Thrust reverser — engine 2 (ITM-005) ∧ …} reverser independence",
+   "claim": "The reverser element(s) grouped in the SF-002-TL below-floor MAC clause fail independently.",
+   "principle": "Independence for the SF-002-TL total-loss-of-ground-reverse-thrust AND (below-floor MAC configuration), reverser engine-2 branch (ITM-005).",
+   "findings": "Architecture note: thrust reversers are fitted to the two INBOARD engines only (engines 2 and 3 — ITM-005, ITM-006), so total-loss reverse thrust rests on just two reverser units with no outboard diversity. Common Resource (hydraulic): reverser actuation and the nose-door/visor family draw on HYD A; reverser deployment inhibit uses weight-on-wheels and radio-altimeter agreement with a mechanical sleeve lock. Common Resource (electrical/control): reverser command path shares the engine-2 FADEC (dual channel, cross-linked for data only) and DC essential / AC transfer feeds. Installation/Environment: reverser 2 is co-located in the engine-2 nacelle (zone 620), a designated fire zone with high energy and flammable fluid — a single nacelle event can take the reverser with the engine. Development/Design: the two reversers are of the same design, a common-design channel across the reverser pair. Table M2 concerns: [1] Nacelle 620 fire/high-energy zone co-location | reverser 2 and its engine lost together | zonal item. [2] Shared WOW / radio-altimeter inhibit logic | common signal source affecting both reversers | flagged for the reverser-pair clause. [3] Same-design reverser units | common latent defect | flagged. Insufficient input: this MAC clause names a single reverser (ITM-005); the AND-gate independence tested is between the two reversers only if the clause groups ITM-005 with ITM-006 — the provided clause text shows one element, so a within-unit common cause (single nacelle event) already defeats that element's availability.",
+   "requirements": [
+    "The engine-2 thrust-reverser command, inhibit (WOW/radio-altimeter) and HYD A actuation paths shall be shown not to share a common cause with the engine-3 reverser that defeats the SF-002-TL reverser independence. [independence requirement, dev/PASA]"
+   ],
+   "mitigation": "Reverser deployment inhibited in flight by weight-on-wheels AND radio-altimeter agreement plus a mechanical translating-sleeve lock; dual-channel FADEC. No reverser-pair diversity beyond the two inboard units.",
+   "status": "Open — development-phase independence requirement, pending substantiation",
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Thrust reversers are fitted to the two inboard engines only."
+   },
+   "_k": "anemb-1790556051731-2",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "1788554435725",
+   "toId": "idp-pg-1788549569092nv6vi",
+   "confidence": "low",
+   "source": {
+    "doc": "",
+    "quote": ""
+   },
+   "_k": "anemb-1790556051731-3"
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "1788554435726",
+   "toId": "idp-pg-1788549569092nv6vi",
+   "confidence": "low",
+   "source": {
+    "doc": "",
+    "quote": ""
+   },
+   "_k": "anemb-1790556051731-4"
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "1788554435727",
+   "toId": "idp-pg-1788549569206fkzib",
+   "confidence": "low",
+   "source": {
+    "doc": "",
+    "quote": ""
+   },
+   "_k": "anemb-1790556051731-5"
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-002-TL · PRP ∧ AVI independence for total loss of ground reverse thrust",
+   "claim": "Total loss of ground reverse thrust requires simultaneous Propulsion (PRP) reverser failure AND Avionics & Flight Deck (AVI) failure of the weight-on-wheels / radio-altimeter arm-and-command — the two branches are independent.",
+   "principle": "Independence of the PRP reverser branch and the AVI arm/command branch feeding the SF-002-TL AND gate",
+   "findings": "Common Resources: both branches consume EPS, a resource that supplies all systems; AVI reference/alerting is fed from the DC essential bus which also supplies engine controls — a shared essential-bus loss couples both branches. Common Environment / Installation: PRP fire/overheat discretes originate in the nacelle fire zones and AVI low-voltage/data routes transit the mid-hold commonality zone (300); a zonal event there could reach both. Development/Design: reverser inhibit logic depends on WOW+RA agreement sourced from AVI, so an AVI data error can defeat the intended two-branch separation. Not credibly common: PRP reverser hydro-mechanical actuation vs AVI processing are dissimilar in technology.",
+   "mitigation": "Require EPS segregation so no single bus loss removes both the reverser arming path and reverser actuation; confirm DC-essential dependency does not create a single point across both branches; require zonal separation of PRP fire/overheat discretes from AVI LV/data routing where they transit zone 300; substantiate WOW/RA agreement redundancy so a single AVI channel error cannot both inhibit and mis-command.",
+   "status": "Open",
+   "requirements": [
+    "The reverser arming (WOW/RA) path and the reverser actuation power feed shall not share a single electrical bus whose loss defeats both.",
+    "The PRP fire/overheat discretes and the AVI LV/data channels shall maintain defined separation where they transit zone 300."
+   ],
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Reverser deployment is inhibited in flight by weight-on-wheels and radio-altimeter agreement",
+    "where": "§5.1.2"
+   },
+   "_k": "anemb-1790556051731-6",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "",
+   "toId": "",
+   "confidence": "low",
+   "source": {
+    "doc": "",
+    "quote": ""
+   },
+   "_k": "anemb-1790556051731-7"
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-002-TL · PRP inboard-reverser redundancy independence",
+   "claim": "Total loss of ground reverse thrust is prevented by the two inboard-engine reversers (engines 2 and 3) being independent, so both branches of the SF-002-TL AND gate do not fail together.",
+   "principle": "Independence of the two inboard thrust-reverser channels (ITM-005 engine 2, ITM-006 engine 3) at the SF-002-TL AND gate",
+   "findings": "Common Resources: reverser deployment is inhibited by WOW+RA agreement and both reversers share the AVI-sourced arm logic; a common AVI/EPS fault can inhibit both. Development/Design: the two reversers are of common design/part family, so a common design or manufacturing deficiency is a credible common cause across both units. Installation / Environment: reversers sit in separate nacelle fire zones (620, 630), which supports physical separation against a single zonal event. Common maintenance: identical units invite a common maintenance/rigging error across both.",
+   "mitigation": "Substantiate that the shared WOW/RA arm-and-command does not present a single point defeating both reversers; apply staggered maintenance/rigging or dissimilar acceptance checks to counter common design/manufacturing/maintenance error across the two identical reverser units; confirm nacelle-zone separation preserves the physical-independence claim.",
+   "status": "Open",
+   "requirements": [
+    "The two inboard thrust reversers shall not be defeated by a single common WOW/RA arm-and-command fault.",
+    "Common maintenance/rigging error across the two inboard reversers shall be mitigated by procedure or dissimilar verification."
+   ],
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Thrust reversers are fitted to the two inboard engines only.",
+    "where": "§5.1.2"
+   },
+   "_k": "anemb-1790556051731-8",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "",
+   "toId": "",
+   "confidence": "low",
+   "source": {
+    "doc": "",
+    "quote": ""
+   },
+   "_k": "anemb-1790556051731-9"
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-014-TL · Air cycle pack 1 ∧ pack 2 independence (MAC breach)",
+   "claim": "Total loss of flight-deck conditioning and air supply requires loss of BOTH air cycle pack 1 (ITM-015) AND pack 2 (ITM-016) — the two packs are independent, per MAC clause min 1 of {ITM-015, ITM-016}.",
+   "principle": "Independence of air cycle pack 1 and pack 2 at the SF-014-TL AND gate (MAC-BRCH)",
+   "findings": "Common Resources: both packs are supplied with bleed air through a single cross-bleed manifold with three isolation valves — a manifold-level fault or loss of all bleed sources removes both packs simultaneously. The cross-bleed manifold physically sits in zone 300, the aircraft's principal commonality zone, so a zonal event there is a credible common cause. Common Resources (electrical): both packs and their controllers consume EPS. Development/Design: the two packs are of common design, so a common design deficiency is a credible common cause. Mitigating: bleed can be supplied from either side through the cross-bleed, giving source redundancy upstream of the manifold — but the manifold itself is the coupling point.",
+   "mitigation": "Substantiate that the cross-bleed manifold and its isolation valves are not a single point defeating both packs (e.g. manifold segmentation / valve isolation on demand); require zonal protection of the manifold in zone 300 against a single event striking both pack supplies; confirm pack electrical feeds are segregated so no single bus loss removes both; address common pack design via qualification/dissimilarity or acceptance-test rigor.",
+   "status": "Open",
+   "requirements": [
+    "A single cross-bleed manifold or isolation-valve fault shall not remove bleed supply to both air cycle packs.",
+    "Air cycle pack 1 and pack 2 electrical supplies shall be segregated so no single bus loss removes both packs."
+   ],
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Two air cycle packs are supplied with bleed air from the four engines through a cross-bleed manifold",
+    "where": "§5.9.2"
+   },
+   "_k": "anemb-1790556051731-10",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "",
+   "toId": "",
+   "confidence": "low",
+   "source": {
+    "doc": "",
+    "quote": ""
+   },
+   "_k": "anemb-1790556051731-11"
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-015-TL — Pressurisation controller 1 ∧ controller 2 independence",
+   "claim": "The two pressurisation controllers (ITM-017, ITM-018) fail independently, so loss of cabin pressure control requires both to fail.",
+   "principle": "AND-gate independence of the dual pressurisation controllers underpinning SF-015-TL (Total loss of cabin pressure control).",
+   "findings": "Development-phase (PSSA) evaluation per ARP4761A App M. Common Resources: both controllers are ECS equipment consuming EPS; the SDD states EPS 'Supplies all systems', so a shared bus/feed is a credible common-cause defeating the pair unless the two controllers are shown to sit on independent electrical sources. Development/Design: both controllers drive the same two outflow valves and share the pressurisation control law — a common specification/software defect is a common-cause contributor. Installation Design / Environment: not groundable — no zone links ITM-017/018 in the zonal model; co-location and shared routing require zonal confirmation. Manufacturing: same part type not confirmed by the SDD.",
+   "mitigation": "Segregate the two controllers onto independent EPS sources (e.g. different DC/AC feeds) and confirm no single bus loss takes both; apply design/software dissimilarity or independent monitoring for the shared control law; confirm physical separation in the zonal analysis. Retain the pneumatic backup mode and independent mechanical relief as architectural mitigation.",
+   "findings2": "",
+   "status": "Open — development phase, PSSA",
+   "requirements": [
+    "The two pressurisation controllers shall be supplied from independent electrical sources such that no single bus loss disables both.",
+    "A common design/software fault of the pressurisation control law shall not simultaneously defeat both pressurisation controllers."
+   ],
+   "verification": "SSA/ASA to verify (a) electrical source independence of ITM-017/ITM-018 against the as-built EPS bus assignment, (b) dissimilarity or independent-monitoring argument for the shared control law, and (c) zonal separation once ITM-017/018 zones are assigned.",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Pressurisation control is by two digital controllers driving two outflow valves",
+    "where": "§5.9.2"
+   },
+   "_k": "anemb-1790556051731-12",
+   "_abstained": []
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "CMA-SF015TL-CTRL",
+   "toId": "1788550070394hvtsl",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "two digital controllers driving two outflow valves",
+    "where": "§5.9.2"
+   },
+   "_k": "anemb-1790556051731-13"
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-015-TL — Outflow valve 1 ∧ Outflow valve 2 independence",
+   "claim": "The two outflow valves (ITM-019, ITM-020) fail independently, so loss of cabin pressure control requires both to fail (either valve being sufficient).",
+   "principle": "AND-gate independence of the dual outflow valves underpinning SF-015-TL (Total loss of cabin pressure control).",
+   "findings": "Development-phase (PSSA) evaluation per ARP4761A App M. Common Resources: both valves are ECS equipment consuming EPS ('Supplies all systems'); a shared electrical feed to both valves is a credible common-cause. Development/Design: both valves are commanded by the same two controllers — a controller-common command fault could drive both valves erroneously; the same-type valve is a common-design contributor if confirmed. Installation Design / Environment: not groundable — no zone links ITM-019/020 in the zonal model; co-location/shared routing require zonal confirmation. Manufacturing: same part type not confirmed by the SDD.",
+   "mitigation": "Confirm each outflow valve on an independent electrical feed; ensure the pneumatic backup mode drives one outflow valve directly on cabin pressure independent of the controllers; rely on independent positive/negative mechanical pressure relief as a diverse backstop; confirm physical separation of the two valves in the zonal analysis.",
+   "findings2": "",
+   "status": "Open — development phase, PSSA",
+   "requirements": [
+    "Each outflow valve shall be supplied from an independent electrical source such that no single bus loss disables both.",
+    "A single controller command fault shall not simultaneously drive both outflow valves to an unsafe position."
+   ],
+   "verification": "SSA/ASA to verify (a) independent electrical feeds to ITM-019/ITM-020, (b) the pneumatic backup and mechanical relief provide diverse cabin-pressure protection independent of both valves' normal control path, and (c) zonal separation once valve zones are assigned.",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "two controllers driving two outflow valves, either valve being sufficient",
+    "where": "§5.9.2"
+   },
+   "_k": "anemb-1790556051731-14",
+   "_abstained": []
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "CMA-SF015TL-OFV",
+   "toId": "1788550070394hvtsl",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "two outflow valves, either valve being sufficient",
+    "where": "§5.9.2"
+   },
+   "_k": "anemb-1790556051731-15"
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-017-TL — Ice detector 1 ∧ Ice detector 2 independence",
+   "claim": "The two ice detectors (ITM-021 left, ITM-022 right forward fuselage) fail independently, so total loss of icing detection requires both to fail.",
+   "principle": "AND-gate independence of the dual ice detectors underpinning SF-017-TL (Total loss of icing detection / probe protection).",
+   "findings": "Development-phase (PSSA) evaluation per ARP4761A App M. Development/Design & Manufacturing: the SDD explicitly states the two detectors are identical in type and records their commonality as an item for examination — a common design/manufacturing-lot defect is a credible common-cause that defeats the AND. Common Resources: both detectors are electrically heated/monitored and consume EPS; a shared feed is a candidate common-cause. Environment: both are on the forward fuselage in the same icing/atmospheric environment; a single icing condition outside the detection design (or common contamination) can blind both identical units simultaneously — a common-environment contributor. Installation Design: mounted on opposite sides (left/right forward fuselage), which supports physical separation against a localised event; zone links for ITM-021/022 are not in the zonal model, so co-location beyond 'forward fuselage' is not fully groundable.",
+   "mitigation": "Given identical-type detectors, argue against common-design failure via qualification/exposure evidence or introduce dissimilar/independent detection means; confirm independent electrical supplies; substantiate that a single icing/contamination environment cannot blind both units (detection design coverage of the certification icing envelope). This commonality, if unresolved, invalidates any DAL reduction that rested on the dual-detector AND independence (App P).",
+   "findings2": "",
+   "status": "Open — development phase, PSSA",
+   "requirements": [
+    "The two ice detectors shall be supplied from independent electrical sources such that no single bus loss disables both.",
+    "The common-type ice detector installation shall be substantiated to show a single icing or contamination environment cannot simultaneously defeat both detectors across the certification icing envelope."
+   ],
+   "verification": "SSA/ASA to verify (a) independent electrical supplies to ITM-021/ITM-022, (b) the common-design substantiation for the identical detector type, and (c) that opposite-side installation is preserved as built and no shared routing/penetration reintroduces co-location.",
+   "confidence": "high",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "The two ice detectors are identical in type and their commonality is recorded as an item for examination",
+    "where": "§5.10.3"
+   },
+   "_k": "anemb-1790556051731-16",
+   "_abstained": []
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "CMA-SF017TL-ICEDET",
+   "toId": "17885501601270vbr4",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Two ice detectors of the same type are installed on opposite sides",
+    "where": "§5.10.2"
+   },
+   "_k": "anemb-1790556051731-17"
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-017-TL · AVI total loss ∧ IPS total loss independence (COFFE-AND)",
+   "claim": "AVI acquisition/monitoring path and IPS ice-detection path fail independently for total loss of icing detection",
+   "principle": "Independence of the AVI-hosted detection/monitoring channel from the IPS ice-detector channel feeding SF-017-TL",
+   "findings": "Two ice detectors are of the same type (common design) — a shared type defect can disable both. AVI reference/processing and IPS detection can share the DC essential bus and transit the mid equipment bay (zone 300), the aircraft's principal commonality zone. HV↔LV crossings and multiple routings converge in zone 300, so a zonal event there is a candidate common cause across both paths.",
+   "mitigation": "Confirm the two ice detectors' common type-defect exposure is bounded (dissimilarity or type-defect argument); confirm AVI and IPS supplies are drawn from separated buses and are not both single-threaded on DC essential; confirm zone 300 co-location does not defeat the AND (ZSA cross-reference). Where not assured, raise independence requirements for supply/routing/type-defect separation.",
+   "status": "Open",
+   "requirements": [
+    "The AVI detection/monitoring path and the IPS ice-detection path contributing to SF-017-TL shall not share a single electrical source such that one source loss defeats both.",
+    "The common type of the two ice detectors shall be substantiated against a common type-defect defeating SF-017-TL, or dissimilarity introduced."
+   ],
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "two ice detectors of the same type"
+   },
+   "_k": "anemb-1790556051731-18",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-017-TL · AVI malfunction ∧ IPS total loss independence (COFFE-AND)",
+   "claim": "AVI erroneous-data malfunction and IPS ice-detection total loss are independent contributors to SF-017-TL",
+   "principle": "Independence of the AVI malfunction mode from the IPS detection-loss mode feeding SF-017-TL",
+   "findings": "AVI supplies total air temperature and airspeed to IPS and receives ice-detection advisory back, so the two paths are functionally coupled at the data interface — a common erroneous input (air data) can both mislead AVI and starve IPS scheduling. Both paths can be co-located in zone 300 and can share the DC essential bus. The two ice detectors are of the same type (common design).",
+   "mitigation": "Confirm the air-data source feeding both AVI presentation and IPS scheduling is not a single common source whose error defeats the AND; confirm supply and routing separation in zone 300; substantiate the ice-detector common-type exposure. Raise independence requirements where the shared air-data / bus / zone coupling is not bounded.",
+   "status": "Open",
+   "requirements": [
+    "The air-data source feeding the AVI path and the IPS scheduling path contributing to SF-017-TL shall be arranged so a single erroneous source does not defeat both contributors.",
+    "The AVI and IPS contributors to SF-017-TL shall be substantiated as independent of zone 300 co-location and shared DC essential supply."
+   ],
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "total air temperature and airspeed from the avionics"
+   },
+   "_k": "anemb-1790556051731-19",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-018-TL · MAC below-floor: DPU / ADIRU / ISI redundancy independence for total loss of flight & navigation data",
+   "claim": "Display processing units, reference units and the standby instrument feeding SF-018-TL fail independently down to the MAC floor",
+   "principle": "Independence of the redundant DPU (ITM-023/024/025), ADIRU (ITM-026/027/028) and ISI (ITM-031) set underpinning the SF-018 MAC",
+   "findings": "Three display processors are in three separate bays and the two network channels share no connector or penetration — good separation. However FCC/equipment bays and processors transit zones 120/300/400, and zone 300 is the principal commonality zone where HV↔LV crossings and multiple routings converge; a zonal event there is a candidate common cause. Two ADIRUs are on the main buses and one on DC essential (ITM-028), so a main-bus common cause degrades two of three reference units at once. The standby instrument shares no supply, sensor or processing with the primary displays, which supports the ISI clause of the MAC.",
+   "mitigation": "Confirm the DPU/ADIRU set is not defeated by a single zone 300 event (ZSA cross-reference) and that the two-on-main / one-on-essential ADIRU split is intentional and bounds a single main-bus loss to 2-of-3. Preserve the standby-instrument no-shared-resource claim as the independent leg. Raise independence requirements where the MAC floor is not held by physical/supply separation.",
+   "status": "Open",
+   "requirements": [
+    "The DPU and ADIRU contributors to SF-018-TL shall be substantiated as not defeated by a single zone 300 co-location event.",
+    "The ADIRU supply arrangement (two on main buses, one on DC essential) shall be substantiated to bound a single main-bus loss below the SF-018 MAC floor.",
+    "The integrated standby instrument shall remain independent in supply, sensing and processing from the primary display path for SF-018-TL."
+   ],
+   "verification": "",
+   "confidence": "high",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "standby instrument that shares no supply, no sensor and no processing with the primary displays"
+   },
+   "_k": "anemb-1790556051731-20",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-020-TL · dual-loop fire detection (loop A ∧ loop B per nacelle) — common design / same-type loops",
+   "claim": "Per-nacelle warning requires BOTH detection loops to fail (AND with degraded single-loop logic); the two loops are independent.",
+   "principle": "Loop A and loop B of each nacelle/APU zone fail independently so no single cause disables both.",
+   "findings": "Common Failure/Error Source Concern | Effect on the Principle | Mitigating Factor or Lack of Independence — (1) Common design / common part type: both loops are continuous detection elements of the same detector technology, so a shared design or material deficiency or a common calibration/threshold error can bias or disable both loops of a nacelle simultaneously | defeats the AND for that zone | SDD does not state loop A and loop B are dissimilar in element type or supplier — commonality is NOT excluded and is a Development/Design common-cause candidate. (2) Common test/maintenance action: a single loop functional-test or continuity-check procedure applied to both loops in one maintenance action can introduce a common latent error | latent defeat of both loops | staggered maintenance not stated.",
+   "mitigation": "Require loop A / loop B dissimilarity (element type and/or supplier) or substantiate that a common design deficiency is not credible; require staggered/independent functional test procedures for the two loops of each zone; carry the AND-gate CCF contributor (beta-factor) explicitly for the same-type detection pair.",
+   "status": "Open — development phase (supports PSSA / DAL substantiation for SF-020-TL)",
+   "requirements": [
+    "The fire-detection loop A and loop B of each nacelle/APU zone shall be dissimilar in detection element type or supplier, or a common design/material deficiency shall be shown not credible.",
+    "Functional test of loop A and loop B of a given zone shall not be performed as a single common maintenance action."
+   ],
+   "verification": "",
+   "confidence": "high",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "dual-loop continuous fire detection, with the two loops routed separately and an AND logic between them"
+   },
+   "_k": "anemb-1790556051731-21",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-020-TL · dual-loop fire detection — common environment / co-location within the fire zone",
+   "claim": "The two loops of a nacelle are physically independent so a single zonal event does not take both.",
+   "principle": "Loop A and loop B are separated within the zone such that one fire/overheat/mechanical event cannot disable both before warning.",
+   "findings": "Common Failure/Error Source Concern | Effect on the Principle | Mitigating Factor or Lack of Independence — (1) Co-location in a designated fire zone: both loops are installed inside the same nacelle (zone 610/620/630/640, worst zonal severity Catastrophic) which is itself a high-energy, flammable-fluid fire zone; an intense localised fire or an uncontained rotor/engine burst can sever or degrade both routed loops | defeats the AND for that zone | SDD states the two loops are routed on opposite sides of the zone and separately clipped — partial mitigation, but a rotor-burst debris cone or engine-burst event (both PARTICULAR RISKS applicable) may cross both routings; reconcile with PRA. (2) The AND logic degrades to single-loop on loss of one loop, so the first loop lost is a latent reducer of margin before the common environmental event.",
+   "mitigation": "Confirm opposite-side routing survives the applicable rotor-burst (AC 20-128A) and engine-burst debris trajectories; reconcile loop separation against the nacelle ZSA and rotor-burst PRA; where a single debris/fire event can defeat both, model it as a common-cause contributor to the SF-020-TL tree rather than an independent AND.",
+   "status": "Open — development phase (supports PSSA for SF-020-TL); reconcile with PRA Rotor Burst / Engine Burst and nacelle ZSA",
+   "requirements": [
+    "Loop A and loop B routings within each nacelle shall be separated such that no single credible rotor-burst debris trajectory or localised fire defeats both before warning."
+   ],
+   "verification": "",
+   "confidence": "high",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "The two detection loops for each zone are routed on opposite sides of that zone and are separately clipped."
+   },
+   "_k": "anemb-1790556051731-22",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-020-TL · dual-loop fire detection — common electrical resource (DC essential bus)",
+   "claim": "Detection availability across all zones is independent of any single shared electrical resource.",
+   "principle": "The detection loops draw power such that no single bus loss disables detection across the redundant set / multiple zones.",
+   "findings": "Common Failure/Error Source Concern | Effect on the Principle | Mitigating Factor or Lack of Independence — (1) Shared power resource: FPR detection is supplied with DC power from the essential bus; a loss of the DC essential bus removes detection across all zones simultaneously — a common resource above the per-zone AND | defeats detection redundancy at the system level, not just one AND | SDD states discharge circuits are on the hot battery bus so extinguishing survives generation loss, but DETECTION is on DC essential — single-resource exposure for the detection function is NOT excluded. (2) EPS is a resource consumed by every system; the SF-020 MAC (five loop-pair clauses) presumes power to all loops, an implicit independence hypothesis on the essential bus.",
+   "mitigation": "Confirm whether loop A and loop B of a zone, and detection across zones, draw from segregated buses; if all detection is on DC essential, carry DC-essential loss as a repeated/common-cause event across the SF-020-TL tree and reflect it in the DAL substantiation; consider splitting loop A/B power sources.",
+   "status": "Open — development phase (supports PSSA for SF-020-TL); requires EPS↔FPR power-source segregation confirmation",
+   "requirements": [
+    "The fire-detection loops shall be powered such that no single electrical bus loss removes fire/overheat detection across more than one nacelle/APU zone, or the shared bus shall be modelled as a common-cause event in the SF-020-TL fault tree."
+   ],
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "DC power from the essential bus to detection and from the hot battery bus to the discharge circuits"
+   },
+   "_k": "anemb-1790556051731-23",
+   "_abstained": [
+    "verification"
+   ]
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-020-TL · Fire & overheat detection loop A ∧ loop B (engine nacelle) independence",
+   "claim": "Dual continuous detection loops per engine nacelle, routed separately with AND logic for warning, fail independently so complete loss of engine fire/overheat detection is remote.",
+   "principle": "Loop A and loop B of a given engine nacelle are independent — no shared design, resource, routing or environment defeats the pair.",
+   "findings": "Common Failure/Error Source Concern | Effect on the Principle | Mitigating Factor or Lack of Independence — (1) Common design/type: both loops are continuous fire detection of the same technology and likely a common part number/manufacturing lot | a design or lot defect disables both loops in a nacelle | SDD claims separate routing but no dissimilarity between loops is stated — treat commonality as a lack of independence (COMMON DESIGN / MANUFACTURING). (2) Common resource: detection is supplied from the DC essential bus | loss/corruption of DC essential feed can disable both loops | shared supply is a COMMON RESOURCE contributor; segregation of loop feeds not substantiated. (3) Common environment / co-location: both loops sit inside the same nacelle, a designated fire zone (zone 610/620/630/640) | the very fire the loops must detect, or a nacelle burst/overheat, can damage both loops before warning | separate clipping on opposite sides mitigates local damage but not a zone-consuming event (COMMON ENVIRONMENT / INSTALLATION-DESIGN). (4) Common maintenance/calibration action across identical loops | a single incorrect calibration/install action defeats both | staggered/independent maintenance not stated.",
+   "mitigation": "Confirm and, where absent, require: loop-pair feed segregation (independent protected feeds, not a single shared branch of DC essential); dissimilarity or lot-control between loop A and loop B; substantiation that the AND-to-single-loop degradation logic does not itself create a common failure; PRA (uncontained rotor burst AC 20-128A, engine burst §25.901(c)) and ZSA for zone 610/620/630/640 to show a single nacelle event does not defeat both loops. Add a common-cause contributor to the SF-020-TL tree for the loop pair rather than a bare AND.",
+   "principle_note": "",
+   "status": "Open",
+   "requirements": [
+    "The two fire/overheat detection loops of each engine nacelle shall not share a single electrical supply branch such that one fault disables both loops.",
+    "The engine nacelle detection loop pair shall be shown by ZSA/PRA to survive a single nacelle fire, overheat or debris event sufficiently to raise a warning."
+   ],
+   "verification": "SSA/ASA to confirm as-built loop feed segregation, loop dissimilarity/lot control, and ZSA/PRA disposition for the nacelle fire zone; not yet performed (development phase).",
+   "confidence": "high",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "dual-loop continuous fire detection, with the two loops routed separately and an AND logic between them"
+   },
+   "_k": "anemb-1790556051731-24",
+   "_abstained": []
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-020-TL · Fire detection loop A ∧ loop B (APU compartment) independence",
+   "claim": "Dual continuous detection loops in the APU compartment, routed separately with AND logic, fail independently so complete loss of APU fire detection is remote.",
+   "principle": "Loop A and loop B of the APU compartment are independent — no shared design, resource, routing or environment defeats the pair.",
+   "findings": "Common Failure/Error Source Concern | Effect on the Principle | Mitigating Factor or Lack of Independence — (1) Common design/type: both APU loops are the same continuous-detection technology, likely common part number/lot | a design or lot defect disables both | separate routing stated, dissimilarity not stated (COMMON DESIGN / MANUFACTURING). (2) Common resource: APU detection supplied from the DC essential bus | loss/corruption of that feed disables both loops | shared supply is a COMMON RESOURCE; loop-feed segregation not substantiated. (3) Common environment / co-location: both loops are in the APU compartment, a designated fire zone in the aft fuselage (zone 800) | an APU fire or compartment-consuming event can damage both loops before warning | opposite-side clipping mitigates local damage only (COMMON ENVIRONMENT / INSTALLATION-DESIGN). (4) Note automatic APU discharge on the ground with the aircraft unattended relies on this detection — a common-cause loss of both loops also defeats that protective automatic action. (5) Common maintenance/calibration of identical loops | single wrong action defeats both | independent maintenance not stated.",
+   "mitigation": "Confirm/require: APU loop-pair feed segregation independent of a single DC essential branch; dissimilarity or lot-control between the two APU loops; ZSA for zone 800 (APU fire zone) and PRA showing a single APU compartment event does not defeat both loops nor the unattended auto-discharge chain. Model the APU loop pair as an explicit common-cause contributor in the SF-020-TL tree.",
+   "principle_note": "",
+   "status": "Open",
+   "requirements": [
+    "The two APU-compartment detection loops shall not share a single electrical supply branch such that one fault disables both loops.",
+    "The APU detection loop pair, and the automatic ground discharge that depends on it, shall be shown by ZSA to survive a single APU-compartment event sufficiently to detect fire."
+   ],
+   "verification": "SSA/ASA to confirm as-built APU loop feed segregation, dissimilarity/lot control, and ZSA disposition for the APU fire zone (zone 800); not yet performed (development phase).",
+   "confidence": "high",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Each engine nacelle and the APU compartment carry dual-loop continuous fire detection"
+   },
+   "_k": "anemb-1790556051731-25",
+   "_abstained": []
+  },
+  {
+   "op": "add_cma",
+   "subject": "MAC-BRCH SF-021-TL · Extinguisher bottle 1 ∧ bottle 2 (engine pair) independence",
+   "claim": "Two cross-plumbed extinguisher bottles per engine pair, either able to discharge into either nacelle of the pair, fail independently so total loss of fire extinguishing for the pair is remote.",
+   "principle": "Bottle 1 and bottle 2 of an engine pair are independent — no shared design, resource, routing or environment defeats the pair.",
+   "findings": "Common Failure/Error Source Concern | Effect on the Principle | Mitigating Factor or Lack of Independence — (1) Common design/type: both bottles are identical extinguisher units, likely common part number/charge lot | a common charge/valve/squib defect renders both undischargeable (COMMON DESIGN / MANUFACTURING); no dissimilarity stated. (2) Common resource: discharge circuits are supplied from the hot battery bus | loss/corruption of that supply disables both discharges | shared supply is a COMMON RESOURCE — hot-battery-bus feed selected precisely so it survives generation loss, but a single fault on that bus/branch is still a common contributor. (3) Shared discharge plumbing / cross-plumbing: cross-plumbing that lets either bottle serve either nacelle introduces shared distribution manifold/valving | a manifold/valve blockage or leak can defeat both bottles for the pair | benefit is coverage flexibility, cost is a potential shared discharge-path failure (COMMON RESOURCE / SHARED ROUTING). (4) Common environment: the bottles/plumbing route to nacelles that are fire zones (zone 610–640) | a nacelle event can breach the shared discharge path | installation separation of bottles from the fire zone mitigates the bottle itself, not the shared plumbing (COMMON ENVIRONMENT). (5) Common maintenance: identical bottles serviced/weighed by the same action | a single wrong servicing action leaves both under-charged | staggered/independent servicing not stated.",
+   "mitigation": "Confirm/require: discharge-circuit feed segregation so a single hot-battery-bus branch fault cannot inhibit both discharges; lot-control or dissimilarity on bottle charge/squib; substantiation that the cross-plumbing manifold/valving is not a single shared discharge path defeating both bottles; ZSA/PRA (nacelle fire, engine/rotor burst) for the discharge routing. Model the bottle pair and its shared discharge path as an explicit common-cause contributor in the SF-021-TL tree.",
+   "principle_note": "",
+   "status": "Open",
+   "requirements": [
+    "The two extinguisher bottle discharge circuits of each engine pair shall not share a single electrical supply branch such that one fault inhibits both discharges.",
+    "The cross-plumbed discharge path of each engine pair shall be shown not to constitute a single shared failure that defeats both bottles."
+   ],
+   "verification": "SSA/ASA to confirm as-built discharge feed segregation, bottle lot-control/dissimilarity, and integrity/independence of the cross-plumbing manifold; not yet performed (development phase).",
+   "confidence": "high",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Two extinguisher bottles per engine pair, cross-plumbed so that either bottle can discharge into either nacelle"
+   },
+   "_k": "anemb-1790556051731-26",
+   "_abstained": []
+  },
+  {
+   "op": "link",
+   "fromTable": "cma",
+   "fromId": "<new SF-020-TL nacelle CMA _id>",
+   "toId": "idp-pg-1788549570006yl9cc",
+   "confidence": "low",
+   "source": {
+    "doc": "",
+    "quote": ""
+   },
+   "_k": "anemb-1790556051731-27"
+  },
+  {
+   "op": "add_cma",
+   "subject": "SF-021-TL · Fire-extinguishing bottle-pair within-pair independence (ITM-044/045 eng 1/2; ITM-046/047 eng 3/4) — below-floor MAC",
+   "claim": "The two extinguisher bottles within each engine pair fail independently, so 1-of-2 per pair (plus the single APU bottle ITM-048) satisfies SF-021-TL.",
+   "principle": "Within-pair AND independence of the two bottles per engine pair, per MAC mac-1788549812369-774 clauses {ITM-044,ITM-045} and {ITM-046,ITM-047}.",
+   "findings": "Common Resources — the discharge circuits for both bottles are supplied from the hot battery bus (§5.12.5); a hot-battery-bus loss removes both bottles of a pair simultaneously, defeating the within-pair AND. Installation Design — the two bottles per pair are cross-plumbed so either discharges into either nacelle of the pair (§5.12.2); a fault in the shared cross-plumbing manifold is a common cause across the pair. Environment / Manufacturing — the paired bottles are of common design and likely a common charge/manufacturing lot (not stated); a common charge or seal defect is a candidate common-cause across the pair. APU protection (ITM-048) is a single bottle with no redundancy (§5.12.3) and is not an AND claim.",
+   "status": "",
+   "mitigation": "Model the hot-battery-bus discharge supply as a common-cause contributor (repeated event / dedicated CCF gate) beneath the SF-021-TL bottle-pair AND rather than leaving the AND as fully independent. Model the shared cross-plumbing manifold as a common-cause contributor for each pair. Substantiate charge/lot independence (staggered charging, dissimilar lots) or add an MGL/beta CCF term for the pair.",
+   "requirements": [
+    "The fire-extinguishing discharge circuits for the two bottles of each engine pair shall not share a single power source such that its loss removes both bottles of the pair.",
+    "The cross-plumbing manifold serving each bottle pair shall be shown by common-mode analysis not to constitute a single failure defeating both bottles of the pair.",
+    "Bottle charging/servicing procedures shall be defined so that a common charge or maintenance error does not disable both bottles of a pair."
+   ],
+   "verification": "",
+   "confidence": "medium",
+   "source": {
+    "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+    "quote": "Two extinguisher bottles per engine pair, cross-plumbed so that either bottle can discharge into either nacelle"
+   },
+   "_k": "anemb-1790556051731-28",
+   "_abstained": [
+    "verification"
+   ]
+  }
+ ],
+ "assumptions": [
+  {
+   "text": "The SF-001-TL and SF-002-TL below-floor MAC clauses assert AND-gate independence between the grouped engines/reversers, which is the independence principle these CMAs test.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "The seeded fault-tree pages for SF-001-TL and SF-002-TL are OR gates over system contributions; the engine/reverser AND independence lives in the MAC configuration model, not yet as a tree AND gate.",
+   "ifWrong": "If the below-floor grouping is not an AND independence claim, the CMA principle statement and the fault-tree link target change; the CMA→gate edge would need a dedicated below-floor AND gate instead.",
+   "usedFor": "All three CMA records and their links",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "systems A and B sharing a wing-root run is a claim about independence that has to be tested rather than assumed",
+     "where": "Appendix A, p.40"
+    }
+   ]
+  },
+  {
+   "text": "The single-part-number generators across all four engine positions constitute a credible common-design/common-maintenance contributor to engine independence despite staggered overhaul.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD records generator part-number commonality as a design-level item and applies staggered overhaul, but does not close whether the commonality defeats the AND independence.",
+   "ifWrong": "If commonality is shown non-credible, the generator common-design contributor and its independence requirement drop from the SF-001-TL CMA rows.",
+   "usedFor": "SF-001-TL engine-1 and engine-3 CMA records",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "The generators are of a single part number across all four positions",
+     "where": "§5.5.3, p.14"
+    }
+   ]
+  },
+  {
+   "text": "The cross-feed gallery is the load-bearing shared fuel resource coupling engines across sides for the SF-001-TL independence claim.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD states the gallery is the only inter-side fuel path but does not demonstrate the isolation valves prevent multi-engine propagation.",
+   "ifWrong": "If isolation is shown effective, the fuel shared-resource contributor is downgraded and the associated independence requirement narrows to same-side effects only.",
+   "usedFor": "SF-001-TL engine-1 and engine-3 CMA records",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "The gallery is the only path by which fuel from one side reaches an engine on the other.",
+     "where": "§5.2.2, p.11"
+    }
+   ]
+  },
+  {
+   "text": "Only two thrust reversers (inboard engines 2 and 3) are fitted, so SF-002-TL total-loss reverse thrust has no outboard reverser diversity.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "The SDD states reversers are on the inboard engines only; the reverser-pair AND independence therefore rests on just two same-design units.",
+   "ifWrong": "If more reversers exist, the SF-002-TL diversity assessment and the reverser common-design contributor change.",
+   "usedFor": "SF-002-TL reverser CMA record",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "Thrust reversers are fitted to the two inboard engines only.",
+     "where": "§5.1.2, p.10"
+    }
+   ]
+  },
+  {
+   "text": "The SF-002-TL AND gate's two branches are the PRP reverser-provision branch and the AVI WOW/RA arm-and-command branch.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "The named AND gate 'COFFE-AND — PRP ∧ AVI (SF-002-TL)' is not present in the provided ftaPages, so I inferred the two branches from the SDD reverser inhibit logic and the aircraft FHA SF-002-TL rows.",
+   "ifWrong": "If the branches are different systems, the shared-resource and shared-zone findings and the two SF-002-TL CMA rows change accordingly.",
+   "usedFor": "CMA rows 'SF-002-TL · PRP ∧ AVI independence...' and 'SF-002-TL · PRP inboard-reverser redundancy independence'",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "Reverser deployment is inhibited in flight by weight-on-wheels and radio-altimeter agreement, with a mechanical lock at the translating sleeve.",
+     "where": "§5.1.2"
+    }
+   ]
+  },
+  {
+   "text": "EPS is a resource that supplies all systems, so both the PRP and AVI branches depend on it and it is a candidate common-cause contributor.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The FHA/tree do not spell out per-branch power feeds, so I relied on the SDD inventory statement that EPS supplies every system.",
+   "ifWrong": "If the two branches are on fully segregated buses with no shared essential feed, the EPS common-resource finding is removed from both SF-002-TL rows.",
+   "usedFor": "Common Resources findings in both SF-002-TL CMA rows",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "EPS   Electrical Power   Resource   Supplies all systems",
+     "where": "§2.1"
+    }
+   ]
+  },
+  {
+   "text": "The cross-bleed manifold is the physical coupling point that can defeat the pack 1 ∧ pack 2 independence claimed by the SF-014 MAC clause.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SF-014-TL AND gate is not in the provided ftaPages; I grounded the coupling on the SDD ECS description of a single cross-bleed manifold feeding both packs.",
+   "ifWrong": "If the manifold segments or isolates such that no single fault removes both packs' bleed, the manifold common-cause finding and its requirement are dropped from the SF-014-TL row.",
+   "usedFor": "CMA row 'SF-014-TL · Air cycle pack 1 ∧ pack 2 independence (MAC breach)'",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "Two air cycle packs are supplied with bleed air from the four engines through a cross-bleed manifold with three isolation valves",
+     "where": "§5.9.2"
+    }
+   ]
+  },
+  {
+   "text": "The three MAC-BRCH claims correspond to the aircraft-level FHA top gates SF-015-TL and SF-017-TL rather than the system-level ECS/IPS trees.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "No fault-tree page for SF-015-TL/SF-017-TL appears in ftaPages (the seeded pages stop at SF-008); the FHA rows carry the fcIds, so the cma links target the aircraft FHA fcIds.",
+   "ifWrong": "If dedicated system-level tree pages exist for these top events, the cma→gate links should point at those gate node ids instead of the FHA fcIds.",
+   "usedFor": "the three link actions to 1788550070394hvtsl and 17885501601270vbr4",
+   "citations": []
+  },
+  {
+   "text": "ECS pressurisation controllers, outflow valves and ice detectors each draw electrical power from EPS as a shared resource.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD states EPS supplies all systems but does not give the specific bus assignment for ITM-017/018/019/020/021/022, so the shared-feed common-cause is asserted pending bus-level confirmation.",
+   "ifWrong": "If each redundant element is already on a confirmed independent source, the EPS common-resource contributor drops and the associated independence requirement is closed rather than open.",
+   "usedFor": "CMA SF-015-TL controller, CMA SF-015-TL outflow valve, CMA SF-017-TL ice detector",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "EPS Electrical Power Resource Supplies all systems",
+     "where": "§2.1 System Inventory"
+    }
+   ]
+  },
+  {
+   "text": "The two ice detectors' identical type constitutes a credible common-design/common-manufacturing common-cause defeating their AND independence.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD records the commonality as an item for examination but provides no dissimilarity or qualification evidence to discharge it.",
+   "ifWrong": "If common-design failure is substantiated as non-credible, the SF-017-TL detector CMA finding weakens to residual and no dissimilarity requirement is needed.",
+   "usedFor": "CMA SF-017-TL ice detector",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "The two ice detectors are identical in type and their commonality is recorded as an item for examination",
+     "where": "§5.10.3"
+    }
+   ]
+  },
+  {
+   "text": "The COFFE-AND gate rolling to SF-017-TL couples an AVI-hosted contributor with an IPS contributor whose independence is the AND-gate claim under test.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "The named COFFE-AND gate and the SF-017-TL fault-tree page are not present in the provided ftaPages, so the exact contributors of the AND could not be read from the model.",
+   "ifWrong": "If the AND-gate contributors differ, the two SF-017-TL CMA rows' findings and independence requirements change accordingly and the link targets differ.",
+   "usedFor": "SF-017-TL · AVI total loss ∧ IPS total loss; SF-017-TL · AVI malfunction ∧ IPS total loss",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "two ice detectors of the same type",
+     "where": "§5.10.3 / Figure 6-11"
+    }
+   ]
+  },
+  {
+   "text": "AVI and IPS contributors can share the DC essential bus and transit the mid equipment bay (zone 300) unless separation is substantiated.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD lists zone 300 as the principal commonality zone and shows AVI on essential/main buses and IPS on AC/DC power, but does not state whether the specific SF-017-TL contributors are separated.",
+   "ifWrong": "If the contributors are on separated buses and routes, the shared-supply / zone-300 common-cause findings and the associated independence requirements fall away.",
+   "usedFor": "Both SF-017-TL rows and the SF-018-TL zone-300 finding",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "the HV/LV crossing points",
+     "where": "§3 zone 300"
+    }
+   ]
+  },
+  {
+   "text": "This CMA is a DEVELOPMENT-phase analysis supporting PASA/PSSA, producing independence requirements rather than as-built verification evidence.",
+   "type": "other",
+   "status": "Open",
+   "rationale": "No implementation/as-built verification inputs were provided; the SDD is a design description that explicitly does not classify or assess.",
+   "ifWrong": "If verification-phase evidence exists, the rows should carry verification notes closing the requirements rather than open independence requirements.",
+   "usedFor": "All three CMA rows",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "It does not classify anything and it does not assess anything.",
+     "where": "§1.3"
+    }
+   ]
+  },
+  {
+   "text": "Fire-detection loop A and loop B of each nacelle/APU zone are of the same detector technology and are not stated to be dissimilar in element type or supplier.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD describes dual-loop detection and separate routing but does not state loop-to-loop element dissimilarity, forcing a common-design assumption to test the AND.",
+   "ifWrong": "If the loops are dissimilar by design, the common-design CCF contributor and its associated requirement drop, and the SF-020-TL AND independence for that concern holds without derating.",
+   "usedFor": "CMA row 'SF-020-TL · dual-loop fire detection — common design / same-type loops'",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "dual-loop continuous fire detection, with the two loops routed separately and an AND logic between them for warning",
+     "where": "§5.12.2"
+    }
+   ]
+  },
+  {
+   "text": "All fire/overheat detection loops are powered from the DC essential bus (as stated for detection), making that bus a shared resource above the per-zone loop-pair AND.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "The SDD states detection is DC-essential powered but does not confirm whether loop A and loop B, or different zones, are segregated onto different buses.",
+   "ifWrong": "If loop A/B and zones draw from segregated buses, the DC-essential single-resource concern narrows and the system-level CCF row and its requirement are reduced or removed.",
+   "usedFor": "CMA row 'SF-020-TL · dual-loop fire detection — common electrical resource (DC essential bus)'",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "DC power from the essential bus to detection and from the hot battery bus to the discharge circuits",
+     "where": "§5.12.4"
+    }
+   ]
+  },
+  {
+   "text": "An uncontained rotor-burst debris cone or intense localised nacelle fire can credibly cross both opposite-side loop routings within a single nacelle.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "Nacelles are designated fire zones with rotor-burst and engine-burst listed as applicable particular risks; opposite-side routing may not clear both debris trajectories, and no PRA reconciliation is provided in the inputs.",
+   "ifWrong": "If PRA shows opposite-side routing survives all credible debris/fire trajectories, the co-location CCF contributor and its routing-separation requirement drop for SF-020-TL.",
+   "usedFor": "CMA row 'SF-020-TL · dual-loop fire detection — common environment / co-location within the fire zone'",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "Engine nacelles 1–4 Engine, FADEC, generator, EDP, fire detection loops, extinguisher plumbing High energy, flammable fluid, fire zone",
+     "where": "§3 zone table"
+    }
+   ]
+  },
+  {
+   "text": "Fire detection loop A and loop B in each nacelle/APU compartment are of the same detection technology and likely a common part number/manufacturing lot.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "The SDD states dual-loop continuous detection with separate routing but does not assert dissimilarity between the two loops, forcing a common-design assumption.",
+   "ifWrong": "If the loops are dissimilar and lot-independent, the COMMON DESIGN/MANUFACTURING contributor for SF-020-TL loses force and the independence claim strengthens.",
+   "usedFor": "SF-020-TL nacelle and APU CMA rows (common design/manufacturing findings and requirements)",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "dual-loop continuous fire detection, with the two loops routed separately and an AND logic between them",
+     "where": "§5.12.2"
+    }
+   ]
+  },
+  {
+   "text": "Both nacelle detection loops and both APU detection loops draw from the DC essential bus, and the two extinguisher discharge circuits draw from the hot battery bus, as single supply domains unless per-loop/per-bottle segregation is substantiated.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD states detection is on the DC essential bus and discharge on the hot battery bus but does not describe segregation of the feeds to the redundant members.",
+   "ifWrong": "If each loop/bottle has an independent protected feed, the COMMON RESOURCE contributor is closed and the shared-supply requirement is satisfied by design.",
+   "usedFor": "Common-resource findings and the shared-supply requirements on all three CMA rows",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "DC power from the essential bus to detection and from the hot battery bus to the discharge circuits",
+     "where": "§5.12.4"
+    }
+   ]
+  },
+  {
+   "text": "The two extinguisher bottles of an engine pair are identical units and share a common cross-plumbing manifold/valving as their discharge path.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "The SDD describes cross-plumbing so either bottle serves either nacelle but does not confirm the manifold is not a single shared failure path.",
+   "ifWrong": "If the cross-plumbing provides genuinely independent discharge paths per bottle, the SHARED ROUTING contributor for SF-021-TL is removed.",
+   "usedFor": "SF-021-TL bottle-pair shared-routing finding and the cross-plumbing requirement",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "Two extinguisher bottles per engine pair, cross-plumbed so that either bottle can discharge into either nacelle",
+     "where": "§5.12.2"
+    }
+   ]
+  },
+  {
+   "text": "The two bottles within each engine pair share the hot battery bus for their discharge circuits, making that bus a common-cause across the pair.",
+   "type": "independence",
+   "status": "Open",
+   "rationale": "The SDD states discharge circuits are supplied from the hot battery bus but does not confirm per-bottle independent feeds within a pair.",
+   "ifWrong": "If each bottle of a pair has a genuinely independent discharge power source, the hot-battery-bus common-cause contributor drops out of the SF-021-TL AND and the finding narrows to cross-plumbing and charge-lot only.",
+   "usedFor": "SF-021-TL · Fire-extinguishing bottle-pair within-pair independence CMA row",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "Discharge circuits are supplied from the hot battery bus so that they remain available with all generation lost.",
+     "where": "§5.12.5"
+    }
+   ]
+  },
+  {
+   "text": "The two bottles within a pair are of common design and may share a common charge/manufacturing lot.",
+   "type": "data",
+   "status": "Open",
+   "rationale": "The SDD describes two bottles per pair but does not state whether they are dissimilar or charged from separate lots.",
+   "ifWrong": "If lot/charge independence is substantiated, the charge/lot common-cause contributor is removed from the SF-021-TL bottle-pair CCF term.",
+   "usedFor": "SF-021-TL · Fire-extinguishing bottle-pair within-pair independence CMA row",
+   "citations": [
+    {
+     "doc": "Aeolus_HL-1_Architecture_and_SDD.pdf",
+     "quote": "Two extinguisher bottles per engine pair, cross-plumbed so that either bottle can discharge into either nacelle of the pair.",
+     "where": "§5.12.2"
+    }
+   ]
+  },
+  {
+   "text": "No SF-021-TL fault-tree page exists in the current project, so the CMA cannot yet be linked to a real gate id.",
+   "type": "architecture",
+   "status": "Open",
+   "rationale": "ftaPages in the provided state end at SF-008-M; there is no SF-021-TL tree to resolve a gate id for the link action.",
+   "ifWrong": "If an SF-021-TL tree exists that was not supplied, a link action can be added targeting its top gate rather than leaving the link open.",
+   "usedFor": "CMA-to-gate link for SF-021-TL",
+   "citations": []
+  }
+ ]
+}

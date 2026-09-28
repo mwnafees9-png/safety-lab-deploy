@@ -110,7 +110,7 @@ if (S) {
       S2.stampFor('fha.populate', 'Part 23 IV'));
     // 30 Aug 2026 — v2 shipped on take 3 (#0a2621d7).
     check('base stamp stays bracket-free on the same registry',
-      /^fha\.draft@v[4-9]#[0-9a-f]{8}$/.test(S2.stampFor('fha.populate', 'Part 25')));
+      /^fha\.draft@v[0-9]+#[0-9a-f]{8}$/.test(S2.stampFor('fha.populate', 'Part 25')));
     check('unknown basis falls back to base, never to nothing',
       S2.bodyFor('fha.populate', 'Part 99 Z') === S2.skills['fha.draft'].body);
     check('noteUse records the basis', (S2.noteUse('fha.populate', 'Part 23 IV'), S2.used()[0].basis === 'Part 23 IV'));
@@ -320,7 +320,7 @@ console.log('4. assumption ledger stamping executed');
     'window.SafetyLabAiAssumptions.add({ analysis: "fha", text: "premise one", type: "architecture" })', withReg);
   // 30 Aug 2026 — v2 shipped on take 3.
   check('new entry carries skill stamp for its analysis',
-    e1 && /^fha\.draft@v[4-9]#[0-9a-f]{8}$/.test(e1.skill), e1 && JSON.stringify(e1.skill));
+    e1 && /^fha\.draft@v[0-9]+#[0-9a-f]{8}$/.test(e1.skill), e1 && JSON.stringify(e1.skill));
   const e2 = vm.runInContext(
     'window.SafetyLabAiAssumptions.add({ analysis: "fcim.populate", text: "premise two" })', withReg);
   check('stamp follows the analysis key (fcim)', e2 && /^fcim\.draft@v[2-9]#/.test(e2.skill));   // v1→v2 31 Aug 2026: CANONICAL CONDITION PHRASING (E1 rig)

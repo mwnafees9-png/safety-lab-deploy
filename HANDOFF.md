@@ -1,3 +1,30 @@
+## 27 Sep 2026 — Q12-Q14 AI STANCE (prosecutor stance, no far-fetched threat, defense order). BUILT, EVAL RUN AND FILED, wall green, NOT YET DEPLOYED (Waqas ships).
+
+**THE ASK.** Waqas lifted the eval spend hold ("you can use the eval and spend") for the three AI-lane items in section Q. Q12: the FHA and CMA prompts start from "assume this design is unsafe and look for the evidence" rather than compiling evidence that it is safe. Q13: a common-mode candidate is never dropped for sounding unlikely. Q14: design out first, safeguard second, inform the crew third, and "inform the crew" is never accepted as the only defense against Hazardous or Catastrophic.
+
+**BUILT (prompt text only, no code paths changed).** `site/ai_skills.js`: `_BODIES_FHA_SHARED` (fha.draft + sfha.draft) gained PROSECUTOR STANCE and DEFENSE ORDER paragraphs before EXPECTED OUTPUTS; `cma.draft` gained PROSECUTOR STANCE and NO THREAT IS FAR-FETCHED. The stance paragraph says explicitly that it governs what the model LOOKS FOR, not the class it assigns, so the severity rules are untouched. `_VERSIONS`: fha.draft 9 -> 10, sfha.draft 9 -> 10, cma.draft 1 -> 2. Stamps: fha.draft@v10#ff757938, sfha.draft@v10#ff757938, cma.draft@v2#6f303f9c. Inline fallbacks `_SPEC_FHA` / `_SPEC_CMA` in `site/ai_assistant.js` carry the identical text (the parity test compares them byte for byte). Pins: ai_skills 2.15, ai_assistant 76.72, ai_loader 8.64. Tests updated to the new stamps: regression_e2_commitment (plus a new check that both paragraphs are present), regression_phase_rule_judgement, regression_ai_skills (stamp regex loosened to v[0-9]+).
+
+**THE EVAL (rule 29 gate) — four draws on production, project 'Aeolus HL-1 · FHA draws on run 3 inputs · 4 Sep' (22 fn / 43 FCIM / 107 conditions / 120 FTA pages / 25 AND gates), signed in as Waqas, evalBare + evalFresh, FHA cleared before each draw, the same identical-input protocol as 5 Sep.**
+
+FHA, fha.draft@v10#ff757938, scored against the goldens e1/e2/e3 (v7, 5 Sep) and e4 (v9, 13 Sep) with `node eval/score_run.mjs <golden> <candidate> --lax`:
+- f1: 217 rows, coverage 107/107, 147 judgement-flagged. perPhaseClassAgreement 0.59-0.71, functionWorstCaseAgreement 0.864-0.955, severeJumpRate 0.037-0.095, fhaSignatureMatchRate 0.975-0.995.
+- f2: 185 rows, coverage 97/107 (see the blip below). Same bands.
+- The tool's own draw-to-draw band, from e1/e2/e3 against each other, is 0.60-0.72 / 0.864-0.955 / 0.061-0.102. Both draws sit inside it on every metric, which is what a stance-only change should look like.
+- Severity mix: f1 Catastrophic 29 / Hazardous 46 (Cat+Haz 35% of rows, against 30-33% on the goldens); f2 Cat 22 / Haz 41 (34%). Only two conditions became Catastrophic that never were on any golden (SF-012-M2 erroneous lock indication while the boundary is unsecured; SF-020-TL2 undetected loss of fire / overheat detection) and none lost Catastrophic.
+- Q14 is the one change that shows clearly: 17 f1 rows (7 in f2) name a design defense in the mitigation text, against 0-1 on the goldens.
+
+CMA, one draw on each version, captured and NOT applied (no project mutated), 25 AND-gate independence claims auto-selected by the capture path, 9 turns of 3 claims:
+- v1 (cma.draft@v1#381333c0): 19 CMA rows + 10 gate links, mean 3.37 of the five principle categories named per row, 21 numbered concerns, 1.95 independence requirements per row, 6 rows with a verification statement, 1,251 chars of findings per row.
+- v2 (cma.draft@v2#6f303f9c): 18 rows + 6 links, mean 3.44 categories, 18 concerns, 1.78 requirements per row, 6 with verification, 1,193 chars per row.
+- READING: on this project v2 is indistinguishable from v1 on volume and on principle coverage. The only directional difference is the distribution: every v2 row names at least two principle categories, where one v1 row named none, and v2 shifts weight from the 5-category rows to the 3-category rows. Q13's real test is the negative one and it passes on both: neither draw drops a candidate for being improbable. The two hedging sentences in the whole set (one per version) are demands to substantiate, not dismissals ("or substantiate that a common design deficiency is not credible"). The honest conclusion is that v2 does not degrade the CMA and does not measurably improve it on a design whose common modes are already this obvious; the paragraph is insurance against a design where they are not.
+- Filed: eval/runs/draws5/draw5_f1_v10_2026-09-27.json, draw5_f2_v10_2026-09-27.json, cma_v1_2026-09-27.json, cma_v2_2026-09-27.json.
+
+**INFRASTRUCTURE BLIP, NOT THE PROMPT.** The hosted proxy's auth path returned 502 "Auth backend unreachable" (proxy worker.js, verifyUserJwt / lookupToken on a Supabase read that does not answer) in two windows tonight: it cost draw f2 two of 22 turns after three attempts each (turns 10, 11, 12, 17), so f2 covers 97 of 107 conditions, and it killed the first CMA v1 attempt outright (0 of 9 turns, nothing spent on the model). A single ping came back OK a few minutes later and the re-run was clean. Worth a look: there is no retry or backoff on the Supabase auth read inside the proxy, so one slow read fails the whole call.
+
+**NOT DONE / KNOWN.** The FHA draws were applied to project 2fe55f97 (it now holds f2's 185 rows); the CMA draws were captured only. sfha.draft carries the identical body to fha.draft and was not drawn separately (it never has been). No CMA golden exists, so the CMA comparison is v1 against v2 on one project, not against a baseline corpus. The in-page body injection used for the v1 draw reverts on reload; the committed text is v2.
+
+**SECTION Q STATUS.** Q1-Q14 all built. Left: Q15 (the LinkedIn accident series).
+
 ## 27 Sep 2026 — Q9 DESIGN BASELINE STAMP. BUILT, 39/39 + ten mutations red, wall 355/355, NOT YET DEPLOYED (Waqas ships). Q10 1.1 ships with it (section follows the Zonal Model page).
 
 **THE ASK.** "Analysis lags a moving design" as a feature: every analysis records the design baseline (and DMU version) it was done against, a project-level current baseline, older = re-check on the thread.
