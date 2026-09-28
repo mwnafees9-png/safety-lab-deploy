@@ -21,6 +21,49 @@ not defects, and stay parked further down this file.
 Checked against the code and the repo on 28 Sep 2026, not against this register — several entries
 had drifted in both directions.
 
+- [ ] **SEC-0 — THE AUDIT HASH CHAIN IS BROKEN ON PRODUCTION. Found 28 Sep 2026 by reading the
+      database. HIGHEST PRIORITY.** `chain_verifications` id 25, chain `audit_log`, ok = false,
+      first_bad_id = 15, 03:17 UTC. Rows 14 and 15 both carry row 13's hash: two AI calls in the
+      same 200 ms during the Q12-Q14 eval both read the tail before either committed. Row 15 was
+      written first and got the later id. Every run from 22 to 27 Sep passed **on a denominator
+      of four rows** — the exact failure our own CCA paper names, a check that examined nothing
+      reading as a pass.
+      **FIX BUILT AND PROVEN:** `supabase/migrations/20260928a_chain_serialization.sql` +
+      `customer-install/db/13_chain_serialization.sql` (apply.sh wired). Advisory lock around the
+      tail read, id drawn INSIDE the lock (without that, a correctly-chained row can still carry a
+      lower id than the row it chains onto, and every verifier walks id ascending), ts from
+      clock_timestamp() inside the lock. All four ledgers, per-project lock keys for change_journal
+      and problem_report_events. Proven on the throwaway with pg_cron workers as real concurrent
+      backends: BEFORE 1,800 rows / 2 writers → 4 forks, 33 id-vs-time contradictions; AFTER 3,780
+      rows / 3 writers → 0 forks, 0 broken links, 0 ts violations, 0 hashes failing to recompute.
+      Tamper evidence re-proved on the fixed chain (payload edit, prev_hash repoint, row delete —
+      all three caught).
+      **NOT APPLIED ANYWHERE YET. NEEDS WAQAS.** Two rulings before it goes:
+      (a) the existing break cannot be repaired — UPDATE/DELETE are revoked and that revoke is
+          right — so either the verifier learns about acknowledged breaks and verifies per segment,
+          or the chain re-genesises at a recorded row. Recommend the former: an unacknowledged
+          break must still fail, or the tamper evidence is worthless.
+      (b) the hash covers prev_hash, user_id, feature, model, tokens_in, tokens_out and ts. It does
+          NOT cover `itar`, `ok`, `error`, `weighted_cost` or `latency_ms`. Someone with write
+          access could flip `itar` from true to false, erasing the record that a call was
+          export-controlled, and the chain would still verify. Widening the hash breaks every
+          existing row's verification, so if it is going to happen it should happen in the same
+          re-genesis as (a) rather than as a second break later.
+- [ ] **SEC-0b — `workspace_audit` has zero rows.** The AI-call half of S7 writes (59 rows on
+      production, newest 00:47 on 28 Sep). The workspace-events half — sign-ins, role changes,
+      invitations, exports, erasures — has never written anything. S13's "unified activity log" is
+      half built, and the trust page's activity claims should be read against that.
+- [ ] **SEC-0c — the hosted app loads a third-party beacon that is not on its own egress list.**
+      Verified live 28 Sep: every `/app/` page load fetches
+      `static.cloudflareinsights.com/beacon.min.js`, injected by Cloudflare at the edge.
+      `SLConfigEgress()` returns only Supabase and api.safetylabaero.com, so SL-DG-0001 section 7.2
+      ("lists every address the application will contact") is false on the hosted product. Same
+      defect class as the d3js finding in R7 that we thought was closed. Also: the live CSP still
+      permits cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com and d3js.org in `script-src` and
+      two of them in `connect-src`, although nothing loads from them since the 16 Sep vendoring —
+      a reviewer reads the policy, not the source. **Knock-on: SL-WP-0008 v1.2 section 7.3 claims
+      the guide's egress list is the whole list. That sentence is wrong and the paper is on the
+      Desktop; correct it before the paper goes anywhere.**
 - [ ] **SEC-1 (S8 phases 3 to 6) — get credentials out of browser localStorage.** Phases 1 and 2 are
       done and proven with real roles on the throwaway. Left: the app write path (RPC calls replace
       localStorage; browser-only to a local store, desktop to the keychain), the server read path
