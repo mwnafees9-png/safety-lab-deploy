@@ -189,7 +189,11 @@ if (!worker) {
   check('garbage refused, never throws', !ok('not a url'));
   check('route lives INSIDE the Bearer-auth pipeline (after lookupToken)',
     worker.indexOf('/v1/ai/notify/integrity') > worker.indexOf('const check = await lookupToken'));
-  check('notify has its own hard KV cap, prefixed off the AI counter', /"ntf:" \+ token, 6/.test(worker));
+  // S11 / SEC-3 (29 Sep 2026): the counter key is now a SHA-256 of the token under a
+  // prefix, rather than the raw token, so the pin moved from the concatenation to the
+  // prefix argument. test/proxy_hygiene.test.mjs in the proxy repo executes both lanes
+  // and proves the two keys differ and neither contains the token.
+  check('notify has its own hard KV cap, prefixed off the AI counter', /checkRateLimit\(env, token, 6, "ntf"\)/.test(worker));
   check('email rail is Resend from the send subdomain', /alerts@send\.safetylabaero\.com/.test(worker));
   check('missing RESEND key degrades to "unconfigured", not an error', /unconfigured/.test(worker));
   run_p5();

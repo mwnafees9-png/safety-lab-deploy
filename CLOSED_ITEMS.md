@@ -1031,3 +1031,43 @@ the section-D allocator carry-overs were scrapped on 19 Aug for the same reason.
       N1 red on the suite's own leftovers. The mutation now runs on a source string instead of a
       real file, plus a check that shouts if debris from an older run is sitting there. The stray
       file is in `_to_delete/`.
+
+- [x] **SEC-3 / S11 — proxy hygiene. CLOSED 29 Sep 2026. NOT YET DEPLOYED (proxy repo; Waqas
+      ships).** Three defects in safety-lab-proxy-deploy/worker.js, all verified live on 28 Sep.
+      **(1) CORS was `*`.** The proxy told every browser on the internet that any page could read
+      its replies. Now an allowlist: safetylabaero.com built in, `ALLOWED_ORIGINS` for a customer's
+      own hostname. Decided once at the edge of fetch() and applied to whatever the handlers
+      returned, so no per-request state is shared between concurrent requests in the same isolate.
+      An unknown BROWSER origin is refused 403 before any licence lookup, upstream call or
+      metering, so a hostile page cannot even burn an account's allowance. No Origin header at all
+      (curl, a server, the desktop main process) is served exactly as before and gets no CORS
+      header back, because it needs none.
+      **Two residuals, said plainly in the code rather than papered over.** The desktop loads from
+      `file://`, which browsers report as the origin "null", and a sandboxed iframe looks the same;
+      "null" is accepted by default so the desktop keeps working, and `ALLOW_NULL_ORIGIN=0` closes
+      it the day SEC-8 / S25 moves the desktop off file://. And a customer-hosted install with
+      `ALLOWED_ORIGINS` unset stands the check down with a warning in the log, because 403ing a
+      field install's whole AI feature on upgrade is worse than the exposure it closes, and that
+      proxy runs inside the customer's own boundary billing their own AI. Setting the variable
+      enforces immediately.
+      Worth keeping straight: CORS is not the access control here, the bearer token is. Locking the
+      origin removes the browser route for a leaked token. It does not make a leaked token safe.
+      **(2) The request-rate cap failed OPEN** — KV missing or erroring and every capped account
+      went through unlimited, with a comment defending it as uptime. That is backwards for the one
+      control whose job is stopping a runaway bill: it switched itself off at the moment it
+      mattered. Now 503 with an honest message, and only where a cap exists. Founder, comped and
+      every customer-hosted install have no cap and are untouched. A missing BINDING is a
+      deployment choice, not a fault, unless `RATE_LIMIT_REQUIRED=1` says the deployment really has
+      one — wrangler.jsonc now sets it, so on Cloudflare a binding that went missing is caught,
+      while a customer's standalone node proxy (no KV by design) keeps working.
+      **(3) The KV counter key was the raw licence token.** Now a SHA-256 of it under a per-lane
+      prefix, so the two lanes cannot share a counter and the credential is not sitting in a key.
+      **Proved:** `test/proxy_hygiene.test.mjs` 28/28, every case driven through the real
+      worker.fetch. Eight mutations, all red: wildcard restored; every origin allowed; a refused
+      origin still running the request; fail-open on a KV error; the raw token back in the key; a
+      missing binding as a free pass; the null-origin switch dead; the stand-down ignoring a
+      configured list. All five pre-existing proxy suites still green; main wall 356/356.
+      **Also:** `.env.example` written in the proxy repo — server.mjs's header had pointed at one
+      that did not exist.
+      Feature-header half deliberately NOT closed: carried forward as SEC-3b, because the honest
+      fix is the proxy writing its own audit row (S13), not reading a header it has no use for.
