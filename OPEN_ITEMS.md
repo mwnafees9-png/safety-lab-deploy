@@ -21,34 +21,17 @@ not defects, and stay parked further down this file.
 Checked against the code and the repo on 28 Sep 2026, not against this register — several entries
 had drifted in both directions.
 
-- [ ] **SEC-0 — THE AUDIT HASH CHAIN IS BROKEN ON PRODUCTION. Found 28 Sep 2026 by reading the
-      database. HIGHEST PRIORITY.** `chain_verifications` id 25, chain `audit_log`, ok = false,
-      first_bad_id = 15, 03:17 UTC. Rows 14 and 15 both carry row 13's hash: two AI calls in the
-      same 200 ms during the Q12-Q14 eval both read the tail before either committed. Row 15 was
-      written first and got the later id. Every run from 22 to 27 Sep passed **on a denominator
-      of four rows** — the exact failure our own CCA paper names, a check that examined nothing
-      reading as a pass.
-      **FIX BUILT AND PROVEN:** `supabase/migrations/20260928a_chain_serialization.sql` +
-      `customer-install/db/13_chain_serialization.sql` (apply.sh wired). Advisory lock around the
-      tail read, id drawn INSIDE the lock (without that, a correctly-chained row can still carry a
-      lower id than the row it chains onto, and every verifier walks id ascending), ts from
-      clock_timestamp() inside the lock. All four ledgers, per-project lock keys for change_journal
-      and problem_report_events. Proven on the throwaway with pg_cron workers as real concurrent
-      backends: BEFORE 1,800 rows / 2 writers → 4 forks, 33 id-vs-time contradictions; AFTER 3,780
-      rows / 3 writers → 0 forks, 0 broken links, 0 ts violations, 0 hashes failing to recompute.
-      Tamper evidence re-proved on the fixed chain (payload edit, prev_hash repoint, row delete —
-      all three caught).
-      **NOT APPLIED ANYWHERE YET. NEEDS WAQAS.** Two rulings before it goes:
-      (a) the existing break cannot be repaired — UPDATE/DELETE are revoked and that revoke is
-          right — so either the verifier learns about acknowledged breaks and verifies per segment,
-          or the chain re-genesises at a recorded row. Recommend the former: an unacknowledged
-          break must still fail, or the tamper evidence is worthless.
-      (b) the hash covers prev_hash, user_id, feature, model, tokens_in, tokens_out and ts. It does
-          NOT cover `itar`, `ok`, `error`, `weighted_cost` or `latency_ms`. Someone with write
-          access could flip `itar` from true to false, erasing the record that a call was
-          export-controlled, and the chain would still verify. Widening the hash breaks every
-          existing row's verification, so if it is going to happen it should happen in the same
-          re-genesis as (a) rather than as a second break later.
+- [ ] **SEC-0d — the audit hash does not cover every field.** The seal covers prev_hash, user_id,
+      feature, model, tokens_in, tokens_out and ts. It does NOT cover `itar`, `ok`, `error`,
+      `weighted_cost` or `latency_ms`. Someone with database access could flip `itar` from true to
+      false, erasing the record that a call was export-controlled, and the chain would still
+      verify clean. Widening the hash invalidates every existing row.
+      This USED to be a now-or-never decision that had to ride along with SEC-0. It is not any
+      more: 20260929a gives the verifier registered segment boundaries, so a widening is just
+      another registered break with a recorded reason, done whenever it is wanted. Left as its own
+      decision. Cost if taken: one migration, one registered boundary, the chain reads
+      "segments = 13" afterwards. NEEDS WAQAS.
+
 - [ ] **SEC-0b — `workspace_audit` has zero rows.** The AI-call half of S7 writes (59 rows on
       production, newest 00:47 on 28 Sep). The workspace-events half — sign-ins, role changes,
       invitations, exports, erasures — has never written anything. S13's "unified activity log" is

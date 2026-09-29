@@ -964,3 +964,40 @@ the section-D allocator carry-overs were scrapped on 19 Aug for the same reason.
   every legacy member lives in demo copies, which show their findings until the demos rework reseeds
   them (ruled 21 Aug: let them show). Suite: `regression_fn_granularity` (30 checks). Live-verified
   on K350 in the deployed tool, fixture-restored.
+
+- [x] **SEC-0 — the audit hash chain was broken on production. CLOSED 29 Sep 2026, applied and
+      verified on `fhrqkhdrwbfnizkepkch`.**
+      Found 28 Sep by reading the database rather than the register: `chain_verifications`,
+      chain `audit_log`, ok = false, first_bad_id = 15. Cause: the chain trigger read the chain
+      tail with no lock, so two AI calls committing inside the same 200 ms both chained onto the
+      same row. Every run from 22 to 27 Sep had passed on a denominator of four rows, which is the
+      failure our own CCA paper section 9 names: a check that examined nothing reading as a pass.
+      **It was worse than the register said.** The old verifier exited at the first mismatch, so it
+      reported one break. Walking the whole table found ELEVEN, between 00:00:44 and 00:47:13 UTC
+      on 28 Sep. Every one of the 72 rows recomputes its own hash from its own payload, so no
+      content was altered; only the links between them forked.
+      **Applied 29 Sep, two migrations:**
+      `20260928a_chain_serialization` — advisory lock around the tail read, id drawn INSIDE the
+      lock (without that a correctly-chained row can still carry a lower id than the row it chains
+      onto, and every verifier walks id ascending), ts from clock_timestamp() inside the lock. All
+      four ledgers; per-project lock keys for change_journal and problem_report_events.
+      `20260929a_acknowledged_chain_breaks` + `20260929b_register_28sep_concurrency_forks` —
+      `public.chain_breaks` (RLS on, no policies, no runtime grants: registrations go in by
+      migration only), verifiers that carry on across a REGISTERED break and report segments and
+      acknowledged counts, and the eleven forks registered, each admitted only after passing three
+      checks written into the SQL: the row recomputes its own hash, its prev_hash matches a real
+      earlier row's hash, and it falls inside the window of the fault.
+      **Evidence.** Mutation-proved ten for ten on the throwaway before production: unregistered
+      fork fails; registered fork passes with 2 segments; editing the payload OF the break row
+      fails; a second unregistered fork fails; deleting the orphaned row before the break fails
+      (that case was found by the test, not by reasoning, and the both-sides pinning is the fix for
+      it); payload edit inside a segment fails; a registration naming the wrong prev_hash fails; one
+      naming the wrong prior row fails; deleting the break row fails; deleting a normal row
+      mid-chain fails. On production, read-only and rolled back: removing one registration put the
+      chain straight back to ok = false at that id.
+      **Live state after:** audit_log ok = true, checked 72, segments 12, acknowledged 11;
+      signoffs ok = true, checked 0. Recorded in `chain_verifications` as ran_by
+      'post-fix-verification'. Customer installs get the same through
+      `customer-install/db/13_` and `14_` (apply.sh wired); the registration file is production
+      data and is not part of the install kit.
+      Hash coverage carried forward separately as SEC-0d.
