@@ -221,8 +221,9 @@ function showUpgradeRequiredToast(feature, requiredTier) {
 }
 
 // The credential the AI plumbing sends as its bearer. Two worlds:
-//   hosted demo  - the cloud-issued token auth_gate stored in safetyLab.license.token; the proxy
-//                  looks it up in license_tokens.
+//   hosted demo  - the cloud-issued token auth_gate holds in memory (SLLicenseToken, SEC-1
+//                  29 Sep 2026; it used to sit in localStorage); the proxy looks it up in
+//                  license_tokens.
 //   customer     - the SIGNED LICENSE BLOB. The customer's own proxy runs in offline-licence mode
 //                  and verifies that blob against Safety Lab's public key; it has no database to
 //                  look a token up in. slab_license.js writes only a 'signed:<id>' MARKER into the
@@ -238,7 +239,8 @@ function getLicenseToken() {
             if (blob) return String(blob);
         }
     } catch (_) {}
-    try { return localStorage.getItem('safetyLab.license.token') || ''; } catch(_) { return ''; }
+    // SEC-1 (29 Sep 2026): memory, not localStorage. See license_token.js.
+    try { return (window.SLLicenseToken && window.SLLicenseToken.get()) || ''; } catch(_) { return ''; }
 }
 
 function certBasisDisplayLabel() {

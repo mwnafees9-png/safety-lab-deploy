@@ -29,6 +29,10 @@ function loadVerifier() {
   const store = {};
   const W = { localStorage: { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: k => { delete store[k]; } },
               crypto: globalThis.crypto, SLConfig: { mode: 'hosted-demo', supabaseUrl: '' } };
+  // SEC-1 (29 Sep 2026): the licence marker goes into memory, not localStorage. Give the
+  // harness the real holder so slab_license runs the path it actually runs in the browser.
+  W.SLLicenseToken = (function () { var v = '';
+    return { get: () => v, set: (t) => { v = String(t || ''); }, clear: () => { v = ''; }, has: () => !!v }; })();
   const ctx = { window: W, console: { info(){}, warn(){}, error(){}, log(){} }, URL, TextEncoder, TextDecoder, atob: s => Buffer.from(s, 'base64').toString('binary'), localStorage: W.localStorage, Date, JSON, Math, Number, String, Array, Object, Uint8Array, Promise, isNaN };
   vm.createContext(ctx);
   vm.runInContext(licSrc, ctx);
@@ -107,7 +111,8 @@ const V = (blob, o) => verify(blob, Object.assign({}, base, o || {}));
   check('no private-key material anywhere in the shipped module', !/"d"\s*:/.test(licSrc) && !/PRIVATE KEY/.test(licSrc));
   check('a license signed by an ephemeral key does NOT verify against the SHIPPED keys', !(await V(sign(lic(), KX), { keys: shipped })).valid);
   check('module fails CLOSED on customer modes: authoritative when self-hosted/browser-only/desktop', /m === 'self-hosted' \|\| m === 'browser-only' \|\| m === 'desktop'/.test(strip(licSrc)));
-  check('invalid on a customer install writes tier unpaid + drops the token', /setItem\('safetyLab\.license\.tier', 'unpaid'\)/.test(licSrc) && /removeItem\('safetyLab\.license\.token'\)/.test(licSrc));
+  // SEC-1 (29 Sep 2026): the marker lives in memory (SLLicenseToken), not localStorage.
+  check('invalid on a customer install writes tier unpaid + drops the token', /setItem\('safetyLab\.license\.tier', 'unpaid'\)/.test(licSrc) && /W\.SLLicenseToken\.clear\(\)/.test(licSrc));
   check('exposes SLLicenseCheckIdentity for re-check at sign-in', /SLLicenseCheckIdentity = async function/.test(licSrc));
 
   console.log('\n[license] END TO END — the real signing tool → the real app verifier');

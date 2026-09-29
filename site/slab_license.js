@@ -163,12 +163,14 @@
         localStorage.setItem('safetyLab.license.source', 'signed');
         // keep the existing AI plumbing happy: a license-derived marker where the cloud
         // token used to go. The customer's own AI proxy verifies the signed license itself.
-        localStorage.setItem('safetyLab.license.token', 'signed:' + (result.id || 'license'));
+        // SEC-1 (29 Sep 2026): the marker is in memory, not on disk. The real bearer on a
+        // customer install is the signed blob, read through SLLicenseBlob by getLicenseToken().
+        if (W.SLLicenseToken) W.SLLicenseToken.set('signed:' + (result.id || 'license'));
         console.info('[Safety Lab Aero] signed license OK — ' + result.customer + ' · ' + result.tier + (result.trial ? ' · TRIAL' : '') + ' · expires ' + String(result.expiresAt).slice(0, 10) + ' (' + result.daysLeft + ' days left)');
       } else if (result.authoritative) {
         localStorage.setItem('safetyLab.license.tier', 'unpaid');
         localStorage.setItem('safetyLab.license.source', 'signed');
-        localStorage.removeItem('safetyLab.license.token');
+        if (W.SLLicenseToken) W.SLLicenseToken.clear();
         console.warn('[Safety Lab Aero] no valid license on this install — ' + result.reason);
       }
     } catch (_) {}

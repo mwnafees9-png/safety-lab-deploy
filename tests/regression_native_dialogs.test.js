@@ -58,8 +58,12 @@ function stripCommentsAndStrings(src) {
   }
   return out;
 }
-function nativeSites(f) {
-  const src = fs.readFileSync(path.join(SITE, f), 'utf8'), code = stripCommentsAndStrings(src);
+// 29 Sep 2026 — src can be supplied, so the N6 mutation does not have to write a file into
+// site/. It used to, and on a mount that refuses unlink (the Cowork device bridge) the debris
+// stayed behind and made N1 red on this test's own leftovers on every later run. A mutation
+// test that poisons the thing it is testing is not a mutation test.
+function nativeSites(f, srcOverride) {
+  const src = (srcOverride !== undefined) ? srcOverride : fs.readFileSync(path.join(SITE, f), 'utf8'), code = stripCommentsAndStrings(src);
   const re = /(^|[^A-Za-z0-9_.$])(window\.)?(alert|confirm|prompt)\s*\(/g; const hits = []; let m;
   while ((m = re.exec(code))) {
     const at = m.index + m[1].length, line = code.slice(0, at).split('\n').length;
@@ -210,9 +214,14 @@ console.log('\n[N3] slAlert on the dialog engine');
 
   console.log('\n[N6] mutation');
   {
-    const tmp = path.join(SITE, '__mut_native.js');
-    fs.writeFileSync(tmp, "function x() { if (!confirm('sure?')) return; }\n");
-    try { check('a native confirm( put back in a module is caught by N1', nativeSites('__mut_native.js').length === 1); } finally { fs.unlinkSync(tmp); }
+    check('a native confirm( put back in a module is caught by N1',
+      nativeSites('__mut_native.js', "function x() { if (!confirm('sure?')) return; }\n").length === 1);
+    check('...and the same text with the call removed is NOT flagged (the scanner is not just matching the word)',
+      nativeSites('__mut_native.js', "function x() { if (!slConfirm('sure?')) return; }\n").length === 0);
+    // Belt and braces: if an older run of this suite left its file behind on a mount that
+    // refuses unlink, say so loudly rather than letting it quietly fail N1 next time.
+    check('no debris from an earlier run is sitting in site/',
+      !fs.existsSync(path.join(SITE, '__mut_native.js')), 'delete site/__mut_native.js');
     const codeOnly = stripCommentsAndStrings("// alert(1)\nconst s = 'alert(2)';\nconst t = `prompt(${3})`;\nconst r = /confirm(/;\n");
     check('the scanner ignores comments, strings, template text and regex literals', !/(alert|prompt|confirm)\(/.test(codeOnly), JSON.stringify(codeOnly));
   }

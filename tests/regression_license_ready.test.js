@@ -24,9 +24,10 @@ function check(name, cond, detail) { if (cond) { pass++; console.log('  PASS  ' 
 
 console.log('[1] auth_gate — the license sync gates the lift and never wipes a token on error');
 {
-  check('a query error KEEPS the stored token (no removeItem on the error path)', /license_tokens query error \(keeping the stored token\)/.test(gate) && !/query error:', error\.message \|\| error\); try \{ localStorage\.removeItem\('safetyLab\.license\.token'\)/.test(gate));
+  check('a query error KEEPS the stored token (nothing cleared on the error path)', /license_tokens query error \(keeping the stored token\)/.test(gate) && !/query error:', error\.message \|\| error\); try \{ (localStorage\.removeItem\('safetyLab\.license\.token'\)|if \(window\.SLLicenseToken\) window\.SLLicenseToken\.clear\(\))/.test(gate));
   check('… and so does a thrown failure', /license token sync failed \(keeping the stored token\)/.test(gate));
-  check('only a positive "no valid token" from the server removes it', /The server positively says there is no valid token for this user\.\s+try \{ localStorage\.removeItem\('safetyLab\.license\.token'\); \}/.test(gate));
+  // SEC-1 (29 Sep 2026): the token is held in memory (SLLicenseToken), not localStorage.
+  check('only a positive "no valid token" from the server removes it', /The server positively says there is no valid token for this user\.\s+try \{ if \(window\.SLLicenseToken\) window\.SLLicenseToken\.clear\(\); \}/.test(gate));
   check('the sync is exposed as a promise and a re-run hook', /window\.__slabLicenseReady = run;/.test(gate) && /window\.__slabSyncLicense = _syncLicenseTokenFromSupabase;/.test(gate));
   check('the gate lifts after the sync or after 6 s, whichever first', /function _syncThenLift\(\)/.test(gate) && /_syncLicenseTokenFromSupabase\(\)\.then\(lift, lift\)/.test(gate) && /setTimeout\(lift, 6000\)/.test(gate));
   const bare = (gate.match(/_syncLicenseTokenFromSupabase\(\);\s*\n\s*liftGate\(\);/g) || []).length;

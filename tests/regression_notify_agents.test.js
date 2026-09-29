@@ -57,8 +57,11 @@ function sandbox() {
   sb.resourcesData = []; sb.routingData = [];
   sb._fetches = [];
   sb.fetch = (url, opts) => { sb._fetches.push({ url, opts }); return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) }); };
-  sb.localStorage = { _s: { 'safetyLab.license.token': 'tok_regression_1234567890' },
+  sb.localStorage = { _s: {},
     getItem(k) { return this._s[k] || null; }, setItem(k, v) { this._s[k] = String(v); }, removeItem(k) { delete this._s[k]; } };
+  // SEC-1 (29 Sep 2026): the licence bearer lives in memory, not localStorage.
+  sb.SLLicenseToken = (function () { var v = 'tok_regression_1234567890';
+    return { get: () => v, set: (t) => { v = String(t || ''); }, clear: () => { v = ''; }, has: () => !!v }; })();
   // v1.1 — model the LIVE app's globals, learned by execution on the deployed
   // build: there is NO global saveState (that was this suite's own stub lying
   // to the module); the real rail is _writeAutosave + scheduleAutosave, and

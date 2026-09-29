@@ -32,9 +32,11 @@ const m = misc.match(/function getLicenseToken\(\) \{[\s\S]*?\n\}/);
 check('getLicenseToken located', !!m);
 const BLOB = 'eyJ2IjoxfQ.c2ln'; // any base64url.base64url shape
 function run(world) {
-  const store = Object.assign({}, world.store || {});
-  const sb = { window: null, localStorage: { getItem: (k) => (k in store ? store[k] : null) }, String };
-  sb.window = { SLLicense: world.SLLicense, SLLicenseBlob: world.SLLicenseBlob };
+  // SEC-1 (29 Sep 2026): the token slot is SLLicenseToken, held in memory, not localStorage.
+  let held = (world.store || {})['safetyLab.license.token'] || '';
+  const sb = { window: null, String };
+  sb.window = { SLLicense: world.SLLicense, SLLicenseBlob: world.SLLicenseBlob,
+    SLLicenseToken: { get: () => held, set: (t) => { held = String(t || ''); }, clear: () => { held = ''; }, has: () => !!held } };
   vm.createContext(sb);
   vm.runInContext(m[0] + '; this.__out = getLicenseToken();', sb);
   return sb.__out;
@@ -57,8 +59,9 @@ console.log('\n[bearer] structure');
 check('slab_license exposes the blob for the accessor (SLLicenseBlob)', /W\.SLLicenseBlob = function \(\) \{ return readBlob\(\); \};/.test(lic));
 check('core_modules sends Bearer getLicenseToken() and nothing else', (core.match(/'Bearer ' \+ getLicenseToken\(\)/g) || []).length >= 2 && !/localStorage\.getItem\('safetyLab\.license\.token'\)/.test(core));
 check('notify_agents goes through window.getLicenseToken first', /window\.getLicenseToken === 'function'\) return String\(window\.getLicenseToken\(\) \|\| ''\)/.test(agents));
-check('the marker slab_license writes is still a marker (the slot is not overwritten with the blob)', /localStorage\.setItem\('safetyLab\.license\.token', 'signed:' \+ \(result\.id \|\| 'license'\)\)/.test(lic),
+check('the marker slab_license writes is still a marker (the slot is not overwritten with the blob)', /W\.SLLicenseToken\.set\('signed:' \+ \(result\.id \|\| 'license'\)\)/.test(lic),
   'the slot is read by other code as "a licence exists"; the blob goes out only as the bearer');
+check('SEC-1 — and that marker is in memory, not on disk', !/localStorage\.setItem\('safetyLab\.license\.token'/.test(lic));
 check('safety_lab.js exports getLicenseToken on window (notify_agents relies on it)', /window\.getLicenseToken = getLicenseToken;/.test(read('safety_lab.js')));
 
 console.log('\n' + (fail ? 'FAIL ' + fail + ' / ' + (pass + fail) : 'PASS ' + pass + ' / ' + pass));

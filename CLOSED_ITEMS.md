@@ -1001,3 +1001,33 @@ the section-D allocator carry-overs were scrapped on 19 Aug for the same reason.
       `customer-install/db/13_` and `14_` (apply.sh wired); the registration file is production
       data and is not part of the install kit.
       Hash coverage carried forward separately as SEC-0d.
+
+- [x] **SEC-1 / S8 — the licence bearer is out of browser storage. CLOSED 29 Sep 2026. NOT YET
+      DEPLOYED (Waqas ships).**
+      The register said phases 3 to 6 of the credential work were open. The code said otherwise and
+      the code was right: the vault landed 20 Sep and the Anthropic key, Voyage key and Jama
+      credentials all go through it. What was actually still on disk was ONE thing, the licence
+      bearer token in `safetyLab.license.token`. Not a user secret, which is probably why it got
+      left behind, but a bearer credential all the same: one injected script and it spends AI
+      against the account.
+      **Fix:** `site/license_token.js` holds it in a closure for the life of the page. Nothing on
+      disk, nothing shared between tabs, and a value an older build left behind is DELETED at load
+      rather than adopted. Memory is enough because auth_gate re-reads the token from
+      `license_tokens` at every sign-in and already gates the UI on that read finishing
+      (`__slabLicenseReady`, 6 s bound), so storage was never earning its keep. sessionStorage
+      would still have put it somewhere a later script can read.
+      Customer installs unchanged in substance: the bearer there is the signed licence blob, read
+      through SLLicenseBlob, which never went through this slot; only the 'signed:<id>' marker
+      moved into memory.
+      **Proved:** `tests/regression_license_token.test.js` 25/25 — the holder executed (set, get,
+      clear, null and undefined, a blocked-localStorage browser, and the legacy value deleted and
+      not adopted), getLicenseToken executed against the real holder on both worlds,
+      notify_agents' accessor executed (including: a value planted in localStorage after load is
+      NOT picked up), the BYO test's blank-and-restore executed, and a source sweep that no
+      site/*.js touches the key any more. Five mutations, all red. Wall 356/356.
+      **Also cleared on the way past:** `site/__mut_native.js`, the housekeeping item. It was
+      regression_native_dialogs' own mutation file, which the test writes into site/ and then
+      deletes — and on the Cowork device mount the delete is refused, so the debris stayed and made
+      N1 red on the suite's own leftovers. The mutation now runs on a source string instead of a
+      real file, plus a check that shouts if debris from an older run is sitting there. The stray
+      file is in `_to_delete/`.

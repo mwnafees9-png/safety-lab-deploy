@@ -1072,7 +1072,8 @@
           const { data, error } = await sb.from('license_tokens').select('token,plan,expires_at').limit(1).maybeSingle();
           if (error) { console.warn('[auth-gate] license_tokens query error (keeping the stored token):', error.message || error); return { ok: false, kept: true }; }
           if (data && data.token && (!data.expires_at || new Date(data.expires_at) > new Date())) {
-            try { localStorage.setItem('safetyLab.license.token', String(data.token)); } catch(_){}
+            // SEC-1 (29 Sep 2026): in memory for the life of the page, never on disk.
+            try { if (window.SLLicenseToken) window.SLLicenseToken.set(String(data.token)); } catch(_){}
             // Make the client license tier authoritative from the server's purchased plan
             // (e.g. an enterprise account is uncapped; a pro-plus account keeps the standard
             // allowance) rather than trusting the local onboarding guess. setLicenseTier
@@ -1081,7 +1082,7 @@
             return { ok: true, token: true };
           }
           // The server positively says there is no valid token for this user.
-          try { localStorage.removeItem('safetyLab.license.token'); } catch(_){}
+          try { if (window.SLLicenseToken) window.SLLicenseToken.clear(); } catch(_){}
           return { ok: true, token: false };
         } catch (e) { console.warn('[auth-gate] license token sync failed (keeping the stored token):', e); return { ok: false, kept: true }; }
       })();
@@ -1132,7 +1133,7 @@
         });
       } else if (event === 'SIGNED_OUT') {
         _passwordRecoveryActive = false;
-        try { localStorage.removeItem('safetyLab.license.token'); } catch(_){}
+        try { if (window.SLLicenseToken) window.SLLicenseToken.clear(); } catch(_){}
         renderGate();
       }
     });

@@ -1683,9 +1683,9 @@ window.testAiConnectionBYO = async function(){
     // The proxy mode check looks at Pro+ license + license token, so if both are absent we'll fall through to BYO.
     // For an explicit BYO test, temporarily blank the license token.
     let savedToken = '';
-    try { savedToken = localStorage.getItem('safetyLab.license.token') || ''; localStorage.removeItem('safetyLab.license.token'); } catch(_) {}
+    try { var _lt = window.SLLicenseToken; if (_lt) { savedToken = _lt.get() || ''; _lt.clear(); } } catch(_) {}
     try { await testAiConnection(); } finally {
-        try { if (savedToken) localStorage.setItem('safetyLab.license.token', savedToken); } catch(_) {}
+        try { if (savedToken && window.SLLicenseToken) window.SLLicenseToken.set(savedToken); } catch(_) {}
     }
 };
 
