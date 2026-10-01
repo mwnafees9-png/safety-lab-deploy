@@ -23,6 +23,13 @@
  * install pointed at the customer's database is 'self-hosted' like the web and gets the
  * same leak check — the desktop is a different window onto the same install, not a
  * different set of rules.
+ * 1.4 (1 Oct 2026, completeness): SLConfigEgress() used to list only the three DATA paths, so a
+ * desktop install's update check (updates.safetylabaero.com) was contacted and never listed. The
+ * deployment guide tells a customer the listing names every address the application will contact,
+ * and for the desktop that sentence was not true. The listing now also carries `otherContacts`:
+ * addresses that are contacted but carry no project data. They are deliberately NOT part of the
+ * leak check — adding a Safety Lab address to `egress` would hard-stop every self-hosted desktop
+ * at startup — so the guard's behavior is unchanged and only the disclosure is complete.
  * 1.2 (6 Sep 2026): AI OFF (`__SLAB_AI_OFF__`) → aiEndpoint '' and no AI egress; browser-only
  * may name the customer's OWN AI endpoint (files on the machine, AI on their server) — only a
  * Safety Lab AI address is a contradiction there. Found while wiring the desktop: a blank AI
@@ -96,6 +103,21 @@
     if (purposes[k]) egress.push({ purpose: k, url: purposes[k], host: host(purposes[k]), safetyLab: pointsAtSafetyLab(purposes[k]) });
   });
 
+  // Addresses contacted that carry NO project data. Listed for completeness, excluded from the
+  // leak check by design (see 1.4): the update feed is a Safety Lab host on every install,
+  // including a self-hosted one, and is not a leak.
+  var otherContacts = [];
+  if (isDesktop) {
+    otherContacts.push({
+      purpose: 'application update check',
+      url: 'https://updates.safetylabaero.com/desktop/',
+      host: 'updates.safetylabaero.com',
+      safetyLab: true,
+      carriesProjectData: false,
+      note: 'Sends the installed version and the platform. No project data, no account data, no Output. Can be turned off in the desktop settings.'
+    });
+  }
+
   // THE GUARD. On a customer install nothing may reach Safety Lab.
   var fatal = null;
   if (mode === 'browser-only') {
@@ -123,7 +145,7 @@
   }
 
   var cfg = {
-    version: '1.3',
+    version: '1.4',
     mode: mode,
     aiOff: aiOff,
     isDesktop: isDesktop,
@@ -135,17 +157,26 @@
     aiEndpoint: eff.aiEndpoint,
     corpusEndpoint: eff.corpusEndpoint,
     egress: egress,
+    otherContacts: otherContacts,
     fatal: fatal,
     pointsAtSafetyLab: pointsAtSafetyLab
   };
-  try { Object.freeze(cfg.egress); Object.freeze(cfg); } catch (_) {}
+  try { Object.freeze(cfg.egress); Object.freeze(cfg.otherContacts); Object.freeze(cfg); } catch (_) {}
   W.SLConfig = cfg;
 
   // One-click self-test: what will this install talk to?
   W.SLConfigEgress = function () {
-    try { console.table(egress.map(function (e) { return { purpose: e.purpose, host: e.host, 'points at Safety Lab': e.safetyLab }; })); }
-    catch (_) { try { console.log(JSON.stringify(egress, null, 2)); } catch (__){} }
-    return egress;
+    var all = egress.map(function (e) {
+      return { purpose: e.purpose, host: e.host, 'carries project data': true, 'points at Safety Lab': e.safetyLab };
+    }).concat(otherContacts.map(function (e) {
+      return { purpose: e.purpose, host: e.host, 'carries project data': false, 'points at Safety Lab': e.safetyLab };
+    }));
+    try { console.table(all); }
+    catch (_) { try { console.log(JSON.stringify(all, null, 2)); } catch (__){} }
+    otherContacts.forEach(function (e) {
+      try { console.info('[Safety Lab Aero] ' + e.host + ' — ' + e.note); } catch (_) {}
+    });
+    return all;
   };
 
   if (fatal) {
