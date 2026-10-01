@@ -161,5 +161,35 @@ if [ "$RC" = "0" ]; then
   else
     echo "WARNING: no git remote — this build exists only on this laptop."
   fi
+  # 1 Oct 2026. The desktop app ships the web bundle recorded in
+  # ../safety-lab-desktop/app/BUILD_INFO.json, written by pull-web.sh. release.sh always
+  # re-pulls before it builds, so a desktop RELEASE can never be stale. What goes stale is
+  # the gap BETWEEN releases, and nothing surfaced it: a week passed with the installed
+  # desktop app 20 commits behind production and no one saw it until someone went looking.
+  # This prints the gap after every green deploy. It can never fail the ship.
+  echo
+  DESK="$(cd "$(dirname "$0")/../safety-lab-desktop" 2>/dev/null && pwd || true)"
+  BI="$DESK/app/BUILD_INFO.json"
+  if [ -n "$DESK" ] && [ -f "$BI" ]; then
+    DESK_WEB="$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).webCommit||"")}catch(e){}' "$BI")"
+    DESK_AT="$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).pulledAt||"")}catch(e){}' "$BI")"
+    HEAD_SHA="$(git rev-parse HEAD)"
+    if [ -z "$DESK_WEB" ]; then
+      echo "NOTE: desktop BUILD_INFO.json records no webCommit; cannot tell how old the desktop build is."
+    elif [ "$DESK_WEB" = "$HEAD_SHA" ]; then
+      echo "Desktop app is current with this build."
+    elif git cat-file -e "${DESK_WEB}^{commit}" 2>/dev/null; then
+      BEHIND="$(git rev-list --count "$DESK_WEB".."$HEAD_SHA" 2>/dev/null || echo '?')"
+      echo "DESKTOP IS BEHIND by $BEHIND commits."
+      echo "  Last desktop release pulled web ${DESK_WEB:0:7} on ${DESK_AT:-an unknown date}."
+      echo "  Customers on the Mac and Windows app are NOT running what just went live."
+      echo "  Cut a current desktop build:  cd ../safety-lab-desktop && npm run release"
+    else
+      echo "NOTE: the desktop pulled web ${DESK_WEB:0:7}, which is not in this repo's history."
+    fi
+  else
+    echo "NOTE: no desktop repo beside this one; skipping the desktop drift check."
+  fi
+
 fi
 exit $RC
