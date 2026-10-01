@@ -61,6 +61,8 @@ had drifted in both directions.
       Web Analytics (cost: analytics on the marketing pages, which can be re-added to those pages
       explicitly if wanted). Waqas's call.
 - [ ] **SEC-2 — rotate notify_hook_secret.** Due since 17 Sep. Needs Waqas; the value itself is his.
+      Steps and the verification query (the failure here is silent) in SECURITY_ROTATION_RUNBOOK.md
+      section 1.
 - [ ] **SEC-3b (was part of S11) — the proxy is TOLD which feature each call is for and ignores
       it.** The browser sends `x-safetylab-feature` on every AI call; the worker accepts the header
       in CORS and never reads it. It never reads it because the BROWSER writes the audit_log row
@@ -76,9 +78,18 @@ had drifted in both directions.
       erasure via RPC, certificate persisted in destruction_certificates and shown on the account
       page, local wipe on erase and sign-out, complete manifest, ai_org_cache stamped and cascaded.
       This one is a documentation-accuracy risk as much as a security one.
-- [ ] **SEC-5 (R8) — service-role key rotation.** The service_role JWT sits in five db-webhook trigger
-      definitions. Big-bang (anon key, redeploy, edge env, recreate the five triggers), choreographed
-      with Waqas. Note S28: the last change to this path killed every outbound email for three days.
+- [ ] **SEC-5 (R8) — legacy API keys.** CORRECTED 1 Oct 2026: the premise of this item was stale.
+      The service_role JWT is NOT in any trigger definition. Verified against production: 23 triggers
+      in `public`, none takes an argument, none contains a JWT, and the one function that calls out
+      over HTTP (`private.notify_post`) reads a purpose-scoped secret from Supabase Vault. That
+      changed on 17 Sep. There is no big-bang and no trigger surgery.
+      What is actually left: the legacy anon and service_role JWT keys are still enabled. The app
+      already uses the modern publishable key, but all seven edge functions still take the
+      auto-injected `SUPABASE_SERVICE_ROLE_KEY`, so the legacy keys cannot be disabled until those
+      move to a `sb_secret_` key. The service_role JWT was in the schema before 17 Sep and so is in
+      every backup from before that date, which is why it should be retired rather than left.
+      Staged, reversible procedure in SECURITY_ROTATION_RUNBOOK.md section 2. Note S28 still applies:
+      the last change to this path killed every outbound email for three days, silently.
 - [ ] **SEC-6 (S12, remaining half) — capture the production-only DDL into the repo** (`supabase db dump`)
       so the customer-install migrations stop drifting from production. S20 depends on it.
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
