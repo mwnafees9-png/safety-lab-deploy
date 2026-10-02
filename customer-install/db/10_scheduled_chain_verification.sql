@@ -67,6 +67,17 @@ revoke execute on function private.run_chain_verification(text) from public, ano
 -- best-effort and the failure is loud rather than silent. An operator without pg_cron runs
 --     select private.run_chain_verification('cron');
 -- from their own scheduler instead; see the note printed below.
+-- First try to enable pg_cron ourselves. On Supabase (hosted or self-hosted) the extension is
+-- shipped and preloaded, so this succeeds and the schedule below lands without any dashboard
+-- click. On a Postgres that does not carry pg_cron the create fails, we swallow it, and the
+-- loud warning below still fires.
+do $ext$
+begin
+  create extension if not exists pg_cron;
+exception when others then
+  raise notice 'pg_cron could not be enabled here (%); falling through to the manual path', sqlerrm;
+end $ext$;
+
 do $sched$
 begin
   if exists (select 1 from pg_extension where extname = 'pg_cron') then

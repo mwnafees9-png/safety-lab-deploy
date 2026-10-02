@@ -109,6 +109,21 @@ had drifted in both directions.
       after this commit. Small production finding, not fixed: `anon` holds EXECUTE on `public.ai_cache_put`
       because the migration revoked from `public` rather than `anon` (one-line revoke, do it with the next
       production migration). S20 can proceed.
+      **SAME DAY, LATER: the kit proven on the SELF-HOSTED Supabase stack (everything on the customer's own
+      box, no Supabase account).** New `customer-install/selfhost/` (install.sh + Caddy https with the
+      customer's certificate, pooler and edge runtime switched off, pinned to self-hosted/v0.8.2). Run from
+      nothing in Docker: stack healthy, kit applied, sign-up, password sign-in, every RLS check and the
+      reviewer picker pass through https, untrusted clients refused, dashboard password-gated. Grants on the
+      self-hosted install match production exactly. THREE MORE BUGS FOUND: (1) kit never created the
+      on_auth_user_created trigger on auth.users (capture covered public/private only), so on every customer
+      install a new user could not create a workspace: fixed, `17_auth_signup_trigger.sql`, with a backfill;
+      (2) `10_` now enables pg_cron itself when the server carries it; (3) PRODUCTION BUG since 29 Sep:
+      public.verify_audit_chain() and public.verify_signoff_chain() still declare three columns while the
+      inner functions return five, so both fail and the app's Verify ledger button has shown "Could not
+      verify ledger" since then. Migration `20261002a_verify_wrappers_match_inner.sql` (+ anon revoke on
+      ai_cache_put) written, proven on the self-hosted install, NOT YET APPLIED TO PRODUCTION: Waqas to say
+      go. Parity test now 60 checks incl. every kit file accounted for. Not exercised: the desktop app
+      itself against this backend (needs a licence signed for the server name, Waqas's key).
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
       update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate

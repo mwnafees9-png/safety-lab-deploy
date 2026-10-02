@@ -31,6 +31,8 @@ This runs the SQL files in order:
 15. `14_acknowledged_chain_breaks.sql`: registered, explained chain breaks.
 16. `15_erasure_completeness.sql`: erasure routines cover every table that can hold project or user data.
 17. `16_workspace_member_directory.sql`: the workspace member directory the reviewer picker and workflow screens read.
+18. `17_auth_signup_trigger.sql`: the sign-up trigger that gives every new user their row and personal workspace (and backfills users created before it).
+19. `18_verify_wrappers_match_inner.sql`: the two chain-check functions users call, re-declared to match what they return.
 
 Run this once, on an empty database. It is a fresh-install sequence, not an upgrade script:
 `00_schema_baseline.sql` fails if the tables already exist. To upgrade an existing install,

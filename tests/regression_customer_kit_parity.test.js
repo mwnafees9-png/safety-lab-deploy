@@ -59,6 +59,14 @@ const NOT_PORTED = {
   '20260929b_register_28sep_concurrency_forks.sql': 'production data only: registers chain breaks in OUR audit history; a fresh install has none',
 };
 
+// Bucket 5 — kit-only files: things production has that no migration file ever created
+// (made in the dashboard before the repo captured DDL), or customer-install replacements.
+const KIT_ONLY = {
+  '00_schema_baseline.sql': 'the 6 Sep 2026 capture of production, scrubbed of Safety Lab specifics',
+  '06_grants_lockdown.sql': 'the 6 Sep capture lost the privilege revokes; this file reproduces production\'s grant state (verified 9 Sep 2026)',
+  '17_auth_signup_trigger.sql': 'production\'s on_auth_user_created trigger lives on auth.users and was never in a migration; the kit also replaces handle_new_user() with a customer version (tier from the licence file, no trial clock)',
+};
+
 const migrations = fs.readdirSync(MIG).filter(f => f.endsWith('.sql')).sort();
 const kitFiles = fs.readdirSync(KIT).filter(f => /^\d\d_.*\.sql$/.test(f)).sort();
 const kitHash = new Map(kitFiles.map(f => [norm(path.join(KIT, f)), f]));
@@ -78,6 +86,16 @@ for (const m of migrations) {
                              : 'listed in more than one bucket: ' + buckets.join(', '));
 }
 check('at least the known twins are present (' + twins + ' >= 12)', twins >= 12);
+
+console.log('\n[kit] every kit file is accounted for: a twin of a migration, an ADAPTED target, or KIT_ONLY with a reason');
+{
+  const migHash = new Set(migrations.map(m => norm(path.join(MIG, m))));
+  const adaptedTargets = new Set(Object.values(ADAPTED));
+  for (const k of kitFiles) {
+    const why = migHash.has(norm(path.join(KIT, k))) ? 'twin' : adaptedTargets.has(k) ? 'adapted' : KIT_ONLY[k] ? 'kit-only' : '';
+    check(k + '  <-  ' + (why || 'NOTHING'), !!why, 'kit file with no migration and no KIT_ONLY reason');
+  }
+}
 
 console.log('\n[kit] ADAPTED entries point at real kit files');
 for (const [m, k] of Object.entries(ADAPTED)) check(m + ' -> ' + k + ' exists', fs.existsSync(path.join(KIT, k)));
