@@ -70,7 +70,12 @@ had drifted in both directions.
       is the proxy writing its own row from what it actually saw, which is S13's unified activity
       log, not a line in the worker. Deliberately left open on 29 Sep rather than ticked off with
       something cosmetic. Carries SEC-0b (workspace_audit has never written a row) with it.
-- [ ] **SEC-3c — the deployment guide does not mention ALLOWED_ORIGINS.** SL-DG-0001 v2.0 is a
+- [x] **SEC-3c — DONE 2 Oct 2026 in SL-DG-0001 Rev 2.2** (section 4.2), together with the 7.2/7.3
+      egress wording and the 6.2 Anthropic Workspace sentence. Rev 2.2 is Released and sitting in
+      customer-install/, but it is ON HOLD FROM RADIA until config 1.4 is deployed: section 7.2
+      describes the two-part egress listing, which does not exist on the live site until ./ship.sh
+      runs. Send it after the deploy, not before.
+      Original entry: **the deployment guide does not mention ALLOWED_ORIGINS.** SL-DG-0001 v2.0 is a
       released customer document and is under the R15 hold, so it was not edited on 29 Sep when the
       variable was added. `.env.example` in the proxy repo documents it in full. Fold into the next
       guide revision, with the customer-hosted stand-down stated plainly.
