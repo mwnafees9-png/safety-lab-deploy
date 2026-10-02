@@ -67,14 +67,19 @@ is inside this folder.
    "Checking the front door", then two lines that should both say 200, then "Done." and a
    sheet of what every user types in the app.
 
-7. Open the file `WHAT-TO-TYPE-IN-THE-APP.txt` that now sits next to `install.sh`. Keep it;
-   every user needs the three values in it.
+7. Two files now sit next to `install.sh`: `<server name>.safetylab-setup`, which is what every
+   user needs, and `WHAT-TO-TYPE-IN-THE-APP.txt`, which explains it and lists the values in case
+   anyone wants to type them by hand.
+
+8. When the license file from Safety Lab arrives (it ends in `.lic`), put it next to
+   `install.sh` and run `bash install.sh` again. The setup file is rewritten with the license
+   inside, and from then on it is the only file a user needs.
 
 If something goes wrong the script stops and prints a sentence starting with STOP that
 says what to do. Running `bash install.sh` again is always safe: it remembers your answers
 and never deletes your data.
 
-## Part 3. Every user's computer (5 minutes each)
+## Part 3. Every user's computer (two minutes each)
 
 1. If the script made its own certificate (you skipped Part 1 step 6): copy the file
    `trust-this-on-every-user-computer.crt` to the user's computer. Windows: double-click
@@ -87,13 +92,11 @@ and never deletes your data.
 2. Go to https://safetylabaero.com and download the desktop app (Mac or Windows). Install
    it like any app.
 
-3. Open it. On the first screen choose "My organization's server" and type the Server
-   address and the Server key from `WHAT-TO-TYPE-IN-THE-APP.txt`. Under AI choose "My
-   organization's AI endpoint" and type the AI endpoint from the same file.
+3. Open it. Click "Choose setup file..." and pick the `.safetylab-setup` file your
+   administrator gave you (or drop the file on the window). It fills in the server, the AI
+   and the license. Click Next, read and accept the agreement, click Finish.
 
-4. Load the license file Safety Lab sent you.
-
-5. Click Create account, enter your work email and a password, and you are in.
+4. Click Create account, enter your work email and a password, and you are in.
 
 ## Part 4. Make yourself the administrator (once)
 

@@ -146,12 +146,43 @@ echo "   sign-in service over https: $SIGNIN (want 200)"
 echo "   AI service over https:      $AI (want 200)"
 [ "$SIGNIN" = 200 ] && [ "$AI" = 200 ] || echo "   One of these is not 200. The install may still be fine if your certificate is for a different name; tell Safety Lab the two numbers."
 
-# ---------------------------------------------------------------- 8. the sheet for users
+# ---------------------------------------------------------------- 8. the setup file and the sheet for users
+# The setup file is what every user opens in the desktop app: one click, nothing to type. It carries
+# ONLY what a browser bundle already carries in the open (the server address, the PUBLISHABLE key,
+# the AI endpoint) plus the signed license if Safety Lab's .lic file sits next to this script.
+# Never the AI key, never a password: the app refuses a setup file that carries a secret.
+LIC_FILE=$(ls "$HERE"/*.lic 2>/dev/null | head -1 || true)
+SETUP="$HERE/$SERVER_NAME.safetylab-setup"
+{
+  echo '{'
+  echo '  "format": "safetylab-setup/1",'
+  echo '  "note": "Safety Lab Aero setup file for '"$SERVER_NAME"'. Open it in the desktop app (Choose setup file). It carries no secrets.",'
+  echo '  "backend": "own",'
+  echo '  "backendUrl": "https://'"$SERVER_NAME"'",'
+  echo '  "backendKey": "'"$PUB"'",'
+  echo '  "ai": "own",'
+  echo '  "aiEndpoint": "https://'"$SERVER_NAME"'/v1/ai",'
+  if [ -n "$LIC_FILE" ]; then
+    printf '  "license": "%s",\n' "$(tr -d '\r\n' < "$LIC_FILE" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+  fi
+  echo '  "webAppUrl": ""'
+  echo '}'
+} > "$SETUP"
+chmod 644 "$SETUP"
 DASH_U=$(grep '^DASHBOARD_USERNAME=' .env | cut -d= -f2-)
 cat > "$HERE/WHAT-TO-TYPE-IN-THE-APP.txt" <<EOF
-Safety Lab Aero on your own server: what every user types in the desktop app
-============================================================================
-Open the Safety Lab Aero desktop app. First screen, "Where does your data live?":
+Safety Lab Aero on your own server: getting every user started
+==============================================================
+Give every user the file:   $SETUP
+$( [ -n "$LIC_FILE" ] && echo "It carries your license, so it is the only file they need." || echo "It carries no license yet. Put the .lic file Safety Lab sends you next to install.sh, run
+bash install.sh again, and the setup file is rewritten with the license inside. Until then,
+users load the .lic file separately in the app." )
+
+The user: install the Safety Lab Aero desktop app from https://safetylabaero.com, open it, click
+"Choose setup file..." and pick that file (or drop the file on the window). Done. Then accept the
+agreement, create an account with the work email, sign in.
+
+If you would rather type the values by hand, they are:
 
   Choose:            My organization's server
   Server address:    https://$SERVER_NAME

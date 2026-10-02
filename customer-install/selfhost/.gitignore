@@ -2,3 +2,5 @@ stack/
 answers.env
 trust-this-on-every-user-computer.crt
 WHAT-TO-TYPE-IN-THE-APP.txt
+*.safetylab-setup
+*.lic
