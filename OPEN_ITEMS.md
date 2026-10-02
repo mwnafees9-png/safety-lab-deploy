@@ -133,6 +133,16 @@ had drifted in both directions.
       of customer-install, 113 files, no secrets); Waqas uploads it to R2 `safetylab-downloads/customer-install/`
       so the guide's address resolves. Still open: the production migration 20261002a (Waqas to say go), a licence
       bound to Radia's server name, one desktop-app click-through against a self-hosted backend.
+      **EVENING 2 Oct, the two "couple of clicks" gaps (Waqas: user loading must be a couple of clicks, data and
+      security rules unchanged).** (1) SETUP FILE: install.sh writes `<server>.safetylab-setup` (addresses +
+      publishable key + signed licence, never a secret; the parser refuses secrets, Safety Lab hosts, http,
+      query strings); desktop onboarding and settings take it with one click or a drop (desktop 2c2db5a, 27
+      checks, mutation-proven). (2) OWN AI KEY ON THE DESKTOP: third AI setting; key in the OS keychain, the
+      main process makes the streaming call to api.anthropic.com (ai_main.js), the page never holds the key,
+      ITAR refused twice, renderer fence unchanged (desktop 3652b4f + web bf400b0, 26 + 22 checks). NOT YET
+      DONE: ship.sh for the web side (bf400b0), a desktop release carrying both (0.18.3 on the site has
+      neither), and ONE live run of the key door with a real key in a real window; nothing here was run in
+      Electron, only under the test wall.
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
       update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate
