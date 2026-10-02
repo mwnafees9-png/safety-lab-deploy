@@ -128,7 +128,7 @@ had drifted in both directions.
       the customer box: Supabase stack files vendored (no Git), AI proxy runs as a Node container behind Caddy at
       /v1/ai (no Node on the host, one certificate), install.sh asks four questions and writes
       WHAT-TO-TYPE-IN-THE-APP.txt. Proven from nothing incl. AI health 200 over https and 401 without a licence.
-      SL-DG-0001 **Rev 2.3**: new section 4.5 (step by step), section 3 "where each piece comes from" with the
+      SL-DG-0001 (now Rev 2.1): new section 4.5 (step by step), section 3 "where each piece comes from" with the
       download address. Install package zip built at `~/dev/Claude outputs/customer-install-package/` (git archive
       of customer-install, 113 files, no secrets); Waqas uploads it to R2 `safetylab-downloads/customer-install/`
       so the guide's address resolves. Still open: the production migration 20261002a (Waqas to say go), a licence
@@ -146,7 +146,7 @@ had drifted in both directions.
       **LATER STILL, 2 Oct:** certificate pin (desktop 234de4f, package 63ac026): the install makes its own
       long-lived root + server certificate, the setup file carries both fingerprints, the desktop trusts
       that one server by them; no user installs a certificate and IT needs no CA. install.cmd for a Windows
-      double-click (unrun on Windows). SL-DG-0001 **Rev 2.4** issued to the repo (2.3 withdrawn, never sent).
+      double-click (unrun on Windows). SL-DG-0001 issued as **Rev 2.1** (Waqas: one revision since the 2.0 Radia holds; the same-day 2.2/2.3/2.4 builds withdrawn).
       Package zip rebuilt (116 files, guide inside). Upload to R2 and a desktop release still pending.
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
