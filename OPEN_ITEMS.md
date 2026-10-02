@@ -124,6 +124,15 @@ had drifted in both directions.
       ai_cache_put) written, proven on the self-hosted install, NOT YET APPLIED TO PRODUCTION: Waqas to say
       go. Parity test now 60 checks incl. every kit file accounted for. Not exercised: the desktop app
       itself against this backend (needs a licence signed for the server name, Waqas's key).
+      **LATER 2 Oct: package rebuilt to the "eight-year-old" standard (commit 34a1584).** Only Docker is needed on
+      the customer box: Supabase stack files vendored (no Git), AI proxy runs as a Node container behind Caddy at
+      /v1/ai (no Node on the host, one certificate), install.sh asks four questions and writes
+      WHAT-TO-TYPE-IN-THE-APP.txt. Proven from nothing incl. AI health 200 over https and 401 without a licence.
+      SL-DG-0001 **Rev 2.3**: new section 4.5 (step by step), section 3 "where each piece comes from" with the
+      download address. Install package zip built at `~/dev/Claude outputs/customer-install-package/` (git archive
+      of customer-install, 113 files, no secrets); Waqas uploads it to R2 `safetylab-downloads/customer-install/`
+      so the guide's address resolves. Still open: the production migration 20261002a (Waqas to say go), a licence
+      bound to Radia's server name, one desktop-app click-through against a self-hosted backend.
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
       update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate
