@@ -7347,6 +7347,14 @@ function _initSupabaseClient() {
                     _onSupabaseSignedOut();
                 } else if (event === 'TOKEN_REFRESHED' && session && session.user) {
                     _supabaseSession = session;
+                } else if (event === 'MFA_CHALLENGE_VERIFIED' && session && session.access_token) {
+                    // 3 Oct 2026. supabase-js hands a new token to the live connection only on
+                    // SIGNED_IN / TOKEN_REFRESHED, not after the second step. Without this the
+                    // connection keeps the password-only token and, since migration 20261003a,
+                    // the server refuses every private channel for a two-factor account. With it,
+                    // the channels refused before the second step rejoin on their own.
+                    _supabaseSession = session;
+                    try { if (_supabaseClient.realtime && typeof _supabaseClient.realtime.setAuth === 'function') _supabaseClient.realtime.setAuth(session.access_token); } catch (_) {}
                 }
             } catch (e) { console.error('[Safety Lab Aero] auth listener error:', e); }
         });
@@ -7414,7 +7422,7 @@ async function startRealtimePresence() {
     let _curProj = null; try { _curProj = (typeof getActiveCloudProjectId === 'function') ? getActiveCloudProjectId() : null; } catch (_) {}
     const meta = { userId: u.id, name: (u.user_metadata && (u.user_metadata.name || u.user_metadata.full_name)) || u.email || 'Someone', email: u.email || '', projectId: _curProj || null, at: Date.now() };
     try {
-        _rtChannel = client.channel('slab-presence:' + wsId, { config: { presence: { key: u.id }, broadcast: { self: false } } });
+        _rtChannel = client.channel('slab-presence:' + wsId, { config: { private: true, presence: { key: u.id }, broadcast: { self: false } } });   // 3 Oct 2026: members only (migration 20261003a)
         _rtChannel.on('presence', { event: 'sync' }, function () { try { const st = _rtChannel.presenceState(); _rtRenderPresence(_rtPresenceUsers(st)); _rtRenderSoftLock(_rtProjectPeers(st, u.id)); } catch (_) {} });
         _rtChannel.on('broadcast', { event: 'comment' }, function (msg) { try { _rtApplyRemoteComment(msg && msg.payload); } catch (_) {} });   // #27 part 2: live comment sync
         _rtChannel.subscribe(function (status) { if (status === 'SUBSCRIBED') { try { _rtChannel.track(meta); } catch (_) {} } });
@@ -8305,8 +8313,13 @@ function _wsRequirePassword(actionLabel){
             if(!pw){ if(msg) msg.textContent='Enter your password.'; return; }
             okBtn.disabled=true; const o=okBtn.textContent; okBtn.textContent='Checking…';
             try{
-                const res=await client.auth.signInWithPassword({ email:u.email, password:pw });
-                if(res && res.error){ if(msg) msg.textContent='Incorrect password.'; okBtn.disabled=false; okBtn.textContent=o; return; }
+                // 3 Oct 2026 — through SafetyLabMFA.reauthenticate so a two-factor session stays
+                // two-factor (mfa.js explains why a bare signInWithPassword breaks it).
+                const re=(window.SafetyLabMFA && typeof window.SafetyLabMFA.reauthenticate==='function')
+                    ? await window.SafetyLabMFA.reauthenticate(u.email, pw)
+                    : await client.auth.signInWithPassword({ email:u.email, password:pw }).then(function(r){ return { ok: !(r && r.error), reason:'password' }; });
+                if(!re.ok && re.reason==='second-step'){ done(false); return; }
+                if(!re.ok){ if(msg) msg.textContent='Incorrect password.'; okBtn.disabled=false; okBtn.textContent=o; return; }
                 done(true);
             }catch(e){ if(msg) msg.textContent=((e&&e.message)||'Verification failed.'); okBtn.disabled=false; okBtn.textContent=o; }
         };

@@ -633,7 +633,9 @@
   }
 
   function _openChannel() {
-    chan = _client.channel('slab-crdt:' + _wsId + ':' + _projId, { config: { broadcast: { self: false } } });
+    // 3 Oct 2026 — private: Realtime authorizes join and send against realtime.messages policies
+    // (migration 20261003a): members receive, editors send. A public channel checked nothing.
+    chan = _client.channel('slab-crdt:' + _wsId + ':' + _projId, { config: { private: true, broadcast: { self: false } } });
     chan.on('broadcast', { event: 'yupdate' }, function (m) { if (m && m.payload && m.payload.u) _applyRemote(m.payload.u); });
     chan.on('broadcast', { event: 'ysync1' }, function (m) {
       if (!m || !m.payload || !m.payload.sv) return;

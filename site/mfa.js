@@ -368,8 +368,80 @@
         });
     }
 
+    // ----------------------------------------------------------- re-authentication
+    // 3 Oct 2026. Signing off and taking or releasing a lock ask for the password again.
+    // Those screens called signInWithPassword on the app's own session, which REPLACES an
+    // AAL2 session with a fresh AAL1 one. For an account with a second factor that left the
+    // app running on a password-only session; with two-factor now enforced by the database
+    // (migration 20261003b) every save would then be refused, and the live co-editing
+    // connection is closed by the server the moment it is handed the password-only token
+    // (proven on the self-hosted stack: the channel goes CLOSED and does not come back).
+    //
+    // So this is the one place a password re-check happens, and it has two paths:
+    //   - no second factor: the password is checked on the app's own session, as before,
+    //     so the database sees a fresh password sign-in and records 'password_reauth'.
+    //     The session stays AAL1 to AAL1, and the live connection stays open.
+    //   - a second factor: the password is checked on a separate, throwaway sign-in that
+    //     is signed out straight after, and must belong to the same account. The app's own
+    //     session is never dropped to AAL1. Then the second step runs on the app's session,
+    //     which the database records as 'mfa'. Declining the second step leaves the session
+    //     as it was (still two-factor) and nothing is signed.
+    // If the throwaway sign-in cannot be built, the older path runs: password on the app's
+    // session, then the second step, and declining it signs out.
+    // Returns { ok: true } or { ok: false, reason: 'password' | 'second-step' | 'unavailable' }.
+    function _checkClient(sb) {
+        try {
+            if (!window.supabase || typeof window.supabase.createClient !== 'function') return null;
+            if (!sb || !sb.supabaseUrl || !sb.supabaseKey) return null;
+            return window.supabase.createClient(String(sb.supabaseUrl), sb.supabaseKey, {
+                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'slab-reauth-check' }
+            });
+        } catch (_) { return null; }
+    }
+    async function _sessionUserId(sb) {
+        try { var r = await sb.auth.getSession(); return (r && r.data && r.data.session && r.data.session.user && r.data.session.user.id) || ''; }
+        catch (_) { return ''; }
+    }
+    async function reauthenticate(email, password) {
+        var sb = _sb();
+        if (!sb || !sb.auth || typeof sb.auth.signInWithPassword !== 'function') return { ok: false, reason: 'unavailable' };
+        var st = await _factors();
+        var hasFactor = st.supported && (st.verified.length > 0 || (!!st.error && _wasEnrolled(await _sessionEmail())));
+        if (!st.supported) hasFactor = false;
+        if (hasFactor) {
+            var chk = _checkClient(sb);
+            if (chk) {
+                var me = await _sessionUserId(sb);
+                var cr;
+                try { cr = await chk.auth.signInWithPassword({ email: email, password: password }); } catch (_) { cr = null; }
+                var okPw = !!(cr && !cr.error && cr.data && cr.data.user && me && cr.data.user.id === me);
+                try { if (cr && !cr.error) await chk.auth.signOut({ scope: 'local' }); } catch (_) {}
+                if (!okPw) return { ok: false, reason: 'password' };
+                var stepped0 = false;
+                try { stepped0 = await promptChallenge({ mandatory: true }); } catch (_) { stepped0 = false; }
+                if (stepped0) return { ok: true };
+                _toast('Not signed: the second step was not completed.', 'warning');
+                return { ok: false, reason: 'second-step' };
+            }
+        }
+        var res;
+        try { res = await sb.auth.signInWithPassword({ email: email, password: password }); }
+        catch (_) { return { ok: false, reason: 'password' }; }
+        if (!res || res.error) return { ok: false, reason: 'password' };
+        var need = true;
+        try { need = await needsChallenge(); } catch (_) { need = true; }
+        if (!need) return { ok: true };
+        var stepped = false;
+        try { stepped = await promptChallenge({ mandatory: true }); } catch (_) { stepped = false; }
+        if (stepped) return { ok: true };
+        try { await sb.auth.signOut({ scope: 'local' }); } catch (_) {}
+        _toast('Signed out: the second step was not completed. Your open project is still in this browser.', 'warning');
+        return { ok: false, reason: 'second-step' };
+    }
+
     window.SafetyLabMFA = {
         mount: mount,
+        reauthenticate: reauthenticate,
         needsChallenge: needsChallenge,
         promptChallenge: promptChallenge,
         hasVerifiedFactor: hasVerifiedFactor,

@@ -82,7 +82,7 @@
     var c = _client(), ws = _wsId(), proj = _projId();
     if (!c || !ws || !proj) { setTimeout(start, 4000); return; }
     _tok = (crypto.randomUUID ? crypto.randomUUID() : 'l' + Math.random().toString(36).slice(2)).slice(0, 8);
-    _chan = c.channel('slab-locks:' + ws + ':' + proj);
+    _chan = c.channel('slab-locks:' + ws + ':' + proj, { config: { private: true } });   // 3 Oct 2026: members receive, editors announce (migration 20261003a)
     _chan.on('broadcast', { event: 'lock' }, function (m) {
       var p = m && m.payload; if (!p || p.tok === _tok) return;
       if (p.action === 'claim') _peers.set(String(p.key), { held_by: p.held_by, name: p.name, exp: p.exp || 0 });

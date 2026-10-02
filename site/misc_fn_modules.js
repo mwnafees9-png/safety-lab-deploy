@@ -3694,9 +3694,17 @@ async function submitSignoff(reviewId, baselineSha, roleAtSigning) {
     if (!password) { if (statusEl) { statusEl.textContent = 'Enter your password to sign.'; statusEl.style.color = 'var(--color-danger)'; } return; }
     if (statusEl) { statusEl.textContent = 'Verifying identity…'; statusEl.style.color = 'var(--color-text-tertiary)'; }
     try {
-        // Re-authenticate: identity + intent. Verifies the signer is really them.
-        const { error: authErr } = await client.auth.signInWithPassword({ email: email, password: password });
-        if (authErr) { if (statusEl) { statusEl.textContent = 'Password incorrect — not signed.'; statusEl.style.color = 'var(--color-danger)'; } return; }
+        // Re-authenticate: identity + intent. Verifies the signer is really them. 3 Oct 2026:
+        // through SafetyLabMFA.reauthenticate, so an account with a second factor takes the
+        // second step too and the session stays at two-factor (see mfa.js).
+        const _re = (window.SafetyLabMFA && typeof window.SafetyLabMFA.reauthenticate === 'function')
+            ? await window.SafetyLabMFA.reauthenticate(email, password)
+            : await client.auth.signInWithPassword({ email: email, password: password }).then(r => ({ ok: !(r && r.error), reason: 'password' }));
+        if (!_re.ok) {
+            if (statusEl) { statusEl.textContent = _re.reason === 'second-step' ? 'Second step not completed — not signed.' : 'Password incorrect — not signed.'; statusEl.style.color = 'var(--color-danger)'; }
+            if (_re.reason === 'second-step') closeSignoffModal();
+            return;
+        }
         const projectId = _activeCloudProjectId;
         // Link to a sealed revision if the signed fingerprint matches one.
         let baselineId = null;

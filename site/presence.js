@@ -222,7 +222,7 @@
         const ws = _ws(), proj = _proj();
         if (!client || !ws || !proj || !_identity()) { setTimeout(start, 4000); return; }   // no signed-in name → not yet
         _tok = (crypto.randomUUID ? crypto.randomUUID() : 'p' + Math.random().toString(36).slice(2)).slice(0, 8);
-        _chan = client.channel('slab-presence:' + ws + ':' + proj, { config: { presence: { key: _tok } } });
+        _chan = client.channel('slab-presence:' + ws + ':' + proj, { config: { private: true, presence: { key: _tok } } });   // 3 Oct 2026: members only (migration 20261003a)
         _chan.on('presence', { event: 'sync' }, function () {
             try { _state = _chan.presenceState(); } catch (_) { _state = {}; }
             _renderStrip();
