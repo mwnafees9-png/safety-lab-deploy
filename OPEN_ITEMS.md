@@ -95,8 +95,20 @@ had drifted in both directions.
       every backup from before that date, which is why it should be retired rather than left.
       Staged, reversible procedure in SECURITY_ROTATION_RUNBOOK.md section 2. Note S28 still applies:
       the last change to this path killed every outbound email for three days, silently.
-- [ ] **SEC-6 (S12, remaining half) — capture the production-only DDL into the repo** (`supabase db dump`)
-      so the customer-install migrations stop drifting from production. S20 depends on it.
+- [x] **SEC-6 (S12, remaining half) — kit vs production parity. DONE 2 Oct 2026.** Built the customer
+      install kit on a clean Postgres 16 and diffed its signature (tables, columns, functions by body hash,
+      policies, triggers, grants, views, indexes) against production. Findings: policies identical (64 of 64);
+      two production migrations were never ported to the kit, `20260916_erasure_completeness` and
+      `20260916b_workspace_member_directory`. On a customer install that meant the reviewer picker was empty
+      and `workspace_member_directory`, `user_emails_for_ids` and `ai_cache_put` did not exist. Both are now
+      in the kit as `15_` and `16_`, apply.sh runs them, and every customer-relevant function, column, policy,
+      trigger and index matches production. The remaining diffs are hosted-only notify objects and the
+      service_role/anon grant artifacts of the local stubs. `tests/regression_customer_kit_parity.test.js`
+      (40 tests) freezes the baseline list, requires every later migration to be a twin, an adapted copy or
+      an explicitly listed not-ported file, and checks apply.sh. Any Radia install must use the kit at or
+      after this commit. Small production finding, not fixed: `anon` holds EXECUTE on `public.ai_cache_put`
+      because the migration revoked from `public` rather than `anon` (one-line revoke, do it with the next
+      production migration). S20 can proceed.
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
       update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate
