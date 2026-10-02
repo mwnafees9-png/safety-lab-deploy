@@ -1,0 +1,43 @@
+# Safety Lab Aero additions to the stock Supabase stack. Layered by install.sh after
+# docker-compose.yml and docker-compose.caddy.yml (COMPOSE_FILE in .env).
+#
+#   caddy      gets the customer's certificate, and the extra route to the AI service
+#   ai-proxy   the Safety Lab AI service (holds the customer's own AI key; same code as the
+#              hosted proxy, run as a plain Node service). Reached ONLY through Caddy at
+#              https://<server>/v1/ai/... ; its port is not published on the host.
+#   supavisor  switched off: the app never uses the pooler, and it is the only thing that
+#              would expose the database port outside the box
+#   functions  switched off: the edge runtime downloads packages from the internet at boot,
+#              so an air-gapped install would never come up healthy
+services:
+  caddy:
+    volumes:
+      - ./volumes/proxy/certs:/etc/caddy/certs:ro
+    depends_on:
+      ai-proxy:
+        condition: service_healthy
+
+  ai-proxy:
+    container_name: safetylab-ai-proxy
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command: ["node", "server.mjs"]
+    env_file:
+      - ./ai-proxy.env
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      LICENSE_MODE: offline
+    volumes:
+      - ./ai-proxy:/app:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8787/v1/ai/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  supavisor:
+    profiles: ["not-used-by-safety-lab"]
+  functions:
+    profiles: ["not-used-by-safety-lab"]

@@ -1,83 +1,131 @@
-# Safety Lab Aero — everything on your own server
+# Safety Lab Aero on your own computer: the install, step by step
 
-This folder puts the whole backend on one machine you own: the database, the sign-in
-service, the API that enforces the access rules, and the live-update channel. No Supabase
-account, no cloud, nothing leaves your network. It uses the open-source Supabase stack
-(Apache 2.0) running in Docker, with the Safety Lab database built into it by the files in
-`../db`.
+This puts everything Safety Lab Aero needs on one computer you own: the database, the
+sign-in service, and the AI service. No cloud account. Nothing leaves your network except
+AI drafting requests to the AI provider, and those never carry your project files.
 
-If you would rather use a Supabase project in your own cloud account, you do not need this
-folder: follow the deployment guide's self-hosted section instead. Both paths give the app
-the same two values (a server address and a publishable key).
+You need to install exactly one program on that computer: Docker Desktop. Everything else
+is inside this folder.
 
-## What you need
+## Part 1. Get the computer ready (your IT person, about 30 minutes)
 
-- A Linux server (or a Windows or Mac machine running Docker Desktop) with Docker and the
-  Docker Compose plugin, git and openssl. About 10 GB of disk for the images, plus your data.
-- Internet access from that machine for the first run only (to download the images). After
-  that it can be air-gapped.
-- A DNS name your users will reach the server on, for example `safetylab.yourcompany.local`.
-- A certificate for that name from your own certificate authority (the one your company
-  machines already trust). If you have none, `--self-signed` works for a lab: the script
-  prints a root certificate that every user machine must then trust.
+1. Pick the computer. It must stay switched on. Windows 10 or 11 Pro, a Mac, or a Linux
+   server. At least 4 processor cores, 8 GB of memory, 30 GB of free disk.
 
-## Install
+2. Install Docker Desktop. Go to https://www.docker.com/products/docker-desktop/ and click
+   Download. Run the installer and accept the defaults. When it asks to use WSL 2 on
+   Windows, say yes. Restart the computer if it asks.
 
-```
-cd customer-install/selfhost
-./install.sh safetylab.yourcompany.local --cert /path/server.crt --key /path/server.key
-```
+3. Open Docker Desktop once. Wait until the bottom left corner says "Engine running".
+   Leave it open. (It starts by itself after this.)
 
-or, for a lab without a certificate:
+4. Windows only: open the Start menu, type `Ubuntu`, and press Enter. If nothing is found,
+   open the Start menu, type `cmd`, press Enter, type `wsl --install` and press Enter,
+   restart the computer, then try `Ubuntu` again. The first time, Ubuntu asks you to make
+   a username and a password; pick any. This Ubuntu window is where you type the commands
+   below. (Mac and Linux: open the Terminal app instead.)
 
-```
-./install.sh safetylab.yourcompany.local --self-signed
-```
+5. Give the computer a name on your network, for example `safetylab.yourcompany.local`.
+   Your IT person does this in your DNS. Test from another computer: open a command window
+   and type `ping safetylab.yourcompany.local`. It should answer.
 
-The script fetches the stack files (pinned to the release it was proven against), generates
-all secrets into `stack/.env` (keep that file private, it is the keys to your database),
-configures https, starts the services, builds the Safety Lab database, and prints the
-three lines to put in the app's `install.env`. Then continue with `node configure.js` as the
-deployment guide says.
+6. Ask your IT person for a certificate for that name from the company's certificate
+   authority. You get two files, a certificate and a private key. Put them on the computer,
+   for example in `C:\SafetyLab\certs\`. If your company cannot make one, skip this: the
+   script makes its own, and Part 3 tells you the one extra step.
 
-## After install
+7. Make the AI key. Go to https://console.anthropic.com and sign in (make an account if you
+   have none). Click Settings, then Workspaces, then Create Workspace, and name it
+   `Safety Lab`. Open that workspace, click API Keys, Create Key, name it `safetylab-server`,
+   and copy the key somewhere safe on this computer only. Also copy the Workspace ID (it
+   starts with `wrkspc_`): it is shown on the workspace's page.
 
-Make yourself an administrator (once, with your own email address):
+8. Make sure the computer can open https://api.anthropic.com in a browser (it shows a
+   short message; that is fine). That is the only outside address it needs.
 
-```
-cd stack && docker compose exec -T db psql -U postgres -d postgres \
-  -c "insert into private.platform_admins(email) values ('you@yourcompany.com')"
-```
+## Part 2. Install (about 20 minutes, most of it waiting)
 
-Day to day, from the `stack` folder: `sh run.sh status`, `sh run.sh stop`, `sh run.sh start`,
-`sh run.sh logs`. The admin dashboard is at `https://<server>/project/` behind the username
-and password in `stack/.env`.
+1. Unzip the Safety Lab package you downloaded into `C:\SafetyLab` (Windows) or your home
+   folder (Mac, Linux). You get a folder named `customer-install`.
 
-Back up `stack/volumes/db/data` (the database) and `stack/.env` (the keys). Losing `.env`
+2. Open the Ubuntu window (Windows) or Terminal (Mac, Linux).
+
+3. Go into the folder. Windows: type
+   `cd /mnt/c/SafetyLab/customer-install/selfhost` and press Enter.
+   Mac or Linux: type `cd ~/customer-install/selfhost` and press Enter.
+
+4. Type `bash install.sh` and press Enter.
+
+5. It asks four questions. Type each answer and press Enter:
+   the server name from Part 1 step 5;
+   the certificate file and the key file from step 6 (Windows paths look like
+   `/mnt/c/SafetyLab/certs/server.crt`), or just press Enter twice if you have none;
+   the AI key from step 7 (nothing shows while you type; that is normal);
+   the Workspace ID from step 7.
+
+6. Wait. The first run downloads about 9 GB. You see a list of files being applied, then
+   "Checking the front door", then two lines that should both say 200, then "Done." and a
+   sheet of what every user types in the app.
+
+7. Open the file `WHAT-TO-TYPE-IN-THE-APP.txt` that now sits next to `install.sh`. Keep it;
+   every user needs the three values in it.
+
+If something goes wrong the script stops and prints a sentence starting with STOP that
+says what to do. Running `bash install.sh` again is always safe: it remembers your answers
+and never deletes your data.
+
+## Part 3. Every user's computer (5 minutes each)
+
+1. If the script made its own certificate (you skipped Part 1 step 6): copy the file
+   `trust-this-on-every-user-computer.crt` to the user's computer. Windows: double-click
+   it, click Install Certificate, choose Local Machine, choose "Place all certificates in
+   the following store", Browse, pick "Trusted Root Certification Authorities", Next,
+   Finish. Mac: double-click it, it opens Keychain Access, find it under System, double-click
+   it, open Trust, set "When using this certificate" to Always Trust, close, enter the
+   password. Skip this step entirely if IT gave you a company certificate.
+
+2. Go to https://safetylabaero.com and download the desktop app (Mac or Windows). Install
+   it like any app.
+
+3. Open it. On the first screen choose "My organization's server" and type the Server
+   address and the Server key from `WHAT-TO-TYPE-IN-THE-APP.txt`. Under AI choose "My
+   organization's AI endpoint" and type the AI endpoint from the same file.
+
+4. Load the license file Safety Lab sent you.
+
+5. Click Create account, enter your work email and a password, and you are in.
+
+## Part 4. Make yourself the administrator (once)
+
+In the Ubuntu or Terminal window, go to the `stack` folder inside `selfhost` and run the
+one-line command shown under "For the administrator only" in `WHAT-TO-TYPE-IN-THE-APP.txt`,
+with your own email in it.
+
+## Day to day
+
+Is it running? In the `stack` folder: `docker compose ps`. Every line should say "healthy"
+or "Up". Stop: `docker compose stop`. Start: `docker compose start`. After a reboot it starts
+by itself as long as Docker Desktop starts.
+
+Back up these three things somewhere safe, regularly: the folder `stack/volumes/db/data`
+(your data), and the files `stack/.env` and `stack/ai-proxy.env` (the keys). Losing the keys
 with the data intact means nobody can sign in.
 
-## What is switched off
+## When Safety Lab sends an update
 
-Two services in the stock Supabase stack are disabled by `docker-compose.slab-tls.yml`
-because the Safety Lab app never uses them: the connection pooler, which is the only thing
-that would expose the database port outside the box, and the edge-function runtime, which
-downloads packages from the internet at boot and would never come up on an air-gapped
-machine. Everything else is stock, so Supabase's own `update.sh` in the `stack` folder works
-for upgrades.
+Database updates come as new numbered files for the `db` folder. Copy them in, then in the
+`stack` folder run, for each new file in order:
+`docker compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 < ../../db/NN_name.sql`
 
-## Sign-ups
+A new package version: unzip it over the old one, keep your `selfhost/stack` folder and
+`selfhost/answers.env`, and run `bash install.sh` again.
 
-No mail server is configured, so a new user's sign-up confirms itself. The access rules and
-the licence file still decide what anyone can see: a new account sees nothing until a
-workspace owner adds it. To require email confirmation instead, fill in the `SMTP_*`
-lines in `stack/.env`, set `ENABLE_EMAIL_AUTOCONFIRM=false`, and run `./install.sh` again
-with the same arguments.
+## What is switched off, for the technically curious
 
-## Upgrading the Safety Lab database later
-
-`install.sh` builds the database only when it is missing. When Safety Lab sends you new
-numbered files for `../db`, apply just the new ones, in order:
-
-```
-cd stack && docker compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 < ../../db/NN_name.sql
-```
+The stock Supabase stack carries a connection pooler and an edge-function runtime. The
+Safety Lab app uses neither, so they are off: the pooler is the only thing that would open
+the database port outside the computer, and the edge runtime downloads packages from the
+internet when it starts, which breaks on an air-gapped machine. The AI service runs as a
+small Node program inside Docker and is reachable only through the https front door at
+`/v1/ai`. The stack files are the Supabase release `self-hosted/v0.8.2`, copied into this
+package so no download from GitHub is needed.

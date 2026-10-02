@@ -1,12 +1,6 @@
 {$PROXY_DOMAIN} {
-    __TLS_LINE__
-
-    @safetylab_ai path /v1/ai/*
-    handle @safetylab_ai {
-        reverse_proxy ai-proxy:8787
-    }
-
     @supabase_api path /auth/v1/* /rest/v1/* /graphql/v1 /realtime/v1/* /storage/v1/* /functions/v1/* /mcp /sso/* /.well-known/oauth-authorization-server
+
     handle @supabase_api {
         reverse_proxy api-gw:8000
     }
@@ -16,6 +10,7 @@
             # PROXY_AUTH_PASSWORD is overwritten with the bcrypt on startup
             {$PROXY_AUTH_USERNAME} {$PROXY_AUTH_PASSWORD}
         }
+
         reverse_proxy studio:3000
     }
 
