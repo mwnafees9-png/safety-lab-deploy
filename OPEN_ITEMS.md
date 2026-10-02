@@ -143,6 +143,11 @@ had drifted in both directions.
       DONE: ship.sh for the web side (bf400b0), a desktop release carrying both (0.18.3 on the site has
       neither), and ONE live run of the key door with a real key in a real window; nothing here was run in
       Electron, only under the test wall.
+      **LATER STILL, 2 Oct:** certificate pin (desktop 234de4f, package 63ac026): the install makes its own
+      long-lived root + server certificate, the setup file carries both fingerprints, the desktop trusts
+      that one server by them; no user installs a certificate and IT needs no CA. install.cmd for a Windows
+      double-click (unrun on Windows). SL-DG-0001 **Rev 2.4** issued to the repo (2.3 withdrawn, never sent).
+      Package zip rebuilt (116 files, guide inside). Upload to R2 and a desktop release still pending.
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
       update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate
