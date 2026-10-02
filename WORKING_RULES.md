@@ -182,3 +182,9 @@ declares identity on a node sitting on an aircraft page. Max theoretical movers 
     The same day's corollary to rules 1-3: **propose a performance change only from a
     measurement.** The "compute on every edit" pass was proposed from reading code; 30 real edits
     measured 30 ms at 100x project size.
+
+32. **One revision per issue, counted from the revision the customer holds (Waqas, 2 Oct 2026).**
+    A controlled document gets ONE new revision number when it is issued, however many build
+    passes happen in between; same-day intermediate builds are withdrawn, not left in the revision
+    history. "Nobody releases the same document a million times in the same day." SL-DG-0001 went
+    2.0 (held by Radia) to 2.1, with the 2.2/2.3/2.4 builds of 2 Oct removed from the repo.
