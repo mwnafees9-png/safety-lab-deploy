@@ -9,7 +9,8 @@
 //
 // Three doors, decided once at load from SLConfig, never guessed per call:
 //
-//   desktop      The OS keychain, via the shell (window.slabSecrets). Only the Jama token
+//   desktop      The OS keychain, via the shell (window.slabSecrets). The Jama token and, since
+//                2 Oct 2026, the user's own Anthropic key; the shell's main process uses either
 //                lives there; on the desktop a per-user AI key is not a thing by design —
 //                AI goes through the customer's proxy, and the egress fence stops anything
 //                else. Unchanged from 16 Sep; this module just routes to it.
@@ -88,7 +89,7 @@
         if (!KINDS[kind]) return false;
         var d = door();
         if (d === 'session') return !!_ssGet(kind);
-        if (d === 'desktop') return false;           // AI keys are not a desktop thing; Jama has its own path
+        if (d === 'desktop') return !!_status[kind];  // mirrored from the keychain's status list (never the value)
         return !!_status[kind];
     }
     function meta(kind) { var s = _status[kind]; return (s && s.meta) || {}; }
@@ -101,7 +102,18 @@
         value = String(value || '');
         var d = door();
         if (d === 'session') { _ssSet(kind, value); _status[kind] = value ? { meta: m || {}, updatedAt: new Date().toISOString() } : undefined; _emit(); return { ok: true, door: d }; }
-        if (d === 'desktop') return { ok: false, error: 'not stored on the desktop by this path' };
+        if (d === 'desktop') {
+            // 2 Oct 2026 — the AI key on the desktop: into the OS keychain through the shell.
+            // The page writes it and can ask whether it is there; it can never read it back.
+            // The desktop's main process puts it on the request (slabAi), so the key never
+            // exists in this process. Same rule as the Jama token.
+            if (!value) return remove(kind);
+            if (!(window.slabSecrets && typeof window.slabSecrets.save === 'function')) return { ok: false, error: 'this desktop build cannot store secrets' };
+            var rs; try { rs = await window.slabSecrets.save(kind, value, m || {}); } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+            if (!(rs && rs.ok)) return { ok: false, error: (rs && rs.error) || 'the keychain refused the save' };
+            await _refreshDesktopStatus(); _emit();
+            return { ok: true, door: d };
+        }
         var sb = _sb(); if (!sb) return { ok: false, error: 'no backend' };
         if (!value) return remove(kind);
         try {
@@ -115,7 +127,12 @@
         if (!KINDS[kind]) return { ok: false };
         var d = door();
         if (d === 'session') { _ssSet(kind, ''); delete _status[kind]; _emit(); return { ok: true, door: d }; }
-        if (d === 'desktop') return { ok: false };
+        if (d === 'desktop') {
+            if (!(window.slabSecrets && typeof window.slabSecrets.remove === 'function')) return { ok: false };
+            try { await window.slabSecrets.remove(kind); } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+            await _refreshDesktopStatus(); _emit();
+            return { ok: true, door: d };
+        }
         var sb = _sb(); if (!sb) return { ok: false, error: 'no backend' };
         try { var r = await sb.rpc('delete_secret', { p_kind: kind }); if (r && r.error) return { ok: false, error: r.error.message }; }
         catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
@@ -149,8 +166,21 @@
         _initP = _init();
         return _initP;
     }
+    // ---- desktop door: the keychain's status list, kinds only -------------------------
+    async function _refreshDesktopStatus() {
+        var next = {};
+        try {
+            if (window.slabSecrets && typeof window.slabSecrets.status === 'function') {
+                var r = await window.slabSecrets.status();
+                ((r && r.secrets) || []).forEach(function (e) { if (e && KINDS[e.kind]) next[e.kind] = { meta: e.meta || {}, updatedAt: e.updatedAt || null }; });
+            }
+        } catch (_) {}
+        _status = next;
+    }
+
     async function _init() {
         if (_ready) return;
+        if (door() === 'desktop') await _refreshDesktopStatus();
         if (door() === 'vault') {
             await _refreshJwt();
             await _refreshVaultStatus();

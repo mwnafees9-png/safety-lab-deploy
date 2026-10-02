@@ -1651,10 +1651,10 @@ window._refreshAiKeyStatus = function(){
     const st = window.SecretStore; if (!st) return;
     const where = { vault: 'stored server-side in your account; this page cannot read it back',
                     session: 'kept in this tab only (browser-only install: there is no server to hold it); gone when the tab closes',
-                    desktop: 'not used on the desktop: AI runs through your organization\'s proxy' }[st.door()] || '';
+                    desktop: (window.__SLAB_AI_DESKTOP_KEY__ ? 'stored in this computer\'s keychain; this page cannot read it back' : 'not used on the desktop: AI runs through your organization\'s endpoint (Settings)') }[st.door()] || '';
     const paint = (kind, id) => {
         const el = document.getElementById(id); if (!el) return;
-        if (st.door() === 'desktop') { el.textContent = where; return; }
+        if (st.door() === 'desktop' && !window.__SLAB_AI_DESKTOP_KEY__) { el.textContent = where; return; }
         if (st.has(kind)) {
             const m = st.meta(kind) || {};
             el.innerHTML = '<span style="color:var(--color-success); font-weight:600;">Saved</span>' + (m.last4 ? ' (…' + String(m.last4).replace(/[<>&]/g, '') + ')' : '') + ' · ' + where +

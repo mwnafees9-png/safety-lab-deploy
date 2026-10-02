@@ -141,7 +141,11 @@ const AiClient = (function(){
     function _hasByo(kind)     { const st = _store(); return !!(st && st.has(kind)); }
     // Phase 53.66b — AI is available when EITHER the Pro+ hosted proxy is usable
     // (license token + Pro+ tier active) OR the user has a BYO Anthropic key saved.
-    function isProxyMode()     { return !!(typeof isProPlusLicensed === 'function' && isProPlusLicensed() && getLicenseToken()); }
+    // 2 Oct 2026 — the desktop key door: the user's own Anthropic key sits in the OS keychain and
+    // the desktop's main process makes the call (window.slabAi). No proxy, no server, nothing of
+    // ours in the path. The shell sets the flag only when AI mode is "my own key".
+    function _desktopKeyDoor()  { try { return !!(typeof window !== 'undefined' && window.__SLAB_AI_DESKTOP_KEY__ && window.slabAi && typeof window.slabAi.messages === 'function'); } catch (_) { return false; } }
+    function isProxyMode()     { return !_desktopKeyDoor() && !!(typeof isProPlusLicensed === 'function' && isProPlusLicensed() && getLicenseToken()); }
     function isConfigured()    { return isProxyMode() || _hasByo('anthropic_key'); }
     function hasMemory()       { return isProxyMode() || _hasByo('voyage_key'); }
 
@@ -378,7 +382,7 @@ const AiClient = (function(){
     // 6 Sep 2026 — no AI endpoint at all (browser-only install, or AI switched off): refuse
     // here, at the one choke point, in plain words. Never fall back to a Safety Lab address.
     function unconfiguredRefusal(){
-        try { return AI_PROXY_BASE_URL ? null : 'AI is not set up on this install. Choose an AI backend under Settings (your own Claude, Azure, or on-prem endpoint).'; }
+        try { return (AI_PROXY_BASE_URL || _desktopKeyDoor()) ? null : 'AI is not set up on this install. Choose an AI backend under Settings (your own Claude, Azure, or on-prem endpoint).'; }
         catch (_) { return 'AI is not set up on this install.'; }
     }
     // 12 Sep 2026 — PROMPT CACHING, packaging only. The system prompt arrives here as the
@@ -464,6 +468,13 @@ const AiClient = (function(){
         const startedAt = Date.now();
         // One request send (proxy or BYO). Extracted so we can retry cleanly.
         async function _send(b) {
+            if (_desktopKeyDoor()) {
+                // The key never enters this process: the shell reads it from the keychain and
+                // makes the request, streaming the answer back as a Response. The ITAR fence
+                // above already refused controlled projects before we got here.
+                if (!_hasByo('anthropic_key')) throw new Error('No AI key on this computer yet. Paste your Anthropic key under Advanced, or choose an AI endpoint in Settings.');
+                return window.slabAi.messages(b, { feature: opts.feature || 'messages', itar: itar });
+            }
             if (proxy) {
                 // Route via Safety Lab Aero proxy. Proxy handles Anthropic vs Azure OpenAI
                 // routing based on the isITAR flag we pass through.
