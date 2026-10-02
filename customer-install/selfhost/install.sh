@@ -43,8 +43,9 @@ else
   read -r -p "   Server name: " SERVER_NAME
   [ -n "$SERVER_NAME" ] || die "The server name cannot be empty."
   echo
-  echo "2) Your certificate for that name, from your IT certificate authority. Two files."
-  echo "   If you do not have them, just press Enter twice and a self-signed one is made."
+  echo "2) Optional. A certificate for that name from your IT certificate authority (two files)."
+  echo "   Most installs just press Enter twice: the script makes its own certificate and the"
+  echo "   desktop app trusts it for this server automatically through the setup file."
   read -r -p "   Certificate file (.crt or .pem), full path: " CERT_FILE
   read -r -p "   Private key file (.key or .pem), full path:  " KEY_FILE
   if [ -n "$CERT_FILE" ]; then
@@ -57,7 +58,8 @@ else
   read -r -s -p "   Anthropic API key: " ANTHROPIC_API_KEY; echo
   [ -n "$ANTHROPIC_API_KEY" ] || die "The API key cannot be empty. (Leave AI for later? Press Ctrl+C now and ask Safety Lab.)"
   echo
-  echo "4) The Workspace id for that key (starts with wrkspc_). Found at console.anthropic.com under Settings, Workspaces."
+  echo "4) Optional. The Workspace id for that key (starts with wrkspc_), shown on the workspace page at"
+  echo "   console.anthropic.com. Needed only for an organization-level key; press Enter to skip."
   read -r -p "   Workspace id: " ANTHROPIC_WORKSPACE_ID
   printf 'SERVER_NAME=%q\nCERT_FILE=%q\nKEY_FILE=%q\n' "$SERVER_NAME" "${CERT_FILE:-}" "${KEY_FILE:-}" > "$ANSWERS"
 fi
@@ -101,13 +103,30 @@ unset ANTHROPIC_API_KEY
 
 # ---------------------------------------------------------------- 4. https
 bold "Setting up https for $SERVER_NAME"
-mkdir -p volumes/proxy/certs
+mkdir -p volumes/proxy/certs; chmod 700 volumes/proxy/certs
 if [ -n "${CERT_FILE:-}" ]; then
   cp "$CERT_FILE" volumes/proxy/certs/server.crt; cp "$KEY_FILE" volumes/proxy/certs/server.key
-  TLS_LINE="tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key"; SELF_SIGNED=0
+  SELF_SIGNED=0
 else
-  TLS_LINE="tls internal"; SELF_SIGNED=1
+  # No IT certificate: make our own, once. A root (10 years) and a server certificate for this
+  # name signed by it (5 years). Caddy's built-in authority was not used on purpose: it rotates
+  # its intermediate weekly and does not present its root, so nothing about it can be pinned.
+  # The desktop app trusts this exact root and this exact server certificate for this server
+  # name only, through the fingerprints the setup file carries. Users install nothing.
+  SELF_SIGNED=1
+  C=volumes/proxy/certs
+  if [ ! -f "$C/root.crt" ] || [ ! -f "$C/server.crt" ]; then
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$C/root.key" -out "$C/root.crt" -days 3650 \
+      -subj "/CN=Safety Lab Aero local root for $SERVER_NAME" -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+    openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$C/server.key" -out "$C/server.csr" -subj "/CN=$SERVER_NAME" >/dev/null 2>&1
+    printf 'subjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\n' "$SERVER_NAME" > "$C/server.ext"
+    openssl x509 -req -in "$C/server.csr" -CA "$C/root.crt" -CAkey "$C/root.key" -CAcreateserial -out "$C/server.leaf.crt" -days 1825 -extfile "$C/server.ext" >/dev/null 2>&1
+    cat "$C/server.leaf.crt" "$C/root.crt" > "$C/server.crt"     # Caddy presents leaf + root
+    rm -f "$C/server.csr" "$C/server.ext"; chmod 600 "$C"/*.key
+  fi
+  cp "$C/root.crt" "$HERE/trust-this-on-every-user-computer.crt"; chmod 644 "$HERE/trust-this-on-every-user-computer.crt"
 fi
+TLS_LINE="tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key"
 sed "s|__TLS_LINE__|$TLS_LINE|" "$HERE/Caddyfile.template" > volumes/proxy/caddy/Caddyfile
 
 # ---------------------------------------------------------------- 5. start
@@ -116,6 +135,11 @@ docker compose pull -q --ignore-pull-failures 2>/dev/null || echo "   (download 
 docker compose up -d --wait --wait-timeout 600 || {
   echo; echo "A service did not come up. This is what Docker reports:"; docker compose ps
   die "Send the output above to Safety Lab, or run 'docker compose logs <service>' in $STACK to see why."; }
+
+# Caddy reads its configuration and certificate at start. A re-run that changed either (new
+# certificate, new server name) must restart it, or it keeps serving the old one.
+docker compose restart caddy >/dev/null 2>&1 || true
+sleep 2
 
 # ---------------------------------------------------------------- 6. the Safety Lab database
 PGX(){ docker compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q "$@"; }
@@ -134,8 +158,6 @@ sleep 3
 PUB=$(grep '^SUPABASE_PUBLISHABLE_KEY=' .env | cut -d= -f2-)
 CA_ARGS=()
 if [ "$SELF_SIGNED" = 1 ]; then
-  docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt "$HERE/trust-this-on-every-user-computer.crt" >/dev/null 2>&1 || true
-  chmod 644 "$HERE/trust-this-on-every-user-computer.crt" 2>/dev/null || true
   CA_ARGS=(--cacert "$HERE/trust-this-on-every-user-computer.crt")
 fi
 probe(){ docker run --rm --network supabase_default -v "$HERE:/pkg:ro" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' --resolve "$SERVER_NAME:443:$(docker inspect supabase-caddy --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')" ${CA_ARGS:+--cacert /pkg/trust-this-on-every-user-computer.crt} "$@" 2>/dev/null || true; }
@@ -153,6 +175,16 @@ echo "   AI service over https:      $AI (want 200)"
 # Never the AI key, never a password: the app refuses a setup file that carries a secret.
 LIC_FILE=$(ls "$HERE"/*.lic 2>/dev/null | head -1 || true)
 SETUP="$HERE/$SERVER_NAME.safetylab-setup"
+# In self-signed mode the setup file also carries the SHA-256 fingerprint of the root this install
+# made. The desktop app then trusts that one root for this one server name, so no user installs a
+# certificate by hand. With an IT-issued certificate the users' machines already trust the CA and
+# no pin is written.
+fp(){ openssl x509 -in "$1" -outform DER 2>/dev/null | openssl dgst -sha256 -hex 2>/dev/null | sed 's/^.*= *//' | tr -d ' \n'; }
+PIN=""
+if [ "$SELF_SIGNED" = 1 ]; then
+  RP=$(fp volumes/proxy/certs/root.crt); LP=$(fp volumes/proxy/certs/server.leaf.crt)
+  if [ ${#RP} -eq 64 ] && [ ${#LP} -eq 64 ]; then PIN="$RP,$LP"; fi
+fi
 {
   echo '{'
   echo '  "format": "safetylab-setup/1",'
@@ -162,6 +194,7 @@ SETUP="$HERE/$SERVER_NAME.safetylab-setup"
   echo '  "backendKey": "'"$PUB"'",'
   echo '  "ai": "own",'
   echo '  "aiEndpoint": "https://'"$SERVER_NAME"'/v1/ai",'
+  if [ -n "$PIN" ]; then echo '  "backendPin": "'"$PIN"'",'; fi
   if [ -n "$LIC_FILE" ]; then
     printf '  "license": "%s",\n' "$(tr -d '\r\n' < "$LIC_FILE" | sed 's/\\/\\\\/g; s/"/\\"/g')"
   fi
@@ -194,12 +227,16 @@ Under "AI":
   AI endpoint:       https://$SERVER_NAME/v1/ai
 
 Then load the license file Safety Lab sent you, and sign in (first time: Create account).
-$( [ "$SELF_SIGNED" = 1 ] && echo "
-BEFORE ANY OF THAT, on every user's computer, install this file as a trusted root certificate:
-  $HERE/trust-this-on-every-user-computer.crt
-(Windows: double-click it, Install Certificate, Local Machine, Trusted Root Certification Authorities.
- Mac: double-click it, open Keychain Access, find it, set Trust to Always Trust.)
-Without this the app refuses the server, because it does not trust the certificate." )
+$( [ "$SELF_SIGNED" = 1 ] && [ -n "$PIN" ] && echo "
+This install made its own certificate. The setup file carries its fingerprint, so the desktop app
+trusts this server automatically; users install nothing. Only a web browser opening
+https://$SERVER_NAME (the admin dashboard, say) will warn; for that one case the root is here:
+  $HERE/trust-this-on-every-user-computer.crt" )
+$( [ "$SELF_SIGNED" = 1 ] && [ -z "$PIN" ] && echo "
+WARNING: this install made its own certificate but its fingerprint could not be read, so every
+user's computer must trust $HERE/trust-this-on-every-user-computer.crt by hand
+(Windows: double-click, Install Certificate, Local Machine, Trusted Root Certification Authorities;
+ Mac: double-click, Keychain Access, set Trust to Always Trust). Tell Safety Lab." )
 
 For the administrator only
 --------------------------
