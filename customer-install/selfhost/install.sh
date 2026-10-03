@@ -182,8 +182,11 @@ SETUP="$HERE/$SERVER_NAME.safetylab-setup"
 fp(){ openssl x509 -in "$1" -outform DER 2>/dev/null | openssl dgst -sha256 -hex 2>/dev/null | sed 's/^.*= *//' | tr -d ' \n'; }
 PIN=""
 if [ "$SELF_SIGNED" = 1 ]; then
-  RP=$(fp volumes/proxy/certs/root.crt); LP=$(fp volumes/proxy/certs/server.leaf.crt)
-  if [ ${#RP} -eq 64 ] && [ ${#LP} -eq 64 ]; then PIN="$RP,$LP"; fi
+  # Only the server certificate itself is pinned: it is the one the server proves it holds the
+  # key for. The root is deliberately NOT in the list; a pin list containing the root would let
+  # a fake server that appends our public root pass (review finding, 3 Oct 2026).
+  LP=$(fp volumes/proxy/certs/server.leaf.crt)
+  if [ ${#LP} -eq 64 ]; then PIN="$LP"; fi
 fi
 {
   echo '{'
