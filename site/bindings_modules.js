@@ -1543,10 +1543,26 @@ const AI_PROXY_BASE_URL = (typeof window !== 'undefined' && window.SLConfig) ? S
 
 const PRO_PLUS_MONTHLY_ALLOWANCE = 2000000;   // 2M Sonnet-equivalent tokens / month
 
+// 3 Oct 2026 (batch 5) — a deliberate change to one of the two safety switches is STAMPED
+// (projectConfig.controlStamps[name] = {on, at, by}). Live sync lets a switch go from on to off
+// only with a deliberate-off stamp newer than the doc's (crdt_sync.js _offAllowed), so a stale
+// copy of the settings can never turn export control or AI-off back off. Only these two
+// handlers write stamps, and only when the value actually changes.
+function _slStampControl(name, on) {
+    try {
+        if (!projectConfig.controlStamps || typeof projectConfig.controlStamps !== 'object' || Array.isArray(projectConfig.controlStamps)) projectConfig.controlStamps = {};
+        let by = null;
+        try { by = (window._supabaseSession && window._supabaseSession.user && window._supabaseSession.user.id) || null; } catch (_) {}
+        projectConfig.controlStamps[name] = { on: !!on, at: Date.now(), by: by };
+    } catch (_) {}
+}
+
 window.toggleAiITAR = function(){
     if (!projectConfig) return;
     const el = document.getElementById('ai-itar-toggle');
+    const _wasItar = !!projectConfig.isITARControlled;
     projectConfig.isITARControlled = !!(el && el.checked);
+    if (_wasItar !== projectConfig.isITARControlled) _slStampControl('isITARControlled', projectConfig.isITARControlled);
     _refreshAiITARStatus();
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
 };
@@ -1592,7 +1608,9 @@ window.saveAiSettings = function(){
     projectConfig.aiSettings.costCap        = parseFloat(get('ai-cost-cap')) || 0;   // blank / 0 = no cap
     // 23 Sep 2026 (G10) — per-project AI off switch (checked in Provider.complete and AiClient.messages).
     const _offEl = document.getElementById('ai-project-off');
+    const _wasAiOff = projectConfig.aiSettings.projectAiOff === true;
     if (_offEl) projectConfig.aiSettings.projectAiOff = !!_offEl.checked;
+    if (_offEl && _wasAiOff !== (projectConfig.aiSettings.projectAiOff === true)) _slStampControl('projectAiOff', projectConfig.aiSettings.projectAiOff === true);
     projectConfig.aiSettings.topK           = parseInt(get('ai-top-k')) || 5;
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
     const status = document.getElementById('ai-status');

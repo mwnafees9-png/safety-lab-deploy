@@ -9,17 +9,8 @@
  * than what someone once meant it to do, because a file that argues with itself is how the ITAR
  * fence below went unnoticed for weeks.
  *
- * Does not run for ITAR-controlled projects on our cloud — and as of 5 Sep 2026 that is actually
- * true; see _itar() and _fenced() (3 Oct 2026: the customer's own server is the one exception).
- *
- * 3 Oct 2026 (batch 5) — PROJECT SETTINGS SYNC FIELD BY FIELD. projectConfig used to travel as ONE
- * last-writer-wins value, so any change (even one new AI log line) resent the whole bundle and a
- * stale copy could flip "export-controlled" or "AI off" back off. Now: each top-level setting is
- * its own entry (map 'pc'), the two safety switches can only go from on to off when an engineer
- * unticks them (a newer deliberate-off stamp in controlStamps), and the AI logs (aiAuditLog,
- * aiDraftLog) are append-only maps that merge everyone's entries. The old single value stays
- * written as a MIRROR so older builds (the 0.18 desktop) keep working; a write from an older build
- * is detected and folded in under the same rules. See _pcPush / _pcPull below. Requires a Supabase session + an active cloud project. Loads Yjs (window.Y) lazily from vendor/yjs.min.js — if the
+ * Does not run for ITAR-controlled projects — and as of 5 Sep 2026 that is actually true; see
+ * _itar(). Requires a Supabase session + an active cloud project. Loads Yjs (window.Y) lazily from vendor/yjs.min.js — if the
  * bundle is missing or the flag is off, this module does nothing and the app is unaffected.
  *
  * v1 scope: item-level merge for the aircraft-level flat tables (functions / FHA / requirements),
@@ -59,9 +50,7 @@
   // that a field lock guards while actively edited. Only stores with a clean repaint are
   // listed here; murkier ones (stpaData, ftaConfig, mirror objects) stay on the snapshot
   // backup until they get proper repaint handling. __crdtApply renders each on arrival.
-  // 3 Oct 2026 (batch 5): projectConfig left this list. It syncs field by field (PC below); the
-  // 'whole' map still carries a MIRROR of it under the same name for older builds.
-  var WHOLE = ['mlData', 'projectName', 'stpaData'];  // stpaData added 9 Sep — repaint via window.STPA_PANEL.render()
+  var WHOLE = ['projectConfig', 'mlData', 'projectName', 'stpaData'];  // stpaData added 9 Sep — repaint via window.STPA_PANEL.render()
 
   // COUNTERS (7 Sep 2026): id-minting counters (next ASM-N, FMEA-N, review, internalId).
   // Merged MAX (never backward) via one 'counters' Y.Map — two people adding at once must
@@ -239,7 +228,7 @@
   // merged. With the baseline, pushing BEFORE a pull is always safe, so a pull can
   // never discard an edit made here, however it was made.
   var _base = null;
-  function _baseReset() { _base = { col: {}, ord: {}, whole: {}, pc: {}, logs: {}, raw: {}, rawList: {}, ctl: {} }; _pcDirty = true; _pcSeen = null; _pcPullDirty = true; }
+  function _baseReset() { _base = { col: {}, ord: {}, whole: {} }; }
   // 13 Sep 2026 — PER-USER UNDO (Waqas: "if I hit undo I want it to restore mine but not
   // impact teammates' work ... exactly how it is in Microsoft documents"). The snapshot undo
   // in helpers_modules restores the WHOLE project as this tab last saw it, which rolls a
@@ -257,7 +246,6 @@
     var scopes = [];
     COLLECTIONS.forEach(function (c) { scopes.push(ydoc.getMap('col:' + c.name), ydoc.getMap('ord:' + c.name)); });
     scopes.push(ydoc.getMap('col:' + FTA_SHELL), ydoc.getMap('ord:' + FTA_SHELL), ydoc.getMap('col:' + FTA_NODE), ydoc.getMap('ord:' + FTA_NODE), ydoc.getMap('whole'));
-    scopes.push(ydoc.getMap(PC_MAP));   // 3 Oct 2026: settings, field by field. The AI logs are append-only and never an undo step.
     return scopes;
   }
   function _makeUndo() {
@@ -443,334 +431,6 @@
     (document.head || document.documentElement).appendChild(s);
   }
 
-
-  // ---- projectConfig, FIELD BY FIELD (batch 5, 3 Oct 2026) -------------------------------
-  // Waqas: settings sync field by field, not as one bundle; ITAR and AI-off can only be turned
-  // off deliberately, never by a stale save; the AI log is append-only.
-  //   PC_MAP        one entry per top-level setting (JSON), three-way pushed like a keyed row.
-  //   PC_LOGS       the AI logs, each its own map keyed by entry: entries are only ever ADDED
-  //                 (or updated in place, e.g. a trimmed output); the existing size caps are the
-  //                 only thing that drops the oldest, exactly as before.
-  //   PC_MAX        counters inside the settings, MAX-merged (never backward).
-  //   CTL_MAP       the two safety switches. Every tab writes its OWN view under its own key
-  //                 (so two views never overwrite each other, even when they meet only at the
-  //                 handshake), and the answer is read from all of them: ON if any view says on,
-  //                 unless a DELIBERATE off (projectConfig.controlStamps[name] = {on:false, at},
-  //                 written only by the toggles in AI Settings) is newer than the newest on. A
-  //                 stale copy, an older build or a seed from an old snapshot can say "off" as
-  //                 often as it likes: without a newer deliberate stamp it changes nothing.
-  //   MIRROR        whole['projectConfig'] = the merged settings as one value, plus
-  //                 whole['__pcMirror'] = its fingerprint, for older builds. A mirror whose
-  //                 fingerprint does not match was written by an older build: its changes are
-  //                 folded in field by field under the same rules (_pcMigrateAndImport).
-  var PC_MAP = 'pc', CTL_MAP = 'ctl';
-  var PC_LOGS = {
-    aiAuditLog: {
-      cap: 500,
-      key: function (e) { return String(typeof e.ts === 'number' ? e.ts : 0) + '|' + _fnv(_canon(e)); },   // key-order-free: a re-ordered copy is the same entry
-      at: function (e) { return (e && typeof e.ts === 'number') ? e.ts : 0; }
-    },
-    aiDraftLog: {
-      cap: 5000,
-      key: function (e) { return String(e.id) + '|' + String(e.at || '') + '|' + String(e.inputHash || ''); },   // stable: survives the output being trimmed
-      at: function (e) { var t = Date.parse((e && e.at) || ''); return isFinite(t) ? t : 0; }
-    }
-  };
-  function _isAic(e) { return !!e && /^AIC-\d+$/.test(String(e.id || '')); }
-  function _logSkip(name, e) { return !e || typeof e !== 'object' || (name === 'aiDraftLog' && !e.id); }
-  var PC_MAX = { aiDraftCounter: 1 };
-  var PC_CONTROLS = {
-    isITARControlled: { get: function (pc) { return !!(pc && pc.isITARControlled); },
-                        set: function (pc, on) { pc.isITARControlled = !!on; } },
-    projectAiOff:     { get: function (pc) { return !!(pc && pc.aiSettings && pc.aiSettings.projectAiOff === true); },
-                        set: function (pc, on) { if (!pc.aiSettings || typeof pc.aiSettings !== 'object') { if (!on) return; pc.aiSettings = {}; } pc.aiSettings.projectAiOff = !!on; } }
-  };
-  var PC_KEEP = { isITARControlled: 1, aiSettings: 1, controlStamps: 1 };   // never deleted by a sync
-  function _fnv(s) {
-    var h = 0x811c9dc5; s = String(s == null ? '' : s);
-    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; }
-    return ('0000000' + h.toString(16)).slice(-8);
-  }
-  function _parse(v) { try { return v == null ? undefined : JSON.parse(v); } catch (_) { return undefined; } }
-  // Key-order-free JSON: two copies of the same settings compare equal whatever order their keys
-  // were written in (an older build re-serializes its own object, in its own key order).
-  function _canon(v) {
-    if (Array.isArray(v)) return '[' + v.map(function (x) { return (x === undefined || typeof x === 'function') ? 'null' : _canon(x); }).join(',') + ']';
-    if (v && typeof v === 'object') {
-      return '{' + Object.keys(v).sort().filter(function (k) { return v[k] !== undefined && typeof v[k] !== 'function'; })
-        .map(function (k) { return JSON.stringify(k) + ':' + _canon(v[k]); }).join(',') + '}';
-    }
-    var j = JSON.stringify(v); return j === undefined ? 'null' : j;
-  }
-  function _isObj(o) { return !!o && typeof o === 'object' && !Array.isArray(o); }
-  function _stamp(pc, c) { var s = pc && pc.controlStamps && pc.controlStamps[c]; return (s && typeof s === 'object' && typeof s.at === 'number') ? s : null; }
-  // controlStamps merge: per switch, the newest stamp wins.
-  function _mergeStamps(a, b) {
-    var out = {}, k;
-    a = _isObj(a) ? a : {}; b = _isObj(b) ? b : {};
-    for (k in a) if (Object.prototype.hasOwnProperty.call(a, k)) out[k] = a[k];
-    for (k in b) if (Object.prototype.hasOwnProperty.call(b, k)) {
-      var sa = out[k], sb = b[k];
-      if (!sa || typeof sa.at !== 'number' || (sb && typeof sb.at === 'number' && sb.at > sa.at)) out[k] = sb;
-    }
-    return out;
-  }
-  // This tab's view of one switch, as it goes into CTL_MAP.
-  function _ctlEntry(pc, c) {
-    var on = PC_CONTROLS[c].get(pc), st = _stamp(pc, c);
-    if (on) return { on: true, at: (st && st.on === true) ? st.at : 0 };
-    var d = !!(st && st.on === false);
-    return { on: false, at: d ? st.at : 0, d: d };
-  }
-  // The answer for one switch from every view: undefined when nobody has written one yet.
-  function _ctlEffective(c) {
-    var cm = ydoc.getMap(CTL_MAP), suffix = ':' + c, hasOn = false, onAt = -1, offAt = -1, any = false;
-    Array.from(cm.keys()).forEach(function (k) {
-      if (k.slice(-suffix.length) !== suffix) return;
-      var e = _parse(cm.get(k)); if (!e || typeof e !== 'object') return;
-      any = true;
-      var at = (typeof e.at === 'number') ? e.at : 0;
-      if (e.on === true) { hasOn = true; if (at > onAt) onAt = at; }
-      else if (e.d === true && at > offAt) offAt = at;
-    });
-    if (!any) return undefined;
-    return hasOn && !(offAt > onAt);
-  }
-  function _ctlWrite(key, entry) {
-    var cm = ydoc.getMap(CTL_MAP), next = JSON.stringify(entry);
-    if (cm.get(key) !== next) { cm.set(key, next); _pcTouch(); }
-  }
-  // Views that cannot change the answer (not the newest on, not the newest deliberate off) are
-  // dropped once there are many, so the map stays small. Safe concurrently: a new view always
-  // arrives under a new key, and a dropped view could not have decided anything.
-  function _ctlPrune() {
-    var cm = ydoc.getMap(CTL_MAP);
-    if (cm.size <= 40) return;
-    Object.keys(PC_CONTROLS).forEach(function (c) {
-      var suffix = ':' + c, bestOn = null, bestOff = null, all = [];
-      Array.from(cm.keys()).forEach(function (k) {
-        if (k.slice(-suffix.length) !== suffix) return;
-        var e = _parse(cm.get(k)) || {}, at = (typeof e.at === 'number') ? e.at : 0;
-        all.push(k);
-        if (e.on === true && (!bestOn || at > bestOn.at)) bestOn = { k: k, at: at };
-        if (e.on !== true && e.d === true && (!bestOff || at > bestOff.at)) bestOff = { k: k, at: at };
-      });
-      all.forEach(function (k) { if ((!bestOn || k !== bestOn.k) && (!bestOff || k !== bestOff.k)) { cm.delete(k); _pcTouch(); } });
-    });
-  }
-  // The settings as the doc holds them now (field map + logs + switches). With no field map yet
-  // (a doc written only by older builds) the mirror is the answer.
-  function _pcRead() {
-    var map = ydoc.getMap(PC_MAP), out = {};
-    if (map.size === 0) {
-      var legacy = _parse(ydoc.getMap('whole').get('projectConfig'));
-      if (_isObj(legacy)) { for (var lk in legacy) if (Object.prototype.hasOwnProperty.call(legacy, lk)) out[lk] = legacy[lk]; }
-    } else {
-      Array.from(map.keys()).sort().forEach(function (k) { var v = _parse(map.get(k)); if (v !== undefined) out[k] = v; });   // sorted: every tab builds the same mirror
-    }
-    var lists = {};
-    Object.keys(PC_LOGS).forEach(function (name) {
-      var L = PC_LOGS[name], lm = ydoc.getMap('log:' + name), arr = [];
-      if (lm.size === 0 && map.size === 0) { lists[name] = null; return; }   // mirror-only doc: the mirror's list stands
-      Array.from(lm.keys()).forEach(function (k) { var v = _parse(lm.get(k)); if (v && typeof v === 'object') arr.push({ k: k, v: v }); });
-      arr.sort(function (x, y) { var d = L.at(x.v) - L.at(y.v); return d !== 0 ? d : (x.k < y.k ? -1 : (x.k > y.k ? 1 : 0)); });
-      lists[name] = arr;
-    });
-    // The 23 Sep move, done by the merge: AIC- entries found in the cost log belong to the draft
-    // log (ai_audit.js v1.1). Kept in the cost-log map so nothing is ever lost, shown in the draft log.
-    if (lists.aiAuditLog && lists.aiDraftLog) {
-      var have = {};
-      lists.aiDraftLog.forEach(function (x) { have[String(x.v.id)] = 1; });
-      lists.aiAuditLog.forEach(function (x) { if (_isAic(x.v) && !have[String(x.v.id)]) { lists.aiDraftLog.push({ k: 'm|' + x.k, v: x.v }); have[String(x.v.id)] = 1; } });
-      lists.aiDraftLog.sort(function (x, y) { var d = PC_LOGS.aiDraftLog.at(x.v) - PC_LOGS.aiDraftLog.at(y.v); return d !== 0 ? d : (x.k < y.k ? -1 : (x.k > y.k ? 1 : 0)); });
-      lists.aiAuditLog = lists.aiAuditLog.filter(function (x) { return !_isAic(x.v); });
-    }
-    Object.keys(PC_LOGS).forEach(function (name) {
-      if (!lists[name]) return;
-      var list = lists[name].map(function (x) { return x.v; });
-      if (list.length > PC_LOGS[name].cap) list = list.slice(list.length - PC_LOGS[name].cap);
-      out[name] = list;
-    });
-    if (out.controlStamps !== undefined) out.controlStamps = _mergeStamps({}, out.controlStamps);
-    Object.keys(PC_CONTROLS).forEach(function (c) {
-      var eff = _ctlEffective(c);
-      if (eff !== undefined) PC_CONTROLS[c].set(out, eff);
-    });
-    return out;
-  }
-  // Add this tab's log entries to the log maps. Never deletes an entry another tab added; the
-  // size cap drops the oldest, as the single-copy log always did.
-  function _logPush(name, list, full, onlyNew) {
-    var L = PC_LOGS[name], lm = ydoc.getMap('log:' + name);
-    var b = _base.logs[name] || (_base.logs[name] = new Map());
-    if (!onlyNew) {                                   // the whole list unchanged since this tab last pushed it: nothing to do
-      var whole = JSON.stringify(Array.isArray(list) ? list : []);
-      if (!full && _base.rawList[name] === whole) return;
-      _base.rawList[name] = whole;
-    }
-    (Array.isArray(list) ? list : []).forEach(function (e) {
-      if (_logSkip(name, e)) return;
-      var k = L.key(e);
-      if (onlyNew) { if (!lm.has(k)) { lm.set(k, JSON.stringify(e)); _pcTouch(); } return; }   // an older build's copy: add what is missing, nothing else
-      // Compared key-order-free: pulling an entry into this tab's model can reorder its keys (the
-      // model is updated in place), which must not count as an edit and bounce back.
-      var raw = JSON.stringify(e), r = _base.raw[name] || (_base.raw[name] = new Map());
-      if (!full && r.get(k) === raw) return;                    // unchanged since this tab last looked (fast path)
-      r.set(k, raw);
-      var bd = b.get(k);
-      if (!full && bd !== undefined && (bd === raw || _canon(_parse(bd)) === _canon(e))) return;   // no edit here
-      var cur = lm.get(k);
-      if (cur === undefined || (cur !== raw && _canon(_parse(cur)) !== _canon(e))) { lm.set(k, raw); _pcTouch(); }
-      b.set(k, raw);
-    });
-    if (lm.size > L.cap + 50) {                     // prune in a batch, oldest first, down to the cap
-      var arr = [];
-      Array.from(lm.keys()).forEach(function (k) { arr.push({ k: k, t: L.at(_parse(lm.get(k)) || {}) }); });
-      arr.sort(function (x, y) { return (x.t - y.t) || (x.k < y.k ? -1 : (x.k > y.k ? 1 : 0)); });
-      arr.slice(0, arr.length - L.cap).forEach(function (x) { lm.delete(x.k); b.delete(x.k); });
-      _pcTouch();
-    }
-  }
-  // Write one settings object into the doc. `posture`: 'three-way' (only what changed here since
-  // the baseline), 'full' (the model is authoritative: seed/adopt), 'legacy' (an older build's
-  // whole-bundle write: only the fields that differ from the previous mirror).
-  function _pcWrite(local, posture, prevLegacy) {
-    if (!_isObj(local)) return;
-    var map = ydoc.getMap(PC_MAP), b = _base.pc;
-    var keys = {};
-    Object.keys(local).forEach(function (k) { if (!PC_LOGS[k]) keys[k] = 1; });
-    Object.keys(keys).forEach(function (k) {
-      // Compared key-order-free (see _canon): the same setting re-serialized in another key order
-      // is not a change, so it is never re-sent and never bounces between tabs or builds.
-      var v = local[k] === undefined ? null : local[k];
-      var raw = JSON.stringify(v), cur = map.get(k);
-      var same = function (str) { return str !== undefined && (str === raw || _canon(_parse(str)) === _canon(v)); };
-      var changed;
-      if (posture === 'full') changed = !same(cur);
-      else if (posture === 'legacy') changed = !(prevLegacy && (k in prevLegacy) && same(JSON.stringify(prevLegacy[k]))) && !same(cur);
-      else changed = !same(b[k]);
-      if (posture !== 'legacy') b[k] = raw;
-      if (!changed) return;
-      if (PC_MAX[k] && typeof v === 'number') { var cv = _parse(cur); if (typeof cv === 'number' && cv >= v) return; }
-      var next = (k === 'controlStamps') ? JSON.stringify(_mergeStamps(_parse(cur), v)) : raw;
-      if (cur === undefined || (cur !== next && _canon(_parse(cur)) !== _canon(_parse(next)))) { map.set(k, next); _pcTouch(); }
-    });
-    // deletions: a field this tab removed (three-way), every field the model lacks (full), or a
-    // field the older build removed (legacy). The safety switches and their stamps never go.
-    var gone = [];
-    if (posture === 'full') Array.from(map.keys()).forEach(function (k) { if (!keys[k]) gone.push(k); });
-    else if (posture === 'legacy') Object.keys(prevLegacy || {}).forEach(function (k) { if (!keys[k] && !PC_LOGS[k]) gone.push(k); });
-    else Object.keys(b).forEach(function (k) { if (!keys[k]) gone.push(k); });
-    gone.forEach(function (k) {
-      if (posture !== 'legacy') delete b[k];
-      if (PC_KEEP[k]) return;
-      if (map.has(k)) { map.delete(k); _pcTouch(); }
-    });
-    // the switches: this tab's view under this tab's key. An older build's view arrives under a
-    // shared 'legacy:' key: a switch it turned ON counts from now; an off from it is never
-    // deliberate (it cannot stamp), so it changes nothing.
-    Object.keys(PC_CONTROLS).forEach(function (c) {
-      if (posture === 'legacy') {
-        var was = PC_CONTROLS[c].get(prevLegacy || {}), now = PC_CONTROLS[c].get(local);
-        if (prevLegacy && was === now) return;
-        _ctlWrite('legacy:' + c, now ? { on: true, at: Date.now() } : { on: false, at: 0, d: false });
-        return;
-      }
-      var entry = JSON.stringify(_ctlEntry(local, c));
-      if (posture === 'full' || _base.ctl[c] !== entry) _ctlWrite(String(ydoc.clientID) + ':' + c, JSON.parse(entry));
-      _base.ctl[c] = entry;
-    });
-    _ctlPrune();
-    Object.keys(PC_LOGS).forEach(function (name) { if (name in local) _logPush(name, local[name], posture === 'full', posture === 'legacy'); });
-  }
-  // Keep the single-value mirror current for older builds, fingerprinted as ours. Always run
-  // inside a 'seed' transaction (shared with peers, never an undo step).
-  // Rebuilt only when a settings map changed since the last mirror (the maps are watched), so an
-  // edit to a table row costs nothing here even with a long AI log.
-  var _pcDirty = true, _pcSeen = null, _pcPullDirty = true;
-  // Every write of ours marks the settings changed directly: when a write happens inside another
-  // transaction's cleanup, Yjs runs its observers later, too late for the decisions below.
-  function _pcTouch() { _pcDirty = true; _pcPullDirty = true; }
-  function _pcWatch() {
-    if (!ydoc || ydoc.__pcWatched) return;
-    ydoc.__pcWatched = true;
-    var mark = function () { _pcTouch(); };   // a teammate's change (observers run before the update event)
-    [PC_MAP, CTL_MAP].concat(Object.keys(PC_LOGS).map(function (n) { return 'log:' + n; })).forEach(function (n) { ydoc.getMap(n).observe(mark); });
-  }
-  function _pcMirror(read) {
-    var wmap = ydoc.getMap('whole');
-    if (!_pcDirty && wmap.get('projectConfig') === _pcSeen && _pcSeen != null) return;
-    var m = JSON.stringify(read || _pcRead()), h = _fnv(m);
-    if (wmap.get('projectConfig') !== m) wmap.set('projectConfig', m);
-    if (wmap.get('__pcMirror') !== h) wmap.set('__pcMirror', h);
-    _base.whole.projectConfig = m;
-    _pcSeen = wmap.get('projectConfig');
-    _pcDirty = false;
-  }
-  // A doc written only by older builds has no field map: fill it from the mirror once (origin
-  // 'seed', so it is never an undo step); its switches become a shared 'mirror:' view, not
-  // deliberate. Then fold in any whole-bundle write an older build made since (its fingerprint
-  // does not match), field by field, under the same rules.
-  function _pcMigrateAndImport() {
-    var wmap = ydoc.getMap('whole'), map = ydoc.getMap(PC_MAP);
-    _pcWatch();
-    var wv = wmap.get('projectConfig');
-    if (wv == null) return;
-    if (map.size > 0 && wv === _pcSeen) return;                 // the mirror we last wrote or checked
-    var ours = (wmap.get('__pcMirror') === _fnv(wv));
-    if (map.size > 0 && ours) { _pcSeen = wv; return; }
-    ydoc.transact(function () {
-      var legacy = _parse(wv);
-      if (!_isObj(legacy)) return;
-      if (map.size === 0) {
-        Object.keys(legacy).forEach(function (k) { if (!PC_LOGS[k]) map.set(k, JSON.stringify(legacy[k] === undefined ? null : legacy[k])); });
-        _pcTouch();
-        Object.keys(PC_LOGS).forEach(function (name) { if (name in legacy) _logPush(name, legacy[name], true); });
-        Object.keys(PC_CONTROLS).forEach(function (c) { var on = PC_CONTROLS[c].get(legacy); _ctlWrite('mirror:' + c, on ? { on: true, at: 0 } : { on: false, at: 0, d: false }); });
-      } else {
-        _pcWrite(legacy, 'legacy', _parse(_base.whole.projectConfig) || null);
-        // An older build often only re-sends what it was given, in its own key order. If its copy
-        // says the same as the doc, accept it as the mirror rather than answering it: an answer
-        // would bounce straight back to it, and back again, for as long as both are open.
-        var now = _pcRead();
-        if (_canon(now) === _canon(legacy)) { _pcSeen = wv; _base.whole.projectConfig = wv; _pcDirty = false; return; }
-        _pcMirror(now);
-        return;
-      }
-      _pcMirror();
-    }, 'seed');
-  }
-  // When this tab's view of a switch is not the doc's answer (its off was not deliberate),
-  // bring its model back in line with the doc.
-  function _pcCorrectIfHeld(local) {
-    try {
-      var held = false;
-      Object.keys(PC_CONTROLS).forEach(function (c) { var eff = _ctlEffective(c); if (eff !== undefined && PC_CONTROLS[c].get(local) !== eff) held = true; });
-      if (!held) return;
-      var cur = _pcRead();
-      _pcBaseFromDoc(cur);
-      _applying = true;
-      try { if (window.__crdtApply) window.__crdtApply({ projectConfig: cur }); } finally { _applying = false; }
-      try { console.info('[CRDT] export control / AI off follows the team: only unticking it in AI Settings turns it off.'); } catch (_) {}
-    } catch (_) {}
-  }
-  // The baseline after a pull: what the doc holds, and this tab's switch views as the pulled
-  // settings express them (so the next push writes a view only when an engineer changes it).
-  function _pcBaseFromDoc(pulled) {
-    var map = ydoc.getMap(PC_MAP), b = {};
-    if (pulled) Object.keys(pulled).forEach(function (k) { if (!PC_LOGS[k]) b[k] = JSON.stringify(pulled[k] === undefined ? null : pulled[k]); });   // what the model was given
-    else Array.from(map.keys()).forEach(function (k) { b[k] = map.get(k); });
-    _base.pc = b;
-    Object.keys(PC_LOGS).forEach(function (name) {
-      var lm = ydoc.getMap('log:' + name), bl = new Map();
-      Array.from(lm.keys()).forEach(function (k) { bl.set(k, lm.get(k)); });
-      _base.logs[name] = bl;
-    });
-    var ctl = {};
-    if (pulled) Object.keys(PC_CONTROLS).forEach(function (c) { ctl[c] = JSON.stringify(_ctlEntry(pulled, c)); });
-    _base.ctl = ctl;
-  }
-
   // ---- model <-> Y.Doc -------------------------------------------------------
   // pushLocal(opts): opts.full = seed posture (model wins, doc mirrors it) — used by
   // the reconcile/adopt paths that have just replaced the model wholesale. The default
@@ -781,7 +441,6 @@
     var full = !!(opts && opts.full);
     var cap; try { cap = window.__crdtCapture ? window.__crdtCapture() : null; } catch (_) { cap = null; }
     if (!cap) return;
-    try { _pcMigrateAndImport(); } catch (_) {}
     ydoc.transact(function () {
       COLLECTIONS.forEach(function (c) { _writeKeyed(c.name, cap[c.name] || [], c.key, full); });
       // fault trees: node-level merge — decompose page trees into shells + flat nodes
@@ -795,9 +454,6 @@
         if (full ? (wmap.get(name) !== next) : (_base.whole[name] !== next)) wmap.set(name, next);
         _base.whole[name] = next;
       });
-      // 3 Oct 2026 (batch 5): settings field by field (the mirror for older builds follows,
-      // in its own transaction, so it is never an undo step of this tab)
-      if ('projectConfig' in cap) _pcWrite(cap.projectConfig, full ? 'full' : 'three-way');
       var cmap = ydoc.getMap('counters');
       COUNTERS.forEach(function (name) {
         var v = cap[name];
@@ -813,8 +469,6 @@
         });
       }
     }, full ? 'seed' : 'local');
-    if ('projectConfig' in cap) { try { if (ydoc.getMap(PC_MAP).size > 0) ydoc.transact(function () { _pcMirror(); }, 'seed'); } catch (_) {} }
-    if ('projectConfig' in cap) _pcCorrectIfHeld(cap.projectConfig);
   }
 
   // pullToModel(opts): opts.load = the doc is being adopted onto a model that was just
@@ -852,18 +506,6 @@
     WHOLE.forEach(function (name) {
       if (wmap.has(name)) { try { partial[name] = JSON.parse(wmap.get(name)); _base.whole[name] = wmap.get(name); } catch (_) {} }
     });
-    // 3 Oct 2026 (batch 5): settings field by field (an older build's write folded in first)
-    try { _pcMigrateAndImport(); } catch (_) {}
-    // only when a settings map changed since the last pull (a table edit leaves the settings alone)
-    if ((ydoc.getMap(PC_MAP).size > 0 || wmap.has('projectConfig')) && (_pcPullDirty || (opts && opts.load))) {
-      _pcPullDirty = false;
-      var _pcNow = _pcRead();
-      // keep the mirror current (two tabs' mirrors can cross; an undo reverts fields, not the mirror)
-      try { if (ydoc.getMap(PC_MAP).size > 0) ydoc.transact(function () { _pcMirror(_pcNow); }, 'seed'); } catch (_) {}
-      partial.projectConfig = _pcNow;
-      _pcBaseFromDoc(partial.projectConfig);
-      if (wmap.has('projectConfig')) _base.whole.projectConfig = wmap.get('projectConfig');
-    }
     var cmap = ydoc.getMap('counters');
     var counters = {};
     COUNTERS.forEach(function (name) { var v = cmap.get(name); if (typeof v === 'number') counters[name] = v; });
