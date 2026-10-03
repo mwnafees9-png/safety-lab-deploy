@@ -29,10 +29,18 @@
         try { return !!(typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled); }
         catch (_) { return true; }   // fail CLOSED — unknown state = controlled
     }
+    // 3 Oct 2026 (security review, batch 4): the query is project text, so a project with AI
+    // switched off (AI Settings) sends nothing here either. The AI-off check sat in
+    // Provider.complete, but the batch engine assembles its context, this lookup included,
+    // BEFORE it calls complete, so the query left even though the drafting call was then refused.
+    function _aiOffBlocked() {
+        try { return !!(typeof projectConfig !== 'undefined' && projectConfig && projectConfig.aiSettings && projectConfig.aiSettings.projectAiOff === true); }
+        catch (_) { return true; }   // fail CLOSED
+    }
 
     async function search(q, k) {
         if (!ENDPOINT) return [];       // not configured = off, never a silent fallback to ours
-        if (_itarBlocked()) return [];
+        if (_itarBlocked() || _aiOffBlocked()) return [];
         q = String(q || '').trim().slice(0, 500);
         if (!q) return [];
         try {
@@ -49,7 +57,7 @@
     // own number, so BM25 ranks CITERS above the section itself on bare-ref
     // queries. Search wide, then filter to the section's own chunks by id.
     async function lookup(sectionRef) {
-        if (_itarBlocked()) return [];
+        if (_itarBlocked() || _aiOffBlocked()) return [];
         const ref = String(sectionRef || '').replace(/^§\s*/, '').trim();
         if (!ref) return [];
         const hits = await search(ref, 12);
@@ -59,7 +67,12 @@
     }
 
     // Grounding block for Provider.complete — cited verbatim, provenance named.
-    async function groundingBlock(queryText, k) {
+    // ctx.controlled (3 Oct 2026): the caller found controlled content in the request (a
+    // controlled data classification, or a system declared export-controlled named in it). The
+    // drafting call itself may still be allowed on a local backend, but the corpus lives on a
+    // separate service, so the query does not go there.
+    async function groundingBlock(queryText, k, ctx) {
+        if (ctx && ctx.controlled) return '';
         const hits = await search(queryText, k || 4);
         if (!hits.length) return '';
         const lines = hits.map(function (h) {
@@ -73,6 +86,6 @@
     }
 
     if (typeof window !== 'undefined') {
-        window.A15_CORPUS = { search: search, lookup: lookup, groundingBlock: groundingBlock, endpoint: ENDPOINT, _itarBlocked: _itarBlocked };
+        window.A15_CORPUS = { search: search, lookup: lookup, groundingBlock: groundingBlock, endpoint: ENDPOINT, _itarBlocked: _itarBlocked, _aiOffBlocked: _aiOffBlocked };
     }
 })();

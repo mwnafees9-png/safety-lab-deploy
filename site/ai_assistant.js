@@ -1195,9 +1195,11 @@
         // ITAR (block entirely), fails to '' when the corpus is unreachable; a
         // completion NEVER waits on retrieval failure or blocks on it.
         try {
-            if (window.A15_CORPUS && typeof window.A15_CORPUS.groundingBlock === 'function') {
+            if (window.A15_CORPUS && typeof window.A15_CORPUS.groundingBlock === 'function' && !_projectAiOff()) {
                 const _qc = String((opts.messages && opts.messages[0] && opts.messages[0].content) || '').slice(0, 300);
-                const _reg = await window.A15_CORPUS.groundingBlock(_qc, 4);
+                // 3 Oct 2026: controlled content never goes to the corpus service (see corpus_retrieve.js).
+                const _ctl = _CONTROLLED_CLASS.test(String(opts.data_classification || '')) || !!_payloadTaint({ user_prompt: _qc, system_instruction: String(sys || '') });
+                const _reg = await window.A15_CORPUS.groundingBlock(_qc, 4, { controlled: _ctl });
                 if (_reg) sys = sys + '\n\n' + _reg;
             }
         } catch (_) {}
@@ -12396,6 +12398,10 @@
     async function _anemBatch(taskDirective, cfg) {
         cfg = cfg || {};
         if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
+        // 3 Oct 2026 (security review, batch 4): AI off for this project means nothing leaves,
+        // and this engine assembles its context (which reaches the corpus service) before it
+        // calls Provider.complete, where the switch was checked. Checked here first now.
+        { const _off = _projectAiOff(); if (_off) { _toast(_off, 'warning', 5000); return; } }
         const ctxNote = cfg.context ? ('\n\nPROJECT CONTEXT:\n' + (typeof cfg.context === 'string' ? cfg.context : JSON.stringify(cfg.context, null, 1))) : '';
         const imgs = Array.isArray(cfg.images) ? cfg.images.filter(function (im) { return im && (im.data || im.imageData); }) : [];
         // The turn's user content, rebuilt per chunk so each call can name the slice

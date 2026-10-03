@@ -39,7 +39,7 @@ check('corpus_retrieve.js names no Safety Lab host outside comments',
   'a fallback here is invisible to the hard-stop and to SLConfigEgress');
 check('it reads SLConfig.corpusEndpoint and nothing else', /window\.SLConfig && window\.SLConfig\.corpusEndpoint/.test(corpusSrc) && !/__SLAB_CORPUS_ENDPOINT__/.test(corpusSrc.replace(/\/\*[\s\S]*?\*\//g, '')));
 check('search() returns nothing when the address is blank', /if \(!ENDPOINT\) return \[\];/.test(corpusSrc));
-check('the ITAR fail-closed guard still runs', /if \(_itarBlocked\(\)\) return \[\];/.test(corpusSrc));
+check('the ITAR fail-closed guard still runs (3 Oct 2026: now beside the AI-off guard)', /if \(_itarBlocked\(\)( \|\| _aiOffBlocked\(\))?\) return \[\];/.test(corpusSrc));
 
 // ---- [2] slab_config resolves it, per mode, EXECUTED -------------------------------------------
 console.log('\n[corpus] slab_config resolution, executed in vm');

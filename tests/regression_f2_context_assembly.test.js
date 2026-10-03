@@ -47,6 +47,9 @@ function sandbox(overrides) {
         _withBasisClause: (s, f) => s + '\n\n[BASIS ' + f + ']',
         _withInsufficiencyClause: s => s + '\n\n[INSUF]',
         _CONTROLLED_CLASS: /(controlled|itar)/i,
+        // 3 Oct 2026: the corpus block now also asks whether AI is off and whether the request is controlled.
+        _projectAiOff: () => null,
+        _payloadTaint: () => '',
         window: {
             AiFidelity: { exemplarsFor: (f, o) => 'EXEMPLARS(' + f + ')' },
             A15_CORPUS: { groundingBlock: async (q, n) => { calls.push(['a15', q, n]); return 'CORPUS'; } }
