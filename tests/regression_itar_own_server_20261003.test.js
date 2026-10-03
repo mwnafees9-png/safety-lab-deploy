@@ -187,6 +187,32 @@ console.log('\n[5] AI: the choke point in core_modules (EXECUTED)');
   check('embed(): same fence and flag', /controlledRefusal\(opts\)/.test(emb) && /const itar = _itarFlag\(opts\);/.test(emb) && (emb.match(/'x-safetylab-itar': itar \? '1' : '0'/g) || []).length === 2);
 }
 
+console.log('\n[5b] AI: the REAL shared check from helpers feeding the REAL fence in core (EXECUTED end to end)');
+{
+  const helpersSrc = fn(helpers, 'function _slCloudBlockedForControlled') + '\n' + fn(helpers, 'function _slControlledReason') + '\n' + fn(helpers, 'function _slOwnServer');
+  const a = core.indexOf('function controlledRefusal(');
+  const fence = core.slice(a, core.indexOf('\n    function controlledRefusalMessage', a));
+  function e2e(cfg, pc, door) {
+    const win = {};
+    if (cfg !== null) win.SLConfig = cfg;
+    const ctx = { window: win, projectConfig: pc, AI_PROXY_BASE_URL: 'https://ai.example/v1/ai',
+      _desktopKeyDoor: () => door === 'key', isProxyMode: () => door === 'proxy', _byoViaProxy: () => door === 'vault' };
+    vm.createContext(ctx);
+    vm.runInContext(helpersSrc + '\nwindow.SLControlled = { blocksCloud: function (s) { return _slCloudBlockedForControlled(s); }, controlledReason: function (s) { return _slControlledReason(s); }, ownServer: function () { return _slOwnServer(); } };\n' + fence + '\nglobalThis.__r = controlledRefusal; globalThis.__f = _itarFlag;', ctx);
+    return { refused: ctx.__r({}), flag: ctx.__f({}) };
+  }
+  const ITAR = { isITARControlled: true };
+  check('e2e: our cloud, ITAR, licensed path: refused', typeof e2e(OURS, ITAR, 'proxy').refused === 'string');
+  check('e2e: NO SLConfig at all (a page where slab_config did not load), ITAR: refused, as on our cloud', typeof e2e(null, ITAR, 'proxy').refused === 'string');
+  check('e2e: own server, ITAR, licensed path: allowed with the ITAR flag', (r => r.refused === null && r.flag === true)(e2e(THEIRS, ITAR, 'proxy')));
+  check('e2e: own server, ITAR, desktop own key: refused', typeof e2e(THEIRS, ITAR, 'key').refused === 'string');
+  check('e2e: own server, ordinary project: allowed, flag off', (r => r.refused === null && r.flag === false)(e2e(THEIRS, { isITARControlled: false }, 'proxy')));
+}
+{
+  const emb = fn(ai, 'async embed(opts) {');
+  check('Provider.embed hands the text\'s own marks to AiClient (read only on a customer server)', /const _em = _requestMarks\(/.test(emb) && /controlled: _em\.controlled, natl: _em\.natl/.test(emb));
+}
+
 console.log('\n[6] AI: the gateway and the request marks (ai_assistant, EXECUTED)');
 {
   const route = fn(ai, 'route(request) {');
@@ -250,11 +276,11 @@ console.log('\n[8] the settings say what actually happens');
 }
 
 console.log('\n[9] cache pins');
-for (const [f, v] of [['slab_config.js', '1.5'], ['helpers_modules.js', '3.19'], ['core_modules.js', '1.11'], ['crdt_sync.js', '2.3'], ['presence.js', '2.2'],
-                      ['edit_locks.js', '1.3'], ['cloud_sync.js', '2.3'], ['notify_agents.js', '2.1'], ['ai_loader.js', '8.67']]) {
+for (const [f, v] of [['slab_config.js', '1.5'], ['helpers_modules.js', '3.20'], ['core_modules.js', '1.11'], ['crdt_sync.js', '2.3'], ['presence.js', '2.2'],
+                      ['edit_locks.js', '1.3'], ['cloud_sync.js', '2.3'], ['notify_agents.js', '2.1'], ['ai_loader.js', '8.68']]) {
   check(f + ' >= ' + v, PIN.atLeast(idx, f, v));
 }
-check('ai_assistant.js >= 76.75 (loader)', PIN.atLeast(loader, 'ai_assistant.js', '76.75'));
+check('ai_assistant.js >= 76.76 (loader)', PIN.atLeast(loader, 'ai_assistant.js', '76.76'));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

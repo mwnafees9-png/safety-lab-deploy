@@ -29,6 +29,11 @@
  *   F15 no bouncing between tabs or builds (the settings are applied in place, key order kept)
  *   F16 the same setting in another key order is not a change (never re-sent, never answered)
  *   F16b an AI log entry in another key order is the same entry (no duplicates, nothing re-sent)
+ *   F17 an older build's ON survives another older build's stale copy
+ *   F18 two tabs tidying a long list of switch views at the same moment keep it ON
+ *   F19 undo works on the two switches
+ *   F20 a deliberate untick wins over a machine whose clock runs ahead
+ *   F21 a lost message never starts a storm with an older build in the project
  *   F14 two switches stamped at once on two tabs: both stamps kept
  *   F13 an old (v1.0) AIC- entry in the cost log is shown in the draft log and never lost
  *
@@ -59,13 +64,15 @@ let rooms = {};
 // handler returns (a real socket delivers asynchronously; it never runs a peer's handler inside
 // the sender's own Yjs transaction).
 let _q = [], _delivering = false;
-function _deliver() { if (_delivering) return; _delivering = true; try { while (_q.length) _q.shift()(); } finally { _delivering = false; } }
+let HOLD = false;   // while true, messages wait (two tabs act at the same moment, then hear each other)
+function _deliver() { if (_delivering || HOLD) return; _delivering = true; try { while (_q.length) _q.shift()(); } finally { _delivering = false; } }
+function release() { HOLD = false; _deliver(); }
 function fakeClient() {
   return {
     channel(name) {
       const ch = { name, handlers: {}, on(type, filter, cb) { ch.handlers[filter.event] = cb; return ch; },
         subscribe(cb) { (rooms[name] = rooms[name] || []).push(ch); try { cb('SUBSCRIBED'); } catch (_) {} return ch; },
-        send(m) { MSGS++; (rooms[name] || []).forEach(o => { if (o !== ch && o.handlers[m.event]) _q.push(() => o.handlers[m.event](m)); }); _deliver(); },
+        send(m) { MSGS++; if (++SENT > 4000) { STORM = true; return; } if (DROP > 0 && m.event === 'yupdate') { DROP--; return; } (rooms[name] || []).forEach(o => { if (o !== ch && o.handlers[m.event]) _q.push(() => o.handlers[m.event](m)); }); _deliver(); },
         unsubscribe() { rooms[name] = (rooms[name] || []).filter(o => o !== ch); } };
       return ch;
     },
@@ -84,7 +91,7 @@ const _inPlace = (function () {
   const ctx = {}; vm.createContext(ctx); vm.runInContext(HELPERS.slice(i, j) + '\n' + HELPERS.slice(k, l) + '\nglobalThis.__f = _assignDeepInPlace;', ctx);
   return ctx.__f;
 })();
-let MSGS = 0;
+let MSGS = 0, SENT = 0, STORM = false, DROP = 0;   // SENT/STORM: a runaway exchange is cut off and reported instead of hanging the suite; DROP: lose the next N updates (a real socket can)
 const BASE_PC = { regulation: 'Part 25', missionDuration: 3, isITARControlled: false, aiSettings: { topK: 5, projectAiOff: false }, aiAuditLog: [], aiDraftLog: [], aiDraftCounter: 0 };
 
 function tab(name, pc, src) {
@@ -316,6 +323,83 @@ async function scenarios(src, label, quiet) {
     check('F16b and nothing re-sent', logWrites === 0, logWrites + ' log writes');
   }
 
+  console.log('\n[F17] an older build turned export control ON; another older build sends a stale copy');
+  {
+    rooms = {};
+    const N = tab('N', BASE_PC, SRC); await settle(); await settle(); N.flush();
+    const O1 = tab('O1', BASE_PC, OLD); await settle(); await settle(); O1.flush(); N.flush();
+    const O2 = tab('O2', BASE_PC, OLD); await settle(); await settle(); O2.flush(); N.flush(); O1.flush();
+    [N, O1, O2].forEach(t => t.advance(20000));
+    O2.silent(pc => { pc.regulation = 'Part 31'; });                 // O2 holds a change it has not sent
+    O1.edit(pc => { pc.isITARControlled = true; });                  // an older build ticks it (no stamp)
+    N.flush(); O2.flush(); O1.flush(); N.flush(); O2.flush();
+    O2.edit(pc => { pc.isITARControlled = false; pc.regulation = 'Part 31'; });   // and O2's stale copy goes out
+    N.flush(); O1.flush(); O2.flush(); N.flush(); O1.flush(); O2.flush();
+    check('F17 an older build\'s ON survives another older build\'s stale copy (all three tabs)',
+          N.pc().isITARControlled === true && O1.pc().isITARControlled === true && O2.pc().isITARControlled === true,
+          'N ' + N.pc().isITARControlled + ' O1 ' + O1.pc().isITARControlled + ' O2 ' + O2.pc().isITARControlled);
+  }
+
+  console.log('\n[F18] two tabs tidy a long list of switch views at the same moment');
+  {
+    const { A, B } = await pair(SRC, SRC);
+    A.edit(pc => { pc.isITARControlled = true; pc.controlStamps = { isITARControlled: { on: true, at: T0 + 1000 } }; });
+    B.flush();
+    const put = (env, from, to) => { const d = env.api._doc(); d.transact(() => { for (let i = from; i < to; i++) d.getMap('ctl').set('v' + String(i).padStart(2, '0') + ':isITARControlled', JSON.stringify({ on: true, at: T0 + 2000 })); }, 'seed'); };   // newer than A's own view, all tied
+    A.api._doc().transact(() => { A.api._doc().getMap('ctl').set('w0:isITARControlled', JSON.stringify({ on: false, at: T0 + 500, d: true })); }, 'seed');   // an older deliberate off (unticked once, ticked again since)
+    HOLD = true; put(A, 0, 21); put(B, 21, 42); release();            // same views, written in a different order on each tab
+    A.flush(); B.flush();
+    HOLD = true;
+    A.edit(pc => { pc.regulation = 'T1'; }); B.edit(pc => { pc.missionDuration = 12; });   // both push, both tidy, neither hears the other yet
+    release(); A.flush(); B.flush(); A.flush(); B.flush();
+    const views = A.api._doc().getMap('ctl').size;
+    check('F18 export control stays ON after both tabs tidied at once', A.pc().isITARControlled === true && B.pc().isITARControlled === true,
+          'A ' + A.pc().isITARControlled + ' B ' + B.pc().isITARControlled + ', ' + views + ' views left');
+    check('F18 the list was actually tidied, and an ON view survived it', views < 40 && Array.from(A.api._doc().getMap('ctl').values()).some(v => JSON.parse(v).on === true), views + ' views');
+  }
+
+  console.log('\n[F19] undo works on the two switches');
+  {
+    const { A, B } = await pair(SRC, SRC);
+    A.edit(pc => { pc.isITARControlled = true; pc.controlStamps = { isITARControlled: { on: true, at: T0 + 1000 } }; });
+    B.flush();
+    A.edit(pc => { pc.isITARControlled = false; pc.controlStamps.isITARControlled = { on: false, at: T0 + 2000 }; });
+    B.flush();
+    const offBoth = A.pc().isITARControlled === false && B.pc().isITARControlled === false;
+    const u1 = A.api.undo(); A.flush(); B.flush();
+    check('F19 untick export control, then undo: back ON on both tabs', offBoth && u1 && A.pc().isITARControlled === true && B.pc().isITARControlled === true,
+          'A ' + A.pc().isITARControlled + ' B ' + B.pc().isITARControlled);
+    A.edit(pc => { pc.aiSettings.projectAiOff = true; pc.controlStamps.projectAiOff = { on: true, at: T0 + 3000 }; });
+    B.flush();
+    const onBoth = A.pc().aiSettings.projectAiOff === true && B.pc().aiSettings.projectAiOff === true;
+    const u2 = A.api.undo(); A.flush(); B.flush();
+    check('F19 tick AI off, then undo: back OFF on both tabs', onBoth && u2 && A.pc().aiSettings.projectAiOff === false && B.pc().aiSettings.projectAiOff === false,
+          'A ' + A.pc().aiSettings.projectAiOff + ' B ' + B.pc().aiSettings.projectAiOff);
+  }
+
+  console.log('\n[F20] a deliberate untick wins over a fast clock');
+  {
+    const { A, B } = await pair(SRC, SRC);
+    A.edit(pc => { pc.isITARControlled = true; pc.controlStamps = { isITARControlled: { on: true, at: Date.now() + 3600e3 } }; });   // A's clock is an hour ahead
+    B.flush();
+    const floor = B.api.controlFloor('isITARControlled');
+    B.edit(pc => { pc.isITARControlled = false; pc.controlStamps.isITARControlled = { on: false, at: Math.max(Date.now(), floor + 1) }; });   // as _slStampControl stamps it
+    A.flush(); B.flush();
+    check('F20 controlFloor reports the newest view', floor >= Date.now() + 3500e3);
+    check('F20 the untick wins on both tabs', A.pc().isITARControlled === false && B.pc().isITARControlled === false, 'A ' + A.pc().isITARControlled + ' B ' + B.pc().isITARControlled);
+  }
+
+  console.log('\n[F21] a lost message never starts a storm (an older build in the project)');
+  {
+    const { A: N, B: O } = await pair(SRC, OLD);
+    SENT = 0; STORM = false; MSGS = 0;
+    DROP = 1; O.edit(pc => { pc.regulation = 'Lost'; });            // this update never reaches N
+    for (let i = 0; i < 3; i++) { O.edit(pc => { pc.missionDuration = 40 + i; }); N.flush(); O.flush(); }   // later ones depend on it: N holds them back
+    N.edit(pc => { pc.fmeaNote = 'n'; }); O.flush(); N.flush();
+    check('F21 no storm while a message is missing', !STORM && MSGS < 60, MSGS + ' messages' + (STORM ? ' (STORM cut off)' : ''));
+    SENT = 0; STORM = false;
+  }
+
   console.log('\n[F11] mutation: the pre-batch-5 file fails the same scenarios');
   {
     const o = await scenarios(OLD);
@@ -339,8 +423,24 @@ async function scenarios(src, label, quiet) {
     vm.createContext(ctx); vm.runInContext(body + '\n_slStampControl("isITARControlled", false);', ctx);
     const s = ctx.projectConfig.controlStamps && ctx.projectConfig.controlStamps.isITARControlled;
     check('EXECUTED: a stamp records on/off, when, and who', s && s.on === false && typeof s.at === 'number' && s.by === 'u1');
-    check('crdt_sync >= 2.4', PIN.atLeast(IDX, 'crdt_sync.js', '2.4'));
-    check('bindings_modules >= 1.51', PIN.atLeast(IDX, 'bindings_modules.js', '1.51'));
+    const ctx2 = { projectConfig: { controlStamps: { isITARControlled: { on: true, at: 5 } } }, window: { SafetyLabCRDT: { controlFloor: () => Date.now() + 3600e3 } }, Date, Math };
+    vm.createContext(ctx2); vm.runInContext(body + '\n_slStampControl("isITARControlled", false);', ctx2);
+    check('EXECUTED: a stamp lands after the newest known view, whatever this clock says', ctx2.projectConfig.controlStamps.isITARControlled.at > Date.now() + 3500e3);
+    const save = BND.slice(BND.indexOf('window.saveAiSettings = function(){'));
+    check('saving settings changes AI off only when the box was changed since it was painted',
+          /const _boxTouched = !!_offEl && \(typeof window\.__slAiOffPainted !== 'boolean' \|\| _offEl\.checked !== window\.__slAiOffPainted\);/.test(save) && /if \(_offEl && _boxTouched\) projectConfig\.aiSettings\.projectAiOff = !!_offEl\.checked;/.test(save));
+    {
+      const H = HELPERS;
+      const rs = H.slice(H.indexOf('function _slRepaintSafetySwitches(){')); const rsBody = rs.slice(0, rs.indexOf('\n}') + 2);
+      const els = { 'ai-itar-toggle': { checked: false }, 'ai-project-off': { checked: false } };
+      const ctx3 = { document: { getElementById: id => els[id] || null }, projectConfig: { isITARControlled: true, aiSettings: { projectAiOff: true } }, window: {}, _refreshAiITARStatus: () => {} };
+      vm.createContext(ctx3); vm.runInContext(rsBody + '\n_slRepaintSafetySwitches();', ctx3);
+      check('EXECUTED: a teammate\'s change repaints both boxes and the painted value', els['ai-itar-toggle'].checked === true && els['ai-project-off'].checked === true && ctx3.window.__slAiOffPainted === true);
+      check('...and it runs whenever settings arrive from the sync', /if \(partial\.projectConfig\) _slRepaintSafetySwitches\(\);/.test(H));
+    }
+    check('crdt_sync >= 2.5', PIN.atLeast(IDX, 'crdt_sync.js', '2.5'));
+    check('bindings_modules >= 1.52', PIN.atLeast(IDX, 'bindings_modules.js', '1.52'));
+    check('helpers_modules >= 3.20', PIN.atLeast(IDX, 'helpers_modules.js', '3.20'));
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

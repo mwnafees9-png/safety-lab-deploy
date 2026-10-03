@@ -303,7 +303,9 @@
             if (this.mode === 'local') return _localEmbed(opts);
             const ac = window.AiClient;
             if (!ac) throw new Error('[Safety Lab Aero AI] AiClient unavailable.');
-            return ac.embed(opts.input, { model: opts.model, inputType: opts.inputType });
+            // 3 Oct 2026 — the text's own controlled marks go with it (read only on a customer's own server)
+            const _em = _requestMarks({ messages: [{ role: 'user', content: Array.isArray(opts.input) ? opts.input.join('\n') : String(opts.input == null ? '' : opts.input) }], controlled: opts.controlled, data_classification: opts.data_classification });
+            return ac.embed(opts.input, { model: opts.model, inputType: opts.inputType, controlled: _em.controlled, natl: _em.natl });
         }
     };
 

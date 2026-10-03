@@ -257,7 +257,7 @@
     var scopes = [];
     COLLECTIONS.forEach(function (c) { scopes.push(ydoc.getMap('col:' + c.name), ydoc.getMap('ord:' + c.name)); });
     scopes.push(ydoc.getMap('col:' + FTA_SHELL), ydoc.getMap('ord:' + FTA_SHELL), ydoc.getMap('col:' + FTA_NODE), ydoc.getMap('ord:' + FTA_NODE), ydoc.getMap('whole'));
-    scopes.push(ydoc.getMap(PC_MAP));   // 3 Oct 2026: settings, field by field. The AI logs are append-only and never an undo step.
+    scopes.push(ydoc.getMap(PC_MAP), ydoc.getMap(CTL_MAP));   // 3 Oct 2026: settings field by field, and this tab's views of the two safety switches (undo of a tick/untick works). The AI logs are append-only and never an undo step.
     return scopes;
   }
   function _makeUndo() {
@@ -536,13 +536,24 @@
     if (!any) return undefined;
     return hasOn && !(offAt > onAt);
   }
+  // The newest time any view of switch c carries (0 when none): a deliberate change is stamped
+  // after it, so it wins whatever the clocks of the machines involved say.
+  function _ctlFloor(c) {
+    if (!ydoc) return 0;
+    var cm = ydoc.getMap(CTL_MAP), suffix = ':' + c, top = 0;
+    Array.from(cm.keys()).forEach(function (k) { if (k.slice(-suffix.length) !== suffix) return; var e = _parse(cm.get(k)); if (e && typeof e.at === 'number' && e.at > top) top = e.at; });
+    return top;
+  }
   function _ctlWrite(key, entry) {
     var cm = ydoc.getMap(CTL_MAP), next = JSON.stringify(entry);
     if (cm.get(key) !== next) { cm.set(key, next); _pcTouch(); }
   }
   // Views that cannot change the answer (not the newest on, not the newest deliberate off) are
-  // dropped once there are many, so the map stays small. Safe concurrently: a new view always
-  // arrives under a new key, and a dropped view could not have decided anything.
+  // dropped once there are many, so the map stays small. "Newest" is a TOTAL order (time, then
+  // key), so every tab picks the same keeper from the same views; and the overall newest view is
+  // never dropped by anyone (no tab knows a newer one), so tabs pruning at the same moment can
+  // never delete every "on" between them (review finding, 3 Oct 2026).
+  function _ctlNewer(a, b) { return !b || a.at > b.at || (a.at === b.at && a.k > b.k); }
   function _ctlPrune() {
     var cm = ydoc.getMap(CTL_MAP);
     if (cm.size <= 40) return;
@@ -550,10 +561,10 @@
       var suffix = ':' + c, bestOn = null, bestOff = null, all = [];
       Array.from(cm.keys()).forEach(function (k) {
         if (k.slice(-suffix.length) !== suffix) return;
-        var e = _parse(cm.get(k)) || {}, at = (typeof e.at === 'number') ? e.at : 0;
+        var e = _parse(cm.get(k)) || {}, at = (typeof e.at === 'number') ? e.at : 0, me = { k: k, at: at };
         all.push(k);
-        if (e.on === true && (!bestOn || at > bestOn.at)) bestOn = { k: k, at: at };
-        if (e.on !== true && e.d === true && (!bestOff || at > bestOff.at)) bestOff = { k: k, at: at };
+        if (e.on === true && _ctlNewer(me, bestOn)) bestOn = me;
+        if (e.on !== true && e.d === true && _ctlNewer(me, bestOff)) bestOff = me;
       });
       all.forEach(function (k) { if ((!bestOn || k !== bestOn.k) && (!bestOff || k !== bestOff.k)) { cm.delete(k); _pcTouch(); } });
     });
@@ -666,14 +677,15 @@
       if (PC_KEEP[k]) return;
       if (map.has(k)) { map.delete(k); _pcTouch(); }
     });
-    // the switches: this tab's view under this tab's key. An older build's view arrives under a
-    // shared 'legacy:' key: a switch it turned ON counts from now; an off from it is never
-    // deliberate (it cannot stamp), so it changes nothing.
+    // the switches: this tab's view under this tab's key. An older build cannot stamp, so its
+    // view is only ever an ON, recorded under the shared 'legacy:' key as newer than every view
+    // known (no machine's clock involved). An off from it is never written at all: it could not
+    // change the answer, and writing it would overwrite an older build's earlier ON.
     Object.keys(PC_CONTROLS).forEach(function (c) {
       if (posture === 'legacy') {
         var was = PC_CONTROLS[c].get(prevLegacy || {}), now = PC_CONTROLS[c].get(local);
-        if (prevLegacy && was === now) return;
-        _ctlWrite('legacy:' + c, now ? { on: true, at: Date.now() } : { on: false, at: 0, d: false });
+        if (!now || (prevLegacy && was === now)) return;
+        _ctlWrite('legacy:' + c, { on: true, at: _ctlFloor(c) + 1 });
         return;
       }
       var entry = JSON.stringify(_ctlEntry(local, c));
@@ -697,9 +709,12 @@
     var mark = function () { _pcTouch(); };   // a teammate's change (observers run before the update event)
     [PC_MAP, CTL_MAP].concat(Object.keys(PC_LOGS).map(function (n) { return 'log:' + n; })).forEach(function (n) { ydoc.getMap(n).observe(mark); });
   }
-  function _pcMirror(read) {
+  function _pcMirror(read, force) {
     var wmap = ydoc.getMap('whole');
-    if (!_pcDirty && wmap.get('projectConfig') === _pcSeen && _pcSeen != null) return;
+    // Only when OUR view of the settings changed since we last wrote or accepted a mirror. A mirror
+    // that changed or vanished on its own (an older build's write, or a write still waiting for a
+    // lost message to arrive) is never "answered" here: answering is how two tabs ping-pong.
+    if (!force && !_pcDirty && _pcSeen != null) return;
     var m = JSON.stringify(read || _pcRead()), h = _fnv(m);
     if (wmap.get('projectConfig') !== m) wmap.set('projectConfig', m);
     if (wmap.get('__pcMirror') !== h) wmap.set('__pcMirror', h);
@@ -726,7 +741,7 @@
         Object.keys(legacy).forEach(function (k) { if (!PC_LOGS[k]) map.set(k, JSON.stringify(legacy[k] === undefined ? null : legacy[k])); });
         _pcTouch();
         Object.keys(PC_LOGS).forEach(function (name) { if (name in legacy) _logPush(name, legacy[name], true); });
-        Object.keys(PC_CONTROLS).forEach(function (c) { var on = PC_CONTROLS[c].get(legacy); _ctlWrite('mirror:' + c, on ? { on: true, at: 0 } : { on: false, at: 0, d: false }); });
+        Object.keys(PC_CONTROLS).forEach(function (c) { if (PC_CONTROLS[c].get(legacy)) _ctlWrite('mirror:' + c, { on: true, at: 0 }); });   // an on carried over; an off needs no view
       } else {
         _pcWrite(legacy, 'legacy', _parse(_base.whole.projectConfig) || null);
         // An older build often only re-sends what it was given, in its own key order. If its copy
@@ -734,7 +749,7 @@
         // would bounce straight back to it, and back again, for as long as both are open.
         var now = _pcRead();
         if (_canon(now) === _canon(legacy)) { _pcSeen = wv; _base.whole.projectConfig = wv; _pcDirty = false; return; }
-        _pcMirror(now);
+        _pcMirror(now, true);                 // its copy says something else (a stale off, a removed field): tell it what the doc holds
         return;
       }
       _pcMirror();
@@ -1112,6 +1127,7 @@
     keys: function () { var o = {}; COLLECTIONS.forEach(function (c) { o[c.name] = c.key; }); return o; },
     undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo, liveUndo: liveUndo, _undoMgr: function () { return _undoMgr; },
     _base: function () { return _base; },
+    controlFloor: function (c) { try { return _ctlFloor(String(c)); } catch (_) { return 0; } },   // bindings_modules stamps a deliberate change after this
     _fta: { decompose: _ftaDecompose, recompose: _ftaRecompose, rebuildTree: _ftaRebuildTree }
   };
 

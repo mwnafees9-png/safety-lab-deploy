@@ -1553,7 +1553,12 @@ function _slStampControl(name, on) {
         if (!projectConfig.controlStamps || typeof projectConfig.controlStamps !== 'object' || Array.isArray(projectConfig.controlStamps)) projectConfig.controlStamps = {};
         let by = null;
         try { by = (window._supabaseSession && window._supabaseSession.user && window._supabaseSession.user.id) || null; } catch (_) {}
-        projectConfig.controlStamps[name] = { on: !!on, at: Date.now(), by: by };
+        // Stamped AFTER every view this tab knows of (the doc's newest, and its own last stamp), so a
+        // deliberate change wins even when another machine's clock runs ahead of this one.
+        let at = Date.now();
+        try { const C = window.SafetyLabCRDT; if (C && typeof C.controlFloor === 'function') at = Math.max(at, (C.controlFloor(name) || 0) + 1); } catch (_) {}
+        try { const prev = projectConfig.controlStamps[name]; if (prev && typeof prev.at === 'number') at = Math.max(at, prev.at + 1); } catch (_) {}
+        projectConfig.controlStamps[name] = { on: !!on, at: at, by: by };
     } catch (_) {}
 }
 
@@ -1608,8 +1613,13 @@ window.saveAiSettings = function(){
     projectConfig.aiSettings.costCap        = parseFloat(get('ai-cost-cap')) || 0;   // blank / 0 = no cap
     // 23 Sep 2026 (G10) — per-project AI off switch (checked in Provider.complete and AiClient.messages).
     const _offEl = document.getElementById('ai-project-off');
+    // 3 Oct 2026 (batch 5) — AI off changes only when the engineer changed the box since it was
+    // painted. Saving other settings (or "Test connection", which saves first) never touches it, so
+    // a box that missed a teammate's change can never switch AI back on for the project.
     const _wasAiOff = projectConfig.aiSettings.projectAiOff === true;
-    if (_offEl) projectConfig.aiSettings.projectAiOff = !!_offEl.checked;
+    const _boxTouched = !!_offEl && (typeof window.__slAiOffPainted !== 'boolean' || _offEl.checked !== window.__slAiOffPainted);
+    if (_offEl && _boxTouched) projectConfig.aiSettings.projectAiOff = !!_offEl.checked;
+    if (_offEl && _boxTouched) window.__slAiOffPainted = !!_offEl.checked;
     if (_offEl && _wasAiOff !== (projectConfig.aiSettings.projectAiOff === true)) _slStampControl('projectAiOff', projectConfig.aiSettings.projectAiOff === true);
     projectConfig.aiSettings.topK           = parseInt(get('ai-top-k')) || 5;
     if (typeof scheduleAutosave === 'function') scheduleAutosave();

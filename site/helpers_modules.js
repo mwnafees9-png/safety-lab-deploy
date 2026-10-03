@@ -6297,7 +6297,7 @@ function renderAiAssistant(){
     set('ai-voyage-model',    ais.voyageModel    || 'voyage-3-large');
     set('ai-max-tokens',      ais.maxTokens      || 4096);
     set('ai-cost-cap',        ais.costCap        || '');
-    try { const _offEl = document.getElementById('ai-project-off'); if (_offEl) _offEl.checked = ais.projectAiOff === true; } catch (_) {}
+    try { const _offEl = document.getElementById('ai-project-off'); if (_offEl) _offEl.checked = ais.projectAiOff === true; window.__slAiOffPainted = (ais.projectAiOff === true); } catch (_) {}   // painted value: saveAiSettings changes AI off only when the box differs from it
     set('ai-top-k',           ais.topK           || 5);
     // Self-hosted / on-prem backend (#56) — device-level routing config (localStorage).
     try {
@@ -6340,6 +6340,18 @@ function _refreshAiAllowance(){
     if (txt) txt.textContent = unlimited
         ? (Math.round(u.used).toLocaleString() + ' tokens used this month · Unlimited')
         : (Math.round(u.used).toLocaleString() + ' / ' + u.allowance.toLocaleString() + ' used · ' + pct.toFixed(1) + '%');
+}
+
+// 3 Oct 2026 (batch 5) — a teammate's change to export control or AI off reaches the AI Settings
+// boxes straight away (the panel is otherwise painted only when the tab opens), so a box on screen
+// never shows a stale value that a later "Save" or click could act on.
+function _slRepaintSafetySwitches(){
+    const itarEl = document.getElementById('ai-itar-toggle');
+    if (itarEl) itarEl.checked = !!(projectConfig && projectConfig.isITARControlled);
+    const offEl = document.getElementById('ai-project-off');
+    const offNow = !!(projectConfig && projectConfig.aiSettings && projectConfig.aiSettings.projectAiOff === true);
+    if (offEl) { offEl.checked = offNow; window.__slAiOffPainted = offNow; }
+    if (itarEl) _refreshAiITARStatus();
 }
 
 function _refreshAiITARStatus(){
@@ -8873,6 +8885,7 @@ function __crdtApply(partial) {
         try { if (partial.itemsData         && typeof renderItems           === 'function') renderItems(); } catch (_) {}
         try { if (partial.flightPhasesData  && typeof renderFlightPhases    === 'function') renderFlightPhases(); } catch (_) {}
         try { if (partial.projectConfig  && typeof renderProjectConfigUI === 'function') renderProjectConfigUI(); } catch (_) {}
+        try { if (partial.projectConfig) _slRepaintSafetySwitches(); } catch (_) {}
         try { if (partial.mlData         && typeof renderMarkovModels     === 'function') renderMarkovModels(); } catch (_) {}
         try { if (typeof partial.projectName === 'string' && typeof _refreshProjectNameUI === 'function') _refreshProjectNameUI(); } catch (_) {}
         try { if (partial.stpaData && typeof window !== 'undefined' && window.STPA_PANEL && typeof window.STPA_PANEL.render === 'function') window.STPA_PANEL.render(); } catch (_) {}
