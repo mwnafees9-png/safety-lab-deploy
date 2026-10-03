@@ -62,6 +62,7 @@ else
   echo "   console.anthropic.com. Needed only for an organization-level key; press Enter to skip."
   read -r -p "   Workspace id: " ANTHROPIC_WORKSPACE_ID
   printf 'SERVER_NAME=%q\nCERT_FILE=%q\nKEY_FILE=%q\n' "$SERVER_NAME" "${CERT_FILE:-}" "${KEY_FILE:-}" > "$ANSWERS"
+  chmod 600 "$ANSWERS"
 fi
 
 # ---------------------------------------------------------------- 2. stack files
@@ -91,6 +92,9 @@ setenv ENABLE_PHONE_AUTOCONFIRM false
 setenv COMPOSE_FILE "docker-compose.yml:docker-compose.caddy.yml:docker-compose.safetylab.yml"
 setenv STUDIO_DEFAULT_ORGANIZATION "Safety Lab Aero on-premises"
 setenv STUDIO_DEFAULT_PROJECT "Safety Lab Aero"
+# 3 Oct 2026 (security review, batch 3): stack/.env holds the database password, the JWT secret
+# and the service key. It was left readable by every user of this machine. Owner-only, every run.
+chmod 600 .env
 
 if [ ! -f ai-proxy.env ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   bold "Writing the AI service settings (stack/ai-proxy.env, keep it private: it holds your AI key)"
@@ -100,6 +104,15 @@ if [ ! -f ai-proxy.env ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   chmod 600 ai-proxy.env
 fi
 unset ANTHROPIC_API_KEY
+# The AI service checks that a license is for THIS server (3 Oct 2026). Its own name is written on
+# every run, so an install made before this line, or a changed server name, is brought up to date
+# without asking for the AI key again.
+if grep -q '^LICENSE_BACKEND_HOST=' ai-proxy.env; then
+  sed -i.bak "s|^LICENSE_BACKEND_HOST=.*|LICENSE_BACKEND_HOST=$SERVER_NAME|" ai-proxy.env && rm -f ai-proxy.env.bak
+else
+  echo "LICENSE_BACKEND_HOST=$SERVER_NAME" >> ai-proxy.env
+fi
+chmod 600 ai-proxy.env
 
 # ---------------------------------------------------------------- 4. https
 bold "Setting up https for $SERVER_NAME"
@@ -117,7 +130,11 @@ else
   C=volumes/proxy/certs
   if [ ! -f "$C/root.crt" ] || [ ! -f "$C/server.crt" ]; then
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$C/root.key" -out "$C/root.crt" -days 3650 \
-      -subj "/CN=Safety Lab Aero local root for $SERVER_NAME" -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" >/dev/null 2>&1
+      -subj "/CN=Safety Lab Aero local root for $SERVER_NAME" -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign" \
+      -addext "nameConstraints=critical,permitted;DNS:$SERVER_NAME" >/dev/null 2>&1
+    # 3 Oct 2026: the root may only ever vouch for this one server name (nameConstraints) and may not
+    # create further authorities (pathlen:0). Some administrators still trust it by hand for the
+    # dashboard; if its key ever leaked, it could not be used to impersonate any other site.
     openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$C/server.key" -out "$C/server.csr" -subj "/CN=$SERVER_NAME" >/dev/null 2>&1
     printf 'subjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\n' "$SERVER_NAME" > "$C/server.ext"
     openssl x509 -req -in "$C/server.csr" -CA "$C/root.crt" -CAkey "$C/root.key" -CAcreateserial -out "$C/server.leaf.crt" -days 1825 -extfile "$C/server.ext" >/dev/null 2>&1
@@ -175,10 +192,11 @@ echo "   AI service over https:      $AI (want 200)"
 # Never the AI key, never a password: the app refuses a setup file that carries a secret.
 LIC_FILE=$(ls "$HERE"/*.lic 2>/dev/null | head -1 || true)
 SETUP="$HERE/$SERVER_NAME.safetylab-setup"
-# In self-signed mode the setup file also carries the SHA-256 fingerprint of the root this install
-# made. The desktop app then trusts that one root for this one server name, so no user installs a
-# certificate by hand. With an IT-issued certificate the users' machines already trust the CA and
-# no pin is written.
+# In self-signed mode the setup file also carries the SHA-256 fingerprint of the server certificate
+# this install made. The desktop app then trusts that one certificate for this one server name, so
+# no user installs anything by hand. With an IT-issued certificate the users' machines already
+# trust the CA and no pin is written. If the server certificate is ever re-made, run this script
+# again and hand out the new setup file.
 fp(){ openssl x509 -in "$1" -outform DER 2>/dev/null | openssl dgst -sha256 -hex 2>/dev/null | sed 's/^.*= *//' | tr -d ' \n'; }
 PIN=""
 if [ "$SELF_SIGNED" = 1 ]; then

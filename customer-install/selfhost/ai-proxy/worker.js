@@ -654,6 +654,15 @@ async function verifyOfflineLicense(env, blob) {
     const now = Date.now(), nb = Date.parse(payload.notBefore), na = Date.parse(payload.notAfter);
     if (nb && now < nb) return { error: "invalid_token" };
     if (na && now > na) return { error: "expired" };
+    // 3 Oct 2026 (security review, batch 3): the licence must be for THIS install. The app's own
+    // verifier (slab_license.js) refuses a licence whose bind.backend names another server; this
+    // check did not, so any valid Safety Lab licence (another customer's, a trial bound to the
+    // demo cloud) unlocked the AI on any customer's proxy. LICENSE_BACKEND_HOST is the install's
+    // server name, written by install.sh. A bound licence on a proxy that does not know its own
+    // name is refused too: that proxy cannot tell whose licence it is holding.
+    const bound = String((payload.bind && payload.bind.backend) || "").trim().toLowerCase();
+    const mine = String(env.LICENSE_BACKEND_HOST || "").trim().toLowerCase();
+    if (bound && bound !== mine) return { error: "wrong_install" };
     const itar = payload.itar === true || (Array.isArray(payload.features) && payload.features.indexOf("itar") >= 0);
     return { token: payload.id || "offline", license: { plan: payload.tier || "enterprise", itar_required: itar }, used: 0, remaining: null, itarRequired: itar, rateLimitRpm: 0, exhausted: false };
   } catch (_) { return { error: "invalid_token" }; }
@@ -696,6 +705,7 @@ async function routeRequest(request, env, ctx) {
         if (check.error === "supabase_unreachable") return jsonResponse(502, { error: { type: "upstream_down", message: "Auth backend unreachable." } });
         if (check.error === "invalid_token") return jsonResponse(401, { error: { type: "invalid_token", message: "Token not recognized." } });
         if (check.error === "expired") return jsonResponse(401, { error: { type: "expired_token", message: "License expired." } });
+        if (check.error === "wrong_install") return jsonResponse(403, { error: { type: "license_not_for_this_server", message: "This license is for a different Safety Lab Aero server." } });
         if (check.exhausted) {
           return jsonResponse(402, { error: { type: "allowance_exhausted", message: "Monthly token allowance exhausted. Resets on the 1st of next month." }, plan: check.license.plan, remaining: 0 });
         }
