@@ -34,6 +34,8 @@
  *   F19 undo works on the two switches
  *   F20 a deliberate untick wins over a machine whose clock runs ahead
  *   F21 a lost message never starts a storm with an older build in the project
+ *   F22 two older builds and one new tab: an older build's change is kept (the mirror keeps their key order)
+ *   F23 restoring an older version in the tab that ticked export control does not turn it off
  *   F14 two switches stamped at once on two tabs: both stamps kept
  *   F13 an old (v1.0) AIC- entry in the cost log is shown in the draft log and never lost
  *
@@ -398,6 +400,32 @@ async function scenarios(src, label, quiet) {
     N.edit(pc => { pc.fmeaNote = 'n'; }); O.flush(); N.flush();
     check('F21 no storm while a message is missing', !STORM && MSGS < 60, MSGS + ' messages' + (STORM ? ' (STORM cut off)' : ''));
     SENT = 0; STORM = false;
+  }
+
+  console.log('\n[F22] two older builds and one new tab: an older build\'s change is kept');
+  {
+    rooms = {};
+    const N = tab('N', BASE_PC, SRC); await settle(); await settle(); N.flush();
+    const O = tab('O', BASE_PC, OLD); await settle(); await settle(); O.flush(); N.flush();
+    const O2 = tab('O2', BASE_PC, OLD); await settle(); await settle(); O2.flush(); N.flush(); O.flush();
+    [N, O, O2].forEach(t => t.advance(20000));
+    N.edit(pc => { pc.controlStamps = { projectAiOff: { on: false, at: T0 } }; });   // stamps exist, as after anyone ticks a switch
+    O.flush(); O2.flush(); N.flush(); O.flush(); O2.flush();
+    O2.edit(pc => { pc.missionDuration = 9; });
+    for (let i = 0; i < 3; i++) { N.flush(); O.flush(); O2.flush(); }
+    check('F22 the older build\'s change survives on all three tabs', N.pc().missionDuration === 9 && O.pc().missionDuration === 9 && O2.pc().missionDuration === 9,
+          'N ' + N.pc().missionDuration + ' O ' + O.pc().missionDuration + ' O2 ' + O2.pc().missionDuration);
+  }
+
+  console.log('\n[F23] the tab that ticked export control restores an older version');
+  {
+    const { A, B } = await pair(SRC, SRC);
+    A.edit(pc => { pc.isITARControlled = true; pc.controlStamps = { isITARControlled: { on: true, at: T0 + 1000 } }; });
+    B.flush();
+    A.model.projectConfig = clone(BASE_PC);                          // the older version: off, no stamp
+    A.api.adoptModel({ force: true }); A.flush(); B.flush(); A.flush(); B.flush();
+    check('F23 restoring an older version does not turn export control off (both tabs)', A.pc().isITARControlled === true && B.pc().isITARControlled === true,
+          'A ' + A.pc().isITARControlled + ' B ' + B.pc().isITARControlled);
   }
 
   console.log('\n[F11] mutation: the pre-batch-5 file fails the same scenarios');

@@ -688,8 +688,11 @@
         _ctlWrite('legacy:' + c, { on: true, at: _ctlFloor(c) + 1 });
         return;
       }
-      var entry = JSON.stringify(_ctlEntry(local, c));
-      if (posture === 'full' || _base.ctl[c] !== entry) _ctlWrite(String(ydoc.clientID) + ':' + c, JSON.parse(entry));
+      var entry = JSON.stringify(_ctlEntry(local, c)), ev = JSON.parse(entry);
+      // A view that is OFF without a deliberate stamp never changes the answer, so it is never
+      // written. In particular it never replaces this tab's own ON view: restoring or opening an
+      // older version in the tab that ticked a switch cannot turn it off for everyone.
+      if ((posture === 'full' || _base.ctl[c] !== entry) && (ev.on === true || ev.d === true)) _ctlWrite(String(ydoc.clientID) + ':' + c, ev);
       _base.ctl[c] = entry;
     });
     _ctlPrune();
@@ -709,13 +712,25 @@
     var mark = function () { _pcTouch(); };   // a teammate's change (observers run before the update event)
     [PC_MAP, CTL_MAP].concat(Object.keys(PC_LOGS).map(function (n) { return 'log:' + n; })).forEach(function (n) { ydoc.getMap(n).observe(mark); });
   }
+  function _orderLike(v, ref) {
+    if (Array.isArray(v)) return v.map(function (x, i) { return _orderLike(x, Array.isArray(ref) ? ref[i] : undefined); });
+    if (!v || typeof v !== 'object') return v;
+    var out = {}, r = (ref && typeof ref === 'object' && !Array.isArray(ref)) ? ref : {};
+    Object.keys(r).forEach(function (k) { if (Object.prototype.hasOwnProperty.call(v, k)) out[k] = _orderLike(v[k], r[k]); });
+    Object.keys(v).forEach(function (k) { if (!Object.prototype.hasOwnProperty.call(out, k)) out[k] = _orderLike(v[k], r[k]); });
+    return out;
+  }
   function _pcMirror(read, force) {
     var wmap = ydoc.getMap('whole');
     // Only when OUR view of the settings changed since we last wrote or accepted a mirror. A mirror
     // that changed or vanished on its own (an older build's write, or a write still waiting for a
     // lost message to arrive) is never "answered" here: answering is how two tabs ping-pong.
     if (!force && !_pcDirty && _pcSeen != null) return;
-    var m = JSON.stringify(read || _pcRead()), h = _fnv(m);
+    // Written in the key order of the mirror already there (nested objects too), new keys after.
+    // An older build applies the mirror IN PLACE, which keeps its own key order; if ours matched
+    // a different order, its baseline would never equal its own copy and it would keep re-sending
+    // a stale copy over a teammate's change (review finding, two older builds + one new tab).
+    var m = JSON.stringify(_orderLike(read || _pcRead(), _parse(wmap.get('projectConfig') || _base.whole.projectConfig))), h = _fnv(m);
     if (wmap.get('projectConfig') !== m) wmap.set('projectConfig', m);
     if (wmap.get('__pcMirror') !== h) wmap.set('__pcMirror', h);
     _base.whole.projectConfig = m;
