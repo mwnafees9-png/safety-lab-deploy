@@ -5,7 +5,7 @@ real self-hosted Supabase stack from `customer-install/selfhost/stack-src` (GoTr
 Realtime), with real password and TOTP sessions.
 
 1. Start the stack (db, auth, rest, realtime, api-gw) on a fresh database, with
-   ENABLE_EMAIL_AUTOCONFIRM=true, and apply kit files 00 to 18 with psql. Copy the kit files to
+   ENABLE_EMAIL_AUTOCONFIRM=true (a TEST stack only; install.sh never sets it), and apply kit files 00 to 18 with psql. Copy the kit files to
    /tmp/kit inside the db container (the script applies 19 and 20 from there).
 2. Copy both scripts into a folder with `@supabase/supabase-js@2.116.0` and `otplib` installed:
    `STACK_DIR=/path/to/stack node stack_proof.mjs` (28 checks: today's hole, 19 before the app,

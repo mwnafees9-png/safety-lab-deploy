@@ -26,5 +26,6 @@ for f in 00_schema_baseline 01_ws_members_admin_cannot_mint_owner 02_drop_hardco
   echo "==> applying $f.sql"
   psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$HERE/$f.sql"
 done
-echo "Done. Your database is ready. Add yourself as a platform admin with:"
+echo "Done. Your database is ready. Next: sign up in the app with your own address and confirm it"
+echo "from the email (keep 'Confirm email' on in your Auth settings). Only then make it administrator:"
 echo "  insert into private.platform_admins(email) values ('you@yourcompany.com');"

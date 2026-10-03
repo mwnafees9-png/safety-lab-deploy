@@ -65,6 +65,35 @@ else
   chmod 600 "$ANSWERS"
 fi
 
+# Questions 5 and 6 (3 Oct 2026). Asked once; an install made before they existed is asked them on
+# its next run. Without a mail server the sign-in service cannot check that a person owns the
+# address they type, and the app trusts that address (invitations, the administrator role,
+# sign-off records). So: with a mail server every new account confirms its address by email;
+# without one, open sign-up is off and accounts are made by the administrator (add-user.sh).
+if [ -z "${ADMIN_EMAIL:-}" ]; then
+  echo
+  echo "5) The administrator's email address (yours, if you run this server). This script creates"
+  echo "   that account itself and makes it the administrator, so nobody can claim it first."
+  read -r -p "   Administrator email: " ADMIN_EMAIL
+  [[ "$ADMIN_EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || die "That is not an email address: $ADMIN_EMAIL"
+  echo
+  echo "6) Optional. Your company's mail server, so new users can confirm their own email address."
+  echo "   Press Enter to skip: then only the administrator creates accounts (./add-user.sh)."
+  read -r -p "   Mail server name (e.g. smtp.yourcompany.com): " SMTP_HOST_ANS
+  SMTP_PORT_ANS=""; SMTP_USER_ANS=""; SMTP_FROM_ANS=""
+  if [ -n "$SMTP_HOST_ANS" ]; then
+    read -r -p "   Port [587]: " SMTP_PORT_ANS; SMTP_PORT_ANS="${SMTP_PORT_ANS:-587}"
+    read -r -p "   User name for the mail server: " SMTP_USER_ANS
+    read -r -s -p "   Password for the mail server (not shown, kept only in stack/.env): " SMTP_PASS_NEW; echo
+    case "$SMTP_PASS_NEW" in *"'"*) die "The mail password contains a single quote ('), which this script cannot store safely. Use a different password or app password.";; esac
+    read -r -p "   Send emails from (e.g. safetylab@yourcompany.com): " SMTP_FROM_ANS
+    [[ "$SMTP_FROM_ANS" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || die "That is not an email address: $SMTP_FROM_ANS"
+  fi
+  printf 'ADMIN_EMAIL=%q\nSMTP_HOST_ANS=%q\nSMTP_PORT_ANS=%q\nSMTP_USER_ANS=%q\nSMTP_FROM_ANS=%q\n' \
+    "$ADMIN_EMAIL" "$SMTP_HOST_ANS" "$SMTP_PORT_ANS" "$SMTP_USER_ANS" "$SMTP_FROM_ANS" >> "$ANSWERS"
+  chmod 600 "$ANSWERS"
+fi
+
 # ---------------------------------------------------------------- 2. stack files
 if [ ! -f "$STACK/docker-compose.yml" ]; then
   bold "Copying the stack files into $STACK"
@@ -86,7 +115,25 @@ setenv SUPABASE_PUBLIC_URL "https://$SERVER_NAME"
 setenv API_EXTERNAL_URL   "https://$SERVER_NAME/auth/v1"
 setenv SITE_URL           "https://$SERVER_NAME"
 setenv PROXY_DOMAIN       "$SERVER_NAME"
-setenv ENABLE_EMAIL_AUTOCONFIRM true
+# Sign-up (3 Oct 2026, see questions 5 and 6). An address is never trusted unconfirmed.
+setenv ENABLE_EMAIL_AUTOCONFIRM false
+if [ -n "${SMTP_HOST_ANS:-}" ]; then
+  setenv DISABLE_SIGNUP false
+  setenv SMTP_HOST "$SMTP_HOST_ANS"
+  setenv SMTP_PORT "$SMTP_PORT_ANS"
+  setenv SMTP_USER "$SMTP_USER_ANS"
+  setenv SMTP_ADMIN_EMAIL "$SMTP_FROM_ANS"
+  setenv SMTP_SENDER_NAME "Safety Lab Aero"
+  # The password goes in single quotes so Docker reads it literally (a $ in it is not a variable).
+  if [ -n "${SMTP_PASS_NEW:-}" ]; then
+    grep -v '^SMTP_PASS=' .env > .env.tmp && printf "SMTP_PASS='%s'\n" "$SMTP_PASS_NEW" >> .env.tmp && mv .env.tmp .env
+  fi
+  SIGNUP_MODE=mail
+else
+  setenv DISABLE_SIGNUP true
+  SIGNUP_MODE=admin
+fi
+unset SMTP_PASS_NEW
 setenv ENABLE_PHONE_SIGNUP false
 setenv ENABLE_PHONE_AUTOCONFIRM false
 setenv COMPOSE_FILE "docker-compose.yml:docker-compose.caddy.yml:docker-compose.safetylab.yml"
@@ -170,6 +217,28 @@ else
   done
 fi
 
+# ---------------------------------------------------------------- 6b. the administrator's account
+# Made here, by the script, before anyone is told the server exists, so nobody can register the
+# administrator's address first (3 Oct 2026). Then made administrator by that exact address.
+# shellcheck disable=SC1091
+. "$HERE/accounts.sh"
+SLAB_SERVICE_KEY="$(grep '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)"; export SLAB_SERVICE_KEY
+ADMIN_PW=""
+ADMIN_SQL_EMAIL="$(printf '%s' "$ADMIN_EMAIL" | tr 'A-Z' 'a-z')"
+if [ "$(PGX -Atc "select count(*) from private.platform_admins where lower(email) = '$ADMIN_SQL_EMAIL'")" = "1" ]; then
+  bold "Administrator account already set up ($ADMIN_EMAIL)"
+else
+  bold "Creating the administrator account ($ADMIN_EMAIL)"
+  sleep 2
+  set +e; ADMIN_PW="$(slab_create_account "$ADMIN_EMAIL")"; rc=$?; set -e
+  if [ $rc -eq 2 ]; then
+    die "An account for $ADMIN_EMAIL already exists on this server but is not the administrator: someone created it before this script did. Do not make it administrator. Tell Safety Lab."
+  fi
+  [ $rc -eq 0 ] || die "Could not create the administrator account. Run this script again; if it fails again, send the output above to Safety Lab."
+  PGX -c "insert into private.platform_admins(email) values ('$ADMIN_SQL_EMAIL') on conflict do nothing" >/dev/null
+  echo "   Created and made administrator."
+fi
+
 # ---------------------------------------------------------------- 7. check the front door
 sleep 3
 PUB=$(grep '^SUPABASE_PUBLISHABLE_KEY=' .env | cut -d= -f2-)
@@ -234,7 +303,10 @@ users load the .lic file separately in the app." )
 
 The user: install the Safety Lab Aero desktop app from https://safetylabaero.com, open it, click
 "Choose setup file..." and pick that file (or drop the file on the window). Done. Then accept the
-agreement, create an account with the work email, sign in.
+agreement and sign in.
+$( [ "$SIGNUP_MODE" = mail ] && echo "New users choose Create account, use their work email, and click the link in the email they get." || echo "Accounts: this server has no mail server, so users cannot create their own account. The administrator
+creates each one:   cd \"$HERE\" && ./add-user.sh person@yourcompany.com
+and gives the person the temporary password it prints. They change it under Account, Change password." )
 
 If you would rather type the values by hand, they are:
 
@@ -247,7 +319,7 @@ Under "AI":
   Choose:            My organization's AI endpoint
   AI endpoint:       https://$SERVER_NAME/v1/ai
 
-Then load the license file Safety Lab sent you, and sign in (first time: Create account).
+Then load the license file Safety Lab sent you, and sign in.
 $( [ "$SELF_SIGNED" = 1 ] && [ -n "$PIN" ] && echo "
 This install made its own certificate. The setup file carries its fingerprint, so the desktop app
 trusts this server automatically; users install nothing. Only a web browser opening
@@ -262,11 +334,15 @@ user's computer must trust $HERE/trust-this-on-every-user-computer.crt by hand
 For the administrator only
 --------------------------
 Admin dashboard:   https://$SERVER_NAME/project/   user: $DASH_U   password: DASHBOARD_PASSWORD in $STACK/.env
-Make yourself a platform administrator (once; use the email you sign in with):
-  cd "$STACK" && docker compose exec -T db psql -U postgres -d postgres -c "insert into private.platform_admins(email) values ('you@yourcompany.com')"
+Administrator:     $ADMIN_EMAIL (made by this script; it is already the platform administrator)
+Add a user:        cd "$HERE" && ./add-user.sh person@yourcompany.com
 Is it running?     cd "$STACK" && docker compose ps
 Stop / start:      cd "$STACK" && docker compose stop      /     docker compose start
 Back up:           copy $STACK/volumes/db/data (the database) and $STACK/.env and $STACK/ai-proxy.env (the keys) somewhere safe
 EOF
 bold "Done."
 cat "$HERE/WHAT-TO-TYPE-IN-THE-APP.txt"
+if [ -n "$ADMIN_PW" ]; then
+  # Shown once, here only; never written to a file.
+  printf '\n\033[1mYour administrator sign-in\033[0m\n  email:     %s\n  password:  %s\nSign in with it in the app, then change it under Account, Change password.\n' "$ADMIN_EMAIL" "$ADMIN_PW"
+fi

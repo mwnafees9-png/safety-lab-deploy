@@ -804,11 +804,15 @@
         ? 'Email or password is incorrect. If you have not signed up yet, switch to "Create account" above.'
         : (/email not confirmed/i.test(msg)
               ? 'Please verify your email first. Check your inbox for the activation link.'
+              : (/signups not allowed|signup_disabled/i.test(msg)
+                  // 3 Oct 2026: a customer server with no mail server has open sign-up off; the
+                  // administrator creates accounts (customer-install/selfhost/add-user.sh).
+                  ? 'New accounts on this server are created by your administrator. Ask them to add you; they will give you a temporary password to sign in with.'
               : (/user already registered/i.test(msg)
                   ? 'An account with this email already exists. Switch to "Sign in" above.'
                   : (/weak password|password.*8/i.test(msg)
                         ? 'Password must be at least 8 characters.'
-                        : msg)));
+                        : msg))));
       showMessage(friendly, 'error');
     } finally {
       btn.disabled = false;

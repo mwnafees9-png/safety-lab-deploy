@@ -96,13 +96,20 @@ and never deletes your data.
    administrator gave you (or drop the file on the window). It fills in the server, the AI
    and the license. Click Next, read and accept the agreement, click Finish.
 
-4. Click Create account, enter your work email and a password, and you are in.
+4. Sign in. If your server has a mail server, click Create account, use your work email,
+   and click the link in the email you receive. If it does not, your administrator creates
+   your account and gives you a temporary password: sign in with it, then change it under
+   Account, Change password.
 
-## Part 4. Make yourself the administrator (once)
+## Part 4. The administrator account
 
-In the Ubuntu or Terminal window, go to the `stack` folder inside `selfhost` and run the
-one-line command shown under "For the administrator only" in `WHAT-TO-TYPE-IN-THE-APP.txt`,
-with your own email in it.
+The install script asks for the administrator's email, creates that account itself and makes
+it the administrator, then prints its temporary password once at the end. Sign in with it and
+change it under Account, Change password. To add a user on a server with no mail server, run
+`./add-user.sh person@yourcompany.com` in the `selfhost` folder and give them the password it
+prints. (Why: without a mail server nobody can check that a person owns the address they type,
+and the app trusts that address for invitations, the administrator role and sign-off records.
+So open sign-up is off on such a server.)
 
 ## Day to day
 

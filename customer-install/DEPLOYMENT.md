@@ -40,11 +40,16 @@ connection string (Supabase: *Project Settings → Database → Connection strin
 ./apply.sh "postgresql://postgres:PASSWORD@db.YOURREF.supabase.co:5432/postgres"
 ```
 
-Then make yourself an administrator (run in the Supabase SQL editor or psql):
+Then make yourself an administrator. First sign up in the app with that address and confirm it
+from the email it sends (keep "Confirm email" switched on in your Supabase project's Auth
+settings; it is on by default). Only then, in the Supabase SQL editor or psql:
 
 ```sql
 insert into private.platform_admins(email) values ('you@yourcompany.com');
 ```
+
+Do it in that order: the administrator role follows the address, so it must belong to an
+account whose address you have confirmed yourself.
 
 Your database is ready. Nothing here contacted Safety Lab.
 

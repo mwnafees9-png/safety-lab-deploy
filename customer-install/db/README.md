@@ -42,9 +42,15 @@ run only the numbered files you have not run yet, in order. `tests/regression_cu
 in the main repo checks that this list stays in step with the production migrations.
 
 ## After install
-Make yourself an administrator:
+Then make yourself an administrator. First sign up in the app with that address and confirm it
+from the email it sends (keep "Confirm email" switched on in your Supabase project's Auth
+settings; it is on by default). Only then, in the Supabase SQL editor or psql:
+
 ```sql
 insert into private.platform_admins(email) values ('you@yourcompany.com');
 ```
+
+Do it in that order: the administrator role follows the address, so it must belong to an
+account whose address you have confirmed yourself.
 That's it for the database. Point the app and the AI proxy at it next (see the
 deployment guide).

@@ -71,5 +71,39 @@ console.log('\n[apply.sh] the database password never reaches a command line');
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
 }
 
+console.log('\n[accounts] sign-up never trusts an unconfirmed address');
+{
+  check('autoconfirm is off in every mode', /setenv ENABLE_EMAIL_AUTOCONFIRM false/.test(inst) && !/setenv ENABLE_EMAIL_AUTOCONFIRM true/.test(inst));
+  check('no mail server: open sign-up off', /else\n\s*setenv DISABLE_SIGNUP true\n\s*SIGNUP_MODE=admin/.test(inst));
+  check('mail server: sign-up on, mail settings written, password kept literal', /setenv DISABLE_SIGNUP false\n\s*setenv SMTP_HOST "\$SMTP_HOST_ANS"/.test(inst) && /printf "SMTP_PASS='%s'\\n"/.test(inst));
+  check('the mail password is never saved in answers.env', !/SMTP_PASS_NEW[^\n]*>> "\$ANSWERS"/.test(inst) && /ADMIN_EMAIL=%q\\nSMTP_HOST_ANS=%q\\nSMTP_PORT_ANS=%q\\nSMTP_USER_ANS=%q\\nSMTP_FROM_ANS=%q/.test(inst));
+  check('the administrator account is made by the script before the user sheet', inst.indexOf('6b. the administrator') > 0 && inst.indexOf('6b. the administrator') < inst.indexOf('8. the setup file'));
+  check('an administrator address someone registered first stops the install', /if \[ \$rc -eq 2 \]; then\n\s*die "An account for \$ADMIN_EMAIL already exists on this server but is not the administrator/.test(inst));
+  check('the old "insert your own email as admin" instruction is gone', !/insert into private\.platform_admins\(email\) values \('you@yourcompany\.com'\)/.test(inst));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'slab-acc-'));
+  // A stand-in for docker: records its own command line and environment, answers like GoTrue.
+  fs.writeFileSync(path.join(dir, 'docker'), '#!/bin/bash\necho "ARGV: $*" >> "$SLAB_LOG"\necho "ENVKEY: ${SLAB_SERVICE_KEY:0:6} BODY: $SLAB_BODY" >> "$SLAB_LOG"\nif [[ "$SLAB_BODY" == *taken@* ]]; then printf \'{"msg":"A user with this email address has already been registered"}\\n422\'; else printf \'{"id":"u1"}\\n201\'; fi\n');
+  fs.chmodSync(path.join(dir, 'docker'), 0o755);
+  const kit = path.join(REPO, 'customer-install/selfhost');
+  fs.mkdirSync(path.join(dir, 'stack')); fs.writeFileSync(path.join(dir, 'stack/.env'), 'SERVICE_ROLE_KEY=SECRETKEYVALUE123\n');
+  fs.copyFileSync(path.join(kit, 'accounts.sh'), path.join(dir, 'accounts.sh')); fs.copyFileSync(path.join(kit, 'add-user.sh'), path.join(dir, 'add-user.sh'));
+  const log = path.join(dir, 'log.txt');
+  const run = (email) => { try { fs.unlinkSync(log); } catch (_) {} return cp.spawnSync('bash', [path.join(dir, 'add-user.sh'), email], { encoding: 'utf8', env: Object.assign({}, process.env, { PATH: dir + ':' + process.env.PATH, SLAB_LOG: log }) }); };
+  const r1 = run('new.person@co.test');
+  const pw = ((r1.stdout || '').match(/Temporary password:\s+(\S+)/) || [])[1] || '';
+  const lg = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
+  check('add-user.sh creates the account and prints a temporary password', r1.status === 0 && pw.length >= 16, (r1.stdout || '') + (r1.stderr || ''));
+  check('the temporary password meets the app\'s sign-up rule', /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw));
+  check('the account is created confirmed (the administrator vouches for the address)', /"email_confirm":true/.test(lg));
+  const argv = lg.split('\n').filter(l => l.startsWith('ARGV:')).join('\n');
+  check('neither the service key nor the password is on a command line', argv.length > 0 && argv.indexOf('SECRETKEYVALUE123') < 0 && argv.indexOf(pw) < 0, argv);
+  check('the service key reaches the container through its environment', /ENVKEY: SECRET/.test(lg));
+  const r2 = run('taken@co.test');
+  check('an address already registered: says so, changes nothing', r2.status === 0 && /already exists/.test(r2.stdout || ''));
+  const r3 = run("bad'@x");
+  check('not an email address: refused before any call', r3.status !== 0 && !fs.existsSync(log));
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+}
+
 console.log('\n' + (fail ? 'FAIL' : 'PASS') + '  ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

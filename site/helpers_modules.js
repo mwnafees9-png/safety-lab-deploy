@@ -8144,6 +8144,7 @@ function openAccountPanel() {
       +     _acctOpenInRow(esc)
       +     '<div id="acct-msg" style="font-size:12px;min-height:14px;"></div>'
       +     '<div id="acct-mfa-mount" style="border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:12px;"></div>'
+      +     '<div id="acct-password-mount" style="border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:10px;"></div>'
       +     '<details style="margin-top:2px;border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:10px;"><summary style="font-size:12px;font-weight:600;color:#b91c1c;cursor:pointer;">Danger zone</summary>'
       +       '<div style="font-size:11.5px;color:var(--color-text-secondary,#667085);margin:8px 0;line-height:1.45;">Permanently erase your account and all your safety-analysis data, and receive a certificate of destruction. This cannot be undone.</div>'
       +       '<button type="button" id="acct-delete" style="border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:9px;padding:7px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;">Delete my account &amp; data…</button>'
@@ -8157,6 +8158,8 @@ function openAccountPanel() {
     document.body.appendChild(ov);
     // Two-factor authentication section (born-modular; mfa.js populates the mount).
     try { if (window.SafetyLabMFA && typeof window.SafetyLabMFA.mount === 'function') window.SafetyLabMFA.mount('acct-mfa-mount'); } catch(_){}
+    // Change password (3 Oct 2026, born-modular; account_password.js populates the mount).
+    try { if (window.SafetyLabPassword && typeof window.SafetyLabPassword.mount === 'function') window.SafetyLabPassword.mount('acct-password-mount'); } catch(_){}
     _wireAvatarControls(email, function () { try { return (document.getElementById('acct-name') || {}).value || curName; } catch (_) { return curName; } });
     const close = function(){ try { ov.remove(); } catch(_){} };
     ov.addEventListener('mousedown', function(e){ if (e.target === ov) close(); });
