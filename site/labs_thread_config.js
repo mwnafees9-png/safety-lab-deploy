@@ -27,6 +27,15 @@
             window.__SLAB_SUPABASE_KEY__ ||
             (window.SafetyLab && window.SafetyLab.SUPABASE_KEY) ||
             'sb_publishable_ExwM8wVKnQ3chHQKPyRFOw_WMtLGfiQ'),
-        channel: 'labs-thread'
+        channel: 'labs-thread',
+        // 3 Oct 2026 (security review, batch 4): the cross-machine leg is OFF. It was a PUBLIC
+        // Realtime channel (labs-thread:AE-001) that every copy of the app joined, for every
+        // project of every customer: anyone holding the publishable key could read each
+        // assumption state change as it happened and inject "part-release" / "evidence" events
+        // into every user's assumption register. It is the AE-001 family bus, not a customer
+        // feature. Same-browser BroadcastChannel stays. Turning this back on needs an authorized
+        // (private, workspace-scoped) channel first, like the co-editing channels; until then
+        // nothing in a shipped build sets it.
+        cloud: false
     };
 })();

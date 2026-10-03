@@ -491,10 +491,47 @@ function notifyHostAllowed(rawUrl) {
   return NOTIFY_WEBHOOK_HOSTS.some((suf) => h.endsWith(suf) && h.length > suf.length);
 }
 
+// 3 Oct 2026 (security review, batch 4): every field below comes from the browser. In the
+// email it went into HTML raw and in the Teams card into markdown raw, so a caller could put a
+// link or markup of their choosing into a message sent from our alerts address. Escaped now, and
+// capped in length.
+function escHtml(v, max) {
+  return String(v == null ? "" : v).slice(0, max || 300)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function escMd(v, max) {
+  return String(v == null ? "" : v).slice(0, max || 300).replace(/[\\`*_{}\[\]()#+!|<>~]/g, (c) => "\\" + c).replace(/[\r\n]+/g, " ");
+}
+// Who may receive the email. It went to any address the caller typed, so anyone holding a
+// licence could have our alerts address mail anyone with content of their choosing. Now: the
+// caller's own address, or another address at the caller's own company domain. A free-mail
+// domain counts as personal, so there only the caller's own address is allowed.
+const FREE_MAIL = ["gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com", "icloud.com", "me.com", "aol.com", "proton.me", "protonmail.com", "gmx.com", "mail.com", "yandex.com", "zoho.com"];
+function notifyRecipientAllowed(to, own) {
+  const t = String(to || "").trim().toLowerCase(), o = String(own || "").trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(t) || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o)) return false;
+  if (t === o) return true;
+  const td = t.split("@")[1], od = o.split("@")[1];
+  return td === od && FREE_MAIL.indexOf(od) === -1;
+}
+async function callerEmail(env, caller) {
+  if (!caller) return "";
+  if (caller.email) return caller.email;
+  if (!caller.userId || !env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return "";
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(caller.userId)}`, {
+      headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` },
+    });
+    if (!r.ok) return "";
+    const u = await r.json();
+    return String((u && (u.email || (u.user && u.user.email))) || "");
+  } catch (_) { return ""; }
+}
+
 function notifyAdaptiveCard(body) {
   const rows = (body.worsened || []).slice(0, 20).map((x) => ({
     type: "TextBlock", wrap: true, spacing: "Small", size: "Small",
-    text: `**${x.kind || "issue"}** · ${x.where || ""} · \`${x.ref || ""}\` — ${x.reason || ""}`,
+    text: `**${escMd(x.kind || "issue", 60)}** · ${escMd(x.where, 120)} · ${escMd(x.ref, 120)} — ${escMd(x.reason, 300)}`,
   }));
   const c = body.counts || {};
   return {
@@ -508,7 +545,7 @@ function notifyAdaptiveCard(body) {
           { type: "TextBlock", weight: "Bolder", size: "Medium",
             text: body.test ? "Safety Lab Aero — test notification" : "Safety Lab Aero — project integrity worsened" },
           { type: "TextBlock", spacing: "None", isSubtle: true, size: "Small",
-            text: `Project: ${body.project || "Untitled"} · stale ${c.stale || 0} · dangling ${c.dangling || 0} · compromised ${c.compromised || 0}` },
+            text: `Project: ${escMd(body.project || "Untitled", 120)} · stale ${Number(c.stale) || 0} · dangling ${Number(c.dangling) || 0} · compromised ${Number(c.compromised) || 0}` },
           ...(body.test ? [{ type: "TextBlock", wrap: true, size: "Small",
             text: "The webhook is wired correctly. Real notifications fire only when this project's integrity worsens." }] : rows),
           { type: "TextBlock", spacing: "Small", size: "Small", isSubtle: true, wrap: true,
@@ -519,7 +556,7 @@ function notifyAdaptiveCard(body) {
   };
 }
 
-async function handleNotify(request, env, token) {
+async function handleNotify(request, env, token, caller) {
   let body;
   try { body = JSON.parse(await request.text()); }
   catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Body must be JSON." } }); }
@@ -566,11 +603,13 @@ async function handleNotify(request, env, token) {
       out.teams = r.status;
     } catch (e) { out.teams = "error: " + String((e && e.message) || e); }
   }
-  if (email && env.RESEND_API_KEY) {
+  if (email && env.RESEND_API_KEY && !notifyRecipientAllowed(email, await callerEmail(env, caller))) {
+    out.email = "recipient_not_allowed";
+  } else if (email && env.RESEND_API_KEY) {
     try {
       const c = body.counts || {};
       const lines = (body.worsened || []).slice(0, 40)
-        .map((x) => `<li><b>${x.kind || "issue"}</b> · ${x.where || ""} · <code>${x.ref || ""}</code> — ${x.reason || ""}</li>`).join("");
+        .map((x) => `<li><b>${escHtml(x.kind || "issue", 60)}</b> · ${escHtml(x.where, 120)} · <code>${escHtml(x.ref, 120)}</code> — ${escHtml(x.reason, 300)}</li>`).join("");
       const r = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
@@ -578,9 +617,9 @@ async function handleNotify(request, env, token) {
           from: "Safety Lab Aero Alerts <alerts@send.safetylabaero.com>",
           to: [email],
           subject: body.test ? "Safety Lab Aero — test notification"
-            : `Integrity worsened — ${body.project || "Untitled"} (${(body.worsened || []).length} new)`,
+            : `Integrity worsened — ${String(body.project || "Untitled").replace(/[\r\n]+/g, " ").slice(0, 120)} (${(body.worsened || []).length} new)`,
           html: `<p><b>${body.test ? "Test notification — the email rail is wired correctly." : "Project integrity worsened."}</b></p>` +
-            `<p>Project: ${body.project || "Untitled"} · stale ${c.stale || 0} · dangling ${c.dangling || 0} · compromised ${c.compromised || 0}</p>` +
+            `<p>Project: ${escHtml(body.project || "Untitled", 120)} · stale ${Number(c.stale) || 0} · dangling ${Number(c.dangling) || 0} · compromised ${Number(c.compromised) || 0}</p>` +
             (body.test ? "" : `<ul>${lines}</ul>`) +
             `<p style="color:#667">Open Safety Lab → Traceability &amp; Evidence → Thread Integrity to disposition. Notifications are per-project and configured in the tool.</p>`,
         }),
@@ -668,7 +707,7 @@ async function verifyOfflineLicense(env, blob) {
   } catch (_) { return { error: "invalid_token" }; }
 }
 
-export { weightedTokens, MODEL_TOKEN_WEIGHTS };   // metering, testable in isolation (test/cache_metering.test.mjs)
+export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed };   // metering, testable in isolation (test/cache_metering.test.mjs)
 
 // The router. Everything it returns goes through withCors() at the boundary below, so no
 // handler has to know or care what the calling origin was.
@@ -694,7 +733,7 @@ async function routeRequest(request, env, ctx) {
         const v = await verifyUserJwt(env, token);
         if (v.error === "supabase_unreachable") return jsonResponse(502, { error: { type: "upstream_down", message: "Auth backend unreachable." } });
         if (v.error) return jsonResponse(401, { error: { type: "invalid_token", message: "Token not recognized." } });
-        caller = { kind: "user", userId: v.userId, token };
+        caller = { kind: "user", userId: v.userId, email: v.email || "", token };
         // No licence: no allowance to exhaust, no licence-level ITAR flag (the header can still
         // raise it), and a fixed request cap so the relay cannot be hammered on someone's behalf.
         check = { license: { plan: "byo", user_id: v.userId }, used: 0, remaining: null, exhausted: false, itarRequired: false, rateLimitRpm: 60 };
@@ -746,7 +785,7 @@ async function routeRequest(request, env, ctx) {
             { error: { type: "rate_limited", message: "Notification rate limit (6/min) exceeded. Retry shortly." }, retry_after: 60 },
             { "retry-after": "60" });
         }
-        return handleNotify(request, env, token);
+        return handleNotify(request, env, token, caller);
       }
 
       // SEC-8 — effective ITAR flag: server truth OR client escalation.

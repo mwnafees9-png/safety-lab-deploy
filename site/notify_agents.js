@@ -270,7 +270,7 @@
         document.getElementById('na-test').addEventListener('click', function () {
             read(); _save(); status('Sending test…');
             naSend({ test: true }).then(function (r) {
-                status(r && r.ok ? 'Test delivered.' : 'Test failed: ' + ((r && (r.skipped || r.error || (r.error_detail || ''))) || 'see console'));
+                status(r && r.ok ? 'Test delivered.' : 'Test failed: ' + ((r && r.email === 'recipient_not_allowed') ? 'the email must be your own address or one at your own company domain (3 Oct 2026 rule).' : ((r && (r.skipped || r.error || (r.error_detail || ''))) || 'see console')));
             }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'notify_agents'); });
         });
         document.getElementById('na-ack').addEventListener('click', function () {

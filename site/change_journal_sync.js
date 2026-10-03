@@ -1,5 +1,5 @@
 // ============================================================================
-// change_journal_sync.js — v1.0 — Stage 3 client wiring (9 Sep 2026).
+// change_journal_sync.js — v1.1 — Stage 3 client wiring (9 Sep 2026); outbox + retry (3 Oct 2026).
 //
 // Mirrors the app's MEANINGFUL ACTIONS to the server-side, append-only,
 // hash-chained stores built in migration 20260909030000:
@@ -34,6 +34,71 @@
         catch (_) { try { return !!(window._supabaseSession && window._supabaseSession.user); } catch (__) { return false; } }
     }
     function _swallow(p) { try { if (p && typeof p.then === 'function') p.then(function () {}, function () {}); } catch (_) {} }
+    function _uid() {
+        try { return (typeof _supabaseSession !== 'undefined' && _supabaseSession && _supabaseSession.user && _supabaseSession.user.id) || ''; }
+        catch (_) { try { return (window._supabaseSession && window._supabaseSession.user && window._supabaseSession.user.id) || ''; } catch (__) { return ''; } }
+    }
+
+    // ---- the outbox (3 Oct 2026, security review batch 4) -------------------------------------
+    // A journal row used to be sent once and forgotten: offline, a dropped connection or a busy
+    // server meant the change history silently lost that entry. Now a row that fails for a reason
+    // that can pass (no network, 408, 429, 5xx) waits in an outbox kept in this browser and is
+    // sent again, oldest first, on a back-off and when the connection returns. A refusal (no
+    // edit rights, bad row) is not retried. Rows only ever go out under the account that made
+    // them: the server stamps the actor from the session at insert time, so a row made by one
+    // person is never sent while someone else is signed in. The server also stamps the time at
+    // insert, so the time the change was really made travels in summary.client_at. Order is
+    // kept: while the outbox holds anything, new rows queue behind it. Still fail-soft: nothing
+    // here is awaited by a save, and nothing throws into one.
+    var OUTBOX_KEY = 'slab.journal.outbox.v1', OUTBOX_MAX = 500;
+    var _outbox = (function () { try { var a = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } })();
+    var _draining = false, _retryTimer = null, _backoff = 2000;
+    function _persist() { try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_outbox.slice(-OUTBOX_MAX))); } catch (_) {} }
+    function _retryable(res, thrown) {
+        if (thrown) return true;
+        var st = res && (res.status != null ? res.status : (res.error && res.error.status));
+        if (!res || !res.error) return false;
+        if (st === 0 || st == null) return /fetch|network|timeout|failed to/i.test(String(res.error.message || ''));
+        return st === 408 || st === 429 || st >= 500;
+    }
+    function _scheduleRetry() {
+        if (_retryTimer) return;
+        _retryTimer = setTimeout(function () { _retryTimer = null; _drain(); }, _backoff);
+        _backoff = Math.min(_backoff * 2, 5 * 60 * 1000);
+    }
+    async function _send(item) {
+        var client = _client(); if (!client) return 'retry';
+        var res, thrown = false;
+        try { res = await client.from(item.table).insert(item.row); } catch (_) { thrown = true; }
+        if (!thrown && res && !res.error) return 'sent';
+        return _retryable(res, thrown) ? 'retry' : 'drop';
+    }
+    async function _drain() {
+        if (_draining) return;
+        _draining = true;
+        try {
+            var me = _uid();
+            while (_outbox.length) {
+                var i = -1;
+                for (var k = 0; k < _outbox.length; k++) { if (_outbox[k].uid === me) { i = k; break; } }
+                if (i < 0 || !me) break;                       // only rows made by whoever is signed in now
+                var r = await _send(_outbox[i]);
+                if (r === 'retry') { _scheduleRetry(); break; }
+                _outbox.splice(i, 1); _persist();
+                _backoff = 2000;
+            }
+        } catch (_) {}
+        finally { _draining = false; }
+    }
+    function _enqueue(table, row) {
+        var me = _uid(); if (!me) return;
+        _outbox.push({ table: table, row: row, uid: me });
+        if (_outbox.length > OUTBOX_MAX) _outbox.splice(0, _outbox.length - OUTBOX_MAX);
+        _persist();
+        _drain();
+    }
+    try { window.addEventListener('online', function () { _backoff = 2000; _drain(); }); } catch (_) {}
+    setTimeout(function () { try { _drain(); } catch (_) {} }, 4000);   // rows left from an earlier session
 
     // Fire-and-forget append of one meaningful action. Never throws, never awaited.
     function record(action, opts) {
@@ -49,10 +114,10 @@
                 action: String(action).slice(0, 80),
                 entity_kind: opts.entity_kind ? String(opts.entity_kind).slice(0, 60) : null,
                 entity_id: (opts.entity_id != null && opts.entity_id !== '') ? String(opts.entity_id).slice(0, 200) : null,
-                summary: summary
+                summary: Object.assign({}, summary, { client_at: new Date().toISOString() })
                 // actor, actor_email, ts, prev_hash, row_hash: all server-set by the chain trigger.
             };
-            _swallow(client.from('change_journal').insert(row));
+            _enqueue('change_journal', row);
         } catch (_) { /* never surface a journaling fault to the caller */ }
     }
 
@@ -65,9 +130,9 @@
                 project_id: projectId,
                 report_id: String(reportId).slice(0, 200),
                 event: String(event).slice(0, 40),
-                payload: (payload && typeof payload === 'object') ? payload : { text: String(payload == null ? '' : payload) }
+                payload: Object.assign({}, (payload && typeof payload === 'object') ? payload : { text: String(payload == null ? '' : payload) }, { client_at: new Date().toISOString() })
             };
-            _swallow(client.from('problem_report_events').insert(row));
+            _enqueue('problem_report_events', row);
         } catch (_) {}
     }
 
@@ -258,6 +323,8 @@
         deepVerify: deepVerify,
         showHistory: showHistory,
         _verifyLinkage: _verifyLinkage,
-        _meaningful: JRNL_MEANINGFUL
+        _meaningful: JRNL_MEANINGFUL,
+        _outbox: function () { return _outbox.slice(); },
+        _drain: _drain
     };
 })();

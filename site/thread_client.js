@@ -98,6 +98,10 @@
             // client is loaded. Same shape the family's other tools use.
             cfg = cfg || (typeof window !== 'undefined' && window.LABS_THREAD_CONFIG) || null;
             if (!cfg || !cfg.url || !cfg.anonKey) return null;
+            // 3 Oct 2026: the cloud leg only on an explicit cloud === true (labs_thread_config.js
+            // explains why it is off), and never for an export-controlled project.
+            if (cfg.cloud !== true) return null;
+            try { if (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled) return null; } catch (_) { return null; }
             if (typeof window === 'undefined' || !window.supabase || !window.supabase.createClient) return null;
             try {
                 // v1.1: the bus client is auth-inert — no session persistence, no

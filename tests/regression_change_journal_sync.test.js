@@ -56,12 +56,15 @@ function boot(opts) {
   return { api: ctx.SLJournal, jrnl: ctx.window.jrnl, inserts, jrnlCalls, ctx };
 }
 
+// 3 Oct 2026: rows now go out through an outbox that sends them one after another, so a
+// write lands a few microtasks later than before; flush() waits those out.
+const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
 (async () => {
   console.log('[cjs] record(): row shape, and NO server-set fields sent');
   {
     const e = boot();
     e.api.record('baseline.cut', { entity_kind: 'baseline', entity_id: 7, summary: { text: 'Revision 7', label: 'R7' } });
-    await Promise.resolve();
+    await flush();
     const ins = e.inserts.filter(i => i.table === 'change_journal');
     check('one change_journal insert', ins.length === 1, 'got ' + ins.length);
     const row = ins[0] && ins[0].row || {};
@@ -79,11 +82,11 @@ function boot(opts) {
   {
     let threw = false;
     try {
-      const so = boot({ signedOut: true }); so.api.record('x', {}); await Promise.resolve();
+      const so = boot({ signedOut: true }); so.api.record('x', {}); await flush();
       check('signed out -> no insert', so.inserts.length === 0);
-      const np = boot({ noProj: true }); np.api.record('x', {}); await Promise.resolve();
+      const np = boot({ noProj: true }); np.api.record('x', {}); await flush();
       check('no cloud project -> no insert', np.inserts.length === 0);
-      const nc = boot({ noClient: true }); nc.api.record('x', {}); await Promise.resolve();
+      const nc = boot({ noClient: true }); nc.api.record('x', {}); await flush();
       check('no client -> no insert', nc.inserts.length === 0);
     } catch (_) { threw = true; }
     check('record() never throws across the fail-soft paths', threw === false);
@@ -95,7 +98,7 @@ function boot(opts) {
     e.jrnl('rename', 'renamed A -> B');       // meaningful (allowlisted)
     e.jrnl('fuzz', 'fuzz noise');             // dev noise (NOT allowlisted)
     e.jrnl('self-test', 'engine self-test');  // dev noise
-    await Promise.resolve();
+    await flush();
     const acts = e.inserts.filter(i => i.table === 'change_journal').map(i => i.row.action);
     check('meaningful jrnl kind mirrored (rename)', acts.indexOf('rename') !== -1, JSON.stringify(acts));
     check('noise jrnl kind NOT mirrored (fuzz)', acts.indexOf('fuzz') === -1);
@@ -117,7 +120,7 @@ function boot(opts) {
     const e = boot();
     e.api.problemEvent('pr-1', 'opened', { status: 'open', title: 'CB latent' });
     e.api.problemEvent('pr-1', 'resolved', { status: 'closed', ecnId: 'ecn-1' });
-    await Promise.resolve();
+    await flush();
     const ev = e.inserts.filter(i => i.table === 'problem_report_events');
     check('two problem_report_events inserts', ev.length === 2, 'got ' + ev.length);
     check('report_id + event carried', ev[0].row.report_id === 'pr-1' && ev[0].row.event === 'opened');
@@ -173,7 +176,7 @@ function boot(opts) {
     ctx.window = ctx; ctx._activeCloudProjectId = 'proj-1'; ctx._supabaseSession = { user: { id: 'me' } };
     ctx.window.jrnl = function () {};   // base jrnl for the module to wrap
     vm.createContext(ctx); vm.runInContext(mutated, ctx);
-    ctx.window.jrnl('fuzz', 'noise'); await Promise.resolve();
+    ctx.window.jrnl('fuzz', 'noise'); await flush();
     const leaked = inserts.filter(i => i.table === 'change_journal' && i.row.action === 'fuzz').length > 0;
     check('MUTATION (drop allowlist gate) would let noise leak -> guarded here', leaked === true);
   }

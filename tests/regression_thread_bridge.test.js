@@ -48,7 +48,7 @@ const iSdk = idx.indexOf('vendor/supabase.min.js');
 check('the Supabase SDK is loaded from this build, not a CDN', iSdk > -1 && !/src="https?:\/\/[^"]*supabase-js/.test(idx));
 check('index.html loads SDK, then config → client → bridge, cache-busted',
     iSdk > -1 && iSdk < iCfg && iCfg < iCli && iCli < iBr &&
-    /labs_thread_config\.js\?v=/.test(idx) && /thread_client\.js\?v=1\.1/.test(idx) && /thread_bridge\.js\?v=/.test(idx));
+    /labs_thread_config\.js\?v=/.test(idx) && /thread_client\.js\?v=1\.2/.test(idx) && /thread_bridge\.js\?v=/.test(idx));
 const worker = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8');
 check('worker CSP already names the bus origin (https + wss)',
     /connect-src[^"]*https:\/\/fhrqkhdrwbfnizkepkch\.supabase\.co/.test(worker) &&
