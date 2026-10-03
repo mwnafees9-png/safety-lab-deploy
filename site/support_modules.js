@@ -1260,6 +1260,8 @@ function renderProjectConfigUI() {
         const targetText = cat.prob ? '&lt;' + cat.prob.toExponential(0) + ' /fh' : 'see methodology note above';
         summary.innerHTML = '<strong>Active basis:</strong> ' + esc(certBasisDisplayLabel()) + '  &nbsp;|&nbsp;  <strong>Catastrophic target:</strong> ' + targetText + '  &nbsp;|&nbsp;  <strong>DAL ' + esc(cat.dal || '—') + '</strong> ' + (cat.dal ? 'required for Cat-level top events.' : '(not applicable to this cert basis).');
     }
+    // 3 Oct 2026 — the severity definitions table follows the certification basis.
+    try { if (typeof SLSeverityTables !== 'undefined') SLSeverityTables.render(projectConfig); } catch (_) {}
     renderProbTable();
 }
 

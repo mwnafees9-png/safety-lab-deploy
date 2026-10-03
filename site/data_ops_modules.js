@@ -281,16 +281,12 @@ function exportData(moduleName, format) {
                     ['AC Hazard FC ID','AC Severity','System Hazard FC ID','System Severity','System Sub-Function'],
                     rows);
             }
-            case 'Definitions':
-                return downloadCSV(file('AC_1309_Definitions'),
-                    ['Classification','Effect on Aircraft','Effect on Occupants','Effect on Flight Crew'],
-                    [
-                        ['Catastrophic','Normally with hull loss. A failure condition that would prevent continued safe flight and landing is Catastrophic.','Multiple fatalities.','Fatalities or incapacitation.'],
-                        ['Hazardous','Large reduction in functional capabilities or safety margins.','Serious or fatal injury to a small number of persons other than the flightcrew.','Physical distress or excessive workload such that the flightcrew cannot be relied upon to perform their tasks accurately or completely.'],
-                        ['Major','Significant reduction in safety margins or functional capabilities.','Physical distress, possibly including injuries.','A physical discomfort or significant increase in workload or in conditions impairing the efficiency of the flightcrew.'],
-                        ['Minor','Slight reduction in functional capabilities or safety margins.','Physical discomfort.','Slight increase in workload (routine flight plan changes, emergency procedures well within crew capability).'],
-                        ['No Safety Effect','No effect on operational capabilities or safety.','Inconvenience.','No effect on flightcrew workload.']
-                    ]);
+            case 'Definitions': {
+                // 3 Oct 2026 — the same table the page shows, for the project's certification basis.
+                const _dt = (typeof SLSeverityTables !== 'undefined') ? SLSeverityTables.exportTable(projectConfig) : null;
+                if (!_dt) { try { if (typeof showToast === 'function') showToast('Severity definitions are not loaded yet. Reload and try again.', 'warning', 4000); } catch (_) {} return; }
+                return downloadCSV(file('Severity_Definitions'), _dt.headers, _dt.rows);
+            }
             // 30 Aug 2026 — EXPORT PARITY batch 1 (Waqas directive, 18 Aug: everything
             // on offer can get exported). These three buttons existed and fell through
             // to the "not yet implemented" alert. Each case MIRRORS ITS RENDERER'S
@@ -2027,16 +2023,12 @@ function _pdfDataForModule(moduleName) {
                 headers: ['AC Hazard FC ID','AC Severity','System Hazard FC ID','System Severity','System Sub-Function'],
                 rows };
         }
-        case 'Definitions':
-            return { title: 'AC 1309 Severity Definitions',
-                headers: ['Classification','Effect on Aircraft','Effect on Occupants','Effect on Flight Crew'],
-                rows: [
-                    ['Catastrophic','Normally with hull loss. A failure condition that would prevent continued safe flight and landing is Catastrophic.','Multiple fatalities.','Fatalities or incapacitation.'],
-                    ['Hazardous','Large reduction in functional capabilities or safety margins.','Serious or fatal injury to a small number of persons other than the flightcrew.','Physical distress or excessive workload such that the flightcrew cannot be relied upon to perform their tasks accurately or completely.'],
-                    ['Major','Significant reduction in safety margins or functional capabilities.','Physical distress, possibly including injuries.','A physical discomfort or significant increase in workload or in conditions impairing the efficiency of the flightcrew.'],
-                    ['Minor','Slight reduction in functional capabilities or safety margins.','Physical discomfort.','Slight increase in workload (routine flight plan changes, emergency procedures well within crew capability).'],
-                    ['No Safety Effect','No effect on operational capabilities or safety.','Inconvenience.','No effect on flightcrew workload.']
-                ] };
+        case 'Definitions': {
+            // 3 Oct 2026 — the same table the page shows, for the project's certification basis.
+            const _dt = (typeof SLSeverityTables !== 'undefined') ? SLSeverityTables.exportTable(projectConfig) : null;
+            if (!_dt) return null;
+            return { title: _dt.title, headers: _dt.headers, rows: _dt.rows };
+        }
     }
     return null;
 }

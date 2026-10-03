@@ -915,17 +915,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             </div>
 
             <h4 style="color: var(--header-color); border-bottom: 1px solid var(--border-primary); padding-bottom: 5px;">Qualitative Severity Classifications</h4>
-            <table class="reference-table" style="margin-bottom: 8px;">
-                <thead><tr><th style="width: 13%;">Classification</th><th style="width: 22%;">Effect on Aircraft</th><th style="width: 22%;">Effect on Occupants or Other Persons Excluding Flightcrew</th><th style="width: 29%;">Effect on Flightcrew</th><th style="width: 14%;">Allowable Qualitative Probability</th></tr></thead>
-                <tbody>
-                    <tr><td class="cell-Catastrophic"><span class="sev-pill sev-cat">Catastrophic</span></td><td>Normally with hull loss.<div style="font-size:11.5px; margin-top:4px;">A failure condition that would prevent continued safe flight and landing is Catastrophic (AC 25.1309-1B §3.1.5 Note 1; AC 23.1309-1E: incapacitation or fatal injury to a flight crewmember, normally with loss of the airplane).</div></td><td>Multiple fatalities.</td><td>Fatalities or incapacitation.</td><td>Extremely improbable</td></tr>
-                    <tr><td class="cell-Hazardous"><span class="sev-pill sev-haz">Hazardous</span></td><td>Large reduction in functional capabilities or safety margins.</td><td>Serious or fatal injury to a small number of persons other than the flightcrew.</td><td>Physical distress or excessive workload such that the flightcrew cannot be relied upon to perform their tasks accurately or completely.</td><td>Extremely remote</td></tr>
-                    <tr><td class="cell-Major"><span class="sev-pill sev-maj">Major</span></td><td>Significant reduction in safety margins or functional capabilities.</td><td>Physical distress, possibly including injuries.</td><td>A physical discomfort or significant increase in workload or in conditions impairing the efficiency of the flightcrew.</td><td>Remote</td></tr>
-                    <tr><td class="cell-Minor"><span class="sev-pill sev-min">Minor</span></td><td>Slight reduction in functional capabilities or safety margins.</td><td>Physical discomfort.</td><td>Slight increase in workload.<div style="font-size:11.5px; margin-top:4px;">Includes routine flight plan changes and emergency procedures well within crew capability.</div></td><td>Probable</td></tr>
-                    <tr><td class="cell-Negligible"><span class="sev-pill sev-neg">No Safety Effect</span></td><td>No effect on operational capabilities or safety.</td><td>Inconvenience.</td><td>No effect on flightcrew workload.</td><td>No probability requirement</td></tr>
-                </tbody>
-            </table>
-                <p style="font-size:12px; margin:0 0 30px;">Effect wording per FAA AC 25.1309-1B Table 4-1; AC 23.1309-1E paragraph 8 defines the same five classes in the same terms. The qualitative probability terms are common to the FAA and EASA bases; the numeric probability targets and DAL assignment vary by certification basis and are set in the Certification basis block above. The AI assistant classifies against the verbatim AC 25.1309-1B / AC 23.1309-1E definitions for the project's basis on every severity-assigning pass.</p>
+            <!-- 3 Oct 2026 — the severity table follows the project's certification basis
+                 (severity_tables.js: verbatim AC/CFR wording, or a cited summary for SC-VTOL). -->
+            <div id="sev-def-table"></div>
+                <p style="font-size:12px; margin:0 0 30px;">The numeric probability targets and DAL assignment are set by the certification basis block above. The AI assistant classifies against the definitions for the project's basis on every severity-assigning pass.</p>
 
             <h4 style="color: var(--header-color); border-bottom: 1px solid var(--border-primary); padding-bottom: 5px;">Applicable Quantitative Targets</h4>
             <p class="cfg-hint" title="Targets reflect the selection above. Probabilities are upper bounds (failures per flight hour); the design must demonstrate < target. DAL per SAE ARP4754A.">Upper bounds per flight hour · design must show &lt; target · DAL per ARP4754A.</p>
@@ -4091,6 +4084,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
     <script src="safety_targets.js?v=1.8" defer></script>
     <script src="severity_rubrics.js?v=1.3" defer></script>
+    <script src="severity_tables.js?v=1.0" defer></script>
     <script src="f3061_dal.js?v=1.0" defer></script>
     <script src="reliability_data.js?v=1.1" defer></script>
     <script src="catalogue_data.js?v=1.11" defer></script>
@@ -4119,9 +4113,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fta_view_modules.js?v=66.42" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
-    <script src="data_ops_modules.js?v=66.47" defer></script>
+    <script src="data_ops_modules.js?v=66.48" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.39" defer></script>
+    <script src="support_modules.js?v=66.40" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
     <script src="helpers_modules.js?v=3.20" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
