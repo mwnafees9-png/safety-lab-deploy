@@ -1572,7 +1572,7 @@ window.saveAiSettings = function(){
         }
     } catch(_) { showToast('The key could not be stored.', 'error', 4000); return; }
     // Self-hosted / on-prem backend (#56) — provider mode + local endpoints/model/key.
-    // These are read directly by the AI module's Provider (cloud / itar-cloud / local).
+    // These are read directly by the AI module's Provider (cloud / local).
     try {
         const lsSet = (k, v) => { v = (v || '').trim(); if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); };
         const mode = (get('ai-provider-mode') || 'cloud').trim();

@@ -6302,7 +6302,8 @@ function renderAiAssistant(){
     // Self-hosted / on-prem backend (#56) — device-level routing config (localStorage).
     try {
         const lsGet = (k) => { try { return localStorage.getItem(k) || ''; } catch(_) { return ''; } };
-        set('ai-provider-mode',        lsGet('safetyLab.ai.provider') || 'cloud');
+        // 3 Oct 2026: the 'itar-cloud' option is gone; a saved one shows as 'cloud' (what the AI module reads it as).
+        set('ai-provider-mode',        (function (v) { return (v === 'itar-cloud') ? 'cloud' : v; })(lsGet('safetyLab.ai.provider') || 'cloud'));
         set('ai-local-endpoint',       lsGet('safetyLab.ai.localEndpoint'));
         set('ai-local-model',          lsGet('safetyLab.ai.localModel'));
         set('ai-local-key',            lsGet('safetyLab.ai.localKey'));

@@ -4891,7 +4891,7 @@ window.Reports = Reports;
         }
         const userMsg = 'Draft the "' + section.heading + '" section prose. Project data:\n\n' + JSON.stringify(ctx, null, 2);
         // Route through the AI module's Provider so report drafting honors the active
-        // backend (cloud / itar-cloud / self-hosted local). This is the path the rest of
+        // backend (cloud / self-hosted local). This is the path the rest of
         // the AI features use; falling back to the raw client only if the module is absent.
         let out;
         if (window.SafetyLabAI && typeof window.SafetyLabAI.complete === 'function') {

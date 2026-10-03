@@ -76,10 +76,11 @@
 
     // ---- Pluggable model backend (roadmap #55) — provider abstraction --------
     // Every model call in this module goes through Provider so the backend
-    // (frontier cloud ↔ ITAR cloud ↔ local open-weights) is a CONFIG change,
-    // never a feature rewrite. Today 'cloud' and 'itar-cloud' both delegate to
-    // the already-shipped AiClient (which owns proxy/BYO routing, ITAR→Azure,
-    // the token allowance, cost tracking, and the audit log). 'local' is
+    // (cloud ↔ local open-weights) is a CONFIG change, never a feature rewrite.
+    // 'cloud' delegates to the already-shipped AiClient (which owns proxy/BYO
+    // routing, the token allowance, cost tracking, and the audit log). The old
+    // 'itar-cloud' mode (our proxy routed to Azure Gov) was removed 3 Oct 2026; a
+    // stored 'itar-cloud' reads as 'cloud'. 'local' is
     // reserved for the on-prem ITAR tier (#56) and stays inert until a local
     // endpoint is configured.
     //
@@ -145,14 +146,19 @@
     }
 
     const Provider = {
-        // 'cloud' = Claude via hosted proxy · 'itar-cloud' = proxy→Azure Gov · 'local' = self-hosted open-weights
+        // 'cloud' = Claude via this install's AI endpoint · 'local' = self-hosted open-weights.
+        // 3 Oct 2026: 'itar-cloud' (our proxy routed to Azure Gov) is gone. A browser that
+        // still has it saved reads as 'cloud', which every fence treats exactly as it
+        // treated 'itar-cloud' (controlled data was refused on both).
         get mode() {
             try {
                 const qs = new URLSearchParams(location.search).get('aiProvider');
                 if (qs) localStorage.setItem('safetyLab.ai.provider', qs);
             } catch (_) {}
-            try { return localStorage.getItem('safetyLab.ai.provider') || 'cloud'; }
-            catch (_) { return 'cloud'; }
+            let v = 'cloud';
+            try { v = localStorage.getItem('safetyLab.ai.provider') || 'cloud'; }
+            catch (_) { v = 'cloud'; }
+            return (v === 'itar-cloud') ? 'cloud' : v;
         },
 
         // True when the active backend can service a call right now.
@@ -188,7 +194,7 @@
             const cfg = !!(ac && ac.isConfigured && ac.isConfigured());
             const proxy = !!(ac && ac.isProxyMode && ac.isProxyMode());
             const detail = !cfg ? 'not configured (Pro+ or BYO key)'
-                : (proxy ? ('Pro+ hosted proxy' + (m === 'itar-cloud' ? ' → Azure (ITAR)' : '')) : 'BYO key (direct)');
+                : (proxy ? 'Pro+ hosted proxy' : 'BYO key (direct)');
             return { mode: m, ready: cfg, detail: detail };
         },
 
@@ -239,10 +245,6 @@
             } else {
                 const ac = window.AiClient;
                 if (!ac) throw new Error('[Safety Lab Aero AI] AiClient unavailable — check load order / Pro+ gating.');
-                // ITAR projects MUST stay on the proxy (Azure routing). Refuse BYO.
-                if (mode === 'itar-cloud' && ac.isProxyMode && !ac.isProxyMode()) {
-                    throw new Error('[Safety Lab Aero AI] itar-cloud requires the Pro+ hosted proxy (Azure routing). BYO key is blocked for ITAR data.');
-                }
                 const r = await ac.messages({
                     system:      opts.system,
                     cacheBreaks: opts.cacheBreaks,   // 12 Sep 2026 — where the wire may be cut for the prompt cache (see _assembleAnalysisContext)
@@ -392,10 +394,10 @@
             // non-US regimes: a US government cloud is NOT an approved destination —
             // local/on-prem is the only permitted backend.
             if ((taint === 'natl' || /jurisdiction|uk ml|dual-use/i.test(why)) && mode !== 'local') {
-                return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run on ' + (mode === 'itar-cloud' ? 'a US government cloud' : 'the public cloud') + ' — this jurisdiction requires the local/on-prem backend.' };
+                return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run on the public cloud — this jurisdiction requires the local/on-prem backend.' };
             }
-            // 6 Sep 2026 — 'itar-cloud' is Safety Lab's proxy routed to Azure Gov; it still
-            // transits our cloud, so for controlled data it is refused like 'cloud'.
+            // 6 Sep 2026 — controlled data runs on the LOCAL backend only. (The old
+            // 'itar-cloud' mode was refused here too; it was removed 3 Oct 2026.)
             if (controlled && mode !== 'local') {
                 return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run through Safety Lab\'s cloud — use your own Claude (GovCloud), Azure Government, or on-prem backend.' };
             }
@@ -12338,7 +12340,7 @@
         return { rr: rr, parsed: _safeParseJson(String(rr.text || '')) };
     }
     // 6 Sep 2026 — the controlled-document guard that used to live here (chat lane only;
-    // it also let 'itar-cloud' through, which still transits Safety Lab's proxy) was
+    // it also let the old 'itar-cloud' mode through, which transited Safety Lab's proxy) was
     // retired. The ONE fence is AiClient.controlledRefusal in core_modules.js, at the
     // point every cloud-bound request passes through, so no lane can miss it. The
     // "processed on / at" stamp it kept moved into Provider.complete's local branch.
