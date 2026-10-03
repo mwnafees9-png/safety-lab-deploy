@@ -71,7 +71,7 @@ check('it reads the BARE identifier, not window.projectConfig',
 check('it FAILS CLOSED when the configuration cannot be read',
       (decider.match(/could not be read/g) || []).length >= 2);
 check('it returns a REASON, not a bare boolean',
-      /return 'this project is marked export-controlled'/.test(decider),
+      /return _slOwnServer\(\) \? null : 'this project is marked export-controlled'/.test(decider),   // 3 Oct 2026: the customer's own server is the one exception
       'the reason is what the user is shown and what the log records');
 check('it is exposed for other modules to share',
       /window\.SLControlled/.test(strip(helpers)) && /blocksCloud/.test(strip(helpers)));
@@ -79,13 +79,16 @@ check('it is exposed for other modules to share',
 // Execute the real decider rather than asserting on its source.
 {
   const fnSrc = helpers.slice(helpers.indexOf('function _slCloudBlockedForControlled'));
-  const body = fnSrc.slice(0, fnSrc.indexOf('\n}') + 2);
-  const ctx = { projectConfig: undefined, console };
+  // 3 Oct 2026: the decider asks _slOwnServer(); load it too, so the ITAR case is decided by the
+  // rule and not by a missing-function error falling into the fail-closed catch.
+  const own = helpers.slice(helpers.indexOf('function _slOwnServer'));
+  const body = fnSrc.slice(0, fnSrc.indexOf('\n}') + 2) + '\n' + own.slice(0, own.indexOf('\n}') + 2);
+  const ctx = { projectConfig: undefined, console, window: {} };
   vm.createContext(ctx);
   vm.runInContext(body + '\nglobalThis.__f = _slCloudBlockedForControlled;', ctx);
   const f = ctx.__f;
   ctx.projectConfig = { isITARControlled: true };
-  check('EXECUTED: a controlled project is blocked', typeof f({ projectConfig: { isITARControlled: true } }) === 'string');
+  check('EXECUTED: a controlled project is blocked', f({ projectConfig: { isITARControlled: true } }) === 'this project is marked export-controlled');
   check('EXECUTED: an ordinary project is not blocked', f({ projectConfig: { isITARControlled: false } }) === null);
   check('EXECUTED: no configuration at all is blocked (fail closed)',
         typeof f({ projectConfig: null }) === 'string' || typeof f(null) === 'string');

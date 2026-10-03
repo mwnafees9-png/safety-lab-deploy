@@ -68,7 +68,7 @@ const P = globalThis.SLPresence;
 console.log('\n[1] guards');
 const stripped = src.replace(/\/\/[^\n]*/g, '');
 check('display lane — no store writes', !/(ftaPages\s*=(?!=)|acFhaData\s*=(?!=)|projectConfig\.\w+\s*=(?!=))/.test(stripped));
-check('ITAR projects never start presence', /_itar\(\)\) return;/.test(src));
+check('ITAR projects never start presence (on our cloud)', /_fenced\(\)\) return;/.test(src) && /function _fenced\(\) \{ return _itar\(\) && !_ownServer\(\); \}/.test(src));   // 3 Oct 2026: the customer's own server is the one exception
 check('opt-outs honored (?presence=0 / SLA_PRESENCE)', /presence=0/.test(src) && /SLA_PRESENCE/.test(src));
 
 console.log('\n[2] behavior (stubbed Realtime channel)');

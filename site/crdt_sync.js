@@ -398,7 +398,10 @@
   function _signedIn()  { try { return typeof window.isSupabaseSignedIn === 'function' && window.isSupabaseSignedIn(); } catch (_) { return false; } }
   function _proj()      { try { return (typeof window.getActiveCloudProjectId === 'function' && window.getActiveCloudProjectId()) || null; } catch (_) { return null; } }
   function _ws()        { try { return (typeof window.getActiveWorkspaceId === 'function' && window.getActiveWorkspaceId()) || null; } catch (_) { return null; } }
-  function _ready()     { return flagOn() && !_itar() && _signedIn() && !!_proj() && !!_ws(); }
+  // 3 Oct 2026 — on the customer's own server (SLConfig.ownServer, set by slab_config only after proving nothing points at Safety Lab) a controlled project syncs like any other: the server IS theirs. On our cloud: unchanged.
+  function _ownServer() { try { var C = window.SLConfig; return !!(C && C.ownServer === true && !C.fatal); } catch (_) { return false; } }
+  function _fenced()    { return _itar() && !_ownServer(); }
+  function _ready()     { return flagOn() && !_fenced() && _signedIn() && !!_proj() && !!_ws(); }
 
   // H-5 (31 Aug 2026) — THE PROJECT-SWITCH WINDOW. refresh() polls every 6s, so
   // between the moment the app adopts a different project and the next tick,

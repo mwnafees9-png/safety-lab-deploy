@@ -106,7 +106,7 @@ console.log('\n[itar-cloud retired] EXECUTED: controlled data still refused on c
   const cls = (ai.match(/const _CONTROLLED_CLASS = (\/[^\n]*\/i);/) || [])[1];
   check('route() and the controlled pattern were found', route.length > 0 && !!cls);
   function decide(mode, classification) {
-    const ctx = { Provider: { mode }, _payloadTaint: () => '', SLConfig: undefined };
+    const ctx = { Provider: { mode }, _payloadTaint: () => '', _ownServerInstall: () => false };   // our cloud
     vm.createContext(ctx);
     vm.runInContext('const _CONTROLLED_CLASS = ' + cls + ';\nglobalThis.__G = { ' + route + ' };', ctx);
     return ctx.__G.route({ data_classification: classification });

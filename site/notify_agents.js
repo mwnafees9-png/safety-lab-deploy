@@ -137,8 +137,14 @@
         // is only for a build where that module is missing, and it FAILS CLOSED
         // — a notification is never worth guessing about.
         try {
+            // 3 Oct 2026 — asks "is this project controlled?", NOT "may it go to the cloud?".
+            // An alert leaves for outside channels (email, Slack, Teams) even on a customer's
+            // own server, so a controlled project sends none there either. The own-server
+            // allowance in blocksCloud deliberately does not apply here.
             var SC = (typeof window !== 'undefined') ? window.SLControlled : null;
-            var blocked = SC && typeof SC.blocksCloud === 'function'
+            var blocked = SC && typeof SC.controlledReason === 'function'
+                ? SC.controlledReason(null)
+                : (SC && typeof SC.blocksCloud === 'function')
                 ? SC.blocksCloud(null)
                 : ((typeof projectConfig !== 'undefined' && projectConfig)
                      ? (projectConfig.isITARControlled ? 'this project is marked export-controlled' : null)

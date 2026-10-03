@@ -191,7 +191,7 @@ function mod(extra) {
         const ok2 = await sb2.window.SafetyLabAI.complete({ feature: 'doc.qa', messages: [{ role: 'user', content: 'Q' }] });
         check('A5b EXEC: unticked, calls flow again', ok2.text === 'x' && calls === 1);
         const CORE = read('core_modules.js'), BND = read('bindings_modules.js'), HLP = read('helpers_modules.js'), IDX2 = read('index.html');
-        check('A5b: direct callers are guarded too (AiClient.messages checks the switch before anything is sent)', /projectConfig\.aiSettings\.projectAiOff === true\) throw new Error\('AI is switched off for this project/.test(CORE) && CORE.indexOf('projectAiOff === true) throw') < CORE.indexOf('const _refused = controlledRefusal();'));
+        check('A5b: direct callers are guarded too (AiClient.messages checks the switch before anything is sent)', /projectConfig\.aiSettings\.projectAiOff === true\) throw new Error\('AI is switched off for this project/.test(CORE) && CORE.indexOf('projectAiOff === true) throw') < CORE.indexOf('const _refused = controlledRefusal(opts);'));
         check('A5b: the setting is on the AI Settings page, saved and loaded', /id="ai-project-off"/.test(IDX2) && /projectConfig\.aiSettings\.projectAiOff = !!_offEl\.checked/.test(BND) && /_offEl\.checked = ais\.projectAiOff === true/.test(HLP));
     }
 

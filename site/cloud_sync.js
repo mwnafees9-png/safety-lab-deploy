@@ -210,7 +210,10 @@
             // every 12 s. Judged from the SNAPSHOT (the same object we would have
             // pushed), not window state. The manual Save-to-cloud button is a
             // deliberate user act and stays out of scope; this closes the silent path.
-            if (snap.projectConfig && snap.projectConfig.isITARControlled) { _itarLocalOnlyNotice(); return null; }
+            // 3 Oct 2026 — except on the customer's own server (SLConfig.ownServer), where this
+            // autosave goes to THEIR database. On our cloud: unchanged.
+            if (snap.projectConfig && snap.projectConfig.isITARControlled
+                && !(typeof window !== 'undefined' && window.SLConfig && window.SLConfig.ownServer === true && !window.SLConfig.fatal)) { _itarLocalOnlyNotice(); return null; }
             var name = _name(snap);
             var certBasis = (snap.projectConfig && snap.projectConfig.regulation) || null;
             if (!pid) {

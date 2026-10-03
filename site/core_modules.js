@@ -357,11 +357,40 @@ const AiClient = (function(){
     // or an on-prem model — none of which come through here (Provider routes
     // 'local' straight to the endpoint). Fails CLOSED when the project
     // configuration cannot be read. Returns a reason string, or null when clear.
-    function controlledRefusal(){
+    //
+    // 3 Oct 2026 — the customer-hosted build. Waqas: ITAR projects work fully on the customer's
+    // own system and stay locked out on ours. The fence is now two questions kept apart:
+    //   controlledReason(opts) — is anything about this request controlled? (the project flag,
+    //                            a controlled document on file; on the customer's own server also
+    //                            the caller's own marks, opts.controlled / opts.natl)
+    //   _ownServerRoute()      — will this request go ONLY to the customer's own AI endpoint?
+    //                            True only on a customer's own server (SLConfig.ownServer, which
+    //                            slab_config sets only after proving nothing points at us), and
+    //                            only on the two paths that use this install's AI endpoint (the
+    //                            licensed path, or a saved key the endpoint uses). The desktop
+    //                            own-key door and the browser's direct path go to public
+    //                            Anthropic and are NEVER an own-server route.
+    // On our cloud nothing changes: controlled data refuses exactly as before, and the caller's
+    // marks are ignored there (they never decided anything on our cloud). On the customer's own
+    // server it goes to their endpoint with the ITAR flag set (_itarFlag), and their endpoint
+    // sends it only to their government model or refuses (itar_unconfigured). Non-US regimes
+    // (opts.natl) stay on the local backend only, own server included. An unreadable project
+    // configuration refuses everywhere.
+    function controlledRefusal(opts){
+        const reason = controlledReason(opts);
+        if (!reason) return null;
+        if (reason === 'the project configuration could not be read') return reason;   // fail CLOSED
+        if (_ownServerInstall() && opts && opts.natl) return reason + ' under a non-US regime, which runs on the local backend only';
+        return _ownServerRoute() ? null : reason;
+    }
+    function controlledReason(opts){
         try {
             let reason = null;
-            if (typeof window !== 'undefined' && window.SLControlled && typeof window.SLControlled.blocksCloud === 'function') {
-                reason = window.SLControlled.blocksCloud(null);
+            const SC = (typeof window !== 'undefined') ? window.SLControlled : null;
+            if (SC && typeof SC.controlledReason === 'function') {
+                reason = SC.controlledReason(null);
+            } else if (SC && typeof SC.blocksCloud === 'function') {
+                reason = SC.blocksCloud(null);
             } else if (typeof projectConfig !== 'undefined' && projectConfig) {
                 reason = projectConfig.isITARControlled ? 'this project is marked export-controlled' : null;
             } else {
@@ -373,8 +402,31 @@ const AiClient = (function(){
                 const ctrl = list.filter(function(d){ return d && d.controlled; });
                 if (ctrl.length) reason = 'a controlled document is on file (' + ctrl.map(function(d){ return d.name || 'document'; }).join(', ') + ')';
             }
+            if (!reason && opts && (opts.controlled || opts.natl) && _ownServerInstall()) reason = 'this request carries controlled content';
             return reason;
         } catch (_) { return 'the project configuration could not be read'; }
+    }
+    function _ownServerInstall(){
+        try { const C = (typeof window !== 'undefined') ? window.SLConfig : null; return !!(C && C.ownServer === true && !C.fatal); }
+        catch (_) { return false; }
+    }
+    function _ownServerRoute(){
+        try {
+            if (!_ownServerInstall()) return false;
+            if (_desktopKeyDoor()) return false;            // own key: straight to public Anthropic
+            if (!AI_PROXY_BASE_URL) return false;           // no endpoint of theirs to go to
+            return !!(isProxyMode() || _byoViaProxy());     // the two paths that use this install's endpoint
+        } catch (_) { return false; }
+    }
+    // The ITAR flag on the wire. Our cloud: the project flag, exactly as before (a controlled
+    // request never gets this far there). The customer's own server: set whenever anything
+    // about the request is controlled, so their endpoint keeps it on their government model.
+    function _itarFlag(opts){
+        try {
+            const flag = !!(projectConfig && projectConfig.isITARControlled);
+            if (!_ownServerInstall()) return flag;
+            return flag || !!controlledReason(opts) || !!(opts && (opts.controlled || opts.natl));
+        } catch (_) { return true; }
     }
     function controlledRefusalMessage(reason){
         return 'AI is off because ' + reason + '. Controlled data can only run on your own Claude (GovCloud), Azure Government, or on-prem backend — choose one under AI Settings.';
@@ -430,11 +482,11 @@ const AiClient = (function(){
         // 23 Sep 2026 (G10) — the per-project off switch also guards direct callers (reports,
         // the settings connection test) that do not go through Provider.complete.
         try { if (projectConfig && projectConfig.aiSettings && projectConfig.aiSettings.projectAiOff === true) throw new Error('AI is switched off for this project (AI Settings). Nothing was sent.'); } catch (e) { if (/switched off/.test(e.message)) throw e; }
-        const _refused = controlledRefusal();
+        const _refused = controlledRefusal(opts);
         if (_refused) throw new Error(controlledRefusalMessage(_refused));
         const _unset = unconfiguredRefusal();
         if (_unset) throw new Error(_unset);
-        const itar = !!(projectConfig && projectConfig.isITARControlled);
+        const itar = _itarFlag(opts);
         const proxy = isProxyMode();
         if (proxy && _allowanceRemaining() <= 0) {
             const u = _tokenUsage();
@@ -579,11 +631,11 @@ const AiClient = (function(){
         const model = opts.model || s.voyageModel;
         const inputArr = Array.isArray(input) ? input : [input];
         const proxy = isProxyMode();
-        const _refusedEmb = controlledRefusal();
+        const _refusedEmb = controlledRefusal(opts);
         if (_refusedEmb) throw new Error(controlledRefusalMessage(_refusedEmb));
         const _unsetEmb = unconfiguredRefusal();
         if (_unsetEmb) throw new Error(_unsetEmb);
-        const itar = !!(projectConfig && projectConfig.isITARControlled);
+        const itar = _itarFlag(opts);
         if (proxy && _allowanceRemaining() <= 0) {
             throw new Error('Pro+ monthly token allowance exhausted. Resets next month.');
         }

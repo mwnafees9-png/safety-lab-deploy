@@ -32,12 +32,15 @@
   function _myName() { try { var id = (window.SLAvatar && window.SLAvatar.me && window.SLAvatar.me()) || null; return (id && id.name) || 'Someone'; } catch (_) { return 'Someone'; } }
   // Mirror presence.js's ITAR fence: co-editing (and its locks) are off for controlled projects.
   function _itar() { try { var E = (typeof SLEnv !== 'undefined') ? SLEnv : (typeof window !== 'undefined' ? window.SLEnv : null); if (E && typeof E.get === 'function') { var pc = E.get('projectConfig'); if (pc !== undefined) return !!(pc && pc.isITARControlled); } if (typeof projectConfig !== 'undefined') return !!(projectConfig && projectConfig.isITARControlled); return true; } catch (_) { return true; } }
+  // 3 Oct 2026 — on the customer's own server (SLConfig.ownServer, set by slab_config only after proving nothing points at Safety Lab) a controlled project syncs like any other: the server IS theirs. On our cloud: unchanged.
+  function _ownServer() { try { var C = (typeof window !== 'undefined') ? window.SLConfig : null; return !!(C && C.ownServer === true && !C.fatal); } catch (_) { return false; } }
+  function _fenced() { return _itar() && !_ownServer(); }
   function _notify(key) { for (var i = 0; i < _cbs.length; i++) { try { _cbs[i](key); } catch (_) {} } }
   function _send(action, key, exp) { try { if (_chan) _chan.send({ type: 'broadcast', event: 'lock', payload: { action: action, key: key, held_by: _uid(), name: _myName(), exp: exp || 0, tok: _tok } }); } catch (_) {} }
 
   // Claim a field. Resolves {ok:true} if you hold it now, {ok:false, name} if someone else does.
   async function claim(key) {
-    if (_flagOff() || _itar()) return { ok: true };
+    if (_flagOff() || _fenced()) return { ok: true };
     var c = _client(), proj = _projId();
     if (!c || !proj || !key) return { ok: true };           // local mode → nothing to lock
     try {
@@ -78,7 +81,7 @@
   }
 
   function start() {
-    if (_started || _flagOff() || _itar()) return;
+    if (_started || _flagOff() || _fenced()) return;
     var c = _client(), ws = _wsId(), proj = _projId();
     if (!c || !ws || !proj) { setTimeout(start, 4000); return; }
     _tok = (crypto.randomUUID ? crypto.randomUUID() : 'l' + Math.random().toString(36).slice(2)).slice(0, 8);

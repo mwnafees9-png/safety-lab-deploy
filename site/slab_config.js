@@ -23,6 +23,12 @@
  * install pointed at the customer's database is 'self-hosted' like the web and gets the
  * same leak check — the desktop is a different window onto the same install, not a
  * different set of rules.
+ * 1.5 (3 Oct 2026, ITAR on the customer's own server): `ownServer` is true ONLY on a customer
+ * install that passed the guard below: self-hosted mode (the database is not ours), nothing that
+ * carries project data points at Safety Lab, and a database key is set. It is the one answer every
+ * controlled-data check asks ("is this the customer's own server?"). Waqas, 3 Oct: ITAR projects
+ * work fully on the customer's own system and stay locked out on ours. Hosted demo, the trial
+ * desktop and browser-only are never ownServer. Nothing else in this file changed.
  * 1.4 (1 Oct 2026, completeness): SLConfigEgress() used to list only the three DATA paths, so a
  * desktop install's update check (updates.safetylabaero.com) was contacted and never listed. The
  * deployment guide tells a customer the listing names every address the application will contact,
@@ -145,7 +151,7 @@
   }
 
   var cfg = {
-    version: '1.4',
+    version: '1.5',
     mode: mode,
     aiOff: aiOff,
     isDesktop: isDesktop,
@@ -159,6 +165,7 @@
     egress: egress,
     otherContacts: otherContacts,
     fatal: fatal,
+    ownServer: (mode === 'self-hosted' && !fatal),
     pointsAtSafetyLab: pointsAtSafetyLab
   };
   try { Object.freeze(cfg.egress); Object.freeze(cfg.otherContacts); Object.freeze(cfg); } catch (_) {}

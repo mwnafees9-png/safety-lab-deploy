@@ -245,6 +245,10 @@
             } else {
                 const ac = window.AiClient;
                 if (!ac) throw new Error('[Safety Lab Aero AI] AiClient unavailable — check load order / Pro+ gating.');
+                // 3 Oct 2026 — the request's own controlled marks travel with it. AiClient reads
+                // them ONLY on a customer's own server (to set the ITAR flag, and to keep non-US
+                // regimes local); on our cloud they are ignored and nothing changes.
+                const _marks = _requestMarks(opts);
                 const r = await ac.messages({
                     system:      opts.system,
                     cacheBreaks: opts.cacheBreaks,   // 12 Sep 2026 — where the wire may be cut for the prompt cache (see _assembleAnalysisContext)
@@ -252,7 +256,9 @@
                     feature:     opts.feature || 'ai.sandbox',
                     maxTokens:   opts.maxTokens,
                     model:       opts.model,
-                    temperature: opts.temperature
+                    temperature: opts.temperature,
+                    controlled:  _marks.controlled,
+                    natl:        _marks.natl
                 });
                 const text = (r && r.content && r.content[0] && r.content[0].text) || '';
                 _lastRaw = { feature: opts.feature || null, model: (r && r.model) || null, stopReason: (r && r.stop_reason) || null, text: text.trim(), at: Date.now() };
@@ -360,6 +366,26 @@
     // may run on the US controlled backend (Azure Gov); OTHER national regimes
     // ('natl' — UK ML, EU dual-use, national rules) must NOT be sent to a US
     // government cloud — local/on-prem only. Deterministic, conservative match.
+    // 3 Oct 2026 — is this install the customer's own server? (slab_config sets ownServer only
+    // after proving nothing that carries project data points at Safety Lab.)
+    function _ownServerInstall() {
+        try { const C = (typeof window !== 'undefined') ? window.SLConfig : null; return !!(C && C.ownServer === true && !C.fatal); }
+        catch (_) { return false; }
+    }
+    // The request's own controlled marks: its data classification, or a declared
+    // export-controlled system named in it. natl = a non-US regime (local backend only).
+    function _requestMarks(opts) {
+        try {
+            opts = opts || {};
+            const cls = String(opts.data_classification || '');
+            let msgText = '';
+            try { msgText = JSON.stringify(opts.messages || []); } catch (_) { msgText = ''; }
+            const taint = _payloadTaint({ user_prompt: msgText, system_instruction: typeof opts.system === 'string' ? opts.system : '' });
+            const natl = !!opts.natl || taint === 'natl' || /jurisdiction|uk ml|dual-use/i.test(cls);
+            const controlled = !!opts.controlled || natl || _CONTROLLED_CLASS.test(cls) || !!taint;
+            return { controlled: controlled, natl: natl };
+        } catch (_) { return { controlled: true, natl: false }; }
+    }
     function _payloadTaint(request) {
         try {
             if (typeof window === 'undefined' || typeof window.exportControlSystems !== 'function') return '';
@@ -398,7 +424,10 @@
             }
             // 6 Sep 2026 — controlled data runs on the LOCAL backend only. (The old
             // 'itar-cloud' mode was refused here too; it was removed 3 Oct 2026.)
-            if (controlled && mode !== 'local') {
+            // 3 Oct 2026 — on a customer's own server, 'cloud' IS their own AI endpoint, so
+            // controlled data may go there (AiClient sets the ITAR flag and refuses the own-key
+            // and direct paths). On our cloud: unchanged, local only.
+            if (controlled && mode !== 'local' && !_ownServerInstall()) {
                 return { allowed: false, mode: mode, controlled: true, reason: 'Controlled data (' + why + ') cannot run through Safety Lab\'s cloud — use your own Claude (GovCloud), Azure Government, or on-prem backend.' };
             }
             return { allowed: true, mode: mode, controlled: controlled, reason: (controlled ? 'controlled → ' : 'standard → ') + mode };
@@ -423,6 +452,7 @@
             const r = await Provider.complete({
                 system: request.system_instruction || '',
                 messages: [{ role: 'user', content: userText }],
+                controlled: !!routing.controlled,    // 3 Oct 2026: the gateway's verdict travels with the request
                 feature: request.task_type || 'gateway',
                 maxTokens: request.max_output_tokens,
                 model: request.model || undefined,

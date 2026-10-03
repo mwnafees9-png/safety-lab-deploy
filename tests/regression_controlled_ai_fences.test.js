@@ -42,7 +42,9 @@ function fnBody(src, name) {
 }
 
 console.log('\n[ai fence] ONE fence at the choke point (core_modules.js)');
-const refusal = fnBody(core, 'function controlledRefusal');
+// 3 Oct 2026: the fence is split in two (controlledRefusal = controlledReason + where it goes), so
+// the structural checks read both bodies together. Execution checks below cover the behavior.
+const refusal = fnBody(core, 'function controlledRefusal') + '\n' + fnBody(core, 'function controlledReason');
 check('controlledRefusal exists in the AI client', refusal.length > 0);
 check('it prefers the SHARED project-level check (SLControlled.blocksCloud)', /SLControlled/.test(refusal) && /blocksCloud/.test(refusal));
 check('it falls back to the BARE identifier, never window.projectConfig',
@@ -52,12 +54,12 @@ check('it also refuses when a controlled DOCUMENT is on file', /SafetyLabSourceD
 {
   const msgs = fnBody(core, 'async function messages');
   const emb = fnBody(core, 'async function embed');
-  check('messages() consults the fence', /controlledRefusal\(\)/.test(msgs));
-  check('messages() refuses BEFORE any fetch', before(msgs, 'controlledRefusal()', 'fetch('));
+  check('messages() consults the fence', /controlledRefusal\(opts\)/.test(msgs));
+  check('messages() refuses BEFORE any fetch', before(msgs, 'controlledRefusal(opts)', 'fetch('));
   check('messages() no longer routes controlled data via the proxy',
         !/AI calls require Pro\+/.test(msgs), 'the old rule FORCED controlled data through our cloud');
-  check('embed() consults the fence', /controlledRefusal\(\)/.test(emb));
-  check('embed() refuses BEFORE any fetch', before(emb, 'controlledRefusal()', 'fetch('));
+  check('embed() consults the fence', /controlledRefusal\(opts\)/.test(emb));
+  check('embed() refuses BEFORE any fetch', before(emb, 'controlledRefusal(opts)', 'fetch('));
   check('the fence is exported on AiClient', /controlledRefusal, controlledRefusalMessage/.test(strip(core)));
   check('the refusal names the three approved backends, not an internal mode name',
         /Claude \(GovCloud\), Azure Government, or on-prem/.test(fnBody(core, 'function controlledRefusalMessage')) && !/itar-cloud/.test(fnBody(core, 'function controlledRefusalMessage')));

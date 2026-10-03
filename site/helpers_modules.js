@@ -6346,8 +6346,15 @@ function _refreshAiITARStatus(){
     const status = document.getElementById('ai-itar-status');
     if (!status) return;
     const itar = !!(projectConfig && projectConfig.isITARControlled);
-    if (itar) {
-        status.innerHTML = '<span style="color: var(--sev-haz-fg, #c47100); font-weight: 600;">⚠ ITAR mode active.</span> AI calls will route via Azure OpenAI (US-East private deployment). BYO key mode is blocked for this project.';
+    // 3 Oct 2026 — says what actually happens, which depends on where this install runs.
+    // (The old text promised Azure OpenAI routing that never existed for controlled data.)
+    const own = _slOwnServer();
+    if (itar && own) {
+        status.innerHTML = '<span style="color: var(--sev-haz-fg, #c47100); font-weight: 600;">⚠ Export-controlled.</span> Everything stays on your own server. AI goes only to your own AI endpoint, flagged as controlled, so it reaches your government model or is refused. Your own Anthropic key and outside alerts are off for this project.';
+    } else if (itar) {
+        status.innerHTML = '<span style="color: var(--sev-haz-fg, #c47100); font-weight: 600;">⚠ Export-controlled.</span> On this trial cloud the project stays on this machine: no cloud save, no live sync, and cloud AI is off. A self-hosted (local) AI backend below still works.';
+    } else if (own) {
+        status.innerHTML = '<span class="u-muted">Standard mode: AI calls go to your own AI endpoint.</span>';
     } else {
         status.innerHTML = '<span class="u-muted">Standard mode: calls route via public Anthropic API through the Safety Lab Aero proxy.</span>';
     }
@@ -7412,7 +7419,7 @@ function _rtRenderPresence(users) {
 }
 async function startRealtimePresence() {
     if (!_rtEnabled()) return;
-    try { if (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled) { await stopRealtimePresence(); return; } } catch (_) {}   // ITAR / air-gap: NEVER open a realtime cloud connection for an ITAR-controlled project
+    try { if (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled && !_slOwnServer()) { await stopRealtimePresence(); return; } } catch (_) {}   // ITAR / air-gap: NEVER open a realtime cloud connection for an ITAR-controlled project (3 Oct 2026: except on the customer's own server, where the channel IS their server)
     let client, wsId, session;
     try { client = (typeof window.getSupabaseClient === 'function') && window.getSupabaseClient(); } catch (_) {}
     try { wsId = getActiveWorkspaceId(); } catch (_) {}
@@ -7531,7 +7538,7 @@ function _rtApplyRemoteComment(payload) {
 function _rtBroadcastComment(op, data) {
     try {
         if (!_rtChannel || !_rtEnabled()) return;
-        if (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled) return;   // defense-in-depth: never egress ITAR-controlled content
+        if (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.isITARControlled && !_slOwnServer()) return;   // defense-in-depth: never egress ITAR-controlled content (the customer's own server is not egress, 3 Oct 2026)
         _rtChannel.send({ type: 'broadcast', event: 'comment', payload: Object.assign({ op: op, tok: _rtClientToken }, data) });
     } catch (_) {}
 }
@@ -8997,7 +9004,27 @@ function _bankWorkingState() {
 // scripts sharing one global lexical scope, so the window property is
 // permanently undefined — that is precisely what made two of the five fences
 // dead code for weeks.
+//
+// 3 Oct 2026 — the customer-hosted build has landed, and this is where it is answered, as
+// planned above. Waqas: ITAR projects work fully on the customer's own system and stay locked
+// out on ours. Two questions, kept apart on purpose:
+//   _slControlledReason(snap)  — IS this project controlled? (destination does not matter)
+//   _slOwnServer()             — is THIS install the customer's own server? (SLConfig.ownServer,
+//                                set only when slab_config's guard proved nothing points at us)
+// _slCloudBlockedForControlled = controlled AND not the customer's own server. An unreadable
+// project configuration stays blocked everywhere (fail CLOSED), own server included.
+// Callers whose destination is NOT the customer's server even on a customer install (alerts to
+// outside channels) ask _slControlledReason instead, so they stay blocked for controlled work.
 function _slCloudBlockedForControlled(snap) {
+    try {
+        var pc = (snap && snap.projectConfig)
+              || (typeof projectConfig !== 'undefined' ? projectConfig : null);
+        if (!pc) return 'the project configuration could not be read';   // fail CLOSED, own server included
+        if (pc.isITARControlled) return _slOwnServer() ? null : 'this project is marked export-controlled';   // the customer's own server: allowed
+        return null;
+    } catch (_) { return 'the project configuration could not be read'; } // fail CLOSED
+}
+function _slControlledReason(snap) {
     try {
         var pc = (snap && snap.projectConfig)
               || (typeof projectConfig !== 'undefined' ? projectConfig : null);
@@ -9005,6 +9032,12 @@ function _slCloudBlockedForControlled(snap) {
         if (pc.isITARControlled) return 'this project is marked export-controlled';
         return null;
     } catch (_) { return 'the project configuration could not be read'; } // fail CLOSED
+}
+function _slOwnServer() {
+    try {
+        var C = (typeof window !== 'undefined') ? window.SLConfig : null;
+        return !!(C && C.ownServer === true && !C.fatal);
+    } catch (_) { return false; }
 }
 var _slControlledNoticeShown = false;
 function _slControlledCloudNotice(reason, action) {
@@ -9019,6 +9052,8 @@ try {
     if (typeof window !== 'undefined') {
         window.SLControlled = {
             blocksCloud: function (snap) { return _slCloudBlockedForControlled(snap); },
+            controlledReason: function (snap) { return _slControlledReason(snap); },
+            ownServer: function () { return _slOwnServer(); },
             notice:      function (reason, action) { return _slControlledCloudNotice(reason, action); }
         };
     }

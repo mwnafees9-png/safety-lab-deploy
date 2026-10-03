@@ -71,6 +71,9 @@
         return true;                                              // fail CLOSED
       } catch (_) { return true; }                                // fail CLOSED
     }
+    // 3 Oct 2026 — on the customer's own server (SLConfig.ownServer, set by slab_config only after proving nothing points at Safety Lab) a controlled project syncs like any other: the server IS theirs. On our cloud: unchanged.
+    function _ownServer() { try { var C = (typeof window !== 'undefined') ? window.SLConfig : null; return !!(C && C.ownServer === true && !C.fatal); } catch (_) { return false; } }
+    function _fenced() { return _itar() && !_ownServer(); }
     function _proj() { try { return (typeof getActiveCloudProjectId === 'function' && getActiveCloudProjectId()) || window._activeCloudProjectId || null; } catch (_) { return null; } }
     function _ws() { try { return (typeof getActiveWorkspaceId === 'function' && getActiveWorkspaceId()) || null; } catch (_) { return null; } }
     // ---- identity + the shared avatar --------------------------------------------
@@ -216,7 +219,7 @@
 
     // ---- lifecycle ----------------------------------------------------------------
     function start() {
-        if (_started || _flagOff() || _itar()) return;
+        if (_started || _flagOff() || _fenced()) return;
         let client = null;
         try { client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null; } catch (_) {}
         const ws = _ws(), proj = _proj();
