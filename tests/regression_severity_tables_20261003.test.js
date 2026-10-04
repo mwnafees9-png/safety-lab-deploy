@@ -120,6 +120,18 @@ check('no basis set reads as Part 25 (the default the rest of the app uses)', T.
   }
 }
 
+// 3 Oct 2026 (v1.1) — the rotorcraft tables first cited AC 2x.1309A, the lightning-only section.
+// The figure sits in AC 27.1309B (Amendment 27-51) and AC 29.1309B (Amendment 29-59), and the
+// table and the AI rubric must name the same section and amendment.
+for (const [reg, sec, amdt] of [['Part 27', 'AC 27.1309B', '27-51'], ['Part 29', 'AC 29.1309B', '29-59']]) {
+  const t = T.tableFor({ regulation: reg }), rub = R.rubricFor(reg);
+  check(reg + ': the table cites ' + sec + ' at Amendment ' + amdt + ', the same as the AI rubric',
+    t.source.indexOf(sec + ' (') >= 0 && t.source.indexOf('Amendment ' + amdt) >= 0 && !/1309A/.test(t.source) &&
+    rub.indexOf(sec) >= 0 && rub.indexOf('Amendment ' + amdt) >= 0);
+  const app = (t.notes || []).filter(n => n.ref === 'Applicability').map(n => n.text).join('');
+  check(reg + ': the applicability note names Amendment ' + amdt, app.indexOf('Amendment ' + amdt) >= 0);
+}
+
 console.log('\n[4] the old hard-coded table and export rows are gone; wiring');
 check('the page has the basis-driven table host', /<div id="sev-def-table"><\/div>/.test(idx));
 check('no hard-coded severity table left on the page', !/Normally with hull loss/.test(idx));
@@ -127,8 +139,8 @@ check('the old "Effect wording per FAA AC 25.1309-1B" claim is gone', !/Effect w
 check('no hard-coded definitions left in the exports', !/Normally with hull loss/.test(dops) && (dops.match(/SLSeverityTables\.exportTable\(projectConfig\)/g) || []).length === 2);
 check('the certification basis page re-renders the table when the basis changes', /SLSeverityTables\.render\(projectConfig\)/.test(sup));
 check('severity_tables.js loads after severity_rubrics.js', idx.indexOf('severity_tables.js?v=') > idx.indexOf('severity_rubrics.js?v='));
-check('pins: severity_tables 1.0, support_modules 66.40, data_ops_modules 66.48',
-      PIN.atLeast(idx, 'severity_tables.js', '1.0') && PIN.atLeast(idx, 'support_modules.js', '66.40') && PIN.atLeast(idx, 'data_ops_modules.js', '66.48'));
+check('pins: severity_tables 1.1, support_modules 66.40, data_ops_modules 66.48',
+      PIN.atLeast(idx, 'severity_tables.js', '1.1') && PIN.atLeast(idx, 'support_modules.js', '66.40') && PIN.atLeast(idx, 'data_ops_modules.js', '66.48'));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

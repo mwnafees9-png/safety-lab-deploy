@@ -55,7 +55,10 @@ console.log('\n[apply.sh] the database password never reaches a command line');
   const url = 'postgresql://postgres:p%40ss:w0rd@db.acme.test:5432/postgres?sslmode=require';
   const r = run(apply, { DATABASE_URL: url });
   const lines = (r.stdout || '').split('\n').filter(l => l.startsWith('ARGS='));
-  check('every psql call ran (21 files)', lines.length === 21, String(lines.length));
+  // 4 Oct 2026: counted from the kit itself (21_version_archive_prune_cheap made it 22), so a new
+  // numbered file never needs this number edited by hand.
+  const _kitFiles = fs.readdirSync(path.join(REPO, 'customer-install/db')).filter(f => /^\d\d_.*\.sql$/.test(f)).length;
+  check('every psql call ran (one per numbered kit file, ' + _kitFiles + ')', lines.length === _kitFiles && _kitFiles >= 22, String(lines.length));
   check('no psql command line carries the password', lines.length > 0 && lines.every(l => !/p%40ss|p@ss|w0rd\]? /.test(l.split(' PW=')[0])));
   check('psql gets it, decoded, in PGPASSWORD', lines.length > 0 && lines.every(l => l.endsWith('PW=[p@ss:w0rd]')));
   check('the address psql sees keeps user, host, port, database and options', lines.length > 0 && lines[0].indexOf('postgresql://postgres@db.acme.test:5432/postgres?sslmode=require') >= 0);

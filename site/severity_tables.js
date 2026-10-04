@@ -11,14 +11,17 @@
  * both exports, every class row is built the same way, and a basis' own notes sit in
  * one footnote list under the table, each labeled with its source.
  *
+ * v1.1 3 Oct 2026: the rotorcraft citations named the wrong section of the AC (1309A, the
+ * lightning-only amendment). The figure belongs to AC 27.1309B (Amendment 27-51) and AC 29.1309B
+ * (Amendment 29-59). The cell wording was already right and is unchanged.
  * SOURCES, checked against the documents on 3 Oct 2026:
  *   · Part 25: FAA AC 25.1309-1B (30 Aug 2024) Table 4-1 and §3.1.5 Notes — US Government
  *     work, public domain, VERBATIM.
  *   · Part 23: FAA AC 23.1309-1E (11/17/2011) Figure 2 and ¶8.x(5) Notes — public domain,
  *     VERBATIM. The class (I–IV) changes the numbers and DALs, never these words.
- *   · Part 27: FAA AC 27-1B Chg 9 (6/23/23), AC 27.1309A (§27.1309 Amendment 27-46),
+ *   · Part 27: FAA AC 27-1B Chg 9 (6/23/23), AC 27.1309B (§27.1309 Amendment 27-51),
  *     Figure AC 27.1309-2 — public domain, VERBATIM.
- *   · Part 29: FAA AC 29-2C Chg 9 (6/23/23), AC 29.1309A (§29.1309 Amendment 29-53),
+ *   · Part 29: FAA AC 29-2C Chg 9 (6/23/23), AC 29.1309B (§29.1309 Amendment 29-59),
  *     Figure AC 29.1309-2 — public domain, VERBATIM (as printed, including "or safety" in
  *     the Minor cell).
  *   · SC-VTOL: EASA MOC SC-VTOL Issue 2 (12 May 2021), MOC VTOL.2510, Failure Conditions
@@ -88,7 +91,7 @@
         return ladder({
             basis: part,
             title: 'FAA ' + ac + ' Figure ' + fig,
-            source: 'FAA ' + chg + ', AC ' + sec + '.1309A (§' + sec + '.1309 at Amendment ' + amdt + '), Figure ' + fig + ' "Failure Condition Categories and Probability Definitions", quoted verbatim as printed.',
+            source: 'FAA ' + chg + ', AC ' + sec + '.1309B (§' + sec + '.1309 at Amendment ' + amdt + '), Figure ' + fig + ' "Failure Condition Categories and Probability Definitions", quoted verbatim as printed.',
             verbatim: true,
             columns: ['Effect on rotorcraft', 'Effect on occupants excluding flight crew', 'Effect on flight crew', 'Qualitative Probability'],
             rows: {
@@ -105,8 +108,8 @@
             ]
         });
     }
-    T['Part 27'] = rotor('Part 27', 'AC 27-1B', 'AC 27.1309-2', 'AC 27-1B Chg 9 (6/23/23)', '27-46');
-    T['Part 29'] = rotor('Part 29', 'AC 29-2C', 'AC 29.1309-2', 'AC 29-2C Chg 9 (6/23/23)', '29-53');
+    T['Part 27'] = rotor('Part 27', 'AC 27-1B', 'AC 27.1309-2', 'AC 27-1B Chg 9 (6/23/23)', '27-51');
+    T['Part 29'] = rotor('Part 29', 'AC 29-2C', 'AC 29.1309-2', 'AC 29-2C Chg 9 (6/23/23)', '29-59');
 
     function scvtol(enhanced) {
         var cat = enhanced ? 'Category Enhanced' : 'Category Basic';
@@ -246,7 +249,7 @@
         } catch (_) { return false; }
     }
 
-    var API = { version: '1.0', TABLES: T, ORDER: ORDER, tableFor: tableFor, rowsOf: rowsOf, exportTable: exportTable, html: html, render: render };
+    var API = { version: '1.1', TABLES: T, ORDER: ORDER, tableFor: tableFor, rowsOf: rowsOf, exportTable: exportTable, html: html, render: render };
     G.SLSeverityTables = API;
     if (typeof module !== 'undefined' && module.exports) module.exports = API;
     try { if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { render(); }); else render(); } } catch (_) {}

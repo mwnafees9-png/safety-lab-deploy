@@ -58,16 +58,17 @@ const has = re => re.test(ALL);
     // 31 Aug 2026 (seventh) — v0.8 adds EASA CS 25.1309 / AMC 25.1309 (certstd-57..59). 56 -> 59.
     // 1 Sep 2026 (eighth) — v0.9 adds EASA CS-23 / CS-27 / CS-29 / CS-E (certstd-60..63). 59 -> 63.
     // 1 Sep 2026 (ninth) — v0.10 adds 14 CFR Part 21 §21.16/.17/.101 + operating-rule note (certstd-64..66). 63 -> 66.
-    check('exactly 66 cert-std chunks (…+4 EASA CS-23/27/29/E + 3 Part 21/operating)', KB.chunks.length === 66, 'got ' + KB.chunks.length);
+    // 3 Oct 2026 — v0.14 adds AC 29.1309B / AC 27.1309B from Change 9, the current rotorcraft classes (certstd-67..68). 66 -> 68.
+    check('exactly 68 cert-std chunks (…+3 Part 21/operating + 2 current rotorcraft 1309B)', KB.chunks.length === 68, 'got ' + KB.chunks.length);
     check('every chunk carries {id, source, topic, text} with real text',
         KB.chunks.every(c => c.id && c.source && c.topic && typeof c.text === 'string' && c.text.length > 300));
-    check('ids are certstd-01..certstd-66, unique and contiguous', (function () {
+    check('ids are certstd-01..certstd-68, unique and contiguous', (function () {
         const ids = KB.chunks.map(c => c.id);
         if (new Set(ids).size !== ids.length) return false;
         return ids.every((id, i) => id === 'certstd-' + String(i + 1).padStart(2, '0'));
     })());
     check('browser global is SL_CERTSTD_KB with version + method, node export carries chunks',
-        /window\.SL_CERTSTD_KB = \{ version: 11, method: 'lexical'/.test(ksrc) && Array.isArray(KB.chunks));
+        /window\.SL_CERTSTD_KB = \{ version: 12, method: 'lexical'/.test(ksrc) && Array.isArray(KB.chunks));
 }
 
 // ---- [1c] SC-VTOL NO-DRIFT PINS (31 Aug 2026) ------------------------------------

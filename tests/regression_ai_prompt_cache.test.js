@@ -36,7 +36,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 let pass = 0, fail = 0;
 const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' — ' + d : '')); } };
-const S = f => fs.readFileSync(path.join(__dirname, '..', 'site', f), 'utf8');
+const S = f => fs.readFileSync(path.join(process.env.SLAB_SITE || path.join(__dirname, '..', 'site'), f), 'utf8');   // 3 Oct 2026: mutation runs
 const core = S('core_modules.js'), ai = S('ai_assistant.js'), idx = S('index.html'), loader = S('ai_loader.js');
 const PIN = require('./lib/pinfloor.js');
 
@@ -163,9 +163,9 @@ function streamResponse(text) {
 
     // ------------------------------------------------------------ chat prompt parts
     console.log('\n[A3] _chatSystemPromptParts — the chat prompt, same text, with breaks');
-    const pm = ai.match(/function _chatSystemPromptParts\(role\) \{[\s\S]*?\n    \}/);
+    const pm = ai.match(/function _chatSystemPromptParts\(role, lane\) \{[\s\S]*?\n    \}/);   // 3 Oct 2026: + lane
     check('A3 parts function found', !!pm);
-    const pc = vm.createContext({ _standardsPreamble: () => 'PRE', _chatProjectState: () => ({ a: 1 }), JSON });
+    const pc = vm.createContext({ _standardsPreamble: () => 'PRE', _chatProjectState: () => ({ a: 1 }), JSON, _definitionsBlock: () => '' });
     vm.runInContext('var __p = (' + pm[0].replace('function _chatSystemPromptParts', 'function ') + ');', pc);
     const parts = vm.runInContext('__p', pc)('ROLE TEXT');
     const oldJoin = ['PRE', '', 'ROLE TEXT', '', 'CURRENT PROJECT STATE (JSON, read-only — reference these ids). The connected spine is included: each fault-tree page carries its allocTarget / allocDAL and its ccfGroups / repeatedEvents; system functions carry tracesUpTo and system FCs carry rollsUpTo; requirements carry traceTo. Inherit allocated targets (never a severity-class guess when a real target exists), preserve every up-link, and never break an existing CCF grouping or independence claim.', JSON.stringify({ a: 1 })].join('\n');
@@ -177,6 +177,17 @@ function streamResponse(text) {
     check('A3 with a \\n\\n-led extra appended both chat breaks cut cleanly', Array.isArray(bC) && bC.length === 3 && join(bC) === full && bC[1].text.endsWith('{"a":1}\n\n'));
     const bC2 = C.systemBlocks(parts.text + 'X', parts.breaks);
     check('A3 with no seam after the state, the state break is dropped (role break kept)', Array.isArray(bC2) && bC2.length === 2 && join(bC2) === parts.text + 'X');
+    // 3 Oct 2026 — DEFINITIONS FIRST in the chat: the basis definitions sit between the preamble
+    // and the role, inside the first cached prefix; a batch lane never gets them twice.
+    {
+      const pd = vm.createContext({ _standardsPreamble: () => 'PRE', _chatProjectState: () => ({ a: 1 }), JSON, _definitionsBlock: f => (f === 'chat.edit' ? 'DEFS' : '') });
+      vm.runInContext('var __p = (' + pm[0].replace('function _chatSystemPromptParts', 'function ') + ');', pd);
+      const pChat = vm.runInContext('__p', pd)('ROLE TEXT');
+      const pLane = vm.runInContext('__p', pd)('ROLE TEXT', 'fha');
+      check('A3 the plain chat puts the definitions after the preamble and BEFORE the role, inside the first break', pChat.text.slice(0, pChat.breaks[0]) === 'PRE\n\nDEFS\n\nROLE TEXT\n\n');
+      check('A3 the explicit chat lane is the same as the default', vm.runInContext('__p', pd)('ROLE TEXT', 'chat.edit').text === pChat.text);
+      check('A3 a batch lane gets no definitions in the head (the assembler already put them ahead of its skill body)', pLane.text === parts.text && pLane.text.indexOf('DEFS') < 0);
+    }
     check('A3 _chatSystemPrompt() returns the parts text (one prompt, one source)', /function _chatSystemPrompt\(\) \{ return _chatSystemPromptParts\(_chatSystemPromptRole\(\)\)\.text; \}/.test(ai));
 
     // ------------------------------------------------------------ wiring
@@ -184,8 +195,8 @@ function streamResponse(text) {
     check('W1 Provider.complete passes cacheBreaks to AiClient.messages', /system:\s+opts\.system,\s*\n\s*cacheBreaks: opts\.cacheBreaks/.test(ai));
     check('W1 assembler hands breaks back on opts.cacheBreaks', /opts\.cacheBreaks = _breaks\.filter/.test(ai));
     check('W1 _anemComplete builds breaks from the chat parts + shifted extra breaks and passes them', /const _breaks = _chat\.breaks\.concat\(/.test(ai) && /feature: 'chat\.edit', model: MODELS\.reason, system: sys, cacheBreaks: _breaks/.test(ai));
-    check('W1 _anemRun forwards extraBreaks on the first try and the retry', (ai.match(/_anemComplete\(messages, ex[^\n]*extraBreaks\)/g) || []).length === 2);
-    check('W1 the batch passes the assembler breaks to BOTH _anemRun call sites', (ai.match(/_anemRun\(_mkMessages\([^)]*\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks\)/g) || []).length === 2);
+    check('W1 _anemRun forwards extraBreaks on the first try and the retry', (ai.match(/_anemComplete\(messages, ex[^\n]*extraBreaks, lane\)/g) || []).length === 2);   // 3 Oct 2026: + lane
+    check('W1 the batch passes the assembler breaks to BOTH _anemRun call sites', (ai.match(/_anemRun\(_mkMessages\([^)]*\), _sysExtra, _chunk \? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks, _batchLane\)/g) || []).length === 2);
     check('W1 the local (customer endpoint) path still sends system as a string', /messages\.push\(\{ role: 'system', content: opts\.system \}\)/.test(ai));
     check('W2 pins: core_modules >= 1.6, ai_loader >= 8.54, ai_assistant >= 76.63', PIN.atLeast(idx, 'core_modules.js', '1.6') && PIN.atLeast(idx, 'ai_loader.js', '8.54') && PIN.atLeast(loader, 'ai_assistant.js', '76.63'));
 

@@ -97,7 +97,8 @@ test('E2 — severity commitment: the rejected v3 rule and its gate', () => {
   // 4 Sep 2026 — v7#3404f569 defines GROUNDED vs JUDGEMENT (golden run 1 flagged 121/129).
   // 13 Sep 2026 — v9#6b64c1e1 is v7 in American English (R4 batch B): spelling only, eval-gated.
   // 27 Sep 2026 — v10#ff757938 adds PROSECUTOR STANCE + DEFENSE ORDER (OPEN_ITEMS Q12/Q14), eval-gated.
-  check('fha.draft stamps the shipped v10#ff757938 (v9 text + prosecutor stance + defense order), not the rejected E2 take', global.window.SLABSkills.stampFor('fha.populate', '') === 'fha.draft@v10#ff757938', global.window.SLABSkills.stampFor('fha.populate', ''));
+  // 3 Oct 2026 — v11#1fa71aca: the levels point at the basis' EFFECT LEVELS block, the joint top step follows it. Eval-gated.
+  check('fha.draft stamps v11#1fa71aca (v10 + definitions first, levels by basis), not the rejected E2 take', global.window.SLABSkills.stampFor('fha.populate', '') === 'fha.draft@v11#1fa71aca', global.window.SLABSkills.stampFor('fha.populate', ''));
   check('v10 carries the prosecutor stance and the defense order, and the stance does not set the class', /PROSECUTOR STANCE/.test(body) && /DEFENSE ORDER/.test(body) && /never from the stance itself/.test(body) && /never accepted as the only defense against a Hazardous or Catastrophic/.test(body));
   check('the abstention clause is replaced by FLAGGED judgement, never by silent commitment',
     !/leave severity EMPTY rather than reaching for a plausible value/.test(body) && /WHEN THE INFORMATION IS THIN, JUDGE - DO NOT ABSTAIN/.test(body) && /judgementCall: true and a judgementNote/.test(body));

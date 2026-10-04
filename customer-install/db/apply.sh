@@ -22,7 +22,7 @@ if [[ "$DB_URL" =~ $re ]]; then
   unset _pw
 fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
-for f in 00_schema_baseline 01_ws_members_admin_cannot_mint_owner 02_drop_hardcoded_platform_admins 03_collab_field_edit_locks 04_harden_api_surface 05_change_journal_problem_events 06_grants_lockdown 07_verify_functions 08_user_secrets_vault 09_audit_writers_and_ledger_lockdown  10_scheduled_chain_verification 11_truncate_grants_lockdown 12_drop_dead_ai_usage 13_chain_serialization 14_acknowledged_chain_breaks 15_erasure_completeness 16_workspace_member_directory 17_auth_signup_trigger 18_verify_wrappers_match_inner 19_realtime_private_channels 20_access_rules_hardening; do
+for f in 00_schema_baseline 01_ws_members_admin_cannot_mint_owner 02_drop_hardcoded_platform_admins 03_collab_field_edit_locks 04_harden_api_surface 05_change_journal_problem_events 06_grants_lockdown 07_verify_functions 08_user_secrets_vault 09_audit_writers_and_ledger_lockdown  10_scheduled_chain_verification 11_truncate_grants_lockdown 12_drop_dead_ai_usage 13_chain_serialization 14_acknowledged_chain_breaks 15_erasure_completeness 16_workspace_member_directory 17_auth_signup_trigger 18_verify_wrappers_match_inner 19_realtime_private_channels 20_access_rules_hardening 21_version_archive_prune_cheap; do
   echo "==> applying $f.sql"
   psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$HERE/$f.sql"
 done

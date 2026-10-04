@@ -35,6 +35,7 @@ This runs the SQL files in order:
 19. `18_verify_wrappers_match_inner.sql`: the two chain-check functions users call, re-declared to match what they return.
 20. `19_realtime_private_channels.sql`: who may join and send on the live co-editing, lock and presence channels (workspace members receive; editors send edits and locks).
 21. `20_access_rules_hardening.sql`: two-factor enforced by the database for accounts that have it turned on; projects cannot be moved between workspaces; reviewers can only record their own decision; sign-offs record the signer as the database knows them; chain checks report only what the caller can see.
+22. `21_version_archive_prune_cheap.sql`: a project with a long save history keeps saving. Each archived version stores its item count once, so the clean-up of old versions no longer re-reads every archived copy on every save.
 
 Run this once, on an empty database. It is a fresh-install sequence, not an upgrade script:
 `00_schema_baseline.sql` fails if the tables already exist. To upgrade an existing install,

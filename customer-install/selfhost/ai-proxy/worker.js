@@ -143,10 +143,36 @@ async function sbFetch(env, path, opts = {}) {
   return fetch(url, { ...opts, headers });
 }
 
+// ---- 4 Oct 2026: retry the auth reads on a transient failure --------------------------
+// 27 Sep: the auth read to Supabase failed twice in one evening ("Auth backend unreachable",
+// 502) and each failure killed a whole AI call, one turn of a 22-turn FHA draft at a time,
+// because a single slow or dropped read was final. The auth reads below now go through this:
+// a thrown network error, a 5xx or a 429 is retried, twice, after a short wait (150 ms, then
+// 450 ms, so at most about 0.6 s added). A definite answer is never retried: 401/403 (bad
+// token), 404, any other 4xx, and any 2xx are returned at once, so a wrong token still fails
+// on the first try and a denial is never turned into a second chance.
+const AUTH_RETRY_DELAYS_MS = [150, 450];
+function _authRetryable(res) { return !res || res.status >= 500 || res.status === 429; }
+async function authFetch(doFetch) {
+  let last = null, lastErr = null;
+  for (let attempt = 0; attempt <= AUTH_RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, AUTH_RETRY_DELAYS_MS[attempt - 1]));
+    try {
+      last = await doFetch(); lastErr = null;
+      if (!_authRetryable(last)) return last;
+    } catch (e) { lastErr = e; last = null; }
+  }
+  if (lastErr) throw lastErr;
+  return last;
+}
+
 async function lookupToken(env, token) {
   // SEC-8 itar_required + SEC-7 rate_limit_rpm added to the select.
   const sel = "token,user_id,plan,monthly_allowance,tokens_used_this_month,reset_month,expires_at,itar_required,rate_limit_rpm";
-  const res = await sbFetch(env, `/license_tokens?token=eq.${encodeURIComponent(token)}&select=${sel}`);
+  let res;
+  try {
+    res = await authFetch(() => sbFetch(env, `/license_tokens?token=eq.${encodeURIComponent(token)}&select=${sel}`));
+  } catch (_) { return { error: "supabase_unreachable" }; }   // was uncaught: a dropped connection threw out of the handler
   if (!res.ok) return { error: "supabase_unreachable" };
   const rows = await res.json();
   if (!Array.isArray(rows) || rows.length === 0) return { error: "invalid_token" };
@@ -187,9 +213,9 @@ async function verifyUserJwt(env, jwt) {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return { error: "supabase_unreachable" };
   let res;
   try {
-    res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
+    res = await authFetch(() => fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
       headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, authorization: `Bearer ${jwt}` },
-    });
+    }));
   } catch (_) { return { error: "supabase_unreachable" }; }
   if (res.status === 401 || res.status === 403) return { error: "invalid_token" };
   if (!res.ok) return { error: "supabase_unreachable" };
@@ -204,7 +230,7 @@ async function readUserSecret(env, userId, kind) {
   if (!env.SUPABASE_URL) return { error: "supabase_unreachable" };
   let res;
   try {
-    res = await sbFetch(env, `/user_secrets?user_id=eq.${encodeURIComponent(userId)}&kind=eq.${encodeURIComponent(kind)}&select=secret,meta`);
+    res = await authFetch(() => sbFetch(env, `/user_secrets?user_id=eq.${encodeURIComponent(userId)}&kind=eq.${encodeURIComponent(kind)}&select=secret,meta`));
   } catch (_) { return { error: "supabase_unreachable" }; }
   if (!res.ok) return { error: "supabase_unreachable" };
   let rows; try { rows = await res.json(); } catch (_) { return { error: "supabase_unreachable" }; }
@@ -369,6 +395,16 @@ function streamAnthropicWithUsage(upstreamRes, env, token, fallbackModel, ctx, m
   return new Response(toClient, { status: upstreamRes.status, headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", ...CORS } });
 }
 
+// 4 Oct 2026: who to contact depends on whose server this is. On a customer's own install
+// (offline licence mode) the backend is theirs to configure, so the message sends the user to
+// their own administrator, never to Safety Lab's support address. On our cloud it stays ours.
+function itarUnconfiguredMessage(env) {
+  const head = "This account is ITAR-controlled and no domestic-only (US-sovereign) inference backend is configured. The request was refused rather than routed to a public-cloud model. ";
+  return head + (env && env.LICENSE_MODE === "offline"
+    ? "Ask your Safety Lab Aero server administrator to configure one."
+    : "Contact support@safetylabaero.com.");
+}
+
 // SEC-8: the single place that decides whether a request may touch public
 // Anthropic. `itar` here is the ALREADY-RESOLVED effective flag (license OR
 // header) — an ITAR request can never reach the public upstream.
@@ -386,8 +422,7 @@ async function handleAnthropic(request, env, token, itar, ctx, caller) {
     // Domestic-only (US-sovereign) is the ONLY permitted path for ITAR traffic.
     const provider = itarProvider(env);
     if (!provider) {
-      return jsonResponse(503, { error: { type: "itar_unconfigured",
-        message: "This account is ITAR-controlled and no domestic-only (US-sovereign) inference backend is configured. The request was refused rather than routed to a public-cloud model. Contact support@safetylabaero.com." } });
+      return jsonResponse(503, { error: { type: "itar_unconfigured", message: itarUnconfiguredMessage(env) } });
     }
     let bodyObj;
     try { bodyObj = JSON.parse(await request.text()); }
@@ -707,7 +742,7 @@ async function verifyOfflineLicense(env, blob) {
   } catch (_) { return { error: "invalid_token" }; }
 }
 
-export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed };   // metering, testable in isolation (test/cache_metering.test.mjs)
+export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage };   // metering, testable in isolation (test/cache_metering.test.mjs)
 
 // The router. Everything it returns goes through withCors() at the boundary below, so no
 // handler has to know or care what the calling origin was.

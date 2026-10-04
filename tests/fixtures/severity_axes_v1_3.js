@@ -1,7 +1,6 @@
 // ============================================================================
-// severity_axes.js — v1.4 — severity DERIVED from three effect axes (3 Sep 2026).
+// severity_axes.js — v1.3 — severity DERIVED from three effect axes (3 Sep 2026).
 //   1.3 (5 Sep 2026): the Effects cell names the levels fha_derive.js set by rule (MAC / HF / escape).
-//   1.4 (3 Oct 2026): the levels follow the certification basis (PROFILES below). Part 25 unchanged.
 //
 // Waqas: "reduction in safety margins or reduction in functional capabilities —
 // none, slight, significant, large or hull loss — determine aircraft effect;
@@ -80,94 +79,6 @@
     };
     var ORDER = ['ac', 'crew', 'pax'];
 
-    // ------------------------------------------------------------------------
-    // 1.4 (3 Oct 2026) — THE LEVELS FOLLOW THE CERTIFICATION BASIS. Waqas: "it is a
-    // by cert basis update, the AI should be reading the cert basis definitions before
-    // defining the effects for a particular project."
-    //
-    // The five steps of every axis are still the five classes, in order. What a step
-    // SAYS comes from the basis' own effect table (severity_tables.js), and where a
-    // basis draws the line in a different place the label moves with it: under
-    // SC-VTOL Enhanced one fatality is Catastrophic (MOC VTOL.2510: fatalities are
-    // excluded from Hazardous), so the occupant top step is "one or more fatalities"
-    // and the step below it is "serious injury, no fatality".
-    //
-    // STORED values stay the canonical labels in AXES (index = class), so nothing
-    // already saved changes meaning and every reader (fha_derive, the CSV import, the
-    // sync) keeps working. A basis label is what people and the model SEE, and what
-    // the model may write back: levelIndex reads every basis' labels exactly.
-    //
-    // Part 25 is the canonical set and has no profile: its labels, definitions,
-    // synonyms and joint top step are exactly 1.3. Bases with no aircraft effect
-    // table of their own (Parts 33, 35, 450, 107, Custom) keep the canonical labels.
-    //
-    // top: 'all' — any axis at its top step carries the other two (the 3 Sep ruling;
-    //      true wherever the occupant top step is MULTIPLE fatalities).
-    //      'ac'  — only the loss of the aircraft carries the others. Under SC-VTOL
-    //      Enhanced one fatality is Catastrophic with the aircraft intact, so an
-    //      occupant or crew top step must not drag the aircraft axis to "lost".
-    var _FATAL_CREW = [[/fatal|incapacitat/, 4]];
-    var _PAX_MULTI = [[/\b(multiple|few|several|two or more) fatalities\b/, 4], [/\b(one|single|a) fatality\b|\bserious or fatal injur/, 3]];
-    var PROFILES = {
-        'Part 23': { table: 'Part 23', noun: 'airplane', top: 'all',
-            labels: { crew: { 4: 'fatal injury or incapacitation' }, pax: { 3: 'serious or fatal injury to an occupant' } },
-            rules: { crew: _FATAL_CREW, pax: _PAX_MULTI } },
-        'Part 27': { table: 'Part 27', noun: 'rotorcraft', top: 'all',
-            labels: { ac: { 4: 'loss of rotorcraft' }, pax: { 3: 'serious or fatal injury to one occupant' } },
-            rules: { ac: [[/loss of (the )?rotorcraft|rotorcraft (is )?lost/, 4]], crew: _FATAL_CREW, pax: _PAX_MULTI } },
-        'Part 29': { table: 'Part 29', noun: 'rotorcraft', top: 'all',
-            labels: { ac: { 4: 'loss of rotorcraft' }, pax: { 3: 'serious or fatal injury to one occupant' } },
-            rules: { ac: [[/loss of (the )?rotorcraft|rotorcraft (is )?lost/, 4]], crew: _FATAL_CREW, pax: _PAX_MULTI } },
-        'SC-VTOL Basic': { table: 'SC-VTOL Basic', noun: 'aircraft', top: 'all',
-            labels: { ac: { 4: 'loss of aircraft' }, crew: { 4: 'incapacitation or fatal injury' }, pax: { 3: 'serious or fatal injury to an occupant' } },
-            rules: { crew: _FATAL_CREW, pax: _PAX_MULTI } },
-        'SC-VTOL Enhanced': { table: 'SC-VTOL Enhanced', noun: 'aircraft', top: 'ac',
-            labels: { ac: { 4: 'loss of aircraft' }, crew: { 4: 'incapacitation or fatal injury' }, pax: { 3: 'serious injury, no fatality', 4: 'one or more fatalities' } },
-            rules: { crew: _FATAL_CREW, pax: [[/\bno fatalit|\bwithout (a |any )?fatalit|\bnon fatal\b/, 3], [/fatal/, 4], [/serious injur|severe injur/, 3]] } }
-    };
-    var _COL = { ac: 0, pax: 1, crew: 2 };   // severity_tables ladder columns: aircraft, occupants, crew
-    function _cfgNow(cfg) {
-        if (cfg !== undefined) return cfg || {};
-        try { return (typeof projectConfig !== 'undefined' && projectConfig) ? projectConfig : {}; } catch (_) { return {}; }
-    }
-    // The basis key for a project config ('Part 25' when unknown or unreadable).
-    function basisOf(cfg) {
-        try {
-            var T = G.SLSeverityTables;
-            if (T && typeof T.tableFor === 'function') { var t = T.tableFor(_cfgNow(cfg)); if (t && t.basis) return String(t.basis); }
-        } catch (_) {}
-        return 'Part 25';
-    }
-    function profileFor(cfg) { return PROFILES[basisOf(cfg)] || null; }
-    // What a step is CALLED on this basis (display and prompt). Stored values stay canonical.
-    function label(axis, i, cfg) {
-        var a = AXES[axis]; if (!a || i < 0 || i > 4) return '';
-        var p = profileFor(cfg), o = p && p.labels && p.labels[axis];
-        return (o && o[i]) ? o[i] : a.levels[i];
-    }
-    // What a step MEANS on this basis: the basis' own effect-table cell, then the class.
-    function def(axis, i, cfg) {
-        var a = AXES[axis]; if (!a || i < 0 || i > 4) return '';
-        var p = profileFor(cfg);
-        if (p) {
-            try {
-                var t = G.SLSeverityTables && G.SLSeverityTables.TABLES[p.table];
-                var row = t && t.rows && t.rows[CLASSES[i]];
-                var cell = row && row.cells && row.cells[_COL[axis]];
-                if (cell) return String(cell).replace(/\s*\(Note \d+\)/g, '').replace(/\.\s*$/, '') + ' (' + CLASS_LABEL[CLASSES[i]] + ').';
-            } catch (_) {}
-        }
-        return a.defs[i];
-    }
-    // Every basis' labels, read exactly whatever the project's basis (a row keeps its
-    // meaning when the basis changes, and a basis label never reads as "unset").
-    var EXACT = { ac: {}, crew: {}, pax: {} };
-    Object.keys(PROFILES).forEach(function (b) {
-        var L = PROFILES[b].labels || {};
-        ORDER.forEach(function (ax) { Object.keys(L[ax] || {}).forEach(function (i) { EXACT[ax][_k(L[ax][i])] = Number(i); }); });
-    });
-    function display(axis, v, cfg) { var i = levelIndex(axis, v, cfg); return i >= 0 ? label(axis, i, cfg) : ''; }
-
     // A model (or a CSV) may phrase a level loosely — "Hull loss", "loss of the
     // aircraft", "slight inconvenience", "severe injuries". The closed vocabulary
     // still governs: a phrase is accepted only when it names ONE level; anything
@@ -178,17 +89,12 @@
         pax:  [['none or slight inconvenience', 'none', 'slight inconvenience', 'inconvenience', 'no effect'], ['discomfort'], ['minor injuries', 'minor injury'], ['severe injuries or few fatalities', 'severe injuries', 'serious injuries', 'few fatalities', 'serious or fatal injury', 'serious injury'], ['multiple fatalities', 'fatalities']]
     };
     function _k(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
-    function levelIndex(axis, v, cfg) {
+    function levelIndex(axis, v) {
         var a = AXES[axis]; if (!a) return -1;
         if (typeof v === 'number' && v >= 0 && v <= 4 && v === Math.floor(v)) return v;
         var s = _k(v); if (!s) return -1;
         var i = a.levels.indexOf(s); if (i >= 0) return i;
         if (/^[0-4]$/.test(s)) return Number(s);
-        // 1.4 — any basis' own label, exactly; then THIS basis' reading of a loose
-        // phrase, before the shared synonyms (Part 25 has no rules: 1.3 exactly).
-        if (Object.prototype.hasOwnProperty.call(EXACT[axis], s)) return EXACT[axis][s];
-        var _p = profileFor(cfg), _r = _p && _p.rules && _p.rules[axis];
-        if (_r) { for (var ri = 0; ri < _r.length; ri++) { if (_r[ri][0].test(s)) return _r[ri][1]; } }
         var hits = [];
         SYN[axis].forEach(function (list, li) { if (list.some(function (w) { return s === w || s.indexOf(w) >= 0; })) hits.push(li); });
         // "fatalities" alone matches two pax levels ("few fatalities" / "multiple fatalities")
@@ -196,19 +102,19 @@
         if (hits.length !== 1) { var exact = []; SYN[axis].forEach(function (list, li) { if (list.indexOf(s) >= 0) exact.push(li); }); return exact.length === 1 ? exact[0] : -1; }
         return hits[0];
     }
-    function normLevel(axis, v, cfg) { var i = levelIndex(axis, v, cfg); return i >= 0 ? AXES[axis].levels[i] : ''; }
+    function normLevel(axis, v) { var i = levelIndex(axis, v); return i >= 0 ? AXES[axis].levels[i] : ''; }
     // The three level fields of any object, normalised to the closed vocabulary.
-    function levelsOf(obj, cfg) { var o = {}; ORDER.forEach(function (ax) { o[AXES[ax].key] = normLevel(ax, obj && obj[AXES[ax].key], cfg); }); return o; }
+    function levelsOf(obj) { var o = {}; ORDER.forEach(function (ax) { o[AXES[ax].key] = normLevel(ax, obj && obj[AXES[ax].key]); }); return o; }
     // Severity from whatever levels are present; null when none are set.
     // { severity, governing: [axis…], anchor, idx }
-    function derive(row, cfg) {
+    function derive(row) {
         var best = -1, gov = [];
         // the joint top step applies BEFORE the worst-axis read, so a row that
         // names one catastrophic axis is classified as the whole state it implies
-        var _t = (function () { try { return applyTerminal(row || {}, cfg).levels; } catch (_) { return null; } })();
+        var _t = (function () { try { return applyTerminal(row || {}).levels; } catch (_) { return null; } })();
         var src = _t || (row || {});
         ORDER.forEach(function (ax) {
-            var i = levelIndex(ax, src[AXES[ax].key], cfg);
+            var i = levelIndex(ax, src[AXES[ax].key]);
             if (i < 0) return;
             if (i > best) { best = i; gov = [ax]; } else if (i === best) gov.push(ax);
         });
@@ -238,47 +144,36 @@
     // The standing assumption this rests on, recorded on every row it fires on.
     var TERMINAL_ASSUMPTION = 'Hull loss is credited as not recoverable by crew action, so the crew and occupant outcomes follow from it (ARP4761A Table A6 CAT-1: multiple fatalities, usually with the loss of the aircraft).';
     var TOP = 4;
-    // 1.4 — the standing assumption in the basis' own words (Part 25: the 1.3 sentence).
-    function assumptionFor(cfg) {
-        var p = profileFor(cfg); if (!p) return TERMINAL_ASSUMPTION;
-        return 'Loss of the ' + p.noun + ' is credited as not recoverable by crew action, so the crew and occupant outcomes follow from it (' + basisOf(cfg) + ' Catastrophic: ' + label('ac', TOP, cfg) + '; crew ' + label('crew', TOP, cfg) + '; occupants ' + label('pax', TOP, cfg) + ').';
-    }
     // Returns { levels, changed:[axis…], assumption } — levels always complete at
     // the top step. Never LOWERS an axis; only raises the other two to meet the
     // worst. A row with no axis at the top step comes back untouched.
-    // 1.4 — on a basis whose top is 'ac' only the aircraft axis carries the others.
-    function applyTerminal(row, cfg) {
-        var levels = levelsOf(row, cfg), changed = [];
-        var p = profileFor(cfg), from = (p && p.top === 'ac') ? ['ac'] : ORDER;
-        var terminal = from.some(function (ax) { return levelIndex(ax, levels[AXES[ax].key], cfg) === TOP; });
+    function applyTerminal(row) {
+        var levels = levelsOf(row), changed = [];
+        var terminal = ORDER.some(function (ax) { return levelIndex(ax, levels[AXES[ax].key]) === TOP; });
         if (!terminal) return { levels: levels, changed: changed, assumption: '' };
         ORDER.forEach(function (ax) {
             var k = AXES[ax].key;
-            if (levelIndex(ax, levels[k], cfg) !== TOP) { changed.push(ax); levels[k] = AXES[ax].levels[TOP]; }
+            if (levelIndex(ax, levels[k]) !== TOP) { changed.push(ax); levels[k] = AXES[ax].levels[TOP]; }
         });
-        return { levels: levels, changed: changed, assumption: changed.length ? assumptionFor(cfg) : '' };
+        return { levels: levels, changed: changed, assumption: changed.length ? TERMINAL_ASSUMPTION : '' };
     }
     // Human sentence for what the determination did, for the row's comments.
-    function terminalNote(res, cfg) {
+    function terminalNote(res) {
         if (!res || !res.changed || !res.changed.length) return '';
-        var p = profileFor(cfg);
-        return 'Top step is joint: ' + res.changed.map(function (ax) { return AXES[ax].label.toLowerCase() + ' set to "' + label(ax, TOP, cfg) + '"'; }).join(' and ')
-             + ((p && p.top === 'ac') ? ' because the ' + p.noun + ' is lost. ' : ' because another axis is at the catastrophic step. ') + assumptionFor(cfg);
+        return 'Top step is joint: ' + res.changed.map(function (ax) { return AXES[ax].label.toLowerCase() + ' set to "' + AXES[ax].levels[TOP] + '"'; }).join(' and ')
+             + ' because another axis is at the catastrophic step. ' + TERMINAL_ASSUMPTION;
     }
-    function hasLevels(row, cfg) { return ORDER.some(function (ax) { return levelIndex(ax, row && row[AXES[ax].key], cfg) >= 0; }); }
-    function rationale(row, cfg) {
-        var d = derive(row, cfg); if (!d) return '';
+    function hasLevels(row) { return ORDER.some(function (ax) { return levelIndex(ax, row && row[AXES[ax].key]) >= 0; }); }
+    function rationale(row) {
+        var d = derive(row); if (!d) return '';
         // read the parts off the PROPAGATED levels, so a row whose crew axis the
         // joint top step just filled never prints "Crew —" beside a catastrophic class
-        var _lv = (function () { try { return applyTerminal(row, cfg).levels; } catch (_) { return row; } })();
-        var parts = ORDER.map(function (ax) { var i = levelIndex(ax, _lv[AXES[ax].key], cfg); return AXES[ax].label + ' ' + (i >= 0 ? label(ax, i, cfg) : '—'); });
+        var _lv = (function () { try { return applyTerminal(row).levels; } catch (_) { return row; } })();
+        var parts = ORDER.map(function (ax) { var i = levelIndex(ax, _lv[AXES[ax].key]); return AXES[ax].label + ' ' + (i >= 0 ? AXES[ax].levels[i] : '—'); });
         // Rule 22 — descriptive, not internal shorthand. Three governing axes is the
         // joint catastrophic state, not a list of three things each "governing".
-        // 3 Oct 2026 — three axes level with each other is the joint catastrophic state ONLY at
-        // the top step; three axes all at "none" printed "at the catastrophic step" beside No
-        // Safety Effect (seen on the 27 Sep draws, every NSE row).
         var who = (d.governing.length === ORDER.length)
-            ? (d.idx === TOP ? 'all three axes at the catastrophic step' : 'all three axes at the same step')
+            ? 'all three axes at the catastrophic step'
             : (d.governing.map(function (ax) { return AXES[ax].label.toLowerCase(); }).join(' and ') + (d.governing.length > 1 ? ' axes govern' : ' axis governs'));
         return parts.join(' · ') + ' → ' + CLASS_LABEL[d.severity] + ' (' + who + ')';
     }
@@ -287,10 +182,10 @@
     // ---- the Effects cell: level chip + the sentence that justifies it ----------
     // 11 Sep 2026 — level chips take the app-wide severity fills (safety_lab.css .sev-axis-chip[data-level]); no private colours here.
     var CHIP = { 0: '', 1: '', 2: '', 3: '', 4: '' };
-    function effectsHtml(row, cfg) {
+    function effectsHtml(row) {
         return ORDER.map(function (ax) {
-            var a = AXES[ax], i = levelIndex(ax, row && row[a.key], cfg);
-            var chip = i >= 0 ? '<span class="sev-axis-chip" data-level="' + i + '" title="' + esc(a.question + ': ' + def(ax, i, cfg)) + '" style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:999px;margin-right:6px;' + CHIP[i] + '">' + esc(label(ax, i, cfg)) + '</span>' : '';
+            var a = AXES[ax], i = levelIndex(ax, row && row[a.key]);
+            var chip = i >= 0 ? '<span class="sev-axis-chip" data-level="' + i + '" title="' + esc(a.question + ': ' + a.defs[i]) + '" style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:999px;margin-right:6px;' + CHIP[i] + '">' + esc(a.levels[i]) + '</span>' : '';
             // 5 Sep 2026 (levers 2 + 3) — a level set BY RULE says so beside the chip: from the
             // MAC rule, from the Task Analysis, or by the escape rule (No Safety Effect).
             var _dv = (row && row.derived && row.derived[ax]) ? String(row.derived[ax]) : '';
@@ -321,7 +216,7 @@
             wrap.className = 'grid-3-col sev-axes-grid'; wrap.style.marginTop = '6px';
             wrap.innerHTML = ORDER.map(function (ax) {
                 var a = AXES[ax];
-                var opts = ['<option value="">' + esc(a.question) + ' — level…</option>'].concat(a.levels.map(function (l, i) { return '<option value="' + esc(l) + '" title="' + esc(def(ax, i)) + '">' + esc(a.label + ': ' + label(ax, i)) + ' → ' + esc(CLASS_LABEL[CLASSES[i]]) + '</option>'; })).join('');
+                var opts = ['<option value="">' + esc(a.question) + ' — level…</option>'].concat(a.levels.map(function (l, i) { return '<option value="' + esc(l) + '" title="' + esc(a.defs[i]) + '">' + esc(a.label + ': ' + l) + ' → ' + esc(CLASS_LABEL[CLASSES[i]]) + '</option>'; })).join('');
                 return '<select id="' + prefix + '-lvl-' + ax + '" data-sev-axis="' + ax + '" title="' + esc(a.question + '. Evidence: ' + a.evidence) + '">' + opts + '</select>';
             }).join('');
             grid.parentNode.insertBefore(wrap, grid.nextSibling);
@@ -338,21 +233,8 @@
     function _writeLevels(prefix, row) { ORDER.forEach(function (ax) { var el = _sel(prefix, ax); if (el) el.value = normLevel(ax, row && row[AXES[ax].key]); }); _driveSeverity(prefix); }
     // While any level is set the class is derived and the select is read-only;
     // clear the levels to classify by hand (that IS the recorded override).
-    // 1.4 — the option TEXT follows the project's basis (the value stays canonical);
-    // re-read on every drive, so a basis changed after boot shows its own words.
-    function _relabel(prefix) {
-        ORDER.forEach(function (ax) {
-            var el = _sel(prefix, ax); if (!el || !el.options) return;
-            for (var oi = 1; oi < el.options.length; oi++) {
-                var li = oi - 1, txt = AXES[ax].label + ': ' + label(ax, li) + ' → ' + CLASS_LABEL[CLASSES[li]];
-                if (el.options[oi].text !== txt) el.options[oi].text = txt;
-                el.options[oi].title = def(ax, li);
-            }
-        });
-    }
     function _driveSeverity(prefix) {
         var sev = document.getElementById(prefix + '-sev'), note = document.getElementById(prefix + '-sev-derived-note'); if (!sev) return;
-        try { _relabel(prefix); } catch (_) {}
         // the joint top step, applied to the pickers themselves: name one
         // catastrophic axis and the other two are set and locked, with the
         // assumption stated under them. Clear it and they are free again.
@@ -365,7 +247,7 @@
             var el = _sel(prefix, ax); if (!el) return;
             var lead = levelIndex(ax, _raw[AXES[ax].key]) === TOP;
             el.disabled = !!(_isTerminal && !lead && _t.changed.indexOf(ax) >= 0);
-            el.title = el.disabled ? assumptionFor() : (AXES[ax].question + '. Evidence: ' + AXES[ax].evidence);
+            el.title = el.disabled ? TERMINAL_ASSUMPTION : (AXES[ax].question + '. Evidence: ' + AXES[ax].evidence);
         });
         var d = derive(_t.levels);
         if (d) { sev.value = d.severity; sev.disabled = true; sev.title = 'Derived from the three effect levels — clear the levels to classify by hand.'; if (note) note.textContent = 'Severity derived: ' + rationale(_t.levels) + '.' + (_t.changed.length ? (' ' + terminalNote(_t)) : ''); }
@@ -425,29 +307,5 @@
     }
     if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot(); }
 
-    // ---- 1.4: the EFFECT LEVELS block the drafting prompts carry ----------------
-    // Deterministic text, built from the same labels and definitions the page shows,
-    // so the model writes levels in the basis' own words and the product reads them
-    // back exactly. Placed with the rubric, ahead of the skill body (ai_assistant
-    // _definitionsBlock).
-    function effectLevelsBlock(cfg) {
-        var b = basisOf(cfg), p = profileFor(cfg), hasTable = !!p || b === 'Part 25';
-        var head = 'EFFECT LEVELS FOR THIS CERTIFICATION BASIS - ' + b + '. Set effAcLevel, effCrewLevel and effPaxLevel to exactly one label from each list below, written as shown. Step 1 to 5 of every axis is the class in order (No Safety Effect, Minor, Major, Hazardous, Catastrophic) and the class is the WORST axis.';
-        if (!hasTable) head += ' This basis has no aircraft-level effect table of its own: these are the product labels, and the class follows the rubric for this basis.';
-        var lines = [head];
-        var Q = { ac: 'Aircraft - ' + AXES.ac.question.toLowerCase(), crew: 'Crew - ' + AXES.crew.question.toLowerCase(), pax: 'Occupants - ' + AXES.pax.question.toLowerCase() };
-        ['ac', 'crew', 'pax'].forEach(function (ax) {
-            lines.push(Q[ax] + ':');
-            for (var i = 0; i <= 4; i++) lines.push('  ' + (i + 1) + '. ' + label(ax, i, cfg) + (hasTable ? ' = ' + def(ax, i, cfg) : ' (' + CLASS_LABEL[CLASSES[i]] + ')'));
-        });
-        if (p && p.top === 'ac') {
-            lines.push('Top step on this basis: the loss of the ' + p.noun + ' carries the crew and occupant axes to their top steps. The occupant and crew top steps do NOT imply the loss of the ' + p.noun + ': ' + label('pax', TOP, cfg) + ' is Catastrophic with the ' + p.noun + ' intact, so set the aircraft axis on its own evidence. Any expected fatality, including one person on the ground, is the occupant top step; serious injury with no fatality is the step below it.');
-        } else {
-            lines.push('Top step on this basis: one joint end state - any axis at its top step carries the other two to theirs.');
-        }
-        return lines.join('\n');
-    }
-
-    G.SLSeverityAxes = { _v: '1.4', AXES: AXES, ORDER: ORDER, CLASSES: CLASSES, CLASS_LABEL: CLASS_LABEL, levelIndex: levelIndex, normLevel: normLevel, levelsOf: levelsOf, derive: derive, applyTerminal: applyTerminal, terminalNote: terminalNote, TERMINAL_ASSUMPTION: TERMINAL_ASSUMPTION, TOP: TOP, hasLevels: hasLevels, rationale: rationale, effectsHtml: effectsHtml,
-        PROFILES: PROFILES, basisOf: basisOf, profileFor: profileFor, label: label, def: def, display: display, assumptionFor: assumptionFor, effectLevelsBlock: effectLevelsBlock };
+    G.SLSeverityAxes = { _v: '1.3', AXES: AXES, ORDER: ORDER, CLASSES: CLASSES, CLASS_LABEL: CLASS_LABEL, levelIndex: levelIndex, normLevel: normLevel, levelsOf: levelsOf, derive: derive, applyTerminal: applyTerminal, terminalNote: terminalNote, TERMINAL_ASSUMPTION: TERMINAL_ASSUMPTION, TOP: TOP, hasLevels: hasLevels, rationale: rationale, effectsHtml: effectsHtml };
 })();

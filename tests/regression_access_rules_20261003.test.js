@@ -208,7 +208,7 @@ check('project move refused by a trigger', /create trigger sl_guard_project_work
 check('review assignment cannot change review or person', /create trigger sl_guard_review_assignment before update on public\.review_assignments/.test(B));
 check('sign-off identity set before the chain seals it (trigger name sorts first)', /create trigger trg_signoffs_a_identity before insert on public\.signoffs/.test(B) && 'trg_signoffs_a_identity' < 'trg_signoffs_chain');
 check('sign-off assurance stays inside the column\'s allowed values', /then 'mfa'[\s\S]{0,200}then 'password_reauth'[\s\S]{0,40}else 'session'/.test(B));
-check('apply.sh runs 19 and 20 in order', /18_verify_wrappers_match_inner 19_realtime_private_channels 20_access_rules_hardening;/.test(read('customer-install/db/apply.sh')));
+check('apply.sh runs 19 and 20 in order', /18_verify_wrappers_match_inner 19_realtime_private_channels 20_access_rules_hardening[ ;]/.test(read('customer-install/db/apply.sh')));
 
 // ---------------------------------------------------------------- 4. the SQL proof, when a Postgres is at hand
 console.log('\n[proof] the database proof');

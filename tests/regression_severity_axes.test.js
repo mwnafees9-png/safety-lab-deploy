@@ -231,7 +231,8 @@ console.log('\n[5] CSV — the levels export and import on both FHAs');
 {
   const d = S('data_ops_modules.js');
   check('AC and System FHA exports (download + report) carry Aircraft/Crew/Pax Level after the effects', (d.match(/'Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity'/g) || []).length === 4);
-  check('the rows emit the level fields in the same positions', (d.match(/r\.effAcLevel \|\| '', r\.effCrewLevel \|\| '', r\.effPaxLevel \|\| ''/g) || []).length === 4);
+  // 3 Oct 2026 — written in the project's basis words (regression_effect_levels_by_basis_20261003)
+  check('the rows emit the level fields in the same positions', (d.match(/_axisShow\('ac', r\.effAcLevel\), _axisShow\('crew', r\.effCrewLevel\), _axisShow\('pax', r\.effPaxLevel\)/g) || []).length === 4);
   check('import reads the three columns through the closed vocabulary (off-list → empty)', (d.match(/effAcLevel: _axisLvl\('ac', getValue\(row, \['Aircraft Level'\]\)\)/g) || []).length === 2 && /function _axisLvl\(axis, v\)/.test(d));
   check('data_ops ≥ 66.36 (floor)', parseFloat((S('index.html').match(/data_ops_modules\.js\?v=([\d.]+)/) || [])[1]) >= 66.36);
 }
