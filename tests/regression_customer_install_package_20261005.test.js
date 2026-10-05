@@ -56,7 +56,8 @@ check('...and the kit really asks for the administrator email', /read -r -p "   
 check('...and really prints the administrator sign-in once', /Your administrator sign-in/.test(install) && /if \[ -n "\$ADMIN_PW" \]/.test(install));
 check('...and add-user.sh is in the kit', fs.existsSync(path.join(KIT, 'selfhost', 'add-user.sh')));
 check('...and apply.sh tells the operator to confirm the address first', /Confirm email/.test(fs.readFileSync(path.join(KIT, 'db', 'apply.sh'), 'utf8')));
-check('no em dash in the guide text', !/—/.test(body));
+const footer = plain(unzipText(docx, 'word/footer1.xml'));
+check('no em dash anywhere in the guide: body, page header or page footer', !/\u2014/.test(body + header + footer), footer);
 
 // ---------------------------------------------------------------- the packager, executed in a throwaway repo
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'pkg-'));
