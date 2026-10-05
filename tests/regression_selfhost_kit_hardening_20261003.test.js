@@ -42,7 +42,9 @@ if (fs.existsSync(proxyRepo)) check('the kit\'s AI service is byte-for-byte the 
 else console.log('  SKIP  proxy repo not next to this one');
 
 console.log('\n[certificate] the install\'s own root can only vouch for this server');
-check('root is name-constrained to the server name', /-addext "nameConstraints=critical,permitted;DNS:\$SERVER_NAME"/.test(inst));
+// 5 Oct 2026: the limit is the server's own identity, a name (DNS:) or an IP address (IP:<ip>/255.255.255.255);
+// regression_ip_server_20261005 makes both certificates with openssl and reads the limit back.
+check('root is name-constrained to the server name or IP', /-addext "nameConstraints=critical,permitted;\$NAME_LIMIT"/.test(inst) && /NAME_LIMIT="DNS:\$SERVER_NAME"/.test(inst) && /NAME_LIMIT="IP:\$SERVER_NAME\/255\.255\.255\.255"/.test(inst));
 check('root cannot make further authorities (pathlen:0)', /basicConstraints=critical,CA:TRUE,pathlen:0/.test(inst));
 check('the setup-file comment says the server certificate is pinned, not the root', /fingerprint of the server certificate\s*\n# this install made/.test(inst) && !/fingerprint of the root this install/.test(inst));
 

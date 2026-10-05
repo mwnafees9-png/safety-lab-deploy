@@ -4,15 +4,18 @@ This puts everything Safety Lab Aero needs on one computer you own: the database
 sign-in service, and the AI service. No cloud account. Nothing leaves your network except
 AI drafting requests to the AI provider, and those never carry your project files.
 
-You need to install exactly one program on that computer: Docker Desktop. Everything else
-is inside this folder.
+The one program it needs is Docker. On an Ubuntu server or virtual machine the install script
+installs Docker itself. On Windows or a Mac you install Docker Desktop first (Part 1, steps 2
+and 3). Everything else is inside this folder.
 
 ## Part 1. Get the computer ready (your IT person, about 30 minutes)
 
-1. Pick the computer. It must stay switched on. Windows 10 or 11 Pro, a Mac, or a Linux
-   server. At least 4 processor cores, 8 GB of memory, 30 GB of free disk.
+1. Pick the computer. It must stay switched on. The simplest is an Ubuntu 22.04 or 24.04
+   server or virtual machine; Windows 10 or 11 Pro or a Mac also work. At least 4 processor
+   cores, 16 GB of memory (8 GB is the minimum and runs tight), 50 GB of free disk.
 
-2. Install Docker Desktop. Go to https://www.docker.com/products/docker-desktop/ and click
+2. Windows or Mac only (on Ubuntu skip steps 2 to 4: the script installs Docker itself).
+   Install Docker Desktop. Go to https://www.docker.com/products/docker-desktop/ and click
    Download. Run the installer and accept the defaults. When it asks to use WSL 2 on
    Windows, say yes. Restart the computer if it asks.
 
@@ -28,8 +31,13 @@ is inside this folder.
 5. Give the computer a name on your network, for example `safetylab.yourcompany.local`.
    Your IT person does this in your DNS. Test from another computer: open a command window
    and type `ping safetylab.yourcompany.local`. It should answer.
+   No name? Use the computer's IP address instead, for example `10.20.30.40`. It must be
+   fixed: ask IT to make it static or reserve it. The certificate, your license and every
+   user's setup file are tied to the name or address, so changing it later means a new
+   license and a new setup file for everyone.
 
-6. Ask your IT person for a certificate for that name from the company's certificate
+6. Optional, and only for a name (with an IP address, skip this). Ask your IT person for a
+   certificate for that name from the company's certificate
    authority. You get two files, a certificate and a private key. Put them on the computer,
    for example in `C:\SafetyLab\certs\`. If your company cannot make one, skip this: the
    script makes its own, and Part 3 tells you the one extra step.
@@ -41,7 +49,10 @@ is inside this folder.
    starts with `wrkspc_`): it is shown on the workspace's page.
 
 8. Make sure the computer can open https://api.anthropic.com in a browser (it shows a
-   short message; that is fine). That is the only outside address it needs.
+   short message; that is fine). Once installed, that is the only outside address it needs.
+   During the install it also downloads the software, about 9 GB, from Docker Hub
+   (hub.docker.com and its download servers) and, on Ubuntu, Docker itself from Ubuntu's
+   package servers. Ask IT to allow those for the install.
 
 ## Part 2. Install (about 20 minutes, most of it waiting)
 
@@ -56,18 +67,20 @@ is inside this folder.
 
 4. Type `bash install.sh` and press Enter.
 
-5. It asks four questions. Type each answer and press Enter:
-   the server name from Part 1 step 5;
+5. It asks a few questions. Type each answer and press Enter:
+   the server name or IP address from Part 1 step 5;
    the certificate file and the key file from step 6 (Windows paths look like
    `/mnt/c/SafetyLab/certs/server.crt`), or just press Enter twice if you have none;
    the AI key from step 7 (nothing shows while you type; that is normal);
-   the Workspace ID from step 7.
+   the Workspace ID from step 7;
+   the administrator's email address (yours, if you look after this server);
+   your mail server's details if IT gave you them, or press Enter to skip (Part 4 explains).
 
 6. Wait. The first run downloads about 9 GB. You see a list of files being applied, then
    "Checking the front door", then two lines that should both say 200, then "Done." and a
    sheet of what every user types in the app.
 
-7. Two files now sit next to `install.sh`: `<server name>.safetylab-setup`, which is what every
+7. Two files now sit next to `install.sh`: `<server name or IP>.safetylab-setup`, which is what every
    user needs, and `WHAT-TO-TYPE-IN-THE-APP.txt`, which explains it and lists the values in case
    anyone wants to type them by hand.
 
@@ -115,7 +128,7 @@ So open sign-up is off on such a server.)
 
 Is it running? In the `stack` folder: `docker compose ps`. Every line should say "healthy"
 or "Up". Stop: `docker compose stop`. Start: `docker compose start`. After a reboot it starts
-by itself as long as Docker Desktop starts.
+by itself as long as Docker starts (Docker Desktop on Windows or a Mac; on Ubuntu, Docker starts with the machine).
 
 Back up these three things somewhere safe, regularly: the folder `stack/volumes/db/data`
 (your data), and the files `stack/.env` and `stack/ai-proxy.env` (the keys). Losing the keys

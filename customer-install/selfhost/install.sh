@@ -6,7 +6,8 @@
 # service on this machine, inside Docker. Nothing here contacts Safety Lab. The only
 # outside address the finished install talks to is the AI provider, for drafting only.
 #
-# Needs: Docker (Docker Desktop on Windows or Mac, Docker Engine on Linux). Nothing else.
+# Needs: Docker (Docker Desktop on Windows or Mac, Docker Engine on Linux). On Ubuntu 22.04 or later
+# the script installs Docker itself if it is missing. Nothing else.
 #
 # Run it with no arguments and answer the questions:
 #   ./install.sh
@@ -24,8 +25,37 @@ die(){ printf '\nSTOP: %s\n' "$*"; exit 1; }
 
 # ---------------------------------------------------------------- 0. checks
 bold "Checking this machine"
-command -v docker >/dev/null 2>&1 || die "Docker is not installed. Install Docker Desktop (docker.com), open it once, then run this again."
-docker info >/dev/null 2>&1 || die "Docker is installed but not running. Open Docker Desktop, wait for it to say it is running, then run this again."
+# 5 Oct 2026: on a fresh Ubuntu server or virtual machine the script installs Docker itself, from
+# Ubuntu's own packages (docker.io and docker-compose-v2: free, no extra package source, no
+# signing key to fetch), so the customer's IT never has to set Docker up. Anywhere else (Windows,
+# Mac, another Linux) it says what to install instead.
+_ubuntu_ok()( [ "$(uname -s)" = Linux ] && ! grep -qi microsoft /proc/version 2>/dev/null && [ -r /etc/os-release ] && . /etc/os-release && [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID%%.*}" -ge 22 ] 2>/dev/null )
+if ! command -v docker >/dev/null 2>&1; then
+  if _ubuntu_ok && command -v apt-get >/dev/null 2>&1; then
+    bold "Docker is not on this machine yet. Installing it from Ubuntu's own packages (a few minutes)"
+    SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo"
+    if [ -n "$SUDO" ]; then echo "   This needs administrator rights once; type your password if asked."; fi
+    $SUDO apt-get update -q >/dev/null || die "Could not reach Ubuntu's package servers. Ask IT to allow this machine to reach them, then run this again."
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -q docker.io docker-compose-v2 openssl >/dev/null \
+      || die "Installing Docker failed. Run this again; if it fails again, send the output above to Safety Lab."
+    $SUDO systemctl enable --now docker >/dev/null 2>&1 || $SUDO service docker start >/dev/null 2>&1 || true
+    if [ -n "$SUDO" ]; then
+      # Let this user run Docker, and carry on in a shell that already has that right (no log out).
+      $SUDO usermod -aG docker "$(id -un)"
+      echo "   Docker installed. Continuing."
+      exec sg docker -c "bash '$HERE/install.sh'"
+    fi
+    echo "   Docker installed. Continuing."
+  else
+    die "Docker is not installed. On Windows or Mac install Docker Desktop (docker.com) and open it once; on Linux install Docker Engine and its compose plugin. Then run this again."
+  fi
+fi
+if ! docker info >/dev/null 2>&1; then
+  if docker info 2>&1 | grep -qi "permission denied"; then
+    die "Docker is here but this user may not use it. Run:  sudo usermod -aG docker $(id -un)   then log out and back in, and run this again."
+  fi
+  die "Docker is installed but not running. Open Docker Desktop (or on Linux run: sudo systemctl start docker), wait for it to say it is running, then run this again."
+fi
 docker compose version >/dev/null 2>&1 || die "Docker Compose is missing. Docker Desktop includes it; on Linux install the docker-compose-plugin package."
 [ -d "$KIT_DB" ] || die "The database files are missing (expected $KIT_DB). Unzip the whole package, not just this folder."
 command -v openssl >/dev/null 2>&1 || die "openssl is missing. On Windows run this script from the Ubuntu terminal; on Linux install the openssl package."
@@ -37,11 +67,14 @@ if [ -f "$ANSWERS" ]; then
   . "$ANSWERS"
   bold "Using your earlier answers from answers.env (server: $SERVER_NAME)"
 else
-  bold "Four questions. Type the answer and press Enter."
+  bold "A few questions. Type the answer and press Enter after each."
   echo
-  echo "1) The name your users will reach this computer on. Example: safetylab.yourcompany.local"
-  read -r -p "   Server name: " SERVER_NAME
-  [ -n "$SERVER_NAME" ] || die "The server name cannot be empty."
+  echo "1) The name or IP address your users will reach this computer on."
+  echo "   Examples: safetylab.yourcompany.local   or   10.20.30.40"
+  echo "   An IP address must be fixed (static, or reserved by IT): the license and every user's"
+  echo "   setup file are tied to it."
+  read -r -p "   Server name or IP address: " SERVER_NAME
+  [ -n "$SERVER_NAME" ] || die "The server name or IP address cannot be empty."
   echo
   echo "2) Optional. A certificate for that name from your IT certificate authority (two files)."
   echo "   Most installs just press Enter twice: the script makes its own certificate and the"
@@ -93,6 +126,31 @@ if [ -z "${ADMIN_EMAIL:-}" ]; then
     "$ADMIN_EMAIL" "$SMTP_HOST_ANS" "$SMTP_PORT_ANS" "$SMTP_USER_ANS" "$SMTP_FROM_ANS" >> "$ANSWERS"
   chmod 600 "$ANSWERS"
 fi
+
+# ---------------------------------------------------------------- 1b. name or IP address
+# 5 Oct 2026: a customer without an internal DNS name (Radia) addresses the server by IP. Every
+# place the server's identity is written (certificate, its name limit, the front-door check,
+# the web server's certificate choice) needs to know which of the two it is. IPv4 only: an IPv6
+# address needs brackets in every address the app uses, and nobody has asked for it.
+SERVER_NAME="$(printf '%s' "$SERVER_NAME" | tr 'A-Z' 'a-z' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+SERVER_KIND=""
+if [[ "$SERVER_NAME" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+  for o in "${BASH_REMATCH[@]:1}"; do
+    [ "$((10#$o))" -le 255 ] && [ "$o" = "$((10#$o))" ] || die "$SERVER_NAME is not a valid IP address (each of the four numbers is 0 to 255, no leading zeros)."
+  done
+  case "$SERVER_NAME" in
+    0.*|127.*|169.254.*|255.*|2[2-3][0-9].*) die "$SERVER_NAME cannot be reached by other computers. Use the address IT gave this machine on your network." ;;
+  esac
+  SERVER_KIND=ip
+elif [[ "$SERVER_NAME" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$ ]] && [ "${#SERVER_NAME}" -le 253 ]; then
+  [ "$SERVER_NAME" != localhost ] || die "localhost cannot be reached by other computers. Use this machine's name or IP address on your network."
+  SERVER_KIND=dns
+else
+  die "\"$SERVER_NAME\" is neither a server name (letters, digits, dots, hyphens) nor an IPv4 address."
+fi
+# What the certificate says the server is, and the one name its root may vouch for.
+if [ "$SERVER_KIND" = ip ]; then SAN="IP:$SERVER_NAME"; NAME_LIMIT="IP:$SERVER_NAME/255.255.255.255"
+else SAN="DNS:$SERVER_NAME"; NAME_LIMIT="DNS:$SERVER_NAME"; fi
 
 # ---------------------------------------------------------------- 2. stack files
 if [ ! -f "$STACK/docker-compose.yml" ]; then
@@ -175,15 +233,22 @@ else
   # name only, through the fingerprints the setup file carries. Users install nothing.
   SELF_SIGNED=1
   C=volumes/proxy/certs
+  # 5 Oct 2026: a certificate made for a different name or address (the answer changed, say IT
+  # reassigned the IP before go-live) is made again, root and all: the root may vouch only for
+  # the identity it was made for. The setup file is rewritten below with the new pin.
+  if [ -f "$C/server.leaf.crt" ] && ! openssl x509 -in "$C/server.leaf.crt" -noout -ext subjectAltName 2>/dev/null | grep -qx "[[:space:]]*${SAN/IP:/IP Address:}"; then
+    echo "   The certificate here is for a different server name or address; making a new one for $SERVER_NAME."
+    rm -f "$C/root.crt" "$C/root.key" "$C/root.srl" "$C/server.crt" "$C/server.key" "$C/server.leaf.crt"
+  fi
   if [ ! -f "$C/root.crt" ] || [ ! -f "$C/server.crt" ]; then
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$C/root.key" -out "$C/root.crt" -days 3650 \
       -subj "/CN=Safety Lab Aero local root for $SERVER_NAME" -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,keyCertSign,cRLSign" \
-      -addext "nameConstraints=critical,permitted;DNS:$SERVER_NAME" >/dev/null 2>&1
+      -addext "nameConstraints=critical,permitted;$NAME_LIMIT" >/dev/null 2>&1
     # 3 Oct 2026: the root may only ever vouch for this one server name (nameConstraints) and may not
     # create further authorities (pathlen:0). Some administrators still trust it by hand for the
     # dashboard; if its key ever leaked, it could not be used to impersonate any other site.
     openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$C/server.key" -out "$C/server.csr" -subj "/CN=$SERVER_NAME" >/dev/null 2>&1
-    printf 'subjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\n' "$SERVER_NAME" > "$C/server.ext"
+    printf 'subjectAltName=%s\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\n' "$SAN" > "$C/server.ext"
     openssl x509 -req -in "$C/server.csr" -CA "$C/root.crt" -CAkey "$C/root.key" -CAcreateserial -out "$C/server.leaf.crt" -days 1825 -extfile "$C/server.ext" >/dev/null 2>&1
     cat "$C/server.leaf.crt" "$C/root.crt" > "$C/server.crt"     # Caddy presents leaf + root
     rm -f "$C/server.csr" "$C/server.ext"; chmod 600 "$C"/*.key
@@ -191,7 +256,10 @@ else
   cp "$C/root.crt" "$HERE/trust-this-on-every-user-computer.crt"; chmod 644 "$HERE/trust-this-on-every-user-computer.crt"
 fi
 TLS_LINE="tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key"
-sed "s|__TLS_LINE__|$TLS_LINE|" "$HERE/Caddyfile.template" > volumes/proxy/caddy/Caddyfile
+# A connection to an IP address carries no server name (browsers and the desktop send none for an
+# IP), so the web server is told which certificate to answer with (5 Oct 2026).
+{ if [ "$SERVER_KIND" = ip ]; then printf '{\n    default_sni %s\n}\n\n' "$SERVER_NAME"; fi
+  sed "s|__TLS_LINE__|$TLS_LINE|" "$HERE/Caddyfile.template"; } > volumes/proxy/caddy/Caddyfile
 
 # ---------------------------------------------------------------- 5. start
 bold "Starting the services (the first time downloads about 9 GB; this can take 10 to 20 minutes)"
@@ -246,7 +314,7 @@ CA_ARGS=()
 if [ "$SELF_SIGNED" = 1 ]; then
   CA_ARGS=(--cacert "$HERE/trust-this-on-every-user-computer.crt")
 fi
-probe(){ docker run --rm --network supabase_default -v "$HERE:/pkg:ro" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' --resolve "$SERVER_NAME:443:$(docker inspect supabase-caddy --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')" ${CA_ARGS:+--cacert /pkg/trust-this-on-every-user-computer.crt} "$@" 2>/dev/null || true; }
+probe(){ docker run --rm --network supabase_default -v "$HERE:/pkg:ro" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' --connect-to "$SERVER_NAME:443:$(docker inspect supabase-caddy --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'):443" ${CA_ARGS:+--cacert /pkg/trust-this-on-every-user-computer.crt} "$@" 2>/dev/null || true; }
 bold "Checking the front door from inside Docker"
 SIGNIN=$(probe "https://$SERVER_NAME/auth/v1/health" -H "apikey: $PUB")
 AI=$(probe "https://$SERVER_NAME/v1/ai/health")
