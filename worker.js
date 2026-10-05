@@ -249,9 +249,12 @@ export default {
             if (!env.DOWNLOADS) return j({ error: 'bucket binding missing' }, 500);
             const action = url.searchParams.get('action') || '';
             const key = url.searchParams.get('key') || '';
-            //   · keys live under desktop/ (release artifacts) or docs/ (published
-            //     collateral such as the welcome deck) — nothing else is writable
-            if (!/^(?:desktop|docs)\/[A-Za-z0-9 ._-]+$/.test(key)) return j({ error: 'key must be desktop/<file> or docs/<file>' }, 400);
+            //   · keys live under desktop/ (release artifacts), docs/ (published
+            //     collateral such as the welcome deck) or customer-install/ (the
+            //     install kit zip and the VMware appliance, 1.7 GB, which is past the
+            //     300 MB a single `wrangler r2 object put` takes; added 5 Oct 2026).
+            //     Nothing else is writable.
+            if (!/^(?:desktop|docs|customer-install)\/[A-Za-z0-9 ._-]+$/.test(key)) return j({ error: 'key must be desktop/<file>, docs/<file> or customer-install/<file>' }, 400);
             try {
                 if (action === 'create' && request.method === 'POST') {
                     const ct = url.searchParams.get('ct') || 'application/octet-stream';

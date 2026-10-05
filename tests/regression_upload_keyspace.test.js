@@ -6,8 +6,10 @@
  * served publicly at updates.safetylabaero.com. The ONLY thing standing between
  * an upload token and arbitrary content at a safetylabaero.com subdomain is the
  * key regex. It was widened from `desktop/` to `desktop/|docs/` on 31 Jul so the
- * welcome deck could be hosted; this suite pins the widening to exactly that and
- * proves the traversal cases still bounce.
+ * welcome deck could be hosted, and to `customer-install/` on 5 Oct 2026 for the
+ * install kit and the 1.7 GB VMware appliance (past wrangler's 300 MB single-file
+ * limit). This suite pins the widening to exactly that and proves the traversal
+ * cases still bounce.
  *
  * Run: node tests/regression_upload_keyspace.test.js
  */
@@ -39,6 +41,11 @@ check('docs/ is accepted (the welcome deck lives here)',
   ok('docs/Welcome-to-Safety-Lab-Aero.pptx'));
 check('docs/ accepts the PDF companion', ok('docs/Welcome-to-Safety-Lab-Aero.pdf'));
 
+check('customer-install/ accepts the VMware appliance',
+  ok('customer-install/SafetyLabAero-server-2026-10-05-4761d35.ova'));
+check('customer-install/ accepts the install kit zip',
+  ok('customer-install/SafetyLabAero-customer-install-2.1.zip'));
+
 // ---- rejected --------------------------------------------------------------
 // Each of these would put attacker-chosen bytes on a safetylabaero.com origin.
 check('bucket root is refused', !ok('evil.html'));
@@ -52,6 +59,9 @@ check('an empty key is refused', !ok(''));
 check('a bare prefix with no filename is refused', !ok('docs/'));
 check('a prefix that merely starts with docs is refused', !ok('docsx/evil.html'));
 check('a prefix that merely starts with desktop is refused', !ok('desktopx/evil.html'));
+check('parent traversal out of customer-install/ is refused', !ok('customer-install/../evil.html'));
+check('nested paths under customer-install/ are refused', !ok('customer-install/a/evil.html'));
+check('a prefix that merely starts with customer-install is refused', !ok('customer-installx/evil.html'));
 check('newline smuggling past the anchor is refused', !ok('docs/a.pptx\nevil.html'));
 check('query/percent characters are refused', !ok('docs/a.pptx?x=1'));
 
@@ -61,6 +71,8 @@ check('the rule is still anchored at both ends',
   body.startsWith('^') && body.endsWith('$'), body);
 check('the rule still names an explicit prefix set, not a wildcard',
   /desktop/.test(body) && /docs/.test(body) && !/^\^\.\*/.test(body), body);
+check('the prefix set is exactly desktop, docs and customer-install',
+  /^\^\(\?:desktop\|docs\|customer-install\)\\\//.test(body), body);
 
 // ---- the route is still token-gated ----------------------------------------
 check('/api/upload still requires the UPLOAD_TOKEN secret',
