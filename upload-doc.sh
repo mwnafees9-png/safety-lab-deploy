@@ -40,10 +40,15 @@ if [ -z "${UPLOAD_TOKEN:-}" ]; then
   echo "UPLOAD_TOKEN is not set. Run:  export UPLOAD_TOKEN='...'" >&2
   exit 2
 fi
-# Catch the copy-paste-the-placeholder case before burning a round trip on a 401.
-case "$UPLOAD_TOKEN" in
-  paste-it-here|'...'|your-token|TOKEN|changeme)
-    echo "UPLOAD_TOKEN is still the placeholder literal ('$UPLOAD_TOKEN')." >&2
+# Catch the copy-paste-the-placeholder case before burning a round trip on a 401. Matched by
+# the words a placeholder is made of, not a fixed list: on 5 Oct 'paste-the-real-token' (from our
+# own instructions) was not on the list and only the length check stood in the way, and
+# 'YOUR-REAL-TOKEN' got through to the length check too. A real secret is random characters and
+# contains none of these words. (tr, not ${x,,}: macOS ships bash 3.2.)
+TOKEN_LC="$(printf '%s' "$UPLOAD_TOKEN" | tr '[:upper:]' '[:lower:]')"
+case "$TOKEN_LC" in
+  *paste*|*your*|*real*|*token*|*placeholder*|*changeme*|*example*|*secret*|*here*|*'...'*|*'<'*|*'>'*|*' '*)
+    echo "UPLOAD_TOKEN looks like a placeholder ('$UPLOAD_TOKEN'), not the real secret." >&2
     echo "Set the real Worker secret value. If you do not have it, rotate it:" >&2
     echo "  export UPLOAD_TOKEN=\$(openssl rand -hex 32)" >&2
     echo "  printf %s \"\$UPLOAD_TOKEN\" | npx wrangler secret put UPLOAD_TOKEN -c wrangler.dist.jsonc" >&2

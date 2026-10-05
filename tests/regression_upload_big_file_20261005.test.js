@@ -19,7 +19,7 @@ const fs = require('fs'), path = require('path'), http = require('http'), os = r
 let pass = 0, fail = 0;
 const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' — ' + d : '')); } };
 const ROOT = path.join(__dirname, '..');
-const TOKEN = 'test-upload-token-' + crypto.randomBytes(8).toString('hex');
+const TOKEN = crypto.randomBytes(32).toString('hex');   // random, like the real one (a word like 'token' reads as a placeholder)
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 
 // ---- a stand-in for the R2 bucket, with the multipart calls the route uses ----
@@ -127,6 +127,19 @@ function run(srv, file, key, extra) {
     const t = await fetch('http://127.0.0.1:' + port + '/api/upload?action=create&key=' + KEY, { method: 'POST', headers: { 'x-upload-token': 'wrong-token-wrong-token' } });
     check('a wrong token is refused (401)', t.status === 401 && b.log.length === 0);
     s.close(); }
+
+  console.log('[F] a placeholder token is refused before anything is sent');
+  { const b = fakeBucket(); const s = await serve(b, { parts: {}, hits: [] });
+    for (const t of ['paste-the-real-token', 'YOUR-REAL-TOKEN', 'paste-it-here', '<token>', 'your token here please']) {
+      const r = await run(s, file, KEY, { UPLOAD_TOKEN: t });
+      check('refused: ' + t, r.code === 2 && /looks like a placeholder/.test(r.out) && b.log.length === 0, r.out.slice(-200));
+    }
+    s.close(); }
+
+  console.log('[G] the script runs as ./upload-doc.sh');
+  { const mode = cp.spawnSync('git', ['ls-files', '-s', 'upload-doc.sh'], { cwd: ROOT, encoding: 'utf8' }).stdout;
+    check('git records it as executable (100755)', /^100755 /.test(mode), mode);
+    check('...and it is executable on disk', (fs.statSync(path.join(ROOT, 'upload-doc.sh')).mode & 0o111) !== 0); }
 
   fs.rmSync(dir, { recursive: true, force: true });
   console.log(`\n${pass} passed, ${fail} failed`);
