@@ -107,7 +107,14 @@ check('...and the contents page lists it', (g.match(/4\.6 The VMware appliance: 
 console.log('[8] the customer kit zip leaves the appliance recipe out');
 { const ps = fs.readFileSync(path.join(__dirname, '..', 'package-customer-install.sh'), 'utf8');
   check('package-customer-install.sh deletes customer-install/appliance from the zip', /zip -q -d "\$ZIP" 'customer-install\/appliance\/\*'/.test(ps));
-  check('...and refuses to finish if any of it is still there', /grep -q '\^customer-install\/appliance' && \{ rm -f "\$ZIP"; stop/.test(ps)); }
+  check('...and refuses to finish if any of it is still there', /grep '\^customer-install\/appliance' \|\| true\)" \] \|\| \{ rm -f "\$ZIP"; stop/.test(ps));
+  // Build the real zip and look inside: the first version passed the text checks and still shipped the recipe.
+  const out = fs.mkdtempSync(path.join(require('os').tmpdir(), 'slpkg-'));
+  const r = cp.spawnSync('bash', [path.join(__dirname, '..', 'package-customer-install.sh')], { cwd: path.join(__dirname, '..'), encoding: 'utf8', env: Object.assign({}, process.env, { SLAB_PACKAGE_OUT: out, SLAB_PACKAGE_ALLOW_DIRTY: '1' }) });
+  const z = fs.readdirSync(out).filter(f => f.endsWith('.zip'))[0];
+  const names = z ? cp.spawnSync('unzip', ['-Z1', path.join(out, z)], { encoding: 'utf8' }).stdout : '';
+  check('the built kit zip really has no appliance files', r.status === 0 && !!z && !/customer-install\/appliance/.test(names) && /SL-DG-0001 /.test(names), (r.stderr || '').slice(-300));
+  fs.rmSync(out, { recursive: true, force: true }); }
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
