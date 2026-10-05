@@ -148,6 +148,9 @@ had drifted in both directions.
       that one server by them; no user installs a certificate and IT needs no CA. install.cmd for a Windows
       double-click (unrun on Windows). SL-DG-0001 issued as **Rev 2.1** (Waqas: one revision since the 2.0 Radia holds; the same-day 2.2/2.3/2.4 builds withdrawn).
       Package zip rebuilt (116 files, guide inside). Upload to R2 and a desktop release still pending.
+      **5 Oct:** the 2 Oct zip was stale (3 Oct administrator changes, db 19-21). Guide 2.1 reissued 5 Oct and
+      `package-customer-install.sh` builds the zip from a commit under the name the guide gives. Desktop released (0.18.5).
+      Only the upload remains (Waqas, command printed by the script).
 - [ ] **SEC-7 (S24) — desktop update signing, two steps that need Waqas.** (a) run
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
       update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate

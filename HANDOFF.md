@@ -1,3 +1,11 @@
+## 5 Oct 2026 — CUSTOMER INSTALL PACKAGE: guide 2.1 reissued, zip built from a commit, upload is Waqas's.
+
+**FOUND.** The 2 Oct zip was never uploaded and was out of date: the 3 Oct security work changed how the administrator is made (all-in-one script creates the account and prints a temporary password once; no mail server means users come from add-user.sh; on own Supabase, create and confirm the account BEFORE the platform_admins insert) and added db files 19, 20, 21. Guide Rev 2.1 still gave the old administrator steps and named a 2 Oct zip.
+
+**BUILT.** SL-DG-0001 Rev 2.1 reissued 5 Oct (Waqas: stays 2.1), edited in place (only word/document.xml and docProps/core.xml changed): 4.1 order of operations, 4.4 sign-in, 4.5 install questions + one-time password + Part 3 step 3 + Part 4 rewritten from the kit README, section 3 address now `customer-install/SafetyLabAero-customer-install-2026-10-05.zip`, history row extended, contents page re-paged (16 pages; every heading checked against the rendered PDF). `package-customer-install.sh`: builds from a COMMIT, takes the zip name from the guide's one address, keeps only the current guide revision, refuses a dirty kit, a secret-shaped file, two addresses or a header that disagrees; prints the wrangler upload, never runs it. Output in `customer-install-package/` (gitignored). Test `regression_customer_install_package_20261005` 27 checks, four mutations red. `regression_agreement_single_source` now finds every desktop script that runs electron-builder (build-win-docker.sh was removed from the desktop repo, 4dea280) instead of naming them. Wall green.
+
+**OPEN.** Waqas runs the upload command the script prints, then the curl check. Brand footer reads "Safety Lab Aero — Confidential" (an em dash in the brand shell, left as is pending his call).
+
 ## 4 Oct 2026 — EFFECT LEVELS BY CERT BASIS, DEFINITIONS FIRST. EVAL RUN, wall 372/372, NOT YET DEPLOYED (Waqas ships). Version-prune migration WAITS FOR "apply it".
 
 **THE ASK.** Waqas: "it is a by cert basis update, the AI should be reading the cert basis definitions before defining the effects for a particular project."

@@ -138,7 +138,13 @@ console.log('\n[agreement] SL-LICENSE-0001 is withdrawn and unreferenced');
 const pull = fs.readFileSync(path.join(DESKTOP, 'pull-web.sh'), 'utf8');
 check('pull-web.sh wipes app/ before copying', /rm -rf "\$APP"/.test(pull));
 check('pull-web.sh regenerates the agreement', /build_agreement\.mjs/.test(pull));
-for (const s of ['release.sh', 'build-win-docker.sh']) {
+// 5 Oct 2026: build-win-docker.sh was removed (Windows builds natively through release.sh --win).
+// Rather than name the scripts, every desktop script that packages with electron-builder is found
+// and held to the rule, so a new build path cannot skip it by being new.
+const builders = fs.readdirSync(DESKTOP).filter((s) => /\.sh$/.test(s) &&
+  /electron-builder\s+--(mac|win|linux)/.test(fs.readFileSync(path.join(DESKTOP, s), 'utf8')));
+check('release.sh is a desktop build script', builders.includes('release.sh'), builders.join(', '));
+for (const s of builders) {
   check(s + ' goes through pull-web.sh', /pull-web\.sh/.test(fs.readFileSync(path.join(DESKTOP, s), 'utf8')),
     'a build that skips pull-web.sh ships whatever stale text is sitting in app/');
 }
