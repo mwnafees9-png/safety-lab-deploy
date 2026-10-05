@@ -13,6 +13,7 @@ services:
   caddy:
     volumes:
       - ./volumes/proxy/certs:/etc/caddy/certs:ro
+      - ./volumes/proxy/setup:/srv/safetylab:ro
     depends_on:
       ai-proxy:
         condition: service_healthy

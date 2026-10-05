@@ -222,6 +222,7 @@ chmod 600 ai-proxy.env
 # ---------------------------------------------------------------- 4. https
 bold "Setting up https for $SERVER_NAME"
 mkdir -p volumes/proxy/certs; chmod 700 volumes/proxy/certs
+mkdir -p volumes/proxy/setup   # made here, by this user, before Docker would create it as root
 if [ -n "${CERT_FILE:-}" ]; then
   cp "$CERT_FILE" volumes/proxy/certs/server.crt; cp "$KEY_FILE" volumes/proxy/certs/server.key
   SELF_SIGNED=0
@@ -263,7 +264,13 @@ TLS_LINE="tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key"
 
 # ---------------------------------------------------------------- 5. start
 bold "Starting the services (the first time downloads about 9 GB; this can take 10 to 20 minutes)"
-docker compose pull -q --ignore-pull-failures 2>/dev/null || echo "   (download was interrupted or rate-limited; using what is already here, the rest is fetched on start)"
+# SLAB_OFFLINE=1 (5 Oct 2026): every image is already on this machine (the VMware appliance carries
+# them all), so nothing is downloaded and an install behind a closed firewall comes up the same.
+if [ "${SLAB_OFFLINE:-0}" = 1 ]; then
+  echo "   Everything needed is already on this machine; nothing to download."
+else
+  docker compose pull -q --ignore-pull-failures 2>/dev/null || echo "   (download was interrupted or rate-limited; using what is already here, the rest is fetched on start)"
+fi
 docker compose up -d --wait --wait-timeout 600 || {
   echo; echo "A service did not come up. This is what Docker reports:"; docker compose ps
   die "Send the output above to Safety Lab, or run 'docker compose logs <service>' in $STACK to see why."; }
@@ -360,6 +367,11 @@ fi
   echo '}'
 } > "$SETUP"
 chmod 644 "$SETUP"
+# 5 Oct 2026: the same file is offered at https://<server>/safetylab-setup, so whoever hands it out
+# downloads it from a browser on the network instead of copying it off this machine. It carries no
+# secret (the app refuses a setup file that does).
+mkdir -p "$STACK/volumes/proxy/setup"
+cp "$SETUP" "$STACK/volumes/proxy/setup/setup.safetylab-setup"; chmod 644 "$STACK/volumes/proxy/setup/setup.safetylab-setup"
 DASH_U=$(grep '^DASHBOARD_USERNAME=' .env | cut -d= -f2-)
 cat > "$HERE/WHAT-TO-TYPE-IN-THE-APP.txt" <<EOF
 Safety Lab Aero on your own server: getting every user started

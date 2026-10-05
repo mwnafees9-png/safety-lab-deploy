@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Safety Lab Aero appliance: the maintenance menu (5 Oct 2026). It is the login shell of the
+# 'safetylab' user, so IT logs in on the console (or over SSH) and gets this, not a prompt.
+# ============================================================================
+KIT=/opt/safetylab/customer-install/selfhost
+TITLE="Safety Lab Aero"
+export NEWT_COLORS='root=,blue'
+[ -f /var/lib/safetylab/details.env ] && . /var/lib/safetylab/details.env
+# Anything but an interactive login (scp, a command over ssh) runs as asked.
+if [ -n "${SSH_ORIGINAL_COMMAND:-}" ] || [ "$#" -gt 0 ] || [ ! -t 0 ]; then exec /bin/bash "$@"; fi
+if [ ! -f /var/lib/safetylab/setup-done ]; then echo "Setup has not finished yet. Restart this machine to run it."; exec /bin/bash -l; fi
+while :; do
+  C=$(whiptail --title "$TITLE" --menu "Running at https://${ADDR:-?}\nSetup file for users: https://${ADDR:-?}/safetylab-setup" 19 74 7 \
+    add "Add a person (gives them a temporary password)" \
+    details "Show the address, setup file and certificate fingerprint" \
+    status "Check the services" \
+    restart "Restart the services" \
+    backup "Where the data and keys are (for backups)" \
+    shell "Open a command prompt (for IT)" \
+    quit "Log out" 3>&1 1>&2 2>&3) || C=quit
+  case "$C" in
+    add)
+      E=$(whiptail --title "$TITLE" --inputbox "Their work email address:" 10 74 3>&1 1>&2 2>&3) || continue
+      R=$(cd $KIT && ./add-user.sh "$E" 2>&1)
+      whiptail --title "$TITLE" --msgbox "$R" 18 74 ;;
+    details)
+      whiptail --title "$TITLE" --msgbox "Server:        https://$ADDR\nAdministrator: $ADMIN\n\nEvery user: install the desktop app from safetylabaero.com, download\n  https://$ADDR/safetylab-setup\nand open it in the app (Choose setup file).\n\nThe browser warns once about the certificate; it should show:\n  $FP" 18 74 ;;
+    status) R=$(cd $KIT/stack && docker compose ps --format '{{.Name}}  {{.Status}}' 2>&1); whiptail --title "$TITLE" --scrolltext --msgbox "Every line should say healthy or Up:\n\n$R" 22 74 ;;
+    restart) whiptail --title "$TITLE" --infobox "Restarting. About a minute." 7 50; (cd $KIT/stack && docker compose restart >/dev/null 2>&1); whiptail --title "$TITLE" --msgbox "Restarted." 7 40 ;;
+    backup) whiptail --title "$TITLE" --msgbox "Back these up regularly, somewhere safe:\n\n  $KIT/stack/volumes/db/data   (the database)\n  $KIT/stack/.env               (the database keys)\n  $KIT/stack/ai-proxy.env       (the AI key)\n\nA VMware snapshot of this whole machine also works, taken with the services stopped." 16 74 ;;
+    shell) clear; echo "Type exit to come back to the menu."; /bin/bash -l ;;
+    quit) clear; exit 0 ;;
+  esac
+done

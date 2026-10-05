@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Safety Lab Aero appliance: first start (5 Oct 2026).
+#
+# Runs on the VM's console the first time it starts, before anyone can log in. Asks the few things
+# only the customer knows (a maintenance password, the address, the administrator, the AI key),
+# then installs everything from what is already inside the appliance: no downloads, so it works
+# behind a closed firewall. The only outside address the finished server uses is the AI provider.
+#
+# Test hook: if /opt/safetylab/autosetup.env exists, its values are used instead of the questions
+# (SL_PASSWORD, SL_KEEP_ADDRESS=1 or SL_ADDRESS/SL_PREFIX/SL_GATEWAY/SL_DNS, SL_ADMIN, SL_AI_KEY,
+# SL_AI_WORKSPACE). The file is deleted as soon as it is read.
+# ============================================================================
+set -uo pipefail
+BASE=/opt/safetylab
+KIT=$BASE/customer-install/selfhost
+DONE=/var/lib/safetylab/setup-done
+LOG=/var/log/safetylab-setup.log
+TITLE="Safety Lab Aero"
+export TERM=${TERM:-linux} NEWT_COLORS='root=,blue'
+mkdir -p /var/lib/safetylab
+[ -f "$DONE" ] && exit 0
+
+AUTO=0
+if [ -f $BASE/autosetup.env ]; then
+  # shellcheck disable=SC1091
+  . $BASE/autosetup.env; rm -f $BASE/autosetup.env; AUTO=1
+fi
+say(){ [ $AUTO = 1 ] && { echo "== $*" | tee -a $LOG; return 0; }; whiptail --title "$TITLE" --msgbox "$1" ${2:-14} 74; }
+ask(){ whiptail --title "$TITLE" --inputbox "$1" 12 74 "${2:-}" 3>&1 1>&2 2>&3; }
+secret(){ whiptail --title "$TITLE" --passwordbox "$1" 12 74 3>&1 1>&2 2>&3; }
+fail(){ say "Setup stopped:\n\n$1\n\nThe details are in $LOG. Restart this machine to try again, or send that file to Safety Lab." 16; exit 1; }
+email_ok(){ [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; }
+ipv4_ok(){ [[ "$1" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1; local o; for o in "${BASH_REMATCH[@]:1}"; do [ "$o" = "$((10#$o))" ] && [ "$o" -le 255 ] || return 1; done; }
+current_ip(){ ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1; }
+nic(){ ip -o link show | awk -F': ' '$2 !~ /^(lo|docker|br-|veth)/ {print $2; exit}'; }
+
+say "Welcome. This sets up Safety Lab Aero on this machine. It takes about ten minutes and asks four things:\n\n  1. a password for this machine's maintenance login\n  2. its address on your network\n  3. the administrator's email\n  4. your Anthropic API key\n\nNothing is downloaded. Nothing here contacts Safety Lab." 17
+
+# ---- 1. maintenance password (user 'safetylab': console menu, and SSH for IT)
+if [ $AUTO = 1 ]; then PW="$SL_PASSWORD"; else
+  while :; do
+    PW=$(secret "Choose a password for this machine's maintenance login (user name: safetylab). IT uses it to add people and check on the server. At least 10 characters.") || continue
+    [ ${#PW} -ge 10 ] || { say "At least 10 characters, please." 8; continue; }
+    PW2=$(secret "Type the same password again.") || continue
+    [ "$PW" = "$PW2" ] && break; say "The two passwords were different. Once more." 8
+  done
+fi
+echo "safetylab:$PW" | chpasswd || fail "Could not set the password."
+unset PW PW2 SL_PASSWORD
+
+# ---- 2. address
+IFACE=$(nic); CUR=$(current_ip)
+if [ $AUTO = 1 ]; then
+  if [ "${SL_KEEP_ADDRESS:-0}" = 1 ]; then CHOICE=keep; else CHOICE=fixed; A="$SL_ADDRESS"; P="$SL_PREFIX"; G="$SL_GATEWAY"; D="$SL_DNS"; fi
+else
+  if [ -n "$CUR" ]; then
+    CHOICE=$(whiptail --title "$TITLE" --menu "This machine's address is now $CUR (given by your network).\n\nThe address must never change: your license and every user's setup file are tied to it. Keep it only if IT has reserved it for this machine." 17 74 2 \
+      keep "Keep $CUR (IT has reserved it)" fixed "Set a fixed address myself" 3>&1 1>&2 2>&3) || CHOICE=fixed
+  else CHOICE=fixed; fi
+  if [ "$CHOICE" = fixed ]; then
+    while :; do A=$(ask "Fixed IP address for this machine (from IT), for example 10.20.30.40:" "${CUR}") && ipv4_ok "$A" && break; say "That is not an IP address." 8; done
+    while :; do P=$(ask "Network size (prefix length) for $A. Usually 24 (that is 255.255.255.0):" 24) && [[ "$P" =~ ^[0-9]+$ ]] && [ "$P" -ge 8 ] && [ "$P" -le 30 ] && break; say "A number from 8 to 30." 8; done
+    while :; do G=$(ask "Gateway (router) address, from IT:" "$(ip -4 route show default | awk '{print $3; exit}')") && ipv4_ok "$G" && break; say "That is not an IP address." 8; done
+    while :; do D=$(ask "DNS server address(es), from IT. Separate two with a space:" "$G") && [ -n "$D" ] && break; done
+  fi
+fi
+if [ "$CHOICE" = fixed ]; then
+  DNSLIST=$(printf '%s' "$D" | tr ' ,' '\n\n' | grep -v '^$' | sed 's/.*/"&"/' | paste -sd, -)
+  cat > /etc/netplan/50-safetylab.yaml <<NET
+network:
+  version: 2
+  ethernets:
+    $IFACE:
+      dhcp4: false
+      addresses: ["$A/$P"]
+      routes: [{to: default, via: "$G"}]
+      nameservers: {addresses: [$DNSLIST]}
+NET
+  chmod 600 /etc/netplan/50-safetylab.yaml; rm -f /etc/netplan/40-safetylab-dhcp.yaml
+  netplan apply >>$LOG 2>&1 || fail "The network settings were refused. Check the address, prefix and gateway with IT."
+  sleep 3; ADDR="$A"
+  [ "$(current_ip)" = "$A" ] || [ $AUTO = 1 ] || fail "The machine did not take the address $A. Check the address, prefix and gateway with IT."
+else
+  ADDR="$CUR"
+  [ -n "$ADDR" ] || fail "This machine has no address on the network. Check the VM's network adapter in VMware."
+fi
+
+# ---- 3. administrator, 4. AI key
+if [ $AUTO = 1 ]; then ADMIN="$SL_ADMIN"; KEY="$SL_AI_KEY"; WS="${SL_AI_WORKSPACE:-}"; else
+  while :; do ADMIN=$(ask "The administrator's email address (the person who looks after Safety Lab Aero here). This account is created now and is the only administrator.") && email_ok "$ADMIN" && break; say "That is not an email address." 8; done
+  while :; do KEY=$(secret "Your Anthropic API key (from console.anthropic.com, made inside a Workspace). Whoever made it should type it here. It is kept only on this machine.") && [ -n "$KEY" ] && break; done
+  WS=$(ask "Optional. The Workspace ID for that key (starts with wrkspc_). Leave empty if you are not sure." "") || WS=""
+  whiptail --title "$TITLE" --yesno "Ready to set up:\n\n  Address:        https://$ADDR\n  Administrator:  $ADMIN\n  AI key:         entered\n\nThis takes about ten minutes. Go ahead?" 15 74 || { say "Nothing was changed. Restart this machine to start again." 8; exit 1; }
+fi
+
+# ---- 5. install, from what is inside the appliance
+[ $AUTO = 1 ] || whiptail --title "$TITLE" --infobox "Setting up Safety Lab Aero at https://$ADDR\n\nLoading the services into Docker, then building the database.\nAbout ten minutes. Please wait." 10 74
+{
+  echo "=== $(date -Is) setup for $ADDR"
+  if [ ! -f /var/lib/safetylab/images-loaded ]; then
+    systemctl is-active --quiet docker || systemctl start docker
+    zstd -dc $BASE/images.tar.zst | docker load && touch /var/lib/safetylab/images-loaded
+  fi
+} >>$LOG 2>&1 || fail "Loading the services into Docker failed."
+printf 'SERVER_NAME=%q\nCERT_FILE=\nKEY_FILE=\nADMIN_EMAIL=%q\nSMTP_HOST_ANS=\nSMTP_PORT_ANS=\nSMTP_USER_ANS=\nSMTP_FROM_ANS=\n' "$ADDR" "$ADMIN" > $KIT/answers.env
+chown safetylab:safetylab $KIT/answers.env; chmod 600 $KIT/answers.env
+# Up to three tries: on a busy host a service can be slow to report healthy the first time, and
+# install.sh is safe to run again (it keeps the database and every answer). Any other stop is final.
+for TRY in 1 2 3; do
+  OUT=$(cd $KIT && sudo -u safetylab env SLAB_OFFLINE=1 ANTHROPIC_API_KEY="$KEY" ANTHROPIC_WORKSPACE_ID="$WS" bash install.sh 2>&1); RC=$?
+  [ $RC = 0 ] && break
+  printf '%s\n' "$OUT" | grep -q 'A service did not come up' || break
+  echo "=== $(date -Is) try $TRY: a service was slow to come up; trying again in a minute" >>$LOG
+  [ $AUTO = 1 ] || whiptail --title "$TITLE" --infobox "A service is taking longer than usual to start. Trying again ($TRY of 3)..." 8 74
+  sleep 60
+done
+unset KEY SL_AI_KEY
+printf '%s\n' "$OUT" | sed 's/\(password: *\).*/\1(shown on screen once)/' >>$LOG
+[ $RC = 0 ] || fail "$(printf '%s\n' "$OUT" | grep -m1 '^STOP' || printf '%s\n' "$OUT" | tail -n 3)"
+ADMIN_PW=$(printf '%s\n' "$OUT" | sed -n 's/^ *password: *//p' | tail -1)
+FP=$(openssl x509 -in $KIT/stack/volumes/proxy/certs/server.leaf.crt -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//')
+checks=$(printf '%s\n' "$OUT" | grep -c 'over https: *200')
+printf 'ADDR=%q\nADMIN=%q\nFP=%q\n' "$ADDR" "$ADMIN" "$FP" > /var/lib/safetylab/details.env
+touch "$DONE"
+echo "=== $(date -Is) done; front-door checks at 200: $checks of 2" >>$LOG
+
+say "Safety Lab Aero is running at https://$ADDR\n\nAdministrator: $ADMIN\nTemporary password: ${ADMIN_PW:-(already set on an earlier run)}\nWrite it down now: it is shown only once. Sign in with it in the desktop app, then change it under Account, Change password.\n\nEvery user: install the desktop app from safetylabaero.com, then download the setup file at\n  https://$ADDR/safetylab-setup\nand open it in the app (Choose setup file). Your browser warns once that it does not know this server's certificate; that is expected. It should show this fingerprint:\n  $FP\n\nTo add people: log in here as safetylab and choose Add a person." 26
+exit 0

@@ -6,6 +6,15 @@
         reverse_proxy ai-proxy:8787
     }
 
+    # The users' setup file (5 Oct 2026): no secret in it, served so it can be downloaded in a browser.
+    handle /safetylab-setup {
+        root * /srv/safetylab
+        rewrite * /setup.safetylab-setup
+        header Content-Disposition "attachment; filename=\"{$PROXY_DOMAIN}.safetylab-setup\""
+        header Content-Type application/json
+        file_server
+    }
+
     @supabase_api path /auth/v1/* /rest/v1/* /graphql/v1 /realtime/v1/* /storage/v1/* /functions/v1/* /mcp /sso/* /.well-known/oauth-authorization-server
     handle @supabase_api {
         reverse_proxy api-gw:8000

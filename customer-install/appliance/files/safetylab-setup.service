@@ -1,0 +1,20 @@
+[Unit]
+Description=Safety Lab Aero first-start setup
+After=network-online.target docker.service systemd-user-sessions.service
+Wants=network-online.target
+Before=getty@tty1.service
+ConditionPathExists=!/var/lib/safetylab/setup-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/safetylab-setup
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+RemainAfterExit=yes
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

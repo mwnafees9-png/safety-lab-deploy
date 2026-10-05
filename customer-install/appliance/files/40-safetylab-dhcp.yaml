@@ -1,0 +1,7 @@
+# Until setup runs: take an address from the network on any wired adapter.
+network:
+  version: 2
+  ethernets:
+    any-wired:
+      match: {name: "e*"}
+      dhcp4: true
