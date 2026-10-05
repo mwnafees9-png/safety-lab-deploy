@@ -49,10 +49,14 @@ rm -f "$ZIP"
 git archive --format=zip -o "$ZIP" "$REF" customer-install
 OLD="$(unzip -Z1 "$ZIP" | grep '^customer-install/SL-DG-0001 ' | grep -v "^customer-install/$GUIDE\.\(docx\|pdf\)$" || true)"
 if [ -n "$OLD" ]; then printf '%s\n' "$OLD" | while IFS= read -r f; do zip -q -d "$ZIP" "$f"; done; fi
+# The VMware appliance recipe (customer-install/appliance) is Safety Lab's build tooling: it runs on
+# our build machine, never a customer's, and the customer gets the finished .ova instead (5 Oct 2026).
+if unzip -Z1 "$ZIP" | grep -q '^customer-install/appliance/'; then zip -q -d "$ZIP" 'customer-install/appliance/*'; fi
 
 # 5. Nothing secret, nothing personal. These are the shapes a secret would arrive in.
 BAD="$(unzip -Z1 "$ZIP" | grep -E '\.lic$|\.key$|\.p12$|\.pfx$|(^|/)\.env$|ai-proxy\.env$|\.safetylab-setup$' || true)"
 [ -z "$BAD" ] || { rm -f "$ZIP"; stop "the package would contain: $BAD"; }
+unzip -Z1 "$ZIP" | grep -q '^customer-install/appliance' && { rm -f "$ZIP"; stop "the package would contain the appliance build recipe."; }
 [ "$(unzip -Z1 "$ZIP" | grep -c '^customer-install/SL-DG-0001 ')" = "2" ] || { rm -f "$ZIP"; stop "the package must hold exactly the current guide, .docx and .pdf."; }
 
 COMMIT="$(git rev-parse --short "$REF")"

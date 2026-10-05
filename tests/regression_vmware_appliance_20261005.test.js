@@ -104,5 +104,10 @@ check('the current guide has section 4.6, the VMware appliance', /4\.6 The VMwar
 check('...import with Deploy OVF Template, four questions, the setup file address', /Deploy OVF Template/.test(g) && /Answer four questions:/.test(g) && /\/safetylab-setup/.test(g));
 check('...and the contents page lists it', (g.match(/4\.6 The VMware appliance: import one file/g) || []).length === 2);
 
+console.log('[8] the customer kit zip leaves the appliance recipe out');
+{ const ps = fs.readFileSync(path.join(__dirname, '..', 'package-customer-install.sh'), 'utf8');
+  check('package-customer-install.sh deletes customer-install/appliance from the zip', /zip -q -d "\$ZIP" 'customer-install\/appliance\/\*'/.test(ps));
+  check('...and refuses to finish if any of it is still there', /grep -q '\^customer-install\/appliance' && \{ rm -f "\$ZIP"; stop/.test(ps)); }
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
