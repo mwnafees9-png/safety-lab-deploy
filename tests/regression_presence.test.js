@@ -97,7 +97,7 @@ check('sign-in chip shows YOUR avatar via the one renderer (SLAvatar), removed o
 check('Account panel: picture is resized on-device to a 96px square JPEG and saved on the ACCOUNT (user_metadata.avatar)', /_resizeImageToDataUrl\(f, 96/.test(helpers) && /updateUser\(\{ data: \{ avatar: dataUrl \|\| null \} \}\)/.test(helpers) && /toDataURL\('image\/jpeg', 0\.82\)/.test(helpers));
 check('Account panel: non-image files refused; oversize refused (20 KB cap); Remove clears it', /Please choose an image file/.test(helpers) && /dataUrl\.length > 20000/.test(helpers) && /_saveAvatar\('', email, nameFn, msg\)/.test(helpers));
 check('saving a picture or a name refreshes the chip AND re-broadcasts presence', (helpers.match(/SLPresence\.refresh\(\)/g) || []).length >= 2);
-check('start() refuses to track without a signed-in identity', /!_identity\(\)\) \{ setTimeout\(start, 4000\); return; \}/.test(src));
+check('start() refuses to track without a signed-in identity (5 Oct 2026: the 6 s refresh poll retries it)', /!_identity\(\)\) return;/.test(src) && /setInterval\(_follow, 6000\)/.test(src));
 // cursor rendering: same page renders; different page ignored
 const gStub = { children: [], querySelector: () => null, appendChild(el) { gStub.children.push(el); }, parentNode: {} };
 dom['#fta-svg g'] = gStub;

@@ -1,5 +1,5 @@
 // ============================================================================
-// edit_locks.js — v1.0 — COL-2: server-authoritative FIELD locks for live co-editing.
+// edit_locks.js — v1.4 — COL-2: server-authoritative FIELD locks for live co-editing.
 //
 // One writer per field. When someone starts editing a field, the client claims a
 // lock via the acquire_edit_lock RPC; everyone else is refused and shown who holds it.
@@ -20,7 +20,8 @@
   'use strict';
   var TTL = 120, HB_MS = 45000;                 // lock lifetime (s) and heartbeat (< TTL/2)
   var _chan = null, _started = false, _tok = null, _hb = null;
-  var _mine = new Map();                          // key -> expiresAtMs (locks I hold)
+  var _chanWs = null, _chanProj = null;           // 5 Oct 2026: the workspace/project the live channel was opened for
+  var _mine = new Map();                          // key -> { exp, proj } (locks I hold, and the project each one is on)
   var _peers = new Map();                         // key -> {held_by, name, exp}
   var _cbs = [];
 
@@ -47,7 +48,7 @@
       var r = await c.rpc('acquire_edit_lock', { p_project: proj, p_resource: String(key), p_ttl_seconds: TTL });
       if (r.error) return { ok: true };                      // outage → fail OPEN (save-guard backstops)
       var row = (r.data && r.data[0]) || r.data || {};
-      if (row.ok) { var exp = new Date(row.expires_at).getTime() || (Date.now() + TTL * 1000); _mine.set(String(key), exp); _peers.delete(String(key)); _send('claim', String(key), exp); _ensureHb(); _notify(key); return { ok: true }; }
+      if (row.ok) { var exp = new Date(row.expires_at).getTime() || (Date.now() + TTL * 1000); _mine.set(String(key), { exp: exp, proj: proj }); _peers.delete(String(key)); _send('claim', String(key), exp); _ensureHb(); _notify(key); return { ok: true }; }
       // 9 Sep 2026 — ok:false with NO held_by is NOT a competing editor. The RPC returns it when
       // the caller can't hold the lock at all — signed out, not a member of the project's
       // workspace, or a showcase/demo project — and the client used to treat it as "someone else
@@ -58,24 +59,29 @@
       var p = _peers.get(String(key)); _notify(key); return { ok: false, held_by: row.held_by, name: p ? p.name : null };
     } catch (_) { return { ok: true }; }
   }
+  // 5 Oct 2026: a lock is released on the project it was taken on. After a project switch the
+  // active project is a different one, and releasing there would leave the real lock standing
+  // until its TTL ran out.
   async function release(key) {
+    var held = _mine.get(String(key));
     _mine.delete(String(key)); _send('release', String(key)); _notify(key);
-    var c = _client(), proj = _projId(); if (!c || !proj || !key) return;
+    var c = _client(), proj = (held && held.proj) || _projId(); if (!c || !proj || !key) return;
     try { await c.rpc('release_edit_lock', { p_project: proj, p_resource: String(key) }); } catch (_) {}
   }
   // Name of the OTHER user holding this field (not me, not expired) — or null if free/mine.
   function heldBy(key) { var p = _peers.get(String(key)); if (p && p.held_by !== _uid() && (!p.exp || p.exp > Date.now())) return p.name || 'Someone'; return null; }
-  function mine(key) { var e = _mine.get(String(key)); return !!(e && e > Date.now()); }
+  function mine(key) { var e = _mine.get(String(key)); return !!(e && e.exp > Date.now() && e.proj === _projId()); }
   function onChange(cb) { if (typeof cb === 'function') _cbs.push(cb); }
 
   function _ensureHb() {
     if (_hb) return;
     _hb = setInterval(async function () {
       if (!_mine.size) { clearInterval(_hb); _hb = null; return; }
-      var c = _client(), proj = _projId(); if (!c || !proj) return;
+      var c = _client(); if (!c) return;
       var keys = Array.from(_mine.keys());
       for (var i = 0; i < keys.length; i++) {
-        try { var r = await c.rpc('acquire_edit_lock', { p_project: proj, p_resource: keys[i], p_ttl_seconds: TTL }); var row = (r.data && r.data[0]) || {}; if (row.ok) { var exp = new Date(row.expires_at).getTime(); _mine.set(keys[i], exp); _send('claim', keys[i], exp); } else { _mine.delete(keys[i]); _notify(keys[i]); } } catch (_) {}
+        var held = _mine.get(keys[i]); if (!held || !held.proj) continue;
+        try { var r = await c.rpc('acquire_edit_lock', { p_project: held.proj, p_resource: keys[i], p_ttl_seconds: TTL }); var row = (r.data && r.data[0]) || {}; if (row.ok) { var exp = new Date(row.expires_at).getTime(); _mine.set(keys[i], { exp: exp, proj: held.proj }); _send('claim', keys[i], exp); } else { _mine.delete(keys[i]); _notify(keys[i]); } } catch (_) {}
       }
     }, HB_MS);
   }
@@ -83,8 +89,9 @@
   function start() {
     if (_started || _flagOff() || _fenced()) return;
     var c = _client(), ws = _wsId(), proj = _projId();
-    if (!c || !ws || !proj) { setTimeout(start, 4000); return; }
+    if (!c || !ws || !proj) return;                 // refresh() tries again every 6 s (5 Oct 2026; was its own 4 s retry)
     _tok = (crypto.randomUUID ? crypto.randomUUID() : 'l' + Math.random().toString(36).slice(2)).slice(0, 8);
+    _chanWs = ws; _chanProj = proj;
     _chan = c.channel('slab-locks:' + ws + ':' + proj, { config: { private: true } });   // 3 Oct 2026: members receive, editors announce (migration 20261003a)
     _chan.on('broadcast', { event: 'lock' }, function (m) {
       var p = m && m.payload; if (!p || p.tok === _tok) return;
@@ -95,12 +102,24 @@
     _chan.subscribe();
     _started = true;
   }
-  function stop() { try { Array.from(_mine.keys()).forEach(function (k) { release(k); }); } catch (_) {} try { if (_chan) _chan.unsubscribe(); } catch (_) {} _chan = null; _started = false; if (_hb) { clearInterval(_hb); _hb = null; } }
+  function stop() { try { Array.from(_mine.keys()).forEach(function (k) { release(k); }); } catch (_) {} try { if (_chan) _chan.unsubscribe(); } catch (_) {} _chan = null; _started = false; _chanWs = null; _chanProj = null; _peers.clear(); if (_hb) { clearInterval(_hb); _hb = null; } }
+
+  // 5 Oct 2026: the live channel follows the open project. It used to be opened once, for the
+  // project open at page load, and never moved: after a switch it kept listening on the old
+  // project (so "held by" never showed for the project in front of you) and, when the old one
+  // was out of reach, was refused by the server over and over. Same rule as crdt_sync's refresh():
+  // a changed workspace or project, or a project that is now fenced, closes the channel and
+  // releases the locks held on the old project; then a fresh channel opens for the new one.
+  function refresh() {
+    var ws = _wsId(), proj = _projId();
+    if (_started && (ws !== _chanWs || proj !== _chanProj || _flagOff() || _fenced())) stop();
+    if (!_started) start();
+  }
 
   function _ready(fn) { if (typeof document === 'undefined') return; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-  _ready(function () { setTimeout(start, 3200); });
+  _ready(function () { setTimeout(start, 3200); setInterval(refresh, 6000); });
 
-  var api = { claim: claim, release: release, heldBy: heldBy, mine: mine, onChange: onChange, start: start, stop: stop };
+  var api = { claim: claim, release: release, heldBy: heldBy, mine: mine, onChange: onChange, start: start, stop: stop, refresh: refresh, _channelFor: function () { return _started ? { ws: _chanWs, proj: _chanProj } : null; } };
   if (typeof window !== 'undefined') window.SLLocks = api;
   if (typeof globalThis !== 'undefined') globalThis.SLLocks = api;
 })();

@@ -1,5 +1,5 @@
 // ============================================================================
-// presence.js — v2.0 — COL-1: teammate presence (SLPresence) + the shared avatar (SLAvatar).
+// presence.js — v2.3 — COL-1: teammate presence (SLPresence) + the shared avatar (SLAvatar).
 //
 // 2.0 (6 Sep 2026, Waqas): people show as ROUND AVATARS — two initials (first + last) or
 // their own picture — INLINE in the top bar at the same height as the buttons, to the
@@ -37,6 +37,7 @@
     const COLORS = ['#4E63D8', '#B34700', '#1B7F4B', '#7C3AED', '#B3005E', '#00707E'];
     const CURSOR_MS = 150;      // cursor stream throttle
     let _chan = null, _state = {}, _tok = null, _lastCur = 0, _started = false;
+    let _chanWs = null, _chanProj = null;   // 5 Oct 2026: the workspace/project the channel was opened for
 
     function _flagOff() {
         try {
@@ -223,8 +224,9 @@
         let client = null;
         try { client = typeof getSupabaseClient === 'function' ? getSupabaseClient() : null; } catch (_) {}
         const ws = _ws(), proj = _proj();
-        if (!client || !ws || !proj || !_identity()) { setTimeout(start, 4000); return; }   // no signed-in name → not yet
+        if (!client || !ws || !proj || !_identity()) return;   // no signed-in name → not yet; refresh() tries again every 6 s (5 Oct 2026; was its own 4 s retry)
         _tok = (crypto.randomUUID ? crypto.randomUUID() : 'p' + Math.random().toString(36).slice(2)).slice(0, 8);
+        _chanWs = ws; _chanProj = proj;
         _chan = client.channel('slab-presence:' + ws + ':' + proj, { config: { private: true, presence: { key: _tok } } });   // 3 Oct 2026: members only (migration 20261003a)
         _chan.on('presence', { event: 'sync' }, function () {
             try { _state = _chan.presenceState(); } catch (_) { _state = {}; }
@@ -236,6 +238,25 @@
         });
         _started = true;
         _wireCursorStream();
+    }
+    function stop() {
+        try { if (_chan) _chan.unsubscribe(); } catch (_) {}
+        _chan = null; _started = false; _chanWs = null; _chanProj = null; _state = {};
+        try { _renderStrip(); } catch (_) {}
+    }
+    // 5 Oct 2026: the channel follows the open project, as crdt_sync's refresh() does. It used to
+    // be opened once, for the project open at page load: after a switch, the bubbles showed who
+    // was in the PREVIOUS project, and nobody in the new one saw you.
+    function refresh() {
+        const was = _started && _chan;
+        _follow();
+        if (was && _started && _chan === was) _retrack();   // unchanged project: re-announce (a new name or picture reaches peers at once)
+    }
+    // The 6 s poll: follow a switch, nothing else (no re-track every tick).
+    function _follow() {
+        const ws = _ws(), proj = _proj();
+        if (_started && (ws !== _chanWs || proj !== _chanProj || _flagOff() || _fenced())) stop();
+        if (!_started) start();
     }
     function _retrack() { try { if (_chan) _chan.track(_here()); } catch (_) {} }
 
@@ -252,10 +273,10 @@
     })();
 
     function _ready(fn) { if (typeof document === 'undefined') return; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-    _ready(function () { setTimeout(start, 3000); });   // after auth + project resolve
+    _ready(function () { setTimeout(start, 3000); setInterval(_follow, 6000); });   // after auth + project resolve; then follow project switches
 
     // ------------------------------------------------------------- exports
-    const api = { start, refresh: _retrack, _here, _colorFor, _renderCursor, _renderStrip, _identity, peers: () => Object.values(_state).flat().filter(p => p.tok !== _tok), people: () => _peopleFrom(_state), COLORS };
+    const api = { start, stop, refresh, retrack: _retrack, _channelFor: () => (_started ? { ws: _chanWs, proj: _chanProj } : null), _here, _colorFor, _renderCursor, _renderStrip, _identity, peers: () => Object.values(_state).flat().filter(p => p.tok !== _tok), people: () => _peopleFrom(_state), COLORS };
     const avatarApi = { html: avatarHtml, initials: initialsOf, color: _colorFor, me: _identity };
     if (typeof window !== 'undefined') { window.SLPresence = api; window.SLAvatar = avatarApi; }
     if (typeof globalThis !== 'undefined') { globalThis.SLPresence = api; globalThis.SLAvatar = avatarApi; }
