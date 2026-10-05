@@ -1,6 +1,11 @@
 -- ============================================================================
 -- 4 Oct 2026 — the project-save guard stops timing out on projects with a long history.
--- STATUS: NOT YET APPLIED. Waits for Waqas's "apply it". Customer kit: 21_version_archive_prune_cheap.sql.
+-- STATUS: APPLIED IN PRODUCTION 5 Oct 2026 on Waqas's "apply it". Customer kit: 21_version_archive_prune_cheap.sql.
+--   Applied in steps with the same end state as this file (history: version_archive_items_column,
+--   version_archive_items_fill_trigger, version_archive_prune_cheap, version_archive_items_fill_revoke);
+--   the back-fill of all 3,051 archived versions (456 MB) ran in five batches between them, so no
+--   single statement held the table. Checked after: 0 versions without a count; a rolled-back save
+--   of the stuck FHA eval project took 2.9 s (was cancelled at 8 s) and pruned 81 versions to 50.
 --
 -- WHAT WAS WRONG (measured on production, 4 Oct 2026, read-only)
 --   sl_guard_project_document runs on every save of project_documents. Once a project has

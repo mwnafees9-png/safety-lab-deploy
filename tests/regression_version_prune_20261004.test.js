@@ -36,7 +36,7 @@ check('same keepers as before: the 50 newest and the 10 largest, pruned above 80
 check('the wipe refusal is unchanged', /new_items < \(old_items \* 0\.2\)/.test(guard) && /_slIntentionalClear/.test(guard) && /Refused: this save would cut project content/.test(guard));
 check('the version counter rule is unchanged', /NEW\.version := OLD\.version \+ 1;/.test(guard));
 check('neither function is callable by the app role', /revoke all on function public\.sl_version_items_fill\(\) from anon, authenticated, public;/.test(body) && /revoke all on function public\.sl_guard_project_document\(\) from anon, authenticated, public;/.test(body));
-check('the header says it is NOT yet applied (production waits for the go-ahead)', /STATUS: NOT YET APPLIED/.test(mig));
+check('the header records it as applied in production, and how (5 Oct 2026)', /STATUS: APPLIED IN PRODUCTION 5 Oct 2026/.test(mig) && /five batches/.test(mig));
 check('apply.sh runs 21 after 20', /20_access_rules_hardening 21_version_archive_prune_cheap;/.test(R('customer-install/db/apply.sh')));
 check('the Postgres proof and its seed are in the kit tests', fs.existsSync(path.join(REPO, 'customer-install/db/tests/version_prune_proof.sql')) && /ALL PASS/.test(R('customer-install/db/tests/version_prune_proof.sql')) && fs.existsSync(path.join(REPO, 'customer-install/db/tests/version_prune_setup.sql')));
 
