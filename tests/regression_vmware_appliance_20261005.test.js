@@ -102,6 +102,8 @@ const cur = fs.readdirSync(KITD).filter(f => /^SL-DG-0001 .* v[\d.]+\.docx$/.tes
 const g = cp.spawnSync('unzip', ['-p', path.join(KITD, cur), 'word/document.xml'], { encoding: 'utf8' }).stdout.replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
 check('the current guide has section 4.6, the VMware appliance', /4\.6 The VMware appliance: import one file/.test(g));
 check('...import with Deploy OVF Template, four questions, the setup file address', /Deploy OVF Template/.test(g) && /Answer four questions:/.test(g) && /\/safetylab-setup/.test(g));
+check('...tells IT the laptops need port 443 to the server', /reach that address on port 443/.test(g));
+check('...and to have the key\'s Workspace ID (wrkspc_) ready', /Workspace\u2019s ID \(it starts with wrkspc_\) ready/.test(g));
 check('...and the contents page lists it', (g.match(/4\.6 The VMware appliance: import one file/g) || []).length === 2);
 
 console.log('[8] the customer kit zip leaves the appliance recipe out');
