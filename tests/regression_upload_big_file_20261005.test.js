@@ -98,11 +98,13 @@ function run(srv, file, key, extra) {
     const s = await serve(b, f); const r = await run(s, file, KEY); s.close();
     check('upload-doc.sh finishes successfully', r.code === 0, r.out.slice(-600));
     check('both injected failures really happened', f.hits.length === 2, f.hits.join(','));
-    check('...and each was retried, not fatal', /part   : 2\/4 failed \(try 1 of 5\)/.test(r.out) && /part   : 3\/4 failed \(try 1 of 5\)/.test(r.out), r.out.slice(-600));
+    check('...and each was retried, not fatal', /part   : 2\/4 failed \(try 1 of 25\)/.test(r.out) && /part   : 3\/4 failed \(try 1 of 25\)/.test(r.out), r.out.slice(-600));
     const o = b.objects.get(KEY);
     check('the stored file is byte-identical to the local one', !!o && o.equals(data));
     check('the script compared SHA-256 fingerprints and printed the one to send', /MATCH: the published file is byte-identical/.test(r.out) && r.out.includes('Fingerprint to give the recipient (SHA-256): ' + sha(data)));
-    check('no temporary copy of the file was made (pieces are cut with dd)', !/split -b/.test(fs.readFileSync(path.join(ROOT, 'upload-doc.sh'), 'utf8'))); }
+    { const ud = fs.readFileSync(path.join(ROOT, 'upload-doc.sh'), 'utf8');
+    check('defaults fit a rough connection: 8 MB pieces, 25 tries, waits capped at 30 s', /PART_MB=\$\{PART_MB:-8\}/.test(ud) && /TRIES=\$\{TRIES:-25\}/.test(ud) && /\[ "\$W" -gt 30 \] && W=30/.test(ud)); }
+  check('no temporary copy of the file was made (pieces are cut with dd)', !/split -b/.test(fs.readFileSync(path.join(ROOT, 'upload-doc.sh'), 'utf8'))); }
 
   console.log('[B] a piece that keeps failing ends the upload cleanly');
   { const b = fakeBucket(); const f = { parts: { 2: { how: 'http500-', left: 99 } }, hits: [] };

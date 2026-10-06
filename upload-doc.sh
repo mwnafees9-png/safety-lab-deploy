@@ -27,7 +27,10 @@ set -uo pipefail
 
 ORIGIN=${ORIGIN:-https://safetylabaero.com}
 PUBLIC=${PUBLIC:-https://updates.safetylabaero.com}
-PART_MB=${PART_MB:-16}
+# 6 Oct 2026: 8 MB pieces, 25 tries each, waits capped at 30 s. With 16 MB and 5 tries the 1.7 GB
+# appliance died at piece 17 of 105 on a connection corrupting data in transit ("bad record mac");
+# the desktop publish, at 5 MB and 25 tries, got through the same connection the same hour.
+PART_MB=${PART_MB:-8}
 
 SRC=${1:-}
 KEY=${2:-}
@@ -109,7 +112,7 @@ trap 'echo; echo "aborting multipart upload"; abort' INT TERM
 # is the whole upload abandoned.
 PART_BYTES=$((PART_MB * 1048576))
 NPARTS=$(( (SIZE + PART_BYTES - 1) / PART_BYTES ))
-TRIES=${TRIES:-5}
+TRIES=${TRIES:-25}
 PARTS='['
 N=0
 while [ "$N" -lt "$NPARTS" ]; do
@@ -124,7 +127,7 @@ while [ "$N" -lt "$NPARTS" ]; do
     ETAG=$(printf '%s' "$R" | sed -n 's/.*"etag":"\{0,1\}\([^",]*\)"\{0,1\}.*/\1/p')
     if [ -z "$ETAG" ] && [ "$T" -lt "$TRIES" ]; then
       echo "part   : $N/$NPARTS failed (try $T of $TRIES), sending it again: $R" >&2
-      sleep $((T * T * 2))
+      W=$((T * 3)); [ "$W" -gt 30 ] && W=30; sleep "$W"
     fi
   done
   if [ -z "$ETAG" ]; then
