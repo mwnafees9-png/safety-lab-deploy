@@ -742,7 +742,7 @@ async function verifyOfflineLicense(env, blob) {
   } catch (_) { return { error: "invalid_token" }; }
 }
 
-export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage };   // metering, testable in isolation (test/cache_metering.test.mjs)
+export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense };   // metering, testable in isolation (test/cache_metering.test.mjs)
 
 // The router. Everything it returns goes through withCors() at the boundary below, so no
 // handler has to know or care what the calling origin was.
@@ -754,6 +754,14 @@ async function routeRequest(request, env, ctx) {
         return jsonResponse(200, { ok: true, service: "safety-lab-proxy", ts: Date.now() });
       }
       if (!url.pathname.startsWith("/v1/ai/")) {
+        return jsonResponse(404, { error: { type: "not_found", message: "Unknown endpoint." } });
+      }
+      // 6 Oct 2026: floating seats and the server-held license. Only the standalone server
+      // (server.mjs, the customer's own machine) provides env.__seats; it keeps state on disk.
+      // Routed here, after the origin check above, and authenticated by the seat service itself
+      // with the caller's sign-in token. Everywhere else these paths do not exist.
+      if (url.pathname === "/v1/ai/license" || url.pathname.startsWith("/v1/ai/seat/")) {
+        if (env.__seats && typeof env.__seats.handle === "function") return env.__seats.handle(request, url);
         return jsonResponse(404, { error: { type: "not_found", message: "Unknown endpoint." } });
       }
       const auth = request.headers.get("authorization") || "";

@@ -30,8 +30,14 @@ services:
       PORT: "8787"
       HOST: "0.0.0.0"
       LICENSE_MODE: offline
+      LICENSE_FILE: /license/server.lic
+      SEAT_DATA_DIR: /data
     volumes:
       - ./ai-proxy:/app:ro
+      # 6 Oct 2026: the server's license (put there from the maintenance menu) and the floating
+      # seat records. The license is read-only to the service; the seat records are its own.
+      - ./license:/license:ro
+      - ./ai-proxy-data:/data
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8787/v1/ai/health"]
       interval: 10s

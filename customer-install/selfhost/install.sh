@@ -218,6 +218,24 @@ else
   echo "LICENSE_BACKEND_HOST=$SERVER_NAME" >> ai-proxy.env
 fi
 chmod 600 ai-proxy.env
+# Floating seats (6 Oct 2026): the AI service asks this server's own sign-in service who is calling,
+# through the internal gateway, with the publishable key (the same one every app carries). Written
+# on every run, so an install made before seats existed is brought up to date by running this again.
+SEAT_KEY=$(grep '^SUPABASE_PUBLISHABLE_KEY=' .env | cut -d= -f2-)
+for kv in "SEAT_AUTH_URL=http://api-gw:8000" "SEAT_AUTH_KEY=$SEAT_KEY"; do
+  k="${kv%%=*}"
+  if grep -q "^$k=" ai-proxy.env; then grep -v "^$k=" ai-proxy.env > ai-proxy.env.tmp && mv ai-proxy.env.tmp ai-proxy.env; fi
+  echo "$kv" >> ai-proxy.env
+done
+chmod 600 ai-proxy.env
+# The server's license lives in stack/license/server.lic (loaded from the maintenance menu, or a
+# .lic file Safety Lab sent placed next to this script). The seat records live in ai-proxy-data.
+mkdir -p license ai-proxy-data
+if [ ! -s license/server.lic ]; then
+  NEW_LIC=$(ls "$HERE"/*.lic 2>/dev/null | head -1 || true)
+  if [ -n "$NEW_LIC" ]; then tr -d '\r\n' < "$NEW_LIC" > license/server.lic; fi
+fi
+[ -f license/server.lic ] && chmod 644 license/server.lic
 
 # ---------------------------------------------------------------- 4. https
 bold "Setting up https for $SERVER_NAME"
@@ -282,15 +300,32 @@ sleep 2
 
 # ---------------------------------------------------------------- 6. the Safety Lab database
 PGX(){ docker compose exec -T db psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q "$@"; }
-if [ "$(PGX -Atc "select count(*) from pg_tables where schemaname='public' and tablename='projects'")" = "1" ]; then
-  bold "Safety Lab database already present; leaving it alone"
-else
-  bold "Building the Safety Lab database"
+# Which database files this server has (6 Oct 2026). A fresh server gets every file; a server that
+# already has the database gets only the files it has not had yet, in order, so an update that
+# carries a new numbered file applies it and nothing else. Recorded in private.kit_migrations.
+# Every database built before that record existed was built from the files up to 21, so those are
+# recorded as applied the first time (KIT_BASELINE); nothing after 21 is assumed.
+KIT_BASELINE="00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21"
+HAS_DB="$(PGX -Atc "select count(*) from pg_tables where schemaname='public' and tablename='projects'")"
+PGX -c "create schema if not exists private; create table if not exists private.kit_migrations(name text primary key, applied_at timestamptz not null default now()); revoke all on private.kit_migrations from public;" >/dev/null
+if [ "$HAS_DB" = "1" ] && [ "$(PGX -Atc "select count(*) from private.kit_migrations")" = "0" ]; then
   for f in $(ls "$KIT_DB"/[0-9]*.sql | sort); do
-    echo "   $(basename "$f")"
-    PGX < "$f" 2>&1 | grep -v "^NOTICE\|already exists, skipping\|^ run_chain\|^---\|^ *$\|^(1 row)" || true
+    b=$(basename "$f"); case " $KIT_BASELINE " in *" ${b%%_*} "*) PGX -c "insert into private.kit_migrations(name) values ('$b') on conflict do nothing" >/dev/null ;; esac
   done
 fi
+if [ "$HAS_DB" = "1" ]; then bold "Safety Lab database already present; applying any new database steps"; else bold "Building the Safety Lab database"; fi
+NEW_STEPS=0
+for f in $(ls "$KIT_DB"/[0-9]*.sql | sort); do
+  b=$(basename "$f")
+  [ "$(PGX -Atc "select count(*) from private.kit_migrations where name='$b'")" = "1" ] && continue
+  echo "   $b"
+  # A step that fails stops here, with nothing recorded for it, so the next run tries it again.
+  OUT="$(PGX < "$f" 2>&1)" || { printf '%s\n' "$OUT"; die "The database step $b failed. Nothing after it was applied. Send the output above to Safety Lab."; }
+  printf '%s\n' "$OUT" | grep -v "^NOTICE\|already exists, skipping\|^ run_chain\|^---\|^ *$\|^(1 row)" || true
+  PGX -c "insert into private.kit_migrations(name) values ('$b')" >/dev/null
+  NEW_STEPS=$((NEW_STEPS + 1))
+done
+[ "$HAS_DB" = "1" ] && [ "$NEW_STEPS" = 0 ] && echo "   Nothing new."
 
 # ---------------------------------------------------------------- 6b. the administrator's account
 # Made here, by the script, before anyone is told the server exists, so nobody can register the
@@ -334,7 +369,9 @@ echo "   AI service over https:      $AI (want 200)"
 # ONLY what a browser bundle already carries in the open (the server address, the PUBLISHABLE key,
 # the AI endpoint) plus the signed license if Safety Lab's .lic file sits next to this script.
 # Never the AI key, never a password: the app refuses a setup file that carries a secret.
-LIC_FILE=$(ls "$HERE"/*.lic 2>/dev/null | head -1 || true)
+# The license on this server (stack/license/server.lic) goes in the setup file, so a user never
+# handles a license file. Older installs kept it as a .lic next to this script; that still works.
+if [ -s "$STACK/license/server.lic" ]; then LIC_FILE="$STACK/license/server.lic"; else LIC_FILE=$(ls "$HERE"/*.lic 2>/dev/null | head -1 || true); fi
 SETUP="$HERE/$SERVER_NAME.safetylab-setup"
 # In self-signed mode the setup file also carries the SHA-256 fingerprint of the server certificate
 # this install made. The desktop app then trusts that one certificate for this one server name, so

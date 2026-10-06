@@ -16,11 +16,22 @@
 // ============================================================================
 import http from "node:http";
 import { Readable } from "node:stream";
-import worker from "./worker.js";
+import worker, { verifyOfflineLicense } from "./worker.js";
+import { createSeats } from "./seats.mjs";
 
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
-const env = process.env;
+// A copy, not process.env itself: process.env turns every value into a string, and the seat
+// service is an object (6 Oct 2026). Seats exist only in offline-license mode, on a customer's server.
+const env = Object.assign({}, process.env);
+if (env.LICENSE_MODE === "offline") {
+  env.__seats = createSeats({
+    dataDir: process.env.SEAT_DATA_DIR || "/data",
+    licensePath: process.env.LICENSE_FILE || "/license/server.lic",
+    env, verifyLicense: verifyOfflineLicense,
+    ttlMs: (Number(process.env.SEAT_TTL_MINUTES) || 30) * 60 * 1000,
+  });
+}
 
 const server = http.createServer(async (req, res) => {
   try {

@@ -11,8 +11,11 @@ export NEWT_COLORS='root=,blue'
 if [ -n "${SSH_ORIGINAL_COMMAND:-}" ] || [ "$#" -gt 0 ] || [ ! -t 0 ]; then exec /bin/bash "$@"; fi
 if [ ! -f /var/lib/safetylab/setup-done ]; then echo "Setup has not finished yet. Restart this machine to run it."; exec /bin/bash -l; fi
 while :; do
-  C=$(whiptail --title "$TITLE" --menu "Running at https://${ADDR:-?}\nSetup file for users: https://${ADDR:-?}/safetylab-setup" 19 74 7 \
+  C=$(whiptail --title "$TITLE" --menu "Running at https://${ADDR:-?}\nSetup file for users: https://${ADDR:-?}/safetylab-setup" 22 74 10 \
     add "Add a person (gives them a temporary password)" \
+    license "Load or replace the license" \
+    seats "Who is using a seat now" \
+    update "Install an update from Safety Lab" \
     details "Show the address, setup file and certificate fingerprint" \
     status "Check the services" \
     restart "Restart the services" \
@@ -24,6 +27,40 @@ while :; do
       E=$(whiptail --title "$TITLE" --inputbox "Their work email address:" 10 74 3>&1 1>&2 2>&3) || continue
       R=$(cd $KIT && ./add-user.sh "$E" 2>&1)
       whiptail --title "$TITLE" --msgbox "$R" 18 74 ;;
+    license)
+      # 6 Oct 2026. The license lives on this server; every user's app takes it from here.
+      L=$(ls -t /home/safetylab/*.lic 2>/dev/null | head -1)
+      if [ -n "$L" ]; then
+        whiptail --title "$TITLE" --yesno "Load this license file?\n\n  $L" 10 74 || continue
+        BLOB=$(tr -d ' \r\n\t' < "$L")
+      else
+        BLOB=$(whiptail --title "$TITLE" --inputbox "Copy the license file Safety Lab sent you into /home/safetylab (for example with WinSCP, user safetylab) and choose this again.\n\nOr paste the license text here (over SSH):" 13 74 3>&1 1>&2 2>&3) || continue
+        BLOB=$(printf '%s' "$BLOB" | tr -d ' \r\n\t')
+      fi
+      [ -n "$BLOB" ] || continue
+      R=$(printf '%s' "$BLOB" | docker exec -i safetylab-ai-proxy node /app/license-check.mjs 2>/dev/null)
+      if ! printf '%s' "$R" | grep -q '"ok":true'; then
+        M=$(printf '%s' "$R" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p'); whiptail --title "$TITLE" --msgbox "Not loaded.\n\n${M:-The AI service could not check the license. Choose Check the services.}" 12 74; continue
+      fi
+      CUST=$(printf '%s' "$R" | sed -n 's/.*"customer":"\([^"]*\)".*/\1/p'); SEATS=$(printf '%s' "$R" | sed -n 's/.*"seats":\([0-9a-z]*\).*/\1/p')
+      UNTIL=$(printf '%s' "$R" | sed -n 's/.*"notAfter":"\([0-9-]*\)T.*/\1/p')
+      whiptail --title "$TITLE" --yesno "License checked:\n\n  For:     $CUST\n  Seats:   $SEATS at a time\n  Until:   $UNTIL\n\nLoad it on this server? The setup file is rebuilt with it inside and the services restart (about a minute)." 15 74 || continue
+      mkdir -p $KIT/stack/license && printf '%s' "$BLOB" > $KIT/stack/license/server.lic.new && chmod 644 $KIT/stack/license/server.lic.new && mv -f $KIT/stack/license/server.lic.new $KIT/stack/license/server.lic
+      whiptail --title "$TITLE" --infobox "Loading the license and rebuilding the setup file. About a minute." 7 74
+      if (cd $KIT && SLAB_OFFLINE=1 bash install.sh >>/tmp/safetylab-license.log 2>&1); then
+        whiptail --title "$TITLE" --msgbox "License loaded.\n\nNew users: the setup file at https://$ADDR/safetylab-setup now carries it, so they never handle a license file.\nPeople already set up: their app picks it up from this server the next time it starts." 14 74
+      else
+        whiptail --title "$TITLE" --msgbox "The license is saved, but the services did not all restart. Choose Check the services, or send /tmp/safetylab-license.log to Safety Lab." 11 74
+      fi ;;
+    seats)
+      LIST=$(docker exec safetylab-ai-proxy node -e '
+        let s = {}; try { s = JSON.parse(require("fs").readFileSync("/data/seats.json", "utf8")); } catch (_) {}
+        const ttl = (Number(process.env.SEAT_TTL_MINUTES) || 30) * 60000, t = Date.now();
+        const rows = Object.values(s.leases || {}).filter(l => t - l.lastSeen < ttl)
+          .map(l => "  " + l.email + "   (checked in " + Math.round((t - l.lastSeen) / 60000) + " min ago)");
+        console.log(rows.length ? rows.join("\n") : "  nobody");' 2>/dev/null)
+      whiptail --title "$TITLE" --msgbox "Seats in use now. A seat frees itself 30 minutes after an app stops checking in.\n\n${LIST:-  (the AI service did not answer: choose Check the services)}" 18 74 ;;
+    update) clear; sudo /usr/local/sbin/safetylab-update; echo; read -r -p "Press Enter to go back to the menu." _ ;;
     details)
       whiptail --title "$TITLE" --msgbox "Server:        https://$ADDR\nAdministrator: $ADMIN\n\nEvery user: install the desktop app from safetylabaero.com, download\n  https://$ADDR/safetylab-setup\nand open it in the app (Choose setup file).\n\nThe browser warns once about the certificate; it should show:\n  $FP" 18 74 ;;
     status) R=$(cd $KIT/stack && docker compose ps --format '{{.Name}}  {{.Status}}' 2>&1); whiptail --title "$TITLE" --scrolltext --msgbox "Every line should say healthy or Up:\n\n$R" 22 74 ;;

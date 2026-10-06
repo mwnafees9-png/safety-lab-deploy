@@ -13,6 +13,9 @@ RUN useradd -m -s /usr/local/bin/safetylab-menu -G docker,sudo safetylab && pass
  && echo /usr/local/bin/safetylab-menu >> /etc/shells && echo safetylab > /etc/hostname
 COPY files/safetylab-setup /usr/local/sbin/safetylab-setup
 COPY files/safetylab-menu /usr/local/bin/safetylab-menu
+# 6 Oct 2026: updates from Safety Lab, checked against this public key before anything is applied.
+COPY files/safetylab-update /usr/local/sbin/safetylab-update
+COPY files/update-key.pub.pem /opt/safetylab/update-key.pub.pem
 COPY files/safetylab-setup.service /etc/systemd/system/safetylab-setup.service
 COPY files/40-safetylab-dhcp.yaml /etc/netplan/40-safetylab-dhcp.yaml
 COPY files/issue /etc/issue
@@ -20,8 +23,8 @@ COPY kit/ /opt/safetylab/customer-install/
 COPY images.tar.zst /opt/safetylab/images.tar.zst
 # resolv.conf, hostname and fstab are written by build-appliance.sh: Docker holds them during a build.
 RUN chmod 600 /etc/netplan/40-safetylab-dhcp.yaml \
- && chmod 755 /usr/local/sbin/safetylab-setup /usr/local/bin/safetylab-menu /opt/safetylab/customer-install/selfhost/*.sh /opt/safetylab/customer-install/db/*.sh \
- && chown -R safetylab:safetylab /opt/safetylab \
+ && chmod 755 /usr/local/sbin/safetylab-setup /usr/local/sbin/safetylab-update /usr/local/bin/safetylab-menu /opt/safetylab/customer-install/selfhost/*.sh /opt/safetylab/customer-install/db/*.sh \
+ && chown -R safetylab:safetylab /opt/safetylab && chown root:root /opt/safetylab/update-key.pub.pem && chmod 644 /opt/safetylab/update-key.pub.pem \
  && systemctl enable safetylab-setup.service docker.service ssh.service systemd-networkd.service systemd-resolved.service open-vm-tools.service \
  && printf 'GRUB_DEFAULT=0\nGRUB_TIMEOUT=1\nGRUB_CMDLINE_LINUX_DEFAULT="quiet"\nGRUB_CMDLINE_LINUX="net.ifnames=1"\nGRUB_TERMINAL=console\n' > /etc/default/grub \
  && printf 'mptspi\nmptsas\nvmw_pvscsi\nahci\nata_piix\nsd_mod\next4\n' >> /etc/initramfs-tools/modules

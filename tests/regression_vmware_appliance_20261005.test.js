@@ -46,7 +46,7 @@ check('install.sh is told it is offline, so it never tries to download', /SLAB_O
 
 console.log('[2] the image recipe');
 check('scripts get their permissions in the recipe, not from how files were copied',
-  /chmod 755 \/usr\/local\/sbin\/safetylab-setup \/usr\/local\/bin\/safetylab-menu \/opt\/safetylab\/customer-install\/selfhost\/\*\.sh \/opt\/safetylab\/customer-install\/db\/\*\.sh/.test(docker));
+  /chmod 755 \/usr\/local\/sbin\/safetylab-setup \/usr\/local\/sbin\/safetylab-update \/usr\/local\/bin\/safetylab-menu \/opt\/safetylab\/customer-install\/selfhost\/\*\.sh \/opt\/safetylab\/customer-install\/db\/\*\.sh/.test(docker));
 check('the recipe never touches resolv.conf or fstab (Docker holds them during a build)', !/resolv\.conf|\/etc\/fstab/.test(docker.replace(/^#.*$/mg, '')));
 check('Docker from Ubuntu\'s own packages, VMware guest tools, SSH, the console dialogs', /docker\.io docker-compose-v2/.test(docker) && /open-vm-tools/.test(docker) && /openssh-server/.test(docker) && /whiptail/.test(docker));
 check('the maintenance login starts locked; the setup sets its password', /passwd -l safetylab/.test(docker) && /chpasswd/.test(setup));

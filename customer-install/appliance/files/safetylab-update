@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# ============================================================================
+# safetylab-update: apply an update file from Safety Lab to this server (6 Oct 2026).
+#
+#   sudo safetylab-update [file]        (the maintenance menu runs this: "Install an update")
+#
+# An update file (SafetyLabAero-server-update-<date>-<commit>.slupdate) is a tar holding:
+#   payload.tar.gz       the install kit at one commit of Safety Lab's repository
+#   payload.sig          Safety Lab's signature over payload.tar.gz (ECDSA P-256, SHA-256)
+#   update-key.pub.pem   Safety Lab's public update key
+#   safetylab-update     this program, so a server set up before updates existed can run it once
+#
+# Nothing is changed unless the signature checks out against the key ALREADY on this server
+# (/opt/safetylab/update-key.pub.pem). A server that has no key yet (set up before 6 Oct 2026)
+# takes the key from the file once; IT confirms the file's SHA-256 fingerprint against the one
+# Safety Lab sent before running it. Data and settings are never touched: the database, the keys,
+# the answers and the license live in selfhost/stack and answers.env, which an update never contains.
+# The kit as it was is kept in /opt/safetylab/backups first.
+# ============================================================================
+set -uo pipefail
+LOG=/var/log/safetylab-update.log
+KITROOT=/opt/safetylab/customer-install
+KEY=/opt/safetylab/update-key.pub.pem
+TITLE="Safety Lab Aero update"
+export NEWT_COLORS='root=,blue'
+UI=0; [ -t 0 ] && command -v whiptail >/dev/null && UI=1
+say(){ echo "$1" >>"$LOG"; if [ $UI = 1 ]; then whiptail --title "$TITLE" --msgbox "$1" "${2:-14}" 76; else printf '%b\n' "$1"; fi; }
+fail(){ say "Update NOT applied.\n\n$1\n\nNothing on this server was changed${2:-}. The details are in $LOG." 16; exit 1; }
+[ "$(id -u)" = 0 ] || { echo "Run as administrator: sudo safetylab-update"; exit 1; }
+echo "=== $(date -Is) update started" >>"$LOG"
+
+# 1. the file
+F="${1:-}"
+if [ -z "$F" ]; then F=$(ls -t /home/safetylab/SafetyLabAero-server-update*.slupdate 2>/dev/null | head -1); fi
+if [ -z "$F" ] && [ $UI = 1 ]; then
+  URL=$(whiptail --title "$TITLE" --inputbox "No update file was found in this machine's home folder.\n\nEither copy the file Safety Lab sent you into /home/safetylab (for example with WinSCP, user safetylab) and choose this again, or paste the download address Safety Lab sent you:" 14 76 3>&1 1>&2 2>&3) || exit 0
+  [ -n "$URL" ] || exit 0
+  F=/home/safetylab/$(basename "${URL%%\?*}")
+  case "$F" in *.slupdate) ;; *) fail "That address does not end in .slupdate.";; esac
+  whiptail --title "$TITLE" --infobox "Downloading the update..." 7 50
+  curl -fsSL --max-time 600 -o "$F" "$URL" >>"$LOG" 2>&1 || fail "The download did not work. This server may not be allowed to reach that address; copy the file across instead."
+  chown safetylab:safetylab "$F" 2>/dev/null
+fi
+[ -n "$F" ] && [ -f "$F" ] || fail "No update file found. Copy it into /home/safetylab (user safetylab), then try again."
+echo "file: $F  sha256: $(sha256sum "$F" | cut -d' ' -f1)" >>"$LOG"
+
+W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
+tar -xf "$F" -C "$W" payload.tar.gz payload.sig update-key.pub.pem 2>>"$LOG" || fail "The file is not a Safety Lab update file, or it was damaged when it was copied."
+
+# 2. the signature
+BOOT=""
+if [ -s "$KEY" ]; then USEKEY="$KEY"; else USEKEY="$W/update-key.pub.pem"; BOOT=1; fi
+openssl dgst -sha256 -verify "$USEKEY" -signature "$W/payload.sig" "$W/payload.tar.gz" >>"$LOG" 2>&1 \
+  || fail "The file's signature does not match Safety Lab's update key. Do not use this file; ask Safety Lab for a fresh copy."
+echo "signature ok (key: $USEKEY${BOOT:+, first update on this server})" >>"$LOG"
+
+# 3. what is in it
+mkdir -p "$W/p" && tar -xzf "$W/payload.tar.gz" -C "$W/p" 2>>"$LOG" || fail "The update could not be unpacked."
+NEW="$W/p/customer-install"
+[ -f "$NEW/selfhost/install.sh" ] && [ -d "$NEW/db" ] || fail "The update is missing the install kit."
+VER=$(cat "$NEW/VERSION" 2>/dev/null || echo unknown)
+if [ $UI = 1 ]; then whiptail --title "$TITLE" --yesno "Update checked: it is from Safety Lab and undamaged.\n\nVersion: $VER\n\nInstalling it restarts the services; people using Safety Lab Aero lose their connection for a few minutes and then carry on. Their work is kept.\n\nInstall now?" 16 76 || exit 0; fi
+
+# 4. keep the kit as it was, then put the new one in place (never selfhost/stack or answers.env)
+mkdir -p /opt/safetylab/backups
+B=/opt/safetylab/backups/kit-$(date +%Y%m%d-%H%M%S).tar.gz
+tar -czf "$B" -C /opt/safetylab --exclude=customer-install/selfhost/stack customer-install 2>>"$LOG" || fail "Could not back up the current kit (is the disk full?)."
+echo "backup: $B" >>"$LOG"
+[ $UI = 1 ] && whiptail --title "$TITLE" --infobox "Installing the update. A few minutes; please wait." 7 60
+( cd "$NEW" && tar -cf - --exclude=./appliance --exclude='./SL-DG-0001*' . ) | ( cd "$KITROOT" && tar -xf - ) 2>>"$LOG" \
+  || { tar -xzf "$B" -C /opt/safetylab 2>>"$LOG"; fail "Copying the new files failed" ", the kit was put back as it was"; }
+# Ownership of the files the update brought, never of selfhost/stack: the database's own files in
+# there belong to the database's user, and handing them to safetylab would stop the database starting.
+find "$KITROOT" -path "$KITROOT/selfhost/stack" -prune -o -exec chown safetylab:safetylab {} + 2>/dev/null
+chmod 755 "$KITROOT"/selfhost/*.sh "$KITROOT"/db/*.sh 2>/dev/null
+# this machine's own programs (menu, first-start setup, this updater) and, once, the update key
+for p in safetylab-menu:/usr/local/bin safetylab-setup:/usr/local/sbin safetylab-update:/usr/local/sbin; do
+  n=${p%%:*}; d=${p#*:}; [ -f "$NEW/appliance/files/$n" ] && install -m 755 "$NEW/appliance/files/$n" "$d/$n"
+done
+[ -s "$KEY" ] || install -m 644 "$W/update-key.pub.pem" "$KEY"
+echo "$VER" > /var/lib/safetylab/version
+
+# 5. bring the services up to the new kit: new database steps, new settings, restart
+OUT=$(cd "$KITROOT/selfhost" && sudo -u safetylab env SLAB_OFFLINE=1 bash install.sh 2>&1); RC=$?
+printf '%s\n' "$OUT" >>"$LOG"
+if [ $RC != 0 ]; then
+  say "The new files are in place but the services did not all come back:\n\n$(printf '%s\n' "$OUT" | grep -E 'STOP|failed' | tail -3)\n\nYour data is untouched. Choose 'Check the services' in the menu, or send $LOG to Safety Lab." 18
+  exit 1
+fi
+echo "=== $(date -Is) update applied: $VER" >>"$LOG"
+say "Update installed: $VER\n\nThe services are running again. Nothing else to do." 12
