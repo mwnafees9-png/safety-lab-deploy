@@ -104,6 +104,9 @@ check('the current guide has section 4.6, the VMware appliance', /4\.6 The VMwar
 check('...import with Deploy OVF Template, four questions, the setup file address', /Deploy OVF Template/.test(g) && /Answer four questions:/.test(g) && /\/safetylab-setup/.test(g));
 check('...tells IT the laptops need port 443 to the server', /reach that address on port 443/.test(g));
 check('...and to have the key\'s Workspace ID (wrkspc_) ready', /Workspace\u2019s ID \(it starts with wrkspc_\) ready/.test(g));
+check('Rev 2.2: IT loads the license from the menu, users never load one', /Load the license\. Copy the license file/.test(g) && /The setup file carries the license, so there is nothing else to load/.test(g));
+check('Rev 2.2: floating seats explained, with the 30-minute release', /floating seats/.test(g) && /30 minutes after their computer stops checking in/.test(g));
+check('Rev 2.2: updates from the menu, and the one-time command for older servers', /Install an update from Safety Lab/.test(g) && /tar -xOf SafetyLabAero-server-update\*\.slupdate safetylab-update \| bash/.test(g));
 check('...and the contents page lists it', (g.match(/4\.6 The VMware appliance: import one file/g) || []).length === 2);
 
 console.log('[8] the customer kit zip leaves the appliance recipe out');
