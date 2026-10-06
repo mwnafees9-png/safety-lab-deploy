@@ -258,7 +258,14 @@ export default {
             try {
                 if (action === 'create' && request.method === 'POST') {
                     const ct = url.searchParams.get('ct') || 'application/octet-stream';
-                    const mpu = await env.DOWNLOADS.createMultipartUpload(key, { httpMetadata: { contentType: ct } });
+                    // 6 Oct 2026: how long the edge may cache it. Installers and update manifests keep
+                    // one name every release and must refresh in a minute; version-named files never
+                    // change. Exactly these two values, the ones publish-desktop.sh uses; nothing else.
+                    const cc = url.searchParams.get('cc') || '';
+                    const CC_OK = ['public, max-age=60, must-revalidate', 'public, max-age=31536000, immutable'];
+                    if (cc && !CC_OK.includes(cc)) return j({ error: 'cache-control value not allowed' }, 400);
+                    const meta = { contentType: ct }; if (cc) meta.cacheControl = cc;
+                    const mpu = await env.DOWNLOADS.createMultipartUpload(key, { httpMetadata: meta });
                     return j({ uploadId: mpu.uploadId, key });
                 }
                 if (action === 'part' && request.method === 'PUT') {

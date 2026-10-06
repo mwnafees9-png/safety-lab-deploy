@@ -27,7 +27,7 @@ function fakeBucket() {
   const objects = new Map(), uploads = new Map(); let n = 0; const log = [];
   return {
     objects, uploads, log,
-    async createMultipartUpload(key, opts) { const id = 'up' + (++n); uploads.set(id, { key, parts: new Map(), ct: opts && opts.httpMetadata && opts.httpMetadata.contentType }); log.push('create'); return { uploadId: id, key }; },
+    async createMultipartUpload(key, opts) { const id = 'up' + (++n); uploads.set(id, { key, parts: new Map(), ct: opts && opts.httpMetadata && opts.httpMetadata.contentType }); log.push('create'); log.meta = opts && opts.httpMetadata; return { uploadId: id, key }; },
     resumeMultipartUpload(key, id) {
       return {
         async uploadPart(num, body) {
@@ -140,6 +140,19 @@ function run(srv, file, key, extra) {
   { const mode = cp.spawnSync('git', ['ls-files', '-s', 'upload-doc.sh'], { cwd: ROOT, encoding: 'utf8' }).stdout;
     check('git records it as executable (100755)', /^100755 /.test(mode), mode);
     check('...and it is executable on disk', (fs.statSync(path.join(ROOT, 'upload-doc.sh')).mode & 0o111) !== 0); }
+
+  console.log('[H] the cache lifetime a release file needs (publish-desktop.sh)');
+  { const b = fakeBucket(); const s = await serve(b, { parts: {}, hits: [] }); const port = s.address().port;
+    const mk = (cc) => fetch('http://127.0.0.1:' + port + '/api/upload?action=create&key=desktop/SafetyLabAero-win-x64.exe&ct=application/octet-stream' + (cc ? '&cc=' + encodeURIComponent(cc) : ''), { method: 'POST', headers: { 'x-upload-token': TOKEN } });
+    let r = await mk('public, max-age=60, must-revalidate');
+    check('a one-minute lifetime is stored with the file', r.status === 200 && b.log.meta && b.log.meta.cacheControl === 'public, max-age=60, must-revalidate');
+    r = await mk('public, max-age=31536000, immutable');
+    check('the forever lifetime for version-named files is stored too', r.status === 200 && b.log.meta.cacheControl === 'public, max-age=31536000, immutable');
+    r = await mk('no-store, private');
+    check('any other value is refused (400)', r.status === 400);
+    r = await mk('');
+    check('none given: no cache lifetime is set (as before)', r.status === 200 && b.log.meta.cacheControl === undefined);
+    s.close(); }
 
   fs.rmSync(dir, { recursive: true, force: true });
   console.log(`\n${pass} passed, ${fail} failed`);
