@@ -244,6 +244,7 @@ const COMPED_FREE_EMAILS = [
     { email: 'anvarada30@gmail.com', expiresAt: '2026-07-27', reason: '2-month beta comp' },
     { email: 'vinnywin23@gmail.com', expiresAt: '2026-07-28', reason: '2-month beta comp' },
     { email: 'etchetoghetto@gmail.com', expiresAt: '2026-09-29', reason: '2-month beta comp' },
+    { email: 'jasen.a.miller@gmail.com', expiresAt: '2026-12-12', reason: '2-month beta comp' },
 ];
 
 let _mocShowAllRegulations = false;
