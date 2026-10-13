@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): part-stress records (the item each part sits in) link to the item they are about from the model picker (model_links.js); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // ============================================================================
 // mil217f_stress.js — v1.0 — ARP-G4: MIL-HDBK-217F Notice 2 PART-STRESS,
 // microcircuits first (§5.1 gate/logic arrays + microprocessors).
@@ -254,6 +255,7 @@
             yearsInProduction: _F('st217-yrs') });
     };
     window.st217Rm = function (id) { author.rmPart(id); };
+    window.st217Render = function () { _render(); };   // 13 Oct 2026: model_links.js redraws the page after a link change
     function _render() {
         if (typeof document === 'undefined') return;
         const host = document.getElementById('view-stress217'); if (!host) return;
@@ -280,11 +282,11 @@
             (!parts.length ? '<p style="font-size:12px; color:var(--color-text-tertiary); padding:8px 2px;">No part-stress records yet — parts count remains the default lane until a part earns the refinement.</p>' :
                 '<table class="data-table" style="width:100%; font-size:11.5px; margin-top:10px;"><thead><tr><th>Part</th><th>λp /10⁶h</th><th>λ /h</th><th>C1</th><th>πT</th><th>C2</th><th>πE</th><th>πQ</th><th>πL</th><th>Receipt</th><th></th></tr></thead><tbody>' +
                 parts.map(x => x.r.ok
-                    ? '<tr><td><b>' + esc(x.p.name) + '</b></td><td class="u-mono">' + x.r.lambdaP.toExponential(3) + '</td><td class="u-mono">' + x.r.lambdaPerHour.toExponential(3) + '</td>' +
+                    ? '<tr><td><b>' + esc(x.p.name) + '</b>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('stress217', x.p) : '') + '</td><td class="u-mono">' + x.r.lambdaP.toExponential(3) + '</td><td class="u-mono">' + x.r.lambdaPerHour.toExponential(3) + '</td>' +
                       ['C1', 'piT', 'C2', 'piE', 'piQ', 'piL'].map(k => '<td class="u-mono">' + (+x.r.terms[k]).toPrecision(3) + '</td>').join('') +
                       '<td style="font-size:9.5px; color:var(--color-text-tertiary); max-width:260px;" title="' + esc(x.r.basis.join(' · ')) + '">' + esc(x.r.basis[0]) + ' …' + (x.r.confirm.length ? ' <b style="color:#9A6200;">CONFIRM×' + x.r.confirm.length + '</b>' : '') + '</td>' +
                       '<td><button class="action-btn btn-red" onclick="st217Rm(\'' + esc(x.p.id) + '\')">X</button></td></tr>'
-                    : '<tr><td><b>' + esc(x.p.name) + '</b></td><td colspan="9" style="color:#B91C1C; font-size:11px;">' + esc(x.r.reason) + '</td><td><button class="action-btn btn-red" onclick="st217Rm(\'' + esc(x.p.id) + '\')">X</button></td></tr>').join('') +
+                    : '<tr><td><b>' + esc(x.p.name) + '</b>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('stress217', x.p) : '') + '</td><td colspan="9" style="color:#B91C1C; font-size:11px;">' + esc(x.r.reason) + '</td><td><button class="action-btn btn-red" onclick="st217Rm(\'' + esc(x.p.id) + '\')">X</button></td></tr>').join('') +
                 '</tbody></table>');
     }
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {

@@ -1,4 +1,7 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 13 Oct 2026 (fix G): Change Type offers SEQ, and NOT only when the project allows it and the gate has at most one input. See tests/regression_fta_handbuild_20261013b.test.js
+// 13 Oct 2026 (analysis model links): PRA, ZSA and FMEA rows show and edit their model links (model_links.js): the PRA/ZSA cell and form field, the FMEA form field; an FMEA edit keeps its links; see tests/regression_analysis_links_20261013b.test.js
+// 13 Oct 2026 (Office-style saving, fix2-J): Ctrl+S / Cmd+S is Save (commitSaveChanges -> SLSaveState.save), no longer the file download.
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /*!
  * Safety Lab Aero — Aerospace safety analysis tool
@@ -2185,7 +2188,8 @@ const praCRUD = makeCRUD({
             '<td><strong>' + esc(row.praId) + '</strong></td>' +
             '<td><strong>' + esc(row.threat) + '</strong></td>' +
             '<td>' + esc(row.desc) + '</td>' +
-            '<td>' + esc(row.systems) + '</td>' +
+            // 13 Oct 2026: the row's model links (zones, items, systems); the typed text stays as a note.
+            '<td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('pra', row, { slots: ['zone', 'item', 'system'], note: row.systems }) : esc(row.systems)) + '</td>' +
             '<td>' + esc(row.csfl) + '</td>' +
             '<td>' + _renderPraZonesCell(row.affectedZones) + '</td>' +
             '<td>' + _renderPraExposedCell(row.affectedZones) + '</td>' +
@@ -2208,12 +2212,19 @@ window.submitPRA = function(){
     // cancelEdit() inside it may not clear the dynamic form fields, but we want the
     // snapshot taken from the live form state.
     const modelSnap = _readPraModelForm();
+    // 13 Oct 2026: the form's Model links field (model_links.js), read before the factory resets the form.
+    const mlSnap = (typeof SLModelLinks !== 'undefined') ? SLModelLinks.formPeek('pra') : null;
+    const praLenBefore = praData.length;
     _origPraSubmit();
     const target = editingId != null ? praData.find(r => String(r.internalId) === String(editingId)) : praData[praData.length - 1];
     if (target) {
         target.affectedZones = zones;
         if (pendingRef) target.prCatalogueRef = pendingRef;
         if (modelSnap) target.model = modelSnap;
+    }
+    if (typeof SLModelLinks !== 'undefined') {
+        const saved = target && (editingId != null || praData.length > praLenBefore);
+        if (saved) SLModelLinks.formCommit('pra', target, mlSnap); else SLModelLinks.formRestore('pra', mlSnap);
     }
     window._pendingPrCatalogueRef = null;
     populatePraAffectedZonesDropdown([]);   // clear selection after submit
@@ -2223,6 +2234,7 @@ window.editPRA = function(iId) {
     _origPraEdit(iId);
     const row = praData.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
     populatePraAffectedZonesDropdown(row ? (row.affectedZones || []) : []);
+    if (typeof SLModelLinks !== 'undefined') SLModelLinks.stageFor('pra', row);
     // Phase 30.1 — remember existing catalog ref so an edit that doesn't browse keeps it.
     window._pendingPrCatalogueRef = (row && row.prCatalogueRef) ? row.prCatalogueRef : null;
     // Phase 53.67 — restore the per-PR analysis model into the dynamic form.
@@ -2271,7 +2283,8 @@ const zsaCRUD = makeCRUD({
         return '<td>' + _threadInKebab(actions, { kind:'zsa', id: row.internalId }) + '</td>' +
             '<td><strong>' + esc(row.zoneId) + '</strong></td>' +
             '<td>' + esc(row.desc) + '</td>' +
-            '<td>' + esc(row.equip) + '</td>' +
+            // 13 Oct 2026: the row's model links (its zone and installed items); the typed text stays as a note.
+            '<td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('zsa', row, { slots: ['zone', 'item'], note: row.equip }) : esc(row.equip)) + '</td>' +
             '<td class="' + sevClass + '">' + (row.severity === 'Catastrophic' ? _sevPill('Catastrophic') : esc(row.severity)) + '</td>' +
             '<td>' + _renderZsaHousedFunctionsCell(row.housedFunctions) + '</td>' +
             '<td>' + esc(row.interference) + '</td>' +
@@ -2293,11 +2306,13 @@ window.submitZSA = function(){
     const prevRow = editingId != null ? zsaData.find(r => String(r.internalId) === String(editingId)) : null;
     const prevCopy = prevRow ? Object.assign({}, prevRow) : null;
     const lenBefore = zsaData.length;
+    const mlSnap = (typeof SLModelLinks !== 'undefined') ? SLModelLinks.formPeek('zsa') : null;   // 13 Oct 2026: the Model links field
     _origZsaSubmit();
     const target = editingId != null ? zsaData.find(r => String(r.internalId) === String(editingId)) : (zsaData.length > lenBefore ? zsaData[zsaData.length - 1] : null);
     // Nothing saved (validation refused it): keep the whole form as the user left it.
-    if (!target || (editingId != null && target === prevRow)) return;
+    if (!target || (editingId != null && target === prevRow)) { if (typeof SLModelLinks !== 'undefined') SLModelLinks.formRestore('zsa', mlSnap); return; }
     if (prevCopy && typeof SLZsaRecord !== 'undefined') SLZsaRecord.carryOver(prevCopy, target);
+    if (typeof SLModelLinks !== 'undefined') SLModelLinks.formCommit('zsa', target, mlSnap);
     target.housedFunctions = housed;
     target.adjacency = adjacency;
     populateZsaHousedFunctionsDropdown([]);
@@ -2312,6 +2327,7 @@ window.editZSA = function(iId) {
     const row = zsaData.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
     populateZsaHousedFunctionsDropdown(row ? (row.housedFunctions || []) : []);
     _writeZsaAdjacencyHints(row ? (row.adjacency || {}) : {});
+    if (typeof SLModelLinks !== 'undefined') SLModelLinks.stageFor('zsa', row);
 };
 
 // Phase 53.67 — adjacency hints capture / restore on the ZSA form.
@@ -2915,12 +2931,23 @@ window.submitFMEA = function() {
         if (data.time < 0) { showToast('Exposure time must be ≥ 0.', 'error', 4000); return; }
     }
     const editingId = editStates.fmea;
+    // 13 Oct 2026: the Model links field (model_links.js). An edit used to replace the row with
+    // the form's fields only, which would drop links set from the table; they carry over now.
+    const mlSnap = (typeof SLModelLinks !== 'undefined') ? SLModelLinks.formPeek('fmea') : null;
+    let mlTarget = null;
     if (editingId != null) {
         const idx = fmeaData.findIndex(r => String(r.internalId) === String(editingId));
-        if (idx >= 0) fmeaData[idx] = Object.assign({ internalId: editingId }, data);
+        if (idx >= 0) {
+            const prev = fmeaData[idx];
+            mlTarget = fmeaData[idx] = Object.assign({ internalId: editingId }, data);
+            if (prev && prev.modelLinks) mlTarget.modelLinks = prev.modelLinks;
+            if (prev && prev.modelLinksAuto) mlTarget.modelLinksAuto = prev.modelLinksAuto;
+        }
     } else {
-        fmeaData.push(Object.assign({ internalId: newRowId() }, data));
+        mlTarget = Object.assign({ internalId: newRowId() }, data);
+        fmeaData.push(mlTarget);
     }
+    if (typeof SLModelLinks !== 'undefined' && mlTarget) SLModelLinks.formCommit('fmea', mlTarget, mlSnap);
     // Piece-part rows push aggregated λ (Σ failure-mode rates) onto the linked basic event.
     if (data.fmeaType === 'piece-part') {
         _pushPiecePartFmeaToFta();
@@ -2935,7 +2962,10 @@ window.editFMEA = function(iId) {
     if (!row) return;
     editStates.fmea = iId;
     setEditMode('fmea');
+    // 13 Oct 2026: the row's basic event must be in the form's list or the edit cannot be saved.
+    try { const _bs = document.getElementById('fmea-basic-event'); if (_bs && row.beId && ![..._bs.options].some(o => String(o.value) === String(row.beId)) && typeof updateFMEABasicEvents === 'function') updateFMEABasicEvents(); } catch (_) {}
     _writeFmeaForm(row);
+    if (typeof SLModelLinks !== 'undefined') SLModelLinks.stageFor('fmea', row);   // 13 Oct 2026: Model links field
 };
 
 // [P2 batch 5] L5993-6002 moved verbatim to bindings_modules.js
@@ -3727,12 +3757,19 @@ function onInputModeChange() {
 }
 
 function changeNodeType() {
-    if(!selectedNodeData) return; let val = document.getElementById('config-node-type').value; let isGate = ['AND','OR','XOR','VOTING','INHIBIT','TRANSFER','PAND','SPARE','FDEP'].includes(val);
+    if(!selectedNodeData) return; let val = document.getElementById('config-node-type').value; let isGate = ['AND','OR','XOR','VOTING','INHIBIT','TRANSFER','PAND','SPARE','SEQ','FDEP','NOT'].includes(val);
     let activeChildren = selectedNodeData.children || selectedNodeData._children;
     if(!isGate && activeChildren && activeChildren.length > 0) { showToast("Delete children first.", 'warning', 4000); document.getElementById('config-node-type').value = selectedNodeData.type === 'gate' ? selectedNodeData.gateType : selectedNodeData.type; return; }
     if(val === 'TRANSFER' && activeChildren && activeChildren.length > 0) { showToast("Transfer gates cannot have children.", 'warning', 4000); document.getElementById('config-node-type').value = selectedNodeData.type === 'gate' ? selectedNodeData.gateType : selectedNodeData.type; return; }
+    // 13 Oct 2026 (fix G): NOT is non-coherent logic, offered only when the project turns it on, and it takes one input.
+    if (val === 'NOT') {
+        const _ncOk = (typeof SLFtaEdit !== 'undefined' && SLFtaEdit.nonCoherentAllowed && SLFtaEdit.nonCoherentAllowed());
+        const _why = !_ncOk ? 'NOT gates are off for this project. Turn on "Allow NOT gates" in Project setup first.'
+            : ((activeChildren && activeChildren.length > 1) ? 'A NOT gate takes exactly one input. Remove the extra inputs first.' : '');
+        if (_why) { showToast(_why, 'warning', 5000); document.getElementById('config-node-type').value = selectedNodeData.type === 'gate' ? selectedNodeData.gateType : selectedNodeData.type; return; }
+    }
     // Dynamic gate types are also gates.
-const isDyn = ['PAND','SPARE','FDEP'].includes(val);
+const isDyn = ['PAND','SPARE','SEQ','FDEP'].includes(val);
 const isGateAny = isGate || isDyn;
 if(isGateAny) { selectedNodeData.type = 'gate'; selectedNodeData.gateType = val; } else { selectedNodeData.type = val; selectedNodeData.gateType = null; }
     // Phase 44 — when switching INTO VOTING from another gate type, votingK may still be
@@ -4343,7 +4380,7 @@ window.addEventListener('keydown', function(e){
     }
     if(_isTypingTarget(e.target)) return;
     const meta = e.metaKey || e.ctrlKey;
-    if(meta && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveProject(); showToast('Project saved.', 'success', 2000); return; }
+    if(meta && (e.key === 's' || e.key === 'S')) { e.preventDefault(); commitSaveChanges({ explicit: true }); return; }   // 13 Oct 2026: Ctrl+S is Save (Office-style, save_state.js); the file copy stays under the Project menu
     if(meta && e.shiftKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); redo(); return; }
     if(meta && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); undo(); return; }
     if(meta && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }

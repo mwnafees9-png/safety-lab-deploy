@@ -1,4 +1,9 @@
 // ============================================================================
+// 13 Oct 2026 (v1.2, fix3-M): a model may start from a DISTRIBUTION (model.initialProbs, { state name:
+// probability }, drawn as several start arrows on the Markov state diagram); the transient and phased
+// solves start from it when no explicit initial state or vector is passed. Validated by name: unknown
+// states, probabilities outside [0, 1] or a total other than 1 are refused, never renormalized. A model
+// without initialProbs solves exactly as before. See tests/regression_rbd_markov_diagrams_20261013b.test.js
 // markov_ctmc.js — v1.1 — ARP-G3: full CTMC — transient solution, refusals,
 // cited benchmarks — on top of the editor + steady-state lane that already
 // ship (fta_quant_modules: solveMarkovModel, model CRUD, closed-form card;
@@ -102,6 +107,23 @@
             const r = parseFloat(t && t.rate);
             if (!isFinite(r) || r <= 0) errors.push(tag + ': rate ' + (t && t.rate) + ' is not a positive finite number');
         });
+        // v1.2: a starting distribution (several start arrows), refused by name when it is not one
+        if (model.initialProbs != null) {
+            const ip = model.initialProbs;
+            if (typeof ip !== 'object' || Array.isArray(ip)) errors.push('starting probabilities are not a list of state: probability');
+            else {
+                let tot = 0, any = false;
+                Object.keys(ip).forEach(nm => {
+                    any = true;
+                    const p = parseFloat(ip[nm]);
+                    if (!seen.has(nm)) errors.push('starting probability for "' + nm + '", which is not a state of this model');
+                    if (!(isFinite(p) && p >= 0 && p <= 1)) errors.push('starting probability of "' + nm + '" is ' + ip[nm] + ', not a probability between 0 and 1');
+                    else tot += p;
+                });
+                if (!any) errors.push('starting probabilities are empty: give the starting state, or probabilities that add up to 1');
+                else if (Math.abs(tot - 1) > 1e-9) errors.push('starting probabilities add up to ' + +tot.toPrecision(12) + ', not 1 (refused rather than rescaled, so no probability goes missing)');
+            }
+        }
         if (!model.states.some(s => s && s.isFailed)) warnings.push('no state is marked Failed — P(failed) will be 0 by construction');
         return { ok: errors.length === 0, errors, warnings };
     }
@@ -150,6 +172,9 @@
             }
             if (Math.abs(tot - 1) > 1e-9) return { ok: false, reason: 'initial distribution sums to ' + tot + ', not 1 — REFUSED rather than renormalized, because silently renormalizing hides lost probability mass' };
             pi0 = opts.pi0.slice();
+        } else if (opts.initial == null && model.initialProbs != null) {
+            // v1.2: the model's own starting distribution (validated above)
+            pi0 = model.states.map(s => { const p = parseFloat(model.initialProbs[s.name]); return isFinite(p) ? p : 0; });
         } else {
             let init = 0;
             const wanted = opts.initial != null ? opts.initial : model.initialState;

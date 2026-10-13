@@ -1,3 +1,4 @@
+// 13 Oct 2026 (Office-style saving, fix2-J): no silent cloud push while the person has unsaved work (SLSaveState.holdsSync()); Save writes the cloud copy itself and __slCloudSyncSchedule lets the next silent push follow.
 // ============================================================================
 // cloud_sync.js — continuous cloud autosave + first-edit provisioning.
 //
@@ -184,6 +185,10 @@
     function _writer() { try { var G = (typeof globalThis !== 'undefined') ? globalThis : window; return G.SLCloudWriter || null; } catch (_) { return null; } }
     async function _tick() {
         if (!_on() || _inFlight) return;
+        // 13 Oct 2026 — unsaved work (save_state.js) is never pushed silently: the cloud copy is the
+        // saved version until the person presses Save, which writes it on purpose. (Inline, not a
+        // helper: tests run this function on its own.)
+        try { if (typeof window !== 'undefined' && window.SLSaveState && window.SLSaveState.holdsSync()) return; } catch (_) {}
         var uid = _userId(); if (!uid) return;                 // not signed in → local-only, fine
         var client = _client(); if (!client) return;
         var ws = _wsId(); if (!ws) return;                     // no workspace → can't place a project
@@ -362,6 +367,7 @@
 
     // expose for tests / manual flush
     window.__slCloudSyncTick = _tick;
+    window.__slCloudSyncSchedule = _schedule;   // 13 Oct 2026: save_state.js, after held work is released
     // 31 Aug 2026 — the new-project intake path must drop the outgoing project's
     // cloud identity exactly like a demo load does (an un-detached New Project
     // renamed and overwrote cloud project de27b117 with the next project's

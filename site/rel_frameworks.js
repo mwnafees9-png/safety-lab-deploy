@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): reliability framework entries and accelerated-test plans link to the item they are about from the model picker (model_links.js); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // rel_frameworks.js — Phases R3 + R5 + R6:
@@ -97,6 +98,7 @@
             e.duty = parseFloat(await slPrompt('Duty cycle d (fraction of calendar time operating, 0–1):', '0.4'));
             e.kNonop = parseFloat(await slPrompt('Nonoperating ratio K (λ_storage = K·λ_op; program-specific, typically ≪ 1):', '0.03'));
         } else { showToast('Unknown framework.', 'error', 4000); return; }
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('relFw', e))) return;   // 13 Oct 2026: link the row to the model
         _store().entries.push(e);
         _save(); renderRelFwPage();
     };
@@ -113,6 +115,7 @@
             if (p.length === 3 && p.every(x => x > 0)) { e.sUse = p[0]; e.sTest = p[1]; e.n = p[2]; }
         }
         e.fieldHours = parseFloat(await slPrompt('Field hours to demonstrate:', '100000'));
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('relAccel', e))) return;   // 13 Oct 2026: link the row to the model
         _store().accel.push(e);
         _save(); renderRelFwPage();
     };
@@ -164,14 +167,14 @@
 
         if (s.entries.length) {
             html += '<b style="font-size:13px;">Prediction entries (R3 · R5)</b>' +
-                '<table class="data-table" style="width:100%; font-size:12px; margin:6px 0 18px;"><thead><tr><th></th><th>Item</th><th>Shape</th><th>Inputs</th><th>λ (/h)</th><th></th></tr></thead><tbody>' +
+                '<table class="data-table" style="width:100%; font-size:12px; margin:6px 0 18px;"><thead><tr><th></th><th>Item</th><th>Model links</th><th>Shape</th><th>Inputs</th><th>λ (/h)</th><th></th></tr></thead><tbody>' +
                 s.entries.map(e => {
                     const lam = _entryLambda(e);
                     const inputs = e.kind === 'telcordia' ? 'λ_base ' + Number(e.base).toExponential(1) + ' · πQ ' + e.piQ + ' · πS ' + e.piS + ' · πT ' + e.piT
                         : e.kind === 'fides' ? 'Σ(' + (e.contribs || []).map(c => Number(c).toExponential(1)).join('+') + ') · Π_PM ' + e.piPM + ' · Π_proc ' + e.piProcess
                         : 'λ_op ' + Number(e.lambdaOp).toExponential(1) + ' · d ' + e.duty + ' · K_nonop ' + e.kNonop;
                     return '<tr><td><a href="#" onclick="relFwDelete(\'' + e.id + '\'); return false;" style="color:#8E2A2A; font-size:11px;">✕</a></td>' +
-                        '<td><b>' + _esc(e.name) + '</b></td><td class="u-mono" style="font-size:11px;">' + e.kind + '</td>' +
+                        '<td><b>' + _esc(e.name) + '</b></td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('relFw', e) : '') + '</td><td class="u-mono" style="font-size:11px;">' + e.kind + '</td>' +
                         '<td class="u-mono" style="font-size:10.5px;">' + _esc(inputs) + '</td>' +
                         '<td class="u-mono"><b>' + (lam ? lam.toExponential(3) : '—') + '</b></td>' +
                         '<td><button class="ckpt-m-btn" style="font-size:10px; padding:1px 7px;" onclick="relFwPush(\'' + e.id + '\')">→ library</button></td></tr>';
@@ -180,13 +183,14 @@
 
         if (s.accel.length) {
             html += '<b style="font-size:13px;">Accelerated-test plans (R6)</b>' +
-                '<table class="data-table" style="width:100%; font-size:12px; margin-top:6px;"><thead><tr><th></th><th>Plan</th><th>Arrhenius AF</th><th>IPL AF</th><th>Total AF</th><th>Field hours</th><th>Test hours needed</th></tr></thead><tbody>' +
+                '<table class="data-table" style="width:100%; font-size:12px; margin-top:6px;"><thead><tr><th></th><th>Plan</th><th>Model links</th><th>Arrhenius AF</th><th>IPL AF</th><th>Total AF</th><th>Field hours</th><th>Test hours needed</th></tr></thead><tbody>' +
                 s.accel.map(e => {
                     const afA = arrheniusAF(e.ea, e.tUse, e.tTest);
                     const afI = (e.sUse && e.sTest && e.n) ? iplAF(e.sUse, e.sTest, e.n) : null;
                     const af = (afA || 1) * (afI || 1);
                     return '<tr><td><a href="#" onclick="relFwDelete(\'' + e.id + '\'); return false;" style="color:#8E2A2A; font-size:11px;">✕</a></td>' +
                         '<td><b>' + _esc(e.name) + '</b><br><span class="u-mono" style="font-size:10px; color:var(--color-text-tertiary);">Ea ' + e.ea + ' eV · ' + e.tUse + '→' + e.tTest + ' °C' + (afI ? ' · IPL (' + e.sUse + '→' + e.sTest + ')^' + e.n : '') + '</span></td>' +
+                        '<td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('relAccel', e) : '') + '</td>' +
                         '<td class="u-mono">' + (afA ? afA.toFixed(2) : '—') + '</td>' +
                         '<td class="u-mono">' + (afI ? afI.toFixed(2) : '—') + '</td>' +
                         '<td class="u-mono"><b>' + af.toFixed(2) + '</b></td>' +

@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix G): the SEQ gate is an independence gate (every input must fail) for the structure requirements. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (math fixes 7 and 2): DALgebra rationale explains pending (claimed, not yet CMA-substantiated) reductions with the would-be DAL, the App P row-hold and row-floor rules and a Cert Lab compliance basis; the gate generator derives physical AND functional independence for every AND-family gate (k>=2 VOTING and SPARE included) and a no-single-failure requirement for every OR-family gate on a single-failure path; see tests/regression_dal_row_20261013.test.js and tests/regression_alloc_reqs_20261013.test.js
 // assurance_modules.js — Review / AutoReq / Traceability, extracted verbatim from
 // safety_lab.js (Phase 76). Classic script, shared global lexical scope, loaded BEFORE
@@ -1841,7 +1842,7 @@ const AutoReq = (function(){
     // votingK is 2, the engine's default (fta_engine.js), clamped to the member count.
     function isAndFamily(node){
         if(!node || node.type !== 'gate') return false;
-        if(node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') return true;
+        if(node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') return true;   // 13 Oct 2026 (fix G): SEQ needs every input to fail
         if(node.gateType === 'VOTING') return (node.children || []).length > 0 && _votingNeed(node) >= 2;
         return false;
     }

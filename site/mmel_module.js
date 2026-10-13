@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): MMEL items link their item and basic event from the model picker (no typed ids); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // 13 Oct 2026 (math audit F1/F8): the dispatch check uses the exact P(top) (SLTopBasis.exactTop, not the calcBottomUp roll-up) and the shared per-flight budget of the objective. See tests/regression_exact_top_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // mmel_module.js — Phase P7: MMEL / Time-Limited Dispatch analysis.
@@ -169,9 +170,10 @@
         if (!_access()) { _toast('MMEL/TLD analysis requires a Pro+ subscription.', 'warning', 3500); return; }
         const title = await _ask('MMEL item — equipment name/function:'); if (!title || !title.trim()) return;
         const ata = (await _ask('ATA chapter (e.g. 32-40):', '')) || '';
-        const items = (typeof itemsData !== 'undefined' ? itemsData : []) || [];
-        const itemId = (await _ask('Linked LRU (optional):\n' + items.slice(0, 12).map(i => '  ' + i.itemId + ' — ' + i.name).join('\n'), '')) || '';
-        const beRef = (await _ask('Linked basic event (displayId/logicalId) — enables the protection + quantitative checks:', '')) || '';
+        // 13 Oct 2026: the item and its basic event are picked from the model (model_links.js), never typed.
+        const draft = { title: title.trim(), itemId: '', beRef: '' };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('mmel', draft))) return;
+        const itemId = draft.itemId || '', beRef = draft.beRef || '';
         const installed = parseInt(await _ask('Number installed:', '2')) || 1;
         const required = parseInt(await _ask('Number required for dispatch:', '1')) || 0;
         const cat = ((await _ask('Rectification category — A (as specified) / B (3 days) / C (10 days) / D (120 days):', 'C')) || 'C').trim().toUpperCase();
@@ -276,9 +278,9 @@
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">protection check is exact (cut sets); quantitative check forces the event TRUE through the live engine; nothing here is prose</span></div>';
 
         html += '<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12px;"><thead><tr>' +
-            '<th style="width:76px">Item</th><th>Equipment</th><th style="width:60px">ATA</th><th style="width:70px">Inst/Req</th><th style="width:96px">Category</th>' +
+            '<th style="width:76px">Item</th><th>Equipment</th><th style="min-width:170px">Model links</th><th style="width:60px">ATA</th><th style="width:70px">Inst/Req</th><th style="width:96px">Category</th>' +
             '<th>Protection check (exact)</th><th>Quantitative (dispatched)</th><th style="width:110px">TLD max</th><th style="width:120px">(m)/(o)</th><th style="width:100px">State</th><th style="width:110px"></th></tr></thead><tbody>';
-        if (!S.items.length) html += '<tr><td colspan="11" style="color:var(--color-text-tertiary);">No MMEL items yet — add one or derive candidates from ledger-linked LRUs.</td></tr>';
+        if (!S.items.length) html += '<tr><td colspan="12" style="color:var(--color-text-tertiary);">No MMEL items yet — add one or derive candidates from ledger-linked LRUs.</td></tr>';
         S.items.forEach(it => {
             const p = it.protection, q = it.quant;
             const catFh = it.catDays != null ? Math.round(it.catDays * fhPerDay) : null;
@@ -286,6 +288,7 @@
             const tldDays = tld != null ? tld / fhPerDay : null;
             html += '<tr><td class="u-mono">' + _esc(it.id) + (it.origin ? ' <span style="font-size:9px; font-family:var(--font-mono); border:1px solid currentColor; padding:0 3px; color:var(--color-text-tertiary);">AUTO</span>' : '') + '</td>' +
                 '<td><b>' + _esc(it.title) + '</b>' + (it.beRef ? '<br><span class="u-mono" style="font-size:10.5px; color:var(--color-text-tertiary);">' + _esc(it.beRef) + '</span>' : '') + '</td>' +
+                '<td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('mmel', it) : _esc(it.itemId || '')) + '</td>' +
                 '<td class="u-mono">' + _esc(it.ata || '—') + '</td>' +
                 '<td class="u-mono">' + it.installed + '/' + it.required + '</td>' +
                 '<td class="u-mono">' + _esc(it.category) + (it.catDays != null ? ' · ' + it.catDays + 'd ≈ ' + catFh + ' FH' : ' · as specified') + '</td>' +

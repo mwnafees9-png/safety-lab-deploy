@@ -1,3 +1,5 @@
+// 13 Oct 2026 (fix3-M): Markov models are drawn too: the state and transition tables and the Markov state diagram (markov_diagram.js) are two views of the same model; states get stable ids and a type (operational / degraded / failed), the start can be a distribution (initialProbs), transitions are failure (λ) or repair (μ), a renamed state is renamed in its transitions and start. Solving is unchanged. See tests/regression_rbd_markov_diagrams_20261013b.test.js
+// 13 Oct 2026 (fix G): SEQ (sequence-enforcing) gate solved exactly as a Markov chain when it is an independent constant-rate module (else the AND bound), NOT gate (NOR over several inputs) in calcBottomUp, the BDD, top-down allocation and the DFT Monte Carlo; prime implicants for trees with NOT (copies held identical to fta_engine.js v1.11). See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL, merged with F1 and F4/F5): common cause groups use the real Multiple Greek Letter model (NUREG/CR-5485): one BDD variable per specific common cause event, shared _mgl* helpers held identical to fta_engine.js v1.9, order-invariant group parameters, MGL cut-set rows (expandCCFCutsets) and MGL-consistent uncertainty sampling (time-averaged like P(top)). FDEP forcing covers a member's whole leaf; common cause events of periodic latent members join their interval's time average. Before, gamma and delta did not change P(top) and the group took q and beta from the first member read. See tests/regression_ccf_mgl_20261013.test.js
 // 13 Oct 2026 (math audit F1): calculateAllProbabilities puts the EXACT top (BDD, common cause and shared events included) on every result page, open or not, through _slApplyExactTops; allocation pages keep the engineer's budget with the exact reconstruction on _bddActualProb. Before, only the open page with repeated ids got it, so beta groups never did. See tests/regression_exact_top_20261013.test.js
 // 13 Oct 2026 (math audit F4/F5): static P(top) counts FDEP gates, solves PAND/SPARE exactly when they are independent constant-rate modules (else a stated upper bound with the spare switchover as a visible event), and time-averages periodic latent events sharing an inspection interval (calcBottomUp and the BDD); DFT Monte Carlo handles gate triggers, gate dependents and chained FDEPs; see tests/regression_dynamic_static_20261013.test.js and tests/regression_latent_joint_20261013.test.js
@@ -180,13 +182,13 @@ function allocateTopDown(node, target, strategy, visited) {
     });
     const hasExtChild = childExt.some(e => e !== null);
 
-    if (hasExtChild && (node.gateType === 'AND' || node.gateType === 'OR' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE')) {
+    if (hasExtChild && (node.gateType === 'AND' || node.gateType === 'OR' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ')) {
         // ---------------- AND-family redistribute ----------------
         // p_top = Π p_i  =>  if some children fixed (p_ext), the free children
         // must satisfy  Π p_free = target / Π p_ext.
         // ---------------- OR redistribute ------------------------
         // p_top ≈ 1 - Π(1-p_i)  =>  Π(1-p_free) = (1-target) / Π(1-p_ext).
-        const isAndFamily = (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE');
+        const isAndFamily = (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ');
         let fixedFactor = 1;
         const freeChildren = [];
         const freeIdx = [];
@@ -329,7 +331,7 @@ function allocateTopDown(node, target, strategy, visited) {
         const ratio = wSum > 0 ? w / wSum : 0;
         let childTarget = 0;
         if (ratio > 0) {
-            if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') {
+            if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') {
                 // Phase 61 (F2 fix) — INHIBIT/PAND/SPARE reconstruct bottom-up as a PRODUCT
                 // (their static-equivalent is AND), so the correct inverse is the geometric
                 // split: Π childTarget_i = target. The old linear fallback (target·ratio)
@@ -341,6 +343,10 @@ function allocateTopDown(node, target, strategy, visited) {
                 childTarget = 1 - Math.pow(1 - target, ratio);
             } else if (node.gateType === 'VOTING') {
                 childTarget = votingChildP;
+            } else if (node.gateType === 'NOT') {
+                // 13 Oct 2026 (fix G): NOT (NOR over several inputs): the output occurs when no input
+                // does, so P(out) = PROD(1 - p_i) = target; the geometric split gives 1 - p_i = target^ratio.
+                childTarget = 1 - Math.pow(Math.max(0, Math.min(1, target)), ratio);
             } else {
                 childTarget = target * ratio;   // XOR — Σ pᵢ·Π(1−pⱼ) ≈ Σ pᵢ; linear split closes to <0.1% at cert magnitudes
             }
@@ -488,7 +494,7 @@ function _cbuDyn(node, kids, vecs, ctx) {
     }
     if (!info.reason && kids.length < 2) info.reason = 'fewer than two inputs';
     if (!info.reason) {
-        const exact = isSpare ? _spareExactProb(xs, warmK, ps) : _pandExactProb(xs);
+        const exact = isSpare ? _spareExactProb(xs, warmK, ps) : (node.gateType === 'SEQ' ? _seqExactProb(xs) : _pandExactProb(xs));
         const bound = isSpare ? _spareBoundProb(probs, ps) : probs.reduce((a, b) => a * b, 1);
         if (exact == null) info.reason = 'too many inputs to solve exactly';
         else if (exact > bound * (1 + 1e-9) && bound > 0) info.reason = 'standby factor above 1';
@@ -577,7 +583,8 @@ function _cbuGate(node, visited, ctx) {
                 const childProbs = kids.map(c => _cbuMean(ctx, _cbuNode(c, visited, ctx)));
                 let childImplied = 0;
                 if (node.gateType === 'OR') childImplied = 1 - childProbs.reduce((a, b) => a * (1 - b), 1);
-                else if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') childImplied = childProbs.reduce((a, b) => a * b, 1);
+                else if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') childImplied = childProbs.reduce((a, b) => a * b, 1);
+                else if (node.gateType === 'NOT') childImplied = childProbs.reduce((a, b) => a * (1 - b), 1);
                 else childImplied = childProbs.reduce((a, b) => Math.max(a, b), 0);
                 node._prescribedDivergence = (childImplied > 0 && Math.abs(Math.log10(childImplied / pr)) > 0.3)
                     ? { childImplied: childImplied, prescribed: pr, decadeDelta: Math.log10(childImplied / pr) }
@@ -607,7 +614,12 @@ function _cbuGate(node, visited, ctx) {
         out = new Array(ctx.K);
         for (let k = 0; k < ctx.K; k++) out[k] = vecs.reduce((a, v) => a * v[k], 1);
     }
-    else if (node.gateType === 'PAND' || node.gateType === 'SPARE') out = _cbuDyn(node, actualChildren, vecs, ctx);
+    else if (node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') out = _cbuDyn(node, actualChildren, vecs, ctx);
+    // 13 Oct 2026 (fix G): NOT (NOR over several inputs) = probability that no input occurs.
+    else if (node.gateType === 'NOT') {
+        out = new Array(ctx.K);
+        for (let k = 0; k < ctx.K; k++) out[k] = vecs.reduce((a, v) => a * (1 - v[k]), 1);
+    }
     // FDEP gates don't fail themselves: they force their dependents (see _cbuForce), counted where those are used.
     else if (node.gateType === 'FDEP') {
         node._dynStatic = { mode: 'fdep', dependents: actualChildren.length - 1 };
@@ -1114,6 +1126,120 @@ function _spareBoundProb(probs, ps) {
     for (let j = probs.length - 1; j >= 1; j--) r = (1 - ps) + ps * probs[j] * r;
     return probs[0] * r;
 }
+
+// ── 13 Oct 2026 (hand-built fault trees, fix G): the SEQ and NOT gates ─────────────────────────
+// SEQ (sequence-enforcing gate, the fourth standard dynamic gate): its inputs can only fail in
+// left-to-right order (input i+1 cannot start failing until input i has failed); the output fails
+// when all of them have failed. For an independent module of constant-rate basic events the time
+// to failure is the sum of the inputs' lives: the pure-birth Markov chain 0 -> 1 -> ... -> n,
+// solved exactly with the same uniformization as PAND and SPARE (the DFT Monte Carlo samples the
+// same model). Otherwise the static number is the AND of the inputs: the lives can only sum to
+// less than t if every one of them is less than t, so the AND product is an upper bound.
+function _seqExactProb(xs) {
+    const n = xs.length;
+    if (n < 2 || n > 64) return null;
+    const trans = [];
+    for (let k = 0; k < n; k++) if (xs[k] > 0) trans.push([k, k + 1, xs[k]]);
+    return _ctmcFailProb(n + 1, trans, n);
+}
+// NOT (IEC 61025): the output occurs when its input does NOT occur (several inputs: when none of
+// them occurs, i.e. NOR). Non-coherent logic, allowed only when the project turns it on. The BDD
+// is exact (BDD.not). Cut sets become PRIME IMPLICANTS: the smallest combinations of events that
+// occur and events that do NOT occur ("NOT X") which cause the top event, found by iterated
+// consensus with absorption over the BDD's disjoint paths (Blake canonical form, complete by
+// Quine's theorem). Above _PRIME_BUDGET terms the list is refused with a plain message rather
+// than shown incomplete; P(top) is unaffected (the BDD never enumerates terms).
+var _PRIME_BUDGET = 2000;
+function _treeHasNot(rootNode) {
+    let has = false;
+    const pages = new Set();
+    (function walk(n, seen) {
+        if (!n || has || seen.has(n)) return;
+        seen.add(n);
+        if (n.type !== 'gate') return;
+        if (n.gateType === 'NOT') { has = true; return; }
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !pages.has(linkedId) && typeof ftaPages !== 'undefined' && ftaPages) {
+                pages.add(linkedId);
+                const lp = ftaPages.find(function (p) { return p && p.id === linkedId; });
+                if (lp && lp.root) walk(lp.root, seen);
+            }
+            if (n.gateType === 'TRANSFER') return;
+        }
+        (n.children || n._children || []).forEach(function (c) { walk(c, seen); });
+    })(rootNode, new Set());
+    return has;
+}
+function _primeBudgetError(count) {
+    const e = new Error('This fault tree uses NOT logic, so its cut sets are prime implicants (events that occur together with events that do not). It has more than ' + _PRIME_BUDGET.toLocaleString() + ' of them, so the list is not shown rather than shown incomplete. P(top) is still exact.');
+    e.name = 'NonCoherentCutsetError';
+    e.count = count;
+    return e;
+}
+function _notLiteralNode(n) {
+    const p = (n && typeof n.probability === 'number' && isFinite(n.probability)) ? n.probability : 0;
+    const lid = n ? (n.logicalId != null ? n.logicalId : n.id) : '?';
+    return { id: 'not:' + (n ? n.id : '?'), logicalId: 'not:' + lid, type: 'basic', probability: Math.max(0, Math.min(1, 1 - p)), children: [],
+        _synthetic: 'not', _negated: true, negatedId: n ? n.id : null,
+        displayId: 'NOT ' + ((n && (n.displayId || n.name)) || String(lid)),
+        name: ((n && (n.name || n.displayId)) || 'event') + ' (does not occur)' };
+}
+function _bddPrimeImplicants(bdd, skip) {
+    const terms = [];
+    const subsumes = function (a, b) { if (a.size > b.size) return false; for (const [v, p] of a) if (b.get(v) !== p) return false; return true; };
+    let live = [];
+    const add = function (t) {
+        for (let i = 0; i < live.length; i++) if (subsumes(live[i], t)) return false;
+        live = live.filter(function (u) { return !subsumes(t, u); });
+        live.push(t);
+        if (live.length > _PRIME_BUDGET) throw _primeBudgetError(live.length);
+        return true;
+    };
+    const lits = [];
+    let paths = 0;
+    (function go(n) {
+        if (n === BDD.T0) return;
+        if (n === BDD.T1) {
+            const t = new Map();
+            for (let i = 0; i < lits.length; i++) if (!(skip && skip(lits[i][0]))) t.set(lits[i][0], lits[i][1]);
+            if (++paths > 4 * _PRIME_BUDGET) throw _primeBudgetError(paths);
+            add(t);
+            return;
+        }
+        lits.push([n.varIdx, false]); go(n.low); lits.pop();
+        lits.push([n.varIdx, true]); go(n.high); lits.pop();
+    })(bdd);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        const snap = live.slice();
+        for (let i = 0; i < snap.length; i++) {
+            for (let j = i + 1; j < snap.length; j++) {
+                const a = snap[i], b = snap[j];
+                let opp = null, clash = false;
+                for (const [v, p] of a) { if (b.has(v) && b.get(v) !== p) { if (opp !== null) { clash = true; break; } opp = v; } }
+                if (clash || opp === null) continue;
+                const c = new Map(a);
+                for (const [v, p] of b) c.set(v, p);
+                c.delete(opp);
+                if (add(c)) changed = true;
+            }
+        }
+    }
+    const key = function (t) { return [...t.keys()].sort(function (x, y) { return x - y; }).map(function (v) { return (t.get(v) ? '+' : '-') + v; }).join(','); };
+    live.forEach(function (t) { terms.push({ t: t, k: key(t) }); });
+    terms.sort(function (a, b) { return (a.t.size - b.t.size) || (a.k < b.k ? -1 : (a.k > b.k ? 1 : 0)); });
+    return terms.map(function (x) { return x.t; });
+}
+function _primeImplicantCutsets(rootNode) {
+    const built = buildBDDFromFT(rootNode);
+    if (!built.bdd || built.bdd === BDD.T0) return [];
+    const skip = function (v) { return !!(built.varMeta[v] && built.varMeta[v].synthetic === 'order'); };
+    return _bddPrimeImplicants(built.bdd, skip).map(function (t) {
+        return [...t.keys()].sort(function (x, y) { return x - y; }).map(function (v) { return t.get(v) ? built.varOrder[v] : _notLiteralNode(built.varOrder[v]); });
+    });
+}
 function _glRule(K) {
     const x = [], w = [];
     for (let i = 1; i <= K; i++) {
@@ -1548,7 +1674,7 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         }
         if (!info.reason && kids.length < 2) info.reason = 'fewer than two inputs';
         if (!info.reason) {
-            const exact = isSpare ? _spareExactProb(xs, warmK, ps) : _pandExactProb(xs);
+            const exact = isSpare ? _spareExactProb(xs, warmK, ps) : (node.gateType === 'SEQ' ? _seqExactProb(xs) : _pandExactProb(xs));
             const bound = isSpare ? _spareBoundProb(probs, ps) : probs.reduce((a, b) => a * b, 1);
             if (exact == null) info.reason = 'too many inputs to solve exactly';
             else if (exact > bound * (1 + 1e-9) && bound > 0) info.reason = 'standby factor above 1';
@@ -1619,7 +1745,9 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         if (node.gateType === 'AND' || node.gateType === 'INHIBIT') {
             return kidBdds.reduce((acc, k) => BDD.apply('and', acc, k), BDD.T1);
         }
-        if (node.gateType === 'PAND' || node.gateType === 'SPARE') return dynGate(node, kids, kidBdds);
+        if (node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') return dynGate(node, kids, kidBdds);
+        // 13 Oct 2026 (fix G): NOT negates its input (several inputs: NOR). Non-coherent; see _bddPrimeImplicants.
+        if (node.gateType === 'NOT') return BDD.not(kidBdds.reduce((acc, k) => BDD.apply('or', acc, k), BDD.T0));
         if (node.gateType === 'OR') {
             return kidBdds.reduce((acc, k) => BDD.apply('or', acc, k), BDD.T0);
         }
@@ -1702,6 +1830,7 @@ function _minimizeBDDCutsets(cutsets) {
 }
 // Build BDD and return minimal cutsets as arrays of node references (not just varIdx).
 function bddMinimalCutsets(rootNode) {
+    if (_treeHasNot(rootNode)) return _primeImplicantCutsets(rootNode);   // 13 Oct 2026 (fix G): non-coherent tree -> prime implicants
     const { bdd, varOrder, varMeta } = buildBDDFromFT(rootNode);
     if (!bdd || bdd === BDD.T0) return [];
     const raw = bddCutsets(bdd).map(cs => cs.filter(i => !(varMeta[i] && varMeta[i].synthetic === 'order')));
@@ -1940,7 +2069,7 @@ function simulateDFT(rootNode, missionTime, N, seed) {
         if (!n || visited.has(n.id)) return;
         visited.add(n.id);
         if (n.type === 'gate') {
-            if (n.gateType === 'PAND' || n.gateType === 'SPARE' || n.gateType === 'FDEP') dynGateCount++;
+            if (n.gateType === 'PAND' || n.gateType === 'SPARE' || n.gateType === 'SEQ' || n.gateType === 'FDEP') dynGateCount++;
             if (n.gateType === 'FDEP') fdepGates.push(n);
             if (n.gateType === 'SPARE') {
                 if (_spareWarmK(n) > 0) warmSpareCount++;
@@ -2048,6 +2177,24 @@ function simulateDFT(rootNode, missionTime, N, seed) {
                 cum += life;
             }
             return cum;
+        }
+        if (node.gateType === 'SEQ') {
+            // 13 Oct 2026 (fix G): sequence-enforcing gate. Input i+1 cannot start failing until
+            // input i has failed, so each input's sampled life runs from the previous failure and
+            // the gate fails when the last one does: the sum of the lives (cold standby, perfect switch).
+            let cum = 0;
+            for (let i = 0; i < kids.length; i++) {
+                const life = evalGate(kids[i], failTimes, visited);
+                if (!isFinite(life)) return Infinity;
+                cum += life;
+            }
+            return cum;
+        }
+        if (node.gateType === 'NOT') {
+            // 13 Oct 2026 (fix G): NOT (NOR over several inputs) is judged at the mission end: true
+            // from the start when no input has failed by then, never true otherwise.
+            const tin = Math.min(...kids.map(c => evalGate(c, failTimes, visited)));
+            return (tin <= missionTime) ? Infinity : 0;
         }
         if (node.gateType === 'FDEP')   return Infinity; // FDEPs are modifiers, never fail themselves.
         if (node.gateType === 'XOR') {
@@ -2189,15 +2336,36 @@ function getMarkovModel(id) {
 }
 
 // === Markov model CRUD + render ===
+// 13 Oct 2026 (fix3-M): the state and transition tables and the Markov state diagram (markov_diagram.js)
+// are two views of the same model. Every state and transition carries a stable id (assigned the first time
+// the model is edited; models saved before keep their meaning exactly), states have a type (operational,
+// degraded, failed; failed = isFailed as before, degraded counts as working), the start is a state or a
+// starting distribution (initialProbs), and transitions are failure (λ) or repair (μ). Renaming a state
+// renames it everywhere it is used (transitions, start).
+function _mkEnsureIds(m) {
+    if (!m) return;
+    (m.states || []).forEach((s, i) => { if (s && !s.id) s.id = 'st-' + i; });
+    (m.transitions || []).forEach((t, i) => { if (t && !t.id) t.id = 'tr-' + i; });
+}
+var _mkIdSeq = 0;
+function _mkNewId(prefix) {
+    try { if (window.SLDiagramEditor) return SLDiagramEditor.uuid(); } catch (_) {}
+    return prefix + '-' + Date.now().toString(36) + '-' + (++_mkIdSeq);   // a counter, not a random number: this file uses no unseeded randomness
+}
+function _mkTouched(label) {
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+    try { if (label && window.SLChangeAck && typeof SLChangeAck.describe === 'function') SLChangeAck.describe({ summary: label }); } catch (_) {}
+}
 function addMarkovModel() {
     const m = {
         id: 'mkv-' + Date.now(),
         name: 'New Markov Model',
         states: [
-            { name: 'Working', isFailed: false },
-            { name: 'Failed',  isFailed: true  }
+            { id: _mkNewId('st'), name: 'Working', isFailed: false },
+            { id: _mkNewId('st'), name: 'Failed',  isFailed: true  }
         ],
-        transitions: [{ from: 'Working', to: 'Failed', rate: 1e-5 }]
+        transitions: [{ id: _mkNewId('tr'), from: 'Working', to: 'Failed', rate: 1e-5, kind: 'failure' }],
+        initialState: 'Working'
     };
     (projectConfig.markovModels = projectConfig.markovModels || []).push(m);
     try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
@@ -2214,45 +2382,91 @@ async function deleteMarkovModel(id) {
 function setMarkovName(id, val) { const m = getMarkovModel(id); if (m) m.name = val; }
 function addMarkovState(id) {
     const m = getMarkovModel(id); if (!m) return;
+    _mkEnsureIds(m);
     const base = 'State ' + (m.states.length + 1);
     let name = base, idx = 0;
     while (m.states.some(s => s.name === name)) { idx++; name = base + '·' + idx; }
-    m.states.push({ name, isFailed: false });
+    m.states.push({ id: _mkNewId('st'), name, isFailed: false });
+    _mkTouched('Markov model "' + m.name + '": added state "' + name + '"');
     renderMarkovModels();
 }
 function deleteMarkovState(id, stateName) {
     const m = getMarkovModel(id); if (!m) return;
+    _mkEnsureIds(m);
     m.states = m.states.filter(s => s.name !== stateName);
     m.transitions = m.transitions.filter(t => t.from !== stateName && t.to !== stateName);
+    if (m.initialState === stateName) delete m.initialState;
+    if (m.initialProbs && Object.prototype.hasOwnProperty.call(m.initialProbs, stateName)) { delete m.initialProbs[stateName]; if (!Object.keys(m.initialProbs).length) delete m.initialProbs; }
+    _mkTouched('Markov model "' + m.name + '": removed state "' + stateName + '"');
     renderMarkovModels();
 }
 function setMarkovStateField(id, oldName, field, val) {
     const m = getMarkovModel(id); if (!m) return;
+    _mkEnsureIds(m);
     const s = m.states.find(s => s.name === oldName); if (!s) return;
     if (field === 'name') {
         const trimmed = String(val).trim();
         if (!trimmed || m.states.some(o => o !== s && o.name === trimmed)) { renderMarkovModels(); return; }
         m.transitions.forEach(t => { if (t.from === oldName) t.from = trimmed; if (t.to === oldName) t.to = trimmed; });
+        if (m.initialState === oldName) m.initialState = trimmed;   // 13 Oct 2026: the start follows the rename
+        if (m.initialProbs && Object.prototype.hasOwnProperty.call(m.initialProbs, oldName)) { m.initialProbs[trimmed] = m.initialProbs[oldName]; delete m.initialProbs[oldName]; }
         s.name = trimmed;
     } else if (field === 'isFailed') {
         s.isFailed = !!val;
+        if (s.isFailed) delete s.degraded;
+    } else if (field === 'type') {                                  // 13 Oct 2026: operational | degraded | failed
+        s.isFailed = val === 'failed';
+        if (val === 'degraded') s.degraded = true; else delete s.degraded;
+    } else if (field === 'start') {                                 // 13 Oct 2026: starting probability of this state
+        const raw = String(val == null ? '' : val).trim(), p = raw === '' ? 0 : parseFloat(raw);
+        if (!(isFinite(p) && p >= 0 && p <= 1)) { if (typeof showToast === 'function') showToast('A starting probability is a number between 0 and 1.', 'warning'); renderMarkovModels(); return; }
+        const cur = _markovStartProbs(m);
+        cur[s.name] = p;
+        if (p === 1) { m.initialState = s.name; delete m.initialProbs; }   // certain to start here: the plain starting state
+        else { const ip = {}; m.states.forEach(x => { if (cur[x.name]) ip[x.name] = cur[x.name]; }); m.initialProbs = ip; delete m.initialState; }
     }
+    _mkTouched('Markov model "' + m.name + '": changed state "' + s.name + '"');
     renderMarkovModels();
+}
+// The starting probability of every state as the solver reads it (initialProbs, else the starting
+// state, else the first state).
+function _markovStartProbs(m) {
+    const out = {};
+    if (!m || !Array.isArray(m.states) || !m.states.length) return out;
+    if (m.initialProbs && typeof m.initialProbs === 'object') { Object.keys(m.initialProbs).forEach(k => { out[k] = parseFloat(m.initialProbs[k]) || 0; }); return out; }
+    const nm = m.initialState != null && m.states.some(s => s.name === m.initialState) ? m.initialState : m.states[0].name;
+    out[nm] = 1;
+    return out;
+}
+// Failure (λ) or repair (μ): what the transition says it is, else read from the states it joins
+// (out of a failed state into a working one is a repair, as the phased multiplier reads it).
+function _markovTransitionKind(m, t) {
+    if (t && (t.kind === 'failure' || t.kind === 'repair')) return t.kind;
+    try { if (window.SLMarkovDiagram) return SLMarkovDiagram.transKind(m, t); } catch (_) {}   // one rule for the table and the diagram
+    const f = (m.states || []).find(s => s.name === t.from), to = (m.states || []).find(s => s.name === t.to);
+    return f && f.isFailed && to && !to.isFailed ? 'repair' : 'failure';
 }
 function addMarkovTransition(id) {
     const m = getMarkovModel(id); if (!m || m.states.length < 2) return;
-    m.transitions.push({ from: m.states[0].name, to: m.states[1].name, rate: 0 });
+    _mkEnsureIds(m);
+    m.transitions.push({ id: _mkNewId('tr'), from: m.states[0].name, to: m.states[1].name, rate: 0 });
+    _mkTouched('Markov model "' + m.name + '": added a transition');
     renderMarkovModels();
 }
 function deleteMarkovTransition(id, idx) {
     const m = getMarkovModel(id); if (!m) return;
+    _mkEnsureIds(m);
     m.transitions.splice(idx, 1);
+    _mkTouched('Markov model "' + m.name + '": removed a transition');
     renderMarkovModels();
 }
 function setMarkovTransition(id, idx, field, val) {
     const m = getMarkovModel(id); if (!m || !m.transitions[idx]) return;
+    _mkEnsureIds(m);
     if (field === 'rate') m.transitions[idx].rate = Math.max(0, parseFloat(val) || 0);
+    else if (field === 'kind') m.transitions[idx].kind = val === 'repair' ? 'repair' : 'failure';
     else m.transitions[idx][field] = val;
+    _mkTouched('Markov model "' + m.name + '": changed a transition');
     renderMarkovModels();
 }
 // Backlog #8 — closed-form steady-state availability NEXT TO the exact Markov
@@ -2295,12 +2509,15 @@ function renderMarkovModels() {
     const container = document.getElementById('markov-models-container');
     if (!container) return;
     const models = (projectConfig && projectConfig.markovModels) || [];
-    if (models.length === 0) { container.innerHTML = '<p style="color: var(--text-secondary); font-style: italic; padding: 10px;">No Markov models defined. Click + Add Markov Model to create one.</p>'; return; }
+    if (models.length === 0) { container.innerHTML = '<p style="color: var(--text-secondary); font-style: italic; padding: 10px;">No Markov models defined. Click + Add Markov Model to create one.</p>'; try { if (window.SLMarkovDiagram) SLMarkovDiagram.attach(container); } catch (_) {} return; }
     container.innerHTML = models.map(m => {
         const result = solveMarkovModel(m);
+        const starts = _markovStartProbs(m);
+        const typeOf = s => s.isFailed ? 'failed' : (s.degraded ? 'degraded' : 'operational');
         const stateRows = m.states.map(s => `<tr>
             <td><input type="text" value="${esc(s.name)}" onchange="setMarkovStateField('${esc(m.id)}', '${esc(s.name)}', 'name', this.value)" class="u-mb0"></td>
-            <td style="text-align:center;"><input type="checkbox" ${s.isFailed ? 'checked' : ''} onchange="setMarkovStateField('${esc(m.id)}', '${esc(s.name)}', 'isFailed', this.checked)"></td>
+            <td><select onchange="setMarkovStateField('${esc(m.id)}', '${esc(s.name)}', 'type', this.value)" class="u-mb0" style="min-width:118px;" aria-label="State type of ${esc(s.name)}">${[['operational', 'Operational'], ['degraded', 'Degraded'], ['failed', 'Failed']].map(o => `<option value="${o[0]}"${typeOf(s) === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select></td>
+            <td><input type="text" inputmode="decimal" value="${starts[s.name] ? esc(String(starts[s.name])) : ''}" placeholder="0" onchange="setMarkovStateField('${esc(m.id)}', '${esc(s.name)}', 'start', this.value)" class="u-mb0" style="width:62px;" aria-label="Starting probability of ${esc(s.name)}"></td>
             <td style="font-family: monospace; text-align: right;">${result.ok ? (result.pi[m.states.indexOf(s)] || 0).toExponential(3) : '—'}</td>
             <td><button class="action-btn btn-red" onclick="deleteMarkovState('${esc(m.id)}', '${esc(s.name)}')">X</button></td>
         </tr>`).join('');
@@ -2309,11 +2526,12 @@ function renderMarkovModels() {
             <td><select onchange="setMarkovTransition('${esc(m.id)}', ${i}, 'from', this.value)" class="u-mb0">${stateOpts.replace(`value="${esc(t.from)}"`, `value="${esc(t.from)}" selected`)}</select></td>
             <td style="text-align:center;">→</td>
             <td><select onchange="setMarkovTransition('${esc(m.id)}', ${i}, 'to', this.value)" class="u-mb0">${stateOpts.replace(`value="${esc(t.to)}"`, `value="${esc(t.to)}" selected`)}</select></td>
+            <td><select onchange="setMarkovTransition('${esc(m.id)}', ${i}, 'kind', this.value)" class="u-mb0" style="min-width:58px;" aria-label="Transition type: failure (λ) or repair (μ)" title="λ: a failure. μ: a repair (restoration).">${[['failure', 'λ'], ['repair', 'μ']].map(o => `<option value="${o[0]}"${_markovTransitionKind(m, t) === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select></td>
             <td><input type="number" step="any" min="0" value="${t.rate}" onchange="setMarkovTransition('${esc(m.id)}', ${i}, 'rate', this.value)" class="u-mb0"></td>
             <td><button class="action-btn btn-red" onclick="deleteMarkovTransition('${esc(m.id)}', ${i})">X</button></td>
         </tr>`).join('');
         const pFailedTxt = result.ok ? result.pFailed.toExponential(4) : 'n/a';
-        return `<div class="controls" style="border-left-color: #0e7490;">
+        return `<div class="controls mk-card" data-mk-id="${esc(m.id)}" style="border-left-color: #0e7490;">
             <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
                 <input type="text" value="${esc(m.name)}" onchange="setMarkovName('${esc(m.id)}', this.value)" style="flex:1; margin-bottom:0; font-weight:bold;">
                 <span style="font-family: monospace; font-size: 0.9em; color: var(--header-color);">P(failed) = ${pFailedTxt}</span>
@@ -2321,20 +2539,23 @@ function renderMarkovModels() {
                 <button class="action-btn btn-red" onclick="deleteMarkovModel('${esc(m.id)}')">Delete Model</button>
             </div>
             ${_markovClosedFormHtml(m, result)}
+            <div class="mk-diagram-host" data-mk-id="${esc(m.id)}" style="margin:0 0 12px;"></div>
             <div class="grid-2-col">
                 <div>
                     <h5 style="margin:0 0 6px 0; color: var(--header-color);">States</h5>
-                    <table style="width:100%; font-size: 0.85em;"><thead><tr><th class="u-text-left">Name</th><th>Failed?</th><th style="text-align:right;">π (steady)</th><th></th></tr></thead><tbody>${stateRows}</tbody></table>
+                    <table style="width:100%; font-size: 0.85em;"><thead><tr><th class="u-text-left">Name</th><th>Type</th><th title="Probability of starting in this state (the start arrows on the diagram). Blank is 0; together they add up to 1.">Start</th><th style="text-align:right;">π (steady)</th><th></th></tr></thead><tbody>${stateRows}</tbody></table>
                     <button class="btn-cyan action-btn" onclick="addMarkovState('${esc(m.id)}')" style="margin-top:6px;">+ State</button>
                 </div>
                 <div>
                     <h5 style="margin:0 0 6px 0; color: var(--header-color);">Transitions (rate /hr)</h5>
-                    <table style="width:100%; font-size: 0.85em;"><thead><tr><th>From</th><th></th><th>To</th><th>Rate</th><th></th></tr></thead><tbody>${txRows}</tbody></table>
+                    <table style="width:100%; font-size: 0.85em;"><thead><tr><th>From</th><th></th><th>To</th><th>Type</th><th>Rate</th><th></th></tr></thead><tbody>${txRows}</tbody></table>
                     <button class="btn-cyan action-btn" onclick="addMarkovTransition('${esc(m.id)}')" style="margin-top:6px;">+ Transition</button>
                 </div>
             </div>
+            <div class="mk-phase-host" data-mk-id="${esc(m.id)}"></div>
         </div>`;
     }).join('');
+    try { if (window.SLMarkovDiagram) SLMarkovDiagram.attach(container); } catch (e) { try { console.warn('[markov] diagram attach failed', e); } catch (_) {} }
 }
 
 // Resolve a basic event's effective λ for the *active* FTA context. Falls back through:
@@ -2487,7 +2708,7 @@ function runDFTMonteCarlo() {
         ? `<div style="margin-top:4px; color: var(--text-secondary); font-size: 0.8em;">Spare model: ${spareBits.join(' · ')}. Cold spares with a perfect switch are the default and are not listed.</div>`
         : '';
     const note = dynCount === 0
-        ? '<div style="margin-top:6px; padding:8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; color:#78350f; font-size:0.85em;">No dynamic gates (PAND / SPARE / FDEP) in this tree — Monte Carlo just confirms the BDD result. Add a dynamic gate to exercise time-ordered semantics.</div>'
+        ? '<div style="margin-top:6px; padding:8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; color:#78350f; font-size:0.85em;">No dynamic gates (PAND / SPARE / SEQ / FDEP) in this tree — Monte Carlo just confirms the BDD result. Add a dynamic gate to exercise time-ordered semantics.</div>'
         : `<div style="margin-top:6px; color: var(--text-secondary); font-size: 0.85em;">Tree contains ${dynCount} dynamic gate(s). The static number counts functional dependencies exactly, solves a priority AND or spare exactly when its inputs are constant-rate basic events used nowhere else, and holds an upper bound otherwise (the canvas line under each gate says which). This simulation is the independent cross-check.</div>`;
     out.innerHTML = `<div style="padding: 10px; background: var(--bg-control); border: 1px solid var(--border-primary); border-radius: 4px;">
         <strong>DFT Simulation (Monte Carlo, N = ${r.N.toLocaleString()}, mission t = ${(ftaConfig.exposureTime || 1).toFixed(3)} hr):</strong>

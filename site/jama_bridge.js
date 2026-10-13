@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): a pushed failure condition carries its model links (function ids) in the description; see tests/regression_analysis_links_20261013b.test.js
 // ============================================================================
 // jama_bridge.js — v1.0 — the LIVE Jama bridge (tier-3 traceability).
 // BORN MODULAR: new file, zero monolith edits.
@@ -108,6 +109,8 @@
         const name = f.fcId + ' — ' + (f.fcDesc || '');
         const desc = 'Severity: ' + (f.severity || '—') + ' · Phases: ' + (f.phases || '—') +
             '\nAircraft effect: ' + (f.effAc || '—') + '\nCrew effect: ' + (f.effCrew || '—') + '\nPax effect: ' + (f.effPax || '—') +
+            // 13 Oct 2026: the FC's model links (function ids) travel with it (model_links.js).
+            ((typeof SLModelLinks !== 'undefined' && SLModelLinks.csvCell('acFha', f)) ? '\nModel links: ' + SLModelLinks.csvCell('acFha', f) : '') +
             '\n\n[Safety Lab ' + f.fcId + ' · exported ' + new Date().toISOString().slice(0, 10) + ']';
         const id = await jc.createItem(b.projectId, b.fcItemTypeId, name, desc, b.parentItemId || null);
         if (id == null) throw new Error('created but no id returned');

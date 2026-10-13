@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): repair-level (LORA) cases link to the item they are about from the model picker (model_links.js); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // mx_analytics.js — Phase F6: the maintainability analytics suite.
 // BORN MODULAR: new file, zero monolith edits; store under
@@ -171,7 +172,9 @@
         const lineFixed = parseFloat(await _ask('Annual fixed cost for line capability (tooling/training):', '15000')) || 0;
         const shopCost = parseFloat(await _ask('Per-event cost at SHOP (repair + shipping):', '5500')) || 0;
         const shopFixed = parseFloat(await _ask('Annual fixed cost for shop capability (test equipment amortized):', '40000')) || 0;
-        _store().lora.push({ id: 'LR-' + Date.now(), name: name.trim(), lambda, units, annualFH, discardCost, lineCost, lineFixed, shopCost, shopFixed });
+        const rec = { id: 'LR-' + Date.now(), name: name.trim(), lambda, units, annualFH, discardCost, lineCost, lineFixed, shopCost, shopFixed };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('lora', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().lora.push(rec);
         _save(); renderRamLoraPage();
     }
     async function loraDelete(id) {
@@ -191,7 +194,7 @@
         if (!S.lora.length) html += '<p style="color:var(--color-text-tertiary); font-size:13px;">No repair-level cases yet.</p>';
         S.lora.forEach(c => {
             const r = loraEvaluate(c);
-            html += '<h3>' + _esc(c.name) + ' <a href="#" style="font-size:11px;" onclick="loraDelete(\'' + c.id + '\'); return false;">remove</a></h3>' +
+            html += '<h3>' + _esc(c.name) + ' <a href="#" style="font-size:11px;" onclick="loraDelete(\'' + c.id + '\'); return false;">remove</a></h3>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('lora', c) : '') +
                 '<p style="font-size:12px; font-family:var(--font-mono); color:var(--color-text-secondary);">Fleet demand: ' + r.demand.toFixed(2) + ' events/yr (' + c.units + ' units × ' + c.lambda.toExponential(1) + ' /h × ' + c.annualFH + ' FH)</p>' +
                 '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Level</th><th>Variable $/yr</th><th>Fixed $/yr</th><th>Total $/yr</th><th></th></tr></thead><tbody>' +
                 r.levels.map(l => '<tr' + (l === r.best ? ' style="font-weight:600;"' : '') + '><td>' + _esc(l.level) + '</td>' +

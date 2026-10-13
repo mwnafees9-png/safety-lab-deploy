@@ -1,5 +1,8 @@
 // ============================================================================
-// stpa_report.js — v1.0 — WSB-STPA: the STPA analysis as a WS-B report type —
+// stpa_report.js — v1.1 — (13 Oct 2026: the control structure table also lists the
+// actuators, sensors, external elements, actuation and measurement links the drawn
+// control structure can now carry; disturbances are named as such.)
+// WSB-STPA: the STPA analysis as a WS-B report type —
 // (BRIDGE: §6 gains the UCA↔FTA/FMEA bridge — rollup + per-UCA table, computed
 // fresh at build via STPA.bridgeMap; refusals reported, never hidden.)
 // the J3307 27/27 story as a document you hand to a reviewer.
@@ -87,7 +90,11 @@
             'Element': _lbl(f) || _id(f), 'Kind': 'Feedback',
             'Detail': (_txt(f, ['from', 'process']) || '?') + ' → ' + (_txt(f, ['to', 'controller']) || '?') }));
         (cs.others || []).forEach(o => out.stpa_cs_table.push({
-            'Element': _lbl(o) || _id(o), 'Kind': _txt(o, ['kind', 'type']) || 'Other interaction', 'Detail': _txt(o, ['detail', 'notes']) || '—' }));
+            'Element': _lbl(o) || _id(o), 'Kind': o.type === 'disturbance' ? 'Disturbance' : (_txt(o, ['kind', 'type']) || 'Other interaction'), 'Detail': _txt(o, ['detail', 'notes']) || '—' }));
+        [['actuators', 'Actuator'], ['sensors', 'Sensor'], ['externals', 'External element']].forEach(k => (cs[k[0]] || []).forEach(n => out.stpa_cs_table.push({
+            'Element': n.name || _lbl(n) || _id(n), 'Kind': k[1], 'Detail': _txt(n, ['desc', 'detail', 'notes']) || '—' })));
+        [['actuations', 'Actuates'], ['measurements', 'Measured by']].forEach(k => (cs[k[0]] || []).forEach(x => out.stpa_cs_table.push({
+            'Element': x.name || _id(x), 'Kind': k[1], 'Detail': (x.from || '?') + ' → ' + (x.to || '?') })));
         out.stpa_resp_table = (sd.responsibilities || []).map(r => ({
             'Controller': _txt(r, ['controller', 'who', 'owner']) || '—',
             'Responsibility': _lbl(r) || '—',

@@ -1,3 +1,5 @@
+// 13 Oct 2026 (fix G): the canvas is edited by hand: drag is one undo step with a drop indicator and re-parents onto a gate, every node but the top has a connection handle, basic events take λ / P typed on the canvas, an item badge shows the linked model element, the panel fills "Linked model element", and the render calls SLFtaEdit (fta_canvas_edit.js) for the toolbox, unattached nodes and overview map; the cut-set panel explains prime implicants for NOT trees and refuses too many in plain words. See tests/regression_fta_handbuild_20261013b.test.js
+// 13 Oct 2026 (analysis model links): _gtvBuildGraph joins every analysis row linked to an element on the thread (model_links.js threadIndex/threadPass); see tests/regression_analysis_links_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL): the node panel fills the common cause fields from the GROUP (ccfFillConfigPanel) and the cut-set table expands common cause groups with the tree's MGL model (expandCCFCutsets(min, rootNode)).
 // 13 Oct 2026 (math audit F1/F8): the FHA requirement verification lane and the Golden Thread budget check use SLTopBasis.exactTop (never root.probability) and SLTopBasis.meets; _missionHoursForNormalization delegates to SLTopBasis.missionHours. See tests/regression_exact_top_20261013.test.js and tests/regression_perfh_basis_20261013.test.js
 // 13 Oct 2026 (math fix 7): the DAL badge shows a pending reduction (dashed outline, hover says what the DAL would be once CMA substantiates the claim) and the DAL panel opens on VOTING gates; see tests/regression_dal_row_20261013.test.js
@@ -619,7 +621,12 @@ function updateD3() {
         try { _renderFtaLinkedChip(); } catch (_) {}
         try { _renderFtaConfigSummary(); } catch (_) {}
         if (typeof d3 === 'undefined') return; const rootNode = getActiveFTARoot();
-        if (!rootNode) { g.selectAll("*").remove(); updateToolbarState(); return; }
+        if (!rootNode) {
+            g.selectAll("*").remove(); updateToolbarState();
+            // 13 Oct 2026 (fix G): an empty page still shows the toolbox, its unattached nodes and the overview map.
+            try { if (typeof SLFtaEdit !== 'undefined') SLFtaEdit.afterRender(null, [], document.body.classList.contains('theme-dark')); } catch (_) {}
+            return;
+        }
         // Phase 53.40 — refresh nodeSize on every render so Reconfigure Layout (and any future
         // dynamic box-height change) reflows the tree to match the current box dimensions.
         if (treeLayout && typeof _ftaNodeVerticalSpacing === 'function') {
@@ -702,7 +709,15 @@ function updateD3() {
         // so children remain individually draggable: dragging a child shifts only its own
         // subtree.) Every link that has a source or target inside the moved subtree is
         // re-rendered, plus the link from the parent into the dragged node.
-        const dragHandler = d3.drag().on("drag", function(event, d) {
+        // 13 Oct 2026 (fix G): the drag is one undo step (snapshot on the first move, SLFtaEdit.dragMove),
+        // shows a drop indicator over gates, and on release over a gate reconnects the branch there
+        // (SLFtaEdit.dragEnd); otherwise it is a move that saves like any other change.
+        const _FE = (typeof SLFtaEdit !== 'undefined') ? SLFtaEdit : null;
+        const dragHandler = d3.drag()
+            .on('start', function (event, d) { if (_FE) _FE.dragStart(event, d, this); })
+            .on('end', function (event, d) { if (_FE) _FE.dragEnd(event, d); })
+            .on("drag", function(event, d) {
+            if (_FE && _FE.dragMove(event, d) === false) return;   // a before-change listener refused the move
             // Collect every node in the subtree we're about to shift.
             const subtreeIds = new Set();
             d.each(n => {
@@ -790,10 +805,14 @@ function updateD3() {
             propagateRepeatedEventEdit(d.data);
             updateNodeDataInline();
         });
-        // Phase 53.33 — λ / P metrics field is read-only on the canvas. Edit failure rate +
-        // probability in the node properties panel (right side) instead. Title attribute serves
-        // as a quick hint for users who try to click in.
-        container.append('xhtml:input').attr('class', 'inline-metrics').attr('readonly', 'readonly').attr('tabindex', '-1').attr('placeholder', 'λ / P (select node to edit)').attr('title', 'Failure rate and probability are read-only on the canvas — select the node to edit in the properties panel.');
+        // 13 Oct 2026 (fix G): the λ / P line is typed directly on the canvas for basic and undeveloped
+        // events (value in the mode the drop-down below shows: λ, MTBF or P), validated and applied
+        // through the properties panel's own rules (SLFtaEdit.setMetric). Gates and library, Markov or
+        // development-error events stay read-only here; the readOnly flag is set per node on update.
+        container.append('xhtml:input').attr('class', 'inline-metrics').attr('readonly', 'readonly').attr('placeholder', 'λ / P').attr('spellcheck', 'false')
+            .on('focus', function (e, d) { if (_FE) _FE.metricFocus(this, d); })
+            .on('keydown', function (e, d) { if (e.key === 'Enter') { e.preventDefault(); this.blur(); } else if (e.key === 'Escape') { e.preventDefault(); if (_FE) _FE.metricCancel(this, d); } })
+            .on('blur', function (e, d) { if (_FE) _FE.metricCommit(this, d); });
 
         // v66.15 — inline CCF tag as an IN-FLOW flex child at the BOTTOM of the
         // stack, under the λ/P metrics line (Waqas's placement). v66.12
@@ -887,6 +906,17 @@ function updateD3() {
         // by autoSizeNodeDescription's reserve). The old floating SVG ccf-tag is
         // gone — it collided with wrapped names after the desc box grew to 100px.
         nodeEnter.each(function(d) { d3.select(this).append('path').attr('d', getShapePath(d)).attr('fill', getNodeColors(d).fill).attr('stroke', getNodeColors(d).stroke); });
+        // 13 Oct 2026 (fix G): the connection handle (top of the description box, where the line from the
+        // parent arrives). Drag it onto a gate to connect; to empty canvas to disconnect. Not on the top event.
+        if (_FE) nodeEnter.append('circle').attr('class', 'fta-conn-handle').attr('r', 7).attr('cx', 0).attr('cy', -120)
+            .call(_FE.handleDrag()).append('title').text('Drag onto a gate to connect this node there, or onto empty canvas to disconnect it');
+        // 13 Oct 2026 (fix G): linked model element badge (the item that realizes the event, or its SysML reference).
+        const _itemBadge = nodeEnter.append('g').attr('class', 'fta-item-badge').style('cursor', 'pointer')
+            .on('mousedown', e => e.stopPropagation())
+            .on('click', function (event, d) { event.stopPropagation(); openNodePropertiesModal(d.data); });
+        _itemBadge.append('rect').attr('rx', 4).attr('ry', 4).attr('height', 16).attr('y', -12);
+        _itemBadge.append('text').attr('y', 0).attr('text-anchor', 'middle');
+        _itemBadge.append('title').text('Linked model element: click to change it in the properties panel');
         nodeEnter.append('text').attr('class', 'transfer-tag').attr('y', 35).attr('text-anchor', 'middle').attr('fill', '#7e22ce').attr('font-weight', 'bold').attr('font-size', '10px');
         // v66.11 — collapse/transfer-in y restored above the description box (the
         // box grew to _FTA_DESC_BOX_HEIGHT=100, top now −174; the old fixed y
@@ -944,8 +974,17 @@ function updateD3() {
         inputDiv.append('xhtml:select').attr('class', 'inline-mode')
             .html('<option value="lambda">λ — Failure rate</option><option value="mtbf">MTBF (hours)</option><option value="probability">P at exposure t</option><option value="library">Component library</option>')
             .on('change', function(e, d) {
+                // 13 Oct 2026 (fix G): through the one change path (undo, recalculation, redraw, autosave, listeners).
+                const sel = this;
+                if (_FE) { _FE.applyEdit('Change input mode of ' + (d.data.displayId || d.data.name || 'event'), function () { _ftaApplyInlineMode(sel, d); }, { kind: 'set-mode', nodeIds: [d.data.id] }); if (selectedNodeData && selectedNodeData.id === d.data.id) selectNode(d.data); return; }
+                _ftaApplyInlineMode(sel, d);
+                calculateAllProbabilities();
+                updateD3();
+                if (selectedNodeData && selectedNodeData.id === d.data.id) selectNode(d.data);
+            });
+        function _ftaApplyInlineMode(sel, d) {
                 const oldMode = d.data.inputMode || 'lambda';
-                const newMode = this.value;
+                const newMode = sel.value;
                 const oldLambda = d.data.lambda || 0;
                 // Auto-convert inputValue so the resolved λ stays continuous across the unit change.
                 const t = ftaConfig.exposureTime || 1;
@@ -961,11 +1000,7 @@ function updateD3() {
                 // whatever input mode the user switches to.
                 if (d.data.eventClass === 'dev-error') { d.data.lambda = 0; d.data.inputValue = 0; }
                 propagateRepeatedEventEdit(d.data);
-                calculateAllProbabilities();
-                updateD3();
-                // If the panel is open on this node, refresh it so the user can edit the new-mode value.
-                if (selectedNodeData && selectedNodeData.id === d.data.id) selectNode(d.data);
-            });
+        }
 
         const nodeUpdate = nodeEnter.merge(nodes); nodeUpdate.transition().duration(180).attr('transform', d => `translate(${d.x},${d.y})`);
         nodeUpdate.attr('class', d => `node ${selectedNodeData && selectedNodeData.id === d.data.id ? 'selected' : ''}`);
@@ -979,10 +1014,28 @@ function updateD3() {
         nodeUpdate.select('.inline-id').each(function(d) { if(document.activeElement !== this) this.value = d.data.displayId; });
         nodeUpdate.select('.inline-metrics').each(function(d) {
             // Phase 33 \u2014 every node (gate + leaf) shows \u03BB /hr as primary, P at t as secondary.
-            // Phase 53.33 \u2014 field is now read-only; ignore legacy customMetrics overrides and
-            // always show the live computed value so editing in the properties panel is reflected
-            // immediately on the canvas.
-            this.value = formatNodeMetrics(d);
+            // 13 Oct 2026 (fix G): editable for basic/undeveloped events (see SLFtaEdit.metricEditable);
+            // the live computed value shows whenever the field is not being typed in.
+            const editable = !!(_FE && _FE.metricEditable(d.data));
+            this.readOnly = !editable;
+            this.tabIndex = editable ? 0 : -1;
+            this.classList.toggle('fta-metric-edit', editable);
+            this.title = _FE ? _FE.metricTitle(d.data) : '';
+            if (!this._ftaEditing) this.value = formatNodeMetrics(d);
+        });
+        // 13 Oct 2026 (fix G): handle sits on the top edge of the description box; hidden on the top event.
+        nodeUpdate.select('.fta-conn-handle')
+            .attr('cy', d => -30 - (d.data.descBoxHeight || 90))
+            .style('display', d => d.depth === 0 ? 'none' : null);
+        nodeUpdate.select('.fta-item-badge').each(function (d) {
+            const txt = _FE ? _FE.badgeFor(d) : '';
+            const gsel = d3.select(this);
+            if (!txt) { gsel.style('display', 'none'); return; }
+            const leaf = d.data.type === 'basic' || d.data.type === 'undeveloped';
+            const w = Math.min(158, 14 + txt.length * 6.2);
+            gsel.style('display', null).attr('transform', 'translate(0,' + (leaf ? 94 : 50) + ')');
+            gsel.select('rect').attr('x', -w / 2).attr('width', w);
+            gsel.select('text').text(txt.length > 26 ? txt.slice(0, 25) + '\u2026' : txt);
         });
         // Phase 56.42 \u2014 Actual line for top-down + shared events. Populated by
         // formatNodeActualLine, which returns '' for nodes where the actual is
@@ -1121,6 +1174,8 @@ function updateD3() {
             return 'K=' + k + '/' + kids.length;
         });
         nodes.exit().remove(); updateToolbarState();
+        // 13 Oct 2026 (fix G): toolbox, unattached nodes, overview map (full layout, culling-independent).
+        try { if (_FE) _FE.afterRender(root, _allDesc, isDark); } catch (_) {}
     } catch (err) { console.error("D3 Rendering Error:", err); }
 }
 
@@ -1465,6 +1520,8 @@ function selectNode(dataNode) {
     }
     // Per-phase λ editor — visible only when the active FTA is linked to a hazard with phases.
     renderPhaseLambdaEditor(dataNode);
+    // 13 Oct 2026 (fix G): "Linked model element" (item, SysML v2 reference, stable element ID).
+    try { if (typeof SLFtaEdit !== 'undefined') SLFtaEdit.fillPanel(dataNode); } catch (_) {}
     updateFTAConfigUI(); updateD3();
 }
 
@@ -2272,6 +2329,7 @@ function _generateCutsetReportAsync(rootNode) {
         if (_ftaComputeStale(token)) return;
         if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err);
         const summary = document.getElementById('cutset-summary');
+        if (err && err.name === 'NonCoherentCutsetError') { if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:var(--text-secondary);">' + esc(err.message) + '</div>'; return; }   // 13 Oct 2026 (fix G)
         if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:#b91c1c;">Cut-set computation failed: ' + esc((err && err.message) || String(err)) + '</div>';
     }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fta_view_modules'); });
 }
@@ -2279,7 +2337,17 @@ function _generateCutsetReportAsync(rootNode) {
 function _generateCutsetReportSync(rootNode) {
     let raw;
     try { raw = _perfTime('fta.cutsets', function () { return _quantCachedCutsets(rootNode); }); }
-    catch (err) { if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err); throw err; }
+    catch (err) {
+        if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err);
+        // 13 Oct 2026 (fix G): a NOT tree with too many prime implicants is refused in plain words, never shown partly.
+        if (err && err.name === 'NonCoherentCutsetError') {
+            const sm = document.getElementById('cutset-summary');
+            if (sm) sm.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:var(--text-secondary);">' + esc(err.message) + '</div>';
+            const tb = document.getElementById('cutset-body'); if (tb) tb.innerHTML = '';
+            return;
+        }
+        throw err;
+    }
     const valid = raw.filter(c => c.length > 0).sort((a, b) => a.length - b.length);
     // Minimal-cutset reduction keyed on logicalId so repeated events collapse.
     const min = [];
@@ -2417,6 +2485,12 @@ function _generateCutsetReportSync(rootNode) {
                 <span style="color: var(--text-secondary); font-size: 0.85em;">${esc(deltaTxt)} · BDD size: ${bddResult.bddSize} nodes</span>
             </div>`;
         }
+        // 13 Oct 2026 (fix G): a tree with NOT logic lists prime implicants; say so above the rows.
+        try {
+            if (typeof SLFTAEngine !== 'undefined' && SLFTAEngine.treeHasNot && SLFTAEngine.treeHasNot(rootNode)) {
+                html += `<div style="margin-top: 6px; color: #475569; font-size: 0.9em;"><strong>NOT logic in this tree:</strong> the rows are prime implicants, the smallest combinations of events that occur and events that do not ("NOT X" means X does not occur). The sum over them is not an upper bound for a non-coherent tree; use the exact P(top).</div>`;
+            }
+        } catch (_) {}
         if (qualCount > 0) {
             html += `<div style="margin-top: 6px; color: #0E7490; font-size: 0.9em;">
                 <strong>◇ ${qualCount} qualitative Functional Failure Scenario${qualCount === 1 ? '' : 's'}</strong> — cut set${qualCount === 1 ? '' : 's'} containing a development error (ARP 4761A 4.1.1.1). Development errors are never given probabilities: these scenarios are excluded from every number above, which is therefore conditional on no development error. They are addressed by process assurance (DAL) and the derived requirements, not by the probability budget.
@@ -2871,6 +2945,10 @@ function _gtvBuildGraph(opts){
         return (_ceaMemo[sid] = Object.keys(found).map(k => found[k]));
     }
 
+    // 13 Oct 2026 (analysis model links): every analysis row linked to a model element on this
+    // thread (FMEA, PRA, ZSA, human factors, R&M) joins it; the index is built once per graph.
+    let _mlIdx = null;
+    try { if (typeof window !== 'undefined' && window.SLModelLinks && typeof window.SLModelLinks.threadIndex === 'function') _mlIdx = window.SLModelLinks.threadIndex(); } catch(_){ _mlIdx = null; }
     const rows = [];
     (acFhaData||[]).forEach(f => rows.push({ fha: f, domain: 'AC', system: null }));
     (systemsData||[]).forEach(s => (s.fha||[]).forEach(f => rows.push({ fha: f, domain: 'SYS', system: s })));
@@ -2967,6 +3045,7 @@ function _gtvBuildGraph(opts){
         } catch(e){}
         (zsaData||[]).forEach(z => { if((z.housedFunctions||[]).includes(subId)){ const k = addNode('cca', 'zsa:' + z.internalId, ('ZSA ' + (z.zoneId || '')).trim(), z.desc || 'Zonal', { kind: 'zsa', id: z.internalId }); addLink(fcKey, k); } });
         (praData||[]).forEach(p => { const exposes = (p.affectedZones||[]).some(zid => { const z = (zsaData||[]).find(zz => zz.zoneId === zid); return z && (z.housedFunctions||[]).includes(subId); }); if(exposes){ const k = addNode('cca', 'pra:' + p.internalId, ('PRA ' + (p.praId || '')).trim(), p.threat || 'Particular risk', { kind: 'pra', id: p.internalId }); addLink(fcKey, k); } });
+        if(_mlIdx){ try { window.SLModelLinks.threadPass(_mlIdx, { fha: fha, domain: domain, fn: fn, linkedPages: linkedPages, fcKey: fcKey, funcKey: funcKey, ftaKeys: ftaKeys }, addNode, addLink); } catch(e){} }
 
         let refs = [];
         try { if(typeof Traceability !== 'undefined') refs = Traceability.getReferrers({ kind: domain === 'AC' ? 'acFha' : 'sysFha', id: fha.internalId, systemId: system ? system.id : null }) || []; } catch(e){}

@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): structural items link their zone and item, L/HIRF features link the function / failure condition they protect and their item, from the model picker (protects mirrors the picked codes); see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // msg3_ext.js — Phase R9: the three MSG-3 programs beyond systems/powerplant
@@ -73,8 +74,11 @@
         const ad = await slPrompt('Accidental-damage exposure, "high", "medium", "low" (ground handling, doors, spillage…):', 'medium');
         const ed = mat.trim() === 'metallic' ? await slPrompt('Environmental-damage susceptibility, "high", "medium", "low" (drainage, dissimilar metals, sealant…):', 'medium') : 'n/a';
         const fd = mat.trim() === 'metallic' ? await slPrompt('Fatigue rating, "damage-tolerant" (inspectable) or "safe-life":', 'damage-tolerant') : 'n/a';
-        _store().ssis.push({ id: 'SSI-' + Date.now(), name: name.trim(), material: mat.trim(),
-            ad: (ad || 'medium').trim(), ed: String(ed || 'n/a').trim(), fd: String(fd || 'n/a').trim(), tasks: [] });
+        const ssi = { id: 'SSI-' + Date.now(), name: name.trim(), material: mat.trim(),
+            ad: (ad || 'medium').trim(), ed: String(ed || 'n/a').trim(), fd: String(fd || 'n/a').trim(), tasks: [] };
+        // 13 Oct 2026: the zone (and item) the SSI sits in are picked from the model (model_links.js).
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('msg3Ssi', ssi))) return;
+        _store().ssis.push(ssi);
         _save(); renderMsg3xPage();
     };
     // derive the SSI's task set from its ratings (deterministic)
@@ -137,11 +141,15 @@
         const name = await slPrompt('Protection feature (e.g. "Elevator servo harness overbraid + backshell bonding"):', '');
         if (!name || !name.trim()) return;
         const deg = await slPrompt('Degradation mode, "corrosion", "vibration/chafing", "maintenance disturbance", "aging":', 'corrosion');
-        const protects = await slPrompt('Protects (function / FC reference, e.g. SF-01 or FC-01):', '');
+        // 13 Oct 2026: what the feature protects (function / failure condition) and the item it sits
+        // on are picked from the model; the protects column mirrors the picked codes.
+        const draft = { id: 'LH-' + Date.now(), name: name.trim(), protects: '' };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('msg3Lhirf', draft))) return;
+        const protects = draft.protects;
         const interval = parseFloat(await slPrompt('Inspection/test interval (FH):', '6000'));
         const method = await slPrompt('Method, "GVI", "DET", or "FNC" (functional bonding/shielding test):', 'DET');
-        _store().lhirf.push({ id: 'LH-' + Date.now(), name: name.trim(), deg: (deg || '').trim(),
-            protects: (protects || '').trim(), interval: interval > 0 ? interval : 6000, method: (method || 'DET').trim(), accepted: null });
+        _store().lhirf.push(Object.assign(draft, { deg: (deg || '').trim(),
+            protects: (protects || '').trim(), interval: interval > 0 ? interval : 6000, method: (method || 'DET').trim(), accepted: null }));
         _save(); renderMsg3xPage();
     };
     window.msg3xLhirfAccept = async function (id) {
@@ -190,9 +198,9 @@
         let html = '<div style="display:flex; justify-content:space-between; align-items:center; margin:0 0 8px;"><b style="font-size:14px;">Structures — SSI register</b>' +
             '<button class="btn-cyan" style="font-size:12px; padding:5px 12px;" onclick="msg3xAddSsi()">+ SSI</button></div>';
         if (!s.ssis.length) html += '<p style="color:var(--color-text-tertiary); font-size:12.5px;">No SSIs yet. Each gets AD/ED/FD ratings; the task set derives deterministically (metallic: corrosion + fatigue; composite: impact emphasis; safe-life: discard).</p>';
-        else html += '<table class="data-table" style="width:100%; font-size:12px; margin-bottom:8px;"><thead><tr><th></th><th>SSI</th><th>Material</th><th>AD</th><th>ED</th><th>FD</th><th>Derived tasks</th><th></th></tr></thead><tbody>' +
+        else html += '<table class="data-table" style="width:100%; font-size:12px; margin-bottom:8px;"><thead><tr><th></th><th>SSI</th><th>Model links</th><th>Material</th><th>AD</th><th>ED</th><th>FD</th><th>Derived tasks</th><th></th></tr></thead><tbody>' +
             s.ssis.map(x => '<tr><td><a href="#" onclick="msg3xDeleteSsi(\'' + x.id + '\'); return false;" style="color:#8E2A2A; font-size:11px;">✕</a></td>' +
-                '<td><b>' + _esc(x.name) + '</b></td><td class="u-mono" style="font-size:11px;">' + x.material + '</td>' +
+                '<td><b>' + _esc(x.name) + '</b></td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('msg3Ssi', x) : '') + '</td><td class="u-mono" style="font-size:11px;">' + x.material + '</td>' +
                 '<td class="u-mono">' + x.ad + '</td><td class="u-mono">' + x.ed + '</td><td class="u-mono" style="font-size:11px;">' + x.fd + '</td>' +
                 '<td style="font-size:11px;">' + _ssiTasks(x).map(t => t.type + (t.interval ? ' @' + t.interval + 'FH' : '') + (t.cpcp ? ' (CPCP)' : '')).join(' · ') + '</td>' +
                 '<td><button class="ckpt-m-btn" style="font-size:10px; padding:1px 7px;" onclick="msg3xPushSsi(\'' + x.id + '\')">→ ledger</button></td></tr>').join('') + '</tbody></table>';
@@ -212,11 +220,11 @@
         html += '<div style="display:flex; justify-content:space-between; align-items:center; margin:18px 0 8px;"><b style="font-size:14px;">L/HIRF protection features</b>' +
             '<button class="btn-cyan" style="font-size:12px; padding:5px 12px;" onclick="msg3xAddLhirf()">+ Protection feature</button></div>';
         if (!s.lhirf.length) html += '<p style="color:var(--color-text-tertiary); font-size:12.5px;">Bonding straps, shields, backshells, aperture meshes — each with a degradation mode and an inspection/test at an interval justified against it.</p>';
-        else html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th></th><th>Feature</th><th>Degradation</th><th>Protects</th><th>Task</th><th>Interval acceptance</th><th></th></tr></thead><tbody>' +
+        else html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th></th><th>Feature</th><th>Model links</th><th>Degradation</th><th>Protects</th><th>Task</th><th>Interval acceptance</th><th></th></tr></thead><tbody>' +
             s.lhirf.map(f => {
                 const critical = _sevCritical(f.protects);
                 return '<tr><td><a href="#" onclick="msg3xDeleteLhirf(\'' + f.id + '\'); return false;" style="color:#8E2A2A; font-size:11px;">✕</a></td>' +
-                    '<td><b>' + _esc(f.name) + '</b></td><td style="font-size:11px;">' + _esc(f.deg) + '</td>' +
+                    '<td><b>' + _esc(f.name) + '</b></td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('msg3Lhirf', f) : '') + '</td><td style="font-size:11px;">' + _esc(f.deg) + '</td>' +
                     '<td class="u-mono" style="font-size:11px;">' + _esc(f.protects || '—') + (critical ? ' <span style="font-size:9px; color:#8E2A2A; font-weight:700;">SEVERE</span>' : '') + '</td>' +
                     '<td class="u-mono" style="font-size:11px;">' + f.method + ' @' + f.interval + 'FH</td>' +
                     '<td>' + (f.accepted ? '<span style="font-size:11px;">' + _esc(f.accepted.by) + '</span> <a href="#" style="font-size:10px;" onclick="msg3xLhirfAccept(\'' + f.id + '\'); return false;">withdraw</a>'

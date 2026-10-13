@@ -1,0 +1,9 @@
+{
+  "name": "safetylab-sysml-checks",
+  "private": true,
+  "description": "Two independent SysML v2 validators the Safety Lab SysML v2 tests run every export through (13 Oct 2026, same pins as Sys Lab). Install with: npm install (in this folder). Not shipped with Safety Lab. The OpenMBEE service binary for this computer comes with @openmbee/opensysml (macOS, Linux and Windows builds).",
+  "dependencies": {
+    "sysml-validate": "0.46.0",
+    "@openmbee/opensysml": "0.9.2"
+  }
+}

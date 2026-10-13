@@ -291,7 +291,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
 
                 <!-- Save Changes control. Autosaves to this browser continuously; click to commit
                      a durable save (.json to your folder + cloud when signed in) once edits exist. -->
-                <div class="save-indicator" id="save-indicator" role="button" tabindex="0" onclick="commitSaveChanges()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();commitSaveChanges();}" title="Autosaved to this browser. Click to save changes (writes the .json locally and to the cloud when signed in).">
+                <div class="save-indicator" id="save-indicator" role="button" tabindex="0" onclick="commitSaveChanges({explicit:true})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();commitSaveChanges({explicit:true});}" title="All changes are saved.">
                     <span class="save-indicator-dot"></span>
                     <span id="save-indicator-text">All changes saved</span>
                 </div>
@@ -912,6 +912,13 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         </div>
                     </div>
                 </div>
+                <!-- 13 Oct 2026 (fix G) — fault tree logic: NOT gates (non-coherent logic), off by default. -->
+                <div style="margin-top: var(--s-4); padding: 12px 14px; border: 1px solid var(--color-border-hair); border-radius: var(--r-md); background: var(--color-surface-2);">
+                    <label style="display:flex; align-items:center; gap:8px; margin-bottom: 6px; cursor:pointer;"><input type="checkbox" id="proj-allow-not" onchange="SLFtaEdit.setNonCoherent(this.checked)" style="margin:0; width:auto;"> Allow NOT gates in fault trees (non-coherent logic)</label>
+                    <div style="font-size: 12px; color: var(--color-text-secondary); line-height: 1.5;">
+                        Off by default. Aviation fault trees are normally coherent: a failure never makes the system safer, so every gate is AND, OR, voting and the like. Turn this on only when the analysis needs "this event does not occur" logic. P(top) stays exact; cut sets for trees that use NOT are listed as prime implicants, where "NOT X" means X does not occur.
+                    </div>
+                </div>
             </div>
 
             <h4 style="color: var(--header-color); border-bottom: 1px solid var(--border-primary); padding-bottom: 5px;">Qualitative Severity Classifications</h4>
@@ -1325,7 +1332,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <label>Threat Description / Propagation Path</label><input type="text" id="pra-desc" placeholder="Describe the physical trajectory or zone of influence...">
                     </div>
                     <div>
-                        <label>Affected Systems / Components</label><input type="text" id="pra-systems" placeholder="e.g., Hyd Sys A, Primary Flight Control Comm">
+                        <label>Affected Systems / Components (notes)</label><input type="text" id="pra-systems" placeholder="Notes only. Link the exposed items, zones and systems below.">
+                        <div class="ml-form-field" data-ml-form="pra"></div>
                         <label>Impact on Continued Safe Flight & Landing (CSFL)</label><input type="text" id="pra-csfl-impact" placeholder="Will this impact the ability to safely land?">
                         <label>Mitigation / Protection Strategy</label><input type="text" id="pra-mitigation" placeholder="e.g., Kevlar shielding, redundant routing outside 15-deg cone">
                     </div>
@@ -1352,9 +1360,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button id="btn-cancel-pra" onclick="cancelEdit('pra')" style="display:none; background:#94a3b8;">Cancel Edit</button>
                 </div>
             </div>
+            <!-- 13 Oct 2026 (analysis model links): how many rows are linked to the model, with the exact-match action (model_links.js). -->
+            <div data-ml-banner-for="pra"></div>
             <div style="overflow-x: auto;">
                 <table id="pra-table">
-                    <thead><tr><th>Actions</th><th>PRA ID</th><th>Threat Source</th><th>Propagation Path</th><th>Target Systems</th><th>CSFL Impact Analysis</th><th>Affected Zones</th><th>Exposed Functions</th><th>Mitigation Strategy</th><th>Scenarios</th></tr></thead>
+                    <thead><tr><th>Actions</th><th>PRA ID</th><th>Threat Source</th><th>Propagation Path</th><th>Model links</th><th>CSFL Impact Analysis</th><th>Affected Zones</th><th>Exposed Functions</th><th>Mitigation Strategy</th><th>Scenarios</th></tr></thead>
                     <tbody id="pra-body"></tbody>
                 </table>
             </div>
@@ -1381,7 +1391,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <div>
                         <label>Zone ID</label><input type="text" id="zsa-zone-id" placeholder="e.g., Zone 110 (Lower Half Fuselage)">
                         <label>Zone Description / Boundary</label><input type="text" id="zsa-desc" placeholder="Describe the physical boundaries of this zone...">
-                        <label>Installed Equipment & Routing</label><input type="text" id="zsa-equip" placeholder="e.g., Wire Bundle W1, Hyd Line B, Fuel Line Crossfeed">
+                        <label>Installed Equipment & Routing (notes)</label><input type="text" id="zsa-equip" placeholder="Routing notes (wire bundles, lines). Link the zone and its items below.">
+                        <div class="ml-form-field" data-ml-form="zsa"></div>
                     </div>
                     <div>
                         <label>Worst Case Severity in Zone</label>
@@ -1466,9 +1477,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button id="btn-cancel-zsa" onclick="cancelEdit('zsa')" style="display:none; background:#94a3b8;">Cancel Edit</button>
                 </div>
             </div>
+            <div data-ml-banner-for="zsa"></div>
             <div style="overflow-x: auto;">
                 <table id="zsa-table">
-                    <thead><tr><th>Actions</th><th>Zone ID</th><th>Boundaries</th><th>Installed Equipment</th><th>Worst Severity</th><th>Housed Functions</th><th>Interference Profile</th><th>Separation & Mitigations</th><th>Status</th><th>Assessed (by · method · date)</th></tr></thead>
+                    <thead><tr><th>Actions</th><th>Zone ID</th><th>Boundaries</th><th>Model links</th><th>Worst Severity</th><th>Housed Functions</th><th>Interference Profile</th><th>Separation & Mitigations</th><th>Status</th><th>Assessed (by · method · date)</th></tr></thead>
                     <tbody id="zsa-body"></tbody>
                 </table>
             </div>
@@ -2189,6 +2201,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <input type="text" id="fmea-next-effect" placeholder="e.g., Loss of channel A; auto-reversion to channel B">
                         <label>End Effect <span style="font-weight: 400; color: var(--color-text-tertiary); text-transform: none; letter-spacing: 0;">— top-level (aircraft) effect</span></label>
                         <input type="text" id="fmea-end-effect" placeholder="e.g., Increased crew workload; degraded handling; safe to continue">
+                        <div class="ml-form-field" data-ml-form="fmea"></div>
                     </div>
                 </div>
 
@@ -2242,6 +2255,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 </div>
             </div>
 
+            <div data-ml-banner-for="fmea"></div>
             <table id="fmea-table">
                 <thead id="fmea-table-head"></thead>
                 <tbody id="fmea-body"></tbody>
@@ -2387,7 +2401,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <div class="toolbar-group"><button id="btn-add-top" onclick="addTopEvent()" style="background: #0ea5e9;">+ Add Top Event</button></div>
                         <div class="toolbar-divider"></div>
                         <div class="toolbar-group">
-                            <select id="select-gate-type" class="toolbar-select" disabled><option value="AND">AND Gate</option><option value="OR">OR Gate</option><option value="XOR">XOR Gate</option><option value="VOTING">VOTING Gate</option><option value="INHIBIT">INHIBIT Gate</option><option value="TRANSFER">Transfer Gate</option><optgroup label="Dynamic"><option value="PAND">PAND — Priority AND</option><option value="SPARE">SPARE — Spare (cold / warm)</option><option value="FDEP">FDEP — Functional dependency</option></optgroup></select>
+                            <select id="select-gate-type" class="toolbar-select" disabled><option value="AND">AND Gate</option><option value="OR">OR Gate</option><option value="XOR">XOR Gate</option><option value="VOTING">VOTING Gate</option><option value="INHIBIT">INHIBIT Gate</option><option value="TRANSFER">Transfer Gate</option><optgroup label="Dynamic"><option value="PAND">PAND — Priority AND</option><option value="SPARE">SPARE — Spare (cold / warm)</option><option value="SEQ">SEQ — Sequence enforcing</option><option value="FDEP">FDEP — Functional dependency</option></optgroup><optgroup label="Non-coherent (project setting)" class="fta-opt-not-group" hidden><option value="NOT" class="fta-opt-not" disabled>NOT — Negation</option></optgroup></select>
                             <button id="btn-add-gate" onclick="addSelectedGate()" disabled>+ Add Gate</button>
                         </div>
                         <div class="toolbar-divider"></div>
@@ -2414,6 +2428,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         </div>
                         <div class="toolbar-divider"></div>
                         <div class="toolbar-group">
+                            <button id="btn-disconnect" onclick="SLFtaEdit.disconnectSelected()" disabled style="background: #475569;" title="Take the selected node and its branch off its gate. It stays on the page, unattached and out of the math, until you drag its round handle onto a gate.">⤫ Disconnect</button>
                             <button id="btn-delete" onclick="deleteSelectedNode()" disabled class="btn-red" title="Delete the selected node">✕ Delete Node</button>
                         </div>
                     </div>
@@ -2423,7 +2438,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <div class="cfg-drawer-head" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <h4 style="margin:0; color: var(--header-color);">Gate/Event Properties: <span id="config-node-id"></span> <span id="config-common-mode-hint" style="font-size: 0.75em; color: #b45309; font-weight: 600; margin-left: 6px;"></span> <button id="btn-make-independent" type="button" onclick="makeNodeIndependent()" title="Break the common-mode link — give this node a fresh logical ID so it no longer shares failures with the other instances" style="display: none; margin-left: 8px; padding: 3px 9px; font-size: 11px; background: #f59e0b; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Make Independent</button></h4>
                             <div class="action-group" style="display: flex; align-items: center; gap: 8px;">
-                                <button type="button" id="node-drawer-save" class="node-drawer-save" onclick="commitSaveChanges()" title="Save changes (writes the .json locally and to the cloud when signed in)">Save Changes</button>
+                                <button type="button" id="node-drawer-save" class="node-drawer-save" onclick="commitSaveChanges({explicit:true})" title="Save your changes (Ctrl+S)">Save</button>
                                 <!-- Phase 57 — Thread + tree navigation folded into a kebab (reuses the row-action menu). -->
                                 <div class="row-actions">
                                     <button type="button" class="row-kebab" aria-label="Node actions" aria-haspopup="true" onclick="toggleRowMenu(event)">⋮</button>
@@ -2448,7 +2463,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                                 <label>Change Type</label>
                                 <select id="config-node-type" onchange="changeNodeType()" style="margin-bottom:0;">
                                     <optgroup label="Gates"><option value="AND">AND Gate</option><option value="OR">OR Gate</option><option value="XOR">XOR Gate</option><option value="VOTING">VOTING Gate</option><option value="INHIBIT">INHIBIT Gate</option><option value="TRANSFER">Transfer Gate</option></optgroup>
-                                    <optgroup label="Dynamic Gates"><option value="PAND">PAND — Priority AND</option><option value="SPARE">SPARE — Spare (cold / warm)</option><option value="FDEP">FDEP — Functional dependency</option></optgroup>
+                                    <optgroup label="Dynamic Gates"><option value="PAND">PAND — Priority AND</option><option value="SPARE">SPARE — Spare (cold / warm)</option><option value="SEQ">SEQ — Sequence enforcing</option><option value="FDEP">FDEP — Functional dependency</option></optgroup><optgroup label="Non-coherent (project setting)" class="fta-opt-not-group" hidden><option value="NOT" class="fta-opt-not" disabled>NOT — Negation</option></optgroup>
                                     <optgroup label="Events"><option value="basic">Basic Event</option><option value="undeveloped">Undeveloped</option><option value="conditioning">Conditioning</option><option value="house">House Event</option></optgroup>
                                 </select>
                             </div>
@@ -2701,6 +2716,24 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                              left inside the field row, which has no flex-wrap, so it merely shrank and hugged
                              the left. Standing on its own at the foot of the panel it gets the modal's full
                              width and wraps like ordinary prose. -->
+                        <!-- 13 Oct 2026 (fix G) — Linked model element: the item (LRU) that realizes this node (realizedByItemId),
+                             its SysML v2 reference (sysmlRef) and the stable model element ID. Filled by SLFtaEdit.fillPanel. -->
+                        <div id="config-model-link" style="display:none; margin:16px 0 0 0; padding:10px 12px; border:1px solid var(--color-border-hair); border-radius:var(--r-md); background:var(--color-surface-2);">
+                            <label style="margin-bottom:6px; font-weight:700;">Linked model element</label>
+                            <div style="display:grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr); gap:10px; align-items:end;">
+                                <div>
+                                    <label for="config-model-item" style="font-size:11.5px;">Item (LRU) that realizes it</label>
+                                    <select id="config-model-item" onchange="SLFtaEdit.setItemLink(this.value)" style="margin-bottom:0;"></select>
+                                    <div id="config-model-item-empty" style="display:none; font-size:11px; color:var(--color-text-tertiary); margin-top:4px;">No items yet. Add items (LRUs) in a system workspace to link them here.</div>
+                                </div>
+                                <div>
+                                    <label for="config-model-sysml" style="font-size:11.5px;">SysML v2 element (qualified name)</label>
+                                    <input type="text" id="config-model-sysml" placeholder="for example Aircraft::Brakes::BCU" onchange="SLFtaEdit.setSysmlRef(this.value)" style="margin-bottom:0;">
+                                </div>
+                            </div>
+                            <div style="font-size:11px; color:var(--color-text-tertiary); margin-top:6px;">Model element ID: <span id="config-model-eid" class="u-mono"></span></div>
+                            <div id="config-model-free" style="display:none; font-size:11.5px; color:#b45309; font-weight:600; margin-top:6px;">This node is not connected to the top event, so it is not in the math. Drag its round handle onto a gate to connect it.</div>
+                        </div>
                         <div id="config-event-notice-row" style="flex-basis:100%; width:100%; display:block; margin:16px 0 0 0;">
                             <div id="config-event-usage" style="font-size:12px; line-height:1.6; max-width:100%; overflow-wrap:anywhere;"></div>
                             <div id="config-event-suggest" style="font-size:12px; line-height:1.6; margin-top:6px; max-width:100%; overflow-wrap:anywhere;"></div>
@@ -2723,6 +2756,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                                 <button type="button" onclick="ftaTreeSearch(false)" title="Next match" aria-label="Next match">↵</button>
                             </div>
                             <button id="btn-zoom-selection" class="canvas-floating-btn" onclick="ftaZoomToSelection()" title="Zoom in and center on the selected node">&#8857; Selection</button>
+                            <button id="btn-fta-overview" class="canvas-floating-btn" onclick="SLFtaEdit.toggleMinimap()" aria-pressed="false" title="Show or hide the overview map of the whole tree (click or drag the map to move the view)">&#9638; Overview</button>
                             <button id="btn-fullscreen" class="canvas-floating-btn" onclick="toggleFTAFullscreen()" title="Toggle fullscreen workspace (Esc to exit)">Fullscreen</button>
                             <button id="btn-reconfigure-layout" class="canvas-floating-btn" onclick="reconfigureActiveTreeLayout()" title="Clear all manual drag offsets and snap the active tree back to its auto-laid-out positions">⤢ Reconfigure Layout</button>
                             <button class="canvas-floating-btn" onclick="fitToScreen()" title="Fit the whole tree into the visible canvas">[ &#8644; ] Fit to Workspace</button>
@@ -2871,7 +2905,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
         <!-- C4 — Event Tree Analysis (sequence-consequence lane). -->
         <div id="view-eta" style="display: none;">
             <div class="header-with-export"><h3>Event Tree Analysis</h3></div>
-            <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">Initiator → ordered barriers → every success/failure path enumerated with exact product arithmetic (Σp = 1, machine-checked). Severity calls are signed; outcomes linked to failure conditions are reconciled against the FHA classification — disagreement is a named finding (INV-27). Frequencies and barrier probabilities are your values.</p>
+            <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">An initiating event followed through its headings (barriers and pivotal events) to every end state, drawn by hand in IEC 62502 notation: success and failure branches, headings with more outcomes, headings that do not apply, sequences that end early and transfers to other event trees. Every sequence is computed by exact product arithmetic (the sequence probabilities add up to 1, machine-checked). End states linked to failure conditions are reconciled against the FHA classification, and a disagreement is a named finding (INV-27). Frequencies and probabilities are your values.</p>
             <div id="eta-host"></div>
         </div>
 
@@ -4083,11 +4117,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- LOD-1 — SLLod: semantic zoom, map-tile aggregation below the zoom threshold (display lane; born modular). -->
     <script src="lod_zoom.js?v=1.1" defer></script>
     <!-- DSV-1 — SLDissimilar: dissimilar verification, direct gate-logic MC cross-checks the exact engine (display lane; seeded; journaled). -->
-    <script src="mc_crosscheck.js?v=1.0" defer></script>
+    <script src="mc_crosscheck.js?v=1.1" defer></script>
     <!-- UNC-1 — SLUnc: P05-P95 uncertainty bands on the budget ledger (user-entered EFs only; idle-computed; display lane). -->
     <script src="unc_bands.js?v=1.1" defer></script>
     <script src="paginate.js?v=1.3" defer></script>
-    <script src="fta_engine.js?v=1.10" defer></script>
+    <script src="fta_engine.js?v=1.11" defer></script>
     <!-- 13 Oct 2026 (math audit F1/F8): SLTopBasis: one exact top-event number and one per-flight-hour time basis for every pass/fail screen. -->
     <script src="top_basis.js?v=1.0" defer></script>
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
@@ -4103,7 +4137,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="importers.js?v=1.9" defer></script>
     <script src="core_modules.js?v=1.11" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
-    <script src="fta_quant_modules.js?v=66.26" defer></script>
+    <script src="fta_quant_modules.js?v=66.28" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
     <script src="event_reuse.js?v=1.2" defer></script>
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
@@ -4119,23 +4153,25 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.0" defer></script>
     <script src="node_identity_ui.js?v=1.5" defer></script>
-    <script src="fta_view_modules.js?v=66.45" defer></script>
+    <script src="fta_view_modules.js?v=66.46" defer></script>
+    <!-- 13 Oct 2026 (fix G) — SLFtaEdit: the fault tree built by hand (toolbox, drawn connections, unattached nodes, canvas λ/P, model link, overview map) and the ONE change path (SLFtaEdit.applyEdit). After fta_view_modules.js. -->
+    <script src="fta_canvas_edit.js?v=1.0" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
-    <script src="data_ops_modules.js?v=66.51" defer></script>
+    <script src="data_ops_modules.js?v=66.53" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.43" defer></script>
+    <script src="support_modules.js?v=66.44" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.23" defer></script>
+    <script src="helpers_modules.js?v=3.24" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.2" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.55" defer></script>
+    <script src="bindings_modules.js?v=1.56" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.77" defer></script>
-    <script src="safety_lab.js?v=65.62" defer></script>
+    <script src="misc_fn_modules.js?v=66.78" defer></script>
+    <script src="safety_lab.js?v=65.63" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4147,10 +4183,16 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          never hit TDZ. -->
     <script src="project_stores.js?v=1.0" defer></script>
     <script src="crdt_gc.js?v=1.1" defer></script>
-    <script src="crdt_sync.js?v=2.6" defer></script>
+    <script src="crdt_sync.js?v=2.7" defer></script>
     <script src="save_watch.js?v=1.2" defer></script>
     <script src="data_change.js?v=1.0" defer></script>
+    <!-- 13 Oct 2026 (analysis model links): model_links.js links every analysis row to the model elements it is about; loads after data_change.js (its cache key) and before the worksheet decorators. -->
+    <script src="model_links.js?v=1.0" defer></script>
     <script src="render_pass.js?v=1.0" defer></script>
+    <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
+         and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
+    <script src="change_ack.js?v=1.0" defer></script>
+    <script src="save_state.js?v=1.0" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.1" defer></script>
@@ -4162,11 +4204,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Q7 (26 Sep 2026) — the critical AND-gate test that scopes the CMA: which independence claims the
          failure condition's budget depends on (as OR / as certain, BDD-exact). Panel on the CMA page, a stage on
          the Golden Thread, INV-58. Loads after qual_arg.js; wraps renderCMA and _renderGoldenThread lazily. -->
-    <script src="critical_gates.js?v=1.1" defer></script>
+    <script src="critical_gates.js?v=1.2" defer></script>
     <!-- 27 Sep 2026 (Q1-Q3) — assumption → requirement, rationale required, source-analysis tag. -->
     <script src="req_basis.js?v=1.1" defer></script>
     <!-- 27 Sep 2026 (Q4-Q6) — alert independence, crew response credit, engine / propeller severity anchors. -->
-    <script src="crew_credit.js?v=1.0" defer></script>
+    <script src="crew_credit.js?v=1.1" defer></script>
     <!-- 27 Sep 2026 (Q8) — requirement wording check + EARS templates. -->
     <script src="req_lint.js?v=1.0" defer></script>
     <!-- 27 Sep 2026 (Q11) — PRA survivability framing: taken as certain, nature groups, minimization argument. -->
@@ -4177,14 +4219,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.36" defer></script>
+    <script src="assurance_modules.js?v=1.37" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
     <script src="autonomy_metrics.js?v=0.3" defer></script>
-    <script src="reports.js?v=66.16" defer></script>
+    <script src="reports.js?v=66.17" defer></script>
     <!-- Phase F — R&M module (born modular; wraps switchTab, zero monolith edits). Pro+ gated. -->
-    <script src="ram_modules.js?v=1.9" defer></script>
+    <script src="ram_modules.js?v=1.10" defer></script>
     <!-- FRACAS-2 — the incident ledger (case manager) under the statistical FRACAS;
          events feed failure counts, closure requires a named effectiveness verifier. -->
     <script src="fracas_ledger.js?v=0.3" defer></script>
@@ -4193,12 +4235,16 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          (seeded per MC-SEED). A forecast, not a demonstration: claimed-lane by construction. -->
     <script src="ops_mc.js?v=0.2" defer></script>
     <!-- Phase F4 — MSG-3 scheduled-maintenance analysis (born modular; pushes into the RAM ledger). Pro+ gated. -->
-    <script src="msg3_module.js?v=1.6" defer></script>
+    <script src="msg3_module.js?v=1.7" defer></script>
+    <!-- 13 Oct 2026: SLDiagramEditor, the one diagram editor core (toolbox, connect, move, resize, undo, zoom, pan, full screen, overview, read only). Loads before every diagram built on it: rbd_module, cea_graph, stpa_panel, event_trees, bowtie, markov. -->
+    <script src="diagram_editor.js?v=1.3" defer></script>
     <!-- Phase F5-F7 — the complete R&M analytics suite (born modular). Pro+ gated. -->
-    <script src="rel_analytics.js?v=1.4" defer></script>
-    <script src="mx_analytics.js?v=1.2" defer></script>
-    <script src="rbd_module.js?v=1.2" defer></script>
-    <script src="tol_derate_module.js?v=1.2" defer></script>
+    <script src="rel_analytics.js?v=1.5" defer></script>
+    <script src="mx_analytics.js?v=1.3" defer></script>
+    <!-- 13 Oct 2026: rbd_net.js, the network reliability block diagram engine (IEC 61078: series, parallel, k-out-of-n, standby, bridges, repeated blocks, exact by decision diagram); loads right before rbd_module.js, which draws it on the diagram editor. -->
+    <script src="rbd_net.js?v=1.0" defer></script>
+    <script src="rbd_module.js?v=2.0" defer></script>
+    <script src="tol_derate_module.js?v=1.3" defer></script>
     <!-- Phase F9 — deterministic derivation engine (zero AI; wraps renders, edits nothing). -->
     <script src="ram_derive.js?v=1.2" defer></script>
     <!-- Backlog #8 — closed-form steady-state availability (labeled ESTIMATE lane; wraps the Ai/Ao ledger + RBD renders, edits nothing). -->
@@ -4214,26 +4260,26 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase P2 — problem reports / OPRs (born modular; upgrades the SSA E.4.d gate at runtime). -->
     <script src="problem_reports.js?v=1.2" defer></script>
     <!-- Phase P7 — MMEL/TLD dispatch analysis (born modular; evaluated through the live trees). Pro+ gated. -->
-    <script src="mmel_module.js?v=1.4" defer></script>
+    <script src="mmel_module.js?v=1.5" defer></script>
     <script src="mel_fha_crosscheck.js?v=1.0" defer></script>
     <!-- Phase P6 — modification impact wizard (born modular; deterministic closure). -->
     <script src="mod_impact.js?v=1.10" defer></script>
     <!-- Phase P4 — validation-vs-verification split (born modular; §5.4 discipline). -->
     <script src="vv_validation.js?v=2.5" defer></script>
     <!-- Phase P5 — CEA dependency graph (born modular; graph vs interdependence reconciliation). -->
-    <script src="cea_graph.js?v=1.2" defer></script>
+    <script src="cea_graph.js?v=1.3" defer></script>
     <!-- Phase P8 — safety-significant events export (born modular; in-service watch list). -->
     <script src="sse_export.js?v=1.3" defer></script>
     <!-- Phase P9 — Items/LRU collapse into system workspaces (born modular; injected ws sub-tab). -->
     <script src="items_workspace.js?v=1.0" defer></script>
     <!-- Phase R series — R&M depth build (born modular; math verified in the regression suite). -->
     <script src="rel_mle.js?v=1.1" defer></script>
-    <script src="rbd_mc.js?v=1.2" defer></script>
-    <script src="rel_frameworks.js?v=1.2" defer></script>
-    <script src="lcc_module.js?v=1.2" defer></script>
+    <script src="rbd_mc.js?v=1.3" defer></script>
+    <script src="rel_frameworks.js?v=1.3" defer></script>
+    <script src="lcc_module.js?v=1.3" defer></script>
     <script src="sneak_module.js?v=1.3" defer></script>
-    <script src="swrel_module.js?v=1.2" defer></script>
-    <script src="msg3_ext.js?v=1.2" defer></script>
+    <script src="swrel_module.js?v=1.3" defer></script>
+    <script src="msg3_ext.js?v=1.3" defer></script>
     <script src="ram_settings.js?v=1.3" defer></script>
     <!-- RAM cockpit — seventh dashboard card (continuous track; feeds the gates). -->
     <script src="ram_cockpit.js?v=1.1" defer></script>
@@ -4271,7 +4317,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Recovery ring + session resume (born modular; rides the autosave cadence). -->
     <script src="session_resume.js?v=1.4" defer></script>
     <!-- Continuous cloud autosave + first-edit project provisioning (born modular; wraps _writeAutosave). -->
-    <script src="cloud_sync.js?v=2.3" defer></script>
+    <script src="cloud_sync.js?v=2.4" defer></script>
     <!-- ReqIF import — Polarion et al. (born modular; own XML parser; idempotent). -->
     <script src="reqif_import.js?v=1.4" defer></script>
     <!-- M8 — status-back: verdicts return to Jama/Polarion/DOORS via ReqIF. -->
@@ -4280,6 +4326,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="live_bridge.js?v=1.2" defer></script>
     <!-- M5 — Cameo/SysML XMI import (draft socket awaiting the program sample). -->
     <script src="xmi_import.js?v=0.9" defer></script>
+    <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab
+         library (sysml_safety_lib.sysml), and the "Model element" link field (SLSysML, see sysml_model.js). -->
+    <script src="sysml_model.js?v=1.3" defer></script>
     <!-- Q5 — save/load round-trip proof (born modular; the pipeline proves itself). -->
     <script src="roundtrip_proof.js?v=1.1" defer></script>
     <script src="ccf_similarity.js?v=1.4" defer></script>
@@ -4294,7 +4343,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          agreement asserted (INV-33, hard) before anything shows. Disagreement = refusal.
          MUST load after invariants.js (invRegister) and after rbd_module.js (_rbdR/_rbdParseDsl);
          belt-and-braces retry inside the module besides. -->
-    <script src="rbd_xcheck.js?v=0.2" defer></script>
+    <script src="rbd_xcheck.js?v=0.3" defer></script>
     <!-- MARKOV-NDF — the 3-state Normal/Degraded/Failed discrete template on the Markov page:
          rows must sum to 1, steady state solved twice (elimination + power iteration), worked
          receipt printed. Degraded = dispatch thinking; the rate models stay the cert path. -->
@@ -4304,13 +4353,13 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          per-table citations; the engine refuses without it. -->
     <script src="ram_predict_data.js?v=0.1" defer></script>
     <script src="ram_predict.js?v=0.6" defer></script>
-    <script src="ram_hub.js?v=1.2" defer></script>
+    <script src="ram_hub.js?v=1.3" defer></script>
     <script src="engine_selftest.js?v=1.1" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
     <script src="model_checks.js?v=1.05" defer></script>
-    <script src="tree_warm.js?v=1.3" defer></script>
+    <script src="tree_warm.js?v=1.4" defer></script>
     <script src="fault_sim.js?v=1.22" defer></script>
-    <script src="tab_guard.js?v=1.0" defer></script>
+    <script src="tab_guard.js?v=1.1" defer></script>
     <script src="journal.js?v=1.1" defer></script>
     <script src="change_journal_sync.js?v=1.2" defer></script>
     <script src="pssa_ssa_pages.js?v=1.1" defer></script>
@@ -4319,8 +4368,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="hf_ergo.js?v=0.2" defer></script>
     <script src="hf_assumptions.js?v=0.9" defer></script>
     <script src="hf_register_panel.js?v=1.9" defer></script>
-    <script src="hf_analyses.js?v=1.18" defer></script>
-    <script src="field_defs.js?v=1.6" defer></script>
+    <script src="hf_analyses.js?v=1.19" defer></script>
+    <script src="field_defs.js?v=1.7" defer></script>
     <script src="lane_ai_bar.js?v=1.3" defer></script>
     <script src="hf_evidence.js?v=0.2" defer></script>
     <!-- INV-HFW — crew workload ↔ FHA severity consistency (born modular; registers into the invariants sweep). -->
@@ -4335,7 +4384,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="corpus_retrieve.js?v=1.4" defer></script>
     <!-- STPA system lane — engine (deployed inert since v0.1) + the walkthrough panel that
          makes it user-visible. Registers INV-32 into the invariant sweep. -->
-    <script src="stpa_core.js?v=1.2" defer></script>
+    <script src="stpa_core.js?v=1.3" defer></script>
     <!-- SORA 2.5 engine (EU 2019/947 Specific category) — deployed INERT like stpa_core
          was: verified calculators (iGRC / mitigations / SAIL / adjacent area) + honest
          refusals for the not-yet-verified tables. Panel/walkthrough is the next increment.
@@ -4358,8 +4407,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="demo_picker.js?v=6" defer></script>
     <script src="first_run.js?v=3" defer></script>
     <script src="continue_session.js?v=1.1" defer></script>
-    <script src="stpa_panel.js?v=1.44" defer></script>
-    <script src="stpa_report.js?v=1.2" defer></script>
+    <script src="stpa_panel.js?v=1.45" defer></script>
+    <script src="stpa_report.js?v=1.3" defer></script>
     <script src="stpa_ai_apply.js?v=0.2" defer></script>
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
          Loads after the panels whose tabs it gates; wraps switchTab last-ish so its guard
@@ -4389,7 +4438,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zsa_walkthrough.js?v=1.4" defer></script>
     <script src="cma_walkthrough.js?v=1.31" defer></script>
     <!-- 13 Oct 2026 (fix 6): live common cause detection + forced Accept/Ignore decision + decision log. -->
-    <script src="cma_live.js?v=1.0" defer></script>
+    <script src="cma_live.js?v=1.1" defer></script>
     <script src="pra_library.js?v=1.3" defer></script>
     <script src="pra_canvas.js?v=1.22" defer></script>
     <script src="msg3_zonal.js?v=1.21" defer></script>
@@ -4427,11 +4476,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="do_credit.js?v=1.0" defer></script>
     <script src="do160_ledger.js?v=1.0" defer></script>
     <script src="ewis_lane.js?v=1.0" defer></script>
-    <script src="event_trees.js?v=1.56" defer></script>
+    <script src="event_trees.js?v=2.0" defer></script>
     <!-- Bow-Tie Analysis — unified FTA↔ETA. Born-modular: creates its own view + nav,
          joins the fault tree's BDD-exact top probability to the event tree initiator,
          checks cross-side common cause against cut sets, lints generic barriers. -->
-    <script src="bowtie.js?v=2.72" defer></script>
+    <script src="bowtie.js?v=3.0" defer></script>
     <!-- Global UI text-size control (A−/A/A+, Ctrl±). Born-modular; scales the whole
          app via body zoom, persisted. Addresses the "text too small" default. -->
     <script src="text_scale.js?v=2.2" defer></script>
@@ -4451,12 +4500,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          it also re-wraps on a short poll, so defer order is belt and braces. -->
     <script src="nav_return.js?v=1.0" defer></script>
     <script src="fta_freq.js?v=1.34" defer></script>
-    <script src="markov_ctmc.js?v=1.3" defer></script>
-    <script src="mil217f_stress.js?v=1.1" defer></script>
+    <script src="markov_ctmc.js?v=1.4" defer></script>
+    <!-- 13 Oct 2026: markov_diagram.js, the Markov state diagram (IEC 61165) on the diagram editor, the second view of each Markov model beside its tables; loads right after markov_ctmc.js. -->
+    <script src="markov_diagram.js?v=1.0" defer></script>
+    <script src="mil217f_stress.js?v=1.2" defer></script>
     <!-- Jama live bridge — push FCs into Jama as items, pull the relationship
          graph back; humans assert the links in Jama, we automate the rest. -->
-    <script src="jama_bridge.js?v=1.7" defer></script>
-    <script src="reqif_bridge.js?v=1.3" defer></script>
+    <script src="jama_bridge.js?v=1.8" defer></script>
+    <script src="reqif_bridge.js?v=1.4" defer></script>
     <!-- SPP toolchain declarations — the plan names the tools, interfaces wire themselves. -->
     <script src="toolchain_plan.js?v=1.6" defer></script>
     <!-- Combined & conditioned FCs — M6 (A.8.3-5). Born-modular: combined-FC rows,
@@ -4471,7 +4522,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.16" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.70" defer></script>
+    <script src="ai_loader.js?v=8.71" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.2" defer></script>

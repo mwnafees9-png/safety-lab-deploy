@@ -305,7 +305,9 @@ check('panel: others table + detail editor + precedence authoring + responsibili
 check('panel: authority-aware layout is hierarchical when ranks differ (semantic, not decorative)',
   /authority-aware layout/.test(panel) && /place\(top, 12\)/.test(panel) && /place\(rest, 96\)/.test(panel));
 check('panel: rmNode guards others edges, precedence rules and responsibilities',
-  /d\.cs\.others\)\.some/.test(panel.replace(/\n/g, ' ')) || /concat\(d\.cs\.feedbacks, d\.cs\.others\)/.test(panel));
+  /d\.cs\.others\)\.some/.test(panel.replace(/\n/g, ' ')) || /concat\(d\.cs\.feedbacks, d\.cs\.others\)/.test(panel) ||
+  // 13 Oct 2026 (panel v1.1): the guard also covers the new actuation / measurement links
+  /concat\(d\.cs\.feedbacks, d\.cs\.others, d\.cs\.actuations \|\| \[\], d\.cs\.measurements \|\| \[\]\)\.some/.test(panel));
 check('seed case carries W4 detail (authority + desc + process model) without losing the INV-32 demo',
   /authority: 1/.test(panel) && /authority: 2/.test(panel) && /DELIBERATELY omitted/.test(panel));
 

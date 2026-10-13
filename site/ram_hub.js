@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): the hub shows how many R&M rows link to their model elements, with the exact-match action; see tests/regression_analysis_links_20261013b.test.js
 // ============================================================================
 // ram_hub.js — v1.0 — the R&M lane's front door (30 Aug 2026, Waqas: "we need
 // to make the RAM and HF interface far more intuitive").
@@ -182,6 +183,16 @@
             '<span><b style="color:var(--color-text-primary);">' + withData + '</b> of ' + counted + ' tracked analyses carry data in this project</span>' +
             (access ? '' : '<span style="color:#B7791F; font-weight:700;">Pro+ pages are marked — visible here so you can see what the lane covers.</span>') +
             '<a href="#" onclick="RAM_HUB.go(\'ram-settings\'); return false;" style="margin-left:auto; font-size:10.5px;">RAM Settings</a></div>';
+        // 13 Oct 2026 (analysis model links): how many R&M rows are linked to their item, with the
+        // one action that links typed names by exact match (model_links.js). Status only; the
+        // action is the engineer's click.
+        try {
+            var ML = (typeof window !== 'undefined') ? window.SLModelLinks : null;
+            if (ML) {
+                var keys = ML.ANALYSES.filter(function (a) { return a.group === 'R&M'; }).map(function (a) { return a.key; }).join(',');
+                html += '<div data-ml-banner-for="' + keys + '">' + ML.bannerHtml(keys.split(',')) + '</div>';
+            }
+        } catch (_) {}
         STAGES.forEach(function (s) {
             html +=
                 '<div class="rmh-stage" style="margin-bottom:20px;">' +

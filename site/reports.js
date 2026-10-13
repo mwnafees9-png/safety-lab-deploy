@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix G): SEQ counts as time-ordered gating in the report narrative. The tree pictures leave out the editing handles and unattached nodes (SLFtaEdit.exportClone). See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (math audit F8): the budget ledger table labels its units (/FH) and carries the per-flight values and the flight time. See tests/regression_perfh_basis_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // reports.js — Reports module (v1 namespace + v2 §56.9 section editor + v3 §56.10 AI
@@ -1498,7 +1499,7 @@ const Reports = (function() {
                 found.gates++;
                 if (n.gateType === 'AND') found.redundancy = true;
                 if (n.gateType === 'VOTING') found.voting = true;
-                if (n.gateType === 'INHIBIT' || n.gateType === 'PAND') found.monitor = true;
+                if (n.gateType === 'INHIBIT' || n.gateType === 'PAND' || n.gateType === 'SEQ') found.monitor = true;
             }
             const kids = n.children || n._children;
             if (kids) kids.forEach(c => walk(c, seen));
@@ -2790,7 +2791,7 @@ const Reports = (function() {
             if (!isActive) { out.push({ title: p.name || p.id, dataUrl: null, note: 'inactive' }); continue; }
             try {
                 const svgEl = document.getElementById('fta-svg');
-                const svgStr = new XMLSerializer().serializeToString(svgEl);
+                const svgStr = new XMLSerializer().serializeToString((typeof SLFtaEdit !== 'undefined' && SLFtaEdit.exportClone && svgEl && svgEl.id === 'fta-svg') ? SLFtaEdit.exportClone(svgEl) : svgEl);   // 13 Oct 2026 (fix G): no editing handles or unattached nodes in the picture
                 const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const img = new Image();
@@ -4025,7 +4026,7 @@ window.Reports = Reports;
             if (!isActive) { out.push({ title: p.name || p.id, dataUrl: null }); continue; }
             try {
                 const svgEl = document.getElementById('fta-svg');
-                const svgStr = new XMLSerializer().serializeToString(svgEl);
+                const svgStr = new XMLSerializer().serializeToString((typeof SLFtaEdit !== 'undefined' && SLFtaEdit.exportClone && svgEl && svgEl.id === 'fta-svg') ? SLFtaEdit.exportClone(svgEl) : svgEl);   // 13 Oct 2026 (fix G): no editing handles or unattached nodes in the picture
                 const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const img = new Image();

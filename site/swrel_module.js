@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): software items (CSCIs) link to the item they are about from the model picker (model_links.js); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // swrel_module.js — Phase R8: quantitative software reliability growth models
@@ -117,7 +118,9 @@
         if (times.length < 3) { showToast('Need at least three failure times.', 'warning', 4000); return; }
         const T = parseFloat(await slPrompt('Total execution time observed T (h, ≥ last failure):', String(Math.ceil(Math.max.apply(null, times) * 1.1))));
         if (!(T > 0) || T < Math.max.apply(null, times)) { showToast('T must cover the last failure.', 'warning', 4000); return; }
-        _store().cscis.push({ id: 'SW-' + Date.now(), name: name.trim(), times, T });
+        const rec = { id: 'SW-' + Date.now(), name: name.trim(), times, T };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('swrel', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().cscis.push(rec);
         _save(); renderSwrelPage();
     };
     window.swrelDelete = async function (id) {
@@ -155,7 +158,7 @@
                     const tTenth = go ? go.tToIntensity(go.intensity / 10) : null;
                     const capNote = tTenth != null && tTenth > 10 * c.T ? ' (> 10×T — beyond honest extrapolation)' : '';
                     return '<tr><td><a href="#" onclick="swrelDelete(\'' + c.id + '\'); return false;" style="color:#8E2A2A; font-size:11px;">✕</a></td>' +
-                        '<td><b>' + _esc(c.name) + '</b>' + ((go && go.lowConfidence) ? ' <span style="font-size:9.5px; color:#9A6200; font-weight:700;">LOW CONFIDENCE (n<8)</span>' : '') + '</td>' +
+                        '<td><b>' + _esc(c.name) + '</b>' + ((go && go.lowConfidence) ? ' <span style="font-size:9.5px; color:#9A6200; font-weight:700;">LOW CONFIDENCE (n<8)</span>' : '') + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('swrel', c) : '') + '</td>' +
                         '<td class="u-mono" style="font-size:11px;">' + c.times.length + ' · ' + c.T + 'h</td>' +
                         '<td class="u-mono">' + (go ? _f(go.residual, 2) : '—') + '</td>' +
                         '<td class="u-mono">' + (go ? go.intensity.toExponential(2) : '—') + '</td>' +

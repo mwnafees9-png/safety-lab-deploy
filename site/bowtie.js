@@ -1,17 +1,18 @@
+// 13 Oct 2026 (v3.0, hand-built bow-ties): the bow-tie is now DRAWN BY HAND on the one diagram editor (SLDiagramEditor) in the CCPS / Energy Institute notation: hazard, top event, threats, consequences, preventive and mitigative barriers on their pathways, escalation factors and escalation-factor barriers; barrier type, effectiveness, owner and the trace links as before; full screen, undo, SVG and SysML v2 export. The fault tree (left) and event tree (right) still join at the top event and generate either side as an editable shortcut; old bow-ties open drawn from their links, unchanged. See tests/regression_eta_bowtie_handbuild_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
-// bowtie.js — v1.0 — Bow-Tie Analysis: the unified FTA ↔ ETA view.
+// bowtie.js - v3.0 - Bow-Tie Analysis: the unified FTA and ETA view, drawn by hand.
 // BORN MODULAR: new file, zero monolith edits. Creates its own view + nav entry
 // and wraps switchTab, exactly like event_trees.js.
 //
-// A bow-tie is NOT a third data store — it is a COMPILED rendering that joins two
-// existing analyses around one shared "critical event":
+// A bow-tie joins two existing analyses around one shared "critical event":
 //   · LEFT  (prevention) = a Fault Tree. Its BDD-exact top probability IS the
 //     critical-event probability, and its minimal cut sets are the causal evidence.
 //   · CENTRE = the critical event (FTA top = bow-tie knot = ETA initiator).
 //   · RIGHT (mitigation) = an Event Tree. Its initiator frequency is SOURCED from
 //     the FTA top probability (not hand-entered) → P(consequence path) =
 //     P(critical event) · Π P(barrier outcome | prior).
+// v3.0: and it is a diagram of its own, drawn by hand (see "THE BOW-TIE, DRAWN BY HAND").
 //
 // Two deterministic checks the article ("Unified FTA–ETA for Bow-Tie") calls for:
 //   1. CROSS-SIDE COMMON CAUSE — a mitigation barrier that depends on a component
@@ -20,10 +21,13 @@
 //      and raise a finding (ties into the Independence Principle ledger).
 //   2. GENERIC-BARRIER LINT — a barrier with no trace to a requirement / component
 //      / ET barrier is "named but unproven" and is flagged.
+// v3.0 adds, for a hand-drawn bow-tie, the CCPS structure checks: a threat or
+// consequence with no pathway or no barrier on it, an escalation factor with no
+// escalation-factor barrier.
 //
-// Barriers are MANAGED OBJECTS (the only bow-tie-owned, editable data): side,
-// name, trace {kind, ref, logicalId}, principleId, evidenceRef, note. The FTA and
-// ETA structures stay edited in their own editors — single source of truth.
+// Barriers are MANAGED OBJECTS: side, name, trace {kind, ref, logicalId},
+// principleId, evidenceRef, note, and (v3.0) barrierType, effectiveness, owner, role.
+// The FTA and ETA structures stay edited in their own editors — single source of truth.
 // ============================================================================
 (function () {
     var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
@@ -104,6 +108,7 @@
                 const clone = JSON.parse(JSON.stringify(eta));
                 clone.initiator = clone.initiator || {};
                 clone.initiator.freq = fev.prob;           // THE JOIN — sourced, not typed
+                delete clone.initiator.fromTransfers;      // v3.0: the fault tree is the source here, not other trees
                 const ev = window.etaEvaluate(clone);
                 outcomes = ev.outcomes || []; etaClosed = !!ev.closed; etaOk = true;
             } catch (_) {}
@@ -111,14 +116,16 @@
         // findings
         const findings = [];
         const ccLids = [];   // cause-side elements a mitigation barrier also depends on
+        const ccBarrierIds = [];   // v3.0: which barriers the diagram rings red
         // 1. cross-side common cause: mitigative barrier traced to a cause cut-set element
         barriers.filter(b => b.side === 'mitigative').forEach(b => {
             const shared = [];
             _barrierCauseLids(bt, b).forEach(l => { if (fev.causeLids.has(l)) shared.push(l); });
             if (shared.length) {
                 shared.forEach(l => ccLids.push(l));
+                ccBarrierIds.push(b.id);
                 const via = (b.trace && b.trace.kind === 'eta') ? ' (followed through its event-tree barrier to the fault tree that implements it)' : '';
-                findings.push({ kind: 'common-cause', sev: 'high',
+                findings.push({ kind: 'common-cause', sev: 'high', barrierId: b.id,
                     text: 'Mitigation barrier "' + (b.name || '?') + '" depends on ' + shared.join(', ') + ', which also appears in a cause cut set' + via + '. The barrier is NOT independent of the critical event — a common-cause failure can defeat prevention and mitigation together. Auto-registered as a DEFEATED Independence Principle in the ledger.' });
             }
         });
@@ -126,10 +133,44 @@
         barriers.forEach(b => {
             const traced = b.trace && b.trace.kind && b.trace.kind !== 'none' && (b.trace.ref || b.trace.logicalId);
             if (!traced && !b.requirementId && !b.principleId) {
-                findings.push({ kind: 'generic-barrier', sev: 'advisory',
+                findings.push({ kind: 'generic-barrier', sev: 'advisory', barrierId: b.id,
                     text: 'Barrier "' + (b.name || '?') + '" (' + (b.side || '?') + ') has no trace to a requirement, component, or ET barrier — named but unproven.' });
             }
         });
+        // 3. v3.0: the bow-tie's own structure (CCPS), only for a bow-tie drawn by hand
+        //    (a bow-tie without a stored diagram keeps exactly the v2.x findings)
+        if (bt.diagram && Array.isArray(bt.diagram.elements)) {
+            const els = bt.diagram.elements, links = bt.diagram.links || [];
+            const nm = e => '"' + (e.name || '?') + '"';
+            const kindOf = id => { const e = els.find(x => x.id === id); if (e) return e.kind; const b = barriers.find(x => x.id === id); return b ? (b.role === 'escalation' ? 'efbarrier' : b.side) : null; };
+            els.filter(e => e.kind === 'threat').forEach(t => {
+                // walk the pathways from the threat: does any reach the top event, and through a barrier?
+                let reach = false, guarded = true; const seen = new Set([t.id]);
+                (function walk(id, through) {
+                    links.filter(l => l.kind === 'path' && l.from === id).forEach(l => {
+                        const k = kindOf(l.to);
+                        if (k === 'top') { reach = true; if (!through) guarded = false; return; }
+                        if (k === 'preventive' && !seen.has(l.to)) { seen.add(l.to); walk(l.to, true); }
+                    });
+                })(t.id, false);
+                if (!reach) findings.push({ kind: 'threat-unlinked', sev: 'advisory', text: 'Threat ' + nm(t) + ' has no pathway to the top event.' });
+                else if (!guarded) findings.push({ kind: 'threat-unprotected', sev: 'advisory', text: 'Threat ' + nm(t) + ' reaches the top event with no preventive barrier on its pathway.' });
+            });
+            els.filter(e => e.kind === 'consequence').forEach(c => {
+                const ins = links.filter(l => l.kind === 'path' && l.to === c.id);
+                if (!ins.length) findings.push({ kind: 'consequence-unlinked', sev: 'advisory', text: 'Consequence ' + nm(c) + ' has no pathway from the top event.' });
+                else if (ins.some(l => kindOf(l.from) === 'top')) findings.push({ kind: 'consequence-unmitigated', sev: 'advisory', text: 'Consequence ' + nm(c) + ' follows the top event with no mitigative barrier on its pathway.' });
+            });
+            els.filter(e => e.kind === 'escalation').forEach(f => {
+                const outs = links.filter(l => l.kind === 'escalation' && l.from === f.id);
+                if (!outs.length) findings.push({ kind: 'escalation-unlinked', sev: 'advisory', text: 'Escalation factor ' + nm(f) + ' does not point at the barrier it degrades.' });
+                else if (outs.some(l => kindOf(l.to) === 'preventive' || kindOf(l.to) === 'mitigative')) findings.push({ kind: 'escalation-unbarriered', sev: 'advisory', text: 'Escalation factor ' + nm(f) + ' degrades a barrier with no escalation factor barrier in between.' });
+            });
+        }
+        // the same barrier named on several lines says the same thing once
+        const _seen = new Set();
+        const _uniq = findings.filter(f => { const k = f.kind + '|' + f.text; if (_seen.has(k)) return false; _seen.add(k); return true; });
+        findings.length = 0; _uniq.forEach(f => findings.push(f));
         // two-lane knot: if this tree is paired with its allocation/verification
         // counterpart (page.verifies), surface BOTH probabilities — the budget the
         // PSSA allocated and the as-built value the SSA computed. NOT a second wing
@@ -149,8 +190,10 @@
                     : { pAllocated: pOther, pAchieved: fev.prob, otherName: other.name || other.id };
             }
         } catch (_) {}
+        let critLabel = fev.topLabel;
+        if (!bt.ftaPageId || fev.err) { const te = bt.diagram && (bt.diagram.elements || []).find(e => e.kind === 'top'); critLabel = (te && te.name) || bt.name || critLabel; }
         return {
-            pCritical: fev.prob, critLabel: fev.topLabel, cutsets: fev.cutsets, spf: fev.spf,
+            pCritical: fev.prob, critLabel: critLabel, cutsets: fev.cutsets, spf: fev.spf, ccBarrierIds: ccBarrierIds,
             preventive: barriers.filter(b => b.side === 'preventive'),
             mitigative: barriers.filter(b => b.side === 'mitigative'),
             outcomes: outcomes, etaOk: etaOk, etaClosed: etaClosed, etaLinked: !!eta,
@@ -296,7 +339,7 @@
         if (!page) { _toast('Fault tree not found.', 'warn'); return; }
         const fc = _pageFc(page);
         const eta = _matchEta(page, fc);
-        const id = 'BT-' + String(_store().length + 1).padStart(3, '0');
+        const id = _nextId();
         let seq = 0; const bid = () => 'B' + Date.now().toString(36) + (seq++);
         const bt = { id, name: (fc ? fc.fcId + ' — ' : '') + String((page.root && page.root.name) || page.name || id),
             ftaPageId: page.id, etaId: (eta && eta.id) || '', barriers: [],
@@ -324,6 +367,10 @@
                 trace: { kind: 'eta', ref: eta.id + ' · ' + String(ebar.name || ''), logicalId: '', pageId: ebar.linkedPageId || '', etaId: eta.id } });
         });
         const linked = _autoLinkReqs(bt);
+        // v3.0: the auto-built bow-tie is stored as a drawing straight away (threats, lines,
+        // consequences, laid out), so what it generated is what you then edit by hand
+        try { const d = btFromModel(btToModel(bt), bt); bt.diagram = d.diagram; bt.barriers = d.barriers; } catch (_) {}
+        try { if (typeof pushUndo === 'function') pushUndo('Auto-build bow-tie'); } catch (_) {}
         _store().push(bt); _sel = id; _save(); _render();
         _toast(id + ' auto-built: ' + (page.name || page.id) + (eta ? ' ⇄ ' + eta.id : ' (no event tree matched — link one above)') + ' · ' + bt.barriers.length + ' barrier(s) · ' + linked + ' requirement link(s).', 'success');
         return id;
@@ -424,8 +471,13 @@
     }
 
     // ---- editor actions ------------------------------------------------------
+    function _nextId() {
+        let mx = 0;
+        _store().forEach(b => { const m = /^BT-(\d+)$/.exec(String(b && b.id || '')); if (m) mx = Math.max(mx, +m[1]); });
+        return 'BT-' + String(mx + 1).padStart(3, '0');
+    }
     function createBowtie(name, ftaPageId, etaId) {
-        const id = 'BT-' + String(_store().length + 1).padStart(3, '0');
+        const id = _nextId();
         _store().push({ id: id, name: String(name || 'Bow-tie ' + id).trim(), ftaPageId: ftaPageId || '', etaId: etaId || '', barriers: [], by: (typeof currentUserName !== 'undefined' ? currentUserName : ''), at: new Date().toISOString() });
         _sel = id; _save(); _render();
         return id;
@@ -436,6 +488,7 @@
         const name = await _ask('Barrier name (' + side + '):', ''); if (!name) return;
         const bid = 'B' + Date.now().toString(36);
         (bt.barriers = bt.barriers || []).push({ id: bid, side: side, name: String(name).trim(), trace: { kind: 'none', ref: '', logicalId: '' } });
+        _pending = bid;
         _save(); _render();
     }
     async function traceBarrier(bid) {
@@ -448,274 +501,795 @@
         }
         _save(); _render();
     }
-    function removeBarrier(bid) { const bt = _bt(); if (!bt) return; bt.barriers = (bt.barriers || []).filter(x => x.id !== bid); _save(); _render(); }
+    function removeBarrier(bid) {
+        const bt = _bt(); if (!bt) return;
+        bt.barriers = (bt.barriers || []).filter(x => x.id !== bid);
+        if (bt.diagram) { bt.diagram.links = (bt.diagram.links || []).filter(l => l.from !== bid && l.to !== bid); if (bt.diagram.pos) delete bt.diagram.pos[bid]; }
+        _save(); _render();
+    }
     function _ask(m, d) { return slPrompt(m, d || ''); }
 
-    // ---- render --------------------------------------------------------------
-    function _sevColor(s) { s = String(s || '').toLowerCase(); return /cat/.test(s) ? '#F2928C' : /haz/.test(s) ? '#F5B878' : /maj/.test(s) ? '#F2DB74' : /min/.test(s) ? '#F8ECB0' : (/neg|no safety/.test(s) ? '#A6DFB4' : 'var(--color-text-tertiary,#888)'); } // 11 Sep — the app-wide severity fills
+    // ======================================================================
+    // v3.0 (13 Oct 2026): THE BOW-TIE, DRAWN BY HAND (CCPS / Energy Institute,
+    // "Bow Ties in Risk Management", 2018). One diagram on the shared editor
+    // (SLDiagramEditor): hazard, top event, threats, consequences, preventive and
+    // mitigative barriers on the pathways, escalation factors and the escalation-
+    // factor barriers that defend a barrier against them. Every element is a
+    // SysML v2 element (SafetyLab::Threat, ::Consequence, ::Barrier ...).
+    //
+    // Stored shape (a superset of v2.x; nothing old is rewritten on open):
+    //   bt.barriers[]            every barrier, as before (side, trace, requirementId,
+    //                            principleId, pFail ...), plus barrierType, effectiveness,
+    //                            owner, note, and role 'escalation' for an escalation-
+    //                            factor barrier (its side is the side of the barrier it defends).
+    //   bt.diagram               { v, elements: [{ id, kind, name, x, y, w, h, props, sysmlRef }],
+    //                              links: [{ id, kind, from, to }], pos: { barrierId: { x, y, w, h } } }
+    //                            kinds: hazard, top, threat, consequence, escalation.
+    //                            The top event carries the fault tree (left side) and the
+    //                            event tree (right side) as props.ftaPageId / props.etaId,
+    //                            mirrored on bt.ftaPageId / bt.etaId for every reader.
+    // A bow-tie WITHOUT bt.diagram (every bow-tie made before v3.0, and the HL-1 and
+    // Vayu showcases) is drawn from what it links, exactly as it was compiled before:
+    // threats from the fault tree's top gate, consequences from the event tree's end
+    // states, its barriers on the lines they trace to. The first hand edit stores it.
+    // The aviation hybrid stays: "Left side from fault tree" and "Right side from event
+    // tree" generate those halves onto any bow-tie, and everything they make is editable.
+    // ======================================================================
+    const _E = window.SLDiagramEditor || null;
+    const BK = { preventive: 1, mitigative: 1, efbarrier: 1 };
+    const SZ = { hazard: [180, 62], top: [176, 100], threat: [180, 64], consequence: [180, 64], escalation: [164, 58], preventive: [132, 70], mitigative: [132, 70], efbarrier: [120, 58] };
+    const BARRIER_TYPES = ['Passive hardware', 'Active hardware', 'Active hardware and human', 'Active human', 'Continuous hardware', 'Other'];
+    const EFFECTIVENESS = ['Very good', 'Good', 'Fair', 'Poor', 'Very poor'];
+    const TRACE_KINDS = [{ value: 'none', label: 'Not traced yet' }, { value: 'component', label: 'Component (basic event)' }, { value: 'gate', label: 'Fault tree gate' }, { value: 'eta', label: 'Event tree heading' }, { value: 'requirement', label: 'Requirement' }, { value: 'monitor', label: 'Monitor' }];
+    const SEVS = ['No Safety Effect', 'Minor', 'Major', 'Hazardous', 'Catastrophic'];
+    function _clone(o) { return o == null ? o : JSON.parse(JSON.stringify(o)); }
+    function _x(s) { return _E ? _E.esc(s) : _esc(s); }
+    function _kids(n) { return (n && (n.children || n._children) || []).filter(Boolean); }
+    function _lidOf(n) { return String(n.logicalId != null ? n.logicalId : n.id); }
+    function _slug(s) { return String(s || 'x').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'x'; }
 
-    // ---- the curved-ribbon diagram (pure SVG, compiled from the evaluation) ----
-    // Left ribbons: one per minimal cut set (SPFs red, thicker). Right ribbons:
-    // one per consequence path, width ∝ log(frequency), colored by severity.
-    // Barrier pills stand in two vertical lanes; red ring = common-cause finding,
-    // amber dash = untraced (generic). Everything is drawn from ev — no new data.
-    function _svgDiagram(bt, ev) {
-        const oc = ev.outcomes.slice(0, 8);
-        const page = _ftaPages().find(p => p.id === bt.ftaPageId);
-
-        // -- compile the linked FAULT TREE into a drawable model (Anzen article:
-        //    "the left side should carry the evidence, not just name the causes").
-        //    Gates preserved (AND vs OR is the difference between combinations and
-        //    alternatives); depth/width-capped with dashed truncation marks;
-        //    transfers drawn as the classic triangle.
-        const MAXD = 6, MAXKIDS = 6, MAXNODES = 60;
-        const tNodes = [], tLinks = [], tLeaves = [];
-        (function walk(n, depth, parent) {
-            if (!n || tNodes.length >= MAXNODES) return;
-            const isTransfer = n.type === 'transfer' || !!n.transferTo || !!n.transferRef;
-            const rec = { depth, isGate: n.type === 'gate' && !isTransfer, isTransfer,
-                gateType: String(n.gateType || '').toUpperCase(),
-                label: String(n.displayId || n.name || n.id || ''), full: String(n.name || n.displayId || n.id || ''),
-                lid: String(n.logicalId != null ? n.logicalId : n.id), y: 0, kids: [] };
-            tNodes.push(rec);
-            if (parent) { parent.kids.push(rec); tLinks.push([parent, rec]); }
-            const kids = (n.children || n._children || []).filter(Boolean);
-            if (!rec.isGate || !kids.length || depth >= MAXD) {
-                if (rec.isGate && kids.length) rec.trunc = true;
-                rec.leaf = true; tLeaves.push(rec); return;
-            }
-            kids.slice(0, MAXKIDS).forEach(k => walk(k, depth + 1, rec));
-            if (kids.length > MAXKIDS) {
-                const more = { depth: depth + 1, isGate: false, label: '+' + (kids.length - MAXKIDS) + ' more', full: kids.length + ' children total — open the fault tree for the rest', lid: '', y: 0, kids: [], leaf: true, more: true };
-                tNodes.push(more); tLeaves.push(more); rec.kids.push(more); tLinks.push([rec, more]);
-            }
-        })(page && page.root, 0, null);
-        const tRoot = tNodes[0] || null;
-        if (!tRoot && !oc.length) return '';
-        const maxDepth = tNodes.reduce((m, n) => Math.max(m, n.depth), 0);
-
-        // ---- geometry: adaptive horizontal allocation ----------------------
-        // Per-depth columns sized by what actually lives there (gate columns
-        // narrow, event columns wide, fixed clearance gap). The TREE takes the
-        // width it needs (capped at 400px, then everything scales together);
-        // the barrier lanes, knot and consequence fan FOLLOW it — nothing is
-        // fixed where it can collide.
-        const boxW = 112, boxH = 32, GAP = 28, GATE_W = 30, knotW = 148, treeLeft = 22;
-        const depthW = [];
-        for (let d = 0; d <= maxDepth; d++) {
-            let w = GATE_W;
-            tNodes.forEach(n => { if (n.depth === d && !(n.isGate && !n.leaf) && !n.isTransfer) w = Math.max(w, boxW); });
-            depthW[d] = w;
+    // ---- what a barrier element carries in the editor, and back ----------------
+    const BFIELDS = ['barrierType', 'effectiveness', 'owner', 'pFail', 'requirementId', 'principleId', 'note'];
+    function _barrierProps(b) {
+        const p = {};
+        BFIELDS.forEach(k => { if (b[k] !== undefined) p[k] = b[k]; });
+        if (b.trace) {
+            p.traceKind = b.trace.kind != null ? b.trace.kind : 'none';
+            p.traceRef = b.trace.ref != null ? b.trace.ref : '';
+            p.traceLogicalId = b.trace.logicalId != null ? b.trace.logicalId : '';
+            if (b.trace.pageId !== undefined) p.tracePageId = b.trace.pageId;
+            if (b.trace.etaId !== undefined) p.traceEtaId = b.trace.etaId;
         }
-        const totalW = tRoot ? depthW.reduce((a, b) => a + b, 0) + GAP * maxDepth : 0;
-        const tScale = tRoot ? Math.min(1, 400 / totalW) : 1;
-        const treeRight = tRoot ? treeLeft + totalW * tScale : 130;
-        const pbX = treeRight + 76;
-        const knotX = pbX + 76 + knotW / 2;
-        const mbX = knotX + knotW / 2 + 76;
-        // the EVENT TREE claims the width its barrier columns need, same rule as the FTA side
-        const etaObj = _etaStore().find(t => t.id === bt.etaId) || null;
-        const etaBars = (etaObj && etaObj.barriers) || [];
-        const W = Math.max(1000, mbX + 270, mbX + 72 + etaBars.length * 95 + 165);
-        const H = Math.max(190, Math.max(tLeaves.length, 1) * 42 + 96, oc.length * 42 + 84), cy = H / 2;
-        const yFor = (i, n) => n <= 1 ? cy : 44 + i * (H - 88) / (n - 1);
-        const ccBarrierNames = new Set();
-        ev.findings.forEach(f => { if (f.kind === 'common-cause') { const m = f.text.match(/"([^"]+)"/); if (m) ccBarrierNames.add(m[1]); } });
-
-        // layout: leaves in vertical slots, parents at the mean of their children,
-        // root beside the knot, deeper levels stepping left (mirrored tree).
-        tLeaves.forEach((n, i) => { n.y = tLeaves.length <= 1 ? cy : 48 + i * (H - 96) / (tLeaves.length - 1); });
-        (function place(n) { if (!n || n.leaf) return; n.kids.forEach(place); n.y = n.kids.reduce((a, k) => a + k.y, 0) / (n.kids.length || 1); })(tRoot);
-        // symmetry rule (same as the FTA canvas): the top event anchors the layout —
-        // shift the whole tree so the root sits level with the knot, clamped in-frame.
-        if (tRoot && tNodes.length) {
-            let minY = Infinity, maxY = -Infinity;
-            tNodes.forEach(n => { if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y; });
-            let d = cy - tRoot.y;
-            d = Math.max(d, 40 - minY);
-            d = Math.min(d, (H - 40) - maxY);
-            tNodes.forEach(n => { n.y += d; });
+        return p;
+    }
+    function _barrierFromEl(e, base, side) {
+        const b = base ? _clone(base) : { id: e.id };
+        const p = e.props || {};
+        b.id = e.id;
+        b.name = String(e.label == null ? '' : e.label);
+        b.side = side;
+        if (e.kind === 'efbarrier') b.role = 'escalation'; else delete b.role;
+        BFIELDS.forEach(k => { if (p[k] === undefined || p[k] === null || (p[k] === '' && !(base && base[k] === ''))) delete b[k]; else b[k] = p[k]; });
+        const hadTrace = !!(base && base.trace);
+        if (hadTrace || p.traceKind !== undefined || p.traceRef !== undefined || p.traceLogicalId !== undefined || !base) {
+            const t = Object.assign({}, (base && base.trace) || {});
+            t.kind = p.traceKind != null && p.traceKind !== '' ? String(p.traceKind) : 'none';
+            t.ref = p.traceRef != null ? String(p.traceRef) : '';
+            t.logicalId = p.traceLogicalId != null ? String(p.traceLogicalId) : '';
+            if (p.tracePageId !== undefined) t.pageId = p.tracePageId; else delete t.pageId;
+            if (p.traceEtaId !== undefined) t.etaId = p.traceEtaId; else delete t.etaId;
+            if (t.kind !== 'eta') { delete t.pageId; delete t.etaId; }
+            b.trace = t;
         }
-        const colX = []; let _cur = treeRight;
-        for (let d = 0; d <= maxDepth; d++) { colX[d] = _cur - (depthW[d] * tScale) / 2; _cur -= depthW[d] * tScale + GAP * tScale; }
-        const xFor = n => colX[n.depth];
-        const bwOf = n => (n.isGate && !n.leaf) ? GATE_W : (n.isTransfer ? 24 : Math.min(boxW, depthW[n.depth] * tScale));
-        const spfLids = new Set(); ev.cutsets.forEach(set => { if (set.length === 1) spfLids.add(String(set[0])); });
-        const ccLidSet = new Set(ev.ccLids || []);
+        // a requirement link typed by hand is a new, signed-by-nobody link: drop the old provenance
+        if (base && String(base.requirementId || '') !== String(b.requirementId || '')) { delete b.reqAutoLinked; delete b.reqTier; delete b.reqConfirmed; delete b.reqInternalId; }
+        if (e.sysmlRef) b.sysmlRef = e.sysmlRef; else delete b.sysmlRef;
+        return b;
+    }
 
-        let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;margin:4px 0 14px;" xmlns="http://www.w3.org/2000/svg" font-family="inherit">';
+    // ---- threats and consequences the linked analyses already define -----------
+    function _threatSpecs(page) {
+        if (!page || !page.root) return [];
+        const r = page.root;
+        const nodes = (r.type === 'gate' && _kids(r).length) ? _kids(r) : [r];
+        return nodes.map(n => ({ id: 'T-' + n.id, node: n, label: String(n.name || n.displayId || n.id), ftRef: 'ftn:' + page.id + '/' + n.id }));
+    }
+    function _inSubtree(root, pred) { let hit = false; (function walk(n, seen) { if (!n || hit || seen.has(n)) return; seen.add(n); if (pred(n)) { hit = true; return; } _kids(n).forEach(c => walk(c, seen)); })(root, new Set()); return hit; }
+    function _etaGroups(eta) {
+        let ev = null; try { ev = window.etaEvaluate ? window.etaEvaluate(eta) : null; } catch (_) {}
+        if (!ev) return [];
+        const g = new Map();
+        ev.outcomes.forEach(o => {
+            if (!/[1-9]/.test(o.key) && !o.transferTo) return;   // every heading succeeded (or did not apply): no consequence
+            const k = o.transferTo ? 'transfer:' + o.transferTo : (o.severity || 'unassessed');
+            const cur = g.get(k) || { key: k, severity: o.transferTo ? '' : (o.severity || ''), transferTo: o.transferTo || '', label: '', freq: 0, n: 0 };
+            cur.freq += o.freq; cur.n++;
+            if (!cur.label && o.label) cur.label = o.label;
+            g.set(k, cur);
+        });
+        const order = ['transfer', 'unassessed'].concat(SEVS);
+        return Array.from(g.values()).sort((a, b) => order.indexOf(b.severity || (b.transferTo ? 'transfer' : 'unassessed')) - order.indexOf(a.severity || (a.transferTo ? 'transfer' : 'unassessed')))
+            .map(x => Object.assign(x, { id: 'C-' + eta.id + '-' + _slug(x.key), name: x.transferTo ? 'Continues in ' + x.transferTo : (x.label || (x.severity ? x.severity + ' outcome' : 'Outcomes not assessed yet')) }));
+    }
+    function _el(kind, id, label, props, extra) { const s = SZ[kind] || [140, 60]; return Object.assign({ id, kind, label: String(label == null ? '' : label), props: props || {}, w: s[0], h: s[1] }, extra || {}); }
 
-        // -- draw the fault tree --
-        if (tRoot) {
-            const cap = (page.name || page.id || '').toUpperCase();
-            s += '<text x="' + treeLeft + '" y="16" font-size="10" letter-spacing=".5" fill="var(--color-text-tertiary,#889)">FAULT TREE — ' + _esc(cap.length > 22 ? cap.slice(0, 21) + '…' : cap) + '<title>' + _esc(page.name || page.id || '') + '</title></text>';
-            // IEC-style glyphs, drawn to a clean 30×26 footprint, output to the right.
-            const gateGlyph = (x, y, type) => {
-                if (type === 'AND' || type === 'INHIBIT')
-                    return '<path d="M ' + (x - 14) + ',' + (y - 13) + ' h 12 a 13 13 0 0 1 0 26 h -12 z" fill="var(--color-surface,#fff)" stroke="#445" stroke-width="1.7" stroke-linejoin="round"/>' +
-                        (type === 'INHIBIT' ? '<text x="' + (x - 4) + '" y="' + (y + 2.5) + '" text-anchor="middle" font-size="7" fill="#445">INH</text>' : '');
-                return '<path d="M ' + (x - 14) + ',' + (y - 13) + ' Q ' + (x - 5) + ',' + y + ' ' + (x - 14) + ',' + (y + 13) + ' Q ' + (x + 1) + ',' + (y + 10) + ' ' + (x + 13) + ',' + y + ' Q ' + (x + 1) + ',' + (y - 10) + ' ' + (x - 14) + ',' + (y - 13) + ' z" fill="var(--color-surface,#fff)" stroke="#445" stroke-width="1.7" stroke-linejoin="round"/>';
-            };
-            // leader lines: child output → forward junction in the column gap →
-            // parent input. Columns are strictly ordered, so lines never run back.
-            tLinks.forEach(([p, c]) => {
-                const px = xFor(p) - (p.isGate && !p.leaf ? 14 : bwOf(p) / 2);
-                const cx2 = xFor(c) + ((c.isGate && !c.leaf) ? 13 : (c.isTransfer ? 10 : bwOf(c) / 2));
-                const midX = px - (GAP * tScale) / 2;
-                s += '<path d="M ' + cx2 + ',' + c.y + ' H ' + midX + ' V ' + p.y + ' H ' + px + '" fill="none" stroke="var(--color-text-tertiary,#9aa3b2)" stroke-width="1.4" stroke-linejoin="round"/>';
-            });
-            tNodes.forEach(n => {
-                const x = xFor(n);
-                const _nav = ' style="cursor:pointer;" onclick="btOpenFta(\'' + _esc(page.id) + '\')"';
-                if (n.isGate && !n.leaf) {
-                    s += '<g' + _nav + '>' + gateGlyph(x, n.y, n.gateType) + '<title>' + _esc((n.gateType || 'GATE') + ' — ' + n.full) + '</title></g>';
-                    return;
+    // A bow-tie with no stored diagram: drawn from its links, as v2.x compiled it.
+    function _derive(bt) {
+        const els = [], links = [];
+        const page = _ftaPages().find(p => p.id === bt.ftaPageId) || null;
+        const eta = _etaStore().find(t => t.id === bt.etaId) || null;
+        els.push(_el('top', 'TOP', (page && page.root && (page.root.name || page.root.displayId)) || bt.name || 'Top event', { ftaPageId: bt.ftaPageId || '', etaId: bt.etaId || '' }));
+        const threats = _threatSpecs(page);
+        threats.forEach(t => els.push(_el('threat', t.id, t.label, { ftRef: t.ftRef }, { sysmlRef: t.ftRef })));
+        const bars = bt.barriers || [];
+        const line = {}; threats.forEach(t => { line[t.id] = []; });
+        const floatP = [];
+        bars.filter(b => b.side !== 'mitigative' && b.role !== 'escalation').forEach(b => {
+            const tr = b.trace || {};
+            let th = null;
+            if (tr.logicalId) th = threats.find(t => _inSubtree(t.node, n => n.type !== 'gate' && _lidOf(n) === String(tr.logicalId)));
+            else if (tr.kind === 'gate' && tr.ref) th = threats.find(t => _inSubtree(t.node, n => n.type === 'gate' && (String(n.displayId || '') === tr.ref || String(n.name || '') === tr.ref || String(n.id) === tr.ref)));
+            if (th) line[th.id].push(b); else floatP.push(b);
+        });
+        threats.forEach(t => {
+            let prev = t.id;
+            line[t.id].forEach(b => { links.push({ id: 'L-' + prev + '>' + b.id, kind: 'path', from: prev, to: b.id }); prev = b.id; });
+            links.push({ id: 'L-' + prev + '>TOP', kind: 'path', from: prev, to: 'TOP' });
+        });
+        // mitigative: an event tree's ordered headings form one chain from the top event
+        const mit = bars.filter(b => b.side === 'mitigative' && b.role !== 'escalation');
+        const hs = eta ? (eta.barriers || []) : [];
+        const chain = [];
+        if (eta && mit.length && mit.every(b => b.trace && b.trace.kind === 'eta')) {
+            hs.forEach(h => { const b = mit.find(x => String(x.name) === String(h.name) && chain.indexOf(x) < 0); if (b) chain.push(b); });
+            mit.forEach(b => { if (chain.indexOf(b) < 0) chain.push(b); });
+        }
+        let prev = 'TOP';
+        chain.forEach(b => { links.push({ id: 'L-' + prev + '>' + b.id, kind: 'path', from: prev, to: b.id }); prev = b.id; });
+        if (eta) _etaGroups(eta).forEach(g => {
+            els.push(_el('consequence', g.id, g.name, Object.assign({ etaId: eta.id, etaGroup: g.key }, g.severity ? { severity: g.severity } : {})));
+            links.push({ id: 'L-' + prev + '>' + g.id, kind: 'path', from: prev, to: g.id });
+        });
+        return { elements: els, links: links };
+    }
+
+    function btToModel(bt) {
+        const src = (bt.diagram && Array.isArray(bt.diagram.elements)) ? bt.diagram : _derive(bt);
+        const pos = (bt.diagram && bt.diagram.pos) || {};
+        const elements = [];
+        src.elements.forEach(o => {
+            if (!o || !o.id || BK[o.kind]) return;
+            const s = SZ[o.kind] || [140, 60];
+            const e = { id: String(o.id), kind: o.kind, x: o.x, y: o.y, w: o.w || s[0], h: o.h || s[1], label: String(o.name != null ? o.name : (o.label || '')), props: _clone(o.props || {}) };
+            if (o.sysmlRef) e.sysmlRef = o.sysmlRef;
+            elements.push(e);
+        });
+        (bt.barriers || []).forEach(b => {
+            if (!b || !b.id) return;
+            const kind = b.role === 'escalation' ? 'efbarrier' : (b.side === 'mitigative' ? 'mitigative' : 'preventive');
+            const s = SZ[kind], ps = pos[b.id] || {};
+            const e = { id: String(b.id), kind, x: ps.x, y: ps.y, w: ps.w || s[0], h: ps.h || s[1], label: String(b.name == null ? '' : b.name), props: _barrierProps(b) };
+            if (b.sysmlRef) e.sysmlRef = b.sysmlRef;
+            elements.push(e);
+        });
+        const connectors = (src.links || []).filter(l => l && l.id).map(l => { const c = { id: String(l.id), kind: l.kind || 'path', from: String(l.from), to: String(l.to), label: l.label || '', props: {} }; if (l.sysmlRef) c.sysmlRef = l.sysmlRef; return c; });
+        const model = { elements, connectors };
+        // anything without a position (a derived bow-tie, a barrier added from Jama or an old
+        // menu, an import) takes the standard bow-tie layout; placed shapes stay where they are
+        const loose = elements.filter(e => !(typeof e.x === 'number' && isFinite(e.x) && typeof e.y === 'number' && isFinite(e.y)));
+        if (loose.length) {
+            const fresh = loose.length === elements.length;
+            const L = _btLayout(model, fresh ? null : new Set(loose.map(e => e.id)));
+            loose.forEach(e => { const p = L[e.id] || { x: 0, y: 0 }; e.x = p.x; e.y = p.y; });
+        }
+        _decorate(model, bt);
+        return model;
+    }
+    // Derived display values (underscore props: computed, never stored, never acknowledged).
+    function _decorate(model, bt) {
+        let ev = null; try { ev = bowtieEvaluate(btFromModel(model, bt)); } catch (_) {}
+        const cc = new Set(ev ? ev.ccBarrierIds || [] : []);
+        model.elements.forEach(e => {
+            Object.keys(e.props || {}).forEach(k => { if (k[0] === '_') delete e.props[k]; });
+            if (BK[e.kind] && cc.has(e.id)) e.props._cc = true;
+            if (e.kind === 'top' && ev) { if (ev.pCritical != null) e.props._p = ev.pCritical; if (ev.verif) { e.props._alloc = ev.verif.pAllocated; e.props._ach = ev.verif.pAchieved; } }
+        });
+        return model;
+    }
+    function _sideOf(model, e) {
+        if (e.kind === 'preventive') return 'preventive';
+        if (e.kind === 'mitigative') return 'mitigative';
+        // an escalation-factor barrier defends the barrier its chain leads to
+        const byId = new Map(model.elements.map(x => [x.id, x]));
+        const seen = new Set([e.id]); let q = [e.id];
+        while (q.length) {
+            const nx = [];
+            q.forEach(id => (model.connectors || []).forEach(c => {
+                if (c.kind !== 'escalation' || c.from !== id || seen.has(c.to)) return;
+                seen.add(c.to); const t = byId.get(c.to);
+                if (t && (t.kind === 'preventive' || t.kind === 'mitigative')) nx.push('=' + t.kind); else nx.push(c.to);
+            }));
+            const hit = nx.find(x => x[0] === '=');
+            if (hit) return hit.slice(1);
+            q = nx;
+        }
+        return 'preventive';
+    }
+    function btFromModel(m, bt) {
+        const b2 = _clone(bt);
+        const els = (m && m.elements) || [];
+        const D = { v: 1, elements: [], links: [], pos: {} };
+        const old = bt.barriers || [];
+        const rank = id => { const i = old.findIndex(b => b.id === id); return i < 0 ? 1e9 : i; };
+        const bars = els.map((e, i) => ({ e, i })).filter(o => BK[o.e.kind]).sort((a, b) => (rank(a.e.id) - rank(b.e.id)) || (a.i - b.i))
+            .map(({ e }) => { D.pos[e.id] = { x: e.x, y: e.y, w: e.w, h: e.h }; return _barrierFromEl(e, old.find(b => b.id === e.id), _sideOf(m, e)); });
+        b2.barriers = bars;
+        els.forEach(e => {
+            if (BK[e.kind]) return;
+            const o = { id: e.id, kind: e.kind, name: String(e.label == null ? '' : e.label), x: e.x, y: e.y, w: e.w, h: e.h };
+            const p = {}; Object.keys(e.props || {}).forEach(k => { if (k[0] !== '_' && e.props[k] !== undefined) p[k] = e.props[k]; });
+            if (Object.keys(p).length) o.props = p;
+            if (e.sysmlRef) o.sysmlRef = e.sysmlRef;
+            D.elements.push(o);
+            if (e.kind === 'top') { b2.ftaPageId = String(p.ftaPageId || ''); b2.etaId = String(p.etaId || ''); }
+        });
+        ((m && m.connectors) || []).forEach(c => { const l = { id: c.id, kind: c.kind, from: c.from, to: c.to }; if (c.label) l.label = c.label; if (c.sysmlRef) l.sysmlRef = c.sysmlRef; D.links.push(l); });
+        b2.diagram = D;
+        return b2;
+    }
+
+    // ---- the standard bow-tie layout (Auto layout, generators, derived bow-ties) ----
+    // Threats in a column on the left, consequences on the right, the top event in the
+    // middle with the hazard above it; every barrier on its pathway, in pathway order;
+    // escalation factors hang under the barrier they degrade, their barriers between.
+    function _btLayout(model, only) {
+        const els = model.elements, cns = model.connectors || [];
+        const byId = new Map(els.map(e => [e.id, e]));
+        const out = new Map(); cns.forEach(c => { if (!out.has(c.from)) out.set(c.from, []); out.get(c.from).push(c); });
+        const ROW = 124, COL = 176;
+        const ys = e => (typeof e.y === 'number' && isFinite(e.y)) ? e.y : 1e9;
+        const threats = els.filter(e => e.kind === 'threat').sort((a, b) => ys(a) - ys(b));
+        const cons = els.filter(e => e.kind === 'consequence').sort((a, b) => ys(a) - ys(b));
+        const rowsY = (n, i) => (i - (n - 1) / 2) * ROW;
+        const walk = (startIds, side, rowOf) => {
+            const depth = {}, rows = {};
+            startIds.forEach((sid, r) => {
+                let q = [[sid, 0]]; const seen = new Set([sid]);
+                while (q.length) {
+                    const nx = [];
+                    q.forEach(([id, d]) => (out.get(id) || []).forEach(c => {
+                        if (c.kind !== 'path' || seen.has(c.to)) return;
+                        const t = byId.get(c.to); if (!t || t.kind !== side) return;
+                        seen.add(c.to); depth[c.to] = Math.max(depth[c.to] || 0, d + 1);
+                        (rows[c.to] = rows[c.to] || []).push(rowOf(r)); nx.push([c.to, d + 1]);
+                    }));
+                    q = nx;
                 }
-                if (n.isTransfer) {
-                    s += '<g' + _nav + '><path d="M ' + (x - 10) + ',' + (n.y - 10) + ' h 20 l -10 20 z" fill="var(--color-surface,#fff)" stroke="#556" stroke-width="1.4"/><title>TRANSFER — ' + _esc(n.full) + '</title></g>';
-                    return;
-                }
-                const spf = spfLids.has(n.lid), cc = ccLidSet.has(n.lid);
-                const stroke = cc || spf ? '#b42318' : (n.more || n.trunc) ? 'var(--color-border-hair,rgba(0,0,0,.3))' : '#8892a4';
-                const fill = cc ? 'rgba(180,35,24,.07)' : 'var(--color-surface,#fff)';
-                const tCol = cc || spf ? '#b42318' : 'var(--color-text-secondary,#49515e)';
-                const bw = bwOf(n);
-                // event DESCRIPTIONS, not ids — wrapped to two lines, id in the tooltip
-                const wchars = Math.max(12, Math.floor(bw / 5.3));
-                const wrap2 = (t, w) => { t = String(t); if (t.length <= w) return [t]; let cut = t.lastIndexOf(' ', w); if (cut < 4) cut = w; const a = t.slice(0, cut); let b = t.slice(cut).trim(); if (b.length > w) b = b.slice(0, w - 1) + '…'; return [a, b]; };
-                const lines = wrap2(n.more ? n.label : (n.full || n.label), wchars);
-                const txt = lines.length === 1
-                    ? '<tspan x="' + x + '" y="' + (n.y + 3) + '">' + _esc(lines[0]) + (n.trunc ? ' ▽' : '') + '</tspan>'
-                    : '<tspan x="' + x + '" y="' + (n.y - 2.5) + '">' + _esc(lines[0]) + '</tspan><tspan x="' + x + '" y="' + (n.y + 8.5) + '">' + _esc(lines[1]) + (n.trunc ? ' ▽' : '') + '</tspan>';
-                s += '<g' + _nav + '><rect x="' + (x - bw / 2) + '" y="' + (n.y - boxH / 2) + '" width="' + bw + '" height="' + boxH + '" rx="4" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + (spf || cc ? 1.8 : 1.3) + '"' + ((n.more || n.trunc) ? ' stroke-dasharray="4 3"' : '') + '/>' +
-                    '<text text-anchor="middle" font-size="8.8" fill="' + tCol + '">' + txt + '</text>' +
-                    '<title>' + _esc(n.full) + (n.label && n.label !== n.full ? ' [' + _esc(n.label) + ']' : '') + (n.lid && n.lid !== n.label ? ' (' + n.lid + ')' : '') + (spf ? ' — SINGLE-POINT FAILURE' : '') + (cc ? ' — shared with a mitigation barrier (COMMON CAUSE)' : '') + (n.trunc ? ' — subtree truncated for display; open the fault tree for full depth' : '') + '</title></g>';
             });
-            // root output → knot: horizontal (the symmetry shift put the root level
-            // with the knot), with an elbow only if clamping moved it off-axis.
-            const rx = xFor(tRoot) + ((tRoot.isGate && !tRoot.leaf) ? 13 : bwOf(tRoot) / 2);
-            const kx = knotX - knotW / 2;
-            s += (Math.abs(tRoot.y - cy) < 1)
-                ? '<path d="M ' + rx + ',' + cy + ' H ' + kx + '" fill="none" stroke="#49515e" stroke-width="1.8"/>'
-                : '<path d="M ' + rx + ',' + tRoot.y + ' H ' + ((rx + kx) / 2) + ' V ' + cy + ' H ' + kx + '" fill="none" stroke="#49515e" stroke-width="1.8" stroke-linejoin="round"/>';
-        }
-        // -- the EVENT TREE, drawn in the same language as the fault tree: boxes,
-        //    orthogonal leader lines, one split column per barrier (✓ holds up,
-        //    ✗ fails down), outcome boxes with severity + frequency.
-        if (oc.length && etaBars.length) {
-            const nB = etaBars.length;
-            const boxW2 = 118, boxH2 = 32;
-            const etaLeft = mbX + 72;
-            const boxX = W - 24 - boxW2 / 2;
-            const colW2 = (boxX - boxW2 / 2 - etaLeft - 14) / nB;
-            // caption + barrier column headers (mirrors the FAULT TREE caption)
-            etaBars.forEach((b, i) => {
-                const hx = etaLeft + colW2 * i + colW2 / 2;
-                const nm = String(b.name || 'barrier').toUpperCase();
-                s += '<text x="' + hx + '" y="16" text-anchor="middle" font-size="9" letter-spacing=".4" fill="var(--color-text-tertiary,#889)">' + _esc(nm.length > 20 ? nm.slice(0, 19) + '…' : nm) + '<title>' + _esc(b.name || '') + (b.pFail != null ? ' — P(fail) = ' + b.pFail : '') + '</title></text>';
-            });
-            const byKey = {}; oc.forEach(o => { byKey[o.key] = o; });
-            const leafY = i => oc.length <= 1 ? cy : 44 + i * (H - 88) / (oc.length - 1);
-            // pass 1 — layout: leaves in traversal order (success first), parents at the mean
-            const internals = [], leaves = [];
-            let li = 0;
-            (function layout(depth, mask) {
-                if (depth === nB) { const y = leafY(li++); leaves.push({ mask, y }); return y; }
-                const yT = layout(depth + 1, mask);
-                const yB = layout(depth + 1, mask | (1 << depth));
-                const y = (yT + yB) / 2;
-                internals.push({ depth, y, yT, yB });
-                return y;
-            })(0, 0);
-            const splitX = d => etaLeft + colW2 * d + colW2 / 2;
-            const LN = 'fill="none" stroke="var(--color-text-tertiary,#9aa3b2)" stroke-width="1.4" stroke-linejoin="round"';
-            // knot → first split
-            s += '<path d="M ' + (knotX + knotW / 2) + ',' + cy + ' H ' + splitX(0) + '" ' + LN + '/>';
-            // splits: vertical bar + branch stubs + ✓/✗ marks
-            internals.forEach(nd => {
-                const x = splitX(nd.depth), nx = (nd.depth + 1 < nB) ? splitX(nd.depth + 1) : (boxX - boxW2 / 2);
-                const bar = etaBars[nd.depth];
-                s += '<path d="M ' + x + ',' + nd.yT + ' V ' + nd.yB + '" ' + LN + '><title>' + _esc(String(bar && bar.name || '')) + (bar && bar.pFail != null ? ' — P(fail) = ' + bar.pFail : '') + '</title></path>';
-                s += '<path d="M ' + x + ',' + nd.yT + ' H ' + nx + '" ' + LN + '/><path d="M ' + x + ',' + nd.yB + ' H ' + nx + '" ' + LN + '/>';
-                s += '<text x="' + (x + 5) + '" y="' + (nd.yT - 4) + '" font-size="8" fill="var(--color-success,#1a7f37)">✓</text>' +
-                     '<text x="' + (x + 5) + '" y="' + (nd.yB - 4) + '" font-size="8" fill="#b42318">✗</text>';
-            });
-            // outcome boxes — same box grammar as the fault-tree events
-            leaves.forEach(lf => {
-                const key = lf.mask.toString(2).padStart(Math.max(nB, 1), '0');
-                const o = byKey[key];
-                const col = _sevColor(o && o.severity);
-                const sevTxt = (o && o.severity) || 'unassessed';
-                const bad = /cat|haz/i.test(sevTxt);
-                s += '<g style="cursor:pointer;" onclick="try{switchTab(\'eta\')}catch(e){}"><rect x="' + (boxX - boxW2 / 2) + '" y="' + (lf.y - boxH2 / 2) + '" width="' + boxW2 + '" height="' + boxH2 + '" rx="4" fill="' + (bad ? 'rgba(180,35,24,.06)' : 'var(--color-surface,#fff)') + '" stroke="' + (o && o.severity ? col : 'var(--color-border-hair,rgba(0,0,0,.3))') + '" stroke-width="' + (bad ? 1.8 : 1.3) + '"' + (o && o.severity ? '' : ' stroke-dasharray="4 3"') + '/>' +
-                    '<text text-anchor="middle" font-size="8.8"><tspan x="' + boxX + '" y="' + (lf.y - 2.5) + '" fill="' + (o && o.severity ? col : 'var(--color-text-tertiary,#889)') + '">' + _esc(sevTxt) + '</tspan><tspan x="' + boxX + '" y="' + (lf.y + 8.5) + '" fill="var(--color-text-tertiary,#889)" font-family="var(--font-mono,monospace)">' + _fmt(o && o.freq) + ' /FH</tspan></text>' +
-                    '<title>' + _esc(o ? o.seq.join(' → ') : key) + '</title></g>';
-            });
-        } else if (oc.length) {
-            // outcomes without barrier structure (degenerate ETA) — plain outcome boxes
-            oc.forEach((o, i) => {
-                const y = yFor(i, oc.length), col = _sevColor(o.severity);
-                s += '<path d="M ' + (knotX + knotW / 2) + ',' + cy + ' H ' + (mbX + 40) + ' V ' + y + ' H ' + (W - 160) + '" fill="none" stroke="var(--color-text-tertiary,#9aa3b2)" stroke-width="1.4" stroke-linejoin="round"/>';
-                s += '<text x="' + (W - 152) + '" y="' + (y + 3.5) + '" font-size="9.5" fill="' + col + '">' + _esc(o.severity || 'unassessed') + ' <tspan font-family="var(--font-mono,monospace)" fill="var(--color-text-tertiary,#889)">' + _fmt(o.freq) + '</tspan></text>';
-            });
-        }
-        // barrier lanes
-        const lane = (x, list, label) => {
-            let t = '<line x1="' + x + '" y1="26" x2="' + x + '" y2="' + (H - 26) + '" stroke="var(--color-border-hair,rgba(0,0,0,.18))" stroke-width="1" stroke-dasharray="3 4"/>';
-            t += '<text x="' + x + '" y="16" text-anchor="middle" font-size="10" letter-spacing=".5" fill="var(--color-text-tertiary,#889)">' + label + '</text>';
-            const n = list.length;
-            list.forEach((b, i) => {
-                const y = n <= 1 ? cy : cy + (i - (n - 1) / 2) * 34;
-                const traced = (b.trace && b.trace.kind && b.trace.kind !== 'none' && (b.trace.ref || b.trace.logicalId)) || b.requirementId || b.principleId;
-                const cc = ccBarrierNames.has(b.name || '');
-                const stroke = cc ? '#b42318' : traced ? 'var(--color-success,#1a7f37)' : '#b7791f';
-                const wPill = 118;
-                t += '<g style="cursor:pointer;" onclick="btTraceBarrier(\'' + b.id + '\')"><rect x="' + (x - wPill / 2) + '" y="' + (y - 12) + '" width="' + wPill + '" height="24" rx="12" fill="var(--color-surface,#fff)" stroke="' + stroke + '" stroke-width="' + (cc ? 2.5 : 1.4) + '"' + (traced || cc ? '' : ' stroke-dasharray="4 3"') + '/>' +
-                    '<text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle" font-size="10.5" fill="' + (cc ? '#b42318' : 'var(--color-text-secondary,#556)') + '">' + _esc(String(b.name || '?').length > 18 ? String(b.name).slice(0, 17) + '…' : (b.name || '?')) + '</text>' +
-                    '<title>' + _esc(b.name || '?') + (cc ? ' — COMMON CAUSE with a cause cut set' : traced ? ' — traced' : ' — untraced (generic)') + '</title></g>';
-            });
-            return t;
+            return { depth, rows };
         };
-        s += lane(pbX, ev.preventive, 'PREVENTIVE BARRIERS');
-        s += lane(mbX, ev.mitigative, 'MITIGATIVE BARRIERS');
-        // the knot
-        if (ev.verif) {
-            const exceeded = ev.verif.pAchieved > ev.verif.pAllocated;
-            s += '<g><rect x="' + (knotX - knotW / 2) + '" y="' + (cy - 34) + '" width="' + knotW + '" height="68" rx="10" fill="var(--color-surface,#fff)" stroke="' + (exceeded ? '#b42318' : 'var(--color-text-secondary,#556)') + '" stroke-width="2"/>' +
-                '<text x="' + knotX + '" y="' + (cy - 18) + '" text-anchor="middle" font-size="10" letter-spacing=".4" fill="var(--color-text-tertiary,#889)">CRITICAL EVENT</text>' +
-                '<text x="' + knotX + '" y="' + (cy - 3) + '" text-anchor="middle" font-size="10.5" font-family="var(--font-mono,monospace)" fill="var(--color-text-secondary,#556)">alloc ' + _fmt(ev.verif.pAllocated) + '</text>' +
-                '<text x="' + knotX + '" y="' + (cy + 12) + '" text-anchor="middle" font-size="10.5" font-weight="700" font-family="var(--font-mono,monospace)" fill="' + (exceeded ? '#b42318' : 'var(--color-success,#1a7f37)') + '">achieved ' + _fmt(ev.verif.pAchieved) + '</text>' +
-                '<text x="' + knotX + '" y="' + (cy + 26) + '" text-anchor="middle" font-size="9" fill="var(--color-text-tertiary,#889)">/FH · BDD-exact · two-lane</text>' +
-                '<title>' + _esc(ev.critLabel || bt.name) + ' — allocation vs verification (' + _esc(ev.verif.otherName) + ')' + (exceeded ? ' — ACHIEVED EXCEEDS BUDGET' : '') + '</title></g>';
-        } else {
-            s += '<g><rect x="' + (knotX - knotW / 2) + '" y="' + (cy - 30) + '" width="' + knotW + '" height="60" rx="10" fill="var(--color-surface,#fff)" stroke="var(--color-text-secondary,#556)" stroke-width="2"/>' +
-                '<text x="' + knotX + '" y="' + (cy - 10) + '" text-anchor="middle" font-size="10" letter-spacing=".4" fill="var(--color-text-tertiary,#889)">CRITICAL EVENT</text>' +
-                '<text x="' + knotX + '" y="' + (cy + 8) + '" text-anchor="middle" font-size="13" font-weight="700" fill="var(--color-text,#223)" font-family="var(--font-mono,monospace)">' + _fmt(ev.pCritical) + '</text>' +
-                '<text x="' + knotX + '" y="' + (cy + 22) + '" text-anchor="middle" font-size="9" fill="var(--color-text-tertiary,#889)">/FH · BDD-exact</text>' +
-                '<title>' + _esc(ev.critLabel || bt.name) + '</title></g>';
+        const L = walk(threats.map(t => t.id), 'preventive', r => rowsY(threats.length, r));
+        // the mitigative side: from the top event toward each consequence (row = the consequences it reaches)
+        const top = els.find(e => e.kind === 'top');
+        const R = { depth: {}, rows: {} };
+        if (top) {
+            const seen = new Set(); let q = [[top.id, 0]];
+            while (q.length) {
+                const nx = [];
+                q.forEach(([id, d]) => (out.get(id) || []).forEach(c => {
+                    const t = byId.get(c.to); if (c.kind !== 'path' || !t || t.kind !== 'mitigative' || seen.has(t.id)) return;
+                    seen.add(t.id); R.depth[t.id] = d + 1; nx.push([t.id, d + 1]);
+                }));
+                q = nx;
+            }
+            const reach = (id, acc, seen2) => { (out.get(id) || []).forEach(c => { if (c.kind !== 'path' || seen2.has(c.to)) return; seen2.add(c.to); const t = byId.get(c.to); if (!t) return; if (t.kind === 'consequence') acc.add(t.id); else if (t.kind === 'mitigative') reach(t.id, acc, seen2); }); return acc; };
+            Object.keys(R.depth).forEach(id => { const acc = reach(id, new Set(), new Set()); R.rows[id] = Array.from(acc).map(cid => rowsY(cons.length, cons.findIndex(c => c.id === cid))); });
         }
-        return s + '</svg>';
+        const maxL = Math.max(0, ...Object.values(L.depth)), maxR = Math.max(0, ...Object.values(R.depth));
+        const xThreat = 0, xTop = (maxL + 1) * COL + 120, xCons = xTop + (maxR + 1) * COL + 120;
+        const pos = {};
+        const put = (e, cx, cy) => { pos[e.id] = { x: Math.round(cx - e.w / 2), y: Math.round(cy - e.h / 2) }; };
+        const allRows = threats.map((_, i) => rowsY(threats.length, i)).concat(cons.map((_, i) => rowsY(cons.length, i)), [0]);
+        const minY = Math.min(...allRows), maxY = Math.max(...allRows);
+        threats.forEach((t, i) => put(t, xThreat, rowsY(threats.length, i)));
+        cons.forEach((c, i) => put(c, xCons, rowsY(cons.length, i)));
+        if (top) put(top, xTop, 0);
+        els.filter(e => e.kind === 'hazard').forEach((h, i) => put(h, xTop + i * 200, minY - 150));
+        const mean = a => a && a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+        const floatsP = [], floatsM = [];
+        els.filter(e => e.kind === 'preventive').forEach(b => { if (L.depth[b.id]) put(b, xThreat + 60 + L.depth[b.id] * COL, mean(L.rows[b.id])); else floatsP.push(b); });
+        els.filter(e => e.kind === 'mitigative').forEach(b => { if (R.depth[b.id]) { const my = mean(R.rows[b.id]); put(b, xTop + 60 + R.depth[b.id] * COL, my == null ? 0 : my); } else floatsM.push(b); });
+        floatsP.forEach((b, i) => put(b, xThreat + 120 + i * (COL - 20), maxY + 170));
+        floatsM.forEach((b, i) => put(b, xTop + 140 + i * (COL - 20), maxY + 170));
+        // escalation factors under the barrier they degrade (their barriers stacked between)
+        const perBarrier = {};
+        els.filter(e => e.kind === 'escalation').forEach((ef, k) => {
+            const chain = []; let cur = ef.id, target = null; const seen = new Set([ef.id]);
+            for (let guard = 0; guard < 20 && !target; guard++) {
+                const c = (out.get(cur) || []).find(x => x.kind === 'escalation' && !seen.has(x.to)); if (!c) break;
+                seen.add(c.to); const t = byId.get(c.to); if (!t) break;
+                if (t.kind === 'efbarrier') { chain.push(t); cur = t.id; } else target = t;
+            }
+            const tp = target ? (pos[target.id] || { x: target.x, y: target.y }) : null;
+            if (!tp) { put(ef, xTop - 120 + k * 190, maxY + 330); chain.forEach((b, j) => put(b, xTop - 120 + k * 190, maxY + 250 - j * 80)); return; }
+            const slot = perBarrier[target.id] = (perBarrier[target.id] || 0) + 1;
+            const bx = tp.x + target.w / 2 + (slot - 1) * 150, by = tp.y + target.h;
+            chain.forEach((b, j) => put(b, bx, by + 70 + (chain.length - 1 - j) * 76));
+            put(ef, bx, by + 70 + chain.length * 76 + 20);
+        });
+        els.filter(e => e.kind === 'efbarrier' && !pos[e.id]).forEach((b, i) => put(b, xTop + i * 140, maxY + 420));
+        if (only) Object.keys(pos).forEach(id => { if (!only.has(id)) delete pos[id]; });
+        return pos;
     }
 
-    function _barrierCard(b, ev) {
-        const traced = (b.trace && b.trace.kind && b.trace.kind !== 'none' && (b.trace.ref || b.trace.logicalId)) || b.requirementId || b.principleId;
-        const cc = ev.findings.some(f => f.kind === 'common-cause' && f.text.indexOf('"' + (b.name || '') + '"') >= 0);
-        const border = cc ? '#b42318' : traced ? 'var(--color-success,#1a7f37)' : 'var(--color-border-hair,rgba(0,0,0,.2))';
-        // requirement-link provenance: ⛓ Jama relationship (tier 3) > signed
-        // confirmation (tier 2) > text-match candidate awaiting a human (tier 1).
-        const reqBadge = !b.requirementId ? '' :
-            b.reqTier === 'relationship' ? ' · <span style="color:var(--color-success,#1a7f37);font-weight:600;" title="Derived from the program’s Jama relationship graph — the trace lives in their system of record.">⛓ Jama-traced</span>' :
-            (b.reqConfirmed && b.reqConfirmed.by) ? ' · <span style="color:var(--color-success,#1a7f37);" title="Signed ' + _esc(b.reqConfirmed.by) + ' · ' + _esc(String(b.reqConfirmed.at || '').slice(0, 10)) + '">✍ confirmed</span>' :
-            b.reqAutoLinked ? ' · <a href="#" onclick="btConfirmReqLink(\'' + b.id + '\');return false;" style="color:#b7791f;font-weight:600;" title="Text-match candidate — confirm to make it a signed trace.">candidate — confirm</a>' : '';
-        return '<div style="border:1px solid ' + border + ';border-left-width:3px;border-radius:6px;padding:7px 9px;margin-bottom:6px;font-size:12px;background:var(--color-surface,#fff);">' +
-            '<div style="display:flex;justify-content:space-between;gap:6px;"><strong>' + _esc(b.name) + '</strong>' +
-            '<span><a href="#" onclick="btTraceBarrier(\'' + b.id + '\');return false;" style="color:var(--color-link,#0b57d0);font-size:11px;">trace</a> · <a href="#" onclick="btRemoveBarrier(\'' + b.id + '\');return false;" style="color:#b42318;font-size:11px;">×</a></span></div>' +
-            '<div style="color:var(--color-text-tertiary,#888);font-size:11px;margin-top:2px;">' +
-            (traced ? ('→ ' + _esc(b.trace && b.trace.logicalId ? ('component ' + b.trace.logicalId) : (b.requirementId ? ('req ' + b.requirementId) : (b.trace && b.trace.ref) || 'traced'))) : '⚠ untraced (generic)') +
-            reqBadge +
-            (cc ? ' · <span style="color:#b42318;font-weight:600;">common-cause with a cause cut set</span>' : '') +
-            '</div></div>';
+    // ---- generators: the aviation hybrid, as shortcuts whose output is editable ----
+    // Place what a generator added: the standard layout, moved so that its top event lands on
+    // the drawing's own top event (shapes already on the drawing stay where they are).
+    function _layoutNew(tx, before) {
+        const fresh = before <= 2;
+        const L = _btLayout(tx.model, null);
+        const had = _layoutNew._had || new Set();
+        const top = tx.model.elements.find(e => e.kind === 'top');
+        let dx = 0, dy = 0;
+        if (!fresh && top && had.has(top.id) && L[top.id]) { dx = top.x - L[top.id].x; dy = top.y - L[top.id].y; }
+        Object.keys(L).forEach(id => { if (fresh || !had.has(id)) { const e = tx.get(id); if (e) tx.updateElement(id, { x: L[id].x + dx, y: L[id].y + dy }); } });
     }
+    function _ensureTop(tx, label, props) {
+        let top = tx.model.elements.find(e => e.kind === 'top');
+        if (!top) { const s = SZ.top; top = tx.addElement('top', 0, 0, { label: label, props: props, w: s[0], h: s[1] }); }
+        else { tx.updateElement(top.id, { label: top.label || label, props: props }); }
+        return tx.get(top.id);
+    }
+    function _addPath(tx, from, to, kind) {
+        kind = kind || 'path';
+        if (tx.model.connectors.some(c => c.kind === kind && c.from === from && c.to === to)) return;
+        tx.addConnector(kind, from, to);
+    }
+    function _genLeft(tx, page) {
+        _layoutNew._had = new Set(tx.model.elements.map(e => e.id));
+        const before = tx.model.elements.length;
+        const top = _ensureTop(tx, (page.root && (page.root.name || page.root.displayId)) || page.name || 'Top event', { ftaPageId: page.id });
+        const monitors = ((_pc().monitorSpecs) || []).filter(sp => sp.targetPageId === page.id);
+        let added = 0;
+        _threatSpecs(page).forEach(t => {
+            if (tx.model.elements.some(e => e.kind === 'threat' && e.props && e.props.ftRef === t.ftRef)) return;
+            const th = tx.addElement('threat', 0, 0, { label: t.label, props: { ftRef: t.ftRef }, sysmlRef: t.ftRef, w: SZ.threat[0], h: SZ.threat[1] });
+            added++;
+            const chain = [];
+            // AND / INHIBIT gates are live redundancy claims; monitors watch this threat's events
+            (function walk(n, seen) {
+                if (!n || seen.has(n.id)) return; seen.add(n.id);
+                if (n.type === 'gate' && (n.gateType === 'AND' || n.gateType === 'INHIBIT') && _kids(n).length >= 2)
+                    chain.push({ label: 'Redundancy: ' + String(n.name || n.displayId || 'AND gate').slice(0, 34), props: { traceKind: 'gate', traceRef: String(n.displayId || n.name || n.id), traceLogicalId: '' } });
+                _kids(n).forEach(c => walk(c, seen));
+            })(t.node, new Set());
+            monitors.filter(sp => sp.targetLid != null && _inSubtree(t.node, n => n.type !== 'gate' && _lidOf(n) === String(sp.targetLid))).forEach(sp => {
+                chain.push({ label: 'Monitor: ' + (sp.threshold ? String(sp.threshold).slice(0, 32) : sp.id), props: sp.monitorLid ? { traceKind: 'component', traceRef: String(sp.monitorLid), traceLogicalId: String(sp.monitorLid) } : { traceKind: 'monitor', traceRef: String(sp.id), traceLogicalId: '' } });
+            });
+            let prev = th.id;
+            chain.forEach(c => { const b = tx.addElement('preventive', 0, 0, { label: c.label, props: c.props, w: SZ.preventive[0], h: SZ.preventive[1] }); _addPath(tx, prev, b.id); prev = b.id; });
+            _addPath(tx, prev, top.id);
+        });
+        _layoutNew(tx, before);
+        return added;
+    }
+    function _genRight(tx, eta) {
+        _layoutNew._had = new Set(tx.model.elements.map(e => e.id));
+        const before = tx.model.elements.length;
+        const top = _ensureTop(tx, (eta.initiator && eta.initiator.desc) || eta.name || 'Top event', { etaId: eta.id });
+        let prev = top.id, added = 0;
+        (eta.barriers || []).forEach((h, i) => {
+            const name = String(h.name || ('Heading ' + (i + 1)));
+            let b = tx.model.elements.find(e => e.kind === 'mitigative' && e.props && e.props.traceKind === 'eta' && String(e.label) === name);
+            if (!b) {
+                b = tx.addElement('mitigative', 0, 0, { label: name, w: SZ.mitigative[0], h: SZ.mitigative[1],
+                    props: { pFail: window.SLEta ? window.SLEta.pNotOk(h) : h.pFail, traceKind: 'eta', traceRef: eta.id + ' · ' + name, traceLogicalId: '', tracePageId: h.linkedPageId || '', traceEtaId: eta.id } });
+                added++;
+            }
+            _addPath(tx, prev, b.id); prev = b.id;
+        });
+        _etaGroups(eta).forEach(g => {
+            let c = tx.model.elements.find(e => e.kind === 'consequence' && e.props && e.props.etaGroup === g.key && e.props.etaId === eta.id);
+            if (!c) { c = tx.addElement('consequence', 0, 0, { label: g.name, w: SZ.consequence[0], h: SZ.consequence[1], props: Object.assign({ etaId: eta.id, etaGroup: g.key }, g.severity ? { severity: g.severity } : {}) }); added++; }
+            _addPath(tx, prev, c.id);
+        });
+        _layoutNew(tx, before);
+        return added;
+    }
+
+    // ---- notation (CCPS / Energy Institute bow-tie) ------------------------------
+    const INK = 'var(--sde-stroke,#14171c)', MUTED = 'var(--sde-muted,#7a828f)', FILL = 'var(--sde-fill,#fff)', BAD = 'var(--sde-bad,#c0392b)';
+    function _wrapT(text, max, lines) {
+        const words = String(text || '').split(/\s+/).filter(Boolean), out = []; let cur = '';
+        words.forEach(w => { if (!cur) cur = w; else if ((cur + ' ' + w).length <= max) cur += ' ' + w; else { out.push(cur); cur = w; } });
+        if (cur) out.push(cur);
+        if (out.length > lines) { out.length = lines; out[lines - 1] = out[lines - 1].slice(0, Math.max(1, max - 1)) + '…'; }
+        return out.map(l => l.length > max ? l.slice(0, max - 1) + '…' : l);
+    }
+    function _txt(lines, x, y0, lh, size, weight, color, anchor) {
+        return lines.map((l, i) => '<text x="' + x + '" y="' + (y0 + i * lh) + '" font-size="' + size + '"' + (weight ? ' font-weight="' + weight + '"' : '') + ' fill="' + color + '"' + (anchor ? ' text-anchor="' + anchor + '"' : '') + '>' + _x(l) + '</text>').join('');
+    }
+    function _box(e, accent, caption, side) {
+        const w = e.w, h = e.h, chars = Math.max(10, Math.floor((w - 20) / 6.3));
+        const name = e.label ? _wrapT(e.label, chars, h > 60 ? 3 : 2) : ['(double-click to name)'];
+        let s = '<rect class="sde-shape" x="0" y="0" width="' + w + '" height="' + h + '" rx="6" fill="' + FILL + '" stroke="' + INK + '" stroke-width="1.4"/>';
+        s += side === 'right' ? '<rect x="' + (w - 7) + '" y="0" width="7" height="' + h + '" rx="3" fill="' + accent + '"/>' : '<rect x="0" y="0" width="7" height="' + h + '" rx="3" fill="' + accent + '"/>';
+        s += _txt([caption], 13, 13, 0, 9, 700, MUTED);
+        s += _txt(name, 13, 28, 13, 11.5, 600, e.label ? INK : MUTED);
+        return s;
+    }
+    function _sevFill(s) { s = String(s || '').toLowerCase(); return /cat/.test(s) ? '#F2928C' : /haz/.test(s) ? '#F5B878' : /maj/.test(s) ? '#F2DB74' : /min/.test(s) ? '#F8ECB0' : (/no safety/.test(s) ? '#A6DFB4' : '#c9ced6'); }
+    function _shapeHazard(e) {
+        const w = e.w, h = e.h; let stripes = '';
+        for (let x = -14; x < w; x += 14) stripes += '<path d="M ' + x + ' 14 L ' + (x + 7) + ' 0 L ' + (x + 14) + ' 0 L ' + (x + 7) + ' 14 Z" fill="#14171c"/>';
+        return '<rect x="0" y="0" width="' + w + '" height="14" fill="#F5C518"/><svg x="0" y="0" width="' + w + '" height="14" overflow="hidden">' + stripes + '</svg>' +
+            '<rect class="sde-shape" x="0" y="0" width="' + w + '" height="' + h + '" rx="3" fill="none" stroke="' + INK + '" stroke-width="1.5"/>' +
+            '<rect x="0.75" y="14" width="' + (w - 1.5) + '" height="' + (h - 14.75) + '" fill="' + FILL + '"/>' +
+            _txt(['HAZARD'], 8, 26, 0, 9, 700, MUTED) + _txt(e.label ? _wrapT(e.label, Math.floor((w - 16) / 6.3), 2) : ['(double-click to name)'], 8, 41, 13, 11.5, 600, e.label ? INK : MUTED);
+    }
+    function _shapeTop(e) {
+        const w = e.w, h = e.h, p = e.props || {};
+        const name = e.label ? _wrapT(e.label, 22, 2) : ['(name the top event)'];
+        const pr = p._ach != null ? 'achieved ' + p._ach.toExponential(2) + ' /FH' : p._p != null ? 'P ' + p._p.toExponential(2) + ' /FH' : (p.ftaPageId ? '' : 'not quantified');
+        return '<ellipse class="sde-shape" cx="' + w / 2 + '" cy="' + h / 2 + '" rx="' + w / 2 + '" ry="' + h / 2 + '" fill="rgba(234,88,12,.10)" stroke="#c2410c" stroke-width="2.2"/>' +
+            _txt(['TOP EVENT'], w / 2, 24, 0, 9, 700, '#c2410c', 'middle') + _txt(name, w / 2, 41, 13, 11.5, 700, e.label ? INK : MUTED, 'middle') +
+            (pr ? _txt([pr], w / 2, h - 16, 0, 10, 400, MUTED, 'middle') : '');
+    }
+    function _shapeBarrier(e) {
+        const w = e.w, h = e.h, p = e.props || {};
+        const accent = e.kind === 'mitigative' ? '#1f8f4e' : e.kind === 'efbarrier' ? '#b7791f' : '#1A6EF2';
+        const traced = (p.traceKind && p.traceKind !== 'none' && (p.traceRef || p.traceLogicalId)) || p.requirementId || p.principleId;
+        const cc = !!p._cc;
+        const name = e.label ? _wrapT(e.label, Math.max(10, Math.floor((w - 14) / 6)), e.kind === 'efbarrier' ? 2 : 3) : ['(name it)'];
+        const meta = [p.barrierType, p.effectiveness].filter(Boolean).join(' · ');
+        return '<rect class="sde-shape" x="0" y="0" width="' + w + '" height="' + h + '" rx="3" fill="' + FILL + '" stroke="' + (cc ? BAD : INK) + '" stroke-width="' + (cc ? 2.6 : 1.4) + '"' + (traced || cc ? '' : ' stroke-dasharray="5 3"') + '/>' +
+            '<rect x="0" y="0" width="' + w + '" height="7" rx="2" fill="' + accent + '"/>' +
+            _txt(name, 7, 21, 12.5, 11, 600, e.label ? INK : MUTED) +
+            _txt([meta ? meta.slice(0, Math.floor(w / 5.6)) : (traced ? 'traced' : 'untraced')], 7, h - 7, 0, 9, 400, cc ? BAD : (traced ? MUTED : '#b7791f')) +
+            (cc ? '<title>Common cause: depends on an element in a cause cut set</title>' : '');
+    }
+    function _shapeConsequence(e) {
+        const s = _box(e, _sevFill((e.props || {}).severity), 'CONSEQUENCE', 'right');
+        const sev = (e.props || {}).severity;
+        return s + (sev ? _txt([sev], 13, e.h - 8, 0, 9.5, 600, MUTED) : '');
+    }
+    const _icon = inner => '<svg width="30" height="22" viewBox="0 0 30 22" aria-hidden="true">' + inner + '</svg>';
+
+    let _curEd = null, _pending = null;
+    function _btOfEditor(ed) { const id = ed && ed.opts && ed.opts.btId; return id ? _store().find(b => b && b.id === id) || null : null; }
+    function _btComplete(tx, ctx) {
+        const bt = _btOfEditor(ctx.editor); if (!bt) return;
+        // refresh the derived display values in the same change
+        const m = { elements: tx.model.elements.map(e => ({ id: e.id, kind: e.kind, x: e.x, y: e.y, w: e.w, h: e.h, label: e.label, props: Object.assign({}, e.props), sysmlRef: e.sysmlRef })), connectors: tx.model.connectors };
+        _decorate(m, bt);
+        m.elements.forEach(e => {
+            const cur = tx.get(e.id); if (!cur) return;
+            const a = {}, b = {};
+            Object.keys(cur.props || {}).forEach(k => { if (k[0] === '_') a[k] = cur.props[k]; });
+            Object.keys(e.props || {}).forEach(k => { if (k[0] === '_') b[k] = e.props[k]; });
+            if (JSON.stringify(a) === JSON.stringify(b)) return;
+            const patch = {}; Object.keys(a).forEach(k => { patch[k] = undefined; }); Object.assign(patch, b);
+            tx.updateElement(e.id, { props: patch });
+        });
+    }
+
+    function _pageOpts(cur) {
+        const o = [{ value: '', label: 'None' }].concat(_ftaPages().filter(p => p && p.root).map(p => ({ value: p.id, label: String(p.name || p.id).slice(0, 60) })));
+        if (cur && !o.some(x => x.value === cur)) o.push({ value: cur, label: cur + ' (not found)' });
+        return o;
+    }
+    function _etaOpts(cur) {
+        const o = [{ value: '', label: 'None' }].concat(_etaStore().map(t => ({ value: t.id, label: t.id + ' ' + String(t.name || '').slice(0, 50) })));
+        if (cur && !o.some(x => x.value === cur)) o.push({ value: cur, label: cur + ' (not found)' });
+        return o;
+    }
+    function _fcOpts(cur) {
+        const ids = [];
+        ((typeof acFhaData !== 'undefined' ? acFhaData : []) || []).forEach(f => { if (f && f.fcId && ids.indexOf(f.fcId) < 0) ids.push(f.fcId); });
+        ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => (s.fha || []).forEach(f => { if (f && f.fcId && ids.indexOf(f.fcId) < 0) ids.push(f.fcId); }));
+        if (cur && ids.indexOf(cur) < 0) ids.push(cur);
+        return [{ value: '', label: 'Not linked' }].concat(ids.map(v => ({ value: v, label: v })));
+    }
+    const _pNum = v => (v == null || (v >= 0 && v <= 1)) ? null : 'Enter a probability between 0 and 1 (for example 1e-3).';
+    function _fields(item, ctx) {
+        if (!ctx || !ctx.isElement) return null;
+        const note = { key: 'props.note', label: 'Description', type: 'textarea' };
+        if (item.kind === 'top') return [
+            { key: 'props.ftaPageId', label: 'Left side: fault tree (quantifies the top event)', type: 'select', options: _pageOpts(item.props.ftaPageId) },
+            { key: 'props.etaId', label: 'Right side: event tree (the consequence sequences)', type: 'select', options: _etaOpts(item.props.etaId) },
+            note];
+        if (item.kind === 'consequence') return [
+            { key: 'props.severity', label: 'Severity', type: 'select', options: [{ value: '', label: 'Not assessed' }].concat(SEVS.map(s => ({ value: s, label: s }))) },
+            { key: 'props.category', label: 'Consequence category', type: 'text', help: 'For example: people, aircraft, environment, reputation.' },
+            { key: 'props.linkedFcId', label: 'Failure condition', type: 'select', options: _fcOpts(item.props.linkedFcId) },
+            note];
+        if (BK[item.kind]) {
+            const f = [];
+            if (item.kind !== 'efbarrier') f.push({ key: 'kind', label: 'Side', type: 'select', options: [{ value: 'preventive', label: 'Preventive (left of the top event)' }, { value: 'mitigative', label: 'Mitigative (right of the top event)' }] });
+            return f.concat([
+                { key: 'props.barrierType', label: 'Barrier type', type: 'select', options: [{ value: '', label: 'Not set' }].concat(BARRIER_TYPES.map(v => ({ value: v, label: v }))) },
+                { key: 'props.effectiveness', label: 'Effectiveness', type: 'select', options: [{ value: '', label: 'Not assessed' }].concat(EFFECTIVENESS.map(v => ({ value: v, label: v }))) },
+                { key: 'props.owner', label: 'Owner (accountable person or role)', type: 'text' },
+                { key: 'props.pFail', label: 'Probability of failure on demand (your value)', type: 'number', validate: _pNum },
+                { key: 'props.traceKind', label: 'Traced to', type: 'select', options: TRACE_KINDS },
+                { key: 'props.traceRef', label: 'Trace reference (component, gate, requirement or monitor id)', type: 'text' },
+                { key: 'props.traceLogicalId', label: 'Basic event logical id (for the common cause check)', type: 'text' },
+                { key: 'props.requirementId', label: 'Requirement this barrier satisfies', type: 'text' },
+                { key: 'props.principleId', label: 'Independence principle', type: 'text' },
+                { key: 'props.note', label: 'Note', type: 'textarea' }]);
+        }
+        return [note];
+    }
+    function _panel(item, ctx) {
+        const ed = ctx && ctx.editor, bt = _btOfEditor(ed); if (!bt) return '';
+        const ro = ctx.readOnly ? ' disabled' : '';
+        let ev = null; try { ev = bowtieEvaluate(bt); } catch (_) {}
+        if (!item) {
+            return '<label>Bow-tie</label><div>' + _esc(bt.id + ' ' + (bt.name || '')) + '</div>' +
+                '<div class="sde-help">Drag a Hazard, the Top event, Threats and Consequences onto the canvas, then barriers onto the pathways. Draw a pathway from a blue dot: threat to barrier to top event, top event to barrier to consequence. An escalation factor points at the barrier it degrades, through its own escalation-factor barriers.</div>' +
+                '<div class="sde-row"><button type="button" class="sde-btn" onclick="SLBowtieUI.genLeft()"' + ro + '>Left side from fault tree</button><button type="button" class="sde-btn" onclick="SLBowtieUI.genRight()"' + ro + '>Right side from event tree</button></div>';
+        }
+        if (item.kind === 'top' && ev) {
+            return '<label>Top event probability</label><div class="sde-ro-val">' + (ev.pCritical != null ? ev.pCritical.toExponential(3) + ' /FH (fault tree, BDD-exact)' : 'Not quantified: pick the fault tree that develops it.') + '</div>' +
+                (ev.verif ? '<div class="sde-ro-val">allocated ' + _fmt(ev.verif.pAllocated) + ' · achieved ' + _fmt(ev.verif.pAchieved) + '</div>' : '') +
+                (ev.cutsets.length ? '<div class="sde-help">' + ev.cutsets.length + ' minimal cut sets' + (ev.spf ? ', ' + ev.spf + ' single-point' : '') + '.</div>' : '') +
+                '<div class="sde-row">' + (bt.ftaPageId ? '<button type="button" class="sde-btn" onclick="btOpenFta(\'' + _esc(bt.ftaPageId) + '\')">Open the fault tree</button>' : '') + (bt.etaId ? '<button type="button" class="sde-btn" onclick="SLBowtieUI.openEta()">Open the event tree</button>' : '') + '</div>';
+        }
+        if (item.kind === 'threat' && item.props && item.props.ftRef) {
+            const pid = String(item.props.ftRef).slice(4).split('/')[0];
+            return '<div class="sde-help">Generated from fault tree node ' + _esc(item.props.ftRef) + '.</div><div class="sde-row"><button type="button" class="sde-btn" onclick="btOpenFta(\'' + _esc(pid) + '\')">Open the fault tree</button></div>';
+        }
+        if (item.kind === 'consequence' && item.props && item.props.etaGroup && ev) {
+            const outs = ev.outcomes.filter(o => (/[1-9]/.test(o.key) || o.transferTo) && (o.transferTo ? 'transfer:' + o.transferTo : (o.severity || 'unassessed')) === item.props.etaGroup);
+            const f = outs.reduce((a, o) => a + o.freq, 0);
+            return '<label>From the event tree</label><div class="sde-ro-val">' + outs.length + ' sequence(s), ' + f.toExponential(3) + ' /FH with the top event from the fault tree</div>';
+        }
+        if (BK[item.kind]) {
+            const b = (bt.barriers || []).find(x => x.id === item.id) || {};
+            const reqBadge = !b.requirementId ? '' :
+                b.reqTier === 'relationship' ? '<div class="sde-help" style="color:var(--sde-ok,#1f8f4e)">Requirement link traced in Jama (relationship graph).</div>' :
+                (b.reqConfirmed && b.reqConfirmed.by) ? '<div class="sde-help">Requirement link confirmed by ' + _esc(b.reqConfirmed.by) + '.</div>' :
+                b.reqAutoLinked ? '<div class="sde-help" style="color:#b7791f">Requirement link is a text-match candidate.</div><div class="sde-row"><button type="button" class="sde-btn" onclick="btConfirmReqLink(\'' + _esc(b.id) + '\')"' + ro + '>Confirm the requirement link</button></div>' : '';
+            const mine = ev ? ev.findings.filter(f => f.barrierId === item.id || (f.text || '').indexOf('"' + (item.label || '\u0000') + '"') >= 0) : [];
+            return reqBadge + mine.map(f => '<div class="sde-issue">' + _esc(f.text) + '</div>').join('') +
+                (b.trace && b.trace.pageId ? '<div class="sde-row"><button type="button" class="sde-btn" onclick="btOpenFta(\'' + _esc(b.trace.pageId) + '\')">Open the fault tree that implements it</button></div>' : '');
+        }
+        return '';
+    }
+    function _validate(m) {
+        const out = [], els = m.elements || [], cns = m.connectors || [];
+        const hasOut = id => cns.some(c => c.from === id), hasIn = id => cns.some(c => c.to === id);
+        if (!els.some(e => e.kind === 'top')) out.push({ id: null, message: 'There is no top event yet: drag one from the toolbox.' });
+        els.forEach(e => {
+            const nm = e.label || '(unnamed)';
+            if (e.kind === 'threat' && !hasOut(e.id)) out.push({ id: e.id, message: 'Threat "' + nm + '" has no pathway to the top event.' });
+            if (e.kind === 'consequence' && !hasIn(e.id)) out.push({ id: e.id, message: 'Consequence "' + nm + '" has no pathway from the top event.' });
+            if ((e.kind === 'preventive' || e.kind === 'mitigative') && !hasIn(e.id) && !hasOut(e.id)) out.push({ id: e.id, message: 'Barrier "' + nm + '" is not on a pathway yet.' });
+            if (e.kind === 'escalation' && !hasOut(e.id)) out.push({ id: e.id, message: 'Escalation factor "' + nm + '" does not point at a barrier.' });
+        });
+        cns.forEach(c => {
+            const a = els.find(e => e.id === c.from), b = els.find(e => e.id === c.to);
+            if (a && b && c.kind === 'path') { const r = _canPath(a.kind, b.kind); if (r !== true) out.push({ id: c.id, message: r }); }
+        });
+        return out;
+    }
+    function _canPath(f, t) {
+        if (f === 'threat' && (t === 'preventive' || t === 'top')) return true;
+        if (f === 'preventive' && (t === 'preventive' || t === 'top')) return true;
+        if (f === 'top' && (t === 'mitigative' || t === 'consequence')) return true;
+        if (f === 'mitigative' && (t === 'mitigative' || t === 'consequence')) return true;
+        if (t === 'threat') return 'A pathway starts at a threat; it cannot end at one.';
+        if (f === 'consequence') return 'A pathway ends at a consequence; it cannot start from one.';
+        if (f === 'preventive' || f === 'threat') return 'Left of the top event a pathway runs threat, preventive barriers, top event.';
+        return 'Right of the top event a pathway runs top event, mitigative barriers, consequence.';
+    }
+
+    if (_E) {
+        const ek = (kind, o) => Object.assign({ w: SZ[kind][0], h: SZ[kind][1], renderLabel: false, minW: 80, minH: 40 }, o);
+        _E.register({
+            type: 'bowtie',
+            title: 'Bow-tie (CCPS / Energy Institute)',
+            grid: 10,
+            elementKinds: {
+                hazard: ek('hazard', { label: 'Hazard', description: 'The hazard: what has the potential to cause harm while it is under control', shape: _shapeHazard, maxCount: 1, sysmlType: 'SafetyLab::BowTieHazard',
+                    icon: _icon('<rect x="2" y="4" width="26" height="15" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 8h26" stroke="#F5C518" stroke-width="4"/>') }),
+                top: ek('top', { label: 'Top event', description: 'The moment control of the hazard is lost: the knot of the bow-tie', shape: _shapeTop, boundary: 'ellipse', maxCount: 1, sysmlType: 'SafetyLab::TopEvent',
+                    icon: _icon('<ellipse cx="15" cy="11" rx="12" ry="8" fill="rgba(234,88,12,.15)" stroke="#c2410c" stroke-width="1.6"/>') }),
+                threat: ek('threat', { label: 'Threat', description: 'A cause that can release the hazard', shape: e => _box(e, '#2563eb', 'THREAT', 'left'), sysmlType: 'SafetyLab::Threat',
+                    icon: _icon('<rect x="2" y="4" width="26" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="4" width="4" height="14" fill="#2563eb"/>') }),
+                preventive: ek('preventive', { label: 'Preventive barrier', description: 'Stops a threat from leading to the top event. Place it on a threat pathway', shape: _shapeBarrier, sysmlType: 'SafetyLab::Barrier',
+                    icon: _icon('<rect x="8" y="2" width="14" height="18" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="8" y="2" width="14" height="3" fill="#1A6EF2"/>') }),
+                consequence: ek('consequence', { label: 'Consequence', description: 'An outcome of the top event', shape: _shapeConsequence, sysmlType: 'SafetyLab::Consequence',
+                    icon: _icon('<rect x="2" y="4" width="26" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="24" y="4" width="4" height="14" fill="#c0392b"/>') }),
+                mitigative: ek('mitigative', { label: 'Mitigative barrier', description: 'Reduces or stops the consequence once the top event has happened. Place it on a consequence pathway', shape: _shapeBarrier, sysmlType: 'SafetyLab::Barrier',
+                    icon: _icon('<rect x="8" y="2" width="14" height="18" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="8" y="2" width="14" height="3" fill="#1f8f4e"/>') }),
+                escalation: ek('escalation', { label: 'Escalation factor', description: 'A condition that makes a barrier fail or work less well', shape: e => _box(e, '#b7791f', 'ESCALATION FACTOR', 'left'), sysmlType: 'SafetyLab::EscalationFactor',
+                    icon: _icon('<rect x="2" y="4" width="26" height="14" rx="2" fill="none" stroke="#b7791f" stroke-width="1.4" stroke-dasharray="3 2"/>') }),
+                efbarrier: ek('efbarrier', { label: 'Escalation factor barrier', description: 'Defends a barrier against an escalation factor. Place it between them', shape: _shapeBarrier, sysmlType: 'SafetyLab::Barrier',
+                    icon: _icon('<rect x="9" y="4" width="12" height="15" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="4" width="12" height="3" fill="#b7791f"/>') }),
+            },
+            connectorKinds: {
+                path: { label: 'Pathway', description: 'Threat to barrier to top event, or top event to barrier to consequence', from: ['threat', 'preventive', 'top', 'mitigative'], to: ['preventive', 'top', 'mitigative', 'consequence'], route: 'orthogonal', arrow: 'triangle' },
+                escalation: { label: 'Escalation', description: 'Escalation factor to the barrier it degrades (through its escalation factor barriers)', from: ['escalation', 'efbarrier'], to: ['efbarrier', 'preventive', 'mitigative'], route: 'orthogonal', arrow: 'triangle', style: { stroke: '#b7791f', dash: '6 4' } },
+                release: { label: 'Hazard release', description: 'The hazard to the top event it is released into', from: ['hazard'], to: ['top'], route: 'straight', arrow: 'triangle', style: { dash: '3 3' } },
+            },
+            canConnect(a, b, kind) {
+                if (kind === 'path') return _canPath(a.kind, b.kind);
+                if (kind === 'escalation' && a.kind === 'efbarrier' && b.kind === 'efbarrier' && a.id === b.id) return 'A barrier cannot defend itself.';
+                return true;
+            },
+            layout: (m) => _btLayout(m, null),
+            complete: _btComplete,
+            fields: _fields,
+            panel: _panel,
+            validate: _validate,
+        });
+    }
+
+    // ------------------------------------------------------------------ the page
+    function _mountEditor(bt) {
+        const host = document.getElementById('bt-editor'); if (!host) return;
+        if (_curEd && _curEd.opts.btId === (bt && bt.id) && host.contains(_curEd.root)) { _curEd.reload(); return; }
+        if (_curEd) { try { _curEd.destroy(); } catch (_) {} _curEd = null; }
+        host.innerHTML = '';
+        if (!bt || !_E) return;
+        const id = bt.id;
+        _curEd = _E.mount(host, {
+            type: 'bowtie', btId: id, height: 640, lockKey: 'bowtie:' + id,
+            adapter: {
+                load: () => { const b = _store().find(x => x.id === id); return b ? btToModel(b) : { elements: [], connectors: [] }; },
+                save: (model) => { const s = _store(), i = s.findIndex(x => x.id === id); if (i < 0) return; s[i] = btFromModel(model, s[i]); },
+            },
+            actions: [
+                { label: 'Left side from fault tree', title: 'Generate threats and preventive barriers from a fault tree page (adds only what is missing)', run: () => SLBowtieUI.genLeft() },
+                { label: 'Right side from event tree', title: 'Generate mitigative barriers and consequences from an event tree (adds only what is missing)', run: () => SLBowtieUI.genRight() },
+                { label: 'Export image', title: 'Download the whole bow-tie as an SVG picture', run: () => SLBowtieUI.exportSvg() },
+                { label: 'Export SysML v2', title: 'Export the bow-ties as SysML v2 (SafetyLab library)', run: () => { try { SLSysML.openExport('bowtie'); } catch (_) { _toast('SysML v2 export is not available in this build.', 'warn'); } } },
+            ],
+        });
+        _curEd.on('change', () => { _renderSide(); if (_pending) { const p = _pending, ed = _curEd; _pending = null; setTimeout(() => { try { if (ed.get(p)) ed.select([p]); } catch (_) {} }, 0); } });
+        _curEd.on('reload', () => _renderSide());
+    }
+    function _pick(title, options, help) {
+        return new Promise(res => {
+            let m = document.getElementById('bt-pick-modal'); if (m) m.remove();
+            m = document.createElement('div'); m.id = 'bt-pick-modal';
+            m.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;';
+            const done = v => { m.remove(); res(v); };
+            m.addEventListener('click', e => { if (e.target === m) done(null); });
+            m.innerHTML = '<div role="dialog" aria-modal="true" aria-label="' + _esc(title) + '" style="background:var(--color-surface,#fff);color:var(--color-text-primary,#223);border-radius:14px;padding:18px 20px;width:min(520px,92vw);max-height:80vh;overflow:auto;border:1px solid var(--color-border-hair,rgba(0,0,0,.15));box-shadow:0 30px 80px rgba(0,0,0,.4);">' +
+                '<div style="font-weight:700;font-size:15px;">' + _esc(title) + '</div><div style="font-size:12px;color:var(--color-text-tertiary,#888);margin:2px 0 12px;">' + _esc(help || '') + '</div>' +
+                options.map((o, i) => '<button data-i="' + i + '" style="display:block;width:100%;text-align:left;padding:9px 12px;margin-bottom:6px;border:1px solid var(--color-border-hair,rgba(0,0,0,.15));border-radius:8px;background:var(--color-surface,#fff);color:inherit;cursor:pointer;font-size:13px;">' + _esc(o.label) + '</button>').join('') +
+                '<div style="text-align:right;margin-top:10px;"><button data-x="1" style="padding:7px 14px;border-radius:8px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));background:transparent;color:inherit;cursor:pointer;font-size:12.5px;">Cancel</button></div></div>';
+            m.querySelectorAll('button[data-i]').forEach(b => b.onclick = () => done(options[+b.getAttribute('data-i')].value));
+            m.querySelector('button[data-x]').onclick = () => done(null);
+            document.body.appendChild(m);
+            const first = m.querySelector('button[data-i]'); if (first) first.focus();
+        });
+    }
+    function _summary(bt, ev) {
+        const page = _ftaPages().find(p => p.id === bt.ftaPageId), eta = _etaStore().find(t => t.id === bt.etaId);
+        return '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:8px 12px;margin:0 0 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.12));border-radius:8px;font-size:12px;">' +
+            '<span><b>Top event</b> ' + _esc(ev.critLabel || bt.name) + ' <span class="u-mono">' + (ev.pCritical != null ? _fmt(ev.pCritical) + ' /FH' : 'not quantified') + '</span></span>' +
+            '<span style="color:var(--color-text-tertiary,#888);">Left: ' + (page ? _esc(page.name || page.id) + ' · ' + ev.cutsets.length + ' cut sets' + (ev.spf ? ' · <span style="color:#b42318;font-weight:600;">' + ev.spf + ' single-point</span>' : '') : 'no fault tree') + '</span>' +
+            '<span style="color:var(--color-text-tertiary,#888);">Right: ' + (eta ? _esc(eta.id + ' ' + (eta.name || '')) + (ev.etaClosed ? '' : ' · <span style="color:#b42318;">paths do not sum to 1</span>') : 'no event tree') + '</span>' +
+            (bt.diagram ? '' : '<span style="color:var(--color-text-tertiary,#888);" title="Drawn from the linked fault tree and event tree. Your first edit keeps the drawing as it is.">drawn from its links</span>') + '</div>';
+    }
+    function _register(bt, ev) {
+        const bars = bt.barriers || [];
+        if (!bars.length) return '';
+        const cc = new Set(ev.ccBarrierIds || []);
+        return '<div style="margin-top:14px;"><strong style="font-size:13px;">Barrier register (' + bars.length + ')</strong>' +
+            '<table class="data-table" style="width:100%;font-size:11.5px;margin-top:6px;"><thead><tr><th>Side</th><th>Barrier</th><th>Type</th><th>Effectiveness</th><th>Owner</th><th>Traced to</th><th>Requirement</th><th></th></tr></thead><tbody>' +
+            bars.map(b => {
+                const traced = (b.trace && b.trace.kind && b.trace.kind !== 'none' && (b.trace.ref || b.trace.logicalId)) || b.requirementId || b.principleId;
+                const req = !b.requirementId ? 'None' : _esc(b.requirementId) + (b.reqTier === 'relationship' ? ' <span style="color:var(--color-success,#1a7f37);font-weight:600;" title="Derived from the program’s Jama relationship graph — the trace lives in their system of record.">⛓ Jama-traced</span>' :
+                    (b.reqConfirmed && b.reqConfirmed.by) ? ' <span style="color:var(--color-success,#1a7f37);" title="Signed ' + _esc(b.reqConfirmed.by) + ' · ' + _esc(String(b.reqConfirmed.at || '').slice(0, 10)) + '">✍ confirmed</span>' :
+                    b.reqAutoLinked ? ' <a href="#" onclick="btConfirmReqLink(\'' + _esc(b.id) + '\');return false;" style="color:#b7791f;font-weight:600;" title="Text-match candidate — confirm to make it a signed trace.">candidate — confirm</a>' : '');
+                return '<tr' + (cc.has(b.id) ? ' style="background:rgba(180,35,24,.06);"' : '') + '><td>' + (b.role === 'escalation' ? 'escalation (' + _esc(b.side) + ')' : _esc(b.side || '')) + '</td>' +
+                    '<td><a href="#" onclick="SLBowtieUI.focus(\'' + _esc(b.id) + '\');return false;">' + _esc(b.name || '?') + '</a></td><td>' + _esc(b.barrierType || 'Not set') + '</td><td>' + _esc(b.effectiveness || 'Not assessed') + '</td><td>' + _esc(b.owner || 'Not set') + '</td>' +
+                    '<td>' + (traced ? _esc(b.trace && b.trace.logicalId ? 'component ' + b.trace.logicalId : (b.trace && b.trace.kind && b.trace.kind !== 'none' ? b.trace.kind + ' ' + (b.trace.ref || '') : 'requirement')) : '<span style="color:#b7791f;">untraced (generic)</span>') + (cc.has(b.id) ? ' <span style="color:#b42318;font-weight:600;">common cause</span>' : '') + '</td>' +
+                    '<td>' + req + '</td><td><a href="#" onclick="btTraceBarrier(\'' + _esc(b.id) + '\');return false;">trace</a></td></tr>';
+            }).join('') + '</tbody></table></div>';
+    }
+    function _renderSide() {
+        const side = document.getElementById('bt-side'); if (!side) return;
+        const bt = _bt(); if (!bt) { side.innerHTML = ''; return; }
+        const ev = bowtieEvaluate(bt);
+        const sum = document.getElementById('bt-summary'); if (sum) sum.innerHTML = _summary(bt, ev);
+        let findings;
+        if (ev.findings.length) {
+            findings = '<div style="margin-top:16px;border:1px solid var(--color-border-hair,rgba(0,0,0,.14));border-radius:8px;padding:12px 14px;">' +
+                '<strong style="font-size:13px;">Barrier findings (' + ev.findings.length + ')</strong>' +
+                ev.findings.map(f => '<div style="display:flex;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><span style="flex:0 0 auto;color:' + (f.sev === 'high' ? '#b42318' : '#b7791f') + ';font-weight:700;">' + (f.sev === 'high' ? '●' : '○') + '</span><span>' + _esc(f.text) + '</span></div>').join('') + '</div>';
+        } else {
+            findings = '<div style="margin-top:16px;font-size:12px;color:var(--color-success,#1a7f37);">✓ No barrier findings: every barrier traces to evidence and no mitigation shares a cause cut set.</div>';
+        }
+        side.innerHTML = _register(bt, ev) + findings;
+    }
+
+    function _render() {
+        const host = document.getElementById('view-bowtie'); if (!host) return;
+        const store = _store();
+        const pages = _ftaPages(), etas = _etaStore();
+        let head = '<div class="header-with-export"><h3>Bow-Tie Analysis <span style="font-weight:400;font-size:12px;color:var(--color-text-tertiary,#888);">: threats, barriers, top event, consequences and escalation factors (CCPS / Energy Institute), joined to the fault tree and the event tree</span></h3></div>';
+        const bt0 = _bt();
+        let bar = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 12px;">';
+        bar += '<label for="bt-select" style="font-size:12px;font-weight:600;">Bow-tie</label><select id="bt-select" onchange="btSelect(this.value)" style="padding:6px 8px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;max-width:360px;">' +
+            store.map(b => '<option value="' + _esc(b.id) + '"' + (b.id === (bt0 && bt0.id) ? ' selected' : '') + '>' + _esc(b.id + ' · ' + b.name) + '</option>').join('') +
+            (store.length ? '' : '<option>— none yet —</option>') + '</select>';
+        bar += '<button class="btn-cyan" onclick="btCreate()" style="font-size:12px;">+ New bow-tie</button>';
+        bar += '<button class="btn-cyan" onclick="btAutoBuild()" style="font-size:12px;" title="Compile a bow-tie from an existing fault tree: matches the event tree via the shared failure condition, derives barriers from monitor specs, AND-gate redundancy and the event tree, and auto-links requirements (incl. Jama imports). Everything it makes stays editable.">⚡ Auto-build from fault tree</button>';
+        bar += '<button onclick="btAutoLinkAll()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;" title="Re-run requirement auto-linking on every bow-tie — run after importing requirements (e.g. from Jama).">↻ Re-link requirements</button>';
+        let _tcDim = ''; try { const tc = (typeof window.declaredToolchain === 'function') ? window.declaredToolchain() : null; if (tc && tc.rm && tc.rm.tool && tc.rm.tool !== 'jama') _tcDim = 'opacity:.45;'; } catch (_) {}
+        bar += '<button onclick="btJamaPull()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;' + _tcDim + '" title="Pull mitigations and requirements for this critical event: relationship-traced items first (tier 3), text matches as candidates.' + (_tcDim ? ' (Declared RM toolchain is not Jama — ReqIF traces still feed tier-3 links automatically.)' : '') + '">🔗 Pull from Jama</button>';
+        bar += '<button onclick="jbOpen()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;" title="The live bridge: push failure conditions into Jama as items; the program traces its requirements to them there (human act); pull the relationship graph back for tier-3 links.">🔁 Jama bridge</button>';
+        if (bt0) bar += '<button onclick="SLBowtieUI.rename()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;">Rename</button><button onclick="SLBowtieUI.remove()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;">Delete</button>';
+        bar += '</div>';
+        if (!store.length) {
+            host.innerHTML = head + bar + '<p style="color:var(--color-text-secondary,#666);font-size:13px;">A bow-tie shows how a hazard is released into a <strong>top event</strong>: the <strong>threats</strong> that cause it and the preventive barriers that stop them on the left, the <strong>consequences</strong> and the mitigative barriers on the right, and the escalation factors that weaken barriers. Click <em>New bow-tie</em> to draw one by hand, or <em>Auto-build from fault tree</em> to generate it from your fault tree and event tree. ' + pages.length + ' fault tree(s) and ' + etas.length + ' event tree(s) available.</p>';
+            if (_curEd) { try { _curEd.destroy(); } catch (_) {} _curEd = null; }
+            return;
+        }
+        const keep = _curEd && bt0 && _curEd.opts.btId === bt0.id ? _curEd.root : null;
+        host.innerHTML = head + bar + '<div id="bt-summary"></div><div id="bt-editor"></div><div id="bt-side"></div>';
+        if (keep) document.getElementById('bt-editor').appendChild(keep);
+        _mountEditor(bt0);
+        _renderSide();
+    }
+
+    window.SLBowtieUI = {
+        async genLeft() {
+            const ed = _curEd, bt = _bt(); if (!ed || !bt) return;
+            const pages = _ftaPages().filter(p => p && p.root);
+            if (!pages.length) { _toast('There is no fault tree yet. Build one on the Fault Tree Analysis tab, then generate the left side from it.', 'warn'); return; }
+            const pid = await _pick('Left side from a fault tree', pages.map(p => ({ value: p.id, label: p.name || p.id })), 'Threats come from the inputs of the top gate; AND and INHIBIT gates and monitors become preventive barriers on their threat lines. Only what is missing is added, and all of it stays editable.');
+            if (!pid) return;
+            const page = pages.find(p => p.id === pid);
+            let n = 0;
+            const ok = await ed.change('Left side from fault tree ' + (page.name || page.id), tx => { n = _genLeft(tx, page); });
+            if (ok) { ed.fit(); _toast(n ? n + ' threat(s) added from ' + (page.name || page.id) + '.' : 'Every threat of ' + (page.name || page.id) + ' is already on the bow-tie.', 'success'); }
+        },
+        async genRight() {
+            const ed = _curEd, bt = _bt(); if (!ed || !bt) return;
+            const etas = _etaStore();
+            if (!etas.length) { _toast('There is no event tree yet. Draw one on the Event Trees tab, then generate the right side from it.', 'warn'); return; }
+            const id = await _pick('Right side from an event tree', etas.map(t => ({ value: t.id, label: t.id + ' ' + (t.name || '') })), 'The headings become mitigative barriers in order; the end states, grouped by severity, become consequences. Only what is missing is added, and all of it stays editable.');
+            if (!id) return;
+            const eta = etas.find(t => t.id === id);
+            let n = 0;
+            const ok = await ed.change('Right side from event tree ' + eta.id, tx => { n = _genRight(tx, eta); });
+            if (ok) { ed.fit(); _toast(n ? n + ' element(s) added from ' + eta.id + '.' : 'Everything in ' + eta.id + ' is already on the bow-tie.', 'success'); }
+        },
+        exportSvg() {
+            const ed = _curEd, bt = _bt(); if (!ed || !bt) return;
+            try {
+                const blob = new Blob([ed.toSvg()], { type: 'image/svg+xml' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = String(bt.id) + '_bow-tie.svg';
+                document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+                _toast('Saved ' + a.download + '.', 'success');
+            } catch (e) { _toast('Could not export the picture: ' + (e && e.message || e), 'error'); }
+        },
+        focus(id) { if (_curEd) { _curEd.select([id]); try { _curEd.ensureVisible(id); } catch (_) {} } },
+        openEta() { const bt = _bt(); if (!bt || !bt.etaId) return; try { switchTab('eta'); if (window.SLEtaUI) window.SLEtaUI.select(bt.etaId); } catch (_) {} },
+        async rename() {
+            const bt = _bt(); if (!bt) return;
+            const name = await slPrompt('New name for ' + bt.id + ':', bt.name || '', { title: 'Rename bow-tie', okText: 'Rename' });
+            if (name == null || !String(name).trim()) return;
+            try { if (typeof pushUndo === 'function') pushUndo('Rename bow-tie'); } catch (_) {}
+            bt.name = String(name).trim(); _save(); _render();
+        },
+        async remove() {
+            const bt = _bt(); if (!bt) return;
+            if (!(await slConfirm('Delete ' + bt.id + ' ' + (bt.name || '') + '? Undo brings it back.', { danger: true, okText: 'Delete' }))) return;
+            try { if (typeof pushUndo === 'function') pushUndo('Delete bow-tie ' + bt.id); } catch (_) {}
+            const s = _store(); const i = s.findIndex(x => x.id === bt.id); if (i >= 0) s.splice(i, 1);
+            _sel = null; _save(); _render();
+        },
+        editor() { return _curEd; },
+    };
+    try { window.addEventListener('sl:change-ack', e => { if (e && e.detail && e.detail.decision === 'canceled') { const v = document.getElementById('view-bowtie'); if (v && v.style.display !== 'none') _render(); } }); } catch (_) {}
+
     async function btConfirmReqLink(bid) {
         const bt = _bt(); if (!bt) return;
         const b = (bt.barriers || []).find(x => x.id === bid); if (!b || !b.requirementId) return;
@@ -725,101 +1299,28 @@
         _save(); _render();
     }
 
-    function _render() {
-        const host = document.getElementById('view-bowtie'); if (!host) return;
-        const store = _store();
-        const pages = _ftaPages(), etas = _etaStore();
 
-        let head = '<div class="header-with-export"><h3>Bow-Tie Analysis <span style="font-weight:400;font-size:12px;color:var(--color-text-tertiary,#888);">— unified FTA (prevention) ↔ ETA (mitigation)</span></h3></div>';
-
-        // selector + create
-        let bar = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 14px;">';
-        bar += '<select id="bt-select" onchange="btSelect(this.value)" style="padding:6px 8px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;">' +
-            store.map(b => '<option value="' + b.id + '"' + (b.id === (_bt() && _bt().id) ? ' selected' : '') + '>' + _esc(b.id + ' · ' + b.name) + '</option>').join('') +
-            (store.length ? '' : '<option>— none yet —</option>') + '</select>';
-        bar += '<button class="btn-cyan" onclick="btCreate()" style="font-size:12px;">+ New bow-tie</button>';
-        bar += '<button class="btn-cyan" onclick="btAutoBuild()" style="font-size:12px;" title="Compile a bow-tie from an existing fault tree: matches the event tree via the shared failure condition, derives barriers from monitor specs, AND-gate redundancy and the event tree, and auto-links requirements (incl. Jama imports).">⚡ Auto-build from fault tree</button>';
-        bar += '<button onclick="btAutoLinkAll()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;cursor:pointer;" title="Re-run requirement auto-linking on every bow-tie — run after importing requirements (e.g. from Jama).">↻ Re-link requirements</button>';
-        let _tcDim = ''; try { const tc = (typeof window.declaredToolchain === 'function') ? window.declaredToolchain() : null; if (tc && tc.rm && tc.rm.tool && tc.rm.tool !== 'jama') _tcDim = 'opacity:.45;'; } catch (_) {}
-        bar += '<button onclick="btJamaPull()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;cursor:pointer;' + _tcDim + '" title="Pull mitigations and requirements for this critical event: relationship-traced items first (tier 3), text matches as candidates.' + (_tcDim ? ' (Declared RM toolchain is not Jama — ReqIF traces still feed tier-3 links automatically.)' : '') + '">🔗 Pull from Jama</button>';
-        bar += '<button onclick="jbOpen()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;cursor:pointer;" title="The live bridge: push failure conditions into Jama as items; the program traces its requirements to them there (human act); pull the relationship graph back for tier-3 links.">🔁 Jama bridge</button></div>';
-
-        if (!store.length) {
-            host.innerHTML = head + bar + '<p style="color:var(--color-text-secondary,#666);font-size:13px;">A bow-tie joins a <strong>fault tree</strong> (how the critical event happens) to an <strong>event tree</strong> (what happens after), sharing the critical event. Click <em>New bow-tie</em>, pick a fault-tree page as the left side; the fault tree\'s exact top probability becomes the event tree\'s initiator. ' + pages.length + ' fault tree(s) and ' + etas.length + ' event tree(s) available.</p>';
-            return;
-        }
-
-        const bt = _bt(), ev = bowtieEvaluate(bt);
-        // link controls
-        let links = '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;">';
-        links += '<label>Left (fault tree): <select onchange="btSetFta(this.value)" style="padding:4px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:5px;"><option value="">— none —</option>' + pages.map(p => '<option value="' + p.id + '"' + (p.id === bt.ftaPageId ? ' selected' : '') + '>' + _esc(p.name || p.id) + '</option>').join('') + '</select></label>';
-        links += '<label>Right (event tree): <select onchange="btSetEta(this.value)" style="padding:4px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:5px;"><option value="">— none —</option>' + etas.map(t => '<option value="' + t.id + '"' + (t.id === bt.etaId ? ' selected' : '') + '>' + _esc(t.id + ' · ' + t.name) + '</option>').join('') + '</select></label>';
-        links += '</div>';
-
-        // three columns
-        const col = (title, sub, inner) => '<div style="flex:1;min-width:220px;"><div style="font-weight:700;font-size:13px;">' + title + '</div><div style="font-size:11px;color:var(--color-text-tertiary,#888);margin-bottom:8px;">' + sub + '</div>' + inner + '</div>';
-
-        const leftInner =
-            ev.preventive.map(b => _barrierCard(b, ev)).join('') +
-            '<button onclick="btAddBarrier(\'preventive\')" style="font-size:11px;padding:4px 8px;border:1px dashed var(--color-border-hair,rgba(0,0,0,.3));border-radius:6px;background:transparent;cursor:pointer;">+ preventive barrier</button>' +
-            '<div style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary,#888);">Cut sets: ' + ev.cutsets.length + (ev.spf ? ' · <span style="color:#b42318;font-weight:600;">' + ev.spf + ' single-point</span>' : ' · no SPF') + '</div>';
-
-        const centre =
-            '<div style="text-align:center;border:2px solid var(--color-text-secondary,#666);border-radius:10px;padding:14px 10px;background:var(--color-surface,#fff);">' +
-            '<div style="font-size:11px;color:var(--color-text-tertiary,#888);text-transform:uppercase;letter-spacing:.5px;">Critical event</div>' +
-            '<div style="font-weight:700;font-size:13px;margin:4px 0;">' + _esc(ev.critLabel || bt.name) + '</div>' +
-            '<div style="font-size:18px;font-weight:700;">' + _fmt(ev.pCritical) + '<span style="font-size:11px;font-weight:400;color:#888;"> /FH</span></div>' +
-            '<div style="font-size:10px;color:#888;">from the fault tree (BDD-exact)</div>' +
-            (ev.verif ? '<div style="font-size:10.5px;margin-top:6px;font-family:var(--font-mono,monospace);border-top:1px solid var(--color-border-hair,rgba(0,0,0,.1));padding-top:5px;">alloc ' + _fmt(ev.verif.pAllocated) + '<br><span style="font-weight:700;color:' + (ev.verif.pAchieved > ev.verif.pAllocated ? '#b42318' : 'var(--color-success,#1a7f37)') + ';">achieved ' + _fmt(ev.verif.pAchieved) + (ev.verif.pAchieved > ev.verif.pAllocated ? ' ✗ over budget' : ' ✓') + '</span><div style="font-size:9px;color:#888;" title="' + _esc(ev.verif.otherName) + '">allocation ⇄ verification pair</div></div>' : '') +
-            '</div>';
-
-        const rightInner =
-            ev.mitigative.map(b => _barrierCard(b, ev)).join('') +
-            '<button onclick="btAddBarrier(\'mitigative\')" style="font-size:11px;padding:4px 8px;border:1px dashed var(--color-border-hair,rgba(0,0,0,.3));border-radius:6px;background:transparent;cursor:pointer;">+ mitigative barrier</button>' +
-            (ev.etaLinked
-                ? '<div style="margin-top:10px;"><div style="font-size:11px;color:var(--color-text-tertiary,#888);margin-bottom:4px;">Consequence paths (initiator sourced from P above' + (ev.etaClosed ? '' : ' · <span style="color:#b42318;">paths do not sum to 1</span>') + '):</div>' +
-                    ev.outcomes.slice(0, 6).map(o => '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));">' + (o.severity ? _sevPill(o.severity) : '<span style="color:var(--color-text-tertiary);">unassessed</span>') + '<span style="font-family:var(--font-mono,monospace);">' + _fmt(o.freq) + '</span></div>').join('') +
-                    (ev.outcomes.length > 6 ? '<div style="font-size:10px;color:#888;">+' + (ev.outcomes.length - 6) + ' more</div>' : '') + '</div>'
-                : '<div style="margin-top:10px;font-size:11px;color:var(--color-text-tertiary,#888);">No event tree linked — pick one above to compile consequence paths.</div>');
-
-        const rawDiagram = _svgDiagram(bt, ev);
-        const diagram = rawDiagram
-            ? '<div id="bt-canvas" style="position:relative;overflow:hidden;border:1px solid var(--color-border-hair,rgba(0,0,0,.08));border-radius:10px;background:var(--color-surface,#fff);">' + rawDiagram +
-              '<div style="position:absolute;top:8px;right:8px;display:flex;gap:4px;">' +
-              '<button onclick="_btZoom(1.25)" title="Zoom in" style="width:26px;height:26px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:var(--color-surface,#fff);cursor:pointer;font-size:14px;line-height:1;">+</button>' +
-              '<button onclick="_btZoom(0.8)" title="Zoom out" style="width:26px;height:26px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:var(--color-surface,#fff);cursor:pointer;font-size:14px;line-height:1;">−</button>' +
-              '<button onclick="_btZoomReset()" title="Reset view" style="width:26px;height:26px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:var(--color-surface,#fff);cursor:pointer;font-size:12px;line-height:1;">⟲</button></div>' +
-              '</div>' +
-              '<div style="font-size:10.5px;color:var(--color-text-tertiary,#999);margin:2px 0 12px;">drag to pan · ⌘/Ctrl + scroll or buttons to zoom · double-click to reset · click an event, barrier or outcome to open it</div>'
-            : '';
-
-        const cols = '<div style="display:flex;gap:14px;align-items:flex-start;">' +
-            col('◀ Threats & prevention', 'fault-tree causes → barriers', leftInner) +
-            '<div style="flex:0 0 200px;align-self:center;">' + centre + '</div>' +
-            col('Mitigation & consequences ▶', 'barriers → event-tree outcomes', rightInner) + '</div>';
-
-        // findings
-        let findings = '';
-        if (ev.findings.length) {
-            findings = '<div style="margin-top:16px;border:1px solid var(--color-border-hair,rgba(0,0,0,.14));border-radius:8px;padding:12px 14px;">' +
-                '<strong style="font-size:13px;">Barrier findings (' + ev.findings.length + ')</strong>' +
-                ev.findings.map(f => '<div style="display:flex;gap:8px;font-size:12px;padding:6px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><span style="flex:0 0 auto;color:' + (f.sev === 'high' ? '#b42318' : '#b7791f') + ';font-weight:700;">' + (f.sev === 'high' ? '●' : '○') + '</span><span>' + _esc(f.text) + '</span></div>').join('') + '</div>';
-        } else {
-            findings = '<div style="margin-top:16px;font-size:12px;color:var(--color-success,#1a7f37);">✓ No barrier findings — every barrier traces to evidence and no mitigation shares a cause cut set.</div>';
-        }
-
-        host.innerHTML = head + bar + links + diagram + cols + findings;
-        try { _initCanvas(); } catch (_) {}
+    // link setters (v2.x entry points; they keep the drawing's top event in step)
+    function _setTopProp(k, v) {
+        const bt = _bt(); if (!bt) return;
+        try { if (typeof pushUndo === 'function') pushUndo('Bow-tie link'); } catch (_) {}
+        if (k === 'ftaPageId') bt.ftaPageId = v; else bt.etaId = v;
+        const te = bt.diagram && (bt.diagram.elements || []).find(e => e.kind === 'top');
+        if (te) { te.props = Object.assign({}, te.props || {}); te.props[k] = v; }
+        _save(); _render();
     }
-
-    // link setters
-    function btSetFta(v) { const bt = _bt(); if (bt) { bt.ftaPageId = v; _save(); _render(); } }
-    function btSetEta(v) { const bt = _bt(); if (bt) { bt.etaId = v; _save(); _render(); } }
+    function btSetFta(v) { _setTopProp('ftaPageId', v); }
+    function btSetEta(v) { _setTopProp('etaId', v); }
     function btSelect(v) { _sel = v; _render(); }
+    // v3.0: a new bow-tie starts as an empty drawing; draw it by hand or generate a side.
     async function btCreate() {
-        const pages = _ftaPages(); if (!pages.length) { _toast('Create a fault tree first — it is the left side of the bow-tie.', 'warn'); return; }
-        const name = await _ask('Name this bow-tie (usually the critical event):', ''); if (name === null) return;
-        createBowtie(name, pages[0].id, (_etaStore()[0] || {}).id || '');
+        const name = await _ask('Name this bow-tie (usually the hazard or the top event):', ''); if (name === null) return;
+        try { if (typeof pushUndo === 'function') pushUndo('New bow-tie'); } catch (_) {}
+        const id = _nextId();
+        _store().push({ id: id, name: String(name || 'Bow-tie ' + id).trim() || ('Bow-tie ' + id), ftaPageId: '', etaId: '', barriers: [], diagram: { v: 1, elements: [], links: [], pos: {} },
+            by: (typeof currentUserName !== 'undefined' ? currentUserName : ''), at: new Date().toISOString() });
+        _sel = id; _save(); _render();
+        _toast(id + ' created. Drag the hazard, the top event, threats and consequences from the toolbox, or generate a side from a fault tree or an event tree.', 'success');
     }
 
     // ---- page registration (born-modular; mirrors event_trees.js) ------------
@@ -845,7 +1346,8 @@
                 if (v) v.style.display = (tabId === 'bowtie') ? 'block' : 'none';
                 const s = document.getElementById('snav-bowtie');
                 if (s) s.classList.toggle('snav-active', tabId === 'bowtie');
-                if (tabId === 'bowtie') _render();
+                // remember it as the last tab, so a project apply (Cancel change, reload) comes back here
+                if (tabId === 'bowtie') { try { localStorage.setItem('safetyLab.ui.lastTab.v1', 'bowtie'); } catch (_) {} _render(); }
             } catch (_) {}
             return r;
         };
@@ -853,10 +1355,8 @@
         window.switchTab = wrapped;
     })();
     function _ready(fn) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-    _ready(function () { let tries = 30; const t = setInterval(function () { if (_ensurePage() || --tries <= 0) clearInterval(t); }, 250); });
+    if (typeof document !== 'undefined') _ready(function () { let tries = 30; const t = setInterval(function () { if (_ensurePage() || --tries <= 0) clearInterval(t); }, 250); });
 
-    // ---- canvas: click-through navigation + pan/zoom (read-only — the bow-tie
-    //      stays a compiled rendering; editing lives in the FTA/ETA editors) ----
     function btOpenFta(pageId) {
         try { switchTab('fta'); } catch (_) {}
         try {
@@ -864,46 +1364,6 @@
             if (typeof renderFTASidebar === 'function') renderFTASidebar();
             if (typeof updateD3 === 'function') updateD3();
         } catch (_) {}
-    }
-    function _initCanvas() {
-        const wrap = document.getElementById('bt-canvas'); if (!wrap) return;
-        const svg = wrap.querySelector('svg'); if (!svg) return;
-        const vb0 = (svg.getAttribute('viewBox') || '').split(/\s+/).map(Number);
-        if (vb0.length !== 4 || vb0.some(isNaN)) return;
-        let vb = vb0.slice();
-        const apply = () => svg.setAttribute('viewBox', vb.join(' '));
-        const zoomAt = (fx, fy, k) => {
-            const w = vb[2] / k, h = vb[3] / k;
-            vb[0] += (vb[2] - w) * fx; vb[1] += (vb[3] - h) * fy; vb[2] = w; vb[3] = h;
-            if (vb[2] >= vb0[2]) vb = vb0.slice();      // zooming out past 1:1 resets the frame
-            apply();
-        };
-        svg.style.cursor = 'grab'; svg.style.touchAction = 'none';
-        svg.addEventListener('wheel', e => {
-            if (!e.ctrlKey && !e.metaKey) return;       // plain scroll keeps scrolling the page
-            e.preventDefault();
-            const r = svg.getBoundingClientRect();
-            zoomAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, e.deltaY < 0 ? 1.2 : 1 / 1.2);
-        }, { passive: false });
-        let drag = null;
-        svg.addEventListener('pointerdown', e => {
-            if (e.target && e.target.closest && e.target.closest('[onclick]')) return;   // clicks stay clicks
-            drag = { x: e.clientX, y: e.clientY, vb: vb.slice() };
-            try { svg.setPointerCapture(e.pointerId); } catch (_) {}
-            svg.style.cursor = 'grabbing';
-        });
-        svg.addEventListener('pointermove', e => {
-            if (!drag) return;
-            const r = svg.getBoundingClientRect();
-            vb[0] = drag.vb[0] - (e.clientX - drag.x) * vb[2] / r.width;
-            vb[1] = drag.vb[1] - (e.clientY - drag.y) * vb[3] / r.height;
-            apply();
-        });
-        const end = () => { drag = null; svg.style.cursor = 'grab'; };
-        svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
-        svg.addEventListener('dblclick', () => { vb = vb0.slice(); apply(); });
-        window._btZoom = k => zoomAt(0.5, 0.5, k);
-        window._btZoomReset = () => { vb = vb0.slice(); apply(); };
     }
     window.btOpenFta = btOpenFta;
 
@@ -915,4 +1375,6 @@
     window.btJamaPull = btJamaPull; window.btJamaApply = btJamaApply; window.btConfirmReqLink = btConfirmReqLink;
     window.btAddBarrier = addBarrier; window.btTraceBarrier = traceBarrier; window.btRemoveBarrier = removeBarrier;
     window._renderBowtie = _render;
+    // v3.0: the pure diagram model, for tests and the SysML importer
+    window.SLBowtie = { version: '3.0', toModel: btToModel, fromModel: btFromModel, layout: _btLayout, derive: _derive, genLeft: _genLeft, genRight: _genRight, complete: _btComplete };
 })();

@@ -1,3 +1,8 @@
+// 13 Oct 2026 (STPA / cascading effects diagrams): a project restore (Undo, Cancel in the change acknowledgement) returns to the page the person was on for every page that exists, not only the old list; the STPA and cascading effects pages used to fall back to the dashboard.
+// 13 Oct 2026 (hand-built event trees and bow-ties): the Event_Trees CSV adds sequence number, path, end state, consequence category and transfer columns; a project apply (load, Cancel change) returns to the Event Trees or Bow-Tie tab it was on. See tests/regression_eta_bowtie_handbuild_20261013b.test.js
+// 13 Oct 2026 (fix G): the fault tree CSV import reads PAND, SPARE, SEQ, FDEP and NOT back as gates (dynamic gates used to come back as basic events). The tree pictures in reports leave out the editing handles and unattached nodes (SLFtaEdit.exportClone). See tests/regression_fta_handbuild_20261013b.test.js
+// 13 Oct 2026 (analysis model links): analysis CSV exports carry a Model Links column (kind:id=code) and the imports read it back; an FMEA import resolves the FTA Link display id to the event; see tests/regression_analysis_links_20261013b.test.js
+// 13 Oct 2026 (Office-style saving, fix2-J): checkAutosaveRecovery tells SLSaveState.recovered(meta) what it restored, so unsaved work from a crashed session comes back still unsaved.
 // 13 Oct 2026 (fix 3, MGL): the cut-set exports expand common cause groups with the tree's MGL model (expandCCFCutsets(min, rootNode)); worked steps for benchmarks B10e/B10f.
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Oct 2026 (fix 6 part B): _applyProjectData ends by running the live common cause check (cma_live.js).
@@ -120,6 +125,9 @@ function exportData(moduleName, format) {
         }
         const today = new Date().toISOString().slice(0, 10);
         const file = (base) => `${base}_${today}.csv`;
+        // 13 Oct 2026 (analysis model links): every analysis export carries the row's model links as
+        // kind:id=code tokens (model_links.js csvCell); the import reads them back.
+        const _ml = (k, r) => (typeof SLModelLinks !== 'undefined' ? SLModelLinks.csvCell(k, r) : '');
         switch (moduleName) {
             case 'AC_Functions':
                 return downloadCSV(file('AC_Functions'),
@@ -134,8 +142,8 @@ function exportData(moduleName, format) {
                 // worksheet (natural ascending fcId, phase groups clustered).
                 const _acOrd = (typeof _fhaGroupRows === 'function') ? _fhaGroupRows(acFhaData).ordered : acFhaData;
                 return downloadCSV(file('AC_FHA'),
-                    ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
-                    _acOrd.map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments]));
+                    ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments','Model Links'],
+                    _acOrd.map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments, _ml('acFha', r)]));
             }
             case 'AC_Requirements':
                 return downloadCSV(file('AC_Requirements'),
@@ -167,8 +175,8 @@ function exportData(moduleName, format) {
                 if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 const _sysOrd = (typeof _fhaGroupRows === 'function') ? _fhaGroupRows(sys().fha).ordered : sys().fha;
                 return downloadCSV(file(`${sys().name}_FHA`),
-                    ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
-                    _sysOrd.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments]));
+                    ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments','Model Links'],
+                    _sysOrd.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments, _ml('sysFha', r)]));
             }
             case 'Sys_Requirements': {
                 if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
@@ -191,14 +199,14 @@ function exportData(moduleName, format) {
                     flightPhasesData.map(p => [p.phase, p.altFrom, p.altFromUnit, p.altTo, p.altToUnit, p.duration, p.durationUnit]));
             case 'PRA':
                 return downloadCSV(file('PRA'),
-                    ['PRA ID','Threat Source','Propagation Path','Target Systems','CSFL Impact Analysis','Mitigation Strategy'],
-                    praData.map(r => [r.praId, r.threat, r.desc, r.systems, r.csfl, r.mitigation]));
+                    ['PRA ID','Threat Source','Propagation Path','Target Systems','CSFL Impact Analysis','Mitigation Strategy','Affected Zones','Model Links'],
+                    praData.map(r => [r.praId, r.threat, r.desc, r.systems, r.csfl, r.mitigation, (r.affectedZones || []).join('; '), _ml('pra', r)]));
             case 'ZSA':
                 return downloadCSV(file('ZSA'),
-                    ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Interference Profile','Separation & Mitigations','Status','Assessed By','Assessment Method','Assessed On'],
+                    ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Interference Profile','Separation & Mitigations','Status','Assessed By','Assessment Method','Assessed On','Housed Functions','Model Links'],
                     zsaData.map(r => [r.zoneId, r.desc, r.equip, r.severity, r.interference, r.mitigation,
                         (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.statusText(r) : (r.findingStatus || '')), r.assessedBy || '',
-                        (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.methodText(r) : (r.assessMethod || '')), r.assessedOn || '']));
+                        (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.methodText(r) : (r.assessMethod || '')), r.assessedOn || '', (r.housedFunctions || []).join('; '), _ml('zsa', r)]));
             case 'CMA':
                 // 17 Aug 2026 — CSV export was missing for CMA (fell through to the
                 // "not yet implemented" default) while the PDF table provider below
@@ -216,11 +224,11 @@ function exportData(moduleName, format) {
                 // Phase 68 — FMEA is per-system; this per-tab export matches the on-screen
                 // table (the open System Folder's rows), not every system at once.
                 return downloadCSV(file('HW_FMEA'),
-                    ['FTA Link','Component','Failure Mode','Local Effect','End Effect','Severity','Rate (lambda)','Time (t)','Calculated P'],
+                    ['FTA Link','Component','Failure Mode','Local Effect','End Effect','Severity','Rate (lambda)','Time (t)','Calculated P','Model Links'],
                     (fmeaData || []).filter(r => String(r.owningSystemId || '') === String(activeSystemId || '')).map(r => {
                         let target = null;
                         for (let page of ftaPages) { target = findNode(page.root, r.beId); if (target) break; }
-                        return [target ? target.displayId : '(unknown)', r.part, r.mode, r.localEffect || '', r.endEffect || '', r.severity || '', r.rate, r.time, (r.prob || 0).toExponential(4)];
+                        return [target ? target.displayId : '(unknown)', r.part, r.mode, r.localEffect || '', r.endEffect || '', r.severity || '', r.rate, r.time, (r.prob || 0).toExponential(4), _ml('fmea', r)];
                     }));
             case 'Fault_Tree': {
                 const rows = [];
@@ -493,9 +501,9 @@ function exportData(moduleName, format) {
                 const rows = HX._read('hea').rows;
                 if (!rows.length) { showToast('No error rows in the human error analysis yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_HEA'),
-                    ['ID','Task assumption','Task','Error mode (NUREG/CR-1278)','Effect','Detection','Recovery','Feeds FC'],
+                    ['ID','Task assumption','Task','Error mode (NUREG/CR-1278)','Effect','Detection','Recovery','Feeds FC','Model Links'],
                     rows.map(r => [String(r.heaId || ''), String(r.asmId || ''), String(r.task || ''), String(r.errorMode || ''),
-                                   String(r.effect || ''), String(r.detection || ''), String(r.recovery || ''), String(r.fcIds || '')]));
+                                   String(r.effect || ''), String(r.detection || ''), String(r.recovery || ''), String(r.fcIds || ''), _ml('hfHea', r)]));
             }
             case 'HF_Alerts': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
@@ -503,9 +511,9 @@ function exportData(moduleName, format) {
                 const rows = HX._read('alerts').rows;
                 if (!rows.length) { showToast('No alerts in the crew alerting inventory yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_Alerts'),
-                    ['ID','Alert','Priority (25.1322)','Modality','Cited by FC','Notes'],
+                    ['ID','Alert','Priority (25.1322)','Modality','Cited by FC','Notes','Model Links'],
                     rows.map(r => [String(r.alertId || ''), String(r.name || ''), String(r.priority || ''), String(r.modality || ''),
-                                   String(r.fcIds || ''), String(r.notes || '')]));
+                                   String(r.fcIds || ''), String(r.notes || ''), _ml('hfAlerts', r)]));
             }
             case 'HF_Tasks': {
                 // 30 Aug 2026 — task-first task analysis (Waqas: "it does not
@@ -516,9 +524,9 @@ function exportData(moduleName, format) {
                 const rows = HX._read('tasks').rows;
                 if (!rows.length) { showToast('No crew tasks authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_Tasks'),
-                    ['ID','Phases','Crewmember','Task','Reaction (s)','Execution (s)','Response (s)','Time basis','Channels (HIDH)','Credited as','Notes'],
+                    ['ID','Phases','Crewmember','Task','Reaction (s)','Execution (s)','Response (s)','Time basis','Channels (HIDH)','Credited as','Notes','Model Links'],
                     rows.map(r => [String(r.taskId || ''), String(r.phase || ''), String(r.crewmember || ''), String(r.task || ''),
-                                   String(r.reactionS || ''), String(r.execS || ''), String((HX.taskResponseS ? HX.taskResponseS(r) : r.timeS) || ''), String(r.basis || ''), String(r.channels || ''), String(r.asmId || 'not credited'), String(r.notes || '')]));
+                                   String(r.reactionS || ''), String(r.execS || ''), String((HX.taskResponseS ? HX.taskResponseS(r) : r.timeS) || ''), String(r.basis || ''), String(r.channels || ''), String(r.asmId || 'not credited'), String(r.notes || ''), _ml('hfTasks', r)]));
             }
             case 'HF_Ergo': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
@@ -526,8 +534,8 @@ function exportData(moduleName, format) {
                 const rows = HX._read('ergo').rows;
                 if (!rows.length) { showToast('No ergonomics evaluations authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_Ergo'),
-                    ['ID','Item','Criterion (cite)','Finding','Status','Notes'],
-                    rows.map(r => [String(r.ergoId || ''), String(r.item || ''), String(r.clause || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
+                    ['ID','Item','Criterion (cite)','Finding','Status','Notes','Model Links'],
+                    rows.map(r => [String(r.ergoId || ''), String(r.item || ''), String(r.clause || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || ''), _ml('hfErgo', r)]));
             }
             case 'HF_ControlsDisplays': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
@@ -535,8 +543,8 @@ function exportData(moduleName, format) {
                 const rows = HX._read('cd').rows;
                 if (!rows.length) { showToast('No controls & displays evaluations authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_ControlsDisplays'),
-                    ['ID','Item','Kind','§25.1302 consideration','Supports','Finding','Status','Notes'],
-                    rows.map(r => [String(r.cdId || ''), String(r.item || ''), String(r.kind || ''), String(r.consideration || ''), String(r.supports || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
+                    ['ID','Item','Kind','§25.1302 consideration','Supports','Finding','Status','Notes','Model Links'],
+                    rows.map(r => [String(r.cdId || ''), String(r.item || ''), String(r.kind || ''), String(r.consideration || ''), String(r.supports || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || ''), _ml('hfCd', r)]));
             }
             case 'HF_FunctionAllocation': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
@@ -557,8 +565,8 @@ function exportData(moduleName, format) {
                 const rows = HX._read('tid').rows;
                 if (!rows.length) { showToast('No task steps identified yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_TaskIdentification'),
-                    ['Task ID','Proc ID','Procedure','Mode','Phase','Task step','Definition','Crew','Trigger','Source','Notes'],
-                    rows.map(r => [String(r.taskId || ''), String(r.procId || ''), String(r.procName || ''), String(r.opsMode || ''), String(r.phase || ''), String(r.taskName || ''), String(r.taskDef || ''), String(r.crew || ''), String(r.trigger || ''), String(r.source || ''), String(r.notes || '')]));
+                    ['Task ID','Proc ID','Procedure','Mode','Phase','Task step','Definition','Crew','Trigger','Source','Notes','Model Links'],
+                    rows.map(r => [String(r.taskId || ''), String(r.procId || ''), String(r.procName || ''), String(r.opsMode || ''), String(r.phase || ''), String(r.taskName || ''), String(r.taskDef || ''), String(r.crew || ''), String(r.trigger || ''), String(r.source || ''), String(r.notes || ''), _ml('hfTid', r)]));
             }
             case 'HF_SituationAwareness': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
@@ -566,8 +574,8 @@ function exportData(moduleName, format) {
                 const rows = HX._read('sa').rows;
                 if (!rows.length) { showToast('No situation-awareness elements authored yet.', 'warning', 4000); return; }
                 return downloadCSV(file('HF_SituationAwareness'),
-                    ['ID','SA element','Level','Cue / source','Phase','Finding','Status','Notes'],
-                    rows.map(r => [String(r.saId || ''), String(r.element || ''), String(r.level || ''), String(r.cue || ''), String(r.phase || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || '')]));
+                    ['ID','SA element','Level','Cue / source','Phase','Finding','Status','Notes','Model Links'],
+                    rows.map(r => [String(r.saId || ''), String(r.element || ''), String(r.level || ''), String(r.cue || ''), String(r.phase || ''), String(r.finding || ''), String(r.status || ''), String(r.notes || ''), _ml('hfSa', r)]));
             }
             case 'HF_MFC': {
                 const HX = (typeof window !== 'undefined' && window.HF_ANALYSES) || null;
@@ -608,12 +616,14 @@ function exportData(moduleName, format) {
                         (o.seq || []).join(' → '),
                         Number(o.prob).toExponential(4),
                         Number(o.freq).toExponential(4),
-                        String(o.severity || ''), String(o.linkedFcId || '') + (o.note ? (' · ' + o.note) : '')
+                        String(o.severity || ''), String(o.linkedFcId || '') + (o.note ? (' · ' + o.note) : ''),
+                        // 13 Oct 2026 (hand-built event trees): sequence number, path key, end state name and category, transfer
+                        String(o.seqNo || ''), String(o.key || ''), String(o.label || ''), String(o.category || ''), String(o.transferTo || '')
                     ]));
                     if (!ev.closed) rows.push([String(t.id || ''), String(t.name || ''), 'CHECK', '', '', 'Σp over outcomes', Number(ev.sum).toPrecision(6), '', '', 'path probabilities do not sum to 1 — barrier probability out of range']);
                 });
                 return downloadCSV(file('Event_Trees'),
-                    ['Tree','Name','Status','Initiator','Initiator freq (/FH)','Sequence','P(path)','Frequency (/FH)','Severity','Linked FC / note'],
+                    ['Tree','Name','Status','Initiator','Initiator freq (/FH)','Sequence','P(path)','Frequency (/FH)','Severity','Linked FC / note','Sequence #','Path','End state','Consequence category','Transfers to'],
                     rows);
             }
             case 'STPA_UCAs': {
@@ -646,13 +656,13 @@ function exportData(moduleName, format) {
                 const items = (mm && Array.isArray(mm.items)) ? mm.items : [];
                 if (!items.length) { showToast('No MMEL/MLAS items in this project yet.', 'warning', 4000); return; }
                 return downloadCSV(file('MMEL_MLAS'),
-                    ['Item','Equipment','ATA','Installed','Required','Category','TLD max (days)','Protection check','Quantitative (dispatched)','(m) procedure','(o) procedure','State'],
+                    ['Item','Equipment','ATA','Installed','Required','Category','TLD max (days)','Protection check','Quantitative (dispatched)','(m) procedure','(o) procedure','State','Model Links'],
                     items.map(it => [
                         String(it.id || ''), String(it.title || ''), String(it.ata || ''),
                         String(it.installed == null ? '' : it.installed), String(it.required == null ? '' : it.required),
                         String(it.category || ''), String(it.catDays == null ? '' : it.catDays),
                         String(it.protection || ''), String(it.quant || ''),
-                        String(it.mProc || ''), String(it.oProc || ''), String(it.state || '')
+                        String(it.mProc || ''), String(it.oProc || ''), String(it.state || ''), _ml('mmel', it)
                     ]));
             }
             default:
@@ -698,8 +708,15 @@ function importTabularCSV(text, moduleName) {
     }
     const _MFC_FN = (typeof window !== 'undefined' && window.HF_ANALYSES && window.HF_ANALYSES.MFC_FUNCTIONS) || [];
 
+    // 13 Oct 2026 (analysis model links): an imported row takes back its Model Links column
+    // (kind:id tokens); the typed text of a row without one is linked later only by exact match.
+    const _ML_IMPORT = { 'PRA': ['pra', () => praData], 'ZSA': ['zsa', () => zsaData], 'HW_FMEA': ['fmea', () => fmeaData],
+        'HF_HEA': ['hfHea', () => _hfRows], 'HF_Alerts': ['hfAlerts', () => _hfRows], 'HF_Tasks': ['hfTasks', () => _hfRows], 'HF_Ergo': ['hfErgo', () => _hfRows],
+        'HF_ControlsDisplays': ['hfCd', () => _hfRows], 'HF_TaskIdentification': ['hfTid', () => _hfRows], 'HF_SituationAwareness': ['hfSa', () => _hfRows] }[moduleName] || null;
+    const _mlCol = getColIndex(['Model Links']);
     for(let i=1; i<arr.length; i++) {
         const row = arr[i]; const newId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+        const _mlList = (_ML_IMPORT && _mlCol > -1) ? _ML_IMPORT[1]() : null, _mlLen = _mlList ? _mlList.length : 0;
 
         if(moduleName === 'AC_Functions') {
             acFunctionsData.push({ internalId: newId, funcId: getValue(row, ['Function ID']), funcName: getValue(row, ['Function', 'Aircraft Function']), funcDef: getValue(row, ['Definition']), subId: getValue(row, ['Sub-Function ID']), subName: getValue(row, ['Sub-Function']), subDef: getValue(row, ['Sub-Definition']) });
@@ -753,7 +770,7 @@ function importTabularCSV(text, moduleName) {
                 findingStatus: ((typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.statusFrom(getValue(row, ['Status'])) : '') || 'open' });
         } else if(moduleName === 'HW_FMEA') {
             const lRate = parseFloat(getValue(row, ['Rate (λ)', 'Rate'])) || 0; const tTime = parseFloat(getValue(row, ['Time (t)', 'Time'])) || 0;
-            fmeaData.push({ internalId: newId, fmeaType: 'piece-part', scope: 'system', owningSystemId: activeSystemId || '', beId: getValue(row, ['FTA Link']), part: getValue(row, ['Component']), mode: getValue(row, ['Failure Mode']), rate: lRate, time: tTime, prob: -Math.expm1(-lRate * tTime) });
+            fmeaData.push({ internalId: newId, fmeaType: 'piece-part', scope: 'system', owningSystemId: activeSystemId || '', beId: (function (v) { const id = (typeof SLModelLinks !== 'undefined') ? SLModelLinks.resolveCode('be', v) : ''; return id ? (isNaN(+id) ? id : +id) : v; })(getValue(row, ['FTA Link'])), part: getValue(row, ['Component']), mode: getValue(row, ['Failure Mode']), rate: lRate, time: tTime, prob: -Math.expm1(-lRate * tTime) });
         } else if(moduleName === 'Flight_Phases') {
             if(i===1) flightPhasesData = [];
             flightPhasesData.push({ phase: getValue(row, ['Phase of Flight']), altFrom: getValue(row, ['Altitude From']), altFromUnit: getValue(row, ['Unit From', 'Unit']), altTo: getValue(row, ['Altitude To']), altToUnit: getValue(row, ['Unit To', 'Unit']), duration: getValue(row, ['Duration']), durationUnit: getValue(row, ['Duration Unit', 'Unit']) });
@@ -788,6 +805,9 @@ function importTabularCSV(text, moduleName) {
             } else if (/determination/i.test(section)) {
                 _mfcStore.conclusion.minCrew = val || ''; _mfcStore.conclusion.rationale = extra || '';
             }
+        }
+        if (_mlList && _mlList.length > _mlLen && typeof SLModelLinks !== 'undefined') {
+            try { SLModelLinks.csvApply(_ML_IMPORT[0], _mlList[_mlList.length - 1], row[_mlCol] || ''); } catch (_) {}
         }
     }
 
@@ -827,7 +847,9 @@ function importFaultTreeCSV(text) {
           iInputMode = col('Input Mode'), iLibKey = col('Library Key');
     if (iId < 0 || iParent < 0 || iType < 0) throw new Error('CSV must include Display ID, Parent ID, and Type columns.');
 
-    const gateTypes = new Set(['AND','OR','XOR','VOTING','INHIBIT','TRANSFER']);
+    // 13 Oct 2026 (fix G): the dynamic gates (PAND, SPARE, SEQ, FDEP) and NOT import as gates; before, an
+    // exported PAND/SPARE/FDEP row came back as a basic event.
+    const gateTypes = new Set(['AND','OR','XOR','VOTING','INHIBIT','TRANSFER','PAND','SPARE','SEQ','FDEP','NOT']);
     const nodesByDisplayId = new Map();
     const rows = arr.slice(1).filter(r => (r[iId] || '').trim() !== '');
 
@@ -1306,6 +1328,11 @@ function _adoptCloudIdentityFromMeta(m) {
     } catch (_) {}
 }
 
+// 13 Oct 2026 (Office-style saving) — a restored autosave that was UNSAVED work stays unsaved
+// (save_state.js): Save and Don't Save both still mean what they meant before the crash.
+function _slRecoveredMeta(m) {
+    try { if (typeof window !== 'undefined' && window.SLSaveState) window.SLSaveState.recovered(m || null); } catch (_) {}
+}
 function checkAutosaveRecovery() {
     // Phase 57 — auto-recover the latest autosave on refresh (silent, no banner). The localStorage
     // path stays synchronous so the common case has zero behaviour change and no welcome-flash.
@@ -1324,7 +1351,7 @@ function checkAutosaveRecovery() {
                 // re-read and re-parse the whole payload on every single write.
                 _autosaveStoredHasContent = _autosaveHasContent(parsed);
                 if (_autosaveStoredHasContent) {
-                    try { _applyProjectData(parsed); recovered = true; _recoveredTs = (m && m.ts) || 0; _adoptCloudIdentityFromMeta(m); } catch (e) { console.warn('Auto-recover failed:', e); }
+                    try { _applyProjectData(parsed); recovered = true; _recoveredTs = (m && m.ts) || 0; _adoptCloudIdentityFromMeta(m); _slRecoveredMeta(m); } catch (e) { console.warn('Auto-recover failed:', e); }
                 }
             }
         }
@@ -1359,6 +1386,7 @@ function checkAutosaveRecovery() {
                     SLDB.get(AUTOSAVE_META_KEY).then(function (mm) {
                         if (typeof mm === 'string') { try { mm = JSON.parse(mm); } catch (_) { mm = null; } }
                         _adoptCloudIdentityFromMeta(mm);
+                        _slRecoveredMeta(mm);
                     }).catch(function () {});
                 } catch (_) {}
                 return true;
@@ -1553,9 +1581,12 @@ function _applyProjectData(data) {
         // every time is the opposite of that.
         let _recoveryTab = 'dashboard';
         try {
-            const validTabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'graph', 'moc', 'baselines', 'cm', 'review'];
+            const validTabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'graph', 'moc', 'baselines', 'cm', 'review', 'eta', 'bowtie'];
             const saved = localStorage.getItem(_UI_LAST_TAB_KEY);
-            if (saved && validTabs.indexOf(saved) >= 0) _recoveryTab = saved;
+            // 13 Oct 2026: any page that exists comes back (the STPA, cascading effects and other diagram
+            // pages were missing from the list, so a Cancel in the change acknowledgement or an Undo there
+            // threw the person onto the dashboard).
+            if (saved && (validTabs.indexOf(saved) >= 0 || (/^[a-z0-9-]+$/.test(saved) && document.getElementById('view-' + saved)))) _recoveryTab = saved;
             const savedMode = localStorage.getItem(_UI_FTA_MODE_KEY);
             if (savedMode === 'top-down' || savedMode === 'bottom-up') {
                 ftaConfig.mode = savedMode;
@@ -1690,7 +1721,7 @@ async function exportProjectAsPDF() {
                 try {
                     try { if (typeof SLLazy !== 'undefined') SLLazy.settle('fta-svg'); } catch (_) {}   // lazy_render.js: never photograph a stale canvas
                     const svgEl = document.getElementById('fta-svg');
-                    const svgStr = new XMLSerializer().serializeToString(svgEl);
+                    const svgStr = new XMLSerializer().serializeToString((typeof SLFtaEdit !== 'undefined' && SLFtaEdit.exportClone && svgEl && svgEl.id === 'fta-svg') ? SLFtaEdit.exportClone(svgEl) : svgEl);   // 13 Oct 2026 (fix G): no editing handles or unattached nodes in the picture
                     const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
                     const url = URL.createObjectURL(blob);
                     const img = new Image();
@@ -1934,17 +1965,18 @@ function _pdfDataForModule(moduleName) {
         }
         case 'PRA':
             return { title: 'Particular Risk Analysis',
-                headers: ['PRA ID','Threat','Description','Target Systems','Affected Zones','Exposed Functions','CSFL','Mitigation'],
+                headers: ['PRA ID','Threat','Description','Target Systems','Affected Zones','Exposed Functions','CSFL','Mitigation','Model links'],
                 rows: (praData || []).map(p => {
                     const exposed = (typeof _exposedFunctionsForZones === 'function') ? _exposedFunctionsForZones(p.affectedZones || []) : [];
-                    return [p.praId, p.threat, p.desc, p.systems, (p.affectedZones || []).join(', '), exposed.join(', '), p.csfl, p.mitigation];
+                    return [p.praId, p.threat, p.desc, p.systems, (p.affectedZones || []).join(', '), exposed.join(', '), p.csfl, p.mitigation, (typeof SLModelLinks !== 'undefined' ? SLModelLinks.textCell('pra', p) : '')];
                 }) };
         case 'ZSA':
             return { title: 'Zonal Safety Analysis',
-                headers: ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Housed Functions','Interference','Mitigation','Status','Assessed (by / method / date)'],
+                headers: ['Zone ID','Boundaries','Installed Equipment','Worst Severity','Housed Functions','Interference','Mitigation','Status','Assessed (by / method / date)','Model links'],
                 rows: (zsaData || []).map(z => [z.zoneId, z.desc, z.equip, z.severity, (z.housedFunctions || []).join(', '), z.interference, z.mitigation,
                     (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.statusText(z) : (z.findingStatus || '')),
-                    [z.assessedBy, (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.methodText(z) : z.assessMethod), z.assessedOn].filter(Boolean).join(' / ')]) };
+                    [z.assessedBy, (typeof SLZsaRecord !== 'undefined' ? SLZsaRecord.methodText(z) : z.assessMethod), z.assessedOn].filter(Boolean).join(' / '),
+                    (typeof SLModelLinks !== 'undefined' ? SLModelLinks.textCell('zsa', z) : '')]) };
         case 'CMA':
             return { title: 'Common Mode Analysis',
                 headers: ['Scope','CMA ID','Subject','Independence Claim','Linked Gates','Modes','Findings','Mitigation','Status'],
@@ -1957,7 +1989,7 @@ function _pdfDataForModule(moduleName) {
                 ]) };
         case 'HW_FMEA':
             return { title: 'Failure Modes and Effects Analysis',
-                headers: ['Scope','Type','FMEA ID','Reference','Failure Mode','Local Effect','Next Effect','End Effect','Severity','λ /hr','t (hr)','P'],
+                headers: ['Scope','Type','FMEA ID','Reference','Failure Mode','Local Effect','Next Effect','End Effect','Severity','λ /hr','t (hr)','P','Model links'],
                 rows: (fmeaData || []).map(r => {
                     const scope = (r.scope === 'system') ? ('Sys: ' + ((systemsData.find(s => s.id === r.owningSystemId) || {}).name || '')) : 'AC';
                     const isFunc = r.fmeaType === 'functional';
@@ -1972,7 +2004,8 @@ function _pdfDataForModule(moduleName) {
                         r.localEffect, r.nextEffect, r.endEffect, r.severity,
                         isFunc ? '' : (r.rate || 0),
                         isFunc ? '' : (r.time || 0),
-                        isFunc ? '' : ((r.prob || 0).toExponential ? (r.prob || 0).toExponential(3) : r.prob)
+                        isFunc ? '' : ((r.prob || 0).toExponential ? (r.prob || 0).toExponential(3) : r.prob),
+                        (typeof SLModelLinks !== 'undefined' ? SLModelLinks.textCell('fmea', r) : '')
                     ];
                 }) };
         case 'Flight_Phases':
@@ -2054,7 +2087,7 @@ async function _captureElementAsPng(el, maxW) {
         // Case 2: contains an <svg> — serialize and rasterize.
         const svgEl = (el.tagName === 'svg' || el.tagName === 'SVG') ? el : el.querySelector('svg');
         if (svgEl) {
-            const svgStr = new XMLSerializer().serializeToString(svgEl);
+            const svgStr = new XMLSerializer().serializeToString((typeof SLFtaEdit !== 'undefined' && SLFtaEdit.exportClone && svgEl && svgEl.id === 'fta-svg') ? SLFtaEdit.exportClone(svgEl) : svgEl);   // 13 Oct 2026 (fix G): no editing handles or unattached nodes in the picture
             const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const img = new Image();

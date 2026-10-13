@@ -136,7 +136,7 @@ ok('review subtitle resolves through the tid store', /hfTid: \['tid', 'taskId', 
 
 const ops = R('site/data_ops_modules.js');
 ok('CSV export case exists', /case 'HF_TaskIdentification': \{/.test(ops));
-ok('export header matches the rendered table', /\['Task ID','Proc ID','Procedure','Mode','Phase','Task step','Definition','Crew','Trigger','Source','Notes'\]/.test(ops));
+ok('export header matches the rendered table', /\['Task ID','Proc ID','Procedure','Mode','Phase','Task step','Definition','Crew','Trigger','Source','Notes','Model Links'\]/.test(ops));   // 13 Oct 2026: + the Model links column
 ok('import key maps to the tid store', /'HF_TaskIdentification':'tid'/.test(ops));
 ok('import branch mints TSK- ids', /_hfId\('TSK-', i, getValue\(row, \['Task ID','ID'\]\)\)/.test(ops));
 ok('import defaults an absent mode to Normal', /getValue\(row, \['Mode','Operating mode'\]\) \|\| 'Normal'/.test(ops));

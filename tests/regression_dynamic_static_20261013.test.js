@@ -30,6 +30,7 @@
  * integration of the spare/priority-AND densities written here, and the app's own
  * seeded DFT Monte Carlo within 4 sigma. Mutation proofs: the same checks run on a
  * copy of the engine with the fix textually reverted and must go red.
+ * 13 Oct 2026 (fix G): the SPARE mutation proof reverts the dispatch line as it now reads (it also routes SEQ).
  * Run: node tests/regression_dynamic_static_20261013.test.js
  */
 'use strict';
@@ -328,8 +329,9 @@ function fnSrc(file, name) {
 {
     const eng = read('fta_engine.js'), qm = read('fta_quant_modules.js');
     const revertFdep = s => s.replace(/const trig = fdep\.byLid\.get\(lid\);\n\s*if \(trig\) result = forced\(result, trig, 'l:' \+ lid, visitedPages\);/, '');
-    const revertSpare = s => s.replace("if (node.gateType === 'PAND' || node.gateType === 'SPARE') return dynGate(node, kids, kidBdds);",
-        "if (node.gateType === 'PAND' || node.gateType === 'SPARE') return kidBdds.reduce((acc, k) => BDD.apply('and', acc, k), BDD.T1);");
+    // 13 Oct 2026 (fix G): the dispatch line now also routes SEQ to dynGate; the mutation reverts the same line.
+    const revertSpare = s => s.replace("if (node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') return dynGate(node, kids, kidBdds);",
+        "if (node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') return kidBdds.reduce((acc, k) => BDD.apply('and', acc, k), BDD.T1);");
     const M1 = pageContext({ 'fta_quant_modules.js': revertFdep(qm), 'fta_engine.js': revertFdep(eng) });
     vm.runInContext('ftaConfig.exposureTime = 1;', M1);
     const q = -Math.expm1(-1e-3);

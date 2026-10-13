@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix G): SEQ joins the AND family. See tests/regression_fta_handbuild_20261013b.test.js
 // ============================================================================
 // crew_credit.js — v1.0 — Q4 + Q5 + Q6 (27 Sep 2026): what the crew is being
 // asked to carry, and whether the analysis has earned that credit.
@@ -44,7 +45,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var AND_FAMILY = { AND: 1, INHIBIT: 1, PAND: 1, SPARE: 1 };
+    var AND_FAMILY = { AND: 1, INHIBIT: 1, PAND: 1, SPARE: 1, SEQ: 1 };   // 13 Oct 2026 (fix G): SEQ
     var HIGH = { Catastrophic: 1, Hazardous: 1 };
     var PRIORITY_RANK = { Warning: 3, Caution: 2, Advisory: 1 };
     var ALERT_ITEM = 'al-common';   // the standing CMA questionnaire item (cma_walkthrough.js)

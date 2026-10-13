@@ -1,4 +1,9 @@
 // ============================================================================
+// 13 Oct 2026 (v0.3, fix3-M): drawn diagrams (rbd_net.js networks: bridges, repeated blocks, standby
+// groups) are cross-checked too: the decision diagram result, a brute-force enumeration of every
+// up/down combination, and inclusion-exclusion over the minimal path sets and over the minimal cut
+// sets must agree (xcheckNet). Formula and live fault tree models keep the three legs below.
+// See tests/regression_rbd_markov_diagrams_20261013b.test.js
 // rbd_xcheck.js — v0.2 — RBD-XCHECK (task #94): every RBD result is computed
 // twice, two ways, and must agree.
 //
@@ -181,6 +186,48 @@
             return projectConfig.rbd.models || [];
         } catch (_) { return []; }
     }
+    function _net() { if (typeof window !== 'undefined' && window.RBD_NET) return window.RBD_NET; try { return require('./rbd_net.js'); } catch (_) { return null; } }
+    const _hasDiagram = m => !!(m && m.diagram && Array.isArray(m.diagram.elements));
+    // 13 Oct 2026 (v0.3): a drawn network, computed four ways. Legs that cannot run (too many
+    // components to enumerate, too many minimal sets for inclusion-exclusion) say why; at least two
+    // legs must run and every pair that ran must agree, or this refuses.
+    // The four legs are pure in (diagram, t): the card re-renders after every edit, so results are kept
+    // for the last 64 (diagram, t) pairs (a JSON key; an edit makes a new key). Only what changed is recomputed.
+    const _netCache = new Map();
+    function xcheckNet(diagram, t) {
+        const key = t + '|' + JSON.stringify(diagram || null);
+        if (_netCache.has(key)) { const c = _netCache.get(key); if (c.err) throw new Error(c.err); return c.res; }
+        try { const res = _xcheckNet(diagram, t); _cachePut(key, { res: res }); return res; }
+        catch (e) { _cachePut(key, { err: e.message }); throw e; }
+    }
+    function _cachePut(k, v) { _netCache.set(k, v); if (_netCache.size > 64) _netCache.delete(_netCache.keys().next().value); }
+    function _xcheckNet(diagram, t) {
+        const N = _net();
+        if (!N) throw new Error('RBD-XCHECK refused: the network engine (rbd_net.js) is not loaded.');
+        if (!(t > 0)) throw new Error('RBD-XCHECK refused: mission time must be > 0 hours.');
+        const A = N.analyze(diagram);
+        if (!A.ok) throw new Error('RBD-XCHECK refused: the diagram is not complete yet (' + A.errors[0] + ')');
+        const p = new Array(A.nVars).fill(0);
+        A.comps.forEach(c => { p[A.varOf[c.key]] = N.compR(c, t); });
+        const legs = [], skipped = [];
+        legs.push({ id: 'bdd', label: 'decision diagram', r: A.bdd.prob(A.root, p) });
+        const bf = N.bruteForce(A, c => p[A.varOf[c.key]]);
+        if (bf.ok) legs.push({ id: 'enum', label: 'enumeration of ' + bf.states + ' states', r: bf.value }); else skipped.push('enumeration: ' + bf.reason);
+        let ties = null, cuts = null;
+        try {
+            ties = A.bdd.minimalSets(A.root, 1); cuts = A.bdd.minimalSets(A.root, 0);
+            try { legs.push({ id: 'tie', label: ties.length + ' minimal path sets', r: _unionProb(ties, p) }); } catch (e) { skipped.push('path sets: ' + e.message); }
+            try { legs.push({ id: 'cut', label: cuts.length + ' minimal cut sets', r: 1 - _unionProb(cuts, p.map(x => 1 - x)) }); } catch (e) { skipped.push('cut sets: ' + e.message); }
+        } catch (e) { skipped.push('minimal sets: ' + e.message); }
+        if (legs.length < 2) throw new Error('RBD-XCHECK refused: only one computation could run (' + skipped.join('; ') + '). The decision diagram result stands, single-computation, and says so.');
+        let delta = 0;
+        legs.forEach(a => legs.forEach(b => { delta = Math.max(delta, Math.abs(a.r - b.r)); }));
+        if (delta > TOL) throw new Error('RBD-XCHECK DISAGREEMENT: ' + legs.map(l => l.label + ' R = ' + l.r).join(' vs ') + ' (Δ = ' + delta.toExponential(3) + ' > ' + TOL.toExponential(0) + '). The tool refuses to show a number it cannot compute twice: this is an INV-33 hard finding, not a display problem.');
+        const nm = s => s.map(v => { const c = A.comps.find(x => A.varOf[x.key] === v); return c ? c.name : 'B' + v; }).join('·');
+        return { t: t, r: legs[0].r, legs: legs, skipped: skipped, delta: delta, agree: true,
+                 tieSets: ties ? ties.map(nm) : [], cutSets: cuts ? cuts.map(nm) : [],
+                 basis: 'R computed ' + legs.length + ' ways (' + legs.map(l => l.label).join(', ') + '). Independent components, q = 1−e^(−λt), standby groups solved as Markov chains, t = ' + t + ' h. Agreement asserted to ' + TOL.toExponential(0) + '. Computed, never stored.' };
+    }
     function _structureOf(m) {
         try {
             if (m.fromPage && typeof window._rbdFromPage === 'function') { const d = window._rbdFromPage(m.fromPage); return d ? d.structure : null; }
@@ -193,6 +240,11 @@
         const fails = [];
         let checked = 0;
         _models().forEach(m => {
+            if (_hasDiagram(m)) {
+                try { xcheckNet(m.diagram, _missionT()); checked++; }
+                catch (e) { if (/DISAGREEMENT/.test(e.message)) { checked++; fails.push('"' + m.name + '": ' + e.message); } }
+                return;
+            }
             const s = _structureOf(m);
             if (!s) return;
             checked++;
@@ -233,12 +285,26 @@
     // ---------------------------------------------------------------- UI
     const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     function _cardHtml() {
-        const models = _models().map(m => ({ m: m, s: _structureOf(m) })).filter(x => x.s);
+        const models = _models().map(m => ({ m: m, s: _hasDiagram(m) ? null : _structureOf(m), net: _hasDiagram(m) })).filter(x => x.s || x.net);
         if (!models.length) return '';
         const t = _missionT();
         let rows = '';
         models.forEach(x => {
             let body;
+            if (x.net) {
+                try {
+                    const r = xcheckNet(x.m.diagram, t);
+                    const show = (label, arr, n) => label + ' {' + arr.slice(0, n).join('} {') + '}' + (arr.length > n ? ' +' + (arr.length - n) + ' more' : '');
+                    body = '<span style="font-weight:700; color:#166534;">AGREE</span> · Δ = ' + r.delta.toExponential(2) + ' · ' + r.legs.map(l => _esc(l.label) + ' ' + l.r.toPrecision(10)).join(' · ') +
+                        (r.skipped.length ? '<br><span style="color:var(--color-text-tertiary);">not run: ' + _esc(r.skipped.join('; ')) + '</span>' : '') +
+                        '<br><span style="color:var(--color-text-tertiary);">' + _esc(show(r.tieSets.length + ' tie-sets:', r.tieSets, 6)) + '<br>' + _esc(show(r.cutSets.length + ' cut-sets:', r.cutSets, 6)) + '</span>';
+                } catch (e) {
+                    const isDis = /DISAGREEMENT/.test(e.message);
+                    body = '<span style="font-weight:700; color:' + (isDis ? '#8E2A2A' : '#B45309') + ';">' + (isDis ? 'DISAGREEMENT (INV-33)' : 'CROSS-CHECK REFUSED') + '</span> · <span style="color:var(--color-text-tertiary);">' + _esc(e.message) + '</span>';
+                }
+                rows += '<div style="padding:8px 12px; border-bottom:1px solid var(--color-border);" class="u-mono"><b style="font-size:11.5px;">' + _esc(x.m.name) + '</b><div style="font-size:10.5px; margin-top:3px;">' + body + '</div></div>';
+                return;
+            }
             try {
                 const r = xcheck(x.s, t);
                 const rStruct = (typeof window._rbdR === 'function') ? window._rbdR(x.s, t) : null;
@@ -271,7 +337,7 @@
         if (html) host.insertAdjacentHTML('beforeend', html);
     }
 
-    const API = { xcheck: xcheck, tieSets: tieSets, cutSets: cutSets, leaves: leaves, renderXcheck: renderXcheck, _unionProb: _unionProb, _invRun: _invRun };
+    const API = { xcheck: xcheck, xcheckNet: xcheckNet, tieSets: tieSets, cutSets: cutSets, leaves: leaves, renderXcheck: renderXcheck, _unionProb: _unionProb, _invRun: _invRun };
 
     // ------------------------------------------------------------- wiring
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {

@@ -1,3 +1,4 @@
+// v1.4 (13 Oct 2026, fix G): spawns fta_worker.js v1.9, which runs fta_engine.js v1.11 (SEQ gate, NOT gate with prime implicants).
 // ============================================================================
 // tree_warm.js v1.3, per-tree facts computed OFF the UI thread (23 Sep 2026).
 // v1.3 (13 Oct 2026, fix 6 merged): spawns fta_worker.js v1.8, which runs fta_engine.js v1.10 (explicit common cause events in the cut sets).
@@ -56,7 +57,7 @@
         if (_worker || _broken) return _worker;
         if (typeof Worker === 'undefined') { _broken = true; return null; }
         try {
-            _worker = new Worker('fta_worker.js?v=1.8');
+            _worker = new Worker('fta_worker.js?v=1.9');
             _worker.addEventListener('message', _onMessage);
             _worker.addEventListener('error', function () { _reset(true); });
         } catch (_) { _worker = null; _broken = true; }

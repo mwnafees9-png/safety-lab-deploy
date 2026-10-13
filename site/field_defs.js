@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): definitions for the Model links column and the renamed notes columns (Task notes, Item notes, Supports (notes)).
 // 13 Oct 2026 (math audit F8): definitions for the Budget Ledger's unit-labeled Allocated (/FH) and Achieved (/FH) columns.
 // ============================================================================
 // field_defs.js — v1.0 — definitions on hover for every HF and R&M column,
@@ -83,7 +84,12 @@
         'workload function': 'A §25.1523 / Appendix D workload function (flight path control, navigation, communications, systems operation, command decisions).',
         'assigned': 'Which crew role carries the function — PF, PM, or both.',
         'bedford': 'Bedford workload rating (1–10) for the function in the sizing case, from an assessment; engineer-supplied.',
-        'basis note': 'The evidence behind the assignment and rating: procedure reference, simulator session, or analysis.'
+        'basis note': 'The evidence behind the assignment and rating: procedure reference, simulator session, or analysis.',
+        // 13 Oct 2026 (analysis model links)
+        'model links': 'The model elements this row is about (items, zones, functions, failure conditions, basic events, crew tasks, crew roles), linked by id with Link to model. The badge says Linked, Partly linked, Not linked, Typed name not linked, or Broken link when an element it points at is gone.',
+        'task notes': 'Notes on the task in the engineer\'s words. The crew task itself is a model link (Model links column).',
+        'item notes': 'Notes on the item in the engineer\'s words. The item itself is a model link (Model links column).',
+        'supports notes': 'Notes on what the item supports. The task and function it supports are model links (Model links column).'
     };
     var HF_REG = {
         'assumption': 'The typed assumption as written in the register, with its ASM id.',
@@ -238,7 +244,9 @@
         'sentence': 'The one-line sentence recorded with the decision.',
         'signed': 'Who signed the decision and when.',
         'setting': 'A RAM program setting.',
-        'what it drives': 'Which analyses read this setting.'
+        'what it drives': 'Which analyses read this setting.',
+        // 13 Oct 2026 (analysis model links)
+        'model links': 'The model elements this row is about (items, zones, functions, failure conditions, basic events, crew tasks, crew roles), linked by id with Link to model. The badge says Linked, Partly linked, Not linked, Typed name not linked, or Broken link when an element it points at is gone.'
     };
     // labels that mean something different on a particular page
     var BY_VIEW = {

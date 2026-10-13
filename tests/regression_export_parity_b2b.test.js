@@ -177,7 +177,7 @@ console.log('MMEL_MLAS');
   vm.runInContext('__e("MMEL_MLAS", "csv")', sb);
   const csv = captured.find(o => o.headers);
   check('exports a CSV with the renderer\'s columns', !!csv &&
-    JSON.stringify(csv.headers) === JSON.stringify(['Item', 'Equipment', 'ATA', 'Installed', 'Required', 'Category', 'TLD max (days)', 'Protection check', 'Quantitative (dispatched)', '(m) procedure', '(o) procedure', 'State']),
+    JSON.stringify(csv.headers) === JSON.stringify(['Item', 'Equipment', 'ATA', 'Installed', 'Required', 'Category', 'TLD max (days)', 'Protection check', 'Quantitative (dispatched)', '(m) procedure', '(o) procedure', 'State', 'Model Links']),   // 13 Oct 2026: the table's Model links column (model_links.js)
     csv && JSON.stringify(csv.headers));
   if (csv) check('row values preserved incl. numeric installed/required and TLD days',
     csv.rows[0][0] === 'M-01' && csv.rows[0][3] === '2' && csv.rows[0][4] === '1' && csv.rows[0][6] === '10' && csv.rows[0][11] === 'approved');

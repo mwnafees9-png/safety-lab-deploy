@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix G): SEQ joins the AND family for the critical AND-gate test. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (math audit F8): the OR and certain tests compare per-flight-hour rates (SLTopBasis.meets) with the per-flight-hour objective, not per-flight P; the panel shows /FH. See tests/regression_perfh_basis_20261013.test.js
 // ============================================================================
 // critical_gates.js — v1.0 — Q7 (26 Sep 2026): the critical AND-gate test that
@@ -32,7 +33,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var AND_FAMILY = { AND: 1, INHIBIT: 1, PAND: 1, SPARE: 1 };
+    var AND_FAMILY = { AND: 1, INHIBIT: 1, PAND: 1, SPARE: 1, SEQ: 1 };   // 13 Oct 2026 (fix G): SEQ
     var MAX_GATES = 400;   // per tree; above this the panel says so rather than stall the page
 
     // App state is read through SLEnv (top-level lets are invisible on window; rule 5),

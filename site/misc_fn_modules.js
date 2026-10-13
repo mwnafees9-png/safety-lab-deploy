@@ -1,3 +1,5 @@
+// 13 Oct 2026 (fix G): spawns fta_worker.js v1.9 with the engine v1.11 (SEQ gate, NOT gate with prime implicants).
+// 13 Oct 2026 (Office-style saving + change acknowledgement, fix2-J): scheduleAutosave reports every accepted change to SLChangeAck.noteChange() (change_ack.js); the unsaved flag belongs to save_state.js when it is loaded.
 // 13 Oct 2026 (fix 3, MGL): Paste Special CCF writes group-level parameters. Worker bumped to fta_worker.js v1.7 with the merged engine (fta_engine.js v1.9: MGL common cause plus F4/F5).
 // 13 Oct 2026 (math fix 7): the strictest-DAL smoothing across shared events also smooths the would-be DAL (_dalIfSubstantiated); see tests/regression_dal_row_20261013.test.js
 // 13 Oct 2026 (math audit F4): worker cut sets carry synthetic SPARE switchover members whole (c.syn); spawns fta_worker.js v1.6
@@ -4224,7 +4226,7 @@ function _cutsetWorkerEnabled() {
 // Versioned spawn — same cache-busting discipline as the page's <script> tags,
 // so a deploy can never pair a fresh page with a stale cached worker. Bump this
 // (and the importScripts version inside fta_worker.js) whenever the engine bumps.
-function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.8'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
+function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.9'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
 function _countTreeNodes(node, seen) { if (!node) return 0; seen = seen || new Set(); if (seen.has(node.id)) return 0; seen.add(node.id); var n = 1; var kids = node.children || node._children; if (kids) for (var i = 0; i < kids.length; i++) n += _countTreeNodes(kids[i], seen); return n; }
 function _reconstructCutsets(encoded, index) {
     return encoded.map(function (c) {
@@ -4451,10 +4453,10 @@ function _slMakeViewSaveBtn() {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'save-indicator sl-view-save';
     b.setAttribute('role', 'button'); b.tabIndex = 0;
-    b.title = 'Autosaved to this browser. Click to save changes (writes the .json locally and to the cloud when signed in).';
+    b.title = 'Click to save your changes (Ctrl+S).';
     b.innerHTML = '<span class="save-indicator-dot"></span><span class="sl-view-save-text">All changes saved</span>';
-    b.addEventListener('click', function () { if (typeof commitSaveChanges === 'function') commitSaveChanges(); });
-    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (typeof commitSaveChanges === 'function') commitSaveChanges(); } });
+    b.addEventListener('click', function () { if (typeof commitSaveChanges === 'function') commitSaveChanges({ explicit: true }); });   // 13 Oct 2026: the person's Save (save_state.js)
+    b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (typeof commitSaveChanges === 'function') commitSaveChanges({ explicit: true }); } });
     return b;
 }
 function _slEnsureViewSaveStyle() {
@@ -4650,7 +4652,12 @@ function _ftaGoToSearchHit(hit) {
 function scheduleAutosave() {
     if(_autosaveSuspended) return false;
     try { _quantClearCache(); } catch(_) {}   // #45 — any edit invalidates cached quant results (keeps cached refs valid)
-    _dirtySinceSave = true;   // Phase 57 — any tracked edit makes the Save Changes control active
+    // 13 Oct 2026 — THE CHANGE FUNNEL (change_ack.js): every change this call accepts is shown to
+    // the person to acknowledge (or cancel) unless it is a load, a merge or the app's own
+    // bookkeeping. Unsaved / saved is owned by save_state.js once it is loaded (Office-style):
+    // only an acknowledged change makes the project unsaved, and only Save makes it saved.
+    try { if (window.SLChangeAck) window.SLChangeAck.noteChange(); } catch(_) {}
+    if (!(typeof window !== 'undefined' && window.SLSaveState)) _dirtySinceSave = true;   // Phase 57 — any tracked edit makes the Save Changes control active (no save_state.js: the old behavior)
     try { if (window.SLCmaLive) window.SLCmaLive.onModelChange('edit'); } catch(_) {}   // 13 Oct 2026 (fix 6): live common cause detection (debounced; cma_live.js)
     try { if (window.SafetyLabCRDT && window.SafetyLabCRDT.onLocalChange) window.SafetyLabCRDT.onLocalChange(); } catch(_) {}   // Phase 1 — mirror the edit into the CRDT (no-op unless co-authoring is enabled)
     _autosavePending = true;  // there is now an unwritten change (flushed on tab hide/close)

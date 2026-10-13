@@ -41,6 +41,14 @@
  * named event ("CCF G: A+B") in the minimal cut sets; the page's expandCCFCutsets and the
  * Vesely-Goldberg w_TE both use them, so the frequency includes common cause instead of leaving it
  * out with no flag (audit F6), with each event's MGL rate and each member's independent part.
+ *
+ * v1.11 (13 Oct 2026, fix G, hand-built fault trees): the SEQ gate (sequence-enforcing, the fourth
+ * standard dynamic gate) is solved exactly as a pure-birth Markov chain when it is an independent
+ * module of constant-rate basic events (_seqExactProb), else it holds the AND bound with the reason;
+ * its cut sets carry the order. The NOT gate (non-coherent, off unless the project allows it) is
+ * BDD.not of its input (NOR over several); getCutsets and bddMinimalCutsets list PRIME IMPLICANTS
+ * for a tree that has one ("NOT X" members, _bddPrimeImplicants), or refuse in plain words above
+ * _PRIME_BUDGET. Coherent trees are unchanged. See tests/regression_fta_handbuild_20261013b.test.js.
  * ========================================================================== */
 (function (root) {
 'use strict';
@@ -97,7 +105,11 @@ function _csForce(r, triggers, key, visited, ctx) {
     return out;
 }
 function getCutsets(node, visited = new Set(), ctx) {
-    if (!ctx) ctx = { fdep: _collectFdep(node), forcing: new Set() };
+    if (!ctx) {
+        // 13 Oct 2026 (fix G): a tree with a NOT gate is non-coherent; its cut sets are prime implicants.
+        if (node && _treeHasNot(node)) return _primeImplicantCutsets(node);
+        ctx = { fdep: _collectFdep(node), forcing: new Set() };
+    }
     if (!node) return []; if (visited.has(node.id)) return []; visited.add(node.id);
     if (node.type !== 'gate') {
         const trig = ctx.fdep.byLid.get(_eventKey(node));
@@ -124,7 +136,7 @@ function _gateCutsets(node, visited, ctx) {
     // mode changes (deterministic CutsetExplosionError instead of an environment-
     // dependent stack limit).
     if (node.gateType === 'OR' || node.gateType === 'XOR') { let r = []; for (let c of actualChildren) { const sub = getCutsets(c, new Set(visited), ctx); for (let si = 0; si < sub.length; si++) r.push(sub[si]); if (r.length > _CUTSET_BUDGET) throw new CutsetExplosionError(r.length); } return r; }
-    else if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') {
+    else if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') {
         let r;
         if (node.gateType === 'SPARE' && _spareSwitchP(node) < 1 && actualChildren.length >= 2) {
             const ps = _spareSwitchP(node);
@@ -142,9 +154,9 @@ function _gateCutsets(node, visited, ctx) {
             for (let i = 1; i < actualChildren.length; i++) r = multiplyCutsets(r, getCutsets(actualChildren[i], new Set(visited), ctx));
         }
         // Tag dynamic-gate cutsets so the report can flag the required ordering.
-        if (node.gateType === 'PAND' || node.gateType === 'SPARE') {
+        if (node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') {
             const orderTags = actualChildren.map(c => c.displayId || '?');
-            r.forEach(cs => { cs.dynamicOrigin = node.gateType; cs.dynamicOrder = orderTags.join(node.gateType === 'PAND' ? ' → ' : ' ⇉ '); });
+            r.forEach(cs => { cs.dynamicOrigin = node.gateType; cs.dynamicOrder = orderTags.join(node.gateType === 'SPARE' ? ' ⇉ ' : ' → '); });
         }
         return r;
     }
@@ -602,6 +614,120 @@ function _spareBoundProb(probs, ps) {
     for (let j = probs.length - 1; j >= 1; j--) r = (1 - ps) + ps * probs[j] * r;
     return probs[0] * r;
 }
+
+// ── 13 Oct 2026 (hand-built fault trees, fix G): the SEQ and NOT gates ─────────────────────────
+// SEQ (sequence-enforcing gate, the fourth standard dynamic gate): its inputs can only fail in
+// left-to-right order (input i+1 cannot start failing until input i has failed); the output fails
+// when all of them have failed. For an independent module of constant-rate basic events the time
+// to failure is the sum of the inputs' lives: the pure-birth Markov chain 0 -> 1 -> ... -> n,
+// solved exactly with the same uniformization as PAND and SPARE (the DFT Monte Carlo samples the
+// same model). Otherwise the static number is the AND of the inputs: the lives can only sum to
+// less than t if every one of them is less than t, so the AND product is an upper bound.
+function _seqExactProb(xs) {
+    const n = xs.length;
+    if (n < 2 || n > 64) return null;
+    const trans = [];
+    for (let k = 0; k < n; k++) if (xs[k] > 0) trans.push([k, k + 1, xs[k]]);
+    return _ctmcFailProb(n + 1, trans, n);
+}
+// NOT (IEC 61025): the output occurs when its input does NOT occur (several inputs: when none of
+// them occurs, i.e. NOR). Non-coherent logic, allowed only when the project turns it on. The BDD
+// is exact (BDD.not). Cut sets become PRIME IMPLICANTS: the smallest combinations of events that
+// occur and events that do NOT occur ("NOT X") which cause the top event, found by iterated
+// consensus with absorption over the BDD's disjoint paths (Blake canonical form, complete by
+// Quine's theorem). Above _PRIME_BUDGET terms the list is refused with a plain message rather
+// than shown incomplete; P(top) is unaffected (the BDD never enumerates terms).
+var _PRIME_BUDGET = 2000;
+function _treeHasNot(rootNode) {
+    let has = false;
+    const pages = new Set();
+    (function walk(n, seen) {
+        if (!n || has || seen.has(n)) return;
+        seen.add(n);
+        if (n.type !== 'gate') return;
+        if (n.gateType === 'NOT') { has = true; return; }
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !pages.has(linkedId) && typeof ftaPages !== 'undefined' && ftaPages) {
+                pages.add(linkedId);
+                const lp = ftaPages.find(function (p) { return p && p.id === linkedId; });
+                if (lp && lp.root) walk(lp.root, seen);
+            }
+            if (n.gateType === 'TRANSFER') return;
+        }
+        (n.children || n._children || []).forEach(function (c) { walk(c, seen); });
+    })(rootNode, new Set());
+    return has;
+}
+function _primeBudgetError(count) {
+    const e = new Error('This fault tree uses NOT logic, so its cut sets are prime implicants (events that occur together with events that do not). It has more than ' + _PRIME_BUDGET.toLocaleString() + ' of them, so the list is not shown rather than shown incomplete. P(top) is still exact.');
+    e.name = 'NonCoherentCutsetError';
+    e.count = count;
+    return e;
+}
+function _notLiteralNode(n) {
+    const p = (n && typeof n.probability === 'number' && isFinite(n.probability)) ? n.probability : 0;
+    const lid = n ? (n.logicalId != null ? n.logicalId : n.id) : '?';
+    return { id: 'not:' + (n ? n.id : '?'), logicalId: 'not:' + lid, type: 'basic', probability: Math.max(0, Math.min(1, 1 - p)), children: [],
+        _synthetic: 'not', _negated: true, negatedId: n ? n.id : null,
+        displayId: 'NOT ' + ((n && (n.displayId || n.name)) || String(lid)),
+        name: ((n && (n.name || n.displayId)) || 'event') + ' (does not occur)' };
+}
+function _bddPrimeImplicants(bdd, skip) {
+    const terms = [];
+    const subsumes = function (a, b) { if (a.size > b.size) return false; for (const [v, p] of a) if (b.get(v) !== p) return false; return true; };
+    let live = [];
+    const add = function (t) {
+        for (let i = 0; i < live.length; i++) if (subsumes(live[i], t)) return false;
+        live = live.filter(function (u) { return !subsumes(t, u); });
+        live.push(t);
+        if (live.length > _PRIME_BUDGET) throw _primeBudgetError(live.length);
+        return true;
+    };
+    const lits = [];
+    let paths = 0;
+    (function go(n) {
+        if (n === BDD.T0) return;
+        if (n === BDD.T1) {
+            const t = new Map();
+            for (let i = 0; i < lits.length; i++) if (!(skip && skip(lits[i][0]))) t.set(lits[i][0], lits[i][1]);
+            if (++paths > 4 * _PRIME_BUDGET) throw _primeBudgetError(paths);
+            add(t);
+            return;
+        }
+        lits.push([n.varIdx, false]); go(n.low); lits.pop();
+        lits.push([n.varIdx, true]); go(n.high); lits.pop();
+    })(bdd);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        const snap = live.slice();
+        for (let i = 0; i < snap.length; i++) {
+            for (let j = i + 1; j < snap.length; j++) {
+                const a = snap[i], b = snap[j];
+                let opp = null, clash = false;
+                for (const [v, p] of a) { if (b.has(v) && b.get(v) !== p) { if (opp !== null) { clash = true; break; } opp = v; } }
+                if (clash || opp === null) continue;
+                const c = new Map(a);
+                for (const [v, p] of b) c.set(v, p);
+                c.delete(opp);
+                if (add(c)) changed = true;
+            }
+        }
+    }
+    const key = function (t) { return [...t.keys()].sort(function (x, y) { return x - y; }).map(function (v) { return (t.get(v) ? '+' : '-') + v; }).join(','); };
+    live.forEach(function (t) { terms.push({ t: t, k: key(t) }); });
+    terms.sort(function (a, b) { return (a.t.size - b.t.size) || (a.k < b.k ? -1 : (a.k > b.k ? 1 : 0)); });
+    return terms.map(function (x) { return x.t; });
+}
+function _primeImplicantCutsets(rootNode) {
+    const built = buildBDDFromFT(rootNode);
+    if (!built.bdd || built.bdd === BDD.T0) return [];
+    const skip = function (v) { return !!(built.varMeta[v] && built.varMeta[v].synthetic === 'order'); };
+    return _bddPrimeImplicants(built.bdd, skip).map(function (t) {
+        return [...t.keys()].sort(function (x, y) { return x - y; }).map(function (v) { return t.get(v) ? built.varOrder[v] : _notLiteralNode(built.varOrder[v]); });
+    });
+}
 function _glRule(K) {
     const x = [], w = [];
     for (let i = 1; i <= K; i++) {
@@ -1028,7 +1154,7 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         }
         if (!info.reason && kids.length < 2) info.reason = 'fewer than two inputs';
         if (!info.reason) {
-            const exact = isSpare ? _spareExactProb(xs, warmK, ps) : _pandExactProb(xs);
+            const exact = isSpare ? _spareExactProb(xs, warmK, ps) : (node.gateType === 'SEQ' ? _seqExactProb(xs) : _pandExactProb(xs));
             const bound = isSpare ? _spareBoundProb(probs, ps) : probs.reduce((a, b) => a * b, 1);
             if (exact == null) info.reason = 'too many inputs to solve exactly';
             else if (exact > bound * (1 + 1e-9) && bound > 0) info.reason = 'standby factor above 1';
@@ -1099,7 +1225,9 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         if (node.gateType === 'AND' || node.gateType === 'INHIBIT') {
             return kidBdds.reduce((acc, k) => BDD.apply('and', acc, k), BDD.T1);
         }
-        if (node.gateType === 'PAND' || node.gateType === 'SPARE') return dynGate(node, kids, kidBdds);
+        if (node.gateType === 'PAND' || node.gateType === 'SPARE' || node.gateType === 'SEQ') return dynGate(node, kids, kidBdds);
+        // 13 Oct 2026 (fix G): NOT negates its input (several inputs: NOR). Non-coherent; see _bddPrimeImplicants.
+        if (node.gateType === 'NOT') return BDD.not(kidBdds.reduce((acc, k) => BDD.apply('or', acc, k), BDD.T0));
         if (node.gateType === 'OR') {
             return kidBdds.reduce((acc, k) => BDD.apply('or', acc, k), BDD.T0);
         }
@@ -1439,13 +1567,13 @@ function _vgTau(e) {
 // when the tree has none (then every cut set is summed as before).
 function _dynPositions(rootNode) {
     var has = false;
-    (function scan(n, seen) { if (!n || has || seen.has(n)) return; seen.add(n); if (n.type === 'gate' && (n.gateType === 'PAND' || n.gateType === 'SPARE')) { has = true; return; } (n.children || n._children || []).forEach(function (c) { scan(c, seen); }); })(rootNode, new Set());
+    (function scan(n, seen) { if (!n || has || seen.has(n)) return; seen.add(n); if (n.type === 'gate' && (n.gateType === 'PAND' || n.gateType === 'SPARE' || n.gateType === 'SEQ')) { has = true; return; } (n.children || n._children || []).forEach(function (c) { scan(c, seen); }); })(rootNode, new Set());
     if (!has) return null;
     var exact = new Set();
     try {
         (buildBDDFromFT(rootNode).dyn || []).forEach(function (d) {
             if (!d || d.mode !== 'exact') return;
-            if (d.gateType === 'PAND' || (d.gateType === 'SPARE' && !(d.warmK > 0))) exact.add(String(d.gateId));
+            if (d.gateType === 'PAND' || d.gateType === 'SEQ' || (d.gateType === 'SPARE' && !(d.warmK > 0))) exact.add(String(d.gateId));
         });
     } catch (_) { return null; }
     if (!exact.size) return null;
@@ -1577,6 +1705,7 @@ function _minimizeBDDCutsets(cutsets) {
     return min.map(s => [...s]);
 }
 function bddMinimalCutsets(rootNode) {
+    if (_treeHasNot(rootNode)) return _primeImplicantCutsets(rootNode);   // 13 Oct 2026 (fix G): non-coherent tree -> prime implicants
     const { bdd, varOrder, varMeta } = buildBDDFromFT(rootNode);
     if (!bdd || bdd === BDD.T0) return [];
     const raw = bddCutsets(bdd).map(cs => cs.filter(i => !(varMeta[i] && varMeta[i].synthetic === 'order')));
@@ -1759,6 +1888,10 @@ var SLFTAEngine = {
     ccfCatalog: ccfCatalog,
     explicitCCFCutsets: explicitCCFCutsets,
     bddMinimalCutsets: bddMinimalCutsets,
+    seqExactProb: _seqExactProb,
+    treeHasNot: _treeHasNot,
+    primeImplicantCutsets: _primeImplicantCutsets,
+    PRIME_BUDGET: _PRIME_BUDGET,
     minOrder: _minOrder,
     singleVarReaches: _singleVarReaches,
     singleFailureEvents: singleFailureEvents,

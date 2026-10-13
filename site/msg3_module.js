@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): MSG-3 candidate items link their item from the model picker (no typed id); the linked badge shows on every MSI and screened row; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // msg3_module.js — Phase F4: MSG-3 scheduled-maintenance analysis (systems &
 // powerplant logic). BORN MODULAR: new file, zero monolith edits; loads after
@@ -102,8 +103,10 @@
     async function msg3AddMsi() {
         if (!_access()) { _toast('MSG-3 analysis requires a Pro+ subscription.', 'warning', 3500); return; }
         const name = await _ask('Candidate item — name:'); if (!name || !name.trim()) return;
-        const items = (typeof itemsData !== 'undefined' ? itemsData : []) || [];
-        const itemId = (await _ask('Linked LRU / item id (optional):\n' + items.slice(0, 12).map(i => '  ' + i.itemId + ' — ' + i.name).join('\n'), '')) || '';
+        // 13 Oct 2026: the item is picked from the model (model_links.js), never typed.
+        const draft = { name: name.trim(), itemId: '' };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('msg3Msi', draft))) return;
+        const itemId = draft.itemId || '';
         const sel = {};
         for (const qq of MSI_QUESTIONS) {
             const a = (await _ask('MSI selection — ' + qq.q + '  (y/n):', 'y')) || '';
@@ -112,12 +115,12 @@
         const isMsi = msg3IsMsi(sel);
         if (!isMsi) {
             _store().screened = _store().screened || [];
-            _store().screened.push({ id: 'SCR-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, at: new Date().toISOString() });
+            _store().screened.push({ id: 'SCR-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, at: new Date().toISOString(), modelLinks: draft.modelLinks });
             _save();
             _toast('All four selection questions NO — recorded as screened out (auditable), not an MSI. Note: SHM systems not selected as MSI go to the Structures WG for awareness (IP-105).', 'info', 6000);
             renderMsg3Page(); return;
         }
-        _store().msis.push({ id: 'MSI-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, ffs: [] });
+        _store().msis.push({ id: 'MSI-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, ffs: [], modelLinks: draft.modelLinks });
         _save(); renderMsg3Page();
     }
     function msg3IsMsi(sel) { return !!(sel && (sel.hidden || sel.safety || sel.ops || sel.econ)); }
@@ -222,7 +225,7 @@
         S.msis.forEach(m => {
             html += '<div style="border:1px solid var(--color-border-strong); margin-bottom:16px; background:var(--color-surface-1);">' +
                 '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:2px solid var(--color-text-primary);">' +
-                '<div><b>' + _esc(m.name) + '</b>' + (m.itemId ? ' <span class="u-mono" style="font-size:11px; color:var(--color-text-tertiary);">' + _esc(m.itemId) + '</span>' : '') +
+                '<div><b>' + _esc(m.name) + '</b>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('msg3Msi', m) : (m.itemId ? ' <span class="u-mono" style="font-size:11px; color:var(--color-text-tertiary);">' + _esc(m.itemId) + '</span>' : '')) +
                 (m.sel ? ' <span class="u-mono" style="font-size:9.5px; border:1px solid currentColor; padding:0 4px; color:var(--color-text-secondary);" title="MSI selection basis (2-3-1)">MSI: ' + ['hidden','safety','ops','econ'].filter(k => m.sel[k]).join('+').toUpperCase() + '</span>' : '') +
                 ' <span class="u-mono" style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(m.id) + '</span></div>' +
                 '<div><button class="btn-cyan" style="font-size:11px; padding:3px 9px;" onclick="msg3AddFf(\'' + m.id + '\')">+ Functional failure</button> ' +
@@ -264,7 +267,7 @@
         if (scr.length) {
             html += '<h3 style="margin-top:var(--s-4);">Screened out — selection questions all NO (auditable register)</h3>' +
                 '<table class="data-table" style="width:100%;  font-size:12px;"><tbody>' +
-                scr.map(x => '<tr><td>' + _esc(x.name) + '</td><td class="u-mono" style="width:160px;">' + _esc(x.itemId || '—') + '</td><td class="prov" style="width:140px;">' + _esc(String(x.at).slice(0, 10)) + '</td></tr>').join('') +
+                scr.map(x => '<tr><td>' + _esc(x.name) + '</td><td style="width:240px;">' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('msg3Screen', x) : _esc(x.itemId || '—')) + '</td><td class="prov" style="width:140px;">' + _esc(String(x.at).slice(0, 10)) + '</td></tr>').join('') +
                 '</tbody></table>';
         }
         html += '<div style="border:1px solid var(--color-border-hair); border-left:3px solid var(--color-text-primary); background:var(--color-surface-2); padding:10px 14px; font-size:12px; color:var(--color-text-secondary); margin-top:14px;">' +

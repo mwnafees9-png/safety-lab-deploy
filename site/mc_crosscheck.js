@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix G): the direct gate-logic path evaluates NOT (NOR), INHIBIT (AND) and XOR (exactly one) and skips trees with dynamic gates (PAND, SPARE, SEQ, FDEP) with that reason instead of reading them as OR. See tests/regression_fta_handbuild_20261013b.test.js
 // ============================================================================
 // mc_crosscheck.js — v1.0 — DSV-1: dissimilar verification (SLDissimilar).
 //
@@ -38,6 +39,7 @@
     }
 
     function _hasCcf(root) { let f = false; (function w(n) { if (!n || f) return; if (n.ccfGroup && n.beta > 0) { f = true; return; } (n.children || []).forEach(w); })(root); return f; }
+    function _hasDyn(root) { let f = false; (function w(n) { if (!n || f) return; if (n.type === 'gate' && /^(PAND|SPARE|SEQ|FDEP)$/.test(n.gateType || '')) { f = true; return; } (n.children || []).forEach(w); })(root); return f; }
     function _vars(root) {
         const m = new Map();   // logicalId → probability
         (function w(n) {
@@ -56,7 +58,9 @@
         if (n.type === 'basic' || n.type === 'undeveloped') return draw.get(String(n.logicalId != null ? n.logicalId : n.id)) === true;
         const kids = (n.children || []).map(k => _evalTree(k, draw));
         const gt = n.gateType || 'OR';
-        if (gt === 'AND') return kids.every(Boolean);
+        if (gt === 'AND' || gt === 'INHIBIT') return kids.every(Boolean);
+        if (gt === 'NOT') return !kids.some(Boolean);   // 13 Oct 2026 (fix G): NOT (NOR over several inputs)
+        if (gt === 'XOR') return kids.filter(Boolean).length === 1;
         if (gt === 'VOTING') { const k = Math.max(1, n.votingK || n.k || 2); return kids.filter(Boolean).length >= k; }
         return kids.some(Boolean);   // OR default
     }
@@ -70,6 +74,7 @@
         try {
             if (!root) { out.verdict = 'skipped'; out.note = 'no tree'; return out; }
             if (_hasCcf(root)) { out.verdict = 'skipped'; out.note = 'contains CCF coupling — v1 dissimilar path covers independent-event trees'; return out; }
+            if (_hasDyn(root)) { out.verdict = 'skipped'; out.note = 'contains a dynamic gate (PAND, SPARE, SEQ or FDEP): the static gate-logic path cannot judge failure order; the DFT Monte Carlo covers it'; return out; }
             const t0 = Date.now();
             const r = computeExactProbability(JSON.parse(JSON.stringify(root)));
             out.exact = (r && typeof r === 'object' && 'prob' in r) ? r.prob : r;

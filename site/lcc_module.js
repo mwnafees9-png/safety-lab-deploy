@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): life cycle cost items link to the item they are about from the model picker (model_links.js); Model links column with the linked badge, and the item's failure rate beside the row's; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // lcc_module.js — Phase R4: life-cycle cost on the reliability data the
@@ -95,6 +96,7 @@
         it.acquisition = parseFloat(await slPrompt('Acquisition cost per shipset ($):', '50000')) || 0;
         it.unitCost = parseFloat(await slPrompt('Spare unit cost ($):', '25000')) || 0;
         it.materialCost = parseFloat(await slPrompt('Repair material cost per event ($):', '3000')) || 0;
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('lcc', it))) return;   // 13 Oct 2026: link the row to the model
         _store().items.push(it);
         _save(); renderLccPage();
     };
@@ -132,10 +134,11 @@
         if (!rows.length) {
             html += '<p style="color:var(--color-text-tertiary); font-size:13px;">No items yet. Add by component-library key (λ auto-fills) or free text. The λ and MTTR here are the safety case\'s own numbers — a reliability improvement shows its support-cost payback on this page.</p>';
         } else {
-            html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th></th><th>Item</th><th>λ (/FH)</th><th>Fail/yr (fleet)</th>' +
+            html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th></th><th>Item</th><th>Model links</th><th>λ (/FH)</th><th>Fail/yr (fleet)</th>' +
                 '<th>Labor/yr</th><th>Material/yr</th><th>Downtime/yr</th><th>Spares (units)</th><th>Acq.</th><th>NPV ' + params.years + 'y</th></tr></thead><tbody>' +
                 rows.map(({ it, c }) => '<tr><td><a href="#" onclick="lccDelete(\'' + it.id + '\'); return false;" style="color:#8E2A2A; font-size:11px;">✕</a></td>' +
                     '<td><b>' + _esc(it.name) + '</b></td>' +
+                    '<td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('lcc', it) : '') + '</td>' +
                     '<td class="u-mono" style="font-size:11px;">' + Number(it.lambda).toExponential(1) + '</td>' +
                     '<td class="u-mono">' + c.failYr.toFixed(3) + '</td>' +
                     '<td class="u-mono">' + _$(c.labor) + '</td><td class="u-mono">' + _$(c.material) + '</td><td class="u-mono">' + _$(c.downtime) + '</td>' +

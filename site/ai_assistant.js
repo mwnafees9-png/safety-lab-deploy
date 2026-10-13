@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix G): fault tree proposals accept the SEQ gate, and NOT only when the project allows non-coherent logic (_ftaGateTypesAllowed); a NOT gate never gets a second input. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL): CCF proposals carry the model (beta factor or MGL) explicitly and an unsuggested gamma/delta stays blank (= 1, NUREG/CR-5485 MGL default) instead of a silent 0.
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /*!
@@ -6455,10 +6456,17 @@
         for (var i = 0; i < kids.length; i++) { if (String(kids[i].id) === String(id)) return root; var r = _ftaParentOf(kids[i], id); if (r) return r; }
         return null;
     }
+    // 13 Oct 2026 (fix G): the gate types an AI proposal may use: every static and dynamic gate including SEQ,
+    // and NOT only when the project has turned on non-coherent logic (off by default).
+    function _ftaGateTypesAllowed() {
+        var base = ['AND', 'OR', 'XOR', 'VOTING', 'INHIBIT', 'PAND', 'SPARE', 'SEQ', 'FDEP', 'TRANSFER'];
+        try { if (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.allowNonCoherent === true) base.push('NOT'); } catch (_) {}
+        return base;
+    }
     function _ftaMakeNode(spec) {
         var newId = internalIdCounter++;
         if (spec && spec.type === 'gate') {
-            var gt = (['AND', 'OR', 'XOR', 'VOTING', 'INHIBIT', 'PAND', 'SPARE', 'FDEP', 'TRANSFER'].indexOf(String(spec.gateType || '').toUpperCase()) >= 0) ? String(spec.gateType).toUpperCase() : 'OR';
+            var gt = (_ftaGateTypesAllowed().indexOf(String(spec.gateType || '').toUpperCase()) >= 0) ? String(spec.gateType).toUpperCase() : 'OR';
             return { id: newId, logicalId: newId, displayId: generateDisplayId('gate'), name: (spec && spec.name) || (gt + ' gate'), type: 'gate', gateType: gt, probability: 0, children: [] };
         }
         return { id: newId, logicalId: newId, displayId: generateDisplayId('basic'), name: (spec && spec.name) || 'New event', type: 'basic', lambda: 0, probability: 0, inputMode: 'lambda', children: [] };
@@ -6467,6 +6475,7 @@
         var page = _ftaPageById(a.pageId); if (!page || !page.root) return { ok: false, error: 'no fault-tree page "' + a.pageId + '"' };
         var parent = _ftaFindNode(page.root, a.parentId); if (!parent) return { ok: false, error: 'no node id ' + a.parentId + ' on that page' };
         if (parent.type !== 'gate') return { ok: false, error: 'node ' + a.parentId + ' is a basic event, not a gate — it cannot take children' };
+        if (parent.gateType === 'NOT' && (parent.children || parent._children || []).length >= 1) return { ok: false, error: 'node ' + a.parentId + ' is a NOT gate, which takes exactly one input' };   // 13 Oct 2026 (fix G)
         var node = _ftaMakeNode(a.node || {});
         if (!Array.isArray(parent.children)) { if (Array.isArray(parent._children)) { parent.children = parent._children; parent._children = null; } else parent.children = []; }
         parent.children.push(node);
@@ -6479,7 +6488,7 @@
         var node = _ftaFindNode(page.root, a.nodeId); if (!node) return { ok: false, error: 'no node id ' + a.nodeId + ' on that page' };
         var f = a.fields || {}; var changed = []; var diff = [];
         if (f.name != null) { diff.push({ field: 'name', from: node.name, to: String(f.name) }); node.name = String(f.name); changed.push('name'); }
-        if (f.gateType != null && node.type === 'gate') { var gt = String(f.gateType).toUpperCase(); if (['AND', 'OR', 'XOR', 'VOTING', 'INHIBIT', 'PAND', 'SPARE', 'FDEP', 'TRANSFER'].indexOf(gt) >= 0) { diff.push({ field: 'gateType', from: node.gateType, to: gt }); node.gateType = gt; changed.push('gateType'); } }
+        if (f.gateType != null && node.type === 'gate') { var gt = String(f.gateType).toUpperCase(); if (_ftaGateTypesAllowed().indexOf(gt) >= 0) { diff.push({ field: 'gateType', from: node.gateType, to: gt }); node.gateType = gt; changed.push('gateType'); } }
         // λ / probability / severity are NEVER set here — they remain the engineer's to set.
         node.aiChatEdited = true; if (model) node.aiEditModel = model;
         _ftaRecompute(a.pageId);

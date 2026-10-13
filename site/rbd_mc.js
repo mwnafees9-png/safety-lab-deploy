@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): Monte Carlo cases (item or system) link to the item they are about from the model picker (model_links.js); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // rbd_mc.js — Phase R2: Monte Carlo simulation for the configurations the
@@ -166,7 +167,9 @@
         const nStr = await slPrompt('Trials N (reproducible; SE ∝ 1/√N):', '200000');
         const n = Math.max(1000, parseInt(nStr, 10) || 200000);
         const seedStr = await slPrompt('Seed (same seed ⇒ same result, always):', '42');
-        _store().cases.push({ id: 'MC-' + Date.now(), name: name.trim(), phases, n, seed: parseInt(seedStr, 10) || 42, result: null });
+        const rec = { id: 'MC-' + Date.now(), name: name.trim(), phases, n, seed: parseInt(seedStr, 10) || 42, result: null };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('rbdMc', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().cases.push(rec);
         _save(); renderRbdMcPage();
     };
     window.rbdMcRun = function (id) {
@@ -200,7 +203,7 @@
                 cases.map(c => {
                     const r = c.result;
                     return '<tr><td><a href="#" onclick="rbdMcDelete(\'' + c.id + '\'); return false;" style="color:#8E2A2A; font-size:11px;">✕</a></td>' +
-                        '<td><b>' + _esc(c.name) + '</b><br><span class="u-mono" style="font-size:10px; color:var(--color-text-tertiary);">' + c.phases.map(p => (p.name || '?') + ' ' + p.duration + 'h').join(' → ') + '</span></td>' +
+                        '<td><b>' + _esc(c.name) + '</b><br><span class="u-mono" style="font-size:10px; color:var(--color-text-tertiary);">' + c.phases.map(p => (p.name || '?') + ' ' + p.duration + 'h').join(' → ') + '</span>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('rbdMc', c) : '') + '</td>' +
                         '<td class="u-mono">' + c.phases.length + '</td>' +
                         '<td class="u-mono" style="font-size:11px;">' + c.n.toLocaleString() + ' · ' + c.seed + '</td>' +
                         (r ? '<td class="u-mono"><b>' + r.r.toFixed(6) + '</b></td>' +

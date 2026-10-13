@@ -1,3 +1,5 @@
+// 13 Oct 2026 (fix G): Project setup shows the "Allow NOT gates" setting (projectConfig.allowNonCoherent, off by default). See tests/regression_fta_handbuild_20261013b.test.js
+// 13 Oct 2026 (analysis model links): the FMEA headers name the model-links cell; see tests/regression_analysis_links_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL): the node panel commits common cause parameters at GROUP level (ccfConfigPanelCommit); the common-mode auto-detect reads a group's parameters order-independently with the engine's MGL resolver.
 // 13 Oct 2026 (math fixes 7 and 2): allocateDAL rebuilt on the ARP4761A App P row rule (the failure condition's starting DAL is carried through every gate, nested AND gates can no longer compound below two levels under the start), no DAL reduction until CMA substantiates independence (the would-be reduction is kept as _dalIfSubstantiated), rigorous k-of-n VOTING reductions, a Cert Lab compliance-basis hook (dalRowComplianceBasis), and the gate independence requirement names physical and functional independence; see tests/regression_dal_row_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
@@ -1335,6 +1337,8 @@ function renderProjectConfigUI() {
     const customContent = document.getElementById('proj-custom-content');
     const missionNote = document.getElementById('proj-mission-based-note');
     const summary = document.getElementById('proj-config-summary');
+    // 13 Oct 2026 (fix G): the "Allow NOT gates" setting (non-coherent fault tree logic, off by default).
+    try { const _nc = document.getElementById('proj-allow-not'); if (_nc) _nc.checked = !!(projectConfig && projectConfig.allowNonCoherent === true); } catch (_) {}
     if (!regSel) return;
     // 31 Aug 2026 — canonicalise the dialect ('sc-vtol' / 'part-23') so the picker,
     // the sub-category selector and the summary all agree with getSafetyTarget().
@@ -2572,13 +2576,13 @@ function _setFmeaTableHead() {
     if (!head) return;
     if (_fmeaActiveMode === 'functional') {
         head.innerHTML = '<tr>' +
-            '<th>Actions</th><th>Scope</th><th>ID</th><th>Sub-Function</th><th>Function Failure Mode</th>' +
+            '<th>Actions</th><th>Scope</th><th>ID</th><th>Sub-Function and model links</th><th>Function Failure Mode</th>' +
             '<th>Local Effect</th><th>Next-Higher Effect</th><th>End Effect</th>' +
             '<th>Detection</th><th>Severity</th><th>Compensating Provision</th><th>Phase</th>' +
         '</tr>';
     } else {
         head.innerHTML = '<tr>' +
-            '<th>Actions</th><th>Scope</th><th>ID</th><th>FTA Link</th><th>Component</th><th>Failure Mode</th>' +
+            '<th>Actions</th><th>Scope</th><th>ID</th><th>FTA Link</th><th>Component and model links</th><th>Failure Mode</th>' +
             '<th>Local Effect</th><th>Next-Higher Effect</th><th>End Effect</th>' +
             // Phase was CAPTURED and never shown. The FMEA form has one shared field
             // list for both modes (safety_lab.js), including fmea-phase, so a

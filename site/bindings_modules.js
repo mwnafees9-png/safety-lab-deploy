@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): FMEA rows show their model links (item, interface, basic event) with the linked badge and broken-link warning (model_links.js); see tests/regression_analysis_links_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL): B10e now checks the engine against a hand-derived NUREG/CR-5485 MGL value (it used the engine's own output), new B10f 2-of-3 voting benchmark; repeated events sync the MGL fields; library CCF groups are created as group-level beta factor groups with a recorded source.
 // 13 Oct 2026 (math fix 7): self-tests B18/B19 set substantiated independence explicitly, since a bare claim no longer reduces the DAL; see tests/regression_dal_row_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
@@ -1849,7 +1850,7 @@ window.renderFMEA = function() {
                 '<td>' + actions + '</td>' +
                 scopeCell +
                 '<td><strong>' + esc(row.fmeaId || '') + '</strong></td>' +
-                '<td>' + esc(fnLabel) + _fcChip + '</td>' +
+                '<td>' + esc(fnLabel) + _fcChip + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('fmea', row, { slots: ['item', 'interface'] }) : '') + '</td>' +
                 '<td>' + esc(FMEA_FUNC_MODE_LABELS[row.funcMode] || row.funcMode || '') + '</td>' +
                 '<td>' + esc(row.localEffect || '') + '</td>' +
                 '<td>' + esc(row.nextEffect || '') + '</td>' +
@@ -1870,7 +1871,8 @@ window.renderFMEA = function() {
             scopeCell +
             '<td><strong>' + esc(row.fmeaId || '') + '</strong></td>' +
             '<td>' + display + '</td>' +
-            '<td>' + esc(row.part || '') + '</td>' +
+            // 13 Oct 2026: the part's model links: the item it belongs to, its interfaces, the basic event it feeds.
+            '<td>' + esc(row.part || '') + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('fmea', row, { slots: ['item', 'interface'] }) : '') + '</td>' +
             '<td>' + esc(row.mode || '') + '</td>' +
             '<td>' + esc(row.localEffect || '') + '</td>' +
             '<td>' + esc(row.nextEffect || '') + '</td>' +

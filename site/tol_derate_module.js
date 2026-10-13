@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): tolerance stacks and derating rows link to the item they are about from the model picker (model_links.js); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // tol_derate_module.js — Phase F8: tolerance accumulation & derating audit.
 // Coverage closers for NASA/TP-2000-207428 ch.4 (derating, application
@@ -81,8 +82,10 @@
         if (contributors.length < 2) { _toast('Need at least two contributors (name:nominal:tol).', 'warning', 3500); return; }
         const lo = parseFloat(await _ask('Lower spec limit on the result (blank = none):', ''));
         const hi = parseFloat(await _ask('Upper spec limit on the result (blank = none):', ''));
-        _store().stacks.push({ id: 'TS-' + Date.now(), name: name.trim(), contributors,
-            limits: { lower: isFinite(lo) ? lo : null, upper: isFinite(hi) ? hi : null } });
+        const rec = { id: 'TS-' + Date.now(), name: name.trim(), contributors,
+            limits: { lower: isFinite(lo) ? lo : null, upper: isFinite(hi) ? hi : null } };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('tolStack', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().stacks.push(rec);
         _save(); renderRamTolPage();
     }
     async function tolDeleteStack(id) {
@@ -101,7 +104,9 @@
         const rated = parseFloat(await _ask('Rated value (datasheet):', '1')); if (!(rated > 0)) return;
         const applied = parseFloat(await _ask('Applied (worst-case operating) value:', '0.4')); if (!(applied >= 0)) return;
         const guideline = parseFloat(await _ask('Guideline fraction. Confirm against YOUR derating standard:', DERATE_TYPICAL[cats[idx]])) || DERATE_TYPICAL[cats[idx]];
-        _store().derate.push({ id: 'DR-' + Date.now(), part: part.trim(), category: cats[idx], rated, applied, guideline });
+        const rec = { id: 'DR-' + Date.now(), part: part.trim(), category: cats[idx], rated, applied, guideline };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('derate', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().derate.push(rec);
         _save(); renderRamTolPage();
     }
     async function derateDelete(id) {
@@ -131,7 +136,7 @@
         S.stacks.forEach(st => {
             const r = tolStack(st.contributors, st.limits);
             html += '<h4 style="font-size:12px; font-family:var(--font-mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--color-text-secondary); margin:12px 0 6px;">' + _esc(st.name) +
-                ' <a href="#" style="font-size:11px; text-transform:none;" onclick="tolDeleteStack(\'' + st.id + '\'); return false;">remove</a></h4>' +
+                ' <a href="#" style="font-size:11px; text-transform:none;" onclick="tolDeleteStack(\'' + st.id + '\'); return false;">remove</a></h4>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('tolStack', st) : '') +
                 '<table class="data-table" style="width:100%;  font-size:12px;"><thead><tr><th>Contributor</th><th>Nominal</th><th>± tol</th></tr></thead><tbody>' +
                 st.contributors.map(c => '<tr><td>' + _esc(c.name) + '</td><td class="u-mono">' + c.nominal + '</td><td class="u-mono">' + c.tol + '</td></tr>').join('') +
                 '</tbody></table>' +
@@ -148,11 +153,11 @@
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="derateAdd()">+ Derating row</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">guidelines shown are TYPICAL practice — confirm each against the program\'s derating standard</span></div>';
         html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr>' +
-            '<th>Part</th><th>Category</th><th>Rated</th><th>Applied</th><th>Ratio</th><th>Guideline</th><th>Verdict</th><th></th></tr></thead><tbody>';
-        if (!S.derate.length) html += '<tr><td colspan="8" style="color:var(--color-text-tertiary);">No derating rows yet.</td></tr>';
+            '<th>Part</th><th>Model links</th><th>Category</th><th>Rated</th><th>Applied</th><th>Ratio</th><th>Guideline</th><th>Verdict</th><th></th></tr></thead><tbody>';
+        if (!S.derate.length) html += '<tr><td colspan="9" style="color:var(--color-text-tertiary);">No derating rows yet.</td></tr>';
         S.derate.forEach(d => {
             const v = derateVerdict(d);
-            html += '<tr><td>' + _esc(d.part) + '</td><td style="font-size:11.5px;">' + _esc(d.category) + '</td>' +
+            html += '<tr><td>' + _esc(d.part) + '</td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('derate', d) : '') + '</td><td style="font-size:11.5px;">' + _esc(d.category) + '</td>' +
                 '<td class="u-mono">' + d.rated + '</td><td class="u-mono">' + d.applied + '</td>' +
                 '<td class="u-mono"' + (!v.pass ? ' style="color:#8E2A2A;"' : '') + '>' + (v.ratio * 100).toFixed(1) + '%</td>' +
                 '<td class="u-mono">≤ ' + (d.guideline * 100).toFixed(0) + '%</td>' +

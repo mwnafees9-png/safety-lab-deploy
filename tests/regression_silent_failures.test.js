@@ -30,7 +30,7 @@ let pass = 0, fail = 0;
 const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' — ' + d : '')); } };
 const SITE = path.join(__dirname, '..', 'site');
 const read = f => fs.readFileSync(path.join(SITE, f), 'utf8');
-const EXPECT = { a11_sequencing: 1, config_management: 1, continue_session: 2, cra_matrix: 3, exposure_case: 1, fracas_ledger: 2, fta_proposals: 2, fta_view_modules: 1, helpers_modules: 6, importance_heat: 3, mass_actions: 1, mfa: 1, misc_fn_modules: 1, notify_agents: 1, save_watch: 1, stpa_panel: 13, bindings_modules: 2 };
+const EXPECT = { a11_sequencing: 1, config_management: 1, continue_session: 2, cra_matrix: 3, exposure_case: 1, fracas_ledger: 2, fta_proposals: 2, fta_view_modules: 1, helpers_modules: 6, importance_heat: 3, mass_actions: 1, mfa: 1, misc_fn_modules: 1, notify_agents: 1, save_watch: 1, stpa_panel: 14, bindings_modules: 2 };   // stpa_panel 13 -> 14 (13 Oct 2026): the table's model-link picker chain (linkNode) ends in its own catch
 const CATCH = m => "SLErrorWatch.report(e, '" + m + "')";
 
 // 23 Sep 2026 — REBUILT. The old line-based scan read an apostrophe inside a

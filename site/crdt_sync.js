@@ -1,3 +1,5 @@
+/* 13 Oct 2026 (Office-style saving, fix2-J): while the person has UNSAVED work (save_state.js SLSaveState.holdsSync()) this module sends nothing and applies no pull: a teammate's update is merged into the doc and handed to SLSaveState.remoteArrived(), which rebases (pull({load,rebase}) + the person's unsaved records on top). release() lets held work go on Save; baseLive()/docHasContent()/pull() are exposed for that.
+ */
 /* 13 Oct 2026 (fix 6): projectConfig.cmaDecisionLog (the common cause decision log, cma_live.js) merges append-only, as the AI logs do (PC_LOGS).
  * crdt_sync.js — Phase 1: real-time co-authoring foundation (Yjs CRDT over Supabase Realtime).
  *
@@ -240,7 +242,17 @@
   // merged. With the baseline, pushing BEFORE a pull is always safe, so a pull can
   // never discard an edit made here, however it was made.
   var _base = null;
-  function _baseReset() { _base = { col: {}, ord: {}, whole: {}, pc: {}, logs: {}, raw: {}, rawList: {}, ctl: {} }; _pcDirty = true; _pcSeen = null; _pcPullDirty = true; }
+  function _baseReset() { _base = { col: {}, ord: {}, whole: {}, pc: {}, logs: {}, raw: {}, rawList: {}, ctl: {} }; _pcDirty = true; _pcSeen = null; _pcPullDirty = true; _baseLive = false; }
+  // 13 Oct 2026 (Office-style saving) — the baseline is LIVE once this tab and the doc have
+  // agreed at least once (a pull, or a push of our own). Until then a three-way push would read
+  // every local row as an edit; save_state.js rebases first.
+  var _baseLive = false;
+  // While the person has unsaved work, nothing goes out and nothing is pulled onto the screen:
+  // teammates must never see a half-made change, and the doc must never carry unsaved work.
+  // A teammate's update still merges into the doc (and its idb/server copies); SLSaveState is
+  // told, and lays the person's unsaved records back on top of it (rebase).
+  var _heldPush = false, _heldRemote = false;
+  function _holding() { try { return !!(window.SLSaveState && typeof window.SLSaveState.holdsSync === 'function' && window.SLSaveState.holdsSync()); } catch (_) { return false; } }
   // 13 Sep 2026 — PER-USER UNDO (Waqas: "if I hit undo I want it to restore mine but not
   // impact teammates' work ... exactly how it is in Microsoft documents"). The snapshot undo
   // in helpers_modules restores the WHOLE project as this tab last saw it, which rolls a
@@ -818,6 +830,7 @@
   function pushLocal(opts) {
     if (!ydoc || _applying) return;
     if (_docStale()) return;                          // H-5: never write this model into another project's doc
+    if (_holding()) { _heldPush = true; return; }     // 13 Oct 2026: unsaved work stays on this device until Save
     var full = !!(opts && opts.full);
     var cap; try { cap = window.__crdtCapture ? window.__crdtCapture() : null; } catch (_) { cap = null; }
     if (!cap) return;
@@ -855,6 +868,7 @@
     }, full ? 'seed' : 'local');
     if ('projectConfig' in cap) { try { if (ydoc.getMap(PC_MAP).size > 0) ydoc.transact(function () { _pcMirror(); }, 'seed'); } catch (_) {} }
     if ('projectConfig' in cap) _pcCorrectIfHeld(cap.projectConfig);
+    _baseLive = true; _heldPush = false;
   }
 
   // pullToModel(opts): opts.load = the doc is being adopted onto a model that was just
@@ -864,7 +878,9 @@
   function pullToModel(opts) {
     if (!ydoc) return;
     if (_docStale()) return;                          // H-5: never apply another project's rows onto this model
-    if (_adoptUntil && Date.now() < _adoptUntil) { try { pushLocal({ full: true }); } catch (_) {} return; }   // adopt window: model is authoritative
+    // 13 Oct 2026: unsaved work on screen: the update waits in the doc; SLSaveState rebases.
+    if (_holding() && !(opts && opts.rebase)) { _heldRemote = true; try { window.SLSaveState.remoteArrived(opts || {}); } catch (_) {} return; }
+    if (_adoptUntil && Date.now() < _adoptUntil && !(opts && opts.rebase)) { try { pushLocal({ full: true }); } catch (_) {} return; }   // adopt window: model is authoritative
     // 13 Sep 2026 — A PULL NEVER DISCARDS A LOCAL CHANGE (R18). Push FIRST, always: the
     // three-way push writes exactly the edits made here since the baseline (and only
     // those — it cannot resurrect a delete that has already merged into the doc), so
@@ -913,6 +929,7 @@
     partial.__typeCounters = tcOut;
     _applying = true;
     try { if (window.__crdtApply) window.__crdtApply(partial); } finally { _applying = false; }
+    _baseLive = true;
   }
 
   // ---- transport (Supabase Realtime broadcast) -------------------------------
@@ -1098,6 +1115,7 @@
   // called from safety_lab.js scheduleAutosave() — debounced so rapid edits coalesce into one push
   function onLocalChange() {
     if (!_started || _applying) return;
+    if (_holding()) { _heldPush = true; return; }     // 13 Oct 2026: sent on Save (release)
     clearTimeout(_pushTimer);
     _pushTimer = setTimeout(function () { try { pushLocal(); } catch (_) {} }, 350);
   }
@@ -1144,6 +1162,25 @@
     }
   }
 
+  // 13 Oct 2026 (Office-style saving) — let held work go. Called by save_state.js on Save (the
+  // person's acknowledged work goes out in one transaction, then teammates' updates come in), on
+  // Don't Save (opts.discard: take the doc as it is, push nothing) and when an acknowledgement
+  // window closes with nothing unsaved. opts.seed: the doc was empty, so the model seeds it.
+  function release(opts) {
+    if (!_started || !ydoc || _holding()) return false;
+    var o = opts || {};
+    try {
+      if (o.seed) { pushLocal({ full: true }); }
+      else if (o.discard || !_baseLive) {
+        if (_docHasContent()) pullToModel({ load: true }); else pushLocal({ full: true });
+      }
+      else if (_heldRemote) { pullToModel(); }           // pushes first (three-way), then pulls
+      else { pushLocal(); }
+    } catch (e) { try { console.warn('[CRDT] release failed', e); } catch (_) {} }
+    _heldRemote = false; _heldPush = false;
+    return true;
+  }
+
   window.SafetyLabCRDT = {
     start: start, stop: stop, refresh: refresh, onLocalChange: onLocalChange, enabled: flagOn, adoptModel: adoptModel,
     noteSnapshotVersion: noteSnapshotVersion, authoritative: authOn,
@@ -1152,6 +1189,8 @@
     keys: function () { var o = {}; COLLECTIONS.forEach(function (c) { o[c.name] = c.key; }); return o; },
     undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo, liveUndo: liveUndo, _undoMgr: function () { return _undoMgr; },
     _base: function () { return _base; },
+    release: release, baseLive: function () { return _baseLive; }, docHasContent: function () { return !!ydoc && _docHasContent(); },
+    pull: function (opts) { return pullToModel(opts); }, held: function () { return { push: _heldPush, remote: _heldRemote }; },
     controlFloor: function (c) { try { return _ctlFloor(String(c)); } catch (_) { return 0; } },   // bindings_modules stamps a deliberate change after this
     _fta: { decompose: _ftaDecompose, recompose: _ftaRecompose, rebuildTree: _ftaRebuildTree }
   };

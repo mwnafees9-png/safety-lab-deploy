@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): every exported failure condition carries a Model Links attribute (kind:id=code element ids); see tests/regression_analysis_links_20261013b.test.js
 // ============================================================================
 // reqif_bridge.js — v1.0 — the ReqIF exchange lane (OMG ReqIF 1.2).
 // BORN MODULAR: new file, zero monolith edits.
@@ -59,6 +60,7 @@
                 attr('AD-TEXT', (f.fcDesc || '') + ' — AC: ' + (f.effAc || '—') + ' Crew: ' + (f.effCrew || '—') + ' Pax: ' + (f.effPax || '—')) +
                 attr('AD-SEV', f.severity || '') +
                 attr('AD-PHS', f.phases || '') +
+                attr('AD-LNK', (typeof SLModelLinks !== 'undefined') ? SLModelLinks.csvCell('acFha', f) : '') +   // 13 Oct 2026: model links (element ids)
                 '</VALUES><TYPE><SPEC-OBJECT-TYPE-REF>SOT-FC</SPEC-OBJECT-TYPE-REF></TYPE></SPEC-OBJECT>';
         }).join('\n');
         const hierarchy = fcs.map((f, i) => '<SPEC-HIERARCHY IDENTIFIER="SH-' + i + '" LAST-CHANGE="' + t + '"><OBJECT><SPEC-OBJECT-REF>' + _rid(f) + '</SPEC-OBJECT-REF></OBJECT></SPEC-HIERARCHY>').join('\n');
@@ -76,7 +78,7 @@
             '<DATATYPES><DATATYPE-DEFINITION-STRING IDENTIFIER="DT-STR" LAST-CHANGE="' + t + '" LONG-NAME="String" MAX-LENGTH="32000"/></DATATYPES>\n' +
             '<SPEC-TYPES>' +
             '<SPEC-OBJECT-TYPE IDENTIFIER="SOT-FC" LAST-CHANGE="' + t + '" LONG-NAME="Failure Condition"><SPEC-ATTRIBUTES>' +
-            adef('AD-FID', 'ReqIF.ForeignID') + adef('AD-TEXT', 'ReqIF.Text') + adef('AD-SEV', 'Severity') + adef('AD-PHS', 'Flight Phases') +
+            adef('AD-FID', 'ReqIF.ForeignID') + adef('AD-TEXT', 'ReqIF.Text') + adef('AD-SEV', 'Severity') + adef('AD-PHS', 'Flight Phases') + adef('AD-LNK', 'Model Links') +
             '</SPEC-ATTRIBUTES></SPEC-OBJECT-TYPE>' +
             '<SPECIFICATION-TYPE IDENTIFIER="ST-AFHA" LAST-CHANGE="' + t + '" LONG-NAME="AFHA"/>' +
             '<SPEC-RELATION-TYPE IDENTIFIER="SRT-TRACE" LAST-CHANGE="' + t + '" LONG-NAME="Trace"/>' +

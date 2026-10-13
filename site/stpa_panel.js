@@ -1,7 +1,20 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
-// stpa_panel.js — v1.0 — THE STPA WALKTHROUGH (system lane, user-visible).
+// stpa_panel.js — v1.1 — THE STPA WALKTHROUGH (system lane, user-visible).
+//
+// v1.1 (13 Oct 2026, hand-build round): the Step 2 control structure is now a
+// diagram you draw and edit by hand (SLDiagramEditor, the one editor core):
+// a visible toolbox in the STPA Handbook notation (controller, controlled
+// process, actuator, sensor, external element; control action, feedback,
+// other input or output, disturbance, actuates, measured by), each
+// controller's control algorithm and process model drawn inside it and
+// edited in the properties panel, zoom, pan, full screen, undo, and a model
+// link (SysML v2) on every element. The tables stay as a second view of the
+// SAME store (stpaData.cs); positions live in stpaData.diagram.layout. The
+// fixed 680 by 300 picture stays only as the fallback when the editor core
+// is not loaded. INV-32 missing feedback still draws as a dashed red arrow.
+// Also fixed: "Other inputs / outputs" + add read the feedback row's inputs.
 //
 // v1.0 (STPA-BRIDGE): every assessed UCA answers the BRIDGE question — name
 // its failure-mode counterparts on the FTA/FMEA (resolver-checked, dangling
@@ -163,30 +176,38 @@
         },
         addNode: function (kind, node) {
             const d = DATA(); if (!d) return;
-            const all = d.cs.controllers.concat(d.cs.processes);
+            const key = CS_ARR[kind]; if (!key) return;
+            const all = ENG() ? ENG().nodesOf(d.cs) : d.cs.controllers.concat(d.cs.processes);
             if (!node.id || !node.name) { _toast('Node needs an id and a name.', 'error'); return; }
             if (all.some(n => n.id === node.id)) { _toast('Duplicate id "' + node.id + '" — the engine will refuse it, so the panel does too.', 'error'); return; }
-            (kind === 'controller' ? d.cs.controllers : d.cs.processes).push(node);
+            if (!Array.isArray(d.cs[key])) d.cs[key] = [];   // v1.1: actuator / sensor / external lists exist once used
+            d.cs[key].push(node);
             _save();
         },
         rmNode: function (kind, id) {
             const d = DATA(); if (!d) return;
-            const used = d.cs.actions.concat(d.cs.feedbacks, d.cs.others).some(e => e.from === id || e.to === id);
+            const key = CS_ARR[kind]; if (!key) return;
+            const used = d.cs.actions.concat(d.cs.feedbacks, d.cs.others, d.cs.actuations || [], d.cs.measurements || []).some(e => e.from === id || e.to === id);
             if (used) { _toast('"' + id + '" still carries edges — remove those first. No dangling edges, ever.', 'error'); return; }
             if (d.cs.precedence.some(pr => pr.processId === id)) { _toast('"' + id + '" carries a precedence rule — remove it first.', 'error'); return; }
             if (d.responsibilities.some(r => r.elementId === id)) { _toast('"' + id + '" holds responsibilities — reallocate or remove those first.', 'error'); return; }
-            const arr = kind === 'controller' ? d.cs.controllers : d.cs.processes;
+            const arr = d.cs[key] || [];
             const i = arr.findIndex(n => n.id === id);
             if (i >= 0) arr.splice(i, 1);
+            if (d.diagram && d.diagram.layout) delete d.diagram.layout[CS_PFX[kind] + ':' + id];
             _save();
         },
         addEdge: function (kind, edge) {
             const d = DATA(); if (!d) return;
-            if (!edge.id || !edge.from || !edge.to || !edge.name) { _toast('Edge needs id, from, to, and a name.', 'error'); return; }
-            const arr = kind === 'action' ? d.cs.actions : kind === 'other' ? d.cs.others : d.cs.feedbacks;
-            const all = d.cs.actions.concat(d.cs.feedbacks, d.cs.others);
+            const key = CN_ARR[kind]; if (!key) return;
+            const named = kind !== 'actuation' && kind !== 'measurement';
+            if (!edge.id || !edge.from || !edge.to || (named && !edge.name)) { _toast(named ? 'Edge needs id, from, to, and a name.' : 'Link needs id, from and to.', 'error'); return; }
+            const all = d.cs.actions.concat(d.cs.feedbacks, d.cs.others, d.cs.actuations || [], d.cs.measurements || []);
             if (all.some(e => e.id === edge.id)) { _toast('Duplicate edge id "' + edge.id + '".', 'error'); return; }
-            arr.push(edge);
+            if (!named && !edge.name) delete edge.name;
+            if (kind === 'disturbance') edge.type = 'disturbance';
+            if (!Array.isArray(d.cs[key])) d.cs[key] = [];
+            d.cs[key].push(edge);
             _save();
         },
         rmEdge: function (kind, id) {
@@ -195,18 +216,25 @@
                 const keys = Object.keys(d.dispositions).filter(k => k.indexOf(id + ':') === 0);
                 if (keys.length) { _toast('Action "' + id + '" has ' + keys.length + ' UCA disposition(s) on record — clear those first (they are your data, not ours to drop).', 'error'); return; }
             }
-            const arr = kind === 'action' ? d.cs.actions : kind === 'other' ? d.cs.others : d.cs.feedbacks;
+            const arr = d.cs[CN_ARR[kind]] || [];
             const i = arr.findIndex(e => e.id === id);
             if (i >= 0) arr.splice(i, 1);
             _save();
         },
+        // v1.1: the drawn control structure. The diagram editor already took the app undo
+        // snapshot and schedules the autosave; this writes the store and repaints the tables.
+        applyDiagram: function (model) {
+            const d = DATA(); if (!d) return;
+            csApply(d, model);
+            setTimeout(render, 0);
+        },
         // ---- W4 writes ------------------------------------------------------
         setNodeDetail: function (id, patch) {
             const d = DATA(); if (!d) return;
-            const n = d.cs.controllers.concat(d.cs.processes).find(x => x.id === id);
+            const n = (ENG() ? ENG().nodesOf(d.cs) : d.cs.controllers.concat(d.cs.processes)).find(x => x.id === id);
             if (!n) return;
             Object.keys(patch || {}).forEach(k => {
-                if (['desc', 'authority', 'processModel', 'mentalModels'].indexOf(k) < 0) return;
+                if (['desc', 'authority', 'processModel', 'mentalModels', 'controlAlgorithm', 'sysmlRef'].indexOf(k) < 0) return;
                 if (patch[k] == null || patch[k] === '' || (Array.isArray(patch[k]) && !patch[k].length)) delete n[k];
                 else n[k] = patch[k];
             });
@@ -224,7 +252,7 @@
         addResp: function (text, elementId, constraintIds) {
             const d = DATA(); if (!d) return;
             if (!(text || '').trim()) { _toast('A responsibility needs its text.', 'error'); return; }
-            const elems = new Set(d.cs.controllers.concat(d.cs.processes).map(n => n.id));
+            const elems = new Set((ENG() ? ENG().nodesOf(d.cs) : d.cs.controllers.concat(d.cs.processes)).map(n => n.id));
             if (!elems.has(elementId)) { _toast('Unknown element "' + (elementId || '') + '" — responsibilities are allocated to structure elements.', 'error'); return; }
             const known = new Set(d.constraints.map(c => c.id));
             const bad = (constraintIds || []).filter(x => !known.has(x));
@@ -463,8 +491,8 @@
             if (!e.spineValidate(_spineOf(d)).length && (c.losses + c.hazards + c.spineCons))
                 c.trace = e.spineTrace(_spineOf(d)).findings.length;
         } catch (_) {}
-        c.nodes = d.cs.controllers.length + d.cs.processes.length;
-        c.edges = d.cs.actions.length + d.cs.feedbacks.length;
+        c.nodes = e.nodesOf(d.cs).length;
+        c.edges = d.cs.actions.length + d.cs.feedbacks.length + d.cs.others.length + (d.cs.actuations || []).length + (d.cs.measurements || []).length;
         c.errs = e.validate(d.cs);
         if (c.errs.length) return c;
         try {
@@ -567,6 +595,426 @@
         });
         svg += '</svg>';
         return svg;
+    }
+
+
+    // ======================================================================
+    // v1.1 (13 Oct 2026): THE CONTROL STRUCTURE, DRAWN AND EDITED BY HAND.
+    // The diagram is an SLDiagramEditor (diagram_editor.js) in the STPA
+    // Handbook's notation (Leveson and Thomas 2018): controllers with their
+    // control algorithm and process model inside, controlled processes,
+    // actuators, sensors, external elements (environment, other systems),
+    // control actions down, feedback up, other inputs and outputs,
+    // disturbances, and the actuation / measurement links. The adapter below
+    // reads and writes stpaData.cs directly, so the diagram and the tables are
+    // two views of ONE store; every write still goes through _author.
+    // Positions live in stpaData.diagram.layout (keyed by diagram id); a
+    // structure without positions (old projects, AI drafts, table entries) is
+    // laid out by authority rank on the fly, and nothing is written until the
+    // person edits.
+    // ======================================================================
+    const CS_KINDS = ['controller', 'process', 'actuator', 'sensor', 'external'];
+    const CS_ARR = { controller: 'controllers', process: 'processes', actuator: 'actuators', sensor: 'sensors', external: 'externals' };
+    const CS_PFX = { controller: 'ctl', process: 'proc', actuator: 'act', sensor: 'sen', external: 'ext' };
+    const CS_BASE = { controller: 'C', process: 'P', actuator: 'A', sensor: 'S', external: 'E' };
+    const CN_KINDS = ['action', 'feedback', 'other', 'disturbance', 'actuation', 'measurement'];
+    const CN_ARR = { action: 'actions', feedback: 'feedbacks', other: 'others', disturbance: 'others', actuation: 'actuations', measurement: 'measurements' };
+    const CN_PFX = { action: 'ca', feedback: 'fb', other: 'oth', disturbance: 'dist', actuation: 'actu', measurement: 'meas' };
+    const CN_BASE = { action: 'CA', feedback: 'FB', other: 'OI', disturbance: 'D', actuation: 'AC', measurement: 'M' };
+    const CTL_KIND_LABEL = { human: 'Human controller', automation: 'Automated controller', organization: 'Organizational controller' };
+    const MM_KEYS = ['environment', 'ownState', 'controlledProcess', 'otherControllers'];
+    const _sidOf = id => { const s = String(id == null ? '' : id), i = s.indexOf(':'); return i < 0 ? s : s.slice(i + 1); };
+    // The row id of a shape or connector: props.sid as loaded, when it belongs to this diagram id
+    // (prefix:sid, or prefix:sid~n for an id the store holds twice); otherwise the id itself.
+    const _elSid = el => {
+        if (!el) return '';
+        const p = el.props && el.props.sid != null && el.props.sid !== '' ? String(el.props.sid) : null, id = String(el.id || ''), i = id.indexOf(':');
+        if (p != null && i >= 0) { const rest = id.slice(i + 1); if (rest === p || rest.indexOf(p + '~') === 0) return p; }
+        return _sidOf(id);
+    };
+
+    // Default box size from what the box has to show (the person's own size wins once stored).
+    function _csDefaultSize(kind, n) {
+        if (kind !== 'controller') return { w: kind === 'process' ? 200 : 170, h: kind === 'process' ? 64 : 54 };
+        const alg = String(n.controlAlgorithm || '').trim(), pm = (n.processModel || []).filter(Boolean);
+        // header, then the two compartments (each shows at least one line, a placeholder when empty)
+        const h = 52 + (20 + Math.max(1, Math.min(3, Math.ceil(alg.length / 38))) * 13 + 9) + (20 + Math.max(1, Math.min(5, pm.length)) * 13 + 9);
+        return { w: 250, h: Math.ceil(h / 10) * 10 };
+    }
+    // Layout by authority (semantic, as the old fixed view did): controller tiers by rank,
+    // then actuators (left) and sensors (right), then the controlled processes; external
+    // elements in a column on the right. Pure: { diagramId: { x, y } }.
+    function _csTierLayout(list) {
+        const rows = [], byKind = k => list.filter(x => x.kind === k);
+        const ctl = byKind('controller');
+        const ranks = Array.from(new Set(ctl.map(x => x.rank).filter(r => r != null))).sort((a, b) => a - b);
+        ranks.forEach(r => rows.push(ctl.filter(x => x.rank === r)));
+        const unranked = ctl.filter(x => x.rank == null);
+        if (unranked.length) rows.push(unranked);
+        const mid = byKind('actuator').concat(byKind('sensor'));
+        if (mid.length) rows.push(mid);
+        if (byKind('process').length) rows.push(byKind('process'));
+        const pos = {};
+        const widest = Math.max(1, ...rows.map(r => r.reduce((s, x) => s + x.w + 60, -60)));
+        let y = 0, procY = 0;
+        rows.forEach(r => {
+            const tot = r.reduce((s, x) => s + x.w + 60, -60);
+            let x0 = (widest - tot) / 2;
+            const hMax = Math.max(...r.map(x => x.h));
+            if (r[0] && r[0].kind === 'process') procY = y;
+            r.forEach(x => { pos[x.id] = { x: Math.round(x0 / 10) * 10, y: Math.round(y / 10) * 10 }; x0 += x.w + 60; });
+            y += hMax + 90;
+        });
+        let ey = Math.round(procY / 10) * 10;   // the environment sits beside the process it disturbs
+        byKind('external').forEach(x => { pos[x.id] = { x: Math.round((widest + 120) / 10) * 10, y: ey }; ey += x.h + 40; });
+        return pos;
+    }
+    function _nodeProps(kind, n) {
+        const p = { sid: String(n.id == null ? '' : n.id), desc: n.desc || '' };
+        if (kind === 'controller') {
+            p.ctlKind = n.kind || 'automation';
+            if (n.authority != null && n.authority !== '' && !isNaN(+n.authority)) p.authority = +n.authority;
+            p.controlAlgorithm = n.controlAlgorithm || '';
+            p.processModel = (n.processModel || []).join('\n');
+            const mm = n.mentalModels || {};
+            MM_KEYS.forEach(k => { p['mm_' + k] = mm[k] || ''; });
+        }
+        return p;
+    }
+    // stpaData.cs -> the editor model. Pure over the data handed in.
+    function csModel(d) {
+        const cs = (d && d.cs) || {};
+        const lay = (d && d.diagram && d.diagram.layout) || {};
+        const elements = [], connectors = [], firstId = {}, used = {};
+        const pending = [];
+        CS_KINDS.forEach(kind => (cs[CS_ARR[kind]] || []).forEach(n => {
+            if (!n) return;
+            let eid = CS_PFX[kind] + ':' + n.id, k = 2;
+            while (used[eid]) eid = CS_PFX[kind] + ':' + n.id + '~' + (k++);   // duplicate ids stay visible (the engine refuses them; nothing is lost)
+            used[eid] = 1;
+            if (firstId[n.id] == null) firstId[n.id] = eid;
+            const sz = _csDefaultSize(kind, n), L = lay[eid];
+            const el = { id: eid, kind: kind, x: 0, y: 0, w: sz.w, h: sz.h, label: n.name || '', props: _nodeProps(kind, n) };
+            if (typeof n.sysmlRef === 'string' && n.sysmlRef) el.sysmlRef = n.sysmlRef;
+            if (L && isFinite(L.x) && isFinite(L.y)) { el.x = +L.x; el.y = +L.y; if (isFinite(L.w) && L.w > 0) el.w = +L.w; if (isFinite(L.h) && L.h > 0) el.h = +L.h; }
+            else pending.push({ id: eid, kind: kind, w: el.w, h: el.h, rank: (kind === 'controller' && el.props.authority != null) ? el.props.authority : null });
+            elements.push(el);
+        }));
+        if (pending.length) {
+            const placed = elements.filter(e => !pending.some(p => p.id === e.id));
+            const pos = _csTierLayout(pending);
+            const dy = placed.length ? Math.max(...placed.map(e => e.y + e.h)) + 80 : 0;
+            const dx = placed.length ? Math.min(...placed.map(e => e.x)) : 0;
+            elements.forEach(e => { const p = pos[e.id]; if (p) { e.x = p.x + dx; e.y = p.y + dy; } });
+        }
+        const cnUsed = {};
+        CN_KINDS.forEach(kind => {
+            if (kind === 'disturbance') return;
+            (cs[CN_ARR[kind]] || []).forEach(x => {
+                if (!x) return;
+                const ck = kind === 'other' && x.type === 'disturbance' ? 'disturbance' : kind;
+                let cid = CN_PFX[ck] + ':' + x.id, k = 2;
+                while (cnUsed[cid]) cid = CN_PFX[ck] + ':' + x.id + '~' + (k++);
+                cnUsed[cid] = 1;
+                const c = { id: cid, kind: ck, from: firstId[x.from] || ('missing:' + x.from), to: firstId[x.to] || ('missing:' + x.to), label: x.name || '', props: { sid: String(x.id == null ? '' : x.id) } };
+                if (typeof x.sysmlRef === 'string' && x.sysmlRef) c.sysmlRef = x.sysmlRef;
+                connectors.push(c);
+            });
+        });
+        return { elements: elements, connectors: connectors };
+    }
+    // The editor model -> stpaData (in place). Every field the diagram does not edit is kept
+    // exactly as it was (AI provenance, mental models it does not show, precedence, ...).
+    function csApply(d, model) {
+        const cs = d.cs;
+        const elById = {};
+        (model.elements || []).forEach(e => { elById[e.id] = e; });
+        const sidOfEnd = id => elById[id] ? _elSid(elById[id]) : _sidOf(id);
+        const setOrDel = (o, k, v) => { if (v == null || v === '' || (Array.isArray(v) && !v.length)) delete o[k]; else o[k] = v; };
+        CS_KINDS.forEach(kind => {
+            const key = CS_ARR[kind], old = cs[key] || [];
+            const els = (model.elements || []).filter(e => e.kind === kind);
+            if (!els.length && !Array.isArray(cs[key])) return;   // never create an empty list nobody asked for
+            const pool = old.slice();
+            cs[key] = els.map(e => {
+                const sid = _elSid(e);
+                const i = pool.findIndex(n => n && String(n.id) === sid);
+                const row = i >= 0 ? Object.assign({}, pool.splice(i, 1)[0]) : { id: sid };
+                row.id = (i >= 0) ? row.id : sid;
+                row.name = String(e.label || '');
+                const p = e.props || {};
+                setOrDel(row, 'desc', String(p.desc || '').trim());
+                if (kind === 'controller') {
+                    row.kind = ['human', 'automation', 'organization'].indexOf(p.ctlKind) >= 0 ? p.ctlKind : (row.kind || 'automation');
+                    setOrDel(row, 'authority', (p.authority != null && p.authority !== '' && isFinite(+p.authority)) ? +p.authority : null);
+                    setOrDel(row, 'controlAlgorithm', String(p.controlAlgorithm || '').trim());
+                    setOrDel(row, 'processModel', String(p.processModel || '').split('\n').map(x => x.trim()).filter(Boolean));
+                    const mm = Object.assign({}, row.mentalModels || {});
+                    MM_KEYS.forEach(k => { if (p['mm_' + k] != null) { const v = String(p['mm_' + k]).trim(); if (v) mm[k] = v; else delete mm[k]; } });
+                    setOrDel(row, 'mentalModels', Object.keys(mm).length ? mm : null);
+                }
+                setOrDel(row, 'sysmlRef', typeof e.sysmlRef === 'string' ? e.sysmlRef : null);
+                return row;
+            });
+        });
+        const edgeLists = {};
+        (model.connectors || []).forEach(c => {
+            const key = CN_ARR[c.kind]; if (!key) return;
+            (edgeLists[key] = edgeLists[key] || []).push(c);
+        });
+        ['actions', 'feedbacks', 'others', 'actuations', 'measurements'].forEach(key => {
+            const old = cs[key] || [], cns = edgeLists[key] || [];
+            if (!cns.length && !Array.isArray(cs[key])) return;
+            const pool = old.slice();
+            cs[key] = cns.map(c => {
+                const sid = _elSid(c);
+                const i = pool.findIndex(x => x && String(x.id) === sid);
+                const row = i >= 0 ? Object.assign({}, pool.splice(i, 1)[0]) : { id: sid };
+                row.from = sidOfEnd(c.from); row.to = sidOfEnd(c.to);
+                if (key === 'actuations' || key === 'measurements') setOrDel(row, 'name', String(c.label || '').trim());
+                else row.name = String(c.label || '');
+                if (key === 'others') { if (c.kind === 'disturbance') row.type = 'disturbance'; else if (row.type === 'disturbance') delete row.type; }
+                setOrDel(row, 'sysmlRef', typeof c.sysmlRef === 'string' ? c.sysmlRef : null);
+                return row;
+            });
+        });
+        const layout = {};
+        (model.elements || []).forEach(e => { layout[e.id] = { x: Math.round(e.x), y: Math.round(e.y), w: Math.round(e.w), h: Math.round(e.h) }; });
+        d.diagram = Object.assign({}, d.diagram || {}, { layout: layout });
+        return d;
+    }
+    // The STPA rules the tables already enforce, applied to a diagram change before it lands.
+    // Returns a plain-language reason, or null when the change is fine.
+    function csGuard(d, change) {
+        const disp = (d && d.dispositions) || {};
+        for (const op of change.ops || []) {
+            if (op.t === 'cn' && op.before && op.before.kind === 'action' && (!op.after || op.after.kind !== 'action')) {
+                const sid = _elSid(op.before);
+                const n = Object.keys(disp).filter(k => k.indexOf(sid + ':') === 0).length;
+                if (n) return 'Control action "' + (op.before.label || sid) + '" has ' + n + ' unsafe control action decision' + (n === 1 ? '' : 's') + ' on record. Clear ' + (n === 1 ? 'it' : 'them') + ' in Step 3 first; they are your data, not ours to drop.';
+            }
+            if (op.t === 'el' && op.before && !op.after) {
+                const sid = _elSid(op.before);
+                const nm = op.before.label || sid;
+                if ((d.responsibilities || []).some(r => r.elementId === sid)) return '"' + nm + '" holds responsibilities. Reallocate or remove those first.';
+                if (((d.cs && d.cs.precedence) || []).some(pr => pr.processId === sid)) return '"' + nm + '" carries a precedence rule. Remove it first.';
+            }
+        }
+        return null;
+    }
+    function _csNewId(what, kind, ctx) {
+        const d = DATA(), m = (ctx && ctx.model) || { elements: [], connectors: [] };
+        const taken = new Set();
+        if (what === 'element') {
+            CS_KINDS.forEach(k => ((d && d.cs[CS_ARR[k]]) || []).forEach(n => taken.add(String(n.id))));
+            m.elements.forEach(e => taken.add(_elSid(e)));
+            const base = CS_BASE[kind] || 'N';
+            let n = 1; while (taken.has(base + n)) n++;
+            return (CS_PFX[kind] || 'el') + ':' + base + n;
+        }
+        ['actions', 'feedbacks', 'others', 'actuations', 'measurements'].forEach(k => ((d && d.cs[k]) || []).forEach(x => taken.add(String(x.id))));
+        Object.keys((d && d.dispositions) || {}).forEach(k => taken.add(k.slice(0, k.lastIndexOf(':'))));   // never reuse an id that still has UCA decisions
+        m.connectors.forEach(c => taken.add(_elSid(c)));
+        const base = CN_BASE[kind] || 'L';
+        let n = 1; while (taken.has(base + n)) n++;
+        return (CN_PFX[kind] || 'cn') + ':' + base + n;
+    }
+
+    // ---- the notation ------------------------------------------------------
+    function _csWrap(text, w, fs) { return (window.SLDiagramEditor && SLDiagramEditor.core.wrapLines) ? SLDiagramEditor.core.wrapLines(text, w, fs, 0) : [String(text)]; }
+    function _csText(x, y, s, o) {
+        const E = window.SLDiagramEditor ? SLDiagramEditor.esc : esc;
+        o = o || {};
+        return '<text x="' + x + '" y="' + y + '" font-size="' + (o.fs || 11) + '"' + (o.bold ? ' font-weight="700"' : '') + (o.anchor ? ' text-anchor="' + o.anchor + '"' : '') + (o.fill ? ' fill="' + o.fill + '"' : ' fill="currentColor"') + (o.italic ? ' font-style="italic"' : '') + '>' + E(s) + '</text>';
+    }
+    function _csController(e) {
+        const p = e.props || {}, w = e.w, h = e.h;
+        let s = '<rect class="sde-shape" x="0" y="0" rx="8" ry="8" width="' + w + '" height="' + h + '" fill="var(--stpa-ctl-fill)" stroke="' + NAVY + '" stroke-width="1.6"/>';
+        let y = 18;
+        const nameLines = _csWrap(e.label || 'Controller', w - 16, 12).slice(0, 2);
+        nameLines.forEach((ln, i) => { s += _csText(w / 2, y + i * 14, ln, { fs: 12, bold: true, anchor: 'middle', fill: NAVY }); });
+        y += (nameLines.length - 1) * 14 + 14;
+        s += _csText(w / 2, y, (CTL_KIND_LABEL[p.ctlKind] || 'Controller') + (p.authority != null ? ' · rank ' + p.authority : ''), { fs: 10, anchor: 'middle', fill: MUT });
+        y += 8;
+        const room = () => h - y - 6;
+        const block = (title, lines, max) => {
+            if (room() < 30) return;
+            s += '<line x1="6" y1="' + y + '" x2="' + (w - 6) + '" y2="' + y + '" stroke="' + NAVY + '" stroke-opacity="0.35"/>';
+            y += 14;
+            s += _csText(8, y, title, { fs: 9.5, bold: true, fill: NAVY });
+            const fit = Math.max(0, Math.min(max, Math.floor((room() - 2) / 13)));
+            const shown = lines.slice(0, fit);
+            shown.forEach((ln, i) => { y += 13; s += _csText(10, y, ln.length > Math.floor((w - 18) / 5.6) ? ln.slice(0, Math.floor((w - 18) / 5.6) - 1) + '…' : ln, { fs: 10 }); });
+            if (lines.length > shown.length) { y += 12; s += _csText(10, y, '+ ' + (lines.length - shown.length) + ' more (see properties)', { fs: 9, fill: MUT, italic: true }); }
+            y += 9;
+        };
+        const alg = String(p.controlAlgorithm || '').trim();
+        const pm = String(p.processModel || '').split('\n').map(x => x.trim()).filter(Boolean);
+        block('Control algorithm', alg ? _csWrap(alg, w - 20, 10) : ['(not stated yet)'], 3);
+        block('Process model', pm.length ? pm.map(x => '• ' + x) : ['(no beliefs listed yet)'], 5);
+        return s;
+    }
+    function _csBox(kindLabel, fillVar, stroke, dash) {
+        return function (e) {
+            const w = e.w, h = e.h;
+            let s = '<rect class="sde-shape" x="0" y="0" rx="6" ry="6" width="' + w + '" height="' + h + '" fill="var(' + fillVar + ')" stroke="' + stroke + '" stroke-width="1.4"' + (dash ? ' stroke-dasharray="6 4"' : '') + '/>';
+            const lines = _csWrap(e.label || kindLabel, w - 14, 12).slice(0, Math.max(1, Math.floor((h - 22) / 14)));
+            const top = h / 2 - (lines.length * 14) / 2 + 6;
+            lines.forEach((ln, i) => { s += _csText(w / 2, top + i * 14, ln, { fs: 12, bold: true, anchor: 'middle' }); });
+            s += _csText(w / 2, Math.min(h - 6, top + lines.length * 14 + 2), kindLabel.toLowerCase(), { fs: 9.5, anchor: 'middle', fill: MUT });
+            return s;
+        };
+    }
+    function _csIcon(fill, stroke, dash, inner) {
+        return '<svg width="30" height="22" viewBox="0 0 30 22" aria-hidden="true"><rect x="1" y="2" width="28" height="18" rx="3" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.4"' + (dash ? ' stroke-dasharray="4 3"' : '') + '/>' + (inner || '') + '</svg>';
+    }
+    let _csRegistered = false;
+    function _registerCsDiagram() {
+        if (_csRegistered || typeof window === 'undefined' || !window.SLDiagramEditor) return;
+        _csRegistered = true;
+        if (typeof document !== 'undefined' && !document.getElementById('stpa-cs-css')) {
+            const st = document.createElement('style'); st.id = 'stpa-cs-css';
+            st.textContent = '.sde[data-diagram="stpa-cs"]{--stpa-ctl-fill:#EAF0FA;--stpa-proc-fill:var(--color-surface-1,#fff);--stpa-act-fill:#FDF3E3;--stpa-sen-fill:#E8F6F0;--stpa-ext-fill:var(--color-surface-2,#f5f6f8)}' +
+                '@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .sde[data-diagram="stpa-cs"]{--stpa-ctl-fill:#1d2a3d;--stpa-act-fill:#3a2e1a;--stpa-sen-fill:#163329}}' +
+                ':root[data-theme="dark"] .sde[data-diagram="stpa-cs"]{--stpa-ctl-fill:#1d2a3d;--stpa-act-fill:#3a2e1a;--stpa-sen-fill:#163329}' +
+                '.stpa-cs-miss{pointer-events:none}';
+            (document.head || document.documentElement).appendChild(st);
+        }
+        const notCtl = ['process', 'actuator', 'sensor', 'external'];
+        SLDiagramEditor.register({
+            type: 'stpa-cs',
+            title: 'STPA control structure',
+            grid: 10,
+            elementKinds: {
+                controller: { label: 'Controller', description: 'Human, automated or organizational controller. Its control algorithm and process model are drawn inside it', shape: _csController, renderLabel: false, w: 250, h: 120, minW: 160, minH: 60, defaultLabel: 'Controller', defaultProps: id => ({ sid: _sidOf(id), ctlKind: 'automation', desc: '', controlAlgorithm: '', processModel: '' }), uniqueProps: ['sid'], sysmlType: 'SafetyLab::Controller',
+                    icon: _csIcon('#EAF0FA', NAVY, false, '<line x1="4" y1="9" x2="26" y2="9" stroke="' + NAVY + '" stroke-opacity=".5"/><line x1="4" y1="14" x2="26" y2="14" stroke="' + NAVY + '" stroke-opacity=".5"/>') },
+                process: { label: 'Controlled process', description: 'The process the controllers act on', shape: _csBox('Controlled process', '--stpa-proc-fill', MUT, false), renderLabel: false, w: 200, h: 64, minW: 90, minH: 40, defaultLabel: 'Controlled process', defaultProps: id => ({ sid: _sidOf(id), desc: '' }), uniqueProps: ['sid'], sysmlType: 'SafetyLab::ControlledProcess', icon: _csIcon('#fff', MUT, false) },
+                actuator: { label: 'Actuator', description: 'Turns a control action into a physical action on the controlled process', shape: _csBox('Actuator', '--stpa-act-fill', AMBER, false), renderLabel: false, w: 170, h: 54, minW: 80, minH: 36, defaultLabel: 'Actuator', defaultProps: id => ({ sid: _sidOf(id), desc: '' }), uniqueProps: ['sid'], sysmlType: 'SafetyLab::Actuator', icon: _csIcon('#FDF3E3', AMBER, false) },
+                sensor: { label: 'Sensor', description: 'Measures the controlled process and carries the feedback to a controller', shape: _csBox('Sensor', '--stpa-sen-fill', GREEN, false), renderLabel: false, w: 170, h: 54, minW: 80, minH: 36, defaultLabel: 'Sensor', defaultProps: id => ({ sid: _sidOf(id), desc: '' }), uniqueProps: ['sid'], sysmlType: 'SafetyLab::Sensor', icon: _csIcon('#E8F6F0', GREEN, false) },
+                external: { label: 'External element', description: 'Outside the control structure: the environment or another system, the source of disturbances and other inputs', shape: _csBox('External element', '--stpa-ext-fill', MUT, true), renderLabel: false, w: 170, h: 54, minW: 80, minH: 36, defaultLabel: 'Environment', defaultProps: id => ({ sid: _sidOf(id), desc: '' }), uniqueProps: ['sid'], sysmlType: 'SafetyLab::ExternalElement', icon: _csIcon('#f5f6f8', MUT, true) }
+            },
+            connectorKinds: {
+                action: { label: 'Control action', description: 'A command from a controller, down to a controlled process, a lower controller or an actuator', from: ['controller'], to: ['process', 'controller', 'actuator'], style: { stroke: NAVY, width: 1.8 }, defaultProps: id => ({ sid: _sidOf(id) }), uniqueProps: ['sid'], defaultLabel: 'command', sysmlType: 'SafetyLab::ControlAction' },
+                feedback: { label: 'Feedback', description: 'Information back up to a controller, from a process, a sensor or a lower controller', from: ['process', 'sensor', 'controller'], to: ['controller'], style: { stroke: GREEN, width: 1.8 }, defaultProps: id => ({ sid: _sidOf(id) }), uniqueProps: ['sid'], defaultLabel: 'status', sysmlType: 'SafetyLab::Feedback' },
+                other: { label: 'Other input or output', description: 'Neither control nor feedback: shared data, configuration, an input from another system', from: '*', to: '*', style: { stroke: MUT, width: 1.4, dash: '6 5' }, defaultProps: id => ({ sid: _sidOf(id) }), uniqueProps: ['sid'], defaultLabel: 'input', sysmlType: 'SafetyLab::OtherLink' },
+                disturbance: { label: 'Disturbance', description: 'Something outside the loop acting on an element (weather, wear, interference)', from: ['external'], to: notCtl.concat(['controller']).filter(k => k !== 'external'), style: { stroke: AMBER, width: 1.6, dash: '3 4' }, arrow: 'open', defaultProps: id => ({ sid: _sidOf(id) }), uniqueProps: ['sid'], defaultLabel: 'disturbance', sysmlType: 'SafetyLab::OtherLink' },
+                actuation: { label: 'Actuates', description: 'An actuator acting on the controlled process', from: ['actuator'], to: ['process', 'controller'], style: { stroke: NAVY, width: 1.3 }, defaultProps: id => ({ sid: _sidOf(id) }), uniqueProps: ['sid'], defaultLabel: '', sysmlType: 'SafetyLab::Actuation' },
+                measurement: { label: 'Measured by', description: 'A sensor measuring an element (the arrow runs from the element to the sensor)', from: ['process', 'controller', 'actuator'], to: ['sensor'], style: { stroke: GREEN, width: 1.3 }, defaultProps: id => ({ sid: _sidOf(id) }), uniqueProps: ['sid'], defaultLabel: '', sysmlType: 'SafetyLab::Measurement' }
+            },
+            canConnect: function (a, b, kind) {
+                if (kind === 'action' && a.id === b.id) return 'A controller cannot command itself.';
+                return true;
+            },
+            newId: _csNewId,
+            layout: function (model) {
+                return _csTierLayout(model.elements.map(e => ({ id: e.id, kind: e.kind, w: e.w, h: e.h, rank: (e.kind === 'controller' && e.props && e.props.authority != null && e.props.authority !== '') ? +e.props.authority : null })));
+            },
+            fields: function (item, ctx) {
+                const sidF = { key: 'props.sid', label: 'ID', readOnly: true, help: ctx.isElement ? 'Used by the tables, responsibilities and precedence rules.' : (item.kind === 'action' ? 'Unsafe control actions are keyed to this ID.' : '') };
+                if (!ctx.isElement) return [sidF];
+                const desc = { key: 'props.desc', label: 'Description', type: 'textarea', help: 'J3307 2f-3: a bare label is not an element definition.' };
+                if (item.kind !== 'controller') return [sidF, desc];
+                const f = [sidF,
+                    { key: 'props.ctlKind', label: 'Controller type', type: 'select', options: [{ value: 'human', label: 'Human' }, { value: 'automation', label: 'Automated' }, { value: 'organization', label: 'Organizational' }] },
+                    { key: 'props.authority', label: 'Authority rank (1 is highest)', type: 'number', validate: v => (v != null && (!(v >= 1) || Math.floor(v) !== v)) ? 'The authority rank is a whole number, 1 or more (1 is the highest authority).' : null },
+                    desc,
+                    { key: 'props.controlAlgorithm', label: 'Control algorithm', type: 'textarea', help: 'How this controller decides which control action to give.' },
+                    { key: 'props.processModel', label: 'Process model (one belief per line)', type: 'textarea', help: 'What this controller believes about the process it controls; its decisions act on these beliefs.' }];
+                if (item.props && item.props.ctlKind === 'human') {
+                    const E = ENG();
+                    (E ? E.MENTAL_MODELS : MM_KEYS.map(k => ({ id: k, label: k }))).forEach(t => f.push({ key: 'props.mm_' + t.id, label: 'Mental model: ' + t.label, type: 'textarea', help: t.id === 'otherControllers' ? 'The one usually missed; mode confusion lives here (J3307 7.2.2).' : '' }));
+                }
+                return f;
+            },
+            validate: function (model) {
+                const e = ENG(), d = DATA();
+                if (!e || !d) return [];
+                return e.validate(d.cs).map(m => ({ id: null, message: 'The STPA engine refuses this structure: ' + m }));
+            },
+            canDelete: function (item) {
+                const d = DATA(); if (!d || !item) return true;
+                return csGuard(d, { ops: [{ t: item.from != null ? 'cn' : 'el', before: item, after: null }] }) || true;
+            },
+            beforeChange: function (change) {
+                const d = DATA(); if (!d) return true;
+                const why = csGuard(d, change);
+                if (why) { _toast(why, 'error'); return false; }
+                return true;
+            },
+            decorate: function (model, ctx) {
+                // INV-32: the missing return path, drawn where it should be (dashed red), as before.
+                const e = ENG(), d = DATA();
+                if (!e || !d) return '';
+                let finds = [];
+                try { if (!e.validate(d.cs).length) finds = e.inv18(d.cs).findings; } catch (_) { return ''; }
+                if (!finds.length) return '';
+                const byS = {};
+                model.elements.forEach(el => { const s = _elSid(el); if (!byS[s]) byS[s] = el; });
+                const B = SLDiagramEditor.core.boundaryPoint;
+                let out = '<defs><marker id="stpa-cs-miss-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="' + RED + '"/></marker></defs>';
+                finds.forEach(f => {
+                    const a = (d.cs.actions || []).find(x => x.id === f.actionId);
+                    const tg = a ? e.targetsOf(d.cs, a) : [f.process];
+                    const ctl = byS[f.controller];
+                    (tg.length ? tg : [f.process]).forEach(t => {
+                        const src = byS[t]; if (!src || !ctl) return;
+                        const cA = { x: src.x + src.w / 2, y: src.y + src.h / 2 }, cB = { x: ctl.x + ctl.w / 2, y: ctl.y + ctl.h / 2 };
+                        const dx = cB.x - cA.x, dy = cB.y - cA.y, L = Math.sqrt(dx * dx + dy * dy) || 1, ox = -dy / L * 30, oy = dx / L * 30;
+                        const p1 = B(src, { boundary: 'rect' }, { x: cB.x + ox, y: cB.y + oy }), p2 = B(ctl, { boundary: 'rect' }, { x: cA.x + ox, y: cA.y + oy });
+                        const x1 = p1.x + ox * 0.4, y1 = p1.y + oy * 0.4, x2 = p2.x + ox * 0.4, y2 = p2.y + oy * 0.4;
+                        out += '<g class="stpa-cs-miss" data-action="' + esc(f.actionId) + '"><path d="M' + x1 + ',' + y1 + ' L' + x2 + ',' + y2 + '" stroke="' + RED + '" stroke-width="1.6" stroke-dasharray="6 5" fill="none" marker-end="url(#stpa-cs-miss-arr)"/>' +
+                            (ctx.lod ? '' : '<text x="' + (x1 + (x2 - x1) * 0.3 + ox * 0.45) + '" y="' + (y1 + (y2 - y1) * 0.3 + oy * 0.45 + 4) + '" font-size="10.5" text-anchor="' + (ox >= 0 ? 'start' : 'end') + '" fill="' + RED + '" paint-order="stroke" stroke="var(--sde-bg)" stroke-width="3">no feedback (INV-32)</text>') + '</g>';
+                    });
+                });
+                return out;
+            },
+            panel: function (item) {
+                const e = ENG(), d = DATA();
+                if (!e || !d) return '';
+                if (!item) {
+                    return '<label>Notation</label><div class="sde-help">STPA Handbook (Leveson and Thomas, 2018): control actions run down, feedback runs up. A red dashed arrow is a missing feedback path (INV-32), drawn where it should be.</div>' +
+                        '<div class="sde-row"><button type="button" class="sde-btn" data-pact="stpa-step3">Go to unsafe control actions</button></div>';
+                }
+                if (item.kind === 'action') {
+                    const sid = _elSid(item);
+                    const keys = Object.keys(d.dispositions || {}).filter(k => k.indexOf(sid + ':') === 0);
+                    const assessed = keys.filter(k => (d.dispositions[k] || {}).status === 'assessed').length;
+                    return '<label>Unsafe control actions</label><div class="sde-help">4 to consider for this action; ' + keys.length + ' decided, ' + assessed + ' assessed.</div>' +
+                        '<div class="sde-row"><button type="button" class="sde-btn" data-pact="stpa-step3">Open Step 3</button></div>';
+                }
+                return '';
+            },
+            panelAction: function (act) { if (act === 'stpa-step3') PANEL.go(3); }
+        });
+    }
+    let _csEd = null, _csHost = null;
+    function _mountCsDiagram() {
+        if (typeof document === 'undefined') return;
+        const slot = document.getElementById('stpa-cs-slot');
+        if (!slot) return;
+        if (!window.SLDiagramEditor) { slot.innerHTML = diagram(); return; }   // the editor core is not loaded: the static view, as before
+        _registerCsDiagram();
+        if (!_csHost) { _csHost = document.createElement('div'); _csHost.className = 'stpa-cs-editor'; }
+        if (_csHost.parentNode !== slot) slot.appendChild(_csHost);
+        if (!_csEd) {
+            _csEd = SLDiagramEditor.mount(_csHost, {
+                type: 'stpa-cs', height: 620, lockKey: 'stpa:control-structure',
+                adapter: {
+                    load: function () { const d = DATA(); return d ? csModel(d) : { elements: [], connectors: [] }; },
+                    save: function (model, change) { _author.applyDiagram(model, change); }
+                }
+            });
+            let lastIds = _csEd.model().elements.map(x => x.id).sort().join('|');
+            _csEd.on('reload', function (m) {
+                const ids = m.elements.map(x => x.id).sort().join('|');
+                // a whole new structure (seed case, AI draft, another project): show all of it
+                if (ids && !m.elements.some(x => lastIds.split('|').indexOf(x.id) >= 0)) setTimeout(() => { try { _csEd.fit(); } catch (_) {} }, 0);
+                lastIds = ids;
+            });
+        } else {
+            _csEd.reload();
+            _csEd.refresh();   // the derived INV-32 arrows follow table edits too
+        }
     }
 
     // ------------------------------------------------------------------ steps
@@ -749,7 +1197,7 @@
             }
         } catch (_) {}
         // ---- responsibilities (2c) ----
-        const elemOpts = cs.controllers.concat(cs.processes).map(n => '<option value="' + esc(n.id) + '">' + esc(n.name) + '</option>').join('');
+        const elemOpts = e.nodesOf(cs).map(n => '<option value="' + esc(n.id) + '">' + esc(n.name) + '</option>').join('');
         const conOpts = d.constraints.map(c => c.id).join(', ');
         const IN = 'style="font:inherit; font-size:11px; padding:3px 6px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:4px;"';
         out += '<div style="margin-top:12px;"><b style="font-size:12px;">Responsibilities (2c) — what each element is accountable for, traced to the Step 1 constraints</b>' +
@@ -782,8 +1230,15 @@
         const e = ENG();
         const errs = validation();
         const cs = d.cs;
-        const nodeOpts = cs.controllers.concat(cs.processes).map(n => '<option value="' + esc(n.id) + '">' + esc(n.name) + '</option>').join('');
+        const allNodes = e.nodesOf(cs);
+        const nodeOpts = allNodes.map(n => '<option value="' + esc(n.id) + '">' + esc(n.name) + '</option>').join('');
+        const optsOf = list => (list || []).map(n => '<option value="' + esc(n.id) + '">' + esc(n.name) + '</option>').join('');
         const IN = 'style="font:inherit; font-size:11px; padding:3px 6px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:4px;"';
+        // v1.1: the model link (SysML v2) shown in the tables too; the same picker as the diagram.
+        const linkCell = n => {
+            const lbl = (n.sysmlRef && window.SLSysML) ? SLSysML.refLabel(n.sysmlRef) : (n.sysmlRef || '');
+            return ' <button class="u-mono" title="' + esc(lbl ? 'Model element: ' + lbl + '. Click to change.' : 'Link to a model element (system, item, function...)') + '" style="font-size:9px; cursor:pointer; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:3px; padding:1px 6px; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:middle;" onclick="STPA_PANEL.linkNode(\'' + esc(n.id) + '\')">' + (lbl ? '&#8599; ' + esc(lbl) : 'link') + '</button>';
+        };
         let inv18Box = '';
         if (!errs.length) {
             const r = e.inv18(cs);
@@ -808,12 +1263,13 @@
             arr.map(rowFn).join('') + addRow + '</tbody></table></div>';
         const rmBtn = (fn) => '<td style="text-align:right;"><button style="font-size:10px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:4px; cursor:pointer; padding:2px 7px;" onclick="' + fn + '">×</button></td>';
         return _card('Step 2 — Control structure' + ((d.meta.abstractionLevel || '') ? ' · level: ' + d.meta.abstractionLevel : ' · level UNDECLARED'),
-            'The model IS the diagram — INV-32 findings draw themselves as dashed red missing-feedback edges. The engine refuses dangling edges and duplicate ids at the door. The structure is authored at a STATED level of abstraction (App E) — declare it in Step 1.',
-            diagram() + refuse + inv18Box +
+            'Draw the structure on the canvas (drag shapes from the toolbox, drag a blue dot to connect) or fill the tables below: both edit the same data. INV-32 findings draw themselves as dashed red missing-feedback arrows. The engine refuses dangling edges and duplicate ids at the door. The structure is authored at a STATED level of abstraction (App E) — declare it in Step 1.',
+            '<div id="stpa-cs-slot"></div>' + refuse + inv18Box +
             '<div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:14px;">' +
             tbl('Controllers', cs.controllers, 'controller', ['id', 'name', 'kind · rank'],
                 n => '<tr><td class="u-mono">' + esc(n.id) + '</td><td>' + esc(n.name) +
                      ((n.processModel || []).length || (n.mentalModels && Object.keys(n.mentalModels).length) ? ' <span class="u-mono" style="font-size:8.5px; color:' + GREEN + '; font-weight:700;" title="process model authored">PM</span>' : '') +
+                     ((n.controlAlgorithm || '').trim() ? ' <span class="u-mono" style="font-size:8.5px; color:' + NAVY + '; font-weight:700;" title="control algorithm stated">CA</span>' : '') + linkCell(n) +
                      '</td><td>' + esc(n.kind || '') + ((n.authority != null && n.authority !== '') ? ' · <b>' + esc(String(n.authority)) + '</b>' : '') +
                      ' <button class="u-mono" style="font-size:9px; cursor:pointer; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:3px; padding:1px 6px;" onclick="STPA_PANEL.editNode(\'' + esc(n.id) + '\')">detail</button></td>' + rmBtn("STPA_PANEL.rmNode('controller','" + esc(n.id) + "')") + '</tr>',
                 '<tr><td><input id="stpa-nc-id" ' + IN + ' placeholder="id"></td><td><input id="stpa-nc-name" ' + IN + ' placeholder="name"></td>' +
@@ -821,9 +1277,19 @@
                 '<td style="text-align:right;"><button style="font-size:10px; font-weight:700; cursor:pointer; border:1px solid ' + NAVY + '; color:' + NAVY + '; background:' + NAVY + '0D; border-radius:4px; padding:2px 8px;" onclick="STPA_PANEL.addNode(\'controller\')">+ add</button></td></tr>') +
             tbl('Controlled processes', cs.processes, 'process', ['id', 'name'],
                 n => '<tr><td class="u-mono">' + esc(n.id) + '</td><td>' + esc(n.name) +
-                     ' <button class="u-mono" style="font-size:9px; cursor:pointer; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:3px; padding:1px 6px;" onclick="STPA_PANEL.editNode(\'' + esc(n.id) + '\')">detail</button></td>' + rmBtn("STPA_PANEL.rmNode('process','" + esc(n.id) + "')") + '</tr>',
+                     ' <button class="u-mono" style="font-size:9px; cursor:pointer; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:3px; padding:1px 6px;" onclick="STPA_PANEL.editNode(\'' + esc(n.id) + '\')">detail</button>' + linkCell(n) + '</td>' + rmBtn("STPA_PANEL.rmNode('process','" + esc(n.id) + "')") + '</tr>',
                 '<tr><td><input id="stpa-np-id" ' + IN + ' placeholder="id"></td><td><input id="stpa-np-name" ' + IN + ' placeholder="name"></td>' +
                 '<td style="text-align:right;"><button style="font-size:10px; font-weight:700; cursor:pointer; border:1px solid ' + NAVY + '; color:' + NAVY + '; background:' + NAVY + '0D; border-radius:4px; padding:2px 8px;" onclick="STPA_PANEL.addNode(\'process\')">+ add</button></td></tr>') +
+            '</div><div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:12px;">' +
+            ['actuator', 'sensor', 'external'].map(k => {
+                const T = { actuator: ['Actuators', 'turn a control action into a physical action'], sensor: ['Sensors', 'measure the process and carry feedback'], external: ['External elements', 'environment or other systems: the source of disturbances'] }[k];
+                const P = { actuator: 'na', sensor: 'ns', external: 'nx' }[k];
+                return tbl(T[0] + ' <span style="font-weight:400; color:var(--color-text-tertiary);">(' + T[1] + ')</span>', cs[CS_ARR[k]] || [], k, ['id', 'name'],
+                    n => '<tr><td class="u-mono">' + esc(n.id) + '</td><td>' + esc(n.name) +
+                         ' <button class="u-mono" style="font-size:9px; cursor:pointer; border:1px solid var(--color-border-strong); background:var(--color-surface-2); border-radius:3px; padding:1px 6px;" onclick="STPA_PANEL.editNode(\'' + esc(n.id) + '\')">detail</button>' + linkCell(n) + '</td>' + rmBtn("STPA_PANEL.rmNode('" + k + "','" + esc(n.id) + "')") + '</tr>',
+                    '<tr><td><input id="stpa-' + P + '-id" ' + IN + ' placeholder="id"></td><td><input id="stpa-' + P + '-name" ' + IN + ' placeholder="name"></td>' +
+                    '<td style="text-align:right;"><button style="font-size:10px; font-weight:700; cursor:pointer; border:1px solid ' + NAVY + '; color:' + NAVY + '; background:' + NAVY + '0D; border-radius:4px; padding:2px 8px;" onclick="STPA_PANEL.addNode(\'' + k + '\')">+ add</button></td></tr>');
+            }).join('') +
             '</div><div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:12px;">' +
             tbl('Control actions ↓', cs.actions, 'action', ['id', 'from → to', 'name'],
                 a => '<tr><td class="u-mono">' + esc(a.id) + '</td><td class="u-mono" style="font-size:10.5px;">' + esc(a.from) + ' → ' + esc(a.to) + '</td><td>' + esc(a.name) + '</td>' + rmBtn("STPA_PANEL.rmEdge('action','" + esc(a.id) + "')") + '</tr>',
@@ -839,13 +1305,20 @@
                 '<td style="text-align:right;"><button style="font-size:10px; font-weight:700; cursor:pointer; border:1px solid ' + NAVY + '; color:' + NAVY + '; background:' + NAVY + '0D; border-radius:4px; padding:2px 8px;" onclick="STPA_PANEL.addEdge(\'feedback\')">+ add</button></td></tr>') +
             '</div><div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:12px;">' +
             tbl('Other inputs / outputs ⇢ (neither control nor feedback — §7.2\'s fifth element type, the one models forget)', cs.others, 'other', ['id', 'from → to', 'name'],
-                o => '<tr><td class="u-mono">' + esc(o.id) + '</td><td class="u-mono" style="font-size:10.5px;">' + esc(o.from) + ' → ' + esc(o.to) + '</td><td>' + esc(o.name) + '</td>' + rmBtn("STPA_PANEL.rmEdge('other','" + esc(o.id) + "')") + '</tr>',
+                o => '<tr><td class="u-mono">' + esc(o.id) + '</td><td class="u-mono" style="font-size:10.5px;">' + esc(o.from) + ' → ' + esc(o.to) + '</td><td>' + esc(o.name) + (o.type === 'disturbance' ? ' <span class="u-mono" style="font-size:8.5px; color:' + AMBER + '; font-weight:700;">DISTURBANCE</span>' : '') + '</td>' + rmBtn("STPA_PANEL.rmEdge('other','" + esc(o.id) + "')") + '</tr>',
                 '<tr><td><input id="stpa-eo-id" ' + IN + ' placeholder="id"></td>' +
                 '<td><select id="stpa-eo-from" ' + IN + '>' + nodeOpts + '</select> → <select id="stpa-eo-to" ' + IN + '>' + nodeOpts + '</select></td>' +
-                '<td><input id="stpa-eo-name" ' + IN + ' placeholder="shared data / disturbance / config"></td>' +
+                '<td><input id="stpa-eo-name" ' + IN + ' placeholder="shared data / disturbance / config"> <select id="stpa-eo-type" ' + IN + ' aria-label="Kind of link"><option value="other">other input / output</option><option value="disturbance">disturbance</option></select></td>' +
                 '<td style="text-align:right;"><button style="font-size:10px; font-weight:700; cursor:pointer; border:1px solid ' + NAVY + '; color:' + NAVY + '; background:' + NAVY + '0D; border-radius:4px; padding:2px 8px;" onclick="STPA_PANEL.addEdge(\'other\')">+ add</button></td></tr>') +
+            [['actuation', 'Actuates (actuator → what it acts on)', 'nlu', cs.actuators, allNodes.filter(n => !(cs.actuators || []).includes(n) && !(cs.sensors || []).includes(n) && !(cs.externals || []).includes(n))],
+             ['measurement', 'Measured by (element → the sensor measuring it)', 'nme', allNodes.filter(n => !(cs.sensors || []).includes(n) && !(cs.externals || []).includes(n)), cs.sensors]].map(L =>
+                tbl(L[1], cs[CN_ARR[L[0]]] || [], L[0], ['id', 'from → to'],
+                    x => '<tr><td class="u-mono">' + esc(x.id) + '</td><td class="u-mono" style="font-size:10.5px;">' + esc(x.from) + ' → ' + esc(x.to) + '</td>' + rmBtn("STPA_PANEL.rmEdge('" + L[0] + "','" + esc(x.id) + "')") + '</tr>',
+                    '<tr><td><input id="stpa-' + L[2] + '-id" ' + IN + ' placeholder="id"></td>' +
+                    '<td><select id="stpa-' + L[2] + '-from" ' + IN + '>' + optsOf(L[3]) + '</select> → <select id="stpa-' + L[2] + '-to" ' + IN + '>' + optsOf(L[4]) + '</select></td>' +
+                    '<td style="text-align:right;"><button style="font-size:10px; font-weight:700; cursor:pointer; border:1px solid ' + NAVY + '; color:' + NAVY + '; background:' + NAVY + '0D; border-radius:4px; padding:2px 8px;" onclick="STPA_PANEL.addEdge(\'' + L[0] + '\')">+ add</button></td></tr>')).join('') +
             '</div>' + _w4Cards(d, e, errs) +
-            ((cs.controllers.length + cs.processes.length) === 0
+            (e.nodesOf(cs).length === 0
                 ? '<div style="margin-top:12px;"><button style="font-size:11.5px; font-weight:700; cursor:pointer; border:1px solid ' + VIOLET + '; color:' + VIOLET + '; background:' + VIOLET + '0D; border-radius:6px; padding:6px 14px;" onclick="STPA_PANEL.seedGla()">Load the AE-001 GLA seed case (demo)</button>' +
                   '<span style="font-size:11px; color:var(--color-text-tertiary); margin-left:10px;">Two controllers, two processes — with the surface-status feedback deliberately missing, so you can watch INV-32 fire.</span></div>'
                 : ''));
@@ -1205,6 +1678,7 @@
             '<button class="btn-cyan" style="font-size:11px;" onclick="exportData(&quot;STPA_UCAs&quot;, &quot;csv&quot;)" title="Export the UCA register (dispositions, J3307 context clauses, spine links) as CSV">&#8595; Export CSV</button></div>' +
             '<p style="font-size:12.5px; color:var(--color-text-secondary); ">System-Theoretic Process Analysis — the lane <b>above</b> the component lanes: FMEA is the bottom feed, FHA/FTA the classical spine, STPA catches what they structurally miss — hazards where every component works and the system still fails. Complements, never replaces.</p>' +
             stepRail(c) + body;
+        if (_step === 2) { try { _mountCsDiagram(); } catch (err) { if (window.SLErrorWatch) SLErrorWatch.report(err, 'stpa_panel'); } }
     }
 
     // ------------------------------------------------------------- UI handlers
@@ -1260,15 +1734,27 @@
             _toast('Hazard created from ' + fcId + ' — now trace it to a loss (it lands UNTRACED, honestly).', 'info');
         },
         addNode: function (kind) {
-            const p = kind === 'controller' ? 'nc' : 'np';
+            const p = { controller: 'nc', process: 'np', actuator: 'na', sensor: 'ns', external: 'nx' }[kind];
+            if (!p) return;
             _author.addNode(kind, kind === 'controller'
                 ? { id: _val('stpa-' + p + '-id'), name: _val('stpa-' + p + '-name'), kind: _val('stpa-' + p + '-kind') || 'automation' }
                 : { id: _val('stpa-' + p + '-id'), name: _val('stpa-' + p + '-name') });
         },
         rmNode: function (kind, id) { _author.rmNode(kind, id); },
         addEdge: function (kind) {
-            const p = kind === 'action' ? 'ea' : 'ef';
-            _author.addEdge(kind, { id: _val('stpa-' + p + '-id'), from: _val('stpa-' + p + '-from'), to: _val('stpa-' + p + '-to'), name: _val('stpa-' + p + '-name') });
+            // 13 Oct 2026: 'other' used to read the feedback row's inputs (prefix 'ef'); each table reads its own row now.
+            const p = { action: 'ea', feedback: 'ef', other: 'eo', actuation: 'nlu', measurement: 'nme' }[kind];
+            if (!p) return;
+            const k = (kind === 'other' && _val('stpa-eo-type') === 'disturbance') ? 'disturbance' : kind;
+            _author.addEdge(k, { id: _val('stpa-' + p + '-id'), from: _val('stpa-' + p + '-from'), to: _val('stpa-' + p + '-to'), name: _val('stpa-' + p + '-name') });
+        },
+        // v1.1: link a structure element to the system model (SysML v2), from the tables.
+        linkNode: function (id) {
+            const d = DATA(); if (!d || !window.SLSysML || typeof SLSysML.pick !== 'function') { _toast('The model link is not available in this session.', 'error'); return; }
+            const n = ENG().nodesOf(d.cs).find(x => x.id === id); if (!n) return;
+            SLSysML.pick(n.sysmlRef || '', { title: 'Link ' + (n.name || id) + ' to a model element' })
+                .then(ref => { if (ref == null) return; try { if (typeof pushUndo === 'function') pushUndo('Link model element'); } catch (_) {} _author.setNodeDetail(id, { sysmlRef: ref }); })
+                .catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
         },
         rmEdge: function (kind, id) { _author.rmEdge(kind, id); },
         // ---- W4 handlers ----------------------------------------------------
@@ -1290,7 +1776,9 @@
                             const a = String(auth).trim();
                             if (a && (isNaN(+a) || +a < 1)) { _toast('Authority is a rank — a positive number, 1 highest. Detail saved without it.', 'error'); _author.setNodeDetail(id, patch); return null; }
                             patch.authority = a === '' ? null : +a;
-                            return _ask('Process model: the beliefs this controller\'s algorithm acts on (semicolon-separated; e.g. "commanded surface position; sensed load state"):', (n.processModel || []).join('; '), { title: 'Process model: ' + id, okText: n.kind === 'human' ? 'Next' : 'Save' })
+                            return _ask('Control algorithm: how this controller decides which control action to give (empty clears it):', n.controlAlgorithm || '', { title: 'Control algorithm: ' + id, okText: 'Next' })
+                                .then(alg => { if (alg == null) return null; patch.controlAlgorithm = String(alg).trim(); return true; })
+                                .then(go => go == null ? (_author.setNodeDetail(id, patch), null) : _ask('Process model: the beliefs this controller\'s algorithm acts on (semicolon-separated; e.g. "commanded surface position; sensed load state"):', (n.processModel || []).join('; '), { title: 'Process model: ' + id, okText: n.kind === 'human' ? 'Next' : 'Save' })
                                 .then(pm => {
                                     if (pm == null) { _author.setNodeDetail(id, patch); return null; }
                                     patch.processModel = String(pm).split(';').map(x => x.trim()).filter(Boolean);
@@ -1303,7 +1791,7 @@
                                             .then(v => { if (v == null) return false; mm[t.id] = String(v).trim(); return true; });
                                     }), Promise.resolve(true));
                                     return chain.then(() => { patch.mentalModels = mm; _author.setNodeDetail(id, patch); });
-                                });
+                                }));
                         });
                 })
                 .catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'stpa_panel'); });
@@ -1594,6 +2082,13 @@
         })();
     }
 
+    // v1.1: a canceled change (change acknowledgement) puts the project back; repaint so the
+    // diagram and the tables show what is really stored.
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('sl:change-ack', function (ev) { try { if (ev && ev.detail && ev.detail.decision === 'canceled') render(); } catch (_) {} });
+    }
+    // Pure helpers for the tests (no DOM): the store <-> diagram mapping and the guard.
+    PANEL._cs = { csModel: csModel, csApply: csApply, csGuard: csGuard, tierLayout: _csTierLayout, newId: _csNewId };
     if (typeof window !== 'undefined') window.STPA_PANEL = PANEL;
     if (typeof module !== 'undefined') module.exports = PANEL;
 })();

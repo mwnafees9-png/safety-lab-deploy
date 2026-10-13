@@ -1,5 +1,14 @@
 // ============================================================================
-// stpa_core.js — v1.1 — STPA ENGINE (v1.1/BRIDGE: the UCA ↔ FTA/FMEA seam —
+// stpa_core.js — v1.2 — STPA ENGINE (v1.2, 13 Oct 2026: the STPA Handbook's
+// ACTUATORS and SENSORS, and EXTERNAL elements (environment / other systems, the source of
+// disturbances), join the control structure as optional node lists cs.actuators / cs.sensors /
+// cs.externals, with two optional link lists: cs.actuations (actuator to the element it acts
+// on) and cs.measurements (element to the sensor that measures it). A control action may end
+// at an actuator and a feedback may start at a sensor; targetsOf() / sourcesOf() resolve them
+// through the actuations and measurements, so INV-32, loopSummary, conflictSites and the UCA
+// seeds reason about the process actually commanded and actually measured. Every old
+// structure (no actuators, no sensors) resolves to itself: identical results, byte for byte.)
+// (v1.1/BRIDGE: the UCA ↔ FTA/FMEA seam —
 // bridgeMap(): assessed UCAs declare failure-mode counterparts (FTA nodes,
 // FMEA rows, resolver-checked, dangling refuses) or declare themselves PURE
 // INTERACTION hazards — first-class, never orphans. Three computed states:
@@ -119,6 +128,27 @@
         { id: 'ss',  phrase: 'stopped too soon / applied too long' }
     ];
 
+    // v1.2 — every node list of the structure (controllers first, as before).
+    function nodesOf(cs) {
+        return [].concat(cs.controllers || [], cs.processes || [], cs.actuators || [], cs.sensors || [], cs.externals || []);
+    }
+    // v1.2 — where a control action really lands: through its actuator when it ends at one.
+    function targetsOf(cs, a) {
+        const acts = new Set((cs.actuators || []).map(n => n.id));
+        if (!acts.has(a.to)) return [a.to];
+        return (cs.actuations || []).filter(x => x.from === a.to).map(x => x.to);
+    }
+    // v1.2 — what a feedback really reports on: through its sensor when it starts at one.
+    function sourcesOf(cs, f) {
+        const sens = new Set((cs.sensors || []).map(n => n.id));
+        if (!sens.has(f.from)) return [f.from];
+        return (cs.measurements || []).filter(x => x.to === f.from).map(x => x.from);
+    }
+    function _closes(cs, a, f) {
+        if (f.to !== a.from) return false;
+        const t = new Set(targetsOf(cs, a));
+        return sourcesOf(cs, f).some(x => t.has(x));
+    }
     function validate(cs) {
         const errs = [];
         if (!cs) return ['control structure required'];
@@ -126,7 +156,7 @@
         if (!ctl.length) errs.push('no controllers — STPA starts with who commands');
         if (!prc.length) errs.push('no controlled processes');
         const ids = new Set();
-        [...ctl, ...prc].forEach(n => {
+        nodesOf(cs).forEach(n => {
             if (!n.id) errs.push('node without id');
             else if (ids.has(n.id)) errs.push('duplicate node id ' + n.id);
             else ids.add(n.id);
@@ -138,6 +168,9 @@
         (cs.actions || []).forEach(e => edge(e, 'control action'));
         (cs.feedbacks || []).forEach(e => edge(e, 'feedback'));
         (cs.others || []).forEach(e => edge(e, 'other input/output'));   // W4 — the fifth element type
+        const actIds = new Set((cs.actuators || []).map(n => n.id)), senIds = new Set((cs.sensors || []).map(n => n.id));
+        (cs.actuations || []).forEach(e => { edge(e, 'actuation'); if (ids.has(e.from) && !actIds.has(e.from)) errs.push('actuation ' + (e.id || '') + ': starts at "' + e.from + '", which is not an actuator'); });
+        (cs.measurements || []).forEach(e => { edge(e, 'measurement'); if (ids.has(e.to) && !senIds.has(e.to)) errs.push('measurement ' + (e.id || '') + ': ends at "' + e.to + '", which is not a sensor'); });
         if (!(cs.actions || []).length) errs.push('no control actions — nothing to analyze');
         (cs.precedence || []).forEach(pr => {
             if (!pr || !pr.processId) errs.push('precedence rule without a target process');
@@ -153,10 +186,11 @@
         if (errs.length) throw new Error('stpa: ' + errs.join('; '));
         const findings = [];
         (cs.actions || []).forEach(a => {
-            const heard = (cs.feedbacks || []).some(f => f.from === a.to && f.to === a.from);
+            const heard = (cs.feedbacks || []).some(f => _closes(cs, a, f));
+            const via = targetsOf(cs, a), routed = !(via.length === 1 && via[0] === a.to);
             if (!heard) findings.push({
                 actionId: a.id, controller: a.from, process: a.to,
-                detail: a.from + ' commands "' + a.name + '" to ' + a.to + ' with NO feedback path back — ' +
+                detail: a.from + ' commands "' + a.name + '" to ' + a.to + (routed ? (via.length ? ' (acting on ' + via.join(', ') + ')' : ' (an actuator that acts on nothing yet)') : '') + ' with NO feedback path back — ' +
                         'commanding without hearing is open-loop hope, not control',
                 exits: ['add the feedback path (and the sensor/report that carries it)',
                         'show an equivalent feedback route via another node (document it as an edge)',
@@ -191,6 +225,9 @@
         const out = [];
         (cs.actions || []).forEach(a => GUIDE_PHRASES.forEach(g => {
             const key = a.id + ':' + g.id;
+            const tg = targetsOf(cs, a), routed = !(tg.length === 1 && tg[0] === a.to);   // v1.2 — through an actuator
+            const procId = routed ? (tg.join(', ') || a.to) : a.to;
+            const pathTxt = routed ? a.to + (tg.length ? ' → ' + tg.join(', ') : '') : a.to;
             const d = dispositions[key] || null;
             if (d && d.status === 'dismissed' && !(d.rationale || '').trim())
                 throw new Error('stpa: UCA ' + key + ' dismissed WITHOUT rationale — a silent dismissal is a hole, not a disposition');
@@ -206,13 +243,13 @@
             const links = hazardIds.length ? hazardIds : fcIds;   // spine first; FC = legacy
             const seed = {
                 ucaId: 'UCA-' + key,
-                actionId: a.id, action: a.name, controller: a.from, process: a.to,
+                actionId: a.id, action: a.name, controller: a.from, process: procId,
                 phrase: g.phrase,
                 context: ctx,
                 text: ctx
                     ? a.from + ': “' + a.name + '” ' + g.phrase + ' while ' + ctx +
-                      (links.length ? ' [→ ' + links.join(', ') + ']' : '') + ' (' + a.from + ' → ' + a.to + ')'
-                    : '“' + a.name + '” ' + g.phrase + ' (' + a.from + ' → ' + a.to + ')',
+                      (links.length ? ' [→ ' + links.join(', ') + ']' : '') + ' (' + a.from + ' → ' + pathTxt + ')'
+                    : '“' + a.name + '” ' + g.phrase + ' (' + a.from + ' → ' + pathTxt + ')',
                 status: d ? d.status : 'open',
                 hazardIds: hazardIds,
                 fcIds: fcIds,
@@ -358,7 +395,7 @@
         const errs = validate(cs);
         if (errs.length) throw new Error('stpa: ' + errs.join('; '));
         return (cs.actions || []).map(a => {
-            const fb = (cs.feedbacks || []).filter(f => f.from === a.to && f.to === a.from);
+            const fb = (cs.feedbacks || []).filter(f => _closes(cs, a, f));
             return { actionId: a.id, action: a.name, controller: a.from, process: a.to,
                      feedbackIds: fb.map(f => f.id), feedbackNames: fb.map(f => f.name),
                      closed: fb.length > 0 };
@@ -373,7 +410,7 @@
         if (errs.length) throw new Error('stpa: ' + errs.join('; '));
         const byTarget = {};
         (cs.actions || []).forEach(a => {
-            (byTarget[a.to] = byTarget[a.to] || []).push(a);
+            targetsOf(cs, a).forEach(t => { const L = (byTarget[t] = byTarget[t] || []); if (L.indexOf(a) < 0) L.push(a); });
         });
         const rules = {};
         (cs.precedence || []).forEach(pr => { if (pr && pr.processId) rules[pr.processId] = (pr.rule || '').trim() || null; });
@@ -404,7 +441,7 @@
         if (errs.length) throw new Error('stpa: ' + errs.join('; '));
         const sErrs = spineValidate(spine || { losses: [], hazards: [], constraints: [] });
         if (sErrs.length) throw new Error('stpa: ' + sErrs.join('; '));
-        const elemIds = new Set([].concat(cs.controllers || [], cs.processes || []).map(n => n.id));
+        const elemIds = new Set(nodesOf(cs).map(n => n.id));
         const conIds = new Set(((spine || {}).constraints || []).map(c => c.id));
         const rErrs = [];
         const seen = new Set();
@@ -449,11 +486,11 @@
             if ((cs.controllers || []).length > 1 && (c.authority == null || c.authority === ''))
                 findings.push({ kind: 'no-authority', id: c.id, detail: 'controller ' + c.id + ' has no authority rank while other controllers exist — relative authority is part of the structure, not a nicety' });
         });
-        [].concat(cs.controllers || [], cs.processes || []).forEach(n => {
+        nodesOf(cs).forEach(n => {
             if (!(n.desc || '').trim())
                 findings.push({ kind: 'no-description', id: n.id, detail: 'element ' + n.id + ' has no description (2f-3) — a bare label is not an element definition' });
         });
-        return { checked: (cs.controllers || []).length + (cs.processes || []).length, findings };
+        return { checked: nodesOf(cs).length, findings };
     }
 
     // ======================================================================
@@ -732,7 +769,7 @@
             (cs.others || []).length ? cs.others.length + ' other edge(s): ' + ids(cs.others) : 'none authored — if genuinely none exist, say so in the boundary statement; this is the element type analysts routinely omit');
         add('2f-2', 2, 'Controlled processes', cs.processes.length ? 'satisfied' : 'missing',
             cs.processes.length ? cs.processes.length + ' process(es): ' + ids(cs.processes) : 'none');
-        const allElems = cs.controllers.concat(cs.processes);
+        const allElems = nodesOf(cs);
         const described = allElems.filter(n => (n.desc || '').trim());
         add('2f-3', 2, 'Element descriptions', !allElems.length ? 'missing' : described.length === allElems.length ? 'satisfied' : 'partial',
             described.length + '/' + allElems.length + ' elements described');
@@ -801,7 +838,7 @@
         return { deliverables: out, tally, total: out.length };
     }
 
-    const API = { GUIDE_PHRASES, CAUSES_4A, CAUSES_4B, MENTAL_MODELS, validate, inv18, ucaSeeds, lossScenarios, bridgeMap,
+    const API = { GUIDE_PHRASES, CAUSES_4A, CAUSES_4B, MENTAL_MODELS, nodesOf, targetsOf, sourcesOf, validate, inv18, ucaSeeds, lossScenarios, bridgeMap,
                   causeSeeds, spineValidate, spineTrace, hazardRollup,
                   loopSummary, conflictSites, respTrace, csCompleteness, conformance,
                   ARCHETYPE_CLASSES, SIP_ITEMS, archetypeMatrix, sipSummary };

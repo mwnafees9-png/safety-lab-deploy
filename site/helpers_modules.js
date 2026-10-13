@@ -1,4 +1,7 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 13 Oct 2026 (fix G): SEQ and NOT gate symbols and colors, their canvas lines, NOT in the gate walk, and Fit to Workspace leaves room for the toolbox. See tests/regression_fta_handbuild_20261013b.test.js
+// 13 Oct 2026 (analysis model links): the aircraft and system FHA rows carry the linked badge and broken-link warning for their function and failure-condition links (model_links.js); see tests/regression_analysis_links_20261013b.test.js
+// 13 Oct 2026 (Office-style saving + change acknowledgement, fix2-J): _writeAutosave hands its payload to SLChangeAck.stash() and marks unsaved work in the autosave meta; the save indicator says "Unsaved changes"; commitSaveChanges is SLSaveState.save(); undo/redo run as system changes, use this tab's snapshot steps while there is unsaved work and report to SLSaveState; __crdtApply runs as a system change. See change_ack.js, save_state.js.
 // 13 Oct 2026 (fix 3, MGL): common cause group parameters are group-level (ccfApplyGroupParams / ccfSyncGroup / ccfReadGroupParams), the CCF popover edits the group (model choice, NUREG generic β starting values, parameter source, warnings), group size is re-counted on every membership change. See tests/regression_ccf_mgl_20261013.test.js
 // 13 Oct 2026 (math audit F8): _computeTopAllocatorContext, the CCMR not-to-exceed target and the per-flight-hour label read the ONE shared time basis SLTopBasis (top_basis.js); the allocator's per-flight budget is 1 - exp(-target x t_mission), the exact inverse of the verification lanes. See tests/regression_perfh_basis_20261013.test.js
 // 13 Oct 2026 (math fix 7): the DALgebra reference explains the ARP4761A App P row rule in plain words (start DAL fixes the row, every level stays in it, no reduction before CMA substantiation) and VOTING gate claims feed the CMA pairs; see tests/regression_dal_row_20261013.test.js
@@ -4125,7 +4128,10 @@ function switchWorkspaceTab(subTab) {
     if(subTab === 'req') { renderSysReq(); populateDropdowns('sys-req-trace', sys().functions, 'funcId', 'funcName'); _populateReqParentPicker('sys'); }
     if(subTab === 'pssa') { try { renderWsPssaPanel(); } catch(e) { console.warn('renderWsPssaPanel:', e); } }
     if(subTab === 'asm') { renderSysAssumptions(); }
-    if(subTab === 'fmea') { _prepFmeaForSystemContext(); if (typeof renderFMEA === 'function') renderFMEA(); }
+    // 13 Oct 2026: the FMEA form's basic-event list was only filled by the global FMEA tab, so in a
+    // System Folder an existing piece-part row could not be saved ("Select a Basic Event") and a new
+    // one could not be linked. Fill it here when it is empty.
+    if(subTab === 'fmea') { _prepFmeaForSystemContext(); try { const _bs = document.getElementById('fmea-basic-event'); if (_bs && _bs.options.length <= 1 && typeof updateFMEABasicEvents === 'function') updateFMEABasicEvents(); } catch (_) {} if (typeof renderFMEA === 'function') renderFMEA(); }
 }
 
 // Phase 68 — FMEA is a per-system analysis living ONLY inside a System Folder (no
@@ -4544,6 +4550,14 @@ function formatNodeActualLine(d) {
             ? '\u25b3 Static number is an upper bound for this spare: primary AND (switch fails OR spare)' + why + '; DFT Monte-Carlo gives the time-ordered value'
             : '\u25b3 Static number is an upper bound for this priority AND: all inputs failed, any order' + why + '; DFT Monte-Carlo gives the order-aware value';
     }
+    // 13 Oct 2026 (fix G): the sequence-enforcing gate says which way its static number was done, like PAND/SPARE.
+    if (node.gateType === 'SEQ') {
+        const ds = node._dynStatic;
+        if (ds && ds.mode === 'exact') return '\u25b3 Sequence gate solved exactly in the static number (inputs fail one after another, left to right)';
+        const why = (ds && ds.reason) ? ' (' + ds.reason + ')' : '';
+        return '\u25b3 Static number is an upper bound for this sequence gate: all inputs failed, any order' + why + '; DFT Monte-Carlo gives the sequence-aware value';
+    }
+    if (node.gateType === 'NOT') return '\u25b3 NOT gate: non-coherent logic. P(top) is exact; cut sets are listed as prime implicants ("NOT X" means X does not occur)';
     if (node.gateType === 'FDEP') return '\u25b3 Functional dependency: when the trigger fails, its dependent events count as failed in the static number';
     if (typeof ftaConfig !== 'object' || !ftaConfig || ftaConfig.mode !== 'top-down') return '';
     if (typeof node._bddActualProb !== 'number' || !isFinite(node._bddActualProb)) return '';
@@ -5027,7 +5041,7 @@ function renderACFHA() {
         // opens the Comments cell of the group head instead, so nothing is lost. Sub-Function
         // a bit wider; Effects and Comments much wider.
         const _findingHtml = _grpBadge ? `<div style="margin:0 0 4px 0;">${_grpBadge.replace('margin-left:6px;', 'margin-left:0;')}</div>` : '';
-        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('acFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'fha-ac', tbody, rows: _fhaGrouping.ordered, rowHtml: _fhaRowHtml,
@@ -5499,7 +5513,7 @@ function renderSysFHA() {
                   _l1Fns.map(f => `<option value="${esc(f.funcId)}"${_l1Sugg === String(f.funcId) ? ' selected-suggested' : ''}>${esc(f.funcName || f.funcId)}${_l1Sugg === String(f.funcId) ? ' (FCIM match)' : ''}</option>`).join('') + `</select>`
                 : `<div style="font-size:10px; color:var(--color-text-tertiary);">declare functions on this system first</div>`)
         ;
-        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('sysFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
     };
     // 31 Aug 2026 — same ordered view as the AC table: natural ascending fcId,
     // same-id phase rows clustered, blank ids last.
@@ -6715,9 +6729,13 @@ function fitToScreen() {
     if (bounds.width === 0 || bounds.height === 0) return; 
     
     const pad = 150; const bWidth = bounds.width + pad; const bHeight = bounds.height + pad;
-    const scale = Math.min(1.2, Math.min(fullWidth / bWidth, fullHeight / bHeight));
+    // 13 Oct 2026 (fix G): the toolbox docks on the left of the canvas; fit the tree into the space beside it.
+    let inset = 0;
+    try { const tb = document.getElementById('fta-toolbox'); if (tb && tb.offsetParent) inset = tb.offsetWidth + 16; } catch (_) {}
+    const availW = Math.max(200, fullWidth - inset);
+    const scale = Math.min(1.2, Math.min(availW / bWidth, fullHeight / bHeight));
     const midX = bounds.x + bounds.width / 2; const midY = bounds.y + bounds.height / 2;
-    const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+    const translate = [inset + availW / 2 - scale * midX, fullHeight / 2 - scale * midY];
     
     svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale));
 }
@@ -6766,6 +6784,10 @@ function getShapePath(d) {
     if (d.data.gateType === 'PAND') return "M -22,15 L -22,-5 A 22,22 0 0,1 22,-5 L 22,15 Z M -10,5 L 10,5 L 5,0 M 10,5 L 5,10";
     if (d.data.gateType === 'SPARE') return "M -22,-12 L 22,-12 A 12,12 0 0,1 22,12 L -22,12 A 12,12 0 0,1 -22,-12 Z";
     if (d.data.gateType === 'FDEP') return "M -22,-12 L 22,-12 L 16,12 L -16,12 Z";
+    // 13 Oct 2026 (fix G): SEQ (sequence-enforcing) is the dynamic-gate box with two chevrons (fails in order,
+    // left to right); NOT is the OR shield with a logic inversion bubble on its output.
+    if (d.data.gateType === 'SEQ') return "M -22,-13 L 22,-13 L 22,13 L -22,13 Z M -12,-6 L -4,0 L -12,6 M 0,-6 L 8,0 L 0,6";
+    if (d.data.gateType === 'NOT') return "M -20,15 C -10,10 10,10 20,15 C 20,0 15,-15 0,-19 C -15,-15 -20,0 -20,15 Z M -6,-25 A 6,6 0 1,1 6,-25 A 6,6 0 1,1 -6,-25 Z";
     if (d.data.type === 'undeveloped') return "M 0,-25 L 25,0 L 0,25 L -25,0 Z";
     if (d.data.type === 'conditioning') return "M 0,-15 A 25,15 0 1,1 0,15 A 25,15 0 1,1 0,-15";
     if (d.data.type === 'house') return "M -20,20 L 20,20 L 20,-5 L 0,-25 L -20,-5 Z";
@@ -7231,6 +7253,8 @@ function getNodeColors(d) {
         pand:     { fill: '#ff6482', stroke: '#e8456a' },     // pink
         spare:    { fill: '#5ac8fa', stroke: '#3aa7d8' },     // teal-cyan
         fdep:     { fill: '#bf5af2', stroke: '#9d3fd0' },     // magenta-purple
+        seq:      { fill: '#30b0c7', stroke: '#1f8a9c' },     // teal (13 Oct 2026, fix G)
+        not:      { fill: '#64748b', stroke: '#475569' },     // slate (13 Oct 2026, fix G)
         and:      { fill: '#4E63D8', stroke: '#3D4FB0' },     // iOS blue
         or:       { fill: '#ff9500', stroke: '#e08400' },     // iOS orange
         xor:      { fill: '#ff9500', stroke: '#e08400' },
@@ -7249,6 +7273,8 @@ function getNodeColors(d) {
         pand:     { fill: '#ff7a96', stroke: '#ffa3b6' },
         spare:    { fill: '#64d2ff', stroke: '#8ee0ff' },
         fdep:     { fill: '#d18cf9', stroke: '#e2b3fb' },
+        seq:      { fill: '#40c8e0', stroke: '#7fdcec' },
+        not:      { fill: '#94a3b8', stroke: '#cbd5e1' },
         and:      { fill: '#6D7CF0', stroke: '#8A97F5' },
         or:       { fill: '#ff9f0a', stroke: '#ffba47' },
         xor:      { fill: '#ff9f0a', stroke: '#ffba47' },
@@ -7270,6 +7296,8 @@ function getNodeColors(d) {
     if (d.data.gateType === 'PAND')     return C.pand;
     if (d.data.gateType === 'SPARE')    return C.spare;
     if (d.data.gateType === 'FDEP')     return C.fdep;
+    if (d.data.gateType === 'SEQ')      return C.seq;
+    if (d.data.gateType === 'NOT')      return C.not;
     if (d.data.gateType === 'AND')      return C.and;
     if (d.data.gateType === 'OR')       return C.or;
     if (d.data.gateType === 'XOR')      return C.xor;
@@ -9131,7 +9159,12 @@ function __crdtApply(partial) {
     // write is not the one being suppressed. Only fires when we were not already
     // inside a suspended region (a project load owns its own save).
     if (!prev) {
-        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        // 13 Oct 2026 — a teammate's merged change is not this person's change to acknowledge.
+        try {
+            var _ackA = (typeof window !== 'undefined' && window.SLChangeAck) ? window.SLChangeAck : null;
+            if (_ackA) _ackA.system(function () { if (typeof scheduleAutosave === 'function') scheduleAutosave(); });
+            else if (typeof scheduleAutosave === 'function') scheduleAutosave();
+        } catch (_) {}
     }
 }
 
@@ -11095,8 +11128,10 @@ function _recomputeEffectiveWithExternalCaps(rootNode) {
         const childPs = kids.map(c => walk(c, visited));
         let gateP = 0;
         const gt = node.gateType;
-        if (gt === 'AND' || gt === 'INHIBIT' || gt === 'PAND' || gt === 'SPARE') {
+        if (gt === 'AND' || gt === 'INHIBIT' || gt === 'PAND' || gt === 'SPARE' || gt === 'SEQ') {
             gateP = childPs.reduce((a, b) => a * b, 1);
+        } else if (gt === 'NOT') {
+            gateP = childPs.reduce((a, b) => a * (1 - b), 1);   // 13 Oct 2026 (fix G)
         } else if (gt === 'FDEP') {
             gateP = 0;
         } else if (gt === 'OR') {
@@ -12469,6 +12504,18 @@ function _writeAutosave() {
         payload = _perfTime('autosave.serialize', function () { return JSON.stringify(snapObj); });
         snapHasContent = _autosaveHasContent(snapObj);
         meta = { ts: Date.now(), size: payload.length };
+        // 13 Oct 2026 — the state at the end of this change is the state just BEFORE the next
+        // one: the change acknowledgement funnel keeps it to diff against and to restore on
+        // Cancel (change_ack.js), at no cost beyond this serialization.
+        try { if (typeof window !== 'undefined' && window.SLChangeAck) window.SLChangeAck.stash(payload); } catch (_) {}
+        // Unsaved work rides with the payload it describes, so a crash brings it back UNSAVED
+        // (save_state.js recovered()), never silently promoted to saved.
+        try {
+            if (typeof window !== 'undefined' && window.SLSaveState && window.SLSaveState.isDirty()) {
+                var _ss = window.SLSaveState.status();
+                meta.unsaved = true; meta.unsavedSince = _ss.since; meta.unsavedAcks = _ss.acks.slice(-50);
+            }
+        } catch (_) {}
         // 31 Aug 2026 — the autosave slot restores the DATA on resume but used to
         // drop the cloud identity, so the resumed tab re-provisioned a DUPLICATE
         // project row on its first push (db0b5a9e, minted 30 Aug). The identity
@@ -12583,7 +12630,7 @@ function _updateSaveIndicator(state) {
     // Phase 57 — when there are unsaved edits, present the control as an actionable "Save Changes"
     // (clickable → commitSaveChanges). Background autosave still protects the work locally; the
     // durable save (disk .json + cloud) is the explicit commit.
-    else if (_dirtySinceSave) { cls = 'dirty'; text = 'Save Changes'; }
+    else if (_dirtySinceSave) { cls = 'dirty'; text = 'Unsaved changes'; }   // 13 Oct 2026: Office-style (save_state.js); click or Ctrl+S saves
     else {
         const ago = Math.max(0, Math.round((Date.now() - _autosaveLastWrite) / 1000));
         const base = _autosaveLastWrite ? ('Saved ' + (ago < 5 ? 'just now' : ago + 's ago')) : 'All changes saved';
@@ -12615,6 +12662,17 @@ function _updateSaveIndicator(state) {
 // SaveFs), pushes to the Supabase cloud when signed in, then clears the dirty state. Background
 // autosave is unchanged — this is the user-driven commit the new UI asks for.
 async function commitSaveChanges() {
+    // 13 Oct 2026 — two callers, two meanings, now told apart. The header control, the node
+    // drawer's button, the per-view buttons and Ctrl+S pass { explicit: true }: that is the
+    // person's Save (save_state.js: every change acknowledged, unsaved work sent to the team in
+    // one go, the local and cloud copies written). The ~40 modules that call this after their
+    // own write mean "my change is made": that is scheduleAutosave, and the change becomes an
+    // acknowledged, unsaved change like any other. A module can never Save on the person's behalf.
+    if (typeof window !== 'undefined' && window.SLSaveState && typeof window.SLSaveState.save === 'function') {
+        if (arguments[0] && arguments[0].explicit === true) return window.SLSaveState.save();
+        try { scheduleAutosave(); } catch (_) {}
+        return true;
+    }
     // 13 Sep 2026 — built ON scheduleAutosave (R18 rebuild). This path wrote the local
     // and cloud snapshots but never told the live sync, so ~40 modules' edits reached
     // the cloud and were then overwritten on screen by the next sync pull. One rail:
@@ -12755,21 +12813,51 @@ function pushUndo(label) {
         _undoCoalesceTimer = setTimeout(() => { _undoCoalesceTimer = null; }, 150);
     } catch(e){ console.warn('pushUndo failed:', e); }
 }
-function _restoreSnap(snapStr) {
-    _undoSuspended = true;
-    try {
-        _applyProjectData(JSON.parse(snapStr));
-        _lastUndoSnap = snapStr;
-    } finally { _undoSuspended = false; }
-    // 13 Sep 2026 (R18) — an undo/redo is an edit like any other: it restored the
-    // project with autosave suspended and never announced the result, so it lived only
-    // in this tab until an unrelated edit and a sync pull reverted it.
-    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+function _restoreSnap(snapStr, beforeStr) {
+    // 13 Oct 2026 — a restore is a SYSTEM change: Undo is how a change is taken back, so it is
+    // not asked about again (change_ack.js); save_state.js decides whether it leaves unsaved work.
+    var _ack = (typeof window !== 'undefined' && window.SLChangeAck) ? window.SLChangeAck : null;
+    var _run = function () {
+        _undoSuspended = true;
+        try {
+            var _ap = function () { _applyProjectData(JSON.parse(snapStr)); };
+            if (_ack && _ack.keepJournal) _ack.keepJournal(_ap); else _ap();   // 13 Oct 2026: the journal is append-only, undo never takes entries out
+            _lastUndoSnap = snapStr;
+        } finally { _undoSuspended = false; }
+        // 13 Sep 2026 (R18) — an undo/redo is an edit like any other: it restored the
+        // project with autosave suspended and never announced the result, so it lived only
+        // in this tab until an unrelated edit and a sync pull reverted it.
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+    };
+    if (_ack) _ack.system(_run); else _run();
+    try { if (typeof window !== 'undefined' && window.SLSaveState) window.SLSaveState.afterLocalRestore(snapStr, beforeStr); } catch (_) {}
 }
+// 13 Oct 2026 — the acknowledgement funnel's undo hooks: one acknowledged change = one undo
+// step (the state before it), and a canceled change takes back the steps it pushed.
+function _slUndoDepth() { return _undoStack.length; }
+function _slUndoTopSnap() { return _undoStack.length ? _undoStack[_undoStack.length - 1].snap : null; }
+function _slUndoTruncate(n) { if (typeof n === 'number' && n >= 0 && n < _undoStack.length) _undoStack.length = n; }
+function _slUndoPushSnap(label, snapStr, mark) {
+    if (typeof snapStr !== 'string') return false;
+    // the wrapped actions already pushed this same pre-change state: never twice
+    if (typeof mark === 'number' && _undoStack.length > mark && _undoStack[mark] && _undoStack[mark].snap === snapStr) { _undoStack.length = mark + 1; _undoStack[mark].label = label || _undoStack[mark].label; _redoStack = []; return true; }
+    if (_undoStack.length && _undoStack[_undoStack.length - 1].snap === snapStr) return false;
+    _undoStack.push({ label: label || 'change', snap: snapStr });
+    if (_undoStack.length > UNDO_LIMIT) _undoStack.shift();
+    _redoStack = [];
+    return true;
+}
+try { if (typeof window !== 'undefined') { window._slUndoDepth = _slUndoDepth; window._slUndoTopSnap = _slUndoTopSnap; window._slUndoTruncate = _slUndoTruncate; window._slUndoPushSnap = _slUndoPushSnap; } } catch (_) {}
 // 13 Sep 2026 — while co-editing is live, undo/redo are PER USER (crdt_sync.js): they take
 // back this tab's own changes and never touch a teammate's, as in Word/Excel co-authoring.
 // The snapshot undo below stays for solo and offline work (no live doc).
-function _liveUndo() { try { return !!(window.SafetyLabCRDT && window.SafetyLabCRDT.liveUndo && window.SafetyLabCRDT.liveUndo()); } catch (_) { return false; } }
+// 13 Oct 2026 — while this tab has UNSAVED work (save_state.js) the live sync has not seen it,
+// so the per-user live undo cannot take it back: the snapshot steps below do (one per
+// acknowledged change), and a rebase lays teammates' work back on top afterwards.
+function _liveUndo() {
+    try { if (window.SLSaveState && window.SLSaveState.isDirty() && _undoStack.length) return false; } catch (_) {}
+    try { return !!(window.SafetyLabCRDT && window.SafetyLabCRDT.liveUndo && window.SafetyLabCRDT.liveUndo()); } catch (_) { return false; }
+}
 function undo() {
     if (_liveUndo()) {
         if (!window.SafetyLabCRDT.undo()) return showToast('Nothing of yours to undo.', 'info', 2000);
@@ -12779,7 +12867,7 @@ function undo() {
     const current = JSON.stringify(_snapshotProject());
     const prev = _undoStack.pop();
     _redoStack.push({ label: prev.label, snap: current });
-    _restoreSnap(prev.snap);
+    _restoreSnap(prev.snap, current);
     showToast('Undid: ' + prev.label, 'info', 2000);
 }
 function redo() {
@@ -12791,7 +12879,7 @@ function redo() {
     const current = JSON.stringify(_snapshotProject());
     const next = _redoStack.pop();
     _undoStack.push({ label: next.label, snap: current });
-    _restoreSnap(next.snap);
+    _restoreSnap(next.snap, current);
     showToast('Redid: ' + next.label, 'info', 2000);
 }
 

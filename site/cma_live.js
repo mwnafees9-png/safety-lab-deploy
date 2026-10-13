@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix G): SEQ joins the AND family for the live common cause check. See tests/regression_fta_handbuild_20261013b.test.js
 /* ============================================================================
  * cma_live.js, v1.0, 13 Oct 2026 (fix 6 part B): LIVE common cause detection and a
  * FORCED decision for every suspect.
@@ -51,7 +52,7 @@
     'use strict';
     var VERSION = '1.0';
     var DEBOUNCE_EDIT_MS = 700, DEBOUNCE_LOAD_MS = 1200, DEMO_WINDOW_MS = 20000;
-    var AND_FAMILY = { AND: 1, INHIBIT: 1, PAND: 1, SPARE: 1, VOTING: 1 };
+    var AND_FAMILY = { AND: 1, INHIBIT: 1, PAND: 1, SPARE: 1, SEQ: 1, VOTING: 1 };   // 13 Oct 2026 (fix G): SEQ
 
     // ---------------------------------------------------------------- model access (guarded)
     function _pages() { try { return (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : []; } catch (_) { return []; } }

@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): every authored HF lane row links to its crew role, task, function, item and failure conditions (Model links column + edit modal, model_links.js); the typed FC columns are mirrors now; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // hf_analyses.js — v1.13 — HF'S OWN ANALYSES (30 Aug 2026, Waqas: "human
@@ -915,12 +916,14 @@
             cols: [
                 { k: 'heaId',     label: 'ID',        ro: true, mono: true, w: '90px' },
                 { k: 'asmId',     label: 'Task (asm)', optsFn: 'asmOptions', w: '110px', mono: true },
-                { k: 'task',      label: 'Task',      w: '180px' },
+                { k: 'task',      label: 'Task notes', w: '180px' },
                 { k: 'errorMode', label: 'Error mode', opts: 'ERROR_MODES', w: '120px' },
                 { k: 'effect',    label: 'Effect',    area: true, w: '220px' },
                 { k: 'detection', label: 'Detection', area: true, w: '200px' },
                 { k: 'recovery',  label: 'Recovery',  area: true, w: '200px' },
-                { k: 'fcIds',     label: 'Feeds FC',  w: '110px', mono: true }
+                // 13 Oct 2026: the failure conditions are model links now (Model links column);
+                // this column mirrors their codes and is no longer typed.
+                { k: 'fcIds',     label: 'Feeds FC',  w: '110px', mono: true, ro: true, fmt: function (r, t) { return t ? '<span class="u-mono" style="font-size:11px;" title="Set with Model links; this column mirrors the linked failure conditions">' + esc(t) + '</span>' : null; } }
             ]
         },
         alerts: {
@@ -931,7 +934,7 @@
                 { k: 'name',     label: 'Alert',    w: '220px' },
                 { k: 'priority', label: 'Priority (25.1322)', opts: 'ALERT_PRIORITIES', w: '130px' },
                 { k: 'modality', label: 'Modality', opts: 'ALERT_MODALITIES', w: '110px' },
-                { k: 'fcIds',    label: 'Cited by FC', w: '120px', mono: true },
+                { k: 'fcIds',    label: 'Cited by FC', w: '120px', mono: true, ro: true, fmt: function (r, t) { return t ? '<span class="u-mono" style="font-size:11px;" title="Set with Model links; this column mirrors the linked failure conditions">' + esc(t) + '</span>' : null; } },
                 { k: 'notes',    label: 'Notes',    area: true, w: '240px' }
             ]
         },
@@ -940,7 +943,7 @@
             save: { mode: 'index', fn: 'setErgo' },
             cols: [
                 { k: 'ergoId',  label: 'ID',      ro: true, mono: true, w: '90px' },
-                { k: 'item',    label: 'Item',    w: '220px' },
+                { k: 'item',    label: 'Item notes', w: '220px' },
                 { k: 'clause',  label: 'Criterion (cite)', w: '180px', mono: true },
                 { k: 'finding', label: 'Finding', area: true, w: '300px' },
                 { k: 'status',  label: 'Status',  opts: 'ERGO_STATUS', w: '100px' },
@@ -952,10 +955,10 @@
             save: { mode: 'index', fn: 'setCd' },
             cols: [
                 { k: 'cdId',          label: 'ID',   ro: true, mono: true, w: '90px' },
-                { k: 'item',          label: 'Item', w: '220px' },
+                { k: 'item',          label: 'Item notes', w: '220px' },
                 { k: 'kind',          label: 'Kind', opts: 'CD_KINDS', w: '120px' },
                 { k: 'consideration', label: '§25.1302 consideration', opts: 'CD_CONSIDERATIONS', w: '220px' },
-                { k: 'supports',      label: 'Supports', w: '160px' },
+                { k: 'supports',      label: 'Supports (notes)', w: '160px' },
                 { k: 'finding',       label: 'Finding',  area: true, w: '300px' },
                 { k: 'status',        label: 'Status',   opts: 'CD_STATUS', w: '100px' },
                 { k: 'notes',         label: 'Notes',    area: true, w: '200px' }
@@ -1134,23 +1137,32 @@
     // built-in columns in schema order, the Review cell LAST. Matching that order is not
     // cosmetic — the shared kebab positioner, the selection layer and mass_actions all
     // expect to find the action cell where every other worksheet puts it.
+    // 13 Oct 2026 (analysis model links): every authored lane row links to the model elements
+    // it is about (crew role, task, function, item, failure condition) through model_links.js.
+    // The column sits right after the row's ID, the same place on every lane.
+    var _ML_LANE = { tid: 'hfTid', tasks: 'hfTasks', hea: 'hfHea', alerts: 'hfAlerts', ergo: 'hfErgo', cd: 'hfCd', sa: 'hfSa' };
+    function _mlKey(lane) { return (_ML_LANE[lane] && typeof window !== 'undefined' && window.SLModelLinks) ? _ML_LANE[lane] : null; }
     function _hfTableHtml(lane) {
         var cfg = HF_SCHEMA[lane]; if (!cfg) return '';
         var rows = _hfRowsOf(lane);
         if (!rows.length) return '';
-        var head = '<tr><th style="width:52px;">Actions</th>' + cfg.cols.map(function (c) {
-            return '<th' + (c.w ? ' style="min-width:' + c.w + ';"' : '') + (c.legend ? ' title="' + esc(c.legend) + '"' : '') + '>' + c.label + (c.legend ? ' <span aria-hidden="true" style="opacity:.55;font-weight:400;">\u24d8</span>' : '') + '</th>';
+        var mlk = _mlKey(lane);
+        var head = '<tr><th style="width:52px;">Actions</th>' + cfg.cols.map(function (c, ci) {
+            return '<th' + (c.w ? ' style="min-width:' + c.w + ';"' : '') + (c.legend ? ' title="' + esc(c.legend) + '"' : '') + '>' + c.label + (c.legend ? ' <span aria-hidden="true" style="opacity:.55;font-weight:400;">\u24d8</span>' : '') + '</th>' +
+                (mlk && ci === 0 ? window.SLModelLinks.thHtml() : '');
         }).join('') + (cfg.kind ? _revTh() : '') + '</tr>';
+        var banner = mlk ? window.SLModelLinks.bannerHtml(mlk) : '';
         var body = rows.map(function (r) {
             var id = r[cfg.idField];
-            var tds = cfg.cols.map(function (c) {
-                return '<td' + (c.w ? ' style="max-width:' + c.w + ';"' : '') + '>' + _hfDisplay(c, r) + '</td>';
+            var tds = cfg.cols.map(function (c, ci) {
+                return '<td' + (c.w ? ' style="max-width:' + c.w + ';"' : '') + '>' + _hfDisplay(c, r) + '</td>' +
+                    (mlk && ci === 0 ? window.SLModelLinks.tdHtml(mlk, r) : '');
             }).join('');
             var rs = (typeof cfg.rowStyle === 'function') ? (cfg.rowStyle(r) || '') : '';
             return '<tr data-hf-id="' + esc(String(id)) + '"' + (rs ? ' style="' + rs + '"' : '') + '>' +
                 '<td>' + _hfActions(lane, cfg.kind, id) + '</td>' + tds + (cfg.kind ? _revTd(cfg.kind, id) : '') + '</tr>';
         }).join('');
-        return '<div style="overflow-x:auto; margin-bottom:16px;">' +
+        return banner + '<div style="overflow-x:auto; margin-bottom:16px;">' +
             '<table class="data-table hfx-table" style="width:100%; font-size:12px;">' +
             '<thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
     }
@@ -1180,7 +1192,7 @@
             var fid = 'hfe-' + c.k;
             var label = '<label style="display:block; font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--color-text-tertiary); margin-bottom:4px;">' + c.label + '</label>';
             if (c.ro) {
-                return '<div>' + label + '<div class="u-mono" style="font-size:12px; padding:7px 9px; border:1px dashed var(--color-border-hair); border-radius:6px; color:var(--color-text-secondary); background:var(--color-surface-2);">' +
+                return '<div>' + label + '<div data-hf-ro="' + c.k + '" class="u-mono" style="font-size:12px; padding:7px 9px; border:1px dashed var(--color-border-hair); border-radius:6px; color:var(--color-text-secondary); background:var(--color-surface-2);">' +
                     ((typeof c.fmt === 'function' && c.fmt(row, val)) || (val ? esc(val) : '—')) + '</div></div>';
             }
             var common = 'id="' + fid + '" data-hf-field="' + c.k + '" style="width:100%; font:inherit; font-size:12.5px; padding:7px 9px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); color:inherit; border-radius:6px;"';
@@ -1216,6 +1228,10 @@
               ' — advisory until you approve it.</div>'
             : '';
 
+        // 13 Oct 2026: the row's model links, edited in the same picker as the table's column.
+        var _mlk = _mlKey(lane);
+        if (_mlk) prov = '<div style="grid-column:1 / -1;"><label style="display:block; font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--color-text-tertiary); margin-bottom:4px;">Model links</label>' +
+            window.SLModelLinks.cellHtml(_mlk, row) + '</div>' + prov;
         var ov = document.createElement('div');
         ov.className = 'modal-overlay show';
         ov.id = 'hf-edit-overlay';
@@ -1234,6 +1250,27 @@
         document.getElementById('hfe-cancel').onclick = closeHfEdit;
         document.getElementById('hfe-save').onclick = function () { saveHfEdit(); };
         try { var first = ov.querySelector('input,select,textarea'); if (first) first.focus(); } catch (_) {}
+    }
+    // 13 Oct 2026: a model-link change made from the open editor rewrites the columns that mirror
+    // the links (Feeds FC / Cited by FC); redraw those read-only fields in place, keeping any
+    // unsaved typing in the other fields.
+    if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('sl-model-links-changed', function (e) {
+            try {
+                if (!_hfEditCtx || !e || !e.detail) return;
+                var lane = _hfEditCtx.lane;
+                if (_ML_LANE[lane] !== e.detail.analysis || String(_hfEditCtx.id) !== String(e.detail.rowId)) return;
+                var cfg = HF_SCHEMA[lane]; var rows = _hfRowsOf(lane); var row = null;
+                for (var i = 0; i < rows.length; i++) { if (String(rows[i][cfg.idField]) === String(_hfEditCtx.id)) { row = rows[i]; break; } }
+                if (!row) return;
+                cfg.cols.forEach(function (c) {
+                    if (!c.ro) return;
+                    var el = document.querySelector('#hf-edit-overlay [data-hf-ro="' + c.k + '"]'); if (!el) return;
+                    var val = row[c.k] == null ? '' : String(row[c.k]);
+                    el.innerHTML = (typeof c.fmt === 'function' && c.fmt(row, val)) || (val ? esc(val) : '—');
+                });
+            } catch (_) {}
+        });
     }
     // Save writes through the LANE'S OWN setter, field by field, exactly as the old
     // in-cell inputs did. Nothing here assigns to a row object: every vocabulary guard the

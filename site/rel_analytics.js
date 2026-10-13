@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): life data, growth tests and spares link their item (allocation rows their system) from the model picker; allocation re-runs keep a subsystem's links by its exact name; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // rel_analytics.js — Phase F5: the reliability analytics suite.
 // BORN MODULAR: new file, zero monolith edits; store under
@@ -217,7 +218,9 @@
         const failures = ft.split(',').map(x => parseFloat(x)).filter(x => x > 0);
         const susp = st.split(',').map(x => parseFloat(x)).filter(x => x > 0);
         if (failures.length < 2) { _toast('Need at least two failure times.', 'warning'); return; }
-        _store().lifeData.push({ id: 'LD-' + Date.now(), name: name.trim(), failures, suspensions: susp });
+        const rec = { id: 'LD-' + Date.now(), name: name.trim(), failures, suspensions: susp };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('lifeData', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().lifeData.push(rec);
         _save(); renderRamWeibullPage();
     }
     async function relDeleteLifeSet(id) {
@@ -234,7 +237,9 @@
         const T = parseFloat(await _ask('Total accumulated test time (hours):', '600')) || 0;
         const times = ft.split(',').map(x => parseFloat(x)).filter(x => x > 0).sort((a, b) => a - b);
         if (times.length < 2 || !(T >= times[times.length - 1])) { _toast('Need ≥2 failures and T ≥ the last failure time.', 'warning', 3500); return; }
-        _store().growth.push({ id: 'GR-' + Date.now(), name: name.trim(), times, T });
+        const rec = { id: 'GR-' + Date.now(), name: name.trim(), times, T };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('growth', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().growth.push(rec);
         _save(); renderRamGrowthPage();
     }
     async function relDeleteGrowth(id) {
@@ -254,8 +259,18 @@
         if (tArr.length < 2 || tArr.length !== nArr.length) { _toast('Need ≥2 points with matching time and cumulative-count entries.', 'warning', 3500); return; }
         const points = tArr.map((t, i) => ({ t, N: nArr[i] })).filter(p => p.t > 0 && p.N > 0);
         if (points.length < 2) { _toast('Need ≥2 valid (time, cumulative-count) points.', 'warning', 3500); return; }
-        _store().growth.push({ id: 'GR-' + Date.now(), name: name.trim(), mode: 'grouped', points });
+        const rec = { id: 'GR-' + Date.now(), name: name.trim(), mode: 'grouped', points };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('growth', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().growth.push(rec);
         _save(); renderRamGrowthPage();
+    }
+    // 13 Oct 2026: a re-run of an allocation rebuilds its rows; a subsystem keeps its model links
+    // when the new run names it exactly as before.
+    function _carryLinks(prev, next) {
+        const by = {};
+        ((prev && prev.rows) || []).forEach(r => { if (r && r.modelLinks) by[String(r.name).trim().toLowerCase()] = r.modelLinks; });
+        ((next && next.rows) || []).forEach(r => { const m = by[String(r.name).trim().toLowerCase()]; if (m) r.modelLinks = JSON.parse(JSON.stringify(m)); });
+        return next;
     }
     async function relRunAlloc() {
         if (!_access()) return;
@@ -267,10 +282,12 @@
         const ws = weights.split(',').map(x => parseFloat(x) || 1);
         if (!ns.length) return;
         const wsum = ns.reduce((a, _, i) => a + (ws[i] || 1), 0);
+        const _prevAlloc = _store().alloc;
         _store().alloc = {
             target, at: new Date().toISOString(),
             rows: ns.map((n, i) => ({ name: n, weight: ws[i] || 1, lambda: target * (ws[i] || 1) / wsum })),
         };
+        _carryLinks(_prevAlloc, _store().alloc);
         _save(); renderRamAllocPage();
     }
     async function relRunAgree() {
@@ -289,7 +306,7 @@
         const subs = ns.map((name, i) => ({ name, n: nn[i], E: ee[i], t: tt[i] }));
         const res = agreeAllocate(Rsys, subs);
         if (!res) { _toast('Every subsystem needs a positive module count, importance and time.', 'warning', 3500); return; }
-        _store().agree = Object.assign({ at: new Date().toISOString() }, res);
+        _store().agree = _carryLinks(_store().agree, Object.assign({ at: new Date().toISOString() }, res));
         _save(); renderRamAllocPage();
     }
     async function relRunArinc() {
@@ -304,7 +321,7 @@
         const subs = ns.map((name, i) => ({ name, pred: pp[i] }));
         const res = arincAllocate(target, subs);
         if (!res) { _toast('Every subsystem needs a positive predicted failure rate.', 'warning', 3500); return; }
-        _store().arinc = Object.assign({ at: new Date().toISOString() }, res);
+        _store().arinc = _carryLinks(_store().arinc, Object.assign({ at: new Date().toISOString() }, res));
         _save(); renderRamAllocPage();
     }
     async function relAddSpares() {
@@ -314,7 +331,9 @@
         const units = parseInt(await _ask('Installed units across the fleet:', '12')) || 1;
         const tat = parseFloat(await _ask('Repair turnaround time (hours):', '720')) || 0;
         const pl = parseFloat(await _ask('Protection level (probability no stockout during turnaround):', '0.95')) || 0.95;
-        _store().spares.push({ id: 'SP-' + Date.now(), name: name.trim(), lambda: lam, units, tat, pl });
+        const rec = { id: 'SP-' + Date.now(), name: name.trim(), lambda: lam, units, tat, pl };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('spares', rec))) return;   // 13 Oct 2026: link the row to the model
+        _store().spares.push(rec);
         _save(); renderRamAllocPage();
     }
     async function relPlanDemo() {
@@ -338,7 +357,7 @@
         S.lifeData.forEach(d => {
             const data = d.failures.map(t => ({ t, suspended: false })).concat((d.suspensions || []).map(t => ({ t, suspended: true })));
             const w = weibullMrr(data);
-            html += '<h3>' + _esc(d.name) + ' <a href="#" style="font-size:11px;" onclick="relDeleteLifeSet(\'' + d.id + '\'); return false;">remove</a></h3>';
+            html += '<h3>' + _esc(d.name) + ' <a href="#" style="font-size:11px;" onclick="relDeleteLifeSet(\'' + d.id + '\'); return false;">remove</a></h3>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('lifeData', d) : '');
             if (!w) { html += '<p class="warn">Not enough failure points to fit.</p>'; return; }
             html += '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">' +
                 _chip('β (shape)', w.beta.toFixed(3), w.beta > 1.05) + _chip('η (scale)', Math.round(w.eta).toLocaleString() + ' h') +
@@ -366,7 +385,7 @@
         S.growth.forEach(g => {
             const grouped = g.mode === 'grouped';
             const r = grouped ? crowAmsaaGrouped(g.points) : crowAmsaa(g.times, g.T);
-            html += '<h3>' + _esc(g.name) + ' <span style="font-size:10px; font-weight:600; letter-spacing:.04em; padding:2px 7px; border:1px solid var(--color-border-strong); color:var(--color-text-tertiary); margin-left:6px;">' + (grouped ? 'GROUPED · REGRESSION' : 'EXACT TIMES · MLE') + '</span> <a href="#" style="font-size:11px;" onclick="relDeleteGrowth(\'' + g.id + '\'); return false;">remove</a></h3>';
+            html += '<div style="margin:-4px 0 6px;">' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('growth', g) : '') + '</div>' + '<h3>' + _esc(g.name) + ' <span style="font-size:10px; font-weight:600; letter-spacing:.04em; padding:2px 7px; border:1px solid var(--color-border-strong); color:var(--color-text-tertiary); margin-left:6px;">' + (grouped ? 'GROUPED · REGRESSION' : 'EXACT TIMES · MLE') + '</span> <a href="#" style="font-size:11px;" onclick="relDeleteGrowth(\'' + g.id + '\'); return false;">remove</a></h3>';
             if (!r) { html += '<p class="warn">Need ≥2 ' + (grouped ? 'inspection points' : 'failures') + '.</p>'; return; }
             html += '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">' +
                 _chip('β̂', r.beta.toFixed(3), r.beta > 1) + _chip('λ̂', r.lambda.toExponential(3)) +
@@ -408,8 +427,8 @@
         // -- feasibility weight
         if (S.alloc) {
             html += '<h4 style="margin:14px 0 6px; font-size:13px;">Feasibility weight — series λ budget</h4>' +
-                '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Subsystem</th><th>Weight</th><th>Allocated λ (/h)</th><th>Allocated MTBF (h)</th></tr></thead><tbody>' +
-                S.alloc.rows.map(r => '<tr><td>' + _esc(r.name) + '</td><td class="u-mono">' + r.weight + '</td><td class="u-mono">' + r.lambda.toExponential(3) + '</td><td class="u-mono">' + Math.round(1 / r.lambda).toLocaleString() + '</td></tr>').join('') +
+                '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Subsystem</th><th>Model links</th><th>Weight</th><th>Allocated λ (/h)</th><th>Allocated MTBF (h)</th></tr></thead><tbody>' +
+                S.alloc.rows.map(r => '<tr><td>' + _esc(r.name) + '</td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('relAlloc', r) : '') + '</td><td class="u-mono">' + r.weight + '</td><td class="u-mono">' + r.lambda.toExponential(3) + '</td><td class="u-mono">' + Math.round(1 / r.lambda).toLocaleString() + '</td></tr>').join('') +
                 '</tbody></table>' +
                 '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">Σλ = ' + S.alloc.target.toExponential(2) + ' /h (series: child rates sum exactly). Heavier weight = more budget = easier target; weight by achievability, not importance.</p>';
         }
@@ -417,8 +436,8 @@
         if (S.agree) {
             const a = S.agree;
             html += '<h4 style="margin:16px 0 6px; font-size:13px;">AGREE — complexity nᵢ × importance Eᵢ</h4>' +
-                '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Subsystem</th><th>Modules nᵢ</th><th>Importance Eᵢ</th><th>Time tᵢ (h)</th><th>Allocated λᵢ (/h)</th><th>Allocated MTBFᵢ (h)</th><th>Rᵢ(tᵢ)</th></tr></thead><tbody>' +
-                a.rows.map(r => '<tr><td>' + _esc(r.name) + '</td><td class="u-mono">' + r.n + '</td><td class="u-mono">' + r.E + '</td><td class="u-mono">' + r.t + '</td><td class="u-mono">' + r.lambda.toExponential(3) + '</td><td class="u-mono">' + Math.round(1 / r.lambda).toLocaleString() + '</td><td class="u-mono">' + r.Ri.toFixed(5) + '</td></tr>').join('') +
+                '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Subsystem</th><th>Model links</th><th>Modules nᵢ</th><th>Importance Eᵢ</th><th>Time tᵢ (h)</th><th>Allocated λᵢ (/h)</th><th>Allocated MTBFᵢ (h)</th><th>Rᵢ(tᵢ)</th></tr></thead><tbody>' +
+                a.rows.map(r => '<tr><td>' + _esc(r.name) + '</td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('relAgree', r) : '') + '</td><td class="u-mono">' + r.n + '</td><td class="u-mono">' + r.E + '</td><td class="u-mono">' + r.t + '</td><td class="u-mono">' + r.lambda.toExponential(3) + '</td><td class="u-mono">' + Math.round(1 / r.lambda).toLocaleString() + '</td><td class="u-mono">' + r.Ri.toFixed(5) + '</td></tr>').join('') +
                 '</tbody></table>' +
                 '<p style="font-size:12px; font-family:var(--font-mono); color:' + (a.meets ? '#1D9E75' : '#8E2A2A') + ';">Effective R<sub>sys</sub> = exp(−ΣEᵢλᵢtᵢ) = ' + a.Rachieved.toFixed(5) + ' vs required ' + a.Rreq.toFixed(5) + ' — ' + (a.meets ? 'meets the requirement ✓' : 'falls short ✗') + (typeof a.RprodRaw === 'number' ? '  ·  raw ΠRᵢ = ' + a.RprodRaw.toFixed(5) : '') + '</p>' +
                 '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">λᵢ = nᵢ·(−ln R\'(T)) / (Σn·Eᵢ·tᵢ). Complex subsystems (high nᵢ) get the tightest λ; a low importance Eᵢ relaxes a subsystem\'s target because fewer of its failures fail the mission. The formal AGREE check is the importance-weighted reliability exp(−ΣEᵢλᵢtᵢ) ≥ R\'(T), which the allocation reconstitutes exactly. The raw ΠRᵢ equals R\'(T) only when every Eᵢ = 1.</p>';
@@ -427,8 +446,8 @@
         if (S.arinc) {
             const a = S.arinc;
             html += '<h4 style="margin:16px 0 6px; font-size:13px;">ARINC — apportion by predicted failure rate</h4>' +
-                '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Subsystem</th><th>Predicted λ̂ᵢ (/h)</th><th>Weight</th><th>Allocated λᵢ (/h)</th><th>Allocated MTBFᵢ (h)</th></tr></thead><tbody>' +
-                a.rows.map(r => '<tr><td>' + _esc(r.name) + '</td><td class="u-mono">' + r.pred.toExponential(2) + '</td><td class="u-mono">' + (r.weight * 100).toFixed(1) + '%</td><td class="u-mono">' + r.lambda.toExponential(3) + '</td><td class="u-mono">' + Math.round(1 / r.lambda).toLocaleString() + '</td></tr>').join('') +
+                '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Subsystem</th><th>Model links</th><th>Predicted λ̂ᵢ (/h)</th><th>Weight</th><th>Allocated λᵢ (/h)</th><th>Allocated MTBFᵢ (h)</th></tr></thead><tbody>' +
+                a.rows.map(r => '<tr><td>' + _esc(r.name) + '</td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('relArinc', r) : '') + '</td><td class="u-mono">' + r.pred.toExponential(2) + '</td><td class="u-mono">' + (r.weight * 100).toFixed(1) + '%</td><td class="u-mono">' + r.lambda.toExponential(3) + '</td><td class="u-mono">' + Math.round(1 / r.lambda).toLocaleString() + '</td></tr>').join('') +
                 '</tbody></table>' +
                 '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">Σλ = ' + a.target.toExponential(2) + ' /h (series: child rates sum exactly). λᵢ = λ_sys·λ̂ᵢ/Σλ̂ — the subsystem history predicts as least reliable carries the largest share of the budget (an achievable target), rather than being handed an equal or arbitrary split.</p>';
         }
@@ -437,11 +456,11 @@
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="relAddSpares()">+ Spares case</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">demand d = units × λ × turnaround · s = min stock with P(X≤s) ≥ PL</span></div>';
         if (S.spares.length) {
-            html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Item</th><th>λ (/h)</th><th>Units</th><th>TAT (h)</th><th>Demand d</th><th>PL</th><th>Spares s</th><th>Achieved</th></tr></thead><tbody>' +
+            html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Item</th><th>Model links</th><th>λ (/h)</th><th>Units</th><th>TAT (h)</th><th>Demand d</th><th>PL</th><th>Spares s</th><th>Achieved</th></tr></thead><tbody>' +
                 S.spares.map(sp => {
                     const d = sp.units * sp.lambda * sp.tat;
                     const r = sparesLevel(d, sp.pl);
-                    return '<tr><td>' + _esc(sp.name) + '</td><td class="u-mono">' + sp.lambda.toExponential(1) + '</td><td class="u-mono">' + sp.units + '</td><td class="u-mono">' + sp.tat + '</td>' +
+                    return '<tr><td>' + _esc(sp.name) + '</td><td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('spares', sp) : '') + '</td><td class="u-mono">' + sp.lambda.toExponential(1) + '</td><td class="u-mono">' + sp.units + '</td><td class="u-mono">' + sp.tat + '</td>' +
                         '<td class="u-mono">' + d.toFixed(3) + '</td><td class="u-mono">' + (sp.pl * 100).toFixed(0) + '%</td>' +
                         '<td class="u-mono"><b>' + r.s + '</b></td><td class="u-mono">' + (r.achieved * 100).toFixed(2) + '%</td></tr>';
                 }).join('') + '</tbody></table>';

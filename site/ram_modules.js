@@ -1,3 +1,4 @@
+// 13 Oct 2026 (analysis model links): maintenance tasks and field records link their item and basic event from the model picker (no typed ids); Model links column with the linked badge; see tests/regression_analysis_links_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ram_modules.js — Phase F (F1–F3): Reliability · Availability · Maintainability
 // for Safety Lab Aero. BORN MODULAR: this file never edits the monolith — it
@@ -119,17 +120,16 @@
     async function ramAddTask() {
         if (_gated()) return;
         const name = await _ask('Maintenance task name (e.g. "Elevator servo LRU swap"):'); if (!name || !name.trim()) return;
-        const items = (typeof itemsData !== 'undefined' ? itemsData : []) || [];
-        const itemId = (await _ask('Linked LRU / item id (optional):\n' + items.slice(0, 12).map(i => '  ' + i.itemId + ': ' + i.name).join('\n'), '')) || '';
-        const beRef = (await _ask('Linked fault-tree basic event (displayId / logicalId, optional; enables Ai + the CCMR τ bridge):', '')) || '';
+        // 13 Oct 2026: the item and the basic event are picked from the model, never typed.
+        const draft = { id: 'RAM-' + Date.now(), name: name.trim(), itemId: '', beRef: '' };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('ramTask', draft))) return;
         const act = parseFloat(await _ask('Active repair time (hours):', '0.5')) || 0;
         const log = parseFloat(await _ask('Logistics delay (hours):', '0.25')) || 0;
         const adm = parseFloat(await _ask('Admin delay (hours):', '0.1')) || 0;
         const itv = parseFloat(await _ask('Scheduled inspection/test interval (FH, 0 = on-condition):', '0')) || 0;
-        _ramStore().tasks.push({
-            id: 'RAM-' + Date.now(), name: name.trim(), itemId: itemId.trim(), beRef: beRef.trim(),
+        _ramStore().tasks.push(Object.assign(draft, {
             activeRepair: act, logistics: log, admin: adm, interval: itv, demonstrated: null, by: '',
-        });
+        }));
         _save(); renderRamPage();
     }
     async function ramDemonstrate(id) {
@@ -168,10 +168,11 @@
     // FRACAS field lane.
     async function ramAddField() {
         if (_gated()) return;
-        let hint = '';
-        try { if (typeof window.fracasCandidates === 'function') { const c = window.fracasCandidates(); if (c.length) hint = '\nCandidates (derived from latents + FMEA links):\n' + c.map(x => '  ' + x.ref + ' — ' + x.why).join('\n'); } } catch (_) {}
-        const beRef = (await _ask('Linked basic event (displayId / logicalId) the field data applies to:' + hint, '')) || '';
-        if (!beRef.trim()) return;
+        // 13 Oct 2026: the basic event (and item) the field data applies to are picked from the model.
+        const draft = { id: 'FRC-' + Date.now(), beRef: '' };
+        if (typeof SLModelLinks !== 'undefined' && !(await SLModelLinks.pickNew('ramField', draft, 'Model links · new field record (pick the basic event it applies to)'))) return;
+        const beRef = draft.beRef || '';
+        if (!beRef.trim()) { _toast('A field record needs the basic event it applies to.', 'warning'); return; }
         // Statistical entry (preferred): total fleet operating hours + failure
         // count → chi-square lower confidence bound (MIL-HDBK-781A). A bare
         // point MTBF is accepted but labeled as such.
@@ -186,7 +187,7 @@
         }
         const w = parseInt(await _ask('Observation window (months):', '12')) || 12;
         const by = (await _ask('Recorded by (name):', '')) || '';
-        _ramStore().field.push(Object.assign({ id: 'FRC-' + Date.now(), beRef: beRef.trim(), windowMonths: w, by: by.trim(), at: new Date().toISOString() }, rec));
+        _ramStore().field.push(Object.assign(draft, { beRef: beRef.trim(), windowMonths: w, by: by.trim(), at: new Date().toISOString() }, rec));
         _save(); renderRamPage();
     }
     // FRACAS is Reporting AND Corrective Action — every finding carries an
@@ -353,13 +354,14 @@
         html += '<h3 style="margin-top:var(--s-5);">FRACAS — field lane vs prediction (MIL-HDBK-781A)</h3>' +
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="ramAddField()">+ Field record</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">verified = 60% lower confidence bound clears the prediction; field below prediction = finding, never averaged in</span></div>';
-        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Basic event</th><th>Predicted MTBF</th><th>Field data (window)</th><th>MTBF LCB (60%)</th><th>Verdict</th><th>Corrective action</th><th>By</th></tr></thead><tbody>';
-        if (!field.length) html += '<tr><td colspan="6" style="color:var(--color-text-tertiary);">No field data yet.</td></tr>';
+        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Basic event</th><th>Model links</th><th>Predicted MTBF</th><th>Field data (window)</th><th>MTBF LCB (60%)</th><th>Verdict</th><th>Corrective action</th><th>By</th></tr></thead><tbody>';
+        if (!field.length) html += '<tr><td colspan="8" style="color:var(--color-text-tertiary);">No field data yet.</td></tr>';
         field.forEach(x => {
             const dataTxt = x.statistical
                 ? Math.round(x.f.hours).toLocaleString() + ' h · ' + x.f.failures + ' failure' + (x.f.failures === 1 ? '' : 's') + ' (' + x.f.windowMonths + ' mo)'
                 : (x.point != null ? Math.round(x.point).toLocaleString() + ' h point (' + x.f.windowMonths + ' mo)' : '—');
             html += '<tr><td class="u-mono">' + (x.hit ? _esc(x.hit.node.displayId || x.f.beRef) : _esc(x.f.beRef) + ' ?') + '</td>' +
+                '<td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('ramField', x.f, { slots: ['item'] }) : '') + '</td>' +
                 '<td class="u-mono">' + (x.predicted != null ? Math.round(x.predicted).toLocaleString() + ' h' : '—') + '</td>' +
                 '<td class="u-mono">' + dataTxt + '</td>' +
                 '<td class="u-mono">' + (x.lcb != null ? Math.round(x.lcb).toLocaleString() + ' h' : '—') + '</td>' +
@@ -411,13 +413,13 @@
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="ramAddTask()">+ Add task</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">MDT = active + logistics + admin (MIL-HDBK-338B) · link a basic event to compute Ai/Ao and enable the CCMR τ bridge · ⇢ shows the golden threads the task protects</span></div>';
         html += '<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12.5px;"><thead><tr>' +
-            '<th>Task</th><th>LRU</th><th>Basic event</th><th>λ (/FH)</th><th>MTTR (h)</th><th>MDT (h)</th><th>Ai</th><th>Ao (est)</th><th>Interval (FH)</th><th>Demonstrated</th><th></th></tr></thead><tbody>';
+            '<th>Task</th><th>Model links</th><th>Basic event</th><th>λ (/FH)</th><th>MTTR (h)</th><th>MDT (h)</th><th>Ai</th><th>Ao (est)</th><th>Interval (FH)</th><th>Demonstrated</th><th></th></tr></thead><tbody>';
         if (!taskRows.length) html += '<tr><td colspan="11" style="color:var(--color-text-tertiary);">No tasks yet — the maintenance program starts here (or push tasks from the MSG-3 analysis).</td></tr>';
         taskRows.forEach(r => {
             const t = r.t;
             const demoOk = t.demonstrated != null ? t.demonstrated <= (t.activeRepair || 0) : null;
             html += '<tr><td>' + _esc(t.name) + (t.msg3 ? ' <span style="font-size:9.5px; font-family:var(--font-mono); border:1px solid currentColor; padding:0 4px; color:var(--color-text-tertiary);" title="derived from MSG-3 analysis ' + _esc(t.msg3) + '">MSG-3</span>' : '') + '</td>' +
-                '<td class="u-mono">' + _esc(t.itemId || '—') + '</td>' +
+                '<td>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('ramTask', t, { slots: ['item'] }) : '') + '</td>' +
                 '<td class="u-mono"' + (r.fcs.length ? ' title="on the golden thread of: ' + _esc(r.fcs.join(', ')) + '"' : '') + '>' + (r.hit ? _esc(r.hit.node.displayId || t.beRef) + ' <span style="color:#1D9E75;">✓</span>' + (r.fcs.length ? ' <span style="color:var(--color-text-tertiary); font-size:10px;">⇢ ' + _esc(r.fcs.slice(0, 3).join(', ')) + (r.fcs.length > 3 ? '…' : '') + '</span>' : '') : (t.beRef ? _esc(t.beRef) + ' <span style="color:#B45309;" title="no match in any tree">?</span>' : '—')) + '</td>' +
                 '<td class="u-mono">' + (r.lam > 0 ? r.lam.toExponential(1) : '—') + '</td>' +
                 '<td class="u-mono">' + (t.activeRepair || 0).toFixed(2) + '</td>' +

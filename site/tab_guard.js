@@ -1,3 +1,4 @@
+// 13 Oct 2026 (change acknowledgement, fix2-J): a tab without the write lease still hands the state after each change to SLChangeAck.stash(), so its acknowledgements diff against the right "before".
 // ============================================================================
 // tab_guard.js — v1.0 — Q9: concurrent-tab overwrite protection.
 //
@@ -101,7 +102,14 @@
                 const l = _readLease();
                 const foreignFresh = l && l.tabId !== TAB_ID && (Date.now() - l.at) < LEASE_TTL;
                 if (!foreignFresh) { tgAcquire(false); }
-                if (!tgHasLease()) { _suppressed++; _renderBanner(); return; }   // suspended — write nothing
+                if (!tgHasLease()) {
+                    _suppressed++; _renderBanner();
+                    // 13 Oct 2026 — nothing is written here, but the change acknowledgement funnel
+                    // still needs the state at the end of this change as the "before" of the next
+                    // one (change_ack.js stash(); normally the written payload).
+                    try { if (window.SLChangeAck && typeof _snapshotProject === 'function') window.SLChangeAck.stash(JSON.stringify(_snapshotProject())); } catch (_) {}
+                    return;
+                }   // suspended — write nothing
             }
             _writeLease();          // refresh with the write
             _bumpGen();
