@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 13 Oct 2026 (night, fix2-J rulings 1-2): app Undo / Redo (fault tree and everywhere) run as COLLECTED changes (SLChangeAck.deferred), acknowledged together on leaving the view, not per press.
 // 13 Oct 2026 (fix G): SEQ and NOT gate symbols and colors, their canvas lines, NOT in the gate walk, and Fit to Workspace leaves room for the toolbox. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (analysis model links): the aircraft and system FHA rows carry the linked badge and broken-link warning for their function and failure-condition links (model_links.js); see tests/regression_analysis_links_20261013b.test.js
 // 13 Oct 2026 (Office-style saving + change acknowledgement, fix2-J): _writeAutosave hands its payload to SLChangeAck.stash() and marks unsaved work in the autosave meta; the save indicator says "Unsaved changes"; commitSaveChanges is SLSaveState.save(); undo/redo run as system changes, use this tab's snapshot steps while there is unsaved work and report to SLSaveState; __crdtApply runs as a system change. See change_ack.js, save_state.js.
@@ -12813,7 +12814,7 @@ function pushUndo(label) {
         _undoCoalesceTimer = setTimeout(() => { _undoCoalesceTimer = null; }, 150);
     } catch(e){ console.warn('pushUndo failed:', e); }
 }
-function _restoreSnap(snapStr, beforeStr) {
+function _restoreSnap(snapStr, beforeStr, undoLabel) {
     // 13 Oct 2026 — a restore is a SYSTEM change: Undo is how a change is taken back, so it is
     // not asked about again (change_ack.js); save_state.js decides whether it leaves unsaved work.
     var _ack = (typeof window !== 'undefined' && window.SLChangeAck) ? window.SLChangeAck : null;
@@ -12829,7 +12830,10 @@ function _restoreSnap(snapStr, beforeStr) {
         // in this tab until an unrelated edit and a sync pull reverted it.
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
     };
-    if (_ack) _ack.system(_run); else _run();
+    // 13 Oct 2026 (night, Waqas): Undo / Redo do not ask per press; they are collected and
+    // acknowledged together when the person leaves the view (change_ack.js deferred()).
+    if (_ack && _ack.deferred && undoLabel) _ack.deferred({ kind: /^Redo/.test(undoLabel) ? 'redo' : 'undo', label: undoLabel.replace(/^(Undo|Redo): /, '') }, _run);
+    else if (_ack) _ack.system(_run); else _run();
     try { if (typeof window !== 'undefined' && window.SLSaveState) window.SLSaveState.afterLocalRestore(snapStr, beforeStr); } catch (_) {}
 }
 // 13 Oct 2026 — the acknowledgement funnel's undo hooks: one acknowledged change = one undo
@@ -12867,7 +12871,7 @@ function undo() {
     const current = JSON.stringify(_snapshotProject());
     const prev = _undoStack.pop();
     _redoStack.push({ label: prev.label, snap: current });
-    _restoreSnap(prev.snap, current);
+    _restoreSnap(prev.snap, current, 'Undo: ' + prev.label);
     showToast('Undid: ' + prev.label, 'info', 2000);
 }
 function redo() {
@@ -12879,7 +12883,7 @@ function redo() {
     const current = JSON.stringify(_snapshotProject());
     const next = _redoStack.pop();
     _undoStack.push({ label: next.label, snap: current });
-    _restoreSnap(next.snap, current);
+    _restoreSnap(next.snap, current, 'Redo: ' + next.label);
     showToast('Redid: ' + next.label, 'info', 2000);
 }
 

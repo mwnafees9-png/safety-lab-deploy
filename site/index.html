@@ -4162,7 +4162,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.44" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.24" defer></script>
+    <script src="helpers_modules.js?v=3.25" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4191,8 +4191,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="render_pass.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
-    <script src="change_ack.js?v=1.0" defer></script>
-    <script src="save_state.js?v=1.0" defer></script>
+    <script src="change_ack.js?v=1.1" defer></script>
+    <script src="save_state.js?v=1.1" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.1" defer></script>
@@ -4237,7 +4237,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase F4 — MSG-3 scheduled-maintenance analysis (born modular; pushes into the RAM ledger). Pro+ gated. -->
     <script src="msg3_module.js?v=1.7" defer></script>
     <!-- 13 Oct 2026: SLDiagramEditor, the one diagram editor core (toolbox, connect, move, resize, undo, zoom, pan, full screen, overview, read only). Loads before every diagram built on it: rbd_module, cea_graph, stpa_panel, event_trees, bowtie, markov. -->
-    <script src="diagram_editor.js?v=1.3" defer></script>
+    <script src="diagram_editor.js?v=1.4" defer></script>
     <!-- Phase F5-F7 — the complete R&M analytics suite (born modular). Pro+ gated. -->
     <script src="rel_analytics.js?v=1.5" defer></script>
     <script src="mx_analytics.js?v=1.3" defer></script>
@@ -4407,9 +4407,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="demo_picker.js?v=6" defer></script>
     <script src="first_run.js?v=3" defer></script>
     <script src="continue_session.js?v=1.1" defer></script>
-    <script src="stpa_panel.js?v=1.45" defer></script>
+    <script src="stpa_panel.js?v=1.46" defer></script>
     <script src="stpa_report.js?v=1.3" defer></script>
-    <script src="stpa_ai_apply.js?v=0.2" defer></script>
+    <script src="stpa_ai_apply.js?v=0.3" defer></script>
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
          Loads after the panels whose tabs it gates; wraps switchTab last-ish so its guard
          sits outermost on the chain. -->
@@ -4428,11 +4428,16 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          every write routes through each worksheet's own helpers. -->
     <script src="mass_actions.js?v=0.8" defer></script>
     <script src="mbsa_schema.js?v=1.1" defer></script>
-    <script src="zonal_model.js?v=1.1" defer></script>
+    <script src="zonal_model.js?v=1.2" defer></script>
+    <script src="cad_zonal.js?v=1.2" defer></script>
     <script src="physical_independence.js?v=1.1" defer></script>
     <script src="independence_claims.js?v=1.1" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
     <script src="zonal_ui.js?v=1.13" defer></script>
+    <!-- 13 Oct 2026: CAD Model tab (ZSA area). STEP read in a worker on this computer, geometry cached locally, only metadata in the project. -->
+    <script src="cad_import.js?v=1.3" defer></script>
+    <script src="cad_viewer.js?v=1.2" defer></script>
+    <script src="cad_page.js?v=1.2" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>
     <script src="zsa_walkthrough.js?v=1.4" defer></script>
@@ -4491,7 +4496,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="exposure_case.js?v=1.24" defer></script>
     <script src="cra_matrix.js?v=1.5" defer></script>
     <script src="fta_proposals.js?v=1.4" defer></script>
-    <script src="prove_tabs.js?v=1.5" defer></script>
+    <script src="prove_tabs.js?v=1.6" defer></script>
     <script src="fta_tree_picker.js?v=1.2" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /

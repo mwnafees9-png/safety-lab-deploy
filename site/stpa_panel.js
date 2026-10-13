@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
+// 13 Oct 2026 (fix 7): legacy AI-drafted losses and hazards saved under .text are read as .name on load.
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
 // stpa_panel.js — v1.1 — THE STPA WALKTHROUGH (system lane, user-visible).
@@ -155,6 +156,9 @@
         if (!stpaData.meta) stpaData.meta = { mission: '', scope: '', boundary: '', abstractionLevel: '' };
         ['mission', 'scope', 'boundary', 'abstractionLevel'].forEach(k => { if (typeof stpaData.meta[k] !== 'string') stpaData.meta[k] = ''; });
         ['losses', 'hazards', 'constraints'].forEach(k => { if (!Array.isArray(stpaData[k])) stpaData[k] = []; });
+        // 13 Oct 2026 (fix 7): losses and hazards drafted by the AI before this fix were saved under
+        // .text; the engine reads .name. Accept them on load (the text becomes the name).
+        ['losses', 'hazards'].forEach(k => stpaData[k].forEach(r => { if (r && !(r.name || '').trim() && typeof r.text === 'string' && r.text.trim()) { r.name = r.text.trim(); delete r.text; } }));
         return stpaData;
     }
     const NAVY = '#1F3A5F', GREEN = '#1D9E75', RED = '#B91C1C', MUT = '#8A93A6', AMBER = '#B7791F', VIOLET = '#6D28D9';

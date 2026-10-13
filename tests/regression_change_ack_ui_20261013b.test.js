@@ -26,7 +26,8 @@
  *   B5  nothing is asked while the mouse is held (a drag); one prompt on release
  *   B6  SLChangeAck.batch: async work = one acknowledgement with its label
  *   B7  a background change nobody made is not asked and leaves the project saved
- *   B8  Acknowledge: unsaved, journal record, one undo step; Undo brings back the saved state
+ *   B8  Undo / Redo and diagram moves are collected (13 Oct night): no prompt per press, one list on
+ *       leaving the view; Acknowledge keeps them, Cancel puts back only them
  *   B9  the header control saves; a module calling commitSaveChanges() does not
  *   B10 Ctrl+S saves even with focus in a text field
  *   B11 opening another project: Save / Don't Save / Cancel all do what they say
@@ -213,17 +214,38 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('no dialog for a background write', !(await ackOpen(pg)) && s.stats.prompts === p7);
 
     // ---------------------------------------------------------------- B8
-    console.log('\n[B8] Undo takes back one acknowledged change; all the way back = saved');
+    console.log('\n[B8] Undo / Redo are collected (13 Oct night): no prompt per press, one list on leaving the view');
     const u8 = s.undo;
     check('every acknowledged change pushed one undo step', u8 >= 4, 'undo depth ' + u8);
+    const pr8 = (await state(pg)).stats.prompts;
     for (let i = 0; i < u8; i++) { await pg.evaluate(() => undo()); await sleep(250); }
-    await sleep(800);
+    await sleep(900);
     s = await state(pg);
+    check('no dialog for any of the ' + u8 + ' undos', !(await ackOpen(pg)) && s.stats.prompts === pr8, 'prompts ' + s.stats.prompts);
     check('Undo walked every acknowledged change back (the typed name is gone)', (await pg.evaluate(() => window.__b2node && ftaPages.some(p => JSON.stringify(p.root || {}).indexOf(' typed"') >= 0))) === false);
-    check('back at the saved version the project is saved again', s.dirty === false && !/Unsaved/.test(s.ind), s.ind + ' dirty=' + s.dirty);
-    check('Undo never removed journal entries (acknowledgements stay on record)', s.journal.some(j => /^change-ack: /.test(j)));
+    check('the undos are waiting as one collection', (await pg.evaluate(() => SLChangeAck.collected().length)) === u8);
+    const leave8 = pg.evaluate(() => switchTab('dashboard'));
+    check('leaving the view brings ONE dialog listing what was undone', await waitFor(pg, () => ackOpen(pg), 3000));
+    await sleep(300); txt = await ackText(pg);
+    check('it lists the undos', /What moved or was undone/i.test(txt) && (txt.match(/Undone/g) || []).length === u8, txt.slice(0, 600));
+    await pg.click('.sl-ack-keep'); await leave8; await sleep(800);
+    s = await state(pg);
+    check('acknowledged: back at the saved version the project is saved again', s.dirty === false && !/Unsaved/.test(s.ind), s.ind + ' dirty=' + s.dirty);
+    check('Undo never removed journal entries (acknowledgements stay on record)', s.journal.some(j => /^change-ack: /.test(j)) && s.journal.some(j => /acknowledged \d+ collected change/.test(j)));
     await pg.evaluate(() => redo()); await sleep(700);
-    check('Redo makes it unsaved again', (await state(pg)).dirty === true);
+    check('Redo is collected too (no dialog yet)', !(await ackOpen(pg)) && (await pg.evaluate(() => SLChangeAck.collected()[0] && SLChangeAck.collected()[0].kind)) === 'redo');
+    // a diagram move: collected the same way; Cancel on leaving puts back only it
+    await pg.evaluate(() => { SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { projectConfig.__b8box = { x: 99 }; scheduleAutosave(); }); });
+    const leave8b = pg.evaluate(() => switchTab('ac-fha'));
+    await waitFor(pg, () => ackOpen(pg), 3000);
+    await sleep(300); txt = await ackText(pg);
+    check('the move and the redo are in one list', /Moved/.test(txt) && /Bow-tie: Move Pump/.test(txt) && /Redone/.test(txt), txt.slice(0, 300));
+    await pg.click('.sl-ack-cancel'); await leave8b; await sleep(900);
+    check('Cancel put back only the collected changes', await pg.evaluate(() => !projectConfig.__b8box && !ftaPages.some(p => JSON.stringify(p.root || {}).indexOf(' typed"') >= 0)));
+    await pg.evaluate(() => redo()); await sleep(500);
+    const leave8c = pg.evaluate(() => switchTab('dashboard'));
+    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await leave8c; await sleep(700);
+    check('Redo then Acknowledge makes it unsaved again', (await state(pg)).dirty === true);
 
     // ---------------------------------------------------------------- B9
     console.log('\n[B9] Save from the header; modules cannot save on the person\'s behalf');

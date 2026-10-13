@@ -27,6 +27,7 @@
  *       against the shared copy first and never overwrites B's newer row with A's stale copy
  *   S7  guard(): Save / Don't Save / Cancel answer what the caller may do
  *   S8  a crash: recovered(meta.unsaved) keeps the work unsaved
+ *   S9  13 Oct night: collected moves / undos hold the sync, count as waiting, are asked on Save
  *   M1-M2 mutation proofs: no hold in onLocalChange (B sees unsaved work: S2 red); no rebase
  *       before a Save after a restart (B's newer row is overwritten: S6 red)
  *
@@ -209,6 +210,19 @@ const both = (A, B) => { for (let i = 0; i < 4; i++) { A.flush(); B.flush(); } }
   check('recovered unsaved work stays unsaved, with its acknowledgements', A.save.isDirty() === true && A.save.status().acks.length === 1 && A.save.status().since === 123);
   A.save.replaced();
   check('opening a project makes it the saved version', A.save.isDirty() === false);
+
+  // ---------------------------------------------------------------------- S9 (13 Oct night)
+  console.log('\n[S9] collected moves / undos are held from teammates and asked on Save');
+  {
+    const P = await boot();
+    P.A.ack.deferred({ kind: 'undo', label: 'severity edit' }, () => { P.A.model.acFhaData[0].severity = 'Catastrophic'; P.A.ctx.scheduleAutosave(); });
+    both(P.A, P.B);
+    check('a collected change holds the sync (B does not see it) and counts as waiting', P.A.save.holdsSync() === true && P.B.rows() === 'r1:Major,r2:Minor' && P.A.ack.pendingUser() === true, P.B.rows());
+    P.A.ctx.SLChoice._setTestAnswer('cancel');
+    check('a guard asks about it first (Acknowledge), then Save / Don\'t Save / Cancel', (await run(P.A, P.A.save.guard('open another project'))) === false && P.A.save.isDirty() === true && P.A.ack.collected().length === 0);
+    await run(P.A, P.A.save.save()); both(P.A, P.B);
+    check('Save shares it', P.B.rows() === 'r1:Catastrophic,r2:Minor' && P.A.save.isDirty() === false, P.B.rows());
+  }
 
   // ---------------------------------------------------------------------- mutations
   console.log('\n[M] mutation proofs');

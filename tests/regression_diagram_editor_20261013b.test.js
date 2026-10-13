@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * Regression - 13 Oct 2026 (v1.0). The ONE diagram editor core: site/diagram_editor.js (SLDiagramEditor).
+ * Regression - 13 Oct 2026 (v1.0; [10b] added 13 Oct night: moves, resizes, layout and Undo / Redo are collected, not asked per action). The ONE diagram editor core: site/diagram_editor.js (SLDiagramEditor).
  *
  * FOUND: every Safety Lab diagram except the fault tree was drawn read only (bowtie, event tree, STPA
  *   control structure, reliability block diagram, cascading effects) or not drawn at all (Markov). No
@@ -42,7 +42,7 @@ const J = o => JSON.stringify(o);
 console.log('\n[1] Loads without a DOM and exposes the API');
 let E = load();
 // 13 Oct 2026 (merge into fix3-M): v1.3 = every hook of the v1.1/v1.2 rounds plus fix3-M's (ctx.model, refreshShapes, field apply, offerOnDrag).
-check('SLDiagramEditor is defined with version 1.3', E && E.version === '1.3');
+check('SLDiagramEditor is defined with version 1.4', E && E.version === '1.4');
 ['register', 'mount', 'onBeforeChange', 'onAfterChange', 'setSysmlProvider', 'getDiagram', 'types', 'uuid'].forEach(k => check('exposes ' + k, typeof E[k] === 'function'));
 check('the demo notation registered (test only)', E.types().indexOf('sde-demo') >= 0);
 const C = E.core, DEF = E.getDiagram('sde-demo');
@@ -255,16 +255,37 @@ console.log('\n[6] The beforeChange hook (acknowledgement) can say no, now or la
     console.log('\n[10] Wiring');
     const html = fs.readFileSync(path.join(ROOT, 'site', 'index.html'), 'utf8');
     const pos = f => html.indexOf('<script src="' + f);
-    check('index.html loads diagram_editor.js exactly once, versioned', (html.match(/<script src="diagram_editor\.js\?v=1\.3" defer><\/script>/g) || []).length === 1);   // v1.3 after the fix3-M merge
+    check('index.html loads diagram_editor.js exactly once, versioned', (html.match(/<script src="diagram_editor\.js\?v=1\.[34]" defer><\/script>/g) || []).length === 1);   // v1.3 after the fix3-M merge
     ['rbd_module.js', 'cea_graph.js', 'stpa_panel.js', 'event_trees.js', 'bowtie.js', 'markov_ctmc.js'].forEach(f => check('it loads before ' + f, pos('diagram_editor.js') > 0 && pos(f) > pos('diagram_editor.js')));
     check('the test-only demo notation is not shipped', html.indexOf('sde_demo_diagram') < 0 && !fs.existsSync(path.join(ROOT, 'site', 'sde_demo_diagram.js')));
     const code = SRC.replace(/\/\/[^\n]*/g, '');
     check('no native alert/confirm/prompt (house dialogs only)', !/[^.\w](alert|confirm|prompt)\s*\(/.test(code) && /slPrompt/.test(SRC));
     check('no em dashes anywhere in the file', SRC.indexOf('—') < 0 && FIX.indexOf('—') < 0);
     check('no eval or new Function (production CSP)', !/\beval\s*\(|new Function\s*\(/.test(code));
-    check('header carries the dated version note', /diagram_editor\.js - v1\.3/.test(SRC) && /13 Oct 2026 \(v1\.0\)/.test(SRC) && /13 Oct 2026 \(v1\.1/.test(SRC) && /13 Oct 2026 \(v1\.1, fix3-M\)/.test(SRC));
-    check('every change reaches the app: pushUndo before save, then scheduleAutosave', (() => { const i = SRC.indexOf("root.pushUndo('Diagram: '"), j = SRC.indexOf('save.call(this.adapter, clone(this.store.m), change)', i), k = SRC.indexOf('root.scheduleAutosave()', j); return i > 0 && j > i && k > j; })());
+    check('header carries the dated version note', /diagram_editor\.js - v1\.4/.test(SRC) && /13 Oct 2026 \(v1\.0\)/.test(SRC) && /13 Oct 2026 \(v1\.1/.test(SRC) && /13 Oct 2026 \(v1\.1, fix3-M\)/.test(SRC));
+    check('every change reaches the app: pushUndo before save, then scheduleAutosave', (() => { const i = SRC.indexOf("root.pushUndo('Diagram: '"), j = i + SRC.slice(i).search(/save\.call\((this|self)\.adapter, clone\((this|self)\.store\.m\), change\)/), k = SRC.indexOf('root.scheduleAutosave()', j); return i > 0 && j > i && k > j; })());
     check('American spelling in user text (canceled, color, behavior)', !/cancelled|colour|behaviour|initialis|normalis/.test(SRC));
+
+    console.log('\n[10b] 13 Oct 2026 (night, Waqas rulings 1 and 2): which changes are collected, not asked one by one');
+    {
+        const el = (o) => Object.assign({ id: 'a', kind: 'block', x: 10, y: 20, w: 120, h: 60, label: 'Pump', props: {} }, o || {});
+        const mv = { t: 'el', id: 'a', before: el(), after: el({ x: 40, y: 80 }) };
+        const rs = { t: 'el', id: 'a', before: el(), after: el({ w: 200, h: 90 }) };
+        const rn = { t: 'el', id: 'a', before: el(), after: el({ label: 'Pump 2' }) };
+        const mvRn = { t: 'el', id: 'a', before: el(), after: el({ x: 5, label: 'Pump 3' }) };
+        const add = { t: 'el', id: 'b', before: null, after: el({ id: 'b' }) };
+        check('a move is position only', E.positionOnly([mv]) === true && E.deferKind({ source: 'user', ops: [mv] }) === 'move');
+        check('a resize is position only', E.positionOnly([rs, mv]) === true);
+        check('a rename is content (asked per gesture)', E.positionOnly([rn]) === false && E.deferKind({ source: 'user', ops: [rn] }) === null);
+        check('a move that also renames is content', E.positionOnly([mvRn]) === false);
+        check('adding a shape is content', E.deferKind({ source: 'user', ops: [add] }) === null);
+        check('Undo / Redo are collected whatever they touch', E.deferKind({ source: 'undo', ops: [add] }) === 'undo' && E.deferKind({ source: 'redo', ops: [rn] }) === 'redo' && E.deferKind({ source: 'layout', ops: [mv] }) === 'system');
+        check('...an auto layout the diagram always computes is the app\'s own (system), the Auto layout button is a user move', E.deferKind({ source: 'user', ops: [mv, rs] }) === 'move' && /if \(dk === 'system' && root\.SLChangeAck && typeof root\.SLChangeAck\.system === 'function'\) root\.SLChangeAck\.system\(write\);/.test(SRC));
+        check('_persist routes collected changes through SLChangeAck.deferred and the rest straight through', /var dk = deferKind\(change\);[\s\S]{0,200}else if \(dk && root\.SLChangeAck && typeof root\.SLChangeAck\.deferred === 'function'\) root\.SLChangeAck\.deferred\(/.test(SRC));
+        // mutation proof: a classifier that ignores what changed (every user change a move) makes the rename collected
+        const M = load(SRC.replace("if (positionOnly(change.ops)) return 'move';", "return 'move';"));
+        check('mutation: a classifier that ignores the ops would collect a rename (proves the rename check)', M.deferKind({ source: 'user', ops: [rn] }) === 'move');
+    }
 
     console.log('\n[11] Real browser (Chromium): tools/diagram_editor/browser_check.js');
     let out = '';

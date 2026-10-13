@@ -26,6 +26,8 @@
  *   F2  groups and batch(): one acknowledgement for async work; flush() for Save and the guards
  *   F3  a change made of bookkeeping only is automatic even right after a click; an AI-drafted
  *       row is asked even with nobody at the keyboard
+ *   C   13 Oct night (Waqas rulings 1-2): moves and undo/redo are collected, asked once on leaving the
+ *       view; Cancel reverts only them; content edits in between stay; mutation proof
  *   M1-M3 mutation proofs (the suite goes red): no system scope; no computed-field rule; a rebase
  *       that ignores deletions
  *
@@ -242,6 +244,52 @@ const keysOf = d => d.map(e => e.space + '|' + e.key + '|' + e.op).sort();
     P.model.acReqData.push({ internalId: 1190, id: 'REQ-AI-9', text: 'drafted', aiModel: 'm' }); P.ctx.scheduleAutosave();
     await sleep(700);
     check('an AI-drafted row with nobody at the keyboard is still asked', A.status().stats.prompts === 1);
+  }
+
+  // ------------------------------------------------------------------------- C (13 Oct night)
+  console.log('\n[C] moves and undo/redo are collected, then acknowledged together');
+  async function collected(src, answer) {
+    const P = page(src); const A = P.A;
+    P.ctx.__crdtApply = p => { Object.keys(p).forEach(k => { P.model[k] = J(p[k]); }); };
+    A._setTestAnswer('keep');
+    P.model.projectConfig.bowties = [{ id: 'bt1', boxes: [{ id: 'b1', x: 10, y: 10 }] }]; P.ctx._writeAutosave();
+    A.deferred({ kind: 'move', label: 'placed by the app' }, () => { P.model.projectConfig.bowties[0].boxes[0].y = 10; P.ctx.scheduleAutosave(); });
+    const appMoveIgnored = A.collected().length === 0;   // no input yet: the app placing a shape is not collected
+    A._markInput();
+    A.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { P.model.projectConfig.bowties[0].boxes[0].x = 50; P.ctx.scheduleAutosave(); });
+    await sleep(20);
+    A.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { P.model.projectConfig.bowties[0].boxes[0].x = 90; P.ctx.scheduleAutosave(); });
+    await sleep(700);
+    const quiet = A.status().stats.prompts === 0 && A.pending() && A.pendingUser() && JSON.stringify(A.collected()) === JSON.stringify([{ kind: 'move', label: 'Bow-tie: Move Pump', count: 2 }]);
+    A._markInput(); P.model.acFhaData[0].severity = 'Minor'; P.ctx.scheduleAutosave();   // a content edit in between: asked on its own
+    await sleep(750);
+    const contentAsked = A.status().stats.prompts === 1 && A.status().stats.kept === 1;
+    await sleep(30);
+    A.deferred({ kind: 'undo', label: 'Remove function' }, () => { P.model.acFhaData[2].fcDesc = 'undone text'; P.ctx.scheduleAutosave(); });
+    await sleep(700);
+    const stillQuiet = A.status().stats.prompts === 1 && A.collected().length === 2;
+    A._setTestAnswer(answer);
+    const ok = await A.flushDeferred();
+    await sleep(30);
+    return { P, A, quiet, contentAsked, stillQuiet, ok, appMoveIgnored };
+  }
+  {
+    const r = await collected(null, 'cancel');
+    check('a move nobody made (no input) is not collected', r.appMoveIgnored);
+    check('moves are not asked one by one (two moves of one box = one line, "x2")', r.quiet);
+    check('a content edit in between is still asked on its own', r.contentAsked);
+    check('an undo is collected too, not asked', r.stillQuiet);
+    check('leaving the view asks once for the whole collection', r.A.status().stats.prompts === 2 && !r.A.pending());
+    check('Cancel puts back only the collected changes: the box and the undone row are back', r.P.model.projectConfig.bowties[0].boxes[0].x === 10 && r.P.model.acFhaData[2].fcDesc === 'Pitch oscillation', JSON.stringify(r.P.model.projectConfig.bowties[0].boxes[0]));
+    check('...and the content edit acknowledged in between stays', r.P.model.acFhaData[0].severity === 'Minor');
+    check('the cancel lists what moved and what was undone in the journal', r.P.journal.some(j => /^change-cancel: Not signed in canceled 3 collected changes: Moved: Bow-tie: Move Pump \(x2\); Undone: Remove function/.test(j)), r.P.journal.slice(-2).join(' | '));
+    check('flushDeferred answers false after a Cancel', r.ok === false);
+    const k = await collected(null, 'keep');
+    check('Acknowledge keeps the collected changes', k.P.model.projectConfig.bowties[0].boxes[0].x === 90 && k.P.model.acFhaData[2].fcDesc === 'undone text' && k.ok === true);
+    check('...and journals them as acknowledged', k.P.journal.some(j => /^change-ack: Not signed in acknowledged 3 collected changes: Moved: Bow-tie: Move Pump \(x2\); Undone: Remove function/.test(j)));
+    check('flush() (Save, the guards) asks about the collection too', await (async () => { const P = page(); P.A._setTestAnswer('keep'); P.A.deferred({ kind: 'redo', label: 'x' }, () => { P.model.acFhaData[1].comments = 'r'; P.ctx.scheduleAutosave(); }); const ok = await P.A.flush(); return ok === true && !P.A.pending() && P.A.status().stats.kept === 1; })());
+    const m = await collected(ACK.replace("later.forEach(function (D) { try { _applyContent(D); } catch (_) {} });", ''), 'cancel');
+    check('mutation: without laying content back, Cancel would also lose the edit acknowledged in between (proves the check)', m.P.model.acFhaData[0].severity !== 'Minor');
   }
 
   // ------------------------------------------------------------------------- mutations

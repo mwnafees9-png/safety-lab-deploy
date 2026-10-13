@@ -71,6 +71,25 @@ const CSP_POLICY = [
     "upgrade-insecure-requests"
 ].join('; ');
 
+// The CAD import worker's OWN policy (13 Oct 2026). /app/cad_import_worker.js runs the
+// vendored, unmodified OpenCascade build (vendor/occt, occt-import-js 0.0.23, LGPL-2.1) that
+// reads a customer's STEP file. Two things it needs that the page never does:
+//   - 'wasm-unsafe-eval': compile the OpenCascade WebAssembly;
+//   - 'unsafe-eval': the library's Emscripten glue (embind) builds its call wrappers with the
+//     Function constructor. Rebuilding it without that would mean shipping a modified build.
+// A worker loaded from a URL takes its policy from its own response, not from the page, so this
+// widening is confined to that one file: no DOM, no page variables, no cookies to read. The rest
+// of the policy is the tightest that still works: it may load scripts from this site only
+// (cad_import.js and vendor/occt) and connect to this site only (the .wasm). That last line is
+// the export-control guard: even a defect in the worker cannot send the file or its geometry to
+// any other address. The page's own CSP is unchanged (no eval of any kind).
+const CAD_WORKER_PATH = '/cad_import_worker.js';
+const CAD_WORKER_CSP = [
+    "default-src 'none'",
+    "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'",
+    "connect-src 'self'"
+].join('; ');
+
 // Standard hardening headers applied alongside the CSP on document responses.
 // All safe given the site is fully HTTPS and is never meant to be framed.
 const SEC_HEADERS = {
@@ -426,7 +445,9 @@ export default {
                 if (/\.[a-z0-9]+$/i.test(stripped)) return notFound();
                 return serveHtml(env.ASSETS.fetch(new URL('/index.html', url.origin)), { noStore: true });
             }
-            return withHardening(assetResp);
+            const r = withHardening(assetResp);
+            if (stripped === CAD_WORKER_PATH) r.headers.set('Content-Security-Policy', CAD_WORKER_CSP);
+            return r;
         }
 
         // -----------------------------------------------------------------

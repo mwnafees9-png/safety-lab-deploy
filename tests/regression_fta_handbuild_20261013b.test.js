@@ -415,5 +415,18 @@ function editContext() {
     check('[8i] live sync: an unattached node rides the page shell through decompose / recompose', ok, detail);
 }
 
+// [9] 13 Oct night (Waqas ruling 2): fault tree Undo / Redo are not asked per press. The app's undo
+// restores run as COLLECTED changes (change_ack.js deferred), acknowledged together on leaving the
+// view. Behavior is driven in a real browser in regression_change_ack_ui_20261013b (B8: a fault tree
+// node rename undone, no dialog per undo, one list on leaving, Cancel restores only them).
+{
+    const H = read('helpers_modules.js');
+    const body = H.slice(H.indexOf('function _restoreSnap('), H.indexOf('function _slUndoDepth'));
+    check('[9a] undo / redo restores go through SLChangeAck.deferred with their label', /_ack\.deferred\(\{ kind: \/\^Redo\/\.test\(undoLabel\) \? 'redo' : 'undo'/.test(body));
+    check('[9b] undo() and redo() pass "Undo: " / "Redo: " labels', /_restoreSnap\(prev\.snap, current, 'Undo: ' \+ prev\.label\)/.test(H) && /_restoreSnap\(next\.snap, current, 'Redo: ' \+ next\.label\)/.test(H));
+    const A = read('change_ack.js');
+    check('[9c] leaving a fault tree (openFTAPageById) or a tab asks about the collection first', /\['switchTab', 'openFTAPageById'\]\.forEach/.test(A) && /flushDeferred\(\)\.then\(function \(\) \{ return f\.apply\(self, a\); \}\)/.test(A));
+}
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

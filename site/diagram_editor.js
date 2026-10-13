@@ -1,5 +1,6 @@
 // ============================================================================
-// diagram_editor.js - v1.3 - SLDiagramEditor: the ONE diagram editor core.
+// diagram_editor.js - v1.4 - SLDiagramEditor: the ONE diagram editor core.
+// 13 Oct 2026 (v1.4, Waqas rulings 1 and 2): moves, resizes, auto layout and editor Undo / Redo are collected (SLChangeAck.deferred) and acknowledged together on leaving the view; content edits still ask per gesture.
 // 13 Oct 2026 (v1.3, merge of integrate3 into fix3-M): every hook of the v1.1 rounds, v1.2 and fix3-M together.
 // 13 Oct 2026 (v1.2, merge): the hooks of both v1.1 rounds below, together.
 // 13 Oct 2026 (v1.1, STPA control structure + cascading effects build): five small generic
@@ -118,7 +119,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.3';
+    var VERSION = '1.4';
     var SVGNS = 'http://www.w3.org/2000/svg';
     var HAS_DOM = (typeof document !== 'undefined' && document && typeof document.createElement === 'function');
 
@@ -465,6 +466,26 @@
         return ops;
     };
 
+    // Which changes are collected rather than asked one by one (change_ack.js): Undo / Redo, an
+    // auto layout, and any change whose every op only moves or resizes (x, y, w, h, and a
+    // connector's route points). Exported for tests.
+    var POS_KEYS = { x: 1, y: 1, w: 1, h: 1, points: 1, waypoints: 1, route: 1, bends: 1 };
+    function positionOnly(ops) {
+        if (!ops || !ops.length) return false;
+        return ops.every(function (op) {
+            if (!op || !op.before || !op.after) return false;
+            var keys = {}; Object.keys(op.before).concat(Object.keys(op.after)).forEach(function (k) { keys[k] = 1; });
+            return Object.keys(keys).every(function (k) { return POS_KEYS[k] || JSON.stringify(op.before[k]) === JSON.stringify(op.after[k]); });
+        });
+    }
+    function deferKind(change) {
+        if (!change) return null;
+        if (change.source === 'undo') return 'undo';
+        if (change.source === 'redo') return 'redo';
+        if (change.source === 'layout') return 'system';   // positions the diagram always computes (def.autoLayout): the app's, not the person's
+        if (positionOnly(change.ops)) return 'move';
+        return null;
+    }
     var _changeSeq = 0;
     function makeChange(type, label, ops, source) {
         var ch = { id: ++_changeSeq, diagram: type, label: label, ops: ops, source: source || 'user', time: Date.now() };
@@ -1242,9 +1263,18 @@
         if (save && this.adapter._memory) { save.call(this.adapter, clone(this.store.m), change); this._lastJSON = JSON.stringify(this.store.m); }
         else if (save) {
             if (this.opts.globalUndo !== false && typeof root.pushUndo === 'function') { try { root.pushUndo('Diagram: ' + change.label); } catch (_) {} }
-            try { save.call(this.adapter, clone(this.store.m), change); }
-            catch (e) { toast('The diagram change could not be saved: ' + (e && e.message || e), 'error', 5000); try { console.warn('[diagram] save failed', e); } catch (_) {} }
-            if (this.opts.autosave !== false && typeof root.scheduleAutosave === 'function') { try { root.scheduleAutosave(); } catch (_) {} }
+            var self = this, write = function () {
+                try { save.call(self.adapter, clone(self.store.m), change); }
+                catch (e) { toast('The diagram change could not be saved: ' + (e && e.message || e), 'error', 5000); try { console.warn('[diagram] save failed', e); } catch (_) {} }
+                if (self.opts.autosave !== false && typeof root.scheduleAutosave === 'function') { try { root.scheduleAutosave(); } catch (_) {} }
+            };
+            // 13 Oct 2026 (night, Waqas rulings 1 and 2): a change that only moves or resizes shapes,
+            // an auto layout, and Undo / Redo in the editor are not asked about one by one: they are
+            // collected and acknowledged together when the person leaves the view (change_ack.js).
+            var dk = deferKind(change);
+            if (dk === 'system' && root.SLChangeAck && typeof root.SLChangeAck.system === 'function') root.SLChangeAck.system(write);
+            else if (dk && root.SLChangeAck && typeof root.SLChangeAck.deferred === 'function') root.SLChangeAck.deferred({ kind: dk, label: (this.def.title || this.type) + ': ' + String(change.label || '').replace(/^(Undo|Redo) /, '') }, write);
+            else write();
             try { this._lastJSON = JSON.stringify(normalize(this.def, this.adapter.load())); } catch (_) { this._lastJSON = JSON.stringify(this.store.m); }
         } else {
             this._lastJSON = JSON.stringify(this.store.m);
@@ -2281,6 +2311,7 @@
     }
 
     var api = {
+        positionOnly: positionOnly, deferKind: deferKind,   // 13 Oct 2026 (night): which changes are collected, not asked one by one
         version: VERSION,
         register: register,
         getDiagram: getDiagram,

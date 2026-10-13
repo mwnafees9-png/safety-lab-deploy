@@ -1,4 +1,18 @@
 // ============================================================================
+// zonal_model.js, v1.2, 13 Oct 2026 (CAD / zonal / PRA engine): schema 'zones-2'. A zone may
+// carry the volume it occupies and where its definition came from, so the CAD engine
+// (cad_zonal.js, SLCadZonal) can say which part sits in which zone:
+//     zone.volume = { kind:'box', min:[x,y,z], max:[x,y,z] }      aircraft axes, mm
+//                 | { kind:'parts', cadId:'cad-1', pids:[...] }    the zone is a set of named CAD bodies
+//                 | null                                            no volume (a list or hand zone)
+//     zone.source = 'cad' | 'list' | 'manual'
+//     zone.cadRef = { cadId, revision } | null
+// Every field is optional: a zones-1 project reads exactly as before (no volume = not in any
+// containment, source absent = 'manual'). migrate() is the explicit upgrade: it stamps
+// projectConfig.zonesSchema = 'zones-2' and fills the three fields with their neutral values;
+// it never touches ids, codes, parents or equipment, and running it twice changes nothing.
+// validate() also checks a volume's shape. setVolume(id, volume, source, cadRef) writes them.
+// ============================================================================
 // zonal_model.js — v1.0 — Z1: the structured zonal model (hierarchical zones
 // + equipment register). BORN MODULAR: new file, zero monolith edits; store
 // under projectConfig.zones, so it persists wholesale with the project and
@@ -92,11 +106,64 @@
     function addZone(opts) {
         opts = opts || {};
         if (opts.parentId != null && !get(opts.parentId)) return { ok: false, err: 'Parent zone not found: ' + opts.parentId };
+        if (opts.volume != null && volumeIssue(opts.volume)) return { ok: false, err: volumeIssue(opts.volume) };
         var z = { id: _nextId(), code: String(opts.code || '').trim(), name: String(opts.name || '').trim() || 'Zone',
                   parentId: (opts.parentId != null ? opts.parentId : null), equipment: [] };
+        // zones-2 fields only when given, so a zones-1 caller still makes a zones-1 shaped zone
+        if (opts.volume !== undefined) z.volume = _cloneVolume(opts.volume);
+        if (opts.source !== undefined) z.source = SOURCES.indexOf(opts.source) >= 0 ? opts.source : 'manual';
+        if (opts.cadRef !== undefined) z.cadRef = opts.cadRef ? { cadId: String(opts.cadRef.cadId || ''), revision: opts.cadRef.revision == null ? null : String(opts.cadRef.revision) } : null;
         _zones().push(z);
         return { ok: true, zone: z };
     }
+
+    // ---- zones-2: volumes ----------------------------------------------------
+    var SOURCES = ['cad', 'list', 'manual'];
+    function _num3(v) { return Array.isArray(v) && v.length === 3 && v.every(function (x) { return typeof x === 'number' && isFinite(x); }); }
+    // null when the volume is well formed, else the reason in words.
+    function volumeIssue(v) {
+        if (v == null) return null;
+        if (typeof v !== 'object') return 'A zone volume must be a box, a set of CAD parts, or nothing.';
+        if (v.kind === 'box') {
+            if (!_num3(v.min) || !_num3(v.max)) return 'A box volume needs min and max as three numbers each.';
+            for (var i = 0; i < 3; i++) if (v.min[i] > v.max[i]) return 'A box volume has min above max on axis ' + 'xyz'.charAt(i) + '.';
+            return null;
+        }
+        if (v.kind === 'parts') {
+            if (!v.cadId || typeof v.cadId !== 'string') return 'A parts volume needs the CAD model id it comes from.';
+            if (!Array.isArray(v.pids) || !v.pids.length || !v.pids.every(function (p) { return typeof p === 'string' && p; })) return 'A parts volume needs at least one CAD part id.';
+            return null;
+        }
+        return 'Unknown zone volume kind: ' + v.kind;
+    }
+    function _cloneVolume(v) {
+        if (v == null) return null;
+        if (v.kind === 'box') return { kind: 'box', min: v.min.slice(), max: v.max.slice() };
+        return { kind: 'parts', cadId: v.cadId, pids: v.pids.slice() };
+    }
+    function setVolume(id, volume, source, cadRef) {
+        var z = get(id); if (!z) return { ok: false, err: 'not found' };
+        var bad = volumeIssue(volume); if (bad) return { ok: false, err: bad };
+        z.volume = _cloneVolume(volume);
+        if (source !== undefined) z.source = SOURCES.indexOf(source) >= 0 ? source : 'manual';
+        if (cadRef !== undefined) z.cadRef = cadRef ? { cadId: String(cadRef.cadId || ''), revision: cadRef.revision == null ? null : String(cadRef.revision) } : null;
+        return { ok: true, zone: z };
+    }
+    // The explicit zones-1 -> zones-2 upgrade. Idempotent; returns how many zones gained a field.
+    function migrate() {
+        var pc = _pc(), n = 0;
+        _zones().forEach(function (z) {
+            if (!z) return;
+            var touched = false;
+            if (!('volume' in z)) { z.volume = null; touched = true; }
+            if (!('source' in z) || SOURCES.indexOf(z.source) < 0) { z.source = 'manual'; touched = true; }
+            if (!('cadRef' in z)) { z.cadRef = null; touched = true; }
+            if (touched) n++;
+        });
+        pc.zonesSchema = 'zones-2';
+        return { ok: true, upgraded: n, schema: 'zones-2' };
+    }
+    function schemaOf() { var pc = _pc(); return pc.zonesSchema === 'zones-2' ? 'zones-2' : 'zones-1'; }
 
     function rename(id, name) { var z = get(id); if (!z) return { ok: false, err: 'not found' }; z.name = String(name || '').trim() || z.name; return { ok: true }; }
     function setCode(id, code) { var z = get(id); if (!z) return { ok: false, err: 'not found' }; z.code = String(code || '').trim(); return { ok: true }; }
@@ -143,6 +210,8 @@
             ids[z.id] = 1;
             if (z.code) { if (codes[z.code]) issues.push('Duplicate zone code: ' + z.code + ' (' + z.name + ')'); codes[z.code] = 1; }
             if (z.parentId != null && !zs.some(function (p) { return p.id === z.parentId; })) issues.push('Zone ' + (z.code || z.id) + ' has a missing parent: ' + z.parentId);
+            var vb = volumeIssue(z.volume); if (vb) issues.push('Zone ' + (z.code || z.id) + ': ' + vb);
+            if (z.source != null && SOURCES.indexOf(z.source) < 0) issues.push('Zone ' + (z.code || z.id) + ' has an unknown source: ' + z.source);
             (z.equipment || []).forEach(function (s) {
                 if (!sysIds[s]) issues.push('Zone ' + (z.code || z.id) + ' references unknown equipment: ' + s);
                 if (equipSeen[s]) issues.push('Equipment ' + s + ' is assigned to more than one zone.');
@@ -181,7 +250,8 @@
     function setBarrierSubstantiated(id, v) { var b = _barriers().find(function (x) { return x.id === id; }); if (b) b.substantiated = !!v; return { ok: !!b }; }
 
     ROOT.ZONES = {
-        SCHEMA: 'zones-1',
+        SCHEMA: 'zones-2', SCHEMAS: ['zones-1', 'zones-2'], SOURCES: SOURCES.slice(),
+        volumeIssue: volumeIssue, setVolume: setVolume, migrate: migrate, schemaOf: schemaOf,
         all: all, get: get, roots: roots, children: children, subtree: subtree,
         depth: depth, isDescendant: isDescendant, equipmentInSubtree: equipmentInSubtree, zoneOf: zoneOf,
         addZone: addZone, rename: rename, setCode: setCode, remove: remove,

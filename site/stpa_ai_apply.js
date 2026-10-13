@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix 7): AI-drafted losses and hazards are written under .name, which the STPA engine requires (they were saved under .text).
 // ============================================================================
 // stpa_ai_apply.js — v0.1 — PRD-2: the APPLY half of governed AI STPA drafting.
 //
@@ -83,8 +84,11 @@
         }
 
         // ---- mint ids + write (single pass, refs by minted id) --------------
-        sd.losses = losses.map((t, i) => Object.assign({ id: 'L-' + (i + 1), text: t }, stamp));
-        sd.hazards = hazards.map((h, i) => Object.assign({ id: 'H-' + (i + 1), text: _s(h.text),
+        // 13 Oct 2026 (fix 7): losses and hazards are NAMED (the engine and the hand-built path,
+        // stpa_panel addLoss/addHazard, read .name); the AI path wrote .text, so every AI-drafted
+        // loss and hazard failed spineValidate as unnamed. Constraints keep .text, as by hand.
+        sd.losses = losses.map((t, i) => Object.assign({ id: 'L-' + (i + 1), name: t }, stamp));
+        sd.hazards = hazards.map((h, i) => Object.assign({ id: 'H-' + (i + 1), name: _s(h.text),
             lossIds: _arr(h.lossRefs).map(r => 'L-' + r) }, stamp));
         sd.constraints = constraints.map((c, i) => Object.assign({ id: 'SC-' + (i + 1), text: _s(c.text),
             hazardIds: _arr(c.hazardRefs).map(r => 'H-' + r) }, stamp));

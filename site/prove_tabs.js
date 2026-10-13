@@ -1,4 +1,6 @@
 // ============================================================================
+// prove_tabs.js, v1.6: the ZSA area gains the CAD Model tab after Zonal Model
+// (13 Oct 2026, cad_page.js).
 // prove_tabs.js — v1.5 — CCA CONSOLIDATION: ZSA and CMA become areas (26 Aug
 // 2026, Waqas — see the AREAS entries for the rulings verbatim). The folded
 // pages' rail rows leave the rail: index.html drops routing + ipledger, and
@@ -88,6 +90,8 @@
         // program-plan lane gates (their rail rows used to carry them).
         { label: 'ZSA', tabs: [
             { t: 'zonal',   k: 'Zonal Model' },
+            // 13 Oct 2026: the CAD Model page (cad_page.js), beside the zone tree it feeds.
+            { t: 'cad',     k: 'CAD Model' },
             { t: 'zsa',     k: 'Zonal Safety (ZSA)' },
             { t: 'routing', k: 'Routing / Zone-Spanning', gateLane: 'routing' },
             { t: 'phys',    k: 'Physical Hazards' }

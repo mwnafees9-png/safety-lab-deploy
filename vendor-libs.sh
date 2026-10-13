@@ -37,7 +37,8 @@ npm init -y >/dev/null 2>&1
 echo "Fetching libraries via npm (needs internet)…"
 npm install --no-audit --no-fund --loglevel=error \
   d3@7 chart.js@4 '@supabase/supabase-js@2' \
-  xlsx@0.18.5 jspdf@2.5.1 jszip@3.10.1 docx@8.5.0 mammoth@1.6.0 pdfjs-dist@3.11.174
+  xlsx@0.18.5 jspdf@2.5.1 jszip@3.10.1 docx@8.5.0 mammoth@1.6.0 pdfjs-dist@3.11.174 \
+  three@0.186.1 occt-import-js@0.0.23 esbuild@0.25.10
 
 copy() {
   if [ -f "$1" ]; then cp "$1" "$2"; echo "  OK  $(basename "$2")  ($(wc -c < "$2" | tr -d ' ') bytes)";
@@ -59,5 +60,23 @@ copy "$M/mammoth/mammoth.browser.min.js"              "$DEST/mammoth.browser.min
 copy "$M/pdfjs-dist/build/pdf.min.js"                 "$DEST/pdf.min.js"
 copy "$M/pdfjs-dist/build/pdf.worker.min.js"          "$DEST/pdf.worker.min.js"
 # yjs.min.js is already vendored (collaborative sync) and is left alone.
+
+# 13 Oct 2026: the CAD Model page (cad_import.js / cad_viewer.js), loaded on demand.
+# three.js: npm ships ES modules only since r160, so its own unmodified build is wrapped
+# into one classic script exposing window.THREE (MIT; license copied beside it).
+mkdir -p "$DEST/three" "$DEST/occt"
+echo "export * from 'three';" > "$TMP/three-entry.js"
+"$M/.bin/esbuild" "$TMP/three-entry.js" --bundle --format=iife --global-name=THREE --minify \
+  --legal-comments=inline --log-level=warning --outfile="$TMP/three.min.js"
+{ echo "/*! three.js 0.186.1 (r186): IIFE build of the unmodified npm package three@0.186.1, exposes window.THREE. MIT License, see vendor/three/LICENSE. Rebuilt by vendor-libs.sh (esbuild 0.25.10 --bundle --format=iife --global-name=THREE --minify). */"; cat "$TMP/three.min.js"; } > "$DEST/three/three.min.js"
+echo "  OK  three/three.min.js  ($(wc -c < "$DEST/three/three.min.js" | tr -d ' ') bytes)"
+copy "$M/three/LICENSE"                               "$DEST/three/LICENSE"
+# occt-import-js (OpenCascade WASM, LGPL-2.1): copied UNMODIFIED as separate files, loaded
+# dynamically by cad_import_worker.js, so it stays replaceable (LGPL section 6). Its own
+# license and OpenCascade's travel with it. tests/regression_cad_import pins the hashes.
+copy "$M/occt-import-js/dist/occt-import-js.js"       "$DEST/occt/occt-import-js.js"
+copy "$M/occt-import-js/dist/occt-import-js.wasm"     "$DEST/occt/occt-import-js.wasm"
+copy "$M/occt-import-js/dist/license.occt-import-js.txt" "$DEST/occt/license.occt-import-js.txt"
+copy "$M/occt-import-js/dist/license.occt.txt"        "$DEST/occt/license.occt.txt"
 
 echo "Done. site/vendor/ populated. build.sh copies it into dist/."

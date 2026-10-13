@@ -1,5 +1,7 @@
 // ============================================================================
-// save_state.js — v1.0 — 13 Oct 2026 — saving works like Microsoft Office.
+// save_state.js - v1.1 - 13 Oct 2026 (night): collected moves and undos (change_ack.js deferred()) count as
+// changes waiting: Save, every Save / Don't Save / Cancel point and closing ask about them first.
+// save_state.js - v1.0 - 13 Oct 2026 - saving works like Microsoft Office.
 //
 // WAQAS, 12 OCT (hand testing, ruling 3): unsaved changes work like Office: Save / Don't Save /
 // Cancel when closing, opening another project, leaving the page and the like.
@@ -155,9 +157,11 @@
     function _ackClosed(w, decision) {
         if (decision === 'kept') {
             _beginPending(w.baseline);
-            try { _acks.push((W.SLRecords && w.items) ? W.SLRecords.summarize(w.items, 2) : 'a change'); } catch (_) { _acks.push('a change'); }
+            try { _acks.push(w.summaryText || ((W.SLRecords && w.items) ? W.SLRecords.summarize(w.items, 2) : 'a change')); } catch (_) { _acks.push('a change'); }
             _setDirty(true);
         }
+        // back at the saved version after the decision (undos acknowledged, or moves canceled): saved
+        try { var A2 = _ack(); if (_pending && _S && A2 && A2.sameContent && !(A2.pending && A2.pending()) && A2.sameContent(_S)) { _clean(); } } catch (_) {}
         _setDirty(_pending);   // the header says exactly what this module knows (a module that set the old flag by hand cannot make it lie)
         if (!_pending) { setTimeout(_release, 0); return; }
         if (_remote) _scheduleRebase();
@@ -310,7 +314,8 @@
     function afterLocalRestore(restored, before) {
         var A = _ack();
         if (_pending) {
-            if (_S && (restored === _S || (A && A.sameContent && A.sameContent(_S)))) { _clean(); setTimeout(_release, 0); return; }
+            // back at the saved version: saved, unless collected undos still wait for their acknowledgement
+            if (_S && !(A && A.pending && A.pending()) && (restored === _S || (A && A.sameContent && A.sameContent(_S)))) { _clean(); setTimeout(_release, 0); return; }
             if (_crdt() && (_rebased || _remote)) { _remote = true; _scheduleRebase(50); }
             return;
         }

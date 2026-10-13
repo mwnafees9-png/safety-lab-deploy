@@ -15,6 +15,8 @@
  *       picker entry + the J3307 no-standard-text prompt; apply is called
  *       through STPA_AI_APPLY; index ships stpa_ai_apply.js; dispositions
  *       and abstraction level are never touched by the lane.
+ *   [3b] 13 Oct 2026 (fix 7): losses and hazards are written under .name (the engine's field),
+ *        legacy .text rows are accepted on load; mutation proof.
  * Run: node tests/regression_stpa_ai.test.js
  */
 'use strict';
@@ -78,6 +80,29 @@ const seeds = globalThis.STPA.ucaSeeds(sd.cs, sd.dispositions, { losses: sd.loss
 check('STPA.ucaSeeds yields candidates from the drafted CS (the model wrote none)',
   Array.isArray(seeds) && seeds.length > 0);
 check('the draft schema itself carries no UCA field', !('ucas' in DRAFT) && !('ucaCandidates' in DRAFT));
+
+console.log('\n[3b] 13 Oct 2026 (fix 7): AI-drafted losses and hazards are NAMED, so the engine accepts them');
+check('losses and hazards are written under name (the text the AI drafted)', sd.losses[0].name === 'Loss of aircraft and occupants' && sd.hazards[1].name === 'Insufficient thrust in go-around' && !('text' in sd.losses[0]) && !('text' in sd.hazards[0]));
+check('constraints keep text, as the hand-built path writes them', sd.constraints[0].text === 'Pitch attitude shall stay inside the protected envelope');
+const sv = globalThis.STPA.spineValidate({ losses: sd.losses, hazards: sd.hazards, constraints: sd.constraints });
+check('the drafted spine passes the engine\'s spineValidate (no "has no name")', Array.isArray(sv) && !sv.some(e => /no name/.test(e)), JSON.stringify(sv));
+{
+  // mutation proof: the pre-fix write (.text) is refused by the same engine check
+  const A0 = (() => { const m = { exports: {} }; new Function('module', 'exports', 'window', S('stpa_ai_apply.js').replace("name: t }, stamp)", "text: t }, stamp)").replace("name: _s(h.text),", "text: _s(h.text),"))(m, m.exports, globalThis); return m.exports.apply ? m.exports : globalThis.STPA_AI_APPLY; })();
+  const sd0 = freshSd(); A0.apply(sd0, DRAFT, PROV);
+  const sv0 = globalThis.STPA.spineValidate({ losses: sd0.losses, hazards: sd0.hazards, constraints: sd0.constraints });
+  check('mutation: writing .text again makes spineValidate refuse every loss and hazard (proves the check above)', sv0.filter(e => /no name/.test(e)).length === 4, JSON.stringify(sv0));
+}
+{
+  // legacy load: a project saved with the bug opens with named losses and hazards (stpa_panel DATA())
+  const pan = S('stpa_panel.js');
+  check('stpa_panel accepts legacy .text losses and hazards on load (the text becomes the name)', /\['losses', 'hazards'\]\.forEach\(k => stpaData\[k\]\.forEach\(r => \{ if \(r && !\(r\.name \|\| ''\)\.trim\(\) && typeof r\.text === 'string'/.test(pan));
+  const legacy = { losses: [{ id: 'L-1', text: 'Loss of aircraft' }], hazards: [{ id: 'H-1', text: 'Pitch envelope exceeded', lossIds: ['L-1'] }] };
+  const fn = pan.match(/\['losses', 'hazards'\]\.forEach\(k => stpaData\[k\]\.forEach\([^\n]*\);/)[0];
+  new Function('stpaData', fn)(legacy);
+  const lv = globalThis.STPA.spineValidate({ losses: legacy.losses, hazards: legacy.hazards, constraints: [] });
+  check('...and the engine then accepts them', legacy.losses[0].name === 'Loss of aircraft' && legacy.hazards[0].name === 'Pitch envelope exceeded' && !lv.some(e => /no name/.test(e)), JSON.stringify(lv));
+}
 
 console.log('\n[4] wiring');
 const ai = S('ai_assistant.js'), src = S('stpa_ai_apply.js');

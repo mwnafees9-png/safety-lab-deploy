@@ -129,6 +129,32 @@ const hasSec = (r) => r.headers.get('x-content-type-options') === 'nosniff' && r
     });
   }
 
+  console.log('\n[H9] the CAD import worker has its own policy; the page gains nothing (13 Oct 2026)');
+  {
+    const page = await call(B + '/app/');
+    const csp = page.headers.get('content-security-policy') || '';
+    const dir = (c, k) => (c.split(';').map(d => d.trim()).find(d => d.indexOf(k + ' ') === 0) || '');
+    check("page script-src has no 'unsafe-eval'", !/'unsafe-eval'/.test(dir(csp, 'script-src')), dir(csp, 'script-src'));
+    check("page script-src has no 'wasm-unsafe-eval' (the page compiles no WebAssembly)", !/wasm-unsafe-eval/.test(dir(csp, 'script-src')), dir(csp, 'script-src'));
+    check("page worker-src admits our own worker scripts ('self')", /'self'/.test(dir(csp, 'worker-src')));
+    // The worker is served from the assets binding; give the mock a copy for this block.
+    ASSETS_FILES['/cad_import_worker.js'] = { body: 'self.onmessage=function(){};', type: 'text/javascript; charset=utf-8' };
+    const w = await call(B + '/app/cad_import_worker.js?v=1.0');
+    const wc = w.headers.get('content-security-policy') || '';
+    check('the CAD worker is served (200) with the hardening headers', w.status === 200 && hasSec(w));
+    check('the CAD worker carries its own CSP', !!wc && wc !== csp, wc);
+    check("worker script-src: 'self' plus WebAssembly and the Function constructor, no inline, no hosts", dir(wc, 'script-src') === "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'", dir(wc, 'script-src'));
+    check("worker connect-src is this site only (the geometry cannot be sent anywhere else)", dir(wc, 'connect-src') === "connect-src 'self'", dir(wc, 'connect-src'));
+    check("worker default-src 'none'", dir(wc, 'default-src') === "default-src 'none'");
+    check('no other asset gets the worker policy', !(await call(B + '/app/safety_lab.js')).headers.get('content-security-policy'));
+    delete ASSETS_FILES['/cad_import_worker.js'];
+    // The OpenCascade files are vendored here, and the wasm fits Cloudflare's 25 MiB asset limit.
+    const wasm = path.join(ROOT, 'site', 'vendor', 'occt', 'occt-import-js.wasm');
+    check('vendored: occt/occt-import-js.wasm, under 25 MiB', fs.existsSync(wasm) && fs.statSync(wasm).size < 25 * 1024 * 1024);
+    check('vendored: occt/occt-import-js.js', fs.existsSync(path.join(ROOT, 'site', 'vendor', 'occt', 'occt-import-js.js')));
+    check('vendored: three/three.min.js', fs.existsSync(path.join(ROOT, 'site', 'vendor', 'three', 'three.min.js')));
+  }
+
   console.log('\n[H7] the assets binding no longer owns the fallback (not_found_handling:"none")');
   for (const wf of ['wrangler.jsonc', 'wrangler.dist.jsonc']) {
     const t = fs.readFileSync(path.join(ROOT, wf), 'utf8');

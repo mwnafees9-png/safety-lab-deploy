@@ -250,7 +250,8 @@ let __page = null;
     console.log('\n[bow-tie] old project data opens unchanged');
     const bt0 = await E(() => JSON.stringify(projectConfig.bowties));
     const ev0 = await E(() => JSON.stringify(bowtieEvaluate(projectConfig.bowties[0]).findings.map(f => f.text)));
-    await E(() => { switchTab('bowtie'); }); await wait(600);
+    // 13 Oct night: leaving a view asks about the collected moves / undos first (change_ack.js); acknowledge them
+    await E(() => { switchTab('bowtie'); }); await wait(300); await flushAcks(); await wait(600);
     check('the Bow-Tie page mounts the one diagram editor (CCPS / Energy Institute notation)', await E(() => !!document.querySelector('#bt-editor .sde[data-diagram="bowtie"]')));
     check('HL-1 BT-001 is drawn from its links: top event, 2 threats, 3 consequences, 6 barriers, pathways', await E(() => { const m = SLBowtieUI.editor().model(); const k = x => m.elements.filter(e => e.kind === x).length; return k('top') === 1 && k('threat') === 2 && k('consequence') === 3 && k('preventive') + k('mitigative') === 6 && m.connectors.length >= 8; }));
     check('opening it wrote nothing: the stored bow-ties are byte-identical', await E(() => JSON.stringify(projectConfig.bowties)) === bt0);
