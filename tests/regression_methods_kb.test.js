@@ -44,16 +44,19 @@ check('RAW = Q(i=1)/Q_top and RRW = Q_top/Q(i=0)', /Q\(q_i=1\)\/Q_top/.test(txt(
 check('uncertainty: lognormal + error factor + mean exceeds point estimate', /error factor EF/.test(txt('uncert-01')) && /mean top-event probability exceeds the point estimate/i.test(txt('uncert-01')));
 
 // THE key cross-check: KB CCF formula matches the ENGINE's actual MGL formula
+// 13 Oct 2026 (fix 3): this check used to pin the OLD tier formulas (q*beta*(1-gamma) ORed into
+// every member), which were the beta-factor model in disguise and not MGL. The engine now
+// implements NUREG/CR-5485 Q_k = rho_1..rho_k (1 - rho_(k+1)) Q_t / C(m-1,k-1) per specific subset,
+// and the KB must say exactly that (and that beta alone = MGL with gamma = delta = 1).
 {
     const eng = read('fta_quant_modules.js').replace(/\s+/g, '');
     const kb = txt('ccfparam-01').replace(/\s+/g, '');
-    // engine tiers: p = q * beta * (1 - gamma); q*beta*gamma*(1-delta); q*beta*gamma*delta
-    const engHasT2 = eng.indexOf('q*beta*(1-gamma)') !== -1;
-    const engHasT3 = eng.indexOf('q*beta*gamma*(1-delta)') !== -1;
-    const kbHasT2 = kb.indexOf('q*beta*(1-gamma)') !== -1;
-    const kbHasT3 = kb.indexOf('q*beta*gamma*(1-delta)') !== -1;
-    check('engine implements the MGL tier formulas the KB describes', engHasT2 && engHasT3, 'eng t2=' + engHasT2 + ' t3=' + engHasT3);
-    check('KB CCF chunk states the SAME MGL tier formulas as the engine', kbHasT2 && kbHasT3 && /reduces MGL to the beta-factor model/.test(txt('ccfparam-01')));
+    const engHasQk = eng.indexOf('f[k]=prod*(1-rho[k+1])/_mglBinom(m-1,k-1)') !== -1 && eng.indexOf('constrho=[0,1,beta,gamma,delta]') !== -1;
+    const engHasRhoM1 = eng.indexOf('rho[m+1]=0') !== -1;
+    const kbHasQk = kb.indexOf('Q_k=rho_1*...*rho_k*(1-rho_(k+1))*Q_t/C(m-1,k-1)') !== -1;
+    check('engine implements the NUREG/CR-5485 MGL formula the KB describes', engHasQk && engHasRhoM1, 'eng Qk=' + engHasQk + ' rho(m+1)=' + engHasRhoM1);
+    check('KB CCF chunk states the SAME MGL formula as the engine, and beta alone = MGL with gamma=delta=1', kbHasQk && /beta-factor model, which is MGL with gamma=delta=1/.test(txt('ccfparam-01')));
+    check('KB no longer claims gamma=delta=0 reduces MGL to the beta factor (that was the old, wrong model)', !/setting gamma=delta=0 reduces MGL/.test(txt('ccfparam-01')));
 }
 
 // engine actually computes the named importance measures the KB explains

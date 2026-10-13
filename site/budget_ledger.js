@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F1/F8): allocated, achieved and objective are all per flight hour (per-flight P(top) converted with SLTopBasis, the same call the requirement check makes); per-flight values kept on the row and shown under each cell. Before, per-flight P was compared straight with the per-FH objective. See tests/regression_perfh_basis_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // budget_ledger.js — v1.3 — Phase D gap 3 (§3.6): the Budget Ledger,
@@ -79,15 +80,21 @@
             return links.map(String).indexOf(String(iid)) !== -1;
         });
     }
+    // 13 Oct 2026 (math audit F1): the exact top through the ONE shared function
+    // (SLTopBasis.exactTop, top_basis.js): BDD with common cause and shared events,
+    // cached. A refusal is null (no verdict), never the independent roll-up.
     function _pTop(page) {
-        try {
-            if (page && page.root && typeof computeExactProbability === 'function') {
-                // perf fix 4: the cached read-only P(top) (fta_quant_modules.js)
-                const prob = (typeof exactTopProbability === 'function') ? exactTopProbability(page.root) : computeExactProbability(page.root).prob;
-                if (typeof prob === 'number' && isFinite(prob)) return prob;
-            }
-        } catch (_) {}
-        return null;
+        if (!page || !page.root || typeof SLTopBasis === 'undefined' || !SLTopBasis) return null;
+        return SLTopBasis.exactTop(page.root);
+    }
+    // 13 Oct 2026 (math audit F8): per flight -> per flight hour through the ONE shared
+    // normalization (SLTopBasis.perFlightHour): rate = -ln(1 - P) / t_flight, with the
+    // tree's own mission time (project mission, else nominal flight phases of its
+    // profile, else exposure time). The requirement check and the critical gates use
+    // the same call, so the three lanes cannot disagree on a verdict.
+    function _perFH(pFlight, page) {
+        if (pFlight == null || typeof SLTopBasis === 'undefined' || !SLTopBasis) return null;
+        return SLTopBasis.perFlightHour(pFlight, page);
     }
     // Populated = every leaf carries a rate, a probability or a Markov model. Delegates to
     // the one shared definition; the local walk is the sandbox fallback only (same rule).
@@ -117,13 +124,13 @@
         const allocs = trees.filter(p => p.root && !p.verifies && (p.mode !== 'bottom-up'));
         if (!allocs.length) {
             out.push({ fcId: f.fcId || ('#' + f.internalId), fcDesc: f.fcDesc || '', scope: scopeLabel, systemId: systemId || null,
-                severity: sev, objective, allocated: null, achieved: null, allocPage: null, mirrorPage: null,
+                severity: sev, objective, allocated: null, achieved: null, unit: 'per flight hour', allocatedPerFlight: null, achievedPerFlight: null, missionHours: null, missionSource: null, allocPage: null, mirrorPage: null,
                 status: trees.length ? 'no-allocation-tree' : 'no-tree', margin: null });
             return out;
         }
         allocs.forEach(alloc => {
             const mirror = (_cand('verifies', alloc.id) || _pages()).find(p => p && p.verifies === alloc.id && p.root) || null;
-            const allocated = _pTop(alloc);
+            const allocatedPerFlight = _pTop(alloc);
             // 28 Sep 2026 — an UNPOPULATED mirror is not an achieved result of zero, it is
             // no result at all. A fresh mirror is cloned with every leaf blanked (lambda 0,
             // probability 0), so P(top) computes to exactly 0; zero is finite, so this used
@@ -131,15 +138,27 @@
             // empty mirror reported meets-objective and asa_triage then closed the failure
             // condition as 'closed-by-ssa'. Populated is judged by the SAME rule the E.3 and
             // F.3.7 checklist items use (slMirrorIsPopulated, helpers_modules.js).
-            const achieved = (mirror && _mirrorPopulated(mirror)) ? _pTop(mirror) : null;
+            const achievedPerFlight = (mirror && _mirrorPopulated(mirror)) ? _pTop(mirror) : null;
+            // 13 Oct 2026 (F8): ONE unit in the three number columns: per flight hour.
+            // The objective is per flight hour (severity x cert basis); allocated and
+            // achieved are per-flight probabilities converted with the same mission time.
+            // The per-flight values stay on the row for the reports and the tooltip.
+            const allocN = _perFH(allocatedPerFlight, alloc);
+            const achN = mirror ? _perFH(achievedPerFlight, mirror) : null;
+            const allocated = allocN ? allocN.rate : null;
+            const achieved = achN ? achN.rate : null;
             let status;
             if (achieved == null) status = 'unverified';
             else if (objective == null) status = 'no-objective';
-            else if (achieved <= objective) status = (allocated != null && achieved > allocated) ? 'meets-objective-over-allocation' : 'meets-objective';
+            else if (achieved <= objective * (1 + SLTopBasis.TOL)) status = (allocated != null && achieved > allocated * (1 + SLTopBasis.TOL)) ? 'meets-objective-over-allocation' : 'meets-objective';
             else status = 'EXCEEDS-objective';
             out.push({
                 fcId: f.fcId || ('#' + f.internalId), fcDesc: f.fcDesc || '', scope: scopeLabel, systemId: systemId || null,
                 severity: sev, objective, allocated, achieved,
+                unit: 'per flight hour',
+                allocatedPerFlight, achievedPerFlight,
+                missionHours: (achN || allocN) ? (achN || allocN).hours : null,
+                missionSource: (achN || allocN) ? (achN || allocN).source : null,
                 allocPage: { id: alloc.id, name: alloc.name || alloc.id }, mirrorPage: mirror ? { id: mirror.id, name: mirror.name || mirror.id } : null,
                 status, margin: (achieved != null && objective != null && achieved > 0) ? objective / achieved : null,
                 marginInfo: _marginFor(alloc),
@@ -300,6 +319,11 @@
         if (s === 'no-allocation-tree') return '<span style="color:var(--color-text-tertiary); font-size:11px;">trees linked, none top-down</span>';
         return '<span style="color:var(--color-text-tertiary); font-size:11px;">no tree linked</span>';
     }
+    // 13 Oct 2026 (F8): the per-flight probability under each per-flight-hour value.
+    function _perFlightLine(p, r) {
+        if (p == null || !isFinite(p)) return '';
+        return '<div style="font-size:10px; color:var(--color-text-tertiary);" title="Per-flight P(top) over a ' + (r.missionHours != null ? Number(r.missionHours).toFixed(3) : '?') + ' h flight">P = ' + _exp(p) + ' /flight</div>';
+    }
     function renderBudgetLedgerPage() {
         const host = document.getElementById('view-budget');
         if (!host) return;
@@ -327,9 +351,9 @@
         // above stay computed over ALL rows; the pager bar says so.
         html += '<div id="budget-pager"></div>';
         html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr>' +
-            '<th>FC</th><th>Scope</th><th>Severity</th><th>Objective (/FH)</th><th>Allocated (top-down)</th><th>Achieved (mirror)</th><th>Margin</th><th>Budget state (A9)</th><th>Posture</th><th>Trees</th></tr></thead><tbody id="budget-tbody">';
+            '<th>FC</th><th>Scope</th><th>Severity</th><th>Objective (/FH)</th><th>Allocated (/FH, top-down)</th><th>Achieved (/FH, mirror)</th><th>Margin</th><th>Budget state (A9)</th><th>Posture</th><th>Trees</th></tr></thead><tbody id="budget-tbody">';
         html += '</tbody></table>' +
-            '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono); margin-top:12px;">Objective from severity × certification basis (user-configured targets) · allocated = BDD-exact P(top) of the top-down allocation tree · achieved = BDD-exact P(top) of its bottom-up verification mirror · advisory posture, the authority decides. The ASA triage surface and the SSA/ASA report summary read THIS ledger.</p>';
+            '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono); margin-top:12px;">Objective from severity × certification basis (user-configured targets) · allocated = BDD-exact P(top) of the top-down allocation tree · achieved = BDD-exact P(top) of its bottom-up verification mirror (common cause and shared events included) · all three columns per flight hour: a per-flight P(top) is converted as −ln(1−P)/t_flight with the tree\'s mission time (project mission, else nominal flight phases, else exposure time), the same conversion the requirement check uses; the per-flight value is shown under it · advisory posture, the authority decides. The ASA triage surface and the SSA/ASA report summary read THIS ledger.</p>';
         host.innerHTML = html;
 
         function _rowHtml(r) {
@@ -337,8 +361,8 @@
                 '<td>' + _esc(r.scope) + '</td>' +
                 '<td class="cell-' + _esc(r.severity) + '">' + _sevPill(r.severity) + '</td>' +
                 '<td class="u-mono">' + _exp(r.objective) + '</td>' +
-                '<td class="u-mono">' + (r.allocPage ? _exp(r.allocated) + '<div style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(r.allocPage.name) + '</div>' : '—') + '</td>' +
-                '<td class="u-mono">' + (r.mirrorPage ? _exp(r.achieved) + '<div style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(r.mirrorPage.name) + '</div>' : '—') + '</td>' +
+                '<td class="u-mono">' + (r.allocPage ? _exp(r.allocated) + _perFlightLine(r.allocatedPerFlight, r) + '<div style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(r.allocPage.name) + '</div>' : '—') + '</td>' +
+                '<td class="u-mono">' + (r.mirrorPage ? _exp(r.achieved) + _perFlightLine(r.achievedPerFlight, r) + '<div style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(r.mirrorPage.name) + '</div>' : '—') + '</td>' +
                 '<td class="u-mono">' + (r.margin != null ? (r.margin >= 1 ? '×' + r.margin.toPrecision(2) : '×' + r.margin.toPrecision(2) + ' (short)') : '—') + '</td>' +
                 '<td>' + _marginCell(r) + '</td>' +
                 '<td>' + _statusHtml(r.status) + '</td>' +

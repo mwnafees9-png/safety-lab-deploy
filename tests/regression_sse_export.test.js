@@ -34,6 +34,11 @@ function load(g) {
     sb.window = sb; sb.globalThis = sb;
     vm.createContext(sb);
     vm.runInContext(extract(HELP, '_resolveLinkedFha') + '; function getAllSysFha(){ return []; }', sb, { filename: 'resolver' });
+    // 13 Oct 2026 (math audit F1/F8): the argued rate is the exact P(top) (real BDD engine)
+    // converted with the shared per-flight-hour basis (top_basis.js), no longer
+    // root.probability / exposure time.
+    vm.runInContext(read('fta_engine.js'), sb, { filename: 'fta_engine.js' });
+    vm.runInContext(read('top_basis.js'), sb, { filename: 'top_basis.js' });
     vm.runInContext(SRC, sb, { filename: 'sse_export.js' });
     return sb;
 }
@@ -44,11 +49,16 @@ const acFha = [
     { internalId: 13, fcId: 'FC-C', fcDesc: 'Loss of nav', severity: 'Catastrophic' },
     { internalId: 14, fcId: 'FC-D', fcDesc: 'Minor thing', severity: 'Major' }
 ];
+// 13 Oct 2026: real one-leaf trees (the old fixture had bare { probability } roots, which only
+// worked because the export read root.probability). Exposure 1 h, no mission model: the
+// per-flight-hour rate is -ln(1-P)/1 h, equal to P to ~1e-19 at these magnitudes.
+let _sid = 900;
+const tree = p => ({ id: ++_sid, type: 'gate', gateType: 'OR', children: [{ id: ++_sid, type: 'basic', logicalId: 'L' + _sid, probability: p, children: [] }] });
 const pages = [
-    { id: 'p1', root: { probability: 2e-10 }, linkedFhaIds: [11] },          // newer multi-link list
-    { id: 'p2', root: { probability: 3e-8 }, linkedFhaId: 'AC_12' },         // legacy field, AC_ form
-    { id: 'p3', root: { probability: 4e-10 }, linkedFhaId: 13 },             // legacy field, bare
-    { id: 'p4', root: { probability: 9e-3 }, linkedFhaId: 11, verifies: 'p1' },   // a verification mirror — never the argued rate
+    { id: 'p1', root: tree(2e-10), linkedFhaIds: [11] },          // newer multi-link list
+    { id: 'p2', root: tree(3e-8), linkedFhaId: 'AC_12' },         // legacy field, AC_ form
+    { id: 'p3', root: tree(4e-10), linkedFhaId: 13 },             // legacy field, bare
+    { id: 'p4', root: tree(9e-3), linkedFhaId: 11, verifies: 'p1' },   // a verification mirror: never the argued rate
 ];
 const S = load({
     acFhaData: acFha, ftaPages: pages,

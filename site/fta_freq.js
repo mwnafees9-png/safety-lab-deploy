@@ -1,5 +1,9 @@
 // ============================================================================
-// fta_freq.js — v1.1 — ARP-G12: failure FREQUENCY alongside unavailability.
+// fta_freq.js v1.3, ARP-G12: failure FREQUENCY alongside unavailability.
+// v1.3 (13 Oct 2026, fix 3): a common cause event is now one specific MGL event (NUREG/CR-5485) with its own rate, the MGL share of its members' rate, so its intensity counts in w_top; a member's own variable fails at its own share of the rate. Only an event whose members lack a rate stays a flagged lower bound. See tests/regression_ccf_mgl_20261013.test.js
+// v1.2 (13 Oct 2026, math audit F4/F5): periodic latent events sharing an inspection interval are
+// averaged over the shared cycle like P(top); a SPARE's time-order factor is not listed as an
+// event and its switchover-on-demand event is named as an enabler.
 //
 // G.11 quantifies the probability of BEING failed (unavailability, Q).
 // G.12 quantifies the rate of BECOMING failed (failure frequency, w) — the
@@ -29,9 +33,9 @@
 //                                from an attached Markov model needs
 //                                transition-level analysis — not v1, and the
 //                                refusal is the feature.
-//   · CCF group rows           w = 0 + loud LOWER-BOUND flag: the group's
-//                                probability is in the BDD but its intensity
-//                                is not decomposed in v1.
+//   · common cause event       w = λ_S·(1−q), λ_S = the MGL share of the
+//                                members' rate (13 Oct 2026). When a member
+//                                has no rate: w = 0 + loud LOWER-BOUND flag.
 //
 // Conversion (the honest, stated kind): expected failures per flight
 // N ≈ w_top · T_mission, and w_top itself is the per-FH figure. No
@@ -77,27 +81,48 @@
         const rows = [];
         const flags = { ccfGroups: 0, markovRefused: 0, enablers: 0, suppliers: 0 };
         let wTop = 0;
+        // 13 Oct 2026 (math audit F5): periodic latent events that share an inspection interval
+        // are time-averaged over the shared cycle, exactly as P(top) is: the Birnbaum and each
+        // event's intensity are taken at every point of the engine's cycle grid and averaged.
+        // With no such pair there is one point of weight 1 and the arithmetic is the old one.
+        const pts = (typeof _bddGridMaps === 'function') ? _bddGridMaps(ex, probMap) : [{ w: 1, map: probMap }];
         varOrder.forEach(function (refNode, varIdx) {
             const meta = varMeta && varMeta[varIdx];
+            if (meta && meta.synthetic === 'order') return;   // F4 time-order factor: not an event
             const p = probMap.get(varIdx) || 0;
-            // exact Birnbaum by cofactoring — the same twiddle as the importance measures
-            const m1 = new Map(probMap); m1.set(varIdx, 1);
-            const m0 = new Map(probMap); m0.set(varIdx, 0);
-            const IB = BDD.probability(bdd, m1) - BDD.probability(bdd, m0);
-
-            let cls, w = 0, note = '';
+            let cls, wOf = function () { return 0; }, note = '';
             if (meta && meta.type === 'group') {
-                cls = 'ccf-group'; flags.ccfGroups++;
-                note = 'CCF group row — probability is in the BDD, intensity not decomposed in v1 (LOWER BOUND)';
+                const lamS = (refNode && isFinite(parseFloat(refNode.lambda))) ? parseFloat(refNode.lambda) : 0;
+                if (lamS > 0) {
+                    cls = 'ccf-event'; wOf = function (q) { return lamS * (1 - q); };
+                    note = 'common cause event (MGL, NUREG/CR-5485): w = λ_S(1−q), λ_S = ' + lamS.toExponential(3) + ' /h, the model\u2019s share of the members\u2019 rate';
+                } else {
+                    cls = 'ccf-group'; flags.ccfGroups++;
+                    note = 'common cause event whose members have no rate: probability is in the BDD, intensity unknown (LOWER BOUND)';
+                }
+            } else if (meta && meta.synthetic === 'switch') {
+                cls = 'enabler'; flags.enablers++;
+                note = 'spare switchover failure on demand: a probability per demand, no failure intensity of its own';
             } else if (refNode && refNode.markovModelId) {
                 cls = 'markov-refused'; flags.markovRefused++;
                 note = 'REFUSED: frequency from an attached Markov model needs transition-level analysis — supply λ directly or detach';
             } else if (refNode && isFinite(parseFloat(refNode.supplierW)) && parseFloat(refNode.supplierW) > 0) {
                 cls = 'supplier'; flags.suppliers++;
-                w = parseFloat(refNode.supplierW);
+                const ws = parseFloat(refNode.supplierW);
+                wOf = function () { return ws; };
                 note = 'supplier-provided frequency' + (refNode.supplierWBasis ? ' — ' + String(refNode.supplierWBasis) : ' — NO BASIS CITED (cite it)');
             } else {
-                const lam = _lambdaOf(refNode);
+                // 13 Oct 2026 (fix 3): a common cause member's own variable fails at its OWN share
+                // of the member rate (MGL Q_1 share, (1 − β) for a full group), not the full rate;
+                // the common cause share is carried by the common cause event rows above.
+                let ccfShare = 1;
+                if (meta && meta.ccf) {
+                    const pl = meta.ccf; let sh = 0;
+                    const C = (n, k) => { let r = 1; for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1); return Math.round(r); };
+                    for (let i = 0; i <= pl.h; i++) sh += C(pl.h, i) * (pl.f[1 + i] || 0);
+                    ccfShare = sh;
+                }
+                const lam = _lambdaOf(refNode) * ccfShare;
                 if (!(lam > 0)) {
                     cls = 'enabler'; flags.enablers++;
                     note = 'probability-only event — conditions the others (enabler), no failure intensity of its own; supply λ or a supplier frequency to treat as initiator';
@@ -105,21 +130,30 @@
                     const model = (refNode && refNode.repairModel) || 'unmaintained';
                     if (model === 'continuous' && refNode && parseFloat(refNode.mu) > 0) {
                         const mu = parseFloat(refNode.mu);
-                        cls = 'repairable'; w = lam * mu / (lam + mu);
+                        cls = 'repairable'; wOf = function () { return lam * mu / (lam + mu); };
                         note = 'continuous repair — w = λμ/(λ+μ)';
                     } else if (model === 'periodic') {
-                        cls = 'periodic'; w = lam * (1 - p);
+                        cls = 'periodic'; wOf = function (q) { return lam * (1 - q); };
                         note = 'periodic inspection — w = λ(1−q̄), q̄ from the engine';
                     } else {
-                        cls = 'initiator'; w = lam * (1 - p);
+                        cls = 'initiator'; wOf = function (q) { return lam * (1 - q); };
                         note = 'w = λ(1−q), q = the engine’s own probability for this event';
                     }
                 }
             }
-            const contrib = IB * w;
+            // exact Birnbaum by cofactoring — the same twiddle as the importance measures
+            let IB = 0, contrib = 0;
+            for (let k = 0; k < pts.length; k++) {
+                const m1 = new Map(pts[k].map); m1.set(varIdx, 1);
+                const m0 = new Map(pts[k].map); m0.set(varIdx, 0);
+                const ib = BDD.probability(bdd, m1) - BDD.probability(bdd, m0);
+                IB += pts[k].w * ib;
+                contrib += pts[k].w * ib * wOf(pts[k].map.get(varIdx) || 0);
+            }
+            const w = wOf(p);
             wTop += contrib;
             rows.push({ name: (refNode && (refNode.displayId || refNode.name)) || ('var ' + varIdx),
-                        cls: cls, p: p, IB: IB, lambda: _lambdaOf(refNode), w: w, contrib: contrib, note: note });
+                        cls: cls, p: p, IB: IB, lambda: (meta && meta.type === 'group') ? ((refNode && parseFloat(refNode.lambda)) || 0) : _lambdaOf(refNode), w: w, contrib: contrib, note: note });
         });
         rows.forEach(function (r) { r.share = wTop > 0 ? r.contrib / wTop : 0; });
         rows.sort(function (a, b) { return b.contrib - a.contrib; });

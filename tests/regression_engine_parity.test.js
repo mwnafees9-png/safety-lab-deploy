@@ -38,7 +38,13 @@ function fnText(src, name) {
     return null;
 }
 const norm = t => t.split('\n').map(l => l.replace(/\s*\/\/.*$/, '').trimEnd()).filter(l => l.trim() !== '').join('\n');
-for (const name of ['buildBDDFromFT', '_probMapFor', 'computeExactProbability', 'bddCutsets', '_minimizeBDDCutsets', 'bddMinimalCutsets', '_bddCombinations', 'cutsetSnapshot']) {
+// 13 Oct 2026 (math audit F4/F5): the dynamic-gate and periodic-latent helpers the BDD build now
+// calls are held equal too, and so is computeImportanceMeasures (time-averaged cofactors).
+// 13 Oct 2026 (fix 3): the shared MGL common cause helpers (_mgl*) are held identical too.
+for (const name of ['buildBDDFromFT', '_probMapFor', 'computeExactProbability', 'bddCutsets', '_minimizeBDDCutsets', 'bddMinimalCutsets', '_bddCombinations', 'cutsetSnapshot',
+    '_spareWarmK', '_spareSwitchP', '_dynHasRate', '_dynRateLeaf', '_periodicTau', '_ctmcFailProb', '_spareExactProb', '_pandExactProb', '_spareBoundProb',
+    '_glRule', '_periodicGrid', '_bddGridMaps', '_bddAvgProbability', '_collectFdep', '_dynSyntheticNode', 'computeImportanceMeasures',
+    '_mglNum', '_mglBinom', '_mglLid', '_mglMemberParams', '_mglPlanGroup', '_mglEventProb', '_mglEventRate', '_mglEventNode', '_mglEventTau']) {
     const a = fnText(QUANT, name), b = fnText(ENGINE, name);
     check('E1: ' + name + ' is identical in the page (fta_quant_modules) and the engine (fta_engine)', a && b && norm(a) === norm(b), a && b ? 'texts differ' : 'missing in ' + (a ? 'engine' : 'page'));
 }

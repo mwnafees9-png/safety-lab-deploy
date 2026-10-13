@@ -1546,7 +1546,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button id="btn-submit-cma" onclick="submitCMA()" style="background: #6d28d9;">Log CMA Entry</button>
                     <button id="btn-cancel-cma" onclick="cancelEdit('cma')" style="display:none; background:#94a3b8;">Cancel Edit</button>
                     <!-- Phase 57 — scan the fault trees for CCF groups + shared events and stage them as suggested CMA rows. -->
-                    <button type="button" class="cma-auto-detect-btn" onclick="autoDetectCommonModes()" title="Scan every fault tree for CCF groups (β/γ/δ) and shared/repeated events, and add them as suggested common-mode rows to review.">✨ Auto-detect from fault trees</button>
+                    <!-- 13 Oct 2026 (fix 6): detection is live; this button runs the same check now. -->
+                    <button type="button" class="cma-auto-detect-btn" onclick="autoDetectCommonModes()" title="Common causes in the fault trees (CCF groups, shared events, shared resources) are detected live as the trees change and each one must be decided. This runs the same check now.">✨ Check common causes now</button>
                 </div>
             </div>
             <div style="overflow-x: auto;">
@@ -1555,6 +1556,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <tbody id="cma-body"></tbody>
                 </table>
             </div>
+            <!-- 13 Oct 2026 (fix 6): the common cause decision log (cma_live.js). -->
+            <div id="cma-decision-log"></div>
         </div>
 
         <!-- Routing / zone-spanning paths (additive). Physical runs (harnesses, looms, fluid
@@ -2479,25 +2482,29 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                             <div style="flex: 1;" id="config-voting-container"><label>Voting 'k'</label><input type="number" id="config-voting-k" step="1" min="1" oninput="updateNodeData()" style="margin-bottom:0;"></div>
                         </div>
                         <div style="display: flex; gap: 15px; margin-top: 15px; border-top: 1px dashed var(--border-primary); padding-top: 15px; flex-wrap: wrap;" id="config-ccf-container">
+                            <!-- 13 Oct 2026 (fix 3): common cause parameters belong to the GROUP (NUREG/CR-5485 Multiple Greek Letter). Beta only = beta factor (gamma = delta = 1). -->
                             <div style="flex: 1 1 140px;"><label>CCF Group ID</label><input type="text" id="config-ccf-group" oninput="updateNodeData()" placeholder="e.g., VALVE-GRP-1"></div>
-                            <div style="flex: 1 1 100px;"><label title="Fraction of failures that are common-cause (affecting ≥2 group members).">β (2-of-n)</label><input type="number" id="config-beta" step="0.01" min="0" max="1" value="0" oninput="updateNodeData()"></div>
-                            <div style="flex: 1 1 100px;"><label title="MGL: fraction of CCF events that affect ≥3 group members. Leave 0 for pure β-factor model.">γ (3-of-n)</label><input type="number" id="config-gamma" step="0.01" min="0" max="1" value="0" oninput="updateNodeData()"></div>
-                            <div style="flex: 1 1 100px;"><label title="MGL: fraction of ≥3-component CCF events that affect ≥4 group members. Leave 0 unless modeling quadruple-redundant subsystems.">δ (4-of-n)</label><input type="number" id="config-delta" step="0.01" min="0" max="1" value="0" oninput="updateNodeData()"></div>
-                            <div style="flex: 1 1 100%;"><p class="cfg-hint" title="β-only is the classic decomposition. Setting γ > 0 enables the Multiple Greek Letter model so cutset expansion produces 2-of-n, 3-of-n (and 4-of-n with δ) CCF rows.">β only = classic split · γ&gt;0 = MGL (3-of-n) · δ = 4-of-n. Hover for detail.</p></div>
+                            <div style="flex: 1 1 100px;"><label title="Beta: the share of each member's failures that are common cause (a shared cause fails 2 or more members).">β (beta)</label><input type="number" id="config-beta" step="0.01" min="0" max="1" value="0" oninput="updateNodeData()"></div>
+                            <div style="flex: 1 1 180px;"><label title="Beta factor: every common cause failure fails the whole group. Multiple Greek Letter (NUREG/CR-5485): gamma and delta say how many members a common cause failure reaches.">Model</label><select id="config-ccf-model" onchange="updateNodeData()"><option value="beta">Beta factor (β only)</option><option value="mgl">MGL (β, γ, δ)</option></select></div>
+                            <div style="flex: 1 1 100px;"><label title="MGL gamma: of the common cause failures, the share that reach 3 or more members. Blank = 1.">γ (gamma)</label><input type="number" id="config-gamma" step="0.01" min="0" max="1" placeholder="1 (beta factor)" oninput="updateNodeData()"></div>
+                            <div style="flex: 1 1 100px;"><label title="MGL delta: of the common cause failures reaching 3 or more, the share that reach 4 or more. Blank = 1.">δ (delta)</label><input type="number" id="config-delta" step="0.01" min="0" max="1" placeholder="1 (beta factor)" oninput="updateNodeData()"></div>
+                            <div style="flex: 1 1 220px;"><label>NUREG generic starting value for β</label><select id="config-ccf-preset" onchange="ccfApplyBetaPreset(this.value)"><option value="">Choose…</option><option value="0">β = 0.01: best case, separation and diversity</option><option value="1">β = 0.1: ordinary defenses</option><option value="2">β = 0.25: poorly defended</option></select></div>
+                            <div style="flex: 1 1 220px;"><label>Parameter source</label><input type="text" id="config-ccf-source" oninput="updateNodeData()" placeholder="e.g. NUREG/CR-5485 generic β, or your CCF data reference"></div>
+                            <div style="flex: 1 1 100%;"><p class="cfg-hint" title="NUREG/CR-5485: each specific common cause event (for example A and B failing together) is its own basic event with probability Q_k = ρ1·…·ρk·(1−ρk+1)·Q_t / C(m−1, k−1).">The parameters belong to the group: a change here applies to every member on every page. Beta only = beta factor: every common cause failure fails the whole group (γ = δ = 1). MGL: γ = share of common cause failures reaching 3 or more members, δ = share of those reaching 4 or more; a blank letter is 1.</p><div id="config-ccf-warn" style="display:none;"></div></div>
                         </div>
 
                         <div style="display: none; gap: 15px; margin-top: 15px; border-top: 1px dashed var(--border-primary); padding-top: 15px; flex-wrap: wrap;" id="config-spare-container">
-                            <div style="flex: 1 1 150px;"><label title="Dormancy factor α. A spare waiting its turn fails at λ·α. 0 = cold (no exposure while dormant), 1 = hot (standing by is as damaging as carrying the load), in between = warm. Only the DFT Monte-Carlo reads this — the static P(top) still uses the conservative AND bound.">Spare dormancy α (0 = cold, 1 = hot)</label><input type="number" id="config-spare-warmk" step="0.05" min="0" max="1" value="0" oninput="updateNodeData()" style="margin-bottom:0;"></div>
+                            <div style="flex: 1 1 150px;"><label title="Dormancy factor α. A spare waiting its turn fails at λ·α. 0 = cold (no exposure while dormant), 1 = hot (standing by is as damaging as carrying the load), in between = warm. The static P(top) uses it too: exactly when the spare gate's inputs are basic events with a constant failure rate used nowhere else in the tree, otherwise as the conservative upper bound primary AND (switch fails OR spare). The DFT Monte-Carlo gives the time-ordered value either way.">Spare dormancy α (0 = cold, 1 = hot)</label><input type="number" id="config-spare-warmk" step="0.05" min="0" max="1" value="0" oninput="updateNodeData()" style="margin-bottom:0;"></div>
                             <div style="flex: 1 1 150px;"><label title="Probability that a takeover succeeds when it is demanded. 1 = perfect switch. Below 1, a failed changeover fails the gate at the instant of the demand — the classic single point of failure a redundancy argument hides.">Switch success probability</label><input type="number" id="config-spare-switchp" step="0.01" min="0" max="1" value="1" oninput="updateNodeData()" style="margin-bottom:0;"></div>
-                            <div style="flex: 1 1 100%;"><p class="cfg-hint" title="Defaults are the historical cold-spare, perfect-switch model, so leaving them alone does not move any existing number.">α = 0 and p = 1 is the classic cold spare with a perfect switch — the defaults, and unchanged from before. Run the DFT Monte-Carlo to see the effect of either.</p></div>
+                            <div style="flex: 1 1 100%;"><p class="cfg-hint" title="Defaults are the cold-spare, perfect-switch model. The canvas line under the gate says whether the static number solved this gate exactly or holds an upper bound.">α = 0 and p = 1 is the classic cold spare with a perfect switch, the defaults. Both settings count in the static P(top); run the DFT Monte-Carlo to cross-check.</p></div>
                         </div>
 
                         <div class="cfg-stack" style="display: none; gap: 15px; margin-top: 15px; border-top: 1px dashed var(--border-primary); padding-top: 15px;" id="config-dal-container">
                             <div style="flex: 1;">
-                                <label title="Independence between AND/INHIBIT members is the precondition for any DAL reduction (ARP4761A Table P2 step f) and for treating P(top) as an independent product. It must be substantiated by Common Mode Analysis.">Member Independence (AND/INHIBIT)</label>
+                                <label title="Independence between the members of an AND, INHIBIT or k-of-n VOTING gate is the precondition for any DAL reduction (ARP4761A Table P2 step f) and for treating P(top) as an independent product. The reduction is only taken once Common Mode Analysis has substantiated it.">Member Independence (AND/INHIBIT/VOTING)</label>
                                 <select id="config-dal-independence" onchange="updateNodeData()">
-                                    <option value="claimed">Claimed — provisional, pending CMA</option>
-                                    <option value="substantiated">Substantiated — CMA-demonstrated</option>
+                                    <option value="claimed">Claimed, pending CMA (no reduction yet)</option>
+                                    <option value="substantiated">Substantiated by CMA (reduction taken)</option>
                                     <option value="none">None — no claim (no reduction)</option>
                                     <option value="compromised">Compromised — common mode found</option>
                                 </select>
@@ -2505,8 +2512,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                             <div style="flex: 1;">
                                 <label>DALgebra Option (when independent)</label>
                                 <select id="config-dal-option" onchange="updateNodeData()">
-                                    <option value="opt2">Option 2 — two members at parent − 1, others at the floor</option>
-                                    <option value="opt1">Option 1 — one carrier at parent, others at the floor</option>
+                                    <option value="opt2">Option 2: two members one level below the failure condition DAL, others two below</option>
+                                    <option value="opt1">Option 1: one carrier keeps the failure condition DAL, others two below</option>
                                 </select>
                             </div>
                             <div style="flex: 1;" id="config-dal-carrier-container">
@@ -2514,7 +2521,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                                 <select id="config-dal-carrier" onchange="updateNodeData()"></select>
                             </div>
                             <div style="flex: 1 1 100%;">
-                                <p class="cfg-hint" title="ARP4754B §5.2.3 / ARP4761A Table P2: a reduction below the top DAL requires functional independence between members, substantiated by Common Mode Analysis. Without it, members hold the top DAL. A compromised claim reverts the reduction and flags the probability product (a common-cause term is then required).">DAL reduction needs independent members (CMA). Compromised = reverted. Non-carriers drop 2 levels (Opt 1) or the pair drops 1 (Opt 2), relative to the top DAL · floor E. Hover for detail.</p>
+                                <p class="cfg-hint" title="ARP4754B 5.2 / ARP4761A App P (Table P2 and P.5): a reduction below the failure condition DAL requires independence between the members, substantiated by Common Mode Analysis. Until then members keep the incoming DAL and the canvas badge shows what they would drop to. The whole tree stays in the failure condition&#39;s row: in every group of members that together cause it, one keeps its DAL or two sit one level below, and nobody goes more than two levels below, however many AND gates are nested. A gate that already sits one level below keeps one member at that level. A compromised claim reverts the reduction and flags the probability product (a common-cause term is then required).">No reduction until CMA substantiates independence. The failure condition DAL sets the row: one member keeps it (Opt 1) or two sit one level below (Opt 2), nobody more than two levels below, however deep. Hover for detail.</p>
                             </div>
                         </div>
 
@@ -4078,9 +4085,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- DSV-1 — SLDissimilar: dissimilar verification, direct gate-logic MC cross-checks the exact engine (display lane; seeded; journaled). -->
     <script src="mc_crosscheck.js?v=1.0" defer></script>
     <!-- UNC-1 — SLUnc: P05-P95 uncertainty bands on the budget ledger (user-entered EFs only; idle-computed; display lane). -->
-    <script src="unc_bands.js?v=1.0" defer></script>
+    <script src="unc_bands.js?v=1.1" defer></script>
     <script src="paginate.js?v=1.3" defer></script>
-    <script src="fta_engine.js?v=1.7" defer></script>
+    <script src="fta_engine.js?v=1.10" defer></script>
+    <!-- 13 Oct 2026 (math audit F1/F8): SLTopBasis: one exact top-event number and one per-flight-hour time basis for every pass/fail screen. -->
+    <script src="top_basis.js?v=1.0" defer></script>
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
     <script src="safety_targets.js?v=1.8" defer></script>
     <script src="severity_rubrics.js?v=1.4" defer></script>
@@ -4094,7 +4103,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="importers.js?v=1.9" defer></script>
     <script src="core_modules.js?v=1.11" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
-    <script src="fta_quant_modules.js?v=66.23" defer></script>
+    <script src="fta_quant_modules.js?v=66.26" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
     <script src="event_reuse.js?v=1.2" defer></script>
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
@@ -4110,22 +4119,22 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.0" defer></script>
     <script src="node_identity_ui.js?v=1.5" defer></script>
-    <script src="fta_view_modules.js?v=66.42" defer></script>
+    <script src="fta_view_modules.js?v=66.45" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
-    <script src="data_ops_modules.js?v=66.49" defer></script>
+    <script src="data_ops_modules.js?v=66.51" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.40" defer></script>
+    <script src="support_modules.js?v=66.43" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.20" defer></script>
+    <script src="helpers_modules.js?v=3.23" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.2" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.52" defer></script>
+    <script src="bindings_modules.js?v=1.55" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.74" defer></script>
+    <script src="misc_fn_modules.js?v=66.77" defer></script>
     <script src="safety_lab.js?v=65.62" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4138,7 +4147,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          never hit TDZ. -->
     <script src="project_stores.js?v=1.0" defer></script>
     <script src="crdt_gc.js?v=1.1" defer></script>
-    <script src="crdt_sync.js?v=2.5" defer></script>
+    <script src="crdt_sync.js?v=2.6" defer></script>
     <script src="save_watch.js?v=1.2" defer></script>
     <script src="data_change.js?v=1.0" defer></script>
     <script src="render_pass.js?v=1.0" defer></script>
@@ -4153,7 +4162,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Q7 (26 Sep 2026) — the critical AND-gate test that scopes the CMA: which independence claims the
          failure condition's budget depends on (as OR / as certain, BDD-exact). Panel on the CMA page, a stage on
          the Golden Thread, INV-58. Loads after qual_arg.js; wraps renderCMA and _renderGoldenThread lazily. -->
-    <script src="critical_gates.js?v=1.0" defer></script>
+    <script src="critical_gates.js?v=1.1" defer></script>
     <!-- 27 Sep 2026 (Q1-Q3) — assumption → requirement, rationale required, source-analysis tag. -->
     <script src="req_basis.js?v=1.1" defer></script>
     <!-- 27 Sep 2026 (Q4-Q6) — alert independence, crew response credit, engine / propeller severity anchors. -->
@@ -4168,12 +4177,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.35" defer></script>
+    <script src="assurance_modules.js?v=1.36" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
     <script src="autonomy_metrics.js?v=0.3" defer></script>
-    <script src="reports.js?v=66.15" defer></script>
+    <script src="reports.js?v=66.16" defer></script>
     <!-- Phase F — R&M module (born modular; wraps switchTab, zero monolith edits). Pro+ gated. -->
     <script src="ram_modules.js?v=1.9" defer></script>
     <!-- FRACAS-2 — the incident ledger (case manager) under the statistical FRACAS;
@@ -4205,7 +4214,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase P2 — problem reports / OPRs (born modular; upgrades the SSA E.4.d gate at runtime). -->
     <script src="problem_reports.js?v=1.2" defer></script>
     <!-- Phase P7 — MMEL/TLD dispatch analysis (born modular; evaluated through the live trees). Pro+ gated. -->
-    <script src="mmel_module.js?v=1.3" defer></script>
+    <script src="mmel_module.js?v=1.4" defer></script>
     <script src="mel_fha_crosscheck.js?v=1.0" defer></script>
     <!-- Phase P6 — modification impact wizard (born modular; deterministic closure). -->
     <script src="mod_impact.js?v=1.10" defer></script>
@@ -4214,7 +4223,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase P5 — CEA dependency graph (born modular; graph vs interdependence reconciliation). -->
     <script src="cea_graph.js?v=1.2" defer></script>
     <!-- Phase P8 — safety-significant events export (born modular; in-service watch list). -->
-    <script src="sse_export.js?v=1.2" defer></script>
+    <script src="sse_export.js?v=1.3" defer></script>
     <!-- Phase P9 — Items/LRU collapse into system workspaces (born modular; injected ws sub-tab). -->
     <script src="items_workspace.js?v=1.0" defer></script>
     <!-- Phase R series — R&M depth build (born modular; math verified in the regression suite). -->
@@ -4229,7 +4238,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- RAM cockpit — seventh dashboard card (continuous track; feeds the gates). -->
     <script src="ram_cockpit.js?v=1.1" defer></script>
     <!-- Phase D gap 3 (§3.6) — Budget Ledger: allocated vs achieved as a first-class object (born modular; self-registering page). -->
-    <script src="budget_ledger.js?v=1.45" defer></script>
+    <script src="budget_ledger.js?v=1.46" defer></script>
     <!-- UX-1 — importance heatmap overlay: FV heat on basic events, display lane only (born modular; toolbar toggle injection). -->
     <script src="importance_heat.js?v=2.3" defer></script>
     <!-- UX-4 — leading-indicators strip on the dashboard: early warnings, display + routing only (born modular; counts from invRun / etaCouplingFindings / the engine's feasibility lane). -->
@@ -4245,7 +4254,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1): FFS lane surface (born modular; self-registering page + {{ffs_table}} token source). -->
     <script src="ffs_module.js?v=1.32" defer></script>
     <!-- Phase D gap 1 (§3.5) — ASA working surface: deterministic triage + measured MF&MS re-run (born modular; upgrades the ASA F.4 gate). -->
-    <script src="asa_triage.js?v=1.12" defer></script>
+    <script src="asa_triage.js?v=1.13" defer></script>
     <script src="idp_seed_trees.js?v=1.2" defer></script>
     <!-- Golden Thread integrity sweep + link bindings (born modular). -->
     <script src="gt_integrity.js?v=1.8" defer></script>
@@ -4273,14 +4282,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- Q5 — save/load round-trip proof (born modular; the pipeline proves itself). -->
     <script src="roundtrip_proof.js?v=1.1" defer></script>
-    <script src="ccf_similarity.js?v=1.3" defer></script>
+    <script src="ccf_similarity.js?v=1.4" defer></script>
     <!-- AL1 — signed system aliases (user-entered only; feeds the lookalike detector). -->
     <script src="alias_registry.js?v=1.1" defer></script>
     <script src="rename_guard.js?v=1.6" defer></script>
     <!-- Legacy-id renumber migration (slate #12). MUST load after rename_guard:
          it composes rgRenameOwner + rgApply and owns no reference logic itself. -->
     <script src="renumber_migration.js?v=1.1" defer></script>
-    <script src="invariants.js?v=1.5" defer></script>
+    <script src="invariants.js?v=1.6" defer></script>
     <!-- RBD-XCHECK — every RBD figure computed twice (minimal tie-sets vs minimal cut-sets),
          agreement asserted (INV-33, hard) before anything shows. Disagreement = refusal.
          MUST load after invariants.js (invRegister) and after rbd_module.js (_rbdR/_rbdParseDsl);
@@ -4298,20 +4307,20 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ram_hub.js?v=1.2" defer></script>
     <script src="engine_selftest.js?v=1.1" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
-    <script src="model_checks.js?v=1.04" defer></script>
-    <script src="tree_warm.js?v=1.0" defer></script>
+    <script src="model_checks.js?v=1.05" defer></script>
+    <script src="tree_warm.js?v=1.3" defer></script>
     <script src="fault_sim.js?v=1.22" defer></script>
     <script src="tab_guard.js?v=1.0" defer></script>
     <script src="journal.js?v=1.1" defer></script>
     <script src="change_journal_sync.js?v=1.2" defer></script>
-    <script src="pssa_ssa_pages.js?v=1.0" defer></script>
+    <script src="pssa_ssa_pages.js?v=1.1" defer></script>
     <script src="nav_sfha_tree.js?v=1.3" defer></script>
     <script src="assumption_moat.js?v=1.4" defer></script>
     <script src="hf_ergo.js?v=0.2" defer></script>
     <script src="hf_assumptions.js?v=0.9" defer></script>
     <script src="hf_register_panel.js?v=1.9" defer></script>
     <script src="hf_analyses.js?v=1.18" defer></script>
-    <script src="field_defs.js?v=1.5" defer></script>
+    <script src="field_defs.js?v=1.6" defer></script>
     <script src="lane_ai_bar.js?v=1.3" defer></script>
     <script src="hf_evidence.js?v=0.2" defer></script>
     <!-- INV-HFW — crew workload ↔ FHA severity consistency (born modular; registers into the invariants sweep). -->
@@ -4372,13 +4381,15 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="mbsa_schema.js?v=1.1" defer></script>
     <script src="zonal_model.js?v=1.1" defer></script>
     <script src="physical_independence.js?v=1.1" defer></script>
-    <script src="independence_claims.js?v=1.0" defer></script>
+    <script src="independence_claims.js?v=1.1" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
     <script src="zonal_ui.js?v=1.13" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>
     <script src="zsa_walkthrough.js?v=1.4" defer></script>
     <script src="cma_walkthrough.js?v=1.31" defer></script>
+    <!-- 13 Oct 2026 (fix 6): live common cause detection + forced Accept/Ignore decision + decision log. -->
+    <script src="cma_live.js?v=1.0" defer></script>
     <script src="pra_library.js?v=1.3" defer></script>
     <script src="pra_canvas.js?v=1.22" defer></script>
     <script src="msg3_zonal.js?v=1.21" defer></script>
@@ -4439,7 +4450,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          declare them (fta_view_modules, helpers_modules, support_modules) —
          it also re-wraps on a short poll, so defer order is belt and braces. -->
     <script src="nav_return.js?v=1.0" defer></script>
-    <script src="fta_freq.js?v=1.32" defer></script>
+    <script src="fta_freq.js?v=1.34" defer></script>
     <script src="markov_ctmc.js?v=1.3" defer></script>
     <script src="mil217f_stress.js?v=1.1" defer></script>
     <!-- Jama live bridge — push FCs into Jama as items, pull the relationship
@@ -4460,7 +4471,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.16" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.69" defer></script>
+    <script src="ai_loader.js?v=8.70" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.2" defer></script>

@@ -1,4 +1,7 @@
+// 13 Oct 2026 (fix 3, MGL): the node panel commits common cause parameters at GROUP level (ccfConfigPanelCommit); the common-mode auto-detect reads a group's parameters order-independently with the engine's MGL resolver.
+// 13 Oct 2026 (math fixes 7 and 2): allocateDAL rebuilt on the ARP4761A App P row rule (the failure condition's starting DAL is carried through every gate, nested AND gates can no longer compound below two levels under the start), no DAL reduction until CMA substantiates independence (the would-be reduction is kept as _dalIfSubstantiated), rigorous k-of-n VOTING reductions, a Cert Lab compliance-basis hook (dalRowComplianceBasis), and the gate independence requirement names physical and functional independence; see tests/regression_dal_row_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
+// 13 Oct 2026 (fix 6 part B): autoDetectCommonModes now runs the live common cause check (cma_live.js) instead of staging suggested rows; new _sharedResourceCouplings gives the live check the raw Phase 58 couplings.
 // support_modules.js — v1.0 — Phase P2 batch 3: cross-cutting support layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). Pure runtime function declarations — zero
@@ -607,6 +610,9 @@ function clearAllAllocations() {
         node._independenceReq = null;
         node._dalDerivation = null;
         node._cmaCompromised = false;
+        // 13 Oct 2026 (fix 7): the reduction a pending claim would earn, and the pending flag.
+        node._dalIfSubstantiated = null;
+        node._dalPending = false;
         const kids = node.children || node._children;
         if (kids) kids.forEach(strip);
     }
@@ -681,6 +687,26 @@ function _cmaCompromisedIndex() {
     return { ids: ids, pairs: pairs };
 }
 
+// Compliance-basis hook for the DAL row (13 Oct 2026, fix 7). Safety Lab hard-codes NO special
+// DAL basis. A special basis such as EASA MOC SC-VTOL Table 1 Note A (Basic 1 and 2: no
+// architecture-based DAL reduction) must first be confirmed in Cert Lab; Cert Lab then records it
+// on the project as
+//   projectConfig.dalComplianceBasis = { id: '<name of the basis>', confirmedInCertLab: true,
+//                                        architectureReduction: false | true, floorLevels: 0..4 }
+// and the allocator reads it here. Nothing set (or not confirmed in Cert Lab) returns null and the
+// allocator behaves exactly as ARP4754B / ARP4761A App P (two levels below the start, floor E).
+function dalRowComplianceBasis(startDal, ctx) {
+    try {
+        const pc = (typeof projectConfig === 'object' && projectConfig) ? projectConfig : null;
+        const b = pc && pc.dalComplianceBasis;
+        if (!b || b.confirmedInCertLab !== true) return null;
+        let floorLevels = 2;
+        if (b.architectureReduction === false) floorLevels = 0;
+        else if (Number.isInteger(b.floorLevels) && b.floorLevels >= 0 && b.floorLevels <= 4) floorLevels = b.floorLevels;
+        return { id: String(b.id || 'Cert Lab compliance basis'), floorLevels: floorLevels };
+    } catch (_) { return null; }
+}
+
 // Recursive DAL allocator. Mutates `allocatedDAL` on every node walked.
 // `visited` tracks page IDs across TRANSFERs to prevent infinite recursion on cycles.
 // `cmaSet` (computed once at the top-level call) lets an open CMA common-mode finding drive a
@@ -688,11 +714,48 @@ function _cmaCompromisedIndex() {
 // 23 Sep 2026 (G4) — `ctx` (optional) is the failure condition's F3061 Table 1 context from
 // SLF3061.contextFor(); when present, an independent AND gate gives its non-carrier members Table 1's
 // secondary DAL instead of an ARP4754B Option 1/2 reduction. Absent → ARP4754B as before.
-function allocateDAL(node, parentDal, visited, cmaSet, ctx) {
+//
+// 13 Oct 2026 (fix 7): rebuilt on the ROW rule. ARP4754B 5.2 and ARP4761A App P (Table P2 and
+// P.5) give one row per failure condition: the row is fixed by the failure condition's starting DAL
+// (the project cert basis: getSafetyTarget / the F3061 path), and every functional decomposition
+// below it, however deep, must stay in that row. For every failure set (each minimal combination of
+// members whose joint failure causes the condition) that means:
+//   at least ONE member at the start DAL, or at least TWO members one level below it, and
+//   NO member more than two levels below the start (floor E).
+// The old code reduced each AND gate relative to its OWN incoming DAL, so nested AND gates
+// compounded (Catastrophic AND(x, AND(y,z)) Option 1 reached E). Now the start DAL travels down
+// as `_row` and each gate knows how far below the start it already sits:
+//   at the start      → Option 1 (carriers keep the start, the rest two below) or Option 2
+//                       (uppers one below, the rest two below), as the gate is set;
+//   one level below   → the gate is one of an Option 2 pair; its failure sets must keep a member
+//                       at that level, so carriers keep it and the rest go to two below. A second
+//                       Option 2 step here would leave only ONE member one level below: not allowed;
+//   two or more below → no further reduction.
+// VOTING k-of-n gates reduce too, rigorously: every k-member subset is a failure set, so Option 1
+// needs n-k+1 carriers (every k-subset then holds one) and Option 2 needs n-k+2 uppers (every
+// k-subset then holds two). An AND gate is the n-of-n case (1 carrier, 2 uppers).
+// No reduction is APPLIED until Common Mode Analysis substantiates the independence
+// (dalIndependence 'substantiated'). A claim (the default) holds every member at the incoming DAL
+// and the reduction it would earn is computed in a second pass and kept on each node as
+// `_dalIfSubstantiated`, so the user still sees what substantiation would buy.
+// `_row` and `_pass` are internal (recursion only); callers pass the first five arguments.
+function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
     if (!node || !parentDal) return;
     visited = visited || new Set();
     if (cmaSet === undefined) cmaSet = (typeof _cmaCompromisedIndex === 'function') ? _cmaCompromisedIndex()
         : ((typeof _cmaCompromisedGateIdSet === 'function') ? _cmaCompromisedGateIdSet() : null);
+    if (!_row) {
+        // Top-level call: parentDal IS the failure condition's starting DAL from the cert basis.
+        const basis = (typeof dalRowComplianceBasis === 'function') ? dalRowComplianceBasis(parentDal, ctx) : null;
+        const row = { start: parentDal, floorLevels: basis ? basis.floorLevels : 2, basisId: basis ? basis.id : null };
+        const visitedPotential = new Set(visited);
+        allocateDAL(node, parentDal, visited, cmaSet, ctx, row, 'actual');
+        allocateDAL(node, parentDal, visitedPotential, cmaSet, ctx, row, 'potential');
+        return;
+    }
+    const actual = (_pass !== 'potential');
+    const F = actual ? 'allocatedDAL' : '_dalIfSubstantiated';
+    const down = (c, dal) => allocateDAL(c, dal, visited, cmaSet, ctx, _row, _pass);
     // Phase 56.38 — conservative-merge for cross-tree paste. If the node carries
     // a snapshot DAL from its source tree (and the user hasn't overridden it),
     // the effective inherited DAL is the stricter of (propagated parent, snapshot).
@@ -702,7 +765,7 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx) {
         && !node._pasteDALOverride && !node._pasteOriginDismissed) {
         effectiveParent = dalMax(effectiveParent, node._pasteOrigin.snapshotDAL);
     }
-    node.allocatedDAL = dalMax(node.allocatedDAL, effectiveParent);
+    node[F] = dalMax(node[F], effectiveParent);
 
     if (node.type !== 'gate') return;
 
@@ -711,7 +774,7 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx) {
         if (linkedId && !visited.has(linkedId)) {
             visited.add(linkedId);
             const linked = ftaPages.find(p => p.id === linkedId);
-            if (linked && linked.root) allocateDAL(linked.root, parentDal, visited, cmaSet, ctx);
+            if (linked && linked.root) down(linked.root, parentDal);
         }
         // For pure TRANSFER, the gate has no local children — return.
         // For a logical gate with transferOutTo, the local children are intentionally empty too
@@ -722,34 +785,52 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx) {
     const kids = node.children || node._children;
     if (!kids || kids.length === 0) return;
 
-    const isAndLike = node.gateType === 'AND' || node.gateType === 'INHIBIT';
-
     // Phase 56.38 — propagate the effective (snapshot-merged) DAL to children so
     // conservative-merge cascades through the pasted subtree.
-    const propagateDal = node.allocatedDAL || effectiveParent;
+    const propagateDal = node[F] || effectiveParent;
+    // A stricter DAL than the row start reaching this node (a pasted snapshot, or another failure
+    // condition's stricter allocation on a shared node) opens that stricter row for this subtree.
+    let row = _row;
+    if (propagateDal !== row.start && dalMax(propagateDal, row.start) === propagateDal) row = Object.assign({}, row, { start: propagateDal });
+    // How many levels below the row start this gate already sits (0, 1, 2, ...; E saturates).
+    let below = 0;
+    while (below < 5 && dalDecrement(row.start, below) !== propagateDal) below++;
+    const floorDal = dalDecrement(row.start, row.floorLevels);   // nobody below this, anywhere in the row
 
-    if (!isAndLike) {
-        // OR / XOR / VOTING: any single member can cause the failure condition, so each member
-        // must meet the full top DAL — no reduction (ARP4761A Table P2, single-member column).
-        node._dalReduced = false; node._dalProvisional = false; node._dalCompromised = false;
-        node._probCompromised = false; node._probCompromiseReason = null;
-        node._independenceReq = null;
-        kids.forEach(c => { c.isDALCarrier = false; c._dalDerivation = { basis: 'inherit' }; allocateDAL(c, propagateDal, visited, cmaSet, ctx); });
+    // Failure-set size: AND / INHIBIT need every member (n-of-n); VOTING needs k of n.
+    const n = kids.length;
+    let kNeed = 0;
+    if (node.gateType === 'AND' || node.gateType === 'INHIBIT') kNeed = n;
+    else if (node.gateType === 'VOTING') kNeed = Math.max(1, Math.min(parseInt(node.votingK, 10) || 2, n));
+
+    if (kNeed < 2) {
+        // OR / XOR / 1-of-n VOTING (and PAND / SPARE / FDEP, kept conservative): any single member can
+        // cause the failure condition, so each member must meet the full top DAL.
+        // no reduction (ARP4761A Table P2, single-member column).
+        if (actual) {
+            node._dalReduced = false; node._dalPending = false; node._dalCompromised = false;
+            node._probCompromised = false; node._probCompromiseReason = null;
+            node._independenceReq = null;
+        }
+        kids.forEach(c => { if (actual) { c.isDALCarrier = false; c._dalDerivation = { basis: 'inherit', row: row.start }; } down(c, propagateDal); });
         return;
     }
 
-    // AND / INHIBIT: a reduction below the top DAL is permitted ONLY with functional independence
-    // between the members (ARP4754B §5.2.3 / ARP4761A Table P2 step f). Independence is a CLAIM
-    // that Common Mode Analysis (Appendix M) must substantiate. node.dalIndependence:
-    //   'claimed'       — reduction applied but PROVISIONAL (independence not yet CMA-substantiated)
-    //   'substantiated' — reduction valid (CMA demonstrated independence)
+    // AND / INHIBIT / k-of-n VOTING: a reduction below the top DAL is permitted ONLY with functional
+    // independence between the members (ARP4754B §5.2.3 / ARP4761A Table P2 step f). Independence is a
+    // CLAIM that Common Mode Analysis (Appendix M) must substantiate. node.dalIndependence:
+    //   'claimed':      the DEFAULT. No reduction yet: members hold the incoming DAL and the
+    //                     reduction the claim would earn is shown (_dalIfSubstantiated) until CMA
+    //                     substantiates it. (Before 13 Oct 2026 a claim reduced provisionally.)
+    //   'substantiated' — reduction applied (CMA demonstrated independence)
     //   'none'          — no independence claimed -> group members, NO reduction (all at top DAL)
     //   'compromised'   — CMA/architecture found a common mode -> reduction INVALID, reverted + flagged
-    // Default 'claimed' preserves the concept-tree purpose (allocate under a claim) while making the
-    // assumption explicit and invalidatable. A compromised claim ALSO compromises the probability
-    // allocation at this gate — the AND independent-product no longer holds — see _dalCompromised,
-    // which the probability path consumes to require a common-cause (CCF) term.
-    let indep = node.dalIndependence || 'claimed';
+    // Any other stored value (e.g. a stray 'option-1') is read as an unsubstantiated claim.
+    // A compromised claim ALSO compromises the probability allocation at this gate — the AND
+    // independent-product no longer holds — see _dalCompromised, which the probability path
+    // consumes to require a common-cause (CCF) term.
+    const _raw = node.dalIndependence;
+    let indep = (_raw === 'substantiated' || _raw === 'none' || _raw === 'compromised') ? _raw : 'claimed';
     // Auto-drive (connected thread): an OPEN, linked CMA common-mode finding overrides the claim.
     // A6 — the index carries {ids, pairs}; a bare Set (legacy callers / tests) still works.
     const _cmaIds = cmaSet ? (cmaSet.ids || (typeof cmaSet.has === 'function' ? cmaSet : null)) : null;
@@ -766,22 +847,76 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx) {
         }
     }
     if (cmaHit) indep = 'compromised';
-    node._cmaCompromised = cmaHit;
-    node._cmaCompromisedGlobal = _globalHit;
-    node._dalProvisional = (indep === 'claimed');
-    node._dalCompromised = (indep === 'compromised');
-    node._dalCompromiseReason = node._dalCompromised
-        ? (_globalHit
-            ? 'CMA ' + _globalHit.cma + ' (recorded at gate ' + _globalHit.gate + ' on ' + _globalHit.page + ') identifies an open common mode coupling members ' + _globalHit.lidA + '/' + _globalHit.lidB + ' — the same pair sits under this gate. A failure of independence is global: the DAL reduction here is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause (β) term until that CMA closes (ARP4761A App M).'
-            : cmaHit
-            ? 'CMA identified an open common-mode coupling these members. The DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause (β) term (ARP4761A App M).'
-            : 'Functional independence between members not substantiated by CMA. DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause term.')
-        : null;
 
-    if (indep === 'none' || indep === 'compromised') {
-        // No substantiated independence -> group the members -> no DAL reduction.
-        node._dalReduced = false;
-        node._independenceReq = null;
+    // The reduction THIS gate would take under substantiated independence: one entry per child,
+    // { dal, role }. Pure function of the row, this gate's position in it, its option and k-of-n.
+    const isF3061 = !!(ctx && ctx.method === 'f3061');
+    const opt = node.dalOption === 'opt1' ? 'opt1' : 'opt2';
+    const carrierId = node.dalCarrierChildId;
+    // Carrier order: the chosen carrier child first, then the children in order.
+    const order = kids.map((c, i) => i);
+    if (carrierId != null) {
+        const ci = kids.findIndex(c => c.id === carrierId || String(c.id) === String(carrierId));
+        if (ci > 0) { order.splice(order.indexOf(ci), 1); order.unshift(ci); }
+    }
+    const keepCount = n - kNeed + 1;   // members that must keep the incoming DAL so every failure set holds one
+    const plan = new Array(n);
+    let rule;
+    if (row.floorLevels === 0) {
+        rule = 'basis-no-reduction';
+        kids.forEach((c, i) => { plan[i] = { dal: propagateDal, role: 'held' }; });
+    } else if (isF3061) {
+        // 23 Sep 2026 (G4) — Part 23 under ASTM F3061 Table 1: the carrier(s) keep the incoming DAL,
+        // the others get Table 1's SECONDARY DAL — never lower (Table 1 has no third level). Minor has
+        // no secondary, so no reduction. ARP4754B Options do not apply here.
+        rule = 'f3061';
+        const secDal = (typeof SLF3061 !== 'undefined') ? SLF3061.secondaryFor(propagateDal, ctx) : propagateDal;
+        order.forEach((ci, rank) => {
+            plan[ci] = (rank < keepCount) ? { dal: propagateDal, role: 'primary' }
+                : { dal: secDal, role: (ctx.secondary ? 'secondary' : 'no-secondary') };
+        });
+    } else if (below >= row.floorLevels) {
+        rule = 'at-floor';
+        kids.forEach((c, i) => { plan[i] = { dal: propagateDal, role: 'held' }; });
+    } else if (below === 0 && opt === 'opt2' && row.floorLevels >= 1) {
+        // Option 2: n-k+2 members one level below the start (two for an AND gate), the rest at the floor.
+        rule = 'option2';
+        const upperCount = Math.min(n, n - kNeed + 2);
+        const oneDown = dalDecrement(row.start, 1);
+        kids.forEach((c, i) => { plan[i] = (i < upperCount) ? { dal: oneDown, role: 'upper' } : { dal: floorDal, role: 'reduced' }; });
+    } else {
+        // Option 1 at the start (carriers keep the start), or ANY option once the gate already sits
+        // below the start: carriers keep the incoming DAL so each failure set still holds a member at
+        // that level, and the rest go to the row floor (P.5: stay in the same row).
+        rule = (below === 0) ? 'option1' : 'row-hold';
+        order.forEach((ci, rank) => {
+            plan[ci] = (rank < keepCount) ? { dal: propagateDal, role: (below === 0 ? 'top' : 'held') } : { dal: floorDal, role: 'reduced' };
+        });
+    }
+    const reducible = plan.some(p => p.dal !== propagateDal);
+    // In the potential pass a bare claim counts as substantiated: that is the "what it would be".
+    const applies = (indep === 'substantiated') || (!actual && indep === 'claimed');
+    const optLabel = (opt === 'opt1') ? '1' : '2';
+    const deriv = (p, basis) => {
+        const d = { basis: basis, option: optLabel, independence: indep, role: p.role, row: row.start, rule: rule };
+        if (isF3061) { d.level = ctx.level; d.severity = ctx.severity; }
+        if (row.basisId) d.complianceBasis = row.basisId;
+        if (node.gateType === 'VOTING') d.votingK = kNeed;
+        return d;
+    };
+
+    if (actual) {
+        node._cmaCompromised = cmaHit;
+        node._cmaCompromisedGlobal = _globalHit;
+        node._dalCompromised = (indep === 'compromised');
+        node._dalPending = (indep === 'claimed') && reducible;
+        node._dalCompromiseReason = node._dalCompromised
+            ? (_globalHit
+                ? 'CMA ' + _globalHit.cma + ' (recorded at gate ' + _globalHit.gate + ' on ' + _globalHit.page + ') identifies an open common mode coupling members ' + _globalHit.lidA + '/' + _globalHit.lidB + ' — the same pair sits under this gate. A failure of independence is global: the DAL reduction here is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause (β) term until that CMA closes (ARP4761A App M).'
+                : cmaHit
+                ? 'CMA identified an open common-mode coupling these members. The DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause (β) term (ARP4761A App M).'
+                : 'Functional independence between members not substantiated by CMA. DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause term.')
+            : null;
         if (indep === 'compromised') {
             // Probability cascade (Gaps 1/4): once independence is lost the AND independent-product
             // P(top)=ΠPᵢ no longer holds — a common-cause term now dominates. Flag the gate's
@@ -793,62 +928,57 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx) {
         } else {
             node._probCompromised = false; node._probCompromiseReason = null;
         }
-        kids.forEach(c => { c.isDALCarrier = false; c._dalDerivation = { basis: (indep === 'compromised' ? 'compromised' : 'no-independence'), independence: indep }; allocateDAL(c, propagateDal, visited, cmaSet, ctx); });
-        return;
+        node._dalReduced = applies && reducible;
+        // Stage C (Gap 1): a reduction (taken, or available once substantiated) generates a tracked
+        // independence requirement from the tree logic. It must be substantiated by CMA (App M);
+        // AutoReq/CMA consume node._independenceReq. Phase 56.50 — requirement text and rationale are
+        // separate fields: the normative sentence carries one "shall"; the WHY is rationale.
+        // 13 Oct 2026 (fix 2): the text names PHYSICAL and FUNCTIONAL independence.
+        node._independenceReq = ((indep === 'claimed' || indep === 'substantiated') && reducible) ? {
+            text: 'Members of ' + (node.displayId || ('gate-' + node.id)) + ' shall be physically and functionally independent.',
+            rationale: 'No common-mode development error, common-cause failure, shared-resource coupling or shared installation (location, routing, power) may exist between the members. Substantiation by Common Mode Analysis (ARP4761A App M) validates the DAL reduction and the independent-product P(top) at this gate.'
+                + (indep === 'claimed' ? ' Until it is substantiated the reduction is withheld and every member holds ' + propagateDal + '.' : ''),
+            members: kids.map(function (c) { return c.displayId || c.id; }),
+            status: (indep === 'substantiated') ? 'substantiated' : 'claimed',
+            reductionApplied: indep === 'substantiated'
+        } : null;
     }
 
-    node._dalReduced = true;
-    node._probCompromised = false; node._probCompromiseReason = null;
-    // Stage C (Gap 1) — the reduction generates a tracked independence requirement from the tree
-    // logic. It must be substantiated by CMA (App M); AutoReq/CMA consume node._independenceReq.
-    // Phase 56.50 — requirement text and rationale are separate fields: the
-    // normative sentence carries one "shall"; the WHY (what independence means
-    // here, the CMA substantiation demand, what the reduction rests on) is
-    // rationale. Consumers that only read .text keep working.
-    node._independenceReq = {
-        text: 'Members of ' + (node.displayId || ('gate-' + node.id)) + ' shall be functionally independent.',
-        rationale: 'No common-mode development error, common-cause failure, or shared-resource coupling may exist between the members. Substantiation by Common Mode Analysis (ARP4761A App M) validates the DAL reduction and the independent-product P(top) at this gate.',
-        members: kids.map(function (c) { return c.displayId || c.id; }),
-        status: (indep === 'substantiated') ? 'substantiated' : 'claimed'
-    };
-    // 23 Sep 2026 (G4) — Part 23 under ASTM F3061 Table 1: one member (the carrier) keeps the
-    // incoming DAL, the others get Table 1's SECONDARY DAL — never lower (Table 1 has no third
-    // level). Minor has no secondary, so no reduction. ARP4754B Options do not apply here.
-    if (ctx && ctx.method === 'f3061') {
-        const carrierId = node.dalCarrierChildId || (kids[0] && kids[0].id);
-        const secDal = (typeof SLF3061 !== 'undefined') ? SLF3061.secondaryFor(propagateDal, ctx) : propagateDal;
-        if (secDal === propagateDal) {
-            // No actual reduction here (Minor has no secondary; or this gate already sits at the
-            // secondary level): nothing rests on independence for the DAL, so no reduction flag
-            // and no DAL independence requirement at this gate.
-            node._dalReduced = false; node._independenceReq = null;
-        }
+    if (indep === 'none' || indep === 'compromised') {
+        // No substantiated independence -> group the members -> no DAL reduction.
         kids.forEach(c => {
-            const isCarrier = (c.id === carrierId);
-            c.isDALCarrier = isCarrier;
-            c._dalDerivation = { basis: 'f3061', independence: indep, role: isCarrier ? 'primary' : (ctx.secondary ? 'secondary' : 'no-secondary'), level: ctx.level, severity: ctx.severity };
-            allocateDAL(c, isCarrier ? propagateDal : secDal, visited, cmaSet, ctx);
+            if (actual) { c.isDALCarrier = false; c._dalDerivation = { basis: (indep === 'compromised' ? 'compromised' : 'no-independence'), independence: indep, row: row.start }; }
+            down(c, propagateDal);
         });
         return;
     }
-    const opt = node.dalOption || 'opt2';
-    const oneDown  = dalDecrement(propagateDal, 1);   // top - 1
-    const floorDal = dalDecrement(propagateDal, 2);   // ARP4754A Table 5-2: additional members TWO DAL levels below the FC DAL (relative; floored only at E). NOT an absolute Cat->C/Haz->D floor — those coincide only under Part 25 (A-2=C, B-2=D); e.g. Part 23 III Cat top B -> D.
-    if (opt === 'opt1') {
-        // Option 1: one carrier member at the top DAL; additional members at the floor.
-        const carrierId = node.dalCarrierChildId || (kids[0] && kids[0].id);
-        kids.forEach(c => {
-            if (c.id === carrierId) { c.isDALCarrier = true;  c._dalDerivation = { basis: 'option1', option: '1', independence: indep, role: 'top' };     allocateDAL(c, propagateDal, visited, cmaSet, ctx); }
-            else                    { c.isDALCarrier = false; c._dalDerivation = { basis: 'option1', option: '1', independence: indep, role: 'reduced' }; allocateDAL(c, floorDal, visited, cmaSet, ctx); }
-        });
-    } else {
-        // Option 2: at least TWO members one level below the top; remaining members at the floor.
+    if (!applies) {
+        // A claim not yet substantiated by CMA: every member holds the incoming DAL now; the
+        // second (potential) pass records what each would get once the claim is substantiated.
         kids.forEach((c, i) => {
-            c.isDALCarrier = (i < 2);
-            c._dalDerivation = { basis: 'option2', option: '2', independence: indep, role: (i < 2) ? 'upper' : 'reduced' };
-            allocateDAL(c, (i < 2) ? oneDown : floorDal, visited, cmaSet, ctx);
+            if (actual) {
+                c.isDALCarrier = false;
+                const d = deriv(plan[i], reducible ? 'pending' : (isF3061 ? 'f3061' : (rule === 'basis-no-reduction' ? 'compliance-basis' : 'row-floor')));
+                d.wouldBe = plan[i].dal;
+                c._dalDerivation = d;
+            }
+            down(c, propagateDal);
         });
+        return;
     }
+    kids.forEach((c, i) => {
+        if (actual) {
+            const p = plan[i];
+            c.isDALCarrier = (p.dal === propagateDal && reducible) || p.role === 'upper';
+            const basis = isF3061 ? 'f3061'
+                : rule === 'basis-no-reduction' ? 'compliance-basis'
+                : rule === 'at-floor' ? 'row-floor'
+                : rule === 'option2' ? 'option2'
+                : rule === 'option1' ? 'option1' : 'row-hold';
+            c._dalDerivation = deriv(p, basis);
+        }
+        down(c, plan[i].dal);
+    });
 }
 
 // ==========================================
@@ -2391,96 +2521,50 @@ function _detectSharedResourceCommonModes(existingKeys, mkId) {
     return candidates;
 }
 
+// 13 Oct 2026 (fix 6 part B): raw shared-resource couplings for LIVE detection
+// (cma_live.js). The same Phase 58 test as _detectSharedResourceCommonModes, without
+// minting ids or rows: every AND/INHIBIT gate whose different inputs consume one
+// resource. Skips the walk entirely when no resource has consumers. Returns
+// [{ page, gate, resource, sharedSubIds, sharedSubIdNames }].
+function _sharedResourceCouplings() {
+    const out = [];
+    try {
+        if (typeof resourcesData === 'undefined' || !Array.isArray(resourcesData)) return out;
+        if (!resourcesData.some(r => r && Array.isArray(r.consumedBy) && r.consumedBy.length)) return out;
+        const gates = (typeof _enumerateAllGates === 'function') ? _enumerateAllGates() : [];
+        gates.forEach(({ page, node: gate }) => {
+            if (!gate || (gate.gateType !== 'AND' && gate.gateType !== 'INHIBIT')) return;
+            _gateSharedResources(gate, page).forEach(f => {
+                out.push({ page, gate, resource: f.resource, sharedSubIds: f.sharedSubIds || [], sharedSubIdNames: (f.sharedSubIds || []).map(_subIdName) });
+                try { gate._sharedResourceFlag = f.resource.name; } catch (e) { /* read-only node guard */ }
+            });
+        });
+    } catch (e) { /* fully guarded: detection is additive */ }
+    return out;
+}
+
 // ============================================================================
-// Phase 57 — CMA auto-detect. Harvest the common modes already encoded in the
-// fault trees — (a) declared CCF groups (ccfGroup + β/γ/δ) and (b) shared/repeated
-// events (one component reused in ≥2 places = single point across redundancy) —
-// and (c) shared-resource couplings (Phase 58) — and stage them as SUGGESTED CMA
-// rows for the analyst to Accept or Dismiss.
+// Phase 57 — CMA auto-detect.
+// 13 Oct 2026 (fix 6 part B, Waqas's ruling): SUPERSEDED BY LIVE DETECTION. The scan
+// used to run only on this button and stage SUGGESTED rows that changed nothing until
+// someone clicked Accept. Detection now runs whenever the fault trees change
+// (cma_live.js) and every suspect must be decided, Accept or Ignore with a reason,
+// before editing continues; each decision is recorded. The button stays as "check
+// now": it runs the same live check immediately and opens the same prompt.
 // ============================================================================
 function autoDetectCommonModes() {
     if (!Array.isArray(ftaPages) || !ftaPages.length) {
-        if (typeof showToast === 'function') showToast('No fault trees to scan yet — build a fault tree first.', 'warning', 3500);
+        if (typeof showToast === 'function') showToast('No fault trees to scan yet: build a fault tree first.', 'warning', 3500);
         return;
     }
-    const existingKeys = new Set((cmaData || []).map(c => c.autoKey).filter(Boolean));
-    const ccfGroups = new Map();    // groupName -> { beta, gamma, delta, members: [{page, node}] }
-    const sharedByLid = new Map();  // logicalId -> [{page, node}]
-    (ftaPages || []).forEach(page => {
-        if (!page || !page.root) return;
-        (function walk(node) {
-            if (!node) return;
-            if (node.type !== 'gate') {
-                if (node.ccfGroup && (node.beta || 0) > 0) {
-                    if (!ccfGroups.has(node.ccfGroup)) ccfGroups.set(node.ccfGroup, { beta: node.beta || 0, gamma: node.gamma || 0, delta: node.delta || 0, members: [] });
-                    ccfGroups.get(node.ccfGroup).members.push({ page, node });
-                }
-                const lid = node.logicalId != null ? node.logicalId : node.id;
-                if (!sharedByLid.has(lid)) sharedByLid.set(lid, []);
-                sharedByLid.get(lid).push({ page, node });
-                return;
-            }
-            const kids = node.children || node._children;
-            if (kids) kids.forEach(walk);
-        })(page.root);
-    });
-    // Parent-gate keys ("pageId:gateId") for a set of member events — used to pre-fill Linked Gates.
-    const _gateKeysFor = (members) => {
-        const keys = new Set();
-        members.forEach(({ page, node }) => {
-            const parent = (typeof findParentNode === 'function') ? findParentNode(page.root, node.id) : null;
-            if (parent) keys.add(page.id + ':' + parent.id);
-        });
-        return Array.from(keys);
-    };
-    const _mkId = () => (typeof _newId === 'function') ? _newId('CMA') : ('CMA-A' + (internalIdCounter));
-    const candidates = [];
-    // (a) CCF groups
-    ccfGroups.forEach((grp, name) => {
-        const key = 'ccf:' + name;
-        if (existingKeys.has(key)) return;
-        const labels = grp.members.map(m => m.node.name || m.node.displayId || ('BE-' + m.node.id));
-        candidates.push({
-            internalId: newRowId(), cmaId: _mkId(),
-            subject: 'CCF group: ' + name,
-            claim: 'Redundant items in CCF group "' + name + '" are not fully independent — a shared cause can fail them together (β=' + grp.beta + (grp.gamma ? (', γ=' + grp.gamma) : '') + (grp.delta ? (', δ=' + grp.delta) : '') + ').',
-            modes: [], linkedGateIds: _gateKeysFor(grp.members),
-            findings: 'Auto-detected from fault-tree CCF group "' + name + '" — ' + grp.members.length + ' member(s): ' + labels.join(', ') + '. Classify the common-cause mode(s) and record the independence / separation argument that justifies β.',
-            mitigation: '', status: 'Open', scope: 'aircraft', owningSystemId: '',
-            suggested: true, autoSource: 'ccf-group', autoKey: key
-        });
-    });
-    // (b) Shared / repeated events (same logicalId reused in ≥2 distinct locations)
-    sharedByLid.forEach((occ, lid) => {
-        if (occ.length < 2) return;
-        const key = 'shared:' + lid;
-        if (existingKeys.has(key)) return;
-        const nm = occ[0].node.name || occ[0].node.displayId || ('event ' + lid);
-        candidates.push({
-            internalId: newRowId(), cmaId: _mkId(),
-            subject: 'Shared component: ' + nm,
-            claim: 'A single component ("' + nm + '") appears in ' + occ.length + ' places across the fault tree(s) — its single failure defeats the redundancy it spans (single point of failure / common mode).',
-            modes: [], linkedGateIds: _gateKeysFor(occ),
-            findings: 'Auto-detected shared/repeated event "' + nm + '" (logical ID ' + lid + ') used in ' + occ.length + ' locations. Confirm whether this single resource is intended to feed multiple redundant paths, and capture the justification or design change.',
-            mitigation: '', status: 'Open', scope: 'aircraft', owningSystemId: '',
-            suggested: true, autoSource: 'shared-event', autoKey: key
-        });
-    });
-    // (c) Shared-resource couplings — reuse the same existingKeys Set + cmaId minter
-    //     so this pass dedups against the rows just staged above and mints ids
-    //     identically. Factored into _detectSharedResourceCommonModes (also used by
-    //     the dedicated "Flag shared-resource common modes" button).
-    try {
-        _detectSharedResourceCommonModes(existingKeys, _mkId).forEach(c => candidates.push(c));
-    } catch (e) { /* shared-resource pass is additive + best-effort */ }
-    if (!candidates.length) {
-        if (typeof showToast === 'function') showToast('No new common modes found — no CCF groups, shared events, or shared-resource couplings in the fault trees (or all already captured).', 'info', 4800);
+    if (typeof window !== 'undefined' && window.SLCmaLive && typeof window.SLCmaLive.checkNow === 'function') {
+        const r = window.SLCmaLive.checkNow();
+        if (r && !r.pending.length && typeof showToast === 'function') {
+            showToast('Checked ' + r.suspects.length + ' suspected common cause' + (r.suspects.length === 1 ? '' : 's') + ' in the fault trees: every one is already decided (see the decision log below the CMA table).', 'info', 4800);
+        }
         return;
     }
-    candidates.forEach(c => cmaData.push(c));
-    if (typeof scheduleAutosave === 'function') scheduleAutosave();
-    renderCMA();
-    if (typeof showToast === 'function') showToast(candidates.length + ' common-mode candidate(s) added from the fault trees — review and Accept each.', 'success', 5200);
+    if (typeof showToast === 'function') showToast('Common cause detection is not loaded; reload the page.', 'error', 4800);
 }
 
 function _setFmeaTableHead() {
@@ -2705,14 +2789,20 @@ function updateNodeData() {
     }
     if (selectedNodeData.type !== 'gate') {
         if(selectedNodeData.type === 'basic') {
+            const _prevCcfGroup = selectedNodeData.ccfGroup || '';
             selectedNodeData.ccfGroup = document.getElementById('config-ccf-group').value.trim();
-            const beta = parseFloat(document.getElementById('config-beta').value) || 0;
-            // Beta is a probability share — clamp to [0, 1] regardless of input.
-            selectedNodeData.beta = Math.min(1, Math.max(0, beta));
-            const gammaEl = document.getElementById('config-gamma');
-            const deltaEl = document.getElementById('config-delta');
-            if (gammaEl) selectedNodeData.gamma = Math.min(1, Math.max(0, parseFloat(gammaEl.value) || 0));
-            if (deltaEl) selectedNodeData.delta = Math.min(1, Math.max(0, parseFloat(deltaEl.value) || 0));
+            // 13 Oct 2026 (fix 3): β, the model (beta factor or MGL), γ, δ and their source are
+            // GROUP parameters (NUREG/CR-5485): ccfConfigPanelCommit writes them to every member
+            // and re-counts the group. Fallback for harnesses without helpers_modules.js.
+            if (typeof ccfConfigPanelCommit === 'function') ccfConfigPanelCommit(selectedNodeData, _prevCcfGroup);
+            else {
+                const beta = parseFloat(document.getElementById('config-beta').value) || 0;
+                selectedNodeData.beta = Math.min(1, Math.max(0, beta));
+                const gammaEl = document.getElementById('config-gamma');
+                const deltaEl = document.getElementById('config-delta');
+                if (gammaEl) selectedNodeData.gamma = gammaEl.value === '' ? null : Math.min(1, Math.max(0, parseFloat(gammaEl.value) || 0));
+                if (deltaEl) selectedNodeData.delta = deltaEl.value === '' ? null : Math.min(1, Math.max(0, parseFloat(deltaEl.value) || 0));
+            }
         }
         // Phase 56.45 — Achievable λ /hr (physical). Optional. When set, the
         // canvas + property panel surface a feasibility flag if allocated > achievable.
@@ -2835,8 +2925,8 @@ function updateNodeData() {
             selectedNodeData.spareSwitchP = isFinite(sp) ? Math.min(1, Math.max(0, sp)) : 1;
         }
     }
-    // DAL allocation option (AND / INHIBIT gates only).
-    if (selectedNodeData.gateType === 'AND' || selectedNodeData.gateType === 'INHIBIT') {
+    // DAL allocation option (AND / INHIBIT gates, and k-of-n VOTING gates since 13 Oct 2026, fix 7).
+    if (selectedNodeData.gateType === 'AND' || selectedNodeData.gateType === 'INHIBIT' || selectedNodeData.gateType === 'VOTING') {
         const optSel = document.getElementById('config-dal-option');
         const carrierSel = document.getElementById('config-dal-carrier');
         const indepSel = document.getElementById('config-dal-independence');

@@ -1,4 +1,8 @@
+// 13 Oct 2026 (fix 3, MGL, merged with F1 and F4/F5): common cause groups use the real Multiple Greek Letter model (NUREG/CR-5485): one BDD variable per specific common cause event, shared _mgl* helpers held identical to fta_engine.js v1.9, order-invariant group parameters, MGL cut-set rows (expandCCFCutsets) and MGL-consistent uncertainty sampling (time-averaged like P(top)). FDEP forcing covers a member's whole leaf; common cause events of periodic latent members join their interval's time average. Before, gamma and delta did not change P(top) and the group took q and beta from the first member read. See tests/regression_ccf_mgl_20261013.test.js
+// 13 Oct 2026 (math audit F1): calculateAllProbabilities puts the EXACT top (BDD, common cause and shared events included) on every result page, open or not, through _slApplyExactTops; allocation pages keep the engineer's budget with the exact reconstruction on _bddActualProb. Before, only the open page with repeated ids got it, so beta groups never did. See tests/regression_exact_top_20261013.test.js
+// 13 Oct 2026 (math audit F4/F5): static P(top) counts FDEP gates, solves PAND/SPARE exactly when they are independent constant-rate modules (else a stated upper bound with the spare switchover as a visible event), and time-averages periodic latent events sharing an inspection interval (calcBottomUp and the BDD); DFT Monte Carlo handles gate triggers, gate dependents and chained FDEPs; see tests/regression_dynamic_static_20261013.test.js and tests/regression_latent_joint_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
+// 13 Oct 2026 (fix 6): expandCCFCutsets rebuilt on SLFTAEngine.explicitCCFCutsets: every common cause event appears once, explicitly, in the minimal cut sets (audit F6).
 // fta_quant_modules.js — v1.0 — Phase P2 batch 1: FTA quantification math layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script, all names remain
 // global exactly as before). Runtime-only pure function declarations — zero
@@ -385,19 +389,184 @@ function allocateTopDown(node, target, strategy, visited) {
     }
 }
 
-function calcBottomUp(node, visited = new Set()) {
-    if (!node) return 0;
-    if (visited.has(node.id)) return node.probability || 0;
-    visited.add(node.id);
-    if (node.type !== 'gate') {
-        // Phase 61 — a leaf with no rate data (no λ, no Markov model) holds an allocated
-        // probability BUDGET (or a directly-set value, e.g. a house event); that stored
-        // probability is authoritative and must not be wiped by the λ→P conversion.
-        // Leaves with real rate data (verification trees) compute P from λ + repair model.
-        const _lamEff = (typeof getEffectiveLambda === 'function') ? (getEffectiveLambda(node) || 0) : (node.lambda || 0);
-        if (!(_lamEff > 0) && !node.markovModelId) { node.probability = node.probability || 0; return node.probability; }
-        node.probability = effectiveProb(node, ftaConfig.exposureTime); return node.probability;
+// 13 Oct 2026 (math audit F4 / F5): calcBottomUp is the gate-by-gate number (the headline on a
+// tree without repeated events). It now carries each node's value at the points of the shared
+// inspection-cycle grid (one point when no two periodic latent events share an interval, which
+// reproduces the old arithmetic bit for bit), so latent events inspected at the same check are
+// time-averaged jointly (lambda1*lambda2*tau^2/3 under AND, not tau^2/4). FDEP dependents count
+// as failed when their trigger fails, and PAND / SPARE gates are solved exactly when they are an
+// independent module of constant-rate basic events, else they hold the conservative bound. The
+// rules are the same ones the BDD (buildBDDFromFT) applies; see the block above _bddCombinations.
+function _cbuContext(root) {
+    const lidCount = new Map(), periodic = new Map(), seen = new Set(), pages = new Set();
+    let hasFdep = false;
+    (function walk(n) {
+        if (!n || seen.has(n.id)) return;
+        seen.add(n.id);
+        if (n.type !== 'gate') {
+            const lid = n.logicalId != null ? n.logicalId : n.id;
+            lidCount.set(lid, (lidCount.get(lid) || 0) + 1);
+            const tau = parseFloat(n.tau);
+            if (n.repairModel === 'periodic' && isFinite(tau) && tau > 0 && !n.markovModelId && n.eventClass !== 'dev-error' && _dynHasRate(n)) {
+                if (!periodic.has(tau)) periodic.set(tau, new Set());
+                periodic.get(tau).add(lid);
+            }
+            return;
+        }
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !pages.has(linkedId)) {
+                pages.add(linkedId);
+                const page = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages.find(p => p.id === linkedId) : null;
+                if (page && page.root) walk(page.root);
+            }
+            return;
+        }
+        if (n.gateType === 'FDEP') hasFdep = true;
+        const kids = n.children || n._children;
+        if (kids) kids.forEach(walk);
+    })(root);
+    const dims = [];
+    periodic.forEach((lids, tau) => { if (lids.size >= 2) dims.push({ tau, K: Math.floor(lids.size / 2) + 1 }); });
+    dims.sort((a, b) => a.tau - b.tau);
+    let total = 1;
+    dims.forEach(d => { total *= d.K; });
+    const bound = total > 4096;
+    let pts = [{ w: 1, s: new Map() }];
+    if (!bound) dims.forEach(d => {
+        const r = _glRule(d.K), next = [];
+        pts.forEach(pt => { for (let k = 0; k < d.K; k++) { const s = new Map(pt.s); s.set(d.tau, r.x[k]); next.push({ w: pt.w * r.w[k], s }); } });
+        pts = next;
+    });
+    return { pts, K: pts.length, taus: new Set(dims.map(d => d.tau)), bound, lidCount, fdep: hasFdep ? _collectFdep(root) : { byLid: new Map(), byGate: new Map(), gates: [] }, prof: new Map(), forcing: new Set(), unset: new Set(), forcedIn: new Map(), root };
+}
+function _cbuConst(ctx, p) { const v = new Array(ctx.K); for (let k = 0; k < ctx.K; k++) v[k] = p; return v; }
+function _cbuMean(ctx, v) { if (ctx.K === 1) return v[0]; let s = 0; for (let k = 0; k < ctx.K; k++) s += ctx.pts[k].w * v[k]; return s; }
+function _cbuForce(ctx, v, triggers, key, visited) {
+    if (ctx.forcing.has(key)) return v;
+    ctx.forcing.add(key);
+    const out = v.slice();
+    triggers.forEach(t => {
+        const tv = _cbuNode(t, visited, ctx);
+        for (let k = 0; k < ctx.K; k++) out[k] = 1 - (1 - out[k]) * (1 - tv[k]);
+    });
+    ctx.forcing.delete(key);
+    return out;
+}
+function _cbuLeafVec(node, ctx) {
+    const p = node.probability || 0;
+    const tau = parseFloat(node.tau);
+    if (ctx.K > 1 || ctx.bound) {
+        if (ctx.taus.has(tau) && _periodicTau(node) === tau) {
+            if (ctx.bound) return _cbuConst(ctx, Math.min(1, 2 * p));
+            const v = new Array(ctx.K);
+            for (let k = 0; k < ctx.K; k++) v[k] = Math.min(1, p * 2 * ctx.pts[k].s.get(tau));
+            return v;
+        }
     }
+    return _cbuConst(ctx, p);
+}
+function _cbuDyn(node, kids, vecs, ctx) {
+    const isSpare = node.gateType === 'SPARE';
+    const ps = isSpare ? _spareSwitchP(node) : 1;
+    const warmK = isSpare ? _spareWarmK(node) : 0;
+    const info = { mode: 'bound', reason: '', exact: null, bound: null, switchP: ps, warmK };
+    const xs = [], probs = [], lids = new Set();
+    for (let i = 0; i < kids.length && !info.reason; i++) {
+        const k = kids[i];
+        const nm = k ? (k.displayId || k.name || String(k.id)) : '?';
+        if (!k || k.type === 'gate') { info.reason = 'input ' + nm + ' is a gate, not a single basic event'; break; }
+        const lid = k.logicalId != null ? k.logicalId : k.id;
+        if (lids.has(lid)) { info.reason = 'input ' + nm + ' is entered twice'; break; }
+        lids.add(lid);
+        if ((ctx.lidCount.get(lid) || 0) !== 1) { info.reason = 'input ' + nm + ' also appears elsewhere in the tree'; break; }
+        if (ctx.fdep.byLid.has(lid)) { info.reason = 'input ' + nm + ' is forced by a functional dependency'; break; }
+        if (k.ccfGroup && k.beta > 0) { info.reason = 'input ' + nm + ' is in a common cause group'; break; }
+        const x = _dynRateLeaf(k);
+        if (x == null) { info.reason = 'input ' + nm + ' has no constant failure rate over the whole mission (probability only, repair model, latent or phase exposure)'; break; }
+        xs.push(x); probs.push(k.probability);
+    }
+    if (!info.reason && kids.length < 2) info.reason = 'fewer than two inputs';
+    if (!info.reason) {
+        const exact = isSpare ? _spareExactProb(xs, warmK, ps) : _pandExactProb(xs);
+        const bound = isSpare ? _spareBoundProb(probs, ps) : probs.reduce((a, b) => a * b, 1);
+        if (exact == null) info.reason = 'too many inputs to solve exactly';
+        else if (exact > bound * (1 + 1e-9) && bound > 0) info.reason = 'standby factor above 1';
+        else { info.mode = 'exact'; info.exact = exact; info.bound = bound; }
+    }
+    node._dynStatic = info;
+    if (info.mode === 'exact') return _cbuConst(ctx, info.exact);
+    if (warmK > 1) return vecs[0].slice();
+    const out = new Array(ctx.K);
+    for (let k = 0; k < ctx.K; k++) {
+        const pk = vecs.map(v => v[k]);
+        out[k] = isSpare ? _spareBoundProb(pk, ps) : pk.reduce((a, b) => a * b, 1);
+    }
+    return out;
+}
+function _cbuNode(node, visited, ctx) {
+    if (!node) return _cbuConst(ctx, 0);
+    if (node.type !== 'gate') {
+        const lid = node.logicalId != null ? node.logicalId : node.id;
+        let v = ctx.prof.get(node.id);
+        if (!v) {
+            if (!visited.has(node.id)) {
+                visited.add(node.id);
+                // Phase 61: a leaf with no rate data (no λ, no Markov model) holds an allocated
+                // probability BUDGET (or a directly-set value, e.g. a house event); that stored
+                // probability is authoritative and must not be wiped by the λ→P conversion.
+                // Leaves with real rate data (verification trees) compute P from λ + repair model.
+                const _lamEff = (typeof getEffectiveLambda === 'function') ? (getEffectiveLambda(node) || 0) : (node.lambda || 0);
+                if (!(_lamEff > 0) && !node.markovModelId) node.probability = node.probability || 0;
+                else node.probability = effectiveProb(node, ftaConfig.exposureTime);
+            }
+            v = _cbuLeafVec(node, ctx);
+            ctx.prof.set(node.id, v);
+        }
+        const trig = ctx.fdep.byLid.get(lid);
+        return trig ? _cbuForce(ctx, v, trig, 'l:' + lid, visited) : v;
+    }
+    if (visited.has(node.id)) return ctx.prof.get(node.id) || _cbuConst(ctx, node.probability || 0);
+    visited.add(node.id);
+    let v = _cbuGate(node, visited, ctx);
+    if (v === null) { ctx.unset.add(node.id); return _cbuConst(ctx, 0); }
+    const gtrig = ctx.fdep.byGate.get(node.id);
+    // A functional dependency makes its trigger a shared event of every dependent, which the
+    // gate-by-gate product cannot see (it would multiply the trigger in twice). A gate whose
+    // subtree holds a forced event therefore takes the exact BDD value, FDEPs from the whole tree
+    // in scope. A prescribed (engineer-asserted) gate keeps its asserted value.
+    const prescribed = (typeof _getPrescribedTarget === 'function') ? _getPrescribedTarget(node) : null;
+    if (ctx.fdep.gates.length && node.gateType !== 'FDEP' && !(prescribed !== null && isFinite(prescribed))
+        && _cbuForcedIn(node, ctx) && typeof computeExactProbability === 'function') {
+        let ex = null;
+        try { ex = computeExactProbability(node, ctx.root).prob; } catch (e) { ex = null; }
+        if (ex !== null && isFinite(ex)) { v = _cbuConst(ctx, ex); node.probability = ex; }
+        else if (gtrig) { v = _cbuForce(ctx, v, gtrig, 'g:' + node.id, visited); node.probability = _cbuMean(ctx, v); }
+    } else if (gtrig) { v = _cbuForce(ctx, v, gtrig, 'g:' + node.id, visited); node.probability = _cbuMean(ctx, v); }
+    ctx.prof.set(node.id, v);
+    return v;
+}
+function _cbuForcedIn(node, ctx) {
+    if (!node) return false;
+    if (ctx.forcedIn.has(node.id)) return ctx.forcedIn.get(node.id);
+    ctx.forcedIn.set(node.id, false);
+    let r = false;
+    if (node.type !== 'gate') r = ctx.fdep.byLid.has(node.logicalId != null ? node.logicalId : node.id);
+    else if (node.gateType === 'FDEP') r = false;
+    else if (ctx.fdep.byGate.has(node.id)) r = true;
+    else if (node.gateType === 'TRANSFER' || node.transferOutTo) {
+        const linkedId = node.transferOutTo || node.linkedPageId;
+        const page = (linkedId && typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages.find(p => p.id === linkedId) : null;
+        r = !!(page && page.root && _cbuForcedIn(page.root, ctx));
+        if (!r && node.gateType !== 'TRANSFER') r = (node.children || node._children || []).some(c => _cbuForcedIn(c, ctx));
+    }
+    else r = (node.children || node._children || []).some(c => _cbuForcedIn(c, ctx));
+    ctx.forcedIn.set(node.id, r);
+    return r;
+}
+// Returns the gate's grid vector (and sets node.probability to its mean), or null for the
+// legacy "no children / unresolved transfer → 0, probability untouched" cases.
+function _cbuGate(node, visited, ctx) {
     // Phase 56.39d — Prescribed gate: value is engineer-asserted. Children
     // still calc bottom-up so divergence can be surfaced for DER review.
     if (typeof _getPrescribedTarget === 'function') {
@@ -405,7 +574,7 @@ function calcBottomUp(node, visited = new Set()) {
         if (pr !== null && isFinite(pr)) {
             const kids = node.children || node._children;
             if (kids && kids.length) {
-                const childProbs = kids.map(c => calcBottomUp(c, visited));
+                const childProbs = kids.map(c => _cbuMean(ctx, _cbuNode(c, visited, ctx)));
                 let childImplied = 0;
                 if (node.gateType === 'OR') childImplied = 1 - childProbs.reduce((a, b) => a * (1 - b), 1);
                 else if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') childImplied = childProbs.reduce((a, b) => a * b, 1);
@@ -417,7 +586,7 @@ function calcBottomUp(node, visited = new Set()) {
                 delete node._prescribedDivergence;
             }
             node.probability = pr;
-            return pr;
+            return _cbuConst(ctx, pr);
         }
     }
     // Pure TRANSFER and logical-gate-with-transferOutTo both resolve to a linked page's root.
@@ -425,28 +594,52 @@ function calcBottomUp(node, visited = new Set()) {
         const linkedId = node.transferOutTo || node.linkedPageId;
         if (linkedId) {
             const linkedPage = ftaPages.find(p => p.id === linkedId);
-            if (linkedPage && linkedPage.root) { node.probability = calcBottomUp(linkedPage.root, visited); return node.probability; }
+            if (linkedPage && linkedPage.root) { const lv = _cbuNode(linkedPage.root, visited, ctx); node.probability = _cbuMean(ctx, lv); return lv; }
         }
-        if (node.gateType === 'TRANSFER') { node.probability = 0; return 0; }
+        if (node.gateType === 'TRANSFER') { node.probability = 0; return _cbuConst(ctx, 0); }
         // For a transfer-out logical gate with a missing destination, fall through to use its own (empty) children.
     }
     const actualChildren = node.children || node._children;
-    if (!actualChildren || actualChildren.length === 0) return 0;
-    const probs = actualChildren.map(c => calcBottomUp(c, visited));
-    // PAND and SPARE static-equivalent ≈ AND (the time-ordered constraint is conservative for static math).
-    if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') node.probability = probs.reduce((a, b) => a * b, 1);
-    // FDEP gates don't contribute to top probability directly — they only modify dependents (handled via DFT Monte Carlo).
-    else if (node.gateType === 'FDEP') node.probability = 0;
-    else if (node.gateType === 'OR') node.probability = 1 - probs.reduce((a, b) => a * (1 - b), 1);
-    else if (node.gateType === 'VOTING' || node.gateType === 'XOR') {
-        const dp = new Array(probs.length + 1).fill(0); dp[0] = 1.0;
-        for (const p of probs) {
-            for (let i = probs.length; i >= 1; i--) dp[i] = dp[i] * (1 - p) + dp[i - 1] * p;
-            dp[0] = dp[0] * (1 - p);
-        }
-        if (node.gateType === 'XOR') node.probability = dp[1];
-        else { const k = Math.min(node.votingK || 2, probs.length); let sum = 0; for (let i = k; i <= probs.length; i++) sum += dp[i]; node.probability = sum; }  /* Phase 44 — default K=2 (not 1, which would degrade VOTING to OR). */
+    if (!actualChildren || actualChildren.length === 0) return null;
+    const vecs = actualChildren.map(c => _cbuNode(c, visited, ctx));
+    let out;
+    if (node.gateType === 'AND' || node.gateType === 'INHIBIT') {
+        out = new Array(ctx.K);
+        for (let k = 0; k < ctx.K; k++) out[k] = vecs.reduce((a, v) => a * v[k], 1);
     }
+    else if (node.gateType === 'PAND' || node.gateType === 'SPARE') out = _cbuDyn(node, actualChildren, vecs, ctx);
+    // FDEP gates don't fail themselves: they force their dependents (see _cbuForce), counted where those are used.
+    else if (node.gateType === 'FDEP') {
+        node._dynStatic = { mode: 'fdep', dependents: actualChildren.length - 1 };
+        out = _cbuConst(ctx, 0);
+    }
+    else if (node.gateType === 'OR') {
+        out = new Array(ctx.K);
+        for (let k = 0; k < ctx.K; k++) out[k] = 1 - vecs.reduce((a, v) => a * (1 - v[k]), 1);
+    }
+    else if (node.gateType === 'VOTING' || node.gateType === 'XOR') {
+        out = new Array(ctx.K);
+        for (let kk = 0; kk < ctx.K; kk++) {
+            const probs = vecs.map(v => v[kk]);
+            const dp = new Array(probs.length + 1).fill(0); dp[0] = 1.0;
+            for (const p of probs) {
+                for (let i = probs.length; i >= 1; i--) dp[i] = dp[i] * (1 - p) + dp[i - 1] * p;
+                dp[0] = dp[0] * (1 - p);
+            }
+            if (node.gateType === 'XOR') out[kk] = dp[1];
+            else { const k = Math.min(node.votingK || 2, probs.length); let sum = 0; for (let i = k; i <= probs.length; i++) sum += dp[i]; out[kk] = sum; }  /* Phase 44: default K=2 (not 1, which would degrade VOTING to OR). */
+        }
+    }
+    else { return _cbuConst(ctx, node.probability || 0); }
+    node.probability = _cbuMean(ctx, out);
+    return out;
+}
+function calcBottomUp(node, visited = new Set()) {
+    if (!node) return 0;
+    if (visited.has(node.id)) return node.probability || 0;
+    const ctx = _cbuContext(node);
+    _cbuNode(node, visited, ctx);
+    if (node.type === 'gate' && ctx.unset.has(node.id)) return 0;
     return node.probability;
 }
 
@@ -589,6 +782,85 @@ function _slSharedStrictestRound() {
 }
 try { window._slSharedStrictestRound = _slSharedStrictestRound; } catch (_) {}
 
+// 13 Oct 2026 (math audit F1): see the note inside calculateAllProbabilities.
+function _slAllocationRolePageIds() {
+    const ids = new Set();
+    const pages = (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : [];
+    pages.forEach(p => { if (p && p.mode === 'top-down') ids.add(p.id); });
+    if (typeof ftaConfig === 'object' && ftaConfig && ftaConfig.mode === 'top-down') {
+        const active = pages.find(p => p && p.id === activeFTAPageId);
+        const rootPage = (typeof getRootAncestorPageOfActive === 'function') ? (getRootAncestorPageOfActive() || active) : active;
+        const seen = new Set();
+        (function reach(page) {
+            if (!page || seen.has(page.id)) return;
+            seen.add(page.id); ids.add(page.id);
+            (function walk(n) {
+                if (!n) return;
+                if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+                    const linked = n.transferOutTo || n.linkedPageId;
+                    if (linked) reach(pages.find(p => p && p.id === linked));
+                }
+                (n.children || n._children || []).forEach(walk);
+            })(page.root);
+        })(rootPage);
+        if (active) ids.add(active.id);
+    }
+    return ids;
+}
+function _slExactTopOrNull(rootNode) {
+    try {
+        const p = (typeof exactTopProbability === 'function') ? exactTopProbability(rootNode) : computeExactProbability(rootNode).prob;
+        return (typeof p === 'number' && isFinite(p) && p >= 0) ? p : null;
+    } catch (_) { return null; }
+}
+function _slApplyExactTops() {
+    if (typeof computeExactProbability !== 'function' || typeof ftaPages === 'undefined' || !Array.isArray(ftaPages)) return;
+    const activePage = ftaPages.find(p => p && p.id === activeFTAPageId) || null;
+    // Display normalization of intermediate gates on the open page (Phase 56.44), unchanged.
+    if (activePage && activePage.root && typeof _hasRepeatedLogicalIds === 'function' && _hasRepeatedLogicalIds(activePage.root)) {
+        if (typeof _flagGatesWithSharedSubtreeEvents === 'function') _flagGatesWithSharedSubtreeEvents(activePage.root);
+        if (typeof _normalizeIntermediateGatesForSharedEvents === 'function') _normalizeIntermediateGatesForSharedEvents(activePage.root);
+    }
+    const t = (typeof ftaConfig === 'object' && ftaConfig && ftaConfig.exposureTime) ? ftaConfig.exposureTime : 1;
+    const allocIds = _slAllocationRolePageIds();
+    const topDownActive = typeof ftaConfig === 'object' && ftaConfig && ftaConfig.mode === 'top-down';
+    ftaPages.forEach(page => {
+        if (!page || !page.root || page.root.type !== 'gate') return;
+        const r = page.root;
+        const isOpen = !!activePage && page.id === activePage.id;
+        if (allocIds.has(page.id)) {
+            // Allocation role: the engineer's budget stays on the root.
+            delete r._bddExactProb; delete r._bddBottomUpProb; delete r._exactTopRefused; delete r._topIsRollup;
+            if (topDownActive && isOpen) {
+                const exact = _slExactTopOrNull(r);
+                if (exact != null) { r._bddActualProb = exact; r._bddTargetProb = r.probability; }
+                else { delete r._bddActualProb; delete r._bddTargetProb; }
+                delete r._bddActualLambda;   // Phase 61 — probability-only in allocation mode
+            }
+            return;
+        }
+        delete r._bddActualProb; delete r._bddActualLambda; delete r._bddTargetProb;
+        if (!isOpen) {
+            // Result page that is not on screen: lazy compute (8 Sep 2026 directive), nothing
+            // is computed for it here. Its root keeps whatever the last roll-up left and is
+            // MARKED as such; no verdict reads it (they call SLTopBasis.exactTop, cached), and
+            // the moment the page is opened it gets the exact value below.
+            if (r._bddExactProb !== r.probability) { r._topIsRollup = true; delete r._bddExactProb; delete r._bddBottomUpProb; }
+            return;
+        }
+        // The open result page: the exact top replaces the gate-by-gate roll-up.
+        const naive = r.probability;
+        const exact = _slExactTopOrNull(r);
+        delete r._topIsRollup;
+        if (exact == null) { r._exactTopRefused = true; r._topIsRollup = true; delete r._bddExactProb; delete r._bddBottomUpProb; return; }
+        delete r._exactTopRefused;
+        r._bddExactProb = exact;
+        r._bddBottomUpProb = naive;
+        r.probability = exact;
+        r.lambda = (exact > 0 && exact < 1) ? (-Math.log1p(-exact) / t) : 0;
+    });
+}
+
 function calculateAllProbabilities() {
     if (ftaConfig.mode === 'top-down') {
         // Phase 66.19 — resolve shared events across every tree BEFORE this page is
@@ -665,63 +937,28 @@ function calculateAllProbabilities() {
         // the parent's recursion).
         ftaPages.forEach(page => { if (page.root) calcBottomUp(page.root, new Set()); });
     }
-    // Phase 56.41 / 56.42 — On the ACTIVE page, if shared logicalIds exist,
-    // compute BDD-exact and surface it neutrally.
-    //
-    //   TOP-DOWN: TOP target is the engineer-set budget — preserve it.
-    //             Store BDD-exact reconstruction on root._bddActualProb so the
-    //             canvas can render Target / Actual side-by-side. The tool
-    //             shows numbers, not judgments — the engineer decides whether
-    //             the divergence is acceptable.
-    //   BOTTOM-UP: TOP has no engineer-set target — replace root.probability
-    //              with BDD-exact so the canvas shows the correct, cert-
-    //              defensible value instead of the naive independent calc.
-    try {
-        const activePage = (typeof ftaPages !== 'undefined') ? ftaPages.find(p => p.id === activeFTAPageId) : null;
-        if (activePage && activePage.root && typeof computeExactProbability === 'function') {
-            if (_hasRepeatedLogicalIds(activePage.root)) {
-                _flagGatesWithSharedSubtreeEvents(activePage.root);
-                // Phase 56.44 — Normalize every intermediate gate whose subtree
-                // contains shared events. Each such gate's displayed probability
-                // becomes its BDD-exact subtree reconstruction (not the naive
-                // bottom-up multiplication). Runs BEFORE the root-level
-                // computeExactProbability so the root sees corrected children.
-                if (typeof _normalizeIntermediateGatesForSharedEvents === 'function') {
-                    _normalizeIntermediateGatesForSharedEvents(activePage.root);
-                }
-                const exact = computeExactProbability(activePage.root);
-                if (exact && typeof exact.prob === 'number' && isFinite(exact.prob)) {
-                    const t = (typeof ftaConfig === 'object' && ftaConfig && ftaConfig.exposureTime) ? ftaConfig.exposureTime : 1;
-                    const exactLambda = (exact.prob > 0 && exact.prob < 1) ? (-Math.log1p(-exact.prob) / t) : 0;
-                    if (ftaConfig.mode === 'top-down') {
-                        // Preserve engineer's TOP target. Surface actual alongside.
-                        // Phase 61 — probability-only in allocation mode; no λ-equivalent stored.
-                        activePage.root._bddActualProb   = exact.prob;
-                        activePage.root._bddTargetProb   = activePage.root.probability;
-                        delete activePage.root._bddActualLambda;
-                    } else {
-                        // Bottom-up: replace TOP with the cert-defensible exact value.
-                        activePage.root._bddExactProb     = exact.prob;
-                        activePage.root._bddBottomUpProb  = activePage.root.probability;
-                        activePage.root.probability       = exact.prob;
-                        activePage.root.lambda            = exactLambda;
-                        // Clean any leftover top-down markers.
-                        delete activePage.root._bddActualProb;
-                        delete activePage.root._bddActualLambda;
-                        delete activePage.root._bddTargetProb;
-                    }
-                }
-            } else {
-                // No shared events — clean up any stale markers from a prior
-                // state and let the canvas render the standard λ / P line.
-                delete activePage.root._bddExactProb;
-                delete activePage.root._bddBottomUpProb;
-                delete activePage.root._bddActualProb;
-                delete activePage.root._bddActualLambda;
-                delete activePage.root._bddTargetProb;
-            }
-        }
-    } catch (e) { /* BDD optional — fall back silently */ }
+    // 13 Oct 2026 (math audit F1): ONE EXACT TOP.
+    // Before today the BDD value replaced the gate-by-gate roll-up only when the open
+    // tree had repeated logicalIds. A common cause (beta) group has no repeated ids,
+    // so its term never reached root.probability, and the pass/fail screens read
+    // root.probability on pages that were not open, where it was always the
+    // independent roll-up (T4: 1.0e-8 shown against an exact 5.0e-6). Now:
+    //   - every pass/fail screen calls SLTopBasis.exactTop (top_basis.js): the cached
+    //     BDD with common cause and shared events, on any page, open or not. None of
+    //     them reads root.probability any more.
+    //   - the OPEN result page (bottom-up / verification) shows that exact value on its
+    //     root, always (common cause included, not only with repeated ids); the
+    //     gate-by-gate value stays on root._bddBottomUpProb for transparency.
+    //   - the OPEN allocation page keeps the engineer's budget on its root and carries
+    //     the exact reconstruction on root._bddActualProb ("Actual" on the canvas when
+    //     it differs from the target by more than 1%).
+    //   - pages NOT on screen are not computed here (lazy compute, 8 Sep 2026): their
+    //     root is marked _topIsRollup until the page is opened.
+    //   - intermediate gates keep their gate-by-gate value (display only), with the
+    //     existing shared-event normalization on the open page.
+    // A BDD refusal keeps the roll-up on screen, marks root._exactTopRefused, and the
+    // verdict screens withhold a verdict.
+    try { _slApplyExactTops(); } catch (e) { /* BDD optional at runtime; never break a recompute */ }
     // Phase 53.43 — reactively propagate DAL allocation from the true root after every change.
     if (typeof propagateDalFromTrueRoot === 'function') propagateDalFromTrueRoot();
     // Phase 56.18b — sweep externally-linked events for staleness vs the snapshot.
@@ -755,6 +992,412 @@ function calculateAllProbabilities() {
 // BDD — extracted to engine_modules.js (Phase 76; byte-identical, loaded after this file).
 
 // Helper for VOTING gates — k-of-n via combinations.
+// ── 13 Oct 2026 (math audit F4 / F5): dynamic gates and periodic latent events in the
+// STATIC number. Pure functions of node fields and baked probabilities (no app state), kept
+// identical in fta_engine.js and fta_quant_modules.js (regression_engine_parity holds them).
+//
+// FDEP. A functional dependency (kids[0] = trigger, kids[1..] = dependents) is the standard
+// static reduction: every occurrence of a dependent becomes OR(dependent, trigger). Exact for
+// the static gates (a dependent is failed by T exactly when it failed on its own or its trigger
+// did). The FDEP gate itself still outputs nothing.
+//
+// SPARE / PAND. The static structure is the gate's conservative bound: PAND = AND of its inputs;
+// SPARE = primary AND (switch-1 fails OR (spare-1 AND (switch-2 fails OR (spare-2 AND ...)))),
+// where "switch-j fails" is a visible event with probability 1 - switch success. When every
+// input is a basic event with a constant failure rate over the mission, used nowhere else in
+// the tree, the gate is an independent dynamic module and is solved EXACTLY as a Markov chain
+// (the same model the DFT Monte Carlo samples: cold/warm standby, switch success on demand,
+// strict order for PAND). The bound is then multiplied by a time-order factor
+// (exact / bound, never above 1) carried as one BDD variable ANDed onto the gate, so P(top) is
+// exact and the cut sets keep their real members. Otherwise the bound stands and the gate says
+// it is an upper bound.
+//
+// Periodic latent events (repairModel 'periodic', interval tau, mean lambda*tau/2). Events with
+// the SAME interval are taken to be inspected at the same check, so their unavailabilities rise
+// together: q_i(t) = lambda_i * t over the cycle. The static number is the time average of
+// P(top) over the cycle, (1/tau) * integral P(top | q(t)) dt, evaluated exactly with
+// Gauss-Legendre points (P(top) is a polynomial in t of degree <= the number of such events, so
+// floor(n/2) + 1 points are exact). Two events under AND give lambda1*lambda2*tau^2/3, the
+// ARP4761A practice, instead of the product of the means (tau^2/4). A single periodic event,
+// or one combined with active per-flight events, keeps exactly its old value (the average of a
+// linear term is its mean). Different intervals stay independent of each other, as before.
+function _dynHasRate(n) {
+    if (parseFloat(n.lambda) > 0) return true;
+    const lp = n.lambdaByPhase;
+    return !!(lp && typeof lp === 'object' && Object.keys(lp).some(function (k) { return parseFloat(lp[k]) > 0; }));
+}
+function _dynRateLeaf(n) {
+    if (!n || n.type === 'gate' || n.eventClass === 'dev-error' || n.markovModelId) return null;
+    const model = n.repairModel || 'unmaintained';
+    if (model === 'continuous' && ((n.mu || 0) > 0)) return null;
+    if (model === 'periodic' && ((n.tau || 0) > 0)) return null;
+    if ((n.exposureMode || 'continuous') !== 'continuous') return null;
+    if (!_dynHasRate(n)) return null;
+    const p = n.probability;
+    if (typeof p !== 'number' || !isFinite(p) || p < 0 || p >= 1) return null;
+    return -Math.log1p(-p);
+}
+function _periodicTau(n) {
+    if (!n || n.type === 'gate' || n.eventClass === 'dev-error' || n.markovModelId || n._synthetic) return 0;
+    if (n.repairModel !== 'periodic') return 0;
+    const tau = parseFloat(n.tau);
+    if (!(isFinite(tau) && tau > 0)) return 0;
+    if (!_dynHasRate(n)) return 0;
+    const p = n.probability;
+    if (typeof p !== 'number' || !(p > 0) || p > 0.5) return 0;
+    return tau;
+}
+function _ctmcFailProb(nStates, trans, failState) {
+    const out = new Float64Array(nStates);
+    for (let i = 0; i < trans.length; i++) out[trans[i][0]] += trans[i][2];
+    let L = 0;
+    for (let i = 0; i < nStates; i++) if (out[i] > L) L = out[i];
+    if (!(L > 0)) return 0;
+    let v = new Float64Array(nStates); v[0] = 1;
+    const logL = Math.log(L);
+    let logw = -L, p = 0;
+    const nMax = Math.ceil(L + 12 * Math.sqrt(L) + 60) + nStates;
+    for (let n = 0; n <= nMax; n++) {
+        if (n > 0) {
+            const nv = new Float64Array(nStates);
+            for (let i = 0; i < nStates; i++) nv[i] = v[i] * (1 - out[i] / L);
+            for (let i = 0; i < trans.length; i++) { const t = trans[i]; nv[t[1]] += v[t[0]] * (t[2] / L); }
+            v = nv;
+            logw += logL - Math.log(n);
+        }
+        p += Math.exp(logw) * v[failState];
+        if (n >= nStates && n + 2 > L) {
+            const tail = Math.exp(logw + logL - Math.log(n + 1)) / (1 - L / (n + 2));
+            if (p > 0 ? tail <= 1e-17 * p : tail < 1e-300) break;
+        }
+    }
+    return Math.min(1, p);
+}
+function _spareExactProb(xs, warmK, ps) {
+    const m = xs.length - 1;
+    if (m < 1 || m > 8) return null;
+    let full = 0;
+    for (let b = 1; b <= m; b++) full |= (1 << b);
+    const idx = new Map(), states = [], pend = [];
+    const sid = function (i, mask) { const k = i * 1024 + mask; if (!idx.has(k)) { idx.set(k, states.length); states.push([i, mask]); } return idx.get(k); };
+    sid(0, full);
+    for (let s = 0; s < states.length; s++) {
+        const i = states[s][0], mask = states[s][1];
+        let j = -1;
+        for (let b = i + 1; b <= m; b++) if (mask & (1 << b)) { j = b; break; }
+        if (xs[i] > 0) {
+            if (j < 0) pend.push([s, -1, xs[i]]);
+            else {
+                if (ps > 0) pend.push([s, sid(j, mask & ~(1 << j)), xs[i] * ps]);
+                if (ps < 1) pend.push([s, -1, xs[i] * (1 - ps)]);
+            }
+        }
+        if (warmK > 0) for (let b = i + 1; b <= m; b++) if ((mask & (1 << b)) && xs[b] > 0) pend.push([s, sid(i, mask & ~(1 << b)), warmK * xs[b]]);
+    }
+    const F = states.length;
+    return _ctmcFailProb(F + 1, pend.map(function (t) { return [t[0], t[1] < 0 ? F : t[1], t[2]]; }), F);
+}
+function _pandExactProb(xs) {
+    const n = xs.length;
+    if (n < 2 || n > 64) return null;
+    const trans = [];
+    for (let k = 0; k < n; k++) {
+        if (xs[k] > 0) trans.push([k, k + 1, xs[k]]);
+        let later = 0;
+        for (let j = k + 1; j < n; j++) later += xs[j];
+        if (later > 0) trans.push([k, n + 1, later]);
+    }
+    return _ctmcFailProb(n + 2, trans, n);
+}
+function _spareBoundProb(probs, ps) {
+    let r = 1;
+    for (let j = probs.length - 1; j >= 1; j--) r = (1 - ps) + ps * probs[j] * r;
+    return probs[0] * r;
+}
+function _glRule(K) {
+    const x = [], w = [];
+    for (let i = 1; i <= K; i++) {
+        let z = Math.cos(Math.PI * (i - 0.25) / (K + 0.5)), pp = 1;
+        for (let it = 0; it < 100; it++) {
+            let p1 = 1, p2 = 0;
+            for (let j = 1; j <= K; j++) { const p3 = p2; p2 = p1; p1 = ((2 * j - 1) * z * p2 - (j - 1) * p3) / j; }
+            pp = K * (z * p1 - p2) / (z * z - 1);
+            const z1 = z;
+            z = z1 - p1 / pp;
+            if (Math.abs(z - z1) < 1e-16) break;
+        }
+        x.push((1 - z) / 2);
+        w.push(1 / ((1 - z * z) * pp * pp));
+    }
+    return { x: x, w: w };
+}
+function _periodicGrid(varOrder, varMeta) {
+    const groups = new Map();
+    for (let v = 0; v < varOrder.length; v++) {
+        const meta = varMeta && varMeta[v];
+        const n = (meta && (meta.node || meta.refNode)) || varOrder[v];
+        const tau = (meta && meta.type === 'group' && meta.ccf) ? _mglEventTau(meta.ccf, meta.ccfIdx) : _periodicTau(n);
+        if (!tau) continue;
+        if (!groups.has(tau)) groups.set(tau, []);
+        groups.get(tau).push(v);
+    }
+    const dims = [];
+    groups.forEach(function (vars, tau) { if (vars.length >= 2) dims.push({ tau: tau, vars: vars, K: Math.floor(vars.length / 2) + 1 }); });
+    if (!dims.length) return null;
+    dims.sort(function (a, b) { return a.tau - b.tau; });
+    let total = 1;
+    dims.forEach(function (d) { total *= d.K; });
+    if (total > 4096) {
+        const f = [];
+        dims.forEach(function (d) { d.vars.forEach(function (v) { f.push([v, 2]); }); });
+        return { bound: true, groups: dims.map(function (d) { return { tau: d.tau, count: d.vars.length }; }), points: [{ w: 1, f: f }] };
+    }
+    let points = [{ w: 1, f: [] }];
+    dims.forEach(function (d) {
+        const r = _glRule(d.K), next = [];
+        points.forEach(function (pt) {
+            for (let k = 0; k < d.K; k++) {
+                const f = pt.f.slice();
+                d.vars.forEach(function (v) { f.push([v, 2 * r.x[k]]); });
+                next.push({ w: pt.w * r.w[k], f: f });
+            }
+        });
+        points = next;
+    });
+    return { bound: false, groups: dims.map(function (d) { return { tau: d.tau, count: d.vars.length }; }), points: points };
+}
+function _bddGridMaps(built, probMap) {
+    const grid = built && built.grid;
+    if (!grid) return [{ w: 1, map: probMap }];
+    return grid.points.map(function (pt) {
+        const m = new Map(probMap);
+        for (let i = 0; i < pt.f.length; i++) m.set(pt.f[i][0], Math.min(1, (probMap.get(pt.f[i][0]) || 0) * pt.f[i][1]));
+        return { w: pt.w, map: m };
+    });
+}
+function _bddAvgProbability(built, probMap, fixVar, fixVal) {
+    const pts = _bddGridMaps(built, probMap);
+    let s = 0;
+    for (let i = 0; i < pts.length; i++) {
+        let m = pts[i].map;
+        if (fixVar != null) { m = new Map(m); m.set(fixVar, fixVal); }
+        s += pts[i].w * BDD.probability(built.bdd, m);
+    }
+    return s;
+}
+function _collectFdep(scope) {
+    const byLid = new Map(), byGate = new Map(), gates = [];
+    const seen = new Set(), pages = new Set();
+    (function walk(n) {
+        if (!n || seen.has(n.id)) return;
+        seen.add(n.id);
+        if (n.type !== 'gate') return;
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !pages.has(linkedId)) {
+                pages.add(linkedId);
+                const page = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages.find(function (p) { return p.id === linkedId; }) : null;
+                if (page && page.root) walk(page.root);
+            }
+            return;
+        }
+        const kids = n.children || n._children;
+        if (n.gateType === 'FDEP' && kids && kids.length >= 2 && kids[0]) {
+            gates.push(n);
+            for (let i = 1; i < kids.length; i++) {
+                const d = kids[i];
+                if (!d) continue;
+                const m = d.type === 'gate' ? byGate : byLid;
+                const key = d.type === 'gate' ? d.id : (d.logicalId != null ? d.logicalId : d.id);
+                if (!m.has(key)) m.set(key, []);
+                if (m.get(key).indexOf(kids[0]) < 0) m.get(key).push(kids[0]);
+            }
+        }
+        if (kids) kids.forEach(walk);
+    })(scope);
+    return { byLid: byLid, byGate: byGate, gates: gates };
+}
+function _dynSyntheticNode(gate, kind, j, p, spare) {
+    const gid = gate.id;
+    const label = gate.displayId || gate.name || gate.gateType;
+    const id = 'dyn:' + gid + ':' + (kind === 'switch' ? 'sw' + j : 'order');
+    return {
+        id: id, logicalId: id, type: 'basic', probability: p, children: [], _synthetic: kind, _dynGateId: gid,
+        displayId: kind === 'switch' ? label + '-SW' + j : label + ' order',
+        name: kind === 'switch'
+            ? 'Switchover to ' + ((spare && (spare.displayId || spare.name)) || ('spare ' + j)) + ' fails on demand (' + label + ')'
+            : 'Time-order factor of ' + label + ' (exact dynamic solution / static bound)'
+    };
+}
+
+// ── 13 Oct 2026: common cause failure, the Multiple Greek Letter model ────────────────────────
+// NUREG/CR-5485 (Mosleh et al., 1998) and NUREG/CR-4780: for a common cause component group
+// of m alike members, each with total failure probability Q_t, the probability of ONE SPECIFIC
+// common cause basic event that fails ONE SPECIFIC set of k members is
+//     Q_k^(m) = (1 / C(m-1, k-1)) · (ρ_1 · ρ_2 · … · ρ_k) · (1 − ρ_{k+1}) · Q_t
+// with ρ_1 = 1, ρ_2 = β, ρ_3 = γ, ρ_4 = δ, ρ_{m+1} = 0 (and Q_1 = (1 − β) · Q_t, the member's
+// own independent failure). Every specific subset of 2 or more members is its OWN event (its own
+// BDD variable), so the cut sets name each common cause event explicitly.
+// Defaults, stated once: β alone is the beta factor model, which is MGL with γ = δ = 1 (every
+// common cause failure takes out the whole group). A γ or δ that was not entered is 1. Letters
+// past δ (groups of 5 or more) are 1: a common cause failure that reaches 4 members reaches all.
+// What "entered" means: node.ccfModel === 'mgl' → any number stored in gamma/delta (0 included);
+// node.ccfModel === 'beta' → gamma/delta are ignored; no ccfModel (projects saved before this
+// change) → a gamma/delta above 0 counts as entered, 0 or blank means "not entered" (the old
+// screen's "leave 0 for the beta factor" instruction), so every beta-only project computes the
+// same number it did before.
+// Group parameters belong to the GROUP. The screens write them onto every member; if members
+// still disagree (an import, an old project), the group uses the largest β, γ and δ found on any
+// member, in any order, and reports a 'params-differ' issue. Members with different Q_t: each
+// common cause event uses the largest Q_t among the members it fails (conservative; NUREG/CR-5485
+// assumes alike members) and the group reports a 'qt-differ' issue.
+// Group size m: the members this tree reaches, or the project-wide count the screens stamp on the
+// members (ccfGroupSize) when the group also has members this tree does not reach. Those absent
+// members still matter: a common cause event that fails {A, B, X} with X outside this tree fails
+// exactly {A, B} here, so every in-tree subset's event is the union of all whole-group events
+// that land on it (and the ones that land on one member join that member's own variable).
+var _MGL_MAX_EVENTS = 2048;
+function _mglNum(v) {
+    if (v === null || v === undefined || v === '') return null;
+    const x = (typeof v === 'number') ? v : parseFloat(v);
+    return isFinite(x) ? Math.min(1, Math.max(0, x)) : null;
+}
+function _mglBinom(n, k) {
+    if (k < 0 || k > n) return 0;
+    let r = 1;
+    for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+    return Math.round(r);
+}
+function _mglLid(n) { return n.logicalId != null ? n.logicalId : n.id; }
+function _mglMemberParams(n) {
+    const beta = _mglNum(n && n.beta) || 0;
+    const model = n && n.ccfModel;
+    const g = _mglNum(n && n.gamma), d = _mglNum(n && n.delta);
+    const gammaGiven = model === 'beta' ? false : (g !== null && (model === 'mgl' || g > 0));
+    const deltaGiven = model === 'beta' ? false : (d !== null && (model === 'mgl' || d > 0));
+    return { beta: beta, gamma: gammaGiven ? g : 1, delta: deltaGiven ? d : 1, gammaGiven: gammaGiven, deltaGiven: deltaGiven };
+}
+// The group's model, from its members (any order). Returns null when the group's β is 0
+// (no common cause modeled: the members are ordinary independent events).
+function _mglPlanGroup(group, memberNodes) {
+    const byLid = new Map();
+    (memberNodes || []).forEach(n => { const k = String(_mglLid(n)); if (!byLid.has(k)) byLid.set(k, n); });
+    const lids = [...byLid.keys()].sort();
+    const members = lids.map(k => byLid.get(k));
+    const ps = members.map(_mglMemberParams);
+    let beta = 0, gamma = 0, delta = 0;
+    ps.forEach(p => { if (p.beta > beta) beta = p.beta; if (p.gamma > gamma) gamma = p.gamma; if (p.delta > delta) delta = p.delta; });
+    if (!(beta > 0)) return null;
+    const issues = [];
+    const p0 = ps[0];
+    const same = ps.every(p => p.beta === p0.beta && p.gamma === p0.gamma && p.delta === p0.delta && p.gammaGiven === p0.gammaGiven && p.deltaGiven === p0.deltaGiven);
+    if (!same) issues.push({ code: 'params-differ', group: group,
+        message: 'The members of common cause group "' + group + '" carry different beta, gamma or delta values. The group uses the largest of each (beta ' + beta + ', gamma ' + gamma + ', delta ' + delta + '). Set the group parameters once so every member agrees.' });
+    const qs = members.map(n => (n && n.eventClass === 'dev-error') ? 0 : ((n && n.probability) || 0));
+    const qMin = Math.min.apply(null, qs), qMax = Math.max.apply(null, qs);
+    if (qMax > 0 && qMin !== qMax) issues.push({ code: 'qt-differ', group: group,
+        message: 'The members of common cause group "' + group + '" have different failure probabilities (' + qMin.toExponential(2) + ' to ' + qMax.toExponential(2) + '). The model assumes alike members, so each common cause event uses the largest probability among the members it fails.' });
+    const t = members.length;
+    let declared = 0;
+    members.forEach(n => { const s = parseInt(n && n.ccfGroupSize, 10); if (isFinite(s) && s > declared) declared = s; });
+    if (declared && declared < t) issues.push({ code: 'size-below-members', group: group,
+        message: 'Common cause group "' + group + '" is recorded as ' + declared + ' members but this tree reaches ' + t + '. The tree count is used.' });
+    const m = Math.max(t, declared);
+    const rho = [0, 1, beta, gamma, delta];
+    for (let k = 5; k <= m; k++) rho[k] = 1;
+    rho[m + 1] = 0;
+    const f = [0];
+    let prod = 1;
+    for (let k = 1; k <= m; k++) { prod *= rho[k]; f[k] = prod * (1 - rho[k + 1]) / _mglBinom(m - 1, k - 1); }
+    const h = m - t;
+    const sizes = [];
+    for (let j = 2; j <= t; j++) {
+        let any = false;
+        for (let i = 0; i <= h; i++) if (f[j + i] > 0) { any = true; break; }
+        if (any) sizes.push(j);
+    }
+    let count = 0;
+    sizes.forEach(j => { count += _mglBinom(t, j); });
+    if (count > _MGL_MAX_EVENTS) {
+        const e = new Error('Common cause group "' + group + '" (' + t + ' members) needs ' + count + ' common cause events, over the ' + _MGL_MAX_EVENTS + ' limit. Split the group or enter gamma and delta so fewer subsets carry probability.');
+        e.name = 'CCFGroupTooLargeError'; e.group = group; e.count = count;
+        throw e;
+    }
+    const subsets = [];
+    sizes.forEach(j => {
+        (function pick(start, cur) {
+            if (cur.length === j) { subsets.push(cur.slice()); return; }
+            for (let i = start; i < t; i++) { cur.push(i); pick(i + 1, cur); cur.pop(); }
+        })(0, []);
+    });
+    const gammaGiven = ps.every(p => p.gammaGiven), deltaGiven = ps.every(p => p.deltaGiven);
+    const srcs = [];
+    members.forEach(n => { const v = n && n.ccfParamSource ? String(n.ccfParamSource).trim() : ''; if (v && srcs.indexOf(v) === -1) srcs.push(v); });
+    return { group: group, members: members, lids: lids, m: m, t: t, h: h, beta: beta, gamma: gamma, delta: delta,
+             gammaGiven: gammaGiven, deltaGiven: deltaGiven, model: (gammaGiven || deltaGiven) ? 'mgl' : 'beta-factor',
+             f: f, subsets: subsets, issues: issues, paramSource: srcs.join(' | ') };
+}
+// Probability of the event that fails exactly the in-tree members `idxs` (indexes into
+// plan.members). One index = that member's own variable (its independent part plus every
+// whole-group event that reaches only it here). qOf(node) gives each member's Q_t.
+function _mglEventProb(plan, idxs, qOf) {
+    const j = idxs.length;
+    let qt = 0;
+    for (let a = 0; a < j; a++) { const q = qOf(plan.members[idxs[a]]); if (q > qt) qt = q; }
+    if (!(qt > 0)) return 0;
+    if (plan.h === 0) return Math.min(1, plan.f[j] * qt);
+    let s = 0;
+    for (let i = 0; i <= plan.h; i++) {
+        const x = (plan.f[j + i] || 0) * qt;
+        if (!(x > 0)) continue;
+        if (x >= 1) return 1;
+        s += _mglBinom(plan.h, i) * Math.log1p(-x);
+    }
+    return -Math.expm1(s);
+}
+// The same event's failure rate (per hour), when every member it fails has a rate: the MGL
+// share of the largest member rate. 0 when any member has no rate.
+function _mglEventRate(plan, idxs) {
+    let lam = 0;
+    for (let a = 0; a < idxs.length; a++) {
+        const l = parseFloat(plan.members[idxs[a]].lambda);
+        if (!(isFinite(l) && l > 0)) return 0;
+        if (l > lam) lam = l;
+    }
+    let share = 0;
+    for (let i = 0; i <= plan.h; i++) share += _mglBinom(plan.h, i) * (plan.f[idxs.length + i] || 0);
+    return share * lam;
+}
+// The visible common cause basic event for one subset: what cut sets, reports and the
+// common cause screens show. It is not a tree node and never carries ccfGroup itself.
+function _mglEventNode(plan, idxs) {
+    const mem = idxs.map(i => plan.members[i]);
+    const labels = mem.map(n => String(n.displayId || n.name || _mglLid(n)));
+    const key = 'ccf:' + plan.group + ':' + idxs.map(i => plan.lids[i]).join('+');
+    return {
+        id: key, logicalId: key, type: 'basic', isCCF: true, sourceGroup: plan.group, ccfTier: idxs.length,
+        displayId: 'CCF-' + plan.group + '[' + labels.join('+') + ']',
+        name: 'CCF ' + plan.group + ': ' + labels.join('+'),
+        probability: 0, lambda: 0, children: [],
+        ccf: { group: plan.group, k: idxs.length, groupSize: plan.m, membersInTree: plan.t,
+               memberLids: idxs.map(i => plan.lids[i]), memberIds: mem.map(n => n.id), memberDisplayIds: labels,
+               beta: plan.beta, gamma: plan.gamma, delta: plan.delta, gammaGiven: plan.gammaGiven, deltaGiven: plan.deltaGiven,
+               model: plan.model, method: 'NUREG/CR-5485 Multiple Greek Letter', paramSource: plan.paramSource }
+    };
+}
+// 13 Oct 2026 (fix 3 x F5): the inspection interval a common cause event shares with its members,
+// so the shared-interval time average scales it with them (its probability is linear in its
+// members' q). 0 when its members are not all periodic latent events with one interval.
+function _mglEventTau(plan, idxs) {
+    let tau = 0;
+    for (let a = 0; a < idxs.length; a++) {
+        const t = _periodicTau(plan.members[idxs[a]]);
+        if (!t || (tau && t !== tau)) return 0;
+        tau = t;
+    }
+    return tau;
+}
+
 function _bddCombinations(items, r) {
     const out = [];
     (function pick(start, current) {
@@ -764,56 +1407,45 @@ function _bddCombinations(items, r) {
     return out;
 }
 
-// Build a BDD from a fault tree root. Returns { bdd, varOrder, lidToVar, varMeta, ccfGroupToVar }.
-// varOrder is the full list of representative nodes — one entry per BDD variable.
-// varMeta annotates each variable as either an 'indep' (independent failure of a basic event)
-// or a 'group' (common-cause failure event shared by every basic event in the named CCF group).
-// For an event in CCF group G with parameters β/γ/δ, its BDD leaf becomes:
-//     v_indep  ∨  v_group2of  ∨  v_group3of  ∨  v_group4of
-// and the probability assignments split the total q across the tiers:
-//     P(v_indep)   = q · (1 − β)
-//     P(v_group2)  = q · β · (1 − γ)
-//     P(v_group3)  = q · β · γ · (1 − δ)
-//     P(v_group4)  = q · β · γ · δ
-// This makes BDD exact P(top) consistent with the CCF-decomposed cutset paths.
-function buildBDDFromFT(rootNode) {
+// Build a BDD from a fault tree root. Returns { bdd, varOrder, lidToVar, varMeta, ccfGroupToVar, ccfGroups }.
+// varOrder is the full list of representative nodes, one entry per BDD variable.
+// varMeta annotates each variable as either 'indep' (a basic event's own variable) or 'group'
+// (ONE specific common cause event of a CCF group: the event that fails one specific set of
+// k members). 13 Oct 2026 (fix 3): real MGL per NUREG/CR-5485, see the block above. Before,
+// the group had three tier variables ORed into EVERY member, which is the beta factor model
+// whatever gamma and delta said (2-out-of-3 came out 0.67 to 0.86 of MGL), and the group took
+// q and beta from whichever member was read first (5x swing on child order). Now each specific
+// subset is its own variable, a member's leaf is
+//     v_own  ∨  (every subset event that contains the member)
+// and varOrder[v] for a subset event is a visible CCF event object ("CCF G: A+B", isCCF, with
+// the group, members, k and parameters in .ccf), so the BDD cut sets list it by name.
+// Merged with F4/F5 (v1.9 engine): FDEP forcing applies to the whole member leaf (own and common
+// cause events), dynamic-gate synthetic variables are 'indep' with meta.synthetic.
+function buildBDDFromFT(rootNode, scopeRoot) {
     BDD.reset();
-    if (!rootNode) return { bdd: BDD.T0, varOrder: [], lidToVar: new Map(), varMeta: [], ccfGroupToVar: new Map() };
+    if (!rootNode) return { bdd: BDD.T0, varOrder: [], lidToVar: new Map(), varMeta: [], ccfGroupToVar: new Map(), ccfGroups: [], dyn: [], fdepCount: 0, grid: null };
     const varOrder = [];
     const varMeta  = [];
     const lidToVar = new Map();
-    // ccfGroupToVar.get(group) → { v2, v3, v4 } — variable indices for the 2/3/4-of-n CCF tiers.
+    // 13 Oct 2026 (fix 3, MGL): ccfGroupToVar.get(group) = { plan, vars, events, memberVars }:
+    // one variable per specific common cause event (the MGL block above).
     const ccfGroupToVar = new Map();
-    function ensureGroupVars(refNode) {
-        const g = refNode.ccfGroup;
-        if (!g) return null;
-        const beta  = refNode.beta  || 0;
-        const gamma = refNode.gamma || 0;
-        const delta = refNode.delta || 0;
-        if (beta <= 0) return null;
-        let entry = ccfGroupToVar.get(g);
-        if (entry) return entry;
-        entry = {};
-        entry.v2 = varOrder.length; varOrder.push(refNode); varMeta.push({ type: 'group', tier: 2, group: g, refNode });
-        if (gamma > 0) { entry.v3 = varOrder.length; varOrder.push(refNode); varMeta.push({ type: 'group', tier: 3, group: g, refNode }); }
-        if (gamma > 0 && delta > 0) { entry.v4 = varOrder.length; varOrder.push(refNode); varMeta.push({ type: 'group', tier: 4, group: g, refNode }); }
-        ccfGroupToVar.set(g, entry);
-        return entry;
-    }
-    // Pass 1 — collect logicalIds + CCF group representatives in DFS order.
-    (function collect(node, visitedNodes, visitedPages) {
+    const leaves = [];
+    const seenLid = new Set();
+    // 13 Oct 2026 (F4): functional dependencies in scope (the whole tree by default; a caller
+    // evaluating a sub-gate passes the tree root so FDEPs outside the sub-gate still apply).
+    const fdep = _collectFdep(scopeRoot || rootNode);
+    const lidCount = new Map();
+    const seenNodes = new Set(), seenPages = new Set();
+    // Pass 1: collect logicalIds + CCF group representatives in DFS order.
+    function collect(node, visitedNodes, visitedPages) {
         if (!node) return;
         if (visitedNodes.has(node.id)) return;
         visitedNodes.add(node.id);
         if (node.type !== 'gate') {
             const lid = node.logicalId != null ? node.logicalId : node.id;
-            if (!lidToVar.has(lid)) {
-                lidToVar.set(lid, varOrder.length);
-                varOrder.push(node);
-                varMeta.push({ type: 'indep', node });
-                // Allocate group vars on first encounter of any CCF member of that group.
-                ensureGroupVars(node);
-            }
+            lidCount.set(lid, (lidCount.get(lid) || 0) + 1);
+            if (!seenLid.has(lid)) { seenLid.add(lid); leaves.push(node); }
             return;
         }
         if (node.gateType === 'TRANSFER' || node.transferOutTo) {
@@ -827,11 +1459,123 @@ function buildBDDFromFT(rootNode) {
         }
         const kids = node.children || node._children;
         if (kids) kids.forEach(c => collect(c, visitedNodes, visitedPages));
-    })(rootNode, new Set(), new Set());
+    }
+    collect(rootNode, seenNodes, seenPages);
+    // Triggers of FDEPs outside the evaluated tree whose dependents are in it (scoped calls only).
+    for (let grew = true; grew;) {
+        grew = false;
+        fdep.gates.forEach(g => {
+            const kids = g.children || g._children;
+            if (!kids || seenNodes.has(kids[0].id)) return;
+            const hit = kids.slice(1).some(d => d && (d.type === 'gate' ? seenNodes.has(d.id) : seenLid.has(d.logicalId != null ? d.logicalId : d.id)));
+            if (hit) { collect(kids[0], seenNodes, seenPages); grew = true; }
+        });
+    }
 
-    // Pass 2 — recursive BDD build. The pageCache memoizes a destination page's resolved BDD so
+    // 13 Oct 2026 (fix 3, MGL): variables in DFS order, each common cause group's events right
+    // after its first member's own variable (only once every leaf, FDEP triggers included, is known).
+    const groupMembers = new Map();
+    leaves.forEach(n => {
+        if (!n.ccfGroup) return;
+        if (!groupMembers.has(n.ccfGroup)) groupMembers.set(n.ccfGroup, []);
+        groupMembers.get(n.ccfGroup).push(n);
+    });
+    const plans = new Map();
+    groupMembers.forEach((mem, g) => { const plan = _mglPlanGroup(g, mem); if (plan) plans.set(g, plan); });
+    leaves.forEach(n => {
+        const lid = n.logicalId != null ? n.logicalId : n.id;
+        const plan = n.ccfGroup ? plans.get(n.ccfGroup) : null;
+        lidToVar.set(lid, varOrder.length);
+        varOrder.push(n);
+        if (!plan) { varMeta.push({ type: 'indep', node: n }); return; }
+        varMeta.push({ type: 'indep', node: n, ccf: plan, ccfIdx: [plan.lids.indexOf(String(lid))] });
+        if (ccfGroupToVar.has(plan.group)) return;
+        const entry = { plan: plan, vars: [], events: [], memberVars: plan.lids.map(() => []) };
+        plan.subsets.forEach(idxs => {
+            const ev = _mglEventNode(plan, idxs);
+            const v = varOrder.length;
+            entry.vars.push(v); entry.events.push(ev);
+            idxs.forEach(i => entry.memberVars[i].push(v));
+            varOrder.push(ev);
+            varMeta.push({ type: 'group', tier: idxs.length, group: plan.group, ccf: plan, ccfIdx: idxs, event: ev, refNode: ev });
+        });
+        ccfGroupToVar.set(plan.group, entry);
+    });
+
+    // Pass 2: recursive BDD build. The pageCache memoizes a destination page's resolved BDD so
     // multiple TRANSFERs that all point at the same page don't rebuild it from scratch.
     const pageCache = new Map();
+    const forcing = new Set(), forcedCache = new Map();
+    const dynInfo = new Map();
+    function forced(base, triggers, key, visitedPages) {
+        if (forcing.has(key)) return base;
+        if (!forcing.size && forcedCache.has(key)) return forcedCache.get(key);
+        const top = !forcing.size;
+        forcing.add(key);
+        let r = base;
+        triggers.forEach(t => { r = BDD.apply('or', r, build(t, visitedPages)); });
+        forcing.delete(key);
+        if (top) forcedCache.set(key, r);
+        return r;
+    }
+    function synthVar(node) {
+        const v = varOrder.length;
+        varOrder.push(node);
+        varMeta.push({ type: 'indep', node, synthetic: node._synthetic });
+        return v;
+    }
+    // F4: classify a PAND / SPARE gate once: exact independent module, or conservative bound.
+    function dynClassify(node, kids) {
+        const isSpare = node.gateType === 'SPARE';
+        const ps = isSpare ? _spareSwitchP(node) : 1;
+        const warmK = isSpare ? _spareWarmK(node) : 0;
+        const info = { gateId: node.id, displayId: node.displayId, gateType: node.gateType, ps, warmK, mode: 'bound', reason: '', sw: [], orderVar: null, primaryOnly: false, exact: null, bound: null };
+        if (isSpare && ps < 1) for (let j = 1; j < kids.length; j++) info.sw.push(synthVar(_dynSyntheticNode(node, 'switch', j, 1 - ps, kids[j])));
+        const xs = [], probs = [], lids = new Set();
+        for (let i = 0; i < kids.length && !info.reason; i++) {
+            const k = kids[i];
+            const nm = k ? (k.displayId || k.name || String(k.id)) : '?';
+            if (!k || k.type === 'gate') { info.reason = 'input ' + nm + ' is a gate, not a single basic event'; break; }
+            const lid = k.logicalId != null ? k.logicalId : k.id;
+            if (lids.has(lid)) { info.reason = 'input ' + nm + ' is entered twice'; break; }
+            lids.add(lid);
+            if ((lidCount.get(lid) || 0) !== 1) { info.reason = 'input ' + nm + ' also appears elsewhere in the tree'; break; }
+            if (fdep.byLid.has(lid)) { info.reason = 'input ' + nm + ' is forced by a functional dependency'; break; }
+            if (lidToVar.has(lid) && varMeta[lidToVar.get(lid)].ccf) { info.reason = 'input ' + nm + ' is in a common cause group'; break; }
+            const x = _dynRateLeaf(k);
+            if (x == null) { info.reason = 'input ' + nm + ' has no constant failure rate over the whole mission (probability only, repair model, latent or phase exposure)'; break; }
+            xs.push(x); probs.push(k.probability);
+        }
+        if (!info.reason && kids.length < 2) info.reason = 'fewer than two inputs';
+        if (!info.reason) {
+            const exact = isSpare ? _spareExactProb(xs, warmK, ps) : _pandExactProb(xs);
+            const bound = isSpare ? _spareBoundProb(probs, ps) : probs.reduce((a, b) => a * b, 1);
+            if (exact == null) info.reason = 'too many inputs to solve exactly';
+            else if (exact > bound * (1 + 1e-9) && bound > 0) info.reason = 'standby factor above 1';
+            else {
+                info.mode = 'exact'; info.exact = exact; info.bound = bound;
+                const f = bound > 0 ? Math.min(1, exact / bound) : 1;
+                if (f < 1 - 1e-12) info.orderVar = synthVar(_dynSyntheticNode(node, 'order', 0, f));
+            }
+        }
+        if (info.mode !== 'exact' && warmK > 1) info.primaryOnly = true;
+        return info;
+    }
+    function dynGate(node, kids, kidBdds) {
+        let info = dynInfo.get(node.id);
+        if (!info) { info = dynClassify(node, kids); dynInfo.set(node.id, info); }
+        if (info.primaryOnly) return kidBdds[0];
+        let f;
+        if (info.sw.length) {
+            let r = BDD.T1;
+            for (let j = kidBdds.length - 1; j >= 1; j--) r = BDD.apply('or', BDD.variable(info.sw[j - 1]), BDD.apply('and', kidBdds[j], r));
+            f = BDD.apply('and', kidBdds[0], r);
+        } else {
+            f = kidBdds.reduce((acc, k) => BDD.apply('and', acc, k), BDD.T1);
+        }
+        if (info.orderVar != null) f = BDD.apply('and', f, BDD.variable(info.orderVar));
+        return f;
+    }
     function build(node, visitedPages) {
         if (!node) return BDD.T0;
         if (node.type !== 'gate') {
@@ -839,13 +1583,13 @@ function buildBDDFromFT(rootNode) {
             const v = lidToVar.get(lid);
             if (v == null) return BDD.T0;
             let result = BDD.variable(v);
-            // OR in the CCF group tier variables so common-cause hits register on every group member.
-            const groupVars = node.ccfGroup ? ccfGroupToVar.get(node.ccfGroup) : null;
-            if (groupVars) {
-                if (groupVars.v2 != null) result = BDD.apply('or', result, BDD.variable(groupVars.v2));
-                if (groupVars.v3 != null) result = BDD.apply('or', result, BDD.variable(groupVars.v3));
-                if (groupVars.v4 != null) result = BDD.apply('or', result, BDD.variable(groupVars.v4));
-            }
+            // A common cause member fails on its own or by any common cause event that contains it;
+            // a functional dependency then forces the whole leaf (own and common cause) below.
+            const meta = varMeta[v];
+            const entry = (meta && meta.ccf) ? ccfGroupToVar.get(meta.ccf.group) : null;
+            if (entry) entry.memberVars[meta.ccfIdx[0]].forEach(gv => { result = BDD.apply('or', result, BDD.variable(gv)); });
+            const trig = fdep.byLid.get(lid);
+            if (trig) result = forced(result, trig, 'l:' + lid, visitedPages);
             return result;
         }
         if (node.gateType === 'TRANSFER' || node.transferOutTo) {
@@ -862,19 +1606,25 @@ function buildBDDFromFT(rootNode) {
             }
             return BDD.T0;
         }
+        const g = buildGate(node, visitedPages);
+        const gtrig = fdep.byGate.get(node.id);
+        return gtrig ? forced(g, gtrig, 'g:' + node.id, visitedPages) : g;
+    }
+    function buildGate(node, visitedPages) {
         const kids = node.children || node._children;
         if (!kids || kids.length === 0) return BDD.T0;
+        // FDEP is a modifier: it contributes through its dependents (see forced()), not directly.
+        if (node.gateType === 'FDEP') return BDD.T0;
         const kidBdds = kids.map(c => build(c, visitedPages));
-        if (node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') {
-            // PAND and SPARE static-equivalent ≈ AND. For exact dynamic semantics, use DFT Monte Carlo.
+        if (node.gateType === 'AND' || node.gateType === 'INHIBIT') {
             return kidBdds.reduce((acc, k) => BDD.apply('and', acc, k), BDD.T1);
         }
-        if (node.gateType === 'FDEP') return BDD.T0; // modifier — contributes via dependents, not directly
+        if (node.gateType === 'PAND' || node.gateType === 'SPARE') return dynGate(node, kids, kidBdds);
         if (node.gateType === 'OR') {
             return kidBdds.reduce((acc, k) => BDD.apply('or', acc, k), BDD.T0);
         }
         if (node.gateType === 'XOR') {
-            // "Exactly one input is true" — matches the legacy analytic-engine semantics.
+            // "Exactly one input is true": matches the legacy analytic-engine semantics.
             const n = kidBdds.length;
             let result = BDD.T0;
             for (let i = 0; i < n; i++) {
@@ -886,19 +1636,22 @@ function buildBDDFromFT(rootNode) {
         }
         if (node.gateType === 'VOTING') {
             const k = Math.max(1, Math.min(node.votingK || 2, kidBdds.length));
-            let result = BDD.T0;
-            for (let size = k; size <= kidBdds.length; size++) {
-                for (const subset of _bddCombinations(kidBdds, size)) {
-                    const conj = subset.reduce((acc, b) => BDD.apply('and', acc, b), BDD.T1);
-                    result = BDD.apply('or', result, conj);
-                }
+            let row = [BDD.T1];
+            for (let j = 1; j <= k; j++) row.push(BDD.T0);
+            for (let i = kidBdds.length - 1; i >= 0; i--) {
+                const next = [BDD.T1];
+                for (let j = 1; j <= k; j++) next.push(BDD.apply('or', BDD.apply('and', kidBdds[i], row[j - 1]), row[j]));
+                row = next;
             }
-            return result;
+            return row[k];
         }
         return BDD.T0;
     }
     const bdd = build(rootNode, new Set());
-    return { bdd, varOrder, lidToVar, varMeta, ccfGroupToVar };
+    const dyn = [];
+    dynInfo.forEach(i => dyn.push({ gateId: i.gateId, displayId: i.displayId, gateType: i.gateType, mode: i.mode, reason: i.reason, exact: i.exact, bound: i.bound, switchP: i.ps, warmK: i.warmK }));
+    const grid = _periodicGrid(varOrder, varMeta);
+    return { bdd, varOrder, lidToVar, varMeta, ccfGroupToVar, ccfGroups: [...plans.values()], dyn, fdepCount: fdep.gates.length, grid };
 }
 
 // BDD-derived minimal cutsets. For a monotone fault tree, every 1-path through the BDD is a
@@ -949,23 +1702,21 @@ function _minimizeBDDCutsets(cutsets) {
 }
 // Build BDD and return minimal cutsets as arrays of node references (not just varIdx).
 function bddMinimalCutsets(rootNode) {
-    const { bdd, varOrder } = buildBDDFromFT(rootNode);
+    const { bdd, varOrder, varMeta } = buildBDDFromFT(rootNode);
     if (!bdd || bdd === BDD.T0) return [];
-    const raw = bddCutsets(bdd);
+    const raw = bddCutsets(bdd).map(cs => cs.filter(i => !(varMeta[i] && varMeta[i].synthetic === 'order')));
     const minimal = _minimizeBDDCutsets(raw);
     return minimal.map(cs => cs.sort((a, b) => a - b).map(idx => varOrder[idx]));
 }
 
-// Build a probability map for the BDD's variables. For 'indep' vars the probability is
-// q·(1−β) (independent failure share). For 'group' vars it is q·β·(1−γ) for tier 2,
-// q·β·γ·(1−δ) for tier 3, q·β·γ·δ for tier 4. Falls back to plain q when varMeta isn't passed.
+// Build a probability map for the BDD's variables. A plain event gets its own q. A CCF member's
+// own variable gets Q_1 = (1 − β)·Q_t (plus any whole-group event that lands only on it in this
+// tree); a CCF subset event gets Q_k^(m) (_mglEventProb), and the visible event object is
+// stamped with that probability and its rate. Backlog #4: a development error (ARP 4761A
+// 4.1.1.1) enters at p = 0, so P(top) is P(top | no development error); its variable stays in
+// the BDD so the cut-set structure is untouched. Falls back to plain q without varMeta.
 function _probMapFor(varOrder, varMeta) {
     const map = new Map();
-    // Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1) enter the
-    // BDD at p = 0, whatever λ/P a stale field might carry: the quantified
-    // P(top) is explicitly P(top | no development error). The variables still
-    // exist in the BDD so cut-set structure (and the qualitative-FFS partition)
-    // is untouched.
     const _q = n => (n && n.eventClass === 'dev-error') ? 0 : (n && n.probability) || 0;
     if (!varMeta || !varMeta.length) {
         varOrder.forEach((node, varIdx) => map.set(varIdx, _q(node)));
@@ -973,31 +1724,21 @@ function _probMapFor(varOrder, varMeta) {
     }
     varMeta.forEach((meta, varIdx) => {
         if (meta.type === 'indep') {
-            const n = meta.node;
-            const q = _q(n);
-            const b = (n.ccfGroup && n.beta > 0) ? n.beta : 0;
-            map.set(varIdx, q * (1 - b));
+            map.set(varIdx, meta.ccf ? _mglEventProb(meta.ccf, meta.ccfIdx, _q) : _q(meta.node));
         } else if (meta.type === 'group') {
-            const r = meta.refNode;
-            const q = _q(r);
-            const beta  = r.beta  || 0;
-            const gamma = r.gamma || 0;
-            const delta = r.delta || 0;
-            let p = 0;
-            if (meta.tier === 2) p = q * beta * (1 - gamma);
-            else if (meta.tier === 3) p = q * beta * gamma * (1 - delta);
-            else if (meta.tier === 4) p = q * beta * gamma * delta;
+            const p = _mglEventProb(meta.ccf, meta.ccfIdx, _q);
+            if (meta.event) { meta.event.probability = p; meta.event.lambda = _mglEventRate(meta.ccf, meta.ccfIdx); }
             map.set(varIdx, p);
         }
     });
     return map;
 }
 
-function computeExactProbability(rootNode) {
-    const built = buildBDDFromFT(rootNode);
+function computeExactProbability(rootNode, scopeRoot) {
+    const built = buildBDDFromFT(rootNode, scopeRoot);
     const probMap = _probMapFor(built.varOrder, built.varMeta);
-    const prob = BDD.probability(built.bdd, probMap);
-    return { prob, bdd: built.bdd, varOrder: built.varOrder, lidToVar: built.lidToVar, varMeta: built.varMeta, probMap, bddSize: BDD.size(built.bdd) };
+    const prob = _bddAvgProbability(built, probMap);
+    return { prob, bdd: built.bdd, varOrder: built.varOrder, lidToVar: built.lidToVar, varMeta: built.varMeta, probMap, bddSize: BDD.size(built.bdd), grid: built.grid, dyn: built.dyn, fdepCount: built.fdepCount, upperBound: built.dyn.some(d => d.mode !== 'exact') || !!(built.grid && built.grid.bound), ccfGroups: built.ccfGroups };
 }
 
 // 23 Sep 2026 (perf fix 4) — P(top) RESULT CACHE for read-only callers.
@@ -1033,16 +1774,27 @@ function _boundedCache(maxEntries, maxChars) {
 }
 const _PTOP_CACHE_MAX = 20000;
 const _ptopCache = _boundedCache(_PTOP_CACHE_MAX, 16e6);
-// Every node field buildBDDFromFT / _probMapFor read. Each value is encoded
-// unambiguously (strings JSON-quoted), so two different inputs never share a key.
+// Every node field buildBDDFromFT / _probMapFor read (probability: leaves only, see
+// _ptopKey). Each value is encoded
+// unambiguously (strings length-prefixed), so two different inputs never share a key.
 const _PTOP_FIELDS = ['id', 'type', 'gateType', 'logicalId', 'votingK', 'probability', 'eventClass',
-    'ccfGroup', 'beta', 'gamma', 'delta', 'transferOutTo', 'linkedPageId'];
+    'ccfGroup', 'beta', 'gamma', 'delta', 'ccfModel', 'ccfGroupSize', 'transferOutTo', 'linkedPageId'];
+// 13 Oct 2026 (math audit F1, cost): every pass/fail screen and the result-page
+// swap in calculateAllProbabilities now ask for the exact top on every tree, so this
+// key walk runs over the whole project per recompute. Same content, same
+// unambiguity, about 3x cheaper: strings are length-prefixed instead of
+// JSON-quoted (s<len>:<text> cannot be confused with any other encoding), and the
+// key is built by concatenation instead of an array of small strings.
+// 13 Oct 2026 (F4 / F5): the BDD now also reads the dynamic-gate settings and the fields that
+// decide whether an event is a constant-rate or periodically inspected latent event.
+_PTOP_FIELDS.push('spareSwitchP', 'spareWarmK', 'lambda', 'lambdaByPhase', 'repairModel', 'mu', 'tau', 'markovModelId', 'exposureMode');
 function _ptopVal(v) {
     if (v === undefined) return 'u';
     if (v === null) return 'z';
-    if (typeof v === 'number') return 'n' + v;
-    if (typeof v === 'string') return JSON.stringify(v);
-    if (typeof v === 'boolean') return v ? 'T' : 'F';
+    const t = typeof v;
+    if (t === 'number') return 'n' + v;
+    if (t === 'string') return 's' + v.length + ':' + v;
+    if (t === 'boolean') return v ? 'T' : 'F';
     return 'j' + JSON.stringify(v);   // throws on an unencodable value -> the caller bypasses the cache
 }
 // NOT memoized per render pass on purpose: code inside a pass (the CCMR interval
@@ -1051,28 +1803,38 @@ function _ptopVal(v) {
 // old content. The key is always walked from the tree as it is now.
 function _ptopKey(rootNode, fields) {
     fields = fields || _PTOP_FIELDS;
-    const out = [];
+    const nf = fields.length;
+    // A gate's own probability is NOT an input of the diagram (buildBDDFromFT and
+    // _probMapFor read only leaf probabilities; a gate's value is its output). It is
+    // left out of the key so the open page's roll-up / exact swap and the shared-event
+    // normalization of intermediate gates do not turn an unchanged tree into a miss.
+    // 13 Oct 2026 (merge of F1 with F4/F5): the same holds for the leaf-only rate fields F4/F5
+    // added (lambda, lambdaByPhase): the roll-up writes a gate's lambda AFTER the open page's exact
+    // top is cached, which made every recompute miss on the open page.
+    const pIdx = fields.indexOf('probability'), lIdx = fields.indexOf('lambda'), lpIdx = fields.indexOf('lambdaByPhase');
+    let out = '';
     const pagesSeen = new Set();
     const pages = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : [];
     (function walk(n) {
-        if (!n) { out.push('~'); return; }
-        out.push('(');
-        for (let i = 0; i < fields.length; i++) out.push(_ptopVal(n[fields[i]]), ',');
+        if (!n) { out += '~'; return; }
+        out += '(';
+        const isGate = n.type === 'gate';
+        for (let i = 0; i < nf; i++) out += (isGate && (i === pIdx || i === lIdx || i === lpIdx) ? 'g' : _ptopVal(n[fields[i]])) + ',';
         if (n.type === 'gate' && (n.gateType === 'TRANSFER' || n.transferOutTo)) {
             const linkedId = n.transferOutTo || n.linkedPageId;
             if (linkedId && !pagesSeen.has(String(linkedId))) {
                 pagesSeen.add(String(linkedId));
                 const page = pages.find(p => p && p.id === linkedId);
-                out.push('{');
-                if (page && page.root) walk(page.root); else out.push('∅');
-                out.push('}');
+                out += '{';
+                if (page && page.root) walk(page.root); else out += '∅';
+                out += '}';
             }
         }
         const kids = n.children || n._children;
-        if (kids) { out.push(kids === n.children ? '[' : '_['); kids.forEach(walk); out.push(']'); }
-        out.push(')');
+        if (kids) { out += (kids === n.children ? '[' : '_['); for (let i = 0; i < kids.length; i++) walk(kids[i]); out += ']'; }
+        out += ')';
     })(rootNode);
-    return out.join('');
+    return out;
 }
 function exactTopProbability(rootNode) {
     if (!rootNode) return computeExactProbability(rootNode).prob;
@@ -1093,15 +1855,17 @@ try { window.exactTopProbability = exactTopProbability; } catch (_) {}
 // that has since been replaced. The key adds the label fields to the P(top)
 // key, so any change to what a snapshot carries is a miss.
 // See tests/regression_perf_round2.test.js.
-const _MCS_FIELDS = _PTOP_FIELDS.concat(['displayId', 'name']);
+const _MCS_FIELDS = _PTOP_FIELDS.concat(['displayId', 'name', 'ccfParamSource']);   // 13 Oct 2026: a common cause event snapshot carries the group's parameter source
 const _MCS_CACHE_MAX = 20000;
 const _mcsCache = _boundedCache(_MCS_CACHE_MAX, 16e6);
 // Kept here (the page must not depend on the engine namespace at call time —
 // several harnesses load this file alone); fta_engine.js has the identical
 // cutsetSnapshot for the worker, held equal by tests/regression_engine_parity.
 function cutsetSnapshot(n) {
-    return { id: n.id, logicalId: n.logicalId, displayId: n.displayId, name: n.name,
+    const s = { id: n.id, logicalId: n.logicalId, displayId: n.displayId, name: n.name,
              ccfGroup: n.ccfGroup, beta: n.beta, eventClass: n.eventClass };
+    if (n.isCCF) { s.isCCF = true; s.sourceGroup = n.sourceGroup; s.ccfTier = n.ccfTier; s.ccf = n.ccf ? JSON.parse(JSON.stringify(n.ccf)) : null; }
+    return s;
 }
 const _mcsSnap = cutsetSnapshot;
 function minimalCutsetSnapshots(rootNode) {
@@ -1204,10 +1968,17 @@ function simulateDFT(rootNode, missionTime, N, seed) {
     // and so a gate reached twice (shared subtree) sees the SAME switch — one
     // physical changeover, one outcome.
     let switchCoins = null;
+    let forcedGates = null;   // gate id -> forcing time from an FDEP whose dependent is a gate
 
     // Evaluate the gate's "fail time" given a snapshot of basic-event failure times.
     // Returns Infinity if the gate does not fail within finite time given the sample.
+    // A gate that is an FDEP dependent fails at the earlier of its own time and its trigger's.
     function evalGate(node, failTimes, visited) {
+        const t = evalGateRaw(node, failTimes, visited);
+        if (forcedGates && node && forcedGates.has(node.id) && !visited.has(node.id)) return Math.min(t, forcedGates.get(node.id));
+        return t;
+    }
+    function evalGateRaw(node, failTimes, visited) {
         if (!node) return Infinity;
         if (visited.has(node.id)) return Infinity;
         visited = new Set(visited); visited.add(node.id);
@@ -1316,21 +2087,36 @@ function simulateDFT(rootNode, missionTime, N, seed) {
             }
         }
         // Apply FDEP modifications: each trigger that fails before T forces its dependents.
-        for (const fdep of fdepGates) {
-            const kids = fdep.children || fdep._children;
-            if (!kids || kids.length < 2) continue;
-            const triggerKid = kids[0];
-            if (triggerKid.type === 'gate') continue; // require a leaf trigger for now
-            const triggerLid = triggerKid.logicalId != null ? triggerKid.logicalId : triggerKid.id;
-            const triggerTime = failTimes.get(triggerLid);
-            if (triggerTime == null || !isFinite(triggerTime) || triggerTime > missionTime) continue;
-            for (let i = 1; i < kids.length; i++) {
-                const dep = kids[i];
-                if (dep.type === 'gate') continue;
-                const lid = dep.logicalId != null ? dep.logicalId : dep.id;
-                const natural = failTimes.get(lid);
-                failTimes.set(lid, Math.min(natural || Infinity, triggerTime));
+        // 13 Oct 2026 (F4): a trigger may be a gate (its failure time is evaluated), a dependent
+        // may be a gate (its output is forced), and chained FDEPs (a trigger that is itself a
+        // dependent) are applied to a fixed point, so the order the FDEPs were drawn in no longer
+        // matters. No random numbers are drawn here, so seeded results are unchanged wherever the
+        // old single pass was already right.
+        forcedGates = fdepGates.length ? new Map() : null;
+        for (let pass = 0; pass <= fdepGates.length; pass++) {
+            let changed = false;
+            for (const fdep of fdepGates) {
+                const kids = fdep.children || fdep._children;
+                if (!kids || kids.length < 2 || !kids[0]) continue;
+                const triggerKid = kids[0];
+                const triggerTime = triggerKid.type === 'gate'
+                    ? evalGate(triggerKid, failTimes, new Set())
+                    : failTimes.get(triggerKid.logicalId != null ? triggerKid.logicalId : triggerKid.id);
+                if (triggerTime == null || !isFinite(triggerTime) || triggerTime > missionTime) continue;
+                for (let i = 1; i < kids.length; i++) {
+                    const dep = kids[i];
+                    if (!dep) continue;
+                    if (dep.type === 'gate') {
+                        const cur = forcedGates.get(dep.id);
+                        if (cur == null || triggerTime < cur) { forcedGates.set(dep.id, triggerTime); changed = true; }
+                        continue;
+                    }
+                    const lid = dep.logicalId != null ? dep.logicalId : dep.id;
+                    const natural = failTimes.get(lid);
+                    if (!(natural <= triggerTime)) { failTimes.set(lid, triggerTime); changed = true; }
+                }
             }
+            if (!changed) break;
         }
         const topT = evalGate(rootNode, failTimes, new Set());
         if (topT <= missionTime) failCount++;
@@ -1702,7 +2488,7 @@ function runDFTMonteCarlo() {
         : '';
     const note = dynCount === 0
         ? '<div style="margin-top:6px; padding:8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:4px; color:#78350f; font-size:0.85em;">No dynamic gates (PAND / SPARE / FDEP) in this tree — Monte Carlo just confirms the BDD result. Add a dynamic gate to exercise time-ordered semantics.</div>'
-        : `<div style="margin-top:6px; color: var(--text-secondary); font-size: 0.85em;">Tree contains ${dynCount} dynamic gate(s); Monte Carlo is the authoritative result for these.</div>`;
+        : `<div style="margin-top:6px; color: var(--text-secondary); font-size: 0.85em;">Tree contains ${dynCount} dynamic gate(s). The static number counts functional dependencies exactly, solves a priority AND or spare exactly when its inputs are constant-rate basic events used nowhere else, and holds an upper bound otherwise (the canvas line under each gate says which). This simulation is the independent cross-check.</div>`;
     out.innerHTML = `<div style="padding: 10px; background: var(--bg-control); border: 1px solid var(--border-primary); border-radius: 4px;">
         <strong>DFT Simulation (Monte Carlo, N = ${r.N.toLocaleString()}, mission t = ${(ftaConfig.exposureTime || 1).toFixed(3)} hr):</strong>
         <div style="margin-top:6px; font-family: monospace; font-size: 0.95em; color: #be185d;">
@@ -1760,56 +2546,51 @@ function runUncertaintyAnalysis(rootNode, N, seed) {
     N = N || 10000;
     const usedSeed = (seed == null ? 42 : seed) >>> 0;
     const rng = _mcMulberry(usedSeed);
-    const { bdd, varOrder, varMeta } = buildBDDFromFT(rootNode);
+    const built = buildBDDFromFT(rootNode);
+    const { varOrder, varMeta } = built;
     if (!varOrder.length) return { samples: [], mean: 0, median: 0, p05: 0, p95: 0, N: 0, seed: usedSeed };
     const exposure = ftaConfig.exposureTime || 1;
     // Pre-compute σ_ln per variable: σ = ln(EF) / 1.645 (since EF = exp(1.645·σ) for 90% CI).
     // The median λ here already accounts for phase-of-flight weighting if the event uses it.
     //
-    // Phase 61 (F3 fix) — apply the SAME MGL/CCF tier splitting that _probMapFor uses for the
-    // point estimate, so the sampled distribution is consistent with BDD-exact:
-    //   indep var of a CCF member:  q·(1−β)
-    //   group tier-2 var:           q·β·(1−γ)
-    //   group tier-3 var:           q·β·γ·(1−δ)
-    //   group tier-4 var:           q·β·γ·δ
-    // Previously every variable (including the group tiers) received the FULL q, inflating
-    // P(top) on CCF trees ~an order of magnitude and contradicting the point estimate.
+    // Phase 61 (F3 fix): the sampled distribution uses the SAME common cause split as the point
+    // estimate. 13 Oct 2026 (fix 3, MGL): each CCF member's q is sampled ONCE per trial and every
+    // variable that depends on it (the member's own variable and each common cause event that
+    // contains it) is computed from those sampled values with _mglEventProb, exactly the function
+    // _probMapFor uses. Variables without CCF are sampled in variable order as before, so trees
+    // without common cause draw the same random sequence and give the same samples.
+    const _sampleSpec = node => {
+        const median = getEffectiveLambda(node);
+        const EF = node.lambdaEF && node.lambdaEF > 1 ? node.lambdaEF : 1;
+        return { node, median, sigma: EF > 1 ? Math.log(EF) / 1.645 : 0 };
+    };
+    const _sampleQ = sp => {
+        const z = sp.sigma > 0 ? _normSample(rng) : 0;
+        const lambdaSampled = sp.median * Math.exp(sp.sigma * z);
+        // Phase 61: leaves without rate data (probability-only allocation budgets) contribute
+        // their stored probability; there is no λ to sample.
+        return (sp.median > 0) ? effectiveProbFromLambda(lambdaSampled, sp.node, exposure) : (sp.node.probability || 0);
+    };
     const meta = varOrder.map((node, idx) => {
         const vm = (varMeta && varMeta[idx]) || null;
-        let refNode = node, factor = 1;
-        if (vm && vm.type === 'group') {
-            refNode = vm.refNode || node;
-            const beta  = refNode.beta  || 0;
-            const gamma = refNode.gamma || 0;
-            const delta = refNode.delta || 0;
-            if (vm.tier === 2)      factor = beta * (1 - gamma);
-            else if (vm.tier === 3) factor = beta * gamma * (1 - delta);
-            else if (vm.tier === 4) factor = beta * gamma * delta;
-        } else {
-            const n = (vm && vm.node) || node;
-            refNode = n;
-            factor = (n.ccfGroup && n.beta > 0) ? (1 - n.beta) : 1;
-        }
-        const median = getEffectiveLambda(refNode);
-        const EF = refNode.lambdaEF && refNode.lambdaEF > 1 ? refNode.lambdaEF : 1;
-        const sigma = EF > 1 ? Math.log(EF) / 1.645 : 0;
-        return { node: refNode, median, sigma, factor };
+        if (vm && vm.ccf) return { ccf: vm.ccf, idxs: vm.ccfIdx };
+        return { spec: _sampleSpec((vm && vm.node) || node) };
     });
+    const memberSpecs = new Map();
+    meta.forEach(m => { if (m.ccf) m.ccf.members.forEach(n => { if (!memberSpecs.has(n)) memberSpecs.set(n, _sampleSpec(n)); }); });
     const samples = new Array(N);
     for (let i = 0; i < N; i++) {
         const probMap = new Map();
+        const qMember = new Map();
+        const qOf = n => {
+            if (!qMember.has(n)) qMember.set(n, (n && n.eventClass === 'dev-error') ? 0 : _sampleQ(memberSpecs.get(n)));
+            return qMember.get(n);
+        };
         for (let v = 0; v < meta.length; v++) {
             const m = meta[v];
-            const z = m.sigma > 0 ? _normSample(rng) : 0;
-            const lambdaSampled = m.median * Math.exp(m.sigma * z);
-            // Phase 61 — leaves without rate data (probability-only allocation budgets)
-            // contribute their stored probability; there is no λ to sample.
-            const q = (m.median > 0)
-                ? effectiveProbFromLambda(lambdaSampled, m.node, exposure)
-                : (m.node.probability || 0);
-            probMap.set(v, m.factor * q);
+            probMap.set(v, m.ccf ? _mglEventProb(m.ccf, m.idxs, qOf) : _sampleQ(m.spec));
         }
-        samples[i] = BDD.probability(bdd, probMap);
+        samples[i] = _bddAvgProbability(built, probMap);   // 13 Oct 2026 (F5): same time average as P(top)
     }
     samples.sort((a, b) => a - b);
     return {
@@ -1835,11 +2616,11 @@ function computeImportanceMeasures(rootNode) {
     const measures = [];
     varOrder.forEach((refNode, varIdx) => {
         const meta = varMeta[varIdx];
+        if (meta && meta.synthetic === 'order') return; // 13 Oct 2026 (F4): a time-order factor is not an event
         if (meta && meta.type === 'group') return; // CCF group rows are derived — skip from the per-event ranking
-        const m1 = new Map(probMap); m1.set(varIdx, 1);
-        const m0 = new Map(probMap); m0.set(varIdx, 0);
-        const pX1 = BDD.probability(bdd, m1);
-        const pX0 = BDD.probability(bdd, m0);
+        // 13 Oct 2026 (F5): cofactors are time-averaged over a shared inspection cycle like P(top).
+        const pX1 = _bddAvgProbability(ex, probMap, varIdx, 1);
+        const pX0 = _bddAvgProbability(ex, probMap, varIdx, 0);
         const p   = probMap.get(varIdx) || 0;
         const birnbaum = pX1 - pX0;
         const fv       = pTop > 0 ? (pTop - pX0) / pTop : 0;
@@ -1852,78 +2633,27 @@ function computeImportanceMeasures(rootNode) {
     return { measures, pTop, bddSize: ex.bddSize };
 }
 
-// Expand a list of minimal cutsets to include CCF decomposition rows.
-//   Pure β model:      one independent path + one β-CCF path per group with ≥2 group members in the cutset.
-//   MGL (β + γ + δ):   independent path + 2-component CCF + 3-component CCF + 4-component CCF rows
-//                      based on the cutset's group multiplicity.
-// Probabilities per MGL convention:
-//   P_ind          = q(1−β)
-//   P_CCF_2of2     = q·β·(1−γ)
-//   P_CCF_3of≥3    = q·β·γ·(1−δ)
-//   P_CCF_4of≥4    = q·β·γ·δ
-function expandCCFCutsets(minimalCutsets) {
-    const expanded = [];
-    for (const cutset of minimalCutsets) {
-        // Bucket events in this cutset by ccfGroup.
-        const groups = {};
-        for (const node of cutset) {
-            if (node.ccfGroup && (node.beta > 0)) {
-                if (!groups[node.ccfGroup]) groups[node.ccfGroup] = [];
-                groups[node.ccfGroup].push(node);
-            }
-        }
-        const groupKeys = Object.keys(groups).filter(g => groups[g].length >= 2);
-        if (groupKeys.length === 0) { expanded.push(cutset); continue; }
-        // Preserve dynamic-gate annotations across the CCF decomposition.
-        const dynOrigin = cutset.dynamicOrigin;
-        const dynOrder  = cutset.dynamicOrder;
-
-        // For each multi-member group, generate one row per CCF tier.
-        // To keep cardinality bounded, expand groups one at a time (Cartesian product would explode).
-        let working = [cutset];
-        for (const g of groupKeys) {
-            const members = groups[g];
-            const first = members[0];
-            const beta  = first.beta || 0;
-            const gamma = first.gamma || 0;
-            const delta = first.delta || 0;
-            const groupSize = Math.min(members.length, 4); // up to 4-component CCF
-            const next = [];
-            for (const cs of working) {
-                // Independent path: each member's contribution is q·(1−β).
-                const indCs = cs.map(n => (n.ccfGroup === g
-                    ? { displayId: `${n.displayId} (Ind)`, name: `${n.name} (Independent)`, probability: n.probability * (1 - beta) }
-                    : n));
-                next.push(indCs);
-                // 2-component CCF path: q·β·(1−γ)
-                const ccf2Prob = first.probability * beta * (1 - gamma);
-                const ccf2Cs = cs.filter(n => n.ccfGroup !== g).concat([
-                    { displayId: `CCF₂-[${g}]`, name: `Common Cause (2-of-n): ${g}`, probability: ccf2Prob, isCCF: true, sourceGroup: g, ccfTier: 2 }
-                ]);
-                next.push(ccf2Cs);
-                // 3-component CCF path: q·β·γ·(1−δ), only when group has ≥3 members and γ > 0
-                if (groupSize >= 3 && gamma > 0) {
-                    const ccf3Prob = first.probability * beta * gamma * (1 - delta);
-                    const ccf3Cs = cs.filter(n => n.ccfGroup !== g).concat([
-                        { displayId: `CCF₃-[${g}]`, name: `Common Cause (3-of-n): ${g}`, probability: ccf3Prob, isCCF: true, sourceGroup: g, ccfTier: 3 }
-                    ]);
-                    next.push(ccf3Cs);
-                }
-                // 4-component CCF path: q·β·γ·δ, only when group has ≥4 members and δ > 0
-                if (groupSize >= 4 && delta > 0) {
-                    const ccf4Prob = first.probability * beta * gamma * delta;
-                    const ccf4Cs = cs.filter(n => n.ccfGroup !== g).concat([
-                        { displayId: `CCF₄-[${g}]`, name: `Common Cause (4-of-n): ${g}`, probability: ccf4Prob, isCCF: true, sourceGroup: g, ccfTier: 4 }
-                    ]);
-                    next.push(ccf4Cs);
-                }
-            }
-            working = next;
-        }
-        if (dynOrigin) working.forEach(cs => { cs.dynamicOrigin = dynOrigin; cs.dynamicOrder = dynOrder; });
-        expanded.push(...working);
-    }
-    return expanded;
+// Expand a list of minimal cutsets so every common cause event is explicit.
+// 13 Oct 2026 (fix 6): REBUILT. The old body assumed the β/γ/δ tier model, read the numbers
+// from whichever group member came first, expanded only cut sets holding two members, and
+// repeated a "CCF" row inside every such cut set, so the same common cause showed many times
+// and never as the minimal cut set of one it is when it alone fails an AND of its members. It
+// now delegates to SLFTAEngine.explicitCCFCutsets, which reads the group variables of the
+// page's own BDD build (computeExactProbability below, the copy the panel's P(top) comes from)
+// and returns the minimal cut sets of exactly the function the BDD evaluates: each common
+// cause event once, as one named event (isCCF, sourceGroup, members), and each member's
+// independent part as "<id> (Ind)" carrying the BDD's own probability and rate. Works for any
+// group-variable model. 13 Oct 2026 (fix 6 merged with fix 3): fix 3's own rewrite of this function
+// (_expandCcfPlans / _mglMinimalCovers: covers built from _mglPlanGroup, rows only for cut sets
+// holding two or more members) is replaced by this one implementation: the catalog reads the
+// MGL subset events and their labels from the same BDD build, so the rows are exactly that
+// build's minimal cut sets, a single-member cut set shows its common cause events too, and the
+// frequency (computeFailureFrequency) uses the same rows. One implementation, not two.
+// rootNode: the tree the sets came from (optional; without it the sets' leaves define the
+// groups). Trees without a common cause group come back unchanged.
+function expandCCFCutsets(minimalCutsets, rootNode) {
+    if (typeof SLFTAEngine === 'undefined' || !SLFTAEngine || typeof SLFTAEngine.explicitCCFCutsets !== 'function') return (minimalCutsets || []).slice();
+    return SLFTAEngine.explicitCCFCutsets(minimalCutsets, rootNode || null, { computeExact: computeExactProbability });
 }
 
 // The active top event (fault-tree page) the cut-set analysis is scoped to. Cut sets are

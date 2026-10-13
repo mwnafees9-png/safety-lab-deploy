@@ -1,4 +1,7 @@
+// 13 Oct 2026 (fix 3, MGL): the cut-set exports expand common cause groups with the tree's MGL model (expandCCFCutsets(min, rootNode)); worked steps for benchmarks B10e/B10f.
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
+// 13 Oct 2026 (fix 6 part B): _applyProjectData ends by running the live common cause check (cma_live.js).
+// 13 Oct 2026 (fix 6): both Cutset_Analysis exports pass the tree to expandCCFCutsets, so common cause events are explicit, once each, in the exported minimal cut sets.
 // data_ops_modules.js — v1.0 — Phase P2 batch 2b: data operations layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). Pure runtime function declarations — zero
@@ -250,7 +253,7 @@ function exportData(moduleName, format) {
                     for (let m of min) if (m.map(e => e.id).every(id => ids.includes(id))) { sup = true; break; }
                     if (!sup) min.push(curr);
                 }
-                const finalCutsets = expandCCFCutsets(min);
+                const finalCutsets = expandCCFCutsets(min, rootNode);   // 13 Oct 2026 (fix 6): common cause events explicit
                 return downloadCSV(file('Cutset_Analysis'),
                     ['Cutset #','Order','Event IDs','Event Descriptions','Calculated Probability','Contains CCF'],
                     finalCutsets.map((cs, i) => [
@@ -1590,6 +1593,8 @@ function _applyProjectData(data) {
         // the flush-on-hide path guarantee it can never be lost.
         if (typeof SLIdle !== 'undefined' && SLIdle) { _autosavePending = true; SLIdle.schedule('autosave', _writeAutosave, { timeout: 2500 }); }
         else _writeAutosave();
+        // 13 Oct 2026 (fix 6): a load (open, import, recovery, undo, showcase) runs the live common cause check.
+        try { if (typeof window !== 'undefined' && window.SLCmaLive) window.SLCmaLive.onModelChange('load'); } catch (_) {}
     }
 }
 
@@ -2006,7 +2011,7 @@ function _pdfDataForModule(moduleName) {
                 for (let m of min) if (m.map(e => e.id).every(id => ids.includes(id))) { sup = true; break; }
                 if (!sup) min.push(curr);
             }
-            const finalCutsets = (typeof expandCCFCutsets === 'function') ? expandCCFCutsets(min) : min;
+            const finalCutsets = (typeof expandCCFCutsets === 'function') ? expandCCFCutsets(min, rootNode) : min;   // 13 Oct 2026 (fix 6)
             return { title: 'Minimal Cutsets',
                 headers: ['Cutset #','Order','Event IDs','Event Names','Probability','CCF'],
                 rows: finalCutsets.map((cs, i) => [
@@ -3135,10 +3140,24 @@ function _buildBenchmarkSteps(r) {
             s.push({ label: 'Result',     value: '= 1.0e-3 + 8.1e-5 = 1.081e-3' });
             break;
         case 'B10-mgl-ccf':
-            s.push({ label: 'Inputs',     value: 'β = 0.05,  γ = 0.5,  q = 0.01,  3-component (δ = 0)' });
-            s.push({ label: 'Formula',    value: 'P(3-of-3 CCF) = q · β · γ' });
+            s.push({ label: 'Inputs',     value: 'β = 0.05,  γ = 0.5,  q = 0.01,  3-component group (m = 3, so ρ4 = 0)' });
+            s.push({ label: 'Formula',    value: 'Q3 = ρ1·ρ2·ρ3·(1 − ρ4)·Q_t / C(2,2) = q · β · γ' });
             s.push({ label: 'Substitute', value: '0.01 · 0.05 · 0.5' });
             s.push({ label: 'Result',     value: '= 2.5e-4' });
+            break;
+        // 13 Oct 2026 (fix 3): worked steps for the hand-derived MGL engine benchmarks.
+        case 'B10e-mgl-ccf-engine':
+            s.push({ label: 'Inputs',     value: 'β = 0.05,  γ = 0.5,  q = 0.01,  3 members AND-ed' });
+            s.push({ label: 'MGL events', value: 'Q1 = (1−β)q = 9.5e-3 (each member) · Q2 = β(1−γ)q/2 = 1.25e-4 (each pair) · Q3 = βγq = 2.5e-4' });
+            s.push({ label: 'Formula',    value: 'P = Q3 + (1−Q3)[(1−Q2)³Q1³ + 3Q2(1−Q2)²Q1 + 3Q2²(1−Q2) + Q2³]' });
+            s.push({ label: 'Result',     value: '= 2.544644e-4  (the beta factor would give 5.008e-4)' });
+            break;
+        case 'B10f-mgl-2oo3-engine':
+            s.push({ label: 'Inputs',     value: 'β = 0.05,  γ = 0.5,  q = 0.01,  VOTING 2-of-3' });
+            s.push({ label: 'MGL events', value: 'own Q1 = 9.5e-3 ×3, pair Q2 = 1.25e-4 ×3, triple Q3 = 2.5e-4' });
+            s.push({ label: 'Formula',    value: 'sum over all 2⁷ states of the 7 events of P(state) where at least 2 members are failed' });
+            s.push({ label: 'Leading',    value: '≈ 3Q2 + Q3 + 3Q1² = 3.75e-4 + 2.5e-4 + 2.7075e-4' });
+            s.push({ label: 'Result',     value: '= 8.937265e-4  (the beta factor would give 7.69e-4)' });
             break;
         case 'B11-markov-2state':
             s.push({ label: 'States',     value: 'Working ↔ Failed' });

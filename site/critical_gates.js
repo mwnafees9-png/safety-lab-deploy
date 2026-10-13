@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F8): the OR and certain tests compare per-flight-hour rates (SLTopBasis.meets) with the per-flight-hour objective, not per-flight P; the panel shows /FH. See tests/regression_perfh_basis_20261013.test.js
 // ============================================================================
 // critical_gates.js — v1.0 — Q7 (26 Sep 2026): the critical AND-gate test that
 // scopes the common mode analysis.
@@ -118,6 +119,17 @@
         var c = clone(page.root, page.id);
         if (c.gates.length > MAX_GATES) { res.skipped = 'tree has ' + c.gates.length + ' gates; the critical-gate test is capped at ' + MAX_GATES; return res; }
         res.pTop = _exact(c.root);
+        // 13 Oct 2026 (math audit F8): the objective is per flight hour; every P(top)
+        // here is per flight. Each is converted with the ONE shared normalization
+        // (SLTopBasis.meets: rate = -ln(1 - P) / t_flight with this tree's mission time),
+        // the same call the requirement check and the Budget Ledger make. Before this
+        // the per-flight value was compared straight with the per-flight-hour objective,
+        // which on a 0.5 h flight let 8e-10 per flight (1.6e-9/FH) pass 1e-9/FH.
+        var basis = SLTopBasis.missionHours(page);
+        res.missionHours = basis.hours; res.missionSource = basis.source;
+        var rateOf = function (p) { var n = (p == null) ? null : SLTopBasis.perFlightHour(p, page); return n ? n.rate : null; };
+        var breaks = function (p) { if (p == null) return false; var v = SLTopBasis.meets(p, res.target, page); return !!v && !v.pass; };
+        res.rateTop = rateOf(res.pTop);
         c.gates.forEach(function (g) {
             var gt = g.clone.gateType;
             if (!AND_FAMILY[gt]) return;
@@ -133,12 +145,12 @@
                 pCert = _exact(c.root);
                 g.parent.children[idx] = g.clone;
             } else { pCert = 1; }   // the gate is the top event: taking it as certain is P = 1
-            var orBreaks = (pOr != null) && pOr > res.target;
-            var certBreaks = (pCert != null) && pCert > res.target;
+            var orBreaks = breaks(pOr);
+            var certBreaks = breaks(pCert);
             res.gates.push({
                 key: g.pageId + ':' + g.orig.id, pageId: g.pageId, nodeId: g.orig.id,
                 displayId: g.orig.displayId || ('G-' + g.orig.id), name: g.orig.name || '', gateType: gt,
-                pAsOr: pOr, pCertain: pCert, orBreaks: orBreaks, certainBreaks: certBreaks,
+                pAsOr: pOr, pCertain: pCert, rateAsOr: rateOf(pOr), rateCertain: rateOf(pCert), orBreaks: orBreaks, certainBreaks: certBreaks,
                 critical: orBreaks || certBreaks
             });
         });
@@ -202,7 +214,7 @@
                 body += '<tr' + (g.critical && !rev.length ? ' style="background:var(--sev-haz-bg, #FFF6E5);"' : '') + '>'
                     + '<td>' + _esc(fcLabel(res)) + '</td><td>' + _esc(res.pageName) + '</td>'
                     + '<td><b>' + _esc(g.displayId) + '</b>' + (g.name ? ' <span style="color:var(--color-text-secondary);">' + _esc(g.name) + '</span>' : '') + ' <span style="color:var(--color-text-tertiary);">' + _esc(g.gateType) + '</span></td>'
-                    + '<td>' + _exp(res.target) + '</td><td>' + _exp(g.pAsOr) + '</td><td>' + _exp(g.pCertain) + '</td>'
+                    + '<td>' + _exp(res.target) + '</td><td title="P = ' + _exp(g.pAsOr) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + _exp(g.rateAsOr) + '</td><td title="P = ' + _exp(g.pCertain) + ' per flight over a ' + Number(res.missionHours).toFixed(3) + ' h flight">' + _exp(g.rateCertain) + '</td>'
                     + '<td>' + (g.critical ? '<span style="font-weight:700;color:var(--color-danger);">Critical</span>' : '<span style="color:var(--color-success);">Not critical</span>') + '<div style="font-size:11px;color:var(--color-text-secondary);">' + why + '</div></td>'
                     + '<td>' + revCell + '</td></tr>';
             });
@@ -215,7 +227,7 @@
             + '<div style="font-size:12px;color:var(--color-text-secondary);" title="For every AND gate in a failure condition’s fault tree, the top event is recomputed twice: with the gate treated as OR (any one input passes) and with the gate taken as certain. A gate is critical when either result exceeds the condition’s probability objective. Critical gates are the ones whose independence a common mode analysis must confirm; the rest need no review.">'
             + 'Each AND gate is tested against the failure condition’s probability objective two ways: as an OR gate, and as if it had already occurred. A gate is critical when either result breaks the budget. Only critical gates need a common mode review.</div></div>'
             + '<div style="font-size:12px;color:var(--color-text-secondary);white-space:nowrap;">' + summary + ' &nbsp; <label style="font-weight:400;"><input type="checkbox" ' + (_showAll ? 'checked' : '') + ' onchange="SLCriticalGates.toggleAll(this.checked)"> show all gates</label></div></div>'
-            + '<div style="overflow-x:auto;"><table style="font-size:12px;"><thead><tr><th>Failure condition</th><th>Fault tree</th><th>Gate</th><th title="Probability objective for the linked failure condition, per flight hour">Objective</th><th title="P(top) if the gate were an OR gate">If OR</th><th title="P(top) if the gate’s event had certainly occurred">If certain</th><th>Verdict</th><th>Common mode review</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+            + '<div style="overflow-x:auto;"><table style="font-size:12px;"><thead><tr><th>Failure condition</th><th>Fault tree</th><th>Gate</th><th title="Probability objective for the linked failure condition, per flight hour">Objective (/FH)</th><th title="Top event rate per flight hour if the gate were an OR gate (per-flight P(top) divided by the flight time, the same conversion the requirement check and the Budget Ledger use)">If OR (/FH)</th><th title="Top event rate per flight hour if the gate’s event had certainly occurred">If certain (/FH)</th><th>Verdict</th><th>Common mode review</th></tr></thead><tbody>' + body + '</tbody></table></div>';
     }
     function renderPanel() {
         var d = root.document; if (!d) return;
@@ -266,7 +278,7 @@
                 crit++;
                 var rev = reviewedBy(g.key);
                 if (!rev.length) unrev++;
-                lines.push('<b>' + _esc(g.displayId) + '</b>' + (g.name ? ' ' + _esc(g.name) : '') + ' · if OR ' + _exp(g.pAsOr) + ' · if certain ' + _exp(g.pCertain)
+                lines.push('<b>' + _esc(g.displayId) + '</b>' + (g.name ? ' ' + _esc(g.name) : '') + ' · if OR ' + _exp(g.rateAsOr) + '/FH · if certain ' + _exp(g.rateCertain) + '/FH'
                     + ' · ' + (rev.length ? 'reviewed by ' + _esc(rev.map(function (r) { return r.cmaId; }).join(', ')) : '<span style="color:#9A6200;font-weight:600;">no common mode review</span>'));
             });
         });

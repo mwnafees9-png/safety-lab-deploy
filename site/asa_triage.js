@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F8): the measured-lane posture compares the per-flight-hour rate (SLTopBasis.meets) with the objective; columns labeled /FH. See tests/regression_perfh_basis_20261013.test.js
 // ============================================================================
 // asa_triage.js — v1.0 — Phase D gap 1 (§3.5): the ASA working surface.
 //
@@ -159,7 +160,10 @@
         } catch (_) {}
         let budget = null;
         try { const r = computeExactProbability(page.root); if (r && typeof r.prob === 'number') budget = r.prob; } catch (_) {}
-        return { pageId: page.id, pageName: page.name || page.id, budget, measured, totalLeaves: total, substituted, subs };
+        // 13 Oct 2026 (math audit F8): the per-flight values converted to per flight hour
+        // with the ONE shared normalization (SLTopBasis), the unit of the objective.
+        const _fh = v => { const n = (v != null && typeof SLTopBasis !== 'undefined' && SLTopBasis) ? SLTopBasis.perFlightHour(v, page) : null; return n ? n.rate : null; };
+        return { pageId: page.id, pageName: page.name || page.id, budget, measured, budgetPerFH: _fh(budget), measuredPerFH: _fh(measured), totalLeaves: total, substituted, subs };
     }
     // All pass-2 rows: every aircraft-level FC × its MF&MS pages.
     function asaMeasuredRows(triageRows) {
@@ -168,7 +172,14 @@
             if (t.cls !== 'aircraft-level') return;
             const objective = (function () { try { const x = getSafetyTarget(t.severity); return x && x.prob != null ? Number(x.prob) : null; } catch (_) { return null; } })();
             if (!t.mfms.length) { rows.push({ fcId: t.fcId, severity: t.severity, objective, page: null, run: null }); return; }
-            t.mfms.forEach(pg => rows.push({ fcId: t.fcId, severity: t.severity, objective, page: pg, run: asaMeasuredRun(pg.id) }));
+            t.mfms.forEach(pg => {
+                const run = asaMeasuredRun(pg.id);
+                // 13 Oct 2026 (F8): per-flight measured P(top) against the per-flight-hour
+                // objective through SLTopBasis.meets, the same call as every other lane.
+                const page = _pages().find(p => p && p.id === pg.id) || null;
+                const verdict = (run && run.measured != null && objective != null && typeof SLTopBasis !== 'undefined' && SLTopBasis) ? SLTopBasis.meets(run.measured, objective, page) : null;
+                rows.push({ fcId: t.fcId, severity: t.severity, objective, page: pg, run, verdict });
+            });
         });
         return rows;
     }
@@ -220,16 +231,16 @@
         if (!mrows.length) {
             html += '<p style="font-size:12px; color:var(--color-text-tertiary);">No aircraft-level FCs yet — pass 2 activates when the interdependence table flags multi-system conditions.</p>';
         } else {
-            html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th>FC</th><th>MF&MS tree</th><th>P(top) — budget lane</th><th>P(top) — measured lane</th><th>Objective</th><th>Measured coverage</th><th>Posture</th></tr></thead><tbody>';
+            html += '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th>FC</th><th>MF&MS tree</th><th>Budget lane (/FH)</th><th>Measured lane (/FH)</th><th>Objective (/FH)</th><th>Measured coverage</th><th>Posture</th></tr></thead><tbody>';
             mrows.forEach(m => {
                 if (!m.page) { html += '<tr><td class="u-mono">' + _esc(m.fcId) + '</td><td colspan="6" style="color:#8E2A2A; font-size:11.5px;">no MF&MS tree — compile one from the MAC model first</td></tr>'; return; }
                 const r = m.run || {};
                 const posture = (r.measured == null || m.objective == null) ? '<span style="color:var(--color-text-tertiary); font-size:11px;">—</span>'
                     : r.substituted === 0 ? '<span style="color:#9A6200; font-family:var(--font-mono); font-size:11px;">no measured sources yet — budget lane only</span>'
-                    : (r.measured <= m.objective ? '<span style="color:#1D6E3E; font-family:var(--font-mono); font-size:11px; font-weight:600;">MEETS objective on measured data (advisory' + (r.substituted < r.totalLeaves ? ', partial coverage' : '') + ')</span>'
+                    : ((m.verdict && m.verdict.pass) ? '<span style="color:#1D6E3E; font-family:var(--font-mono); font-size:11px; font-weight:600;">MEETS objective on measured data (advisory' + (r.substituted < r.totalLeaves ? ', partial coverage' : '') + ')</span>'
                         : '<span style="color:#8E2A2A; font-family:var(--font-mono); font-size:11px; font-weight:700;">EXCEEDS objective on measured data</span>');
                 html += '<tr><td class="u-mono">' + _esc(m.fcId) + '</td><td style="font-size:11px;">' + _esc(m.page.name) + '</td>' +
-                    '<td class="u-mono">' + _exp(r.budget) + '</td><td class="u-mono">' + _exp(r.measured) + '</td><td class="u-mono">' + _exp(m.objective) + '</td>' +
+                    '<td class="u-mono">' + _exp(r.budgetPerFH) + '<div style="font-size:10px; color:var(--color-text-tertiary);">P = ' + _exp(r.budget) + ' /flight</div></td><td class="u-mono">' + _exp(r.measuredPerFH) + '<div style="font-size:10px; color:var(--color-text-tertiary);">P = ' + _exp(r.measured) + ' /flight</div></td><td class="u-mono">' + _exp(m.objective) + '</td>' +
                     '<td class="u-mono">' + (r.totalLeaves ? r.substituted + '/' + r.totalLeaves + ' leaves measured' : '—') +
                     ((r.subs || []).length ? '<div style="font-size:10px; color:var(--color-text-tertiary);">' + r.subs.map(s => _esc(s.leaf) + ' ← ' + _esc(s.mirror)).join('<br>') + '</div>' : '') + '</td>' +
                     '<td>' + posture + '</td></tr>';

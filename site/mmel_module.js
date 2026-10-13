@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F1/F8): the dispatch check uses the exact P(top) (SLTopBasis.exactTop, not the calcBottomUp roll-up) and the shared per-flight budget of the objective. See tests/regression_exact_top_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // mmel_module.js — Phase P7: MMEL / Time-Limited Dispatch analysis.
 // BORN MODULAR: new file, zero monolith edits; store under projectConfig.mmel.
@@ -109,21 +110,29 @@
         if (!aff || !aff.pages.length) return null;
         const n = aff.hit.node;
         const saved = { probability: n.probability, lambda: n.lambda, inputMode: n.inputMode, repairModel: n.repairModel, tau: n.tau, exposureMode: n.exposureMode, dormancyInterval: n.dormancyInterval, markovModelId: n.markovModelId };
-        const tExp = (typeof ftaConfig === 'object' && ftaConfig && ftaConfig.exposureTime) || 1;
         let worst = null;
         try {
             aff.pages.forEach(({ page, severity }) => {
                 if (!severity) return;
-                const base = calcBottomUp(page.root, new Set());
+                // 13 Oct 2026 (math audit F1): calcBottomUp refreshes the leaf
+                // probabilities; the top used for the verdict is the exact one
+                // (SLTopBasis.exactTop: common cause and shared events included), not
+                // the independent gate-by-gate value calcBottomUp returns.
+                calcBottomUp(page.root, new Set());
+                const base = SLTopBasis.exactTop(page.root);
                 n.probability = 1; n.lambda = 0; n.inputMode = 'probability';
                 delete n.repairModel; delete n.tau; delete n.exposureMode; delete n.dormancyInterval; delete n.markovModelId;
-                const disp = calcBottomUp(page.root, new Set());
+                calcBottomUp(page.root, new Set());
+                const disp = SLTopBasis.exactTop(page.root);
                 Object.keys(saved).forEach(k => { if (saved[k] === undefined) delete n[k]; else n[k] = saved[k]; });
                 calcBottomUp(page.root, new Set());   // restore computed state
                 let target = null;
-                try { const t = getSafetyTarget(severity); if (t && t.prob) target = -Math.expm1(-t.prob * tExp); } catch (_) {}
-                const row = { page: page.name || page.id, severity, base, dispatched: disp, target,
-                              ratio: base > 0 ? disp / base : null, withinTarget: target != null ? disp <= target : null };
+                // 13 Oct 2026 (math audit F8): per-flight budget from the ONE shared
+                // normalization (SLTopBasis, the tree's mission time), not the exposure time.
+                try { const t = getSafetyTarget(severity); if (t && t.prob) target = SLTopBasis.perFlightBudget(t.prob, page).pFlight; } catch (_) {}
+                const _fh = v => (v != null) ? SLTopBasis.perFlightHour(v, page).rate : null;
+                const row = { page: page.name || page.id, severity, base, dispatched: disp, target, baseRate: _fh(base), dispatchedRate: _fh(disp),
+                              ratio: (base > 0 && disp != null) ? disp / base : null, withinTarget: (target != null && disp != null) ? disp <= target * (1 + SLTopBasis.TOL) : null };
                 if (!worst || (row.dispatched || 0) > (worst.dispatched || 0)) worst = row;
             });
         } catch (e) {
@@ -132,11 +141,13 @@
         }
         if (!worst) return null;
         // TLD: allowed extra probability = budgetShare × target; extra rate per FH
-        // ≈ (P_disp − P_base)/tExp ⇒ max dispatch FH = share×target / rate. STATED
+        // (13 Oct 2026: per-flight-hour rates from SLTopBasis, the tree's flight time) ⇒ max dispatch FH = share×target / rate. STATED
         // assumption; the authority agrees the share, not the tool.
         const share = _store().budgetShare;
         if (worst.target != null && worst.dispatched > worst.base) {
-            const extraRate = (worst.dispatched - worst.base) / tExp;
+            // 13 Oct 2026 (F8): extra per-flight-hour rate through the one shared
+            // normalization (same flight time as the target), not divided by exposure.
+            const extraRate = worst.dispatchedRate - worst.baseRate;
             worst.tldMaxFH = extraRate > 0 ? (share * worst.target) / extraRate : null;
             worst.tldShare = share;
         }

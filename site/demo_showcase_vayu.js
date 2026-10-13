@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math fix 7): the AND gates carried the DAL option in the wrong field (dalIndependence: 'option-1' / 'option-2'), which the allocator silently read as a non-provisional reduction. The option now sits in dalOption and the independence is the default claim, so no DAL reduction is taken until CMA substantiates it (the badge shows the would-be DAL); see tests/regression_dal_row_20261013.test.js
 // demo_showcase_vayu.js — Vayu V-1 eVTOL air taxi showcase.
 // Same contract as demo_showcase_hl1.js: build() returns a full project model;
 // postLoad() runs the real engines. Authored to Aeolus depth PLUS full Human
@@ -486,7 +487,7 @@
         const pFccC = be('Computing lane C fails', 0, { probability: 5e-5 });
         page('pg-fcc-loss', 'PSSA · FCC total loss of control-law output', {
             treeLevel: 'system', systemId: 'sys-fcc', mode: 'top-down', linkedFhaIds: [2001],
-            root: seal(gate('AND', 'All three computing lanes lost', [pFccA, pFccB, pFccC], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'All three computing lanes lost', [pFccA, pFccB, pFccC], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- FCC: erroneous output not annunciated ----------------------------
@@ -507,8 +508,8 @@
         page('pg-dep-multirotor', 'PSSA · Loss of more than one lift rotor in hover', {
             treeLevel: 'system', systemId: 'sys-dep', mode: 'top-down', linkedFhaIds: [2011],
             root: seal(gate('OR', 'Two or more lift rotors lost simultaneously', [
-                gate('AND', 'Rotors 1 and 2 both lost', [r1, r2], { dalIndependence: 'option-1' }),
-                gate('AND', 'Rotors 3 and 4 both lost', [r3, r4], { dalIndependence: 'option-1' }),
+                gate('AND', 'Rotors 1 and 2 both lost', [r1, r2], { dalOption: 'opt1' }),
+                gate('AND', 'Rotors 3 and 4 both lost', [r3, r4], { dalOption: 'opt1' }),
             ], { allocatedDAL: 'A' })),
         });
 
@@ -519,7 +520,7 @@
                 be('Controller group 1 lost', 0, { probability: 4e-4 }),
                 be('Controller group 2 lost', 0, { probability: 4e-4 }),
                 be('Controller group 3 lost', 0, { probability: 4e-4 }),
-            ], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            ], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- EPS: total loss of propulsion energy (min 4 of 6 packs) ---------
@@ -529,7 +530,7 @@
             root: seal(gate('AND', 'More than two of six packs lost, below the hover floor', [
                 pPk(1), pPk(2), pPk(3),
                 be('Cross-tie contactor fails to reconfigure', 0, { probability: 5e-3 }),
-            ], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            ], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- EPS: erroneous energy-state indication ---------------------------
@@ -538,7 +539,7 @@
         page('pg-eps-soc', 'PSSA · Erroneous energy-state indication', {
             treeLevel: 'system', systemId: 'sys-eps', mode: 'top-down', linkedFhaIds: [2023],
             root: seal(gate('AND', 'Positive but false reserve presented to the pilot', [
-                gate('AND', 'Both estimation channels erroneous', [pSoc1, pSoc2], { dalIndependence: 'option-1' }),
+                gate('AND', 'Both estimation channels erroneous', [pSoc1, pSoc2], { dalOption: 'opt1' }),
                 be('Miscompare monitor absent or ignored', 0, { probability: 1 }),
             ], { allocatedDAL: 'A' })),
         });
@@ -548,7 +549,7 @@
         const pEhaB = be('Pitch actuation lane B (EHA) fails', 0, { probability: 2.6e-5 });
         page('pg-fcs-pitch', 'PSSA · FCS loss of pitch actuation in cruise', {
             treeLevel: 'system', systemId: 'sys-fcs', mode: 'top-down', linkedFhaIds: [2041],
-            root: seal(gate('AND', 'Loss of both pitch actuation lanes', [pEhaA, pEhaB], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Loss of both pitch actuation lanes', [pEhaA, pEhaB], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- Avionics: misleading display -------------------------------------
@@ -568,7 +569,7 @@
             treeLevel: 'system', systemId: 'sys-thm', mode: 'top-down', linkedFhaIds: [2061],
             root: seal(gate('AND', 'Both cooling loops lost', [
                 be('Cooling loop A lost', 3.5e-5), be('Cooling loop B lost', 3.5e-5),
-            ], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            ], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- BMS: undetected thermal runaway ----------------------------------
@@ -608,7 +609,7 @@
         const pPark = be('Parking/holding means unavailable', 0, { probability: 3e-4 });
         page('pg-ldg-brakes', 'PSSA · Loss of ground deceleration and holding', {
             treeLevel: 'system', systemId: 'sys-ldg', mode: 'top-down', linkedFhaIds: [2081],
-            root: seal(gate('AND', 'Aircraft cannot be arrested or held on the pad', [pBrkA, pBrkB, pPark], { allocatedDAL: 'B', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Aircraft cannot be arrested or held on the pad', [pBrkA, pBrkB, pPark], { allocatedDAL: 'B', dalOption: 'opt1' })),
         });
 
         // -- Aircraft-level PASA trees ----------------------------------------

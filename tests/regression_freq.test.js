@@ -127,9 +127,23 @@ check('the other event still contributes (refusal is per-event, not per-tree)',
 const rCcf = F.computeFrequency(GATE('AND', [
   BE({ name: 'C1', probability: qr, lambda: lam, ccfGroup: 'G1', beta: 0.1 }),
   BE({ name: 'C2', probability: qr, lambda: lam, ccfGroup: 'G1', beta: 0.1 })]));
-check('CCF group rows present and classed, figure flagged LOWER BOUND',
-  rCcf.ok && rCcf.lowerBound === true && rCcf.flags.ccfGroups >= 1 &&
-  rCcf.rows.some(r => r.cls === 'ccf-group' && /LOWER BOUND/.test(r.note)));
+// 13 Oct 2026 (fix 3): this check used to pin the v1 LIMITATION (common cause rows had no rate,
+// figure flagged LOWER BOUND). The MGL engine gives each common cause event its rate (β·λ for a
+// 2-member group) and each member's own variable its own share ((1 − β)·λ), so the figure is now
+// complete. Expected value derived by hand: own q i = (1−β)q, CCF q c = βq, Q = c + (1−c)i²,
+// IB_c = 1 − i², IB_i = (1 − c)·i, w = IB_c·βλ·(1−c) + 2·IB_i·(1−β)λ·(1−i).
+{
+  const b = 0.1, i = (1 - b) * qr, c = b * qr;
+  const wHand = (1 - i * i) * b * lam * (1 - c) + 2 * (1 - c) * i * (1 - b) * lam * (1 - i);
+  check('CCF event row present with its own rate, figure complete (no LOWER BOUND), w_top matches the hand formula',
+    rCcf.ok && rCcf.lowerBound === false && rCcf.rows.some(r => r.cls === 'ccf-event') && approx(rCcf.wTop, wHand, 1e-12),
+    'wTop ' + rCcf.wTop + ' vs ' + wHand);
+}
+const rCcf0 = F.computeFrequency(GATE('AND', [
+  BE({ name: 'D1', probability: qr, ccfGroup: 'G2', beta: 0.1 }),
+  BE({ name: 'D2', probability: qr, ccfGroup: 'G2', beta: 0.1 })]));
+check('a common cause event whose members have no rate is still flagged LOWER BOUND',
+  rCcf0.ok && rCcf0.lowerBound === true && rCcf0.rows.some(r => r.cls === 'ccf-group' && /LOWER BOUND/.test(r.note)));
 
 // ---- [5] refusals + sweep + wiring ------------------------------------------
 console.log('\n[5] refusals, sweep, page wiring');

@@ -1,5 +1,6 @@
+// 13 Oct 2026 (math fix 7): claims carry pending (reduction withheld until CMA) beside reduced, and k-of-n VOTING gates are read; see tests/regression_dal_row_20261013.test.js
 // ============================================================================
-// independence_claims.js — v1.0 — P-bridge: extract credited-independence
+// independence_claims.js — v1.1 — P-bridge: extract credited-independence
 // claims from the fault trees and resolve each member to EQUIPMENT identity,
 // so the physical cross-check (physical_independence.js) can be fed from the
 // real model. BORN MODULAR: new file, READ-ONLY walk, no DOM, no mutation.
@@ -37,7 +38,8 @@
             if (!p || !p.root) return;
             (function walk(n) {
                 if (!n) return;
-                var andLike = n.gateType === 'AND' || n.gateType === 'INHIBIT';
+                // 13 Oct 2026 (fix 7): a k-of-n VOTING gate (k >= 2) can carry a DAL reduction too.
+                var andLike = n.gateType === 'AND' || n.gateType === 'INHIBIT' || n.gateType === 'VOTING';
                 if (andLike && (n._independenceReq || n._dalReduced)) {
                     var kids = n.children || n._children || [];
                     var members = kids.map(function (c) {
@@ -45,7 +47,9 @@
                     });
                     out.push({
                         pageId: p.id, page: p.name, gateId: n.id, gate: n.displayId || n.id, gateType: n.gateType,
-                        independence: n.dalIndependence, reduced: !!n._dalReduced,
+                        // reduced = the DAL reduction is TAKEN (CMA-substantiated); pending = it is
+                        // claimed and withheld until CMA substantiates it (13 Oct 2026, fix 7).
+                        independence: n.dalIndependence, reduced: !!n._dalReduced, pending: !!n._dalPending,
                         members: members,
                         resolved: members.filter(function (m) { return m.equipmentId; }).length,
                         unresolved: members.filter(function (m) { return !m.equipmentId; }).length

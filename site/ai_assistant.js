@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix 3, MGL): CCF proposals carry the model (beta factor or MGL) explicitly and an unsuggested gamma/delta stays blank (= 1, NUREG/CR-5485 MGL default) instead of a silent 0.
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 /*!
  * Safety Lab Aero — AI Assistant module
@@ -8981,8 +8982,8 @@
                 threatenedPrinciple: threatRef,
                 model: model,
                 suggestedBeta: (_ccfClamp01(gp.suggestedBeta) != null ? _ccfClamp01(gp.suggestedBeta) : 0.05),
-                suggestedGamma: (model === 'MGL' ? (_ccfClamp01(gp.suggestedGamma) != null ? _ccfClamp01(gp.suggestedGamma) : 0) : null),
-                suggestedDelta: (model === 'MGL' ? (_ccfClamp01(gp.suggestedDelta) != null ? _ccfClamp01(gp.suggestedDelta) : 0) : null),
+                suggestedGamma: (model === 'MGL' ? (_ccfClamp01(gp.suggestedGamma) != null ? _ccfClamp01(gp.suggestedGamma) : null) : null),   // 13 Oct 2026 (fix 3): not suggested = blank = 1 in MGL, never a silent 0
+                suggestedDelta: (model === 'MGL' ? (_ccfClamp01(gp.suggestedDelta) != null ? _ccfClamp01(gp.suggestedDelta) : null) : null),
                 links: { cmaId: String(links.cmaId || '').trim(), praId: String(links.praId || '').trim(), zsaId: String(links.zsaId || '').trim() },
                 rationale: String(gp.rationale || '').trim(),
                 _model: r.model || MODELS.reason,
@@ -9068,9 +9069,9 @@
                     '<input type="number" step="0.001" min="0" max="1" id="ccf-edit-beta-' + p._k + '" value="' + _esc(String(p.suggestedBeta)) + '" style="width:100%;margin:2px 0 8px;padding:5px 7px;border:1px solid var(--aifh-border);border-radius:6px;background:var(--aifh-card);color:var(--aifh-text);font:inherit">' +
                     '<div id="ccf-edit-mgl-' + p._k + '" style="display:' + (isMgl ? 'block' : 'none') + '">' +
                         '<label class="aifh-meta">γ (MGL assumption — 0 to 1)</label>' +
-                        '<input type="number" step="0.001" min="0" max="1" id="ccf-edit-gamma-' + p._k + '" value="' + _esc(String(p.suggestedGamma == null ? 0 : p.suggestedGamma)) + '" style="width:100%;margin:2px 0 8px;padding:5px 7px;border:1px solid var(--aifh-border);border-radius:6px;background:var(--aifh-card);color:var(--aifh-text);font:inherit">' +
+                        '<input type="number" step="0.001" min="0" max="1" id="ccf-edit-gamma-' + p._k + '" placeholder="blank = 1" value="' + _esc(p.suggestedGamma == null ? '' : String(p.suggestedGamma)) + '" style="width:100%;margin:2px 0 8px;padding:5px 7px;border:1px solid var(--aifh-border);border-radius:6px;background:var(--aifh-card);color:var(--aifh-text);font:inherit">' +
                         '<label class="aifh-meta">δ (MGL assumption — 0 to 1)</label>' +
-                        '<input type="number" step="0.001" min="0" max="1" id="ccf-edit-delta-' + p._k + '" value="' + _esc(String(p.suggestedDelta == null ? 0 : p.suggestedDelta)) + '" style="width:100%;margin:2px 0 8px;padding:5px 7px;border:1px solid var(--aifh-border);border-radius:6px;background:var(--aifh-card);color:var(--aifh-text);font:inherit">' +
+                        '<input type="number" step="0.001" min="0" max="1" id="ccf-edit-delta-' + p._k + '" placeholder="blank = 1" value="' + _esc(p.suggestedDelta == null ? '' : String(p.suggestedDelta)) + '" style="width:100%;margin:2px 0 8px;padding:5px 7px;border:1px solid var(--aifh-border);border-radius:6px;background:var(--aifh-card);color:var(--aifh-text);font:inherit">' +
                     '</div>' +
                     '<div class="aifh-meta">Members (fixed): ' + (p.members || []).length + '</div>' +
                     '<div class="aifh-actions"><button type="button" class="aifh-accept" data-act="save" data-k="' + p._k + '">Save changes</button>' +
@@ -9079,7 +9080,7 @@
             }
             const links = p.links || {};
             const linkBits = [links.cmaId ? ('CMA ' + links.cmaId) : '', links.praId ? ('PRA ' + links.praId) : '', links.zsaId ? ('ZSA ' + links.zsaId) : ''].filter(Boolean).join(' · ');
-            const mgl = (p.model === 'MGL') ? (' · γ=' + (p.suggestedGamma == null ? 0 : p.suggestedGamma) + ', δ=' + (p.suggestedDelta == null ? 0 : p.suggestedDelta)) : '';
+            const mgl = (p.model === 'MGL') ? (' · γ=' + (p.suggestedGamma == null ? '1 (blank)' : p.suggestedGamma) + ', δ=' + (p.suggestedDelta == null ? '1 (blank)' : p.suggestedDelta)) : '';
             return '<div class="aifh-card">' +
                 '<h4>' + _esc(p.name) + '</h4>' +
                 '<div class="aifh-meta">' + _esc(_ccfMechLabel(p.mechanism)) + ' · model ' + _esc(p.model) + ' · ' + (p.members || []).length + ' members</div>' +
@@ -9116,8 +9117,8 @@
                     const b = _ccfClamp01(betaEl ? betaEl.value : p.suggestedBeta);
                     if (b != null) p.suggestedBeta = b;
                     if (p.model === 'MGL') {
-                        const g = _ccfClamp01(gammaEl ? gammaEl.value : p.suggestedGamma); p.suggestedGamma = (g != null ? g : 0);
-                        const d = _ccfClamp01(deltaEl ? deltaEl.value : p.suggestedDelta); p.suggestedDelta = (d != null ? d : 0);
+                        const g = (gammaEl && gammaEl.value === '') ? null : _ccfClamp01(gammaEl ? gammaEl.value : p.suggestedGamma); p.suggestedGamma = (g != null ? g : null);
+                        const d = (deltaEl && deltaEl.value === '') ? null : _ccfClamp01(deltaEl ? deltaEl.value : p.suggestedDelta); p.suggestedDelta = (d != null ? d : null);
                     } else { p.suggestedGamma = null; p.suggestedDelta = null; }
                     _ccfEditingKey = null; _renderCcfCards();
                     _toast('Proposal updated (not yet applied — Accept to write it onto the nodes).', 'info');
@@ -9162,17 +9163,18 @@
             const refs = (p.members || []).map(function (m) { return { pageId: m.pageId, nodeId: m.nodeId }; });
             if (refs.length < 2) { _toast('A CCF group needs at least two members.', 'warning'); return false; }
             const beta = (p.suggestedBeta != null) ? p.suggestedBeta : 0.05;
-            const gamma = (p.model === 'MGL') ? (p.suggestedGamma == null ? 0 : p.suggestedGamma) : undefined;
-            const delta = (p.model === 'MGL') ? (p.suggestedDelta == null ? 0 : p.suggestedDelta) : undefined;
+            // 13 Oct 2026 (fix 3): the model travels explicitly; a blank MGL letter stays blank (= 1).
+            const gamma = (p.model === 'MGL') ? (p.suggestedGamma == null ? null : p.suggestedGamma) : undefined;
+            const delta = (p.model === 'MGL') ? (p.suggestedDelta == null ? null : p.suggestedDelta) : undefined;
             // This is the ONLY write to the trees. It sets node.ccfGroup/beta/(gamma/delta)
             // and runs the SAME recompute/render the existing CCF-config-change path uses.
-            const res = window.applyCCFGroupToNodes(refs, p.name, beta, gamma, delta);
+            const res = window.applyCCFGroupToNodes(refs, p.name, beta, gamma, delta, { model: p.model === 'MGL' ? 'mgl' : 'beta', source: 'AI common cause proposal accepted by the engineer (assumption to substantiate)' });
             if (!res || !res.applied) { _toast('Could not locate the member basic events to apply the CCF group (they may have changed).', 'warning'); return false; }
             // Provenance — stamp the staging record (travels with the audit view, not the math).
             p._disposition = { action: 'accepted', model: p._model || null, at: new Date().toISOString(), acceptedBy: _acceptedByLabel() || undefined, applied: res.applied, missing: (res.missing || []).length };
             _logDelta('ccf.propose', 'accept', { name: p.name, members: res.applied, beta: beta });
             const miss = (res.missing || []).length;
-            _toast('CCF group "' + p.name + '" applied to ' + res.applied + ' basic event(s)' + (miss ? (' (' + miss + ' member(s) not found)') : '') + ' — β=' + beta + (p.model === 'MGL' ? (', γ=' + gamma + ', δ=' + delta) : '') + '. Engine recomputed.', 'success');
+            _toast('CCF group "' + p.name + '" applied to ' + res.applied + ' basic event(s)' + (miss ? (' (' + miss + ' member(s) not found)') : '') + ' — β=' + beta + (p.model === 'MGL' ? (', γ=' + (gamma == null ? '1' : gamma) + ', δ=' + (delta == null ? '1' : delta)) : '') + '. Engine recomputed.', 'success');
             return true;
         } catch (e) { _toast('Could not apply CCF group: ' + ((e && e.message) || e), 'warning'); return false; }
     }

@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F1/F8): the argued rate is the exact P(top) converted with SLTopBasis.perFlightHour, not root.probability divided by the exposure time. See tests/regression_exact_top_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // sse_export.js — Phase P8 (gap M14): the safety-significant events list for
@@ -39,7 +40,6 @@
             rows.push({ kind, id, event, monitor, expectation, source });
 
         // ---- 1. severe failure conditions --------------------------------
-        const tExp = (typeof ftaConfig === 'object' && ftaConfig && ftaConfig.exposureTime) || 1;
         const target = sev => { try { const t = typeof getSafetyTarget === 'function' ? getSafetyTarget(sev) : null; return t && t.prob > 0 ? t.prob : null; } catch (_) { return null; } };
         // 23 Sep 2026 — a tree links to its FC through linkedFhaIds[] (newer) or the legacy
         // linkedFhaId, in either the bare or the 'AC_' form. Matching the legacy field verbatim
@@ -55,7 +55,11 @@
             try {
                 const pg = ((typeof ftaPages !== 'undefined' && ftaPages) || []).find(p =>
                     p.root && !p.verifies && p.treeLevel !== 'system' && _linksTo(p, iid));
-                return pg && pg.root && (pg.root.probability > 0) ? pg.root.probability : null;
+                // 13 Oct 2026 (math audit F1/F8): the exact top (common cause and shared
+                // events included) converted to a per-flight-hour rate with the one shared
+                // normalization, not root.probability divided by the exposure time.
+                const p = pg && pg.root ? SLTopBasis.exactTop(pg.root) : null;
+                return (p != null && p > 0) ? SLTopBasis.perFlightHour(p, pg).rate : null;
             } catch (_) { return null; }
         };
         ((typeof acFhaData !== 'undefined' && acFhaData) || []).forEach(f => {
@@ -63,7 +67,7 @@
             const t = target(f.severity), p = linkedProb(f.internalId);
             push('condition', f.fcId, f.fcDesc || f.fcId,
                 'occurrence of the condition (or precursors) in service',
-                'certified ≤ ' + _sci(t) + '/FH' + (p ? ' · argued ' + _sci(p / tExp) + '/FH' : ''),
+                'certified ≤ ' + _sci(t) + '/FH' + (p ? ' · argued ' + _sci(p) + '/FH' : ''),
                 'AC FHA · ' + f.severity);
         });
         ((typeof systemsData !== 'undefined' && systemsData) || []).forEach(s => (s.fha || []).forEach(f => {

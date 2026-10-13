@@ -81,7 +81,10 @@ check('no duplicate node ids across the fault trees', dupErr === 0, dupErr + ' d
 const pitch = d.ftaPages.find(p => p.id === 'pg-rj-pitch');
 check('loss-of-pitch is an AND of two independent lanes at DAL A',
   pitch && pitch.root.gateType === 'AND' && pitch.root.allocatedDAL === 'A' &&
-  pitch.root.dalIndependence === 'option-1' && (pitch.root.children || []).length === 2);
+  // 13 Oct 2026 (fix 7): the old expectation pinned dalIndependence 'option-1', which was the DAL
+  // OPTION stored in the independence field (the allocator read it as a non-provisional reduction).
+  // The option now sits in dalOption; the independence is the default claim (CMA pending).
+  pitch.root.dalOption === 'opt1' && !pitch.root.dalIndependence && (pitch.root.children || []).length === 2);
 check('the deterministic core carries no AI/date/random',
   !/fetch\(|anthropic\.|Date\.now|Math\.random/i.test(S('demo_showcase_kestrel25.js')));
 

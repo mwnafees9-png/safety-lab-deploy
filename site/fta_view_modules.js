@@ -1,5 +1,9 @@
+// 13 Oct 2026 (fix 3, MGL): the node panel fills the common cause fields from the GROUP (ccfFillConfigPanel) and the cut-set table expands common cause groups with the tree's MGL model (expandCCFCutsets(min, rootNode)).
+// 13 Oct 2026 (math audit F1/F8): the FHA requirement verification lane and the Golden Thread budget check use SLTopBasis.exactTop (never root.probability) and SLTopBasis.meets; _missionHoursForNormalization delegates to SLTopBasis.missionHours. See tests/regression_exact_top_20261013.test.js and tests/regression_perfh_basis_20261013.test.js
+// 13 Oct 2026 (math fix 7): the DAL badge shows a pending reduction (dashed outline, hover says what the DAL would be once CMA substantiates the claim) and the DAL panel opens on VOTING gates; see tests/regression_dal_row_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
+// 13 Oct 2026 (fix 6): the cut set panel passes the tree to expandCCFCutsets (common cause events explicit, once each) and the w_TE line says how many common cause events it includes.
 // fta_view_modules.js — v1.0 — Phase P2 batch 2a: FTA & golden-thread view layer.
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). Pure runtime function declarations — zero
@@ -914,6 +918,8 @@ function updateD3() {
         // Phase 53.41 — bigger rect + bigger bolder text + darker text fill for readability.
         dalBadge.append('rect').attr('class', 'dal-badge-rect').attr('x', -27).attr('y', -11).attr('width', 54).attr('height', 20).attr('rx', 5).attr('ry', 5).attr('stroke', '#0f172a').attr('stroke-width', 1.25);
         dalBadge.append('text').attr('class', 'dal-badge-text').attr('y', 4).attr('text-anchor', 'middle').attr('font-weight', '700').attr('font-size', '11.5px').attr('fill', '#0f172a').style('letter-spacing', '0.3px');
+        // 13 Oct 2026 (fix 7): hover title: what the DAL would be once CMA substantiates a pending claim.
+        dalBadge.append('title').attr('class', 'dal-badge-title');
         // DAL-carrier star removed — ARP4754B / ARP4761A define no marked "carrier". The per-member
         // DAL badges fully express the allocation; the option-based DALgebra explanation lives in the
         // generated requirement's rationale, not as a canvas glyph.
@@ -1096,6 +1102,16 @@ function updateD3() {
         nodeUpdate.select('.dal-badge').style('display', d => d.data.allocatedDAL ? 'inline' : 'none');
         nodeUpdate.select('.dal-badge-rect').attr('fill', d => DAL_COLORS[d.data.allocatedDAL] || '#9ca3af');
         nodeUpdate.select('.dal-badge-text').text(d => d.data.allocatedDAL ? `${dalPrefixForNode(d.data)} ${d.data.allocatedDAL}` : '');
+        // 13 Oct 2026 (fix 7): a member held at its incoming DAL because an independence claim above it
+        // is not yet substantiated by CMA shows a dashed badge, and its hover says what it would drop to.
+        nodeUpdate.select('.dal-badge-rect').attr('stroke-dasharray', d => (d.data._dalIfSubstantiated && d.data.allocatedDAL && d.data._dalIfSubstantiated !== d.data.allocatedDAL) ? '3,2' : null);
+        nodeUpdate.select('.dal-badge-title').text(d => {
+            const n = d.data; if (!n.allocatedDAL) return '';
+            const k = dalPrefixForNode(n);
+            if (n._dalIfSubstantiated && n._dalIfSubstantiated !== n.allocatedDAL)
+                return k + ' ' + n.allocatedDAL + ' now. Would be ' + k + ' ' + n._dalIfSubstantiated + ' once Common Mode Analysis substantiates the independence claimed above it (no reduction is taken before that).';
+            return k + ' ' + n.allocatedDAL;
+        });
         // Phase 46 — VOTING K/N badge. Only shown when the gate is VOTING.
         nodeUpdate.select('.voting-k-badge').style('display', d => d.data.gateType === 'VOTING' ? 'inline' : 'none');
         nodeUpdate.select('.voting-k-text').text(d => {
@@ -1286,7 +1302,7 @@ function selectNode(dataNode) {
     document.getElementById('config-transfer-container').style.display = (dataNode.gateType === 'TRANSFER') ? 'flex' : 'none';
     document.getElementById('config-ccf-container').style.display = (dataNode.type === 'basic') ? 'flex' : 'none';
     if(dataNode.gateType === 'TRANSFER') { const linkSel = document.getElementById('config-transfer-link'); linkSel.innerHTML = '<option value="">-- Select Tree to Link --</option>'; ftaPages.forEach(p => { if(p.id !== activeFTAPageId) linkSel.innerHTML += `<option value="${esc(p.id)}" ${dataNode.linkedPageId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`; }); }
-    if (dataNode.type !== 'gate' && dataNode.gateType !== 'TRANSFER') { document.getElementById('config-lambda').value = dataNode.lambda || 0; /* Phase 66.10 — the weight slider is a PERCENTAGE control; seeding it with the raw `weight || 1` wrote 1% onto any node that had no weight yet. syncWeightSliderFromNode() owns it and defaults to the node's equal share. */ if (typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); if (typeof slRenderEventReuse === 'function') slRenderEventReuse(); if(dataNode.type === 'basic') { document.getElementById('config-ccf-group').value = dataNode.ccfGroup || ''; document.getElementById('config-beta').value = dataNode.beta || 0; document.getElementById('config-gamma').value = dataNode.gamma || 0; document.getElementById('config-delta').value = dataNode.delta || 0; } }
+    if (dataNode.type !== 'gate' && dataNode.gateType !== 'TRANSFER') { document.getElementById('config-lambda').value = dataNode.lambda || 0; /* Phase 66.10 — the weight slider is a PERCENTAGE control; seeding it with the raw `weight || 1` wrote 1% onto any node that had no weight yet. syncWeightSliderFromNode() owns it and defaults to the node's equal share. */ if (typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); if (typeof slRenderEventReuse === 'function') slRenderEventReuse(); if(dataNode.type === 'basic') { document.getElementById('config-ccf-group').value = dataNode.ccfGroup || ''; if (typeof ccfFillConfigPanel === 'function') ccfFillConfigPanel(dataNode); else { document.getElementById('config-beta').value = dataNode.beta || 0; document.getElementById('config-gamma').value = dataNode.gamma == null ? '' : dataNode.gamma; document.getElementById('config-delta').value = dataNode.delta == null ? '' : dataNode.delta; } /* 13 Oct 2026 (fix 3): group-level MGL fields */; } }
     if (dataNode.gateType === 'VOTING') document.getElementById('config-voting-k').value = dataNode.votingK || 2;
 
     // --- DFT-WARM: spare dormancy + switch reliability (SPARE gates only) ---
@@ -1305,9 +1321,9 @@ function selectNode(dataNode) {
         }
     }
 
-    // --- DAL allocation panel (AND / INHIBIT gates only) ---
+    // --- DAL allocation panel (AND / INHIBIT gates, and k-of-n VOTING gates since 13 Oct 2026, fix 7) ---
     const dalContainer = document.getElementById('config-dal-container');
-    const isAndLike = dataNode.gateType === 'AND' || dataNode.gateType === 'INHIBIT';
+    const isAndLike = dataNode.gateType === 'AND' || dataNode.gateType === 'INHIBIT' || dataNode.gateType === 'VOTING';
     if (dalContainer) {
         dalContainer.style.display = isAndLike ? 'flex' : 'none';
         if (isAndLike) {
@@ -2275,7 +2291,7 @@ function _generateCutsetReportSync(rootNode) {
         }
         if (!sup) min.push(curr);
     }
-    const finalCutsets = expandCCFCutsets(min);
+    const finalCutsets = expandCCFCutsets(min, rootNode);   // 13 Oct 2026 (fix 6): common cause events explicit, once each
     const tbody = document.getElementById('cutset-body'); tbody.innerHTML = '';
 
     // Backlog #4 — qualitative development errors (ARP 4761A 4.1.1.1). A cut set
@@ -2412,9 +2428,13 @@ function _generateCutsetReportSync(rootNode) {
             if (typeof SLFTAEngine !== 'undefined' && SLFTAEngine.computeFailureFrequency) {
                 const _ff = SLFTAEngine.computeFailureFrequency(rootNode);
                 if (_ff && typeof _ff.wTE === 'number' && isFinite(_ff.wTE)) {
+                    // 13 Oct 2026 (fix 6): w_TE now sums over the cut sets with common cause events
+                    // explicit; say so whenever the tree has any, so the number is never read as
+                    // independent-only.
+                    const _ccfNote = _ff.ccfEvents > 0 ? ` · includes ${_ff.ccfEvents} common cause event${_ff.ccfEvents === 1 ? '' : 's'}` : '';
                     html += `<div style="margin-top: 6px;"><strong>Failure frequency w<sub>TE</sub>:</strong>
                         <span style="font-family: monospace; font-size: 1.1em; color: var(--header-color);">${_ff.wTE.toExponential(4).toUpperCase()}</span>
-                        <span style="color: var(--text-secondary); font-size: 0.85em;">/hr — unconditional occurrence rate (Vesely–Goldberg · ARP4761A App G)</span>
+                        <span style="color: var(--text-secondary); font-size: 0.85em;">/hr — unconditional occurrence rate (Vesely–Goldberg · ARP4761A App G)${esc(_ccfNote)}</span>
                     </div>`;
                 }
             }
@@ -2606,7 +2626,11 @@ function _renderGoldenThread(fha, domain, highlight){
     });
     const tree = linkedPages.length ? linkedPages[0] : null;
     let computed = null;
-    if(tree && tree.root){ try { computed = computeExactProbability(tree.root).prob; } catch(e){ computed = (tree.root.probability || null); } }
+    // 13 Oct 2026 (math audit F1/F8): the exact top through SLTopBasis. A refusal is no
+    // number (never the independent roll-up), and the verdict compares the per-flight-hour
+    // rate with the per-flight-hour target through the one shared normalization.
+    let refused = false;
+    if(tree && tree.root){ computed = SLTopBasis.exactTop(tree.root); refused = (computed == null); }
 
     let html = '';
     let rightHtml = '';
@@ -2622,12 +2646,14 @@ function _renderGoldenThread(fha, domain, highlight){
     let budgetBody, budgetStatus;
     if(sevTarget && sevTarget.prob != null){
         if(computed != null){
-            const pass = computed <= sevTarget.prob;
+            const v = SLTopBasis.meets(computed, sevTarget.prob, tree);
+            const pass = v.pass;
             if(!pass) gaps++;
             budgetStatus = pass ? 'ok' : 'gap';
-            budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · BDD-exact top ' + computed.toExponential(2)
+            budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · BDD-exact top ' + computed.toExponential(2) + ' per flight = ' + v.rate.toExponential(2) + '/fh over a ' + v.hours.toFixed(3) + ' h flight'
                 + _gtChip(pass ? 'within budget' : 'exceeds budget', pass ? 'ok' : 'gap');
-        } else { warns++; budgetStatus = 'warn'; budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · no fault tree linked' + _gtChip('no tree', 'warn'); }
+        } else if(refused){ warns++; budgetStatus = 'warn'; budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · the exact engine refused this tree (decision diagram too large); no verdict stated' + _gtChip('no exact value', 'warn'); }
+        else { warns++; budgetStatus = 'warn'; budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · no fault tree linked' + _gtChip('no tree', 'warn'); }
     } else { budgetStatus = 'info'; budgetBody = 'No quantitative target for this severity / cert basis (' + esc((sevTarget && sevTarget.scope) || '—') + ').'; }
     html += _gtStage('Budget check', budgetBody, budgetStatus);
 
@@ -3357,23 +3383,16 @@ function _findNodeByLogicalId(root, lid) {
     })(root);
     return found;
 }
-// Phase 57 — flight (mission) duration in hours, used to normalize a rolled-up top-event
-// probability into an AC 25.1309 "average probability per flight hour" before comparing it to
-// a per-flight-hour cert target (e.g. Hazardous 1e-7/hr). Mirrors _computeTopAllocatorContext's
-// t_mission priority: project-defined mission duration → sum of flight-phase durations → null.
-// Both sources are project-wide, so this is independent of which FTA page is active.
-function _missionHoursForNormalization() {
-    const md = (typeof projectConfig !== 'undefined' && projectConfig.missionDuration && projectConfig.missionDuration > 0)
-        ? projectConfig.missionDuration : null;
-    if (md) return md;
-    let sum = 0;
-    try {
-        (flightPhasesData || []).forEach(p => {
-            const h = (typeof parseDurationToHours === 'function') ? parseDurationToHours(p.duration, p.durationUnit) : 0;
-            if (h > 0) sum += h;
-        });
-    } catch (e) { /* ignore */ }
-    return sum > 0 ? sum : null;
+// Phase 57: flight (mission) duration in hours for the per-flight-hour normalization.
+// 13 Oct 2026 (math audit F8): delegates to the ONE shared source, SLTopBasis.missionHours
+// (top_basis.js), so the requirement check, the Budget Ledger, the critical gates and the
+// allocator all divide by the same flight time. Returns null when no mission model exists
+// (callers that word requirement text keep their own label for that case); the verdict
+// lanes call SLTopBasis directly, which then uses the exposure time.
+function _missionHoursForNormalization(page) {
+    if (typeof SLTopBasis === 'undefined' || !SLTopBasis) throw new Error('top_basis.js (SLTopBasis) is not loaded');
+    const m = SLTopBasis.missionHours(page || null);
+    return m.source === 'no-mission-defined' ? null : m.hours;
 }
 
 function getAutoReqVerificationEvidence(row) {
@@ -3457,8 +3476,13 @@ function getAutoReqVerificationEvidence(row) {
         if (!allocPage) return null;   // No linked FTA page; can't auto-verify against a tree.
         const mirror = _findVerificationMirror(allocPage);
         if (!mirror || !mirror.root) return { state: 'no-mirror', label: 'No verification tree', detail: 'Create a verification mirror for the linked FTA to roll up top-event evidence.' };
-        const actual = parseFloat(mirror.root.probability) || 0;
-        if (actual <= 0) return { state: 'awaiting', label: 'Awaiting verification', detail: 'Populate leaf λ values in the verification tree; the top-event probability rolls up automatically.' };
+        // 13 Oct 2026 (math audit F1): the exact top (BDD, common cause and shared events
+        // included, open page or not), never mirror.root.probability, which other code
+        // paths refill with the independent gate-by-gate roll-up.
+        const populated = (typeof slMirrorIsPopulated === 'function') ? slMirrorIsPopulated(mirror) : true;
+        const actual = populated ? SLTopBasis.exactTop(mirror.root) : 0;
+        if (actual == null) return { state: 'awaiting', label: 'Exact P(top) unavailable', detail: 'The exact engine refused this verification tree (decision diagram too large), so no pass or fail is stated. The independent gate-by-gate roll-up is not used for a verdict.' };
+        if (!(actual > 0)) return { state: 'awaiting', label: 'Awaiting verification', detail: 'Populate leaf λ values in the verification tree; the top-event probability rolls up automatically.' };
         // Pull the target from the req's text or context (lambdaOperational not set on FHA reqs).
         // Use the cert-basis target via getSafetyTarget if severity is in context.
         let target = 0;
@@ -3466,28 +3490,20 @@ function getAutoReqVerificationEvidence(row) {
             const tgt = getSafetyTarget(src.context.severity);
             target = (tgt && tgt.prob) || 0;
         }
-        if (target <= 0) return { state: 'pass', label: 'P = ' + actual.toExponential(2), detail: 'Top-event probability rolled up from verification tree.' };
-        // Phase 57 — exposure-time normalization. `actual` is the per-flight probability rolled
-        // up over the leaves' exposure windows; the cert target (getSafetyTarget) is an average
-        // probability PER FLIGHT HOUR (e.g. Hazardous 1e-7/hr). Comparing the two directly
-        // flatters short-exposure trees (a sub-hour P looks like it clears an hourly budget).
-        // Convert the rolled-up P to a per-flight-hour rate, λ_avg = −ln(1−P)/t_flight, and
-        // compare that to the target. Falls back to the raw P comparison when no mission model
-        // (project mission duration or flight phases) exists — preserving prior behavior.
-        const tMission = _missionHoursForNormalization();
-        let actualRate = actual, normalized = false;
-        if (tMission && tMission > 0) {
-            actualRate = -Math.log1p(-Math.min(actual, 1 - 1e-15)) / tMission;
-            normalized = true;
-        }
-        const pass = actualRate <= target * 1.000001;
+        if (target <= 0) return { state: 'pass', label: 'P = ' + actual.toExponential(2), detail: 'Top-event probability rolled up from verification tree (no quantitative target for this severity).' };
+        // Phase 57 / 13 Oct 2026 (F8): exposure-time normalization through the ONE shared
+        // function (SLTopBasis.meets): per-flight P to the average rate per flight hour,
+        // λ_avg = −ln(1−P)/t_flight, against the per-flight-hour objective. The same call
+        // the Budget Ledger and the critical gates make, with the same mission time and the
+        // same fallback (the tree exposure time when no mission model exists).
+        const v = SLTopBasis.meets(actual, target, mirror);
+        const pass = v.pass;
+        const normalized = v.source !== 'no-mission-defined';
         return {
             state: pass ? 'pass' : 'fail',
-            label: (pass ? 'PASS' : 'FAIL') + ' · ' + (normalized ? 'λ = ' + actualRate.toExponential(2) + '/hr' : 'P = ' + actual.toExponential(2)),
-            detail: normalized
-                ? 'Top-event P = ' + actual.toExponential(2) + ' over a ' + tMission.toFixed(3) + ' hr flight → ' + actualRate.toExponential(2) + '/hr average · target ≤ ' + target.toExponential(2) + '/hr · ' + (pass ? 'meets regulation target' : 'exceeds regulation target')
-                : 'Top-event P = ' + actual.toExponential(2) + ' · target ≤ ' + target.toExponential(2) + ' · ' + (pass ? 'meets regulation target' : 'exceeds regulation target') + ' (no mission model defined — compared on raw probability)',
-            actual, actualRate, target, normalized, tMission
+            label: (pass ? 'PASS' : 'FAIL') + ' · λ = ' + v.rate.toExponential(2) + '/hr',
+            detail: SLTopBasis.describe(v) + ' · target ≤ ' + target.toExponential(2) + '/hr · ' + (pass ? 'meets regulation target' : 'exceeds regulation target'),
+            actual, actualRate: v.rate, target, normalized, tMission: v.hours, missionSource: v.source
         };
     }
 

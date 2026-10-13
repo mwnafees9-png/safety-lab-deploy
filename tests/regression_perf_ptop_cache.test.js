@@ -146,11 +146,17 @@ check('an error is never cached (each call recomputes and throws)', threw === 2 
 p.buildBDDFromFT = realBuild;
 
 // ---- 6. the hot read-only callers use it -------------------------------------------------------
-check('budget ledger _pTop uses the cached P(top)', /function _pTop[\s\S]{0,400}exactTopProbability\(page\.root\)/.test(read('budget_ledger.js')));
+// 13 Oct 2026 (math audit F1): the ledger reads P(top) through SLTopBasis.exactTop, the one
+// function every pass/fail screen now shares; that function is the cached exactTopProbability.
+check('budget ledger _pTop uses the cached P(top)', /function _pTop[\s\S]{0,400}SLTopBasis\.exactTop\(page\.root\)/.test(read('budget_ledger.js'))
+    && /function exactTop\(rootNode\)[\s\S]{0,300}exactTopProbability\(rootNode\)/.test(read('top_basis.js')));
 check('CCMR NTE evalAt uses the cached P(top)', /const evalAt = v => \{[\s\S]{0,400}exactTopProbability\(page\.root\)/.test(read('helpers_modules.js')));
 check('stale watch sweepAlpha uses the cached P(top)', /function sweepAlpha[\s\S]{0,500}exactTopProbability/.test(read('stale_watch.js')));
+// 13 Oct 2026 (math audit F4): computeExactProbability gained an optional scopeRoot (the tree
+// whose FDEP gates apply when a sub-gate is evaluated). Still a fresh build every call, which is
+// what this check is about, so the pattern accepts the optional parameter.
 check('computeExactProbability itself is unchanged (callers needing the diagram still get a fresh one)',
-    /function computeExactProbability\(rootNode\) \{\n    const built = buildBDDFromFT\(rootNode\);/.test(read('fta_quant_modules.js')));
+    /function computeExactProbability\(rootNode(, scopeRoot)?\) \{\n    const built = buildBDDFromFT\(rootNode(, scopeRoot)?\);/.test(read('fta_quant_modules.js')));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

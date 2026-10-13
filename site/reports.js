@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F8): the budget ledger table labels its units (/FH) and carries the per-flight values and the flight time. See tests/regression_perfh_basis_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // reports.js — Reports module (v1 namespace + v2 §56.9 section editor + v3 §56.10 AI
 // bulk-draft), extracted verbatim from safety_lab.js (Phase 76). Classic script, loaded
@@ -1327,7 +1328,8 @@ const Reports = (function() {
                     if (sys && r.systemId && String(r.systemId) !== String(sys.id)) return;   // system-scope reports show their own budgets
                     budget_ledger_table.push({
                         'FC': r.fcId, 'Scope': r.scope, 'Severity': r.severity,
-                        'Objective (/FH)': _exp(r.objective), 'Allocated': _exp(r.allocated), 'Achieved (mirror)': _exp(r.achieved),
+                        'Objective (/FH)': _exp(r.objective), 'Allocated (/FH)': _exp(r.allocated), 'Achieved (mirror, /FH)': _exp(r.achieved),
+                        'Allocated P per flight': _exp(r.allocatedPerFlight), 'Achieved P per flight': _exp(r.achievedPerFlight), 'Flight time (h)': r.missionHours != null ? Number(r.missionHours).toFixed(3) : 'n/a',
                         'Margin': r.margin != null ? '×' + Number(r.margin).toPrecision(2) : '—',
                         'Posture (advisory)': r.status.replace(/-/g, ' '),
                         'Trees': (r.allocPage ? r.allocPage.name : '') + (r.mirrorPage ? ' ⇄ ' + r.mirrorPage.name : ''),

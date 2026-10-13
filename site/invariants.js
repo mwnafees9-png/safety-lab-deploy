@@ -1,3 +1,5 @@
+// 13 Oct 2026 (math audit F1): INV-03 reads both tops through SLTopBasis.exactTop, never root.probability (the independent roll-up on pages not open). See tests/regression_exact_top_20261013.test.js
+// 13 Oct 2026 (math fix 7): INV-05 reads a claimed (not yet CMA-substantiated) independence as a withheld DAL reduction, since claims no longer reduce; see tests/regression_dal_row_20261013.test.js
 // ============================================================================
 // invariants.js — v1.0 — Q8: cross-artifact invariant sweep.
 //
@@ -153,8 +155,14 @@
                     if (!p || !p.root || p.verifies) return;
                     const mirror = _findVerificationMirror(p);
                     if (!mirror || !mirror.root) return;
-                    const budget = parseFloat(p.root.probability) || 0;
-                    const actual = parseFloat(mirror.root.probability) || 0;
+                    // 13 Oct 2026 (math audit F1): both sides from the ONE exact function
+                    // (SLTopBasis.exactTop: BDD, common cause and shared events included, on
+                    // every page), never root.probability, which holds the independent
+                    // gate-by-gate roll-up on pages that are not open. Same definition of
+                    // "allocated" and "achieved" as the Budget Ledger. Both are per flight,
+                    // so they compare directly.
+                    const budget = SLTopBasis.exactTop(p.root) || 0;
+                    const actual = SLTopBasis.exactTop(mirror.root) || 0;
                     if (!(budget > 0) || !(actual > 0)) return;
                     checked++;
                     if (actual > budget * 1.000001)
@@ -191,8 +199,10 @@
                     _walkGates(p.root, g => {
                         if (!g._independenceReq) return;
                         checked++;
+                        // 13 Oct 2026 (fix 7): a claim no longer reduces the DAL: the reduction is
+                        // withheld (members hold the incoming DAL) until CMA substantiates it.
                         if (g._independenceReq.status !== 'substantiated')
-                            fails.push('Gate ' + (g.displayId || g.id) + ' on "' + p.name + '": DAL reduction rests on CLAIMED independence — CMA substantiation pending');
+                            fails.push('Gate ' + (g.displayId || g.id) + ' on "' + p.name + '": DAL reduction withheld: independence is CLAIMED, CMA substantiation pending');
                     });
                 });
                 return { checked, fails };

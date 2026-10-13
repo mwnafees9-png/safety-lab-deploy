@@ -1,4 +1,7 @@
+// 13 Oct 2026 (fix 3, MGL): B10e now checks the engine against a hand-derived NUREG/CR-5485 MGL value (it used the engine's own output), new B10f 2-of-3 voting benchmark; repeated events sync the MGL fields; library CCF groups are created as group-level beta factor groups with a recorded source.
+// 13 Oct 2026 (math fix 7): self-tests B18/B19 set substantiated independence explicitly, since a bare claim no longer reduces the DAL; see tests/regression_dal_row_20261013.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
+// 13 Oct 2026 (fix 6 part B): renderCMA draws the common cause decision log; the shared-resource button and the old suggestion Accept/Dismiss route to the live prompt (cma_live.js) so every decision is recorded.
 // bindings_modules.js — v1.0 — Phase P2 batch 5: self-contained constants + API bindings.
 // MOVED VERBATIM from safety_lab.js (byte-exact). Two machine-proven classes:
 //   1. const/let data declarations whose initializers evaluate in an EMPTY VM
@@ -512,6 +515,9 @@ const REPEATED_EVENT_SYNCED_FIELDS = [
     'lambda', 'probability',
     'inputMode', 'inputValue', 'libraryKey',
     'ccfGroup', 'beta', 'votingK',
+    // 13 Oct 2026 (fix 3): one event, one common cause model: the MGL letters, model choice,
+    // group size and parameter source follow the event to every place it repeats.
+    'gamma', 'delta', 'ccfModel', 'ccfGroupSize', 'ccfParamSource',
     // DFT-WARM — one physical spare arrangement means one dormancy factor and one
     // switch reliability everywhere the same logical gate appears.
     'spareWarmK', 'spareSwitchP',
@@ -1103,6 +1109,8 @@ window.renderCMA = function() {
     onCmaScopeChange();
     // Keep the linked-gates dropdown in sync with the current FTA pages.
     populateCmaLinkedGatesDropdown();
+    // 13 Oct 2026 (fix 6): the common cause decision log sits under the CMA table, in every scope.
+    try { if (window.SLCmaLive) window.SLCmaLive.renderLogPanel(); } catch (_) {}
     if (_cmaScopeFilter === 'all') {
         _origCmaRender();
         return;
@@ -1142,7 +1150,17 @@ window.renderCMA = function() {
     }
 };
 
+// 13 Oct 2026 (fix 6 part B): SUPERSEDED. This button used to stage SUGGESTED shared-resource
+// rows. Shared resources are now detected live with the other common causes (cma_live.js) and
+// every one must be decided; the button runs that check now and opens the same prompt. The
+// staging body below is kept only as the fallback when the live check is not loaded.
 window.detectResourceCommonModes = function () {
+    if (window.SLCmaLive && typeof window.SLCmaLive.checkNow === 'function') {
+        const r = window.SLCmaLive.checkNow();
+        if (r && !r.pending.length && typeof showToast === 'function') showToast('No undecided shared-resource common modes: every suspect is already decided (see the CMA decision log).', 'info', 4500);
+        try { if (typeof switchTab === 'function' && document.getElementById('view-cma')) switchTab('cma'); } catch (e) { /* navigation is best-effort */ }
+        return;
+    }
     if (typeof pushUndo === 'function') pushUndo('Detect shared-resource common modes');
     if (typeof cmaData === 'undefined' || !Array.isArray(cmaData)) { try { cmaData = []; } catch (e) {} }
     const existingKeys = new Set((cmaData || []).map(c => c && c.autoKey).filter(Boolean));
@@ -1163,9 +1181,20 @@ window.detectResourceCommonModes = function () {
     } catch (e) { /* navigation is best-effort */ }
 };
 
+// 13 Oct 2026 (fix 6 part B): a suggested row staged by the old button is an UNDECIDED suspect.
+// Accept / Dismiss on it open the live prompt, so the decision is recorded (who, when, why);
+// the old direct path remains only for a suggestion whose suspect is no longer in the trees.
+function _cmaSuggestionToPrompt(row) {
+    try {
+        if (!row || !row.autoKey || !window.SLCmaLive) return false;
+        const r = window.SLCmaLive.checkNow();
+        return !!(r && r.pending.some(s => s.key === row.autoKey));
+    } catch (_) { return false; }
+}
 window.acceptCmaSuggestion = function (id) {
     const row = (cmaData || []).find(r => String(r.internalId) === String(id));
     if (!row) return;
+    if (_cmaSuggestionToPrompt(row)) return;
     delete row.suggested;
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
     renderCMA();
@@ -1173,6 +1202,7 @@ window.acceptCmaSuggestion = function (id) {
 };
 
 window.dismissCmaSuggestion = function (id) {
+    if (_cmaSuggestionToPrompt((cmaData || []).find(r => String(r.internalId) === String(id)))) return;
     cmaData = (cmaData || []).filter(r => String(r.internalId) !== String(id));
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
     renderCMA();
@@ -1900,9 +1930,12 @@ window.createCcfGroupFromLibrary = async function(key) {
     const def = getActiveLibrary()[key] || {};
     const groupName = 'CCF-' + key;
     const beta = 0.1;
-    const ok = await slConfirm('Create CCF group "' + groupName + '" (β = ' + beta + ') across ' + nodes.length + ' basic events that share component library entry "' + (def.name || key) + '"?\n\nThis sets ccfGroup + β on each event (γ/δ default to 0). Tune β/γ/δ per event afterward.', { okText: 'Create' });
+    const ok = await slConfirm('Create CCF group "' + groupName + '" (β = ' + beta + ') across ' + nodes.length + ' basic events that share component library entry "' + (def.name || key) + '"?\n\nThis sets the group on each event as a beta factor (every common cause failure fails the whole group; γ = δ = 1). Set the group parameters and their source afterward via the violet pill.', { okText: 'Create' });
     if (!ok) return;
-    nodes.forEach(n => { n.ccfGroup = groupName; n.beta = beta; if (n.gamma == null) n.gamma = 0; if (n.delta == null) n.delta = 0; });
+    // 13 Oct 2026 (fix 3): group-level parameters (NUREG/CR-5485); β = 0.1 is the NUREG generic
+    // anchor for ordinary defenses and is recorded as the source.
+    nodes.forEach(n => { n.ccfGroup = groupName; n.beta = beta; });
+    if (typeof ccfApplyGroupParams === 'function') ccfApplyGroupParams(groupName, { beta: beta, model: 'beta', source: 'NUREG/CR-4780, NUREG/CR-5485 generic beta (ordinary defenses) = ' + beta });
     if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities();
     if (typeof updateD3 === 'function') updateD3();
     if (typeof showToast === 'function') showToast('CCF group "' + groupName + '" created on ' + nodes.length + ' shared-library basic events (β = ' + beta + ').', 'success', 4000);
@@ -2430,24 +2463,50 @@ const BENCHMARKS = [
             const root = _mkGate('AND', [D, E]);
             BDD.reset();
             const r = computeExactProbability(root);
-            return { computed: r.prob, detail: 'engine BDD over indep var q(1−β)=0.009 ×2 + shared tier-2 var q·β=0.001' };
+            return { computed: r.prob, detail: 'engine BDD over own vars q(1−β)=0.009 ×2 + the common cause event D+E, q·β=0.001' };
         }
     },
     {
         id: 'B10e-mgl-ccf-engine', category: 'CCF',
         name: 'MGL CCF through the engine (end-to-end)',
-        source: "NUREG/CR-5485, §3.3 (Multiple Greek Letter) — engine-exercised",
-        citation: 'Real β/γ MGL group (β=0.05, γ=0.5, q=0.01), 3 members AND-ed, run through computeExactProbability. Exact engine value = P(g2∨g3) + (1−P(g2∨g3))·((1−β)q)³ = 5.007944e-4.',
-        expected: 5.007944463661e-4, tolerance: 1e-9,
+        source: "NUREG/CR-5485 (Mosleh et al., 1998) Multiple Greek Letter, Q_k^(m) = ρ1..ρk(1−ρ(k+1))Q_t / C(m−1,k−1); hand-derived",
+        // 13 Oct 2026 (fix 3): the old expected value (5.007944e-4) was the ENGINE'S OWN OUTPUT under
+        // the old tier model, which was the beta factor model in disguise, so the benchmark could
+        // never fail. The expected value below is derived by hand from the published MGL formula,
+        // independent of the engine: m = 3, Q1 = (1−β)q = 9.5e-3, Q2 = β(1−γ)q/2 = 1.25e-4 for EACH
+        // of the 3 pairs, Q3 = βγq = 2.5e-4. All three fail when C3 occurs, or (no C3 and) the pair
+        // events and independent failures cover all three:
+        //   P = Q3 + (1−Q3)·[(1−Q2)³Q1³ + 3Q2(1−Q2)²Q1 + 3Q2²(1−Q2) + Q2³] = 2.544644176655e-4.
+        citation: 'β=0.05, γ=0.5, q=0.01, 3 members AND-ed. Hand-derived exact MGL: Q3 + (1−Q3)[(1−Q2)³Q1³ + 3Q2(1−Q2)²Q1 + 3Q2²(1−Q2) + Q2³] with Q1=9.5e-3, Q2=1.25e-4, Q3=2.5e-4 → 2.544644e-4 (the old engine gave 5.008e-4, the beta factor answer).',
+        expected: 2.544644176655e-4, tolerance: 1e-12,
         run: () => {
-            // Build an ACTUAL 3-member MGL CCF group (β, γ tiers) and route it through the engine.
-            const D = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-DEF', beta: 0.05, gamma: 0.5, name: 'Valve D' });
-            const E = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-DEF', beta: 0.05, gamma: 0.5, name: 'Valve E' });
-            const F = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-DEF', beta: 0.05, gamma: 0.5, name: 'Valve F' });
+            const D = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-DEF', beta: 0.05, gamma: 0.5, ccfModel: 'mgl', name: 'Valve D' });
+            const E = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-DEF', beta: 0.05, gamma: 0.5, ccfModel: 'mgl', name: 'Valve E' });
+            const F = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-DEF', beta: 0.05, gamma: 0.5, ccfModel: 'mgl', name: 'Valve F' });
             const root = _mkGate('AND', [D, E, F]);
             BDD.reset();
             const r = computeExactProbability(root);
-            return { computed: r.prob, detail: 'engine BDD: indep q(1−β)=0.0095 ×3 + shared tier-2 q·β·(1−γ)=2.5e-4 + tier-3 q·β·γ=2.5e-4' };
+            return { computed: r.prob, detail: 'engine BDD: own Q1 ×3, three pair events Q2, one triple event Q3' };
+        }
+    },
+    {
+        id: 'B10f-mgl-2oo3-engine', category: 'CCF',
+        name: 'MGL CCF, 2-out-of-3 failure (VOTING) through the engine',
+        source: "NUREG/CR-5485 Multiple Greek Letter; hand-derived by enumerating the 7 basic events",
+        // 13 Oct 2026 (fix 3): the case the old model got wrong (0.67 to 0.86 of MGL). Expected value
+        // from summing over all 2^7 states of the independent events {D,E,F own; DE, DF, EF; DEF}
+        // the probability that at least 2 members are failed. Leading terms: 3Q2 + Q3 + 3Q1² =
+        // 3.75e-4 + 2.5e-4 + 2.7075e-4; the exact sum is 8.937265294695e-4.
+        citation: 'β=0.05, γ=0.5, q=0.01, VOTING 2-of-3. Exact sum over the 7 MGL events: 8.937265e-4 (≈ 3Q2 + Q3 + 3Q1²). The beta factor gives 7.69e-4.',
+        expected: 8.937265294695e-4, tolerance: 1e-12,
+        run: () => {
+            const D = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-V', beta: 0.05, gamma: 0.5, ccfModel: 'mgl', name: 'Sensor D' });
+            const E = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-V', beta: 0.05, gamma: 0.5, ccfModel: 'mgl', name: 'Sensor E' });
+            const F = _mkLeaf({ probability: 0.01, ccfGroup: 'CCF-V', beta: 0.05, gamma: 0.5, ccfModel: 'mgl', name: 'Sensor F' });
+            const root = _mkGate('VOTING', [D, E, F], { votingK: 2 });
+            BDD.reset();
+            const r = computeExactProbability(root);
+            return { computed: r.prob, detail: 'engine BDD, 2-of-3 over own + pair + triple events' };
         }
     },
 
@@ -2594,16 +2653,21 @@ const BENCHMARKS = [
     // refuses the reduction when the independence state is 'none' and 'compromised'
     // — the allocator defaults to PROVISIONAL, not to unconditional. What was wrong
     // was this test's own description of what it was demonstrating.
+    //
+    // 13 Oct 2026 (fix 7): the default changed: a bare claim no longer reduces at all
+    // until Common Mode Analysis substantiates it (the would-be DAL is kept as
+    // _dalIfSubstantiated). These two cases test the Table P2 reduction itself, so they
+    // now set dalIndependence 'substantiated' explicitly.
     {
         id: 'B18-dalgebra-opt2', category: 'DALgebra',
-        name: 'DALgebra Option 2 — AND gate decrement (under a provisional independence claim)',
+        name: 'DALgebra Option 2: AND gate decrement (under CMA-substantiated independence)',
         source: "SAE ARP4761A App P Table P2 Option 2, under ARP4754B §5.2 principles (was ARP4754A (2010) §5.4.1.2)",
-        citation: 'Top DAL A → two members at B per Table P2 Option 2; the reduction is permitted only behind a functional-independence claim (App P step f), which the allocator defaults to as PROVISIONAL',
+        citation: 'Top DAL A → two members at B per Table P2 Option 2; the reduction is permitted only behind a functional-independence claim (App P step f), and is taken once CMA has substantiated it',
         expected: 'B', tolerance: 0,
         run: () => {
             // Build a tiny tree where DAL allocation runs and we inspect a child's allocated DAL.
             const child = _mkLeaf({ type: 'undeveloped', allocatedDAL: null });
-            const root = _mkGate('AND', [child, _mkLeaf()], { dalOption: 'opt2' });
+            const root = _mkGate('AND', [child, _mkLeaf()], { dalOption: 'opt2', dalIndependence: 'substantiated' });
             // Run allocator (it mutates allocatedDAL on each child).
             allocateDAL(root, 'A', new Set());
             return { computed: child.allocatedDAL, isExact: true };
@@ -2618,7 +2682,7 @@ const BENCHMARKS = [
         run: () => {
             const carrier = _mkLeaf({ type: 'undeveloped', allocatedDAL: null });
             const sibling = _mkLeaf({ type: 'undeveloped', allocatedDAL: null });
-            const root = _mkGate('AND', [carrier, sibling], { dalOption: 'opt1', dalCarrierChildId: carrier.id });
+            const root = _mkGate('AND', [carrier, sibling], { dalOption: 'opt1', dalCarrierChildId: carrier.id, dalIndependence: 'substantiated' });
             allocateDAL(root, 'A', new Set());
             return { computed: carrier.allocatedDAL + ',' + sibling.allocatedDAL, isExact: true };
         }

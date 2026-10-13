@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math fix 7): the AND gates carried the DAL option in the wrong field (dalIndependence: 'option-1' / 'option-2'), which the allocator silently read as a non-provisional reduction. The option now sits in dalOption and the independence is the default claim, so no DAL reduction is taken until CMA substantiates it (the badge shows the would-be DAL); see tests/regression_dal_row_20261013.test.js
 // demo_showcase_halcyon.js — Halcyon HA-10 — hybrid-electric coastal amphibian.
 //
 // A Part 23 Class III amphibian threaded through the FULL ARP 4761A
@@ -455,16 +456,16 @@
             { treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [acFhaData[7].internalId] });
         pFcs.root = seal(gate('AND', 'Total loss of flight-path control', [
             gate('OR', 'Channel A unavailable', [
-                be('Channel A computer failure', 3.2e-5, { dalIndependence: 'option1' }),
+                be('Channel A computer failure', 3.2e-5, { dalOption: 'opt1' }),
                 be('Channel A actuator failure', 2.0e-5),
                 be('Channel A power loss', 1.5e-5)
-            ], { dalIndependence: 'option1' }),
+            ], { dalOption: 'opt1' }),
             gate('OR', 'Channel B unavailable', [
                 be('Channel B computer failure', 3.2e-5),
                 be('Channel B actuator failure', 2.0e-5),
                 be('Channel B power loss', 1.5e-5)
             ])
-        ], { dalIndependence: 'option1' }));
+        ], { dalOption: 'opt1' }));
         const vFcs = page('pg-ac-fcs-v', 'SF-03-TL · Total loss of flight-path control (Verification)',
             { treeLevel: 'aircraft', mode: 'bottom-up', verifies: 'pg-ac-fcs', linkedFhaIds: [acFhaData[7].internalId] });
         vFcs.root = seal(gate('AND', 'Total loss of flight-path control', [
@@ -672,7 +673,7 @@
         sysMirror('pg-sys-egen-v', 'EGN-FC-01 · Loss of turbogenerator output (Verification)', 'egen', 'pg-sys-egen', S('egen').fha[0].internalId,
             gate('OR', 'Generation lost', [ be('Turbine mechanical failure', 6.0e-6), be('Generator excitation failure', 2.5e-6) ]));
         sysTree('pg-sys-fcs', 'FCA-FC-01 · Loss of flight-control channel A', 'fcs-a', S('fcs-a').fha[0].internalId,
-            gate('OR', 'Channel A lost', [ be('Channel A computer failure', 3.2e-5), be('Channel A actuator failure', 2.0e-5) ], { dalIndependence: 'option1' }));
+            gate('OR', 'Channel A lost', [ be('Channel A computer failure', 3.2e-5), be('Channel A actuator failure', 2.0e-5) ], { dalOption: 'opt1' }));
         sysMirror('pg-sys-fcs-v', 'FCA-FC-01 · Loss of flight-control channel A (Verification)', 'fcs-a', 'pg-sys-fcs', S('fcs-a').fha[0].internalId,
             gate('OR', 'Channel A lost', [ be('Channel A computer failure', 2.8e-5), be('Channel A actuator failure', 1.7e-5) ]));
         sysTree('pg-sys-fcs-err', 'FCA-FC-02 · Undetected erroneous channel A control response', 'fcs-a', S('fcs-a').fha[1].internalId,

@@ -1,4 +1,5 @@
-/* crdt_sync.js — Phase 1: real-time co-authoring foundation (Yjs CRDT over Supabase Realtime).
+/* 13 Oct 2026 (fix 6): projectConfig.cmaDecisionLog (the common cause decision log, cma_live.js) merges append-only, as the AI logs do (PC_LOGS).
+ * crdt_sync.js — Phase 1: real-time co-authoring foundation (Yjs CRDT over Supabase Realtime).
  *
  * FLAG-GATED, and DEFAULT ON — see flagOn() below. Until 5 Sep 2026 this header described the
  * module as dormant until switched on, which had been false since the flag was inverted: flagOn()
@@ -474,10 +475,19 @@
       cap: 5000,
       key: function (e) { return String(e.id) + '|' + String(e.at || '') + '|' + String(e.inputHash || ''); },   // stable: survives the output being trimmed
       at: function (e) { var t = Date.parse((e && e.at) || ''); return isFinite(t) ? t : 0; }
+    },
+    // 13 Oct 2026 (fix 6): the common cause decision log (cma_live.js). Append-only like the AI
+    // logs, so two teammates deciding at the same time both keep their entries. It is an audit
+    // record, so the cap is far above any real project and only bounds a runaway writer.
+    cmaDecisionLog: {
+      cap: 100000,
+      sparse: true,          // not written into the settings until it has an entry (an empty list would change every project's settings and set older builds answering it)
+      key: function (e) { return String(e.id); },
+      at: function (e) { var t = Date.parse((e && e.at) || ''); return isFinite(t) ? t : 0; }
     }
   };
   function _isAic(e) { return !!e && /^AIC-\d+$/.test(String(e.id || '')); }
-  function _logSkip(name, e) { return !e || typeof e !== 'object' || (name === 'aiDraftLog' && !e.id); }
+  function _logSkip(name, e) { return !e || typeof e !== 'object' || ((name === 'aiDraftLog' || name === 'cmaDecisionLog') && !e.id); }
   var PC_MAX = { aiDraftCounter: 1 };
   var PC_CONTROLS = {
     isITARControlled: { get: function (pc) { return !!(pc && pc.isITARControlled); },
@@ -582,7 +592,7 @@
     var lists = {};
     Object.keys(PC_LOGS).forEach(function (name) {
       var L = PC_LOGS[name], lm = ydoc.getMap('log:' + name), arr = [];
-      if (lm.size === 0 && map.size === 0) { lists[name] = null; return; }   // mirror-only doc: the mirror's list stands
+      if (lm.size === 0 && (map.size === 0 || L.sparse)) { lists[name] = null; return; }   // mirror-only doc: the mirror's list stands (a sparse log with no entries is simply absent)
       Array.from(lm.keys()).forEach(function (k) { var v = _parse(lm.get(k)); if (v && typeof v === 'object') arr.push({ k: k, v: v }); });
       arr.sort(function (x, y) { var d = L.at(x.v) - L.at(y.v); return d !== 0 ? d : (x.k < y.k ? -1 : (x.k > y.k ? 1 : 0)); });
       lists[name] = arr;

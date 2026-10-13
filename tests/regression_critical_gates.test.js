@@ -43,6 +43,10 @@ function load(model, extra) {
     sb.getSafetyTarget = sev => ({ prob: TARGET[sev] === undefined ? null : TARGET[sev], dal: 'A' });
     vm.createContext(sb);
     vm.runInContext(ENGINE, sb, { filename: 'fta_engine.js' });
+    // 13 Oct 2026 (math audit F8): the test compares through SLTopBasis (top_basis.js),
+    // loaded on every page. No mission model here, so the flight time is the 1 h default
+    // and every per-flight-hour value equals the per-flight one to ~1e-15.
+    vm.runInContext(read('top_basis.js'), sb, { filename: 'top_basis.js' });
     vm.runInContext(SRC, sb, { filename: 'critical_gates.js' });
     return sb;
 }

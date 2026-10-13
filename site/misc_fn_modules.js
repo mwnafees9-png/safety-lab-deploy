@@ -1,5 +1,9 @@
+// 13 Oct 2026 (fix 3, MGL): Paste Special CCF writes group-level parameters. Worker bumped to fta_worker.js v1.7 with the merged engine (fta_engine.js v1.9: MGL common cause plus F4/F5).
+// 13 Oct 2026 (math fix 7): the strictest-DAL smoothing across shared events also smooths the would-be DAL (_dalIfSubstantiated); see tests/regression_dal_row_20261013.test.js
+// 13 Oct 2026 (math audit F4): worker cut sets carry synthetic SPARE switchover members whole (c.syn); spawns fta_worker.js v1.6
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
+// 13 Oct 2026 (fix 6 part B): scheduleAutosave tells the live common cause check (cma_live.js) that the model changed; every local edit path goes through here.
 // misc_fn_modules.js — v1.0 — Phase P2 batch 6: residual function layer (full sweep).
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). 100%% pure runtime function declarations —
@@ -541,6 +545,9 @@ function applyPasteMode_CCFGroup(branchRoot, groupName, beta) {
             })(srcPage.root);
         }
     }
+    // 13 Oct 2026 (fix 3): the chosen β is a GROUP parameter (beta factor) for every member, and
+    // the group size is re-counted with the pasted copies in it.
+    try { if (typeof ccfApplyGroupParams === 'function') ccfApplyGroupParams(groupName, { beta: Math.max(0, Math.min(1, beta)), model: 'beta' }); } catch (_) {}
 }
 
 function acceptPasteReview() {
@@ -4050,6 +4057,11 @@ function _propagateStrictestDALAcrossSharedEvents(rootNode) {
         });
         if (!strict) return;
         arr.forEach(n => { n.allocatedDAL = strict; });
+        // 13 Oct 2026 (fix 7): the would-be DAL (once CMA substantiates a pending claim) follows the
+        // same strictest-position rule, so the hover and the register agree across positions.
+        let strictIf = null;
+        arr.forEach(n => { if (n._dalIfSubstantiated) strictIf = dalMax(strictIf, n._dalIfSubstantiated); });
+        if (strictIf) arr.forEach(n => { n._dalIfSubstantiated = strictIf; });
     });
 }
 
@@ -4212,11 +4224,12 @@ function _cutsetWorkerEnabled() {
 // Versioned spawn — same cache-busting discipline as the page's <script> tags,
 // so a deploy can never pair a fresh page with a stale cached worker. Bump this
 // (and the importScripts version inside fta_worker.js) whenever the engine bumps.
-function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.5'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
+function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.8'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
 function _countTreeNodes(node, seen) { if (!node) return 0; seen = seen || new Set(); if (seen.has(node.id)) return 0; seen.add(node.id); var n = 1; var kids = node.children || node._children; if (kids) for (var i = 0; i < kids.length; i++) n += _countTreeNodes(kids[i], seen); return n; }
 function _reconstructCutsets(encoded, index) {
     return encoded.map(function (c) {
         var arr = c.ids.map(function (eid) { return index[eid]; }).filter(Boolean);
+        if (c.syn) c.syn.forEach(function (n) { arr.push(n); });   // 13 Oct 2026 (F4): SPARE switchover events travel whole
         if (c.dyn) { arr.dynamicOrigin = c.dyn.o; arr.dynamicOrder = c.dyn.ord; }
         return arr;
     });
@@ -4638,6 +4651,7 @@ function scheduleAutosave() {
     if(_autosaveSuspended) return false;
     try { _quantClearCache(); } catch(_) {}   // #45 — any edit invalidates cached quant results (keeps cached refs valid)
     _dirtySinceSave = true;   // Phase 57 — any tracked edit makes the Save Changes control active
+    try { if (window.SLCmaLive) window.SLCmaLive.onModelChange('edit'); } catch(_) {}   // 13 Oct 2026 (fix 6): live common cause detection (debounced; cma_live.js)
     try { if (window.SafetyLabCRDT && window.SafetyLabCRDT.onLocalChange) window.SafetyLabCRDT.onLocalChange(); } catch(_) {}   // Phase 1 — mirror the edit into the CRDT (no-op unless co-authoring is enabled)
     _autosavePending = true;  // there is now an unwritten change (flushed on tab hide/close)
     try { if (window.SLSaveWatch) window.SLSaveWatch.settle(); } catch(_) {}   // 13 Sep 2026 — the watcher must not save this burst twice (save_watch.js)

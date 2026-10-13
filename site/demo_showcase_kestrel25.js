@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math fix 7): the AND gates carried the DAL option in the wrong field (dalIndependence: 'option-1' / 'option-2'), which the allocator silently read as a non-provisional reduction. The option now sits in dalOption and the independence is the default claim, so no DAL reduction is taken until CMA substantiates it (the badge shows the would-be DAL); see tests/regression_dal_row_20261013.test.js
 // demo_showcase_kestrel25.js — the Kestrel RJ Part 25 transport showcase.
 // A twin-turbofan regional jet taken through the full 14 CFR Part 25 / ARP 4761A
 // / 4754B thread: aircraft FHA → flight-control system deep-dive → fault trees
@@ -214,7 +215,7 @@
         ]);
         page('pg-rj-pitch', 'PASA · Loss of pitch control', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [7101],
-            root: seal(gate('AND', 'Loss of pitch control (both lanes)', [laneA, laneB], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Loss of pitch control (both lanes)', [laneA, laneB], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // Erroneous pitch command (aircraft, Catastrophic) — command/monitor.
@@ -222,18 +223,18 @@
         const monFail = be('Dissimilar monitor fails to detect / passivate', 1e-5, { realizedByItemId: 'LRU-FCS-B' });
         page('pg-rj-erroneous', 'PASA · Erroneous pitch command', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [7102],
-            root: seal(gate('AND', 'Erroneous command reaches the surface undetected', [cmdErr, monFail], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Erroneous command reaches the surface undetected', [cmdErr, monFail], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // Loss of all attitude display (aircraft, Catastrophic) — primary + standby.
         const adcBoth = gate('AND', 'Both primary air-data computers lost', [
             be('ADC-1 failure', 3e-4, { realizedByItemId: 'LRU-ADC-1' }),
             be('ADC-2 failure', 3e-4, { realizedByItemId: 'LRU-ADC-2' }),
-        ], { dalIndependence: 'option-2' });
+        ], { dalOption: 'opt2' });
         const sbyFail = be('Standby module unavailable', 5e-4, { realizedByItemId: 'LRU-SBY' });
         page('pg-rj-display', 'PSSA · Loss of all attitude / air-data', {
             treeLevel: 'system', systemId: 'sys-avi', mode: 'top-down', linkedFhaIds: [7204],
-            root: seal(gate('AND', 'No valid attitude reference available', [adcBoth, sbyFail], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'No valid attitude reference available', [adcBoth, sbyFail], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // Loss of deceleration on landing (system, Hazardous).

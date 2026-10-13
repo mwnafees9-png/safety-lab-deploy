@@ -30,6 +30,11 @@ const approx = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= tol;
 eval(fs.readFileSync(path.join(__dirname, '..', 'site', 'fta_engine.js'), 'utf8'));
 globalThis.window = globalThis;
 globalThis.computeExactProbability = globalThis.SLFTAEngine.computeExactProbability;
+// 13 Oct 2026 (math audit F1/F8): the ledger and the ASA lanes read P(top) and the
+// per-flight-hour conversion through SLTopBasis (top_basis.js), loaded on every page.
+// No mission model here, so the flight time is the default 1 h exposure and the
+// per-flight-hour values below equal the per-flight ones to ~1e-15.
+(0, eval)(fs.readFileSync(path.join(__dirname, '..', 'site', 'top_basis.js'), 'utf8'));
 
 // ---- project fixture --------------------------------------------------------
 const BE = (id, p, extra) => Object.assign({ id, logicalId: 'L' + id, type: 'basic', probability: p, name: 'BE' + id, displayId: 'BE-' + id }, extra || {});

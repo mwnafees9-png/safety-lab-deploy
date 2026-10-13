@@ -63,11 +63,14 @@ check('the reason names the CMA, the gate it was recorded at, and says the failu
   g2._dalCompromiseReason);
 check('_cmaCompromisedGlobal records the provenance for the UI', g2._cmaCompromisedGlobal && g2._cmaCompromisedGlobal.cma === 'CMA-9');
 check('probability cascade fires on the globally-compromised gate (no β on record)', g2._probCompromised === true);
-check('ONE shared member is not the failed pair — G3 (L1,L3) keeps its reduction (claims stay local)',
-  g3._dalCompromised === false && g3._dalReduced === true,
-  JSON.stringify({ c: g3._dalCompromised, r: g3._dalReduced }));
-check('G3 members carry reduced DALs (Option 2: one-down / floor)',
-  g3.children.every(c => c.allocatedDAL !== 'A'), JSON.stringify(g3.children.map(c => c.allocatedDAL)));
+// 13 Oct 2026 (fix 7): G3 is a bare 'claimed' gate. The old expectation had it REDUCED (a claim used
+// to reduce provisionally); the agreed rule is no reduction until CMA substantiates independence, so
+// G3 is not compromised, its reduction is PENDING, and the would-be DALs are kept for the user.
+check('ONE shared member is not the failed pair: G3 (L1,L3) is not compromised; its claim stays pending (claims stay local)',
+  g3._dalCompromised === false && g3._dalReduced === false && g3._dalPending === true,
+  JSON.stringify({ c: g3._dalCompromised, r: g3._dalReduced, p: g3._dalPending }));
+check('G3 members hold the top DAL now and show the reduced DAL they would get once substantiated (Option 2: one-down)',
+  g3.children.every(c => c.allocatedDAL === 'A' && c._dalIfSubstantiated === 'B'), JSON.stringify(g3.children.map(c => [c.allocatedDAL, c._dalIfSubstantiated])));
 
 // ---- AutoReq sees the same global failure -----------------------------------
 const rG2 = checkCMACompromise(g2, ftaPages[1]);

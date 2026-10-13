@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F8): definitions for the Budget Ledger's unit-labeled Allocated (/FH) and Achieved (/FH) columns.
 // ============================================================================
 // field_defs.js — v1.0 — definitions on hover for every HF and R&M column,
 // and an "About this lane" strip on every HF and R&M page (3 Sep 2026).
@@ -226,6 +227,9 @@
         'objective fh': 'The quantitative objective the certification basis sets for the severity (per flight hour).',
         'allocated top down': 'The probability budget allocated to this failure condition from the top down.',
         'achieved mirror': 'The probability the fault tree actually achieves — mirrored from the tree, not typed.',
+        // 13 Oct 2026 (math audit F8): the ledger columns now carry their unit.
+        'allocated fh top down': 'The budget the top-down allocation tree hands out, as an average rate per flight hour: its exact per-flight P(top) divided by the flight time (−ln(1−P)/t_flight). The per-flight value is shown under it.',
+        'achieved fh mirror': 'What the verification mirror achieves, as an average rate per flight hour: its exact per-flight P(top) (common cause and shared events included) divided by the flight time, the same conversion the requirement check uses. The per-flight value is shown under it.',
         'budget state a9': 'Whether achieved sits within allocated (A9 rule): within, marginal or over-committed.',
         'posture': 'Advisory posture of the line — what the gate checklist says about it; nothing is locked.',
         'trees': 'The fault trees that quantify this failure condition.',

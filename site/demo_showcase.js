@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math fix 7): the AND gates carried the DAL option in the wrong field (dalIndependence: 'option-1' / 'option-2'), which the allocator silently read as a non-provisional reduction. The option now sits in dalOption and the independence is the default claim, so no DAL reduction is taken until CMA substantiates it (the badge shows the would-be DAL); see tests/regression_dal_row_20261013.test.js
 // demo_showcase.js — Phase E3: the K350 Kestrel program showcase.
 //
 // One comprehensive worked example replacing the SV-7 / ES-9 demos. A Part 23
@@ -297,7 +298,7 @@
         // == system PSSA trees (top-down) ==
         const fcsServoA = be('Elevator servo channel A fails', 0, { probability: 3e-5 });
         const fcsServoB = be('Elevator servo channel B fails', 0, { probability: 3e-5 });
-        const fcsAnd = gate('AND', 'Loss of both elevator servo channels', [fcsServoA, fcsServoB], { dalIndependence: 'option-1' });
+        const fcsAnd = gate('AND', 'Loss of both elevator servo channels', [fcsServoA, fcsServoB], { dalOption: 'opt1' });
         const fcsColumn = be('Control path position sensing lost', 0, { probability: 1e-6 });
         page('pg-fcs-pitch', 'PSSA · FCS loss of pitch output', {
             treeLevel: 'system', systemId: 'sys-fcs', mode: 'top-down', linkedFhaIds: [2001],
@@ -310,7 +311,7 @@
         // the pg-ac-fc03 nodes below. Aileron BEs name their LRUs (4801/4802).
         const fcsRailA = { id: 3401, name: 'Aileron servo channel A fails', type: 'basic', lambda: 0, probability: 3e-5, inputMode: 'probability', children: [], realizedByItemId: 4801 };
         const fcsRailB = { id: 3402, name: 'Aileron servo channel B fails', type: 'basic', lambda: 0, probability: 3e-5, inputMode: 'probability', children: [], realizedByItemId: 4802 };
-        const fcsRailAnd = { id: 3403, name: 'Loss of both aileron servo channels', type: 'gate', gateType: 'AND', probability: 0, children: [fcsRailA, fcsRailB], dalIndependence: 'option-1' };
+        const fcsRailAnd = { id: 3403, name: 'Loss of both aileron servo channels', type: 'gate', gateType: 'AND', probability: 0, children: [fcsRailA, fcsRailB], dalOption: 'opt1' };
         const fcsRollCmd = { id: 3404, name: 'Roll command/monitor lane lost in the FCC', type: 'basic', lambda: 0, probability: 1e-6, inputMode: 'probability', children: [] };
         page('pg-fcs-roll', 'PSSA · FCS loss of roll output', {
             treeLevel: 'system', systemId: 'sys-fcs', mode: 'top-down', linkedFhaIds: [2201],
@@ -340,7 +341,7 @@
         const _epsItm = sid => { const it = itemsData.find(i => i.itemId === sid); return it ? it.internalId : undefined; };
         const epsGen1 = be('Generation channel 1 fails', 0, { probability: 1e-4, realizedByItemId: _epsItm('LRU-EPS-01') });
         const epsGen2 = be('Generation channel 2 fails', 0, { probability: 1e-4, realizedByItemId: _epsItm('LRU-EPS-02') });
-        const epsAnd = gate('AND', 'Loss of both generation channels', [epsGen1, epsGen2], { dalIndependence: 'option-2' });
+        const epsAnd = gate('AND', 'Loss of both generation channels', [epsGen1, epsGen2], { dalOption: 'opt2' });
         const epsTie = be('Essential bus distribution fault', 0, { probability: 2e-6 });
         page('pg-eps-bus', 'PSSA · EPS loss of generation', {
             treeLevel: 'system', systemId: 'sys-eps', mode: 'top-down', linkedFhaIds: [2031],
@@ -352,7 +353,7 @@
         // RT-001 through Z-MLGW, a genuine co-routing finding by design.
         const ldgChA = be('Brake hydraulic channel A fails', 0, { probability: 5e-5, realizedByItemId: 'LRU-LDG-01' });
         const ldgChB = be('Brake hydraulic channel B fails', 0, { probability: 5e-5, realizedByItemId: 'LRU-LDG-02' });
-        const ldgAnd = gate('AND', 'Loss of both brake channels', [ldgChA, ldgChB], { dalIndependence: 'option-1' });
+        const ldgAnd = gate('AND', 'Loss of both brake channels', [ldgChA, ldgChB], { dalOption: 'opt1' });
         const ldgBcu = be('Brake control unit total failure', 0, { probability: 8e-6 });
         page('pg-ldg-brakes', 'PSSA · LDG loss of wheel braking', {
             treeLevel: 'system', systemId: 'sys-ldg', mode: 'top-down', linkedFhaIds: [2091],
@@ -368,7 +369,7 @@
 
         const fueL = be('Left feed path blocked or unporting', 0, { probability: 3e-5 });
         const fueR = be('Right feed path blocked or unporting', 0, { probability: 3e-5 });
-        const fueAnd = gate('AND', 'Independent starvation of both feed paths', [fueL, fueR], { dalIndependence: 'option-1' });
+        const fueAnd = gate('AND', 'Independent starvation of both feed paths', [fueL, fueR], { dalOption: 'opt1' });
         const fueVent = be('Common vent icing blocks both tanks', 0, { probability: 1e-7 });
         page('pg-fue-starv', 'PSSA · FUE dual starvation', {
             treeLevel: 'system', systemId: 'sys-fue', mode: 'top-down', linkedFhaIds: [2051],
@@ -386,7 +387,7 @@
         const acThrustAnd = gate('AND', 'Independent loss of both powerplants', [
             xfer('pg-prl-thrust', 'Left powerplant thrust loss'),
             xfer('pg-prr-thrust', 'Right powerplant thrust loss'),
-        ], { dalIndependence: 'option-1' });
+        ], { dalOption: 'opt1' });
         page('pg-ac-fc05', 'PASA · FC-05 total thrust loss', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [1005],
             root: seal(gate('OR', 'Total loss of forward thrust', [
@@ -402,12 +403,12 @@
                     be('Left reverse/beta unavailable', 0, { probability: 1e-3 }),
                     be('Right reverse/beta unavailable', 0, { probability: 1e-3 }),
                 ]),
-            ], { allocatedDAL: 'B', dalIndependence: 'option-1' })),
+            ], { allocatedDAL: 'B', dalOption: 'opt1' })),
         });
         const acDispAnd = gate('AND', 'Misleading primary indication with standby unavailable or not cross-checked', [
             xfer('pg-avi-mislead', 'Primary display chain misleading'),
             be('Standby indication unavailable or not consulted', 0, { probability: 1e-3 }),
-        ], { dalIndependence: 'option-1' });
+        ], { dalOption: 'opt1' });
         const acDispCommon = be('Common air-data source error feeds primary and standby', 0, { probability: 1e-9 });
         page('pg-ac-fc09', 'PASA · FC-09 misleading display', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [1009],

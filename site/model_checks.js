@@ -1,4 +1,5 @@
 // ============================================================================
+// 13 Oct 2026 (v1.05, fix 3): MC-06 (advisory) reports common cause groups whose members disagree on parameters, whose recorded size is too small, that are too large to expand, or that sit 3 or more under a VOTING gate with only beta entered.
 // model_checks.js — v1.0 — M3: machine-checked safety properties on the
 // compiled BDDs (MBSA-1).
 //
@@ -266,6 +267,33 @@
                         checked++;
                         if (facts.aloneSet.has(lid))
                             fails.push(m.id + ' (' + m.beRef + ' inoperative): dispatch ALONE reaches the top of "' + page.name + '" [' + worst.severity + '] — no residual protection');
+                    });
+                });
+                return { checked, fails };
+            }
+        });
+        // 13 Oct 2026 (fix 3): MC-06 (advisory; MC-04/05 are fault_sim.js): the common cause model of every tree is
+        // well defined (NUREG/CR-5485 MGL): one set of parameters per group, a recorded size that
+        // is not below the members present, a group small enough to expand, and no group of 3 or
+        // more under a VOTING gate with only beta entered (partial common cause, 2 of 3, is not
+        // modeled until gamma is given). Pure tree walk (SLFTAEngine.ccfModelNotes), no BDD.
+        window.invRegister({
+            id: 'MC-06', name: 'Common cause groups are well defined and partial common cause is modeled under voting gates (NUREG/CR-5485 MGL)', sev: 'advisory',
+            run: () => {
+                const fails = []; let checked = 0; const seen = new Set();
+                const E = (typeof SLFTAEngine !== 'undefined' && SLFTAEngine && SLFTAEngine.ccfModelNotes) ? SLFTAEngine : null;
+                if (!E) return { checked, fails };
+                _pages().forEach(p => {
+                    if (!p || !p.root) return;
+                    checked++;
+                    let notes = [];
+                    try { notes = E.ccfModelNotes(p.root) || []; } catch (_) { notes = []; }
+                    notes.forEach(n => {
+                        if (n.severity === 'info') return;
+                        const k = n.code + '|' + n.group + '|' + (n.gateId != null ? n.gateId : '');
+                        if (seen.has(k)) return;
+                        seen.add(k);
+                        fails.push((p.name || p.id) + ': ' + n.message);
                     });
                 });
                 return { checked, fails };

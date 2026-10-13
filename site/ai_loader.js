@@ -1,3 +1,4 @@
+// 13 Oct 2026 (fix 3): ai_assistant.js bumped to v76.78 (CCF proposals carry the MGL model explicitly; blank gamma/delta = 1) and fta_kb_data.js to v1.3 (KB chunk ccfparam-01 now states the real NUREG/CR-5485 MGL formula the engine uses).
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
 // ai_loader.js — v1.2 — O1: the AI lane loads on demand, not on boot.
@@ -18,7 +19,7 @@
 (function () {
     'use strict';
 
-    const FILES = ['fta_kb_data.js?v=1.2', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'ai_assistant.js?v=76.77', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
+    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'ai_assistant.js?v=76.78', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
     let _loading = null;
 
     window.slLoadAI = function () {

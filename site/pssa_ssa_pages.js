@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F1): the SSA budget pairs read both tops through SLTopBasis.exactTop, never root.probability. See tests/regression_exact_top_20261013.test.js
 // ============================================================================
 // pssa_ssa_pages.js — v1.0 — PSSA and SSA become PROPER PAGES.
 //
@@ -65,17 +66,10 @@
             const alloc = _pages().filter(p => p && p.root && !p.verifies && p.systemId === s.id);
             const mirrors = _pages().filter(p => p && p.root && p.verifies && p.systemId === s.id);
             // budget compliance per mirrored pair (the INV-03 comparison, itemized).
-            // Roots without a computed roll-up (page never opened this session)
-            // fall back to the BDD engine's exact P(top) — deterministic either way.
-            const _rootP = root => {
-                const p = parseFloat(root.probability) || 0;
-                if (p > 0) return p;
-                try {
-                    if (typeof computeExactProbability === 'function') return computeExactProbability(root).prob || 0;
-                    if (typeof SLFTAEngine !== 'undefined' && SLFTAEngine.computeExactProbability) return SLFTAEngine.computeExactProbability(root).prob || 0;
-                } catch (_) {}
-                return 0;
-            };
+            // 13 Oct 2026 (math audit F1): always the exact top (SLTopBasis.exactTop:
+            // BDD, common cause and shared events included), never root.probability,
+            // which held the independent gate-by-gate roll-up on pages not open.
+            const _rootP = root => SLTopBasis.exactTop(root) || 0;
             const pairs = [];
             mirrors.forEach(m => {
                 const a = alloc.find(p => p.id === m.verifies);

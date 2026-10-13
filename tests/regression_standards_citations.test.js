@@ -364,8 +364,12 @@ console.log('\n[citations] the allocator gates the reduction on independence');
     /node\.dalIndependence/.test(sup) && /'substantiated'/.test(sup));
   check("'none' and 'compromised' revert every member to the top level",
     /if \(indep === 'none' \|\| indep === 'compromised'\)/.test(sup));
-  check('a bare claim is applied but flagged PROVISIONAL until CMA substantiates it',
-    /_dalProvisional = \(indep === 'claimed'\)/.test(sup));
+  // 13 Oct 2026 (fix 7): the old check pinned "_dalProvisional = (indep === 'claimed')", a bare
+  // claim REDUCING provisionally. That default was wrong (the agreed rule: no reduction until CMA
+  // substantiates independence). The check now pins the new gating: only 'substantiated' applies
+  // the reduction, a claim is held and marked pending.
+  check('a bare claim is NOT applied: the reduction is withheld (pending) until CMA substantiates it',
+    /const applies = \(indep === 'substantiated'\)/.test(sup) && /node\._dalPending = \(indep === 'claimed'\) && reducible/.test(sup));
   check('a compromised claim also invalidates the AND probability product',
     /_dalCompromised/.test(sup) && /common-cause \(β\) term/.test(sup),
     'independence bought both the DAL reduction and the multiplication — losing it costs both');

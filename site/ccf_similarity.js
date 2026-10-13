@@ -1,5 +1,7 @@
 // ============================================================================
-// ccf_similarity.js — v1.3 — "Confirm independence" flags for lookalike
+// ccf_similarity.js — v1.4 — "Confirm independence" flags for lookalike
+// v1.4 (13 Oct 2026, fix 3): bucketing a pair writes β to the whole common cause group
+// (group-level MGL parameters, NUREG/CR-5485) and re-counts the group size.
 // v1.3 (A7, 22 Aug 2026): common resource ≠ common cause — a pair of
 // COMPILED/DECLARED structural events (MAC/lane provenance, macsys:/macres:
 // lids, declared resource identity) is never a lookalike finding: their
@@ -241,6 +243,9 @@
                 (n.children || []).forEach(walk);
             })(page.root);
         });
+        // 13 Oct 2026 (fix 3): β is a GROUP parameter: the chosen β goes to every member of the
+        // group (an existing group keeps its model, γ, δ and source) and the size is re-counted.
+        try { if (typeof ccfApplyGroupParams === 'function') { const gp = (typeof ccfReadGroupParams === 'function' && ccfReadGroupParams(grp, null)) || {}; ccfApplyGroupParams(grp, { beta: beta, model: gp.model || 'beta', gamma: gp.gamma, delta: gp.delta, source: gp.source }); } } catch (_) {}
         // Bucketed state now derives from the nodes; drop any stale confirmation.
         try { if (projectConfig.ccfIndependence) delete projectConfig.ccfIndependence[key]; } catch (_) {}
         try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); } catch (_) {}

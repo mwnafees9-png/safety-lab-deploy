@@ -67,7 +67,10 @@ function randomTree(seed) {
     }
     return mk(3);
 }
-const snap = n => ({ id: n.id, logicalId: n.logicalId, displayId: n.displayId, name: n.name, ccfGroup: n.ccfGroup, beta: n.beta, eventClass: n.eventClass });
+// 13 Oct 2026 (fix 3): a cut-set member can now be a visible common cause event (MGL); its
+// snapshot also carries isCCF, sourceGroup, ccfTier and the .ccf metadata (cutsetSnapshot).
+const snap = n => { const o = { id: n.id, logicalId: n.logicalId, displayId: n.displayId, name: n.name, ccfGroup: n.ccfGroup, beta: n.beta, eventClass: n.eventClass };
+    if (n.isCCF) { o.isCCF = true; o.sourceGroup = n.sourceGroup; o.ccfTier = n.ccfTier; o.ccf = n.ccf ? JSON.parse(JSON.stringify(n.ccf)) : null; } return o; };
 
 // ---- A. cut-set snapshots -------------------------------------------------------------------
 {

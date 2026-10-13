@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math fix 7): the AND gates carried the DAL option in the wrong field (dalIndependence: 'option-1' / 'option-2'), which the allocator silently read as a non-provisional reduction. The option now sits in dalOption and the independence is the default claim, so no DAL reduction is taken until CMA substantiates it (the badge shows the would-be DAL); see tests/regression_dal_row_20261013.test.js
 // demo_showcase_sora.js — the SORA Specific-category showcase.
 // A Barracuda-class autonomous air vehicle taken through the full JARUS SORA
 // v2.5 thread (iGRC → GRC → ARC → SAIL → OSOs → containment) with an autonomy
@@ -207,7 +208,7 @@
         const breachAuto = be('Autopilot / autonomy commands egress', 4e-5, { realizedByItemId: 'LRU-AUTO-01' });
         const breachGeo = be('Geofence logic fails to trip at the boundary', 2e-5);
         const breachOr = gate('OR', 'Operational-volume boundary breach initiated', [breachNav, breachAuto, breachGeo]);
-        const contAnd = gate('AND', 'Boundary breach with flight termination failed to arrest it', [breachOr, xfer('pg-u-fts', 'Flight termination fails to arrest the breach')], { dalIndependence: 'option-1' });
+        const contAnd = gate('AND', 'Boundary breach with flight termination failed to arrest it', [breachOr, xfer('pg-u-fts', 'Flight termination fails to arrest the breach')], { dalOption: 'opt1' });
         const contStruct = be('Structural / propulsion event carries the vehicle out uncontained', 1e-7);
         page('pg-u-containment', 'PASA · Loss of containment (flyaway)', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [6106],
@@ -221,7 +222,7 @@
         const c2Rec = be('Lost-link autonomous recovery ineffective or inappropriate', 1e-3, { realizedByItemId: 'LRU-AUTO-01' });
         page('pg-u-c2', 'PASA · Loss of C2 with no autonomous recovery', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [6104],
-            root: seal(gate('AND', 'C2 lost and autonomous recovery ineffective', [c2Or, c2Rec], { allocatedDAL: 'B', dalIndependence: 'option-2' })),
+            root: seal(gate('AND', 'C2 lost and autonomous recovery ineffective', [c2Or, c2Rec], { allocatedDAL: 'B', dalOption: 'opt2' })),
         });
 
         // DAA loss → mid-air (aircraft)
@@ -231,13 +232,13 @@
         const daaOr = gate('OR', 'Detect-and-avoid fails to preserve well clear', [daaSensor, daaTrack]);
         page('pg-u-daa', 'PASA · Loss of detect-and-avoid (mid-air)', {
             treeLevel: 'aircraft', mode: 'top-down', linkedFhaIds: [6205],
-            root: seal(gate('AND', 'Encounter with traffic and DAA fails to maintain well clear', [daaIntruder, daaOr], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Encounter with traffic and DAA fails to maintain well clear', [daaIntruder, daaOr], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // Navigation loss (system)
         const navGnss = be('GNSS denied (jamming / spoofing)', 5e-3);
         const navIns = be('INS drift beyond the integrity bound', 3e-4);
-        const navAnd = gate('AND', 'GNSS lost with inertial coast exceeded', [navGnss, navIns], { dalIndependence: 'option-2' });
+        const navAnd = gate('AND', 'GNSS lost with inertial coast exceeded', [navGnss, navIns], { dalOption: 'opt2' });
         const navCpu = be('Navigation computer failure', 5e-5, { realizedByItemId: 'LRU-NAV-01' });
         page('pg-u-nav', 'PSSA · Loss of navigation', {
             treeLevel: 'system', systemId: 'sys-nav', mode: 'top-down', linkedFhaIds: [6203],

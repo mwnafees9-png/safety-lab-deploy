@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math fixes 7 and 2): DALgebra rationale explains pending (claimed, not yet CMA-substantiated) reductions with the would-be DAL, the App P row-hold and row-floor rules and a Cert Lab compliance basis; the gate generator derives physical AND functional independence for every AND-family gate (k>=2 VOTING and SPARE included) and a no-single-failure requirement for every OR-family gate on a single-failure path; see tests/regression_dal_row_20261013.test.js and tests/regression_alloc_reqs_20261013.test.js
 // assurance_modules.js — Review / AutoReq / Traceability, extracted verbatim from
 // safety_lab.js (Phase 76). Classic script, shared global lexical scope, loaded BEFORE
 // safety_lab.js. Accessed by bare name (no window.*); self-contained at definition;
@@ -1650,9 +1651,21 @@ const AutoReq = (function(){
                 if (d.role === 'secondary') return a.kind + ' ' + a.dal + ' set at the secondary-system DAL under ' + t1 + ' (never lower: Table 1 has no level below the secondary), predicated on ' + indepTxt + ' between the members.';
                 return a.kind + ' ' + a.dal + ' held at the primary-system DAL under ' + t1 + ': Table 1 gives this class no secondary-system DAL, so no member is reduced.';
             }
+            // 13 Oct 2026 (fix 7): a claim no reduction rests on yet, the row-hold rule, the row
+            // floor and a Cert Lab compliance basis each explain themselves.
+            if (d.basis === 'pending') {
+                const would = (a.node && a.node._dalIfSubstantiated) || d.wouldBe;
+                return a.kind + ' ' + a.dal + ' held at the incoming level: functional independence between the members is claimed but not yet substantiated by Common Mode Analysis (ARP4761A App M), so no reduction is taken (' + tp2 + ' step f).'
+                    + (would && would !== a.dal ? ' Once the CMA substantiates it, this member would be ' + a.kind + ' ' + would + ' (Option ' + (d.option || '2') + ', staying in the DAL ' + (d.row || '?') + ' row of Table P2).' : '');
+            }
+            if (d.basis === 'row-hold') return d.role === 'held'
+                ? a.kind + ' ' + a.dal + ' kept at its gate\u2019s level: the gate already sits one level below the failure condition DAL ' + (d.row || '?') + ', so one member keeps that level and every failure set still has two members one level below the start (ARP4761A App P, P.5: stay in the same row of Table P2), predicated on ' + indepTxt + ' between the members.'
+                : a.kind + ' ' + a.dal + ' set at the row floor, two levels below the failure condition DAL ' + (d.row || '?') + ' (ARP4761A App P, P.5: nested decompositions stay in the same row of Table P2, never lower), predicated on ' + indepTxt + ' between the members.';
+            if (d.basis === 'row-floor') return a.kind + ' ' + a.dal + ' held: its gate already sits two levels below the failure condition DAL ' + (d.row || '?') + ', the lowest the row of Table P2 allows, so no further reduction is possible (ARP4761A App P, P.5).';
+            if (d.basis === 'compliance-basis') return a.kind + ' ' + a.dal + ' held at the incoming level: the project compliance basis "' + (d.complianceBasis || 'Cert Lab') + '", confirmed in Cert Lab, allows no architecture-based DAL reduction.';
             if (d.basis === 'option1') return d.role === 'top'
                 ? a.kind + ' ' + a.dal + ' held at the failure condition’s top level under ' + tp2 + ' Option 1 (one member retains the top DAL), predicated on ' + indepTxt + ' between the members.'
-                : a.kind + ' ' + a.dal + ' reduced under ' + tp2 + ' Option 1 (additional members two development-assurance levels below the failure condition DAL, floored at DAL E), predicated on ' + indepTxt + ' between the members.';
+                : a.kind + ' ' + a.dal + ' reduced under ' + tp2 + ' Option 1 (additional members two development-assurance levels below the failure condition DAL' + (d.row ? ' ' + d.row : '') + ', floored at DAL E; never lower however deep the decomposition, ARP4761A App P, P.5), predicated on ' + indepTxt + ' between the members.';
             if (d.basis === 'option2') return d.role === 'upper'
                 ? a.kind + ' ' + a.dal + ' set one level below the top under ' + tp2 + ' Option 2 (at least two members one level below the FC DAL), predicated on ' + indepTxt + ' between the members.'
                 : a.kind + ' ' + a.dal + ' reduced to the Option 2 floor under ' + tp2 + ', predicated on ' + indepTxt + ' between the members.';
@@ -1820,25 +1833,27 @@ const AutoReq = (function(){
     }
 
     // ----- Generator 4: Gate structure → independence / SPF requirements -----
+    // 13 Oct 2026 (fix 2): the gate families follow the failure logic. A gate whose output needs
+    // two or more members to fail is an independence gate (AND, INHIBIT, PAND, SPARE, and a k-of-n
+    // VOTING gate with k >= 2: every k-member subset is redundancy); a gate any ONE member fails is a
+    // single-failure gate (OR, XOR, 1-of-n VOTING). Before, a 2-of-3 VOTING gate was filed as OR
+    // (and drew a single-failure requirement it does not have) and SPARE drew nothing. A missing
+    // votingK is 2, the engine's default (fta_engine.js), clamped to the member count.
     function isAndFamily(node){
         if(!node || node.type !== 'gate') return false;
-        if(node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND') return true;
-        if(node.gateType === 'VOTING'){
-            const k = parseInt(node.votingK) || 0;
-            const n = (node.children || []).length;
-            return k > 0 && k === n;
-        }
+        if(node.gateType === 'AND' || node.gateType === 'INHIBIT' || node.gateType === 'PAND' || node.gateType === 'SPARE') return true;
+        if(node.gateType === 'VOTING') return (node.children || []).length > 0 && _votingNeed(node) >= 2;
         return false;
     }
     function isOrFamily(node){
         if(!node || node.type !== 'gate') return false;
         if(node.gateType === 'OR' || node.gateType === 'XOR') return true;
-        if(node.gateType === 'VOTING'){
-            const k = parseInt(node.votingK) || 0;
-            const n = (node.children || []).length;
-            return n > 0 && k > 0 && k < n;
-        }
+        if(node.gateType === 'VOTING') return (node.children || []).length > 0 && _votingNeed(node) === 1;
         return false;
+    }
+    function _votingNeed(node){
+        const n = (node.children || []).length;
+        return Math.max(1, Math.min(parseInt(node.votingK, 10) || 2, n || 1));
     }
 
     function checkANDCompromise(gate){
@@ -1993,6 +2008,9 @@ const AutoReq = (function(){
         const out = [];
         walkPagesInScope(scopeKey, (node, page) => {
             if(!node || node.type !== 'gate') return;
+            // 13 Oct 2026 (fix 2): derived from ALLOCATION trees only: a verification mirror
+            // (page.verifies) repeats its source's gates and would derive every requirement twice.
+            if(page && page.verifies) return;
             // Skip pure TRANSFER pointers and transferred-out stubs (destination root carries the children).
             if(node.gateType === 'TRANSFER' || node.transferOutTo) return;
             const kids = node.children || [];
@@ -2043,8 +2061,12 @@ const AutoReq = (function(){
             // Surface the allocateDAL-generated independence requirement's substantiation state
             // (the precondition for the DAL reduction) in the AutoReq rationale.
             const _ir = node._independenceReq;
+            // 13 Oct 2026 (fix 7): a claim no longer reduces: the reduction is TAKEN only once CMA
+            // has substantiated the independence; until then it is withheld and stated as available.
             const irNote = _ir
-                ? ` DAL reduction taken under ${_ir.status} independence — CMA substantiation (ARP4761A App M) ${_ir.status === 'substantiated' ? 'is recorded' : 'is REQUIRED to validate the reduction'}.`
+                ? (_ir.status === 'substantiated'
+                    ? ' DAL reduction taken under substantiated independence: CMA substantiation (ARP4761A App M) is recorded.'
+                    : ' DAL reduction withheld: independence is claimed but not yet substantiated, and CMA substantiation (ARP4761A App M) is REQUIRED before the reduction can be taken.')
                 : '';
 
             if(isAndFamily(node)){
@@ -2062,9 +2084,13 @@ const AutoReq = (function(){
                 //   (d) common-cause couplings detected on the gate (shared
                 //       library entry, declared CCF group, CMA-identified
                 //       modes) become their own singular requirements.
+                // 13 Oct 2026 (fix 2): top-down allocation happens before the design exists, so
+                // it cannot quantify common cause; instead every AND-family gate of an allocation
+                // tree DERIVES a functional independence requirement (a) and a physical
+                // independence requirement (c) between its members, whatever the severity.
                 out.push({
                     text: `${childAssetSubject} shall be functionally independent.`,
-                    rat: `Required by AND-family gate ${gateLabel} per ARP 4754A §5.4.1 — the gate's probability product assumes no common cause couples its members. Children: ${childLabels}.${rebalRat}${irNote}`,
+                    rat: `Derived by AND-family gate ${gateLabel} of the allocation tree per ARP 4754A §5.4.1: the gate's budget split assumes no common cause couples its members, so they must be functionally independent (no shared function, signal, software or development error); physical independence is a companion requirement. Children: ${childLabels}.${rebalRat}${irNote}`,
                     level: 'L2', type: 'Safety', analysis: 'Independence',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',
@@ -2091,7 +2117,7 @@ const AutoReq = (function(){
                     const opt = node.dalOption === 'opt1' ? '1' : '2';
                     out.push({
                         text: `${childAssetSubject} shall be developed with ${kw} development independence.`,
-                        rat: `The DAL reduction at gate ${gateLabel} (ARP4754B §5.2.3 / ARP4761A Table P2, Option ${opt}) is predicated on development independence between the members. CMA substantiation (ARP4761A App M) ${_ir.status === 'substantiated' ? 'is recorded' : 'is REQUIRED to validate the reduction'}. Children: ${childLabels}.`,
+                        rat: `The DAL reduction at gate ${gateLabel} (ARP4754B §5.2.3 / ARP4761A Table P2, Option ${opt}) is predicated on development independence between the members. ${_ir.status === 'substantiated' ? 'CMA substantiation (ARP4761A App M) is recorded and the reduction is taken' : 'CMA substantiation (ARP4761A App M) is REQUIRED; until then the reduction is withheld and every member holds the incoming DAL'}. Children: ${childLabels}.`,
                         level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Analysis',
                         traceId: node.displayId || '',
@@ -2105,11 +2131,14 @@ const AutoReq = (function(){
                     });
                 }
 
-                // (c) Physical separation — Catastrophic top events only.
-                if (topSev === 'Catastrophic') {
+                // (c) Physical independence: every AND-family gate (13 Oct 2026, fix 2: was
+                //     Catastrophic top events only, so a Hazardous redundancy got functional
+                //     independence alone). Same generator and sourceId, so existing rows keep
+                //     their identity; the fingerprint is unchanged where the row existed.
+                {
                     out.push({
-                        text: `${childAssetSubject} shall be physically separated.`,
-                        rat: `Members of AND-family gate ${gateLabel} protect a Catastrophic top event; installation separation (location, routing, power sources) is required so a single physical event cannot fail more than one member. Coverage is corroborated by ZSA/PRA. Children: ${childLabels}.`,
+                        text: `${childAssetSubject} shall be physically independent.`,
+                        rat: `Derived by AND-family gate ${gateLabel} of the allocation tree: the members share the budget as independent failures${topSev ? ' of a ' + topSev + ' failure condition' : ''}, so a single physical event must not fail more than one of them: separation in location, routing and power source. Coverage is corroborated by ZSA/PRA. Children: ${childLabels}.`,
                         level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Inspection',
                         traceId: node.displayId || '',
@@ -2211,8 +2240,17 @@ const AutoReq = (function(){
                 // Phase 56.49e — NSPF requirement only at FC top with severity
                 // ≥ Hazardous. Suppress OR-gate NSPF for everything else (it's
                 // a tautology — the upstream AND covers NSPF for the FC).
-                if (node !== page.root) return;   // not the FC top, skip
+                // 13 Oct 2026 (fix 2): an OR gate derives a no-single-point-failure requirement
+                // for its members wherever its failure reaches the failure condition by a single
+                // failure path: the FC top itself, or any OR-family gate with no AND-family (or
+                // k>=2 VOTING) ancestor. Under an independence gate the redundancy is carried by
+                // that gate's own independence requirements instead. Hazardous/Catastrophic only
+                // (14 CFR 25.1309(b) / AC 25.1309-1B fail-safe), as before.
                 if (!topSev || SEV_ORDER[topSev] < 4) return;   // not Catastrophic/Hazardous
+                if (node !== page.root) {
+                    const _path = findPathTo(page.root, node);
+                    if (!_path || _path.slice(0, -1).some(isAndFamily)) return;   // redundancy above: no NSPF here
+                }
                 // Use the FULL failure condition (do NOT strip "Loss of…") — an NSPF requirement must
                 // name the FAILURE ("loss of cabin pressurization"), not the function ("cabin
                 // pressurization"). Lowercase the first letter for mid-sentence flow unless it's an acronym.
@@ -2221,9 +2259,12 @@ const AutoReq = (function(){
                 const fcSubject = (_fw && _fw === _fw.toUpperCase() && _fw.length > 1)
                     ? _rawFc
                     : (_rawFc.charAt(0).toLowerCase() + _rawFc.slice(1));
+                const _isTop = (node === page.root);
                 out.push({
                     text: `No single failure shall result in ${fcSubject}.`,
-                    rat: `Required for ${topSev} failure conditions per 14 CFR 25.1309(b) / AC 25.1309-1B §4.1. Top: ${gateLabel}.${rebalRat}`,
+                    rat: _isTop
+                        ? `Required for ${topSev} failure conditions per 14 CFR 25.1309(b) / AC 25.1309-1B §4.1. Top: ${gateLabel}.${rebalRat}`
+                        : `Derived by OR-family gate ${gateLabel} of the allocation tree: any one of its members (${childLabels}) causes it, and it reaches the ${topSev} failure condition with no redundancy above it, so no single failure may cause it (each member must itself be protected against a single failure; 14 CFR 25.1309(b) / AC 25.1309-1B §4.1).${rebalRat}`,
                     level: 'L2', type: 'Safety', analysis: 'Independence',
                     verifMethod: 'Analysis',
                     traceId: node.displayId || '',

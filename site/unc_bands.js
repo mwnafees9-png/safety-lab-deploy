@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math audit F8): the P05-P95 band is converted to per flight hour (SLTopBasis) before it is compared with the per-flight-hour objective. See tests/regression_perfh_basis_20261013.test.js
 // ============================================================================
 // unc_bands.js — v1.0 — UNC-1: uncertainty bands on the budget ledger (SLUnc).
 //
@@ -65,10 +66,17 @@
                     el.textContent = '± no EF data';
                     el.title = 'Uncertainty bands need error factors (lambdaEF) on the mirror tree’s basic events — your values, never assumed.';
                 } else {
-                    const meets = (row.objective != null) ? (band.p95 <= row.objective) : null;
-                    el.textContent = '± P05–P95: ' + _fmt(band.p05) + ' – ' + _fmt(band.p95) + (meets == null ? '' : (meets ? ' · band meets objective' : ' · P95 EXCEEDS objective'));
+                    // 13 Oct 2026 (math audit F8): the band is per-flight P(top); the objective
+                    // and the ledger cell are per flight hour. Convert the band with the ONE
+                    // shared normalization (SLTopBasis) before comparing or printing.
+                    const mpg = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).find(p => p && p.id === row.mirrorPage.id) || null;
+                    const fh = v => { const n = (typeof SLTopBasis !== 'undefined' && SLTopBasis) ? SLTopBasis.perFlightHour(v, mpg) : null; return n ? n.rate : null; };
+                    const r05 = fh(band.p05), r95 = fh(band.p95);
+                    const vm = (row.objective != null && typeof SLTopBasis !== 'undefined' && SLTopBasis) ? SLTopBasis.meets(band.p95, row.objective, mpg) : null;
+                    const meets = vm ? vm.pass : null;
+                    el.textContent = '± P05–P95: ' + _fmt(r05) + ' – ' + _fmt(r95) + ' /FH' + (meets == null ? '' : (meets ? ' · band meets objective' : ' · P95 EXCEEDS objective'));
                     if (meets === false) el.style.color = 'var(--color-danger,#C0392B)';
-                    el.title = 'Monte-Carlo band over ' + band.N + ' samples — lognormal λ from YOUR error factors; median ' + _fmt(band.median) + '. P05–P95 = central 90%. Advisory: the posture column remains the point-estimate verdict.';
+                    el.title = 'Monte-Carlo band over ' + band.N + ' samples — lognormal λ from YOUR error factors; median ' + _fmt(fh(band.median)) + ' /FH (per flight: P05 ' + _fmt(band.p05) + ', P95 ' + _fmt(band.p95) + '). P05–P95 = central 90%. Advisory: the posture column remains the point-estimate verdict.';
                 }
                 cell.appendChild(el);
             });

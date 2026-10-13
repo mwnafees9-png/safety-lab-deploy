@@ -1,6 +1,11 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 13 Oct 2026 (fix 3, MGL): common cause group parameters are group-level (ccfApplyGroupParams / ccfSyncGroup / ccfReadGroupParams), the CCF popover edits the group (model choice, NUREG generic β starting values, parameter source, warnings), group size is re-counted on every membership change. See tests/regression_ccf_mgl_20261013.test.js
+// 13 Oct 2026 (math audit F8): _computeTopAllocatorContext, the CCMR not-to-exceed target and the per-flight-hour label read the ONE shared time basis SLTopBasis (top_basis.js); the allocator's per-flight budget is 1 - exp(-target x t_mission), the exact inverse of the verification lanes. See tests/regression_perfh_basis_20261013.test.js
+// 13 Oct 2026 (math fix 7): the DALgebra reference explains the ARP4761A App P row rule in plain words (start DAL fixes the row, every level stays in it, no reduction before CMA substantiation) and VOTING gate claims feed the CMA pairs; see tests/regression_dal_row_20261013.test.js
+// 13 Oct 2026 (math audit F4): the dynamic-gate canvas lines say truthfully what the static number does (exact or upper bound, FDEP counted); the false claims (every PAND/SPARE bounded by an AND, an FDEP adding nothing) are gone; sub-gate BDD values keep the whole tree's FDEPs in scope
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
+// 13 Oct 2026 (fix 6 part B): _restoreProjectSnapshot (open-from-cloud, server restore) ends by running the live common cause check (cma_live.js).
 // helpers_modules.js — v1.0 — Phase P2 batch 4: runtime helper layer (bulk pass).
 // MOVED VERBATIM from safety_lab.js (byte-exact; classic script loaded BEFORE the
 // monolith; all names remain global). 100%% pure runtime function declarations —
@@ -768,7 +773,10 @@ function openPasteReviewModal(branchRoot) {
     }
 }
 
-function applyCCFGroupToNodes(memberRefs, groupName, beta, gamma, delta) {
+// 13 Oct 2026 (fix 3): opts = { model: 'beta' | 'mgl', source }. The parameters are written to the
+// WHOLE group (every member on every page, ccfApplyGroupParams), not only to the referenced
+// events, and a gamma/delta that is not given stays blank (= 1 in MGL) instead of 0.
+function applyCCFGroupToNodes(memberRefs, groupName, beta, gamma, delta, opts) {
     const result = { applied: 0, missing: [], nodes: [] };
     try {
         const name = String(groupName == null ? '' : groupName).trim();
@@ -796,13 +804,10 @@ function applyCCFGroupToNodes(memberRefs, groupName, beta, gamma, delta) {
                 return hit;
             })() : null);
             if (!node2 || node2.type !== 'basic') { result.missing.push(ref); return; }
-            // Write ONLY the four existing inline CCF fields — nothing else.
+            // Write ONLY the common cause fields, nothing else. The group-level write below
+            // sets β, the model, γ, δ, the size and the source on every member.
             node2.ccfGroup = name;
             node2.beta = b;
-            // Mirror createCcfGroupFromLibrary: default γ/δ to 0 when not provided so
-            // the node carries a complete (β, γ, δ) the engine math already understands.
-            node2.gamma = haveGamma ? g : (node2.gamma == null ? 0 : node2.gamma);
-            node2.delta = haveDelta ? d : (node2.delta == null ? 0 : node2.delta);
             // Mirror any repeated occurrences of this event (same logicalId) exactly as
             // the node-config save path does, so a CCF tag is consistent across positions.
             try { if (typeof propagateRepeatedEventEdit === 'function') propagateRepeatedEventEdit(node2); } catch (_) {}
@@ -810,6 +815,10 @@ function applyCCFGroupToNodes(memberRefs, groupName, beta, gamma, delta) {
             result.applied++;
         });
         if (result.applied) {
+            const model = (opts && opts.model) ? (opts.model === 'mgl' ? 'mgl' : 'beta') : ((haveGamma || haveDelta) ? 'mgl' : 'beta');
+            const prev = (typeof ccfReadGroupParams === 'function') ? ccfReadGroupParams(name, new Set(result.nodes)) : null;
+            if (typeof ccfApplyGroupParams === 'function') ccfApplyGroupParams(name, { beta: b, model: model, gamma: haveGamma ? g : null, delta: haveDelta ? d : null,
+                source: (opts && opts.source) ? opts.source : (prev && prev.source) || undefined });
             // SAME recompute / render the existing CCF-config-change path runs.
             if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities();
             if (typeof updateD3 === 'function') updateD3();
@@ -841,7 +850,7 @@ function dalgebraOptionsTableHTML() {
                 return '<tr><td>' + sev + '</td><td><strong>DAL ' + _e(c.P) + '</strong></td><td>' + (c.S ? '<strong>DAL ' + _e(c.S) + '</strong> &mdash; never lower' : '<span class="u-muted-italic">none &mdash; no reduction</span>') + '</td></tr>';
             }).join('');
             if (rows) return '<h4 style="margin-top: var(--s-5); margin-bottom: var(--s-2); color: var(--color-text-primary);">Primary and secondary DALs &mdash; ASTM F3061 Table 1, Assessment Level ' + _e(lvl) + '</h4>' +
-                '<p class="cfg-hint" style="margin-bottom: var(--s-2);">At an AND gate with independence between its members, one member keeps the primary DAL and the others take the secondary DAL. A secondary system is only needed when it is required to meet the F3230 probability targets. To use the ARP4754 method instead, change the DAL method above.</p>' +
+                '<p class="cfg-hint" style="margin-bottom: var(--s-2);">At an AND gate whose members Common Mode Analysis has shown to be independent, one member keeps the primary DAL and the others take the secondary DAL (never lower, however deep the tree). Until that is shown every member keeps the primary DAL. A secondary system is only needed when it is required to meet the F3230 probability targets. To use the ARP4754 method instead, change the DAL method above.</p>' +
                 '<table class="reference-table"><thead><tr><th style="width:25%;">Failure condition</th><th style="width:25%;">Primary system</th><th style="width:50%;">Secondary system</th></tr></thead><tbody>' + rows + '</tbody></table>';
         }
     } catch (_) {}
@@ -866,8 +875,11 @@ function dalgebraOptionsTableHTML() {
             '<td>carrier <strong>' + top + '</strong>, others <strong>' + others + '</strong></td>' +
             '<td>&ge;2 members <strong>' + two + '</strong>, others <strong>' + others + '</strong></td></tr>';
     };
+    // 13 Oct 2026 (fix 7): the explanation states the ROW rule (ARP4761A App P, Table P2 and P.5)
+    // in plain words: the failure condition's DAL fixes the row, every level of the tree stays in it,
+    // and nothing is reduced until Common Mode Analysis has substantiated the independence.
     return '<h4 style="margin-top: var(--s-5); margin-bottom: var(--s-2); color: var(--color-text-primary);">Two DAL allocation options' + (scope ? ' &mdash; ' + (typeof esc === 'function' ? esc(scope) : scope) : '') + '</h4>' +
-        '<p class="cfg-hint" style="margin-bottom: var(--s-2);" title="ARP4754A §5.4.1 / Table 5-2 (ARP4761A Table P2). A reduction below the failure condition&#39;s top DAL requires functional independence between the AND-gate members, substantiated by Common Mode Analysis. Option 1: one carrier keeps the top DAL, the other members drop TWO levels. Option 2: at least two members drop ONE level. The reduction is relative to the top DAL and floored only at DAL E. Without substantiated independence every member holds the top DAL.">DALgebra reduction under substantiated independence (CMA): non-carriers drop two levels (Option 1) or the pair drops one level (Option 2), relative to the top DAL. Floor: DAL E. Hover for detail.</p>' +
+        '<p class="cfg-hint" style="margin-bottom: var(--s-2);" title="ARP4754B 5.2 and ARP4761A Appendix P (Table P2 and P.5). The failure condition&#39;s DAL picks one row of the table, and the whole tree below it stays in that row, however many AND gates it passes through. Take any group of members that together cause the failure condition: at least one of them keeps the failure condition&#39;s DAL (Option 1), or at least two of them sit one level below it (Option 2), and none goes more than two levels below it (never below E). A k-of-n voting gate follows the same rule for every k members that can fail together. A reduction needs the members to be independent, and is only taken once Common Mode Analysis has substantiated that. Until then every member keeps the incoming DAL and the tool shows what it would drop to.">How reduction works: the failure condition&#39;s DAL sets the row and the whole tree stays in it. In every group of members that together cause the failure condition, one keeps that DAL (Option 1) or two sit one level below it (Option 2), and nobody goes more than two levels below it (floor E), however deep the tree. Nothing is reduced until Common Mode Analysis has shown the members are independent; until then you see what it would be. Hover for detail.</p>' +
         '<table class="reference-table"><thead><tr><th style="width:20%;">Failure condition</th><th style="width:15%;">Top DAL</th><th style="width:32%;">Option 1 &mdash; carrier + independence</th><th style="width:33%;">Option 2 &mdash; AND decrement</th></tr></thead><tbody>' +
         SEVS.map(rowFor).join('') +
         '</tbody></table>';
@@ -1864,7 +1876,11 @@ function ccmrLatentSweep(force) {
         const isVerification = !!page.verifies || (page.mode === 'bottom-up');
         const sysName = page.systemId ? (((systemsData || []).find(s => s.id === page.systemId) || {}).name || String(page.systemId)) : 'Aircraft';
         let targetP = null;
-        try { const t = getSafetyTarget(sev); if (t && t.prob) targetP = -Math.expm1(-t.prob * tExp); } catch (_) {}
+        // 13 Oct 2026 (math audit F8): the per-flight budget of a per-flight-hour objective
+        // comes from the ONE shared normalization (SLTopBasis.perFlightBudget, the tree's
+        // mission time), not from the exposure time, so this bound and the requirement
+        // check agree on what "meets the target" means.
+        try { const t = getSafetyTarget(sev); if (t && t.prob) targetP = SLTopBasis.perFlightBudget(t.prob, page).pFlight; } catch (_) {}
         (function walk(n, seen) {
             if (!n || seen.has(n.id)) return;
             seen.add(n.id);
@@ -2116,7 +2132,8 @@ function ipLedger(force) {
         (function walk(n, seenIds) {
             if (!n || seenIds.has(n.id)) return;
             seenIds.add(n.id);
-            if (n.type === 'gate' && (n.gateType === 'AND' || n.gateType === 'INHIBIT')) {
+            // 13 Oct 2026 (fix 7): a k-of-n VOTING gate can carry a DAL independence claim too.
+            if (n.type === 'gate' && (n.gateType === 'AND' || n.gateType === 'INHIBIT' || n.gateType === 'VOTING')) {
                 const claim = n.dalIndependence || '';
                 if (claim && claim !== 'none') {
                     const kids = (n.children || n._children || []).filter(Boolean);
@@ -4395,32 +4412,18 @@ function syncFTAExposureFromFHA() {
 function _computeTopAllocatorContext() {
     const headlineRate = ftaConfig.targetP || 0;
     const exposureTime = ftaConfig.exposureTime || 1;
-    // Determine t_mission. Three sources, in priority order.
-    let totalMissionHours, missionSource;
-    const md = (typeof projectConfig !== 'undefined' && projectConfig.missionDuration && projectConfig.missionDuration > 0)
-        ? projectConfig.missionDuration : null;
-    if (md) {
-        totalMissionHours = md;
-        missionSource = 'project-defined';
-    } else {
-        // Sum every row on the Flight Phases tab. parseDurationToHours handles each row.
-        let sum = 0;
-        try {
-            (_activeTreeMissionPhases() || []).forEach(p => {
-                const h = (typeof parseDurationToHours === 'function')
-                    ? parseDurationToHours(p.duration, p.durationUnit)
-                    : 0;
-                if (h > 0) sum += h;
-            });
-        } catch(e){}
-        if (sum > 0) {
-            totalMissionHours = sum;
-            missionSource = 'sum-of-flight-phases';
-        } else {
-            totalMissionHours = exposureTime;
-            missionSource = 'no-mission-defined';
-        }
-    }
+    // Determine t_mission. 13 Oct 2026 (math audit F8): ONE source for every lane,
+    // SLTopBasis.missionHours (top_basis.js): project mission duration, else the
+    // nominal flight phases of this tree's mission profile (contingency phases are
+    // not mission time), else the exposure time. The requirement check, the Budget
+    // Ledger and the critical gates divide by the same number, so a budget handed
+    // out here is judged against the same flight time it was handed out with.
+    const _activePg = (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages.find(p => p && p.id === activeFTAPageId) : null;
+    // No silent second formula: top_basis.js loads before this file runs.
+    if (typeof SLTopBasis === 'undefined' || !SLTopBasis) throw new Error('top_basis.js (SLTopBasis) is not loaded');
+    const _m = SLTopBasis.missionHours(_activePg || null);
+    const totalMissionHours = _m.hours;
+    const missionSource = _m.source;
     // Pull matched-phase names from the linked FHA for the readout label (purely informational).
     const ctx = _fhaExposureContext(ftaConfig.linkedFhaId);
     const matchedPhases = ctx ? ctx.exp.matchedPhases : [];
@@ -4434,7 +4437,11 @@ function _computeTopAllocatorContext() {
         phaseRatio: hasNormalization ? r : 1,
         totalMissionHours,
         missionSource,
-        topProbAtExposure: -Math.expm1(-operationalRate * exposureTime),
+        // 13 Oct 2026 (F8): the per-flight budget is the objective over the mission,
+        // 1 - exp(-headline x t_mission), the exact inverse of the per-flight-hour
+        // normalization the verification lanes apply. Same value as the old
+        // operationalRate x exposureTime whenever the phase ratio normalizes (r < 0.999).
+        topProbAtExposure: SLTopBasis.perFlightBudget(headlineRate, _activePg || null).pFlight,
         hasFhaNormalization: hasNormalization,
         matchedPhases
     };
@@ -4494,8 +4501,9 @@ function formatNodeMetrics(d) {
     // normalization at the time boundary; no λ exists on allocation nodes.
     let perFh = '';
     try {
-        const tM = (typeof _missionHoursForNormalization === 'function' && _missionHoursForNormalization()) || tExp || 0;
-        if (prob > 0 && prob < 1 && tM > 0) perFh = ' · ≈' + (-Math.log1p(-prob) / tM).toExponential(2).toUpperCase() + '/FH';
+        // 13 Oct 2026 (F8): the one shared normalization (SLTopBasis.perFlightHour).
+        const n = (prob > 0 && prob < 1 && typeof SLTopBasis !== 'undefined' && SLTopBasis) ? SLTopBasis.perFlightHour(prob, null) : null;
+        if (n) perFh = ' · ≈' + n.rate.toExponential(2).toUpperCase() + '/FH';
     } catch (_) {}
     return 'P=' + probStr + perFh;
 }
@@ -4521,11 +4529,22 @@ function formatNodeActualLine(d) {
     // DAL/probability reduction rested on an independence claim CMA found compromised. The
     // independent product understates P(top) until a common-cause (β) term is added.
     if (node._probCompromised) return '⚠ Independence compromised — common-cause (β) term required';
-    // Gap 5 transparency — dynamic gates: static P(top) is order-agnostic (a conservative bound).
-    // PAND/SPARE are treated as AND here (P(AND) ≥ P(PAND)); FDEP contributes 0. The order-aware
-    // value comes from the DFT Monte-Carlo (ARP4761A App G required-order factor k/n!).
-    if (node.gateType === 'PAND' || node.gateType === 'SPARE') return '△ Order-dependent — static P(top) uses a conservative AND bound; run DFT Monte-Carlo for the order-aware value';
-    if (node.gateType === 'FDEP') return '△ FDEP contributes 0 to static P(top); its dependency is exercised in the DFT Monte-Carlo';
+    // Gap 5 transparency: dynamic gates. 13 Oct 2026 (math audit F4): the old lines said every
+    // PAND/SPARE was bounded conservatively by an AND (false for a SPARE with an imperfect switch,
+    // which the AND left out) and that an FDEP added nothing (its dependency was simply missing
+    // from the number). The static number now counts both; the line says which way this gate was done,
+    // from the classification calcBottomUp records (node._dynStatic).
+    if (node.gateType === 'PAND' || node.gateType === 'SPARE') {
+        const ds = node._dynStatic;
+        if (ds && ds.mode === 'exact') return node.gateType === 'SPARE'
+            ? '\u25b3 Spare solved exactly in the static number (standby, switch and time order included)'
+            : '\u25b3 Priority AND solved exactly in the static number (failure order included)';
+        const why = (ds && ds.reason) ? ' (' + ds.reason + ')' : '';
+        return node.gateType === 'SPARE'
+            ? '\u25b3 Static number is an upper bound for this spare: primary AND (switch fails OR spare)' + why + '; DFT Monte-Carlo gives the time-ordered value'
+            : '\u25b3 Static number is an upper bound for this priority AND: all inputs failed, any order' + why + '; DFT Monte-Carlo gives the order-aware value';
+    }
+    if (node.gateType === 'FDEP') return '\u25b3 Functional dependency: when the trigger fails, its dependent events count as failed in the static number';
     if (typeof ftaConfig !== 'object' || !ftaConfig || ftaConfig.mode !== 'top-down') return '';
     if (typeof node._bddActualProb !== 'number' || !isFinite(node._bddActualProb)) return '';
     const isActiveRoot = (typeof getActiveFTARoot === 'function')
@@ -6789,6 +6808,163 @@ function _ftaCcfMembers(groupName) {
     });
     return out;
 }
+// ── 13 Oct 2026 (fix 3): common cause group parameters belong to the GROUP ──────────────────
+// The engine runs the Multiple Greek Letter model of NUREG/CR-5485 (fta_engine.js, _mgl*). The
+// parameters (β, the model choice, γ, δ, their source) and the group size are one set per group:
+// every write below goes to EVERY member on every page, and every change of membership re-counts
+// the size, so no member can silently carry its own numbers. Beta only = the beta factor model
+// (γ = δ = 1: every common cause failure fails the whole group). A blank γ or δ in MGL is 1.
+function ccfGroupDistinctMembers(groupName) {
+    const seen = new Map();
+    _ftaCcfMembers(groupName).forEach(function (m) {
+        const lid = String(m.node.logicalId != null ? m.node.logicalId : m.node.id);
+        if (!seen.has(lid)) seen.set(lid, m.node);
+    });
+    return [...seen.values()];
+}
+// The group's current parameters, resolved exactly as the engine resolves them (any member
+// order; members that disagree give the largest of each). `exclude` = nodes to leave out (the
+// newcomers when membership grows, so they adopt the group's numbers).
+function ccfReadGroupParams(groupName, exclude) {
+    const nodes = ccfGroupDistinctMembers(groupName).filter(n => !(exclude && exclude.has(n)));
+    if (!nodes.length) return null;
+    const M = (typeof SLFTAEngine !== 'undefined' && SLFTAEngine && SLFTAEngine.mgl) ? SLFTAEngine.mgl : null;
+    let plan = null;
+    try { plan = M ? M.planGroup(groupName, nodes) : null; } catch (_) { plan = null; }
+    if (!plan) {
+        const n0 = nodes[0];
+        return { beta: parseFloat(n0.beta) || 0, model: n0.ccfModel === 'mgl' ? 'mgl' : 'beta', gamma: null, delta: null, source: n0.ccfParamSource || '' };
+    }
+    return { beta: plan.beta, model: plan.model === 'mgl' ? 'mgl' : 'beta',
+             gamma: plan.gammaGiven ? plan.gamma : null, delta: plan.deltaGiven ? plan.delta : null, source: plan.paramSource || '' };
+}
+function ccfApplyGroupParams(groupName, params) {
+    if (!groupName) return { members: 0, occurrences: 0, size: 0 };
+    params = params || {};
+    const clamp = v => { if (v === null || v === undefined || v === '') return null; const x = parseFloat(v); return isFinite(x) ? Math.max(0, Math.min(1, x)) : null; };
+    const beta = clamp(params.beta) || 0;
+    const model = params.model === 'mgl' ? 'mgl' : 'beta';
+    const gamma = model === 'mgl' ? clamp(params.gamma) : null;
+    const delta = model === 'mgl' ? clamp(params.delta) : null;
+    const occ = _ftaCcfMembers(groupName).map(m => m.node);
+    const size = ccfGroupDistinctMembers(groupName).length;
+    occ.forEach(function (n) {
+        n.beta = beta; n.ccfModel = model; n.gamma = gamma; n.delta = delta; n.ccfGroupSize = size;
+        if (params.source !== undefined && params.source !== null) n.ccfParamSource = String(params.source);
+    });
+    return { members: size, occurrences: occ.length, size: size };
+}
+// Membership changed (events joined or left): every member takes the group's existing
+// parameters (newcomers adopt them; a brand-new group keeps its own) and the size is re-counted.
+function ccfSyncGroup(groupName, newcomers) {
+    if (!groupName) return null;
+    const ex = new Set(newcomers || []);
+    const p = (ex.size ? ccfReadGroupParams(groupName, ex) : null) || ccfReadGroupParams(groupName, null);
+    if (!p) return null;
+    return ccfApplyGroupParams(groupName, p);
+}
+// Published NUREG generic β starting values (cert_basis_spine.js BETA_ANCHORS, NUREG/CR-4780 and
+// NUREG/CR-5485). γ and δ have no generic value offered here: blank = 1 is the beta factor,
+// conservative for all-members failure; enter component-specific γ/δ with their source.
+function ccfBetaPresets() {
+    const A = (typeof window !== 'undefined' && window.CERT_BASIS && window.CERT_BASIS.BETA_ANCHORS) || { bestCase: 0.01, ordinary: 0.1, poorlyDefended: 0.25 };
+    const cite = 'NUREG/CR-4780, NUREG/CR-5485 generic beta';
+    return [
+        { beta: A.bestCase, label: 'β = ' + A.bestCase + ': best case, strong separation AND diversity', source: cite + ' (best case, separation and diversity credited) = ' + A.bestCase },
+        { beta: A.ordinary, label: 'β = ' + A.ordinary + ': ordinary defenses', source: cite + ' (ordinary defenses) = ' + A.ordinary },
+        { beta: A.poorlyDefended, label: 'β = ' + A.poorlyDefended + ': poorly defended', source: cite + ' (poorly defended) = ' + A.poorlyDefended }
+    ];
+}
+// What the analyst needs to know about one group: the engine's notes for the active tree
+// (members disagree, voting gate with beta only, group too large) plus a stale recorded size.
+function ccfGroupNotes(groupName) {
+    const out = [];
+    if (!groupName) return out;
+    try {
+        const root = (typeof getActiveFTARoot === 'function') ? getActiveFTARoot() : null;
+        if (root && typeof SLFTAEngine !== 'undefined' && SLFTAEngine.ccfModelNotes) SLFTAEngine.ccfModelNotes(root).forEach(n => { if (n.group === groupName) out.push(n); });
+    } catch (_) {}
+    const mem = ccfGroupDistinctMembers(groupName);
+    let stamped = 0;
+    mem.forEach(n => { const v = parseInt(n.ccfGroupSize, 10); if (isFinite(v) && v > stamped) stamped = v; });
+    if (mem.length > 1 && stamped && stamped !== mem.length) out.push({ code: 'size-stale', severity: 'warning', group: groupName,
+        message: 'Group "' + groupName + '" is recorded as ' + stamped + ' members but the project has ' + mem.length + '. Save the group parameters to re-count.' });
+    if (mem.length === 1) out.push({ code: 'single-member', severity: 'info', group: groupName, message: 'Group "' + groupName + '" has only one member, so no common cause is modeled yet.' });
+    return out;
+}
+function ccfNotesHtml(notes) {
+    if (!notes || !notes.length) return '';
+    const col = { error: '#b91c1c', warning: '#b45309', info: 'var(--color-text-secondary,#667085)' };
+    const e = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return notes.map(n => '<div style="margin-top:4px;font-size:11.5px;line-height:1.45;color:' + (col[n.severity] || col.warning) + ';">' + (n.severity === 'info' ? '' : '⚠ ') + e(n.message) + '</div>').join('');
+}
+// Node panel: fill the common cause fields from the selected basic event.
+function ccfFillConfigPanel(node) {
+    const $ = id => document.getElementById(id);
+    if (!$('config-ccf-group')) return;
+    $('config-ccf-group').value = node.ccfGroup || '';
+    const p = node.ccfGroup ? ccfReadGroupParams(node.ccfGroup, null) : null;
+    const M = (typeof SLFTAEngine !== 'undefined' && SLFTAEngine && SLFTAEngine.mgl) ? SLFTAEngine.mgl : null;
+    const own = M ? M.memberParams(node) : { beta: node.beta || 0, gammaGiven: false, deltaGiven: false, gamma: 1, delta: 1 };
+    const beta = p ? p.beta : (parseFloat(node.beta) || 0);
+    const model = p ? p.model : ((own.gammaGiven || own.deltaGiven) ? 'mgl' : 'beta');
+    const g = p ? p.gamma : (own.gammaGiven ? own.gamma : null), d = p ? p.delta : (own.deltaGiven ? own.delta : null);
+    $('config-beta').value = beta || 0;
+    if ($('config-ccf-model')) $('config-ccf-model').value = model;
+    if ($('config-gamma')) $('config-gamma').value = (g == null ? '' : g);
+    if ($('config-delta')) $('config-delta').value = (d == null ? '' : d);
+    if ($('config-ccf-source')) $('config-ccf-source').value = (p ? p.source : node.ccfParamSource) || '';
+    if ($('config-ccf-preset')) $('config-ccf-preset').value = '';
+    ccfRefreshConfigPanelState(node);
+}
+function ccfRefreshConfigPanelState(node) {
+    const $ = id => document.getElementById(id);
+    const mgl = $('config-ccf-model') && $('config-ccf-model').value === 'mgl';
+    ['config-gamma', 'config-delta'].forEach(id => { const el = $(id); if (el) { el.disabled = !mgl; el.placeholder = mgl ? 'blank = 1' : '1 (beta factor)'; } });
+    const w = $('config-ccf-warn');
+    if (w) {
+        const html = (node && node.ccfGroup) ? ccfNotesHtml(ccfGroupNotes(node.ccfGroup)) : '';
+        w.innerHTML = html; w.style.display = html ? 'block' : 'none';
+    }
+}
+// Node panel: commit the common cause fields (called from updateNodeData). The group name is
+// already written on the node; prevGroup is what it was before this edit.
+function ccfConfigPanelCommit(node, prevGroup) {
+    const $ = id => document.getElementById(id);
+    const fields = {
+        beta: $('config-beta') ? $('config-beta').value : node.beta,
+        model: $('config-ccf-model') ? $('config-ccf-model').value : (node.ccfModel || 'beta'),
+        gamma: $('config-gamma') ? $('config-gamma').value : node.gamma,
+        delta: $('config-delta') ? $('config-delta').value : node.delta,
+        source: $('config-ccf-source') ? $('config-ccf-source').value : (node.ccfParamSource || '')
+    };
+    const grp = node.ccfGroup || '';
+    if (!grp) {
+        // No group: nothing common-cause is modeled; keep β on the event as typed (old behavior).
+        node.beta = Math.max(0, Math.min(1, parseFloat(fields.beta) || 0));
+        if (prevGroup) { delete node.ccfGroupSize; ccfSyncGroup(prevGroup); }
+    } else if (grp !== prevGroup && ccfGroupDistinctMembers(grp).length > 1) {
+        // Joined an existing group: adopt its parameters, then show them.
+        ccfSyncGroup(grp, [node]);
+        if (prevGroup) ccfSyncGroup(prevGroup);
+        ccfFillConfigPanel(node);
+        return;
+    } else {
+        ccfApplyGroupParams(grp, fields);
+        if (prevGroup && prevGroup !== grp) ccfSyncGroup(prevGroup);
+    }
+    ccfRefreshConfigPanelState(node);
+}
+// Node panel: a NUREG generic β starting value fills β and records its source.
+function ccfApplyBetaPreset(idx) {
+    const pr = ccfBetaPresets()[parseInt(idx, 10)];
+    if (!pr) return;
+    const $ = id => document.getElementById(id);
+    if ($('config-beta')) $('config-beta').value = pr.beta;
+    if ($('config-ccf-source')) $('config-ccf-source').value = pr.source;
+    if (typeof updateNodeData === 'function') updateNodeData();
+}
+try { window.ccfApplyGroupParams = ccfApplyGroupParams; window.ccfSyncGroup = ccfSyncGroup; window.ccfReadGroupParams = ccfReadGroupParams; window.ccfGroupNotes = ccfGroupNotes; window.ccfBetaPresets = ccfBetaPresets; window.ccfApplyBetaPreset = ccfApplyBetaPreset; } catch (_) {}
 function _closeFtaCcfPopover() {
     const p = document.getElementById('fta-ccf-popover'); if (p) p.remove();
     document.removeEventListener('mousedown', _ftaCcfOutside, true);
@@ -6801,56 +6977,91 @@ function _ftaCcfPopover(node, event) {
     if (!node || !node.ccfGroup) return;
     const grp = node.ccfGroup;
     const members = _ftaCcfMembers(grp);
-    const b = node.beta || 0, g = node.gamma || 0, dl = node.delta || 0;
+    const distinct = ccfGroupDistinctMembers(grp);
+    // 13 Oct 2026 (fix 3): the popover edits the GROUP's parameters (NUREG/CR-5485 MGL). There is
+    // no per-member choice any more: members carrying different numbers made the answer depend
+    // on which member the engine read first.
+    const gp = ccfReadGroupParams(grp, null) || { beta: node.beta || 0, model: 'beta', gamma: null, delta: null, source: '' };
+    const isMgl = gp.model === 'mgl';
     const pop = document.createElement('div');
     pop.id = 'fta-ccf-popover';
-    pop.style.cssText = 'position:fixed;z-index:2147483601;width:320px;max-height:76vh;overflow:auto;background:var(--color-surface-1,#fff);color:var(--color-text-primary,#111);border:1px solid #c4b5fd;border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.28);padding:14px 16px;font-size:13px;';
-    const x = Math.min((event && event.clientX) || 200, window.innerWidth - 340);
-    const y = Math.min((event && event.clientY) || 200, window.innerHeight - 380);
+    pop.style.cssText = 'position:fixed;z-index:2147483601;width:340px;max-height:80vh;overflow:auto;background:var(--color-surface-1,#fff);color:var(--color-text-primary,#111);border:1px solid #c4b5fd;border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.28);padding:14px 16px;font-size:13px;';
+    const x = Math.min((event && event.clientX) || 200, window.innerWidth - 360);
+    const y = Math.min((event && event.clientY) || 200, window.innerHeight - 460);
     pop.style.left = Math.max(12, x) + 'px';
     pop.style.top = Math.max(12, y) + 'px';
-    const fld = function (id, lbl, val) {
+    const inputCss = 'width:100%;padding:5px 7px;margin-top:2px;border:1px solid var(--color-border-hair,#ddd);border-radius:6px;font:inherit;font-size:13px;background:var(--color-surface-2,#fff);color:inherit;box-sizing:border-box;';
+    const fld = function (id, lbl, val, extra) {
         return '<label style="flex:1;font-size:11px;color:var(--color-text-secondary,#667085);">' + lbl +
-            '<input id="' + id + '" type="number" step="0.01" min="0" max="1" value="' + val + '" style="width:100%;padding:5px 7px;margin-top:2px;border:1px solid var(--color-border-hair,#ddd);border-radius:6px;font:inherit;font-size:13px;background:var(--color-surface-2,#fff);color:inherit;box-sizing:border-box;"></label>';
+            '<input id="' + id + '" type="number" step="0.01" min="0" max="1" value="' + (val == null ? '' : val) + '" ' + (extra || '') + ' style="' + inputCss + '"></label>';
     };
-    const rows = members.map(function (m) {
-        const nn = m.node;
+    const presets = ccfBetaPresets();
+    const rows = distinct.map(function (nn) {
         return '<div style="padding:6px 9px;border-bottom:1px solid var(--color-border-hair,#f1f1f1);display:flex;justify-content:space-between;gap:8px;align-items:center;">' +
             '<span style="font-weight:600;white-space:nowrap;">' + esc(nn.displayId || ('BE-' + nn.id)) + '</span>' +
             '<span style="color:var(--color-text-secondary,#667085);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(nn.description || nn.name || '') + '</span>' +
-            '<span style="color:#7c3aed;font-variant-numeric:tabular-nums;white-space:nowrap;">β ' + (nn.beta || 0) + '</span></div>';
-    }).join('') || '<div style="padding:8px 9px;color:var(--color-text-secondary,#667085);">This is the only member — add more via multi-select grouping.</div>';
+            '<span style="color:#7c3aed;font-variant-numeric:tabular-nums;white-space:nowrap;">q ' + (typeof nn.probability === 'number' ? nn.probability.toExponential(2) : '-') + '</span></div>';
+    }).join('') || '<div style="padding:8px 9px;color:var(--color-text-secondary,#667085);">This is the only member. Add more via multi-select grouping.</div>';
     pop.innerHTML =
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">' +
           '<div style="font-weight:700;color:#7c3aed;">◆ Common-cause group</div>' +
           '<button id="ccf-pop-x" aria-label="Close" style="border:none;background:transparent;font-size:18px;line-height:1;cursor:pointer;color:var(--color-text-tertiary,#888);">&times;</button></div>' +
         '<div style="font-weight:600;">' + esc(grp) + '</div>' +
-        '<div style="color:var(--color-text-secondary,#667085);margin:2px 0 10px;font-size:12px;">' + members.length + ' member' + (members.length === 1 ? '' : 's') + ' · β = fraction of failures that are common-cause</div>' +
-        '<div style="display:flex;gap:8px;margin-bottom:8px;">' + fld('ccf-pop-beta', 'β (2-of-n)', b) + fld('ccf-pop-gamma', 'γ (3-of-n)', g) + fld('ccf-pop-delta', 'δ (4-of-n)', dl) + '</div>' +
-        '<label style="display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;cursor:pointer;"><input id="ccf-pop-all" type="checkbox" checked> Apply to all ' + members.length + ' member' + (members.length === 1 ? '' : 's') + '</label>' +
+        '<div style="color:var(--color-text-secondary,#667085);margin:2px 0 10px;font-size:12px;">' + distinct.length + ' member' + (distinct.length === 1 ? '' : 's') + '. These parameters belong to the group and apply to every member.</div>' +
+        '<label style="display:block;font-size:11px;color:var(--color-text-secondary,#667085);margin-bottom:8px;">Model' +
+          '<select id="ccf-pop-model" style="' + inputCss + '"><option value="beta"' + (isMgl ? '' : ' selected') + '>Beta factor (β only): every common cause failure fails the whole group</option>' +
+          '<option value="mgl"' + (isMgl ? ' selected' : '') + '>Multiple Greek Letter (β, γ, δ), NUREG/CR-5485</option></select></label>' +
+        '<label style="display:block;font-size:11px;color:var(--color-text-secondary,#667085);margin-bottom:8px;">NUREG generic starting value for β' +
+          '<select id="ccf-pop-preset" style="' + inputCss + '"><option value="">Choose a starting value…</option>' + presets.map((p, i) => '<option value="' + i + '">' + esc(p.label) + '</option>').join('') + '</select></label>' +
+        '<div style="display:flex;gap:8px;margin-bottom:8px;">' + fld('ccf-pop-beta', 'β (share of failures that are common cause)', gp.beta) + '</div>' +
+        '<div style="display:flex;gap:8px;margin-bottom:4px;">' + fld('ccf-pop-gamma', 'γ (of those, share reaching 3+)', isMgl ? gp.gamma : null, isMgl ? 'placeholder="blank = 1"' : 'placeholder="1 (beta factor)" disabled') + fld('ccf-pop-delta', 'δ (of those, share reaching 4+)', isMgl ? gp.delta : null, isMgl ? 'placeholder="blank = 1"' : 'placeholder="1 (beta factor)" disabled') + '</div>' +
+        '<label style="display:block;font-size:11px;color:var(--color-text-secondary,#667085);margin:6px 0 8px;">Parameter source (recorded with the group)' +
+          '<input id="ccf-pop-source" type="text" value="' + esc(gp.source || '') + '" placeholder="e.g. NUREG/CR-5485 generic β, or your CCF data reference" style="' + inputCss + '"></label>' +
+        '<div id="ccf-pop-notes" style="margin-bottom:8px;">' + ccfNotesHtml(ccfGroupNotes(grp)) + '</div>' +
         '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-tertiary,#888);margin-bottom:4px;">Members</div>' +
         '<div style="border:1px solid var(--color-border-hair,#eee);border-radius:8px;max-height:150px;overflow:auto;margin-bottom:12px;">' + rows + '</div>' +
         '<div style="display:flex;gap:8px;">' +
-          '<button id="ccf-pop-save" class="action-btn btn-cyan" style="flex:1;">Save</button>' +
+          '<button id="ccf-pop-save" class="action-btn btn-cyan" style="flex:1;">Save group</button>' +
           '<button id="ccf-pop-ungroup" class="action-btn" style="flex:0 0 auto;background:transparent;border:1px solid #ef4444;color:#ef4444;">Remove this event</button></div>';
     document.body.appendChild(pop);
+    const modelSel = document.getElementById('ccf-pop-model');
+    modelSel.onchange = function () {
+        const m = modelSel.value === 'mgl';
+        ['ccf-pop-gamma', 'ccf-pop-delta'].forEach(id => { const el = document.getElementById(id); el.disabled = !m; el.placeholder = m ? 'blank = 1' : '1 (beta factor)'; if (!m) el.value = ''; });
+    };
+    document.getElementById('ccf-pop-preset').onchange = function () {
+        const pr = presets[parseInt(this.value, 10)];
+        if (!pr) return;
+        document.getElementById('ccf-pop-beta').value = pr.beta;
+        document.getElementById('ccf-pop-source').value = pr.source;
+    };
     document.getElementById('ccf-pop-x').onclick = _closeFtaCcfPopover;
     document.getElementById('ccf-pop-save').onclick = function () {
-        const clamp = v => Math.max(0, Math.min(1, parseFloat(v) || 0));
-        const nb = clamp(document.getElementById('ccf-pop-beta').value);
-        const ng = clamp(document.getElementById('ccf-pop-gamma').value);
-        const nd = clamp(document.getElementById('ccf-pop-delta').value);
-        const all = document.getElementById('ccf-pop-all').checked;
-        const targets = all ? members.map(m => m.node) : [node];
-        targets.forEach(function (t) { t.beta = nb; t.gamma = ng; t.delta = nd; });
+        ccfApplyGroupParams(grp, {
+            beta: document.getElementById('ccf-pop-beta').value,
+            model: modelSel.value,
+            gamma: document.getElementById('ccf-pop-gamma').value,
+            delta: document.getElementById('ccf-pop-delta').value,
+            source: document.getElementById('ccf-pop-source').value
+        });
         _closeFtaCcfPopover();
+        try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); } catch (_) {}
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
         try { if (typeof updateD3 === 'function') updateD3(); } catch (_) {}
-        try { if (typeof showToast === 'function') showToast('Updated CCF group "' + grp + '".', 'success', 2600); } catch (_) {}
+        const notes = ccfGroupNotes(grp).filter(n => n.severity !== 'info');
+        try { if (typeof showToast === 'function') showToast('Updated common cause group "' + grp + '".' + (notes.length ? ' ' + notes[0].message : ''), notes.length ? 'warning' : 'success', notes.length ? 7000 : 2600); } catch (_) {}
     };
     document.getElementById('ccf-pop-ungroup').onclick = function () {
-        node.ccfGroup = ''; node.beta = 0; node.gamma = 0; node.delta = 0;
+        // Every occurrence of this event (same logical id) leaves together; the group re-counts.
+        const lid = String(node.logicalId != null ? node.logicalId : node.id);
+        members.forEach(function (m) {
+            const n = m.node;
+            if (String(n.logicalId != null ? n.logicalId : n.id) !== lid) return;
+            n.ccfGroup = ''; n.beta = 0; n.gamma = null; n.delta = null; delete n.ccfModel; delete n.ccfGroupSize; delete n.ccfParamSource;
+        });
+        ccfSyncGroup(grp);
         _closeFtaCcfPopover();
+        try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); } catch (_) {}
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
         try { if (typeof updateD3 === 'function') updateD3(); } catch (_) {}
         try { if (typeof showToast === 'function') showToast('Removed from CCF group.', 'info', 2600); } catch (_) {}
@@ -6898,11 +7109,17 @@ async function _ftaCcfGroupSelected() {
     const suggested = existing || ('CCF-GRP-' + String(Date.now()).slice(-4));
     const name = await slPrompt('Common-cause group name:', suggested);
     if (!name || !name.trim()) return;
+    const prevGroups = new Set(nodes.map(n => n.ccfGroup).filter(g => g && g !== name.trim()));
+    const newcomers = nodes.filter(n => n.ccfGroup !== name.trim());
     nodes.forEach(n => { n.ccfGroup = name.trim(); if (!(n.beta > 0)) n.beta = 0.1; });
+    // 13 Oct 2026 (fix 3): newcomers adopt the group's parameters; sizes re-count.
+    ccfSyncGroup(name.trim(), newcomers);
+    prevGroups.forEach(g => ccfSyncGroup(g));
+    try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); } catch (_) {}
     _ftaCcfClearMulti();
     try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
     try { if (typeof updateD3 === 'function') updateD3(); } catch (_) {}
-    try { if (typeof showToast === 'function') showToast('Grouped ' + nodes.length + ' events as CCF "' + name.trim() + '" (β=0.1). Click the violet pill to tune β.', 'success', 4600); } catch (_) {}
+    try { if (typeof showToast === 'function') showToast('Grouped ' + nodes.length + ' events as CCF "' + name.trim() + '" (β=' + ((ccfReadGroupParams(name.trim(), null) || {}).beta) + ', beta factor unless the group already uses MGL). Click the violet pill to set the group parameters and their source.', 'success', 5200); } catch (_) {}
 }
 
 function _ftaCcfDetect() {
@@ -6979,7 +7196,7 @@ function _ftaCcfSuggestModal() {
           '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--color-border-hair,#eee);">' +
             '<div style="font-weight:700;">⚡ Suggested common-cause groups</div>' +
             '<button id="ccf-sg-x" aria-label="Close" style="border:none;background:transparent;font-size:20px;cursor:pointer;color:var(--color-text-tertiary,#888);">&times;</button></div>' +
-          '<div style="padding:14px 18px;overflow:auto;"><p style="margin:0 0 12px;font-size:12.5px;color:var(--color-text-secondary,#667085);">Distinct basic events sharing a description — likely common-cause candidates. Grouping applies a shared CCF group name and β=0.1 (tune later via the pill).</p>' + items + '</div></div>';
+          '<div style="padding:14px 18px;overflow:auto;"><p style="margin:0 0 12px;font-size:12.5px;color:var(--color-text-secondary,#667085);">Distinct basic events sharing a description — likely common-cause candidates. Grouping applies a shared CCF group name and β=0.1 as a beta factor (an existing group keeps its own parameters; set them and their source via the pill).</p>' + items + '</div></div>';
     document.body.appendChild(ov);
     document.getElementById('ccf-sg-x').onclick = () => ov.remove();
     ov.addEventListener('mousedown', e => { if (e.target === ov) ov.remove(); });
@@ -6989,10 +7206,16 @@ function _ftaCcfSuggestModal() {
             if (!s) return;
             const base = String(s.label).trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20);
             const name = 'CCF-' + (base || ('GRP-' + String(Date.now()).slice(-4)));
+            const prevGroups = new Set(s.nodes.map(n => n.ccfGroup).filter(g => g && g !== name));
+            const newcomers = s.nodes.filter(n => n.ccfGroup !== name);
             s.nodes.forEach(n => { n.ccfGroup = name; if (!(n.beta > 0)) n.beta = 0.1; });
+            // 13 Oct 2026 (fix 3): newcomers adopt an existing group's parameters; sizes re-count.
+            ccfSyncGroup(name, newcomers);
+            prevGroups.forEach(g => ccfSyncGroup(g));
+            try { if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities(); } catch (_) {}
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
             try { if (typeof updateD3 === 'function') updateD3(); } catch (_) {}
-            try { if (typeof showToast === 'function') showToast('Grouped ' + s.nodes.length + ' events as "' + name + '" (β=0.1).', 'success', 4000); } catch (_) {}
+            try { if (typeof showToast === 'function') showToast('Grouped ' + s.nodes.length + ' events as "' + name + '" (β=' + ((ccfReadGroupParams(name, null) || {}).beta) + ').', 'success', 4000); } catch (_) {}
             ov.remove();
         };
     });
@@ -8689,6 +8912,8 @@ function _restoreProjectSnapshot(data) {
     try { if (typeof renderCMA === 'function') renderCMA(); } catch(_) {}
     try { if (typeof renderFMEA === 'function') renderFMEA(); } catch(_) {}
     try { if (typeof rerenderAllTemplateDrivenTables === 'function') rerenderAllTemplateDrivenTables(); } catch(_) {}
+    // 13 Oct 2026 (fix 6): open-from-cloud and server restore run the live common cause check too.
+    try { if (typeof window !== 'undefined' && window.SLCmaLive) window.SLCmaLive.onModelChange('load'); } catch(_) {}
 }
 
 // === Phase 1 (CRDT co-authoring) model hooks ================================
@@ -10309,7 +10534,11 @@ async function deleteSelectedNode() {
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
         }
     } else {
+        // 13 Oct 2026 (fix 3): a common cause group that loses a member re-counts its size.
+        const _ccfLeft = new Set();
+        (function walk(n) { if (!n) return; if (n.type === 'basic' && n.ccfGroup) _ccfLeft.add(n.ccfGroup); (n.children || n._children || []).forEach(walk); })(selectedNodeData);
         deleteNodeRecursive(rootNode, selectedNodeData.id);
+        try { if (typeof ccfSyncGroup === 'function') _ccfLeft.forEach(g => ccfSyncGroup(g)); } catch (_) {}
         selectedNodeData = null;
         document.getElementById('node-config-panel').style.display = 'none';
         // Phase 53.49 — structure changed → flag affected reqs.
@@ -10382,6 +10611,7 @@ function _cloneSubtreeForVerification(node, blankValues) {
         // Drop runtime/allocated state and parent-only fields we don't want to carry over.
         if (k === 'children' || k === '_children') return;
         if (k === 'allocatedDAL' || k === 'dalCarrierChildId' || k === 'isDALCarrier') return;
+        if (k === '_dalIfSubstantiated' || k === '_dalPending') return;   // 13 Oct 2026 (fix 7): allocation-side state
         // C2 (22 Aug 2026) — identity is DEEP-copied. `fresh[k] = node[k]` made the
         // twins share ONE identity object, so a verification-side edit (modeIds)
         // would have mutated the allocation twin and tripped its modes-on-allocation
@@ -11034,7 +11264,8 @@ function _normalizeIntermediateGatesForSharedEvents(rootNode) {
         if (n.type !== 'gate') return;
         if (!n._sharedEventsInSubtree) return;
         try {
-            const exact = computeExactProbability(n);
+            // 13 Oct 2026 (F4): scope = the whole tree, so an FDEP outside this gate still forces its dependents inside it.
+            const exact = computeExactProbability(n, rootNode);
             if (exact && typeof exact.prob === 'number' && isFinite(exact.prob)) {
                 n.probability = exact.prob;
                 // Phase 61 — λ-equivalent only on verification (bottom-up) trees; allocation is probability-only.

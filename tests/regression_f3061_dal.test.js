@@ -90,7 +90,8 @@ const alloc = (cfg, sev, root) => {
 bad = [];
 ['I', 'II', 'III', 'IV'].forEach(l => ['Major', 'Hazardous', 'Catastrophic'].forEach(sev => ['opt1', 'opt2'].forEach(opt => {
     const a = leaf(), b = leaf(), c = leaf();
-    const root = gate('AND', [a, b, c], { dalOption: opt, dalCarrierChildId: a.id });
+    // 13 Oct 2026 (fix 7): substantiated explicitly; a bare claim no longer reduces (the old default did).
+    const root = gate('AND', [a, b, c], { dalOption: opt, dalCarrierChildId: a.id, dalIndependence: 'substantiated' });
     alloc({ regulation: 'Part 23', part23Class: l }, sev, root);
     const cell = T.cell(l, sev);
     if (a.allocatedDAL !== cell.P || b.allocatedDAL !== cell.S || c.allocatedDAL !== cell.S) bad.push(l + ' ' + sev + ' ' + opt + ': ' + [a, b, c].map(x => x.allocatedDAL).join('/') + ' want ' + cell.P + '/' + cell.S);
@@ -98,8 +99,10 @@ bad = [];
 check('F4 EXEC: every level and class, either ARP option setting — carrier gets the primary DAL, the others Table 1\'s secondary', bad.length === 0, bad.slice(0, 4).join('; '));
 
 let x = leaf(), y = leaf(), carrier = leaf();
-let inner = gate('AND', [x, y]);
-let root = gate('AND', [carrier, inner], { dalCarrierChildId: carrier.id });
+// 13 Oct 2026 (fix 7): both gates substantiated, so the nested gate is proven to hold at the secondary
+// even when its own independence is substantiated (the old fixture leaned on the reducing default).
+let inner = gate('AND', [x, y], { dalIndependence: 'substantiated' });
+let root = gate('AND', [carrier, inner], { dalCarrierChildId: carrier.id, dalIndependence: 'substantiated' });
 alloc({ regulation: 'Part 23', part23Class: 'IV' }, 'Catastrophic', root);
 check('F4 EXEC: nested AND inside the secondary branch stays at the secondary DAL (IV Cat: A / B / B / B)', carrier.allocatedDAL === 'A' && inner.allocatedDAL === 'B' && x.allocatedDAL === 'B' && y.allocatedDAL === 'B', [carrier, inner, x, y].map(n => n.allocatedDAL).join('/'));
 check('F4 EXEC: that nested gate is not marked reduced and raises no DAL independence requirement', inner._dalReduced === false && inner._independenceReq === null);
@@ -117,21 +120,28 @@ x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalIndependence: 'compromis
 alloc({ regulation: 'Part 23', part23Class: 'IV' }, 'Catastrophic', root);
 check('F4 EXEC: compromised independence reverts every member to the top DAL', x.allocatedDAL === 'A' && y.allocatedDAL === 'A');
 
+// 13 Oct 2026 (fix 7): the old check expected a bare claim to REDUCE (root._dalReduced === true). The
+// agreed rule is no reduction until CMA substantiates independence: the claim raises its requirement,
+// holds both members at the primary, and keeps the secondary as the would-be DAL.
 x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalIndependence: 'claimed' });
 alloc({ regulation: 'Part 23', part23Class: 'I' }, 'Hazardous', root);
-check('F4 EXEC: a reducing gate still raises its independence requirement (claimed)', root._dalReduced === true && root._independenceReq && root._independenceReq.status === 'claimed');
+check('F4 EXEC: a claimed gate raises its independence requirement but takes no reduction until CMA (I Haz: C / C now, would be C / D)',
+    root._dalReduced === false && root._dalPending === true && root._independenceReq && root._independenceReq.status === 'claimed'
+    && x.allocatedDAL === 'C' && y.allocatedDAL === 'C' && x._dalIfSubstantiated === 'C' && y._dalIfSubstantiated === 'D',
+    [x, y].map(n => n.allocatedDAL + '/' + n._dalIfSubstantiated).join(' '));
 
 // ---- F5 EXEC ----------------------------------------------------------------------------
-x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt1', dalCarrierChildId: x.id });
+// 13 Oct 2026 (fix 7): F5 tests the reduction itself, so independence is substantiated explicitly.
+x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt1', dalCarrierChildId: x.id, dalIndependence: 'substantiated' });
 let top = alloc({ regulation: 'Part 23', part23Class: 'I', part23DalMethod: 'arp4754' }, 'Catastrophic', root);
 check('F5 EXEC: ARP4754 method on a Level I Catastrophic — top A, Option 1 others C', top === 'A' && x.allocatedDAL === 'A' && y.allocatedDAL === 'C' && y._dalDerivation.basis === 'option1');
-x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt2' });
+x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt2', dalIndependence: 'substantiated' });
 alloc({ regulation: 'Part 23', part23Class: 'I', part23DalMethod: 'arp4754' }, 'Catastrophic', root);
 check('F5 EXEC: ARP4754 method — Option 2 gives B / B', x.allocatedDAL === 'B' && y.allocatedDAL === 'B');
-x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt1', dalCarrierChildId: x.id });
+x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt1', dalCarrierChildId: x.id, dalIndependence: 'substantiated' });
 alloc({ regulation: 'Part 25' }, 'Catastrophic', root);
 check('F5 EXEC: Part 25 unchanged — Option 1 A / C (self-test B19)', x.allocatedDAL === 'A' && y.allocatedDAL === 'C');
-x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt2' });
+x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalOption: 'opt2', dalIndependence: 'substantiated' });
 alloc({ regulation: 'Part 25' }, 'Catastrophic', root);
 check('F5 EXEC: Part 25 unchanged — Option 2 B / B (self-test B18)', x.allocatedDAL === 'B' && y.allocatedDAL === 'B');
 
@@ -140,7 +150,8 @@ const ORDER = ['A', 'B', 'C', 'D', 'E'];
 bad = [];
 ['I', 'II', 'III', 'IV'].forEach(l => ['Hazardous', 'Catastrophic'].forEach(sev => {
     const a = leaf(), b = leaf(), deep1 = leaf(), deep2 = leaf();
-    const r = gate('AND', [a, gate('AND', [b, gate('AND', [deep1, deep2], { dalOption: 'opt1' })], { dalOption: 'opt1' })], { dalOption: 'opt1', dalCarrierChildId: a.id });
+    const SUB = 'substantiated';   // 13 Oct 2026 (fix 7): substantiated so the nesting actually reduces
+    const r = gate('AND', [a, gate('AND', [b, gate('AND', [deep1, deep2], { dalOption: 'opt1', dalIndependence: SUB })], { dalOption: 'opt1', dalIndependence: SUB })], { dalOption: 'opt1', dalCarrierChildId: a.id, dalIndependence: SUB });
     alloc({ regulation: 'Part 23', part23Class: l }, sev, r);
     const S = T.cell(l, sev).S;
     [b, deep1, deep2].forEach(n => { if (ORDER.indexOf(n.allocatedDAL) > ORDER.indexOf(S)) bad.push(l + ' ' + sev + ' ' + n.allocatedDAL + '<' + S); });
@@ -151,7 +162,10 @@ check('F6: three levels of Option 1 nesting never take a backup below Table 1\'s
 check('F7: the canvas allocation passes the failure condition\'s Table 1 context', /dalCtx = \(typeof SLF3061 !== 'undefined'\) \? SLF3061\.contextFor\(fha\.severity, projectConfig\)/.test(HELP) && /allocateDAL\(root, topDal, new Set\(\), undefined, dalCtx\)/.test(HELP));
 check('F7: the all-trees sweep passes it for every root', /SLF3061\.contextFor\(fha\.severity, projectConfig\)/.test(MISC) && /allocateDAL\(j\.page\.root, j\.topDal, new Set\(\), cmaSet, j\.ctx\)/.test(MISC));
 const allocSrc = extract(SUP, 'allocateDAL');
-const recursive = (allocSrc.match(/allocateDAL\(/g) || []).length - 1, withCtx = (allocSrc.match(/allocateDAL\([^;]*, ctx\)/g) || []).length;
+// 13 Oct 2026 (fix 7): the allocator now recurses with two extra internal arguments (the failure
+// condition's row and the actual/potential pass), so the context is no longer the LAST argument;
+// the check counts every call that passes ctx in the fifth position instead.
+const recursive = (allocSrc.match(/allocateDAL\(/g) || []).length - 1, withCtx = (allocSrc.match(/allocateDAL\([^;(]*?, [^;(,]*?, [^;(,]*?, [^;(,]*?, ctx[,)]/g) || []).length;
 check('F7: every recursive call inside the allocator carries the context', recursive > 0 && recursive === withCtx - 1, recursive + ' calls, ' + (withCtx - 1) + ' with ctx');
 check('F7: the requirement register explains a Table 1 allocation', /d\.basis === 'f3061'/.test(ASR) && /ASTM F3061 §4\.2\.5, Table 1/.test(ASR));
 check('F7: the reference table shows Table 1 on a Part 23 Table 1 project', /SLF3061\.method\(projectConfig\) === 'f3061'/.test(HELP) && /Primary and secondary DALs &mdash; ASTM F3061 Table 1/.test(HELP));

@@ -1,3 +1,4 @@
+// 13 Oct 2026 (math fix 7): the AND gates carried the DAL option in the wrong field (dalIndependence: 'option-1' / 'option-2'), which the allocator silently read as a non-provisional reduction. The option now sits in dalOption and the independence is the default claim, so no DAL reduction is taken until CMA substantiates it (the badge shows the would-be DAL); see tests/regression_dal_row_20261013.test.js
 // demo_showcase_hl1.js — Aeolus HL-1 — outsized freighter demo project.
 //
 // A Part 25 outsized freighter threaded through the full ARP 4761A spine:
@@ -566,7 +567,7 @@
         // -- FCS: loss of pitch output (dual dissimilar actuation) ------------
         const pElevA = be('Elevator actuation lane A fails', 0, { probability: 2.4e-5 });
         const pElevB = be('Elevator actuation lane B fails', 0, { probability: 2.4e-5 });
-        const pElevAnd = gate('AND', 'Loss of both elevator actuation lanes', [pElevA, pElevB], { dalIndependence: 'option-1' });
+        const pElevAnd = gate('AND', 'Loss of both elevator actuation lanes', [pElevA, pElevB], { dalOption: 'opt1' });
         const pFccBoth = be('Both flight control computers reject the pitch lane', 0, { probability: 8e-7 });
         page('pg-fcs-pitch', 'PSSA · FCS loss of pitch output', {
             treeLevel: 'system', systemId: 'sys-fcs', mode: 'top-down', linkedFhaIds: [2001],
@@ -578,7 +579,7 @@
         const pRudR = be('Right fin rudder actuation lost', 0, { probability: 3.1e-5 });
         page('pg-fcs-yaw', 'PSSA · FCS loss of directional control', {
             treeLevel: 'system', systemId: 'sys-fcs', mode: 'top-down', linkedFhaIds: [2004],
-            root: seal(gate('AND', 'Loss of rudder output on both fins', [pRudL, pRudR], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Loss of rudder output on both fins', [pRudL, pRudR], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- Propulsion: all four engines -------------------------------------
@@ -589,7 +590,7 @@
         const eng1 = mkEng(1), eng2 = mkEng(2), eng3 = mkEng(3), eng4 = mkEng(4);
         page('pg-prp-allout', 'PSSA · Loss of thrust on all four powerplants', {
             treeLevel: 'system', systemId: 'sys-prp', mode: 'top-down', linkedFhaIds: [2013],
-            root: seal(gate('AND', 'All four powerplants shut down', [eng1, eng2, eng3, eng4], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'All four powerplants shut down', [eng1, eng2, eng3, eng4], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- Propulsion: two on one side (the four-engine asymmetry case) -----
@@ -598,10 +599,10 @@
             root: seal(gate('OR', 'Both powerplants on one side shut down', [
                 gate('AND', 'Left pair shut down', [
                     be('Engine 1 shutdown (left outboard)', 1.2e-5),
-                    be('Engine 2 shutdown (left inboard)', 1.2e-5)], { dalIndependence: 'option-1' }),
+                    be('Engine 2 shutdown (left inboard)', 1.2e-5)], { dalOption: 'opt1' }),
                 gate('AND', 'Right pair shut down', [
                     be('Engine 3 shutdown (right inboard)', 1.2e-5),
-                    be('Engine 4 shutdown (right outboard)', 1.2e-5)], { dalIndependence: 'option-1' }),
+                    be('Engine 4 shutdown (right outboard)', 1.2e-5)], { dalOption: 'opt1' }),
             ], { allocatedDAL: 'B' })),
         });
 
@@ -611,7 +612,7 @@
             root: seal(gate('AND', 'No generation source available', [
                 gate('AND', 'All four engine-driven generators lost', [
                     be('Generator 1 fails', 2e-5), be('Generator 2 fails', 2e-5),
-                    be('Generator 3 fails', 2e-5), be('Generator 4 fails', 2e-5)], { dalIndependence: 'option-1' }),
+                    be('Generator 3 fails', 2e-5), be('Generator 4 fails', 2e-5)], { dalOption: 'opt1' }),
                 be('APU generator unavailable', 0, { probability: 3e-3 }),
                 be('Battery lane depleted or failed', 0, { probability: 1e-4 }),
             ], { allocatedDAL: 'A' })),
@@ -622,7 +623,7 @@
             treeLevel: 'system', systemId: 'sys-hyd', mode: 'top-down', linkedFhaIds: [2031],
             root: seal(gate('AND', 'All three hydraulic systems lost', [
                 be('System A lost', 4.5e-5), be('System B lost', 4.5e-5), be('System C lost', 4.5e-5),
-            ], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            ], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- Landing gear: loss of braking ------------------------------------
@@ -631,7 +632,7 @@
         const brkAcc = be('Accumulator reserve unavailable', 0, { probability: 2e-4 });
         page('pg-ldg-brakes', 'PSSA · Loss of wheel braking', {
             treeLevel: 'system', systemId: 'sys-ldg', mode: 'top-down', linkedFhaIds: [2052],
-            root: seal(gate('AND', 'Wheel braking unavailable', [brkA, brkB, brkAcc], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Wheel braking unavailable', [brkA, brkB, brkAcc], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- Avionics: misleading display -------------------------------------
@@ -652,7 +653,7 @@
         page('pg-crg-restraint', 'PSSA · Loss of payload restraint', {
             treeLevel: 'system', systemId: 'sys-crg', mode: 'top-down', linkedFhaIds: [2091],
             root: seal(gate('OR', 'Payload released in flight', [
-                gate('AND', 'Both load paths fail at one station', [rstA, rstB], { dalIndependence: 'option-1' }),
+                gate('AND', 'Both load paths fail at one station', [rstA, rstB], { dalOption: 'opt1' }),
                 gate('AND', 'Restraint under-tensioned at loading and not detected', [
                     be('Restraint not correctly tensioned by the loading crew', 0, { probability: 3e-4 }),
                     be('Tension monitoring absent or ignored', 0, { probability: 1e-2 }),
@@ -677,7 +678,7 @@
         const nzdLock = be('Lock mechanism fails or is not engaged', 0, { probability: 2.2e-5 });
         page('pg-nzd-open', 'PSSA · Nose door opens in flight', {
             treeLevel: 'system', systemId: 'sys-nzd', mode: 'top-down', linkedFhaIds: [2201],
-            root: seal(gate('AND', 'Door not restrained against flight loads', [nzdLatch, nzdLock], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            root: seal(gate('AND', 'Door not restrained against flight loads', [nzdLatch, nzdLock], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- Nose door: false lock indication ---------------------------------
@@ -688,7 +689,7 @@
                 gate('AND', 'Both indication channels report locked', [
                     be('Indication channel 1 erroneous', 0, { probability: 1.8e-4 }),
                     be('Indication channel 2 erroneous', 0, { probability: 1.8e-4 }),
-                ], { dalIndependence: 'option-1' }),
+                ], { dalOption: 'opt1' }),
             ], { allocatedDAL: 'A' })),
         });
 
@@ -698,7 +699,7 @@
             root: seal(gate('AND', 'Crew unprotected at cruise altitude', [
                 be('Flight-deck pressure boundary breached', 0, { probability: 4e-6 }),
                 be('Crew oxygen unavailable', 0, { probability: 8e-5 }),
-            ], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            ], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         // -- Aircraft-level PASA trees ----------------------------------------
@@ -709,9 +710,9 @@
                 gate('AND', 'Reverse thrust unavailable on all powerplants', [
                     be('Left pair reverse unavailable', 0, { probability: 2e-3 }),
                     be('Right pair reverse unavailable', 0, { probability: 2e-3 }),
-                ], { dalIndependence: 'option-1' }),
+                ], { dalOption: 'opt1' }),
                 be('Lift dump unavailable', 0, { probability: 5e-3 }),
-            ], { allocatedDAL: 'A', dalIndependence: 'option-1' })),
+            ], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
         page('pg-ac-fc05', 'PASA · FC-05 total loss of thrust', {
