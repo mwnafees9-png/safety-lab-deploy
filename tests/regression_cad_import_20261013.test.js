@@ -102,8 +102,11 @@ const FIX = path.join(__dirname, 'fixtures', 'cad', 'toy_aircraft.step');
       const ok = I.buildModel(fake, { instances: { 'A\u0002P': ['L-PUMP', 'R-PUMP'] } }), bad = I.buildModel(fake, { instances: { 'A\u0002P': ['L-PUMP'] } });
       check('instance names apply only when the counts agree', ok.parts.map(p => p.designator).join() === 'L-PUMP,R-PUMP' && bad.parts.every(p => !p.designator));
     }
-    check('every part has a mesh with geometry', m1.meshes.length === 6 && m1.meshes.every(x => x.position instanceof Float32Array && x.index instanceof Uint32Array && x.index.length >= 3));
-    check('meshes own exactly-sized buffers (safe to transfer out of the worker)', m1.meshes.every(x => x.position.byteOffset === 0 && x.position.buffer.byteLength === x.position.byteLength && x.index.buffer.byteLength === x.index.byteLength));
+    // cad-C (13 Oct 2026): geometry is a prototype per distinct shape plus a placement per part.
+    check('every part has a prototype with geometry and a placement (none = identity)', m1.meshes.length === 6 && m1.meshes.every(x => m1.protos[x.proto] && m1.protos[x.proto].position instanceof Float32Array && m1.protos[x.proto].index instanceof Uint32Array && m1.protos[x.proto].index.length >= 3 && (x.matrix === null || (x.matrix instanceof Float32Array && x.matrix.length === 16))));
+    check('the two engines share one prototype, and so do the two computers: 4 shapes for 6 parts', m1.protos.length === 4 && m1.meshes[1].proto === m1.meshes[2].proto && m1.meshes[3].proto === m1.meshes[4].proto && m1.stats.prototypes === 4);
+    check('prototypes own exactly-sized buffers (safe to transfer out of the worker)', m1.protos.every(x => x.position.byteOffset === 0 && x.position.buffer.byteLength === x.position.byteLength && x.index.buffer.byteLength === x.index.byteLength));
+    check('a placed copy lands where the file puts it (world positions from prototype x placement)', (() => { const w = I.worldPosition(m1, 2), b = I.bboxOf(w), p = m1.parts[2].bbox; return [0, 1, 2].every(j => near(b.min[j], p.min[j], 1e-3) && near(b.max[j], p.max[j], 1e-3)); })());
   }
   console.log('\n[C3] stable part ids');
   {
@@ -160,7 +163,7 @@ const FIX = path.join(__dirname, 'fixtures', 'cad', 'toy_aircraft.step');
     check('the engine is loaded for this block (SLCadZonal.addCadModel)', g.SLCadZonal === E && typeof E.addCadModel === 'function');
     const cache = { put: (k, v) => { store[k] = v; return Promise.resolve(); } };
     const r = await I.finalizeImport({ sha256: info.sha256, model: m1 }, { fileName: 'toy_aircraft.step', cache, by: 'Test Engineer' });
-    check('cache got the meshes under the sha256', store[info.sha256] && store[info.sha256].meshes.length === 6 && store[info.sha256].meshes[0].position instanceof Float32Array);
+    check('cache got the geometry under the sha256 (v2: prototypes + placements)', store[info.sha256] && store[info.sha256].version === 2 && store[info.sha256].packed.n === 6 && I.unpackMeshes(store[info.sha256].packed).length === 6 && store[info.sha256].protos.length === 4 && store[info.sha256].protos[0].position instanceof Float32Array);
     check('cache record says mm', store[info.sha256] && store[info.sha256].units === 'mm');
     check('project got cad-1, revision 1, written by the engine', pc.cadModels.length === 1 && pc.cadModels[0].id === 'cad-1' && pc.cadModels[0].revision === '1' && r.entry === pc.cadModels[0] && pc.cadSeq === 1);
     check('the stored model is exactly the contract', JSON.stringify(Object.keys(pc.cadModels[0])) === JSON.stringify(['id', 'fileName', 'sha256', 'revision', 'importedAt', 'units', 'parts']) && pc.cadModels[0].parts.every(p => { const k = Object.keys(p).filter(x => x !== 'designator'); return JSON.stringify(k) === JSON.stringify(['pid', 'name', 'partNumber', 'path', 'bbox', 'centroid']); }));
@@ -204,7 +207,8 @@ const FIX = path.join(__dirname, 'fixtures', 'cad', 'toy_aircraft.step');
     check('a part under budget is untouched', I.decimate(P, X, 1e9).decimated === false);
     const fake = { root: { name: 'A', meshes: [0], children: [] }, meshes: [{ name: 'Ball', attributes: { position: { array: pos } }, index: { array: idx } }] };
     const bm = I.buildModel(fake, { maxTrianglesPerPart: 3000 });
-    check('buildModel applies the budget and counts it', bm.stats.decimatedParts === 1 && bm.meshes[0].index.length / 3 <= 3000 && bm.meshes[0].normal === null);
+    check('buildModel applies the budget and counts it', bm.stats.decimatedParts === 1 && bm.protos[bm.meshes[0].proto].index.length / 3 <= 3000 && bm.protos[bm.meshes[0].proto].normal === null);
+    check('...and the part box is taken from the full geometry, before simplification', near(bm.parts[0].bbox.max[2], 500, 1e-3) && near(bm.parts[0].bbox.min[2], -500, 1e-3));
   }
 
   // ---------------------------------------------------------------- C8
@@ -325,7 +329,7 @@ const FIX = path.join(__dirname, 'fixtures', 'cad', 'toy_aircraft.step');
     }
     check('sphere and box accepted', Pp.volumeSpec({ kind: 'sphere', center: [0, 0, 0], radius: 5 }).ok && Pp.volumeSpec({ kind: 'box', min: [1, 1, 1], max: [0, 0, 0] }).min[0] === 0);
     check('incomplete shapes refused, not drawn wrong', !Pp.volumeSpec({ kind: 'cone', apex: [0, 0, 0], axis: [0, 0, 0], halfAngleDeg: 30, length: 1 }).ok && !Pp.volumeSpec({ kind: 'sphere', center: [0, 0], radius: 1 }).ok && !Pp.volumeSpec({ kind: 'disk-sector', center: [0, 0, 0], axis: [1, 0, 0], radius: 1, spreadDeg: 95 }).ok && !Pp.volumeSpec({ kind: 'disk-sector', center: [0, 0, 0], axis: [1, 0, 0] }).ok && !Pp.volumeSpec({ kind: 'blob' }).ok);
-    const fa = m1.meshes[3].position, fb = m1.meshes[4].position;   // the two FCC boxes
+    const fa = I.worldPosition(m1, 3), fb = I.worldPosition(m1, 4);   // the two FCC boxes
     const cp = Pp.closestVertexPair(fa, fb);
     let brute = Infinity; for (let i = 0; i < fa.length; i += 3) for (let j = 0; j < fb.length; j += 3) brute = Math.min(brute, Math.hypot(fa[i] - fb[j], fa[i + 1] - fb[j + 1], fa[i + 2] - fb[j + 2]));
     check('part to part: the sweep equals brute force', cp && near(cp.distance, brute, 1e-6), cp && cp.distance + ' vs ' + brute);
@@ -349,24 +353,34 @@ const FIX = path.join(__dirname, 'fixtures', 'cad', 'toy_aircraft.step');
   // ---------------------------------------------------------------- C11
   console.log('\n[C11] no network, no eval, wiring');
   {
-    const FILES = ['cad_import.js', 'cad_import_worker.js', 'cad_viewer.js', 'cad_page.js'];
+    const FILES = ['cad_import.js', 'cad_import_worker.js', 'cad_brep.js', 'cad_exact.js', 'cad_render.js', 'cad_review.js', 'cad_viewer.js', 'cad_viewer_panels.js', 'cad_page.js'];
     FILES.forEach(f => {
       const src = S(f).replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, '');
-      check(f + ': no network call (fetch, XMLHttpRequest, WebSocket, sendBeacon, EventSource)', !/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource/.test(src));
+      // The worker reads our own OpenCascade build's files (vendor/occt-fast) from this site:
+      // its one network helper is fed only OCJS_DIR paths (and the worker's own policy allows
+      // connect-src 'self' only). Every other file makes no network call at all.
+      const net = f === 'cad_import_worker.js' ? src.replace(/function getBytes\(url, onBytes\) \{[\s\S]*?\n\}\n/, '') : src;
+      check(f + ': no network call (fetch, XMLHttpRequest, WebSocket, sendBeacon, EventSource)' + (f === 'cad_import_worker.js' ? ' outside the one reader of our own vendor files' : ''), !/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource/.test(net));
       check(f + ': no eval or Function constructor', !/\beval\s*\(|new Function\s*\(/.test(src));
     });
+    {
+      const Wk = S('cad_import_worker.js');
+      const calls = Wk.match(/getBytes\(([^,)]*)/g) || [];
+      check('the worker\'s reader is only ever given our own vendor files (vendor/occt-fast)', calls.length >= 2 && calls.filter(c => !/^getBytes\(url/.test(c)).every(c => /getBytes\(FAST_DIR \+/.test(c)) && /var FAST_DIR = 'vendor\/occt-fast\/';/.test(Wk) && !/vendor\/ocjs/.test(Wk), calls.join(' | '));
+    }
     const W = S('cad_import_worker.js');
     check('worker loads OpenCascade from vendor/occt as its own file', /importScripts\(SLCadImport\.OCCT_DIR \+ 'occt-import-js\.js'\)/.test(W) && I.OCCT_DIR === 'vendor/occt/');
     check('worker fingerprints the file and refuses a mismatch before parsing', W.indexOf('expectSha') >= 0 && W.indexOf("code: 'mismatch'") < W.indexOf('convertStep'));
     check('worker runs the same convertStep this test runs', /SLCadImport\.convertStep\(bytes, oc, opts\)/.test(W));
-    check('worker transfers mesh buffers instead of copying', /postMessage\(\{ type: 'result'[^)]*\}, transfer\)/.test(W));
+    check('worker transfers geometry buffers instead of copying', /postMessage\(\{ type: 'result'[^)]*\}, transferOf\(model\)\)/.test(W) && /t\.push\(p\.position\.buffer, p\.index\.buffer\)/.test(W));
     check('cache is IndexedDB sl-cad / meshes', I.DB_NAME === 'sl-cad' && I.DB_STORE === 'meshes');
     const writers = ['cad_import.js', 'cad_viewer.js', 'cad_page.js'].filter(f => /cadModels\s*(=(?!=)|\.push|\.splice)/.test(S(f).replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, '')));
     check('the CAD UI never writes projectConfig.cadModels itself; the engine is the one writer', writers.length === 0 && /E\.addCadModel\(entry\)/.test(S('cad_import.js')) && /pc\.cadModels\.push\(m\)/.test(S('cad_zonal.js')), writers.join(','));
     check('viewer and page never write zones or PRA volumes', !/(projectConfig|_pc\(\)|\bpc)\.(zones|praVolumes)\s*=(?!=)|(zones|praVolumes|_zones\(\)|_vols\(\))\.(push|splice)\(/.test(S('cad_viewer.js') + S('cad_page.js')));
     check('viewer reads geometry only from the local cache or a re-opened local file', /I\.cacheGet\(entry\.sha256\)/.test(S('cad_viewer.js')) && /I\.reopen\(file, entry/.test(S('cad_viewer.js')));
     const IDX = S('index.html');
-    check('load order: zonal_ui.js, cad_import.js, cad_viewer.js, cad_page.js', /zonal_ui\.js\?v=[\d.]+" defer><\/script>\s*(<!--[^>]*-->\s*)?<script src="cad_import\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_viewer\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_page\.js\?v=[\d.]+" defer><\/script>/.test(IDX));
+    check('load order: zonal_ui.js, cad_import.js, cad_render.js, cad_exact.js, cad_review.js, cad_viewer.js, cad_viewer_panels.js, cad_page.js', /zonal_ui\.js\?v=[\d.]+" defer><\/script>\s*(<!--[^>]*-->\s*)?<script src="cad_import\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_render\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_exact\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_review\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_viewer\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_viewer_panels\.js\?v=[\d.]+" defer><\/script>\s*<script src="cad_page\.js\?v=[\d.]+" defer><\/script>/.test(IDX));
+    check('cad_brep.js and cad_step_struct.js run in the worker only, never as page scripts', !/<script src="cad_(brep|step_struct)\.js/.test(IDX) && /importScripts\('cad_import\.js' \+ _q, 'cad_brep\.js' \+ _q, 'cad_step_struct\.js' \+ _q\)/.test(W));
     check('the worker is not a page script', !/<script src="cad_import_worker\.js/.test(IDX));
     const PT = require(path.join(SITE, 'prove_tabs.js'));
     const zsa = PT.AREAS.find(a => a.label === 'ZSA').tabs.map(x => x.t);

@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 13 Oct 2026 (late, AutoSave, Waqas: "when a user saves a choice/change it should be autosaving"): _writeAutosave answers whether it wrote (true / false) and leaves its IndexedDB write as window.__slAutosaveIdb so save_state.js v2.0 can wait for it; the autosave meta carries unacked (changes still waiting for an acknowledgement, with the accepted state in its own slot) and cloudPending (accepted work not yet in the cloud) instead of the old unsaved markers; _updateSaveIndicator hands the header to SLSaveState.renderIndicator; snapshot undo is used while anything is held from the live sync.
 // 13 Oct 2026 (night, fix2-J rulings 1-2): app Undo / Redo (fault tree and everywhere) run as COLLECTED changes (SLChangeAck.deferred), acknowledged together on leaving the view, not per press.
 // 13 Oct 2026 (fix G): SEQ and NOT gate symbols and colors, their canvas lines, NOT in the gate walk, and Fit to Workspace leaves room for the toolbox. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (analysis model links): the aircraft and system FHA rows carry the linked badge and broken-link warning for their function and failure-condition links (model_links.js); see tests/regression_analysis_links_20261013b.test.js
@@ -12509,12 +12510,17 @@ function _writeAutosave() {
         // one: the change acknowledgement funnel keeps it to diff against and to restore on
         // Cancel (change_ack.js), at no cost beyond this serialization.
         try { if (typeof window !== 'undefined' && window.SLChangeAck) window.SLChangeAck.stash(payload); } catch (_) {}
-        // Unsaved work rides with the payload it describes, so a crash brings it back UNSAVED
-        // (save_state.js recovered()), never silently promoted to saved.
+        // 13 Oct 2026 (late, AutoSave): what this payload holds beyond what was accepted rides
+        // with it: unacked = changes still waiting for an acknowledgement (the accepted state is in
+        // its own slot, save_state.js), cloudPending = accepted work the cloud copy does not have
+        // yet. A crash brings both back as they were: the waiting changes are asked about again,
+        // the upload is retried. Nothing unacknowledged is ever promoted to saved by a restart.
         try {
-            if (typeof window !== 'undefined' && window.SLSaveState && window.SLSaveState.isDirty()) {
-                var _ss = window.SLSaveState.status();
-                meta.unsaved = true; meta.unsavedSince = _ss.since; meta.unsavedAcks = _ss.acks.slice(-50);
+            if (typeof window !== 'undefined' && window.SLSaveState && typeof window.SLSaveState.autosaveMeta === 'function') {
+                var _am = window.SLSaveState.autosaveMeta() || {};
+                if (_am.unacked) meta.unacked = true;
+                if (_am.cloudPending) meta.cloudPending = true;
+                if (_am.acceptedId) meta.acceptedId = _am.acceptedId;
             }
         } catch (_) {}
         // 31 Aug 2026 — the autosave slot restores the DATA on resume but used to
@@ -12529,7 +12535,7 @@ function _writeAutosave() {
     } catch(e) {
         console.warn('Autosave serialize failed:', e);
         _updateSaveIndicator('error');
-        return;
+        return false;
     }
     // E1 — THE REFUSAL. During boot recovery only, an empty snapshot never
     // overwrites a stored one that has content. This is the write that destroyed
@@ -12549,20 +12555,26 @@ function _writeAutosave() {
     // boot, when the flag is already true, and persists exactly as before.
     if (!snapHasContent && !_bootRecoveryHasRun && !_autosaveRecoveryPending) {
         _updateSaveIndicator('saved');   // an empty project has nothing to save — not an error
-        return;
+        return true;
     }
     if (_autosaveRecoveryPending && !snapHasContent && _autosaveStoredWorthKeeping()) {
         console.warn('[E1] refused to overwrite a stored project with an empty snapshot during recovery.');
         _updateSaveIndicator('saved');   // the good copy IS the saved state — say so honestly
-        return;
+        return true;
     }
     // #14 — IndexedDB primary (large capacity), async fire-and-forget.
     const idbAvail = SLDB.available();
     if (idbAvail) {
-        _maybeCompress(payload)                                          // #44 — gzip when enabled, else plain
+        // 13 Oct 2026 (AutoSave): the promise is kept (resolves true when the copy is in
+        // IndexedDB) so an acknowledged change can be reported saved only once it is.
+        const _idbP = _maybeCompress(payload)                            // #44: gzip when enabled, else plain
             .then(function (stored) { return SLDB.set(AUTOSAVE_KEY, stored); })
             .then(function () { return SLDB.set(AUTOSAVE_META_KEY, meta); })
-            .catch(function (e) { console.warn('IndexedDB autosave failed:', e); });
+            .then(function () { return true; })
+            .catch(function (e) { console.warn('IndexedDB autosave failed:', e); return false; });
+        try { if (typeof window !== 'undefined') window.__slAutosaveIdb = _idbP; } catch (_) {}
+    } else {
+        try { if (typeof window !== 'undefined') window.__slAutosaveIdb = null; } catch (_) {}
     }
     // localStorage mirror (synchronous — the pagehide/beforeunload safety net). Best-effort: a
     // project larger than the localStorage quota fails here but is still safe in IndexedDB.
@@ -12572,6 +12584,7 @@ function _writeAutosave() {
         localStorage.setItem(AUTOSAVE_META_KEY, JSON.stringify(meta));
         lsOk = true;
     } catch(e) { /* quota exceeded — IndexedDB holds the full payload */ }
+    try { if (typeof window !== 'undefined') window.__slAutosaveLs = lsOk; } catch (_) {}   // 13 Oct 2026 (AutoSave): with __slAutosaveIdb, what save_state.js reads to say Saved honestly
     _autosaveLastWrite = meta.ts;
     _autosavePending = false;   // write dispatched — nothing pending to flush
     // E1 — what is in storage is now what we just wrote. Tracking it here is what
@@ -12585,6 +12598,7 @@ function _writeAutosave() {
     try { _writeLastGood(payload, meta, snapHasContent); } catch (_) {}
     // #16 — non-blocking project-size health advisory.
     try { _checkProjectHealth(meta.size); } catch(_) {}
+    return !!(lsOk || idbAvail);
 }
 
 // E1 part 3 — the last-good mirror. Three conditions, all of them load-bearing:
@@ -12620,6 +12634,9 @@ function _writeLastGood(payload, meta, snapHasContent) {
     return wrote;
 }
 function _updateSaveIndicator(state) {
+    // 13 Oct 2026 (late, AutoSave): save_state.js v2.0 owns what the header says (Saving… / Saved
+    // at a time / Not saved: why, with Retry): a local write reports into it instead of painting.
+    try { if (typeof window !== 'undefined' && window.SLSaveState && typeof window.SLSaveState.renderIndicator === 'function') return window.SLSaveState.renderIndicator(state); } catch (_) {}
     // Phase 57 — keep the node drawer's Save button in step with the same dirty state.
     const drawerBtn = document.getElementById('node-drawer-save');
     if (drawerBtn) drawerBtn.classList.toggle('has-unsaved', !!_dirtySinceSave);
@@ -12859,7 +12876,7 @@ try { if (typeof window !== 'undefined') { window._slUndoDepth = _slUndoDepth; w
 // so the per-user live undo cannot take it back: the snapshot steps below do (one per
 // acknowledged change), and a rebase lays teammates' work back on top afterwards.
 function _liveUndo() {
-    try { if (window.SLSaveState && window.SLSaveState.isDirty() && _undoStack.length) return false; } catch (_) {}
+    try { if (window.SLSaveState && window.SLSaveState.holdsSync() && _undoStack.length) return false; } catch (_) {}   // AutoSave: only what still waits for an acknowledgement is held from the live doc
     try { return !!(window.SafetyLabCRDT && window.SafetyLabCRDT.liveUndo && window.SafetyLabCRDT.liveUndo()); } catch (_) { return false; }
 }
 function undo() {

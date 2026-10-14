@@ -1,35 +1,43 @@
 // ============================================================================
-// cad_viewer.js, v1.2: the 3D CAD viewer (window.SLCadViewer, 13 Oct 2026).
+// cad_viewer.js, v2.0: the 3D CAD viewer (window.SLCadViewer, 13 Oct 2026; 2.0 cad-C).
 //
-// View only: move through the aircraft, never author it. Built on three.js
-// (vendor/three/three.min.js, r186, loaded on first use). Mountable in any
-// container, so Cert Lab and Sys Lab can reuse it later.
+// View only: move through the aircraft and review it, never author it. Built on three.js
+// (vendor/three/three.min.js, r186, loaded on first use). Mountable in any container, so Cert
+// Lab and Sys Lab can reuse it later. The side panels (properties, saved views, notes, clashes,
+// PMI, revision compare, snapshots) are in cad_viewer_panels.js; the shared records in
+// cad_review.js; drawing at scale in cad_render.js; exact geometry in cad_exact.js.
 //
-//   * parts tree (the model's own assembly tree): click a row to select and
-//     frame the part; click a part in 3D to reveal its row.
-//   * orbit, pan, zoom (to the cursor), fit all, standard views, fly-through
-//     and walk-through (W A S D + mouse, Q / E down / up, Shift faster),
-//     full screen. Buttons and keys follow the diagram editor's style.
-//   * hide, show all, isolate, x-ray, section planes X / Y / Z (drag the plane
-//     or its slider), measure point to point or part to part.
-//   * zones overlay from projectConfig.zones[*].volume (box -> translucent box,
-//     parts -> those parts tinted), labelled with the zone code, per-zone
-//     toggles; PRA volumes from projectConfig.praVolumes (cone, sphere, box,
-//     disk-sector), toggled.
+//   * LARGE ASSEMBLIES: parts drawn as instanced, batched chunks (one draw call per chunk), level
+//     of detail and contribution culling by screen size, frustum culling per part, occlusion
+//     queries per chunk, built progressively (SLCadRender). Picking through a box hierarchy and
+//     per-prototype triangle hierarchies.
+//   * parts tree (virtual list: only the rows on screen exist), search, filter, multi-select
+//     (Ctrl / Cmd toggles, Shift selects a range), click a part in 3D to reveal its row.
+//   * orbit, pan, zoom (to the cursor), fit all, standard views and the view cube (click a face),
+//     fly-through (unchanged) and walk-through with gravity and collision against the parts'
+//     meshes (stays on the floor, steps up small heights, stopped by walls), full screen.
+//   * hide, show all, isolate, ghost (everything but the selection see-through), explode.
+//   * SECTIONS: any number of planes at once (X, Y, Z or along a picked face), a section box,
+//     flip, every plane and box face draggable in 3D or by slider, and CAPPED cut faces (the
+//     solid inside is filled where a plane cuts it, stencil method).
+//   * MEASURE: point to point, edge length, radius / diameter, angle, part to part. On the TRUE
+//     geometry (B-rep) when the exact session is open (SLCadExact); otherwise worked out on the
+//     display mesh and labeled "approximate".
+//   * zones overlay (box or parts volumes, labeled), PRA volumes, color by attribute with legend,
+//     AP242 PMI on the model, revision compare overlay, 3D notes and markups, PNG snapshots.
 //
-// API: SLCadViewer.mount(el, opts) -> viewer, with loadModel(cadId),
-// showModel(entry, meshes), highlightZone(zoneId), highlightParts(pids),
-// highlightVolume(id), onSelect(cb) -> unsubscribe, dispose(). The same names
-// on SLCadViewer itself act on the most recently mounted viewer.
+// API: SLCadViewer.mount(el, opts) -> viewer, with loadModel(cadId), showModel(entry, geometry),
+// highlightZone(zoneId), highlightParts(pids), highlightVolume(id), onSelect(cb) -> unsubscribe,
+// select(pids), refreshOverlays(), dispose(). The same names on SLCadViewer act on the most
+// recently mounted viewer.
 //
-// Geometry comes only from this computer's IndexedDB cache (SLCadImport). If
-// it is not there, the viewer asks for the STEP file to be re-opened locally
-// and checks its fingerprint; it never downloads geometry. No eval, no
-// Function constructor, no network calls.
+// Geometry comes only from this computer's IndexedDB cache (SLCadImport). If it is not there,
+// the viewer asks for the STEP file to be re-opened locally and checks its fingerprint; it never
+// downloads geometry. No eval, no Function constructor, no network calls.
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.2';
+    var VERSION = '2.0';
     var THREE_URL = 'vendor/three/three.min.js';
 
     // =================================================================== pure helpers
@@ -205,12 +213,15 @@
         if (ba < 0) return null;
         return { distance: Math.sqrt(best), a: [posA[ba * 3], posA[ba * 3 + 1], posA[ba * 3 + 2]], b: [posB[bb * 3], posB[bb * 3 + 1], posB[bb * 3 + 2]] };
     }
-    function fmtMm(v) { return (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1)) + ' mm'; }
+    function fmtMm(v) { return (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 1 ? v.toFixed(1) : v.toFixed(3)) + ' mm'; }
     function _pc() {
         try { if (root.SLEnv && typeof root.SLEnv.get === 'function') { var v = root.SLEnv.get('projectConfig'); if (v) return v; } } catch (_) {}
         try { if (typeof projectConfig !== 'undefined' && projectConfig) return projectConfig; } catch (_) {}   // eslint-disable-line no-undef
         return root.projectConfig || {};
     }
+    function _mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+    function _hexRgb(h) { var n = parseInt(String(h).replace('#', ''), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
+    var SEL_RGB = [0.10, 0.43, 0.95];
 
     var _threeP = null;
     function loadThree() {
@@ -227,15 +238,22 @@
 
     // =================================================================== styles
     var CSS = [
-        '.scv{--scv-bg:var(--color-surface-1,#fff);--scv-panel:var(--color-surface-2,#f5f6f8);--scv-border:var(--color-border-thin,rgba(20,23,28,.35));--scv-accent:var(--color-accent,#1A6EF2);--scv-muted:var(--color-text-tertiary,#7a828f);--scv-bad:var(--color-danger,#c0392b);',
-        'position:relative;display:flex;flex-direction:column;border:1px solid var(--scv-border);border-radius:8px;background:var(--scv-bg);color:var(--color-text-primary,#14171c);font:13px/1.35 var(--font-sans,system-ui,-apple-system,"Segoe UI",sans-serif);height:620px;min-height:360px;overflow:hidden}',
+        '.scv{--scv-bg:var(--color-surface-1,#fff);--scv-panel:var(--color-surface-2,#f5f6f8);--scv-border:var(--color-border-thin,rgba(20,23,28,.35));--scv-accent:var(--color-accent,#1A6EF2);--scv-muted:var(--color-text-tertiary,#5f6773);--scv-bad:var(--color-danger,#c0392b);',
+        'position:relative;display:flex;flex-direction:column;border:1px solid var(--scv-border);border-radius:8px;background:var(--scv-bg);color:var(--color-text-primary,#14171c);font:13px/1.35 var(--font-sans,system-ui,-apple-system,"Segoe UI",sans-serif);height:680px;min-height:360px;overflow:hidden}',
         '.scv.scv-fullscreen{position:fixed;inset:0;z-index:9000;border-radius:0;height:auto!important}',
+        // The app styles every label (uppercase, block) and every input / select (full width, big
+        // padding); inside the viewer they are compact controls.
+        '.scv label{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:400;text-transform:none;letter-spacing:normal;margin:0;color:inherit}',
+        '.scv input,.scv select,.scv textarea{width:auto;margin:0;padding:3px 6px;font-size:12px;line-height:1.3;background-color:var(--scv-bg);border-radius:5px}',
+        '.scv input[type=checkbox]{width:auto;margin:0 4px 0 0;padding:0}',
+        '.scv input[type=range]{padding:0;border:none;background:transparent;box-shadow:none}',
+        '.scv select.scv-btn,.scv select.scv-input{padding:0 22px 0 8px;background-position:right 7px center;height:28px}',
+        '.scv select.scv-input{height:24px}',
+        '.scv .scv-search{width:100%}',
         '.scv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--scv-border);background:var(--scv-panel)}',
-        '.scv-sep{width:1px;height:20px;background:var(--scv-border);margin:0 4px}',
-        '.scv-btn{display:inline-flex;align-items:center;gap:4px;height:28px;margin:0;padding:0 9px;box-shadow:none;background-image:none;border:1px solid var(--scv-border);border-radius:6px;background:var(--scv-bg);color:inherit;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;width:auto}',
+        '.scv-sep{width:1px;height:20px;background:var(--scv-border);margin:0 3px}',
+        '.scv-btn{display:inline-flex;align-items:center;gap:4px;height:28px;margin:0;padding:0 8px;box-shadow:none;background-image:none;border:1px solid var(--scv-border);border-radius:6px;background:var(--scv-bg);color:inherit;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;width:auto}',
         '.scv select.scv-btn{padding:0 6px;min-width:0;flex:0 0 auto}',
-        // The app styles every <button> with a gradient and a hover lift (safety_lab.css, specificity 0,2,1);
-        // the viewer's own buttons are flat, so its rules carry the .scv prefix to win.
         '.scv button:hover:not(:disabled){transform:none;box-shadow:none}',
         '.scv .scv-btn:hover:not(:disabled){background:var(--scv-bg);border-color:var(--scv-accent)}',
         '.scv .scv-btn[aria-pressed="true"],.scv .scv-btn[aria-pressed="true"]:hover:not(:disabled){background:var(--scv-accent);border-color:var(--scv-accent);color:#fff}',
@@ -243,14 +261,23 @@
         '.scv .scv-car:hover:not(:disabled),.scv .scv-eye:hover:not(:disabled){background:transparent;color:var(--scv-accent)}',
         '.scv-btn:disabled{opacity:.45;cursor:default}',
         '.scv-btn:focus-visible,.scv-canvas:focus-visible{outline:2px solid var(--scv-accent);outline-offset:1px}',
+        '.scv-range{display:inline-flex;align-items:center;gap:4px;font-size:12px;height:28px}',
+        '.scv-range input{width:84px}',
+        '.scv-chip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:12px;font-size:11.5px;border:1px solid var(--scv-border);background:var(--scv-bg);cursor:pointer;white-space:nowrap}',
+        '.scv-chip[data-st="ready"]{border-color:#2b8a3e;color:#1f6f32}',
+        '.scv-chip[data-st="loading"]{border-color:var(--scv-accent);color:var(--scv-accent)}',
+        '.scv-chip[data-st="error"],.scv-chip[data-st="need-file"]{border-color:var(--scv-bad);color:var(--scv-bad)}',
         '.scv-body{position:relative;display:flex;flex:1;min-height:0}',
-        '.scv-side{width:270px;flex:0 0 auto;display:flex;flex-direction:column;border-right:1px solid var(--scv-border);background:var(--scv-panel);min-height:0}',
-        '.scv-tabs{display:flex;gap:2px;padding:6px 6px 0}',
-        '.scv-tab{flex:1;height:26px;border:1px solid var(--scv-border);border-bottom:none;border-radius:6px 6px 0 0;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer;margin:0;padding:0 4px;box-shadow:none}',
+        '.scv-side{width:300px;flex:0 0 auto;display:flex;flex-direction:column;border-right:1px solid var(--scv-border);background:var(--scv-panel);min-height:0}',
+        '.scv-tabs{display:flex;flex-wrap:wrap;gap:2px;padding:6px 6px 0}',
+        '.scv-tab{flex:1 0 auto;height:24px;border:1px solid var(--scv-border);border-bottom:none;border-radius:6px 6px 0 0;background:transparent;color:inherit;font:inherit;font-size:11.5px;cursor:pointer;margin:0;padding:0 6px;box-shadow:none}',
         '.scv-tab[aria-selected="true"]{background:var(--scv-bg);font-weight:600}',
-        '.scv-pane{flex:1;overflow:auto;background:var(--scv-bg);border-top:1px solid var(--scv-border);padding:6px 4px;min-height:0}',
-        '.scv-search{width:100%;box-sizing:border-box;margin:0 0 6px;padding:5px 7px;border:1px solid var(--scv-border);border-radius:5px;background:var(--scv-bg);color:inherit;font:inherit;font-size:12px}',
-        '.scv-row{display:flex;align-items:center;gap:3px;padding:2px 4px;border-radius:4px;cursor:pointer;white-space:nowrap;font-size:12px}',
+        '.scv-pane{flex:1;overflow:auto;background:var(--scv-bg);border-top:1px solid var(--scv-border);padding:6px 4px;min-height:0;position:relative}',
+        '.scv-search{width:100%;box-sizing:border-box;margin:0 0 4px;padding:5px 7px;border:1px solid var(--scv-border);border-radius:5px;background:var(--scv-bg);color:inherit;font:inherit;font-size:12px}',
+        '.scv-tools{display:flex;gap:4px;align-items:center;margin:0 0 4px;font-size:11.5px}',
+        '.scv-tools select{font-size:11.5px;padding:1px 4px;border:1px solid var(--scv-border);border-radius:4px;background:var(--scv-bg);color:inherit}',
+        '.scv-tree{position:relative}',
+        '.scv-row{display:flex;align-items:center;gap:3px;padding:0 4px;height:22px;box-sizing:border-box;border-radius:4px;cursor:pointer;white-space:nowrap;font-size:12px;user-select:none}',
         '.scv-row:hover{background:var(--scv-panel)}',
         '.scv-row.scv-sel{background:rgba(26,110,242,.14);box-shadow:inset 3px 0 0 var(--scv-accent)}',
         '.scv-row .scv-lbl{overflow:hidden;text-overflow:ellipsis;flex:1}',
@@ -263,18 +290,39 @@
         '.scv-labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}',
         '.scv-label{position:absolute;transform:translate(-50%,-100%);padding:1px 6px;border-radius:4px;font:600 11px/1.4 var(--font-mono,monospace);color:#fff;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}',
         '.scv-label.scv-measure{background:#14171c;font-family:var(--font-sans,system-ui,sans-serif);font-weight:500}',
-        '.scv-secpanel{position:absolute;top:8px;right:8px;display:none;flex-direction:column;gap:4px;padding:6px 8px;border:1px solid var(--scv-border);border-radius:6px;background:var(--scv-bg);font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.12)}',
+        '.scv-label.scv-approx{background:#7a5a00}',
+        '.scv-label.scv-pmi{background:#fff;color:#0b5d2a;border:1px solid #0b5d2a;font-weight:600;transform:translate(-50%,-50%)}',
+        '.scv-label.scv-note{background:#a3218a;pointer-events:auto;cursor:pointer;transform:translate(-50%,-100%)}',
+        '.scv-label.scv-note.scv-closed{background:#6b6f78}',
+        '.scv-secpanel{position:absolute;top:8px;right:8px;display:none;flex-direction:column;gap:4px;padding:6px 8px;border:1px solid var(--scv-border);border-radius:6px;background:var(--scv-bg);font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.12);max-height:60%;overflow:auto;z-index:2}',
         '.scv-secpanel.scv-open{display:flex}',
         '.scv-secpanel label{display:flex;align-items:center;gap:6px}',
-        '.scv-secpanel input[type=range]{width:160px}',
-        '.scv-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(245,246,248,.94);text-align:center}',
+        '.scv-secpanel input[type=range]{width:140px}',
+        '.scv-legend{position:absolute;left:8px;bottom:8px;display:none;max-width:280px;max-height:45%;overflow:auto;padding:6px 8px;border:1px solid var(--scv-border);border-radius:6px;background:var(--scv-bg);font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.12);z-index:2}',
+        '.scv-legend.scv-open{display:block}',
+        '.scv-legend .scv-lg{display:flex;align-items:center;gap:6px;padding:1px 2px;cursor:pointer;border-radius:3px}',
+        '.scv-legend .scv-lg:hover{background:var(--scv-panel)}',
+        '.scv-overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(245,246,248,.94);text-align:center;z-index:3}',
         '.scv-overlay.scv-open{display:flex}',
         '.scv-overlay .scv-card{max-width:460px;font-size:13px}',
+        '.scv-dialog{position:absolute;top:44px;left:50%;transform:translateX(-50%);display:none;padding:12px 14px;border:1px solid var(--scv-border);border-radius:8px;background:var(--scv-bg);box-shadow:0 6px 24px rgba(0,0,0,.18);z-index:4;font-size:12.5px;min-width:320px}',
+        '.scv-dialog.scv-open{display:block}',
+        '.scv-dialog label{display:flex;align-items:center;gap:8px;margin:4px 0}',
         '.scv-prog{height:6px;border-radius:3px;background:var(--scv-panel);overflow:hidden;margin:10px 0}',
         '.scv-prog>div{height:100%;width:0;background:var(--scv-accent);transition:width .2s}',
         '.scv-status{display:flex;gap:12px;align-items:center;padding:4px 10px;border-top:1px solid var(--scv-border);background:var(--scv-panel);font-size:12px;color:var(--scv-muted);min-height:24px}',
         '.scv-status .scv-hint{flex:1}',
-        '.scv-empty{padding:12px;color:var(--scv-muted);font-size:12px}'
+        '.scv-empty{padding:12px;color:var(--scv-muted);font-size:12px}',
+        '.scv-kv{display:grid;grid-template-columns:96px 1fr;gap:2px 8px;font-size:12px;margin:2px 0 8px}',
+        '.scv-kv dt{color:var(--scv-muted)}',
+        '.scv-kv dd{margin:0;word-break:break-word}',
+        '.scv-h{font-weight:600;font-size:12px;margin:8px 0 4px}',
+        '.scv-item{padding:4px 6px;margin:3px 0;border-radius:5px;background:var(--scv-panel);font-size:12px;cursor:pointer}',
+        '.scv-item:hover{outline:1px solid var(--scv-accent)}',
+        '.scv-item.scv-sel{outline:2px solid var(--scv-accent)}',
+        '.scv-badge{display:inline-block;padding:0 5px;border-radius:3px;font-size:10.5px;font-weight:600;color:#fff}',
+        '.scv-mini{font-size:11px;padding:1px 7px;height:22px}',
+        '.scv-input{font:inherit;font-size:12px;padding:3px 6px;border:1px solid var(--scv-border);border-radius:5px;background:var(--scv-bg);color:inherit;box-sizing:border-box}'
     ].join('\n');
     function injectCss() {
         if (document.getElementById('scv-css')) return;
@@ -289,15 +337,21 @@
 
     // =================================================================== the viewer
     var _seq = 0;
+    var ROW_H = 22;
+    var TABS = [['parts', 'Parts'], ['props', 'Properties'], ['zones', 'Zones'], ['volumes', 'PRA'], ['views', 'Views'], ['notes', 'Notes'], ['clash', 'Clashes'], ['pmi', 'PMI'], ['compare', 'Compare']];
     function Viewer(el, opts) {
         this.el = el; this.opts = opts || {}; this.id = ++_seq;
-        this.listeners = []; this.parts = {}; this.order = []; this.sel = new Set();
+        this.listeners = []; this.parts = {}; this.order = []; this.sel = new Set(); this.metaBy = {};
         this.mode = 'orbit'; this.measure = 'off'; this.xray = false;
-        this.sections = { x: { on: false, t: 0.5, flip: false }, y: { on: false, t: 0.5, flip: false }, z: { on: false, t: 0.5, flip: false } };
+        this.sec = { planes: [], box: null, caps: true, seq: 0 };
+        this.sections = { x: { on: false }, y: { on: false }, z: { on: false } };   // compatibility: which axis planes are on
         this.zonesOn = false; this.volumesOn = false; this.zoneVis = {}; this.volVis = {};
         this.focusZone = null; this.focusVolume = null;
         this.keys = {}; this.labels = []; this.entry = null; this.disposed = false; this.dirty = true;
-        this.expanded = {};
+        this.expanded = {}; this.explode = 0; this.colorByState = null; this.compare = null; this.clashHi = null;
+        this.walk = { vz: 0, eye: 1700, step: 450, radius: 300 };
+        this.filter = ''; this.treeFilter = 'all';
+        this.frameTimes = [];
         this._build();
     }
     var P = Viewer.prototype;
@@ -311,31 +365,40 @@
         this.$ = {};
         function btn(act, label, title) { var b = h('button', { type: 'button', class: 'scv-btn', 'data-act': act, title: title || label, 'aria-label': label }, esc(label)); bar.appendChild(b); return b; }
         function sep() { bar.appendChild(h('span', { class: 'scv-sep', 'aria-hidden': 'true' })); }
+        function sel(act, label, title, options) { var s = h('select', { class: 'scv-btn', 'data-act': act, 'aria-label': label, title: title }, options); bar.appendChild(s); return s; }
         btn('fit', 'Fit all', 'Fit everything visible in view (F)');
-        var vsel = h('select', { class: 'scv-btn', 'data-act': 'view', 'aria-label': 'Standard view', title: 'Look from a standard direction' },
+        this.$.view = sel('view', 'Standard view', 'Look from a standard direction',
             '<option value="">View</option>' + Object.keys(VIEWS).map(function (k) { return '<option value="' + k + '">' + VIEWS[k].label + '</option>'; }).join(''));
-        bar.appendChild(vsel);
         sep();
         this.$.orbit = btn('mode-orbit', 'Orbit', 'Drag to turn around the model, right drag or Shift drag to pan, wheel to zoom at the cursor, double click to turn around a point');
         this.$.fly = btn('mode-fly', 'Fly', 'Fly through: W A S D to move, Q / E down / up, drag to look, Shift for speed, wheel sets speed');
-        this.$.walk = btn('mode-walk', 'Walk', 'Walk through at a fixed height: W A S D to move, Q / E to change height, drag to look');
+        this.$.walk = btn('mode-walk', 'Walk', 'Walk through: W A S D to move on the floor, gravity keeps you down, walls stop you, Q / E crouch or stand taller, drag to look');
         sep();
         btn('hide', 'Hide', 'Hide the selected parts (H)');
         btn('show-all', 'Show all', 'Show every part');
         btn('isolate', 'Isolate', 'Show only the selected parts (I)');
-        this.$.xray = btn('xray', 'X-ray', 'See through everything except the selection (X)');
+        this.$.xray = btn('xray', 'Ghost', 'Ghost every part except the selection (X)');
+        var ex = h('label', { class: 'scv-range', title: 'Explode the assembly: parts move apart from its center' }, 'Explode <input type="range" min="0" max="100" value="0" data-act="explode" aria-label="Explode">');
+        bar.appendChild(ex); this.$.explode = ex.querySelector('input');
         sep();
+        this.$.section = sel('section', 'Section', 'Cut the model: planes along X, Y, Z or a picked face, or a section box',
+            '<option value="">Section</option><option value="x">Add plane X</option><option value="y">Add plane Y</option><option value="z">Add plane Z</option><option value="face">Add plane on a face (click it)</option><option value="box">Section box</option><option value="caps">Filled cut faces on / off</option><option value="clear">Remove all</option>');
         this.$.secx = btn('sec-x', 'Section X', 'Cut the model with a plane across X; drag the plane or use its slider');
         this.$.secy = btn('sec-y', 'Section Y', 'Cut the model with a plane across Y');
         this.$.secz = btn('sec-z', 'Section Z', 'Cut the model with a plane across Z');
         sep();
-        var msel = h('select', { class: 'scv-btn', 'data-act': 'measure', 'aria-label': 'Measure', title: 'Measure the distance between two points or two parts' },
-            '<option value="off">Measure</option><option value="point">Point to point</option><option value="part">Part to part</option>');
-        bar.appendChild(msel); this.$.measure = msel;
+        this.$.measure = sel('measure', 'Measure', 'Measure on the exact geometry (or the display mesh, labeled approximate)',
+            '<option value="off">Measure</option><option value="point">Point to point</option><option value="edge">Edge length</option><option value="radius">Radius / diameter</option><option value="angle">Angle</option><option value="part">Part to part</option>');
+        this.$.colorBy = sel('color-by', 'Color by', 'Color the parts by an attribute (legend at the bottom left)',
+            '<option value="">Color by</option><option value="none">Original colors</option><option value="system">Equipment (system)</option><option value="zone">Zone</option><option value="dal">DAL</option><option value="partNumber">Part number</option><option value="assembly">Assembly</option><option value="designator">Designator</option><option value="material">Material</option><option value="custom">Custom field...</option>');
         sep();
         this.$.zones = btn('zones', 'Zones', 'Show the zone volumes');
-        this.$.vols = btn('volumes', 'PRA volumes', 'Show the particular risk volumes');
+        this.$.vols = btn('volumes', 'PRA', 'Show the particular risk volumes');
+        this.$.pmiBtn = btn('pmi', 'PMI', 'Show the AP242 dimensions, tolerances and datums on the model (reads the exact geometry)');
+        this.$.noteBtn = btn('note', 'Note', 'Pin a note or markup to a part: click the part');
+        btn('snapshot', 'Snapshot', 'Save a PNG of this view, with notes and labels, at the size you choose');
         sep();
+        this.$.exact = h('span', { class: 'scv-chip', 'data-act': 'exact', role: 'button', tabindex: '0', title: 'Exact geometry (B-rep) for measurement and PMI' }, 'Exact: off'); bar.appendChild(this.$.exact);
         this.$.full = btn('fullscreen', 'Full screen', 'Full screen (Esc exits)');
         btn('keys', 'Keys', 'Keyboard and mouse controls');
         rootEl.appendChild(bar);
@@ -343,39 +406,50 @@
         var body = h('div', { class: 'scv-body' });
         var side = h('div', { class: 'scv-side' });
         var tabs = h('div', { class: 'scv-tabs', role: 'tablist' });
-        ['parts', 'zones', 'volumes'].forEach(function (t) {
-            var b = h('button', { type: 'button', class: 'scv-tab', role: 'tab', 'data-tab': t, 'aria-selected': t === 'parts' ? 'true' : 'false' }, t === 'parts' ? 'Parts' : t === 'zones' ? 'Zones' : 'PRA volumes');
-            tabs.appendChild(b);
-        });
-        side.appendChild(tabs);
+        TABS.forEach(function (t) { tabs.appendChild(h('button', { type: 'button', class: 'scv-tab', role: 'tab', 'data-tab': t[0], 'aria-selected': t[0] === 'parts' ? 'true' : 'false' }, t[1])); });
+        side.appendChild(tabs); this.$.tabs = tabs;
         this.$.pane = h('div', { class: 'scv-pane' });
         side.appendChild(this.$.pane);
         body.appendChild(side);
         var cv = this.$.canvas = h('div', { class: 'scv-canvas', tabindex: '0', 'aria-label': '3D model view' });
         this.$.labels = h('div', { class: 'scv-labels' }); cv.appendChild(this.$.labels);
         this.$.secpanel = h('div', { class: 'scv-secpanel' }); cv.appendChild(this.$.secpanel);
+        this.$.legend = h('div', { class: 'scv-legend' }); cv.appendChild(this.$.legend);
+        this.$.dialog = h('div', { class: 'scv-dialog', role: 'dialog' }); cv.appendChild(this.$.dialog);
         this.$.overlay = h('div', { class: 'scv-overlay', role: 'status' }); cv.appendChild(this.$.overlay);
         body.appendChild(cv);
         rootEl.appendChild(body);
         var status = h('div', { class: 'scv-status' });
         this.$.hint = h('span', { class: 'scv-hint' }, 'No model loaded.'); status.appendChild(this.$.hint);
+        this.$.perf = h('span', { title: 'Drawing: parts drawn of the total, chunks, frame time' }, ''); status.appendChild(this.$.perf);
         this.$.selInfo = h('span', {}, ''); status.appendChild(this.$.selInfo);
         rootEl.appendChild(status);
         this.el.appendChild(rootEl);
         this.tab = 'parts';
 
-        bar.addEventListener('click', function (e) { var b = e.target.closest('[data-act]'); if (b && b.tagName === 'BUTTON') self._act(b.getAttribute('data-act')); });
-        vsel.addEventListener('change', function () { if (vsel.value) self.setView(vsel.value); vsel.value = ''; });
-        msel.addEventListener('change', function () { self.setMeasure(msel.value); });
-        tabs.addEventListener('click', function (e) { var b = e.target.closest('[data-tab]'); if (!b) return; self.tab = b.getAttribute('data-tab'); Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute('aria-selected', String(x === b)); }); self._renderPane(); });
+        bar.addEventListener('click', function (e) { var b = e.target.closest('[data-act]'); if (b && (b.tagName === 'BUTTON' || b.classList.contains('scv-chip'))) self._act(b.getAttribute('data-act')); });
+        bar.addEventListener('change', function (e) {
+            var a = e.target.getAttribute('data-act'), v = e.target.value;
+            if (a === 'view') { if (v) self.setView(v); e.target.value = ''; }
+            else if (a === 'measure') self.setMeasure(v);
+            else if (a === 'section') { if (v) self._sectionAction(v); e.target.value = ''; }
+            else if (a === 'color-by') { if (v) self._colorByAction(v); e.target.value = ''; }
+        });
+        bar.addEventListener('input', function (e) { if (e.target.getAttribute('data-act') === 'explode') self.setExplode(+e.target.value / 100); });
+        tabs.addEventListener('click', function (e) { var b = e.target.closest('[data-tab]'); if (b) self.showTab(b.getAttribute('data-tab')); });
         this.$.pane.addEventListener('click', function (e) { self._paneClick(e); });
-        this.$.pane.addEventListener('input', function (e) { if (e.target.classList.contains('scv-search')) { self.filter = e.target.value; self._renderTreeList(); } });
+        this.$.pane.addEventListener('input', function (e) { if (e.target.classList.contains('scv-search')) { self.filter = e.target.value; self._renderTreeList(true); } else if (self._paneInput) self._paneInput(e); });
         this.$.pane.addEventListener('change', function (e) { self._paneChange(e); });
-        this.$.secpanel.addEventListener('input', function (e) { var ax = e.target.getAttribute('data-ax'); if (ax) { self.sections[ax].t = +e.target.value / 1000; self._applySections(); } });
-        this.$.secpanel.addEventListener('click', function (e) { var ax = e.target.getAttribute('data-flip'); if (ax) { self.sections[ax].flip = !self.sections[ax].flip; self._applySections(); } });
+        this.$.pane.addEventListener('scroll', function () { if (self.tab === 'parts') self._renderTreeWindow(); });
+        this.$.secpanel.addEventListener('input', function (e) { self._secInput(e); });
+        this.$.secpanel.addEventListener('click', function (e) { self._secClick(e); });
+        this.$.legend.addEventListener('click', function (e) { var r = e.target.closest('[data-lg]'); if (r && self.colorByState) { var l = self.colorByState.legend[+r.getAttribute('data-lg')]; if (l) { self.select(l.pids, true); self.frameBox(unionBox(l.pids.map(function (p) { return self.metaBy[p] && self.metaBy[p].bbox; }))); } } if (e.target.closest('[data-lg-close]')) self.setColorBy(null); });
+        this.$.exact.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); self._act('exact'); } });
         this._docKey = function (e) { if (self.fullscreen && e.key === 'Escape') { e.preventDefault(); self.toggleFullscreen(false); } };
         document.addEventListener('keydown', this._docKey, true);
-        this._syncButtons();
+        var X = root.SLCadExact;
+        if (X && typeof X.onState === 'function') this._exactUnsub = X.onState(function () { self._syncExact(); });
+        this._syncButtons(); this._syncExact();
         this._renderPane();
     };
 
@@ -387,28 +461,36 @@
             if (self.disposed) return null;
             self.T = T;
             var r;
-            try { r = new T.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: !!self.opts.preserveDrawingBuffer }); }
+            // Depth precision over an aircraft (0.01 mm to 100 m): a reversed depth buffer when the
+            // GPU offers it (keeps early depth rejection: big models draw much faster), else a
+            // logarithmic one.
+            var rev = false;
+            try { var pc0 = document.createElement('canvas').getContext('webgl2'); rev = !!(pc0 && pc0.getExtension('EXT_clip_control')); var lx = pc0 && pc0.getExtension('WEBGL_lose_context'); if (lx) lx.loseContext(); } catch (_) {}
+            if (self.opts.depth === 'log') rev = false;
+            try { r = new T.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: !rev, reversedDepthBuffer: rev, stencil: true, preserveDrawingBuffer: !!self.opts.preserveDrawingBuffer }); }
             catch (e) { self._overlay('<div class="scv-card"><b>3D view unavailable.</b><br>This computer did not allow a WebGL view (' + esc(e && e.message || e) + ').</div>'); throw e; }
             r.setPixelRatio(Math.min(2, root.devicePixelRatio || 1));
             r.localClippingEnabled = true;
             r.setClearColor(0x000000, 0);
-            self.renderer = r;
+            r.autoClear = false;
+            self.renderer = r; self.depthMode = rev ? 'reversed' : 'logarithmic';
             self.$.canvas.insertBefore(r.domElement, self.$.labels);
             var scene = self.scene = new T.Scene();
             self.camera = new T.PerspectiveCamera(45, 1, 1, 1e7);
             self.camera.up.set(0, 0, 1);
             self.camera.position.set(-1000, -1000, 800);
             self.target = new T.Vector3();
-            scene.add(new T.HemisphereLight(0xffffff, 0x8890a0, 1.1));
-            self.light = new T.DirectionalLight(0xffffff, 1.6);
+            var hemi = new T.HemisphereLight(0xffffff, 0x8890a0, 1.1); hemi.layers.enableAll(); scene.add(hemi);
+            self.light = new T.DirectionalLight(0xffffff, 1.6); self.light.layers.enableAll();
             self.camera.add(self.light); self.light.position.set(0.3, 0.6, 1);
             self.light.target.position.set(0, 0, -1); self.camera.add(self.light.target);
             scene.add(self.camera);
-            self.gModel = new T.Group(); self.gZones = new T.Group(); self.gVols = new T.Group(); self.gSec = new T.Group(); self.gMeasure = new T.Group();
-            self.gZones.visible = false; self.gVols.visible = false;
-            [self.gModel, self.gZones, self.gVols, self.gSec, self.gMeasure].forEach(function (g) { scene.add(g); });
-            self.planes = { x: new T.Plane(new T.Vector3(1, 0, 0), 0), y: new T.Plane(new T.Vector3(0, 1, 0), 0), z: new T.Plane(new T.Vector3(0, 0, 1), 0) };
+            self.gModel = new T.Group(); self.gFocus = new T.Group(); self.gZones = new T.Group(); self.gVols = new T.Group(); self.gSec = new T.Group(); self.gMeasure = new T.Group();
+            self.gCaps = new T.Group(); self.gPmi = new T.Group(); self.gNotes = new T.Group(); self.gCompare = new T.Group(); self.gClash = new T.Group();
+            self.gZones.visible = false; self.gVols.visible = false; self.gPmi.visible = false;
+            [self.gModel, self.gFocus, self.gZones, self.gVols, self.gSec, self.gMeasure, self.gCaps, self.gPmi, self.gNotes, self.gCompare, self.gClash].forEach(function (g) { scene.add(g); });
             self.raycaster = new T.Raycaster();
+            self.focusMat = new T.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.6, side: T.DoubleSide, emissive: new T.Color(0x1a6ef2), emissiveIntensity: 0.25 });
             self._bindInput();
             self._resize();
             if (typeof ResizeObserver === 'function') { self._ro = new ResizeObserver(function () { self._resize(); }); self._ro.observe(self.$.canvas); }
@@ -418,7 +500,15 @@
                 self._raf = requestAnimationFrame(loop);
                 var dt = Math.min(0.1, (now - last) / 1000); last = now;
                 if (self.mode !== 'orbit' && self._moveKeys(dt)) self.dirty = true;
-                if (self.dirty) { self.dirty = false; self._render(); }
+                if (self.scene3 && self.scene3.update(self.camera, self.$.canvas.clientHeight || 1)) self.dirty = true;
+                if (self.continuous) self.dirty = true;
+                if (self.dirty || self._capsPending) {
+                    self.dirty = false;
+                    var t0 = performance.now();
+                    self._render(now);
+                    self.frameTimes.push({ at: now, render: performance.now() - t0 });
+                    if (self.frameTimes.length > 240) self.frameTimes.shift();
+                }
             };
             self._raf = requestAnimationFrame(loop);
             return T;
@@ -432,10 +522,62 @@
         this.camera.aspect = w / hh; this.camera.updateProjectionMatrix();
         this.dirty = true;
     };
-    P._render = function () {
-        this.renderer.render(this.scene, this.camera);
+    // Main pass, occlusion queries, filled cut faces, view cube. Caps are drawn when the view is
+    // still (they cost two passes of the model per plane); while the camera moves they wait.
+    P._render = function (now) {
+        var r = this.renderer, cam = this.camera;
+        r.clear(true, true, true);
+        cam.layers.set(0);
+        r.render(this.scene, cam);
+        if (this.scene3 && this.scene3.occlusion) this.scene3.occlusionPass(r, cam);
+        var planes = this._clipPlanes || [];
+        this._capsPending = false;
+        if (planes.length && this.sec.caps) {
+            if (this._interacting && (now || performance.now()) - this._interacting < 200) this._capsPending = true;
+            else this._renderCaps(planes);
+        }
+        this._renderCube();
         this._updateLabels();
         this.frames = (this.frames || 0) + 1;
+    };
+    P._renderCaps = function (planes) {
+        var T = this.T, r = this.renderer, cam = this.camera, self = this;
+        if (!this._stencil || this._stencil.n !== planes.length) this._buildCapMaterials(planes);
+        var st = this._stencil;
+        planes.forEach(function (pl, i) {
+            self.scene.overrideMaterial = st.back[i]; cam.layers.set(1); r.render(self.scene, cam);
+            self.scene.overrideMaterial = st.front[i]; r.render(self.scene, cam);
+            self.scene.overrideMaterial = null;
+            self.gCaps.children.forEach(function (c, k) { c.visible = k === i; });
+            cam.layers.set(2); r.render(self.scene, cam);
+        });
+        this.scene.overrideMaterial = null;
+        cam.layers.set(0);
+        this.capsDrawn = (this.capsDrawn || 0) + 1;
+    };
+    P._buildCapMaterials = function (planes) {
+        var T = this.T, self = this;
+        if (this._stencil) { this._stencil.back.concat(this._stencil.front).forEach(function (m) { m.dispose(); }); }
+        while (this.gCaps.children.length) this._disposeObj(this.gCaps.children.pop());
+        var b = this._modelBox || { min: [0, 0, 0], max: [1, 1, 1] };
+        var size = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) * 2 || 1;
+        var c = new T.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+        var st = { n: planes.length, back: [], front: [] };
+        planes.forEach(function (pl, i) {
+            var base = { depthWrite: false, depthTest: false, colorWrite: false, stencilWrite: true, stencilFunc: T.AlwaysStencilFunc, clippingPlanes: [pl] };
+            st.back.push(new T.MeshBasicMaterial(Object.assign({ side: T.BackSide, stencilFail: T.IncrementWrapStencilOp, stencilZFail: T.IncrementWrapStencilOp, stencilZPass: T.IncrementWrapStencilOp }, base)));
+            st.front.push(new T.MeshBasicMaterial(Object.assign({ side: T.FrontSide, stencilFail: T.DecrementWrapStencilOp, stencilZFail: T.DecrementWrapStencilOp, stencilZPass: T.DecrementWrapStencilOp }, base)));
+            var mat = new T.MeshStandardMaterial({ color: 0xb33a3a, metalness: 0.1, roughness: 0.75, side: T.DoubleSide, clippingPlanes: planes.filter(function (_, k) { return k !== i; }),
+                stencilWrite: true, stencilRef: 0, stencilFunc: T.NotEqualStencilFunc, stencilFail: T.ReplaceStencilOp, stencilZFail: T.ReplaceStencilOp, stencilZPass: T.ReplaceStencilOp });
+            var q = new T.Mesh(new T.PlaneGeometry(size, size), mat);
+            // the plane keeps n.p + constant >= 0; its surface is n.p = -constant
+            var n = pl.normal.clone(), p0 = c.clone().addScaledVector(n, -(n.dot(c) + pl.constant));
+            q.position.copy(p0); q.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), n);
+            q.layers.set(2); q.renderOrder = 20; q.userData.cap = i;
+            q.onAfterRender = function (rr) { rr.clearStencil(); };
+            self.gCaps.add(q);
+        });
+        this._stencil = st;
     };
 
     // ---------------------------------------------------------------- loading
@@ -443,15 +585,27 @@
         if (html == null) { this.$.overlay.classList.remove('scv-open'); this.$.overlay.innerHTML = ''; return; }
         this.$.overlay.innerHTML = html; this.$.overlay.classList.add('scv-open');
     };
+    // every part of a model: the project's list, or for a large model the full list kept on
+    // this computer (SLCadZonal.partsOf)
+    function partsOfEntry(entry) { var E = root.SLCadZonal; return E && E.partsOf ? E.partsOf(entry) : ((entry && entry.parts) || []); }
     P.loadModel = function (cadId) {
         var self = this, I = root.SLCadImport;
         var entry = I ? I.getModel(cadId) : null;
         if (!entry) { this._overlay('<div class="scv-card">No CAD model with this id in the project.</div>'); return Promise.resolve(false); }
         this.entry = entry;
         this._overlay('<div class="scv-card">Opening ' + esc(entry.fileName) + ' from this computer...</div>');
+        try { this._ensure3d(); } catch (_) {}   // the 3D setup runs while the cache is read
+        var TR = I._trace || function () {}; TR('reopen: cache read start');
         return I.cacheGet(entry.sha256).catch(function () { return null; }).then(function (payload) {
+            TR('reopen: cache read');
             if (self.disposed) return false;
-            if (payload && Array.isArray(payload.meshes)) return self.showModel(entry, payload.meshes);
+            if (payload && (Array.isArray(payload.meshes) || payload.packed)) {
+                // a large model's full part list lives in this cache, not in the project
+                var E = root.SLCadZonal;
+                if (entry.partStore === 'local' && E && !E.hasLocalParts(entry.sha256) && payload.parts) { var PP = payload.parts, PM = payload.packed; E.registerLocalParts(entry.sha256, function () { return I.unpackParts(PP, PM); }); }
+                if (entry.partStore === 'local' && E && !E.hasLocalParts(entry.sha256)) { self._askReopen(entry); return false; }
+                return self.showModel(entry, payload);
+            }
             self._askReopen(entry);
             return false;
         });
@@ -469,83 +623,171 @@
             inp.click();
         });
     };
+    var PHASES = { hash: 'Checking the fingerprint...', load: 'Loading the STEP reader...', scan: 'Reading the product structure...', parse: 'Reading the STEP file...', transfer: 'Building the shapes...', mesh: 'Building parts...', fallback: 'Using the smaller reader...', done: 'Saving to this computer...' };
     P.reopenWith = function (file, entry) {
         var self = this, I = root.SLCadImport;
         var msg = this.$.overlay.querySelector('[data-reopen-msg]'), prog = this.$.overlay.querySelector('.scv-prog');
         if (prog) prog.style.display = 'block';
-        var job = I.reopen(file, entry, { onProgress: function (ph, f) { if (msg) msg.textContent = ph === 'parse' ? 'Reading the geometry...' : ph === 'hash' ? 'Checking the fingerprint...' : ph === 'mesh' ? 'Building parts...' : ''; if (prog && f != null) prog.firstChild.style.width = Math.round(f * 100) + '%'; } });
+        var job = I.reopen(file, entry, { keepSession: true, onProgress: function (ph, f) { if (msg) msg.textContent = (PHASES[ph] || ph) + (f != null ? ' ' + Math.round(f * 100) + '%' : ''); if (prog && f != null) prog.firstChild.style.width = Math.round(f * 100) + '%'; } });
         this._job = job;
-        return job.promise.then(function (r) { self._job = null; return self.showModel(entry, r.model.meshes); }, function (e) {
+        return job.promise.then(function (r) {
+            self._job = null;
+            if (r.worker && root.SLCadExact) root.SLCadExact.attach(r.worker, entry);
+            return self.showModel(entry, r.model);
+        }, function (e) {
             self._job = null;
             if (msg) { msg.style.color = 'var(--scv-bad)'; msg.textContent = e.message || String(e); }
             return false;
         });
     };
-    // Build the scene from cached meshes. Chunked so a big aircraft keeps the
-    // page responsive while it builds.
-    P.showModel = function (entry, meshes) {
+    // Build the scene from cached geometry (v2 prototypes + placements, or a v1 list of meshes).
+    // Progressive: the largest parts first, a time slice per frame.
+    // Detail streamed in behind the first view (large assemblies): real shapes replace the boxes.
+    // Batches are queued and applied a few times a second, so the view stays smooth.
+    P.applyDetail = function (list) {
         var self = this;
+        (this._detailQ = this._detailQ || []).push.apply(this._detailQ, list || []);
+        if (this._detailT) return;
+        this._detailT = setTimeout(function () {
+            self._detailT = null;
+            var q = self._detailQ; self._detailQ = [];
+            if (!self.scene3 || !q.length) return;
+            self.scene3.replaceProtos(q);
+            self.detailApplied = (self.detailApplied || 0) + q.length;
+            self.dirty = true;
+        }, 250);
+    };
+    P.showModel = function (entry, geometry) {
+        var self = this, I = root.SLCadImport, R = root.SLCadRender;
         this.entry = entry;
         return this._ensure3d().then(function (T) {
             if (!T || self.disposed) return false;
+            var TR = (I && I._trace) || function () {};
+            TR('viewer: start');
             self._clearModel();
-            var metaBy = {}; (entry.parts || []).forEach(function (p) { metaBy[p.pid] = p; });
-            var mats = {};
-            var i = 0, N = meshes.length;
+            var geom = I.normalizeGeometry(geometry);
+            self.geom = geom; self.attrs = (geometry && geometry.attrs) || {};
+            // one pass, plain loops: 200,000 parts index in a fraction of a second
+            var i, order = [], mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+            var PK = geom.packed, PP = geometry && geometry.parts && geometry.parts.n === (PK && PK.n) ? geometry.parts : null;
+            if (PK && PP && entry.partStore === 'local') {
+                // a large model straight from its cache: order and extent from the flat arrays; the
+                // part records are made when something asks (SLCadZonal.partsOf)
+                order = I.pidsOf(PK, PP).slice();
+                var BB = PP.bbox;
+                for (i = 0; i < PK.n; i++) for (var a0 = 0; a0 < 3; a0++) { if (BB[i * 6 + a0] < mn[a0]) mn[a0] = BB[i * 6 + a0]; if (BB[i * 6 + 3 + a0] > mx[a0]) mx[a0] = BB[i * 6 + 3 + a0]; }
+                self._metaSrc = function () { return partsOfEntry(entry); }; self._metaBy = null; self._partsSame = true;
+                self.order = order;
+                self._modelBox = order.length ? { min: mn, max: mx } : { min: [0, 0, 0], max: [1, 1, 1] };
+                self._packedParts = PP;
+            }
+            var allParts = self._packedParts ? null : partsOfEntry(entry), n = allParts ? allParts.length : 0, ms = allParts ? geom.meshes : null;
+            if (allParts) {
+            // parts and placements in the same order (a large model from its cache): no pid index is
+            // needed for the first frame; the index builds on first use
+            var aligned = n === ms.length;
+            for (i = 0; aligned && i < n; i++) if (allParts[i].pid !== ms[i].pid) aligned = false;
+            var keep;
+            if (aligned) { self._metaSrc = allParts; self._metaBy = null; self._partsSame = true; keep = function () { return true; }; }
+            else {
+                var metaBy = self.metaBy, seen = new Set();
+                for (i = 0; i < n; i++) metaBy[allParts[i].pid] = allParts[i];
+                for (i = 0; i < ms.length; i++) seen.add(ms[i].pid);
+                keep = function (pp) { return seen.has(pp.pid); };
+            }
+            for (i = 0; i < n; i++) {
+                var pp = allParts[i]; if (!keep(pp)) continue;
+                order.push(pp.pid); if (!aligned) self.parts[pp.pid] = pp;
+                var bb = pp.bbox; for (var a = 0; a < 3; a++) { if (bb.min[a] < mn[a]) mn[a] = bb.min[a]; if (bb.max[a] > mx[a]) mx[a] = bb.max[a]; }
+            }
+            self.order = order;
+            self._modelBox = order.length ? { min: mn, max: mx } : { min: [0, 0, 0], max: [1, 1, 1] };
+            }
+            TR('viewer: parts indexed');
+            self._sizeScene();
+            self.setView('iso');
+            var N = self.order.length;
             self._overlay('<div class="scv-card">Building ' + N + ' parts...<div class="scv-prog"><div></div></div></div>');
-            return new Promise(function (resolve) {
-                (function step() {
-                    if (self.disposed) return resolve(false);
-                    var t0 = performance.now();
-                    while (i < N && performance.now() - t0 < 30) {
-                        var m = meshes[i++]; var meta = metaBy[m.pid]; if (!meta) continue;
-                        var g = new T.BufferGeometry();
-                        g.setAttribute('position', new T.BufferAttribute(m.position, 3));
-                        g.setIndex(new T.BufferAttribute(m.index, 1));
-                        if (m.normal && m.normal.length === m.position.length) g.setAttribute('normal', new T.BufferAttribute(m.normal, 3)); else g.computeVertexNormals();
-                        g.computeBoundingBox(); g.computeBoundingSphere();
-                        var col = m.color ? new T.Color(m.color[0], m.color[1], m.color[2]) : new T.Color(0.75, 0.77, 0.8);
-                        var mat = new T.MeshStandardMaterial({ color: col, metalness: 0.1, roughness: 0.65, side: T.DoubleSide });
-                        var mesh = new T.Mesh(g, mat);
-                        mesh.userData.pid = m.pid;
-                        self.gModel.add(mesh);
-                        self.parts[m.pid] = { meta: meta, mesh: mesh, color: col.clone(), position: m.position };
-                        self.order.push(m.pid);
-                    }
-                    var bar = self.$.overlay.querySelector('.scv-prog>div'); if (bar) bar.style.width = Math.round(i / Math.max(1, N) * 100) + '%';
-                    if (i < N) { setTimeout(step, 0); return; }
-                    self._overlay(null);
-                    self.tree = buildTree(self.order.map(function (pid) { return self.parts[pid].meta; }));
-                    self.expanded = {}; (self.tree.root.children || []).forEach(function (c) { self.expanded[c.key] = true; });
-                    self._modelBox = unionBox(self.order.map(function (pid) { return self.parts[pid].meta.bbox; })) || { min: [0, 0, 0], max: [1, 1, 1] };
-                    self._sizeScene();
-                    self._buildZones(); self._buildVolumes(); self._applySections();
-                    self.setView('iso');
-                    self._renderPane();
-                    self._hint(entry.fileName + ' rev ' + entry.revision + ' · ' + self.order.length + ' parts · mm');
-                    self.dirty = true;
-                    resolve(true);
-                })();
+            var sc = self.scene3 = new R.Scene(T, {});
+            sc.clipOk = function (p) { return self._clipOk(p); };
+            self.gModel.add(sc.group);
+            var shown = false;
+            return sc.build(geom, self._packedParts ? { packed: self._packedParts, all: function () { return partsOfEntry(entry); } } : allParts, function (f) {
+                var bar = self.$.overlay.querySelector('.scv-prog>div'); if (bar) bar.style.width = Math.round(f * 100) + '%';
+                sc.chunks.forEach(function (c) { c.mesh.layers.enable(1); });
+                // show the model as soon as the first (largest) chunks exist
+                if (!shown && f > 0) { shown = true; self.$.overlay.style.background = 'transparent'; self.$.overlay.style.pointerEvents = 'none'; self.$.overlay.style.alignItems = 'flex-end'; }
+                self.dirty = true;
+            }).then(function (ok) {
+                TR('viewer: scene built');
+                if (!ok || self.disposed) return false;
+                self.$.overlay.style.background = ''; self.$.overlay.style.pointerEvents = ''; self.$.overlay.style.alignItems = '';
+                self._overlay(null);
+                sc.chunks.forEach(function (c) { c.mesh.layers.enable(1); });
+                if (self.opts.occlusion !== false) sc.setupOcclusion(self.renderer);
+                self._applyClipping();
+                // the parts tree: built when first needed (its tab, a search, a selection), so a
+                // very large model is on screen first
+                self.tree = null; self._treeLazy = true; self.expanded = {};
+                self._buildZones(); self._buildVolumes(); self._rebuildSectionHandles();
+                if (self._afterShow) self._afterShow();
+                TR('viewer: zones and volumes');
+                // the scene starts in each part's own color: repaint only when something overrides it
+                var tinted = self._zoneTint && Object.keys(self._zoneTint).length;
+                if (tinted || self.colorByState || self.clashHi || (self.compare && self.compare.status) || self.sel.size || self.xray) self._paint();
+                TR('viewer: painted');
+                self._renderPane(); TR('viewer: pane drawn');
+                self._hint(entry.fileName + ' rev ' + entry.revision + ' · ' + self.order.length + ' parts · ' + sc.stats.prototypes + ' distinct shapes · ' + sc.drawCalls() + ' draw calls · mm');
+                self.dirty = true;
+                self._emitLoaded();
+                // the pid indexes, once the model is on screen
+                setTimeout(function () { if (self.disposed || self.scene3 !== sc) return; void self.metaBy; void sc.byPid; }, 300);
+                return true;
             });
         });
     };
-    P._clearModel = function () {
+    // metaBy (pid -> part) and parts (pid -> part with geometry): built on first use when the
+    // model came in order from its cache
+    Object.defineProperty(P, 'metaBy', {
+        get: function () { if (!this._metaBy) { var m = {}, L = (typeof this._metaSrc === 'function' ? this._metaSrc() : this._metaSrc) || []; for (var i = 0; i < L.length; i++) m[L[i].pid] = L[i]; this._metaBy = m; } return this._metaBy; },
+        set: function (v) { this._metaBy = v; this._metaSrc = null; }
+    });
+    Object.defineProperty(P, 'parts', {
+        get: function () { return this._partsSame ? this.metaBy : (this._parts || (this._parts = {})); },
+        set: function (v) { this._parts = v; this._partsSame = false; }
+    });
+    P._ensureTree = function () {
+        if (this.tree || !this._treeLazy || !this.order.length) return this.tree;
         var self = this;
-        [this.gModel, this.gZones, this.gVols, this.gMeasure].forEach(function (g) {
+        this.tree = buildTree(this.order.map(function (pid) { return self.metaBy[pid]; }));
+        (this.tree.root.children || []).forEach(function (c) { self.expanded[c.key] = true; });
+        var TR = (root.SLCadImport && root.SLCadImport._trace) || function () {}; TR('viewer: tree built (on demand)');
+        return this.tree;
+    };
+    P._emitLoaded = function () { var cb = this.opts.onLoaded; if (typeof cb === 'function') { try { cb(this.entry); } catch (_) {} } };
+    P._clearModel = function () {
+        var self = this; this._packedParts = null;
+        if (this.scene3) { this.scene3.dispose(); this.scene3 = null; }
+        [this.gModel, this.gFocus, this.gZones, this.gVols, this.gMeasure, this.gPmi, this.gNotes, this.gCompare, this.gClash].forEach(function (g) {
             if (!g) return;
             while (g.children.length) { var o = g.children.pop(); self._disposeObj(o); }
         });
         this.labels.forEach(function (l) { if (l.el.parentNode) l.el.parentNode.removeChild(l.el); });
-        this.labels = []; this.parts = {}; this.order = []; this.sel = new Set(); this.measureState = null;
+        this.labels = []; this.parts = {}; this.order = []; this.sel = new Set(); this.measureState = null; this.metaBy = {};
+        this.colorByState = null; this.compare = null; this.clashHi = null; this.explode = 0; if (this.$.explode) this.$.explode.value = 0;
+        this.$.legend.classList.remove('scv-open');
     };
     P._disposeObj = function (o) {
-        o.traverse(function (x) { if (x.geometry) x.geometry.dispose(); if (x.material) { (Array.isArray(x.material) ? x.material : [x.material]).forEach(function (m) { m.dispose(); }); } });
+        o.traverse(function (x) { if (x.geometry && !x.isBatchedMesh) x.geometry.dispose(); if (x.material && !x.userData.sharedMat) { (Array.isArray(x.material) ? x.material : [x.material]).forEach(function (m) { if (m && m.dispose) m.dispose(); }); } });
     };
     P._sizeScene = function () {
         var b = this._modelBox, d = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) || 1;
         this.size = d;
         this.camera.near = Math.max(d * 1e-5, 0.01); this.camera.far = d * 100; this.camera.updateProjectionMatrix();
         this.flySpeed = d * 0.12;
+        // walking: a person in a big model, a scaled person in a small one
+        this.walk.eye = d > 6000 ? 1700 : Math.max(d * 0.12, 1);
+        this.walk.step = this.walk.eye * 0.26; this.walk.radius = this.walk.eye * 0.18;
     };
 
     // ---------------------------------------------------------------- camera
@@ -561,8 +803,14 @@
         this.dirty = true;
     };
     P._visibleBox = function () {
-        var self = this;
-        return unionBox(this.order.filter(function (pid) { return self.parts[pid].mesh.visible; }).map(function (pid) { return self.parts[pid].meta.bbox; }));
+        var self = this, sc = this.scene3;
+        if (!sc) return null;
+        return unionBox(this.order.filter(function (pid) { return sc.isVisible(pid); }).map(function (pid) { return self._drawnBox(pid); }));
+    };
+    P._drawnBox = function (pid) {
+        var b = this.metaBy[pid] && this.metaBy[pid].bbox; if (!b) return null;
+        var o = this.scene3 ? this.scene3.offsetOf(pid) : [0, 0, 0];
+        return { min: [b.min[0] + o[0], b.min[1] + o[1], b.min[2] + o[2]], max: [b.max[0] + o[0], b.max[1] + o[1], b.max[2] + o[2]] };
     };
     P.frameBox = function (box) {
         if (!box || !this.camera) return;
@@ -577,6 +825,15 @@
         this.dirty = true;
     };
     P.fitAll = function () { this.frameBox(this._visibleBox() || this._modelBox); };
+    P.getCamera = function () { var c = this.camera; return { eye: [c.position.x, c.position.y, c.position.z], target: [this.target.x, this.target.y, this.target.z], up: [c.up.x, c.up.y, c.up.z], fov: c.fov }; };
+    P.setCamera = function (cam) {
+        if (!cam || !this.camera) return;
+        var e = cam.eye || cam.position;
+        this.camera.position.set(e[0], e[1], e[2]); this.target.set(cam.target[0], cam.target[1], cam.target[2]);
+        if (cam.up) this.camera.up.set(cam.up[0], cam.up[1], cam.up[2]);
+        if (cam.fov) { this.camera.fov = cam.fov; this.camera.updateProjectionMatrix(); }
+        this.camera.lookAt(this.target); if (this.mode !== 'orbit') this._setMode('orbit'); this.dirty = true;
+    };
     P._orbit = function (dx, dy) {
         var T = this.T, cam = this.camera, off = new T.Vector3().subVectors(cam.position, this.target);
         var up = new T.Vector3(0, 0, 1);
@@ -611,7 +868,7 @@
     P._zoomAt = function (clientX, clientY, deltaY) {
         var T = this.T, cam = this.camera;
         var hit = this._pick(clientX, clientY);
-        var p = hit ? hit.point : this.target.clone();
+        var p = hit ? new T.Vector3(hit.point[0], hit.point[1], hit.point[2]) : this.target.clone();
         var f = Math.pow(1.0015, deltaY);
         var nd = cam.position.distanceTo(p) * f;
         if (nd < this.size * 1e-4 && f < 1) return;
@@ -620,30 +877,89 @@
         this.target.sub(p).multiplyScalar(f).add(p);
         cam.lookAt(this.target);
     };
+    // Fly: free movement. Walk: on the floor, with gravity and walls (see _walkStep).
     P._moveKeys = function (dt) {
         var k = this.keys, T = this.T, cam = this.camera;
+        if (this.mode === 'walk') return this._walkStep(dt);
         var f = (k.w ? 1 : 0) - (k.s ? 1 : 0), s = (k.d ? 1 : 0) - (k.a ? 1 : 0), u = (k.e ? 1 : 0) - (k.q ? 1 : 0);
         if (!f && !s && !u) return false;
         var sp = this.flySpeed * (k.shift ? 4 : 1) * dt;
         var dir = new T.Vector3(); cam.getWorldDirection(dir);
-        if (this.mode === 'walk') { dir.z = 0; if (dir.lengthSq() < 1e-9) dir.set(1, 0, 0); dir.normalize(); }
         var right = new T.Vector3().crossVectors(dir, new T.Vector3(0, 0, 1)).normalize();
         var mv = new T.Vector3().addScaledVector(dir, f * sp).addScaledVector(right, s * sp).add(new T.Vector3(0, 0, u * sp));
         cam.position.add(mv); this.target.add(mv);
         cam.lookAt(this.target);
         return true;
     };
+    // Rays against the visible parts' meshes (sections respected).
+    P._ray = function (o, d, tmax) {
+        var sc = this.scene3; if (!sc) return null;
+        return sc.raycast(o, d, null, tmax);
+    };
+    // Walk: the eye stays `eye` above the floor under it (gravity, 9.81 m/s2), climbs steps up
+    // to `step`, and walls closer than `radius` stop the move (it slides along them).
+    P._walkStep = function (dt) {
+        var k = this.keys, T = this.T, cam = this.camera, W = this.walk, moved = false;
+        if (k.e) { W.eye = Math.min(W.eye * (1 + dt), this.size); moved = true; }
+        if (k.q) { W.eye = Math.max(W.eye * (1 - dt), W.step * 1.2); moved = true; }
+        var f = (k.w ? 1 : 0) - (k.s ? 1 : 0), s = (k.d ? 1 : 0) - (k.a ? 1 : 0);
+        var p = cam.position;
+        var fwd = new T.Vector3(); cam.getWorldDirection(fwd); fwd.z = 0; if (fwd.lengthSq() < 1e-9) fwd.set(1, 0, 0); fwd.normalize();
+        var right = new T.Vector3().crossVectors(fwd, new T.Vector3(0, 0, 1)).normalize();
+        if (f || s) {
+            var sp = Math.max(W.eye * 0.9, 1) * (k.shift ? 3 : 1) * dt;   // a brisk walk
+            var mv = new T.Vector3().addScaledVector(fwd, f).addScaledVector(right, s).normalize().multiplyScalar(sp);
+            var feet = p.z - W.eye;
+            for (var pass = 0; pass < 2; pass++) {
+                var L = mv.length(); if (L < 1e-9) break;
+                var dir = mv.clone().divideScalar(L), block = null;
+                [feet + W.step + W.eye * 0.05, feet + W.eye * 0.6, p.z].forEach(function (zh) {
+                    var hit = this._ray([p.x, p.y, zh], [dir.x, dir.y, dir.z], L + W.radius);
+                    if (hit && (!block || hit.t < block.t)) block = hit;
+                }, this);
+                if (!block) break;
+                var n = this.scene3.hitNormal(block); var nh = new T.Vector3(n[0], n[1], 0);
+                if (nh.lengthSq() < 1e-6) break;
+                nh.normalize(); if (nh.dot(dir) > 0) nh.negate();
+                var allowed = Math.max(0, block.t - W.radius);
+                var keep = dir.clone().multiplyScalar(allowed);
+                var rest = mv.clone().sub(keep); rest.addScaledVector(nh, -rest.dot(nh));   // slide along the wall
+                p.add(keep); this.target.add(keep);
+                mv = rest; this.walkBlocked = (this.walkBlocked || 0) + 1;
+            }
+            p.add(mv); this.target.add(mv); moved = true;
+        }
+        // gravity: the floor under the eye
+        var down = this._ray([p.x, p.y, p.z], [0, 0, -1], W.eye + W.step + this.size);
+        var floorZ = down ? p.z - down.t : (this._modelBox ? this._modelBox.min[2] : p.z - W.eye);
+        var want = floorZ + W.eye;
+        if (p.z > want + 1e-6) {
+            W.vz -= 9810 * dt * (this.size > 6000 ? 1 : this.size / 6000);
+            var nz = Math.max(want, p.z + W.vz * dt); this.target.z += nz - p.z; p.z = nz;
+            if (nz === want) W.vz = 0;
+            moved = true;
+        } else if (p.z < want - 1e-6) {
+            var up = want - p.z;
+            if (up <= W.step || !down) { this.target.z += up; p.z = want; W.vz = 0; moved = true; }
+        } else W.vz = 0;
+        this.walkFloor = floorZ;
+        if (moved) cam.lookAt(this.target);
+        return moved;
+    };
     P._setMode = function (m) {
         this.mode = m;
         if (m === 'walk' && this.camera && this._modelBox) {
-            // Walk at the model's mid-height, looking level.
             var T = this.T, dir = new T.Vector3(); this.camera.getWorldDirection(dir); dir.z = 0; if (dir.lengthSq() < 1e-9) dir.set(1, 0, 0); dir.normalize();
-            var dist = Math.max(this.size * 0.01, this.camera.position.distanceTo(this.target));
-            this.target.copy(this.camera.position).addScaledVector(dir, dist);
+            // start on the floor under the camera (or the model's lowest point)
+            var p = this.camera.position, down = this._ray([p.x, p.y, p.z], [0, 0, -1]);
+            var floor = down ? p.z - down.t : this._modelBox.min[2];
+            p.z = floor + this.walk.eye; this.walk.vz = 0;
+            var dist = Math.max(this.size * 0.01, this.walk.eye);
+            this.target.copy(p).addScaledVector(dir, dist);
             this.camera.lookAt(this.target);
         }
         this._syncButtons();
-        this._hint(m === 'orbit' ? 'Orbit: drag to turn, right drag to pan, wheel to zoom at the cursor.' : m === 'fly' ? 'Fly: W A S D to move, Q / E down and up, drag to look, Shift for speed, wheel sets speed.' : 'Walk: W A S D to move at this height, Q / E to change height, drag to look.');
+        this._hint(m === 'orbit' ? 'Orbit: drag to turn, right drag to pan, wheel to zoom at the cursor.' : m === 'fly' ? 'Fly: W A S D to move, Q / E down and up, drag to look, Shift for speed, wheel sets speed.' : 'Walk: W A S D to move on the floor (gravity on, walls stop you), Q / E to crouch or stand taller, drag to look, Shift to hurry.');
         this.dirty = true;
     };
 
@@ -653,27 +969,25 @@
         return new this.T.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     };
     P._clipOk = function (pt) {
-        var self = this;
-        return ['x', 'y', 'z'].every(function (a) { return !self.sections[a].on || self.planes[a].distanceToPoint(pt) >= -1e-6; });
+        var pl = this._clipPlanes || [];
+        for (var i = 0; i < pl.length; i++) if (pl[i].normal.x * pt[0] + pl[i].normal.y * pt[1] + pl[i].normal.z * pt[2] + pl[i].constant < -1e-6) return false;
+        return true;
     };
-    P._pick = function (cx, cy) {
-        if (!this.raycaster) return null;
+    // The part under the cursor: { pid, point (as drawn), tri, proto, face }.
+    P._pick = function (cx, cy, filter) {
+        if (!this.raycaster || !this.scene3) return null;
         this.raycaster.setFromCamera(this._ndc(cx, cy), this.camera);
-        var self = this;
-        var objs = this.gModel.children.filter(function (m) { return m.visible; });
-        var hits = this.raycaster.intersectObjects(objs, false);
-        for (var i = 0; i < hits.length; i++) {
-            var m = hits[i].object;
-            if (this.xray && !this.sel.has(m.userData.pid) && this.sel.size) continue;
-            if (self._clipOk(hits[i].point)) return { pid: m.userData.pid, point: hits[i].point.clone() };
-        }
-        return null;
+        var r = this.raycaster.ray, self = this;
+        var flt = filter || (this.xray && this.sel.size ? function (it) { return self.sel.has(it.pid); } : null);
+        var hit = this.scene3.raycast([r.origin.x, r.origin.y, r.origin.z], [r.direction.x, r.direction.y, r.direction.z], flt);
+        if (hit) hit.face = this.scene3.faceOfTri(hit.proto, hit.tri);
+        return hit;
     };
-    P._pickSection = function (cx, cy) {
+    P._pickHandle = function (cx, cy) {
         if (!this.raycaster) return null;
         this.raycaster.setFromCamera(this._ndc(cx, cy), this.camera);
         var hits = this.raycaster.intersectObjects(this.gSec.children.filter(function (m) { return m.visible; }), false);
-        return hits.length ? hits[0].object.userData.axis : null;
+        return hits.length ? hits[0].object.userData.handle : null;
     };
     P._bindInput = function () {
         var self = this, cv = this.$.canvas, el = this.renderer.domElement;
@@ -681,8 +995,10 @@
         el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
         el.addEventListener('pointerdown', function (e) {
             cv.focus({ preventScroll: true });
-            var secAx = self._pickSection(e.clientX, e.clientY);
-            drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, button: e.button, shift: e.shiftKey, moved: false, sec: secAx };
+            if (self._cubeClick(e.clientX, e.clientY)) return;
+            var hd = self._pickHandle(e.clientX, e.clientY);
+            drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, button: e.button, shift: e.shiftKey, moved: false, handle: hd };
+            self._interacting = performance.now();
             try { el.setPointerCapture(e.pointerId); } catch (_) {}
         });
         el.addEventListener('pointermove', function (e) {
@@ -691,7 +1007,8 @@
             drag.x = e.clientX; drag.y = e.clientY;
             if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 3) drag.moved = true;
             if (!drag.moved) return;
-            if (drag.sec) self._dragSection(drag.sec, e.clientX, e.clientY);
+            self._interacting = performance.now();
+            if (drag.handle) self._dragHandle(drag.handle, e.clientX, e.clientY);
             else if (self.mode !== 'orbit') self._look(dx, dy);
             else if (drag.button === 2 || drag.button === 1 || drag.shift) self._pan(dx, dy);
             else self._orbit(dx, dy);
@@ -700,221 +1017,560 @@
         el.addEventListener('pointerup', function (e) {
             if (!drag) return;
             var d = drag; drag = null;
+            self._interacting = performance.now() - 150; self.dirty = true;
             try { el.releasePointerCapture(e.pointerId); } catch (_) {}
-            if (!d.moved && d.button === 0) self._click(e.clientX, e.clientY, e.ctrlKey || e.metaKey || e.shiftKey);
+            if (!d.moved && d.button === 0) self._click(e.clientX, e.clientY, { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey });
         });
         el.addEventListener('dblclick', function (e) {
             if (self.mode !== 'orbit') return;
             var hit = self._pick(e.clientX, e.clientY); if (!hit) return;
-            self.target.copy(hit.point); self.camera.lookAt(self.target); self.dirty = true;
+            self.target.set(hit.point[0], hit.point[1], hit.point[2]); self.camera.lookAt(self.target); self.dirty = true;
         });
         el.addEventListener('wheel', function (e) {
             e.preventDefault();
+            self._interacting = performance.now();
             if (self.mode !== 'orbit') { self.flySpeed *= e.deltaY < 0 ? 1.2 : 1 / 1.2; self._hint('Speed ' + fmtMm(self.flySpeed) + ' per second.'); return; }
             self._zoomAt(e.clientX, e.clientY, e.deltaY); self.dirty = true;
         }, { passive: false });
         cv.addEventListener('keydown', function (e) {
+            if (e.target !== cv) return;
             var k = e.key.toLowerCase();
             if (e.shiftKey) self.keys.shift = true;
-            if (self.mode !== 'orbit' && 'wasdqe'.indexOf(k) >= 0 && k.length === 1) { self.keys[k] = true; e.preventDefault(); return; }
+            if (self.mode !== 'orbit' && 'wasdqe'.indexOf(k) >= 0 && k.length === 1) { self.keys[k] = true; self._interacting = performance.now(); e.preventDefault(); return; }
             if (k === 'f') { self.fitAll(); e.preventDefault(); }
             else if (k === 'h') { self.hideSelected(); e.preventDefault(); }
             else if (k === 'i') { self.isolate(); e.preventDefault(); }
             else if (k === 'x') { self.setXray(!self.xray); e.preventDefault(); }
-            else if (k === 'escape') { if (self.measure !== 'off') self.setMeasure('off'); else if (self.mode !== 'orbit') self._setMode('orbit'); else self.select([]); }
+            else if (k === 'escape') { if (self.noteMode) self.setNoteMode(false); else if (self.measure !== 'off') self.setMeasure('off'); else if (self.mode !== 'orbit') self._setMode('orbit'); else self.select([]); }
         });
         cv.addEventListener('keyup', function (e) { var k = e.key.toLowerCase(); delete self.keys[k]; if (!e.shiftKey) delete self.keys.shift; });
         cv.addEventListener('blur', function () { self.keys = {}; });
     };
-    P._click = function (cx, cy, additive) {
+    P._click = function (cx, cy, mod) {
+        mod = mod || {};
+        if (this._pendingFacePlane) { var hp = this._pick(cx, cy); this._pendingFacePlane = false; if (hp) this.addPlaneFromHit(hp); return; }
         var hit = this._pick(cx, cy);
-        if (this.measure !== 'off') { this._measureClick(hit); return; }
-        if (!hit) { if (!additive) this.select([], true); return; }
-        if (additive) { var s = new Set(this.sel); if (s.has(hit.pid)) s.delete(hit.pid); else s.add(hit.pid); this.select(Array.from(s), true); }
+        if (this.noteMode) { if (hit && this._noteClick) this._noteClick(hit); return; }
+        if (this.measure !== 'off') { this._measureClick(hit, cx, cy); return; }
+        if (!hit) { if (!mod.ctrl && !mod.shift) this.select([], true); return; }
+        if (mod.ctrl || mod.shift) { var s = new Set(this.sel); if (s.has(hit.pid)) s.delete(hit.pid); else s.add(hit.pid); this.select(Array.from(s), true); }
         else this.select([hit.pid], true);
+        this._anchorPid = hit.pid;
         this._reveal(hit.pid);
     };
 
-    // ---------------------------------------------------------------- selection + visibility
-    P._paint = function () {
-        var self = this, anySel = this.sel.size > 0;
-        var tint = this._zoneTint || {};
-        this.order.forEach(function (pid) {
-            var p = self.parts[pid], m = p.mesh.material, on = self.sel.has(pid);
-            m.color.copy(tint[pid] ? new self.T.Color(tint[pid]) : p.color);
-            m.emissive.set(on ? 0x1a6ef2 : 0x000000); m.emissiveIntensity = on ? 0.55 : 0;
-            var ghost = self.xray && !(on || (!anySel && tint[pid]));
-            m.transparent = ghost; m.opacity = ghost ? 0.12 : 1; m.depthWrite = !ghost;
-            m.needsUpdate = true;
-        });
+    // ---------------------------------------------------------------- selection + colors
+    // One color per part, in this order: revision compare, clash pair, color by, zone tint, the
+    // file's own color; a selected part is blended toward blue.
+    P._colorOf = function (pid) {
+        var sc = this.scene3, it = sc && sc.byPid[pid]; if (!it) return null;
+        var c = it.base;
+        var zt = this._zoneTint && this._zoneTint[pid]; if (zt) c = _hexRgb(zt);
+        if (this.colorByState && this.colorByState.byPid[pid]) c = this.colorByState.byPid[pid];
+        if (this.clashHi) { if (this.clashHi.a === pid) c = [0.86, 0.16, 0.16]; else if (this.clashHi.b === pid) c = [0.12, 0.42, 0.95]; }
+        if (this.compare && this.compare.status && this.compare.status[pid]) c = this.compare.colors[this.compare.status[pid]];
+        if (this.sel.has(pid)) c = _mix(c, SEL_RGB, 0.55);
+        return c;
+    };
+    P._paint = function (pids) {
+        var sc = this.scene3; if (!sc) return;
+        var self = this;
+        (pids || this.order).forEach(function (pid) { var c = self._colorOf(pid); if (c) sc.setColor(pid, c, 1); });
+        if (this.xray) this._buildFocus();
         this.dirty = true;
     };
     P.select = function (pids, fromUser) {
-        var self = this;
+        var self = this, prev = this.sel;
         this.sel = new Set((pids || []).filter(function (p) { return self.parts[p]; }));
-        if (this.T) this._paint();
+        if (this.T && this.scene3) {
+            var changed = []; prev.forEach(function (p) { if (!self.sel.has(p)) changed.push(p); }); this.sel.forEach(function (p) { if (!prev.has(p)) changed.push(p); });
+            this._paint(changed);
+            if (this.xray) this.scene3.setGhost(true, Array.from(this.sel));
+        }
         this._renderPane();
-        var parts = Array.from(this.sel).map(function (p) { return self.parts[p].meta; });
+        var parts = Array.from(this.sel).map(function (p) { return self.metaBy[p]; });
         this.$.selInfo.textContent = parts.length === 1 ? (parts[0].name + (parts[0].designator ? ' · ' + parts[0].designator : '') + (parts[0].partNumber ? ' · ' + parts[0].partNumber : '')) : parts.length ? parts.length + ' parts selected' : '';
         if (fromUser) this._emit();
     };
     P._emit = function () {
-        var self = this, ev = { cadId: this.entry && this.entry.id, pids: Array.from(this.sel), parts: Array.from(this.sel).map(function (p) { return self.parts[p].meta; }) };
+        var self = this, ev = { cadId: this.entry && this.entry.id, pids: Array.from(this.sel), parts: Array.from(this.sel).map(function (p) { return self.metaBy[p]; }) };
         this.listeners.slice().forEach(function (cb) { try { cb(ev); } catch (_) {} });
     };
     P.onSelect = function (cb) { var self = this; if (typeof cb !== 'function') return function () {}; this.listeners.push(cb); return function () { self.listeners = self.listeners.filter(function (x) { return x !== cb; }); }; };
-    P.setVisible = function (pids, on) { var self = this; pids.forEach(function (p) { if (self.parts[p]) self.parts[p].mesh.visible = on; }); this.dirty = true; this._renderPane(); };
+    P.isVisible = function (pid) { return !!(this.scene3 && this.scene3.isVisible(pid)); };
+    P.setVisible = function (pids, on) { if (this.scene3) this.scene3.setVisible(pids, on); if (this.xray) this._buildFocus(); this.dirty = true; this._renderPane(); };
     P.hideSelected = function () { this.setVisible(Array.from(this.sel), false); };
     P.showAll = function () { this.setVisible(this.order, true); };
     P.isolate = function () {
         if (!this.sel.size) { this._hint('Select one or more parts first.'); return; }
-        var self = this; this.order.forEach(function (p) { self.parts[p].mesh.visible = self.sel.has(p); }); this.dirty = true; this._renderPane(); this.fitAll();
+        var self = this;
+        this.scene3.setVisible(this.order.filter(function (p) { return !self.sel.has(p); }), false);
+        this.scene3.setVisible(Array.from(this.sel), true);
+        this.dirty = true; this._renderPane(); this.fitAll();
     };
-    P.setXray = function (on) { this.xray = !!on; this._paint(); this._syncButtons(); };
-    P.highlightParts = function (pids) {
-        var self = this, list = (pids || []).filter(function (p) { return self.parts[p]; });
-        list.forEach(function (p) { self.parts[p].mesh.visible = true; });
-        this.select(list, false);
-        if (list.length) { this._reveal(list[0]); this.frameBox(unionBox(list.map(function (p) { return self.parts[p].meta.bbox; }))); }
-        return list.length;
+    P.hiddenPids = function () { var sc = this.scene3; return sc ? this.order.filter(function (p) { return !sc.isVisible(p); }) : []; };
+    // Ghost: every part see-through except the selection, which is drawn solid on top.
+    P.setXray = function (on) {
+        this.xray = !!on;
+        if (this.scene3) { this.scene3.setGhost(this.xray, Array.from(this.sel)); this._buildFocus(); }
+        this._syncButtons(); this.dirty = true;
     };
-
-    // ---------------------------------------------------------------- sections
-    P.toggleSection = function (ax, on) {
-        var s = this.sections[ax]; s.on = on == null ? !s.on : !!on;
-        this._applySections(); this._syncButtons();
-    };
-    P._applySections = function () {
-        var self = this, T = this.T, b = this._modelBox;
-        var any = ['x', 'y', 'z'].some(function (a) { return self.sections[a].on; });
-        this.$.secpanel.classList.toggle('scv-open', any);
-        this.$.secpanel.innerHTML = ['x', 'y', 'z'].filter(function (a) { return self.sections[a].on; }).map(function (a) {
-            var s = self.sections[a], j = 'xyz'.indexOf(a), v = b ? b.min[j] + (b.max[j] - b.min[j]) * s.t : 0;
-            return '<label>' + a.toUpperCase() + ' <input type="range" min="0" max="1000" value="' + Math.round(s.t * 1000) + '" data-ax="' + a + '" aria-label="Section ' + a.toUpperCase() + ' position"> <span style="min-width:72px;font-variant-numeric:tabular-nums">' + fmtMm(v) + '</span> <button type="button" class="scv-btn" data-flip="' + a + '" title="Keep the other side">Flip</button></label>';
-        }).join('');
-        if (!T || !b) return;
-        var active = [];
-        ['x', 'y', 'z'].forEach(function (a) {
-            var s = self.sections[a], j = 'xyz'.indexOf(a), pl = self.planes[a];
-            var pos = b.min[j] + (b.max[j] - b.min[j]) * s.t;
-            var n = [0, 0, 0]; n[j] = s.flip ? 1 : -1;
-            pl.normal.set(n[0], n[1], n[2]); pl.constant = s.flip ? -pos : pos;
-            if (s.on) active.push(pl);
-        });
-        this.order.forEach(function (p) { var m = self.parts[p].mesh.material; m.clippingPlanes = active.length ? active : null; m.needsUpdate = true; });
-        // The draggable plane handles.
-        while (this.gSec.children.length) this._disposeObj(this.gSec.children.pop());
-        ['x', 'y', 'z'].forEach(function (a) {
-            if (!self.sections[a].on) return;
-            var j = 'xyz'.indexOf(a), pad = 0.08;
-            var ext = [b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]];
-            var u = (j + 1) % 3, v = (j + 2) % 3;
-            var g = new T.PlaneGeometry(ext[u] * (1 + pad) || 1, ext[v] * (1 + pad) || 1);
-            var mat = new T.MeshBasicMaterial({ color: 0x1a6ef2, transparent: true, opacity: 0.08, side: T.DoubleSide, depthWrite: false });
-            var q = new T.Mesh(g, mat); q.userData.axis = a;
-            var c = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
-            c[j] = b.min[j] + ext[j] * self.sections[a].t;
-            q.position.set(c[0], c[1], c[2]);
-            if (a === 'x') q.rotation.set(Math.PI / 2, Math.PI / 2, 0); else if (a === 'y') q.rotation.set(Math.PI / 2, 0, 0);
-            if (a === 'x') q.geometry = new T.PlaneGeometry(ext[1] * (1 + pad) || 1, ext[2] * (1 + pad) || 1);
-            if (a === 'y') q.geometry = new T.PlaneGeometry(ext[0] * (1 + pad) || 1, ext[2] * (1 + pad) || 1);
-            if (a === 'z') q.geometry = new T.PlaneGeometry(ext[0] * (1 + pad) || 1, ext[1] * (1 + pad) || 1);
-            g.dispose();
-            var edge = new T.LineSegments(new T.EdgesGeometry(q.geometry), new T.LineBasicMaterial({ color: 0x1a6ef2 }));
-            q.add(edge);
-            self.gSec.add(q);
-        });
+    P._buildFocus = function () {
+        var g = this.gFocus, self = this;
+        while (g.children.length) { var o = g.children.pop(); o.traverse(function (x) { if (x.geometry) x.geometry.dispose(); }); }
+        if (!this.xray || !this.scene3) return;
+        var pids = Array.from(this.sel).filter(function (p) { return self.scene3.isVisible(p); });
+        if (!pids.length) return;
+        this.focusMat.clippingPlanes = this._clipPlanes && this._clipPlanes.length ? this._clipPlanes : null;
+        var m = this.scene3.partsMesh(pids, this.focusMat);
+        m.traverse(function (x) { x.userData.sharedMat = true; x.layers.enable(1); });
+        g.add(m);
         this.dirty = true;
     };
-    // Drag a plane: the point on its axis nearest the mouse ray.
-    P._dragSection = function (ax, cx, cy) {
-        var T = this.T, b = this._modelBox, j = 'xyz'.indexOf(ax);
-        this.raycaster.setFromCamera(this._ndc(cx, cy), this.camera);
-        var ray = this.raycaster.ray;
+    P.highlightParts = function (pids) {
+        var self = this, list = (pids || []).filter(function (p) { return self.parts[p]; });
+        if (this.scene3) this.scene3.setVisible(list, true);
+        this.select(list, false);
+        if (list.length) { this._reveal(list[0]); this.frameBox(unionBox(list.map(function (p) { return self._drawnBox(p); }))); }
+        return list.length;
+    };
+    P.setExplode = function (f) {
+        this.explode = Math.max(0, Math.min(1, +f || 0));
+        if (!this.scene3) return;
+        var b = this._modelBox, c = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
+        var R = root.SLCadRender;
+        this.scene3.setOffsets(this.explode > 0 ? R.explodeOffsets(this.order.map(function (p) { return this.metaBy[p]; }, this), this.explode * 1.5, c) : null);
+        if (this.$.explode && +this.$.explode.value !== Math.round(this.explode * 100)) this.$.explode.value = Math.round(this.explode * 100);
+        if (this.xray) this._buildFocus();
+        if (this.explode > 0 && this.measure !== 'off') this.setMeasure('off');
+        this._refreshOverlayPositions();
+        this.dirty = true;
+    };
+    P._refreshOverlayPositions = function () { if (this._refreshNotes) this._refreshNotes(); };
+
+    // ---------------------------------------------------------------- sections
+    // planes: { id, dir:[unit], offset (mm along dir), on, flip }. A plane keeps dir.p <= offset
+    // (flip keeps the other side). The box keeps its inside. All active cuts apply at once.
+    P._axisDir = function (a) { return a === 'x' ? [1, 0, 0] : a === 'y' ? [0, 1, 0] : [0, 0, 1]; };
+    P.addPlane = function (dir, offset, opts) {
+        opts = opts || {};
+        var L = Math.hypot(dir[0], dir[1], dir[2]); dir = [dir[0] / L, dir[1] / L, dir[2] / L];
+        var b = this._modelBox || { min: [0, 0, 0], max: [1, 1, 1] }, c = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
+        var pl = { id: 'p' + (++this.sec.seq), dir: dir, offset: offset != null ? offset : dir[0] * c[0] + dir[1] * c[1] + dir[2] * c[2], on: true, flip: !!opts.flip, axis: opts.axis || null };
+        this.sec.planes.push(pl);
+        this._applyClipping(); this._syncButtons();
+        return pl;
+    };
+    P.addPlaneFromHit = function (hit) {
+        var self = this, n = this.scene3.hitNormal(hit), p = hit.point;
+        var X = root.SLCadExact;
+        var make = function (nn, pt, exact) { var pl = self.addPlane(nn, nn[0] * pt[0] + nn[1] * pt[1] + nn[2] * pt[2], {}); pl.exact = !!exact; self._hint('Section plane on the face of ' + self.metaBy[hit.pid].name + (exact ? ' (exact face plane).' : ' (from the display mesh).')); };
+        if (X && X.ready(this.entry && this.entry.id) && X.has(hit.pid) && !this.explode) {
+            X.pick(hit.pid, p, hit.face).then(function (r) { if (r && r.face && r.face.type === 'plane') make(r.face.normal, r.face.origin, true); else make(n, p, false); }, function () { make(n, p, false); });
+        } else make(n, p, false);
+    };
+    P.removePlane = function (id) { this.sec.planes = this.sec.planes.filter(function (p) { return p.id !== id; }); this._applyClipping(); this._syncButtons(); };
+    // Compatibility with the axis buttons: one plane per axis, toggled.
+    P.toggleSection = function (ax, on) {
+        var cur = this.sec.planes.find(function (p) { return p.axis === ax; });
+        var want = on == null ? !cur : !!on;
+        if (want && !cur) this.addPlane(this._axisDir(ax), null, { axis: ax });
+        else if (!want && cur) this.removePlane(cur.id);
+        this._syncButtons();
+    };
+    P.setBox = function (on, box) {
+        if (!on) { this.sec.box = null; }
+        else {
+            var b = box || (this.sel.size ? unionBox(Array.from(this.sel).map(function (p) { return this._drawnBox(p); }, this)) : null) || this._modelBox;
+            var pad = Math.max(1, this.size * 0.01);
+            this.sec.box = { min: [b.min[0] - pad, b.min[1] - pad, b.min[2] - pad], max: [b.max[0] + pad, b.max[1] + pad, b.max[2] + pad] };
+        }
+        this._applyClipping(); this._syncButtons();
+    };
+    P._threePlanes = function () {
+        var T = this.T, out = [];
+        this.sec.planes.forEach(function (p) {
+            if (!p.on) return;
+            var s = p.flip ? 1 : -1;   // keep dir.p <= offset  <=>  -dir.p + offset >= 0
+            out.push(new T.Plane(new T.Vector3(s * p.dir[0], s * p.dir[1], s * p.dir[2]), -s * p.offset));
+        });
+        var b = this.sec.box;
+        if (b) for (var j = 0; j < 3; j++) {
+            var n1 = [0, 0, 0], n2 = [0, 0, 0]; n1[j] = 1; n2[j] = -1;
+            out.push(new T.Plane(new T.Vector3(n1[0], n1[1], n1[2]), -b.min[j]));
+            out.push(new T.Plane(new T.Vector3(n2[0], n2[1], n2[2]), b.max[j]));
+        }
+        return out;
+    };
+    P._applySections = function () { this._applyClipping(); };   // name kept from 1.x
+    P._applyClipping = function () {
+        if (!this.T) { this._renderSecPanel(); return; }
+        var planes = this._clipPlanes = this._threePlanes();
+        var list = planes.length ? planes : null;
+        if (this.scene3) { this.scene3.material.clippingPlanes = list; this.scene3.material.needsUpdate = true; this.scene3.ghostMaterial.clippingPlanes = list; this.scene3.ghostMaterial.needsUpdate = true; }
+        this.focusMat.clippingPlanes = list; this.focusMat.needsUpdate = true;
+        if (this._compareMat) { this._compareMat.clippingPlanes = list; this._compareMat.needsUpdate = true; }
+        this._stencil = null;
+        ['x', 'y', 'z'].forEach(function (a) { this.sections[a].on = this.sec.planes.some(function (p) { return p.axis === a && p.on; }); }, this);
+        this._rebuildSectionHandles();
+        this._renderSecPanel();
+        this.dirty = true;
+    };
+    P._secCoord = function (p) { return p.offset; };
+    P._renderSecPanel = function () {
+        var self = this, b = this._modelBox, sp = this.$.secpanel;
+        var any = this.sec.planes.length || this.sec.box;
+        sp.classList.toggle('scv-open', !!any);
+        if (!any) { sp.innerHTML = ''; return; }
+        var rows = this.sec.planes.map(function (p) {
+            var lo = 0, hi = 1;
+            if (b) { var ext = [0, 1, 2].map(function (j) { return [b.min[j], b.max[j]]; }); lo = 0; hi = 0; for (var k = 0; k < 8; k++) { var v = (k & 1 ? ext[0][1] : ext[0][0]) * p.dir[0] + (k & 2 ? ext[1][1] : ext[1][0]) * p.dir[1] + (k & 4 ? ext[2][1] : ext[2][0]) * p.dir[2]; if (k === 0) { lo = hi = v; } lo = Math.min(lo, v); hi = Math.max(hi, v); } }
+            var t = hi > lo ? (p.offset - lo) / (hi - lo) : 0.5;
+            var name = p.axis ? p.axis.toUpperCase() : 'Face ' + p.dir.map(function (x) { return x.toFixed(2); }).join(' ');
+            return '<label data-plane="' + p.id + '"><input type="checkbox" data-on="' + p.id + '"' + (p.on ? ' checked' : '') + ' aria-label="Plane on"> ' + esc(name) + ' <input type="range" min="0" max="1000" value="' + Math.round(Math.max(0, Math.min(1, t)) * 1000) + '" data-ax="' + p.id + '" data-lo="' + lo + '" data-hi="' + hi + '" aria-label="Section ' + esc(name) + ' position"> <span style="min-width:72px;font-variant-numeric:tabular-nums">' + fmtMm(p.offset) + '</span> <button type="button" class="scv-btn scv-mini" data-flip="' + p.id + '" title="Keep the other side">Flip</button><button type="button" class="scv-btn scv-mini" data-del="' + p.id + '" title="Remove this plane" aria-label="Remove">✕</button></label>';
+        });
+        if (this.sec.box) {
+            var bx = this.sec.box;
+            rows.push('<div style="font-weight:600;margin-top:2px">Section box <button type="button" class="scv-btn scv-mini" data-boxsel title="Fit the box to the selection">To selection</button> <button type="button" class="scv-btn scv-mini" data-boxoff>✕</button></div>' +
+                ['x', 'y', 'z'].map(function (a, j) {
+                    return '<label>' + a.toUpperCase() + ' <input class="scv-input" style="width:84px" type="number" step="any" data-box="min' + j + '" value="' + bx.min[j].toFixed(1) + '"> to <input class="scv-input" style="width:84px" type="number" step="any" data-box="max' + j + '" value="' + bx.max[j].toFixed(1) + '"></label>';
+                }).join('') + '<div style="color:var(--scv-muted);font-size:11px">Drag a face of the box in the view to move it.</div>');
+        }
+        rows.push('<label><input type="checkbox" data-caps' + (this.sec.caps ? ' checked' : '') + '> Filled cut faces</label>');
+        sp.innerHTML = rows.join('');
+    };
+    P._secInput = function (e) {
+        var t = e.target, id = t.getAttribute('data-ax');
+        if (id) { var p = this.sec.planes.find(function (x) { return x.id === id; }); if (!p) return; var lo = +t.getAttribute('data-lo'), hi = +t.getAttribute('data-hi'); p.offset = lo + (hi - lo) * (+t.value / 1000); this._interacting = performance.now(); this._applyClippingLight(); var sp = t.parentNode.querySelector('span'); if (sp) sp.textContent = fmtMm(p.offset); return; }
+        var bk = t.getAttribute('data-box');
+        if (bk && this.sec.box && t.value !== '' && isFinite(+t.value)) { var j = +bk.slice(3); this.sec.box[bk.slice(0, 3)][j] = +t.value; this._applyClippingLight(); }
+    };
+    P._secClick = function (e) {
+        var t = e.target, self = this;
+        var f = t.getAttribute('data-flip'); if (f) { var p = this.sec.planes.find(function (x) { return x.id === f; }); if (p) { p.flip = !p.flip; this._applyClipping(); } return; }
+        var d = t.getAttribute('data-del'); if (d) { this.removePlane(d); return; }
+        var on = t.getAttribute('data-on'); if (on) { var q = this.sec.planes.find(function (x) { return x.id === on; }); if (q) { q.on = t.checked; this._applyClipping(); } return; }
+        if (t.hasAttribute('data-caps')) { this.sec.caps = t.checked; this.dirty = true; return; }
+        if (t.hasAttribute('data-boxoff')) { this.setBox(false); return; }
+        if (t.hasAttribute('data-boxsel')) { if (!this.sel.size) { this._hint('Select parts first.'); return; } this.setBox(true); return; }
+        void self;
+    };
+    // While dragging: move the planes without rebuilding the panel.
+    P._applyClippingLight = function () {
+        var fresh = this._threePlanes(), cur = this._clipPlanes || [];
+        if (fresh.length !== cur.length) { this._applyClipping(); return; }
+        fresh.forEach(function (p, i) { cur[i].normal.copy(p.normal); cur[i].constant = p.constant; });
+        if (this._stencil) {
+            var b = this._modelBox, c = new this.T.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2), T = this.T;
+            this.gCaps.children.forEach(function (q, i) { var pl = cur[i], n = pl.normal.clone(); q.position.copy(c.clone().addScaledVector(n, -(n.dot(c) + pl.constant))); q.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), n); });
+        }
+        this._rebuildSectionHandles();
+        this.dirty = true;
+    };
+    // Draggable handles: a translucent quad per plane, a quad per box face.
+    P._rebuildSectionHandles = function () {
+        var T = this.T, self = this, b = this._modelBox; if (!T || !b) return;
+        while (this.gSec.children.length) this._disposeObj(this.gSec.children.pop());
+        var ext = [b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]], diag = Math.hypot(ext[0], ext[1], ext[2]) || 1;
         var c = new T.Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
-        var d = new T.Vector3(); d.setComponent(j, 1);
-        var w0 = new T.Vector3().subVectors(c, ray.origin);
-        var a = 1, bb = d.dot(ray.direction), cc = ray.direction.dot(ray.direction), dd = d.dot(w0), ee = ray.direction.dot(w0);
-        var den = a * cc - bb * bb; if (Math.abs(den) < 1e-9) return;
-        var s = (bb * ee - cc * dd) / den;
-        var coord = c.getComponent(j) + s, ext = b.max[j] - b.min[j] || 1;
-        this.sections[ax].t = Math.max(0, Math.min(1, (coord - b.min[j]) / ext));
-        this._applySections();
+        function quad(w, hh, color, op) {
+            var g = new T.PlaneGeometry(w || 1, hh || 1);
+            var q = new T.Mesh(g, new T.MeshBasicMaterial({ color: color, transparent: true, opacity: op, side: T.DoubleSide, depthWrite: false }));
+            q.add(new T.LineSegments(new T.EdgesGeometry(g), new T.LineBasicMaterial({ color: color })));
+            return q;
+        }
+        this.sec.planes.forEach(function (p) {
+            if (!p.on) return;
+            var n = new T.Vector3(p.dir[0], p.dir[1], p.dir[2]);
+            var w = p.axis === 'x' ? [ext[1], ext[2]] : p.axis === 'y' ? [ext[0], ext[2]] : p.axis === 'z' ? [ext[0], ext[1]] : [diag, diag];
+            var q = quad(w[0] * 1.08, w[1] * 1.08, 0x1a6ef2, 0.08);
+            q.position.copy(c.clone().addScaledVector(n, p.offset - n.dot(c)));
+            if (p.axis === 'x') q.rotation.set(Math.PI / 2, Math.PI / 2, 0); else if (p.axis === 'y') q.rotation.set(Math.PI / 2, 0, 0); else if (p.axis !== 'z') q.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), n);
+            q.userData.handle = { kind: 'plane', id: p.id };
+            self.gSec.add(q);
+        });
+        var bx = this.sec.box;
+        if (bx) {
+            var e2 = [bx.max[0] - bx.min[0], bx.max[1] - bx.min[1], bx.max[2] - bx.min[2]], bc = [(bx.min[0] + bx.max[0]) / 2, (bx.min[1] + bx.max[1]) / 2, (bx.min[2] + bx.max[2]) / 2];
+            [0, 1, 2].forEach(function (j) {
+                ['min', 'max'].forEach(function (side) {
+                    var u = (j + 1) % 3, v = (j + 2) % 3;
+                    var q = quad(e2[j === 0 ? 1 : 0], e2[j === 2 ? 1 : 2], 0xd9480f, 0.06);
+                    var pos = bc.slice(); pos[j] = bx[side][j]; q.position.set(pos[0], pos[1], pos[2]);
+                    if (j === 0) q.rotation.set(Math.PI / 2, Math.PI / 2, 0); else if (j === 1) q.rotation.set(Math.PI / 2, 0, 0);
+                    q.userData.handle = { kind: 'box', axis: j, side: side };
+                    void u; void v;
+                    self.gSec.add(q);
+                });
+            });
+        }
+        this.dirty = true;
+    };
+    // Drag a plane or a box face: the point on its normal line nearest the mouse ray.
+    P._dragHandle = function (hd, cx, cy) {
+        var T = this.T, dir, origin;
+        if (hd.kind === 'plane') { var p = this.sec.planes.find(function (x) { return x.id === hd.id; }); if (!p) return; dir = new T.Vector3(p.dir[0], p.dir[1], p.dir[2]); origin = dir.clone().multiplyScalar(p.offset); }
+        else { var bx = this.sec.box; if (!bx) return; dir = new T.Vector3(); dir.setComponent(hd.axis, 1); origin = new T.Vector3((bx.min[0] + bx.max[0]) / 2, (bx.min[1] + bx.max[1]) / 2, (bx.min[2] + bx.max[2]) / 2); origin.setComponent(hd.axis, bx[hd.side][hd.axis]); }
+        this.raycaster.setFromCamera(this._ndc(cx, cy), this.camera);
+        var ray = this.raycaster.ray, w0 = new T.Vector3().subVectors(origin, ray.origin);
+        var b = dir.dot(ray.direction), cc = ray.direction.dot(ray.direction), dd = dir.dot(w0), ee = ray.direction.dot(w0);
+        var den = cc - b * b; if (Math.abs(den) < 1e-9) return;
+        var s = (b * ee - cc * dd) / den;
+        if (hd.kind === 'plane') { var pl = this.sec.planes.find(function (x) { return x.id === hd.id; }); pl.offset = origin.dot(dir) + s; }
+        else { var v = this.sec.box[hd.side][hd.axis] + s, other = this.sec.box[hd.side === 'min' ? 'max' : 'min'][hd.axis]; this.sec.box[hd.side][hd.axis] = hd.side === 'min' ? Math.min(v, other - 1e-3) : Math.max(v, other + 1e-3); }
+        this._applyClippingLight();
+        this._secPanelValuesLater();
+    };
+    P._secPanelValuesLater = function () { var self = this; clearTimeout(this._spT); this._spT = setTimeout(function () { self._renderSecPanel(); }, 120); };
+    P._sectionAction = function (v) {
+        if (v === 'x' || v === 'y' || v === 'z') this.addPlane(this._axisDir(v), null, { axis: this.sec.planes.some(function (p) { return p.axis === v; }) ? null : v });
+        else if (v === 'face') { this._pendingFacePlane = true; this._hint('Click a face: the plane is laid on it (on the exact face when the exact geometry is open).'); }
+        else if (v === 'box') this.setBox(!this.sec.box);
+        else if (v === 'caps') { this.sec.caps = !this.sec.caps; this._renderSecPanel(); this.dirty = true; }
+        else if (v === 'clear') { this.sec.planes = []; this.sec.box = null; this._applyClipping(); this._syncButtons(); }
+    };
+    P.sectionState = function () { return { planes: this.sec.planes.map(function (p) { return { dir: p.dir.slice(), offset: p.offset, on: p.on && !p.flip ? true : p.on, flip: p.flip }; }), box: this.sec.box ? { min: this.sec.box.min.slice(), max: this.sec.box.max.slice() } : null, caps: this.sec.caps }; };
+    P.setSectionState = function (s) {
+        s = s || {}; var self = this;
+        this.sec.planes = (s.planes || []).map(function (p) { var ax = Math.abs(p.dir[0]) === 1 ? 'x' : Math.abs(p.dir[1]) === 1 ? 'y' : Math.abs(p.dir[2]) === 1 ? 'z' : null; return { id: 'p' + (++self.sec.seq), dir: p.dir.slice(), offset: p.offset, on: p.on !== false, flip: !!p.flip, axis: ax }; });
+        this.sec.box = s.box ? { min: s.box.min.slice(), max: s.box.max.slice() } : null;
+        this.sec.caps = s.caps !== false;
+        this._applyClipping(); this._syncButtons();
     };
 
     // ---------------------------------------------------------------- measure
+    var MEASURE_HINT = { point: 'Measure: click two points on the model.', edge: 'Measure: click an edge (its length, and radius for an arc).', radius: 'Measure: click a round edge or a cylindrical face.', angle: 'Measure: click two edges or faces.', part: 'Measure: click two parts (minimum distance).' };
     P.setMeasure = function (m) {
         this.measure = m || 'off'; this.measureState = null;
         if (this.measure === 'off') this._clearMeasure();
         if (this.$.measure.value !== this.measure) this.$.measure.value = this.measure;
-        this._hint(this.measure === 'point' ? 'Measure: click two points on the model.' : this.measure === 'part' ? 'Measure: click two parts.' : 'Measure off.');
+        if (this.measure !== 'off' && this.explode > 0) { this._hint('Measurements are taken with the model assembled: set Explode to 0 first.'); this.measure = 'off'; this.$.measure.value = 'off'; return; }
+        var X = root.SLCadExact;
+        if (this.measure !== 'off' && X && this.entry && !X.ready(this.entry.id) && X.state().status !== 'loading') this.loadExact();
+        this._hint(this.measure === 'off' ? 'Measure off.' : MEASURE_HINT[this.measure] + (this._exactReady() ? ' Exact geometry.' : ' Exact geometry is loading; until it is ready, values come from the display mesh and are marked approximate.'));
+    };
+    P._exactReady = function () { var X = root.SLCadExact; return !!(X && this.entry && X.ready(this.entry.id)); };
+    P.loadExact = function (file) {
+        var X = root.SLCadExact, self = this; if (!X || !this.entry) return Promise.resolve(false);
+        return X.open(this.entry, file ? { file: file } : {}).then(function () { self._syncExact(); self._hint('Exact geometry ready: measurements and PMI come from the STEP file\'s own surfaces.'); if (self._afterExact) self._afterExact(); return true; }, function (e) {
+            self._syncExact();
+            if (e && e.code === 'need-file') self._hint(e.message);
+            else self._hint('Exact geometry not available: ' + ((e && e.message) || e) + '. Measurements stay approximate.');
+            return false;
+        });
+    };
+    P._askExactFile = function () {
+        var self = this, inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stp,.step,.p21';
+        inp.onchange = function () { if (inp.files && inp.files[0]) self.loadExact(inp.files[0]); };
+        inp.click();
+    };
+    P._syncExact = function () {
+        var X = root.SLCadExact, el = this.$.exact; if (!el) return;
+        var st = X ? X.state() : { status: 'none' }, mine = st.cadId && this.entry && st.cadId === this.entry.id;
+        var s = mine ? st.status : 'none';
+        el.setAttribute('data-st', s);
+        el.textContent = s === 'ready' ? 'Exact: ready' : s === 'loading' ? 'Exact: ' + (PHASES[st.phase] || 'loading').replace(/\.\.\.$/, '') + (st.frac != null ? ' ' + Math.round(st.frac * 100) + '%' : '') : s === 'need-file' ? 'Exact: open the file' : s === 'error' ? 'Exact: not available' : 'Exact: off';
+        el.title = s === 'error' ? (st.error || '') : s === 'need-file' ? 'The STEP file is not kept in this browser. Click to open it (checked against the fingerprint).' : 'Exact geometry (B-rep) for measurement and PMI. Click to load.';
     };
     P._clearMeasure = function () {
-        var self = this;
         while (this.gMeasure && this.gMeasure.children.length) this._disposeObj(this.gMeasure.children.pop());
         this.labels = this.labels.filter(function (l) { if (l.kind === 'measure') { if (l.el.parentNode) l.el.parentNode.removeChild(l.el); return false; } return true; });
-        self.dirty = true;
-    };
-    P._measureClick = function (hit) {
-        if (!hit) return;
-        var st = this.measureState;
-        if (!st) { this._clearMeasure(); this.measureState = { first: hit }; this._marker(hit.point); this._hint(this.measure === 'part' ? 'First part: ' + this.parts[hit.pid].meta.name + '. Click the second part.' : 'Click the second point.'); return; }
-        this.measureState = null;
-        var a, b, text;
-        if (this.measure === 'part') {
-            var r = closestVertexPair(this.parts[st.first.pid].position, this.parts[hit.pid].position);
-            if (!r) return;
-            a = new this.T.Vector3(r.a[0], r.a[1], r.a[2]); b = new this.T.Vector3(r.b[0], r.b[1], r.b[2]);
-            text = 'Closest ' + fmtMm(r.distance) + ' (to mesh resolution)';
-            var ca = this.parts[st.first.pid].meta.centroid, cb = this.parts[hit.pid].meta.centroid;
-            this._hint(this.parts[st.first.pid].meta.name + ' to ' + this.parts[hit.pid].meta.name + ': closest ' + fmtMm(r.distance) + ', centroids ' + fmtMm(Math.hypot(ca[0] - cb[0], ca[1] - cb[1], ca[2] - cb[2])) + ' apart.');
-        } else {
-            a = st.first.point; b = hit.point;
-            var dd = b.clone().sub(a);
-            text = fmtMm(dd.length());
-            this._hint('Distance ' + fmtMm(dd.length()) + ' (dX ' + fmtMm(dd.x) + ', dY ' + fmtMm(dd.y) + ', dZ ' + fmtMm(dd.z) + ').');
-        }
-        this._clearMeasure();
-        this._marker(a); this._marker(b);
-        var T = this.T;
-        var line = new T.Line(new T.BufferGeometry().setFromPoints([a, b]), new T.LineBasicMaterial({ color: 0x14171c, depthTest: false }));
-        line.renderOrder = 10; this.gMeasure.add(line);
-        this._label(a.clone().add(b).multiplyScalar(0.5), text, null, 'measure');
-        this.lastMeasure = { text: text, distance: a.distanceTo(b) };
         this.dirty = true;
     };
+    P._worldPerPx = function (p) {
+        var d = this.camera.position.distanceTo(new this.T.Vector3(p[0], p[1], p[2]));
+        return 2 * d * Math.tan(this.camera.fov * Math.PI / 360) / (this.$.canvas.clientHeight || 1);
+    };
+    // One click of a measurement. Exact when the session is open, else from the display mesh.
+    P._measureClick = function (hit) {
+        if (!hit) return;
+        var self = this, X = root.SLCadExact, mode = this.measure;
+        var exact = this._exactReady() && X.has(hit.pid);
+        var tok = this._mtok = (this._mtok || 0) + 1;
+        var need2 = mode === 'point' || mode === 'angle' || mode === 'part';
+        var withPick = function (fn) {
+            if (!exact || mode === 'part') return fn(null);
+            X.pick(hit.pid, hit.point, hit.face).then(function (pk) { if (tok === self._mtok || need2) fn(pk); }, function () { fn(null); });
+        };
+        withPick(function (pk) {
+            if (mode === 'edge' || mode === 'radius') { self._measureSingle(mode, hit, pk); return; }
+            var st = self.measureState;
+            if (!st) {
+                self._clearMeasure();
+                self.measureState = { first: hit, pk: pk };
+                self._marker(pk ? self._snapPoint(pk, hit) : hit.point);
+                self._hint(mode === 'part' ? 'First part: ' + self.metaBy[hit.pid].name + '. Click the second part.' : mode === 'angle' ? 'First: ' + self._pickWords(pk, hit) + '. Click the second edge or face.' : 'Click the second point.');
+                return;
+            }
+            self.measureState = null;
+            if (mode === 'point') self._measurePoints(st.first, st.pk, hit, pk);
+            else if (mode === 'angle') self._measureAngle(st.first, st.pk, hit, pk);
+            else self._measureParts(st.first, hit);
+        });
+    };
+    // The exact point a pick stands for: a B-rep vertex or edge when the click was within a few
+    // pixels of one, otherwise the projection on the true surface.
+    P._snapPoint = function (pk, hit) {
+        var px = this._worldPerPx(hit.point);
+        if (pk.vertex && pk.vertex.distance <= px * 12) return pk.vertex.point;   // within 12 pixels of a vertex
+        if (pk.edge && pk.edge.distance <= px * 6 && pk.edgePoint) return pk.edgePoint;   // within 6 pixels of an edge
+        return pk.point || hit.point;
+    };
+    P._pickWords = function (pk, hit) { var X = root.SLCadExact; return pk && X ? X.describePick(Object.assign({ edgeTol: this._worldPerPx(hit.point) * 8 }, pk)) || 'face' : 'face (display mesh)'; };
+    P._measurePoints = function (h1, pk1, h2, pk2) {
+        var exact = !!(pk1 && pk2), a = exact ? this._snapPoint(pk1, h1) : h1.point, b = exact ? this._snapPoint(pk2, h2) : h2.point;
+        var d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(d[0], d[1], d[2]);
+        var txt = fmtMm(L) + (exact ? '' : ' (approximate)');
+        this._drawMeasure(a, b, txt, exact);
+        this._hint('Distance ' + fmtMm(L) + ' (dX ' + fmtMm(d[0]) + ', dY ' + fmtMm(d[1]) + ', dZ ' + fmtMm(d[2]) + '). ' + (exact ? 'Exact: points on the true surfaces.' : 'Approximate: points on the display mesh.'));
+        this.lastMeasure = { kind: 'point', value: L, exact: exact, text: txt, a: a, b: b };
+    };
+    P._measureSingle = function (mode, hit, pk) {
+        this._clearMeasure();
+        var X = root.SLCadExact;
+        if (!pk) { this._hint(mode === 'edge' ? 'Edge length needs the exact geometry (it is ' + (this._exactReady() ? 'not available for this part' : 'loading') + ').' : 'Radius needs the exact geometry (it is ' + (this._exactReady() ? 'not available for this part' : 'loading') + ').'); this.lastMeasure = { kind: mode, exact: false, value: null }; return; }
+        var e = pk.edge, f = pk.face, txt, val, pts = null, at;
+        if (mode === 'edge' && e) {
+            txt = (e.type === 'circle' ? 'arc ' : '') + 'length ' + fmtMm(e.length) + (e.type === 'circle' ? ', R ' + fmtMm(e.radius) : '');
+            val = e.length; pts = e.points; at = e.points[Math.floor(e.points.length / 2)];
+        } else if (mode === 'radius' && e && e.type === 'circle' && e.distance <= this._worldPerPx(hit.point) * 10) {
+            txt = 'R ' + fmtMm(e.radius) + ', ⌀ ' + fmtMm(e.diameter); val = e.radius; pts = e.points; at = e.center;
+        } else if (mode === 'radius' && f && (f.type === 'cylinder' || f.type === 'sphere')) {
+            txt = f.type + ' R ' + fmtMm(f.radius) + ', ⌀ ' + fmtMm(2 * f.radius); val = f.radius; at = pk.point;
+        } else { this._hint(mode === 'radius' ? 'That is not a round edge or a cylindrical face (' + X.describePick(pk) + ').' : 'No edge there.'); return; }
+        if (pts) this._polyline(pts, 0xd9480f);
+        if (at) { this._marker(at); this._label(new this.T.Vector3(at[0], at[1], at[2]), txt, null, 'measure'); }
+        this._hint(txt + ' (exact).');
+        this.lastMeasure = { kind: mode, value: val, exact: true, text: txt, pick: pk };
+    };
+    P._measureAngle = function (h1, pk1, h2, pk2) {
+        var X = root.SLCadExact, res = null, exact = false;
+        if (pk1 && pk2 && X) { res = X.angleBetween(pk1, pk2); exact = !!res; }
+        if (!res) {
+            var n1 = this.scene3.hitNormal(h1), n2 = this.scene3.hitNormal(h2), deg = X ? X.angleDeg(n1, n2, true) : null;
+            res = { degrees: deg, a: 'face (display mesh)', b: 'face (display mesh)' };
+        }
+        if (res.degrees == null) { this._hint('No direction to measure an angle from.'); return; }
+        var txt = res.degrees.toFixed(3) + '°' + (exact ? '' : ' (approximate)');
+        this._drawMeasure(h1.point, h2.point, txt, exact);
+        this._hint('Angle ' + txt + ' between ' + res.a + ' and ' + res.b + '.');
+        this.lastMeasure = { kind: 'angle', value: res.degrees, exact: exact, text: txt };
+    };
+    P._measureParts = function (h1, h2) {
+        var self = this, X = root.SLCadExact, R = root.SLCadRender;
+        var a = h1.pid, b = h2.pid;
+        var approx = function () {
+            var ma = self.scene3.meshOf(a), mb = self.scene3.meshOf(b);
+            var r = R.meshDistance(ma, mb, Infinity);
+            if (!r || !r.found) { self._hint('No distance found.'); return; }
+            var txt = 'closest ' + fmtMm(r.d) + ' (approximate)';
+            self._drawMeasure(r.a, r.b, txt, false);
+            self._hint(self.metaBy[a].name + ' to ' + self.metaBy[b].name + ': ' + txt + (r.cross ? ', the meshes cross' : '') + '.');
+            self.lastMeasure = { kind: 'part', value: r.d, exact: false, text: txt };
+        };
+        if (this._exactReady() && X.has(a) && X.has(b)) {
+            X.distance(a, b).then(function (r) {
+                if (!r) { approx(); return; }
+                var txt = 'closest ' + fmtMm(r.distance);
+                self._drawMeasure(r.a, r.b, txt, true);
+                self._hint(self.metaBy[a].name + ' to ' + self.metaBy[b].name + ': ' + txt + ' (exact, between the true surfaces).');
+                self.lastMeasure = { kind: 'part', value: r.distance, exact: true, text: txt };
+            }, approx);
+        } else approx();
+    };
+    P._drawMeasure = function (a, b, text, exact) {
+        var T = this.T;
+        this._clearMeasure();
+        var A = new T.Vector3(a[0], a[1], a[2]), B = new T.Vector3(b[0], b[1], b[2]);
+        this._marker(a); this._marker(b);
+        var line = new T.Line(new T.BufferGeometry().setFromPoints([A, B]), new T.LineBasicMaterial({ color: exact ? 0x14171c : 0x7a5a00, depthTest: false }));
+        line.renderOrder = 10; this.gMeasure.add(line);
+        var l = this._label(A.clone().add(B).multiplyScalar(0.5), text, null, 'measure');
+        if (!exact) l.el.classList.add('scv-approx');
+        this.dirty = true;
+    };
+    P._polyline = function (pts, color) {
+        var T = this.T;
+        var line = new T.Line(new T.BufferGeometry().setFromPoints(pts.map(function (p) { return new T.Vector3(p[0], p[1], p[2]); })), new T.LineBasicMaterial({ color: color || 0xd9480f, depthTest: false }));
+        line.renderOrder = 10; this.gMeasure.add(line); this.dirty = true;
+    };
     P._marker = function (p) {
-        var T = this.T, s = new T.Mesh(new T.SphereGeometry(this.size * 0.004, 12, 8), new T.MeshBasicMaterial({ color: 0x14171c, depthTest: false }));
-        s.position.copy(p); s.renderOrder = 11; this.gMeasure.add(s); this.dirty = true;
+        var T = this.T, s = new T.Mesh(new T.SphereGeometry(this.size * 0.003, 12, 8), new T.MeshBasicMaterial({ color: 0x14171c, depthTest: false }));
+        s.position.set(p[0] != null ? p[0] : p.x, p[1] != null ? p[1] : p.y, p[2] != null ? p[2] : p.z); s.renderOrder = 11; this.gMeasure.add(s); this.dirty = true;
     };
 
     // ---------------------------------------------------------------- labels
     P._label = function (pos, text, color, kind, key) {
-        var el = h('div', { class: 'scv-label' + (kind === 'measure' ? ' scv-measure' : '') }, esc(text));
+        var el = h('div', { class: 'scv-label' + (kind === 'measure' ? ' scv-measure' : kind === 'pmi' ? ' scv-pmi' : kind === 'note' ? ' scv-note' : '') }, esc(text));
         if (color) el.style.background = color;
         this.$.labels.appendChild(el);
-        var l = { el: el, pos: pos, kind: kind, key: key }; this.labels.push(l); return l;
+        var l = { el: el, pos: pos, kind: kind, key: key, text: text }; this.labels.push(l); return l;
     };
     P._updateLabels = function () {
         if (!this.labels.length) return;
         var w = this.$.canvas.clientWidth, hh = this.$.canvas.clientHeight, cam = this.camera, v = new this.T.Vector3();
         var self = this;
         this.labels.forEach(function (l) {
-            var show = l.kind === 'measure' || (l.kind === 'zone' && self.gZones.visible && self.zoneVis[l.key] !== false) || (l.kind === 'vol' && self.gVols.visible && self.volVis[l.key] !== false);
+            var show = l.kind === 'measure' || (l.kind === 'zone' && self.gZones.visible && self.zoneVis[l.key] !== false) || (l.kind === 'vol' && self.gVols.visible && self.volVis[l.key] !== false) || (l.kind === 'pmi' && self.gPmi.visible) || (l.kind === 'note' && self.gNotes.visible && !l.hidden);
             if (show) { v.copy(l.pos).project(cam); show = v.z > -1 && v.z < 1; }
             l.el.style.display = show ? 'block' : 'none';
             if (show) { l.el.style.left = ((v.x + 1) / 2 * w) + 'px'; l.el.style.top = ((1 - v.y) / 2 * hh) + 'px'; }
         });
     };
+    P._dropLabels = function (kind) { this.labels = this.labels.filter(function (l) { if (l.kind === kind) { if (l.el.parentNode) l.el.parentNode.removeChild(l.el); return false; } return true; }); };
+
+    // ---------------------------------------------------------------- view cube (bottom right)
+    var CUBE_PX = 92, CUBE_FACES = [['back', 'Back'], ['front', 'Front'], ['right', 'Right'], ['left', 'Left'], ['top', 'Top'], ['bottom', 'Bottom']];
+    P._cubeScene = function () {
+        if (this._cube) return this._cube;
+        var T = this.T, s = new T.Scene();
+        var mats = CUBE_FACES.map(function (f) {
+            var c = document.createElement('canvas'); c.width = c.height = 128;
+            var g = c.getContext('2d'); g.fillStyle = '#f2f4f8'; g.fillRect(0, 0, 128, 128); g.strokeStyle = '#7a828f'; g.lineWidth = 6; g.strokeRect(3, 3, 122, 122);
+            g.fillStyle = '#14171c'; g.font = 'bold 26px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(f[1], 64, 64);
+            var tx = new T.CanvasTexture(c); tx.colorSpace = T.SRGBColorSpace;
+            return new T.MeshBasicMaterial({ map: tx });
+        });
+        var box = new T.Mesh(new T.BoxGeometry(1, 1, 1), mats);
+        // the face labels read upright from their own side in the Z-up world
+        s.add(box);
+        var ax = new T.AxesHelper(0.9); ax.position.set(-0.75, -0.75, -0.75); s.add(ax);
+        var cam = new T.OrthographicCamera(-1.05, 1.05, 1.05, -1.05, 0.1, 10); cam.up.set(0, 0, 1);
+        this._cube = { scene: s, cam: cam, box: box };
+        return this._cube;
+    };
+    P._cubeRect = function () { var w = this.$.canvas.clientWidth, hh = this.$.canvas.clientHeight; return { x: w - CUBE_PX - 10, y: 10 + (this.$.secpanel.classList.contains('scv-open') ? 0 : 0), w: CUBE_PX, h: CUBE_PX, cw: w, ch: hh }; };
+    P._renderCube = function () {
+        if (this.opts.viewCube === false || !this.order.length) return;
+        var T = this.T, r = this.renderer, cb = this._cubeScene(), rc = this._cubeRect();
+        var dir = new T.Vector3().subVectors(this.camera.position, this.target).normalize();
+        cb.cam.position.copy(dir).multiplyScalar(3); cb.cam.up.copy(this.camera.up); cb.cam.lookAt(0, 0, 0);
+        var y = rc.ch - rc.h - 10;   // bottom right, in GL coordinates from the bottom
+        r.setScissorTest(true); r.setScissor(rc.x, 10, rc.w, rc.h); r.setViewport(rc.x, 10, rc.w, rc.h);
+        r.clearDepth(); r.render(cb.scene, cb.cam);
+        r.setScissorTest(false); r.setViewport(0, 0, rc.cw, rc.ch);
+        this._cubeRectCss = { left: rc.x, top: y, w: rc.w, h: rc.h };
+    };
+    P._cubeClick = function (cx, cy) {
+        var rc = this._cubeRectCss; if (!rc || !this._cube) return false;
+        var br = this.renderer.domElement.getBoundingClientRect(), x = cx - br.left, y = cy - br.top;
+        if (x < rc.left || x > rc.left + rc.w || y < rc.top || y > rc.top + rc.h) return false;
+        var nd = new this.T.Vector2((x - rc.left) / rc.w * 2 - 1, -((y - rc.top) / rc.h) * 2 + 1);
+        var rcst = new this.T.Raycaster(); rcst.setFromCamera(nd, this._cube.cam);
+        var hit = rcst.intersectObject(this._cube.box, false)[0];
+        if (!hit) return true;
+        var face = CUBE_FACES[hit.face.materialIndex]; if (face) { this.setView(face[0]); this._hint('View: ' + face[1] + '.'); }
+        return true;
+    };
 
     // ---------------------------------------------------------------- zones + PRA volumes
     P._zones = function () { var z = _pc().zones; return Array.isArray(z) ? z : []; };
     P._vols = function () { var v = _pc().praVolumes; return Array.isArray(v) ? v : []; };
-    P._dropLabels = function (kind) { this.labels = this.labels.filter(function (l) { if (l.kind === kind) { if (l.el.parentNode) l.el.parentNode.removeChild(l.el); return false; } return true; }); };
     P._buildZones = function () {
         var self = this, T = this.T; if (!T) return;
         while (this.gZones.children.length) this._disposeObj(this.gZones.children.pop());
         this._dropLabels('zone');
+        var prevTint = this._zoneTint || {};
         this.zoneObjs = {}; this._zoneTint = {};
         var cadId = this.entry && this.entry.id;
         this._zones().forEach(function (z) {
@@ -936,12 +1592,14 @@
             } else if (vol.kind === 'parts' && Array.isArray(vol.pids) && (!vol.cadId || vol.cadId === cadId)) {
                 var pids = vol.pids.filter(function (p) { return self.parts[p]; });
                 if (self.gZones.visible && on && !dim) pids.forEach(function (p) { self._zoneTint[p] = col; });
-                var bx = unionBox(pids.map(function (p) { return self.parts[p].meta.bbox; }));
+                var bx = unionBox(pids.map(function (p) { return self.metaBy[p].bbox; }));
                 self.zoneObjs[z.id] = { box: bx, pids: pids };
                 if (bx) self._label(new T.Vector3((bx.min[0] + bx.max[0]) / 2, (bx.min[1] + bx.max[1]) / 2, bx.max[2]), z.code || z.id, col, 'zone', z.id);
             }
         });
-        this._paint();
+        var changed = Object.keys(prevTint).concat(Object.keys(this._zoneTint));
+        if (this.scene3) this._paint(changed.length > this.order.length ? null : changed);
+        this.dirty = true;
     };
     P._buildVolumes = function () {
         var self = this, T = this.T; if (!T) return;
@@ -978,7 +1636,7 @@
     };
     P.setZonesOn = function (on) { this.zonesOn = !!on; if (this.gZones) { this.gZones.visible = this.zonesOn; this._buildZones(); } this._syncButtons(); this.dirty = true; };
     P.setVolumesOn = function (on) { this.volumesOn = !!on; if (this.gVols) this.gVols.visible = this.volumesOn; this._syncButtons(); this.dirty = true; };
-    P.refreshOverlays = function () { if (this.T && this.order.length) { this._buildZones(); this._buildVolumes(); } this._renderPane(); };
+    P.refreshOverlays = function () { if (this.T && this.order.length) { this._buildZones(); this._buildVolumes(); if (this._refreshNotes) this._refreshNotes(); } this._renderPane(); };
     P.highlightZone = function (zoneId) {
         var z = this._zones().find(function (x) { return x && x.id === zoneId; });
         if (!z) return false;
@@ -1002,13 +1660,61 @@
         return !!o;
     };
 
-    // ---------------------------------------------------------------- side panel
+    // ---------------------------------------------------------------- color by
+    P.setColorBy = function (attr, opts) {
+        var R = root.SLCadReview;
+        if (!attr || attr === 'none' || !R) { this.colorByState = null; this.$.legend.classList.remove('scv-open'); this._paint(); return null; }
+        var self = this, E = root.SLCadZonal, ctx = { attrs: this.attrs || {}, field: opts && opts.field };
+        try { if (E && this.entry) { ctx.links = E.confirmed(this.entry.id); var c = E.containment(this.entry.id); var Z = root.ZONES; ctx.zoneOf = {}; c.parts.forEach(function (r) { if (r.zoneId) { var z = Z && Z.get ? Z.get(r.zoneId) : null; ctx.zoneOf[r.pid] = z ? ((z.code ? z.code + ' ' : '') + (z.name || '')).trim() : r.zoneId; } }); } } catch (_) {}
+        try { ctx.systems = (root.SLEnv && root.SLEnv.get('systemsData')) || (typeof systemsData !== 'undefined' ? systemsData : []); } catch (_) { ctx.systems = []; }   // eslint-disable-line no-undef
+        var st = R.colorBy(attr, this.order.map(function (p) { return self.metaBy[p]; }), ctx);
+        st.label = (R.ATTRS[attr] || attr) + (attr === 'custom' ? ': ' + ctx.field : '');
+        this.colorByState = st;
+        this.$.legend.innerHTML = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><b style="flex:1">' + esc(st.label) + '</b><button type="button" class="scv-btn scv-mini" data-lg-close aria-label="Close the legend">✕</button></div>' +
+            st.legend.map(function (l, i) { return '<div class="scv-lg" data-lg="' + i + '" title="Select these parts"><span class="scv-swatch" style="background:' + l.color + '"></span><span style="flex:1">' + esc(l.value == null ? '(none)' : l.value) + '</span><span style="color:var(--scv-muted)">' + l.count + '</span></div>'; }).join('') +
+            (st.reused ? '<div style="color:var(--scv-muted);font-size:11px;margin-top:4px">More values than colors: colors repeat.</div>' : '');
+        this.$.legend.classList.add('scv-open');
+        this._paint();
+        return st;
+    };
+    P._colorByAction = function (v) {
+        if (v === 'custom') { this._customFieldDialog(); return; }
+        this.setColorBy(v);
+    };
+    P._customFieldDialog = function () {
+        var self = this, d = this.$.dialog;
+        d.innerHTML = '<b>Color by a field</b><div style="color:var(--scv-muted);margin:4px 0 6px">A field of the part (name, partNumber, designator), of its STEP attributes (description, material, productId) or of the linked equipment (any field of the system record).</div><label>Field <input class="scv-input" data-cf value="' + esc(this._lastField || '') + '" placeholder="e.g. material"></label><div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px"><button type="button" class="scv-btn" data-cf-cancel>Cancel</button><button type="button" class="scv-btn" data-cf-ok>Color</button></div>';
+        d.classList.add('scv-open');
+        var inp = d.querySelector('[data-cf]'); inp.focus();
+        d.onclick = function (e) {
+            if (e.target.hasAttribute('data-cf-cancel')) { d.classList.remove('scv-open'); }
+            if (e.target.hasAttribute('data-cf-ok')) { self._lastField = inp.value.trim(); d.classList.remove('scv-open'); if (self._lastField) self.setColorBy('custom', { field: self._lastField }); }
+        };
+    };
+
+    // ---------------------------------------------------------------- side panel (parts, zones, PRA; the rest in cad_viewer_panels.js)
+    P.showTab = function (t) {
+        this.tab = t;
+        Array.prototype.forEach.call(this.$.tabs.children, function (x) { x.setAttribute('aria-selected', String(x.getAttribute('data-tab') === t)); });
+        this.$.pane.innerHTML = '';
+        this._renderPane();
+    };
     P._renderPane = function () {
         var pane = this.$.pane; if (!pane) return;
         var self = this;
         if (this.tab === 'parts') {
+            if (!this.tree && this._treeLazy && this.order.length) {
+                pane.innerHTML = '<div class="scv-empty">Listing ' + this.order.length + ' parts...</div>';
+                var me = this; clearTimeout(this._treeT); this._treeT = setTimeout(function () { if (me.disposed) return; me._ensureTree(); if (me.tab === 'parts') me._renderPane(); }, 30);
+                return;
+            }
             if (!this.tree) { pane.innerHTML = '<div class="scv-empty">No model loaded.</div>'; return; }
-            if (!pane.querySelector('.scv-search')) pane.innerHTML = '<input type="search" class="scv-search" placeholder="Find a part by name, number or designator" aria-label="Find a part"><div class="scv-tree" role="tree"></div>';
+            if (!pane.querySelector('.scv-search')) {
+                pane.innerHTML = '<input type="search" class="scv-search" placeholder="Find a part by name, number or designator" aria-label="Find a part" value="' + esc(this.filter) + '">' +
+                    '<div class="scv-tools"><select data-tree-filter aria-label="Filter the parts"><option value="all">All parts</option><option value="visible">Shown</option><option value="hidden">Hidden</option><option value="selected">Selected</option><option value="linked">Linked to equipment</option><option value="unlinked">Not linked</option></select><span data-tree-count style="color:var(--scv-muted)"></span><span style="flex:1"></span><button type="button" class="scv-btn scv-mini" data-sel-all title="Select every part the list shows">Select shown</button></div>' +
+                    '<div class="scv-tree" role="tree" aria-multiselectable="true"></div>';
+                pane.querySelector('[data-tree-filter]').value = this.treeFilter;
+            }
             this._renderTreeList();
         } else if (this.tab === 'zones') {
             var zs = this._zones();
@@ -1019,7 +1725,7 @@
                     (has ? '<input type="checkbox" data-zone-vis="' + esc(z.id) + '"' + (self.zoneVis[z.id] !== false ? ' checked' : '') + ' aria-label="Show zone ' + esc(z.code) + '">' : '<span style="width:13px"></span>') +
                     '<span class="scv-swatch" style="background:' + col + '"></span><span class="scv-lbl"><b>' + esc(z.code || '') + '</b> ' + esc(z.name || '') + (has ? '' : ' (no volume)') + '</span></div>';
             }).join('');
-        } else {
+        } else if (this.tab === 'volumes') {
             var vs = this._vols();
             if (!vs.length) { pane.innerHTML = '<div class="scv-empty">No particular risk volumes in this project.</div>'; return; }
             pane.innerHTML = '<label class="scv-row"><input type="checkbox" data-vols-all' + (this.volumesOn ? ' checked' : '') + '> <b>Show PRA volumes</b></label>' + vs.map(function (v) {
@@ -1028,60 +1734,117 @@
                     (ok ? '<input type="checkbox" data-vol-vis="' + esc(v.id) + '"' + (self.volVis[v.id] !== false ? ' checked' : '') + '>' : '<span style="width:13px"></span>') +
                     '<span class="scv-lbl">' + esc(v.label || v.id) + ' <span class="scv-pn">' + esc(v.shape && v.shape.kind || '') + (ok ? (_unbounded(v.shape) ? ', no reach given: drawn to the model size' : '') : ', incomplete shape') + '</span></span></div>';
             }).join('');
-        }
+        } else if (this._renderOtherPane) this._renderOtherPane(this.tab);
+        else pane.innerHTML = '<div class="scv-empty">This panel is not available in this build.</div>';
     };
-    P._renderTreeList = function () {
-        var host = this.$.pane.querySelector('.scv-tree'); if (!host || !this.tree) return;
-        var self = this, rows = [], q = String(this.filter || '').trim().toLowerCase();
-        function eyeOn(n) { return n.pids.some(function (p) { return self.parts[p] && self.parts[p].mesh.visible; }); }
-        function row(n, depth) {
-            var isLeaf = !!n.pid, open = !!self.expanded[n.key];
-            var sel = isLeaf ? self.sel.has(n.pid) : (n.pids.length && n.pids.every(function (p) { return self.sel.has(p); }));
-            rows.push('<div class="scv-row' + (sel ? ' scv-sel' : '') + '" role="treeitem" data-key="' + esc(n.key) + '"' + (isLeaf ? ' data-pid="' + esc(n.pid) + '"' : ' aria-expanded="' + open + '"') + ' style="padding-left:' + (4 + depth * 14) + 'px">' +
-                (isLeaf ? '<span style="width:18px"></span>' : '<button type="button" class="scv-car" data-car="' + esc(n.key) + '" aria-label="' + (open ? 'Collapse' : 'Expand') + '">' + (open ? '&#9662;' : '&#9656;') + '</button>') +
-                '<button type="button" class="scv-eye' + (eyeOn(n) ? '' : ' scv-off') + '" data-eye="' + esc(n.key) + '" title="Show or hide" aria-label="Show or hide">&#9673;</button>' +
-                '<span class="scv-lbl">' + esc(n.label) + '</span>' + (n.partNumber ? '<span class="scv-pn">' + esc(n.partNumber) + '</span>' : '') + '</div>');
-            if (!isLeaf && open) n.children.forEach(function (c) { row(c, depth + 1); });
+    // The rows the tree shows now (flattened), filter and search applied.
+    P._treeRows = function () {
+        var self = this, rows = [], q = String(this.filter || '').trim().toLowerCase(), f = this.treeFilter, sc = this.scene3;
+        var linked = null;
+        if (f === 'linked' || f === 'unlinked') { try { linked = root.SLCadZonal && this.entry ? root.SLCadZonal.confirmed(this.entry.id) : {}; } catch (_) { linked = {}; } }
+        var keep = function (pid) {
+            if (f === 'visible') return sc && sc.isVisible(pid);
+            if (f === 'hidden') return sc && !sc.isVisible(pid);
+            if (f === 'selected') return self.sel.has(pid);
+            if (f === 'linked') return !!linked[pid];
+            if (f === 'unlinked') return !linked[pid];
+            return true;
+        };
+        if (q || f !== 'all') {
+            this.order.forEach(function (pid) {
+                var m = self.metaBy[pid];
+                if (!keep(pid)) return;
+                if (q && (m.name + ' ' + (m.partNumber || '') + ' ' + (m.designator || '') + ' ' + (m.path || []).join(' ')).toLowerCase().indexOf(q) < 0) return;
+                rows.push({ key: 'pid:' + pid, label: m.name + (m.designator ? ' (' + m.designator + ')' : ''), pid: pid, partNumber: m.partNumber, pids: [pid], children: [], depth: 0, flat: true });
+            });
+            return rows;
         }
-        if (q) {
-            var hits = this.order.map(function (p) { return self.parts[p].meta; }).filter(function (m) { return (m.name + ' ' + (m.partNumber || '') + ' ' + (m.designator || '')).toLowerCase().indexOf(q) >= 0; });
-            hits.slice(0, 500).forEach(function (m) { row({ key: 'pid:' + m.pid, label: m.name + (m.designator ? ' (' + m.designator + ')' : ''), pid: m.pid, partNumber: m.partNumber, pids: [m.pid], children: [] }, 0); });
-            if (!hits.length) rows.push('<div class="scv-empty">No part matches.</div>');
-            if (hits.length > 500) rows.push('<div class="scv-empty">' + (hits.length - 500) + ' more; narrow the search.</div>');
-        } else this.tree.root.children.forEach(function (c) { row(c, 0); });
-        host.innerHTML = rows.join('');
+        if (!this._ensureTree()) return rows;
+        (function walk(list, depth) { list.forEach(function (n) { rows.push({ node: n, depth: depth }); if (!n.pid && self.expanded[n.key]) walk(n.children, depth + 1); }); })(this.tree.root.children, 0);
+        return rows.map(function (r) { if (r.node) { var n = r.node; return { key: n.key, label: n.label, pid: n.pid || null, partNumber: n.partNumber || null, pids: n.pids, children: n.children, depth: r.depth }; } return r; });
+    };
+    P._renderTreeList = function (resetScroll) {
+        var host = this.$.pane.querySelector('.scv-tree'); if (!host || !this._ensureTree()) return;
+        this._rows = this._treeRows();
+        var cnt = this.$.pane.querySelector('[data-tree-count]');
+        if (cnt) cnt.textContent = (this.filter || this.treeFilter !== 'all' ? this._rows.length + ' of ' : '') + this.order.length + ' parts';
+        host.style.height = (this._rows.length * ROW_H) + 'px';
+        if (resetScroll) this.$.pane.scrollTop = 0;
+        this._renderTreeWindow(true);
+    };
+    // Only the rows in view (plus a margin) exist in the page: a 200,000 part tree stays light.
+    P._renderTreeWindow = function (force) {
+        var host = this.$.pane.querySelector('.scv-tree'); if (!host || !this._rows) return;
+        var pane = this.$.pane, top = Math.max(0, pane.scrollTop - host.offsetTop), view = pane.clientHeight || 400;
+        var first = Math.max(0, Math.floor(top / ROW_H) - 10), last = Math.min(this._rows.length, Math.ceil((top + view) / ROW_H) + 10);
+        if (!force && this._win && this._win[0] === first && this._win[1] === last) return;
+        this._win = [first, last];
+        var self = this, sc = this.scene3, out = [];
+        for (var i = first; i < last; i++) {
+            var n = this._rows[i], isLeaf = !!n.pid, open = !!this.expanded[n.key];
+            var sel = isLeaf ? this.sel.has(n.pid) : (n.pids.length && n.pids.length <= 5000 && n.pids.every(function (p) { return self.sel.has(p); }));
+            var eye = sc ? (isLeaf ? sc.isVisible(n.pid) : n.pids.some(function (p) { return sc.isVisible(p); })) : true;
+            out.push('<div class="scv-row' + (sel ? ' scv-sel' : '') + '" role="treeitem" data-row="' + i + '" data-key="' + esc(n.key) + '"' + (isLeaf ? ' data-pid="' + esc(n.pid) + '"' : ' aria-expanded="' + open + '"') + ' aria-selected="' + !!sel + '" style="position:absolute;left:0;right:0;top:' + (i * ROW_H) + 'px;padding-left:' + (4 + (n.depth || 0) * 14) + 'px">' +
+                (isLeaf || n.flat ? '<span style="width:18px"></span>' : '<button type="button" class="scv-car" data-car="' + esc(n.key) + '" aria-label="' + (open ? 'Collapse' : 'Expand') + '">' + (open ? '&#9662;' : '&#9656;') + '</button>') +
+                '<button type="button" class="scv-eye' + (eye ? '' : ' scv-off') + '" data-eye="' + esc(n.key) + '" title="Show or hide" aria-label="Show or hide">&#9673;</button>' +
+                '<span class="scv-lbl">' + esc(n.label) + '</span>' + (n.partNumber ? '<span class="scv-pn">' + esc(n.partNumber) + '</span>' : '') + '</div>');
+        }
+        host.innerHTML = out.join('') + (this._rows.length ? '' : '<div class="scv-empty">No part matches.</div>');
     };
     P._nodeByKey = function (key) {
+        if (!this.tree) this._ensureTree();
         if (!this.tree) return null;
         if (key.indexOf('pid:') === 0) { var pid = key.slice(4); return this.parts[pid] ? { pid: pid, pids: [pid] } : null; }
         return this.tree.byKey[key] || null;
     };
     P._paneClick = function (e) {
         var t = e.target, self = this;
-        var car = t.closest('[data-car]'); if (car) { var k = car.getAttribute('data-car'); this.expanded[k] = !this.expanded[k]; this._renderTreeList(); return; }
-        var eye = t.closest('[data-eye]'); if (eye) { var n = this._nodeByKey(eye.getAttribute('data-eye')); if (n) { var on = !n.pids.some(function (p) { return self.parts[p].mesh.visible; }); this.setVisible(n.pids, on); } return; }
-        if (t.matches('input')) return;
-        var r = t.closest('[data-key]');
-        if (r) { var nn = this._nodeByKey(r.getAttribute('data-key')); if (!nn) return; this.select(nn.pids, true); this.setVisible(nn.pids.filter(function (p) { return !self.parts[p].mesh.visible; }), true); this.frameBox(unionBox(nn.pids.map(function (p) { return self.parts[p].meta.bbox; }))); return; }
-        var zr = t.closest('[data-zone]'); if (zr) { this.highlightZone(zr.getAttribute('data-zone')); this._emitZone(zr.getAttribute('data-zone')); return; }
-        var vr = t.closest('[data-vol]'); if (vr) { this.highlightVolume(vr.getAttribute('data-vol')); this._emitVol(vr.getAttribute('data-vol')); }
+        if (this.tab === 'parts') {
+            var car = t.closest('[data-car]'); if (car) { var k = car.getAttribute('data-car'); this.expanded[k] = !this.expanded[k]; this._renderTreeList(); return; }
+            var eye = t.closest('[data-eye]'); if (eye) { var n = this._nodeByKey(eye.getAttribute('data-eye')); if (n) { var on = !n.pids.some(function (p) { return self.isVisible(p); }); this.setVisible(n.pids, on); } return; }
+            if (t.hasAttribute('data-sel-all')) { this.select(this._rows.filter(function (r) { return r.pid; }).map(function (r) { return r.pid; }), true); return; }
+            if (t.matches('input,select')) return;
+            var r = t.closest('[data-row]');
+            if (r) {
+                var idx = +r.getAttribute('data-row'), nn = this._rows[idx]; if (!nn) return;
+                var pids = nn.pids;
+                if (e.shiftKey && this._anchorRow != null) {
+                    var a = Math.min(this._anchorRow, idx), b = Math.max(this._anchorRow, idx), set = new Set(e.ctrlKey || e.metaKey ? this.sel : []);
+                    for (var i = a; i <= b; i++) this._rows[i].pids.forEach(function (p) { set.add(p); });
+                    this.select(Array.from(set), true);
+                } else if (e.ctrlKey || e.metaKey) {
+                    var s2 = new Set(this.sel), all = pids.every(function (p) { return s2.has(p); });
+                    pids.forEach(function (p) { if (all) s2.delete(p); else s2.add(p); });
+                    this.select(Array.from(s2), true); this._anchorRow = idx;
+                } else {
+                    this.select(pids, true); this._anchorRow = idx;
+                    this.setVisible(pids.filter(function (p) { return !self.isVisible(p); }), true);
+                    this.frameBox(unionBox(pids.map(function (p) { return self._drawnBox(p); })));
+                }
+                return;
+            }
+        }
+        var zr = t.closest('[data-zone]'); if (zr && !t.matches('input')) { this.highlightZone(zr.getAttribute('data-zone')); this._emitZone(zr.getAttribute('data-zone')); return; }
+        var vr = t.closest('[data-vol]'); if (vr && !t.matches('input')) { this.highlightVolume(vr.getAttribute('data-vol')); this._emitVol(vr.getAttribute('data-vol')); return; }
+        if (this._otherPaneClick) this._otherPaneClick(e);
     };
     P._emitZone = function (id) { var cb = this.opts.onZone; if (typeof cb === 'function') { try { cb(id); } catch (_) {} } };
     P._emitVol = function (id) { var cb = this.opts.onVolume; if (typeof cb === 'function') { try { cb(id); } catch (_) {} } };
     P._paneChange = function (e) {
         var t = e.target;
+        if (t.hasAttribute('data-tree-filter')) { this.treeFilter = t.value; this._renderTreeList(true); return; }
         if (t.hasAttribute('data-zones-all')) { this.setZonesOn(t.checked); return; }
         if (t.hasAttribute('data-vols-all')) { this.setVolumesOn(t.checked); return; }
         var zid = t.getAttribute('data-zone-vis'); if (zid) { this.zoneVis[zid] = t.checked; if (!this.zonesOn && t.checked) this.setZonesOn(true); else if (this.T) this._buildZones(); return; }
-        var vid = t.getAttribute('data-vol-vis'); if (vid) { this.volVis[vid] = t.checked; if (!this.volumesOn && t.checked) this.setVolumesOn(true); if (this.T) this._buildVolumes(); }
+        var vid = t.getAttribute('data-vol-vis'); if (vid) { this.volVis[vid] = t.checked; if (!this.volumesOn && t.checked) this.setVolumesOn(true); if (this.T) this._buildVolumes(); return; }
+        if (this._otherPaneChange) this._otherPaneChange(e);
     };
     P._reveal = function (pid) {
         var self = this;
-        ancestorsOf(pid, this.order.map(function (p) { return self.parts[p].meta; })).forEach(function (k) { self.expanded[k] = true; });
-        if (this.tab !== 'parts') { this.tab = 'parts'; Array.prototype.forEach.call(this.root.querySelectorAll('.scv-tab'), function (x) { x.setAttribute('aria-selected', String(x.getAttribute('data-tab') === 'parts')); }); this.$.pane.innerHTML = ''; this._renderPane(); }
-        else this._renderTreeList();
-        var rowEl = this.$.pane.querySelector('[data-pid="' + (root.CSS && root.CSS.escape ? root.CSS.escape(pid) : pid.replace(/"/g, '\\"')) + '"]');
-        if (rowEl && rowEl.scrollIntoView) rowEl.scrollIntoView({ block: 'nearest' });
+        ancestorsOf(pid, [this.metaBy[pid]].filter(Boolean)).forEach(function (k) { self.expanded[k] = true; });
+        if (this.tab !== 'parts') { if (this.tab === 'props') { this._renderPane(); return; } this.showTab('parts'); } else this._renderTreeList();
+        var i = this._rows ? this._rows.findIndex(function (r) { return r.pid === pid; }) : -1;
+        if (i >= 0) { var host = this.$.pane.querySelector('.scv-tree'); var y = (host ? host.offsetTop : 0) + i * ROW_H; if (y < this.$.pane.scrollTop || y > this.$.pane.scrollTop + this.$.pane.clientHeight - ROW_H) this.$.pane.scrollTop = Math.max(0, y - this.$.pane.clientHeight / 2); this._renderTreeWindow(true); }
     };
 
     // ---------------------------------------------------------------- toolbar
@@ -1100,8 +1863,12 @@
             case 'sec-z': this.toggleSection('z'); break;
             case 'zones': this.setZonesOn(!this.zonesOn); this._renderPane(); break;
             case 'volumes': this.setVolumesOn(!this.volumesOn); this._renderPane(); break;
+            case 'pmi': if (this.setPmiOn) this.setPmiOn(!this.pmiOn); break;
+            case 'note': if (this.setNoteMode) this.setNoteMode(!this.noteMode); break;
+            case 'snapshot': if (this.openSnapshot) this.openSnapshot(); break;
+            case 'exact': { var X = root.SLCadExact, st = X && X.state(); if (st && st.status === 'need-file') this._askExactFile(); else this.loadExact(); break; }
             case 'fullscreen': this.toggleFullscreen(); break;
-            case 'keys': this._hint('Orbit: drag, right drag pans, wheel zooms at the cursor, double click sets the turning point. Fly / Walk: W A S D, Q / E, drag to look, Shift faster. F fit, H hide, I isolate, X x-ray, Esc clears.'); break;
+            case 'keys': this._hint('Orbit: drag, right drag pans, wheel zooms at the cursor, double click sets the turning point. Fly / Walk: W A S D, Q / E, drag to look, Shift faster. F fit, H hide, I isolate, X ghost, Esc clears. Parts list: Ctrl or Cmd click adds, Shift click selects a range. View cube (bottom right): click a face.'); break;
         }
     };
     P._syncButtons = function () {
@@ -1110,9 +1877,11 @@
         $.fly.setAttribute('aria-pressed', String(this.mode === 'fly'));
         $.walk.setAttribute('aria-pressed', String(this.mode === 'walk'));
         $.xray.setAttribute('aria-pressed', String(this.xray));
-        ['x', 'y', 'z'].forEach(function (a) { $['sec' + a].setAttribute('aria-pressed', String(self.sections[a].on)); });
+        ['x', 'y', 'z'].forEach(function (a) { $['sec' + a].setAttribute('aria-pressed', String(self.sec.planes.some(function (p) { return p.axis === a; }))); });
         $.zones.setAttribute('aria-pressed', String(this.zonesOn));
         $.vols.setAttribute('aria-pressed', String(this.volumesOn));
+        $.pmiBtn.setAttribute('aria-pressed', String(!!this.pmiOn));
+        $.noteBtn.setAttribute('aria-pressed', String(!!this.noteMode));
         $.full.setAttribute('aria-pressed', String(!!this.fullscreen));
         $.full.textContent = this.fullscreen ? 'Exit full screen' : 'Full screen';
     };
@@ -1124,11 +1893,20 @@
         return this.fullscreen;
     };
     P._hint = function (t) { this.$.hint.textContent = t; };
+    // Frame time over the last frames drawn (for the status line and the scale proof).
+    P.perfStats = function () {
+        var f = this.frameTimes.slice(-120), iv = [];
+        for (var i = 1; i < f.length; i++) iv.push(f[i].at - f[i - 1].at);
+        iv.sort(function (a, b) { return a - b; });
+        var sc = this.scene3, s = sc ? sc.stats : {};
+        return { frames: f.length, medianFrameMs: iv.length ? iv[Math.floor(iv.length / 2)] : null, p95FrameMs: iv.length ? iv[Math.floor(iv.length * 0.95)] : null, medianRenderMs: f.length ? f.map(function (x) { return x.render; }).sort(function (a, b) { return a - b; })[Math.floor(f.length / 2)] : null, parts: this.order.length, drawn: s.drawn, coarse: s.coarseDrawn, culledFrustum: s.culledFrustum, culledSmall: s.culledSmall, chunks: s.chunks, instancedShapes: s.instancedShapes, drawCalls: s.drawCalls, prototypes: s.prototypes, occludedChunks: s.occludedChunks };
+    };
     P.dispose = function () {
         this.disposed = true;
         if (this._job) { try { this._job.cancel(); } catch (_) {} }
         try { cancelAnimationFrame(this._raf); } catch (_) {}
         if (this._ro) { try { this._ro.disconnect(); } catch (_) {} }
+        if (this._exactUnsub) this._exactUnsub();
         document.removeEventListener('keydown', this._docKey, true);
         if (this.fullscreen) { try { document.documentElement.style.overflow = ''; } catch (_) {} }
         this._clearModel();
@@ -1150,10 +1928,10 @@
     }
     function _on(name) { return function () { if (!_last) return false; return _last[name].apply(_last, arguments); }; }
     var api = {
-        VERSION: VERSION, mount: mount, current: function () { return _last; },
+        VERSION: VERSION, Viewer: Viewer, mount: mount, current: function () { return _last; },
         loadModel: _on('loadModel'), showModel: _on('showModel'), highlightZone: _on('highlightZone'), highlightParts: _on('highlightParts'),
         highlightVolume: _on('highlightVolume'), onSelect: _on('onSelect'), dispose: function () { if (_last) _last.dispose(); },
-        _pure: { fitBoxDistance: fitBoxDistance, buildTree: buildTree, ancestorsOf: ancestorsOf, unionBox: unionBox, zoneColor: zoneColor, standardView: standardView, volumeSpec: volumeSpec, closestVertexPair: closestVertexPair, VIEWS: VIEWS }
+        _pure: { fitBoxDistance: fitBoxDistance, buildTree: buildTree, ancestorsOf: ancestorsOf, unionBox: unionBox, zoneColor: zoneColor, standardView: standardView, volumeSpec: volumeSpec, closestVertexPair: closestVertexPair, VIEWS: VIEWS, esc: esc, fmtMm: fmtMm }
     };
     root.SLCadViewer = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

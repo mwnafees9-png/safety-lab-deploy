@@ -1,3 +1,4 @@
+// 13 Oct 2026 (late, AutoSave, Waqas: "when a user saves a choice/change it should be autosaving"): __slCloudSyncPushNow(opts) pushes AT ONCE (no 12 s wait, the writer's quiet window cut) and RESOLVES WITH THE OUTCOME ({ ok, reason }) so save_state.js v2.0 can say Saved / Not saved and retry; opts.snapshot writes the accepted project (moves still waiting for an acknowledgement left out). Every guard below (ITAR, provisioning needs content, demo grace, paywall, shrink) applies to it unchanged.
 // 13 Oct 2026 (Office-style saving, fix2-J): no silent cloud push while the person has unsaved work (SLSaveState.holdsSync()); Save writes the cloud copy itself and __slCloudSyncSchedule lets the next silent push follow.
 // ============================================================================
 // cloud_sync.js — continuous cloud autosave + first-edit provisioning.
@@ -59,7 +60,9 @@
     function _docVer() { try { return (typeof _activeCloudDocVersion !== 'undefined') ? _activeCloudDocVersion : null; } catch (_) { return null; } }
     function _lastLocalWrite() { try { return (typeof _autosaveLastWrite !== 'undefined') ? _autosaveLastWrite : 0; } catch (_) { return 0; } }
 
-    function _snapshot() {
+    function _snapshot(given) {
+        // 13 Oct 2026 (AutoSave): the accepted project as a snapshot string (moves still waiting left out)
+        if (given) { try { var o = (typeof given === 'string') ? JSON.parse(given) : given; if (o && typeof o === 'object') return o; } catch (_) {} }
         try { if (typeof _buildProjectSnapshot === 'function') return _buildProjectSnapshot(); } catch (_) {}
         try { if (typeof _snapshotProject === 'function') return _snapshotProject(); } catch (_) {}
         return null;
@@ -202,13 +205,15 @@
         _inFlight = true;
         try { await _push(client, ws, uid, W); } catch (_) {} finally { _inFlight = false; }
     }
-    async function _push(client, ws, uid, W) {
-        var lw = 0, snapItems = null, snapByTable = null;
+    async function _push(client, ws, uid, W, opts) {
+        opts = opts || {};
+        var lw = 0, snapItems = null, snapByTable = null, why = null;
         var prepare = async function () {
             var pid = _pid();
             lw = _lastLocalWrite();
-            if (pid && lw && lw <= _lastPushedTs) return null;   // a queued-ahead save already shipped this
-            var snap = _snapshot(); if (!snap) return null;      // FRESH — taken inside the serialized run
+            if (!opts.force && pid && lw && lw <= _lastPushedTs) { why = 'current'; return null; }
+            var snap = _snapshot(opts.snapshot);                  // FRESH, inside the serialized run (or the accepted state AutoSave hands over)
+            if (!snap) { why = 'no-snapshot'; return null; }
             // Defect 1 (spec 14 Aug, landed 30 Aug 2026) — ITAR guard. crdt_sync and
             // presence refuse ITAR-controlled projects; this module checked NOTHING,
             // so an ITAR-marked project was silently snapshotted to hosted Supabase
@@ -217,12 +222,14 @@
             // deliberate user act and stays out of scope; this closes the silent path.
             // 3 Oct 2026 — except on the customer's own server (SLConfig.ownServer), where this
             // autosave goes to THEIR database. On our cloud: unchanged.
+            why = 'itar';                                         // (the reason a null below means, for AutoSave)
             if (snap.projectConfig && snap.projectConfig.isITARControlled
                 && !(typeof window !== 'undefined' && window.SLConfig && window.SLConfig.ownServer === true && !window.SLConfig.fatal)) { _itarLocalOnlyNotice(); return null; }
+            why = null;
             var name = _name(snap);
             var certBasis = (snap.projectConfig && snap.projectConfig.regulation) || null;
             if (!pid) {
-                if (!_hasRealContent(snap)) return null;         // don't mint an empty row
+                if (!_hasRealContent(snap)) { why = 'no-content'; return null; }   // don't mint an empty row
                 // 3 Sep 2026 — TWO more reasons never to mint a row silently. (1) A demo
                 // that was just loaded: Oladele's account held thirteen copies of the K350
                 // showcase, four minted in one morning — open the app, the demo loads, the
@@ -230,14 +237,17 @@
                 // someone has actually worked on it for a while (or presses Save, which
                 // provisions on purpose). (2) A paywalled user: the paywall is the page;
                 // provisioning behind it only litters the workspace.
+                why = 'demo';
                 try { if (window.__slDemoLoadedAt && (Date.now() - window.__slDemoLoadedAt) < _DEMO_GRACE_MS) return null; } catch (_) {}
+                why = 'paywall';
                 try { if (typeof isPaywalled === 'function' && isPaywalled()) return null; } catch (_) {}
+                why = null;
                 // Provision through the SHARED lock in helpers_modules.js, not inline —
                 // the same lock the manual Save uses, so two writers cannot mint two rows.
                 var ensure = (typeof window._slEnsureCloudProject === 'function') ? window._slEnsureCloudProject : null;
-                if (!ensure) return null;                        // app not fully loaded — try again next tick
+                if (!ensure) { why = 'not-ready'; return null; }   // app not fully loaded: try again next tick
                 pid = await ensure(client, ws, name, certBasis, uid);
-                if (!pid) return null;
+                if (!pid) { why = 'provision-failed'; return null; }
                 try { if (typeof showToast === 'function') showToast('Project saved to your workspace — autosaving to the cloud now.', 'success', 3500); } catch (_) {}
             } else {
                 // keep the name / cert basis fresh, fire-and-forget
@@ -258,19 +268,43 @@
                         ? ('Cloud save paused: one table (' + _tableLabel(gutTable.key) + ') suddenly went from ' + gutTable.from + ' rows to ' + gutTable.to + ', so the saved copy was left alone. Reload before editing further; your last saved version is intact.')
                         : ('Cloud save paused: this tab\u2019s project suddenly looks almost empty, so the saved copy was left alone. Reload before editing further; your last saved version is intact.'), 'warning', 12000);
                 } catch (_) {}
+                why = 'shrink';
                 return null;
             }
             snapItems = _contentItems(snap); snapByTable = _countsByTable(snap);
             return { client: client, projectId: pid, userId: uid, snapshot: snap };
         };
-        var r = await W.write({ mode: 'silent', prepare: prepare });
+        var wp = W.write({ mode: 'silent', prepare: prepare });
+        if (opts.now) { try { if (typeof W.flush === 'function') W.flush(); } catch (_) {} }   // AutoSave: no quiet-window wait
+        var r = await wp;
         if (r && r.ok) {
-            _lastPushedTs = lw || Date.now();
+            _lastPushedTs = Math.max(lw || 0, _lastPushedTs) || Date.now();
             _lastPushedItems = snapItems; _lastPushedByTable = snapByTable;
         } else if (r && r.reason === 'error') {
             // The app is never disrupted — local autosave already succeeded.
             try { console.warn('[cloud-sync] push failed (local save is safe):', r.error && (r.error.message || r.error)); } catch (_) {}
         }
+        var out = r ? { ok: !!r.ok, reason: r.ok ? 'ok' : (r.reason === 'skipped' ? (why || 'skipped') : r.reason), version: r.version, error: r.error } : { ok: false, reason: why || 'skipped' };
+        return out;
+    }
+    // 13 Oct 2026 (AutoSave): push NOW and say how it went. Reasons: ok · signed-out (no cloud for
+    // this person: the copy on this device is the save) · itar / no-content / demo / paywall (by
+    // policy nothing goes to the cloud) · offline · error (network or server: retry) · refused (the
+    // cloud copy moved under this tab) · lease (another tab is the active one) · busy (a push is
+    // already running: wait for it) · off (the kill switch).
+    async function _pushNow(opts) {
+        opts = opts || {};
+        if (!_on()) return { ok: false, reason: 'off' };
+        var uid = _userId(); if (!uid) return { ok: false, reason: 'signed-out' };
+        var client = _client(); if (!client) return { ok: false, reason: 'signed-out' };
+        var ws = _wsId(); if (!ws) return { ok: false, reason: 'no-workspace' };
+        try { if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, reason: 'offline' }; } catch (_) {}
+        var W = _writer(); if (!W) return { ok: false, reason: 'not-ready' };
+        while (_inFlight) { await new Promise(function (r) { setTimeout(r, 60); }); }
+        _inFlight = true; _lastPushAt = Date.now();
+        try { return await _push(client, ws, uid, W, { snapshot: opts.snapshot, force: true, now: true }); }
+        catch (e) { return { ok: false, reason: 'error', error: e }; }
+        finally { _inFlight = false; }
     }
 
     function _schedule() {
@@ -368,6 +402,7 @@
     // expose for tests / manual flush
     window.__slCloudSyncTick = _tick;
     window.__slCloudSyncSchedule = _schedule;   // 13 Oct 2026: save_state.js, after held work is released
+    window.__slCloudSyncPushNow = _pushNow;     // 13 Oct 2026 (AutoSave): save_state.js, the moment a change is acknowledged
     // 31 Aug 2026 — the new-project intake path must drop the outgoing project's
     // cloud identity exactly like a demo load does (an un-detached New Project
     // renamed and overwrote cloud project de27b117 with the next project's

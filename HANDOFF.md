@@ -1,3 +1,122 @@
+## 14 Oct 2026 (cad-C, scale): LARGE STEP ASSEMBLIES (200,000 COMPONENTS) FAST, OUR OWN 12.7 MB OPENCASCADE BUILD REPLACES THE 50 MB ONE. Tests and proofs green, wall = known desktop/proxy failures only. NOT YET DEPLOYED (Waqas ships).
+
+**THE RULING (founder, 13 to 14 Oct).** Top of the line performance on a 200,000 component STEP: whole aircraft visible and navigable within seconds (10 s on 2 cores), full detail streaming in behind (largest first), reopen from cache under 1 s, full detail and full-aircraft clash under 30 s, exact measurement and PMI kept, the 50 MB engine dropped once everything it served runs on our own build and is proven identical; projectConfig stays small.
+
+**WHY THE OLD PATH COULD NOT.** OpenCascade's STEP transfer gets slower with the square of the number of assembly components (20k components: 154 s), and the opencascade.js build pays JavaScript exception trampolines on every call (about 40 ms per small part).
+
+**HOW IT WORKS NOW.**
+- `site/cad_step_struct.js` (worker only): one pass indexes the file; the assembly structure (PRODUCT, NAUO, CDSR placements, units) is read in JavaScript; placements, part ids and colors match OpenCascade exactly (tested). First view = a box per part (boxes hold circles, spheres, tori too), sent as flat arrays. AP242 tessellated parts (TRIANGULATED_FACE, COMPLEX_TRIANGULATED_FACE) are real shapes at once. Assemblies of 300+ components take this path; anything it does not understand goes to the whole-file reader.
+- Detail: each DISTINCT part is cut out as its own small STEP file and read by a pool of workers (one per core, max 8), largest first; boxes are swapped in place; true part boxes replace the estimates when detail completes (local list, synced summary, cache).
+- `site/vendor/occt-fast/` (12.7 MB): OCCT 7.8.1 UNMODIFIED (LGPL-2.1 + OCCT exception, both texts beside it) with our C entry point `tools/occt/slcad_occt.cpp` (read and mesh, exact queries, PMI); built by `tools/occt/build_occt.sh` (native wasm exceptions, no setjmp signal conversion, no eval). Whole-file imports, exact queries, PMI and the part readers all run on it. `site/vendor/ocjs` and `tools/ocjs` are deleted; occt-import-js stays as the last fallback.
+- Exact measurement on large models: the import worker stays after the stream and answers part by part from the structure it already read (no second read of the STEP file). Triangle-only parts are measured on their triangles and labeled approximate.
+- Clash: one rule decided exactly (clash = surfaces cross strictly or shared volume incl. containment; touch = no clash within the touch distance; clearance), boxes from the actual shapes, broad phase then narrow phase in parallel workers, fixed result order. The Clashes panel uses it for 2,000+ parts.
+- Large models (over 20,000 parts) keep their part list on this computer; projectConfig holds a summary with every linked or zone-referenced part pinned (199,370 parts sync as 277 bytes). Cache payload packed (about 31 MB for 200k).
+- The page at 200k: panels cap long lists at 100 rows (the old Equipment links panel wrote 200,000 rows: the browser stall), the parts tree builds on demand, equipment matching runs on request for very large models, the model is on screen before cache writes and panels.
+
+**NUMBERS (this container: 2 cores, Chromium with SwiftShader).**
+| | 200,000 components (147 MB, 2,648 distinct parts) |
+|---|---|
+| First view in Chromium (file to boxes on screen) | 7.9 to 8.6 s (worker code alone 4.0 to 4.4 s) |
+| Warm reopen in Chromium | 1.2 to 1.6 s; data part alone 0.58 to 0.88 s. 1 s TARGET NOT MET here (software GPU, 2 cores) |
+| Full detail, 2 part readers | 30.4 s in Chromium |
+| Exact distance, first / next | 0.52 s / 0.06 s |
+| Full-aircraft clash, 2 workers (282,898 candidate pairs) | 19.3 to 21.2 s |
+| Synced project record | 277 bytes |
+Toy aircraft import: 1.8 s (was 4.9 s). Desktop (Electron 31.7.7, file://): 3,000 components full detail 26.3 s, exact distance, page still cannot eval or compile wasm, nothing leaves. 8 cores not measured (expected about 2.5x faster for the parallel parts).
+
+**TESTS.** `tests/regression_cad_scale_20261013.test.js` (48 checks, 9 mutations): structure vs our whole-file reading (toy and generated aircraft: every pid, placement, color), part files, round-part boxes, tessellation, part-by-part exact = whole-file, clash rule, local part store and pins, triangle-only fallback. `tests/regression_cad_scale_timed_20261013.test.js` (9 checks): 200k first view, synced size, reopen data part, full clash, against 10 s / 4 kB / 1 s / 30 s. `tests/regression_cad_full_20261013.test.js` (108) and `tests/regression_cad_import_20261013.test.js` (161) moved onto our build with the same expectations (exact values, NIST STC-06 PMI 19 / 25 / 51, 12 of 13 agree). Generator: `tests/fixtures/cad/make_aircraft_step.js` (options: components, tessellated). Wall: 406 suites, 11 fails + 3 crashed, all the known desktop/proxy repo ones.
+
+**NOT DONE / KNOWN.** Warm reopen in Chromium is 1.2 to 1.6 s on this box (target 1 s); the remaining time is the cache read and the 3D setup. PMI on large models opened part by part is not available (PMI needs the whole file). A distance between a triangle-only part and an exact part falls back to the viewer's mesh measurement. Measured on 2 cores and a software GPU only.
+## 13 Oct 2026 (late, autosave): AN ACKNOWLEDGED CHANGE SAVES AT ONCE. The Save / Don't Save / Cancel prompt is gone. Tests and Chromium proof green, NOT YET DEPLOYED (Waqas ships).
+
+**THE RULING (Waqas, 13 Oct).** "When a user saves a choice/change it should be autosaving." The moment a change is acknowledged it is saved, at once and durably, with no separate Save step. Still waiting are only the change in progress and the collected moves and undos (his earlier ruling: acknowledged "when the user is ready to leave the page"). Once those are acknowledged they save too.
+
+**BUILT.**
+- `site/save_state.js` 2.0 (rewritten). Acknowledge runs one save of the accepted project, in this order:
+  1. This device: the local autosave, and the save waits for the write to finish. A tab without the write lease now reports "not written" (tab_guard.js returns false).
+  2. Teammates: the live sync, crdt_sync.js release().
+  3. The cloud copy: cloud_sync.js `__slCloudSyncPushNow`, which pushes at once and reports how it went.
+
+  Saves never overlap: a change acknowledged during a save gets one more save right after. Header and per-view indicator: "Saving…", "Saved 10:42" (tooltip says where), "Not saved: offline. Retry", "Not saved: <why>. Retry", or "N moves and undos to acknowledge" (a click acknowledges them).
+  - Failures: offline waits for the browser's online event. Other errors retry after 3, 10, 30, 60 s, then every 2 min. A refused cloud write while the live sync carries the change counts as saved. Without the live sync, Retry runs the manual cloud save, which asks whether to overwrite or load. The pending upload is recorded in the autosave meta (`cloudPending`), so a crash retries it.
+  - Leaving (close, open, new, demo, sign out, restore, desktop close): what waits is asked first (the acknowledgement list; Cancel there reverts only those items). The save in flight is waited for. Only if something accepted is still not persisted does "Not saved yet" ask Stay / Continue anyway. Continue banks a copy in the recovery ring first.
+  - Ctrl+S and the header click mean "save now / retry". Don't Save and SLSaveState.discard are removed.
+- `site/change_ack.js` 1.2:
+  - `acceptedSnapshot()`: the state Cancel on the collection would leave.
+  - `SLRecords.applyToObject`.
+  - `reopen()`: after a crash, asks about the changes that were never acknowledged. It waits until the app is quiet and no dialog is up, and counts only what differs from the stored payload, so the app's own writes since the restore are not listed.
+  - `flush({changeOnly})`.
+  - Automatic changes made during a collection join the accepted state (Cancel on moves no longer reverts them).
+  - The dialog footers say Acknowledge saves.
+- `site/crdt_sync.js` `pushAccepted()`: a change acknowledged while moves are collected reaches teammates live, on its own. The moves follow when acknowledged; Cancel on them sends nothing.
+- Crash safety: the accepted state is kept in IndexedDB 'safetyLab.accepted.v1' (written when something starts waiting, id in the autosave meta `acceptedId`, plus `unacked`).
+- helpers_modules: `_writeAutosave` returns whether it wrote and exposes its IndexedDB promise; `_updateSaveIndicator` hands off to SLSaveState.renderIndicator; snapshot undo while anything is held. The 5 s label refresh is NOT taken as proof of a write (found by the browser suite).
+- data_ops_modules passes the raw restored payload to recovered().
+- Cache pins: data_ops 66.54, helpers 3.26, misc_fn 66.79, crdt_sync 2.8, change_ack 1.2, save_state 2.0, cloud_sync 2.5, tab_guard 1.2.
+
+**TESTS.**
+- `tests/regression_save_state_20261013b.test.js`, rewritten: 54 checks with the real crdt_sync / change_ack / save_state and real Yjs in two tabs. Covers:
+  - acknowledged = saved (device, team, cloud);
+  - a waiting change is never shared;
+  - Cancel;
+  - moves waiting plus a content change (device, cloud and team get it without the move);
+  - offline;
+  - error retry;
+  - a change acknowledged during a save;
+  - guard;
+  - a crash (pending upload retried; waiting changes asked again, Acknowledge and Cancel);
+  - a local storage failure.
+
+  Five mutations go red: no save on Acknowledge, accepted snapshot ignored, no retry timer, guard ignoring a pending upload, no live send while moves wait.
+- `tests/regression_change_ack_ui_20261013b.test.js`, B9 to B15 rewritten: 77 checks in Chromium. `regression_cloud_sync` accepts `_snapshot(opts.snapshot)`.
+- Screenshots: scratchpad as-shots/as_01 to as_06 (Saved, moves waiting, Not saved: this device, the Not saved yet dialog, Not saved: offline, crash re-ask).
+- Wall (`./ship.sh --dry`): 404 suites, 11 real fails plus 3 crashed. All of them are the known missing sibling repos (project_file_extension 9, notify_agents 1, eula_terms 1; three desktop suites cannot start). Nothing new.
+  - The first full run also failed rbd_markov_diagrams and eta_bowtie_handbuild once each. Both passed alone and on the second full run (timing under load, as noted on 13 Oct cad-C).
+  - The first run also found the helpers_modules header order (regression_writers_announce), now fixed.
+
+**KNOWN / NOT DONE.**
+- A crash with ONLY a position change on a fault tree or table row: the re-ask lists it as a changed row (positions are layout fields, so no field line is shown).
+- A change acknowledged while moves wait reaches the cloud backup and teammates, but a teammate's update arriving during the collection is brought in when the moves are acknowledged (the live doc keeps it; nothing is lost).
+- Desktop: the shell's close handler should await `__slabRequestClose()` (unchanged contract); the fallback path is proven in the browser suite only.
+
+## 13 Oct 2026 (cad-C): CAD MODEL PAGE COMPLETED FOR REVIEW (large assemblies, capped sections, exact measurement, clash, notes, saved views, PMI, revision compare, walk, snapshots). Tests and browser proof green, NOT YET DEPLOYED (Waqas ships).
+
+**THE ASK.** Bring the CAD Model page up to full 3DEXPERIENCE style viewing and review, view only (no CAD authoring). Same hard rule as before: the STEP file and its geometry stay on the customer's machine and never go into projectConfig. Only metadata, saved views and notes go into projectConfig (shared).
+
+**NEW FILES.** `site/cad_render.js` (SLCadRender: instanced and batched drawing, culling, level of detail, ray picking, mesh clash). `site/cad_brep.js` (SLCadBrep, worker and node only: STEP read on the full OpenCascade build, exact queries, PMI). `site/cad_exact.js` (SLCadExact: the page side of the exact session). `site/cad_review.js` (SLCadReview: saved views, 3D notes, color by, compare status; the only writer of projectConfig.cadViews / cadMarkups, with the geometry guard). `site/cad_viewer_panels.js` (the Properties, Views, Notes, Clashes, PMI, Compare panes and snapshots). cad_viewer.js 2.0 rewritten on top of these; cad_import.js 2.0; cad_import_worker.js 2.0; cad_page.js 1.3. Script count pin 272 to 276 (regression_project_durability).
+
+**OPENCASCADE (LGPL-2.1).** `site/vendor/ocjs/`: opencascade.js 2.0.0-beta.b5ff984 (full OCCT 7.6), unmodified, its own files, loaded only inside the CAD worker. Glue opencascade.full.js 404,707 bytes; the 50,305,130 byte wasm is split into opencascade.full.part1/2/3.wasm (20,971,520 / 20,971,520 / 8,362,090 bytes, all under Cloudflare's 25 MiB limit), joined in the worker and checked against manifest.json's sha256 before compiling. Licenses beside it (LICENSE.opencascade.js.txt, license.occt.txt). Rebuild with `tools/ocjs/build_ocjs.sh` (pins the npm tarball's sha256, makes the classic-script wrapper by replacing only the last line, splits, writes the manifest). occt-import-js (vendor/occt) stays as the automatic fallback if the full build cannot load. Same worker policy as before (it already allows eval in the worker only); the page policy is unchanged and still blocks eval and WebAssembly (measured again in Chromium and Electron).
+
+**WHAT THE USER GETS.**
+- Large assemblies: each repeated shape is meshed once and drawn as GPU instances (4+ copies), the rest in spatial batches; frustum culling, small part culling and a coarse level of detail, time sliced round robin so a moving camera never freezes; occlusion queries per batch; reversed depth buffer (no z-fighting on a 60 m aircraft). Progress now moves INSIDE the STEP read (bytes parsed). Parts list is virtual (only rows on screen exist).
+- Sections: several planes (X / Y / Z / from a clicked face), a section box, flip, drag the handle, filled (capped) cut faces.
+- Exact measurement on the B-rep, kept open in the worker: point to point, edge length, angle between faces or edges, radius / diameter, minimum distance between parts, part volume / area / center. Snapping to vertex and edge. When the exact session is not open, values are measured on the mesh and labeled "approx." in the view.
+- Clearance and clash: tolerance, touch, sets A / B or whole model, deterministic order (clash, touch, clearance, then distance); click a row to frame and isolate the pair; "Exact" button checks a pair on the B-rep (shared volume).
+- Product tree: search, filter (visible / hidden / selected / linked / unlinked), Ctrl / Shift multi-select, properties pane; color by system, zone, DAL, part number, assembly, material or a custom field, with a legend.
+- Explode slider, ghosting, view cube, saved views (camera, sections, explode, ghost, hidden parts, color by) shared through projectConfig.cadViews.
+- 3D notes (note / arrow / circle) pinned to a part by pid plus a point local to that part (they follow explode), author and time, open / closed, list; shared in projectConfig.cadMarkups.
+- AP242 PMI toggle: dimensions, tolerances and datums with presentation lines and labels, list pane, click to focus. Values checked against the model; a unit is converted only when exactly one unit factor agrees with the geometry, and a disagreement is flagged.
+- Revision compare: overlay of another revision from the local cache (added / removed / moved / changed colors) beside the engine's revision review list; closing a review item is wired.
+- Walk mode with gravity and collision (wall slide, steps); fly unchanged.
+- PNG snapshot at a chosen size, with notes and labels, downloaded locally.
+- Kept: zones, PRA volumes, equipment links, independence and impact panels, the ZSA 3D button (proof section "legacy").
+
+**LOCAL STORAGE CHANGE.** IndexedDB 'sl-cad' is now version 2 with a second store 'steps' holding the STEP file itself (on this machine only) so the exact session reopens without asking for the file. Cache payload v2 (prototypes plus placements); v1 entries still read. Another machine sees metadata, views and notes but asks for the file (proof section "machine2").
+
+**NUMBERS (this container, Chromium with SwiftShader, a software GPU: frame times are far slower than on any real graphics card; the CPU side is the meaningful part).**
+- Toy aircraft import in the browser: about 5 s, most of it loading and compiling the 50 MB wasm. Desktop (Electron, file://): 4.6 s.
+- 20,000 placed parts: scene build 424 ms; JS cost per frame 0.6 ms vs 131 ms for the 13 Oct one-mesh-per-part way; 7 draw calls vs 20,000; whole frame (GPU waited for) 496 ms vs 1,661 ms; pick 4.4 ms; 49 DOM rows for the tree.
+- 200,000 placed parts: generate 0.5 s, scene build 1.25 s, 4 to 7 draw calls, JS per frame 0.6 ms, empty frame 15.9 ms, full model 1,734 ms in software rasterization (all of it pixel work), pick 10.9 ms, walk step 0.5 ms, color by 315 ms, JS heap 326 MB.
+- Exact: nacelle to nacelle 4300 mm, radius 1000, edge 10000, volume 24e6 mm3, all exact. NIST STC-06 PMI: 19 dimensions, 25 tolerances, 51 datums read; 12 of 13 checkable dimensions agree with the model, the other is flagged.
+
+**TESTS.** `tests/regression_cad_full_20261013.test.js` (113 checks, 16 mutations red; loads the real wasm, about 1 to 2 minutes). `tests/regression_cad_import_20261013.test.js` updated for v2 (161 checks). Engine test 93/93. Fixtures: `tests/fixtures/cad/nist_stc_06_asme1_ap242-e3.stp` (NIST, US government work) and `make_big_assembly.js` (generator). Browser proof (scratchpad cad_proof2.js) 74/74 across legacy, tree, color, section, measure, clash, views, notes, walk, snapshot, compare, PMI, machine2; screenshots cad-shots/c2_*. Scale proof cad_scale_proof.js (N=20000 / 200000). Desktop proof in Electron 31.7.7: 8/8 (import from file://, exact distance, reopen from the stored file, page still cannot eval or compile wasm, nothing CAD related leaves the bundle). Wall: 404 suites, 11 real fails + 3 crashed, all pre-existing (the desktop and proxy sibling repos are not checked out here); nothing new. The first run found two of mine (a British "labelled" and two promise chains without a catch in cad_viewer_panels.js), both fixed. On the second full run regression_change_ack_ui_20261013b failed once ("Save there saves and then asks the shell to close the window"); it does not touch CAD and passed 71/71 three times on its own right after, so it looks timing sensitive under the full wall.
+
+**NOT DONE / KNOWN.**
+- Very large STEP FILES import slowly: OpenCascade's own STEP transfer is quadratic in the number of assembly components (wasm: 2k components 1.5 s, 6k 15 s, 20k 154 s; native OCCT 7.8 is about 3x faster with the same shape). Viewing 200k parts is proven; reading a 200k-component STEP file is not. Plan: read the assembly structure in JS and transfer each distinct leaf product once.
+- 50 MB of wasm on first use (cached by the browser afterwards). Plan: a trimmed custom OpenCascade build (STEP, XCAF, BRepExtrema, BRepGProp, BRepMesh, BRepAlgoAPI_Common only), expected 15 to 20 MB; see the note in tools/ocjs/build_ocjs.sh.
+- Occlusion culling works per batch, not per instance. Mesh clash is approximate (to the mesh); use "Exact" on a pair for B-rep truth. Exploded and section views are display only.
+- PMI semantic values from OCCT 7.6 sometimes come in the file's unit without conversion; handled by the model cross-check above, unchecked values are shown as written.
+
 ## 13 Oct 2026 (cad-A + cad-B merged): CAD MODEL PAGE, STEP IMPORT, 3D VIEWER AND THE CAD / ZONAL / PRA ENGINE. Built, tests and browser proof green, NOT YET DEPLOYED (Waqas ships).
 
 **THE ASK.** A view-only viewer to move through the aircraft (3DEXPERIENCE feel), fed by neutral STEP (AP203/AP214/AP242) from any CAD tool. CAD files are export controlled: the file never leaves the customer's machine.

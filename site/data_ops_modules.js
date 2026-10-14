@@ -1328,10 +1328,12 @@ function _adoptCloudIdentityFromMeta(m) {
     } catch (_) {}
 }
 
-// 13 Oct 2026 (Office-style saving) — a restored autosave that was UNSAVED work stays unsaved
-// (save_state.js): Save and Don't Save both still mean what they meant before the crash.
-function _slRecoveredMeta(m) {
-    try { if (typeof window !== 'undefined' && window.SLSaveState) window.SLSaveState.recovered(m || null); } catch (_) {}
+// 13 Oct 2026 (AutoSave, save_state.js v2.0): the restored autosave's meta says whether an upload
+// had not landed (retried) and whether changes were still waiting for an acknowledgement (asked
+// about again, measured from the accepted copy); nothing waiting is ever promoted to saved. The RAW
+// payload goes with it: the apply normalizes the parsed rows in place, and that is not a change.
+function _slRecoveredMeta(m, restored) {
+    try { if (typeof window !== 'undefined' && window.SLSaveState) window.SLSaveState.recovered(m || null, restored || null); } catch (_) {}
 }
 function checkAutosaveRecovery() {
     // Phase 57 — auto-recover the latest autosave on refresh (silent, no banner). The localStorage
@@ -1351,7 +1353,7 @@ function checkAutosaveRecovery() {
                 // re-read and re-parse the whole payload on every single write.
                 _autosaveStoredHasContent = _autosaveHasContent(parsed);
                 if (_autosaveStoredHasContent) {
-                    try { _applyProjectData(parsed); recovered = true; _recoveredTs = (m && m.ts) || 0; _adoptCloudIdentityFromMeta(m); _slRecoveredMeta(m); } catch (e) { console.warn('Auto-recover failed:', e); }
+                    try { _applyProjectData(parsed); recovered = true; _recoveredTs = (m && m.ts) || 0; _adoptCloudIdentityFromMeta(m); _slRecoveredMeta(m, payload); } catch (e) { console.warn('Auto-recover failed:', e); }
                 }
             }
         }
@@ -1386,7 +1388,7 @@ function checkAutosaveRecovery() {
                     SLDB.get(AUTOSAVE_META_KEY).then(function (mm) {
                         if (typeof mm === 'string') { try { mm = JSON.parse(mm); } catch (_) { mm = null; } }
                         _adoptCloudIdentityFromMeta(mm);
-                        _slRecoveredMeta(mm);
+                        _slRecoveredMeta(mm, payload);
                     }).catch(function () {});
                 } catch (_) {}
                 return true;

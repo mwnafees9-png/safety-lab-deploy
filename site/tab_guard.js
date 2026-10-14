@@ -108,7 +108,7 @@
                     // still needs the state at the end of this change as the "before" of the next
                     // one (change_ack.js stash(); normally the written payload).
                     try { if (window.SLChangeAck && typeof _snapshotProject === 'function') window.SLChangeAck.stash(JSON.stringify(_snapshotProject())); } catch (_) {}
-                    return;
+                    return false;   // 13 Oct 2026 (AutoSave): nothing was written here, and save_state.js must not say Saved
                 }   // suspended — write nothing
             }
             _writeLease();          // refresh with the write

@@ -54,8 +54,9 @@ check('no row yet: INSERT at version 1, duplicate-key is the same refusal',
   /\.insert\(Object\.assign\(\{ project_id: projectId, version: 1 \}/.test(w) && /'23505'/.test(w));
 check('the silent path hands the writer a prepare() — same queue as the manual Save',
   /W\.write\(\{ mode: 'silent', prepare: prepare \}\)/.test(c) && /__slabCloudSaveQ/.test(w));
+// 13 Oct 2026 (AutoSave): _snapshot(opts.snapshot) = the accepted state handed over, still read inside the run
 check('the snapshot is taken INSIDE the writer\'s queued run (prepare), never before it',
-  /var prepare = async function \(\) \{[\s\S]{0,300}var snap = _snapshot\(\)/.test(c) && !/async function _tick\([\s\S]{0,900}_snapshot\(\)[\s\S]{0,900}async function _push/.test(c));
+  /var prepare = async function \(\) \{[\s\S]{0,300}var snap = _snapshot\((opts\.snapshot)?\)/.test(c) && !/async function _tick\([\s\S]{0,900}_snapshot\(\)[\s\S]{0,900}async function _push/.test(c));
 check('non-fatal — a writer error is logged, local save stays safe',
   /r\.reason === 'error'/.test(c) && /local save is safe/i.test(c));
 check('throttled (min gap) so it never hammers the backend',

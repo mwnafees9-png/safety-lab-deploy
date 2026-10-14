@@ -4453,7 +4453,7 @@ function _slMakeViewSaveBtn() {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'save-indicator sl-view-save';
     b.setAttribute('role', 'button'); b.tabIndex = 0;
-    b.title = 'Click to save your changes (Ctrl+S).';
+    b.title = 'Acknowledged changes save automatically. Click to save now or to retry (Ctrl+S).';
     b.innerHTML = '<span class="save-indicator-dot"></span><span class="sl-view-save-text">All changes saved</span>';
     b.addEventListener('click', function () { if (typeof commitSaveChanges === 'function') commitSaveChanges({ explicit: true }); });   // 13 Oct 2026: the person's Save (save_state.js)
     b.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (typeof commitSaveChanges === 'function') commitSaveChanges({ explicit: true }); } });
@@ -4654,8 +4654,8 @@ function scheduleAutosave() {
     try { _quantClearCache(); } catch(_) {}   // #45 — any edit invalidates cached quant results (keeps cached refs valid)
     // 13 Oct 2026 — THE CHANGE FUNNEL (change_ack.js): every change this call accepts is shown to
     // the person to acknowledge (or cancel) unless it is a load, a merge or the app's own
-    // bookkeeping. Unsaved / saved is owned by save_state.js once it is loaded (Office-style):
-    // only an acknowledged change makes the project unsaved, and only Save makes it saved.
+    // bookkeeping. Saved / not saved is owned by save_state.js once it is loaded (AutoSave, 13 Oct
+    // late): an acknowledged change is saved at once; only what waits for an acknowledgement is not.
     try { if (window.SLChangeAck) window.SLChangeAck.noteChange(); } catch(_) {}
     if (!(typeof window !== 'undefined' && window.SLSaveState)) _dirtySinceSave = true;   // Phase 57 — any tracked edit makes the Save Changes control active (no save_state.js: the old behavior)
     try { if (window.SLCmaLive) window.SLCmaLive.onModelChange('edit'); } catch(_) {}   // 13 Oct 2026 (fix 6): live common cause detection (debounced; cma_live.js)

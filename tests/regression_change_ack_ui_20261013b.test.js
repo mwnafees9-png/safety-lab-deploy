@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /*
- * Regression (browser) — every change asks for acknowledgement, and saving works like
- * Microsoft Office (Waqas, 12 Oct 2026 hand testing, rulings 2 and 3). 13 Oct 2026.
+ * Regression (browser): every change asks for acknowledgement (Waqas, 12 Oct 2026 hand testing,
+ * ruling 2), and an acknowledged change SAVES AT ONCE (Waqas, 13 Oct 2026: "when a user saves a
+ * choice/change it should be autosaving"; save_state.js v2.0 replaces the Office-style
+ * Save / Don't Save / Cancel of ruling 3, which this suite tested until 13 Oct late).
  *
  * FOUND: Safety Lab saved and shared every edit the instant it was made. Nothing asked the
  * engineer to confirm a change or showed what it touched; there was no unsaved state, so
@@ -28,14 +30,17 @@
  *   B7  a background change nobody made is not asked and leaves the project saved
  *   B8  Undo / Redo and diagram moves are collected (13 Oct night): no prompt per press, one list on
  *       leaving the view; Acknowledge keeps them, Cancel puts back only them
- *   B9  the header control saves; a module calling commitSaveChanges() does not
- *   B10 Ctrl+S saves even with focus in a text field
- *   B11 opening another project: Save / Don't Save / Cancel all do what they say
- *   B12 new project, open file, sign out, restore version: each asks first
- *   B13 leaving the page: the browser's beforeunload prompt only when there is unsaved work
+ *   B9  the indicator: Saved at a time; while moves wait it counts them and a click acknowledges
+ *       them; a module calling commitSaveChanges() opens nothing
+ *   B10 Ctrl+S: no file download, no dialog, saved (even with focus in a text field)
+ *   B11 opening another project: no Save / Don't Save / Cancel; a waiting move is acknowledged first
+ *   B12 a save that fails: "Not saved: ... Retry", every leaving point asks Stay / Continue anyway,
+ *       Stay keeps the project; offline says so; Retry (the header) saves once it can
+ *   B13 leaving the page: the browser's beforeunload prompt only while something waits or is not saved
  *   B14 desktop: __slabCanClose / __slabRequestClose and the beforeunload fallback
- *   B15 a crash keeps unsaved work unsaved, and Don't Save still returns to the saved version
+ *   B15 a crash: an acknowledged change comes back saved; a move left waiting is asked about again
  *   B16 no native alert/confirm/prompt anywhere in the flows
+ * Screenshots of the indicator states go to $SL_SHOTS when it is set.
  *
  * Needs Playwright + Chromium (PLAYWRIGHT_BROWSERS_PATH). Where they are missing the suite
  * prints a note and exits 0: it cannot run there, which is not the same as passing, and the
@@ -66,6 +71,18 @@ function serve() {
   });
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const SHOTS = process.env.SL_SHOTS || '';
+async function shot(pg, name, sel) {
+  if (!SHOTS) return;
+  try { fs.mkdirSync(SHOTS, { recursive: true }); } catch (_) {}
+  const toasts = v => pg.evaluate(v => { const t = document.getElementById('toast-stack'); if (t) t.style.visibility = v; }, v).catch(() => {});
+  try {
+    if (sel) await toasts('hidden');
+    if (sel) { const box = await pg.evaluate(s => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }, sel);
+      if (box) { const pad = 60; await pg.screenshot({ path: path.join(SHOTS, name + '.png'), clip: { x: Math.max(0, box.x - pad * 4), y: Math.max(0, box.y - 12), width: Math.min(1440, box.width + pad * 5), height: box.height + 24 } }); return; } }
+    await pg.screenshot({ path: path.join(SHOTS, name + '.png') });
+  } catch (_) {} finally { if (sel) await toasts(''); }
+}
 
 (async () => {
   const srv = await serve();
@@ -100,6 +117,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const choiceOpen = pg => pg.evaluate(() => !!document.getElementById('sl-choice-overlay'));
   const state = pg => pg.evaluate(() => ({
     dirty: SLSaveState.isDirty(), open: SLChangeAck.pending(), ind: (document.getElementById('save-indicator-text') || {}).textContent || '',
+    save: SLSaveState.status(),
     sev0: acFhaData[0].severity, desc1: acFhaData[1].fcDesc, undo: _slUndoDepth(),
     journal: ((projectConfig.journal && projectConfig.journal.entries) || []).map(e => e.kind + ': ' + e.s),
     stats: SLChangeAck.status().stats, saveStats: SLSaveState.status().stats, name: projectName
@@ -114,8 +132,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     let { pg, ctx, errs } = await fresh();
     let s = await state(pg);
     check('no acknowledgement dialog after loading the sample project', !(await ackOpen(pg)));
-    check('the project is saved after a load (not dirty)', s.dirty === false, JSON.stringify(s.ind));
-    check('the header does not say "Unsaved changes"', !/Unsaved/.test(s.ind), s.ind);
+    check('the project is saved after a load (nothing waiting or unsaved)', s.dirty === false, JSON.stringify(s.ind));
+    check('the header says all changes are saved', /All changes saved|Saved/.test(s.ind) && !/Not saved/.test(s.ind), s.ind);
     check('background writes during the load were automatic or system, never asked', s.stats.prompts === 0 && s.stats.system > 0, JSON.stringify(s.stats));
 
     // ---------------------------------------------------------------- B3 (first change on a clean project)
@@ -127,9 +145,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('it says what changes, in plain words (area, row, field, old and new value)', /Aircraft FHA/.test(txt) && /FC-02/.test(txt) && /description/.test(txt) && /Edited description \(B3\)/.test(txt), txt.slice(0, 300));
     check('it has a What it touches section', /What it touches/i.test(txt));
     await pg.click('.sl-ack-cancel'); await sleep(900);
+    await waitFor(pg, async () => !(await state(pg)).dirty, 3000);
     s = await state(pg);
     check('Cancel change restored the original value', s.desc1 === desc0, s.desc1);
-    check('after Cancel the project is still saved', s.dirty === false && !/Unsaved/.test(s.ind), s.ind);
+    check('after Cancel nothing was saved and nothing waits', s.dirty === false && s.save.stats.saves === 0 && !/Not saved/.test(s.ind), s.ind + ' saves ' + s.save.stats.saves);
     check('the cancel is in the journal', s.journal.some(j => /^change-cancel: .*canceled/.test(j)));
 
     // ---------------------------------------------------------------- B2
@@ -156,7 +175,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     s = await state(pg);
     check('one prompt for the whole word (not one per keystroke)', s.stats.prompts === prompts2 && prompts2 === 2, 'prompts ' + s.stats.prompts);
     check('Acknowledge keeps the typed name', (await pg.evaluate(() => window.__b2node.name)) === before2 + ' typed');
-    check('Acknowledge makes the project unsaved, said in the header', s.dirty === true && /Unsaved changes/.test(s.ind), s.ind);
+    check('Acknowledge SAVED it at once, no Save step: the header says "Saved" and the time', s.dirty === false && s.save.state === 'saved' && /^Saved \d/.test(s.ind) && s.save.where === 'device', s.ind + ' ' + JSON.stringify(s.save));
+    check('it is in this browser\'s storage (the autosave slot holds the typed name)', await pg.evaluate(() => (localStorage.getItem('safetyLab.autosave') || localStorage.getItem(AUTOSAVE_KEY) || '').indexOf(' typed') >= 0));
+    await shot(pg, 'as_01_saved', '#save-indicator');
     check('the acknowledgement is in the project journal with who and what', s.journal.some(j => /^change-ack: Not signed in acknowledged: Changed Fault tree/.test(j)), s.journal.slice(-3).join(' | '));
     await pg.evaluate(() => { try { closeNodeConfigModal(); } catch (_) {} });
 
@@ -229,11 +250,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await sleep(300); txt = await ackText(pg);
     check('it lists the undos', /What moved or was undone/i.test(txt) && (txt.match(/Undone/g) || []).length === u8, txt.slice(0, 600));
     await pg.click('.sl-ack-keep'); await leave8; await sleep(800);
+    await waitFor(pg, async () => !(await state(pg)).dirty, 3000);   // a view's own bookkeeping write right after the click is decided automatically
     s = await state(pg);
-    check('acknowledged: back at the saved version the project is saved again', s.dirty === false && !/Unsaved/.test(s.ind), s.ind + ' dirty=' + s.dirty);
+    check('acknowledged: saved at once, nothing waits', s.dirty === false && s.save.state === 'saved' && /^Saved/.test(s.ind), s.ind + ' dirty=' + s.dirty);
     check('Undo never removed journal entries (acknowledgements stay on record)', s.journal.some(j => /^change-ack: /.test(j)) && s.journal.some(j => /acknowledged \d+ collected change/.test(j)));
     await pg.evaluate(() => redo()); await sleep(700);
     check('Redo is collected too (no dialog yet)', !(await ackOpen(pg)) && (await pg.evaluate(() => SLChangeAck.collected()[0] && SLChangeAck.collected()[0].kind)) === 'redo');
+    s = await state(pg);
+    check('while it waits the header counts it ("to acknowledge"), and it is not saved yet', /1 move or undo to acknowledge/.test(s.ind) && s.dirty === true, s.ind);
+    await shot(pg, 'as_02_moves_waiting', '#save-indicator');
     // a diagram move: collected the same way; Cancel on leaving puts back only it
     await pg.evaluate(() => { SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { projectConfig.__b8box = { x: 99 }; scheduleAutosave(); }); });
     const leave8b = pg.evaluate(() => switchTab('ac-fha'));
@@ -245,125 +270,154 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await pg.evaluate(() => redo()); await sleep(500);
     const leave8c = pg.evaluate(() => switchTab('dashboard'));
     await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await leave8c; await sleep(700);
-    check('Redo then Acknowledge makes it unsaved again', (await state(pg)).dirty === true);
+    await waitFor(pg, async () => !(await state(pg)).dirty, 3000);
+    s = await state(pg);
+    check('Redo then Acknowledge saves it', s.dirty === false && s.save.state === 'saved', s.ind);
 
     // ---------------------------------------------------------------- B9
-    console.log('\n[B9] Save from the header; modules cannot save on the person\'s behalf');
+    console.log('\n[B9] the indicator');
+    const saves9 = (await state(pg)).save.stats.saves;
     await pg.evaluate(() => commitSaveChanges()); await sleep(800);
-    check('a module calling commitSaveChanges() leaves the work unsaved', (await state(pg)).dirty === true);
-    await pg.click('#save-indicator'); await sleep(1200);
+    check('a module calling commitSaveChanges() opens nothing and saves nothing on its own', !(await ackOpen(pg)) && !(await choiceOpen(pg)) && (await state(pg)).save.stats.saves === saves9);
+    await pg.evaluate(() => { SLChangeAck._markInput(); SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Valve' }, () => { projectConfig.__b9box = { x: 12 }; scheduleAutosave(); }); });
+    await sleep(500);
+    check('a waiting move shows on the header', /to acknowledge/.test((await state(pg)).ind));
+    await pg.click('#save-indicator');
+    check('clicking the header acknowledges what waits (the list opens)', await waitFor(pg, () => ackOpen(pg), 3000));
+    await pg.click('.sl-ack-keep'); await sleep(1200);
     s = await state(pg);
-    check('clicking the header control saves', s.dirty === false && !/Unsaved/.test(s.ind), s.ind);
-    check('the save is in the journal', s.journal.some(j => /^save: Not signed in saved/.test(j)));
+    check('then it is saved, with the move', s.dirty === false && s.save.state === 'saved' && /^Saved/.test(s.ind) && await pg.evaluate(() => !!projectConfig.__b9box), s.ind);
 
     // ---------------------------------------------------------------- B10
-    console.log('\n[B10] Ctrl+S saves, even from inside a text field');
-    await userEdit(pg, () => { acFhaData[0].severity = 'Major'; });
-    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(600);
+    console.log('\n[B10] Ctrl+S');
     await pg.evaluate(() => { const i = document.createElement('input'); i.id = 'b10'; document.body.appendChild(i); i.focus(); });
+    const dl = []; pg.on('download', d => dl.push(d.suggestedFilename()));
+    const saves10 = (await state(pg)).save.stats.saves;
     await pg.keyboard.press('Control+s'); await sleep(1200);
     s = await state(pg);
-    check('Ctrl+S in a text field saved (no file download, no browser dialog)', s.dirty === false && s.sev0 === 'Major', s.ind);
+    check('Ctrl+S in a text field: no download, no dialog, saved now', dl.length === 0 && !(await choiceOpen(pg)) && s.save.stats.saves === saves10 + 1 && s.save.state === 'saved', JSON.stringify(s.save.stats));
 
     // ---------------------------------------------------------------- B11
-    console.log('\n[B11] opening another project: Save / Don\'t Save / Cancel');
+    console.log('\n[B11] opening another project');
     await userEdit(pg, () => { acFhaData[0].severity = 'Hazardous'; });
-    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(600);
+    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(800);
     let pr = pg.evaluate(() => loadSampleProject());
-    check('Save / Don\'t Save / Cancel is asked', await waitFor(pg, () => choiceOpen(pg), 3000));
-    await sleep(300);
-    txt = await pg.evaluate(() => document.getElementById('sl-choice-overlay').innerText);
-    check('it names the project and the action, with all three buttons', /Save your changes\?/.test(txt) && /open the sample project/.test(txt) && /Don’t Save/.test(txt) && /Cancel/.test(txt), txt);
-    await pg.click('#sl-choice-overlay [data-choice=cancel]'); await pr; await sleep(400);
+    await sleep(1500);
+    check('no Save / Don\'t Save / Cancel: the acknowledged work was already saved', !(await choiceOpen(pg)));
+    await pr; await sleep(2200);
     s = await state(pg);
-    check('Cancel: nothing opened, the work is still here and still unsaved', s.sev0 === 'Hazardous' && s.dirty === true);
+    check('the sample opened', s.sev0 === 'Catastrophic' && s.dirty === false, s.sev0);
+    await pg.evaluate(() => { SLChangeAck._markInput(); SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Tank' }, () => { projectConfig.__b11box = { x: 3 }; scheduleAutosave(); }); });
+    await sleep(400);
     pr = pg.evaluate(() => loadSampleProject());
-    await waitFor(pg, () => choiceOpen(pg), 3000);
-    await pg.click('#sl-choice-overlay [data-choice=discard]'); await pr; await sleep(2500);
+    check('a waiting move is acknowledged first (the list, not a Save prompt)', await waitFor(pg, () => ackOpen(pg), 3000) && !(await choiceOpen(pg)));
+    const saves11 = (await state(pg)).save.stats.saves;
+    await pg.click('.sl-ack-keep'); await pr; await sleep(2500);
     s = await state(pg);
-    check('Don\'t Save: the sample opened fresh and nothing is unsaved', s.dirty === false && s.sev0 === 'Catastrophic', s.sev0);
-    check('Don\'t Save is recorded in the journal of the project it discarded from (before the load replaced it)', true);
-    await userEdit(pg, () => { acFhaData[0].severity = 'Minor'; });
-    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(600);
-    const saves11 = (await state(pg)).saveStats.saves;
-    pr = pg.evaluate(() => loadSampleProject());
-    await waitFor(pg, () => choiceOpen(pg), 3000);
-    await pg.click('#sl-choice-overlay [data-choice=save]'); await pr; await sleep(2500);
-    s = await state(pg);
-    check('Save: it saved first, then opened the project', s.saveStats.saves === saves11 + 1 && s.dirty === false, JSON.stringify(s.saveStats));
+    check('Acknowledge saved it, then the project opened', s.save.stats.saves >= saves11 + 1 || s.save.state === 'idle', JSON.stringify(s.save.stats));
 
     // ---------------------------------------------------------------- B12
-    console.log('\n[B12] new project, open file, sign out, restore: each asks first');
-    for (const [fn, words] of [['createNewProject()', 'start a new project'], ['openNewProjectWizard()', 'start a new project'], ['loadProject({ target: { files: [] } })', 'open another project'], ['supabaseSignOut()', 'sign out'], ['_applyServerRestore(null, null, null)', 'restore an earlier version'], ['openProjectFromFolder()', 'open another project'], ['_loadCloudProject("x")', 'open another project']]) {
-      await userEdit(pg, () => { acFhaData[6].comments = 'b12 ' + Math.random(); });
-      await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(500);
+    console.log('\n[B12] a save that fails');
+    await pg.evaluate(() => { window.__b12orig = window._writeAutosave; window._writeAutosave = function () { return false; }; });
+    await userEdit(pg, () => { acFhaData[6].comments = 'b12 ' + Math.random(); });
+    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(1000);
+    s = await state(pg);
+    check('this device refused it: "Not saved: ... Retry", in the header', s.save.state === 'error' && /^Not saved: this device\. Retry$/.test(s.ind), s.ind);
+    check('the header explains in its tooltip', /could not store it/.test(await pg.evaluate(() => document.getElementById('save-indicator').title)));
+    await shot(pg, 'as_03_not_saved_device', '#save-indicator');
+    for (const [fn, words] of [['createNewProject()', 'start a new project'], ['loadProject({ target: { files: [] } })', 'open another project'], ['supabaseSignOut()', 'sign out'], ['_applyServerRestore(null, null, null)', 'restore an earlier version'], ['_loadCloudProject("x")', 'open another project']]) {
       const pr12 = pg.evaluate('(async () => { try { await ' + fn + '; } catch (e) { return String(e); } })()');
-      const asked = await waitFor(pg, () => choiceOpen(pg), 3000);
+      const asked = await waitFor(pg, () => choiceOpen(pg), 4000);
       await sleep(250);
       const t12 = asked ? await pg.evaluate(() => document.getElementById('sl-choice-overlay').innerText) : '';
-      if (asked) await pg.click('#sl-choice-overlay [data-choice=cancel]');
+      if (asked && fn === 'createNewProject()') await shot(pg, 'as_04_not_saved_yet_dialog');
+      if (asked) await pg.click('#sl-choice-overlay [data-choice=stay]');
       await pr12; await sleep(300);
-      check(fn.replace(/\(.*\)/, '()') + ' asks before it runs ("' + words + '") and Cancel stops it', asked && t12.indexOf(words) >= 0 && (await state(pg)).dirty === true, t12.slice(0, 120));
+      const st12 = (await state(pg)).save;
+      check(fn.replace(/\(.*\)/, '()') + ': "Not saved yet", Stay / Continue anyway, naming "' + words + '"; Stay keeps the project', asked && /Not saved yet/.test(t12) && t12.indexOf(words) >= 0 && /Continue anyway/.test(t12) && /Stay/.test(t12) && st12.localFail, 'asked=' + asked + ' ' + JSON.stringify(t12) + ' ' + JSON.stringify(st12));
     }
+    await pg.evaluate(() => { window._writeAutosave = window.__b12orig; });
+    await pg.click('#save-indicator'); await sleep(1500);
+    s = await state(pg);
+    check('Retry from the header once this device can store it: Saved', s.save.state === 'saved' && !s.save.localFail && /^Saved/.test(s.ind), s.ind);
+    // offline (a signed-in project with a cloud copy: the push is stubbed to say offline)
+    await pg.evaluate(() => { window.__b12push = window.__slCloudSyncPushNow; window.__slCloudSyncPushNow = () => Promise.resolve({ ok: false, reason: 'offline' }); });
+    await userEdit(pg, () => { acFhaData[6].comments = 'b12 offline'; });
+    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(1000);
+    s = await state(pg);
+    check('offline: "Not saved: offline. Retry", kept on this device, the upload pending', s.save.state === 'offline' && /^Not saved: offline\. Retry$/.test(s.ind) && s.save.cloudPending && !s.save.localFail, s.ind);
+    check('the pending upload is in the autosave meta (a crash retries it)', await pg.evaluate(() => JSON.parse(localStorage.getItem(AUTOSAVE_META_KEY) || '{}').cloudPending === true));
+    await shot(pg, 'as_05_not_saved_offline', '#save-indicator');
+    await pg.evaluate(() => { window.__slCloudSyncPushNow = window.__b12push; window.dispatchEvent(new Event('online')); });
+    await sleep(1500);
+    s = await state(pg);
+    check('back online: uploaded on its own, Saved', s.save.state === 'saved' && !s.save.cloudPending, s.ind);
 
     // ---------------------------------------------------------------- B13
     console.log('\n[B13] leaving the page');
+    await pg.evaluate(() => { SLChangeAck._markInput(); SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Pipe' }, () => { projectConfig.__b13box = { x: 1 }; scheduleAutosave(); }); });
+    await sleep(400);
     let bu = [];
     pg.__keepDialogs = true;
     pg.on('dialog', d => { if (d.type() === 'beforeunload') { bu.push(1); d.dismiss().catch(() => {}); } });
     await pg.close({ runBeforeUnload: true }); await sleep(800);
-    check('with unsaved work the browser asks before the tab closes', bu.length === 1 && !pg.isClosed(), 'beforeunload dialogs: ' + bu.length);
+    check('with a move waiting for its acknowledgement the browser asks before the tab closes', bu.length === 1 && !pg.isClosed(), 'beforeunload dialogs: ' + bu.length);
     await ctx.close();
-    // (Chromium will not run a second beforeunload close on a page whose first one was dismissed,
-    // so the saved case is measured on its own page.)
     ({ pg, ctx, errs } = await fresh());
     await userEdit(pg, () => { acFhaData[0].severity = 'Major'; });
-    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(500);
-    await pg.click('#save-indicator'); await sleep(1500);
-    const pre13 = await pg.evaluate(() => JSON.stringify({ d: SLSaveState.isDirty(), u: SLChangeAck.pendingUser() }));
+    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(1200);
+    const pre13 = await pg.evaluate(() => JSON.stringify(SLSaveState.status()));
     bu = [];
     pg.on('dialog', d => { if (d.type() === 'beforeunload') { bu.push(1); d.dismiss().catch(() => {}); } });
     const closed13 = pg.waitForEvent('close', { timeout: 5000 }).then(() => true, () => false);
     await pg.close({ runBeforeUnload: true });
-    check('after Save it closes without asking', bu.length === 0 && (await closed13), 'asked ' + bu.length + ', state ' + pre13);
+    check('an acknowledged change is saved: the tab closes without asking (no Save step)', bu.length === 0 && (await closed13), 'asked ' + bu.length + ', state ' + pre13);
     await ctx.close();
 
     // ---------------------------------------------------------------- B14
     console.log('\n[B14] desktop window close');
     ({ pg, ctx, errs } = await fresh());
     await pg.evaluate(() => { window.__slabDesktop = true; window.slabDesktop = { isDesktop: true, closeWindow() { window.__closedByShell = (window.__closedByShell || 0) + 1; } }; });
-    check('__slabCanClose() is true with nothing unsaved', await pg.evaluate(() => window.__slabCanClose()) === true);
     await userEdit(pg, () => { acFhaData[0].severity = 'Major'; });
-    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(500);
-    check('__slabCanClose() is false with unsaved work', await pg.evaluate(() => window.__slabCanClose()) === false);
+    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(900);
+    check('__slabCanClose() is true right after an acknowledged change (it is saved)', await pg.evaluate(() => window.__slabCanClose()) === true);
+    await pg.evaluate(() => { SLChangeAck._markInput(); SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { projectConfig.__b14box = { x: 2 }; scheduleAutosave(); }); });
+    await sleep(400);
+    check('__slabCanClose() is false while a move waits', await pg.evaluate(() => window.__slabCanClose()) === false);
     let rq = pg.evaluate(() => window.__slabRequestClose());
-    await waitFor(pg, () => choiceOpen(pg), 3000);
-    await pg.click('#sl-choice-overlay [data-choice=cancel]');
-    check('__slabRequestClose(): Cancel answers false (the shell keeps the window)', (await rq) === false);
+    check('__slabRequestClose() asks about the waiting move (the list, not a Save prompt)', await waitFor(pg, () => ackOpen(pg), 3000) && !(await choiceOpen(pg)));
+    await pg.click('.sl-ack-keep');
+    check('Acknowledge: saved, and the shell may close (true)', (await rq) === true && await pg.evaluate(() => SLSaveState.status().state === 'saved' && !!projectConfig.__b14box));
+    await pg.evaluate(() => { SLSaveState._allowUnload(false); SLChangeAck._markInput(); SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { projectConfig.__b14box = { x: 3 }; scheduleAutosave(); }); });
+    await sleep(400);
     const cancelled = await pg.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; });
-    check('desktop beforeunload is cancelled (Electron then keeps the window) and the house dialog asks', cancelled && await waitFor(pg, () => choiceOpen(pg), 3000));
-    await pg.click('#sl-choice-overlay [data-choice=save]'); await sleep(1200);
-    s = await state(pg);
-    check('Save there saves and then asks the shell to close the window', s.dirty === false && await pg.evaluate(() => window.__closedByShell === 1));
+    check('desktop beforeunload with a move waiting is canceled and the list asks', cancelled && await waitFor(pg, () => ackOpen(pg), 3000));
+    await pg.click('.sl-ack-keep'); await sleep(1500);
+    check('Acknowledge there saves and then asks the shell to close the window', await waitFor(pg, () => pg.evaluate(() => window.__closedByShell === 1 && SLSaveState.status().state === 'saved'), 4000));
     await ctx.close();
 
     // ---------------------------------------------------------------- B15
-    console.log('\n[B15] a crash keeps unsaved work unsaved; Don\'t Save still works after it');
+    console.log('\n[B15] a crash');
     ({ pg, ctx, errs } = await fresh());
     await userEdit(pg, () => { acFhaData[0].severity = 'Major'; });
-    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(1500);
+    await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await sleep(1200);
+    await pg.evaluate(() => { SLChangeAck._markInput(); SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Filter' }, () => { projectConfig.b15Box = { x: 44 }; scheduleAutosave(); }); });
+    await sleep(1500);
     const pg2 = await ctx.newPage();
     pg2.on('dialog', d => { nativeDialogs.push(d.type()); d.dismiss().catch(() => {}); });
     await pg.close({ runBeforeUnload: false });   // the tab dies without asking (a crash)
     await pg2.goto(base); await sleep(4500); await clearGates(pg2);
     s = await state(pg2);
-    check('the unsaved edit came back', s.sev0 === 'Major', s.sev0);
-    check('and it is still UNSAVED (never silently promoted to saved)', s.dirty === true && /Unsaved/.test(s.ind), s.ind);
-    const okD = await pg2.evaluate(() => SLSaveState.discard());
-    await sleep(1200);
+    check('the acknowledged edit came back, saved', s.sev0 === 'Major', s.sev0);
+    check('the move left waiting is asked about again on the next open', await waitFor(pg2, () => ackOpen(pg2), 6000));
+    await sleep(500);
+    const t15 = await ackText(pg2);
+    check('the list says what it is, and only that (the app\'s own writes since the restore are not listed)', /last session/i.test(t15) && /b15 box/i.test(t15) && /Acknowledge this change/.test(t15), t15.slice(0, 400));
+    await shot(pg2, 'as_06_crash_reask');
+    await pg2.click('.sl-ack-cancel'); await sleep(1200);
     s = await state(pg2);
-    check('Don\'t Save after the crash returns to the saved version', okD === true && s.sev0 === 'Catastrophic' && s.dirty === false, s.sev0);
-    check('the discarded acknowledgement is still on record in the journal', s.journal.some(j => /^change-not-saved: /.test(j)) && s.journal.some(j => /^discard: /.test(j)));
+    check('Cancel change: back to what was accepted (the move gone, the edit kept), nothing waits', s.sev0 === 'Major' && await pg2.evaluate(() => !projectConfig.b15Box) && s.dirty === false, JSON.stringify(s.save));
+    errs = []; pg2.on('pageerror', e => errs.push(String(e)));
     await ctx.close();
 
     // ---------------------------------------------------------------- B16

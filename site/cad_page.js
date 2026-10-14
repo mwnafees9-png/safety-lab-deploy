@@ -1,5 +1,5 @@
 // ============================================================================
-// cad_page.js, v1.2: the CAD Model page (13 Oct 2026). A tab in the ZSA area,
+// cad_page.js, v1.3: the CAD Model page (13 Oct 2026; 1.3 cad-C: exact session handed from the import, the review panels of the viewer). A tab in the ZSA area,
 // right after Zonal Model (prove_tabs.js), mounted the born-modular way of
 // zonal_ui.js: its own view ('view-cad'), a switchTab wrap, no monolith edits.
 //
@@ -21,7 +21,7 @@
 // ============================================================================
 (function () {
     'use strict';
-    var VERSION = '1.2';
+    var VERSION = '1.3';
     var state = { cadId: null, viewer: null, job: null, unsub: null, lastSel: null };
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
     function _pc() {
@@ -55,23 +55,36 @@
         bar.style.width = frac == null ? '100%' : Math.round(frac * 100) + '%';
         bar.style.opacity = frac == null ? '0.35' : '1';
     }
-    var PHASE = { hash: 'Fingerprinting the file', load: 'Starting the STEP reader', scan: 'Reading the product structure', parse: 'Reading the geometry (this can take a while for a whole aircraft)', mesh: 'Building parts', done: 'Saving to this computer' };
+    var PHASE = { hash: 'Fingerprinting the file', load: 'Loading the STEP reader', scan: 'Reading the product structure', parse: 'Reading the STEP file', transfer: 'Building the shapes (one OpenCascade step, no fraction)', mesh: 'Meshing parts (each repeated part once)', fallback: 'The full reader could not run here: using the smaller one', done: 'Saving to this computer' };
     function cadImportFile(file) {
         var I = window.SLCadImport;
         if (state.job) { _msg('An import is already running.', 'error'); return null; }
         _msg('');
         _progress(true, PHASE.hash + '...', 0);
-        var job = state.job = I.importStep(file, { by: _who(), onProgress: function (ph, f) { _progress(true, (PHASE[ph] || ph) + '...', ph === 'parse' && f === 0 ? null : f); } });
+        // the 3D library loads while the file is read, not after
+        try { if (state.viewer && state.viewer._ensure3d) state.viewer._ensure3d(); } catch (_) {}
+        var job = state.job = I.importStep(file, { by: _who(), keepSession: true, onProgress: function (ph, f) { _progress(true, (PHASE[ph] || ph) + (f != null && ph !== 'transfer' ? ' ' + Math.round(f * 100) + '%' : '') + '...', ph === 'transfer' ? null : f); } });
         return job.promise.then(function (r) {
             state.job = null; _progress(false);
-            state.cadId = r.entry.id;
-            _renderRevisions();
+            state.cadId = r.entry.id; state.matchOn = false;
+            // the worker that read the file keeps its exact geometry open for measurement and PMI
+            if (r.worker && window.SLCadExact) window.SLCadExact.attach(r.worker, r.entry);
+            var TR = I._trace || function () {};
+            TR('page: result'); _renderRevisions(); TR('page: revisions drawn');
             var rv = r.revision, rvTxt = '';
             if (rv && rv.diff) rvTxt = ' Compared with revision ' + _esc(rv.diff.fromRevision || rv.from) + ': ' + rv.diff.added.length + ' added, ' + rv.diff.removed.length + ' removed, ' + rv.diff.moved.length + ' moved' + (rv.carried ? '; ' + rv.carried.carried.length + ' equipment links carried over' + (rv.carried.dropped.length ? ', ' + rv.carried.dropped.length + ' dropped' : '') : '') + '. ' + (rv.review ? rv.review.items.length + ' item' + (rv.review.items.length === 1 ? '' : 's') + ' to review below.' : '');
-            _msg('Imported <b>' + _esc(r.entry.fileName) + '</b> as revision ' + _esc(r.entry.revision) + ': ' + r.entry.parts.length + ' parts' + (r.model.stats && r.model.stats.decimatedParts ? ', ' + r.model.stats.decimatedParts + ' simplified for display' : '') + '. Geometry kept on this computer only.' + rvTxt);
-            _renderPanels();
+            var st = r.model.stats || {};
+            _msg('Imported <b>' + _esc(r.entry.fileName) + '</b> as revision ' + _esc(r.entry.revision) + ': ' + _partCount(r.entry) + ' parts' + (st.prototypes && st.prototypes < _partCount(r.entry) ? ' (' + st.prototypes + ' distinct shapes)' : '') + (st.decimatedParts ? ', ' + st.decimatedParts + ' simplified for display' : '') + '. Geometry and the STEP file kept on this computer only' + ((r.model.reader === 'opencascade.js' || r.model.reader === 'occt-fast') ? '; exact geometry open for measurement and PMI' : r.model.fallbackReason ? '; read with the smaller reader (' + _esc(r.model.fallbackReason) + '), exact geometry loads on demand' : '') + '.' + rvTxt);
+            // a large model: on screen first, the panels below it right after
+            if (!r.stream) { _renderPanels(); TR('page: panels drawn'); }
             _toast('CAD model imported', 'success');
-            return state.viewer ? state.viewer.showModel(r.entry, r.model.meshes).then(function () { return r.entry; }) : r.entry;
+            if (r.stream) {
+                _msg('Opened <b>' + _esc(r.entry.fileName) + '</b>: ' + _partCount(r.entry) + ' parts shown as boxes; the real shapes stream in behind (largest first).');
+                r.stream.onEnd(function (e) { if (r.stream.worker && window.SLCadExact) window.SLCadExact.attach(r.stream.worker, r.entry); });
+                r.stream.onEnd(function (e) { if (e.type === 'detail-done') _msg('Opened <b>' + _esc(r.entry.fileName) + '</b>: ' + _partCount(r.entry) + ' parts, all ' + e.total + ' distinct shapes read' + (e.workers ? ' by ' + e.workers + ' parallel readers' : '') + '. Geometry and the STEP file kept on this computer only.'); else if (e.message !== 'canceled') _msg('Some shapes could not be read: ' + _esc(e.message || ''), 'error'); });
+            }
+            if (!state.viewer && r.stream) _renderPanels();
+            return state.viewer ? state.viewer.showModel(r.entry, r.model).then(function () { TR('page: model shown'); if (r.stream) setTimeout(function () { _renderPanels(); TR('page: panels drawn'); }, 0); if (r.stream) r.stream.on(function (b) { state.viewer.applyDetail(b.protos); }); return r.entry; }) : r.entry;
         }, function (e) {
             state.job = null; _progress(false);
             _msg(e && e.code === 'canceled' ? 'Import canceled.' : 'Import failed: ' + _esc(e && e.message || e), e && e.code === 'canceled' ? null : 'error');
@@ -129,7 +142,21 @@
         return n;
     }
     function _model() { var E = _engine(); return E && state.cadId ? E.model(state.cadId) : null; }
-    function _partMeta(pid) { var m = _model(); return m ? (m.parts || []).find(function (x) { return x.pid === pid; }) : null; }
+    function _partCount(m) { return m ? (m.partStore === 'local' ? m.partCount : (m.parts || []).length) : 0; }
+    var _metaCache = { list: null, map: null };
+    function _partMeta(pid) {
+        var m = _model(), E = window.SLCadZonal; var list = m ? (E && E.partsOf ? E.partsOf(m) : (m.parts || [])) : [];
+        if (_metaCache.list !== list || _metaCache.n !== list.length) { var map = {}; list.forEach(function (x) { map[x.pid] = x; }); _metaCache = { list: list, n: list.length, map: map }; }
+        return _metaCache.map[pid] || null;
+    }
+    // A long list in a panel shows its first LIST_CAP rows and says how many more there are: a
+    // 200,000 part model must never become 200,000 rows of HTML (the parts list in the viewer is
+    // the place to browse them all; it draws only the rows on screen).
+    var LIST_CAP = 100;
+    function _cap(list, row) {
+        var shown = list.length > LIST_CAP ? list.slice(0, LIST_CAP) : list;
+        return shown.map(row).join('') + (list.length > LIST_CAP ? '<div style="' + MUTED + 'padding:3px 6px;" data-cad-more="' + list.length + '">and ' + (list.length - LIST_CAP) + ' more (find them in the viewer\'s parts list)</div>' : '');
+    }
     function _partName(pid) { var p = _partMeta(pid); return p ? p.name + (p.designator ? ' ' + p.designator : '') + (p.partNumber ? ' (' + p.partNumber + ')' : '') : pid; }
     function _sysName(id) {
         var s = null; try { var list = (window.SLEnv && SLEnv.get('systemsData')) || (typeof systemsData !== 'undefined' ? systemsData : []); s = (list || []).find(function (x) { return x && String(x.id) === String(id); }); } catch (_) {}   // eslint-disable-line no-undef
@@ -154,34 +181,41 @@
     function _renderMatching() {
         var E = _engine(); if (!E) { _panel('cad-match', 'Equipment links', _noEngine()); return; }
         if (!_model()) { _panel('cad-match', 'Equipment links', _noModel()); return; }
+        // a very large model: matching runs when asked, not on every redraw (it reads every part)
+        var mdl = _model();
+        if (mdl && mdl.partStore === 'local' && !state.matchOn) {
+            _panel('cad-match', 'Equipment links', '<div style="font-size:12px;">' + (E.confirmed ? Object.keys(E.confirmed(state.cadId)).length : 0) + ' linked parts. <button data-cad-act="match-now" style="' + BTN + 'margin-left:6px;">Find equipment matches in ' + _partCount(mdl) + ' parts</button></div>', _rule('identity'));
+            return;
+        }
         var m = E.matchEquipment(state.cadId);
         var sys = _systems();
         var nameBox = '<label style="font-size:12px;display:inline-flex;gap:6px;align-items:center;margin-bottom:6px;">Your name (recorded on every link) <input id="cad-by" value="' + _esc(state.by || _who()) + '" style="font-size:12px;padding:2px 6px;border:1px solid var(--color-border-hair);border-radius:5px;width:180px;"></label>';
         var head = '<div style="font-size:12px;margin-bottom:6px;" data-cad-match-summary>' + m.linked.length + ' linked · ' + m.exact.length + ' designator matches to accept · ' + m.candidates.length + ' suggestions to confirm · ' + m.unmatched.length + ' with no match.</div>' +
             '<div style="' + MUTED + 'margin-bottom:6px;">A link is to one installed copy, never to a part number: the same part can be fitted several times doing different jobs. Only a reference designator found on exactly one CAD part and one equipment item is offered as a match; a shared part number, an ATA code or a similar name is only a suggestion. Nothing links until you accept or confirm it.</div>';
         var ex = m.exact.length ? '<div style="margin-top:6px;"><b style="font-size:12px;">Designator matches</b> <button data-cad-act="accept-all" style="' + BTN + 'margin-left:6px;">Accept all ' + m.exact.length + '</button>' +
-            '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' + m.exact.map(function (x) {
+            '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' + _cap(m.exact, function (x) {
                 return '<tr data-cad-exact="' + _esc(x.pid) + '" style="border-top:1px solid var(--color-border-hair);"><td style="padding:3px 6px;">' + _pidLink(x.pid) + '</td><td style="padding:3px 6px;">' + _esc(_sysName(x.sysId)) + '</td><td style="padding:3px 6px;' + MUTED + '">same reference designator ' + _esc((_partMeta(x.pid) || {}).designator || (_partMeta(x.pid) || {}).name || '') + '</td>' +
                     '<td style="padding:3px 6px;text-align:right;white-space:nowrap;"><button data-cad-act="confirm" data-pid="' + _esc(x.pid) + '" data-sys="' + _esc(x.sysId) + '" data-on="' + _esc(x.on) + '" style="' + BTN + '">Accept</button> <button data-cad-act="reject" data-pid="' + _esc(x.pid) + '" data-sys="' + _esc(x.sysId) + '" style="' + BTN_BAD + '">Reject</button></td></tr>';
-            }).join('') + '</table></div>' : '';
-        var ca = m.candidates.length ? '<div style="margin-top:8px;"><b style="font-size:12px;">Suggestions to confirm</b> <span style="' + MUTED + '">(shared part number, ATA code or a similar name)</span><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' + m.candidates.map(function (c) {
+            }) + '</table></div>' : '';
+        var ca = m.candidates.length ? '<div style="margin-top:8px;"><b style="font-size:12px;">Suggestions to confirm</b> <span style="' + MUTED + '">(shared part number, ATA code or a similar name)</span><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' + _cap(m.candidates, function (c) {
                 return c.sysIds.map(function (sid, i) {
                     return '<tr data-cad-cand="' + _esc(c.pid) + '" style="border-top:1px solid var(--color-border-hair);"><td style="padding:3px 6px;">' + (i === 0 ? _pidLink(c.pid) : '') + '</td><td style="padding:3px 6px;">' + _esc(_sysName(sid)) + '</td>' +
                         '<td style="padding:3px 6px;text-align:right;white-space:nowrap;"><button data-cad-act="confirm" data-pid="' + _esc(c.pid) + '" data-sys="' + _esc(sid) + '" style="' + BTN + '">Confirm</button> <button data-cad-act="reject" data-pid="' + _esc(c.pid) + '" data-sys="' + _esc(sid) + '" style="' + BTN_BAD + '">Reject</button></td></tr>';
                 }).join('');
-            }).join('') + '</table></div>' : '';
+            }) + '</table></div>' : '';
         var opts = sys.map(function (s) { return '<option value="' + _esc(s.id) + '">' + _esc(s.name || s.id) + '</option>'; }).join('');
-        var un = m.unmatched.length ? '<details style="margin-top:8px;"><summary style="font-size:12px;cursor:pointer;">' + m.unmatched.length + ' parts with no match (link one by hand)</summary>' + m.unmatched.map(function (pid) {
+        var un = m.unmatched.length ? '<details style="margin-top:8px;"><summary style="font-size:12px;cursor:pointer;">' + m.unmatched.length + ' parts with no match (link one by hand)</summary>' + _cap(m.unmatched, function (pid) {
                 return '<div style="display:flex;gap:6px;align-items:center;padding:2px 0;">' + _pidLink(pid) + (opts ? '<select data-cad-manual="' + _esc(pid) + '" style="font-size:11.5px;padding:1px;"><option value="">equipment...</option>' + opts + '</select><button data-cad-act="manual" data-pid="' + _esc(pid) + '" style="' + BTN + '">Confirm link</button>' : '') + '</div>';
-            }).join('') + '</details>' : '';
-        var li = m.linked.length ? '<details style="margin-top:8px;"><summary style="font-size:12px;cursor:pointer;">' + m.linked.length + ' linked parts</summary>' + m.linked.map(function (l) {
+            }) + '</details>' : '';
+        var li = m.linked.length ? '<details style="margin-top:8px;"><summary style="font-size:12px;cursor:pointer;">' + m.linked.length + ' linked parts</summary>' + _cap(m.linked, function (l) {
                 return '<div style="display:flex;gap:6px;align-items:center;padding:2px 0;font-size:12px;" data-cad-linked="' + _esc(l.pid) + '">' + _pidLink(l.pid) + ' <span>to ' + _esc(_sysName(l.sysId)) + '</span><button data-cad-act="unlink" data-pid="' + _esc(l.pid) + '" style="' + BTN_BAD + 'margin-left:auto;">Unlink</button></div>';
-            }).join('') + '</details>' : '';
+            }) + '</details>' : '';
         _panel('cad-match', 'Equipment links', nameBox + head + ex + ca + un + li, _rule('identity'));
     }
     function _linkAction(btn) {
         var E = _engine(); if (!E || !state.cadId) return;
         var act = btn.getAttribute('data-cad-act'), pid = btn.getAttribute('data-pid'), sid = btn.getAttribute('data-sys');
+        if (act === 'match-now') { state.matchOn = true; _renderMatching(); return; }
         if (act === 'unlink') { E.unlink(state.cadId, pid); _afterLinks(); return; }
         var by = _needWho(); if (!by) return;
         state.by = by;
@@ -204,13 +238,13 @@
         var sel = state.lastSel && state.lastSel.pids && state.lastSel.pids[0];
         var selLine = '';
         if (sel) {
-            var rec = c.parts.find(function (r) { return r.pid === sel; });
+            var rec = null; for (var ri = 0; ri < c.parts.length; ri++) if (c.parts[ri].pid === sel) { rec = c.parts[ri]; break; }
             selLine = '<div style="font-size:12px;margin-bottom:6px;" data-cad-sel-zone>Selected: ' + _pidLink(sel) + ' is ' + (rec && rec.zoneId ? 'in ' + _zoneLink(rec.zoneId) + (rec.ambiguousWith ? ' (also inside ' + rec.ambiguousWith.map(_zoneLink).join(', ') + ' at the same depth)' : '') : (c.envelopes.indexOf(sel) >= 0 ? 'part of a zone envelope' : 'outside every zone')) + (c.straddling.some(function (s) { return s.pid === sel; }) ? ', and crosses a zone boundary' : '') + '.</div>';
         }
         var body = selLine + '<div style="font-size:12px;margin-bottom:4px;">' + c.parts.filter(function (r) { return r.zoneId; }).length + ' parts in zones · ' + c.outside.length + ' outside every zone · ' + c.straddling.length + ' crossing a boundary · ' + c.ambiguous.length + ' ambiguous</div>' +
             (zones.length ? zones.map(function (zid) { return '<div style="font-size:12px;">' + _zoneLink(zid) + ': ' + c.byZone[zid].length + ' part' + (c.byZone[zid].length === 1 ? '' : 's') + '</div>'; }).join('') : '<div style="' + MUTED + '">No zone with a volume holds any part. Import a zone list with boxes, or define zones from parts.</div>') +
-            (c.straddling.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Crossing a boundary</summary>' + c.straddling.map(function (s) { return '<div>' + _pidLink(s.pid) + '</div>'; }).join('') + '</details>' : '') +
-            (c.outside.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Outside every zone</summary>' + c.outside.map(function (p) { return '<div>' + _pidLink(p) + '</div>'; }).join('') + '</details>' : '') +
+            (c.straddling.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Crossing a boundary</summary>' + _cap(c.straddling, function (s) { return '<div>' + _pidLink(s.pid) + '</div>'; }) + '</details>' : '') +
+            (c.outside.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Outside every zone</summary>' + _cap(c.outside, function (p) { return '<div>' + _pidLink(p) + '</div>'; }) + '</details>' : '') +
             (c.zoneIssues.length ? '<div style="font-size:12px;color:var(--color-danger,#8E2A2A);margin-top:4px;">' + c.zoneIssues.map(function (i) { return _esc(i.text); }).join('<br>') + '</div>' : '');
         var plan = E.applyContainment(state.cadId);
         body += '<div style="margin-top:8px;border-top:1px solid var(--color-border-hair);padding-top:6px;" data-cad-placement><b style="font-size:12px;">Equipment placement from CAD</b>' +
@@ -302,7 +336,7 @@
         }).join(''));
     }
     function _onSelect(ev) { state.lastSel = ev; _renderContainment(); }
-    function _renderPanels() { _renderMatching(); _renderContainment(); _renderIndependence(); _renderReviews(); if (state.focus && state.focus.zoneId) _onZone(state.focus.zoneId, true); else if (state.focus && state.focus.volumeId) _onVolume(state.focus.volumeId, true); else _panel('cad-impact', 'Impact', _engine() ? '<div style="font-size:12px;">Click a zone or a PRA volume (in the viewer\'s lists, or a zone link here) to see what it reaches through the fault trees.</div>' : _noEngine()); }
+    function _renderPanels() { var TR = (window.SLCadImport && SLCadImport._trace) || function () {}; _renderMatching(); TR('panel matching'); _renderContainment(); TR('panel containment'); _renderIndependence(); TR('panel independence'); _renderReviews(); TR('panel reviews'); if (state.focus && state.focus.zoneId) _onZone(state.focus.zoneId, true); else if (state.focus && state.focus.volumeId) _onVolume(state.focus.volumeId, true); else _panel('cad-impact', 'Impact', _engine() ? '<div style="font-size:12px;">Click a zone or a PRA volume (in the viewer\'s lists, or a zone link here) to see what it reaches through the fault trees.</div>' : _noEngine()); }
 
     // ---- a ZSA row's zone, from the Zonal Safety table: show it in 3D
     function _zoneFromText(t) {
@@ -354,7 +388,7 @@
                 var cur = m.id === state.cadId;
                 return '<tr style="border-top:1px solid var(--color-border-hair);' + (cur ? 'background:rgba(26,110,242,.08);' : '') + '">' +
                     '<td style="padding:4px 8px;">' + _esc(m.fileName) + '</td><td style="padding:4px 8px;">' + _esc(m.revision) + '</td>' +
-                    '<td style="padding:4px 8px;">' + _esc(String(m.importedAt || '').slice(0, 16).replace('T', ' ')) + '</td><td style="padding:4px 8px;">' + (m.parts ? m.parts.length : 0) + '</td>' +
+                    '<td style="padding:4px 8px;">' + _esc(String(m.importedAt || '').slice(0, 16).replace('T', ' ')) + '</td><td style="padding:4px 8px;">' + (m.parts ? _partCount(m) : 0) + '</td>' +
                     '<td style="padding:4px 8px;font-family:var(--font-mono,monospace);font-size:11px;" title="sha256 ' + _esc(m.sha256) + '">' + _esc(String(m.sha256 || '').slice(0, 12)) + '</td>' +
                     '<td style="padding:4px 8px;" data-cad-cached="' + _esc(m.sha256) + '">...</td>' +
                     '<td style="padding:4px 8px;text-align:right;"><button onclick="cadViewRevision(\'' + _esc(m.id) + '\')" style="font-size:11.5px;padding:2px 9px;border:1px solid #007AFF;border-radius:5px;background:' + (cur ? '#007AFF;color:#fff' : 'transparent;color:#007AFF') + ';cursor:pointer;">' + (cur ? 'Viewing' : 'View') + '</button></td></tr>';
@@ -380,7 +414,7 @@
                     '<button id="cad-btn-zones" onclick="cadImportZones()" style="font-size:12px;padding:5px 12px;border:1px solid #007AFF;border-radius:6px;background:transparent;color:#007AFF;cursor:pointer;" title="A CSV or Excel list: code, name, parent code and the box xMin yMin zMin xMax yMax zMax (mm, or a unit column)">Import zone list</button>' +
                   '</span>' +
                 '</div>' +
-                '<div style="font-size:12px;color:#55555C;margin:6px 0 8px;">STEP files are read on this computer. The geometry stays in this browser on this computer and is never uploaded; the project keeps only the part names, part numbers and positions.</div>' +
+                '<div style="font-size:12px;color:#55555C;margin:6px 0 8px;">STEP files are read on this computer. The geometry and the file stay in this browser on this computer and are never uploaded; the project keeps only the part names, part numbers and positions, and what the team shares about them (saved views, notes).</div>' +
                 '<div id="cad-progress" style="display:none;align-items:center;gap:10px;margin:6px 0;font-size:12px;"><span data-lbl style="min-width:260px;"></span><div style="flex:1;height:6px;border-radius:3px;background:var(--color-surface-2,#eef1f6);overflow:hidden;"><div data-bar style="height:100%;width:0;background:#007AFF;transition:width .2s;"></div></div><button onclick="cadCancelImport()" style="font-size:11.5px;padding:2px 9px;border:1px solid var(--color-border-hair);border-radius:5px;background:transparent;cursor:pointer;color:var(--color-text-primary);">Cancel</button></div>' +
                 '<div id="cad-msg" style="display:none;font-size:12.5px;margin:6px 0;padding:8px 10px;border:1px solid var(--color-border-hair);border-radius:8px;"></div>' +
                 '<div id="cad-revs" style="border:1px solid var(--color-border-hair);border-radius:8px;overflow:auto;max-height:180px;margin-bottom:10px;"></div>' +
@@ -409,7 +443,7 @@
         }
         _renderRevisions();
         if (!state.viewer && window.SLCadViewer) {
-            state.viewer = window.SLCadViewer.mount(document.getElementById('cad-viewer-host'), { height: 620, onZone: _onZone, onVolume: _onVolume });
+            state.viewer = window.SLCadViewer.mount(document.getElementById('cad-viewer-host'), { height: 680, onZone: _onZone, onVolume: _onVolume, who: _who, onReview: function () { _renderReviews(); }, onShared: function () { try { if (typeof window.scheduleAutosave === 'function') window.scheduleAutosave(); } catch (_) {} } });
             state.unsub = state.viewer.onSelect(_onSelect);
         }
         var ms = _models();

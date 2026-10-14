@@ -106,7 +106,15 @@
     function _E() { return root.SLFTAEngine || null; }
     function _sys() { return _arr(_g('systemsData')); }
     function _sysById(id) { var s = _sys(); for (var i = 0; i < s.length; i++) if (s[i] && String(s[i].id) === String(id)) return s[i]; return null; }
-    function _save() { try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
+    function _save() { _pinReferenced(); try { if (typeof root.scheduleAutosave === 'function') root.scheduleAutosave(); } catch (_) {} }
+    // every part a zone volume names is kept in a large model's synced summary
+    function _pinReferenced() {
+        try {
+            var pc = _pc(); if (!_arr(pc.cadModels).some(function (m) { return m && m.partStore === 'local'; })) return;
+            var Z = _Z(); if (!Z) return;
+            Z.all().forEach(function (z) { var v = z && z.volume; if (v && v.kind === 'parts' && v.cadId) _arr(v.pids).forEach(function (pid) { _pin(v.cadId, pid); }); });
+        } catch (_) {}
+    }
     function _s(v) { return v == null ? '' : String(v).trim(); }
     function _cmp(a, b) { a = String(a == null ? '' : a); b = String(b == null ? '' : b); return a < b ? -1 : (a > b ? 1 : 0); }
     // natural order without locale: "110" < "1000", "Z2" < "Z10"
@@ -123,7 +131,7 @@
     function _clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
     // ---- vectors and boxes ---------------------------------------------------------------
-    function _n3(v) { return Array.isArray(v) && v.length === 3 && v.every(function (x) { return typeof x === 'number' && isFinite(x); }); }
+    function _n3(v) { return Array.isArray(v) && v.length === 3 && typeof v[0] === 'number' && isFinite(v[0]) && typeof v[1] === 'number' && isFinite(v[1]) && typeof v[2] === 'number' && isFinite(v[2]); }
     function _sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
     function _dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
     function _len(a) { return Math.sqrt(_dot(a, a)); }
@@ -152,8 +160,54 @@
     function models() { var pc = _pc(); if (!Array.isArray(pc.cadModels)) return []; return pc.cadModels; }
     function model(cadId) { var m = models(); for (var i = 0; i < m.length; i++) if (m[i] && m[i].id === cadId) return m[i]; return null; }
     function latestCadId() { var m = models(); return m.length ? m[m.length - 1].id : null; }
-    function _partMap(cadId) { var m = model(cadId), out = {}; _arr(m && m.parts).forEach(function (p) { if (p && p.pid != null) out[p.pid] = p; }); return out; }
-    function _partsSorted(cadId) { var m = model(cadId); return _arr(m && m.parts).slice().sort(function (a, b) { return _cmp(a.pid, b.pid); }); }
+    // ---- large models: the full part list stays on this computer ------------------------
+    // A model with more than LOCAL_PARTS_MIN parts keeps in the project (which syncs) only a
+    // summary: its part count and the parts something refers to (an equipment link, a zone),
+    // so every link resolves on any computer. The full list lives with the geometry in this
+    // computer's cache (keyed by the file's sha256) and is registered here when the model
+    // opens. partsOf(model) is the full list when registered, else the synced summary.
+    var LOCAL_PARTS_MIN = 20000;
+    var _local = {};   // sha256 -> { parts, map }
+    // parts: the array, or a function that returns it (called on first use: a model straight from
+    // its cache draws before its 200,000 part records exist)
+    function registerLocalParts(sha, parts) {
+        if (!sha) return false;
+        if (typeof parts === 'function') {
+            var fn = parts, rec = { _parts: null, _map: null };
+            Object.defineProperty(rec, 'parts', { get: function () { if (!this._parts) this._parts = fn() || []; return this._parts; } });
+            Object.defineProperty(rec, 'map', { get: function () { if (!this._map) { var mp = Object.create(null), L = this.parts; for (var i = 0; i < L.length; i++) if (L[i] && L[i].pid != null) mp[L[i].pid] = L[i]; this._map = mp; } return this._map; } });
+            _local[sha] = rec;
+            return true;
+        }
+        if (!Array.isArray(parts)) return false;
+        // pid -> part, built on first use
+        _local[sha] = { parts: parts, _map: null, get map() { if (!this._map) { var mp = Object.create(null); for (var i = 0; i < this.parts.length; i++) { var p = this.parts[i]; if (p && p.pid != null) mp[p.pid] = p; } this._map = mp; } return this._map; } };
+        _pinReferenced();
+        return true;
+    }
+    function hasLocalParts(sha) { return !!_local[sha]; }
+    function partsOf(m) {
+        if (typeof m === 'string') m = model(m);
+        if (!m) return [];
+        if (m.partStore === 'local' && m.sha256 && _local[m.sha256]) return _local[m.sha256].parts;
+        return _arr(m.parts);
+    }
+    // keep a referenced part in the synced summary (no-op for an ordinary model)
+    function _pin(cadId, pid) {
+        var m = model(cadId); if (!m || m.partStore !== 'local') return;
+        if (_arr(m.parts).some(function (p) { return p && p.pid === pid; })) return;
+        var L = m.sha256 && _local[m.sha256], p = L && L.map[pid];
+        if (!p) return;
+        if (!Array.isArray(m.parts)) m.parts = [];
+        m.parts.push(_clone(p));
+        m.parts.sort(function (a, b) { return _cmp(a.pid, b.pid); });
+    }
+    function _partMap(cadId) {
+        var m = model(cadId);
+        if (m && m.partStore === 'local' && m.sha256 && _local[m.sha256]) return _local[m.sha256].map;
+        var out = {}; _arr(m && m.parts).forEach(function (p) { if (p && p.pid != null) out[p.pid] = p; }); return out;
+    }
+    function _partsSorted(cadId) { var m = model(cadId); return partsOf(m).slice().sort(function (a, b) { return _cmp(a.pid, b.pid); }); }
 
     // addCadModel(meta): the viewer hands over the metadata of one imported CAD file. Validated
     // and normalized to millimetres; a new id 'cad-<n>' unless the meta carries a free one.
@@ -164,17 +218,17 @@
         var units = _s(meta.units || 'mm');
         var f = UNITS[units];
         if (!f) return { ok: false, issues: ['Unknown units "' + units + '": use mm, cm, m, in or ft.'] };
-        var seen = {}, parts = [];
+        var seen = new Set(), parts = [];
         _arr(meta.parts).forEach(function (p, i) {
             if (!p || typeof p.pid !== 'string' || !p.pid) { issues.push('Part ' + (i + 1) + ' has no persistent id; skipped.'); return; }
-            if (seen[p.pid]) { issues.push('Part id ' + p.pid + ' appears twice; the second is skipped.'); return; }
+            if (seen.has(p.pid)) { issues.push('Part id ' + p.pid + ' appears twice; the second is skipped.'); return; }
             if (!p.bbox || !_n3(p.bbox.min) || !_n3(p.bbox.max)) { issues.push('Part ' + p.pid + ' has no usable bounding box; skipped.'); return; }
-            var mn = p.bbox.min.map(function (x) { return x * f; }), mx = p.bbox.max.map(function (x) { return x * f; });
+            var mn = [p.bbox.min[0] * f, p.bbox.min[1] * f, p.bbox.min[2] * f], mx = [p.bbox.max[0] * f, p.bbox.max[1] * f, p.bbox.max[2] * f];
             for (var a = 0; a < 3; a++) if (mn[a] > mx[a]) { var t = mn[a]; mn[a] = mx[a]; mx[a] = t; issues.push('Part ' + p.pid + ': box min above max on axis ' + 'xyz'.charAt(a) + '; swapped.'); }
-            seen[p.pid] = 1;
-            var c = _n3(p.centroid) ? p.centroid.map(function (x) { return x * f; }) : _center({ min: mn, max: mx });
+            seen.add(p.pid);
+            var c = _n3(p.centroid) ? [p.centroid[0] * f, p.centroid[1] * f, p.centroid[2] * f] : _center({ min: mn, max: mx });
             var part = { pid: p.pid, name: _s(p.name) || p.pid, partNumber: _s(p.partNumber) || null,
-                         path: _arr(p.path).map(String), bbox: { min: mn, max: mx }, centroid: c };
+                         path: Array.isArray(p.path) ? p.path : [], bbox: { min: mn, max: mx }, centroid: c };
             if (_s(p.designator)) part.designator = _s(p.designator);
             if (_s(p.ata)) part.ata = _s(p.ata);
             parts.push(part);
@@ -190,10 +244,36 @@
         var k2 = /^cad-(\d+)$/.exec(id); pc.cadSeq = Math.max(pc.cadSeq || 0, k2 ? Number(k2[1]) : 0);
         var m = { id: id, fileName: _s(meta.fileName) || null, sha256: _s(meta.sha256) || null, revision: _s(meta.revision) || null,
                   importedAt: _s(meta.importedAt) || (opts.at || new Date().toISOString()), units: 'mm', parts: parts };
+        if (parts.length > LOCAL_PARTS_MIN && m.sha256) {
+            // the full list to this computer's registry, the project keeps the summary
+            registerLocalParts(m.sha256, parts);
+            m.partStore = 'local'; m.partCount = parts.length; m.parts = [];
+        }
         if (units !== 'mm') m.sourceUnits = units;
         pc.cadModels.push(m);
         _save();
         return { ok: true, model: m, issues: issues };
+    }
+
+    // The boxes of a model's parts, replaced by better ones (a large model opens with boxes
+    // estimated from the file and gets each part's true box when its shape has been read).
+    // list = [{ pid, bbox: { min, max }, centroid? }]. Updates this computer's full list and the
+    // synced records alike.
+    function updatePartBoxes(cadId, list) {
+        var m = model(cadId); if (!m) return { ok: false, err: 'CAD model not found: ' + cadId };
+        var map = _partMap(cadId), synced = {}, n = 0;
+        _arr(m.parts).forEach(function (p) { synced[p.pid] = p; });
+        _arr(list).forEach(function (u) {
+            if (!u || !u.bbox || !_n3(u.bbox.min) || !_n3(u.bbox.max)) return;
+            [map[u.pid], synced[u.pid]].forEach(function (p) {
+                if (!p) return;
+                p.bbox = { min: u.bbox.min.slice(), max: u.bbox.max.slice() };
+                if (_n3(u.centroid)) p.centroid = u.centroid.slice();
+            });
+            if (map[u.pid] || synced[u.pid]) n++;
+        });
+        _save();
+        return { ok: true, updated: n };
     }
 
     // ---- links between CAD parts and equipment (systemsData ids) --------------------------
@@ -215,6 +295,7 @@
         var r = L[k] || { cadId: cadId, pid: pid, sysId: null, on: null, by: null, at: null, rejected: [] };
         r.sysId = String(sysId); r.on = opts.on || 'confirmed'; r.by = _s(by); r.at = opts.at || new Date().toISOString();
         r.rejected = _arr(r.rejected).filter(function (x) { return x.sysId !== String(sysId); });
+        _pin(cadId, pid);
         L[k] = r; _save();
         return { ok: true, link: _clone(r) };
     }
@@ -227,6 +308,7 @@
         r.rejected = _arr(r.rejected).filter(function (x) { return x.sysId !== String(sysId); });
         r.rejected.push({ sysId: String(sysId), by: _s(by), at: opts.at || new Date().toISOString() });
         r.rejected.sort(function (a, b) { return _cmp(a.sysId, b.sysId); });
+        _pin(cadId, pid);
         L[k] = r; _save();
         return { ok: true, link: _clone(r) };
     }
@@ -931,7 +1013,7 @@
 
     var api = {
         VERSION: VERSION, RULES: RULES, KINDS: KINDS, SHAPES: SHAPES, FRAGMENTS: FRAGMENTS, DEFAULT_FRAGMENT: DEFAULT_FRAGMENT,
-        models: models, model: model, latestCadId: latestCadId, addCadModel: addCadModel,
+        models: models, model: model, latestCadId: latestCadId, addCadModel: addCadModel, partsOf: partsOf, registerLocalParts: registerLocalParts, updatePartBoxes: updatePartBoxes, hasLocalParts: hasLocalParts, LOCAL_PARTS_MIN: LOCAL_PARTS_MIN,
         matchEquipment: matchEquipment, applyExactLinks: applyExactLinks, confirmLink: confirmLink, rejectLink: rejectLink, unlink: unlink,
         link: link, linkKey: linkKey, confirmed: confirmed, equipmentParts: equipmentParts, carryLinks: carryLinks,
         importZoneList: importZoneList, containment: containment, applyContainment: applyContainment, clearances: clearances, boxDistance: boxDistance,

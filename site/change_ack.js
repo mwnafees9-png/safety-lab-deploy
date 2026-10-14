@@ -1,4 +1,10 @@
 // ============================================================================
+// change_ack.js - v1.2 - 13 Oct 2026 (late, Waqas: "when a user saves a choice/change it should be
+// autosaving"): an acknowledged change is SAVED at once (save_state.js v2.0 AutoSave). Added for
+// that: acceptedSnapshot() (the project as accepted so far: everything acknowledged, nothing still
+// waiting, the state AutoSave writes while moves or undos are still collected), SLRecords.applyToObject
+// (a diff laid onto a snapshot without touching the live model) and reopen() (changes a crash left
+// unacknowledged are asked about again on the next open). The dialogs say the change saves.
 // change_ack.js - v1.1 - 13 Oct 2026 (night, Waqas rulings 1 and 2): moving a box on a diagram
 // (a change that only moves or resizes) and Undo / Redo inside diagrams and the fault tree no
 // longer ask per action. They are COLLECTED (deferred()) and acknowledged together, in one list,
@@ -44,7 +50,8 @@
 // it from the model again whenever it is needed, so asking about it would only teach people
 // to click without reading.
 //
-// SAVING (save_state.js) holds acknowledged changes as the engineer's unsaved work until Save.
+// SAVING (save_state.js v2.0): an acknowledged change is saved at once (this device, the live
+// sync and the cloud copy); only what still waits for an acknowledgement is unsaved.
 //
 // API: see scratchpad CHANGE_ACK_API.md and window.SLChangeAck at the bottom.
 // Tests: tests/regression_change_ack_20261013b.test.js (unit, vm) and
@@ -189,6 +196,46 @@
         }
         if (Object.keys(partial).length && typeof W.__crdtApply === 'function') system(function () { W.__crdtApply(partial); });
         return partial;
+    }
+    // The same diff laid onto a SNAPSHOT (a parsed project), never the live model: returns a new
+    // object (the stores the diff does not touch are shared with obj, unchanged). AutoSave uses it
+    // to write the accepted project while moves or undos are still waiting. Fault trees are put
+    // back together with the live sync's own recompose; without it (the sync module not loaded)
+    // a touched tree is taken whole from the live model, which then also carries its waiting moves.
+    function applyToObject(obj, D) {
+        obj = obj || {};
+        var out = {}, touched = {}, K = _keys();
+        Object.keys(obj).forEach(function (k) { out[k] = obj[k]; });
+        (D || []).forEach(function (e) { if (e.op !== 'reordered' && String(e.key).charAt(0) !== '#') touched[e.space] = true; });
+        var setDel = function (sp, space) {
+            (D || []).forEach(function (e) {
+                if (e.space !== space || e.op === 'reordered' || String(e.key).charAt(0) === '#') return;
+                if (e.op === 'removed') { if (sp.map.has(e.key)) { sp.map.delete(e.key); sp.order = sp.order.filter(function (k) { return k !== e.key; }); } }
+                else { if (!sp.map.has(e.key)) sp.order.push(e.key); sp.map.set(e.key, e.b); }
+            });
+            return sp.order.map(function (k) { return _P(sp.map.get(k)); }).filter(function (x) { return x !== undefined; });
+        };
+        COLS.forEach(function (name) { if (touched['col:' + name]) out[name] = setDel(_keyed(obj[name] || [], K[name] || KEYS[name]), 'col:' + name); });
+        if (touched['fta:shell'] || touched['fta:node']) {
+            var rec = (W.SafetyLabCRDT && W.SafetyLabCRDT._fta && W.SafetyLabCRDT._fta.recompose) ? W.SafetyLabCRDT._fta.recompose : null;
+            if (rec) {
+                var d = _decompose(obj.ftaPages || []);
+                out.ftaPages = rec(setDel(_keyed(d.shells, 'id'), 'fta:shell'), setDel(_keyed(d.nodes, 'nodeKey'), 'fta:node'));
+            } else { var lv = _live(); if (lv.ftaPages) out.ftaPages = _P(_S(lv.ftaPages)); }
+        }
+        (D || []).forEach(function (e) {
+            if (e.space === 'whole') { if (e.op === 'removed') delete out[e.key]; else out[e.key] = _P(e.b); }
+            else if (e.space === 'other') {
+                if (e.key === 'projectSourceDocs') { var l2 = _live(); out.projectSourceDocs = l2.projectSourceDocs; }   // compared by id and name only: the live list is the record
+                else if (e.op === 'removed') delete out[e.key]; else out[e.key] = _P(e.b);
+            }
+        });
+        if (touched.pc) {
+            var pc = _P(_S(obj.projectConfig || {})) || {};
+            (D || []).forEach(function (e) { if (e.space !== 'pc') return; if (e.op === 'removed') delete pc[e.key]; else pc[e.key] = _P(e.b); });
+            out.projectConfig = pc;
+        }
+        return out;
     }
 
     // The live model, by direct reference (classic scripts share one global lexical scope; the
@@ -552,8 +599,9 @@
     function _save() { try { return W.SLSaveState || null; } catch (_) { return null; } }
 
     // scheduleAutosave calls this for every change it accepts. Returns what it decided.
+    var _lastNotedAt = 0;
     function noteChange() {
-        _stats.noted++;
+        _stats.noted++; _lastNotedAt = _now();
         if (_sysDepth > 0) { _stats.system++; return 'system'; }
         if (_deferDepth > 0) return _noteDeferred(_deferInfo || {});
         var groupOpen = _openGroupList().length > 0;
@@ -655,7 +703,7 @@
                 + '<h3 class="sl-dialog-title" id="sl-ack-title">' + (n === 1 ? 'Acknowledge the move or undo you made here' : 'Acknowledge the ' + n + ' moves and undos you made here') + '</h3>'
                 + '<div class="sl-dialog-msg">Moving shapes and Undo / Redo are collected while you work and checked here, together, before you leave this view.</div>'
                 + '<div class="sl-ack-body"><div class="sl-ack-h">What moved or was undone</div><ul class="sl-ack-list" id="sl-ack-items">' + rows + '</ul></div>'
-                + '<div class="sl-ack-foot">Your name and the time go in the project journal. Cancel puts back only these; the edits you acknowledged in between stay.</div>'
+                + '<div class="sl-ack-foot">Acknowledge saves them at once. Your name and the time go in the project journal. Cancel puts back only these; the edits you acknowledged in between stay.</div>'
                 + '<div class="sl-dialog-actions"><button type="button" class="sl-dialog-cancel sl-ack-cancel">Cancel</button><button type="button" class="sl-dialog-ok sl-ack-keep">Acknowledge</button></div></div>';
             document.body.appendChild(ov); ov.style.display = 'flex';
             requestAnimationFrame(function () { ov.classList.add('show'); });
@@ -755,10 +803,15 @@
         items.forEach(function (i) { if (i.space === 'fta:node' && i.ref && whole[String(i.ref.pageId) + '|' + i.op]) { whole[String(i.ref.pageId) + '|' + i.op].nodes++; i.folded = true; } });
         Object.keys(whole).forEach(function (k) { var pg = whole[k]; if (pg.nodes) pg.label += ' (with ' + pg.nodes + ' node' + (pg.nodes === 1 ? '' : 's') + ')'; });
         var shown = items.filter(function (i) { return !i.book && !i.derived && !i.view && !i.folded; });
+        if (w.reopened && !shown.length) shown = items.filter(function (i) { return !i.book && !i.folded; });   // a crash left moves: they still need their acknowledgement
         var ai = items.some(function (i) { return i.ai; });
         w.items = items; w.D = D;
         if (!D.length) { _stats.nothing++; return _close(w, 'nothing'); }
-        if (!shown.length || (!w.user && !ai)) { _stats.automatic++; return _close(w, 'automatic'); }   // forced (Save, a guard) skips the waiting, never the question of whether anyone made it
+        if (!shown.length || (!w.user && !ai)) {
+            _stats.automatic++;
+            if (_bucket && D.length) _bucket.contentD.push(D);   // accepted on its own: Cancel on collected moves keeps it, and the accepted state carries it
+            return _close(w, 'automatic');
+        }   // forced (Save, a guard) skips the waiting, never the question of whether anyone made it
         _stats.prompts++;
         w.shownSnap = _stash;     // the state the dialog describes (the last write happened before the quiet period ended)
         _dialog(w, shown).then(function (choice) {
@@ -853,6 +906,56 @@
         setTimeout(function () { try { if (_stash == null && !_win) { if (typeof requestIdleCallback === 'function') requestIdleCallback(_ensureStash, { timeout: 2000 }); else _ensureStash(); } } catch (_) {} }, 1200);
     }
 
+    // The project as ACCEPTED so far, as a snapshot string: every acknowledged change, nothing that
+    // still waits for an acknowledgement. null = nothing waits, so the live project is the accepted
+    // one. While moves or undos are collected it is the state before the first of them with the
+    // content changes acknowledged since laid back on top (exactly what Cancel on the collection
+    // would leave on screen). While a content change is open it is the state before that change.
+    function acceptedSnapshot() {
+        if (_bucket) {
+            if (!_bucket.contentD.length) return _bucket.baseline;
+            var o = _P(_bucket.baseline); if (!o) return null;
+            var journal = null;
+            try { var lv = _live(); if (lv.projectConfig && lv.projectConfig.journal) journal = lv.projectConfig.journal; } catch (_) {}
+            _bucket.contentD.forEach(function (D) { o = applyToObject(o, (D || []).filter(function (e) { return !(e.space === 'pc' && (BOOK_PC[e.key] || String(e.key).charAt(0) === '_')); })); });
+            if (journal) { o.projectConfig = o.projectConfig || {}; o.projectConfig.journal = journal; }   // the record of every acknowledgement goes with it
+            return _S(o);
+        }
+        if (_win && !_win.noRevert) return _win.baseline;
+        return null;
+    }
+    // A crash left changes nobody acknowledged (the autosave on this device holds them): ask about
+    // them now, measured from the accepted state saved with them. Acknowledge saves them; Cancel
+    // puts the project back to what was accepted.
+    // restored (optional): the project exactly as the crash left it, as restored. Then only what
+    // differs between the accepted copy and THAT is asked about: the app's own writes since the
+    // restore (views drawn, settings created on first use) are measured out, by laying the reverse
+    // of the waiting changes onto the project as it is now.
+    // Returns true (asked), false (nothing to ask) or 'busy' (another change is being decided: try
+    // again shortly, so the app's own start-up writes are never mixed into this question).
+    function reopen(acceptedStr, label, restored) {
+        if (!acceptedStr) return false;
+        // a change being decided, another dialog on screen, or the app still writing as it starts up
+        // (views drawing, first-use settings): right after, so none of that is mixed into this question
+        if (_bucket || _prompting || _win || _otherDialog() || (_now() - _lastNotedAt) < 2500) return 'busy';
+        var base = acceptedStr;
+        if (restored && typeof restored === 'object') {
+            try {
+                var D = diff(records(_P(acceptedStr) || {}), records(restored)).filter(function (e) { return e.op !== 'reordered'; });
+                if (!D.length) return false;   // nothing was waiting after all
+                var back = D.map(function (e) { return { space: e.space, key: e.key, op: e.op === 'added' ? 'removed' : (e.op === 'removed' ? 'added' : 'changed'), a: e.b, b: e.a }; });
+                var now = _P(_snapNow()); if (now) base = _S(applyToObject(now, back));
+            } catch (_) { base = acceptedStr; }
+        }
+        _rc = null;
+        _stash = base;
+        var t = begin(label || 'Changes from your last session that were not acknowledged');
+        noteChange();
+        if (_win) _win.reopened = true;   // asked even when all it holds is moved shapes (positions)
+        end(t);
+        return !!_win;
+    }
+
     // ---- public grouping ---------------------------------------------------
     function begin(label, opts) { var t = 'g' + (++_groupSeq); _groups[t] = { label: label || '', opts: opts || {} }; if (_win) _attachGroup(_groups[t]); return t; }
     function end(token) { var g = _groups[token]; if (!g) return; delete _groups[token]; if (_win) _attachGroup(g); if (_win) _schedule(); }
@@ -864,12 +967,14 @@
         catch (e) { end(t); return Promise.reject(e); }
     }
     function describeChange(info) { if (!info) return; if (_bucket && !_win && (_now() - _lastDeferredAt) < 100) return; var note = { summary: info.summary || '', refs: info.refs || [] }; if (_win) _win.notes.push(note); else { _notes.push(note); if (_notes.length > 20) _notes.shift(); } }
-    // Ask now if something is waiting. true = nothing left unacknowledged.
-    function flush() {
-        if (!_win) return flushDeferred();
+    // Ask now if something is waiting. true = nothing left unacknowledged. opts.changeOnly: only the
+    // open content change, the collected moves and undos keep waiting (they are asked on leaving).
+    function flush(opts) {
+        var only = !!(opts && opts.changeOnly);
+        if (!_win) return only ? Promise.resolve(true) : flushDeferred();
         var p = waitDecision().then(function (d) { return d !== 'canceled'; });
         if (!_prompting) { _groups = {}; _try(true); }
-        return p.then(function (ok) { return flushDeferred().then(function (ok2) { return ok && ok2; }); });
+        return only ? p : p.then(function (ok) { return flushDeferred().then(function (ok2) { return ok && ok2; }); });
     }
 
     // ---- the dialog ----------------------------------------------------------
@@ -934,7 +1039,7 @@
                 + shown.slice(0, SHOW_ITEMS).map(_itemHtml).join('')
                 + (shown.length > SHOW_ITEMS ? '<li class="sl-ack-why">and ' + (shown.length - SHOW_ITEMS) + ' more</li>' : '')
                 + '</ul><div class="sl-ack-h">What it touches</div><div id="sl-ack-impact" class="sl-dialog-msg">Working out what this touches…</div></div>'
-                + '<div class="sl-ack-foot">Your name and the time go in the project journal. Cancel change puts the project back exactly as it was before this change.</div>'
+                + '<div class="sl-ack-foot">Acknowledge saves it at once. Your name and the time go in the project journal. Cancel change puts the project back exactly as it was before this change.</div>'
                 + '<div class="sl-dialog-actions"><button type="button" class="sl-dialog-cancel sl-ack-cancel"' + (w.noRevert ? ' disabled title="Use Undo for this one"' : '') + '>Cancel change</button><button type="button" class="sl-dialog-ok sl-ack-keep">Acknowledge</button></div>'
                 + '</div>';
             document.body.appendChild(ov);
@@ -1031,12 +1136,12 @@
         W.addEventListener && W.addEventListener('load', function () { setTimeout(function () { try { if (typeof requestIdleCallback === 'function') requestIdleCallback(_ensureStash, { timeout: 3000 }); else _ensureStash(); } catch (_) {} }, 2500); });
     }
 
-    var SLRecords = { records: records, diff: diff, describe: describe, summarize: summarize, applyToModel: applyToModel, live: _live, impact: impact };
+    var SLRecords = { records: records, diff: diff, describe: describe, summarize: summarize, applyToModel: applyToModel, applyToObject: applyToObject, live: _live, impact: impact };
     var api = {
         noteChange: noteChange, stash: stash, keepJournal: keepJournal, sameContent: sameContent, system: system, systemAsync: systemAsync, restoring: restoring,
         begin: begin, end: end, batch: batch, describe: describeChange, flush: flush, drop: drop, settle: settle, revertTo: revertTo,
         pending: function () { return !!_win || !!_bucket; },
-        deferred: deferred, flushDeferred: flushDeferred,
+        deferred: deferred, flushDeferred: flushDeferred, acceptedSnapshot: acceptedSnapshot, reopen: reopen,
         collected: function () { return _bucket ? _bucket.items.map(function (i) { return { kind: i.kind, label: i.label, count: i.count || 1 }; }) : []; },
         // an open change somebody MADE (input, a group, a batch): what Save / Don't Save / Cancel
         // and closing the window care about. A background write is decided on its own in 450 ms.

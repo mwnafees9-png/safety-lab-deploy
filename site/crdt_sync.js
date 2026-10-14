@@ -1,3 +1,5 @@
+/* 13 Oct 2026 (late, AutoSave, save_state.js v2.0): holdsSync() now means only "something waits for an acknowledgement". pushAccepted(snapshot) sends an acknowledged change made while moves or undos are still collected ON ITS OWN, through the hold: the accepted project (the collected moves left out) is written three-way, so teammates see it live; the moves follow on release() once acknowledged (they are then the only difference from the baseline), and Cancel on them sends nothing.
+ */
 /* 13 Oct 2026 (Office-style saving, fix2-J): while the person has UNSAVED work (save_state.js SLSaveState.holdsSync()) this module sends nothing and applies no pull: a teammate's update is merged into the doc and handed to SLSaveState.remoteArrived(), which rebases (pull({load,rebase}) + the person's unsaved records on top). release() lets held work go on Save; baseLive()/docHasContent()/pull() are exposed for that.
  */
 /* 13 Oct 2026 (fix 6): projectConfig.cmaDecisionLog (the common cause decision log, cma_live.js) merges append-only, as the AI logs do (PC_LOGS).
@@ -830,9 +832,10 @@
   function pushLocal(opts) {
     if (!ydoc || _applying) return;
     if (_docStale()) return;                          // H-5: never write this model into another project's doc
-    if (_holding()) { _heldPush = true; return; }     // 13 Oct 2026: unsaved work stays on this device until Save
+    var through = !!(opts && opts.through);           // AutoSave: pushAccepted, the accepted state only
+    if (_holding() && !through) { _heldPush = true; return; }     // 13 Oct 2026: what waits for an acknowledgement stays on this device
     var full = !!(opts && opts.full);
-    var cap; try { cap = window.__crdtCapture ? window.__crdtCapture() : null; } catch (_) { cap = null; }
+    var cap; try { cap = (opts && opts.capture) ? opts.capture : (window.__crdtCapture ? window.__crdtCapture() : null); } catch (_) { cap = null; }
     if (!cap) return;
     try { _pcMigrateAndImport(); } catch (_) {}
     ydoc.transact(function () {
@@ -868,7 +871,22 @@
     }, full ? 'seed' : 'local');
     if ('projectConfig' in cap) { try { if (ydoc.getMap(PC_MAP).size > 0) ydoc.transact(function () { _pcMirror(); }, 'seed'); } catch (_) {} }
     if ('projectConfig' in cap) _pcCorrectIfHeld(cap.projectConfig);
-    _baseLive = true; _heldPush = false;
+    _baseLive = true; _heldPush = through ? _holding() : false;   // after pushAccepted the collected moves still wait
+  }
+  // 13 Oct 2026 (AutoSave): an acknowledged change made while moves or undos are collected goes
+  // out on its own: the stores of the accepted snapshot (save_state.js, SLChangeAck.acceptedSnapshot)
+  // replace the live ones in the capture, and the write is three-way, so only what was accepted since
+  // the baseline is sent (never the moves, never a teammate's row taken back). Needs a live baseline:
+  // without one (the sync just started) release() measures everything later, as before.
+  function pushAccepted(snap) {
+    if (!_started || !ydoc || _applying || !snap || typeof snap !== 'object') return false;
+    if (_docStale() || !_baseLive) return false;
+    var live; try { live = window.__crdtCapture ? window.__crdtCapture() : null; } catch (_) { live = null; }
+    if (!live) return false;
+    var cap = {};
+    Object.keys(live).forEach(function (k) { cap[k] = Object.prototype.hasOwnProperty.call(snap, k) ? JSON.parse(JSON.stringify(snap[k] === undefined ? null : snap[k])) : live[k]; });
+    try { pushLocal({ capture: cap, through: true }); } catch (e) { try { console.warn('[CRDT] pushAccepted failed', e); } catch (_) {} return false; }
+    return true;
   }
 
   // pullToModel(opts): opts.load = the doc is being adopted onto a model that was just
@@ -1189,7 +1207,7 @@
     keys: function () { var o = {}; COLLECTIONS.forEach(function (c) { o[c.name] = c.key; }); return o; },
     undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo, liveUndo: liveUndo, _undoMgr: function () { return _undoMgr; },
     _base: function () { return _base; },
-    release: release, baseLive: function () { return _baseLive; }, docHasContent: function () { return !!ydoc && _docHasContent(); },
+    release: release, pushAccepted: pushAccepted, baseLive: function () { return _baseLive; }, docHasContent: function () { return !!ydoc && _docHasContent(); },
     pull: function (opts) { return pullToModel(opts); }, held: function () { return { push: _heldPush, remote: _heldRemote }; },
     controlFloor: function (c) { try { return _ctlFloor(String(c)); } catch (_) { return 0; } },   // bindings_modules stamps a deliberate change after this
     _fta: { decompose: _ftaDecompose, recompose: _ftaRecompose, rebuildTree: _ftaRebuildTree }

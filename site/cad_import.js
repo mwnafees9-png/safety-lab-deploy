@@ -1,5 +1,5 @@
 // ============================================================================
-// cad_import.js, v1.3 (1.2 designators from STEP instance names; 1.3 a worker that cannot start is reported): CAD import for the CAD Model page (13 Oct 2026).
+// cad_import.js, v2.0 (1.2 designators from STEP instance names; 1.3 a worker that cannot start is reported; 2.0 prototypes + placements, the full OpenCascade reader with progress inside the read, the STEP file kept locally for exact measurement): CAD import for the CAD Model page (13 Oct 2026).
 //
 // WHAT IT DOES. Reads a neutral STEP file (AP203 / AP214 / AP242) from any CAD
 // tool and turns it into display meshes plus a small parts list, ON THIS
@@ -43,8 +43,8 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.3';
-    var DB_NAME = 'sl-cad', DB_STORE = 'meshes', DB_VERSION = 1;
+    var VERSION = '2.0';
+    var DB_NAME = 'sl-cad', DB_STORE = 'meshes', DB_STEPS = 'steps', DB_VERSION = 2;
     var START_MS = 20000;   // the worker's first message (it comes before any parsing) must arrive within this
     var OCCT_DIR = 'vendor/occt/';
     // Display budget. A part above this is reduced by vertex clustering; the
@@ -111,6 +111,31 @@
         var base = n.replace(/[\s._\-:]*\d+$/, '');
         if (base && _sq(base) === _sq(productName)) return null;
         return n;
+    }
+    // Per product (by its label, as the tree shows it): the STEP description and any material
+    // named by MATERIAL_DESIGNATION on its product definition (directly or through its shape).
+    function parseStepAttributes(text) {
+        var t = text || '', m, out = {};
+        var prod = {}, pdf = {}, pd = {}, pds = {};
+        var reP = new RegExp('#(\\d+)\\s*=\\s*PRODUCT\\s*\\(\\s*' + S_ + '\\s*,\\s*' + S_ + '\\s*,\\s*(?:' + S_ + '|\\$)', 'g');
+        while ((m = reP.exec(t))) { var id = decodeStepString(m[2]).trim(), nm = decodeStepString(m[3]).trim(); prod[m[1]] = { label: nm || id, id: id, description: m[4] != null ? decodeStepString(m[4]).trim() : '' }; }
+        var reF = new RegExp('#(\\d+)\\s*=\\s*PRODUCT_DEFINITION_FORMATION(?:_WITH_SPECIFIED_SOURCE)?\\s*\\(\\s*' + S_ + '\\s*,\\s*' + S_ + '\\s*,\\s*#(\\d+)', 'g');
+        while ((m = reF.exec(t))) pdf[m[1]] = m[4];
+        var reD = new RegExp('#(\\d+)\\s*=\\s*PRODUCT_DEFINITION\\s*\\(\\s*' + S_ + '\\s*,\\s*' + S_ + '\\s*,\\s*#(\\d+)', 'g');
+        while ((m = reD.exec(t))) pd[m[1]] = m[4];
+        var reS = new RegExp('#(\\d+)\\s*=\\s*PRODUCT_DEFINITION_SHAPE\\s*\\(\\s*(?:' + S_ + '|\\$)\\s*,\\s*(?:' + S_ + '|\\$)\\s*,\\s*#(\\d+)', 'g');
+        while ((m = reS.exec(t))) pds[m[1]] = m[4];
+        Object.keys(pd).forEach(function (k) { var pr = prod[pdf[pd[k]]]; if (pr && !out[pr.label]) { out[pr.label] = { productId: pr.id }; if (pr.description) out[pr.label].description = pr.description; } });
+        var reM = new RegExp('MATERIAL_DESIGNATION\\s*\\(\\s*' + S_ + '\\s*,\\s*\\(?\\s*((?:#\\d+\\s*,?\\s*)+)\\)?', 'g');
+        while ((m = reM.exec(t))) {
+            var mat = decodeStepString(m[1]).trim(); if (!mat) continue;
+            (m[2].match(/#\d+/g) || []).forEach(function (ref) {
+                var n = ref.slice(1), pdId = pd[n] ? n : pds[n] && pd[pds[n]] ? pds[n] : null;
+                var pr = pdId ? prod[pdf[pd[pdId]]] : null;
+                if (pr) { out[pr.label] = out[pr.label] || { productId: pr.id }; out[pr.label].material = mat; }
+            });
+        }
+        return out;
     }
     function stepSchema(text) {
         var m = /FILE_SCHEMA\s*\(\s*\(\s*'([^']*)'/i.exec(text || '');
@@ -216,20 +241,11 @@
     function encSeg(s) { return String(s).replace(/%/g, '%25').replace(/\//g, '%2F').replace(/#/g, '%23'); }
     function makePid(path, name, occ) { return 'p:' + path.concat([name]).map(encSeg).join('/') + '#' + occ; }
 
-    // occt result -> { parts (metadata), meshes (geometry, keyed by pid) }.
-    // occt puts each leaf part occurrence as a mesh on its parent assembly node,
-    // with the placement already applied; that is our unit of "a part".
-    function buildModel(res, opts) {
-        opts = opts || {};
-        var pidx = opts.productIndex || {};
-        var maxPart = opts.maxTrianglesPerPart != null ? opts.maxTrianglesPerPart : DEFAULTS.maxTrianglesPerPart;
-        var maxTotal = opts.maxTrianglesTotal != null ? opts.maxTrianglesTotal : DEFAULTS.maxTrianglesTotal;
-        var meshesIn = (res && res.meshes) || [];
-        var totalIn = 0;
-        meshesIn.forEach(function (m) { totalIn += ((m.index && m.index.array) ? m.index.array.length : 0) / 3; });
-        var scale = (maxTotal > 0 && totalIn > maxTotal) ? maxTotal / totalIn : 1;
-        var parts = [], meshes = [], counters = {}, occOf = [], decimatedParts = 0, trianglesOut = 0, n = 0;
-        var total = meshesIn.length || 1;
+    // The ONE walk that names parts, shared by both readers (occt-import-js here, the full
+    // OpenCascade build in cad_brep.js) so a file gets the same pids from either:
+    // cb(meshIndex, { pid, name, path, key, occ }) in tree order.
+    function walkParts(res, cb) {
+        var meshesIn = (res && res.meshes) || [], counters = {};
         (function walk(node, path) {
             if (!node) return;
             var nm = String(node.name || '').trim();
@@ -244,27 +260,227 @@
                 var partPath = (leaf && (!m.name || name === nm)) ? path : childPath;
                 var key = partPath.join('\u0001') + '\u0002' + name;
                 var occ = counters[key] = (counters[key] || 0) + 1;
-                var pid = makePid(partPath, name, occ);
-                var pos = toF32(m.attributes && m.attributes.position && m.attributes.position.array);
-                var idx = toU32(m.index && m.index.array);
-                var nrm = (m.attributes && m.attributes.normal && m.attributes.normal.array) ? toF32(m.attributes.normal.array) : null;
-                var tris = idx.length / 3;
-                var target = Math.min(maxPart > 0 ? maxPart : Infinity, Math.max(2000, Math.floor(tris * scale)));
-                if (tris > target) {
-                    var d = decimate(pos, idx, target);
-                    if (d.decimated) { pos = d.position; idx = d.index; nrm = null; decimatedParts++; }
-                }
-                trianglesOut += idx.length / 3;
-                var bbox = bboxOf(pos);
-                var pn = Object.prototype.hasOwnProperty.call(pidx, name) ? pidx[name] : null;
-                parts.push({ pid: pid, name: name, partNumber: (pn == null || pn === '') ? null : String(pn), path: partPath.slice(), bbox: bbox, centroid: centroidOf(pos, idx, bbox) });
-                occOf.push({ key: key, parent: partPath.length ? partPath[partPath.length - 1] : null, occ: occ });
-                meshes.push({ pid: pid, position: pos, normal: nrm, index: idx, color: Array.isArray(m.color) ? m.color.slice(0, 3) : null });
-                n++;
-                if (opts.onProgress) { try { opts.onProgress('mesh', n / total); } catch (_) {} }
+                cb(mi, { pid: makePid(partPath, name, occ), name: name, path: partPath.slice(), key: key, occ: occ });
             });
             (node.children || []).forEach(function (c) { walk(c, childPath); });
         })(res && res.root, []);
+        return counters;
+    }
+
+    // ---- instancing: one prototype per repeated geometry, a placement per copy
+    // A matrix is column-major 4x4 (three.js order). Identity placements are stored as null.
+    function _fnv(u32) { var h = 2166136261; for (var i = 0; i < u32.length; i++) { h ^= u32[i]; h = Math.imul(h, 16777619); } return h >>> 0; }
+    function _anchors(pos) {
+        // four well spread vertices (or three plus a synthetic normal point when the part is flat)
+        var n = pos.length / 3; if (n < 3) return null;
+        function d2(i, j) { var dx = pos[i * 3] - pos[j * 3], dy = pos[i * 3 + 1] - pos[j * 3 + 1], dz = pos[i * 3 + 2] - pos[j * 3 + 2]; return dx * dx + dy * dy + dz * dz; }
+        var a0 = 0, a1 = 0, best = -1, i;
+        for (i = 0; i < n; i++) { var v = d2(a0, i); if (v > best) { best = v; a1 = i; } }
+        if (!(best > 0)) return null;
+        var ux = pos[a1 * 3] - pos[0], uy = pos[a1 * 3 + 1] - pos[1], uz = pos[a1 * 3 + 2] - pos[2];
+        var a2 = -1; best = -1;
+        for (i = 0; i < n; i++) {
+            var wx = pos[i * 3] - pos[0], wy = pos[i * 3 + 1] - pos[1], wz = pos[i * 3 + 2] - pos[2];
+            var cx = uy * wz - uz * wy, cy = uz * wx - ux * wz, cz = ux * wy - uy * wx, c = cx * cx + cy * cy + cz * cz;
+            if (c > best) { best = c; a2 = i; }
+        }
+        if (!(best > 0)) return null;
+        var vx = pos[a2 * 3] - pos[0], vy = pos[a2 * 3 + 1] - pos[1], vz = pos[a2 * 3 + 2] - pos[2];
+        var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, nl = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        nx /= nl; ny /= nl; nz /= nl;
+        var a3 = -1; best = 0;
+        var L = Math.sqrt(ux * ux + uy * uy + uz * uz);
+        for (i = 0; i < n; i++) {
+            var h = Math.abs((pos[i * 3] - pos[0]) * nx + (pos[i * 3 + 1] - pos[1]) * ny + (pos[i * 3 + 2] - pos[2]) * nz);
+            if (h > best) { best = h; a3 = i; }
+        }
+        if (best < L * 1e-4) a3 = -1;   // flat: use a synthetic point along the normal
+        return [0, a1, a2, a3];
+    }
+    function _pts(pos, an) {
+        var P = an.slice(0, 3).map(function (i) { return [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]]; });
+        if (an[3] >= 0) P.push([pos[an[3] * 3], pos[an[3] * 3 + 1], pos[an[3] * 3 + 2]]);
+        else {
+            var u = [P[1][0] - P[0][0], P[1][1] - P[0][1], P[1][2] - P[0][2]], v = [P[2][0] - P[0][0], P[2][1] - P[0][1], P[2][2] - P[0][2]];
+            var n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], nl = Math.hypot(n[0], n[1], n[2]), s = Math.hypot(u[0], u[1], u[2]);
+            P.push([P[0][0] + n[0] / nl * s, P[0][1] + n[1] / nl * s, P[0][2] + n[2] / nl * s]);
+        }
+        return P;
+    }
+    // Affine map taking points P[0..3] to Q[0..3]: column-major 4x4, or null when singular.
+    function _solveAffine(P, Q) {
+        var A = P.map(function (p) { return [p[0], p[1], p[2], 1]; });
+        // invert the 4x4 A (rows = points) with Gauss-Jordan
+        var M = A.map(function (r, i) { return r.concat([0, 0, 0, 0].map(function (_, j) { return i === j ? 1 : 0; })); });
+        for (var c = 0; c < 4; c++) {
+            var piv = c; for (var r = c + 1; r < 4; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+            if (Math.abs(M[piv][c]) < 1e-12) return null;
+            var t = M[c]; M[c] = M[piv]; M[piv] = t;
+            var d = M[c][c]; for (var k = 0; k < 8; k++) M[c][k] /= d;
+            for (r = 0; r < 4; r++) if (r !== c) { var f = M[r][c]; if (f) for (k = 0; k < 8; k++) M[r][k] -= f * M[c][k]; }
+        }
+        var inv = M.map(function (r) { return r.slice(4); });
+        // X (4x3) = inv(A) * Q ; matrix rows: out[row r][col c] = X[c][r]
+        var X = [0, 1, 2, 3].map(function (i) { return [0, 1, 2].map(function (j) { return inv[i][0] * Q[0][j] + inv[i][1] * Q[1][j] + inv[i][2] * Q[2][j] + inv[i][3] * Q[3][j]; }); });
+        return [X[0][0], X[0][1], X[0][2], 0, X[1][0], X[1][1], X[1][2], 0, X[2][0], X[2][1], X[2][2], 0, X[3][0], X[3][1], X[3][2], 1];
+    }
+    // A copy is the same part moved: a rotation (no mirror) and a translation, with at most a
+    // uniform scale. A box stretched into a different box maps vertex for vertex too, but it is
+    // a different part, and its normals would be drawn wrong; that is refused.
+    function _rigid(m) {
+        var c = [[m[0], m[1], m[2]], [m[4], m[5], m[6]], [m[8], m[9], m[10]]];
+        var l = c.map(function (v) { return Math.hypot(v[0], v[1], v[2]); });
+        if (!(l[0] > 0) || Math.abs(l[1] - l[0]) > 2e-3 * l[0] || Math.abs(l[2] - l[0]) > 2e-3 * l[0]) return false;
+        var d = function (a, b) { return Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (l[0] * l[0]); };
+        if (d(c[0], c[1]) > 2e-3 || d(c[0], c[2]) > 2e-3 || d(c[1], c[2]) > 2e-3) return false;
+        var det = c[0][0] * (c[1][1] * c[2][2] - c[1][2] * c[2][1]) - c[1][0] * (c[0][1] * c[2][2] - c[0][2] * c[2][1]) + c[2][0] * (c[0][1] * c[1][2] - c[0][2] * c[1][1]);
+        return det > 0;
+    }
+    function _mapsAll(m, P, Q, tol) {
+        for (var i = 0; i < P.length; i += 3) {
+            var x = P[i], y = P[i + 1], z = P[i + 2];
+            var dx = m[0] * x + m[4] * y + m[8] * z + m[12] - Q[i], dy = m[1] * x + m[5] * y + m[9] * z + m[13] - Q[i + 1], dz = m[2] * x + m[6] * y + m[10] * z + m[14] - Q[i + 2];
+            if (dx * dx + dy * dy + dz * dz > tol * tol) return false;
+        }
+        return true;
+    }
+    // items: [{ position, index, normal, faces }] in WORLD coordinates (placement applied).
+    // Returns { protos:[{position,index,normal,faces}], refs:[{ proto, matrix|null }] } where a
+    // copy shares its prototype when the triangle list is identical and ONE affine placement maps
+    // every vertex onto the copy within tolerance (float32 noise). Deterministic: first seen wins.
+    function findInstances(items, opts) {
+        opts = opts || {};
+        var protos = [], refs = [], groups = {}, maxTry = opts.maxTry || 8;
+        items.forEach(function (it) {
+            var pos = it.position, idx = it.index, nv = pos.length / 3;
+            var key = nv + ':' + idx.length + ':' + _fnv(idx);
+            var g = groups[key] || (groups[key] = []), done = false;
+            var ext = 0; for (var i = 0; i < pos.length; i++) { var a = Math.abs(pos[i]); if (a > ext) ext = a; }
+            var tol = Math.max(1e-3, ext * 4e-6);
+            for (var k = 0; k < g.length && k < maxTry && !done; k++) {
+                var pr = g[k];
+                if (!pr.anchors) continue;
+                var m = _solveAffine(_pts(pr.position, pr.anchors), _pts(pos, pr.anchors));
+                if (m && _rigid(m) && _mapsAll(m, pr.position, pos, tol)) { refs.push({ proto: pr.index, matrix: m }); done = true; }
+            }
+            if (!done) {
+                var p = { position: pos, index: idx, normal: it.normal || null, faces: it.faces || null };
+                g.push({ index: protos.length, position: pos, anchors: _anchors(pos) });
+                refs.push({ proto: protos.length, matrix: null });
+                protos.push(p);
+            }
+        });
+        return { protos: protos, refs: refs };
+    }
+    function _xf(m, x, y, z) { return m ? [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]] : [x, y, z]; }
+    function bboxOfXf(pos, m) {
+        if (!m) return bboxOf(pos);
+        var mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+        for (var i = 0; i + 2 < pos.length; i += 3) {
+            var w = _xf(m, pos[i], pos[i + 1], pos[i + 2]);
+            for (var j = 0; j < 3; j++) { if (w[j] < mn[j]) mn[j] = w[j]; if (w[j] > mx[j]) mx[j] = w[j]; }
+        }
+        if (!(mn[0] <= mx[0])) return { min: [0, 0, 0], max: [0, 0, 0] };
+        return { min: mn, max: mx };
+    }
+    // World positions of one part: its prototype's vertices placed by its matrix.
+    function worldPosition(geom, meshOrIndex) {
+        var m = typeof meshOrIndex === 'number' ? geom.meshes[meshOrIndex] : meshOrIndex;
+        if (m.position) return m.position;   // a cache from before instancing (v1)
+        var p = geom.protos[m.proto].position;
+        if (!m.matrix) return p;
+        var out = new Float32Array(p.length), M = m.matrix;
+        for (var i = 0; i < p.length; i += 3) { var w = _xf(M, p[i], p[i + 1], p[i + 2]); out[i] = w[0]; out[i + 1] = w[1]; out[i + 2] = w[2]; }
+        return out;
+    }
+    // Any cached geometry (v1: world meshes; v2: protos + placements) as v2.
+    function normalizeGeometry(g) {
+        if (!g) return null;
+        if (Array.isArray(g)) g = { meshes: g };
+        if (g.packed && !('meshes' in g)) {
+            // the per part records are made on first use; the scene reads the flat arrays
+            var out = Object.assign({}, g, { version: 2 }), P = g.packed, PP = g.parts || null, cache = null;
+            delete out.meshes;
+            Object.defineProperty(out, 'meshes', { enumerable: false, configurable: true, get: function () { if (!cache) cache = unpackMeshes(P, PP); return cache; } });
+            if (Array.isArray(out.protos)) return out;
+            g = out;
+        }
+        if (Array.isArray(g.protos)) return g;
+        var protos = [], meshes = (g.meshes || []).map(function (m, i) { protos.push({ position: m.position, index: m.index, normal: m.normal || null, faces: m.faces || null }); return { pid: m.pid, proto: i, matrix: null, color: m.color || null }; });
+        return Object.assign({}, g, { version: 2, protos: protos, meshes: meshes });
+    }
+
+    // reader result -> { parts (metadata), meshes (per part: pid, proto, matrix, color),
+    // protos (geometry, shared by copies) }.
+    // occt-import-js puts each leaf part occurrence as a mesh on its parent assembly node, with
+    // the placement already applied: its copies are found again by findInstances. The full
+    // OpenCascade reader (cad_brep.js) hands prototypes and placements directly (res.protos).
+    function buildModel(res, opts) {
+        opts = opts || {};
+        var pidx = opts.productIndex || {};
+        var maxPart = opts.maxTrianglesPerPart != null ? opts.maxTrianglesPerPart : DEFAULTS.maxTrianglesPerPart;
+        var maxTotal = opts.maxTrianglesTotal != null ? opts.maxTrianglesTotal : DEFAULTS.maxTrianglesTotal;
+        var meshesIn = (res && res.meshes) || [];
+        var protosIn = res && Array.isArray(res.protos) ? res.protos : null;
+        var parts = [], refs = [], occOf = [], n = 0, rawItems = [];
+        var total = meshesIn.length || 1;
+        var counters = walkParts(res, function (mi, w) {
+            var m = meshesIn[mi];
+            var item;
+            if (protosIn) {
+                var pr = protosIn[m.proto];
+                var M = m.matrix && !_isIdent(m.matrix) ? m.matrix : null;
+                item = { proto: pr, matrix: M };
+            } else {
+                var pos = toF32(m.attributes && m.attributes.position && m.attributes.position.array);
+                var idx = toU32(m.index && m.index.array);
+                var nrm = (m.attributes && m.attributes.normal && m.attributes.normal.array) ? toF32(m.attributes.normal.array) : null;
+                var faces = Array.isArray(m.brep_faces) ? m.brep_faces.map(function (f) { return { first: f.first, last: f.last }; }) : null;
+                item = { position: pos, index: idx, normal: nrm, faces: faces };
+            }
+            rawItems.push(item);
+            var pn = Object.prototype.hasOwnProperty.call(pidx, w.name) ? pidx[w.name] : null;
+            parts.push({ pid: w.pid, name: w.name, partNumber: (pn == null || pn === '') ? null : String(pn), path: w.path });
+            occOf.push({ key: w.key, parent: w.path.length ? w.path[w.path.length - 1] : null, occ: w.occ, color: Array.isArray(m.color) ? m.color.slice(0, 3) : null, protoIn: protosIn ? m.proto : null });
+            n++;
+            if (opts.onProgress && (n % 200 === 0 || n === total)) { try { opts.onProgress('mesh', n / total); } catch (_) {} }
+        });
+        // Prototypes and placements.
+        var protos, protoIdx = [];
+        if (protosIn) {
+            protos = protosIn.map(function (p) { return { position: toF32(p.position), index: toU32(p.index), normal: p.normal ? toF32(p.normal) : null, faces: p.faces || null }; });
+            rawItems.forEach(function (it, i) { refs.push({ proto: occOf[i].protoIn, matrix: it.matrix }); });
+        } else {
+            var fi = opts.instancing === false ? { protos: rawItems.map(function (it) { return it; }), refs: rawItems.map(function (_, i) { return { proto: i, matrix: null }; }) } : findInstances(rawItems);
+            protos = fi.protos; refs = fi.refs;
+        }
+        // Metadata from the full geometry, before any display simplification.
+        parts.forEach(function (p, i) {
+            var pr = protos[refs[i].proto], M = refs[i].matrix;
+            var bb = bboxOfXf(pr.position, M);
+            var c0 = pr._c || (pr._c = centroidOf(pr.position, pr.index, bboxOf(pr.position)));
+            p.bbox = bb; p.centroid = _xf(M, c0[0], c0[1], c0[2]);
+        });
+        // Display budget on the prototypes (a prototype is drawn once per copy, so the total is
+        // counted over copies).
+        var copies = protos.map(function () { return 0; }); refs.forEach(function (r) { copies[r.proto]++; });
+        var totalIn = 0; protos.forEach(function (p, i) { totalIn += (p.index.length / 3) * copies[i]; });
+        var scale = (maxTotal > 0 && totalIn > maxTotal) ? maxTotal / totalIn : 1;
+        var decimatedParts = 0, trianglesOut = 0;
+        protos.forEach(function (p, i) {
+            delete p._c;
+            var tris = p.index.length / 3;
+            var target = Math.min(maxPart > 0 ? maxPart : Infinity, Math.max(2000, Math.floor(tris * scale)));
+            if (tris > target) {
+                var d = decimate(p.position, p.index, target);
+                if (d.decimated) { p.position = d.position; p.index = d.index; p.normal = null; p.faces = null; decimatedParts += copies[i]; }
+            }
+            trianglesOut += (p.index.length / 3) * copies[i];
+        });
+        var meshes = parts.map(function (p, i) {
+            var M = refs[i].matrix;
+            return { pid: p.pid, proto: refs[i].proto, matrix: M ? new Float32Array(M) : null, color: occOf[i].color };
+        });
         // Instance names, matched occurrence by occurrence, only where the STEP file lists exactly as
         // many copies of that part under that assembly as OpenCascade produced (so the order is
         // the same list); otherwise no designator is guessed.
@@ -276,8 +492,13 @@
             var d = designatorFrom(list[o.occ - 1], p.name);
             if (d) { p.designator = d; designators++; }
         });
-        return { parts: parts, meshes: meshes, stats: { parts: parts.length, trianglesIn: totalIn, trianglesOut: trianglesOut, decimatedParts: decimatedParts, designators: designators } };
+        // STEP attributes for the properties panel (description, material): kept with the local
+        // geometry cache, not in the project.
+        var attrs = {}, A = opts.attributes || null;
+        if (A) parts.forEach(function (p) { var a = A[p.name]; if (a) attrs[p.pid] = a; });
+        return { parts: parts, meshes: meshes, protos: protos, attrs: attrs, stats: { parts: parts.length, prototypes: protos.length, trianglesIn: totalIn, trianglesOut: trianglesOut, decimatedParts: decimatedParts, designators: designators } };
     }
+    function _isIdent(m) { for (var i = 0; i < 16; i++) if (Math.abs(m[i] - ((i % 5) === 0 ? 1 : 0)) > 1e-12) return false; return true; }
 
     // The core path: STEP bytes + an initialised occt module -> model.
     // The worker calls this; so do the node tests (no worker shell in between).
@@ -291,6 +512,7 @@
         var schema = stepSchema(text), sourceUnit = stepLengthUnit(text);
         var pidx = productIndex(parseStepProducts(text));
         var instances = parseStepInstances(text);
+        var attributes = parseStepAttributes(text);
         text = null;
         prog('parse', 0);
         var res = occt.ReadStepFile(u8, {
@@ -301,8 +523,8 @@
         });
         if (!res || !res.success) throw new Error('OpenCascade could not read this STEP file.');
         prog('parse', 1);
-        var model = buildModel(res, { productIndex: pidx, instances: instances, maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, onProgress: opts.onProgress });
-        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm';
+        var model = buildModel(res, { productIndex: pidx, instances: instances, attributes: attributes, maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, onProgress: opts.onProgress });
+        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm'; model.reader = 'occt-import-js';
         return model;
     }
 
@@ -331,10 +553,10 @@
     // numeric array longer than a coordinate, or a mesh-shaped key.
     var GEOM_KEYS = { position: 1, positions: 1, normal: 1, normals: 1, index: 1, indices: 1, meshes: 1, vertices: 1, triangles: 1, buffer: 1, bytes: 1, step: 1, stepText: 1, fileBytes: 1 };
     function containsGeometry(obj) {
-        var seen = [];
+        var seen = typeof Set !== 'undefined' ? new Set() : null, seenA = [];
         return (function look(o) {
             if (o == null || typeof o !== 'object') return false;
-            if (seen.indexOf(o) >= 0) return false; seen.push(o);
+            if (seen) { if (seen.has(o)) return false; seen.add(o); } else { if (seenA.indexOf(o) >= 0) return false; seenA.push(o); }
             if (typeof ArrayBuffer !== 'undefined' && (o instanceof ArrayBuffer || ArrayBuffer.isView(o))) return true;
             if (Array.isArray(o)) {
                 if (o.length > 3 && o.every(function (x) { return typeof x === 'number'; })) return true;
@@ -422,16 +644,16 @@
         if (!idb) return Promise.reject(new Error('This browser has no local database (IndexedDB) for CAD geometry.'));
         _dbp = new Promise(function (resolve, reject) {
             var rq = idb.open(DB_NAME, DB_VERSION);
-            rq.onupgradeneeded = function () { var db = rq.result; if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE); };
+            rq.onupgradeneeded = function () { var db = rq.result; if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE); if (!db.objectStoreNames.contains(DB_STEPS)) db.createObjectStore(DB_STEPS); };
             rq.onsuccess = function () { resolve(rq.result); };
             rq.onerror = function () { _dbp = null; reject(rq.error || new Error('Could not open the local CAD cache.')); };
         });
         return _dbp;
     }
-    function _tx(mode, fn) {
+    function _tx(mode, fn, store) {
         return openDb().then(function (db) {
             return new Promise(function (resolve, reject) {
-                var tx = db.transaction(DB_STORE, mode), st = tx.objectStore(DB_STORE), out;
+                var tx = db.transaction(store || DB_STORE, mode), st = tx.objectStore(store || DB_STORE), out;
                 var rq = fn(st);
                 if (rq) rq.onsuccess = function () { out = rq.result; };
                 tx.oncomplete = function () { resolve(out); };
@@ -442,12 +664,47 @@
     function cachePut(sha, payload) { return _tx('readwrite', function (st) { return st.put(payload, sha); }); }
     function cacheGet(sha) { return _tx('readonly', function (st) { return st.get(sha); }).then(function (v) { return v || null; }); }
     function cacheHas(sha) { return _tx('readonly', function (st) { return st.count(sha); }).then(function (n) { return n > 0; }); }
+    // The STEP file itself, kept in this browser on this computer (never uploaded) so exact
+    // measurement and PMI can read it again without asking for the file. Stored as the File /
+    // Blob the user opened.
+    function stepPut(sha, blob) { return _tx('readwrite', function (st) { return st.put(blob, sha); }, DB_STEPS); }
+    function stepGet(sha) { return _tx('readonly', function (st) { return st.get(sha); }, DB_STEPS).then(function (v) { return v || null; }); }
+    function stepHas(sha) { return _tx('readonly', function (st) { return st.count(sha); }, DB_STEPS).then(function (n) { return n > 0; }); }
 
     // ------------------------------------------------------------ worker client
     function workerUrl() { return 'cad_import_worker.js?v=' + VERSION; }
     // Read a STEP file on this computer in the worker. Returns { promise, cancel }.
     // promise -> { sha256, model } with model = { parts, meshes, stats, schema, sourceUnit, units }.
     // opts.expectSha: refuse (before parsing) a file whose fingerprint differs.
+    // Each part's box and centroid from its prototype mesh and placement; model.parts updated.
+    function trueBoxes(model) {
+        var pb = model.protos.map(function (p) {
+            var P = p.position, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+            for (var i = 0; i < P.length; i += 3) for (var j = 0; j < 3; j++) { var v = P[i + j]; if (v < mn[j]) mn[j] = v; if (v > mx[j]) mx[j] = v; }
+            return P.length ? { min: mn, max: mx, c: centroidOf(P, p.index, { min: mn, max: mx }) } : null;
+        });
+        var out = [];
+        model.meshes.forEach(function (m, i) {
+            var b = pb[m.proto], part = model.parts[i]; if (!b || !part || part.pid !== m.pid) return;
+            var bb = bboxOfXf(model.protos[m.proto].position, m.matrix && !_isIdent(m.matrix) ? m.matrix : null);
+            part.bbox = bb; part.centroid = _xf(m.matrix && !_isIdent(m.matrix) ? m.matrix : null, b.c[0], b.c[1], b.c[2]);
+            out.push({ pid: part.pid, bbox: part.bbox, centroid: part.centroid });
+        });
+        return out;
+    }
+    // The detail stream of a large assembly: batches of real shapes, replayed to late listeners.
+    // proof and profiling marks: off unless the page sets window.SL_CAD_TRACE
+    function _trace(label) { try { if (root.SL_CAD_TRACE) { var m = root.performance && root.performance.memory; root.console.log('[cad] ' + label + ' ' + Math.round(root.performance.now()) + ' ms' + (m ? ' heap ' + Math.round(m.usedJSHeapSize / 1048576) + ' MB' : '')); } } catch (_) {} }
+    function makeStream() {
+        var batches = [], fns = [], ends = [], ended = null;
+        return {
+            on: function (fn) { batches.forEach(function (b) { try { fn(b); } catch (_) {} }); fns.push(fn); },
+            onEnd: function (fn) { if (ended) { try { fn(ended); } catch (_) {} } else ends.push(fn); },
+            done: function () { return !!ended; },
+            _emit: function (b) { batches.push(b); fns.forEach(function (fn) { try { fn(b); } catch (_) {} }); },
+            _end: function (e) { if (ended) return; ended = e; ends.forEach(function (fn) { try { fn(e); } catch (_) {} }); }
+        };
+    }
     function runWorker(file, opts) {
         opts = opts || {};
         var w = null, done = false, rejectFn = null, startTimer = null;
@@ -468,12 +725,31 @@
                     clearTimeout(startTimer);
                     var d = ev.data || {};
                     if (d.type === 'progress') { if (opts.onProgress) { try { opts.onProgress(d.phase, d.frac); } catch (_) {} } return; }
-                    done = true; try { w.terminate(); } catch (_) {}
+                    done = true;
+                    // A worker that kept the exact geometry open is handed over, not stopped.
+                    if (d.type === 'result' && d.session && opts.keepSession) { resolve({ sha256: d.sha256, model: d.model, worker: w }); return; }
+                    // A large assembly: the first view now, the detail streamed behind it.
+                    if (d.type === 'result' && d.streaming) {
+                        var stream = makeStream();
+                        _trace('result received');
+                        if (d.model && d.model.packed && !d.model.meshes) { d.model.meshes = unpackMeshes(d.model.packed, d.model.partsPacked); d.model.parts = unpackParts(d.model.partsPacked, d.model.packed); }
+                        w.onmessage = function (ev2) {
+                            var e = ev2.data || {};
+                            if (e.type === 'detail') stream._emit(e);
+                            // the worker stays: it holds the structure and answers exact queries
+                            else if (e.type === 'detail-done' || e.type === 'detail-error') { stream.worker = w; stream._end(e); }
+                        };
+                        stream.cancel = function () { try { w.terminate(); } catch (_) {} stream._end({ type: 'detail-error', message: 'canceled' }); };
+                        _trace('result unpacked');
+                        resolve({ sha256: d.sha256, model: d.model, stream: stream });
+                        return;
+                    }
+                    try { w.terminate(); } catch (_) {}
                     if (d.type === 'result') resolve({ sha256: d.sha256, model: d.model });
                     else { var e = new Error(d.message || 'The STEP import failed.'); e.code = d.code || 'failed'; reject(e); }
                 };
                 w.onerror = function (ev) { clearTimeout(startTimer); if (done) return; done = true; try { w.terminate(); } catch (_) {} reject(new Error((ev && ev.message) || 'The STEP import worker stopped.')); };
-                w.postMessage({ type: 'import', buffer: buf, expectSha: opts.expectSha || null, opts: { maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, linearDeflection: opts.linearDeflection } }, [buf]);
+                w.postMessage({ type: 'import', buffer: buf, expectSha: opts.expectSha || null, opts: { maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, linearDeflection: opts.linearDeflection, reader: opts.reader || 'auto', keepSession: !!opts.keepSession } }, [buf]);
             }, function (e) { done = true; reject(e); });
         });
         return {
@@ -486,8 +762,104 @@
             }
         };
     }
+    // Cache payload v2: prototypes (geometry, once per repeated part) and per part its prototype,
+    // placement and color; STEP attributes for the properties panel. Local only.
     function _cachePayload(sha, model) {
-        return { sha256: sha, units: 'mm', createdAt: new Date().toISOString(), schema: model.schema || null, meshes: model.meshes };
+        var pl = _cachePayload0(sha, model);
+        var aligned = !!(pl.parts && pl.parts.occ) && model.meshes.length === model.parts.length && model.meshes.every(function (m, i) { return m.pid === model.parts[i].pid; });
+        pl.packed = packMeshes(model.meshes, { noPids: aligned });
+        return pl;
+    }
+    function _cachePayload0(sha, model) {
+        return { version: 2, sha256: sha, units: 'mm', createdAt: new Date().toISOString(), schema: model.schema || null, reader: model.reader || null, protos: model.protos, packed: null, parts: model.parts && model.parts.length > LOCAL_PARTS_MIN() ? packParts(model.parts, model.meshes) : null, attrs: model.attrs || {}, partial: !!(model.streaming && !(model.streaming.done >= model.streaming.leaves)) };
+    }
+    // The per part records packed into a few flat arrays: storing and reading 200,000 small
+    // objects from IndexedDB costs seconds, a handful of typed arrays a few milliseconds.
+    function LOCAL_PARTS_MIN() { var E = root.SLCadZonal; return E && E.LOCAL_PARTS_MIN != null ? E.LOCAL_PARTS_MIN : 20000; }
+    // Placements: 12 numbers each (the bottom row of a placement is always 0 0 0 1), colors as
+    // indexes into a palette; part ids left out when they follow from the part list (packParts).
+    function packMeshes(meshes, opts) {
+        opts = opts || {};
+        var n = meshes.length, proto = new Int32Array(n), mat = new Float32Array(n * 12), hasM = new Uint8Array(n), pids = opts.noPids ? null : new Array(n);
+        var pal = [], palIdx = {}, cIdx = new Int32Array(n);
+        var E12 = [0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14];
+        for (var i = 0; i < n; i++) {
+            var m = meshes[i]; if (pids) pids[i] = m.pid; proto[i] = m.proto;
+            if (m.matrix) { hasM[i] = 1; var M = m.matrix; for (var e = 0; e < 12; e++) mat[i * 12 + e] = M[E12[e]]; }
+            if (m.color) { var k = m.color[0] + ',' + m.color[1] + ',' + m.color[2], c = palIdx[k]; if (c === undefined) { c = palIdx[k] = pal.length / 3; pal.push(m.color[0], m.color[1], m.color[2]); } cIdx[i] = c; } else cIdx[i] = -1;
+        }
+        return { n: n, pids: pids ? pids.join('\n') : null, proto: proto, matrix12: mat, hasMatrix: hasM, palette: new Float32Array(pal), colorIndex: cIdx };
+    }
+    // the full 4x4 placements (column-major, 16 per part) from either packed form
+    function matrices16(P) {
+        if (P.matrix) return P.matrix;
+        if (P._m16) return P._m16;
+        var n = P.n, out = new Float32Array(n * 16), a = P.matrix12;
+        for (var i = 0; i < n; i++) {
+            var o = i * 16, q = i * 12;
+            out[o] = a[q]; out[o + 1] = a[q + 1]; out[o + 2] = a[q + 2];
+            out[o + 4] = a[q + 3]; out[o + 5] = a[q + 4]; out[o + 6] = a[q + 5];
+            out[o + 8] = a[q + 6]; out[o + 9] = a[q + 7]; out[o + 10] = a[q + 8];
+            out[o + 12] = a[q + 9]; out[o + 13] = a[q + 10]; out[o + 14] = a[q + 11]; out[o + 15] = 1;
+        }
+        try { Object.defineProperty(P, '_m16', { value: out, enumerable: false }); } catch (_) {}
+        return out;
+    }
+    function colorAt(P, i) {
+        if (P.color) return P.hasColor[i] ? [P.color[i * 3], P.color[i * 3 + 1], P.color[i * 3 + 2]] : null;
+        var c = P.colorIndex[i]; return c < 0 ? null : [P.palette[c * 3], P.palette[c * 3 + 1], P.palette[c * 3 + 2]];
+    }
+    // part ids of a packed payload: stored, or rebuilt from the part list (path, name, copy number)
+    function pidsOf(packedMeshes, packedParts) {
+        var P = packedMeshes;
+        if (P && P._pids) return P._pids;
+        var out;
+        if (P && P.pids != null) out = P.n ? P.pids.split('\n') : [];
+        else if (packedParts && packedParts.pids != null) out = packedParts.n ? packedParts.pids.split('\n') : [];
+        else if (packedParts && packedParts.occ) {
+            // makePid, with each distinct path and name encoded once
+            var strs = packedParts.strings.split('\u0002'), pre = {}, nm = {}, n = packedParts.n; out = new Array(n);
+            for (var i = 0; i < n; i++) {
+                var pk = packedParts.path[i], ni = packedParts.name[i];
+                var pf = pre[pk]; if (pf === undefined) { var segs = strs[pk] ? strs[pk].split('\u0001') : []; pf = pre[pk] = 'p:' + segs.map(encSeg).join('/') + (segs.length ? '/' : ''); }
+                var en = nm[ni]; if (en === undefined) en = nm[ni] = encSeg(strs[ni]);
+                out[i] = pf + en + '#' + packedParts.occ[i];
+            }
+        } else out = [];
+        try { if (P) Object.defineProperty(P, '_pids', { value: out, enumerable: false }); } catch (_) {}
+        return out;
+    }
+    // The part list of a large model, packed for this computer's cache (string tables and flat
+    // arrays): it never goes to the project.
+    function packParts(parts, meshes) {
+        var n = parts.length, strs = [], sIdx = {}, S = function (x) { x = x == null ? '' : String(x); var k = sIdx[x]; if (k === undefined) { k = sIdx[x] = strs.length; strs.push(x); } return k; };
+        var name = new Int32Array(n), pn = new Int32Array(n), hasPn = new Uint8Array(n), path = new Int32Array(n), desig = new Int32Array(n), box = new Float64Array(n * 6), cen = new Float64Array(n * 3), pids = new Array(n);
+        for (var i = 0; i < n; i++) {
+            var p = parts[i]; pids[i] = p.pid; name[i] = S(p.name); if (p.partNumber != null) { hasPn[i] = 1; pn[i] = S(p.partNumber); }
+            path[i] = S((p.path || []).join('\u0001')); desig[i] = p.designator ? S(p.designator) : -1;
+            box.set([p.bbox.min[0], p.bbox.min[1], p.bbox.min[2], p.bbox.max[0], p.bbox.max[1], p.bbox.max[2]], i * 6);
+            cen.set(p.centroid || [0, 0, 0], i * 3);
+        }
+        // part ids follow from path, name and copy number (makePid): stored only when one does not
+        var occ = new Int32Array(n), derived = true;
+        for (var j = 0; j < n; j++) { var h = pids[j].lastIndexOf('#'), oc = h >= 0 ? parseInt(pids[j].slice(h + 1), 10) : NaN; occ[j] = oc; if (derived && makePid(parts[j].path || [], String(parts[j].name), oc) !== pids[j]) derived = false; }
+        return { n: n, pids: derived ? null : pids.join('\n'), occ: derived ? occ : null, strings: strs.join('\u0002'), name: name, partNumber: pn, hasPartNumber: hasPn, path: path, designator: desig, bbox: box, centroid: cen };
+    }
+    function unpackParts(P, packedMeshes) {
+        var pids = !P.n ? [] : P.pids != null ? P.pids.split('\n') : P.occ ? pidsOf(packedMeshes || {}, P) : pidsOf(packedMeshes, null), strs = P.strings.split('\u0002'), out = new Array(P.n), paths = {};
+        for (var i = 0; i < P.n; i++) {
+            var b = P.bbox, o = i * 6, pk = P.path[i];
+            var path = paths[pk] || (paths[pk] = strs[pk] ? strs[pk].split('\u0001') : []);
+            var q = { pid: pids[i], name: strs[P.name[i]], partNumber: P.hasPartNumber[i] ? strs[P.partNumber[i]] : null, path: path, bbox: { min: [b[o], b[o + 1], b[o + 2]], max: [b[o + 3], b[o + 4], b[o + 5]] }, centroid: [P.centroid[i * 3], P.centroid[i * 3 + 1], P.centroid[i * 3 + 2]] };
+            if (P.designator[i] >= 0) q.designator = strs[P.designator[i]];
+            out[i] = q;
+        }
+        return out;
+    }
+    function unpackMeshes(P, packedParts) {
+        var pids = pidsOf(P, packedParts), M = matrices16(P), out = new Array(P.n);
+        for (var i = 0; i < P.n; i++) out[i] = { pid: pids[i], proto: P.proto[i], matrix: P.hasMatrix[i] ? M.subarray(i * 16, i * 16 + 16) : null, color: colorAt(P, i) };
+        return out;
     }
     // Import a new STEP file: worker -> local cache -> metadata into the project.
     // Returns { promise -> { entry, model }, cancel }.
@@ -495,7 +867,7 @@
         opts = opts || {};
         var job = runWorker(file, opts);
         var promise = job.promise.then(function (r) {
-            return finalizeImport(r, { fileName: file && file.name, cache: opts.cache, by: opts.by });
+            return finalizeImport(r, { fileName: file && file.name, cache: opts.cache, by: opts.by, file: file });
         });
         return { promise: promise, cancel: job.cancel };
     }
@@ -503,10 +875,35 @@
     // metadata -> project. Exported so the tests drive the real split.
     function finalizeImport(r, o) {
         o = o || {};
-        var cache = o.cache || { put: cachePut };
-        return Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).then(function () {
+        var cache = o.cache || { put: cachePut, putStep: stepPut };
+        var T = root.SLCadTimings = { start: Date.now() };
+        // a large model streams: it goes on screen first, the cache writes follow in the background
+        var saving = r.stream ? Promise.resolve() : null;
+        if (r.stream) setTimeout(function () { Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).then(function () { _trace('cache put (background)'); if (o.file && cache.putStep) return cache.putStep(r.sha256, o.file); }).catch(function () {}); }, 0);
+        return (saving || Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model)))).then(function () {
+            if (r.stream) return;
+            T.cachePut = Date.now() - T.start; _trace('cache put');
+            // the file itself, locally, for exact measurement later (a failure here only means the
+            // file is asked for again then)
+            if (o.file && cache.putStep) return Promise.resolve(cache.putStep(r.sha256, o.file)).catch(function () {});
+        }).then(function () {
+            T.putStep = Date.now() - T.start; _trace('step stored');
             var entry = addToProject(r.model, { fileName: o.fileName || 'model.step', sha256: r.sha256, importedAt: o.at || new Date().toISOString() });
-            return { entry: entry, model: r.model, revision: reviseFrom(entry, o.by) };
+            _trace('added to project');
+            if (r.stream) {
+                // each real shape replaces its box in the model; the finished model replaces the
+                // cached first view, so the next open is complete
+                r.stream.on(function (b) { (b.protos || []).forEach(function (p) { r.model.protos[p.proto] = { position: p.position, index: p.index, normal: null, faces: p.faces || null }; }); });
+                r.stream.onEnd(function (e) {
+                    if (e.type !== 'detail-done') return;
+                    if (r.model.streaming) r.model.streaming.done = e.total;
+                    // every part's true box from its shape (the first view's boxes were estimates)
+                    var upd = trueBoxes(r.model), E = root.SLCadZonal;
+                    if (E && E.updatePartBoxes) E.updatePartBoxes(entry.id, upd);
+                    Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).catch(function () {});
+                });
+            }
+            return { entry: entry, model: r.model, revision: reviseFrom(entry, o.by), worker: r.worker || null, stream: r.stream || null };
         });
     }
     // Geometry is missing on this computer: the user re-opens the STEP file. Its
@@ -516,8 +913,14 @@
         var job = runWorker(file, Object.assign({}, opts, { expectSha: entry.sha256 }));
         var promise = job.promise.then(function (r) {
             if (r.sha256 !== entry.sha256) { var e = new Error('This file is not the one the model was imported from (fingerprints differ).'); e.code = 'mismatch'; throw e; }
-            var cache = opts.cache || { put: cachePut };
-            return Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).then(function () { return { entry: entry, model: r.model }; });
+            var cache = opts.cache || { put: cachePut, putStep: stepPut };
+            return Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model)))
+                .then(function () { if (cache.putStep) return Promise.resolve(cache.putStep(r.sha256, file)).catch(function () {}); })
+                .then(function () {
+                    var E = root.SLCadZonal;
+                    if (entry.partStore === 'local' && E && E.registerLocalParts) E.registerLocalParts(entry.sha256, projectEntry(r.model, {}).parts);
+                    return { entry: entry, model: r.model, worker: r.worker || null, stream: r.stream || null };
+                });
         });
         return { promise: promise, cancel: job.cancel };
     }
@@ -619,8 +1022,9 @@
         VERSION: VERSION, DB_NAME: DB_NAME, DB_STORE: DB_STORE, OCCT_DIR: OCCT_DIR, DEFAULTS: DEFAULTS,
         decodeStepString: decodeStepString, bytesToText: bytesToText, parseStepProducts: parseStepProducts, parseStepInstances: parseStepInstances, designatorFrom: designatorFrom, stepSchema: stepSchema, stepLengthUnit: stepLengthUnit, productIndex: productIndex,
         bboxOf: bboxOf, centroidOf: centroidOf, decimate: decimate, makePid: makePid, buildModel: buildModel, convertStep: convertStep,
+        walkParts: walkParts, findInstances: findInstances, _rigid: _rigid, _anchors: _anchors, worldPosition: worldPosition, normalizeGeometry: normalizeGeometry, parseStepAttributes: parseStepAttributes, bboxOfXf: bboxOfXf,
         projectEntry: projectEntry, containsGeometry: containsGeometry, addToProject: addToProject, nextRevision: nextRevision, reviseFrom: reviseFrom, getModel: getModel, latestModel: latestModel,
-        sha256Hex: sha256Hex, openDb: openDb, cachePut: cachePut, cacheGet: cacheGet, cacheHas: cacheHas,
+        trueBoxes: trueBoxes, _trace: _trace, _cachePayload: _cachePayload, packMeshes: packMeshes, unpackMeshes: unpackMeshes, pidsOf: pidsOf, matrices16: matrices16, colorAt: colorAt, packParts: packParts, unpackParts: unpackParts, sha256Hex: sha256Hex, openDb: openDb, cachePut: cachePut, cacheGet: cacheGet, cacheHas: cacheHas, stepPut: stepPut, stepGet: stepGet, stepHas: stepHas, DB_STEPS: DB_STEPS,
         workerUrl: workerUrl, runWorker: runWorker, importStep: importStep, finalizeImport: finalizeImport, reopen: reopen,
         parseZoneRows: parseZoneRows, readZoneFile: readZoneFile, handZones: handZones
     };
