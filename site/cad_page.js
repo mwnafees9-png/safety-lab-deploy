@@ -21,7 +21,7 @@
 // ============================================================================
 (function () {
     'use strict';
-    var VERSION = '1.3';
+    var VERSION = '1.4';
     var state = { cadId: null, viewer: null, job: null, unsub: null, lastSel: null };
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
     function _pc() {
@@ -336,7 +336,7 @@
         }).join(''));
     }
     function _onSelect(ev) { state.lastSel = ev; _renderContainment(); }
-    function _renderPanels() { var TR = (window.SLCadImport && SLCadImport._trace) || function () {}; _renderMatching(); TR('panel matching'); _renderContainment(); TR('panel containment'); _renderIndependence(); TR('panel independence'); _renderReviews(); TR('panel reviews'); if (state.focus && state.focus.zoneId) _onZone(state.focus.zoneId, true); else if (state.focus && state.focus.volumeId) _onVolume(state.focus.volumeId, true); else _panel('cad-impact', 'Impact', _engine() ? '<div style="font-size:12px;">Click a zone or a PRA volume (in the viewer\'s lists, or a zone link here) to see what it reaches through the fault trees.</div>' : _noEngine()); }
+    function _renderPanels() { var TR = (window.SLCadImport && SLCadImport._trace) || function () {}; _renderMatching(); TR('panel matching'); _renderContainment(); TR('panel containment'); _renderIndependence(); TR('panel independence'); _renderReviews(); TR('panel reviews'); if (window.SLPraPanel) { try { window.SLPraPanel.render(); } catch (e) { try { console.warn('particular risks panel', e); } catch (_) {} } } if (state.focus && state.focus.zoneId) _onZone(state.focus.zoneId, true); else if (state.focus && state.focus.volumeId) _onVolume(state.focus.volumeId, true); else _panel('cad-impact', 'Impact', _engine() ? '<div style="font-size:12px;">Click a zone or a PRA volume (in the viewer\'s lists, or a zone link here) to see what it reaches through the fault trees.</div>' : _noEngine()); }
 
     // ---- a ZSA row's zone, from the Zonal Safety table: show it in 3D
     function _zoneFromText(t) {
@@ -427,7 +427,8 @@
                 '<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:flex-start;">' +
                   '<div id="cad-indep" style="flex:1 1 420px;min-width:300px;border:1px solid var(--color-border-hair);border-radius:8px;padding:10px;max-height:420px;overflow:auto;"></div>' +
                   '<div id="cad-impact" style="flex:1 1 420px;min-width:300px;border:1px solid var(--color-border-hair);border-radius:8px;padding:10px;max-height:420px;overflow:auto;"></div>' +
-                '</div>';
+                '</div>' +
+                '<div id="cad-pra" style="margin-top:10px;border:1px solid var(--color-border-hair);border-radius:8px;padding:10px;max-height:560px;overflow:auto;"></div>';
             host.appendChild(wrap);
             wrap.addEventListener('click', function (e) {
                 var z = e.target.closest('[data-cad-zone]'); if (z) { e.preventDefault(); if (state.viewer) state.viewer.highlightZone(z.getAttribute('data-cad-zone')); _onZone(z.getAttribute('data-cad-zone'), true); return; }

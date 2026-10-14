@@ -37,7 +37,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '2.0';
+    var VERSION = '2.1';
     var THREE_URL = 'vendor/three/three.min.js';
 
     // =================================================================== pure helpers
@@ -1648,6 +1648,27 @@
         if (this.tab === 'zones') this._renderPane();
         return !!o;
     };
+    // 14 Oct 2026 (p3-pra): overlay line segments (fragment paths, debris directions) drawn on
+    // top of the model; showPaths([{a, b, color}], {frame}) replaces the set, clearPaths() empties it.
+    P.showPaths = function (segs, opts) {
+        var T = this.T; if (!T || !this.scene) return 0;
+        if (!this.gPaths) { this.gPaths = new T.Group(); this.scene.add(this.gPaths); }
+        while (this.gPaths.children.length) this._disposeObj(this.gPaths.children.pop());
+        var byCol = {};
+        (segs || []).forEach(function (s) { if (_n3(s.a) && _n3(s.b)) (byCol[s.color || '#c92a2a'] = byCol[s.color || '#c92a2a'] || []).push(s); });
+        var self = this, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+        Object.keys(byCol).sort().forEach(function (c) {
+            var arr = []; byCol[c].forEach(function (s) { arr.push(s.a[0], s.a[1], s.a[2], s.b[0], s.b[1], s.b[2]); [s.a, s.b].forEach(function (q) { for (var i = 0; i < 3; i++) { mn[i] = Math.min(mn[i], q[i]); mx[i] = Math.max(mx[i], q[i]); } }); });
+            var g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(arr, 3));
+            var l = new T.LineSegments(g, new T.LineBasicMaterial({ color: c, depthTest: false, transparent: true, opacity: 0.9 })); l.renderOrder = 7;
+            self.gPaths.add(l);
+        });
+        this.pathCount = (segs || []).length;
+        if (opts && opts.frame && isFinite(mn[0])) this.frameBox({ min: mn, max: mx });
+        this.dirty = true;
+        return this.pathCount;
+    };
+    P.clearPaths = function () { return this.showPaths([]); };
     P.highlightVolume = function (id) {
         var v = this._vols().find(function (x) { return x && x.id === id; });
         if (!v) return false;
@@ -1930,7 +1951,7 @@
     var api = {
         VERSION: VERSION, Viewer: Viewer, mount: mount, current: function () { return _last; },
         loadModel: _on('loadModel'), showModel: _on('showModel'), highlightZone: _on('highlightZone'), highlightParts: _on('highlightParts'),
-        highlightVolume: _on('highlightVolume'), onSelect: _on('onSelect'), dispose: function () { if (_last) _last.dispose(); },
+        highlightVolume: _on('highlightVolume'), showPaths: _on('showPaths'), clearPaths: _on('clearPaths'), onSelect: _on('onSelect'), dispose: function () { if (_last) _last.dispose(); },
         _pure: { fitBoxDistance: fitBoxDistance, buildTree: buildTree, ancestorsOf: ancestorsOf, unionBox: unionBox, zoneColor: zoneColor, standardView: standardView, volumeSpec: volumeSpec, closestVertexPair: closestVertexPair, VIEWS: VIEWS, esc: esc, fmtMm: fmtMm }
     };
     root.SLCadViewer = api;

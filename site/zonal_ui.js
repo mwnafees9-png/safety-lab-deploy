@@ -76,6 +76,7 @@
                 '<button onclick="zoneAddSub(\'' + z.id + '\')" style="font-size:11px;padding:2px 7px;border:1px solid var(--color-border-hair);border-radius:5px;background:transparent;cursor:pointer;color:var(--color-text-primary);">+ sub-zone</button>' +
                 '<button onclick="zoneRename(\'' + z.id + '\')" style="font-size:11px;padding:2px 7px;border:1px solid var(--color-border-hair);border-radius:5px;background:transparent;cursor:pointer;color:var(--color-text-primary);">rename</button>' +
                 '<button onclick="zsaWalkthrough(\'' + z.id + '\')" style="font-size:11px;padding:2px 7px;border:1px solid #007AFF;border-radius:5px;background:transparent;cursor:pointer;color:#007AFF;">ZSA checklist</button>' +
+                (window.SLZonalAI ? window.SLZonalAI.buttonHtml('zonal.breakdown', { zoneId: z.id }) : '') +
                 '<button onclick="zoneDelete(\'' + z.id + '\')" style="font-size:11px;padding:2px 7px;border:1px solid var(--color-border-hair);border-radius:5px;background:transparent;cursor:pointer;color:#8E2A2A;">delete</button>' +
               '</span>' +
             '</div>' +

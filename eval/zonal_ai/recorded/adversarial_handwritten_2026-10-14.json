@@ -1,0 +1,14 @@
+{
+  "label": "handwritten fabricated and trap answers (NOT a model run)",
+  "source": "handwritten",
+  "at": "2026-10-14",
+  "outputs": {
+    "bird-410": "{\"statements\":[{\"text\":\"Panel PN-NF-410 holds an 8 lb bird at 250 KCAS.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-bird\",\"page\":12,\"quote\":\"panel PN-NF-410 was impacted by a 4 lb bird at 250 KCAS (Vc)\"}]},{\"text\":\"Panel PN-NF-410 holds a 4 lb bird at 230 KCAS.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-bird\",\"page\":12,\"quote\":\"4 lb bird at 230 KCAS\"}]},{\"text\":\"The panel is certified for bird strike.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"fc\",\"id\":\"FC-99\"}]}]}",
+    "bird-411": "{\"statements\":[{\"text\":\"Panel PN-NF-411 showed no penetration at 250 KCAS.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-bird\",\"page\":12,\"quote\":\"No penetration of the panel.\"}]}]}",
+    "bird-412": "{\"statements\":[{\"text\":\"Panel PN-NF-412 passed at 250 KCAS.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-bird\",\"page\":13,\"quote\":\"No penetration. Result: PASS.\"}]}]}",
+    "rotor-shield": "{\"statements\":[{\"text\":\"The shield contains 13.8 kJ: PASS.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-rotor\",\"page\":7,\"quote\":\"The design energy of the APU third-disk fragment is 13.8 kJ.\"},{\"type\":\"report\",\"doc\":\"doc-rotor\",\"page\":7,\"quote\":\"Result: PASS.\"}]},{\"text\":\"A 14.4 kJ fragment was contained.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-rotor\",\"page\":7,\"quote\":\"No perforation.\"}]}]}",
+    "lightning-1a": "{\"statements\":[{\"text\":\"PN-WT-300 passed 100 kA.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-light\",\"page\":5,\"quote\":\"tested with a 100 kA Component D waveform\"}]}]}",
+    "stress-411": "{\"statements\":[{\"text\":\"PN-NF-411 margin is +0.12.\",\"kind\":\"fact\",\"sources\":[{\"type\":\"report\",\"doc\":\"doc-stress\",\"page\":null,\"quote\":\"margin of safety MS = +0.12\"}]}]}",
+    "tire-none": "{\"statements\":[{\"text\":\"The brake line survives tire burst: PASS.\",\"kind\":\"fact\",\"sources\":[]},{\"text\":\"Unknown.\",\"kind\":\"gap\",\"sources\":[]}]}"
+  }
+}

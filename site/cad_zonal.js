@@ -62,8 +62,8 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.2';
-    var KINDS = ['rotorBurst', 'tireBurst', 'birdStrike', 'fire', 'generic'];
+    var VERSION = '1.3';
+    var KINDS = ['rotorBurst', 'tireBurst', 'birdStrike', 'fire', 'fluidLeak', 'iceShedding', 'lightning', 'generic'];   // 14 Oct 2026: fluidLeak, iceShedding, lightning added (configurable volumes)
     var SHAPES = ['box', 'sphere', 'cone', 'disk-sector'];
     var UNITS = { mm: 1, cm: 10, m: 1000, 'in': 25.4, ft: 304.8 };
     // Rotor burst fragment spread about the plane of rotation, in degrees either side. AC 20-128A
@@ -1021,7 +1021,10 @@
         equipmentOfEvent: equipmentOfEvent, eventIndex: eventIndex, evaluate: evaluate, sevRank: sevRank,
         zoneImpact: zoneImpact, riskImpact: riskImpact, independenceFlags: independenceFlags,
         diffRevision: diffRevision, markForReview: markForReview, openReviews: openReviews, closeReviewItem: closeReviewItem,
-        aiPayload: aiPayload
+        aiPayload: aiPayload,
+        // 14 Oct 2026 (p3-pra): the same evaluation for a given set of failed equipment, used by the
+        // release-angle sweep and the per-function risk view (SLPraModels).
+        impactOfEquipment: function (sysIds, extra) { return _impact(_arr(sysIds), extra); }
     };
     try { root.SLCadZonal = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
