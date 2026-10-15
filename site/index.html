@@ -1809,11 +1809,19 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <div>
                             <label>Active model</label>
                             <select id="ai-anthropic-model">
-                                <option value="claude-fable-5">Claude Fable 5 (frontier — Mythos-class reasoning · 5× allowance)</option>
-                                <option value="claude-opus-4-8">Claude Opus 4.8 (premium reasoning · 5× allowance)</option>
-                                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (economical — 1× allowance)</option>
-                                <option value="claude-opus-4-6">Claude Opus 4.6 (previous Opus · 5× allowance)</option>
-                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (0.3× — fast + cheap)</option>
+                                <optgroup label="Claude 5.x">
+                                <option value="claude-fable-5-1">Claude Fable 5.1 (frontier reasoning, $10 / $50 per MTok, 3.33x allowance)</option>
+                                <option value="claude-opus-5-5">Claude Opus 5.5 (default: reasoning and write-ups, $4 / $20, 1.33x allowance)</option>
+                                <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (drafting, $2 / $10, 0.67x allowance)</option>
+                                <option value="claude-haiku-5-5">Claude Haiku 5.5 (fast classification, from $0.10 / $0.50, 0.03x allowance)</option>
+                                </optgroup>
+                                <optgroup label="Previous">
+                                <option value="claude-opus-4-8">Claude Opus 4.8 (previous, 5x allowance)</option>
+                                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (previous, 1x allowance)</option>
+                                <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (previous, 0.3x allowance)</option>
+                                <option value="claude-opus-4-6">Claude Opus 4.6 (previous, 5x allowance)</option>
+                                <option value="claude-fable-5">Claude Fable 5 (previous, 5x allowance)</option>
+                                </optgroup>
                             </select>
                         </div>
                     </div>
@@ -4132,10 +4140,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="reliability_data.js?v=1.1" defer></script>
     <script src="catalogue_data.js?v=1.11" defer></script>
     <script src="ui_constants.js?v=1.0" defer></script>
-    <script src="config_data.js?v=1.1" defer></script>
+    <script src="config_data.js?v=1.2" defer></script>
     <script src="ai_memory.js?v=1.0" defer></script>
     <script src="importers.js?v=1.9" defer></script>
-    <script src="core_modules.js?v=1.11" defer></script>
+    <script src="ai_request.js?v=1.1" defer></script>
+    <script src="core_modules.js?v=1.12" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
     <script src="fta_quant_modules.js?v=66.29" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
@@ -4162,7 +4171,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.44" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.26" defer></script>
+    <script src="helpers_modules.js?v=3.27" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4433,7 +4442,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="pra_refs_data.js?v=1.4" defer></script>
     <script src="pra_models.js?v=1.18" defer></script>
     <!-- 14 Oct 2026: grounded AI for zonal and particular risk drafts (sources checked in code, nothing applied without acknowledgement). -->
-    <script src="zonal_ai.js?v=1.2" defer></script>
+    <script src="zonal_ai.js?v=1.4" defer></script>
     <script src="physical_independence.js?v=1.1" defer></script>
     <script src="independence_claims.js?v=1.1" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
@@ -4538,7 +4547,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.16" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.71" defer></script>
+    <script src="ai_loader.js?v=8.73" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.2" defer></script>

@@ -222,6 +222,11 @@ const TEMPLATE_SCHEMAS = {
 };
 
 const MODEL_TOKEN_WEIGHTS = {
+    // 15 Oct 2026: the Claude 5.x generation, weighted by price against Sonnet 4.6 ($3 / $15)
+    'claude-fable-5-1':          3.33,   // $10 / $50
+    'claude-opus-5-5':           1.33,   // $4 / $20
+    'claude-sonnet-5-5':         0.67,   // $2 / $10
+    'claude-haiku-5-5':          0.033,  // from $0.10 / $0.50
     'claude-opus-4-8':           5.0,    // newest Opus — same premium tier as 4.6
     'claude-opus-4-6':           5.0,    // Opus is ~5× Sonnet cost
     'claude-sonnet-4-6':         1.0,    // baseline
@@ -232,6 +237,11 @@ const MODEL_TOKEN_WEIGHTS = {
 };
 
 const AI_PRICES_USD_PER_MTOK = {
+    // 15 Oct 2026: models overview (platform.claude.com/docs/en/models/overview); Haiku 5.5 is "from" this price
+    'claude-fable-5-1':          { input: 10.00, output: 50.00 },
+    'claude-opus-5-5':           { input: 4.00,  output: 20.00 },
+    'claude-sonnet-5-5':         { input: 2.00,  output: 10.00 },
+    'claude-haiku-5-5':          { input: 0.10,  output: 0.50 },
     'claude-sonnet-4-6':         { input: 3.00,  output: 15.00 },
     'claude-opus-4-8':           { input: 15.00, output: 75.00 },   // estimate — mirror 4.6 until confirmed
     'claude-opus-4-6':           { input: 15.00, output: 75.00 },

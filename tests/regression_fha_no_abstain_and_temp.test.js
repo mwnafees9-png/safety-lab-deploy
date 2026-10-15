@@ -143,7 +143,7 @@ check('claude-fable-5 gets past the family rules (which is the point of the deny
       accepts('claude-fable-5') === true);
 check('a persisted deny list exists', /_TEMP_DENY_KEY = 'safetyLab\.ai\.temperatureDeprecated'/.test(core));
 check('the parameter is attached only when BOTH the family rules and the deny list allow it',
-      /const _tempApplied = _modelAcceptsTemperature\(model\) && !_tempDenied\(model\);/.test(core));
+      /let _tempApplied = _modelAcceptsTemperature\(model\) && !_tempDenied\(model\);/.test(core));   // 15 Oct 2026: let, a Claude 5.x request then drops it (ai_request.js)
 check('the 400 handler records the model before retrying',
       /_denyTemperature\(model\);[\s\S]{0,120}delete body\.temperature;/.test(core));
 

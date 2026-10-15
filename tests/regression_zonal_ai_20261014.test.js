@@ -155,12 +155,67 @@ console.log('\n[D] apply only through the acknowledgement flow');
 
     console.log('\n[H] wiring');
     const iZ = IDX.indexOf('<script src="zonal_ai.js'), iC = IDX.indexOf('<script src="cad_zonal.js');
-    check('H1 index.html loads zonal_ai.js once, after cad_zonal.js', iZ > iC && iC > 0 && (IDX.match(/<script src="zonal_ai\.js\?v=1\.2" defer><\/script>/g) || []).length === 1);
+    check('H1 index.html loads zonal_ai.js once, after cad_zonal.js', iZ > iC && iC > 0 && (IDX.match(/<script src="zonal_ai\.js\?v=1\.4" defer><\/script>/g) || []).length === 1);
     check('H2 no eval / new Function in the module', !/\beval\s*\(|new Function/.test(SRC));
     const evalFiles = ['fixtures.js', 'score.js', 'run_live.js', 'make_handwritten.js'].map(f => fs.readFileSync(path.join(__dirname, '..', 'eval', 'zonal_ai', f), 'utf8'));
     check('H3 no em dash in the module, its prompts or the eval', SRC.indexOf(EM) < 0 && evalFiles.every(t => t.indexOf(EM) < 0));
     check('H4 exports', typeof Z.validate === 'function' && typeof Z.gather === 'function' && Object.keys(Z.SOURCE_MAP).length === 4);
 
-    console.log('\n' + pass + ' passed, ' + fail + ' failed');
+    // ---- 15 Oct 2026: number support also from a cited risk record's parts (computed.partsInside / part: names and part numbers)
+// and from the cited passage's section heading; the live run's 9 false alarm patterns (410, 411, 220, 300, 6.2) are accepted,
+// a number that appears nowhere cited is still rejected
+{
+    const runV = (Zs, lane, target, sts) => { const ctx = Zs.gather(lane, target, F.env()); return Zs.validate({ statements: sts }, ctx); };
+    const birdT = { volumeId: 'risk-bird-nose', part: { pid: 'p-nf410', name: 'Nose fairing panel', partNumber: 'PN-NF-410' } };
+    const rep = (doc, page, quote) => ({ type: 'report', doc, page, quote });
+    const cases = Zs => [
+        runV(Zs, 'damage.assumption', birdT, [{ kind: 'fact', text: 'Nose fairing panel PN-NF-410: no penetration of the panel at 250 KCAS.', sources: [rep('doc-bird', 12, 'No penetration of the panel'), rep('doc-bird', 12, 'impacted by a 4 lb bird at 250 KCAS'), { type: 'risk', id: 'risk-bird-nose' }] }]),
+        runV(Zs, 'damage.assumption', birdT, [{ kind: 'interpretation', text: 'The bird strike volume holds PN-NF-410 and PN-NF-411.', sources: [{ type: 'risk', id: 'risk-bird-nose' }] }]),
+        runV(Zs, 'pra.writeup', { volumeId: 'risk-apu-rotor' }, [{ kind: 'fact', text: 'Shield PN-RS-220 contained the fragment at 12.4 kJ.', sources: [rep('doc-rotor', 7, 'kinetic energy of 12.4 kJ'), { type: 'risk', id: 'risk-apu-rotor' }] }]),
+        runV(Zs, 'pra.writeup', { volumeId: 'risk-light-tip' }, [{ kind: 'fact', text: 'Panel PN-WT-300 showed no puncture.', sources: [rep('doc-light', 4, 'No puncture'), { type: 'risk', id: 'risk-light-tip' }] }]),
+        runV(Zs, 'damage.assumption', birdT, [{ kind: 'fact', text: 'Section 6.2 gives a margin of safety MS = +0.12 for PN-NF-410.', sources: [rep('doc-stress', null, 'Part PN-NF-410 bird strike case, ultimate load: margin of safety MS = +0.12')] }])
+    ];
+    const ok = cases(Z), acc = ok.map(v => v.accepted.length === 1 && v.rejected.length === 0);
+    check('validator: numbers from a cited risk record\'s parts (410, 411, 220, 300) and a cited section heading (6.2) are supported (the live false alarms)', acc.every(Boolean), JSON.stringify(ok.map(v => v.rejected.map(r => r.reasons.join('; ')))));
+    const neg = [
+        runV(Z, 'damage.assumption', birdT, [{ kind: 'fact', text: 'Panel PN-NF-410 survived 999 impacts.', sources: [rep('doc-bird', 12, 'No penetration of the panel'), { type: 'risk', id: 'risk-bird-nose' }] }]),
+        runV(Z, 'pra.writeup', { volumeId: 'risk-apu-rotor' }, [{ kind: 'fact', text: 'Shield PN-RS-220 contained the fragment.', sources: [rep('doc-rotor', 7, 'No perforation')] }]),
+        runV(Z, 'pra.writeup', { volumeId: 'risk-apu-rotor' }, [{ kind: 'fact', text: 'Panel PN-WT-300 was tested.', sources: [{ type: 'risk', id: 'risk-apu-rotor' }] }])
+    ];
+    check('validator: a number that appears nowhere cited is still rejected (999; 220 with only a quote that lacks it; 300 from another risk\'s parts)', neg.every(v => v.accepted.length === 0 && v.rejected.length === 1 && /not in the cited sources/.test(v.rejected[0].reasons.join(';'))), JSON.stringify(neg.map(v => v.rejected.map(r => r.reasons))));
+    const mutZ = (name, from, to) => { if (SRC.indexOf(from) < 0) { check('anchor present: ' + name, false); return; } let red; try { const Zm = load(SRC.replace(from, to)).SLZonalAI || load(SRC.replace(from, to)); red = !cases(Zm).every(v => v.accepted.length === 1 && v.rejected.length === 0); } catch (e) { red = true; } check('mutation goes red: ' + name, red); };
+    mutZ('section heading not counted', " + (hit.section ? ' ' + hit.section : '')", "");
+    mutZ('risk record parts not counted', "return { ok: true, text: r.id + ' ' + r.label + ' ' + JSON.stringify(r.data || {}) + (extra ? ' ' + extra : '') };", "return { ok: true, text: r.id + ' ' + r.label + ' ' + JSON.stringify(r.data || {}) };");
+}
+// ---- 15 Oct 2026: the rotor trap is a claim that the shield passed AT 13.8 kJ; the correct sentence is not a hit
+{
+    const S = require('../eval/zonal_ai/score.js'), tr = F.CASES.find(c => c.id === 'rotor-shield').traps[0];
+    const correct = [{ text: 'The shield PN-RS-220 contained a one-third disk fragment at 12.4 kJ (PASS), and the design energy is 13.8 kJ.' }];
+    const trap = [{ text: 'The shield PN-RS-220 passed the containment test at 13.8 kJ: Result: PASS.' }], trap2 = [{ text: 'At 13.8 kJ the shield showed no perforation. PASS.' }];
+    check('scorer: the correct rotor sentence (12.4 kJ PASS, design energy 13.8 kJ) is not a trap hit; a claim of a pass at 13.8 kJ is', !S.trapHit(tr, correct) && S.trapHit(tr, trap) && S.trapHit(tr, trap2));
+}
+// ---- 15 Oct 2026: gaps. The prompt asks for engineering-evidence gaps only and not to restate notFound; the dialog shows a
+// deduplicated "To complete this assessment" checklist from notFound, folds AI gaps of those record types into it, shows
+// engineering gaps first as statements, and lists what the AI read
+{
+    check('prompt: the gap wording tested live on 15 Oct 2026 (7/7, gaps 27 -> 9): engineering evidence about what the design withstands is a gap, never only an interpretation; project links are a checklist; reports or analyses in notFound are engineering gaps',
+        Z.CONTRACT.indexOf('gap: missing engineering evidence about this design: a test report, an analysis, or design data that would show what the design withstands. Say what is missing and name where it should come from in "missing": type is one of the record types or "report", where names the document, analysis or test.') >= 0 &&
+        Z.CONTRACT.indexOf('Whenever the evidence for what a part or the design withstands is missing, write it as a gap, never only as an interpretation. Do not write gaps for missing project links (equipment links, failure conditions, independence flags, deterministic model results, PRA scenarios): the app lists those to the engineer as a checklist.') >= 0 &&
+        SRC.indexOf('The "notFound" list is what the project does not hold yet. Do not invent it. Its project-link items are shown to the engineer as a checklist; missing reports or analyses in it are engineering gaps.') >= 0);
+    const ctx = Z.gather('pra.writeup', { volumeId: 'risk-tire-mlg' }, F.env());
+    const mt = ctx.missing.map(m => m.type), dupType = mt.find(t => ['equip', 'fc', 'flag', 'pram', 'pra'].indexOf(t) >= 0);
+    const raw = { statements: [
+        { kind: 'gap', text: 'No tire burst test of the brake hydraulic line exists.', sources: [], missing: { type: 'report', where: 'tire burst impact test on PN-HL-77' } },
+        { kind: 'gap', text: 'Restates notFound.', sources: [], missing: { type: dupType || 'equip', where: (ctx.missing.find(m => m.type === dupType) || { where: 'equipment links' }).where } } ] };
+    const d = Z.draftFrom(ctx, raw), h = Z.renderDraftHtml(d);
+    const keys = d.codeGaps.map(g => g.missing.type + '|' + g.missing.where.toLowerCase());
+    check('dialog: the engineering gap stays a statement; an AI gap about a notFound record type is folded into the checklist; the checklist has no duplicates', d.accepted.some(s => /hydraulic line/.test(s.text)) && !d.accepted.some(s => s.text === 'Restates notFound.') && new Set(keys).size === keys.length && /data-zai-checklist/.test(h) && /To complete this assessment/.test(h), JSON.stringify({ mt, acc: d.accepted.map(s => s.text), keys }));
+    { const r2 = { statements: [{ kind: 'gap', text: 'No tire burst test report exists for this volume.', sources: [], missing: { type: 'report', where: 'tire burst test report for the main gear bay' } }] };
+      const d2 = Z.draftFrom(ctx, r2);
+      check('report gaps stay engineering gaps: an AI gap of type report and the source check\'s missing report are statements, not checklist items', d2.accepted.some(s => s.missing && s.missing.type === 'report' && s.origin !== 'code') && d2.accepted.some(s => s.origin === 'code' && s.missing.type === 'report') && d2.codeGaps.every(g => g.missing.type !== 'report'), JSON.stringify({ acc: d2.accepted.map(s => [s.origin, s.missing && s.missing.type]), chk: d2.codeGaps.map(g => g.missing.type) })); }
+    check('dialog: "What the AI read" lists the report passages (doc, revision, page, section, text) and knowledge base items sent', /data-zai-read/.test(h) && /What the AI read \(\d+ report passages, \d+ knowledge base items\)/.test(h) && d.read.passages.every(p => 'doc' in p && 'revision' in p && 'page' in p && 'section' in p && 'text' in p));
+    check('the AI switch is on (user decision 15 Oct 2026) and still hides every button when off', Z.ENABLED === true && /data-zai-lane=/.test(Z.buttonHtml(Object.keys(Z.SOURCE_MAP)[0], {})) && (() => { Z.ENABLED = false; const e = Z.buttonHtml(Object.keys(Z.SOURCE_MAP)[0], {}); Z.ENABLED = true; return e === ''; })());
+}
+console.log('\n' + pass + ' passed, ' + fail + ' failed');
     process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

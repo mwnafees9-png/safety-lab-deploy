@@ -127,8 +127,9 @@ function project(opts) {
     const ok2 = await A.applyDraft(rd, ['s1'], { by: 'W. Engineer', at: '2026-10-14' });
     check('4.3 risk write-up stored under projectConfig.praWriteups[rot-eng1]', ok2.applied && sb.projectConfig.praWriteups['rot-eng1'].length === 1 && sb.projectConfig.praWriteups['rot-eng1'][0].aiDrafted);
     const fd = A.draftFrom(fctx, '{"statements":[]}');
-    const ok3 = await A.applyDraft(fd, [fd.codeGaps[0] && fd.codeGaps[0].id].filter(Boolean), { by: 'W. Engineer' });
-    check('4.4 a code-written gap can be accepted into functionRiskNotes', fd.codeGaps.length === 0 || (ok3.applied && sb.projectConfig.functionRiskNotes['FCC1/F-PITCH'].length === 1));
+    const fcg = fd.codeGaps.concat(fd.accepted.filter(s => s.origin === 'code'));   // checklist items, or a missing report kept as an engineering gap (15 Oct 2026)
+    const ok3 = await A.applyDraft(fd, [fcg[0] && fcg[0].id].filter(Boolean), { by: 'W. Engineer' });
+    check('4.4 a code-written gap can be accepted into functionRiskNotes', fcg.length === 0 || (ok3.applied && sb.projectConfig.functionRiskNotes['FCC1/F-PITCH'].length === 1));
     const dd = A.draftFrom(dctx, JSON.stringify({ statements: [{ text: 'The windshield held a 4 lb bird at 250 KCAS with no penetration.', kind: 'fact', sources: [{ type: 'report', doc: 'doc-ws', page: 9, quote: 'WINDSHIELD pane impacted by a 4 lb bird at 250 KCAS. No penetration.' }] }] }));
     const ok4 = await A.applyDraft(dd, ['s1'], { by: 'W. Engineer', at: '2026-10-14' });
     check('4.5 damage assumption with a valid quote stored under damageAssumptions[part]', ok4.applied && sb.projectConfig.damageAssumptions[ws].length === 1);
@@ -187,8 +188,9 @@ function project(opts) {
         const c2 = Am.gather('zonal.breakdown', { zoneId: zz.id });
         const d = Am.draftFrom(c2, '{"statements":[]}');
         const before2 = sbm._batches.length;
-        await Am.applyDraft(d, d.codeGaps.length ? [d.codeGaps[0].id] : [], { by: 'W. Engineer' });
-        const ok = !!c1.records['pram:rotor:rot-eng1#oneThirdDisc'] && Object.values(c2.records).some(r => r.type === 'fc') && (d.codeGaps.length === 0 || sbm._batches.length === before2 + 1);
+        const cg = d.codeGaps.concat(d.accepted.filter(s => s.origin === 'code'));
+        await Am.applyDraft(d, cg.length ? [cg[0].id] : [], { by: 'W. Engineer' });
+        const ok = !!c1.records['pram:rotor:rot-eng1#oneThirdDisc'] && Object.values(c2.records).some(r => r.type === 'fc') && (cg.length === 0 || sbm._batches.length === before2 + 1);
         check('7 mutation goes red: ' + name, !ok);
     }
     console.log('\n' + pass + ' passed, ' + fail + ' failed');

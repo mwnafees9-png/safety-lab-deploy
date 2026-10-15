@@ -6328,7 +6328,7 @@ function renderAiAssistant(){
     // still do not echo it into the DOM). Show whether one is saved, and its last four.
     try { set('ai-anthropic-key', ''); set('ai-voyage-key', ''); _refreshAiKeyStatus(); } catch(_) {}
     const ais = (projectConfig && projectConfig.aiSettings) || {};
-    set('ai-anthropic-model', ais.anthropicModel || 'claude-opus-4-8');
+    set('ai-anthropic-model', ais.anthropicModel || ((typeof window !== 'undefined' && window.SLAiRequest) ? window.SLAiRequest.defaultModel('reason') : 'claude-opus-4-8'));
     set('ai-voyage-model',    ais.voyageModel    || 'voyage-3-large');
     set('ai-max-tokens',      ais.maxTokens      || 4096);
     set('ai-cost-cap',        ais.costCap        || '');

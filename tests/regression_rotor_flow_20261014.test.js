@@ -84,9 +84,11 @@ console.log('\n[F] the AI gate');
     sb.window = sb; sb.globalThis = sb; vm.createContext(sb);
     vm.runInContext(read('zonal_ai.js'), sb);
     const Z = sb.SLZonalAI, lane = Object.keys(Z.SOURCE_MAP)[0];
-    check('F: SLZonalAI.ENABLED is false by default and buttonHtml draws nothing', Z.ENABLED === false && Z.buttonHtml(lane, {}) === '');
+    // 15 Oct 2026: the AI buttons are on (user decision); the one switch stays and still hides them all when off
+    check('F: SLZonalAI.ENABLED exists and is on by default; buttonHtml draws the AI button', Z.ENABLED === true && /data-zai-lane=/.test(Z.buttonHtml(lane, {})));
+    Z.ENABLED = false;
+    check('F: with the switch off buttonHtml draws nothing', Z.buttonHtml(lane, {}) === '');
     Z.ENABLED = true;
-    check('F: with the gate on the AI button appears', /data-zai-lane=/.test(Z.buttonHtml(lane, {})));
     const P = read('pra_panel.js'), U = read('zonal_ui.js');
     check('F: the rotor suggest button uses the same gate (no separate flag); zonal UI and the panel draw AI buttons only through buttonHtml', /SLZonalAI\.ENABLED === true/.test(P) && !/ROTOR_SUGGEST_ENABLED/.test(P) && !/data-zai-lane/.test(P) && !/data-zai-lane/.test(U));
 }

@@ -28,6 +28,11 @@ const ANTHROPIC_UPSTREAM = "https://api.anthropic.com/v1/messages";
 const VOYAGE_UPSTREAM = "https://api.voyageai.com/v1/embeddings";
 
 const MODEL_TOKEN_WEIGHTS = {
+  // 15 Oct 2026: the Claude 5.x generation, weighted by price against Sonnet 4.6 ($3 / $15), as config_data.js
+  "claude-fable-5-1": 3.33,
+  "claude-opus-5-5": 1.33,
+  "claude-sonnet-5-5": 0.67,
+  "claude-haiku-5-5": 0.033,
   "claude-opus-4-8": 5,   // the app's default drafting model (config_data.js) — was missing here, so Opus 4.8 metered at Sonnet weight (12 Sep 2026)
   "claude-opus-4-6": 5,
   "claude-sonnet-4-6": 1,

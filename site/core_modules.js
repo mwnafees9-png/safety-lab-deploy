@@ -192,7 +192,7 @@ const AiClient = (function(){
     function _settings(){
         const cfg = (projectConfig && projectConfig.aiSettings) || {};
         return {
-            anthropicModel: cfg.anthropicModel || 'claude-opus-4-8',
+            anthropicModel: cfg.anthropicModel || ((typeof window !== 'undefined' && window.SLAiRequest) ? window.SLAiRequest.defaultModel('reason') : 'claude-opus-4-8'),
             voyageModel:    cfg.voyageModel    || 'voyage-3-large',
             maxTokens:      cfg.maxTokens      || 4096,
             costCap:        (cfg.costCap != null ? cfg.costCap : 0),   // 0 = no cap (default); set per-customer to enforce
@@ -310,6 +310,8 @@ const AiClient = (function(){
     // nothing. Callers can now see this per call: the audit record carries
     // temperatureAsked and temperatureApplied.
     function _modelAcceptsTemperature(model){
+        // 15 Oct 2026: the generation rules live in ai_request.js (SLAiRequest); the families below are its fallback
+        try { if (typeof window !== 'undefined' && window.SLAiRequest) return window.SLAiRequest.acceptsTemperature(model); } catch (_) {}
         var m = String(model || '');
         var om = m.match(/opus-(\d+)-(\d+)/i);
         if (om) { var maj = +om[1], min = +om[2]; if (maj > 4 || (maj === 4 && min >= 7)) return false; }
@@ -513,8 +515,14 @@ const AiClient = (function(){
         // quietly is not. Record both the value asked for and whether it landed,
         // so a run's own audit trail answers the question.
         const _tempAsked = (typeof opts.temperature === 'number') ? opts.temperature : 0.2;
-        const _tempApplied = _modelAcceptsTemperature(model) && !_tempDenied(model);
+        let _tempApplied = _modelAcceptsTemperature(model) && !_tempDenied(model);
         if (_tempApplied) body.temperature = _tempAsked;
+        // 15 Oct 2026: Claude 5.x (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.1): no sampling parameters, no thinking field
+        // (adaptive thinking, always on for Opus 5.5 and Fable 5.1), an explicit effort in output_config, max_tokens with room
+        // for thinking, and no prefilled assistant turn (ai_request.js quotes the migration guide)
+        let _shape = null;
+        try { if (typeof window !== 'undefined' && window.SLAiRequest && window.SLAiRequest.gen5(model)) { _shape = window.SLAiRequest.shape(body, model, { temperature: _tempAsked, feature: opts.feature, effort: opts.effort }); _tempApplied = false; } } catch (_) {}
+        if (_shape && _shape.prefillRefused) throw new Error('This model does not accept a prefilled assistant turn; the request was not sent.');
         if (opts.system) body.system = systemBlocks(opts.system, opts.cacheBreaks);
         const _cached = Array.isArray(body.system) ? (body.system.length - 1) : 0;   // markers on the wire
         const startedAt = Date.now();
@@ -594,14 +602,14 @@ const AiClient = (function(){
                 }
             }
         } catch (e) {
-            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: String(e), startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
+            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: String(e), startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
             throw e;
         }
         if (_preErr || !response.ok) {
             // Errors (401/402/503/5xx) come back as JSON even when we asked for a stream.
             let emsg = _preErr;
             if (!emsg) { let errJson = {}; try { errJson = await response.json(); } catch (_) {} emsg = (errJson.error && errJson.error.message) || ('HTTP ' + response.status); }
-            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
+            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
             throw new Error(emsg);
         }
         // Phase 66 — assemble the SSE stream client-side (content-type text/event-stream).
@@ -613,6 +621,9 @@ const AiClient = (function(){
             json = await _readAnthropicStream(response);
         } else {
             json = await response.json();
+            // a buffered answer from a thinking model starts with thinking blocks: callers read content[0].text, so the
+            // text blocks are joined into one (the thinking itself is never shown or stored)
+            if (json && Array.isArray(json.content) && json.content.some(function (b) { return b && b.type !== 'text'; })) json.content = [{ type: 'text', text: json.content.filter(function (b) { return b && b.type === 'text'; }).map(function (b) { return b.text || ''; }).join('') }];
         }
         const usage = json.usage || {};
         const _cw = usage.cache_creation_input_tokens || 0, _cr = usage.cache_read_input_tokens || 0;
@@ -620,7 +631,7 @@ const AiClient = (function(){
         _consumeTokens(model, usage.input_tokens || 0, usage.output_tokens || 0, _cw, _cr);
         // The audit record carries the cache counters so a run's own trail answers "did the
         // cache hit?" — cacheRead large and tokensIn small on the second call is the proof.
-        _logCall({ feature: opts.feature || 'messages', model, ok: true, tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cacheWrite: _cw, cacheRead: _cr, cacheMarkers: _cached, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied });
+        _logCall({ feature: opts.feature || 'messages', model, ok: true, tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cacheWrite: _cw, cacheRead: _cr, cacheMarkers: _cached, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
         return json;
     }
 

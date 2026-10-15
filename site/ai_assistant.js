@@ -762,9 +762,13 @@
 
     // ---- Suggested model per workload — callers may override per call. -------
     // The user's configured default still applies inside AiClient when model is omitted.
+    // 15 Oct 2026: the defaults come from ai_request.js (SLAiRequest.defaultModel), one switch (USE_NEXT_DEFAULTS) moves
+    // all three to Opus 5.5 / Sonnet 5.5 / Haiku 5.5 after the live eval; until then they are the previous ids below
     const MODELS = {
-        draft:    'claude-sonnet-4-6',          // certification prose (report sections, effects text)
-        classify: 'claude-haiku-4-5-20251001',  // fast structured extraction / triage
+        // self-contained (a suite runs this block alone): the defaults come from SLAiRequest when it is loaded
+        _ar() { try { return (typeof window !== 'undefined' && window.SLAiRequest) || (typeof globalThis !== 'undefined' && globalThis.SLAiRequest) || null; } catch (_) { return null; } },
+        get draft() { const A = this._ar(); return A ? A.defaultModel('draft') : 'claude-sonnet-4-6'; },          // certification prose (report sections, effects text)
+        get classify() { const A = this._ar(); return A ? A.defaultModel('classify') : 'claude-haiku-4-5-20251001'; },  // fast structured extraction / triage
         // The "reason" model (architecture interpretation, decomposition, tree synthesis,
         // AND the AI Chat) follows the user's Active Model selection in AI Settings, so the
         // dropdown actually drives the reasoning features.
@@ -781,7 +785,7 @@
         // proxy-side fact the client cannot observe (OPEN_ITEMS).
         get reason() {
             try { var m = (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.aiSettings && projectConfig.aiSettings.anthropicModel); if (m) return m; } catch (_) {}
-            return 'claude-opus-4-8';
+            const A = this._ar(); return A ? A.defaultModel('reason') : 'claude-opus-4-8';
         }
     };
 
@@ -4144,8 +4148,13 @@
     // Hardening — verify with a model DIFFERENT from the one that produced the draft, so the
     // check is genuinely independent (errors aren't correlated with the drafter's).
     function _verifierModel(draftModel) {
-        const OPUS = 'claude-opus-4-8', SONNET = 'claude-sonnet-4-6';
-        return String(draftModel || MODELS.reason).indexOf('opus') >= 0 ? SONNET : OPUS;
+        // 15 Oct 2026: the verifier is always the OTHER family, taken from the eval-approved lane defaults: an Opus draft is
+        // checked by the draft lane's Sonnet (Sonnet 4.6 while that lane is not switched), anything else by the reason lane's
+        // Opus. An Opus 5.5 draft checked by Sonnet 4.6 is the safer pairing: a different family AND generation keeps the
+        // errors least correlated, and Sonnet 4.6 is the model this verifier prompt has always run on; Sonnet 5.5 has no
+        // eval in any role yet. When the draft lane moves to Sonnet 5.5 after its own eval, the verifier follows it.
+        const dm = String(draftModel || MODELS.reason);
+        return dm.indexOf('opus') >= 0 ? MODELS.draft : (MODELS.reason.indexOf('opus') >= 0 ? MODELS.reason : 'claude-opus-4-8');
     }
     async function _runSafetyVerifier(payload) {
         try {
