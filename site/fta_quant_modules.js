@@ -407,8 +407,8 @@ function _cbuContext(root) {
     const lidCount = new Map(), periodic = new Map(), seen = new Set(), pages = new Set();
     let hasFdep = false;
     (function walk(n) {
-        if (!n || seen.has(n.id)) return;
-        seen.add(n.id);
+        if (!n || seen.has(n)) return;   // F1: by the node itself, not its id
+        seen.add(n);
         if (n.type !== 'gate') {
             const lid = n.logicalId != null ? n.logicalId : n.id;
             lidCount.set(lid, (lidCount.get(lid) || 0) + 1);
@@ -514,10 +514,10 @@ function _cbuNode(node, visited, ctx) {
     if (!node) return _cbuConst(ctx, 0);
     if (node.type !== 'gate') {
         const lid = node.logicalId != null ? node.logicalId : node.id;
-        let v = ctx.prof.get(node.id);
+        let v = ctx.prof.get(node);
         if (!v) {
-            if (!visited.has(node.id)) {
-                visited.add(node.id);
+            if (!visited.has(node)) {
+                visited.add(node);
                 // Phase 61: a leaf with no rate data (no λ, no Markov model) holds an allocated
                 // probability BUDGET (or a directly-set value, e.g. a house event); that stored
                 // probability is authoritative and must not be wiped by the λ→P conversion.
@@ -527,15 +527,15 @@ function _cbuNode(node, visited, ctx) {
                 else node.probability = effectiveProb(node, ftaConfig.exposureTime);
             }
             v = _cbuLeafVec(node, ctx);
-            ctx.prof.set(node.id, v);
+            ctx.prof.set(node, v);
         }
         const trig = ctx.fdep.byLid.get(lid);
         return trig ? _cbuForce(ctx, v, trig, 'l:' + lid, visited) : v;
     }
-    if (visited.has(node.id)) return ctx.prof.get(node.id) || _cbuConst(ctx, node.probability || 0);
-    visited.add(node.id);
+    if (visited.has(node)) return ctx.prof.get(node) || _cbuConst(ctx, node.probability || 0);
+    visited.add(node);
     let v = _cbuGate(node, visited, ctx);
-    if (v === null) { ctx.unset.add(node.id); return _cbuConst(ctx, 0); }
+    if (v === null) { ctx.unset.add(node); return _cbuConst(ctx, 0); }
     const gtrig = ctx.fdep.byGate.get(node.id);
     // A functional dependency makes its trigger a shared event of every dependent, which the
     // gate-by-gate product cannot see (it would multiply the trigger in twice). A gate whose
@@ -549,13 +549,13 @@ function _cbuNode(node, visited, ctx) {
         if (ex !== null && isFinite(ex)) { v = _cbuConst(ctx, ex); node.probability = ex; }
         else if (gtrig) { v = _cbuForce(ctx, v, gtrig, 'g:' + node.id, visited); node.probability = _cbuMean(ctx, v); }
     } else if (gtrig) { v = _cbuForce(ctx, v, gtrig, 'g:' + node.id, visited); node.probability = _cbuMean(ctx, v); }
-    ctx.prof.set(node.id, v);
+    ctx.prof.set(node, v);
     return v;
 }
 function _cbuForcedIn(node, ctx) {
     if (!node) return false;
-    if (ctx.forcedIn.has(node.id)) return ctx.forcedIn.get(node.id);
-    ctx.forcedIn.set(node.id, false);
+    if (ctx.forcedIn.has(node)) return ctx.forcedIn.get(node);
+    ctx.forcedIn.set(node, false);
     let r = false;
     if (node.type !== 'gate') r = ctx.fdep.byLid.has(node.logicalId != null ? node.logicalId : node.id);
     else if (node.gateType === 'FDEP') r = false;
@@ -567,7 +567,7 @@ function _cbuForcedIn(node, ctx) {
         if (!r && node.gateType !== 'TRANSFER') r = (node.children || node._children || []).some(c => _cbuForcedIn(c, ctx));
     }
     else r = (node.children || node._children || []).some(c => _cbuForcedIn(c, ctx));
-    ctx.forcedIn.set(node.id, r);
+    ctx.forcedIn.set(node, r);
     return r;
 }
 // Returns the gate's grid vector (and sets node.probability to its mean), or null for the
@@ -648,10 +648,10 @@ function _cbuGate(node, visited, ctx) {
 }
 function calcBottomUp(node, visited = new Set()) {
     if (!node) return 0;
-    if (visited.has(node.id)) return node.probability || 0;
+    if (visited.has(node)) return node.probability || 0;
     const ctx = _cbuContext(node);
     _cbuNode(node, visited, ctx);
-    if (node.type === 'gate' && ctx.unset.has(node.id)) return 0;
+    if (node.type === 'gate' && ctx.unset.has(node)) return 0;
     return node.probability;
 }
 
@@ -1315,8 +1315,8 @@ function _collectFdep(scope) {
     const byLid = new Map(), byGate = new Map(), gates = [];
     const seen = new Set(), pages = new Set();
     (function walk(n) {
-        if (!n || seen.has(n.id)) return;
-        seen.add(n.id);
+        if (!n || seen.has(n)) return;   // F1: by the node itself, not its id
+        seen.add(n);
         if (n.type !== 'gate') return;
         if (n.gateType === 'TRANSFER' || n.transferOutTo) {
             const linkedId = n.transferOutTo || n.linkedPageId;
@@ -1566,8 +1566,8 @@ function buildBDDFromFT(rootNode, scopeRoot) {
     // Pass 1: collect logicalIds + CCF group representatives in DFS order.
     function collect(node, visitedNodes, visitedPages) {
         if (!node) return;
-        if (visitedNodes.has(node.id)) return;
-        visitedNodes.add(node.id);
+        if (visitedNodes.has(node)) return;   // F1: by the node itself, not its id (a transferred page may reuse an id)
+        visitedNodes.add(node);
         if (node.type !== 'gate') {
             const lid = node.logicalId != null ? node.logicalId : node.id;
             lidCount.set(lid, (lidCount.get(lid) || 0) + 1);
@@ -1592,8 +1592,8 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         grew = false;
         fdep.gates.forEach(g => {
             const kids = g.children || g._children;
-            if (!kids || seenNodes.has(kids[0].id)) return;
-            const hit = kids.slice(1).some(d => d && (d.type === 'gate' ? seenNodes.has(d.id) : seenLid.has(d.logicalId != null ? d.logicalId : d.id)));
+            if (!kids || seenNodes.has(kids[0])) return;
+            const hit = kids.slice(1).some(d => d && (d.type === 'gate' ? seenNodes.has(d) : seenLid.has(d.logicalId != null ? d.logicalId : d.id)));
             if (hit) { collect(kids[0], seenNodes, seenPages); grew = true; }
         });
     }
@@ -1688,8 +1688,8 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         return info;
     }
     function dynGate(node, kids, kidBdds) {
-        let info = dynInfo.get(node.id);
-        if (!info) { info = dynClassify(node, kids); dynInfo.set(node.id, info); }
+        let info = dynInfo.get(node);
+        if (!info) { info = dynClassify(node, kids); dynInfo.set(node, info); }
         if (info.primaryOnly) return kidBdds[0];
         let f;
         if (info.sw.length) {
@@ -2066,8 +2066,8 @@ function simulateDFT(rootNode, missionTime, N, seed) {
     const imperfectSpares = []; // SPARE gates with switchP < 1 — these need a coin per demand
     let warmSpareCount = 0, imperfectSwitchCount = 0; // receipts for the result card
     (function walk(n, visited) {
-        if (!n || visited.has(n.id)) return;
-        visited.add(n.id);
+        if (!n || visited.has(n)) return;
+        visited.add(n);
         if (n.type === 'gate') {
             if (n.gateType === 'PAND' || n.gateType === 'SPARE' || n.gateType === 'SEQ' || n.gateType === 'FDEP') dynGateCount++;
             if (n.gateType === 'FDEP') fdepGates.push(n);
@@ -2104,13 +2104,13 @@ function simulateDFT(rootNode, missionTime, N, seed) {
     // A gate that is an FDEP dependent fails at the earlier of its own time and its trigger's.
     function evalGate(node, failTimes, visited) {
         const t = evalGateRaw(node, failTimes, visited);
-        if (forcedGates && node && forcedGates.has(node.id) && !visited.has(node.id)) return Math.min(t, forcedGates.get(node.id));
+        if (forcedGates && node && forcedGates.has(node.id) && !visited.has(node)) return Math.min(t, forcedGates.get(node.id));
         return t;
     }
     function evalGateRaw(node, failTimes, visited) {
         if (!node) return Infinity;
-        if (visited.has(node.id)) return Infinity;
-        visited = new Set(visited); visited.add(node.id);
+        if (visited.has(node)) return Infinity;
+        visited = new Set(visited); visited.add(node);
         if (node.type !== 'gate') {
             const lid = node.logicalId != null ? node.logicalId : node.id;
             const t = failTimes.get(lid);

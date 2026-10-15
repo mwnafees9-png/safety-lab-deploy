@@ -36,7 +36,7 @@ importScripts('cad_import.js' + _q, 'cad_brep.js' + _q, 'cad_step_struct.js' + _
 var _occtReady = null, _session = null, _stream = null;
 // Assemblies with at least this many components open through the JavaScript structure reader:
 // a box per part at once, then each distinct part read on its own and streamed in.
-var FAST_MIN = 300;
+var FAST_MIN = 300, SPLIT_MIN_BYTES = 20e6, PART_CAP_MS = 300000, _importOpts = {};   // a body still being read after PART_CAP_MS: its reader is replaced and the body listed as not meshed   // below 300 components: split one part by body only for a big file
 function progress(phase, frac) { self.postMessage({ type: 'progress', phase: phase, frac: frac == null ? null : frac }); }
 function occt() {
     if (!_occtReady) {
@@ -102,9 +102,23 @@ function viaStructure(bytes) {
     var t0 = Date.now(), ix, st;
     try { ix = S.index(bytes, function (f) { progress('structure', 0.6 * f); }); st = S.structure(ix); }
     catch (e) { return null; }
-    if (st.unsupported || st.components < FAST_MIN) return null;
+    if (st.unsupported) return null;
+    // a few components but one part holding many bodies (the NASA CRM: one product, 35 bodies,
+    // 265 MB): read body by body instead of the whole file in one OpenCascade call (out of memory)
+    var split = null;
+    if (st.components < FAST_MIN) {
+        if (bytes.length < (_importOpts.splitMinBytes != null ? _importOpts.splitMinBytes : SPLIT_MIN_BYTES) || !S.bodies) return null;
+        var lvs = []; S.occurrences(st, function (o) { if (lvs.indexOf(o.leaf) < 0) lvs.push(o.leaf); });
+        // split only a part whose bodies are the solids the structure reader lists (a surface model of many shells, like the
+        // CRM wing-body file, is not split: its shells are not solids, so it would stay a box; it goes to the whole-file read)
+        split = {}; lvs.forEach(function (pd) { var B = S.bodies(ix, st, pd); if (!B || B.bodies.length < 2) return; var sol = S.leafInfo(ix, st, pd).solids.map(function (x) { return x.id; }); if (sol.length === B.bodies.length && B.bodies.every(function (b) { return sol.indexOf(b) >= 0; })) split[pd] = B; });
+        if (!Object.keys(split).length) return null;
+    }
     progress('structure', 0.7);
     var res = S.boxRes(ix, st);
+    if (split) res.leaves.forEach(function (L) { var B = split[L.pd]; if (!B) return; L.split = B;
+        // a box per body from its own points, so the first view shows each body where it is
+        L.info.solids.forEach(function (sd, i) { var k = B.bodies.indexOf(sd.id); if (k < 0 || i >= L.protos.length) return; var bx = S.boxOfIds(ix, B.desc[k], st.fileMm); if (bx) res.protos[L.protos[i]] = S.boxGeometry(bx); }); });
     var pidx = {};
     Object.keys(st.products).forEach(function (k) { var p = st.products[k]; if (p && p.name && p.id && !pidx[p.name]) pidx[p.name] = p.id; });
     var model = SLCadImport.buildModel(res, { productIndex: pidx, maxTrianglesTotal: 0 });
@@ -120,7 +134,14 @@ function viaStructure(bytes) {
     var order = res.leaves.map(function (L, k) { return { L: L, k: k }; }).filter(function (o) { return !o.L.done; }).map(function (o) { var L = o.L, k = o.k, b = L.info.box, d = b ? Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) : 0; return { k: k, w: d * d * copies[k] }; })
         .sort(function (a, b) { return b.w - a.w || a.k - b.k; }).map(function (o) { return o.k; });
     model.streaming.leaves = order.length; model.streaming.tessellated = res.leaves.length - order.length;
-    _stream = { ix: ix, st: st, res: res, leaves: res.leaves.map(function (L) { return { pd: L.pd, protos: L.protos }; }), order: order, next: 0, stopped: false };
+    var leaves = res.leaves.map(function (L) { return { pd: L.pd, protos: L.protos }; });
+    if (split) {   // one work item per body, smallest first so most of the aircraft shows early
+        var items = []; res.leaves.forEach(function (L, li) { if (!L.split) { items.push({ k: li }); return; } L.info.solids.forEach(function (sd, i) { var k = L.split.bodies.indexOf(sd.id); if (k >= 0 && i < L.protos.length) items.push({ pd: L.pd, protos: [L.protos[i]], B: L.split, body: k, size: L.split.desc[k].length, name: (sd.name || 'body') + ' ' + (i + 1) }); }); });
+        items.sort(function (a, b) { return (a.size || 0) - (b.size || 0); });
+        leaves = items.map(function (it) { return it.B ? it : leaves[it.k]; }); order = leaves.map(function (_, i) { return i; });
+        model.streaming.leaves = order.length; model.streaming.bodies = order.length; model.reader = 'structure-bodies';
+    }
+    _stream = { ix: ix, st: st, res: res, leaves: leaves, order: order, next: 0, stopped: false };
     return model;
 }
 function isIdent(m) { for (var i = 0; i < 16; i++) if (Math.abs(m[i] - ((i % 5) === 0 ? 1 : 0)) > 1e-12) return false; return true; }
@@ -184,6 +205,10 @@ function streamPartSession(eng) {
     var ps = makePartSession(eng, pids, function (pid) {
         var mi = at[pid]; if (mi == null) return null;
         var m = res.meshes[mi], L = res.leaves[m.leaf];
+        if (L.split) {   // a part read body by body: only this body's own file is opened, never the whole part (kept in memory per body)
+            var sd = L.info.solids[m.solid], k = sd ? L.split.bodies.indexOf(sd.id) : -1;
+            if (k >= 0) { var key = m.leaf + ':' + k; return { key: key, mini: minis[key] || (minis[key] = S.extractBody(T.ix, L.split, k)), solid: 0, matrix: m.matrix }; }
+        }
         var mini = minis[m.leaf] || (minis[m.leaf] = S.extract(T.ix, T.st, L.pd));
         return { key: m.leaf, mini: mini, solid: m.solid, matrix: m.matrix };
     });
@@ -274,7 +299,20 @@ function streamDetailPool(pool) {
         self.postMessage({ type: 'detail', protos: batch, done: done, total: S.order.length }, transfer);
         batch = []; transfer = []; lastPost = Date.now();
     }
+    var cap = _importOpts.partCapMs || PART_CAP_MS, url = (self.location && self.location.href) || 'cad_import_worker.js';
+    var watch = setInterval(function () {
+        pool.forEach(function (x) {
+            var ks = Object.keys(x.jobs || {}); if (!ks.some(function (k) { return Date.now() - x.jobs[k] > cap; })) return;
+            try { x.w.terminate(); } catch (_) {}
+            ks.forEach(function (k) { k = +k; var L = S.leaves[k], over = Date.now() - x.jobs[k] > cap; inflight--;
+                if (over) { done++; self.postMessage({ type: 'detail-failed', protos: L.protos, name: L.name || L.pd, reason: 'still being read after ' + Math.round(cap / 1000) + ' s (the reader was stopped)', capped: true }); }
+                else S.order.push(k); });   // a body queued behind it is read again by the new reader
+            x.jobs = {}; x.busy = 0; x.w = new Worker(url); x.w.postMessage({ type: 'pool-init', fast: _fastModule }); attach(x); feed(x);
+            if (!inflight && S.next >= S.order.length) finish();
+        });
+    }, Math.min(5000, cap / 4));
     function finish() {
+        clearInterval(watch);
         flush(true); pool.forEach(function (x) { try { x.w.terminate(); } catch (_) {} });
         self.postMessage({ type: 'detail-done', total: S.order.length, workers: pool.length });
         // the exact geometry engine loads now, while nobody waits, so the first measurement is quick
@@ -283,18 +321,20 @@ function streamDetailPool(pool) {
     function feed(x) {
         while (x.busy < 2 && S.next < S.order.length && !S.stopped) {
             var k = S.order[S.next++], L = S.leaves[k];
-            var mini = self.SLCadStep.extract(S.ix, S.st, L.pd);
-            x.busy++; inflight++;
+            var mini = L.B ? self.SLCadStep.extractBody(S.ix, L.B, L.body) : self.SLCadStep.extract(S.ix, S.st, L.pd);
+            if (L.B && _importOpts.testFailBody === L.body) mini = new TextEncoder().encode('ISO-10303-21;\nnot a step file (test)\n');   // test hook: a body that cannot be read
+            x.busy++; inflight++; x.jobs = x.jobs || {}; x.jobs[k] = Date.now();
             x.w.postMessage({ type: 'part', k: k, bytes: mini }, [mini.buffer]);
         }
     }
-    pool.forEach(function (x) {
+    function attach(x) {
         x.w.onmessage = function (ev) {
             var d = ev.data || {};
             if (d.type !== 'part-done') return;
             if (d.k < 0) { x.busy = 99; return; }   // this reader could not start: it gets no more parts
-            x.busy--; inflight--; done++;
+            x.busy--; inflight--; done++; if (x.jobs) delete x.jobs[d.k];
             var L = S.leaves[d.k];
+            if (!d.geo || !d.geo.length) self.postMessage({ type: 'detail-failed', protos: L.protos, name: L.name || L.pd, reason: d.err || 'OpenCascade returned no shape' });
             (d.geo || []).forEach(function (g, i) { if (i < L.protos.length) { batch.push({ proto: L.protos[i], position: g.position, index: g.index, faces: g.faces }); transfer.push(g.position.buffer, g.index.buffer); } });
             flush(false);
             if (S.stopped) { if (!inflight) finish(); return; }
@@ -302,7 +342,8 @@ function streamDetailPool(pool) {
             if (!inflight && S.next >= S.order.length) finish();
         };
         x.w.onerror = function () { x.busy = 99; };
-    });
+    }
+    pool.forEach(attach);
     pool.forEach(feed);
 }
 function streamDetail() {
@@ -323,8 +364,8 @@ function streamDetail() {
         var t0 = Date.now(), batch = [], transfer = [];
         while (S.next < S.order.length && Date.now() - t0 < 120) {
             var k = S.order[S.next++], L = S.leaves[k], geo;
-            try { geo = fastPartGeometry(M, self.SLCadStep.extract(S.ix, S.st, L.pd)); } catch (e) { geo = null; }
-            if (!geo) continue;
+            try { geo = fastPartGeometry(M, L.B ? self.SLCadStep.extractBody(S.ix, L.B, L.body) : self.SLCadStep.extract(S.ix, S.st, L.pd)); } catch (e) { geo = null; }
+            if (!geo) { self.postMessage({ type: 'detail-failed', protos: L.protos, name: L.name || L.pd, reason: 'OpenCascade returned no shape' }); continue; }
             for (var i = 0; i < L.protos.length && i < geo.length; i++) { batch.push({ proto: L.protos[i], position: geo[i].position, index: geo[i].index, faces: geo[i].faces }); transfer.push(geo[i].position.buffer, geo[i].index.buffer); }
         }
         if (batch.length) self.postMessage({ type: 'detail', protos: batch, done: S.next, total: S.order.length }, transfer);
@@ -359,7 +400,7 @@ self.onmessage = function (ev) {
         return;
     }
     if (d.type === 'import') {
-        var bytes = new Uint8Array(d.buffer), o = d.opts || {}, reader = o.reader || 'auto';
+        var bytes = new Uint8Array(d.buffer), o = d.opts || {}, reader = o.reader || 'auto'; _importOpts = o;
         hashThen(bytes, d.expectSha, function (sha) {
             var fast = (reader === 'auto' || reader === 'structure') ? viaStructure(bytes) : null;
             if (fast) {
@@ -423,6 +464,17 @@ self.onmessage = function (ev) {
             out = { type: 'answer', id: d.id, result: fn.apply(_session, d.args || []) };
         } catch (e) { out = { type: 'answer', id: d.id, error: (e && e.message) || String(e) }; }
         self.postMessage(out);
+        return;
+    }
+    if (d.type === 'retry' && _stream) {   // read a body or part again (it could not be meshed or was stopped by the time cap)
+        var S0 = _stream, L0 = S0.leaves.filter(function (L) { return L.protos && d.protos && L.protos[0] === d.protos[0]; })[0];
+        if (!L0) { self.postMessage({ type: 'detail-failed', protos: d.protos, name: '', reason: 'not found for retry' }); return; }
+        fastInstance().then(function (M) {
+            var geo = null; try { geo = fastPartGeometry(M, L0.B ? self.SLCadStep.extractBody(S0.ix, L0.B, L0.body) : self.SLCadStep.extract(S0.ix, S0.st, L0.pd)); } catch (e) { geo = null; }
+            if (!geo || !geo.length) { self.postMessage({ type: 'detail-failed', protos: L0.protos, name: L0.name || L0.pd, reason: 'OpenCascade returned no shape (retry)' }); return; }
+            var b = [], t = []; geo.forEach(function (g, i) { if (i < L0.protos.length) { b.push({ proto: L0.protos[i], position: g.position, index: g.index, faces: g.faces }); t.push(g.position.buffer, g.index.buffer); } });
+            self.postMessage({ type: 'detail', protos: b, retry: true }, t);
+        }).catch(function (e) { self.postMessage({ type: 'detail-failed', protos: L0.protos, name: L0.name || L0.pd, reason: 'OpenCascade could not start for the retry: ' + ((e && e.message) || String(e)) }); });
         return;
     }
     if (d.type === 'close') { closeSession(); if (_stream) _stream.stopped = true; }

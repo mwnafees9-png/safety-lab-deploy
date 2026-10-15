@@ -30,6 +30,10 @@
     function num(id) { var el = document.getElementById(id); var v = el ? parseFloat(el.value) : NaN; return isFinite(v) ? v : null; }
     function say(t, bad) { var el = document.getElementById('cad-pra-msg'); if (el) { el.style.display = t ? 'block' : 'none'; el.style.color = bad ? 'var(--color-danger,#8E2A2A)' : ''; el.textContent = t || ''; } }
     function pidsLink(pids, label) { return '<a href="#" data-pra-parts="' + _esc(pids.join('|')) + '" style="font-size:12px;">' + _esc(label) + '</a>'; }
+    // timebox 48: a refused or blank severity never reads as "no effect"
+    function notEval(reason) { var C = window.SLCadZonal; return C && C.notEvaluatedHtml ? C.notEvaluatedHtml(reason) : '<div data-not-evaluated style="color:var(--color-danger,#8E2A2A);font-weight:600;">Not evaluated: ' + _esc(reason) + '</div>'; }
+    function notOk(R) { if (R && R.refused) return notEval(R.notEvaluated || R.err); return '<div style="color:var(--color-danger,#8E2A2A);font-size:12px;">' + _esc(R ? R.err : '') + '</div>'; }
+    function nmRow(R, row) { return R && R.nonMonotone ? row('Fault tree logic', '<b data-pra-nonmono>non-monotone tree: worst case over subsets used</b>' + (R.nonMonotone.trees && R.nonMonotone.trees.length ? ' (' + R.nonMonotone.trees.map(_esc).join('; ') + ')' : '')) : ''; }
     function impactLine(r) { return 'Worst: ' + (r.worst ? sev(r.worst) : 'none') + (r.conditions && r.conditions.length ? ' · ' + r.conditions.map(function (c) { return _esc(c.fcId); }).join(', ') : '') + (r.shared && r.shared.length ? ' · <b style="color:var(--color-danger,#8E2A2A);">shared exposure: ' + r.shared.map(function (f) { return _esc(f.gate); }).join(', ') + '</b>' : ''); }
 
     function tabs() {
@@ -53,11 +57,379 @@
                 '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;"><tr style="text-align:left;' + MUTED + '"><th>Fragment</th><th>Spread</th><th>Catastrophic / Hazardous release angles</th><th>Ratio</th></tr>' +
                 s.models.map(function (x) {
                     var rng = x.ranges.length ? x.ranges.map(function (r, j) { return '<a href="#" data-pra-range="' + _esc(x.model) + '|' + j + '">' + _esc(r.severity) + ' ' + r.fromDeg + ' to ' + r.toDeg + ' deg</a>'; }).join('<br>') : '<span style="' + MUTED + '">none</span>';
-                    var ratio = x.criterion ? (x.hazardRatio + ' vs ' + _esc(x.criterion.text) + ' ' + (x.meets ? 'met' : '<b style="color:var(--color-danger,#8E2A2A);">NOT met</b>')) : '<span style="' + MUTED + '">' + _esc(x.assessmentNote) + '</span>';
+                    var ratio = x.criterion ? (x.hazardRatio + ' vs ' + _esc(x.criterion.text) + ' ' + (x.meets == null ? notEval(x.refusedNote || 'the risk is not assessed') : x.meets ? 'met' : '<b style="color:var(--color-danger,#8E2A2A);">NOT met</b>')) : '<span style="' + MUTED + '">' + _esc(x.assessmentNote) + '</span>';
                     return '<tr style="border-top:1px solid var(--color-border-hair);"><td>' + _esc(x.label) + '<br><a href="#" data-pra-paths="' + _esc(x.model) + '" style="font-size:11px;">all paths in 3D</a></td><td>±' + val(x.spreadDeg, 'deg') + ' ' + src(x.spreadDeg) + '</td><td>' + rng + '</td><td>' + ratio + (x.energy ? '<br>energy ' + val(x.energy.joules, 'J') + ' ' + src(x.energy.joules) : '<br><span style="' + MUTED + '">' + _esc(x.energyNote) + '</span>') + '</td></tr>';
                 }).join('') + '</table></div>';
         } else if (s && !s.ok) out += '<div style="font-size:12px;color:var(--color-danger,#8E2A2A);">' + _esc(s.err) + '</div>';
+        // the guided step-by-step flow sits below the rotor list (and its accepted write-ups); it is
+        // collapsed once its reports are built, and the engineer can open it again
+        var fh = flowHtml();
+        if (fh) { var built = !!(st.flowReports && Object.keys(st.flowReports).length); var open = st.flowExpanded != null ? st.flowExpanded : !built;
+            out += '<details data-pra-flow-wrap' + (open ? ' open' : '') + ' style="margin-top:8px;"><summary data-pra-flow-summary style="cursor:pointer;font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:normal;">Rotor burst, step by step' + (built ? ' (reports built)' : '') + '</summary>' + fh + '</details>'; }
         return out;
+    }
+
+    // ---- rotor burst, guided: Step 1 rotor, Step 2 fragment types, Step 3 one report per type
+    var TYPE_COLORS = window.SLPraModels.PALETTE.rotor, TYPE_EDGES = window.SLPraModels.PALETTE.rotorEdge;   // the shared colorblind-safe palette
+    // the names the parts tree shows: a name used by several parts gets (1), (2) ... in part id order
+    function _nameMap() { var n = {}, by = {}; try { C().partsOf(C().model(cadId())).slice().sort(function (a, b) { return a.pid < b.pid ? -1 : a.pid > b.pid ? 1 : 0; }).forEach(function (q) { var k = q.name || q.pid; (by[k] = by[k] || []).push(q.pid); }); } catch (_) {} Object.keys(by).forEach(function (k) { var L = by[k]; L.forEach(function (pid, i) { n[pid] = L.length > 1 ? k + ' (' + (i + 1) + ')' : k; }); }); return n; }
+    function partName(pid) { var n = _nameMap(); return n[pid] || pid; }
+    // names(pids, val): the hit list as an engineer reads it; many faces of one product become one entry with where they lie
+    function names(pids, val, suffix) { return M().describeCadParts(cadId(), pids, partName).map(function (e) { var v = val ? Math.min.apply(null, e.pids.map(val)) : null; return _esc(e.label) + (suffix ? suffix(e) : '') + (val ? ' (' + Math.round(v) + ' mm)' : ''); }).join(', '); }
+    function flowHtml() {
+        var m = M(), conf = m.rotors(); if (!conf.length) return '';
+        var rid = st.flowRotor && m.rotor(st.flowRotor) ? st.flowRotor : conf[0].id, r = m.rotor(rid); st.flowRotor = rid;
+        var s1 = m.step1Status(rid), c = r.confirms || {};
+        var tick = function (f, label, inner) { return '<div style="font-size:12px;margin:2px 0;">' + label + ' ' + inner + ' <label style="white-space:nowrap;text-transform:none;letter-spacing:normal;font-weight:400;font-size:12px;display:inline;"><input type="checkbox" data-pra-tick="' + f + '" style="width:auto;"' + (c[f] ? ' checked' : '') + '> ' + (c[f] ? 'Confirmed by ' + _esc(c[f].by) : 'Confirm') + '</label></div>'; };
+        var out = '<div style="border:1px solid var(--color-border-hair);border-radius:8px;padding:8px;margin:6px 0;" data-pra-flow="' + _esc(rid) + '"><b style="font-size:13px;">Rotor burst, step by step</b> ' +
+            '<select id="pra-flow-rotor" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + conf.map(function (x) { return '<option value="' + _esc(x.id) + '"' + (x.id === rid ? ' selected' : '') + '>' + _esc(x.label) + '</option>'; }).join('') + '</select>' +
+            (window.SLZonalAI && window.SLZonalAI.ENABLED === true ? ' <button data-pra-act="rotor-ai" style="' + BTN + '">AI suggest from CAD and specs</button>' : '') +
+            '<div style="font-size:12px;margin-top:4px;"><b>Step 1. Rotor</b> <span style="' + MUTED + '">Tick each value once you have checked it. Changing a value clears its tick.</span></div>' +
+            tick('location', 'Location', 'center <input id="pra-f-center" style="' + INP + 'width:150px;" value="' + _esc(r.center.join(', ')) + '"> axis <input id="pra-f-axis" style="' + INP + 'width:90px;" value="' + _esc(r.axis.map(function (v) { return Math.round(v * 1000) / 1000; }).join(', ')) + '"> mm' + (r.pid ? ' <span style="' + MUTED + '">part ' + _esc(partName(r.pid)) + '</span>' : '') + ' <button data-pra-act="flow-from-sel" style="' + BTN + '">Use selected part</button>') +
+            tick('diameter', 'Disc diameter', '<input id="pra-f-dia" style="' + INP + '" value="' + (r.discRadius ? 2 * r.discRadius : '') + '"> mm, blade length <input id="pra-f-blade" style="' + INP + '" value="' + (r.bladeLength != null ? r.bladeLength : '') + '"> mm') +
+            tick('mass', 'Disc mass (bladed)', '<input id="pra-f-mass" style="' + INP + '" value="' + (r.bladedDiscMassKg || '') + '"> kg') +
+            tick('rpm', 'Maximum rotor speed (redline)', '<input id="pra-f-rpm" style="' + INP + '" value="' + (r.rpm || '') + '"> rpm') +
+            '<div style="font-size:12px;margin:2px 0;">Optional, not from the AC, engineer input: small fragment mass <input id="pra-f-smass" style="' + INP + '" value="' + (r.smallFragmentMassKg || '') + '"> kg, fan blade fragment mass <input id="pra-f-fmass" style="' + INP + '" value="' + (r.fanBladeFragmentMassKg || '') + '"> kg, shield capacity <input id="pra-f-shield" style="' + INP + '" value="' + (r.shieldCapacityJ || '') + '"> J <button data-pra-act="flow-save" style="' + BTN + '">Save values</button></div>' +
+            (function () { var pr = m.fawProposal(r); return tick('axialWidth', 'Fragment axial width (disc rim / blade; engineer input, not from the AC)', '<input id="pra-f-faw" style="' + INP + '" value="' + (r.fragmentAxialWidthMm != null ? r.fragmentAxialWidthMm : (pr.source === 'proposed' ? pr.value : '')) + '"> mm' + (r.fragmentAxialWidthMm == null ? ' <span style="' + MUTED + '">' + (pr.source === 'proposed' ? 'pre-filled from the CAD box along the axis; save and confirm it: the risk results are refused until then' : 'enter and confirm it: the risk results are refused until then') + '</span>' : '')); })() +
+            '<div style="font-size:12px;margin:2px 0;">Engine <input id="pra-f-engine" style="' + INP + 'width:80px;" value="' + _esc(r.engine || '') + '">, its total number of stages <input id="pra-f-stages" style="' + INP + '" value="' + (r.engineStages || '') + '"> (Appendix 1 6.11 averages over all of them)' +
+                '<br>Stages not modeled: <input id="pra-f-harmwhy" style="' + INP + 'width:240px;" placeholder="why they cannot reach anything" value="' + _esc(r.unmodeledStagesHarmless ? r.unmodeledStagesHarmless.reason : '') + '"> <button data-pra-act="flow-harmless" style="' + BTN + '">Confirm they cannot reach anything</button>' + (r.unmodeledStagesHarmless ? ' <span style="' + MUTED + '">confirmed by ' + _esc(r.unmodeledStagesHarmless.by) + '</span>' : '') +
+                '<br>Risk factor (Appendix 1 6.9, engineer input) <input id="pra-f-risk" style="' + INP + '" value="' + (r.riskFactor ? r.riskFactor.value : '') + '"> reason <input id="pra-f-riskwhy" style="' + INP + 'width:240px;" value="' + _esc(r.riskFactor ? r.riskFactor.reason : '') + '"> <button data-pra-act="flow-risk" style="' + BTN + '">Set risk factor</button>' + (r.riskFactor ? ' <span style="' + MUTED + '">set by ' + _esc(r.riskFactor.by) + '</span>' : ' <span style="' + MUTED + '">default 1.0</span>') + (r.kind === 'apu' ? '; stage rotational energy <input id="pra-f-stagee" style="' + INP + '" value="' + (r.stageRotationalEnergyJ || '') + '"> J (para 9d)' + (function () { var sc = r.kind === 'apu' ? (m.fragmentEnergy(r, 'small') || {}).stageEnergyCheck : null; if (!sc) return ''; return ' <span style="' + MUTED + '" data-pra-stagecheck>uniform disc sanity bound (not from the AC): ' + Math.round(sc.estimateJ.value) + ' J</span>' + (sc.warning ? ' <b style="color:var(--color-danger,#b00);" data-pra-stagewarn>' + _esc(sc.warning) + '</b>' : ''); })() : '') + '</div>';
+        if (!s1.unlocked) return out + '<div style="' + MUTED + 'margin-top:4px;">Step 2 opens when all four values are confirmed (still to confirm: ' + _esc(s1.missing.join(', ')) + ').</div></div>';
+        var sel = st.flowTypes || (st.flowTypes = m.DEFAULT_TYPES.slice());
+        out += '<div style="font-size:12px;margin-top:6px;"><b>Step 2. Fragment types</b> (AC 20-128A)</div>' + m.FRAGMENT_ORDER.map(function (k) {
+            var fm = m.FRAGMENT_MODELS[k], opt = m.DEFAULT_TYPES.indexOf(k) < 0;
+            return '<label style="display:block;font-size:12px;text-transform:none;letter-spacing:normal;font-weight:400;"><input type="checkbox" data-pra-type="' + k + '" style="width:auto;"' + (sel.indexOf(k) >= 0 ? ' checked' : '') + '> ' + _esc(fm.label) + ', ±' + fm.spread.value + ' degrees ' + src(fm.spread) + (opt ? ' <i style="' + MUTED + '">optional, run only if needed</i>' : '') + '</label>';
+        }).join('') + '<button data-pra-act="flow-run" style="' + BTN + 'margin-top:4px;">Build the reports</button> <button data-pra-act="flow-3d" style="' + BTN + '">Show all selected in 3D</button>';
+        var reps = st.flowReports || {};
+        var keys = sel.filter(function (k) { return reps[k]; });
+        if (keys.length) {
+            var cur = st.flowOpen && reps[st.flowOpen] ? st.flowOpen : keys[0];
+            out += '<div style="font-size:12px;margin-top:6px;"><b>Step 3. Reports</b> ' + keys.map(function (k) { return '<button data-pra-report="' + k + '" style="' + BTN + (k === cur ? 'background:' + TYPE_COLORS[k] + ';color:#fff;border-color:' + TYPE_COLORS[k] + ';' : '') + '">' + _esc(m.FRAGMENT_MODELS[k].label) + '</button>'; }).join(' ') + '</div>' +
+                '<div id="pra-report" data-pra-report-open="' + cur + '">' + reportHtml(reps[cur]) + '</div>' +
+                '<button data-pra-act="open-3d" style="' + BTN + '">Open in 3D</button> <button data-pra-act="report-print" style="' + BTN + '">Print / Save as PDF</button> <button data-pra-act="report-export" style="' + BTN + '">Export report (HTML)</button>';
+        }
+        return out + '</div>';
+    }
+    function sig3(x) { if (x == null || !isFinite(x)) return null; if (x === 0) return '0'; var d = Math.max(0, 2 - Math.floor(Math.log10(Math.abs(x)))); return (Math.round(x * Math.pow(10, d)) / Math.pow(10, d)).toLocaleString('en-US', { maximumFractionDigits: d }); }
+    function fmtJ(p) { var x = p && p.value; if (x == null) return '<i>missing</i>'; return x >= 1e6 ? sig3(x / 1e6) + ' MJ' : x >= 1e3 ? sig3(x / 1e3) + ' kJ' : sig3(x) + ' J'; }
+    function fmtN(p, unit) { var x = p && p.value; return x == null ? '<i>missing</i>' : sig3(x) + ' ' + unit; }
+    function fmtI(p, unit) { var x = p && p.value; return x == null ? '<i>missing</i>' : Math.round(x).toLocaleString('en-US') + ' ' + unit; }
+    function limitWords(R) {
+        if (!R.criterion) return _esc(R.assessmentNote);
+        if (R.meets == null) return notEval(R.refusedNote || 'the risk is not assessed');
+        var pct = R.hazardRatio * 100, lim = R.criterion.value * 100;
+        return (R.hazardRatio === 0 ? 'Chance of catastrophe 0%' + (R.catastrophicDeg === 0 ? ' (no release angle leads to a Catastrophic condition)' : ' (the catastrophic release angles carry no weight after the spread and flight phase factors)') : 'Chance of catastrophe ' + sig3(pct) + '% (about 1 in ' + Math.round(1 / R.hazardRatio) + '; Appendix 1 6.5 to 6.9: risk angle / 360 x spread factor x flight phase x risk factor)') + ', limit ' + _esc(R.criterion.text) + ' (' + sig3(lim) + '%): ' + (R.meets ? 'met' : '<b style="color:#8E2A2A;">NOT met</b>') + ' ' + src({ source: 'ac', ref: R.criterion.ref });
+    }
+    function rangeWords(R) {
+        return ['Catastrophic', 'Hazardous'].map(function (sv) { var L = R.ranges.filter(function (x) { return x.severity === sv; }); return sv + ': ' + (L.length ? L.map(function (x) { var f3 = function (v) { return String(Math.round(v * 1000) / 1000); }; return f3(x.fromDeg) + ' to ' + f3(x.toDeg) + ' degrees (' + f3(x.widthDeg) + ' degrees wide, exact)'; }).join('; ') : 'none'); }).join('<br>');
+    }
+    function reportHtml(R) {
+        if (!R || !R.ok) return notOk(R);
+        var e = R.energy, row = function (k, v) { return '<tr><td style="padding:2px 8px 2px 0;color:#55555C;">' + k + '</td><td>' + v + '</td></tr>'; };
+        return '<div class="pra-rep" style="font-size:12px;margin:6px 0;">' +
+            '<h3 style="font-size:14px;margin:4px 0;">' + _esc(R.label) + ', ' + _esc(R.rotor) + '</h3>' +
+            '<table style="border-collapse:collapse;">' +
+            row('Spread', '±' + val(R.spreadDeg, 'degrees') + ' ' + src(R.spreadDeg)) +
+            row('Fragment size', fmtI(R.maxDimensionMm, 'mm') + ' ' + src(R.maxDimensionMm)) +
+            row('Redline speed', fmtI(R.redlineRpm, 'rpm') + ' (' + _esc(R.redlineRpm.note) + ')') +
+            row('Fragment mass', fmtN(e.massKg, 'kg') + ' ' + src(e.massKg)) +
+            row('Speed of the c.g.', fmtI(e.speedMs, 'm/s') + ' at ' + fmtI(e.rCgMm, 'mm') + ' from the axis ' + src(e.rCgMm)) +
+            row('Energy at redline', '<b>' + fmtJ(e.energyJ) + '</b> ' + src(e.energyJ) + (e.energyChordJ ? ' · Figure 3 chord reading ' + fmtJ(e.energyChordJ) + ' ' + src(e.energyChordJ) : '') + (e.shield ? ' · shield ' + fmtJ(e.shield.capacityJ) + ' ' + src(e.shield.capacityJ) + ': ' + (e.shield.holds == null ? 'cannot compare' : e.shield.holds ? 'holds' : '<b style="color:#8E2A2A;">does not hold</b>') : ' · no shield credited: the AC treats the fragment as having infinite energy')) +
+            row('Limit check', limitWords(R)) +
+            row('Shielding', 'Per AC 20-128A Appendix 1 4.1(a) the fragment is considered to possess infinite energy: every part along the path counts as hit; only protective shielding or an engine credited by the engineer stops it (no first-hit screening for rotor fragments).') +
+            row('Release angles (rotor position at release)', rangeWords(R)) +
+            row('Probability (Appendix 1 6.5 to 6.9)', R.spreadWeightedDeg != null ? 'translational risk angle ' + (Math.round(R.catastrophicDeg * 1000) / 1000) + ' deg, spread-weighted ' + (Math.round(R.spreadWeightedDeg * 1000) / 1000) + ' deg, x flight phase ' + _esc(R.phaseFactor.note) + ', x risk factor ' + R.riskFactor.value + ' ' + src(R.riskFactor) : 'not computed') +
+            (R.average ? row('Airplane average (Appendix 1 6.11)', R.average.airplaneAverage == null ? notEval((R.average.problems || []).join('; ') || 'the average could not be formed') : (R.average.airplaneAverage != null ? R.average.airplaneAverage.toExponential(2) : 'none') + ' against ' + _esc(R.average.criterion.text) + ': ' + (R.average.meetsAverage ? 'met' : 'NOT met') + '; ' + R.average.engines.map(function (e) { return _esc(e.engine) + ' ' + e.average.toExponential(2) + ' over ' + e.stages + ' stage(s)'; }).join('; ') + '; any single stage at most twice: ' + (R.average.meetsEverySingle ? 'met' : 'NOT met')) : '') +
+            (R.multiple ? row('Multiple disc fragments (para 10c(3)(iii))', R.multiple.ok ? R.multiple.probability.toExponential(2) + ' against ' + _esc(R.multiple.criterion.text) + ': ' + (R.multiple.meets ? 'met' : 'NOT met') + (R.multiple.notApplicable.length ? '; not applicable to ' + R.multiple.notApplicable.map(function (x) { return _esc(x.equipment) + ' (' + Math.round(x.distanceMm) + ' mm from the engine centerline, beyond one rotor diameter of ' + Math.round(R.multiple.largestRotorDiameterMm) + ' mm)'; }).join(', ') : '') : notEval(R.multiple.err || 'no result')) : '') +
+            row('Parts hit', R.partsHit.length ? pidsLink(R.partsHit, R.partsHit.length + ' parts') + ': ' + names(R.partsHit) : 'none') +
+            nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
+            row('Failure conditions', condText(R)) +
+            '</table><div style="' + MUTED + 'margin-top:4px;">' + _esc(R.method) + '</div>' +
+            '<div style="margin-top:4px;"><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div></div>';
+    }
+    function flowVolumes(keys) {
+        var m = M(), v = viewer(); if (!v || !v.showSpreadVolumes) return 0;
+        var reach = m.modelReach(st.flowRotor, cadId());
+        return v.showSpreadVolumes(keys.map(function (k) { var sp = m.spreadVolume(st.flowRotor, k, reach), mp = m.spreadMeshPoints(sp); return { model: k, label: m.FRAGMENT_MODELS[k].label + ' ±' + sp.halfAngleDeg + ' deg', color: TYPE_COLORS[k], edge: TYPE_EDGES[k], positions: mp.positions, index: mp.index, spec: sp }; }), { frame: true, sideOn: true });
+    }
+
+    // ---- interactive export (14 Oct 2026): the report HTML carries its own small 3D viewer
+    // (three.js r186, MIT, inlined) with the triangles of this model, so it opens offline and the
+    // reader can orbit, pan, zoom, cut a section, toggle types and parts. The geometry exists only
+    // in the exported file (never in projectConfig or an AI request).
+    // rotor burst export on the shared report module (pra_report.js)
+    function _names() { return _nameMap(); }
+    function exportGeometry(k, maxTriOther) {
+        var R = (st.flowReports || {})[k], RP = window.SLPraReport; if (!R || !RP) return null;
+        var P2 = RP.collectParts(viewer(), R.partsHit, _names(), maxTriOther); if (!P2) return null;
+        var m2 = M(), types = (st.flowTypes || [k]).slice(); if (types.indexOf(k) < 0) types.unshift(k);
+        var reach = m2.modelReach(st.flowRotor, cadId());
+        var vols = types.map(function (t2) { var sp = m2.spreadVolume(st.flowRotor, t2, reach); return Object.assign(RP.volume(sp, t2, m2.FRAGMENT_MODELS[t2].label + ' \u00b1' + sp.halfAngleDeg + ' deg', TYPE_COLORS[t2], t2 === k), { edge: TYPE_EDGES[t2] }); });
+        return { parts: P2.parts, volumes: vols, triangles: P2.triangles, axis: vols[0].spec.axis };
+    }
+    function exportReportInteractive(k) {
+        var R = (st.flowReports || {})[k], RP = window.SLPraReport; if (!R || !RP) return Promise.resolve(null); if (!R.ok) return notEvalPage(R, 'Rotor burst report: ' + k);
+        var D = exportGeometry(k); if (!D) return Promise.resolve(null);
+        flowVolumes([k]); var png = RP.snapshot(viewer());
+        return RP.page({ title: R.label + ', ' + R.rotor, heading: 'Rotor burst report: ' + R.label, intro: 'Rotor ' + R.rotor + '. Generated by Safety Lab from the confirmed rotor values and the CAD model on this computer.', typesTitle: 'Fragment types', png: png, tableHtml: reportHtml(R), parts: D.parts, volumes: D.volumes, axis: D.axis, triangles: D.triangles });
+    }
+    // printReport(type): an in-page print view (no popup): the report goes into a hidden
+    // container that only the print stylesheet shows; the browser's Print dialog offers PDF.
+    function printHtml(html) {
+        var box = document.getElementById('pra-print');
+        if (!box) { box = document.createElement('div'); box.id = 'pra-print'; document.body.appendChild(box); }
+        if (!document.getElementById('pra-print-style')) { var stl = document.createElement('style'); stl.id = 'pra-print-style'; stl.textContent = '#pra-print{display:none}@media print{body>*:not(#pra-print){display:none !important}#pra-print{display:block !important;font:12px/1.45 Arial,sans-serif;color:#000;background:#fff}#pra-print img{max-width:100%}#pra-print script,#pra-print canvas,#pra-print #v3d-wrap,#pra-print #v3d-tools{display:none !important}}'; document.head.appendChild(stl); }
+        var body = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>')).replace(/<script[\s\S]*?<\/script>/gi, '').replace('<div id="v3d-fallback" style="display:none">', '<div id="v3d-fallback">');
+        box.innerHTML = body; try { window.print(); } catch (_) {} return true;
+    }
+    function printReport(k) {
+        var R = (st.flowReports || {})[k]; if (!R) return false;
+        var box = document.getElementById('pra-print');
+        if (!box) { box = document.createElement('div'); box.id = 'pra-print'; document.body.appendChild(box); }
+        if (!document.getElementById('pra-print-style')) { var stl = document.createElement('style'); stl.id = 'pra-print-style'; stl.textContent = '#pra-print{display:none}@media print{body>*:not(#pra-print){display:none !important}#pra-print{display:block !important;font:12px/1.45 Arial,sans-serif;color:#000;background:#fff}#pra-print img{max-width:100%}}'; document.head.appendChild(stl); }
+        var html = exportReport(k); box.innerHTML = html.slice(html.indexOf('<body>') + 6, html.lastIndexOf('</body>'));
+        try { window.print(); } catch (_) {}
+        return true;
+    }
+    function exportReport(k) {
+        var R = (st.flowReports || {})[k]; if (!R) return null;
+        var png = ''; try { var v = viewer(); flowVolumes([k]); if (v && v.renderer) { v.renderer.render(v.scene, v.camera); png = v.renderer.domElement.toDataURL('image/png'); } } catch (_) {}
+        var html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>' + _esc(R.label) + ', ' + _esc(R.rotor) + '</title><style>body{font:13px/1.45 -apple-system,Segoe UI,Arial,sans-serif;color:#1d1d1f;margin:24px;max-width:900px}h1{font-size:18px}td{vertical-align:top;padding:2px 8px 2px 0}img{max-width:100%;border:1px solid #ddd}@media print{body{margin:10mm}}</style></head><body>' +
+            '<h1>Rotor burst report: ' + _esc(R.label) + '</h1><div>Rotor ' + _esc(R.rotor) + '. Generated by Safety Lab from the confirmed rotor values and the CAD model on this computer.</div>' +
+            (png ? '<p><img alt="Fragment spread in 3D" src="' + png + '"></p>' : '') + reportHtml(R).replace(/<a [^>]*>([^<]*)<\/a>/g, '$1') + '</body></html>';
+        return html;
+    }
+
+
+    // ---- bird strike, guided (shared report module)
+    function birdFlowHtml() {
+        var m = M(), id = cadId(); if (!m.birds().length) return '<div style="font-size:12px;margin-top:8px;border-top:1px solid var(--color-border-hair);padding-top:6px;"><b>Bird strike, step by step</b> <button data-pra-act="bflow-start" style="' + BTN + '">Start the bird strike assessment</button></div>';
+        var b = m.birds()[0]; st.bFlow = b.id; var s1 = m.stepStatus('bird', b.id), c = b.confirms || {};
+        var LBL = 'style="white-space:nowrap;text-transform:none;letter-spacing:normal;font-weight:400;font-size:12px;display:inline;"';
+        var tick = function (f, label, inner) { return '<div style="font-size:12px;margin:2px 0;">' + label + ' ' + inner + ' <label ' + LBL + '><input type="checkbox" data-pra-btick="' + f + '" style="width:auto;"' + (c[f] ? ' checked' : '') + '> ' + (c[f] ? 'Confirmed by ' + _esc(c[f].by) : 'Confirm') + '</label></div>'; };
+        var rules = b.basis ? m.birdSpeedRule(b.basis) : [];
+        var out = '<div data-pra-bflow="' + _esc(b.id) + '" style="font-size:12px;margin-top:8px;border-top:1px solid var(--color-border-hair);padding-top:6px;"><b>Bird strike, step by step</b>' + (window.SLZonalAI && window.SLZonalAI.ENABLED === true ? ' <button data-pra-act="bird-ai" style="' + BTN + '">AI detect from specifications</button>' : '') +
+            '<div><b>Step 1.</b></div>' +
+            tick('basis', 'Certification basis', '<select id="pra-b-basis" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + [['', 'choose'], ['Part 25', 'Part 25'], ['Part 23', 'Part 23'], ['Part 29', 'Part 29']].map(function (o) { return '<option value="' + o[0] + '"' + (b.basis && m.basisKey(o[0]) === b.basis ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>') +
+            tick('speed', 'Impact speed', '<input id="pra-b-speed" style="' + INP + '" value="' + (b.speedMs || '') + '"> m/s <span style="' + MUTED + '">engineer input; the rule names: ' + (rules.length ? rules.map(function (r) { return _esc(r.id) + ': ' + _esc(r.speedRule); }).join('; ') : 'choose the basis first') + '</span>') +
+            tick('depth', 'Depth behind the struck surface', '<input id="pra-b-depth" style="' + INP + '" value="' + (b.depthMm || '') + '"> mm <span style="' + MUTED + '">engineer input: parts this far behind count as exposed</span>') +
+            '<button data-pra-act="bflow-save" style="' + BTN + '">Save values</button>' +
+            '<div style="font-size:12px;margin:2px 0;">Bird diameter <input id="pra-b-diam" style="' + INP + '" value="' + (b.diameter ? b.diameter.value : '') + '"> mm <span style="' + MUTED + '">not from the rule text, engineer input: sets the ray spacing</span> <button data-pra-act="bdiam-set" style="' + BTN + '">Confirm diameter</button> <span style="' + MUTED + '">' + (b.diameter ? 'confirmed by ' + _esc(b.diameter.by) : 'not given: zones are not proposed') + '</span></div>' +
+            (b.basis === 'part23' ? '<div style="font-size:12px;margin:2px 0;"><label ' + LBL + '><input type="checkbox" data-pra-blevel4 style="width:auto;"' + (b.level4 ? ' checked' : '') + '> Level 4 airplane</label> <span style="' + MUTED + '">' + (b.level4 ? 'confirmed by ' + _esc(b.level4.by) + ': the windshield case (23.2320(b)) applies' : 'not confirmed: the windshield case (23.2320(b), level 4 only) is not offered') + '</span></div>' : '');
+        if (!s1.unlocked) return out + '<div style="' + MUTED + '">Step 2 opens when the basis, speed and depth are confirmed (still to confirm: ' + _esc(s1.missing.join(', ')) + ').</div></div>';
+        // timebox 52: the proposal is computed only on the engineer's action and shown from the stored result with its input
+        // hash; when the inputs hash differently now, a stale banner asks for a recompute (no recompute on render)
+        var PS = m.birdProposalState(b.id) || {}, BZ = PS.stored ? PS.stored.result : { ok: false, zones: [], err: null }, props = BZ.zones || [], conf = {}; if (b.basis === 'part23' && !b.level4) rules = rules.filter(function (r) { return r.id !== 'windshield'; }); (b.zones || []).forEach(function (z) { conf[z.pid] = z; });
+        out += '<div style="margin-top:6px;"><b>Step 2. Impact zones</b> <span style="' + MUTED + '">surfaces met first along the flight direction, each with the rule case it falls under; tick the ones to assess</span>' + ' <button data-pra-act="bzones-propose" style="' + BTN + '">' + (PS.stored ? 'Recompute the proposal' : 'Propose impact zones') + '</button>' +
+            (PS.stale ? '<div data-pra-bstale role="alert" style="color:var(--color-danger,#8E2A2A);background:rgba(201,42,42,0.08);border:1px solid var(--color-danger,#8E2A2A);border-radius:4px;padding:4px 8px;font-size:12px;font-weight:600;margin:4px 0;">Stale: the inputs changed since this proposal (stored ' + _esc(PS.stored.hash) + ', now ' + _esc(PS.hash) + '). Recompute before confirming zones.</div>' : '') +
+            (PS.stored ? '<div style="' + MUTED + '" data-pra-bhash>Proposal of ' + _esc(PS.stored.at) + ', inputs ' + _esc(PS.stored.hash) + '</div>' : '<div style="' + MUTED + '">Not proposed yet.</div>') + (!PS.stored ? '' : BZ.ok ? '<div style="' + MUTED + '" data-pra-bnote>' + _esc(BZ.note || '') + '</div>' : (BZ.refused ? '<div data-pra-bnote>' + notEval(BZ.notEvaluated) + '</div>' : '<div style="color:var(--color-danger,#b00);" data-pra-bnote>' + _esc(BZ.err) + '</div>')) + '</div>' +
+            props.map(function (z) { var cur = conf[z.pid] ? conf[z.pid].caseId : z.caseId, ids = rules.map(function (r) { return r.id; });
+                return '<div style="font-size:12px;"><label style="text-transform:none;letter-spacing:normal;font-weight:400;"><input type="checkbox" data-pra-bzone="' + _esc(z.pid) + '" data-case="' + _esc(z.caseId || '') + '" data-name="' + _esc(z.name) + '" style="width:auto;"' + (conf[z.pid] ? ' checked' : '') + '> ' + _esc(z.name) + '</label> case <select data-pra-bcase="' + _esc(z.pid) + '" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + ids.map(function (c2) { return '<option value="' + _esc(c2) + '"' + (c2 === cur ? ' selected' : '') + '>' + _esc(c2) + (c2 === z.caseId ? ' (proposed)' : '') + '</option>'; }).join('') + '</select> <input data-pra-breason="' + _esc(z.pid) + '" style="' + INP + 'width:220px;" placeholder="reason, if you change the case" value="' + _esc(conf[z.pid] && conf[z.pid].override ? conf[z.pid].override.reason : '') + '"></div>'; }).join('') +
+            '<button data-pra-act="bzones-confirm" style="' + BTN + '">Confirm zones and build the reports</button>';
+        var reps = st.bReports || {}, keys = Object.keys(reps).filter(function (k) { return reps[k] && reps[k].ok; });
+        if (keys.length) { var cur = st.bOpen && reps[st.bOpen] ? st.bOpen : keys[0];
+            out += '<div style="margin-top:6px;"><b>Step 3. Reports</b> ' + keys.map(function (k) { return '<button data-pra-breport="' + _esc(k) + '" style="' + BTN + (k === cur ? 'background:#1971c2;color:#fff;' : '') + '">' + _esc(reps[k].label) + '</button>'; }).join(' ') + '</div>' +
+                '<div id="pra-breport" data-pra-breport-open="' + _esc(cur) + '">' + birdReportHtml(reps[cur]) + '</div><button data-pra-act="bopen-3d" style="' + BTN + '">Open in 3D</button> <button data-pra-act="breport-print" style="' + BTN + '">Print / Save as PDF</button> <button data-pra-act="breport-export" style="' + BTN + '">Export report (HTML)</button>'; }
+        return out + '</div>';
+    }
+    function birdReportHtml(R) {
+        if (!R || !R.ok) return notOk(R);
+        var row = function (k, v) { return '<tr><td style="padding:2px 8px 2px 0;color:#55555C;">' + k + '</td><td>' + v + '</td></tr>'; };
+        return '<div class="pra-rep" style="font-size:12px;margin:6px 0;"><h3 style="font-size:14px;margin:4px 0;">' + _esc(R.label) + '</h3><table style="border-collapse:collapse;">' +
+            row('Bird mass', fmtN(R.massKg, 'kg') + (R.massLb ? ' (' + R.massLb + ' lb)' : '') + ' ' + src(R.massKg)) +
+            row('Impact speed', (R.speedMs.value != null ? _esc(R.speedMs.value) + ' m/s' : '<i>missing</i>') + ' <span style="' + MUTED + '">' + _esc(R.speedMs.note) + '</span>') +
+            row('Impact energy', '<b>' + fmtJ(R.energyJ) + '</b> ' + src(R.energyJ)) +
+            row('Struck surface', _esc(R.zone)) + (R.override ? row('Rule case', '<b>' + _esc(R.override) + '</b>') : '') +
+            row('Depth considered behind it', fmtI(R.depthMm, 'mm') + ' <span style="' + MUTED + '">' + _esc(R.depthMm.note) + '</span>') +
+            row('Parts behind the impact', R.behind.length ? (function () { var D = {}, EX = {}; R.behind.forEach(function (x) { D[x.pid] = x.depthMm; EX[x.pid] = x.exposure; }); return names(R.behind.map(function (x) { return x.pid; }), function (q) { return D[q]; }, function (e) { var x = EX[e.pids[0]]; return x ? ' (' + _esc(x.replace(/^behind (.+)$/, function (_, q) { return 'behind ' + partName(q); })) + ')' : ''; }); })() : 'none: no part lies within ' + fmtI(R.depthMm, 'mm') + ' behind the struck surface') +
+            nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
+            row('Failure conditions', condText(R)) +
+            (R.shared.length ? row('Shared exposure', R.shared.map(function (f) { return _esc(f.gate); }).join(', ')) : '') +
+            '</table><div style="' + MUTED + '">' + _esc(R.method) + '</div><div><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div></div>';
+    }
+    function _impactPoint(bv) { var d = M().bird(st.bFlow).direction, b = bv.box, c = [0, 1, 2].map(function (i) { return (b.min[i] + b.max[i]) / 2; }); for (var i = 0; i < 3; i++) if (d[i] > 0) c[i] = b.min[i]; else if (d[i] < 0) c[i] = b.max[i]; return c; }
+    function birdVolumes(pids) {
+        var m = M(), v = viewer(); if (!v || !v.showSpreadVolumes) return 0;
+        var list = [].concat.apply([], pids.map(function (pid) { var sb2 = unionBox([pid]); if (!sb2) return []; var om = boxMesh(sb2); return [{ model: pid + '#surface', label: 'Struck surface: ' + partName(pid), color: '#0b7285', opacity: 0.12, positions: om.positions, index: om.index, spec: null }]; })).concat(pids.map(function (pid) { var bv = m.birdVolume(st.bFlow, pid); return bv ? { model: pid, label: 'Impact region and depth behind: ' + partName(pid), color: '#1971c2', opacity: 0.35, callout: { pos: _impactPoint(bv), text: 'Bird impact: ' + partName(pid) }, positions: bv.positions, index: bv.index, spec: null } : null; })).filter(Boolean);
+        return v.showSpreadVolumes(list, { frame: true, regionView: true, title: 'Bird impact', xrayHits: pids.concat.apply(pids.slice(), pids.map(function (pid) { var R = (st.bReports || {})[pid]; return R && R.behind ? R.behind.map(function (x) { return x.pid; }) : []; })) });
+    }
+    function exportBirdReport(k) {
+        var R = (st.bReports || {})[k], RP = window.SLPraReport, m = M(); if (!R || !RP) return Promise.resolve(null); if (!R.ok) return notEvalPage(R, 'Bird strike report: ' + k);
+        var hit = [R.zonePid].concat(R.behind.map(function (x) { return x.pid; }));
+        var P2 = RP.collectParts(viewer(), hit, _names()); if (!P2) return Promise.resolve(null);
+        var bv = m.birdVolume(st.bFlow, R.zonePid); var vol = RP.meshVolume(bv.positions, bv.index, R.zonePid, 'Impact region and depth behind', '#1971c2', true, null, { opacity: 0.35, callout: { pos: _impactPoint(bv), text: 'Bird impact: ' + partName(R.zonePid) } });
+        birdVolumes([R.zonePid]); var png = RP.snapshot(viewer());
+        return RP.page({ title: R.label, heading: 'Bird strike report: ' + R.label, intro: 'Generated by Safety Lab from the confirmed bird strike values and the CAD model on this computer.', typesTitle: 'Impact region', png: png, tableHtml: birdReportHtml(R), parts: P2.parts, volumes: [vol], axis: m.bird(st.bFlow).direction, triangles: P2.triangles, xray: true });
+    }
+
+    // ---- shared helpers for box-shaped regions
+    function boxMesh(b) { var C8 = []; for (var k = 0; k < 8; k++) C8.push(k & 1 ? b.max[0] : b.min[0], k & 2 ? b.max[1] : b.min[1], k & 4 ? b.max[2] : b.min[2]); var F = [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]], idx = []; F.forEach(function (f) { idx.push(f[0], f[1], f[2], f[0], f[2], f[3]); }); return { positions: C8, index: idx }; }
+    function unionBox(pids) { var B = null; try { C().partsOf(C().model(cadId())).forEach(function (p) { if (pids.indexOf(String(p.pid)) < 0 || !p.bbox) return; if (!B) B = { min: p.bbox.min.slice(), max: p.bbox.max.slice() }; else for (var i = 0; i < 3; i++) { B.min[i] = Math.min(B.min[i], p.bbox.min[i]); B.max[i] = Math.max(B.max[i], p.bbox.max[i]); } }); } catch (_) {} return B; }
+    function boxCenter(b) { return [0, 1, 2].map(function (i) { return (b.min[i] + b.max[i]) / 2; }); }
+    function condText(R) {
+        if (R.conditions && R.conditions.length) return R.conditions.map(function (c) { return _esc(c.fcId) + ' ' + _esc(c.desc) + ' ' + sev(c.severity); }).join('<br>');
+        if (!R.equipment || !R.equipment.length) return 'none reached: no linked equipment in the region';
+        var why = M().whyNotReached(R.equipment); return 'none reached' + (why.length ? ': ' + why.map(_esc).join('; ') : ': the linked equipment drives no failure condition in the fault trees');
+    }
+    function genericReportHtml(R, rows) {
+        if (!R || !R.ok) return notOk(R);
+        var row = function (k, v) { return '<tr><td style="padding:2px 8px 2px 0;color:#55555C;">' + k + '</td><td>' + v + '</td></tr>'; };
+        return '<div class="pra-rep" style="font-size:12px;margin:6px 0;"><h3 style="font-size:14px;margin:4px 0;">' + _esc(R.label) + '</h3><table style="border-collapse:collapse;">' + rows.map(function (r) { return row(r[0], r[1]); }).join('') +
+            nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
+            row('Failure conditions', condText(R)) +
+            (R.shared && R.shared.length ? row('Shared exposure', R.shared.map(function (f) { return _esc(f.gate); }).join(', ')) : '') + '</table>' +
+            (R.refs && R.refs.length ? '<div><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div>' : '') + '</div>';
+    }
+    function regionVolumes(list) { var v = viewer(); if (!v || !v.showSpreadVolumes) return 0; return v.showSpreadVolumes(list.map(function (x) { var mm = boxMesh(x.box); return { model: x.key, label: x.label, color: x.color, opacity: 0.3, callout: { pos: boxCenter(x.box), text: x.callout }, positions: mm.positions, index: mm.index, spec: null }; }), { frame: true, regionView: true, title: 'Region', xrayHits: [].concat.apply([], list.map(function (x) { return x.hits || []; })) }); }
+    function exportRegion(R, x, title, heading, tableHtml) {
+        var RP = window.SLPraReport; if (!R || !RP) return Promise.resolve(null); if (!R.ok) return notEvalPage(R, heading);
+        var P2 = RP.collectParts(viewer(), x.hits, _names()); if (!P2) return Promise.resolve(null);
+        var mm = boxMesh(x.box), vol = RP.meshVolume(mm.positions, mm.index, x.key, x.label, x.color, true, null, { opacity: 0.3, callout: { pos: boxCenter(x.box), text: x.callout } });
+        regionVolumes([x]); var png = RP.snapshot(viewer());
+        return RP.page({ title: title, heading: heading, intro: 'Generated by Safety Lab from the confirmed values and the CAD model on this computer.', typesTitle: 'Region', png: png, tableHtml: tableHtml, parts: P2.parts, volumes: [vol], axis: [1, 0, 0], triangles: P2.triangles, xray: true });
+    }
+
+    // ---- lightning, guided
+    var LZ_COLORS = window.SLPraModels.PALETTE.lightning;   // the shared colorblind-safe palette
+    // the open viewer's part triangles, for skin detection by rays (geometry stays in the browser)
+    function _regTris() { var m = M(); if (!m || !m.setTriangleSource) return; m.setTriangleSource(triOf); }
+    function triOf(pid) { var v = viewer(); if (!v || !v.geom || !window.THREE) return null; var T = window.THREE, M4 = new T.Matrix4(), V = new T.Vector3(), ms = (v.geom.meshes || []).filter(function (x) { return String(x.pid) === String(pid); })[0]; if (!ms) return null; var pr = v.geom.protos[ms.proto]; if (!pr || !pr.position) return null; var pos = pr.position, idx = pr.index, n = idx ? idx.length : pos.length / 3, out = new Float32Array(n * 3); if (ms.matrix) M4.fromArray(ms.matrix); for (var i = 0; i < n; i++) { var vi = idx ? idx[i] : i; V.set(pos[vi * 3], pos[vi * 3 + 1], pos[vi * 3 + 2]).applyMatrix4(M4); out[i * 3] = V.x; out[i * 3 + 1] = V.y; out[i * 3 + 2] = V.z; } return out; }
+    function lightFlowHtml() {
+        var m = M(), id = cadId(), f = m.lightningFlow(id), LBL = 'style="white-space:nowrap;text-transform:none;letter-spacing:normal;font-weight:400;font-size:12px;display:inline;"';
+        var out = '<div data-pra-lflow style="font-size:12px;margin-top:8px;border-top:1px solid var(--color-border-hair);padding-top:6px;"><b>Lightning, step by step</b>' + (window.SLZonalAI && window.SLZonalAI.ENABLED === true ? ' <button data-pra-act="light-ai" style="' + BTN + '">AI detect from specifications</button>' : '');
+        if (!f) return out + ' <button data-pra-act="lflow-start" style="' + BTN + '">Start the lightning assessment</button></div>';
+        var s1 = m.stepStatus('lightning', id), c = f.confirms || {}, p1 = m.lightningStep1(id, { forward: f.forward, band: f.band });
+        var tick = function (k, label, inner) { return '<div style="margin:2px 0;">' + label + ' ' + inner + ' <label ' + LBL + '><input type="checkbox" data-pra-ltick="' + k + '" style="width:auto;"' + (c[k] ? ' checked' : '') + '> ' + (c[k] ? 'Confirmed by ' + _esc(c[k].by) : 'Confirm') + '</label></div>'; };
+        out += '<div><b>Step 1.</b></div>' + tick('extremities', 'Extremities proposed from the CAD:', p1.ok ? p1.extremities.map(function (e) { return _esc(partName(e.pid)) + ' <span style="' + MUTED + '">(' + _esc(e.why) + ')</span>'; }).join(', ') : 'none') +
+            tick('band', 'Band around an extremity', '<input id="pra-l-band" style="' + INP + '" value="' + (f.band || '') + '"> mm <span style="' + MUTED + '">engineer input (SAE ARP5414 not in the knowledge base)</span> <button data-pra-act="lflow-save" style="' + BTN + '">Save</button>');
+        if (!s1.unlocked) return out + '<div style="' + MUTED + '">Step 2 opens when the extremities and the band are confirmed (still to confirm: ' + _esc(s1.missing.join(', ')) + ').</div></div>';
+        _regTris(); var spl = m.skinParts(id);
+        if (!spl) { var ps = m.proposeSkin(id); return out + '<div style="margin-top:6px;"><b>Step 2a. External skin</b> <span style="color:var(--color-danger,#8E2A2A);">proposed, confirm or correct it</span> <span style="' + MUTED + '">method: ' + _esc(ps.method) + '</span></div>' + (ps.warning ? '<div style="color:var(--color-danger,#8E2A2A);font-weight:600;">linked equipment proposed as skin: ' + ps.linkedAsSkin.map(function (pid) { return _esc(partName(pid)); }).join(', ') + '. Check the model is closed; remove a part from the skin below if it is inside the aircraft.</div>' : '') +
+            '<div>' + names(ps.parts) + '</div><button data-pra-act="lskinparts-confirm" style="' + BTN + '">Confirm the skin parts</button></div>'; }
+        out += '<div style="margin-top:6px;"><b>Step 2a. External skin</b> confirmed by ' + _esc(spl.confirmedBy) + ' (' + spl.pids.length + ' parts; ' + _esc(spl.method) + ')' + (spl.edits.length ? '; changes: ' + spl.edits.map(function (e) { return _esc(partName(e.pid)) + (e.skin ? ' added' : ' removed') + ': ' + _esc(e.reason) + ' (' + _esc(e.by) + ')'; }).join('; ') : '') + '</div>' +
+            '<div>Change: <select id="pra-l-sp" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + (function () { try { return C().partsOf(C().model(id)).map(function (q) { return '<option value="' + _esc(q.pid) + '">' + _esc(partName(q.pid)) + (spl.pids.indexOf(String(q.pid)) >= 0 ? ' (skin)' : '') + '</option>'; }).join(''); } catch (_) { return ''; } })() + '</select> <select id="pra-l-sk" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;"><option value="1">is skin</option><option value="0">is not skin</option></select> because <input id="pra-l-sw" style="' + INP + 'width:220px;"> <button data-pra-act="lskinparts-edit" style="' + BTN + '">Change</button></div>';
+        var sk = m.lightningSkin(id), prop = sk ? null : m.proposeSkinZones(id, { forward: f.forward, band: f.band });
+        out += '<div style="margin-top:6px;"><b>Step 2b. Zones on the external skin</b> ' + (sk ? 'confirmed by ' + _esc(sk.confirmedBy) + ' (' + Object.keys(sk.assign).length + ' skin parts)' : '<span style="color:var(--color-danger,#8E2A2A);">proposed by a geometry rule, unverified (SAE ARP5414 not in the knowledge base)</span> <button data-pra-act="lskin-confirm" style="' + BTN + '">Confirm the proposed zones</button>') + '</div><div style="' + MUTED + '">' + _esc(m.SKIN_RULE) + '</div>';
+        var A = sk ? sk.assign : {}; (prop && prop.ok ? prop.parts : []).forEach(function (p) { A[p.pid] = p.zone; }); var POR = sk ? (sk.portions || []) : (prop && prop.ok ? prop.portions : []);
+        out += '<div>' + m.LIGHTNING_ZONES.map(function (z) { var L = POR.filter(function (q) { return q.zone === z; }); return L.length ? '<div><span style="display:inline-block;width:10px;height:10px;background:' + LZ_COLORS[z] + '"></span> <b>' + z + '</b>: ' + L.map(function (q) { return _esc(partName(q.pid)) + (q.portion !== 'whole part' ? ' (' + _esc(q.portion) + ')' : ''); }).join(', ') + '</div>' : ''; }).join('') + ' <button data-pra-act="lskin-show" style="' + BTN + '">Show the zones on the skin</button></div>';
+        if (!sk) return out + '</div>';
+        out += '<div>Move a part to another zone: <select id="pra-l-epid" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + Object.keys(A).map(function (pid) { return '<option value="' + _esc(pid) + '">' + _esc(partName(pid)) + ' (' + A[pid] + ')</option>'; }).join('') + '</select> to <select id="pra-l-ezone" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + m.LIGHTNING_ZONES.map(function (z) { return '<option>' + z + '</option>'; }).join('') + '</select> because <input id="pra-l-ewhy" style="' + INP + 'width:220px;"> <button data-pra-act="lskin-edit" style="' + BTN + '">Move</button></div>' +
+            '<div>Depth behind the skin for indirect effects <input id="pra-l-depth" style="' + INP + '" value="' + (sk.depthMm || '') + '"> mm <span style="' + MUTED + '">engineer input</span> <button data-pra-act="lskin-depth" style="' + BTN + '">Save</button> <button data-pra-act="lflow-run" style="' + BTN + '">Build the reports</button></div>';
+        var reps = st.lReports || {}, keys = m.LIGHTNING_ZONES.filter(function (z) { return reps[z] && reps[z].ok; });
+        if (keys.length) { var cur = st.lOpen && reps[st.lOpen] ? st.lOpen : keys[0], R = reps[cur];
+            out += '<div style="margin-top:6px;"><b>Step 3. Reports</b> ' + keys.map(function (z) { return '<button data-pra-lreport="' + z + '" style="' + BTN + (z === cur ? 'background:' + LZ_COLORS[z] + ';color:#fff;' : '') + '">Zone ' + z + '</button>'; }).join(' ') + '</div><div id="pra-lreport" data-pra-lreport-open="' + cur + '">' + lightReportHtml(R) + '</div>' +
+                '<div>Test waveform or level for zone ' + cur + ' (engineer input): <input id="pra-l-wf" style="' + INP + 'width:260px;" value="' + _esc(R.waveform && R.waveform.value || '') + '"> <button data-pra-act="lflow-wf" style="' + BTN + '">Save</button></div>' +
+                '<button data-pra-act="lopen-3d" style="' + BTN + '">Open in 3D</button> <button data-pra-act="lreport-print" style="' + BTN + '">Print / Save as PDF</button> <button data-pra-act="lreport-export" style="' + BTN + '">Export report (HTML)</button>'; }
+        return out + '</div>';
+    }
+    function lightReportHtml(R) { return genericReportHtml(R, R && R.ok ? [['Zone definition', src(R.definition)], ['Skin found by', _esc(R.skinMethod || '')],
+        ['Direct effects: skin parts in this region', ((R.directPortions && R.directPortions.length) ? (function () { var PO = {}; R.directPortions.forEach(function (q) { (PO[q.pid] = PO[q.pid] || []).push(q.portion); }); return names(Object.keys(PO), null, function (e) { var L = []; e.pids.forEach(function (q) { PO[q].forEach(function (x) { if (x !== 'whole part' && L.indexOf(x) < 0) L.push(x); }); }); return L.length ? ' (' + L.map(_esc).join('; ') + ')' : ''; }); })() : (R.direct.length ? names(R.direct) : 'none')) + '<br><span style="' + MUTED + '">assess: ' + R.effects.direct.map(_esc).join('; ') + '</span>'],
+        ['Indirect effects: internal equipment behind this region', (R.depthMm.value != null ? (R.indirect.length ? (function () { var D = {}; R.indirect.forEach(function (x) { D[x.pid] = x.distanceMm; }); return names(R.indirect.map(function (x) { return x.pid; }), function (q) { return D[q]; }); })() : 'none within the depth') + ' <span style="' + MUTED + '">depth ' + R.depthMm.value + ' mm, ' + _esc(R.depthMm.note) + '</span>' : src(R.depthMm)) + '<br><span style="' + MUTED + '">' + _esc(R.wiringNote) + ' Assess: ' + R.effects.indirect.map(_esc).join('; ') + '</span>'],
+        ['Zone changes by the engineer', R.edits.length ? R.edits.map(function (e) { return _esc(partName(e.pid)) + ' from ' + e.from + ' to ' + e.to + ': ' + _esc(e.reason) + ' (' + _esc(e.by) + ')'; }).join('<br>') : 'none'],
+        ['Test waveform or level', R.waveform.value != null ? _esc(R.waveform.value) + ' ' + src(R.waveform) : src(R.waveform)]] : []); }
+    // a zone drawn as thin shells just outside its skin parts (15 mm out), one colored patch per part
+    function skinShells(pids) { var pos = [], idx = []; try { var P = C().partsOf(C().model(cadId())); pids.forEach(function (pid) { var q = P.filter(function (x) { return String(x.pid) === String(pid); })[0]; if (!q || !q.bbox) return; var b = { min: q.bbox.min.map(function (v) { return v - 15; }), max: q.bbox.max.map(function (v) { return v + 15; }) }, mm = boxMesh(b), o = pos.length / 3; pos.push.apply(pos, mm.positions); mm.index.forEach(function (i) { idx.push(i + o); }); }); } catch (_) {} return { positions: pos, index: idx }; }
+    function portionShells(boxes) { var pos = [], idx = []; boxes.forEach(function (b0) { var b = { min: b0.min.map(function (v) { return v - 15; }), max: b0.max.map(function (v) { return v + 15; }) }, mm = boxMesh(b), o = pos.length / 3; pos.push.apply(pos, mm.positions); mm.index.forEach(function (i) { idx.push(i + o); }); }); return { positions: pos, index: idx }; }
+    // paintSkin(list of {pid, box, portion}): the part's own triangles, each assigned to a portion by its
+    // centroid (band portions first, then the remainder), copied 6 mm out along the triangle normal on
+    // both sides so the paint sits on the skin. No boxes.
+    var PAINT_OFFSET = 6;
+    function paintSkin(L) {
+        var pos = [], idx = [], byPid = {}; L.forEach(function (q) { (byPid[q.pid] = byPid[q.pid] || []).push(q); });
+        var own = {}; Object.keys(byPid).forEach(function (pid) { var all = [], mine = byPid[pid]; (lightPortionsOf(pid) || mine).forEach(function (q) { all.push(q); }); own[pid] = { all: all.sort(function (a, b) { return (a.portion === 'remainder' || a.portion === 'whole part' ? 1 : 0) - (b.portion === 'remainder' || b.portion === 'whole part' ? 1 : 0); }), mine: mine }; });
+        Object.keys(byPid).forEach(function (pid) { var T = triOf(pid); if (!T) return; var O = own[pid];
+            for (var t = 0; t + 8 < T.length; t += 9) {
+                var c = [(T[t] + T[t + 3] + T[t + 6]) / 3, (T[t + 1] + T[t + 4] + T[t + 7]) / 3, (T[t + 2] + T[t + 5] + T[t + 8]) / 3];
+                var at = null; for (var k = 0; k < O.all.length; k++) { var b = O.all[k].box; if (!b || (c[0] >= b.min[0] - 1 && c[0] <= b.max[0] + 1 && c[1] >= b.min[1] - 1 && c[1] <= b.max[1] + 1 && c[2] >= b.min[2] - 1 && c[2] <= b.max[2] + 1)) { at = O.all[k]; break; } }
+                if (!at || !O.mine.some(function (q) { return _porKey(q) === _porKey(at); })) continue;   // by value: lightningSkin() returns a fresh copy on every call, so object identity never matches
+                var e1 = [T[t + 3] - T[t], T[t + 4] - T[t + 1], T[t + 5] - T[t + 2]], e2 = [T[t + 6] - T[t], T[t + 7] - T[t + 1], T[t + 8] - T[t + 2]], n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]], ln = Math.hypot(n[0], n[1], n[2]); if (!(ln > 0)) continue;
+                [1, -1].forEach(function (sg) { var o = pos.length / 3; for (var v = 0; v < 3; v++) for (var a = 0; a < 3; a++) pos.push(T[t + v * 3 + a] + sg * PAINT_OFFSET * n[a] / ln); idx.push(o, o + 1, o + 2); });
+            } });
+        return { positions: pos, index: idx };
+    }
+    function _porKey(q) { return String(q.pid) + '|' + q.portion + '|' + JSON.stringify(q.box || null); }
+    function lightPortionsOf(pid) { var sk = M().lightningSkin(cadId()), POR = sk && sk.portions && sk.portions.length ? sk.portions : null; return POR ? POR.filter(function (q) { return q.pid === pid; }) : null; }
+    function _nearest(sh, c) { var best = null, bd = Infinity; for (var i = 0; i < sh.positions.length; i += 3) { var d = Math.hypot(sh.positions[i] - c[0], sh.positions[i + 1] - c[1], sh.positions[i + 2] - c[2]); if (d < bd) { bd = d; best = [sh.positions[i], sh.positions[i + 1], sh.positions[i + 2]]; } } return best || c; }
+    function lightSkinItems(zones, assign) { var sk = M().lightningSkin(cadId()), POR = sk && sk.portions && sk.portions.length ? sk.portions : null; if (!POR) { var pr = M().proposeSkinZones(cadId(), {}); POR = pr.ok ? pr.portions : null; }
+        if (POR) return zones.map(function (z) { var L = POR.filter(function (q) { return q.zone === z; }); if (!L.length) return null; var sh = paintSkin(L); st.lPaint = st.lPaint || {}; st.lPaint[z] = sh.positions.length ? 'triangles: ' + (sh.positions.length / 18) + ' painted' : 'boxes: no part triangles in the viewer'; if (!sh.positions.length) sh = portionShells(L.map(function (q) { return q.box; })); var u = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] }; L.forEach(function (q) { for (var i = 0; i < 3; i++) { u.min[i] = Math.min(u.min[i], q.box.min[i]); u.max[i] = Math.max(u.max[i], q.box.max[i]); } }); return { model: 'zone-' + z, label: 'Lightning zone ' + z, color: LZ_COLORS[z], opacity: 0.85, callout: { pos: _nearest(sh, boxCenter(u)), text: 'Zone ' + z }, positions: sh.positions, index: sh.index, spec: null }; }).filter(Boolean);
+        return zones.map(function (z) { var L = Object.keys(assign).filter(function (pid) { return assign[pid] === z; }); if (!L.length) return null; var sh = paintSkin(L.map(function (pid) { return { pid: pid, box: null, portion: 'whole part' }; })), b = unionBox(L); if (!sh.positions.length) sh = skinShells(L); return { model: 'zone-' + z, label: 'Lightning zone ' + z, color: LZ_COLORS[z], opacity: 0.85, callout: b ? { pos: _nearest(sh, boxCenter(b)), text: 'Zone ' + z } : null, positions: sh.positions, index: sh.index, spec: null }; }).filter(Boolean); }
+    function showSkin(zones) { var v = viewer(), m = M(), sk = m.lightningSkin(cadId()), A = sk ? sk.assign : {}; if (!sk) { var pr = m.proposeSkinZones(cadId(), {}); if (pr.ok) pr.parts.forEach(function (p) { A[p.pid] = p.zone; }); } if (!v || !v.showSpreadVolumes) return 0; return v.showSpreadVolumes(lightSkinItems(zones, A), { frame: true, regionView: true, title: 'Lightning zones' }); }
+    function lightRegion(z) { var R = (st.lReports || {})[z]; var b = R && unionBox(R.direct); return b ? { key: 'zone-' + z, label: 'Lightning zone ' + z, color: LZ_COLORS[z], box: b, callout: 'Zone ' + z, hits: R.direct.concat(R.indirect.map(function (x) { return x.pid; })), skin: R.direct } : null; }
+
+    // ---- fire, fluid leak, ice shedding, guided
+    function sourceFlowHtml() {
+        var m = M(), id = cadId(), list = m.sources().filter(function (x) { return x.cadId === id; });
+        var out = '<div data-pra-sflow style="font-size:12px;margin-top:8px;border-top:1px solid var(--color-border-hair);padding-top:6px;"><b>Fire, fluid leak and ice shedding, step by step</b>' + (window.SLZonalAI && window.SLZonalAI.ENABLED === true ? ' <button data-pra-act="source-ai" style="' + BTN + '">AI detect from specifications</button>' : '') +
+            '<div><b>Step 1. Source</b> select the source part(s) in the viewer, then: type <select id="pra-s-type" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + Object.keys(m.SOURCE_TYPES).map(function (k) { return '<option value="' + k + '">' + _esc(m.SOURCE_TYPES[k]) + '</option>'; }).join('') + '</select> margin <input id="pra-s-margin" style="' + INP + '"> mm <span style="' + MUTED + '">engineer input</span> label <input id="pra-s-label" style="' + INP + 'width:140px;"> <button data-pra-act="sflow-add" style="' + BTN + '">Confirm source</button></div>';
+        if (!list.length) return out + '</div>';
+        out += '<div style="margin-top:6px;"><b>Step 2. Cases</b> one per confirmed source: ' + list.map(function (x) { return _esc(x.label) + ' <span style="' + MUTED + '">(' + _esc(m.SOURCE_TYPES[x.type]) + ', ' + x.pids.map(partName).map(_esc).join(', ') + ', margin ' + x.marginMm + ' mm, ' + _esc(x.confirmedBy) + ')</span>'; }).join('; ') + ' <button data-pra-act="sflow-run" style="' + BTN + '">Build the reports</button></div>';
+        var reps = st.sReports || {}, keys = Object.keys(reps).filter(function (k) { return reps[k] && reps[k].ok; });
+        if (keys.length) { var cur = st.sOpen && reps[st.sOpen] ? st.sOpen : keys[0];
+            out += '<div style="margin-top:6px;"><b>Step 3. Reports</b> ' + keys.map(function (k) { return '<button data-pra-sreport="' + _esc(k) + '" style="' + BTN + (k === cur ? 'background:#c92a2a;color:#fff;' : '') + '">' + _esc(reps[k].label) + '</button>'; }).join(' ') + '</div><div id="pra-sreport" data-pra-sreport-open="' + _esc(cur) + '">' + sourceReportHtml(reps[cur]) + '</div>' +
+                '<button data-pra-act="sopen-3d" style="' + BTN + '">Open in 3D</button> <button data-pra-act="sreport-print" style="' + BTN + '">Print / Save as PDF</button> <button data-pra-act="sreport-export" style="' + BTN + '">Export report (HTML)</button>'; }
+        return out + '</div>';
+    }
+    function sourceReportHtml(R) { return genericReportHtml(R, R && R.ok ? [['Type', _esc(R.typeLabel)], ['Source', R.sources.map(function (p) { return _esc(partName(p)); }).join(', ')], ['Margin around the source', fmtI(R.margin, 'mm') + ' <span style="' + MUTED + '">' + _esc(R.margin.note) + '</span>'], ['Parts inside the region', R.partsInside.length ? names(R.partsInside) : 'none'], ['Rule', _esc(R.ruleNote)]] : []); }
+    function sourceRegion(k) { var R = (st.sReports || {})[k]; return R && R.ok ? { key: k, label: R.label, color: '#c92a2a', box: R.box, callout: R.typeLabel + ': ' + R.label, hits: R.partsInside } : null; }
+    // ---- tire burst, guided (same pattern as rotor burst; report page and viewer from pra_report.js)
+    var TIRE_COLORS = window.SLPraModels.PALETTE.tire, TIRE_EDGES = window.SLPraModels.PALETTE.tireEdge;
+    function tireFlowHtml() {
+        var m = M(), conf = m.tires(); if (!conf.length) return '';
+        var tid = st.tFlow && m.tire(st.tFlow) ? st.tFlow : conf[0].id, t = m.tire(tid); st.tFlow = tid;
+        var s1 = m.stepStatus('tire', tid), c = t.confirms || {};
+        var LBL = 'style="white-space:nowrap;text-transform:none;letter-spacing:normal;font-weight:400;font-size:12px;display:inline;"';
+        var tick = function (f, label, inner) { return '<div style="font-size:12px;margin:2px 0;">' + label + ' ' + inner + ' <label ' + LBL + '><input type="checkbox" data-pra-ttick="' + f + '" style="width:auto;"' + (c[f] ? ' checked' : '') + '> ' + (c[f] ? 'Confirmed by ' + _esc(c[f].by) : 'Confirm') + '</label></div>'; };
+        var out = '<div data-pra-tflow="' + _esc(tid) + '" style="font-size:12px;"><b>Step 1. Tire</b> ' + _esc(t.label) + (window.SLZonalAI && window.SLZonalAI.ENABLED === true ? ' <button data-pra-act="tire-ai" style="' + BTN + '">AI detect from specifications</button>' : '') +
+            tick('location', 'Location', 'center <input id="pra-t-center" style="' + INP + 'width:150px;" value="' + _esc(t.center.join(', ')) + '"> axle <input id="pra-t-axis" style="' + INP + 'width:90px;" value="' + _esc(t.axis.join(', ')) + '">') +
+            tick('size', 'Size (TRA grown values)', 'DG <input id="pra-t-dg" style="' + INP + '" value="' + t.grownDiameter + '"> mm, WSG <input id="pra-t-w" style="' + INP + '" value="' + t.sectionWidth + '"> mm') +
+            tick('pressure', 'Unloaded rated pressure', '<input id="pra-t-p" style="' + INP + '" value="' + (t.ratedPressureKpa || '') + '"> kPa') +
+            tick('speed', 'Minimum tire speed rating', '<input id="pra-t-s" style="' + INP + '" value="' + (t.speedRatingMs || '') + '"> m/s') +
+            '<div>Optional, engineer input: tire mass <input id="pra-t-m" style="' + INP + '" value="' + (t.massKg || '') + '"> kg <label ' + LBL + '><input type="checkbox" id="pra-t-b" style="width:auto;"' + (t.braked ? ' checked' : '') + '> braked wheel</label> <button data-pra-act="tflow-save" style="' + BTN + '">Save values</button></div>' +
+            '<div>Model 2 (wheel flange, engineer inputs): outboard direction <input id="pra-t-out" style="' + INP + 'width:110px;" value="' + _esc(t.outboard ? t.outboard.dir.map(function (v) { return Math.round(v * 1000) / 1000; }).join(', ') : '') + '"> wheels on this leg <input id="pra-t-wpl" style="' + INP + 'width:40px;" value="' + (t.wheelsPerLeg ? t.wheelsPerLeg.value : '') + '"> cone half angle <input id="pra-t-fha" style="' + INP + 'width:50px;" value="' + (t.flangeHalfAngleDeg || '') + '"> deg (not from the AMC text, engineer input: Figure 2 is not in the text) flange rim radius <input id="pra-t-frad" style="' + INP + 'width:60px;" value="' + (t.flangeRadius ? t.flangeRadius.value : '') + '"> mm (not from the AMC text, engineer input) <button data-pra-act="tm2-save" style="' + BTN + '">Confirm Model 2 inputs</button> <span style="' + MUTED + '">' + (t.outboard && t.wheelsPerLeg && t.flangeRadius ? 'confirmed by ' + _esc(t.wheelsPerLeg.by) + (t.wheelsPerLeg.value === 1 ? '; single wheel: both flanges (inboard and outboard cones)' : '; outer wheel half flange only') : 'not given: Model 2 is not computed') + '</span></div>' +
+            '<div>Retracted cases (Models 3R and 4): stowed tire center <input id="pra-t-stow" style="' + INP + 'width:150px;" value="' + _esc(t.stowed ? t.stowed.center.join(', ') : '') + '"> mm, axle <input id="pra-t-stowax" style="' + INP + 'width:90px;" value="' + _esc(t.stowed ? t.stowed.axis.map(function (v) { return Math.round(v * 1000) / 1000; }).join(', ') : '') + '"> <button data-pra-act="tstow-save" style="' + BTN + '">Confirm stowed position</button> <span style="' + MUTED + '">' + (t.stowed ? 'confirmed by ' + _esc(t.stowed.confirmedBy) : 'not given: retracted cases are not computed') + '</span></div>' +
+            '<div>Gear position: <label ' + LBL + '><input type="checkbox" data-pra-tgear="extended" style="width:auto;"' + ((t.gear || ['extended']).indexOf('extended') >= 0 ? ' checked' : '') + '> extended</label> <label ' + LBL + '><input type="checkbox" data-pra-tgear="retracted" style="width:auto;"' + ((t.gear || []).indexOf('retracted') >= 0 ? ' checked' : '') + '> retracted in the wheel well</label> <span style="' + MUTED + '">each position is its own set of cases</span></div>' +
+            '<div>Directions: ' + (t.arcLimit ? '<b>engineer limitation</b> ' + t.arcLimit.fromDeg + ' to ' + t.arcLimit.toDeg + ' degrees from up: ' + _esc(t.arcLimit.justification) + ' (' + _esc(t.arcLimit.by) + ') <button data-pra-act="tarc-clear" style="' + BTN + '">Remove the limitation</button>' : 'all the way round the axle (AMC 25.734 sets no direction). Limit the arc: from <input id="pra-t-af" style="' + INP + 'width:50px;"> to <input id="pra-t-at" style="' + INP + 'width:50px;"> degrees from up, because <input id="pra-t-aj" style="' + INP + 'width:260px;" placeholder="written justification"> <button data-pra-act="tarc-set" style="' + BTN + '">Confirm limitation</button>') + '</div>';
+        if (!s1.unlocked) return out + '<div style="' + MUTED + '">Step 2 opens when all four values are confirmed (still to confirm: ' + _esc(s1.missing.join(', ')) + ').</div></div>';
+        var cases = m.tireCases(tid), sel = st.tTypes || (st.tTypes = cases.filter(function (c) { return c.isDefault; }).map(function (c) { return c.key; }));
+        out += '<div style="margin-top:6px;"><b>Step 2. Threat models</b> (EASA AMC 25.734, by gear position)</div>' + cases.map(function (cs) { var tm = m.TIRE_MODELS[cs.model];
+            return '<label style="display:block;font-size:12px;text-transform:none;letter-spacing:normal;font-weight:400;"><input type="checkbox" data-pra-ttype="' + cs.key + '" style="width:auto;"' + (sel.indexOf(cs.key) >= 0 ? ' checked' : '') + '> ' + (cs.gear === 'retracted' ? 'Gear retracted: ' : 'Gear extended: ') + _esc(tm.label) + (tm.theta.value != null ? ', \u00b1' + tm.theta.value + ' degrees ' + src(tm.theta) : ' ' + src(tm.theta)) + (!cs.isDefault ? ' <i style="' + MUTED + '">optional, run only if needed</i>' : '') + '</label>'; }).join('') +
+            '<button data-pra-act="tflow-run" style="' + BTN + 'margin-top:4px;">Build the reports</button>';
+        var reps = st.tReports || {}, keys = sel.filter(function (k) { return reps[k]; });
+        if (keys.length) { var cur = st.tOpen && reps[st.tOpen] ? st.tOpen : keys[0];
+            out += '<div style="margin-top:6px;"><b>Step 3. Reports</b> ' + keys.map(function (k) { var mk = k.split('|')[1], col = TIRE_COLORS[mk]; return '<button data-pra-treport="' + k + '" style="' + BTN + (k === cur ? 'background:' + col + ';color:#fff;border-color:' + col + ';' : '') + '">' + _esc(reps[k].label || k) + '</button>'; }).join(' ') + '</div>' +
+                (function () { var RR = M().tireReach(st.tFlow); if (!RR) return ''; return '<div style="font-size:12px;margin:4px 0;" data-pra-treach-row>Reach ' + fmtI(RR, 'mm') + ' <span style="' + MUTED + '">' + _esc(RR.note) + '</span> <label ' + LBL + '><input type="checkbox" data-pra-treach style="width:auto;"' + (RR.confirmedBy ? ' checked' : '') + '> ' + (RR.confirmedBy ? 'Confirmed by ' + _esc(RR.confirmedBy) : 'Confirm') + '</label><br>Reduce to <input id="pra-t-reach" style="' + INP + '"> mm, reason <input id="pra-t-reach-why" style="' + INP + 'width:260px;"> <button data-pra-act="treach-set" style="' + BTN + '">Set reach</button>' + (RR.reduced ? ' <button data-pra-act="treach-clear" style="' + BTN + '">Back to the default</button>' : '') + '</div>'; })() + '<div id="pra-treport" data-pra-treport-open="' + cur + '">' + tireReportHtml(reps[cur]) + '</div><button data-pra-act="topen-3d" style="' + BTN + '">Open in 3D</button> <button data-pra-act="treport-print" style="' + BTN + '">Print / Save as PDF</button> <button data-pra-act="treport-export" style="' + BTN + '">Export report (HTML)</button>'; }
+        return out + '</div>';
+    }
+    function tireReportHtml(R) {
+        if (!R || !R.ok) return notOk(R);
+        var row = function (k, v) { return '<tr><td style="padding:2px 8px 2px 0;color:#55555C;">' + k + '</td><td>' + v + '</td></tr>'; }, P = R.params || {};
+        var PL = { sizeMm: 'Debris size (mm)', speedMs: 'Speed (m/s)', massKg: 'Debris mass (kg)', impactAreaMm2: 'Impact area (mm2)', energyJ: 'Energy (J)', arcDeg: 'Flange arc (degrees)', lengthMm: 'Strip length (mm)', widthMm: 'Strip width (mm)', reachMm: 'Reach (mm)', burstPressureKpaAbs: 'Burst pressure (kPa absolute)', decayConstants: 'Pressure decay constants', plume: 'Plume', decayFormula: 'Pressure decay formula' };
+        var prm = Object.keys(P).map(function (k) { var p = P[k]; return _esc(PL[k] || k) + ': ' + (p && p.value != null ? (typeof p.value === 'number' ? sig3(p.value) : _esc(p.value)) : '<i>missing</i>') + ' ' + src(p); }).join('<br>');
+        return '<div class="pra-rep" style="font-size:12px;margin:6px 0;"><h3 style="font-size:14px;margin:4px 0;">' + _esc(R.label) + ', ' + _esc(R.tire) + '</h3><table style="border-collapse:collapse;">' +
+            (R.limitation ? row('Directions', '<b>' + _esc(R.limitation) + '</b>') : row('Directions', 'all the way round the axle')) +
+            row('Applies', R.applies ? (R.incomplete ? 'not computed: ' + _esc(R.note || '') : 'yes') : _esc(R.note || 'no')) +
+            row('Zone of vulnerability', R.theta && R.theta.value != null ? '±' + R.theta.value + ' degrees ' + src(R.theta) : src(R.theta)) +
+            row('Model values', prm || 'none') +
+            row('Parts hit', R.partsHit.length ? pidsLink(R.partsHit, R.partsHit.length + ' parts') + ': ' + names(R.partsHit, null, function (e) { var ex = e.pids.map(function (q) { return (R.exposure || {})[q]; }).filter(Boolean); return ex.length ? ' (' + _esc(ex.indexOf('directly exposed') >= 0 ? 'directly exposed' : ex[0].replace(/^behind (.+)$/, function (_, q) { return 'behind ' + q.split(', ').map(partName).join(', '); })) + ')' : ''; }) : 'none') +
+            ((R.shielded || []).length ? row('Behind a credited shield (still counted: sampling does not prove blocking)', R.shielded.map(function (x) { return _esc(partName(x.pid)) + ': ' + _esc('behind ' + x.by.map(partName).join(', ') + ' (credited shield: ' + x.note.replace(/^.*\(credited: /, '').replace(/\)$/, '') + ')'); }).join('<br>')) : '') +
+            row('In a wheel well or gear bay', R.wheelWellHits.length ? names(R.wheelWellHits) : 'none') +
+            nmRow(R, row) + row('Linked equipment', R.equipment.length ? R.equipment.map(_esc).join(', ') : 'none') +
+            row('Failure conditions', condText(R)) +
+            '</table><div style="' + MUTED + '">' + _esc(R.method) + '</div><div><b>Sources</b>' + R.refs.map(function (x) { return '<div>' + _esc(x.doc + ' ' + x.section) + ': "' + _esc(x.quote) + '"</div>'; }).join('') + '</div></div>';
+    }
+    function tireVolumes(keys) {
+        var m = M(), v = viewer(); if (!v || !v.showSpreadVolumes) return 0;
+        var list = keys.map(function (k) { var mk = String(k).split('|').pop(), sp = mk === 'm2Flange' ? null : m.tireVolume(st.tFlow, mk, 12000, String(k).split('|')[0]); var cone = mk === 'm2Flange' ? m.tireConeMesh(st.tFlow) : null; if (cone) { var tw = m.tire(st.tFlow), ci = tw && tw.wheelsPerLeg && tw.wheelsPerLeg.value === 1 ? m.tireConeMesh(st.tFlow, 48, true) : null; if (ci) { var off = cone.positions.length / 3; cone = { positions: cone.positions.concat(ci.positions), index: cone.index.concat(ci.index.map(function (v) { return v + off; })), halfAngleDeg: cone.halfAngleDeg }; } return { model: k, label: 'Model 2 flange debris, cone ' + cone.halfAngleDeg + ' deg about the outboard direction' + (ci ? ' and the inboard direction (single wheel: either flange)' : ''), color: TIRE_COLORS[mk], edge: TIRE_EDGES[mk], positions: cone.positions, index: cone.index, spec: null }; } if (!sp) return null; var mp = m.spreadMeshPoints(sp); return { model: k, label: (String(k).indexOf('retracted') === 0 ? 'Retracted: ' : '') + m.TIRE_MODELS[mk].label + ' \u00b1' + sp.halfAngleDeg + ' deg', color: TIRE_COLORS[mk], edge: TIRE_EDGES[mk], positions: mp.positions, index: mp.index, spec: sp }; }).filter(Boolean);
+        return v.showSpreadVolumes(list, { frame: true, regionView: true, title: 'Tire threat zones' });
+    }
+    function notEvalPage(R, heading) { return Promise.resolve({ html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>' + _esc(heading) + '</title></head><body><h1>' + _esc(heading) + '</h1>' + notOk(R) + '</body></html>', notEvaluated: true }); }
+    function exportTireReport(k) {
+        var R = (st.tReports || {})[k], RP = window.SLPraReport, m = M(); if (!R || !RP) return Promise.resolve(null); if (!R.ok) return notEvalPage(R, 'Tire burst report: ' + k);
+        var P2 = RP.collectParts(viewer(), R.partsHit, _names()); if (!P2) return Promise.resolve(null);
+        var vols = (st.tTypes || [k]).map(function (t2) { var mk = t2.split('|').pop(), sp = m.tireVolume(st.tFlow, mk, 12000, t2.split('|')[0]); return sp ? RP.volume(sp, t2, (st.tReports[t2] && st.tReports[t2].label) || m.TIRE_MODELS[mk].label, TIRE_COLORS[mk], t2 === k) && Object.assign(RP.volume(sp, t2, (st.tReports[t2] && st.tReports[t2].label) || m.TIRE_MODELS[mk].label, TIRE_COLORS[mk], t2 === k), { edge: TIRE_EDGES[mk] }) : null; }).filter(Boolean);
+        if (!vols.length) return Promise.resolve(null);
+        tireVolumes([k]); var png = RP.snapshot(viewer());
+        return RP.page({ title: R.label + ', ' + R.tire, heading: 'Tire burst report: ' + R.label, intro: 'Tire ' + R.tire + '. Generated by Safety Lab from the confirmed tire values and the CAD model on this computer.', typesTitle: 'Threat models', png: png, tableHtml: tireReportHtml(R), parts: P2.parts, volumes: vols, axis: vols[0].spec.axis, triangles: P2.triangles });
     }
     // ---- tire burst
     function tireHtml() {
@@ -71,8 +443,9 @@
             return '<div style="font-size:12px;margin-top:6px;" data-pra-tire="' + _esc(t.id) + '">' + _esc(t.label) + ' <span style="' + MUTED + '">confirmed by ' + _esc(t.confirmedBy) + '</span> <button data-pra-act="tire-run" data-tire="' + _esc(t.id) + '" style="' + BTN + '">Assess</button>' + aiBtn('pra.writeup', { kind: 'tireBurst', tireId: t.id, label: t.label, cadId: cadId() }) +
                 (r && r.ok ? '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">' + r.models.map(function (x) {
                     return '<tr style="border-top:1px solid var(--color-border-hair);"><td>' + _esc(x.label) + '</td><td>' + (x.applies === false || x.incomplete ? '<span style="' + MUTED + '">' + _esc(x.note || '') + '</span>' : '±' + val(x.theta, 'deg') + ' ' + src(x.theta) + ' · ' + pidsLink(x.hits, x.hits.length + ' parts') + (x.wheelWellHits.length ? ' (' + x.wheelWellHits.length + ' in a wheel well or gear bay)' : '') + '<br>' + impactLine(x)) + '</td></tr>';
-                }).join('') + '</table>' : '') + aiNotes('praWriteups', t.id) + '</div>';
+                }).join('') + '</table>' + (r.nonMonotone ? '<div data-pra-nonmono style="font-size:12px;font-weight:600;">Fault tree logic: non-monotone tree: worst case over subsets used</div>' : '') : (r && !r.ok ? notOk(r) : '')) + aiNotes('praWriteups', t.id) + '</div>';
         }).join('');
+        out += tireFlowHtml();
         return out;
     }
     // ---- bird strike
@@ -88,6 +461,7 @@
             out += '<div style="' + MUTED + '">' + _esc(b.method) + '</div><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="text-align:left;' + MUTED + '"><th>Exposed part</th><th>Bird</th><th>Energy</th><th>Behind it</th></tr>' +
                 b.zones.map(function (z) { return '<tr style="border-top:1px solid var(--color-border-hair);" data-pra-bird="' + _esc(z.pid) + '"><td>' + pidsLink([z.pid], z.name) + '</td><td>' + val(z.massKg, 'kg') + ' ' + src(z.massKg) + '</td><td>' + val(z.energyJ, 'J') + '</td><td>' + (z.behind.length ? pidsLink([z.pid].concat(z.behind.map(function (x) { return x.pid; })), z.behind.length + ' parts') : '<span style="' + MUTED + '">none</span>') + '<br>' + impactLine(z) + aiBtn('damage.assumption', { kind: 'birdStrike', cadId: cadId(), part: { pid: z.pid, name: z.name } }) + aiNotes('damageAssumptions', z.pid) + '</td></tr>'; }).join('') + '</table>' + aiBtn('pra.writeup', { kind: 'birdStrike', label: 'Bird strike', cadId: cadId() }) + aiNotes('praWriteups', 'birdStrike');
         }
+        out += birdFlowHtml();
         return out;
     }
     // ---- lightning
@@ -97,20 +471,22 @@
         if (saved) out += '<div style="font-size:12px;margin-top:4px;" data-pra-light-confirmed>Confirmed by ' + _esc(saved.confirmedBy) + ' (' + saved.parts.length + ' parts).' + aiBtn('pra.writeup', { kind: 'lightning', label: 'Lightning', cadId: cadId() }) + aiNotes('praWriteups', 'lightning') + '</div>';
         if (L && L.ok) out += '<div style="font-size:12px;">band ' + val(L.band, 'mm') + ' ' + src(L.band) + ' · zones ' + src(L.source) + '</div><table style="width:100%;border-collapse:collapse;font-size:12px;">' + L.zones.map(function (z) { return '<tr style="border-top:1px solid var(--color-border-hair);" data-pra-lzone="' + z.zone + '"><td><b>' + z.zone + '</b></td><td>' + pidsLink(z.pids, z.pids.length + ' parts') + '</td><td>' + impactLine(z) + '</td></tr>'; }).join('') + '</table>' +
             '<div style="font-size:12px;margin-top:4px;"><b>Direct effects to assess:</b> ' + L.effects.direct.map(_esc).join('; ') + '<br><b>Indirect effects:</b> ' + L.effects.indirect.map(_esc).join('; ') + '<br><span style="' + MUTED + '">' + L.effects.refs.map(_esc).join(' · ') + '</span></div>';
+        out += lightFlowHtml();
         return out;
     }
     // ---- fire, fluid leak, ice shedding
     function genericHtml() {
         var m = M(), c = C(), vols = c.riskVolumes().filter(function (v) { return m.GENERIC_KINDS[v.kind]; });
-        return '<div style="' + MUTED + '">A box around the selected parts (select them in the viewer), entered by you.</div><div style="font-size:12px;"><select id="pra-gkind" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + Object.keys(m.GENERIC_KINDS).map(function (k) { return '<option value="' + k + '">' + _esc(m.GENERIC_KINDS[k]) + '</option>'; }).join('') + '</select> label <input id="pra-glabel" style="' + INP + 'width:140px;"> margin mm <input id="pra-gmargin" style="' + INP + '" value="0"> <button data-pra-act="generic-add" style="' + BTN + '">Add around selection</button></div>' +
+        return sourceFlowHtml() + '<div style="' + MUTED + '">Or a plain region: a box around the selected parts (select them in the viewer), entered by you.</div><div style="font-size:12px;"><select id="pra-gkind" style="font-size:11.5px;width:auto;display:inline-block;padding:1px 4px;height:auto;min-height:0;">' + Object.keys(m.GENERIC_KINDS).map(function (k) { return '<option value="' + k + '">' + _esc(m.GENERIC_KINDS[k]) + '</option>'; }).join('') + '</select> label <input id="pra-glabel" style="' + INP + 'width:140px;"> margin mm <input id="pra-gmargin" style="' + INP + '" value="0"> <button data-pra-act="generic-add" style="' + BTN + '">Add around selection</button></div>' +
             vols.map(function (v) { return '<div style="font-size:12px;" data-pra-generic="' + _esc(v.id) + '"><a href="#" data-pra-vol="' + _esc(v.id) + '">' + _esc(v.label) + '</a> <span style="' + MUTED + '">' + _esc(m.GENERIC_KINDS[v.kind]) + ', ' + _esc(v.source) + '</span>' + aiBtn('pra.writeup', { volumeId: v.id, label: v.label }) + aiNotes('praWriteups', v.id) + '</div>'; }).join('');
     }
     // ---- per-function risk view
     function funcHtml() {
         var r = M().functionRiskView(cadId(), { bird: true });
-        if (!r.ok) return '<div style="color:var(--color-danger,#8E2A2A);font-size:12px;">' + _esc(r.err) + '</div>';
+        if (!r.ok) return notOk(r);
         if (!r.functions.length) return '<div style="' + MUTED + '">No functions in the system records.</div>';
-        return '<div style="' + MUTED + '">Each function, the equipment that performs it, its zone and every particular risk or zonal hazard it is exposed to. Source record in brackets.</div>' +
+        var nmLine = r.nonMonotone ? '<div data-pra-nonmono style="font-size:12px;font-weight:600;">Fault tree logic: non-monotone tree: worst case over subsets used (' + r.nonMonotone.trees.map(_esc).join('; ') + ')</div>' : '';
+        return nmLine + '<div style="' + MUTED + '">Each function, the equipment that performs it, its zone and every particular risk or zonal hazard it is exposed to. Source record in brackets.</div>' +
             r.functions.map(function (f) {
                 return '<div style="border-top:1px solid var(--color-border-hair);padding:4px 0;font-size:12px;" data-pra-func="' + _esc(f.funcId) + '"><b>' + _esc(f.funcId) + ' ' + _esc(f.name) + '</b> · worst ' + sev(f.worst) + aiBtn('function.risk', { systemId: (f.elements[0] || {}).sysId, funcId: f.funcId, cadId: cadId() }) +
                     '<div>' + f.elements.map(function (e) { return _esc(e.name) + (e.zone ? ' in ' + _esc(e.zone) : ' (no zone)') + (e.parts.length ? ' ' + pidsLink(e.parts, e.parts.length + ' part' + (e.parts.length === 1 ? '' : 's')) : ''); }).join('; ') + '</div>' +
@@ -119,7 +495,7 @@
                     f.independence.map(function (x) { return '<div style="padding-left:10px;color:' + (x.severity === 'violation' ? 'var(--color-danger,#8E2A2A)' : 'inherit') + ';">' + _esc(x.text) + ' <span style="' + MUTED + '">[' + _esc(x.src) + ']</span></div>'; }).join('') + aiNotes('functionRiskNotes', ((f.elements[0] || {}).sysId || '') + '/' + f.funcId) + '</div>';
             }).join('');
     }
-    function render() {
+    function render() { _regTris();   // the open viewer's triangles for every ray method (skin, bird, face clusters)
         var el = document.getElementById('cad-pra'); if (!el) return;
         if (!M() || !C()) { el.innerHTML = '<b style="font-size:13px;">Particular risks</b><div style="' + MUTED + '">The particular risk engine is not available in this build.</div>'; return; }
         if (!cadId() || !C().model(cadId())) { el.innerHTML = '<b style="font-size:13px;">Particular risks</b><div style="' + MUTED + '">Import or open a CAD model first.</div>'; return; }
@@ -129,11 +505,82 @@
     function selection() { var v = viewer(); return v && v.sel ? Array.from(v.sel) : []; }
     function act(a) {
         var m = M(), c = C(), k = a.getAttribute('data-pra-act'), id = cadId();
+        if (k === 'flow-run') { st.flowExpanded = true; st.flowReports = {}; (st.flowTypes || []).forEach(function (t) { st.flowReports[t] = m.rotorReport(st.flowRotor, t, { cadId: id }); }); st.flowOpen = (st.flowTypes || [])[0]; flowVolumes(st.flowTypes || []); render(); return; }
+        if (k === 'tflow-run') { st.tReports = {}; (st.tTypes || []).forEach(function (t2) { st.tReports[t2] = m.tireReport(st.tFlow, t2, { cadId: id }); }); st.tOpen = (st.tTypes || [])[0]; tireVolumes(st.tTypes || []); render(); return; }
+        if (k === 'treach-set' || k === 'treach-clear') { var rs = k === 'treach-clear' ? m.setTireReach(st.tFlow, null, '', who()) : m.setTireReach(st.tFlow, Number((document.getElementById('pra-t-reach') || {}).value), (document.getElementById('pra-t-reach-why') || {}).value, who()); if (!rs.ok) { say(rs.err, true); return; } st.tReports = {}; (st.tTypes || []).forEach(function (t2) { st.tReports[t2] = m.tireReport(st.tFlow, t2, { cadId: id }); }); tireVolumes(st.tOpen ? [st.tOpen] : []); render(); return; }
+        if (k === 'topen-3d') { var RT = (st.tReports || {})[st.tOpen]; tireVolumes([st.tOpen]); var vt = viewer(); if (vt && RT && RT.partsHit.length) vt.highlightParts(RT.partsHit, { noFrame: true }); return; }
+        if (k === 'lflow-start') { var r1 = m.saveLightningFlow(id, { band: 500, forward: [-1, 0, 0] }, who()); say(r1.ok ? 'Started. The band starts at 500 mm: change it if needed and confirm it.' : r1.err, !r1.ok); render(); return; }
+        if (k === 'lflow-save') { var f0 = m.lightningFlow(id); var cfl = Object.assign({}, f0.confirms || {}); var bnd = num('pra-l-band'); if (bnd !== f0.band) delete cfl.band; var r2 = m.saveLightningFlow(id, { band: bnd, forward: f0.forward, confirms: cfl }, who()); say(r2.ok ? 'Saved.' : r2.err, !r2.ok); st.lReports = null; render(); return; }
+        if (k === 'lskinparts-confirm') { _regTris(); var ps2 = m.proposeSkin(id), r9 = m.confirmSkinParts(id, ps2.parts, ps2.method, who()); say(r9.ok ? 'Skin parts confirmed.' : r9.err, !r9.ok); st.lReports = null; render(); return; }
+        if (k === 'lskinparts-edit') { var r10 = m.editSkinParts(id, (document.getElementById('pra-l-sp') || {}).value, (document.getElementById('pra-l-sk') || {}).value === '1', (document.getElementById('pra-l-sw') || {}).value, who()); say(r10.ok ? 'Changed.' : r10.err, !r10.ok); st.lReports = null; render(); return; }
+        if (k === 'lskin-confirm') { var f2 = m.lightningFlow(id), pz3 = m.proposeSkinZones(id, { forward: f2.forward, band: f2.band }); var r6 = pz3.ok ? m.confirmSkinZones(id, pz3.parts, who(), { portions: pz3.portions }) : pz3; say(r6.ok ? 'Zones on the skin confirmed.' : r6.err, !r6.ok); st.lReports = null; render(); return; }
+        if (k === 'lskin-show') { showSkin(m.LIGHTNING_ZONES); return; }
+        if (k === 'lskin-edit') { var r7 = m.editSkinZone(id, (document.getElementById('pra-l-epid') || {}).value, (document.getElementById('pra-l-ezone') || {}).value, (document.getElementById('pra-l-ewhy') || {}).value, who()); say(r7.ok ? 'Moved.' : r7.err, !r7.ok); st.lReports = null; render(); return; }
+        if (k === 'lskin-depth') { var r8 = m.setSkinDepth(id, num('pra-l-depth'), who()); say(r8.ok ? 'Saved.' : r8.err, !r8.ok); st.lReports = null; render(); return; }
+        if (k === 'lflow-zones') { var f1 = m.lightningFlow(id), pz2 = m.proposeLightningZones(id, { forward: f1.forward, band: f1.band }); var r3 = pz2.ok ? m.confirmLightningZones(id, pz2.parts, who()) : pz2; say(r3.ok ? 'Zone assignment confirmed.' : r3.err, !r3.ok); st.lReports = null; render(); return; }
+        if (k === 'lflow-run') { st.lReports = {}; m.LIGHTNING_ZONES.forEach(function (z) { var R = m.skinZoneReport(id, z); if (R.ok && R.direct.length) st.lReports[z] = R; }); st.lOpen = Object.keys(st.lReports)[0]; render(); return; }
+        if (k === 'lflow-wf') { var r4 = m.setLightningWaveform(id, st.lOpen, (document.getElementById('pra-l-wf') || {}).value, who()); say(r4.ok ? 'Saved.' : r4.err, !r4.ok); st.lReports[st.lOpen] = m.skinZoneReport(id, st.lOpen); render(); return; }
+        if (k === 'lopen-3d') { showSkin([st.lOpen]); return; }
+        if (k === 'lreport-export' || k === 'lreport-print') { window.SLPraPanel.exportLightning(st.lOpen).then(function (ex) { if (!ex) return; if (k === 'lreport-print') printHtml(ex.html); else window.SLPraReport.download('lightning_zone_' + st.lOpen + '.html', ex.html); }); return; }
+        if (k === 'sflow-add') { var sel = selection(); var r5 = m.saveSource({ cadId: id, type: (document.getElementById('pra-s-type') || {}).value, pids: sel, marginMm: num('pra-s-margin'), label: (document.getElementById('pra-s-label') || {}).value }, who()); say(r5.ok ? 'Source confirmed.' : r5.err, !r5.ok); st.sReports = null; render(); return; }
+        if (k === 'sflow-run') { st.sReports = {}; m.sources().filter(function (x) { return x.cadId === id; }).forEach(function (x) { st.sReports[x.id] = m.sourceReport(x.id); }); st.sOpen = Object.keys(st.sReports)[0]; render(); return; }
+        if (k === 'sopen-3d') { var sr = sourceRegion(st.sOpen); if (sr) { regionVolumes([sr]); var vs = viewer(); if (vs && sr.hits.length) vs.highlightParts(sr.hits, { noFrame: true }); } return; }
+        if (k === 'sreport-export' || k === 'sreport-print') { var SR = st.sReports[st.sOpen], sx = sourceRegion(st.sOpen); exportRegion(SR, sx, SR.label, SR.typeLabel + ' report: ' + SR.label, sourceReportHtml(SR)).then(function (ex) { if (!ex) return; if (k === 'sreport-print') printHtml(ex.html); else window.SLPraReport.download('source_' + st.sOpen + '.html', ex.html); }); return; }
+        if (k === 'bflow-start') { var rs = m.saveBird({ label: 'Bird strike', cadId: id, basis: (function () { try { var p = SLEnv.get('projectConfig') || {}; return p.regulation || ''; } catch (_) { return ''; } })() }, who()); say(rs.ok ? 'Started.' : (who() ? rs.err : 'Enter your name under Equipment links first.'), !rs.ok); render(); return; }
+        if (k === 'bzones-propose') { m.computeBirdZones(st.bFlow, who()); st.bReports = null; render(); return; }
+        if (k === 'bdiam-set') { var rd = m.setBirdDiameter(st.bFlow, num('pra-b-diam'), who()); say(rd.ok ? 'Saved.' : rd.err, !rd.ok); if (rd.ok) render(); return; }
+        if (k === 'bflow-save') { var b0 = m.bird(st.bFlow); var bs = (document.getElementById('pra-b-basis') || {}).value || ''; var nb = { id: b0.id, cadId: id, basis: bs, speedMs: num('pra-b-speed'), depthMm: num('pra-b-depth'), direction: b0.direction, zones: b0.zones };
+            var cf3 = Object.assign({}, b0.confirms || {}); if ((m.basisKey(bs) || null) !== b0.basis) delete cf3.basis; if (nb.speedMs !== b0.speedMs) delete cf3.speed; if (nb.depthMm !== b0.depthMm) delete cf3.depth; nb.confirms = cf3;
+            var rb = m.saveBird(nb, who()); say(rb.ok ? 'Values saved.' : rb.err, !rb.ok); st.bReports = null; render(); return; }
+        if (k === 'bzones-confirm') { var Z = Array.prototype.filter.call(document.querySelectorAll('#cad-pra [data-pra-bzone]'), function (x) { return x.checked; }).map(function (x) { var pid = x.getAttribute('data-pra-bzone'), selc = document.querySelector('#cad-pra [data-pra-bcase="' + pid + '"]'), rs = document.querySelector('#cad-pra [data-pra-breason="' + pid + '"]'); return { pid: pid, proposedCaseId: x.getAttribute('data-case'), caseId: selc ? selc.value : x.getAttribute('data-case'), reason: rs ? rs.value : '', name: x.getAttribute('data-name') }; });
+            var rz = m.confirmBirdZones(st.bFlow, Z, who()); if (!rz.ok) { say(rz.err, true); return; } st.bReports = {}; Z.forEach(function (z) { st.bReports[z.pid] = m.birdReport(st.bFlow, z.pid); }); st.bOpen = Z.length ? Z[0].pid : null; birdVolumes(Z.map(function (z) { return z.pid; })); render(); return; }
+        if (k === 'bopen-3d') { var RB = (st.bReports || {})[st.bOpen]; birdVolumes([st.bOpen]); var vb = viewer(); if (vb && RB) vb.highlightParts([RB.zonePid].concat(RB.behind.map(function (x) { return x.pid; })), { noFrame: true }); return; }
+        if (k === 'breport-export') { exportBirdReport(st.bOpen).then(function (ex) { if (ex) window.SLPraReport.download('bird_strike_' + st.bOpen + '.html', ex.html); }); return; }
+        if (k === 'breport-print') { exportBirdReport(st.bOpen).then(function (ex) { if (ex) printHtml(ex.html); }); return; }
+        if (k === 'treport-print') { exportTireReport(st.tOpen).then(function (ex) { if (ex) printHtml(ex.html); }); return; }
+        if (k === 'tarc-set' || k === 'tarc-clear') { var bb = who(); if (!bb) { say('Enter your name under Equipment links first.', true); return; } var ra = k === 'tarc-clear' ? m.setTireArcLimit(st.tFlow, null, bb) : m.setTireArcLimit(st.tFlow, { fromDeg: num('pra-t-af'), toDeg: num('pra-t-at'), justification: (document.getElementById('pra-t-aj') || {}).value }, bb); say(ra.ok ? 'Saved.' : ra.err, !ra.ok); st.tReports = null; st.tTypes = null; render(); return; }
+        if (k === 'treport-export') { exportTireReport(st.tOpen).then(function (ex) { if (ex) window.SLPraReport.download('tire_burst_' + st.tOpen + '.html', ex.html); }); return; }
+        if (k === 'open-3d') { var R3 = (st.flowReports || {})[st.flowOpen]; flowVolumes([st.flowOpen]); var v3 = viewer(); if (v3 && R3) { v3.highlightParts(R3.partsHit, { noFrame: true }); var hh = document.getElementById('cad-viewer-host'); if (hh) hh.scrollIntoView({ block: 'start' }); } return; }
+        if (k === 'flow-3d') { flowVolumes(st.flowTypes || []); return; }
+        if (k === 'report-print') { printReport(st.flowOpen); return; }
+        if (k === 'report-export') { exportReportInteractive(st.flowOpen).then(function (ex) { if (ex) window.SLPraReport.download('rotor_burst_' + st.flowOpen + '.html', ex.html); }); return; }
+        if (k === 'flow-from-sel') { var sl = selection(); var pp = sl.length ? c.partsOf(c.model(id)).filter(function (q) { return q.pid === sl[0] && q.bbox; })[0] : null; if (!pp) { say('Select the rotor part in the viewer first.', true); return; } var ce = document.getElementById('pra-f-center'); if (ce) ce.value = [0, 1, 2].map(function (i) { return Math.round((pp.bbox.min[i] + pp.bbox.max[i]) / 2); }).join(', '); st.flowPid = pp.pid; say('Center taken from ' + pp.name + '. Save the values, then tick Location.'); return; }
         if (k === 'sweep') { st.sweep = m.sweep(a.getAttribute('data-rotor'), { cadId: id }); render(); return; }
         if (k === 'bird-run') { var sp = {}; ['windshield', 'structure', 'empennage'].forEach(function (x) { var v = num('pra-v-' + x); if (v) sp[x] = v; }); var bEl = document.getElementById('pra-basis'); st.bird = m.birdExposure(id, { basis: bEl ? bEl.value : '', speeds: sp }); render(); return; }
         if (k === 'light-run') { st.light = m.proposeLightningZones(id, { band: num('pra-lband') || undefined }); render(); return; }
         var by = who(); if (!by) { say('Enter your name under Equipment links first: everything that goes into the analysis is recorded with who confirmed it.', true); return; }
-        if (k === 'rotor-confirm') {
+        if (k === 'tm2-save') { var bw = who(); if (!bw) { say('Enter your name under Equipment links first.', true); return; } var od = String((document.getElementById('pra-t-out') || {}).value || '').split(/[ ,]+/).filter(Boolean).map(Number); var r1 = m.setTireOutboard(st.tFlow, od, bw); if (!r1.ok) { say(r1.err, true); return; } var r2 = m.setTireWheelsPerLeg(st.tFlow, num('pra-t-wpl'), bw); if (!r2.ok) { say(r2.err, true); return; } var r5 = m.setTireFlangeRadius(st.tFlow, num('pra-t-frad'), bw); if (!r5.ok) { say(r5.err, true); return; } var fh = num('pra-t-fha'); if (fh > 0) { var t1 = m.tire(st.tFlow); var r3 = m.confirmTire(Object.assign({}, t1, { flangeHalfAngleDeg: fh }), t1.confirmedBy); if (!r3.ok) { say(r3.err, true); return; } } st.tReports = null; st.tTypes = null; say('Saved.'); render(); return; }
+        if (k === 'tstow-save') { var nums3 = function (id) { return String((document.getElementById(id) || {}).value || '').split(',').map(function (x) { return parseFloat(x); }); }; var rs2 = m.setTireStowed(st.tFlow, { center: nums3('pra-t-stow'), axis: nums3('pra-t-stowax') }, who()); if (!rs2.ok) { say(rs2.err, true); return; } render(); return; }
+        if (k === 'tflow-save') {
+            var t0 = m.tire(st.tFlow); if (!t0) return;
+            var nn = function (idd) { var el = document.getElementById(idd); return el ? el.value.split(/[ ,]+/).filter(Boolean).map(Number) : []; };
+            var ct = nn('pra-t-center'), at = nn('pra-t-axis');
+            var nx = Object.assign({}, t0, { center: ct.length === 3 ? ct : t0.center, axis: at.length === 3 ? at : t0.axis, grownDiameter: num('pra-t-dg'), sectionWidth: num('pra-t-w'), ratedPressureKpa: num('pra-t-p'), speedRatingMs: num('pra-t-s'), massKg: num('pra-t-m'), braked: !!(document.getElementById('pra-t-b') || {}).checked });
+            var cf2 = Object.assign({}, t0.confirms || {});
+            if (JSON.stringify(nx.center) !== JSON.stringify(t0.center) || JSON.stringify(nx.axis) !== JSON.stringify(t0.axis)) delete cf2.location;
+            if (nx.grownDiameter !== t0.grownDiameter || nx.sectionWidth !== t0.sectionWidth) delete cf2.size;
+            if (nx.ratedPressureKpa !== t0.ratedPressureKpa) delete cf2.pressure;
+            if (nx.speedRatingMs !== t0.speedRatingMs) delete cf2.speed;
+            nx.confirms = cf2; var tsv = m.confirmTire(nx, by); say(tsv.ok ? 'Values saved.' : tsv.err, !tsv.ok); st.tReports = null;
+        } else if (k === 'flow-harmless' || k === 'flow-risk') {
+            var rsX = k === 'flow-harmless' ? m.setUnmodeledStagesHarmless(st.flowRotor, (document.getElementById('pra-f-harmwhy') || {}).value || '', who()) : m.setRiskFactor(st.flowRotor, num('pra-f-risk'), (document.getElementById('pra-f-riskwhy') || {}).value || '', who());
+            if (!rsX.ok) { say(rsX.err, true); return; } render(); return;
+        } else if (k === 'flow-save') {
+            var r0 = m.rotor(st.flowRotor); if (!r0) return;
+            var nums = function (idd) { var el = document.getElementById(idd); return el ? el.value.split(/[ ,]+/).filter(Boolean).map(Number) : []; };
+            var ctr = nums('pra-f-center'), axv = nums('pra-f-axis'), dia = num('pra-f-dia');
+            var next = Object.assign({}, r0, { center: ctr.length === 3 ? ctr : r0.center, axis: axv.length === 3 ? axv : r0.axis, pid: st.flowPid || r0.pid, discRadius: dia ? dia / 2 : r0.discRadius, bladeLength: num('pra-f-blade') != null ? num('pra-f-blade') : r0.bladeLength,
+                bladedDiscMassKg: num('pra-f-mass'), rpm: num('pra-f-rpm'), smallFragmentMassKg: num('pra-f-smass'), fanBladeFragmentMassKg: num('pra-f-fmass'), shieldCapacityJ: num('pra-f-shield'),
+                fragmentAxialWidthMm: num('pra-f-faw'), engine: (document.getElementById('pra-f-engine') || {}).value || r0.engine, engineStages: num('pra-f-stages') || r0.engineStages, stageRotationalEnergyJ: num('pra-f-stagee') });
+            var cf = Object.assign({}, r0.confirms || {});
+            if (JSON.stringify(next.center) !== JSON.stringify(r0.center) || JSON.stringify(next.axis) !== JSON.stringify(r0.axis)) delete cf.location;
+            if (next.discRadius !== r0.discRadius || next.bladeLength !== r0.bladeLength) delete cf.diameter;
+            if (next.bladedDiscMassKg !== r0.bladedDiscMassKg) delete cf.mass;
+            if (next.rpm !== r0.rpm) delete cf.rpm;
+            if (next.fragmentAxialWidthMm !== r0.fragmentAxialWidthMm) delete cf.axialWidth;
+            next.confirms = cf;
+            var sv = m.confirmRotor(next, by); say(sv.ok ? 'Values saved.' : sv.err, !sv.ok); st.flowReports = null;
+        } else if (k === 'rotor-confirm') {
             var i = +a.getAttribute('data-i'), p = m.proposeRotors(id)[i]; if (!p) return;
             var rr = m.confirmRotor({ label: p.name, cadId: id, pid: p.pid, center: p.center, axis: p.axis, kind: p.kind, discRadius: num('pra-r-' + i), bladeLength: num('pra-b-' + i), rotation: +document.getElementById('pra-rot-' + i).value }, by);
             say(rr.ok ? 'Rotor confirmed.' : rr.err, !rr.ok);
@@ -141,7 +588,7 @@
             var j = +a.getAttribute('data-i'), t = m.proposeTires(id)[j]; if (!t) return;
             var tr = m.confirmTire({ label: t.name, cadId: id, pid: t.pid, center: t.center, axis: t.axis, grownDiameter: num('pra-dg-' + j), sectionWidth: num('pra-w-' + j), massKg: num('pra-tm-' + j), speedRatingMs: num('pra-ts-' + j), ratedPressureKpa: num('pra-tp-' + j), braked: !!(document.getElementById('pra-tb-' + j) || {}).checked }, by);
             say(tr.ok ? 'Tire confirmed.' : tr.err, !tr.ok);
-        } else if (k === 'tire-run') { st.tire[a.getAttribute('data-tire')] = m.tireThreats(a.getAttribute('data-tire'), { cadId: id }); }
+        } else if (k === 'tire-run') { st.tire[a.getAttribute('data-tire')] = m.tireCaseResults(a.getAttribute('data-tire'), { cadId: id }); }
         else if (k === 'light-confirm' && st.light && st.light.ok) { var lr = m.confirmLightningZones(id, st.light.parts, by); say(lr.ok ? 'Lightning zones confirmed for ' + lr.count + ' parts.' : lr.err, !lr.ok); }
         else if (k === 'generic-add') {
             var sel = selection(), mdl = c.model(id), parts = c.partsOf(mdl).filter(function (q) { return sel.indexOf(q.pid) >= 0 && q.bbox; });
@@ -173,12 +620,33 @@
     document.addEventListener('click', function (e) {
         var host = document.getElementById('cad-pra'); if (!host || !host.contains(e.target)) return;
         var t = e.target;
-        var tb = t.closest('[data-pra-tab]'); if (tb) { st.open = tb.getAttribute('data-pra-tab'); say(''); render(); return; }
+        var fs0 = t.closest('[data-pra-flow-summary]'); if (fs0) { var dd = fs0.parentNode; st.flowExpanded = !dd.open; return; }
+        var ltk = t.closest('[data-pra-ltick]'); if (ltk) { var bl = who(); if (!bl && ltk.checked) { ltk.checked = false; say('Enter your name under Equipment links first.', true); return; } var rl = M().confirmField('lightning', cadId(), ltk.getAttribute('data-pra-ltick'), bl, ltk.checked); if (!rl.ok) { ltk.checked = !ltk.checked; say(rl.err, true); } st.lReports = null; render(); return; }
+        var lrp = t.closest('[data-pra-lreport]'); if (lrp) { st.lOpen = lrp.getAttribute('data-pra-lreport'); showSkin([st.lOpen]); render(); return; }
+        var srp = t.closest('[data-pra-sreport]'); if (srp) { st.sOpen = srp.getAttribute('data-pra-sreport'); var sr2 = sourceRegion(st.sOpen); if (sr2) regionVolumes([sr2]); render(); return; }
+        var bl4 = t.closest('[data-pra-blevel4]'); if (bl4) { var bb4 = who(); if (!bb4) { bl4.checked = !bl4.checked; say('Enter your name under Equipment links first.', true); return; } var r4 = M().setBirdLevel4(st.bFlow, bl4.checked, bb4); say(r4.ok ? 'Saved.' : r4.err, !r4.ok); render(); return; }
+        var btk = t.closest('[data-pra-btick]'); if (btk) { var bb2 = who(); if (!bb2 && btk.checked) { btk.checked = false; say('Enter your name under Equipment links first.', true); return; } var rbt = M().confirmField('bird', st.bFlow, btk.getAttribute('data-pra-btick'), bb2, btk.checked); if (!rbt.ok) { btk.checked = !btk.checked; say(rbt.err, true); } st.bReports = null; render(); return; }
+        var brp = t.closest('[data-pra-breport]'); if (brp) { st.bOpen = brp.getAttribute('data-pra-breport'); birdVolumes([st.bOpen]); render(); return; }
+        var trc = t.closest('[data-pra-treach]'); if (trc) { var br = who(); if (!br && trc.checked) { trc.checked = false; say('Enter your name under Equipment links first.', true); return; } var rr = M().confirmTireReach(st.tFlow, br, trc.checked); if (!rr.ok) { trc.checked = false; say(rr.err, true); } if (st.tReports) Object.keys(st.tReports).forEach(function (t2) { st.tReports[t2] = M().tireReport(st.tFlow, t2, { cadId: cadId() }); }); render(); return; }
+        var ttk = t.closest('[data-pra-ttick]'); if (ttk) { var bt = who(); if (!bt && ttk.checked) { ttk.checked = false; say('Enter your name under Equipment links first.', true); return; } var rt = M().confirmField('tire', st.tFlow, ttk.getAttribute('data-pra-ttick'), bt, ttk.checked); if (!rt.ok) say(rt.err, true); st.tReports = null; render(); return; }
+        var tg = t.closest('[data-pra-tgear]'); if (tg) { var bg = who(); if (!bg) { tg.checked = !tg.checked; say('Enter your name under Equipment links first.', true); return; } var G = Array.prototype.filter.call(document.querySelectorAll('#cad-pra [data-pra-tgear]'), function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-pra-tgear'); }); var rg = M().setTireGear(st.tFlow, G, bg); if (!rg.ok) { tg.checked = !tg.checked; say(rg.err, true); return; } st.tTypes = null; st.tReports = null; render(); return; }
+        var tty = t.closest('[data-pra-ttype]'); if (tty) { var TL = st.tTypes || []; var tk2 = tty.getAttribute('data-pra-ttype'); st.tTypes = tty.checked ? TL.concat([tk2]).filter(function (x, i, a) { return a.indexOf(x) === i; }) : TL.filter(function (x) { return x !== tk2; }); return; }
+        var trp = t.closest('[data-pra-treport]'); if (trp) { st.tOpen = trp.getAttribute('data-pra-treport'); tireVolumes([st.tOpen]); render(); return; }
+        var tk = t.closest('[data-pra-tick]'); if (tk) { var bn = who(); if (!bn && tk.checked) { tk.checked = false; say('Enter your name under Equipment links first.', true); return; } var rr = M().confirmRotorField(st.flowRotor, tk.getAttribute('data-pra-tick'), bn, tk.checked); if (!rr.ok) say(rr.err, true); st.flowReports = null; render(); return; }
+        var ty = t.closest('[data-pra-type]'); if (ty) { var L = st.flowTypes || []; var kk = ty.getAttribute('data-pra-type'); st.flowTypes = ty.checked ? L.concat([kk]).filter(function (x, i, a) { return a.indexOf(x) === i; }) : L.filter(function (x) { return x !== kk; });
+            // para 9c: the alternative model replaces 9a and 9b (not added to them)
+            if (ty.checked && kk === 'alternate') st.flowTypes = st.flowTypes.filter(function (x) { return x !== 'oneThirdDisc' && x !== 'intermediate'; });
+            if (ty.checked && (kk === 'oneThirdDisc' || kk === 'intermediate')) st.flowTypes = st.flowTypes.filter(function (x) { return x !== 'alternate'; });
+            render(); return; }
+        var rp = t.closest('[data-pra-report]'); if (rp) { st.flowOpen = rp.getAttribute('data-pra-report'); flowVolumes([st.flowOpen]); render(); return; }
+        var tb = t.closest('[data-pra-tab]'); if (tb) { st.flowExpanded = null; st.open = tb.getAttribute('data-pra-tab'); say(''); render(); return; }
         var pr = t.closest('[data-pra-parts]'); if (pr) { e.preventDefault(); var v = viewer(); var ps = pr.getAttribute('data-pra-parts').split('|').filter(Boolean); if (v && ps.length) v.highlightParts(ps); return; }
         var rg = t.closest('[data-pra-range]'); if (rg) { e.preventDefault(); var q = rg.getAttribute('data-pra-range').split('|'); showRange(q[0], +q[1]); return; }
         var pa = t.closest('[data-pra-paths]'); if (pa) { e.preventDefault(); showAll(pa.getAttribute('data-pra-paths')); return; }
         var vo = t.closest('[data-pra-vol]'); if (vo) { e.preventDefault(); var v2 = viewer(); if (v2) v2.highlightVolume(vo.getAttribute('data-pra-vol')); return; }
         var a = t.closest('[data-pra-act]'); if (a) act(a);
     });
-    window.SLPraPanel = { VERSION: VERSION, render: render, state: st, _showRange: showRange };
+    document.addEventListener('change', function (e) { if (e.target && e.target.id === 'pra-flow-rotor') { st.flowRotor = e.target.value; st.flowReports = null; render(); } });
+    window.SLPraPanel = { VERSION: VERSION, render: render, state: st, exportReport: exportReport, exportTireReport: exportTireReport, exportBirdReport: exportBirdReport, exportLightning: function (z) { var R = st.lReports[z], RP = window.SLPraReport; if (R && !R.ok) return notEvalPage(R, 'Lightning report: zone ' + z); var sk = M().lightningSkin(cadId()); var P2 = RP.collectParts(viewer(), R.direct.concat(R.indirect.map(function (x) { return x.pid; })), _names()); var it = lightSkinItems(M().LIGHTNING_ZONES, sk.assign), vols = it.map(function (x) { return RP.meshVolume(x.positions, x.index, x.model, x.label, x.color, x.model === 'zone-' + z, null, { opacity: 0.85, callout: x.callout }); }); showSkin([z]); var png = RP.snapshot(viewer());
+            return RP.page({ title: R.label, heading: 'Lightning report: zone ' + z, intro: 'Generated by Safety Lab from the confirmed values and the CAD model on this computer. Zones are regions of the external skin.', typesTitle: 'Zones on the skin', png: png, tableHtml: lightReportHtml(R), parts: P2.parts, volumes: vols, axis: [1, 0, 0], triangles: P2.triangles }); }, exportSource: function (k) { var R = st.sReports[k]; return exportRegion(R, sourceRegion(k), R.label, R.typeLabel + ' report: ' + R.label, sourceReportHtml(R)); }, printHtml: printHtml, tireVolumes: tireVolumes, exportReportInteractive: exportReportInteractive, printReport: printReport, flowVolumes: flowVolumes, TYPE_COLORS: TYPE_COLORS, _showRange: showRange };
 })();

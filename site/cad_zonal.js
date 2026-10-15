@@ -694,6 +694,17 @@
     // The core evaluation. sysIds: the equipment that fails. Uses the existing BDD engine:
     // buildBDDFromFT(root) and minOrder(bdd, fixedTrue). minOrder with the forced variables fixed
     // true counts the further failures needed; 0 = this tree is reached by the event alone.
+    // _nonMonoGates(root): the NOT and XOR gates of a tree, following transfers (D1, 14 Oct 2026). These make the tree
+    // non-monotone: hitting more equipment can stop the top event, so "all hit equipment fails" is not the worst case.
+    var NON_MONOTONE = { NOT: 1, XOR: 1 };
+    function _nonMonoGates(root) {
+        var out = [], seen = new Set(), seenP = {};
+        (function walk(n) { if (!n || seen.has(n)) return; seen.add(n); if (n.type !== 'gate') return;   // F1: by the node itself
+            if (n.gateType === 'TRANSFER' || n.transferOutTo) { var lk = n.transferOutTo || n.linkedPageId; if (lk && !seenP[lk]) { seenP[lk] = 1; var pg = _pages().filter(function (p) { return p.id === lk; })[0]; if (pg) walk(pg.root); } return; }
+            if (NON_MONOTONE[n.gateType]) out.push({ id: String(n.id), displayId: n.displayId || String(n.id), type: n.gateType });
+            _arr(n.children || n._children).forEach(walk); })(root);
+        return out.sort(function (a, b) { return _cmp(a.id, b.id); });
+    }
     function evaluate(sysIds, opts) {
         opts = opts || {};
         var E = _E();
@@ -704,7 +715,8 @@
         var trees = [], errors = [];
         if (!E || typeof E.buildBDDFromFT !== 'function' || typeof E.minOrder !== 'function') return { engine: false, lids: lids, trees: [], errors: [{ text: 'The fault tree engine is not loaded; no result is given rather than a guess.' }], untagged: EI.untagged, index: EI.byLid };
         _pages().slice().sort(function (a, b) { return _cmp(a.id, b.id); }).forEach(function (pg) {
-            var built;
+            var built, dupIds = typeof E.duplicateNodeIds === 'function' ? E.duplicateNodeIds(pg.root) : [];
+            if (dupIds.length) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ' uses node id' + (dupIds.length > 1 ? 's ' : ' ') + dupIds.slice(0, 5).join(', ') + ' more than once in the page; no result for it.' }); return; }
             try { built = E.buildBDDFromFT(pg.root); } catch (e) { errors.push({ pageId: pg.id, text: 'Fault tree ' + (pg.name || pg.id) + ' is too large for the engine (' + ((e && e.name) || 'error') + '); no result for it.' }); return; }
             if (!built || !built.bdd || built.bdd.isTerminal) return;
             var forced = new Set(), hit = [];
@@ -714,12 +726,39 @@
             var base = E.minOrder(built.bdd, new Set((built.varMeta || []).map(function (m, v) { return (m && m.synthetic === 'order') ? v : -1; }).filter(function (v) { return v >= 0; })));
             var after = E.minOrder(built.bdd, forced);
             trees.push({ pageId: pg.id, name: pg.name || String(pg.id), topId: pg.root.displayId || null, events: hit.sort(_cmp),
-                         reached: after === 0 && base > 0, alreadyTrue: base === 0, additional: isFinite(after) ? after : null, fhaIds: _pageFhaIds(pg).map(String) });
+                         reached: after === 0 && base > 0, alreadyTrue: base === 0, additional: isFinite(after) ? after : null, fhaIds: _pageFhaIds(pg).map(String), nonMonotone: _nonMonoGates(pg.root) });
         });
         return { engine: true, lids: lids, trees: trees, errors: errors, untagged: EI.untagged, index: EI.byLid };
     }
+    // _impact(sysIds): what the failure of the equipment set does. D1: when a tree reached from the set is non-monotone
+    // (NOT, XOR), the severity is the worst over every subset of the hit equipment (any of it may be the part that
+    // fails), by exact enumeration over the items that appear in those trees (at most NONMONO_BOUND); above the bound
+    // no result is given (refused, with the tree and gate named) rather than one that could be optimistic.
+    var NONMONO_BOUND = 16, _refusals = [], _nmSeen = [];
     function _impact(sysIds, extra) {
-        var ev = evaluate(sysIds);
+        var ev0 = evaluate(sysIds), nm = ev0.trees.filter(function (t) { return t.nonMonotone && t.nonMonotone.length; });
+        if (!nm.length) return _impact1(sysIds, extra, ev0);
+        var eq = _uniqSorted(_arr(sysIds).map(String)), EI = eventIndex(), inNM = {};
+        nm.forEach(function (t) { t.events.forEach(function (l) { Object.keys((EI.byLid[l] || { sysIds: {} }).sysIds).forEach(function (s) { inNM[s] = 1; }); }); });
+        var vary = eq.filter(function (s) { return inNM[s]; }), rest = eq.filter(function (s) { return !inNM[s]; });
+        var named = nm.map(function (t) { return (t.name || t.pageId) + ' (' + t.nonMonotone.map(function (g) { return g.type + ' ' + g.displayId; }).join(', ') + ')'; }).join('; ');
+        if (vary.length > NONMONO_BOUND) {
+            var msg = 'Non-monotone fault tree ' + named + ': the worst case over subsets of the ' + vary.length + ' hit items in it is beyond the ' + NONMONO_BOUND + '-item bound; no result is given.';
+            _refusals.push(msg); var r0 = _impact1(sysIds, extra, ev0); r0.conditions = []; r0.worst = null; r0.refused = msg; r0.notEvaluated = msg; return r0;
+        }
+        var full = _impact1(sysIds, extra, ev0), byKey = {}, n = 0;
+        for (var mask = 0; mask < (1 << vary.length); mask++) {
+            var sub = rest.concat(vary.filter(function (s, i) { return mask & (1 << i); })); if (!sub.length) continue; n++;
+            _impact1(sub, null).conditions.forEach(function (c) { var k = c.domain + ':' + c.id; if (!byKey[k]) byKey[k] = c; });
+        }
+        full.conditions = Object.keys(byKey).map(function (k) { return byKey[k]; }).sort(function (a, b) { return (b.rank - a.rank) || _nat(a.fcId || a.id, b.fcId || b.id) || _cmp(a.domain, b.domain) || _cmp(a.id, b.id); });
+        full.worst = full.conditions.length ? full.conditions[0].severity : null;
+        _nmSeen.push(named);
+        full.nonMonotone = { note: 'non-monotone tree: worst case over subsets used', trees: nm.map(function (t) { return { pageId: t.pageId, name: t.name, gates: t.nonMonotone }; }), subsets: n, varied: vary };
+        return full;
+    }
+    function _impact1(sysIds, extra, evIn) {
+        var ev = evIn || evaluate(sysIds);
         var eq = _uniqSorted(_arr(sysIds).map(String));
         var fcs = {};
         ev.trees.forEach(function (t) {
@@ -756,6 +795,9 @@
             coverage: { equipmentWithoutEvents: eq.filter(function (s) { return !withEvents[s]; }), eventsWithoutEquipment: ev.untagged.length },
             errors: ev.errors, engine: ev.engine
         };
+        // a blank severity must never read as "no effect": when the engine is missing or a tree could not be evaluated the
+        // result says so (notEvaluated) and the PRA calls that met it are refused
+        if (!ev.engine || (ev.errors && ev.errors.length)) { out.notEvaluated = !ev.engine ? 'the fault tree engine is not loaded' : 'fault tree(s) not evaluated: ' + ev.errors.map(function (e) { return e.text; }).join(' '); _refusals.push(out.notEvaluated); }
         Object.keys(extra || {}).forEach(function (k) { out[k] = extra[k]; });
         return out;
     }
@@ -1024,7 +1066,11 @@
         aiPayload: aiPayload,
         // 14 Oct 2026 (p3-pra): the same evaluation for a given set of failed equipment, used by the
         // release-angle sweep and the per-function risk view (SLPraModels).
-        impactOfEquipment: function (sysIds, extra) { return _impact(_arr(sysIds), extra); }
+        impactOfEquipment: function (sysIds, extra) { return _impact(_arr(sysIds), extra); },
+        takeRefusals: function () { var r = _refusals.slice(); _refusals.length = 0; return r; },
+        takeNonMonotone: function () { var r = _nmSeen.slice(); _nmSeen.length = 0; return r; },
+        // notEvaluatedHtml(reason): the one warning shown wherever a severity could not be evaluated
+        notEvaluatedHtml: function (reason) { return '<div data-not-evaluated role="alert" style="color:var(--color-danger,#8E2A2A);background:rgba(201,42,42,0.08);border:1px solid var(--color-danger,#8E2A2A);border-radius:4px;padding:4px 8px;font-size:12px;font-weight:600;margin:4px 0;">Not evaluated: ' + String(reason || 'no result').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }) + '</div>'; }, NONMONO_BOUND: NONMONO_BOUND
     };
     try { root.SLCadZonal = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

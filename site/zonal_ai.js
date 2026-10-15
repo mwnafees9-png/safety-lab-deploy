@@ -189,7 +189,8 @@
                 if (!sw || !sw.ok) why = (sw && sw.err) || 'No sweep result.';
                 else _arr(sw.models).forEach(function (m) {
                     var v = {}; v.catastrophicDeg = m.catastrophicDeg; v.hazardRatio = m.hazardRatio; _pv(v, 'spreadDeg', m.spreadDeg); _pv(v, 'massFraction', m.massFraction);
-                    if (m.criterion) { v.criterion = m.criterion.text; v['criterion.source'] = 'ac ' + m.criterion.ref; v.meetsCriterion = m.meets ? 'yes' : 'no'; }
+                    if (m.criterion) { v.criterion = m.criterion.text; v['criterion.source'] = 'ac ' + m.criterion.ref; v.meetsCriterion = m.meets == null ? 'Not evaluated: ' + (m.refusedNote || 'no result') : (m.meets ? 'yes' : 'no'); }
+                    if (sw.nonMonotone) v.faultTreeLogic = 'non-monotone tree: worst case over subsets used';
                     if (m.energy) { _pv(v, 'energyJ', m.energy.joules); _pv(v, 'fragmentMassKg', m.energy.massKg); _pv(v, 'fragmentSpeedMs', m.energy.speedMs); }
                     if (m.energyNote) v.energyNote = m.energyNote;
                     if (m.assessmentNote) v.assessmentNote = m.assessmentNote;
@@ -198,13 +199,13 @@
                     out.push({ id: 'rotor:' + sw.rotorId + '#' + m.model, label: sw.label + ': ' + m.label, values: v, equipment: Object.keys(eq).sort(_cmp), conditions: Object.keys(fc).sort(_cmp), worst: m.catastrophicDeg > 0 ? 'Catastrophic' : null });
                 });
             } else if (t.kind === 'tireBurst' && typeof M.tireThreats === 'function') {
-                var tt = M.tireThreats(t.tireId, { cadId: t.cadId });
+                var tt = typeof M.tireCaseResults === 'function' ? M.tireCaseResults(t.tireId, { cadId: t.cadId }) : M.tireThreats(t.tireId, { cadId: t.cadId });   // every case at its gear position
                 if (!tt || !tt.ok) why = (tt && tt.err) || 'No tire result.';
                 else _arr(tt.models).forEach(function (m) {
                     var v = {}; v.applies = m.applies === false ? 'no' : 'yes'; _pv(v, 'thetaDeg', m.theta);
                     Object.keys(m.params || {}).sort(_cmp).forEach(function (k) { _pv(v, k, m.params[k]); });
-                    v.partsHit = _arr(m.hits).length; if (m.incomplete) v.incomplete = m.note || 'exposure not computed';
-                    out.push({ id: 'tire:' + tt.tireId + '#' + m.model, label: tt.label + ': ' + m.label, values: v, equipment: _eqIds(m.equipment), conditions: _fcIds(m.conditions), worst: m.worst || null, parts: _arr(m.hits).map(_s) });
+                    v.partsHit = _arr(m.hits).length; if (m.incomplete) v.incomplete = m.note || 'exposure not computed'; if (tt.nonMonotone) v.faultTreeLogic = 'non-monotone tree: worst case over subsets used';
+                    out.push({ id: 'tire:' + tt.tireId + '#' + (m.caseKey || m.model), label: tt.label + ': ' + m.label + (m.gear ? ' (gear ' + m.gear + ')' : ''), values: v, equipment: _eqIds(m.equipment), conditions: _fcIds(m.conditions), worst: m.worst || null, parts: _arr(m.hits).map(_s) });
                 });
             } else if (t.kind === 'birdStrike' && typeof M.birdExposure === 'function') {
                 var be = M.birdExposure(t.cadId || (env.cad && env.cad.latestCadId && env.cad.latestCadId()), t.birdOpts || {});
@@ -214,7 +215,7 @@
                     _arr(be.zones).filter(function (z) { return !t.pid || _s(z.pid) === _s(t.pid); }).forEach(function (z) {
                         var v = { caseId: z.caseId || 'missing', exposedAreaMm2: z.areaMm2, partsBehind: _arr(z.behind).length };
                         _pv(v, 'birdMassKg', z.massKg); _pv(v, 'impactEnergyJ', z.energyJ);
-                        if (be.basis) v.basis = be.basis;
+                        if (be.basis) v.basis = be.basis; if (be.nonMonotone) v.faultTreeLogic = 'non-monotone tree: worst case over subsets used';
                         out.push({ id: 'bird:' + z.pid, label: 'Bird strike on ' + _s(z.name), values: v, equipment: _eqIds(z.equipment), conditions: _fcIds(z.conditions), worst: z.worst || null, parts: [_s(z.pid)].concat(_arr(z.behind).map(function (b) { return _s(b.pid); })) });
                     });
                 }
@@ -229,7 +230,7 @@
                 if (!fv || !fv.ok) why = (fv && fv.err) || 'No function view.';
                 else _arr(fv.functions).filter(function (f) { return _s(f.funcId) === _s(t.funcId); }).forEach(function (f) {
                     _arr(f.exposures).forEach(function (x, i) {
-                        out.push({ id: 'fn:' + f.funcId + '#' + _s(x.src || i), label: _s(x.label), values: { kind: _s(x.kind), risk: _s(x.risk), worst: x.worst || 'none', element: _s(x.sysId) }, equipment: [_s(x.sysId)], conditions: [], worst: x.worst || null });
+                        out.push({ id: 'fn:' + f.funcId + '#' + _s(x.src || i), label: _s(x.label), values: Object.assign({ kind: _s(x.kind), risk: _s(x.risk), worst: x.worst || 'none', element: _s(x.sysId) }, fv.nonMonotone ? { faultTreeLogic: 'non-monotone tree: worst case over subsets used' } : {}), equipment: [_s(x.sysId)], conditions: [], worst: x.worst || null });
                     });
                     if (f.missing) why = f.missing;
                     _arr(f.independence).forEach(function (x, i) { out.push({ id: 'fn:' + f.funcId + '#indep' + i, label: _s(x.text), values: { kind: _s(x.kind), severity: _s(x.severity) }, equipment: [], conditions: [], worst: null }); });
@@ -719,6 +720,7 @@
     function _esc(t) { return _s(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     var BTN_LABEL = { 'zonal.breakdown': 'AI zonal draft', 'pra.writeup': 'AI risk write-up', 'function.risk': 'AI function summary', 'damage.assumption': 'AI damage assumption' };
     function buttonHtml(lane, target) {
+        if (api.ENABLED !== true) return '';   // the app-wide AI gate (off until the AI eval passes)
         if (!SOURCE_MAP[lane]) return '';
         return '<button type="button" data-zai-lane="' + _esc(lane) + '" data-zai-target="' + _esc(JSON.stringify(target || {})) + '" title="Drafts from the project records and your AI Inputs only; every statement is checked against its source and waits for your acceptance" style="font-size:11px;padding:2px 7px;border:1px solid var(--color-accent,#007AFF);border-radius:5px;background:transparent;cursor:pointer;color:var(--color-accent,#007AFF);">' + _esc(BTN_LABEL[lane]) + '</button>';
     }
@@ -806,7 +808,9 @@
         });
     }
 
-    var api = { VERSION: VERSION, SOURCE_TYPES: SOURCE_TYPES, SOURCE_MAP: SOURCE_MAP, TOPIC: TOPIC, ROLE_PROMPTS: ROLE_PROMPTS, CONTRACT: CONTRACT,
+    // ENABLED: the one switch for every AI button in the zonal and particular risk UI (14 Oct 2026).
+    // false until the AI eval passes; buttonHtml() draws nothing while it is false.
+    var api = { ENABLED: false, VERSION: VERSION, SOURCE_TYPES: SOURCE_TYPES, SOURCE_MAP: SOURCE_MAP, TOPIC: TOPIC, ROLE_PROMPTS: ROLE_PROMPTS, CONTRACT: CONTRACT,
                 passages: passages, retrieve: retrieve, gather: gather, buildRequest: buildRequest, parseOutput: parseOutput, checkSource: checkSource,
                 validate: validate, run: run, draftFrom: draftFrom, applyAccepted: applyAccepted, praModelResults: praModelResults, praRiskResults: praRiskResults, WRITERS: WRITERS, applyDraft: applyDraft, buttonHtml: buttonHtml, renderDraftHtml: renderDraftHtml, notes: notes, notesHtml: notesHtml, editNote: editNote, deleteNote: deleteNote, NOTE_FIELDS: NOTE_FIELDS, openDraft: openDraft, _norm: _norm };
     try { root.SLZonalAI = api; } catch (_) {}

@@ -57,7 +57,7 @@
         if (_worker || _broken) return _worker;
         if (typeof Worker === 'undefined') { _broken = true; return null; }
         try {
-            _worker = new Worker('fta_worker.js?v=1.9');
+            _worker = new Worker('fta_worker.js?v=1.10');
             _worker.addEventListener('message', _onMessage);
             _worker.addEventListener('error', function () { _reset(true); });
         } catch (_) { _worker = null; _broken = true; }

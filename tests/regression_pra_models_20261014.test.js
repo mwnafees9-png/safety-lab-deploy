@@ -65,6 +65,9 @@ function scenario(src) {
     R.light = M.proposeLightningZones(m.id, { forward: [-1, 0, 0] });
     R.lightNo = M.confirmLightningZones(m.id, R.light.parts, '');
     R.lightYes = M.confirmLightningZones(m.id, R.light.parts, 'W. Engineer', { at: '2026-10-14T00:04:00Z' });
+    R.tcr = M.tireCaseResults('tire-L').models.map(x => x.caseKey + (x.incomplete ? ':incomplete' : ''));
+    R.harmNo = [M.setUnmodeledStagesHarmless('rot-eng1', 'Other stages are enclosed by the case.', ''), M.setUnmodeledStagesHarmless('rot-eng1', 'short', 'W. Engineer')].map(x => x.ok);
+    R.harmOk = M.setUnmodeledStagesHarmless('rot-eng1', 'Other stages are contained by the engine case per the containment test.', 'W. Engineer', { at: 'z' }).ok; M.setUnmodeledStagesHarmless('rot-eng1', null, 'W. Engineer');
     R.fview = M.functionRiskView(m.id, { birdOpts: { direction: [1, 0, 0], basis: 'Part 25' } });
     return { sb, C, M, R };
 }
@@ -86,7 +89,7 @@ check('C: 360 angles at 1 degree', s3.angles.length === 360 && s3.angles[0].angl
 const both = s3.angles.filter(a => a.equipment.join() === 'FCC1,FCC2');
 check('C: some release angles hit both computers and reach the Catastrophic condition', both.length > 0 && both.every(a => a.worst === 'Catastrophic' && a.conditions.join() === 'FC-001'), both.length);
 check('C: a release angle that hits only one computer is not Catastrophic (the AND gate needs both)', s3.angles.some(a => a.equipment.length === 1 && a.worst !== 'Catastrophic'));
-check('C: catastrophic ranges listed and the hazard ratio = catastrophic degrees / 360', s3.ranges.some(r => r.severity === 'Catastrophic') && s3.hazardRatio === Math.round(s3.catastrophicDeg / 360 * 1e6) / 1e6 && s3.criterion.text === '1 in 20');
+check('C: catastrophic ranges listed; hazard ratio = spread-weighted catastrophic degrees / 360 x phase x risk factor (Appendix 1 6.5 to 6.9), never above degrees / 360', s3.ranges.some(r => r.severity === 'Catastrophic') && Math.abs(s3.hazardRatio - s3.spreadWeightedDeg / 360 * s3.phaseFactor.value * s3.riskFactor.value) < 1e-6 && s3.spreadWeightedDeg <= s3.catastrophicDeg + 1e-9 && s3.criterion.text === '1 in 20');
 check('C: no shield: energy not computed, infinite energy note', s3.energy === null && /infinite energy/.test(s3.energyNote));
 const sh = R.sweepShield.models.find(x => x.model === 'oneThirdDisc');
 check('C: a credited shield stops the path: the computers behind it are no longer reached', sh.angles.every(a => a.worst !== 'Catastrophic') && sh.angles.some(a => a.stoppedBy === 'p-shield'));
@@ -123,7 +126,10 @@ const fp = R.fview.functions.find(f => f.funcId === 'F-PITCH');
 check('I: pitch control is performed by both computers', fp && fp.elements.map(e => e.sysId).join() === 'FCC1,FCC2');
 check('I: its exposures include the rotor burst sweep and the bird strike, each with a source record', fp.exposures.some(x => x.kind === 'rotorBurst' && /^praRotors\/rot-eng1#oneThirdDisc$/.test(x.src) && x.worst === 'Catastrophic') && fp.exposures.some(x => x.kind === 'birdStrike' && x.src === 'bird/p-nose'), JSON.stringify(fp.exposures.map(x => x.src)));
 check('I: confirmed lightning zones appear; worst failure condition Catastrophic', fp.exposures.some(x => x.kind === 'lightning') && fp.worst === 'Catastrophic');
-check('I: braking function exposed to tire burst', R.fview.functions.find(f => f.funcId === 'F-BRAKE').exposures.some(x => x.kind === 'tireBurst' && /^praTires\/tire-L#m1Large$/.test(x.src)));
+check('I: braking function exposed to tire burst', R.fview.functions.find(f => f.funcId === 'F-BRAKE').exposures.some(x => x.kind === 'tireBurst' && /^praTires\/tire-L#extended\|m1Large$/.test(x.src)));
+check('I (T9): no tire exposure runs Model 4 or 3R at the extended position; Model 2 never runs retracted', R.fview.functions.every(f => f.exposures.filter(x => x.kind === 'tireBurst').every(x => !/#extended\|m4Burst$/.test(x.src) && !/#retracted\|m2Flange$/.test(x.src) && !/#retracted\|m1/.test(x.src))), JSON.stringify(R.fview.functions.map(f => f.exposures.filter(x => x.kind === 'tireBurst').map(x => x.src))));
+check('I (T9): tire cases run at their gear position: 1, 2, 3E extended; 3R, 4 stowed (incomplete until the stowed position is confirmed; Model 2 incomplete without its engineer half angle); Model 4 never extended', R.tcr.join() === 'extended|m1Large,extended|m1Small,extended|m2Flange:incomplete,extended|m3Strip,retracted|m3Strip:incomplete,retracted|m4Burst:incomplete', R.tcr.join());
+check('Step 1: the "unmodeled stages harmless" confirmation needs a name and a written reason', R.harmNo.join() === 'false,false' && R.harmOk === true, JSON.stringify([R.harmNo, R.harmOk]));
 console.log('\n[E] determinism and mutations');
 check('E: the whole result computed twice is identical', JSON.stringify(scenario().R) === JSON.stringify(R));
 const mut = (name, from, to, test) => { if (SRC.indexOf(from) < 0) { check('E: mutation anchor present: ' + name, false); return; } let red = false; try { red = !test(scenario(SRC.replace(from, to)).R); } catch (e) { red = true; } check('E: mutation goes red: ' + name, red); };
@@ -131,6 +137,7 @@ mut('one-third disc spread 3 -> 15', "spread: P(3, 'ac', 'ac20128a-9a')", "sprea
 mut('shield ignored', 'if (stop >= 0) hits = hits.slice(0, stop + 1);', '', r => r.sweepShield.models[0].angles.every(a => a.worst !== 'Catastrophic'));
 mut('path ignores direction (backward hits)', "poly = _clip(poly, [-d[0], -d[1]], 0);", '', r => JSON.stringify(r.sweep.models[0].ranges) === JSON.stringify(R.sweep.models[0].ranges));
 mut('confirmation without a name', "if (!_s(by)) return { ok: false, err: 'A rotor goes", "if (false) return { ok: false, err: 'A rotor goes", r => !r.noName.ok);
+mut('T9: Model 4 run at the extended position', "var models = ext.models.filter(function (m) { return GEAR_MODELS.extended.indexOf(m.model) >= 0; })", "var models = ext.models.filter(function (m) { return true; })", r => r.tcr.indexOf('extended|m4Burst') < 0);
 mut('bird 4 lb -> 8 lb on the windshield', "massKg: P(4 * LB, 'rule', 'cfr-25.775b')", "massKg: P(8 * LB, 'rule', 'cfr-25.775b')", r => Math.abs(r.bird25.cases[0].massKg.value - 1.814369) < 1e-6);
 const IDX = read('index.html'), iZ = IDX.indexOf('cad_zonal.js?v='), iP = IDX.indexOf('pra_models.js?v='), iR = IDX.indexOf('pra_refs_data.js?v=');
 check('E: refs then models load right after cad_zonal.js', iZ > 0 && iR > iZ && iP > iR && IDX.slice(iZ, iP).split('<script').length === 3);

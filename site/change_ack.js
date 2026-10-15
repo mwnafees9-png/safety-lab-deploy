@@ -293,6 +293,20 @@
     // field that was absent arrives holding the form's default. Absent and the default mean the
     // same thing to the engines: that is not a change.
     var DEFAULTS = { lambdaEF: 1, repairModel: 'unmaintained', exposureMode: 'continuous', inputMode: 'probability' };
+    // 14 Oct 2026: particular risk records named in plain words, with the item that changed
+    var PRA_PC = { praRotors: 'Rotor burst values', praTires: 'Tire burst values', praBirds: 'Bird strike values', praVolumes: 'Particular risk volume', praLightning: 'Lightning zones', praLightningFlow: 'Lightning values', praLightningSkin: 'Lightning zones on the skin', praSkinParts: 'External skin parts', praSources: 'Fire, fluid leak and ice sources', praWriteups: 'Accepted AI write-ups', cadLinks: 'CAD equipment links', cadModels: 'CAD model revision', cadReviews: 'CAD review' };
+    var PRA_SEQ = { praRotorSeq: 1, praTireSeq: 1, praBirdSeq: 1, praVolumeSeq: 1, praSourceSeq: 1, cadSeq: 1, cadReviewSeq: 1 };   // counters: booked silently
+    function _praLabel(k, a, b) {
+        var base = PRA_PC[k]; if (!base) return null;
+        if (Array.isArray(a) || Array.isArray(b)) {
+            var A = Array.isArray(a) ? a : [], B = Array.isArray(b) ? b : [], byId = {}, names = [];
+            A.forEach(function (x) { if (x && x.id != null) byId[x.id] = JSON.stringify(x); });
+            B.forEach(function (x) { if (x && x.id != null && byId[x.id] !== JSON.stringify(x)) names.push(x.label || x.id); });
+            A.forEach(function (x) { if (x && x.id != null && !B.some(function (y) { return y && y.id === x.id; })) names.push((x.label || x.id) + ' (removed)'); });
+            return names.length ? base + ' for ' + names.slice(0, 3).join(', ') + (names.length > 3 ? ' and ' + (names.length - 3) + ' more' : '') : base;
+        }
+        return base;
+    }
     function _human(k) { return FIELD[k] || String(k).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ').toLowerCase(); }
     function _derivedField(k) { return String(k).charAt(0) === '_'; }
     function _empty(v) {
@@ -424,8 +438,9 @@
                 items.push(it); return;
             }
             if (e.space === 'pc') {
-                it.area = 'Project settings'; it.label = _human(e.key); it.ref = { kind: 'setting', key: e.key };
-                if (BOOK_PC[e.key] || e.key.charAt(0) === '_') it.book = true;
+                it.area = 'Project settings'; it.label = _praLabel(e.key, a, b) || _human(e.key); it.ref = { kind: 'setting', key: e.key };
+                if (PRA_PC[e.key]) it.area = /^cad/.test(e.key) ? 'CAD model' : 'Particular risks';
+                if (BOOK_PC[e.key] || PRA_SEQ[e.key] || e.key.charAt(0) === '_') it.book = true;
                 else if (e.op === 'added' && (_empty(b) || INIT_PC[e.key])) it.book = true;   // a store created on first use (empty, or the plan's default)
                 else if (e.op === 'changed' && a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a)) {
                     var fp = _fields(a, b); it.fields = fp.fields.slice(0, 6); it.derived = !fp.fields.length;
@@ -982,7 +997,7 @@
         if (typeof document === 'undefined' || document.getElementById('sl-ack-style')) return;
         var st = document.createElement('style'); st.id = 'sl-ack-style';
         st.textContent = '.sl-ack-card{max-width:620px;width:94%;max-height:86vh;display:flex;flex-direction:column}'
-            + '.sl-ack-body{overflow:auto;margin-top:6px;padding-right:4px}'
+            + '.sl-ack-body{overflow:auto;margin-top:6px;padding-right:4px;flex:1 1 auto;min-height:0}.sl-ack-card .sl-dialog-actions{flex:0 0 auto}'
             + '.sl-ack-h{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-tertiary,#6b7280);margin:14px 0 6px}'
             + '.sl-ack-list{list-style:none;margin:0;padding:0;font-size:13px}'
             + '.sl-ack-list li{padding:6px 0;border-bottom:1px solid var(--color-border-hair,#eef0f3)}'

@@ -221,7 +221,7 @@
     }
     function _mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
     function _hexRgb(h) { var n = parseInt(String(h).replace('#', ''), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
-    var SEL_RGB = [0.10, 0.43, 0.95];
+    var SEL_RGB = [0.10, 0.43, 0.95], HIT_RGB = [0.2, 0.2, 0.2];
 
     var _threeP = null;
     function loadThree() {
@@ -251,6 +251,21 @@
         '.scv select.scv-input{height:24px}',
         '.scv .scv-search{width:100%}',
         '.scv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--scv-border);background:var(--scv-panel)}',
+        // 14 Oct 2026: one row of dropdown menus; each panel holds the original controls (same data-act)
+        '.scv-label.scv-callout{margin-top:-34px}.scv-label.scv-callout::after{content:"";position:absolute;left:50%;top:100%;width:2px;height:34px;background:var(--scv-callout,#1971c2)}',
+        '.scv-menu{position:relative;display:inline-block}',
+        '.scv-menu-btn{white-space:nowrap}.scv-menu-btn::after{content:" \\25BE";font-size:10px}',
+        '.scv-menu-pop{display:none;position:absolute;top:100%;left:0;z-index:30;min-width:190px;margin-top:2px;padding:4px;flex-direction:column;align-items:stretch;gap:2px;background:var(--scv-panel);border:1px solid var(--scv-border);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.18)}',
+        '.scv-menu.scv-open>.scv-menu-pop{display:flex}.scv-menu-pop{min-width:210px;padding:4px 0;box-shadow:0 4px 14px rgba(0,0,0,.14)}',
+        '.scv-menu-pop>.scv-btn,.scv-menu-pop>label,.scv-saved>.scv-btn{display:flex;align-items:center;justify-content:flex-start;width:100%;box-sizing:border-box;text-align:left;border:0;border-radius:0;background:transparent;padding:5px 12px 5px 26px;min-height:26px;position:relative;font-size:12.5px}',
+        '.scv-menu-pop button.scv-btn:hover,.scv-menu-pop button.scv-btn:focus{background:var(--scv-hover,rgba(0,122,255,.10));outline:none}',
+        '.scv-menu-pop>button.scv-btn[aria-pressed="true"]::before{content:"\\2713";position:absolute;left:9px;font-size:12px}',
+        '.scv-menu-pop>button.scv-btn[data-key]::after{content:attr(data-key);margin-left:auto;padding-left:16px;color:var(--scv-muted);font-size:11px}',
+        '.scv-menu-pop>select{margin:3px 10px;width:calc(100% - 20px)}.scv-menu-sep{height:1px;margin:4px 0;background:var(--scv-border)}',
+        '.scv-menu-head{padding:4px 12px 2px 12px;font-size:11px;color:var(--scv-muted)}',
+        '.scv-exact{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--scv-muted);cursor:help}.scv-exact::before{content:"";width:8px;height:8px;border-radius:50%;background:#adb5bd}.scv-exact.scv-on::before{background:#2b8a3e}.scv-exact.scv-busy::before{background:#e8a317}',
+        '.scv-menu-pop.scv-right{left:auto;right:0}.scv-spacer{flex:1 1 auto}',
+        '.scv-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#adb5bd;margin:0 4px;cursor:help}.scv-dot.scv-on{background:#2b8a3e}',
         '.scv-sep{width:1px;height:20px;background:var(--scv-border);margin:0 3px}',
         '.scv-btn{display:inline-flex;align-items:center;gap:4px;height:28px;margin:0;padding:0 8px;box-shadow:none;background-image:none;border:1px solid var(--scv-border);border-radius:6px;background:var(--scv-bg);color:inherit;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;width:auto}',
         '.scv select.scv-btn{padding:0 6px;min-width:0;flex:0 0 auto}',
@@ -269,8 +284,8 @@
         '.scv-chip[data-st="error"],.scv-chip[data-st="need-file"]{border-color:var(--scv-bad);color:var(--scv-bad)}',
         '.scv-body{position:relative;display:flex;flex:1;min-height:0}',
         '.scv-side{width:300px;flex:0 0 auto;display:flex;flex-direction:column;border-right:1px solid var(--scv-border);background:var(--scv-panel);min-height:0}',
-        '.scv-tabs{display:flex;flex-wrap:wrap;gap:2px;padding:6px 6px 0}',
-        '.scv-tab{flex:1 0 auto;height:24px;border:1px solid var(--scv-border);border-bottom:none;border-radius:6px 6px 0 0;background:transparent;color:inherit;font:inherit;font-size:11.5px;cursor:pointer;margin:0;padding:0 6px;box-shadow:none}',
+        '.scv-tabs{display:flex;flex-wrap:nowrap;gap:2px;padding:6px 6px 0}',
+        '.scv-tab{flex:1 0 auto;height:24px;border:1px solid var(--scv-border);border-bottom:none;border-radius:6px 6px 0 0;background:transparent;color:inherit;font:inherit;font-size:11px;cursor:pointer;margin:0;padding:0 5px;box-shadow:none;white-space:nowrap}',
         '.scv-tab[aria-selected="true"]{background:var(--scv-bg);font-weight:600}',
         '.scv-pane{flex:1;overflow:auto;background:var(--scv-bg);border-top:1px solid var(--scv-border);padding:6px 4px;min-height:0;position:relative}',
         '.scv-search{width:100%;box-sizing:border-box;margin:0 0 4px;padding:5px 7px;border:1px solid var(--scv-border);border-radius:5px;background:var(--scv-bg);color:inherit;font:inherit;font-size:12px}',
@@ -338,7 +353,8 @@
     // =================================================================== the viewer
     var _seq = 0;
     var ROW_H = 22;
-    var TABS = [['parts', 'Parts'], ['props', 'Properties'], ['zones', 'Zones'], ['volumes', 'PRA'], ['views', 'Views'], ['notes', 'Notes'], ['clash', 'Clashes'], ['pmi', 'PMI'], ['compare', 'Compare']];
+    var TABS = [['parts', 'Parts'], ['props', 'Props'], ['zones', 'Zones'], ['volumes', 'Particular risks'], ['views', 'Views'], ['notes', 'Notes'], ['clash', 'Clashes'], ['pmi', 'PMI'], ['compare', 'Compare']];
+    var MAIN_TABS = { parts: 1, props: 1, views: 1, notes: 1 };   // the rest sit under the Analysis tab
     function Viewer(el, opts) {
         this.el = el; this.opts = opts || {}; this.id = ++_seq;
         this.listeners = []; this.parts = {}; this.order = []; this.sel = new Set(); this.metaBy = {};
@@ -363,50 +379,94 @@
         if (this.opts.height) rootEl.style.height = typeof this.opts.height === 'number' ? this.opts.height + 'px' : this.opts.height;
         var bar = h('div', { class: 'scv-bar', role: 'toolbar', 'aria-label': '3D viewer tools' });
         this.$ = {};
-        function btn(act, label, title) { var b = h('button', { type: 'button', class: 'scv-btn', 'data-act': act, title: title || label, 'aria-label': label }, esc(label)); bar.appendChild(b); return b; }
-        function sep() { bar.appendChild(h('span', { class: 'scv-sep', 'aria-hidden': 'true' })); }
-        function sel(act, label, title, options) { var s = h('select', { class: 'scv-btn', 'data-act': act, 'aria-label': label, title: title }, options); bar.appendChild(s); return s; }
-        btn('fit', 'Fit all', 'Fit everything visible in view (F)');
-        this.$.view = sel('view', 'Standard view', 'Look from a standard direction',
-            '<option value="">View</option>' + Object.keys(VIEWS).map(function (k) { return '<option value="' + k + '">' + VIEWS[k].label + '</option>'; }).join(''));
-        sep();
+        // Controls are made exactly as before (same data-act, same handlers) and placed in dropdown
+        // menus: Navigate, Display, Section, Measure, Analyze, Markup; Exact status, full screen and
+        // keys on the right. Every old action sits in exactly one menu (MENU_OF below).
+        var holder = null;
+        function add(el) { (holder || bar).appendChild(el); return el; }
+        function btn(act, label, title) { return add(h('button', { type: 'button', class: 'scv-btn', 'data-act': act, title: title || label, 'aria-label': label, role: holder ? 'menuitem' : null }, esc(label))); }
+        function sep() { if (holder) holder.appendChild(h('div', { class: 'scv-menu-sep', role: 'separator' })); }
+        function key(b, k) { b.setAttribute('data-key', k); return b; }
+        function sel(act, label, title, options) { return add(h('select', { class: 'scv-btn', 'data-act': act, 'aria-label': label, title: title }, options)); }
+        self.menus = {};
+        function menu(key, label) {
+            var wrap = h('div', { class: 'scv-menu', 'data-menu': key });
+            var b = h('button', { type: 'button', class: 'scv-btn scv-menu-btn', 'data-menu-btn': key, 'aria-haspopup': 'menu', 'aria-expanded': 'false' }, esc(label));
+            var pop = h('div', { class: 'scv-menu-pop', role: 'menu', 'aria-label': label });
+            wrap.appendChild(b); wrap.appendChild(pop); bar.appendChild(wrap);
+            self.menus[key] = { wrap: wrap, btn: b, pop: pop, label: label };
+            holder = pop; return pop;
+        }
+        menu('navigate', 'Navigate');
         this.$.orbit = btn('mode-orbit', 'Orbit', 'Drag to turn around the model, right drag or Shift drag to pan, wheel to zoom at the cursor, double click to turn around a point');
         this.$.fly = btn('mode-fly', 'Fly', 'Fly through: W A S D to move, Q / E down / up, drag to look, Shift for speed, wheel sets speed');
         this.$.walk = btn('mode-walk', 'Walk', 'Walk through: W A S D to move on the floor, gravity keeps you down, walls stop you, Q / E crouch or stand taller, drag to look');
         sep();
-        btn('hide', 'Hide', 'Hide the selected parts (H)');
+        key(btn('fit', 'Fit all', 'Fit everything visible in view (F)'), 'F');
+        this.$.view = sel('view', 'Standard view', 'Look from a standard direction',
+            '<option value="">Standard view</option>' + Object.keys(VIEWS).map(function (k) { return '<option value="' + k + '">' + VIEWS[k].label + '</option>'; }).join(''));
+        sep(); this.$.savedViews = add(h('div', { class: 'scv-saved', 'data-saved-views': '1' }));
+        // SpaceMouse (WebHID): connect, status and settings; a short note where WebHID is missing
+        sep(); (function () {
+            var SM = root.SLSpaceMouse, hidOk = !!(root.navigator && root.navigator.hid), d = SM ? SM.DEFAULTS : {};
+            if (!SM || !hidOk) { self.$.smStatus = add(h('div', { class: 'scv-sm-note', 'data-sm-status': '1', style: 'font-size:11.5px;color:#55555C;padding:4px 8px;max-width:220px' }, esc(SM ? SM.UNAVAILABLE : 'SpaceMouse support is not loaded'))); return; }
+            btn('sm-connect', 'Connect SpaceMouse', 'Connect a 3Dconnexion SpaceMouse (Chrome, Edge or the desktop app)');
+            self.$.smStatus = add(h('div', { 'data-sm-status': '1', style: 'font-size:11.5px;color:#55555C;padding:2px 8px' }, 'SpaceMouse not connected'));
+            var st = SM.loadSettings(), ck = function (k, label) { return '<label style="display:block;font-size:11.5px;padding:1px 8px"><input type="checkbox" data-sm-set="' + k + '"' + (st[k] ? ' checked' : '') + ' style="width:auto;margin-right:4px">' + label + '</label>'; };
+            add(h('div', { 'data-sm-settings': '1' }, '<label style="display:block;font-size:11.5px;padding:1px 8px">Speed <input type="range" min="0.2" max="3" step="0.1" value="' + st.sensitivity + '" data-sm-set="sensitivity" style="width:110px"></label>' +
+                ck('dominant', 'Dominant axis only') + ck('lockRotation', 'Lock rotation') + ck('lockTranslation', 'Lock pan and zoom') + ck('invertRotation', 'Invert rotation') + ck('invertTranslation', 'Invert pan and zoom')));
+        })();
+        menu('display', 'Display');
+        key(btn('hide', 'Hide', 'Hide the selected parts (H)'), 'H');
         btn('show-all', 'Show all', 'Show every part');
-        btn('isolate', 'Isolate', 'Show only the selected parts (I)');
-        this.$.xray = btn('xray', 'Ghost', 'Ghost every part except the selection (X)');
-        var ex = h('label', { class: 'scv-range', title: 'Explode the assembly: parts move apart from its center' }, 'Explode <input type="range" min="0" max="100" value="0" data-act="explode" aria-label="Explode">');
-        bar.appendChild(ex); this.$.explode = ex.querySelector('input');
+        key(btn('isolate', 'Isolate', 'Show only the selected parts (I)'), 'I');
+        this.$.xray = key(btn('xray', 'Ghost', 'Ghost every part except the selection (X)'), 'X');
         sep();
-        this.$.section = sel('section', 'Section', 'Cut the model: planes along X, Y, Z or a picked face, or a section box',
-            '<option value="">Section</option><option value="x">Add plane X</option><option value="y">Add plane Y</option><option value="z">Add plane Z</option><option value="face">Add plane on a face (click it)</option><option value="box">Section box</option><option value="caps">Filled cut faces on / off</option><option value="clear">Remove all</option>');
-        this.$.secx = btn('sec-x', 'Section X', 'Cut the model with a plane across X; drag the plane or use its slider');
-        this.$.secy = btn('sec-y', 'Section Y', 'Cut the model with a plane across Y');
-        this.$.secz = btn('sec-z', 'Section Z', 'Cut the model with a plane across Z');
-        sep();
-        this.$.measure = sel('measure', 'Measure', 'Measure on the exact geometry (or the display mesh, labeled approximate)',
-            '<option value="off">Measure</option><option value="point">Point to point</option><option value="edge">Edge length</option><option value="radius">Radius / diameter</option><option value="angle">Angle</option><option value="part">Part to part</option>');
+        var ex = add(h('label', { class: 'scv-range', title: 'Explode the assembly: parts move apart from its center' }, 'Explode <input type="range" min="0" max="100" value="0" data-act="explode" aria-label="Explode">'));
+        this.$.explode = ex.querySelector('input');
         this.$.colorBy = sel('color-by', 'Color by', 'Color the parts by an attribute (legend at the bottom left)',
-            '<option value="">Color by</option><option value="none">Original colors</option><option value="system">Equipment (system)</option><option value="zone">Zone</option><option value="dal">DAL</option><option value="partNumber">Part number</option><option value="assembly">Assembly</option><option value="designator">Designator</option><option value="material">Material</option><option value="custom">Custom field...</option>');
+            '<option value="">Color by</option><option value="none">Original colors</option><option value="system">Equipment (system)</option><option value="zone">Zone</option><option value="dal">DAL</option><option value="partNumber">Part number</option><option value="assembly">Assembly</option><option value="designator">Designator</option><option value="material">Material</option><option value="custom">A custom field</option>');
+        menu('section', 'Section');
+        this.$.secx = btn('sec-x', 'Plane X', 'Cut the model with a plane across X; drag the plane or use its slider');
+        this.$.secy = btn('sec-y', 'Plane Y', 'Cut the model with a plane across Y');
+        this.$.secz = btn('sec-z', 'Plane Z', 'Cut the model with a plane across Z');
         sep();
+        this.$.section = sel('section', 'More section options', 'Cut the model: planes along X, Y, Z or a picked face, or a section box',
+            '<option value="">More (face, box, caps, clear)</option><option value="x">Add plane X</option><option value="y">Add plane Y</option><option value="z">Add plane Z</option><option value="face">Add plane on a face (click it)</option><option value="box">Section box</option><option value="caps">Filled cut faces on / off</option><option value="clear">Clear all sections</option>');
+        menu('measure', 'Measure');
+        this.$.measure = sel('measure', 'Measure', 'Measure on the exact geometry (or the display mesh, labeled approximate)',
+            '<option value="off">Measure: off</option><option value="point">Point to point</option><option value="edge">Edge length</option><option value="radius">Radius / diameter</option><option value="angle">Angle</option><option value="part">Part to part (clearance)</option>');
+        menu('analyze', 'Analyze');
         this.$.zones = btn('zones', 'Zones', 'Show the zone volumes');
-        this.$.vols = btn('volumes', 'PRA', 'Show the particular risk volumes');
+        this.$.vols = btn('volumes', 'Particular risks', 'Show the particular risk volumes');
         this.$.pmiBtn = btn('pmi', 'PMI', 'Show the AP242 dimensions, tolerances and datums on the model (reads the exact geometry)');
+        sep();
+        btn('tab-clash', 'Clashes', 'Open the clash check in the side panel');
+        btn('tab-compare', 'Compare revisions', 'Open revision compare in the side panel');
+        menu('markup', 'Markup');
         this.$.noteBtn = btn('note', 'Note', 'Pin a note or markup to a part: click the part');
         btn('snapshot', 'Snapshot', 'Save a PNG of this view, with notes and labels, at the size you choose');
-        sep();
-        this.$.exact = h('span', { class: 'scv-chip', 'data-act': 'exact', role: 'button', tabindex: '0', title: 'Exact geometry (B-rep) for measurement and PMI' }, 'Exact: off'); bar.appendChild(this.$.exact);
-        this.$.full = btn('fullscreen', 'Full screen', 'Full screen (Esc exits)');
-        btn('keys', 'Keys', 'Keyboard and mouse controls');
+        holder = null;
+        bar.appendChild(h('span', { class: 'scv-spacer' }));
+        this.$.exact = h('span', { class: 'scv-chip scv-exact', 'data-act': 'exact', role: 'button', tabindex: '0', 'aria-label': 'Exact geometry: off', title: 'Exact geometry (B-rep) for measurement and PMI' }, 'Exact'); bar.appendChild(this.$.exact);
+        this.$.full = btn('fullscreen', '⛶', 'Full screen (Esc exits)'); this.$.full.setAttribute('aria-label', 'Full screen');
+        var kb = btn('keys', '?', 'Keyboard and mouse controls'); kb.setAttribute('aria-label', 'Keyboard and mouse controls');
+        Object.keys(self.menus).forEach(function (k) { if (k === 'markup') self.menus[k].pop.classList.add('scv-right'); });
+        this._wireMenus(bar);
         rootEl.appendChild(bar);
 
         var body = h('div', { class: 'scv-body' });
         var side = h('div', { class: 'scv-side' });
         var tabs = h('div', { class: 'scv-tabs', role: 'tablist' });
-        TABS.forEach(function (t) { tabs.appendChild(h('button', { type: 'button', class: 'scv-tab', role: 'tab', 'data-tab': t[0], 'aria-selected': t[0] === 'parts' ? 'true' : 'false' }, t[1])); });
+        TABS.forEach(function (t) { if (MAIN_TABS[t[0]]) tabs.appendChild(h('button', { type: 'button', class: 'scv-tab', role: 'tab', 'data-tab': t[0], 'aria-selected': t[0] === 'parts' ? 'true' : 'false' }, t[1])); });
+        var an = h('div', { class: 'scv-menu', 'data-menu': 'analysis-tab' });
+        var anBtn = h('button', { type: 'button', class: 'scv-tab scv-menu-btn', role: 'tab', 'data-analysis-tab': '1', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-selected': 'false' }, 'Analysis');
+        var anPop = h('div', { class: 'scv-menu-pop', role: 'menu', 'aria-label': 'Analysis' });
+        TABS.forEach(function (t) { if (!MAIN_TABS[t[0]]) anPop.appendChild(h('button', { type: 'button', class: 'scv-btn', role: 'menuitem', 'data-tab': t[0] }, t[1])); });
+        an.appendChild(anBtn); an.appendChild(anPop); tabs.appendChild(an); this.$.anTab = { wrap: an, btn: anBtn, pop: anPop };
+        anBtn.addEventListener('click', function (e) { e.stopPropagation(); var o = !an.classList.contains('scv-open'); an.classList.toggle('scv-open', o); anBtn.setAttribute('aria-expanded', String(o)); if (o) { var f = anPop.querySelector('button'); if (f) f.focus(); } });
+        anPop.addEventListener('keydown', function (e) { var L = Array.prototype.slice.call(anPop.querySelectorAll('button')), i = L.indexOf(e.target); if (e.key === 'Escape') { an.classList.remove('scv-open'); anBtn.focus(); } else if (e.key === 'ArrowDown') { e.preventDefault(); (L[i + 1] || L[0]).focus(); } else if (e.key === 'ArrowUp') { e.preventDefault(); (L[i - 1] || L[L.length - 1]).focus(); } });
+        anBtn.addEventListener('keydown', function (e) { if (e.key === 'ArrowDown') { e.preventDefault(); anBtn.click(); } });
         side.appendChild(tabs); this.$.tabs = tabs;
         this.$.pane = h('div', { class: 'scv-pane' });
         side.appendChild(this.$.pane);
@@ -436,7 +496,21 @@
             else if (a === 'color-by') { if (v) self._colorByAction(v); e.target.value = ''; }
         });
         bar.addEventListener('input', function (e) { if (e.target.getAttribute('data-act') === 'explode') self.setExplode(+e.target.value / 100); });
-        tabs.addEventListener('click', function (e) { var b = e.target.closest('[data-tab]'); if (b) self.showTab(b.getAttribute('data-tab')); });
+        bar.addEventListener('change', function (e) { var k = e.target.getAttribute && e.target.getAttribute('data-sm-set'); if (k && self.spaceMouse) self.spaceMouse.set(k, e.target.type === 'checkbox' ? e.target.checked : +e.target.value); });
+        // SpaceMouse: object mode about the selection center or the model center; ignored in Fly / Walk
+        if (root.SLSpaceMouse) {
+            this.spaceMouse = root.SLSpaceMouse.attach({
+                busy: function () { return !self.camera || self.mode !== 'orbit'; },
+                getView: function () { var c = self.camera, t = self.target, sb = null; try { var L = Array.from(self.sel || []).filter(function (p) { return self.parts[p]; }); if (L.length) sb = unionBox(L.map(function (p) { return self._drawnBox(p); })); } catch (_) {} var b = sb || self._modelBox;
+                    return { pos: [c.position.x, c.position.y, c.position.z], target: [t.x, t.y, t.z], up: [c.up.x, c.up.y, c.up.z], pivot: b ? [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2] : [t.x, t.y, t.z] }; },
+                setView: function (v) { self.camera.position.set(v.pos[0], v.pos[1], v.pos[2]); self.target.set(v.target[0], v.target[1], v.target[2]); self.camera.up.set(v.up[0], v.up[1], v.up[2]); self.camera.lookAt(self.target); self.dirty = true; },
+                fitAll: function () { self.fitAll(); self.dirty = true; },
+                openMenu: function () { self.openMenu('navigate'); },
+                onStatus: function (t) { if (self.$ && self.$.smStatus) self.$.smStatus.textContent = t; }
+            });
+            if (this.spaceMouse.available) this.spaceMouse.reconnect();
+        }
+        tabs.addEventListener('click', function (e) { var b = e.target.closest('[data-tab]'); if (b) { self.showTab(b.getAttribute('data-tab')); self.$.anTab.wrap.classList.remove('scv-open'); self.$.anTab.btn.setAttribute('aria-expanded', 'false'); } });
         this.$.pane.addEventListener('click', function (e) { self._paneClick(e); });
         this.$.pane.addEventListener('input', function (e) { if (e.target.classList.contains('scv-search')) { self.filter = e.target.value; self._renderTreeList(true); } else if (self._paneInput) self._paneInput(e); });
         this.$.pane.addEventListener('change', function (e) { self._paneChange(e); });
@@ -1069,7 +1143,7 @@
         if (this.colorByState && this.colorByState.byPid[pid]) c = this.colorByState.byPid[pid];
         if (this.clashHi) { if (this.clashHi.a === pid) c = [0.86, 0.16, 0.16]; else if (this.clashHi.b === pid) c = [0.12, 0.42, 0.95]; }
         if (this.compare && this.compare.status && this.compare.status[pid]) c = this.compare.colors[this.compare.status[pid]];
-        if (this.sel.has(pid)) c = _mix(c, SEL_RGB, 0.55);
+        if (this.sel.has(pid)) c = this.selNeutral ? HIT_RGB.slice() : _mix(c, SEL_RGB, 0.55);   // particular risk views: hit parts neutral charcoal, never a region color
         return c;
     };
     P._paint = function (pids) {
@@ -1127,11 +1201,13 @@
         g.add(m);
         this.dirty = true;
     };
-    P.highlightParts = function (pids) {
+    // highlightParts(pids, {noFrame}): select and show the parts; noFrame keeps the camera where a
+    // region view put it (auto framing only sets the starting camera; navigation stays free)
+    P.highlightParts = function (pids, opts) {
         var self = this, list = (pids || []).filter(function (p) { return self.parts[p]; });
         if (this.scene3) this.scene3.setVisible(list, true);
         this.select(list, false);
-        if (list.length) { this._reveal(list[0]); this.frameBox(unionBox(list.map(function (p) { return self._drawnBox(p); }))); }
+        if (list.length && !(opts && opts.noFrame)) { this._reveal(list[0]); this.frameBox(unionBox(list.map(function (p) { return self._drawnBox(p); }))); }
         return list.length;
     };
     P.setExplode = function (f) {
@@ -1344,6 +1420,7 @@
         this.measure = m || 'off'; this.measureState = null;
         if (this.measure === 'off') this._clearMeasure();
         if (this.$.measure.value !== this.measure) this.$.measure.value = this.measure;
+        if (this._syncButtons) this._syncButtons();
         if (this.measure !== 'off' && this.explode > 0) { this._hint('Measurements are taken with the model assembled: set Explode to 0 first.'); this.measure = 'off'; this.$.measure.value = 'off'; return; }
         var X = root.SLCadExact;
         if (this.measure !== 'off' && X && this.entry && !X.ready(this.entry.id) && X.state().status !== 'loading') this.loadExact();
@@ -1369,8 +1446,10 @@
         var st = X ? X.state() : { status: 'none' }, mine = st.cadId && this.entry && st.cadId === this.entry.id;
         var s = mine ? st.status : 'none';
         el.setAttribute('data-st', s);
-        el.textContent = s === 'ready' ? 'Exact: ready' : s === 'loading' ? 'Exact: ' + (PHASES[st.phase] || 'loading').replace(/\.\.\.$/, '') + (st.frac != null ? ' ' + Math.round(st.frac * 100) + '%' : '') : s === 'need-file' ? 'Exact: open the file' : s === 'error' ? 'Exact: not available' : 'Exact: off';
+        var etxt = s === 'ready' ? 'Exact: ready' : s === 'loading' ? 'Exact: ' + (PHASES[st.phase] || 'loading').replace(/\.\.\.$/, '') + (st.frac != null ? ' ' + Math.round(st.frac * 100) + '%' : '') : s === 'need-file' ? 'Exact: open the file' : s === 'error' ? 'Exact: not available' : 'Exact: off';
+        el.textContent = 'Exact'; el.setAttribute('aria-label', etxt); el.classList.toggle('scv-on', s === 'ready'); el.classList.toggle('scv-busy', s === 'loading');   // a status dot; the words are its label and tooltip
         el.title = s === 'error' ? (st.error || '') : s === 'need-file' ? 'The STEP file is not kept in this browser. Click to open it (checked against the fingerprint).' : 'Exact geometry (B-rep) for measurement and PMI. Click to load.';
+        el.title = etxt + (el.title ? '. ' + el.title : '');
     };
     P._clearMeasure = function () {
         while (this.gMeasure && this.gMeasure.children.length) this._disposeObj(this.gMeasure.children.pop());
@@ -1501,7 +1580,8 @@
 
     // ---------------------------------------------------------------- labels
     P._label = function (pos, text, color, kind, key) {
-        var el = h('div', { class: 'scv-label' + (kind === 'measure' ? ' scv-measure' : kind === 'pmi' ? ' scv-pmi' : kind === 'note' ? ' scv-note' : '') }, esc(text));
+        var el = h('div', { class: 'scv-label' + (kind === 'measure' ? ' scv-measure' : kind === 'pmi' ? ' scv-pmi' : kind === 'note' ? ' scv-note' : kind === 'spread' ? ' scv-callout' : '') }, esc(text));
+        if (kind === 'spread' && color) el.style.setProperty('--scv-callout', color);
         if (color) el.style.background = color;
         this.$.labels.appendChild(el);
         var l = { el: el, pos: pos, kind: kind, key: key, text: text }; this.labels.push(l); return l;
@@ -1511,7 +1591,7 @@
         var w = this.$.canvas.clientWidth, hh = this.$.canvas.clientHeight, cam = this.camera, v = new this.T.Vector3();
         var self = this;
         this.labels.forEach(function (l) {
-            var show = l.kind === 'measure' || (l.kind === 'zone' && self.gZones.visible && self.zoneVis[l.key] !== false) || (l.kind === 'vol' && self.gVols.visible && self.volVis[l.key] !== false) || (l.kind === 'pmi' && self.gPmi.visible) || (l.kind === 'note' && self.gNotes.visible && !l.hidden);
+            var show = l.kind === 'measure' || (l.kind === 'spread' && self.gSpread && self.gSpread.children.some(function (m) { return m.visible && m.userData.model === l.key; })) || (l.kind === 'zone' && self.gZones.visible && self.zoneVis[l.key] !== false) || (l.kind === 'vol' && self.gVols.visible && self.volVis[l.key] !== false) || (l.kind === 'pmi' && self.gPmi.visible) || (l.kind === 'note' && self.gNotes.visible && !l.hidden);
             if (show) { v.copy(l.pos).project(cam); show = v.z > -1 && v.z < 1; }
             l.el.style.display = show ? 'block' : 'none';
             if (show) { l.el.style.left = ((v.x + 1) / 2 * w) + 'px'; l.el.style.top = ((1 - v.y) / 2 * hh) + 'px'; }
@@ -1650,10 +1730,94 @@
     };
     // 14 Oct 2026 (p3-pra): overlay line segments (fragment paths, debris directions) drawn on
     // top of the model; showPaths([{a, b, color}], {frame}) replaces the set, clearPaths() empties it.
+    // 14 Oct 2026 (rotor flow): fragment spread volumes, drawn from the exact vertices the engine
+    // computes (SLPraModels.spreadMeshPoints); list = [{model, label, color, positions, index}].
+    // Each mesh keeps its spec in userData so a test can read the drawing back.
+    P.showSpreadVolumes = function (list, opts) {
+        var T = this.T; if (!T || !this.scene) return 0;
+        if (!this.gSpread) { this.gSpread = new T.Group(); this.scene.add(this.gSpread); }
+        while (this.gSpread.children.length) this._disposeObj(this.gSpread.children.pop());
+        this._dropLabels('spread');
+        var wasN = !!this.selNeutral; this.selNeutral = !!(list && list.length); if (wasN !== this.selNeutral) this._paint();   // hit parts neutral while a risk region is shown
+        // entering the rotor view: show the whole model and clear ghosting, remembering what the user
+        // had hidden; leaving it (an empty list) puts their hidden parts and ghosting back
+        if ((list || []).length && !this._rotorSaved && this.scene3) this._rotorSaved = { hidden: this.hiddenPids(), xray: !!this.xray };
+        // every region view starts clean: no ghost, nothing hidden or isolated from another view (the user's own state comes back on leaving)
+        if ((list || []).length && this.scene3) { if (this.xray) this.setXray(false); this.showAll(); }
+        else if (!(list || []).length && this._rotorSaved) { var rs = this._rotorSaved; this._rotorSaved = null; if (rs.hidden.length) this.setVisible(rs.hidden, false); if (rs.xray) this.setXray(true); }
+        if ((list || []).length) { this.setVolumesOn(false); this.setZonesOn(false); if (this.gPaths) this.gPaths.visible = false; }   // other risk labels and the path lines stay out of the rotor view
+        var self = this, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+        var order = (list || []).slice().sort(function (a, b) { return (b.spec ? b.spec.halfAngleDeg : 0) - (a.spec ? a.spec.halfAngleDeg : 0); });   // widest first, narrowest drawn on top
+        order.forEach(function (v, n) {
+            var g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(v.positions, 3)); g.setIndex(v.index);
+            var mesh = new T.Mesh(g, new T.MeshBasicMaterial({ color: v.color, transparent: true, opacity: v.opacity || 0.18, depthWrite: false, depthTest: true, side: T.DoubleSide }));
+            mesh.renderOrder = 6 + n; mesh.userData = { spread: v.spec, model: v.model };
+            // solid outline at +spread and -spread on the outer and inner rims (every 4 vertices per azimuth: inner-, inner+, outer+, outer-)
+            var P4 = v.positions, segs = [];
+            for (var q = 0; q + 4 < P4.length / 3; q += 4) [0, 1, 2, 3].forEach(function (k) { var a = (q + k) * 3, b = (q + 4 + k) * 3; segs.push(P4[a], P4[a + 1], P4[a + 2], P4[b], P4[b + 1], P4[b + 2]); });
+            var lg2 = v.spec ? new T.BufferGeometry() : new T.EdgesGeometry(g, 1); if (v.spec) lg2.setAttribute('position', new T.Float32BufferAttribute(segs, 3));   // box regions: their real edges
+            // edge style per type (solid, dashed, dotted, dash-dot, long dash) so overlapping regions stay readable
+            var DS = { dashed: [1, 0.6], dotted: [0.25, 0.5], dashdot: [1.2, 0.5], longdash: [2.2, 0.8] }[v.edge || 'solid'], sz = 1;
+            try { lg2.computeBoundingSphere(); sz = Math.max(1, lg2.boundingSphere.radius / 40); } catch (_) {}
+            var line = new T.LineSegments(lg2, DS ? new T.LineDashedMaterial({ color: v.color, dashSize: DS[0] * sz, gapSize: DS[1] * sz }) : new T.LineBasicMaterial({ color: v.color })); if (DS) line.computeLineDistances(); line.userData.edge = v.edge || 'solid'; line.renderOrder = 20 + n; mesh.add(line);
+            self.gSpread.add(mesh);
+            if (v.callout && _n3(v.callout.pos)) self._label(new T.Vector3(v.callout.pos[0], v.callout.pos[1], v.callout.pos[2]), v.callout.text, v.color, 'spread', v.model);   // a named callout (bird impact point, a source, a zone)
+            if (v.spec) { var sp = v.spec, ro = sp.outerRadius, hh = ro * Math.tan(sp.halfAngleDeg * Math.PI / 180) + sp.widthMm / 2;
+                // each type labelled at its own place on the rim (rim angle 90 deg minus 25 deg per type, at
+                // its +spread edge), so labels of different types never sit on top of each other
+                var azl = (90 - 25 * n) * Math.PI / 180, cz = Math.cos(azl), sz = Math.sin(azl), e2 = [sp.axis[1] * sp.e1[2] - sp.axis[2] * sp.e1[1], sp.axis[2] * sp.e1[0] - sp.axis[0] * sp.e1[2], sp.axis[0] * sp.e1[1] - sp.axis[1] * sp.e1[0]];
+                var dl = [0, 1, 2].map(function (q) { return cz * sp.e1[q] + sz * e2[q]; });
+                self._label(new T.Vector3(sp.origin[0] + ro * dl[0] + hh * sp.axis[0], sp.origin[1] + ro * dl[1] + hh * sp.axis[1], sp.origin[2] + ro * dl[2] + hh * sp.axis[2]), '\u00b1' + sp.halfAngleDeg + ' deg', v.color, 'spread', v.model); }
+            for (var i = 0; i < v.positions.length; i += 3) for (var j = 0; j < 3; j++) { mn[j] = Math.min(mn[j], v.positions[i + j]); mx[j] = Math.max(mx[j], v.positions[i + j]); }
+        });
+        var lg = this.$ && this.$.legend;
+        if (lg) {
+            if ((list || []).length) {
+                lg.innerHTML = '<b>' + esc((opts && opts.title) || 'Fragment spread') + '</b>' + list.map(function (v) { return '<label class="scv-lg" style="cursor:pointer"><input type="checkbox" data-spread-toggle="' + esc(v.model) + '" checked style="width:auto;margin:0 4px 0 0"><span class="scv-swatch" style="background:' + v.color + '"></span><span>' + esc(v.label) + '</span></label>'; }).join('');
+                lg.onchange = function (e) { var k = e.target && e.target.getAttribute('data-spread-toggle'); if (!k) return; self.gSpread.children.forEach(function (m) { if (m.userData.model === k) m.visible = e.target.checked; }); self.dirty = true; };
+                lg.classList.add('scv-open');
+            } else { lg.classList.remove('scv-open'); lg.onchange = null; }
+        }
+        // side-on: look across the rotor axis (along the world axis most perpendicular to it,
+        // span first), so the +/- spread reads as a flare instead of a flat disc
+        if (opts && opts.sideOn && list && list[0] && list[0].spec && this.camera) {
+            var ax = list[0].spec.axis, cands = [[0, 1, 0], [0, 0, 1], [1, 0, 0]], best = cands[0], bd = 2;
+            cands.forEach(function (c) { var d = Math.abs(c[0] * ax[0] + c[1] * ax[1] + c[2] * ax[2]); if (d < bd - 1e-9) { bd = d; best = c; } });
+            var up = best[2] ? [1, 0, 0] : [0, 0, 1];
+            this.camera.up.set(up[0], up[1], up[2]);
+            // three-quarter side view: side-on turned 20 degrees around the up axis and raised 25 degrees,
+            // so the wedge thickness and the aircraft both show; the Side preset stays exact side-on
+            var dir = new this.T.Vector3(-best[0], -best[1], -best[2]), upv = new this.T.Vector3(up[0], up[1], up[2]);
+            if (opts.exactSide !== true) { dir.applyAxisAngle(upv, 20 * Math.PI / 180); var rgt = new this.T.Vector3().crossVectors(dir, upv).normalize(); dir.applyAxisAngle(rgt, -25 * Math.PI / 180); }
+            this.camera.position.set(this.target.x + dir.x, this.target.y + dir.y, this.target.z + dir.z);
+            this.sideOnDir = best.slice(); this.sideOnView = opts.exactSide === true ? 'side' : 'three-quarter';
+        }
+        // a region inside the aircraft: ghost everything but the parts in it so the region shows; the
+        // legend gets an "X-ray skin" switch the user can turn off
+        if (opts && Array.isArray(opts.xrayHits) && (list || []).length) {
+            this.select(opts.xrayHits.filter(function (p) { return self.parts[p] || (self.metaBy && self.metaBy[p]) || true; }), false); this.setXray(true);
+            if (lg) { lg.insertAdjacentHTML('beforeend', '<label class="scv-lg" style="cursor:pointer"><input type="checkbox" data-xray-toggle checked style="width:auto;margin:0 4px 0 0"><span>X-ray skin</span></label>'); var prev = lg.onchange; lg.onchange = function (e) { if (e.target && e.target.hasAttribute('data-xray-toggle')) { self.setXray(e.target.checked); return; } if (prev) prev(e); }; }
+        }
+        // region view: look from the side of the aircraft the region is on, from above unless the region
+        // is on the underside, so the region and the whole aircraft both show
+        if (opts && opts.regionView && isFinite(mn[0]) && this._modelBox && this.camera) {
+            var MB = this._modelBox, mc = [0, 1, 2].map(function (i) { return (MB.min[i] + MB.max[i]) / 2; }), rc = [0, 1, 2].map(function (i) { return (mn[i] + mx[i]) / 2; });
+            var hz = (MB.max[2] - MB.min[2]) || 1, under = mx[2] < mc[2] - 0.05 * hz;
+            var vy = rc[1] - mc[1], sy = Math.abs(vy) > 1e-6 ? (vy > 0 ? 1 : -1) : 1;
+            var dv = new this.T.Vector3((rc[0] - mc[0]) >= 0 ? 0.45 : -0.45, 0.75 * sy, under ? -0.5 : 0.55).normalize();
+            this.camera.up.set(0, 0, 1); this.camera.position.set(this.target.x + dv.x, this.target.y + dv.y, this.target.z + dv.z); this.regionViewDir = [dv.x, dv.y, dv.z];
+        }
+        if (opts && opts.frame && isFinite(mn[0])) { var mb = this._modelBox; if (mb) for (var q2 = 0; q2 < 3; q2++) { mn[q2] = Math.min(mn[q2], mb.min[q2]); mx[q2] = Math.max(mx[q2], mb.max[q2]); } this.frameBox({ min: mn, max: mx }); }   // the whole aircraft and the volumes
+        if (this.gPaths && !(list || []).length) this.gPaths.visible = true;
+        this.dirty = true;
+        return (list || []).length;
+    };
+    P.spreadVolumesDrawn = function () { return this.gSpread ? this.gSpread.children.map(function (m) { var a = m.geometry.getAttribute('position'); return { model: m.userData.model, spec: m.userData.spread, visible: m.visible, opacity: m.material.opacity, renderOrder: m.renderOrder, positions: Array.prototype.slice.call(a.array) }; }) : []; };
     P.showPaths = function (segs, opts) {
         var T = this.T; if (!T || !this.scene) return 0;
         if (!this.gPaths) { this.gPaths = new T.Group(); this.scene.add(this.gPaths); }
         while (this.gPaths.children.length) this._disposeObj(this.gPaths.children.pop());
+        this.gPaths.visible = true;
         var byCol = {};
         (segs || []).forEach(function (s) { if (_n3(s.a) && _n3(s.b)) (byCol[s.color || '#c92a2a'] = byCol[s.color || '#c92a2a'] || []).push(s); });
         var self = this, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
@@ -1716,7 +1880,8 @@
     // ---------------------------------------------------------------- side panel (parts, zones, PRA; the rest in cad_viewer_panels.js)
     P.showTab = function (t) {
         this.tab = t;
-        Array.prototype.forEach.call(this.$.tabs.children, function (x) { x.setAttribute('aria-selected', String(x.getAttribute('data-tab') === t)); });
+        Array.prototype.forEach.call(this.$.tabs.querySelectorAll('.scv-tab[data-tab]'), function (x) { x.setAttribute('aria-selected', String(x.getAttribute('data-tab') === t)); });
+        if (this.$.anTab) { var an = MAIN_TABS[t] ? null : TABS.filter(function (q) { return q[0] === t; })[0]; this.$.anTab.btn.textContent = an ? 'Analysis: ' + an[1] : 'Analysis'; this.$.anTab.btn.setAttribute('aria-selected', String(!!an)); }
         this.$.pane.innerHTML = '';
         this._renderPane();
     };
@@ -1872,6 +2037,7 @@
     P._act = function (a) {
         switch (a) {
             case 'fit': this.fitAll(); break;
+            case 'sm-connect': if (this.spaceMouse) this.spaceMouse.connect(); break;
             case 'mode-orbit': this._setMode('orbit'); break;
             case 'mode-fly': this._setMode('fly'); break;
             case 'mode-walk': this._setMode('walk'); break;
@@ -1889,11 +2055,67 @@
             case 'snapshot': if (this.openSnapshot) this.openSnapshot(); break;
             case 'exact': { var X = root.SLCadExact, st = X && X.state(); if (st && st.status === 'need-file') this._askExactFile(); else this.loadExact(); break; }
             case 'fullscreen': this.toggleFullscreen(); break;
+            case 'tab-clash': this.showTab('clash'); break;
+            case 'tab-compare': this.showTab('compare'); break;
             case 'keys': this._hint('Orbit: drag, right drag pans, wheel zooms at the cursor, double click sets the turning point. Fly / Walk: W A S D, Q / E, drag to look, Shift faster. F fit, H hide, I isolate, X ghost, Esc clears. Parts list: Ctrl or Cmd click adds, Shift click selects a range. View cube (bottom right): click a face.'); break;
         }
     };
+    // ---- dropdown menus: open / close by click, keyboard (Enter, Space, arrows, Escape), outside
+    // click; a menu never runs past the viewer's right edge
+    P._wireMenus = function (bar) {
+        var self = this;
+        function items(m) { return Array.prototype.filter.call(m.pop.querySelectorAll('button,select,input'), function (x) { return !x.disabled; }); }
+        bar.addEventListener('click', function (e) {
+            var mb = e.target.closest('[data-menu-btn]'); if (mb) { var k = mb.getAttribute('data-menu-btn'); if (e.detail === 0 && self._kbOpen && Date.now() - self._kbOpen < 500) return; self.toggleMenu(k); return; }
+            var sv = e.target.closest('[data-saved-view]'); if (sv && root.SLCadReview && self.applyView) { self.applyView(root.SLCadReview.getView(sv.getAttribute('data-saved-view'))); self.closeMenus(); return; }
+            var it = e.target.closest('.scv-menu-pop button'); if (it) self.closeMenus();
+        });
+        bar.addEventListener('change', function (e) { if (e.target.closest('.scv-menu-pop') && e.target.tagName === 'SELECT') self.closeMenus(); });
+        bar.addEventListener('keydown', function (e) {
+            var mb = e.target.closest('[data-menu-btn]'), inPop = e.target.closest('.scv-menu-pop');
+            if (mb && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')) { e.preventDefault(); self._kbOpen = Date.now(); self.openMenu(mb.getAttribute('data-menu-btn'), true); return; }   // preventDefault: no synthetic click follows
+            if (inPop) {
+                var m = self.menus[inPop.parentNode.getAttribute('data-menu')], L = items(m), i = L.indexOf(e.target);
+                if (e.key === 'Escape') { e.preventDefault(); self.closeMenus(); m.btn.focus(); }
+                else if (e.key === 'ArrowDown' && e.target.tagName !== 'SELECT') { e.preventDefault(); (L[i + 1] || L[0]).focus(); }
+                else if (e.key === 'ArrowUp' && e.target.tagName !== 'SELECT') { e.preventDefault(); (L[i - 1] || L[L.length - 1]).focus(); }
+            }
+        });
+        this._menuOutside = function (e) { if (!e.target.closest || !e.target.closest('.scv-menu')) self.closeMenus(); };
+        document.addEventListener('pointerdown', this._menuOutside, true);
+        // Escape closes an open menu first (window capture runs before the viewer's own Escape, which clears the selection)
+        this._menuEsc = function (e) {
+            var mb = e.target && e.target.closest && e.target.closest('[data-menu-btn]');
+            if (mb && self.root.contains(mb) && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')) { e.preventDefault(); e.stopPropagation(); self._kbOpen = Date.now(); self.openMenu(mb.getAttribute('data-menu-btn'), true); return; }   // before the viewer's own key handling
+            if (e.key !== 'Escape') return; var M = self.menus || {}, k = Object.keys(M).filter(function (q) { return M[q].wrap.classList.contains('scv-open'); })[0]; if (!k) return; e.preventDefault(); e.stopPropagation(); self.closeMenus(); M[k].btn.focus(); };
+        window.addEventListener('keydown', this._menuEsc, true);
+    };
+    P.openMenu = function (k, focus) {
+        var m = this.menus && this.menus[k]; if (!m) return false;
+        this.closeMenus();
+        if (k === 'navigate' && this.$.savedViews) { var R = root.SLCadReview, L = []; try { L = R ? R.views({ fileName: this.entry && this.entry.fileName }) : []; } catch (_) {}
+            this.$.savedViews.innerHTML = '<div class="scv-menu-head">Saved views</div>' + (L.length ? L.map(function (v) { return '<button type="button" class="scv-btn" role="menuitem" data-saved-view="' + esc(v.id) + '">' + esc(v.name || v.id) + '</button>'; }).join('') : '<div class="scv-menu-head">None yet (Views tab: Save view)</div>'); }
+        m.wrap.classList.add('scv-open'); m.btn.setAttribute('aria-expanded', 'true');
+        var r = m.pop.getBoundingClientRect(), rr = this.root.getBoundingClientRect();
+        m.pop.classList.toggle('scv-right', r.right > rr.right - 4 || k === 'markup');
+        if (focus) { var f = m.pop.querySelector('button,select,input'); if (f) f.focus(); }
+        return true;
+    };
+    P.closeMenus = function () { var M = this.menus || {}; Object.keys(M).forEach(function (k) { M[k].wrap.classList.remove('scv-open'); M[k].btn.setAttribute('aria-expanded', 'false'); }); };
+    P.toggleMenu = function (k) { var m = this.menus && this.menus[k]; if (!m) return; if (m.wrap.classList.contains('scv-open')) this.closeMenus(); else this.openMenu(k); };
+    // the menu that holds a toolbar action (for tests and proofs that drive a control directly)
+    P.menuOf = function (act) { var M = this.menus || {}; for (var k in M) if (M[k].pop.querySelector('[data-act="' + act + '"]')) return k; return null; };
+    P.openMenuFor = function (act) { var k = this.menuOf(act); return k ? this.openMenu(k) : false; };
     P._syncButtons = function () {
         var $ = this.$, self = this;
+        if (this.menus) {
+            var M = this.menus, modeName = { orbit: 'Orbit', fly: 'Fly', walk: 'Walk' }[this.mode] || 'Orbit';
+            M.navigate.btn.textContent = 'Navigate: ' + modeName;
+            var axes = (this.sec && this.sec.planes || []).map(function (p) { return String(p.axis || '').toUpperCase(); }).filter(Boolean);
+            M.section.btn.textContent = axes.length ? 'Section: ' + axes.join(', ') : 'Section';
+            M.measure.btn.textContent = this.measure && this.measure !== 'off' ? 'Measure: ' + ({ point: 'point', edge: 'edge', radius: 'radius', angle: 'angle', part: 'clearance' }[this.measure] || this.measure) : 'Measure';
+            M.display.btn.textContent = this.xray ? 'Display: ghost' : 'Display';
+        }
         $.orbit.setAttribute('aria-pressed', String(this.mode === 'orbit'));
         $.fly.setAttribute('aria-pressed', String(this.mode === 'fly'));
         $.walk.setAttribute('aria-pressed', String(this.mode === 'walk'));
@@ -1904,7 +2126,7 @@
         $.pmiBtn.setAttribute('aria-pressed', String(!!this.pmiOn));
         $.noteBtn.setAttribute('aria-pressed', String(!!this.noteMode));
         $.full.setAttribute('aria-pressed', String(!!this.fullscreen));
-        $.full.textContent = this.fullscreen ? 'Exit full screen' : 'Full screen';
+        $.full.textContent = '\u26F6'; $.full.setAttribute('aria-label', this.fullscreen ? 'Exit full screen' : 'Full screen'); $.full.title = this.fullscreen ? 'Exit full screen (Esc)' : 'Full screen (Esc exits)';
     };
     P.toggleFullscreen = function (force) {
         this.fullscreen = force != null ? !!force : !this.fullscreen;
@@ -1923,6 +2145,8 @@
         return { frames: f.length, medianFrameMs: iv.length ? iv[Math.floor(iv.length / 2)] : null, p95FrameMs: iv.length ? iv[Math.floor(iv.length * 0.95)] : null, medianRenderMs: f.length ? f.map(function (x) { return x.render; }).sort(function (a, b) { return a - b; })[Math.floor(f.length / 2)] : null, parts: this.order.length, drawn: s.drawn, coarse: s.coarseDrawn, culledFrustum: s.culledFrustum, culledSmall: s.culledSmall, chunks: s.chunks, instancedShapes: s.instancedShapes, drawCalls: s.drawCalls, prototypes: s.prototypes, occludedChunks: s.occludedChunks };
     };
     P.dispose = function () {
+        if (this._menuOutside) document.removeEventListener('pointerdown', this._menuOutside, true);
+        if (this._menuEsc) window.removeEventListener('keydown', this._menuEsc, true);
         this.disposed = true;
         if (this._job) { try { this._job.cancel(); } catch (_) {} }
         try { cancelAnimationFrame(this._raf); } catch (_) {}
@@ -1951,7 +2175,7 @@
     var api = {
         VERSION: VERSION, Viewer: Viewer, mount: mount, current: function () { return _last; },
         loadModel: _on('loadModel'), showModel: _on('showModel'), highlightZone: _on('highlightZone'), highlightParts: _on('highlightParts'),
-        highlightVolume: _on('highlightVolume'), showPaths: _on('showPaths'), clearPaths: _on('clearPaths'), onSelect: _on('onSelect'), dispose: function () { if (_last) _last.dispose(); },
+        highlightVolume: _on('highlightVolume'), showPaths: _on('showPaths'), showSpreadVolumes: _on('showSpreadVolumes'), spreadVolumesDrawn: _on('spreadVolumesDrawn'), clearPaths: _on('clearPaths'), onSelect: _on('onSelect'), dispose: function () { if (_last) _last.dispose(); },
         _pure: { fitBoxDistance: fitBoxDistance, buildTree: buildTree, ancestorsOf: ancestorsOf, unionBox: unionBox, zoneColor: zoneColor, standardView: standardView, volumeSpec: volumeSpec, closestVertexPair: closestVertexPair, VIEWS: VIEWS, esc: esc, fmtMm: fmtMm }
     };
     root.SLCadViewer = api;

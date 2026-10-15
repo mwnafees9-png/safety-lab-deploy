@@ -40,6 +40,8 @@
     function _engine() { var E = window.SLCadZonal; return (E && typeof E === 'object') ? E : null; }
 
     // ---------------------------------------------------------------- import
+    // Retry a body or part that could not be meshed: the worker that read the structure reads it again
+    window.cadRetryMesh = function (i) { var r = state.lastImport, q = r && r.model.notMeshed && r.model.notMeshed[i]; if (!q || !r.stream || !r.stream.worker) return false; q.retrying = true; var w = r.stream.worker; var fn = function (ev) { var e = ev.data || {}; if (e.type === 'detail' && e.retry) { w.removeEventListener('message', fn); r.model.notMeshed = (r.model.notMeshed || []).filter(function (x) { return x !== q; }); r.stream._emit(e); _msg('Read <b>' + _esc(q.name) + '</b> on retry.'); } else if (e.type === 'detail-failed' && e.protos && e.protos[0] === q.protos[0]) { w.removeEventListener('message', fn); q.reason = e.reason; q.retrying = false; _msg('Still not meshed: <b>' + _esc(q.name) + '</b>: ' + _esc(e.reason), 'error'); } }; w.addEventListener('message', fn); w.postMessage({ type: 'retry', protos: q.protos }); _msg('Reading <b>' + _esc(q.name) + '</b> again...'); return true; };
     window.cadImportStep = function () {
         var I = window.SLCadImport; if (!I) { _msg('The CAD importer is not loaded.', 'error'); return; }
         var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stp,.step,.p21';
@@ -67,6 +69,7 @@
         return job.promise.then(function (r) {
             state.job = null; _progress(false);
             state.cadId = r.entry.id; state.matchOn = false;
+            state.lastImport = r;
             // the worker that read the file keeps its exact geometry open for measurement and PMI
             if (r.worker && window.SLCadExact) window.SLCadExact.attach(r.worker, r.entry);
             var TR = I._trace || function () {};
@@ -81,7 +84,7 @@
             if (r.stream) {
                 _msg('Opened <b>' + _esc(r.entry.fileName) + '</b>: ' + _partCount(r.entry) + ' parts shown as boxes; the real shapes stream in behind (largest first).');
                 r.stream.onEnd(function (e) { if (r.stream.worker && window.SLCadExact) window.SLCadExact.attach(r.stream.worker, r.entry); });
-                r.stream.onEnd(function (e) { if (e.type === 'detail-done') _msg('Opened <b>' + _esc(r.entry.fileName) + '</b>: ' + _partCount(r.entry) + ' parts, all ' + e.total + ' distinct shapes read' + (e.workers ? ' by ' + e.workers + ' parallel readers' : '') + '. Geometry and the STEP file kept on this computer only.'); else if (e.message !== 'canceled') _msg('Some shapes could not be read: ' + _esc(e.message || ''), 'error'); });
+                r.stream.onEnd(function (e) { var NM = (r.model.notMeshed || []); if (e.type === 'detail-done') _msg('Opened <b>' + _esc(r.entry.fileName) + '</b>: ' + _partCount(r.entry) + ' parts, ' + (NM.length ? (e.total - NM.length) + ' of ' + e.total : 'all ' + e.total) + ' distinct shapes read' + (e.workers ? ' by ' + e.workers + ' parallel readers' : '') + '. Geometry and the STEP file kept on this computer only.' + (NM.length ? '<div data-not-meshed="1" style="margin-top:4px;color:var(--color-danger,#8E2A2A)">' + NM.map(function (q, i) { return 'Not meshed: <b>' + _esc(q.name) + '</b>: ' + _esc(q.reason) + ' (shown as a box) <button data-retry-mesh="' + i + '" onclick="cadRetryMesh(' + i + ')" style="font-size:11.5px">Retry</button>'; }).join('<br>') + '</div>' : '')); else if (e.message !== 'canceled') _msg('Some shapes could not be read: ' + _esc(e.message || ''), 'error'); });
             }
             if (!state.viewer && r.stream) _renderPanels();
             return state.viewer ? state.viewer.showModel(r.entry, r.model).then(function () { TR('page: model shown'); if (r.stream) setTimeout(function () { _renderPanels(); TR('page: panels drawn'); }, 0); if (r.stream) r.stream.on(function (b) { state.viewer.applyDetail(b.protos); }); return r.entry; }) : r.entry;
@@ -293,7 +296,10 @@
         var conds = im.conditions.length ? '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;"><tr style="text-align:left;' + MUTED + '"><th style="padding:2px 6px;">Failure condition</th><th style="padding:2px 6px;">Severity</th><th style="padding:2px 6px;">Trees</th></tr>' + im.conditions.map(function (c) {
                 return '<tr style="border-top:1px solid var(--color-border-hair);"><td style="padding:3px 6px;"><b>' + _esc(c.fcId || c.id) + '</b> ' + _esc(c.desc) + '</td><td style="padding:3px 6px;">' + _sev(c.severity) + '</td><td style="padding:3px 6px;">' + c.trees.length + '</td></tr>';
             }).join('') + '</table>' : '<div style="' + MUTED + '">No failure condition is reached by this event alone.</div>';
-        return head + errs +
+        // timebox 48: a refused or unevaluated result never reads as "no effect"
+        if (im.notEvaluated) { var CZ = window.SLCadZonal; return head + (CZ && CZ.notEvaluatedHtml ? CZ.notEvaluatedHtml(im.notEvaluated) : '<div data-not-evaluated>Not evaluated: ' + _esc(im.notEvaluated) + '</div>'); }
+        var nmNote = im.nonMonotone ? '<div data-cad-nonmono style="font-size:12px;font-weight:600;">Fault tree logic: non-monotone tree: worst case over subsets used</div>' : '';
+        return head + errs + nmNote +
             '<div style="font-size:12px;margin:4px 0;" data-cad-impact-summary>Worst: ' + (im.worst ? _sev(im.worst) : 'none') + ' · ' + im.equipment.length + ' equipment item' + (im.equipment.length === 1 ? '' : 's') + ' · ' + reached.length + ' of ' + im.trees.length + ' fault trees reached</div>' +
             (im.equipment.length ? '<div style="font-size:12px;">Equipment: ' + im.equipment.map(function (e) { return _esc(e.name); }).join(', ') + '</div>' : '') +
             conds +

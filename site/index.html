@@ -4121,7 +4121,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- UNC-1 — SLUnc: P05-P95 uncertainty bands on the budget ledger (user-entered EFs only; idle-computed; display lane). -->
     <script src="unc_bands.js?v=1.1" defer></script>
     <script src="paginate.js?v=1.3" defer></script>
-    <script src="fta_engine.js?v=1.11" defer></script>
+    <script src="fta_engine.js?v=1.12" defer></script>
     <!-- 13 Oct 2026 (math audit F1/F8): SLTopBasis: one exact top-event number and one per-flight-hour time basis for every pass/fail screen. -->
     <script src="top_basis.js?v=1.0" defer></script>
     <!-- Phase 76 modularization — extracted modules (classic scripts, shared global scope). reliability_data first (pure data), then the leaf modules, all BEFORE safety_lab.js. -->
@@ -4137,7 +4137,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="importers.js?v=1.9" defer></script>
     <script src="core_modules.js?v=1.11" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
-    <script src="fta_quant_modules.js?v=66.28" defer></script>
+    <script src="fta_quant_modules.js?v=66.29" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
     <script src="event_reuse.js?v=1.2" defer></script>
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
@@ -4170,7 +4170,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.56" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.79" defer></script>
+    <script src="misc_fn_modules.js?v=66.80" defer></script>
     <script src="safety_lab.js?v=65.63" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4191,7 +4191,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="render_pass.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
-    <script src="change_ack.js?v=1.2" defer></script>
+    <script src="change_ack.js?v=1.4" defer></script>
     <script src="save_state.js?v=2.0" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
@@ -4356,8 +4356,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ram_hub.js?v=1.3" defer></script>
     <script src="engine_selftest.js?v=1.1" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
-    <script src="model_checks.js?v=1.05" defer></script>
-    <script src="tree_warm.js?v=1.4" defer></script>
+    <script src="model_checks.js?v=1.06" defer></script>
+    <script src="tree_warm.js?v=1.5" defer></script>
     <script src="fault_sim.js?v=1.22" defer></script>
     <script src="tab_guard.js?v=1.2" defer></script>
     <script src="journal.js?v=1.1" defer></script>
@@ -4429,24 +4429,26 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="mass_actions.js?v=0.8" defer></script>
     <script src="mbsa_schema.js?v=1.1" defer></script>
     <script src="zonal_model.js?v=1.2" defer></script>
-    <script src="cad_zonal.js?v=1.3" defer></script>
-    <script src="pra_refs_data.js?v=1.0" defer></script>
-    <script src="pra_models.js?v=1.0" defer></script>
+    <script src="cad_zonal.js?v=1.6" defer></script>
+    <script src="pra_refs_data.js?v=1.4" defer></script>
+    <script src="pra_models.js?v=1.18" defer></script>
     <!-- 14 Oct 2026: grounded AI for zonal and particular risk drafts (sources checked in code, nothing applied without acknowledgement). -->
-    <script src="zonal_ai.js?v=1.0" defer></script>
+    <script src="zonal_ai.js?v=1.2" defer></script>
     <script src="physical_independence.js?v=1.1" defer></script>
     <script src="independence_claims.js?v=1.1" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
+    <script src="spacemouse.js?v=1.2" defer></script>
     <script src="zonal_ui.js?v=1.14" defer></script>
     <!-- 13 Oct 2026: CAD Model tab (ZSA area). STEP read in a worker on this computer, geometry cached locally, only metadata in the project. -->
-    <script src="cad_import.js?v=2.0" defer></script>
+    <script src="cad_import.js?v=2.3" defer></script>
     <script src="cad_render.js?v=1.0" defer></script>
     <script src="cad_exact.js?v=1.0" defer></script>
     <script src="cad_review.js?v=1.0" defer></script>
-    <script src="cad_viewer.js?v=2.1" defer></script>
+    <script src="cad_viewer.js?v=2.6" defer></script>
     <script src="cad_viewer_panels.js?v=1.0" defer></script>
-    <script src="cad_page.js?v=1.4" defer></script>
-    <script src="pra_panel.js?v=1.1" defer></script>
+    <script src="cad_page.js?v=1.6" defer></script>
+    <script src="pra_panel.js?v=1.17" defer></script>
+    <script src="pra_report.js?v=1.5" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>
     <script src="zsa_walkthrough.js?v=1.4" defer></script>

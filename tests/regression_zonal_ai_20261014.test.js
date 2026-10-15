@@ -155,7 +155,7 @@ console.log('\n[D] apply only through the acknowledgement flow');
 
     console.log('\n[H] wiring');
     const iZ = IDX.indexOf('<script src="zonal_ai.js'), iC = IDX.indexOf('<script src="cad_zonal.js');
-    check('H1 index.html loads zonal_ai.js once, after cad_zonal.js', iZ > iC && iC > 0 && (IDX.match(/<script src="zonal_ai\.js\?v=1\.0" defer><\/script>/g) || []).length === 1);
+    check('H1 index.html loads zonal_ai.js once, after cad_zonal.js', iZ > iC && iC > 0 && (IDX.match(/<script src="zonal_ai\.js\?v=1\.2" defer><\/script>/g) || []).length === 1);
     check('H2 no eval / new Function in the module', !/\beval\s*\(|new Function/.test(SRC));
     const evalFiles = ['fixtures.js', 'score.js', 'run_live.js', 'make_handwritten.js'].map(f => fs.readFileSync(path.join(__dirname, '..', 'eval', 'zonal_ai', f), 'utf8'));
     check('H3 no em dash in the module, its prompts or the eval', SRC.indexOf(EM) < 0 && evalFiles.every(t => t.indexOf(EM) < 0));

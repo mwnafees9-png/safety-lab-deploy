@@ -11,6 +11,9 @@ disc2 = cq.Workplane("YZ").circle(500).extrude(100).translate((0, 0, 0.001))   #
 tire = cq.Workplane("XZ").circle(600).circle(250).extrude(400)
 ac = cq.Assembly(name="PRA_AIRCRAFT")
 ac.add(B(1500,18000,-1000,-900,-1000,1000).union(B(1500,18000,900,1000,-1000,1000)), name="FUSELAGE", color=cq.Color(0.85,0.85,0.88))
+# closed fuselage (14 Oct 2026): top and bottom skins so the computers are inside
+ac.add(B(1500,18000,-900,900,900,1000), name="FUSELAGE_TOP", color=cq.Color(0.85,0.85,0.88))
+ac.add(B(1500,18000,-900,900,-1000,-900), name="FUSELAGE_BOTTOM", color=cq.Color(0.85,0.85,0.88))
 ac.add(B(0,1500,-1000,1000,-1000,1000), name="NOSE_RADOME", color=cq.Color(0.7,0.7,0.6))
 ac.add(B(1500,1700,-600,600,1000,1500), name="WINDSHIELD", color=cq.Color(0.4,0.6,0.9))
 ac.add(B(9000,11000,-8000,-1000,-60,60), name="WING_L", color=cq.Color(0.8,0.8,0.82))

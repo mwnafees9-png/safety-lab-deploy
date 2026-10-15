@@ -556,6 +556,66 @@
         parts.forEach(function (p) { out.set(p, o); o += p.length; });
         return out;
     }
+    // ---------------------------------------------------------------- one huge part split by body
+    // A single product can hold a whole aircraft (the NASA CRM assembly: one product, 134 bodies,
+    // 38,000 faces, 265 MB). OpenCascade then reads it in one call on one thread. bodies() finds
+    // the representation that lists the bodies; extractBody() writes one body as its own STEP file
+    // (the product, contexts and units, the representation listing only that body), so the bodies
+    // can be read in parallel and reported one by one.
+    var BODY_TYPES = { MANIFOLD_SOLID_BREP: 1, SHELL_BASED_SURFACE_MODEL: 1, BREP_WITH_VOIDS: 1, FACETED_BREP: 1 };
+    function bodies(ix, st, pd) {
+        var c = closureOf(ix, st, pd); if (!c) return null;
+        var rep = null, items = null;
+        for (var i = 0; i < c.ids.length && !rep; i++) {
+            var t = typeName(ix, c.ids[i]); if (!t || t.indexOf('REPRESENTATION') < 0 || t.indexOf('RELATIONSHIP') >= 0 || t.indexOf('DEFINITION') >= 0) continue;
+            var a = args(ix, c.ids[i]); if (!a || !Array.isArray(a[1])) continue;
+            var refs = a[1].filter(function (x) { return x && x.ref; }).map(function (x) { return x.ref; });
+            if (refs.filter(function (r) { return BODY_TYPES[typeName(ix, r)]; }).length >= 2) { rep = c.ids[i]; items = refs; }
+        }
+        if (!rep) return null;
+        var bodyIds = items.filter(function (r) { return BODY_TYPES[typeName(ix, r)]; }), others = items.filter(function (r) { return !BODY_TYPES[typeName(ix, r)]; });
+        var mark = new Map(), desc = bodyIds.map(function (b, k) { var out = [], stack = [b], tmp = []; while (stack.length) { var x = stack.pop(); var m = mark.get(x); if (m === k) continue; mark.set(x, k); out.push(x); tmp.length = 0; refsOf(ix, x, tmp); for (var j = 0; j < tmp.length; j++) stack.push(tmp[j]); } return out; });
+        var inBody = new Set(); desc.forEach(function (L) { L.forEach(function (x) { inBody.add(x); }); });
+        // the shared part of every body file: the product chain, contexts and units only. Loose
+        // geometry, other representations and presentation are left out (on the CRM they were
+        // 51,000 entities, 3.6 MB repeated in every body file)
+        var GEO = /POINT|EDGE|VERTEX|CURVE|LINE|CIRCLE|ELLIPSE|SURFACE|FACE|LOOP|SHELL|BREP|DIRECTION|VECTOR|AXIS|PLACEMENT|STYLE|PRESENTATION|COLOUR|STYLED|CURVE_SET|GEOMETRIC_SET|INVISIBILITY|DRAUGHTING|ANNOTATION/;
+        var base = c.ids.filter(function (x) {
+            if (inBody.has(x) || x === rep) return false; var t = typeName(ix, x) || '';
+            if (!t) { var kk = ix.slot[x], head = ''; for (var q = ix.start[kk]; q < Math.min(ix.end[kk], ix.start[kk] + 400); q++) head += String.fromCharCode(ix.u8[q]); t = head.replace(/'[^']*'/g, '').toUpperCase(); if (!/CONTEXT|UNIT/.test(t)) return false; }   // complex entities: keep contexts and units only
+            if (t.indexOf('SHAPE_DEFINITION_REPRESENTATION') >= 0) { var r0 = []; refsOf(ix, x, r0); return r0.indexOf(rep) >= 0; }
+            if (t.indexOf('RELATIONSHIP') >= 0 && t.indexOf('REPRESENTATION') >= 0) return false;
+            if (t.indexOf('REPRESENTATION') >= 0 && t.indexOf('CONTEXT') < 0) return false;
+            return !GEO.test(t) && !/PLANE\b|PLANE$/.test(t);
+        });
+        // nothing in the shared part may point at what was left out (assignments, loose items): drop
+        // such entities until the set is closed
+        for (var pass = 0; pass < 4; pass++) { var bs = new Set(base); bs.add(rep); var nb = base.filter(function (x) { var r1 = []; refsOf(ix, x, r1); return r1.every(function (r) { return bs.has(r) || r === rep; }); }); if (nb.length === base.length) break; base = nb; }
+        var keep = new Set(base), rr = []; refsOf(ix, rep, rr); rr.filter(function (r) { return items.indexOf(r) < 0; }).forEach(function (r) { others.push(r); });
+        var ctxRefs = others.filter(function (r) { return items.indexOf(r) < 0; }); others = others.filter(function (r) { return items.indexOf(r) >= 0; });
+        others.concat(ctxRefs).forEach(function (o) { var stack = [o], tmp = []; while (stack.length) { var x = stack.pop(); if (keep.has(x)) continue; keep.add(x); tmp.length = 0; refsOf(ix, x, tmp); tmp.forEach(function (r) { stack.push(r); }); } });
+        var K = Array.from(keep), pds = K.filter(function (x) { return (typeName(ix, x) || '').indexOf('PRODUCT_DEFINITION_SHAPE') >= 0; })[0] || null, hasSdr = K.some(function (x) { return (typeName(ix, x) || '').indexOf('SHAPE_DEFINITION_REPRESENTATION') >= 0; });
+        return { pd: pd, rep: rep, others: others, bodies: bodyIds, base: K, desc: desc, pds: pds, needSdr: !hasSdr && pds != null };
+    }
+    function extractBody(ix, B, k) {
+        var ids = B.base.concat(B.desc[k]).filter(function (x, i, a) { return x !== B.rep; }), seen = new Set(), list = [];
+        ids.forEach(function (x) { if (!seen.has(x)) { seen.add(x); list.push(x); } }); list.sort(function (a, b) { return a - b; });
+        var parts = [], total = 0, u8 = ix.u8; function push(u) { parts.push(u); total += u.length; }
+        push(ix.header); push(ascii('DATA;\n'));
+        list.forEach(function (id) { var kk = ix.slot[id]; push(ascii('#' + id + '=')); push(u8.subarray(ix.start[kk], ix.end[kk])); push(ascii(';\n')); });
+        // the representation, listing only this body (and its non-body items such as placements)
+        var rk = ix.slot[B.rep], txt = new TextDecoder('latin1').decode(u8.subarray(ix.start[rk], ix.end[rk]));
+        var lp = txt.indexOf('('), q = txt.indexOf('(', lp + 1), depth = 0, e = q; for (; e < txt.length; e++) { var ch = txt[e]; if (ch === '(') depth++; else if (ch === ')') { depth--; if (depth === 0) break; } }
+        push(ascii('#' + B.rep + '=' + txt.slice(0, q) + '(' + B.others.concat([B.bodies[k]]).map(function (r) { return '#' + r; }).join(',') + ')' + txt.slice(e + 1) + ';\n'));
+        // the product's shape points straight at this body's representation (the file linked them through representations that are left out)
+        if (B.needSdr) push(ascii('#' + (ix.maxId + 1) + '=SHAPE_DEFINITION_REPRESENTATION(#' + B.pds + ',#' + B.rep + ');\n'));
+        push(ascii('ENDSEC;\nEND-ISO-10303-21;\n'));
+        var out = new Uint8Array(total), o = 0; parts.forEach(function (p) { out.set(p, o); o += p.length; }); return out;
+    }
+    // the box of the CARTESIAN_POINTs among ids, in mm (s = file unit in mm)
+    function boxOfIds(ix, ids, s) { s = s || 1; var cp = ix.typeOf.CARTESIAN_POINT, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity], any = false, tmp = [0, 0, 0];
+        for (var q = 0; q < ids.length; q++) { if (ix.tcode[ix.slot[ids[q]]] !== cp) continue; var p = nums(ix, ids[q], tmp); if (!p) continue; any = true; for (var j = 0; j < 3; j++) { if (p[j] < mn[j]) mn[j] = p[j]; if (p[j] > mx[j]) mx[j] = p[j]; } }
+        return any ? { min: [mn[0] * s, mn[1] * s, mn[2] * s], max: [mx[0] * s, mx[1] * s, mx[2] * s] } : null; }
     function closureCtx(ix, id, have) {
         var hs = {}; have.forEach(function (h) { hs[h] = 1; });
         var out = [], stack = [id], tmp = [];
@@ -725,7 +785,7 @@
 
     var api = {
         VERSION: VERSION, index: index, args: args, typeName: typeName, idsOfType: idsOfType, refsOf: refsOf,
-        structure: structure, occurrences: occurrences, boxRes: boxRes, leafInfo: leafInfo, tessellationOf: tessellationOf, boxGeometry: boxGeometry, extract: extract, closureOf: closureOf, pointBox: pointBox,
+        structure: structure, occurrences: occurrences, boxRes: boxRes, leafInfo: leafInfo, tessellationOf: tessellationOf, boxGeometry: boxGeometry, extract: extract, closureOf: closureOf, bodies: bodies, extractBody: extractBody, boxOfIds: boxOfIds, pointBox: pointBox,
         _m: { axisMatrix: axisMatrix, mul: mul, invRigid: invRigid, decodeStepString: decodeStepString, unitMm: unitMm, IDENT: IDENT }
     };
     root.SLCadStep = api;

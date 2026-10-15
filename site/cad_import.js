@@ -43,7 +43,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '2.0';
+    var VERSION = '2.3';
     var DB_NAME = 'sl-cad', DB_STORE = 'meshes', DB_STEPS = 'steps', DB_VERSION = 2;
     var START_MS = 20000;   // the worker's first message (it comes before any parsing) must arrive within this
     var OCCT_DIR = 'vendor/occt/';
@@ -735,7 +735,9 @@
                         if (d.model && d.model.packed && !d.model.meshes) { d.model.meshes = unpackMeshes(d.model.packed, d.model.partsPacked); d.model.parts = unpackParts(d.model.partsPacked, d.model.packed); }
                         w.onmessage = function (ev2) {
                             var e = ev2.data || {};
-                            if (e.type === 'detail') stream._emit(e);
+                            if (e.type === 'detail') { if (e.retry && d.model.notMeshed) d.model.notMeshed = d.model.notMeshed.filter(function (q) { return !(e.protos || []).some(function (p) { return q.protos.indexOf(p.proto) >= 0; }); }); stream._emit(e); }
+                            // a body or part OpenCascade could not mesh stays a box, listed with its reason (never skipped silently)
+                            else if (e.type === 'detail-failed') { (d.model.notMeshed = d.model.notMeshed || []).push({ protos: e.protos, name: e.name, reason: e.reason }); (e.protos || []).forEach(function (p) { if (d.model.protos && d.model.protos[p]) d.model.protos[p].notMeshed = e.reason; }); stream._emit({ type: 'detail', protos: [], failed: e }); }
                             // the worker stays: it holds the structure and answers exact queries
                             else if (e.type === 'detail-done' || e.type === 'detail-error') { stream.worker = w; stream._end(e); }
                         };
@@ -749,7 +751,7 @@
                     else { var e = new Error(d.message || 'The STEP import failed.'); e.code = d.code || 'failed'; reject(e); }
                 };
                 w.onerror = function (ev) { clearTimeout(startTimer); if (done) return; done = true; try { w.terminate(); } catch (_) {} reject(new Error((ev && ev.message) || 'The STEP import worker stopped.')); };
-                w.postMessage({ type: 'import', buffer: buf, expectSha: opts.expectSha || null, opts: { maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, linearDeflection: opts.linearDeflection, reader: opts.reader || 'auto', keepSession: !!opts.keepSession } }, [buf]);
+                w.postMessage({ type: 'import', buffer: buf, expectSha: opts.expectSha || null, opts: { maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, linearDeflection: opts.linearDeflection, reader: opts.reader || 'auto', keepSession: !!opts.keepSession, splitMinBytes: opts.splitMinBytes, partCapMs: opts.partCapMs, testFailBody: opts.testFailBody } }, [buf]);
             }, function (e) { done = true; reject(e); });
         });
         return {

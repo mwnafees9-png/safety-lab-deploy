@@ -152,6 +152,7 @@ function project(opts) {
     console.log('\n[5] the page');
     const html = A.renderDraftHtml(Object.assign({}, zd, { rejected: [{ statement: { text: 'x' }, reasons: ['fc "FC-002" does not exist in the project'] }] }));
     check('5.1 the review dialog lists statements unticked, the rejected list, and the sources consulted', /data-zai-pick="s1"/.test(html) && !/<input[^>]*checked/.test(html) && /Rejected: unsupported \(1\)/.test(html) && /Sources consulted/.test(html));
+    A.ENABLED = true;   // the AI gate is off by default; this check is about the button itself
     const btn = A.buttonHtml('pra.writeup', { kind: 'rotorBurst', rotorId: 'r"1' });
     check('5.2 the button carries its target as escaped JSON', /data-zai-lane="pra.writeup"/.test(btn) && /&quot;r\\&quot;1&quot;/.test(btn), btn);
     const PANEL = read('pra_panel.js'), ZUI = read('zonal_ui.js');

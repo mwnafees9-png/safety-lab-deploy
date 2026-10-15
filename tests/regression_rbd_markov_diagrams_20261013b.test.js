@@ -345,7 +345,7 @@ console.log('\n[6] wiring, versions, plain words');
   const idx = S('index.html'), pos = f => idx.indexOf(f);
   check('index.html: rbd_net.js loads right before rbd_module.js, after diagram_editor.js', /<script src="rbd_net\.js\?v=1\.0" defer><\/script>\s*<script src="rbd_module\.js\?v=2\.0" defer><\/script>/.test(idx) && pos('rbd_net.js') > pos('diagram_editor.js'));
   check('index.html: markov_diagram.js loads right after markov_ctmc.js', /<script src="markov_ctmc\.js\?v=1\.4" defer><\/script>\s*<!--[^>]*-->\s*<script src="markov_diagram\.js\?v=1\.0" defer><\/script>/.test(idx));
-  check('index.html: versions bumped (diagram_editor 1.3, rbd_xcheck 0.3, sysml_model 1.3, fta_quant_modules 66.28; 1.3 after the integrate3 merge)', /diagram_editor\.js\?v=1\.[34]"/.test(idx) && /rbd_xcheck\.js\?v=0\.3"/.test(idx) && /sysml_model\.js\?v=1\.3"/.test(idx) && /fta_quant_modules\.js\?v=66\.28"/.test(idx));
+  check('index.html: versions bumped (diagram_editor 1.3, rbd_xcheck 0.3, sysml_model 1.3, fta_quant_modules 66.28; 1.3 after the integrate3 merge)', /diagram_editor\.js\?v=1\.[34]"/.test(idx) && /rbd_xcheck\.js\?v=0\.3"/.test(idx) && /sysml_model\.js\?v=1\.3"/.test(idx) && /fta_quant_modules\.js\?v=66\.(2[89]|[3-9]\d)"/.test(idx));
   const files = ['rbd_net.js', 'rbd_module.js', 'rbd_xcheck.js', 'markov_diagram.js', 'markov_ctmc.js', 'fta_quant_modules.js', 'sysml_model.js', 'diagram_editor.js'];
   check('every changed file carries a dated 13 Oct 2026 note', files.every(f => /13 Oct 2026/.test(S(f).slice(0, 3000))), files.filter(f => !/13 Oct 2026/.test(S(f).slice(0, 3000))).join(','));
   check('the library file and the copy embedded in sysml_model.js are identical', SYS.LIBRARY_TEXT === S('sysml_safety_lib.sysml'));

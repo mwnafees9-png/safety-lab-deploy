@@ -299,6 +299,20 @@
                 return { checked, fails };
             }
         });
+        // F1 (14 Oct 2026): MC-07 (hard): no node id is used twice inside one fault tree page. Ids may repeat across pages
+        // (the engine keys every visit by the node itself), but a repeated id inside a page makes id lookups (FDEP targets,
+        // links, dispositions) ambiguous. Pure tree walk (SLFTAEngine.duplicateNodeIds).
+        window.invRegister({
+            id: 'MC-07', name: 'No node id is used twice inside one fault tree page', sev: 'hard',
+            run: () => {
+                const fails = []; let checked = 0;
+                const E = (typeof SLFTAEngine !== 'undefined' && SLFTAEngine && SLFTAEngine.duplicateNodeIds) ? SLFTAEngine : null;
+                if (!E) return { checked, fails };
+                _pages().forEach(p => { if (!p || !p.root) return; checked++; let d = []; try { d = E.duplicateNodeIds(p.root) || []; } catch (_) { d = []; }
+                    if (d.length) fails.push((p.name || p.id) + ': node id' + (d.length > 1 ? 's ' : ' ') + d.slice(0, 10).join(', ') + ' used more than once in this page'); });
+                return { checked, fails };
+            }
+        });
         return true;
     }
     // invariants.js loads before this module (script order), but stay defensive.

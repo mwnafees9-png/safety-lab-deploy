@@ -110,7 +110,7 @@ function getCutsets(node, visited = new Set(), ctx) {
         if (node && _treeHasNot(node)) return _primeImplicantCutsets(node);
         ctx = { fdep: _collectFdep(node), forcing: new Set() };
     }
-    if (!node) return []; if (visited.has(node.id)) return []; visited.add(node.id);
+    if (!node) return []; if (visited.has(node)) return []; visited.add(node);   // F1: by the node itself, not its id (ids repeat across pages)
     if (node.type !== 'gate') {
         const trig = ctx.fdep.byLid.get(_eventKey(node));
         return trig ? _csForce([[node]], trig, 'l:' + _eventKey(node), visited, ctx) : [[node]];
@@ -803,8 +803,8 @@ function _collectFdep(scope) {
     const byLid = new Map(), byGate = new Map(), gates = [];
     const seen = new Set(), pages = new Set();
     (function walk(n) {
-        if (!n || seen.has(n.id)) return;
-        seen.add(n.id);
+        if (!n || seen.has(n)) return;
+        seen.add(n);
         if (n.type !== 'gate') return;
         if (n.gateType === 'TRANSFER' || n.transferOutTo) {
             const linkedId = n.transferOutTo || n.linkedPageId;
@@ -1046,8 +1046,8 @@ function buildBDDFromFT(rootNode, scopeRoot) {
     // Pass 1: collect logicalIds + CCF group representatives in DFS order.
     function collect(node, visitedNodes, visitedPages) {
         if (!node) return;
-        if (visitedNodes.has(node.id)) return;
-        visitedNodes.add(node.id);
+        if (visitedNodes.has(node)) return;   // F1: by the node itself, not its id (a transferred page may reuse an id)
+        visitedNodes.add(node);
         if (node.type !== 'gate') {
             const lid = node.logicalId != null ? node.logicalId : node.id;
             lidCount.set(lid, (lidCount.get(lid) || 0) + 1);
@@ -1072,8 +1072,8 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         grew = false;
         fdep.gates.forEach(g => {
             const kids = g.children || g._children;
-            if (!kids || seenNodes.has(kids[0].id)) return;
-            const hit = kids.slice(1).some(d => d && (d.type === 'gate' ? seenNodes.has(d.id) : seenLid.has(d.logicalId != null ? d.logicalId : d.id)));
+            if (!kids || seenNodes.has(kids[0])) return;
+            const hit = kids.slice(1).some(d => d && (d.type === 'gate' ? seenNodes.has(d) : seenLid.has(d.logicalId != null ? d.logicalId : d.id)));
             if (hit) { collect(kids[0], seenNodes, seenPages); grew = true; }
         });
     }
@@ -1168,8 +1168,8 @@ function buildBDDFromFT(rootNode, scopeRoot) {
         return info;
     }
     function dynGate(node, kids, kidBdds) {
-        let info = dynInfo.get(node.id);
-        if (!info) { info = dynClassify(node, kids); dynInfo.set(node.id, info); }
+        let info = dynInfo.get(node);
+        if (!info) { info = dynClassify(node, kids); dynInfo.set(node, info); }
         if (info.primaryOnly) return kidBdds[0];
         let f;
         if (info.sw.length) {
@@ -1807,13 +1807,21 @@ function treeFactsForWorker(rootNode, pages) {
 // or more members under one VOTING gate with only beta entered models every common cause failure
 // as failing the whole group, so a common cause failure of only some of them (2 of 3) is not
 // modeled until gamma is entered. Pure over the tree (transfers followed through ftaPages).
+// F1 (14 Oct 2026): node ids repeated inside ONE page (transfers not followed). Ids may repeat across pages (the engine
+// keys every visit by the node itself), but inside a page a repeated id is a data error that makes id lookups ambiguous.
+function duplicateNodeIds(rootNode) {
+    const byId = new Map(), dups = [];
+    (function walk(n) { if (!n) return; const k = String(n.id); if (byId.has(k)) { if (byId.get(k) !== n && dups.indexOf(k) < 0) dups.push(k); return; } byId.set(k, n);
+        if (n.type === 'gate' && !(n.gateType === 'TRANSFER' || n.transferOutTo)) (n.children || n._children || []).forEach(walk); })(rootNode);
+    return dups.sort();
+}
 function ccfModelNotes(rootNode) {
     const notes = [];
     if (!rootNode) return notes;
     const pages = (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : [];
     function leavesUnder(node, out, seenNodes, seenPages) {
-        if (!node || seenNodes.has(node.id)) return out;
-        seenNodes.add(node.id);
+        if (!node || seenNodes.has(node)) return out;
+        seenNodes.add(node);
         if (node.type !== 'gate') { const lid = _mglLid(node); if (!out.has(String(lid))) out.set(String(lid), node); return out; }
         if (node.gateType === 'TRANSFER' || node.transferOutTo) {
             const linkedId = node.transferOutTo || node.linkedPageId;
@@ -1837,8 +1845,8 @@ function ccfModelNotes(rootNode) {
     });
     const flagged = new Set();
     (function walk(node, seenNodes, seenPages) {
-        if (!node || seenNodes.has(node.id)) return;
-        seenNodes.add(node.id);
+        if (!node || seenNodes.has(node)) return;
+        seenNodes.add(node);
         if (node.type !== 'gate') return;
         if (node.gateType === 'TRANSFER' || node.transferOutTo) {
             const linkedId = node.transferOutTo || node.linkedPageId;
@@ -1899,6 +1907,7 @@ var SLFTAEngine = {
     cutsetSnapshot: cutsetSnapshot,
     treeFactsForWorker: treeFactsForWorker,
     ccfModelNotes: ccfModelNotes,
+    duplicateNodeIds: duplicateNodeIds,
     mgl: { planGroup: _mglPlanGroup, eventProb: _mglEventProb, eventRate: _mglEventRate, eventNode: _mglEventNode, memberParams: _mglMemberParams, eventTau: _mglEventTau, MAX_EVENTS: _MGL_MAX_EVENTS }
 };
 
