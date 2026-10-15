@@ -346,6 +346,21 @@
             found[type] = true;
         }
         var cad = env.cad, Z = env.zones, systems = env.systems(), sysById = {};
+        // (15 Oct 2026) the live engine hands parts as { pid, how } (riskImpact) or bare pids (model results): name and part
+        // number come from the CAD model's part list, so the AI sees each part exactly as the model names it
+        var _pm = null;
+        function partMeta(pid) {
+            if (!_pm) {
+                _pm = {};
+                try {
+                    var cid = target.cadId || (cad && typeof cad.latestCadId === 'function' ? cad.latestCadId() : null);
+                    var mdl = cad && typeof cad.model === 'function' && cid != null ? cad.model(cid) : null;
+                    _arr(mdl && typeof cad.partsOf === 'function' ? cad.partsOf(mdl) : []).forEach(function (q) { if (q && q.pid != null) _pm[_s(q.pid)] = { name: _s(q.name), partNumber: q.partNumber == null || q.partNumber === '' ? null : _s(q.partNumber) }; });
+                } catch (_) {}
+            }
+            return _pm[_s(pid)] || null;
+        }
+        function fillPart(p) { p = p || {}; var m = partMeta(p.pid) || {}; return { pid: _s(p.pid), name: _s(p.name) || m.name || '', partNumber: p.partNumber || m.partNumber || null }; }
         systems.forEach(function (s) { if (s && s.id != null) sysById[_s(s.id)] = s; });
         function addEquip(sysIds) {
             _arr(sysIds).forEach(function (sid) {
@@ -420,7 +435,7 @@
                         var row = env.fha().filter(function (h) { return h && (_s(h.fcId) === c || _s(h.internalId) === c); })[0];
                         rec('fc', c, c, row ? { fcId: _s(row.fcId), description: _s(row.fcDesc || row.desc), severity: row.severity || null } : { fcId: c });
                     });
-                    _arr(r.parts).forEach(function (pid) { rec('part', pid, pid, null); });
+                    _arr(r.parts).forEach(function (pid) { var fp = fillPart({ pid: pid }); if (fp.name || fp.partNumber) { rec('part', pid, fp.name || pid, { name: fp.name, partNumber: fp.partNumber }); if (fp.partNumber) idsForSearch.push(fp.partNumber); } else rec('part', pid, pid, null); });
                 });
             }
             var v = null; try { v = cad && target.volumeId ? cad.riskVolume(target.volumeId) : null; } catch (_) {}
@@ -430,7 +445,7 @@
                 var ri = null; try { ri = cad.riskImpact(v.id); } catch (_) {}
                 facts.risk = { id: _s(v.id), kind: v.kind, label: _s(v.label) };
                 facts.impact = addImpact(ri);
-                facts.partsInside = _arr(ri && ri.parts).map(function (p) { rec('part', p.pid, p.name, { name: _s(p.name), partNumber: p.partNumber || null }); if (p.partNumber) idsForSearch.push(_s(p.partNumber)); return { pid: _s(p.pid), name: _s(p.name), partNumber: p.partNumber || null }; })
+                facts.partsInside = _arr(ri && ri.parts).map(fillPart).map(function (p) { rec('part', p.pid, p.name, { name: _s(p.name), partNumber: p.partNumber || null }); if (p.partNumber) idsForSearch.push(_s(p.partNumber)); return { pid: _s(p.pid), name: _s(p.name), partNumber: p.partNumber || null }; })
                     .sort(function (a, b) { return _cmp(a.pid, b.pid); });
                 facts.unlinkedParts = _arr(ri && ri.unlinkedParts).map(_s).sort(_cmp);
                 facts.flags = flagsFor(function (f) { return _s(f.volumeId || (f.volume && f.volume.id)) === _s(v.id); });
@@ -441,8 +456,13 @@
                     .map(function (s) { var id = _s(s.id); rec('pra', id, s.title || s.name || id, { description: _s(s.description || s.desc) }); return { id: id, title: _s(s.title || s.name), description: _s(s.description || s.desc) }; })
                     .sort(function (a, b) { return _cmp(a.id, b.id); });
             }
+            if (lane === 'pra.writeup' && target.part && target.part.pid != null) {   // the rotor / tire part the write-up is about
+                var wp = fillPart(target.part);
+                rec('part', wp.pid, wp.name || wp.pid, { name: wp.name, partNumber: wp.partNumber });
+                if (wp.partNumber) idsForSearch.push(wp.partNumber);
+            }
             if (lane === 'damage.assumption') {
-                var pt = target.part || {};
+                var pt = target.part && target.part.pid != null ? fillPart(target.part) : {};
                 if (pt.pid) {
                     rec('part', pt.pid, pt.name, { name: _s(pt.name), partNumber: pt.partNumber || null });
                     if (pt.partNumber) idsForSearch.unshift(_s(pt.partNumber));

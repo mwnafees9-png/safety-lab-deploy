@@ -1,3 +1,10 @@
+## 15 Oct 2026 (p3-ai, timebox 60): AI SEES PART NAMES AND PART NUMBERS; PER-PART DAMAGE ASSUMPTION BUTTONS. NOT YET DEPLOYED.
+
+- Bug (live since the AI buttons shipped): riskImpact hands parts as { pid, how } and model results as bare pids; AI button targets passed { pid, name } only. The AI never saw a part number. zonal_ai.js 1.5 gather() fills name and part number from the CAD model part list (cadId of the target, else latest) for parts inside a volume, parts in model results, the damage assumption part and a write-up target part.
+- pra_panel.js 1.18: bird zone damage assumption, rotor and tire write-up targets carry { pid, name, partNumber } from the model. Lightning (confirmed zones) and each fire / leak / ice region get a collapsible "AI damage assumption per part" list, drawn only when SLZonalAI.ENABLED. Lightning per-part target: { kind: 'lightning', cadId, part }; region per-part target: { volumeId, part }.
+- Note: damage assumptions are stored by part pid, so the same part assessed under bird strike and lightning shares one notes list.
+- Tests: new regression_zonal_ai_partmeta_20261015 (16): the 7 eval requests built through a live-like env (riskImpact { pid, how }, targets without partNumber) are byte-identical to the fixture-built ones; mutation without the part list. zonal_ai 62, fixture 36, AI proof alone 23/23, PRA proof alone 125/125, project durability 129, HF durability 28.
+
 ## 15 Oct 2026 (p3-ai, timebox 59): ZONAL AI GAP WORDING. NOT YET DEPLOYED.
 
 - zonal_ai.js 1.4: the contract gap definition and the user-message notFound sentence now carry the coordinator's exact wording. A gap is missing engineering evidence (test report, analysis, design data); missing project links (equip, fc, flag, pram, pra) go to the engineer checklist, not to gaps.
