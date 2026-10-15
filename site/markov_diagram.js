@@ -290,7 +290,7 @@
         rec.wrap = document.createElement('div'); rec.wrap.className = 'mk-diagram';
         host.appendChild(rec.wrap);
         rec.ed = SLDiagramEditor.mount(rec.wrap, {
-            type: 'markov', height: 420, minimap: 'auto',
+            type: 'markov', height: 'fill', minimap: 'auto',
             _mkModel: function () { return model(id); },
             adapter: {
                 // the editor's own order wins for items it already shows, so an edit never looks like an
@@ -339,7 +339,7 @@
         if (!vh) { vh = document.createElement('div'); vh.className = 'mk-phase-view'; host.appendChild(vh); }
         var pm = phaseModel(m, rec.phase);
         vh.innerHTML = '<div style="font-size:12px; color:var(--text-secondary); margin:0 0 4px;">' + SLDiagramEditor.esc(pm.note) + '</div><div class="mk-phase-ed"></div>';
-        rec.viewer = SLDiagramEditor.mount(vh.querySelector('.mk-phase-ed'), { type: 'markov', height: 380, model: toDiagram(pm.model), readOnly: 'Read only: the diagram of "' + rec.phase + '". Choose "Model (all phases)" to edit.' });
+        rec.viewer = SLDiagramEditor.mount(vh.querySelector('.mk-phase-ed'), { type: 'markov', height: 'fill', model: toDiagram(pm.model), readOnly: 'Read only: the diagram of "' + rec.phase + '". Choose "Model (all phases)" to edit.' });
     }
     // the phase plan editor under the tables (writes model.phasePlan; the phased solve reads it)
     function phasePlanHtml(m) {

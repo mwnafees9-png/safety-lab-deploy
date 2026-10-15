@@ -1135,7 +1135,7 @@
         if (!bt || !_E) return;
         const id = bt.id;
         _curEd = _E.mount(host, {
-            type: 'bowtie', btId: id, height: 640, lockKey: 'bowtie:' + id,
+            type: 'bowtie', btId: id, height: 'fill', lockKey: 'bowtie:' + id,
             adapter: {
                 load: () => { const b = _store().find(x => x.id === id); return b ? btToModel(b) : { elements: [], connectors: [] }; },
                 save: (model) => { const s = _store(), i = s.findIndex(x => x.id === id); if (i < 0) return; s[i] = btFromModel(model, s[i]); },

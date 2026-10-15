@@ -3036,9 +3036,16 @@ function gtZoomFit(){
     const h = document.getElementById('gt-sankey-host'); if(!h) return;
     const base = parseFloat(h.dataset.gtBaseW || '0');
     if(!base) return;
-    // Fit the full width of the thread into the viewport, never magnifying past 1:1.
-    _gtZoomApply(h, Math.min(1, (h.clientWidth - 16) / base), null);
-    h.scrollLeft = 0;
+    // Fit the whole thread into the canvas, never magnifying past 1:1.
+    // 15 Oct 2026: the host is a fixed-height canvas now (.sl-canvas-fill, the shared canvas
+    // height), so the fit takes the height into account as well as the width.
+    let fit = (h.clientWidth - 16) / base;
+    try {
+        const vb = h.querySelector('svg') && h.querySelector('svg').viewBox && h.querySelector('svg').viewBox.baseVal;
+        if(vb && vb.width > 0 && vb.height > 0) fit = Math.min(fit, (h.clientHeight - 16) / (base * vb.height / vb.width));
+    } catch(_){}
+    _gtZoomApply(h, Math.min(1, fit), null);
+    h.scrollLeft = 0; h.scrollTop = 0;
 }
 function gtZoomReset(){ const h = document.getElementById('gt-sankey-host'); if(h) _gtZoomApply(h, 1, null); }
 function _gtEnablePan(host){

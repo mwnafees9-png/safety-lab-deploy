@@ -1322,7 +1322,7 @@
         _curEd = _E.mount(host, {
             type: 'event-tree',
             etaTreeId: tid,
-            height: 620,
+            height: 'fill',   // 15 Oct 2026: the shared canvas height (diagram_editor.js v1.5)
             lockKey: 'eta:' + tid,
             adapter: {
                 load: () => { const tr = _store().find(x => x.id === tid); return tr ? toModel(tr) : { elements: [], connectors: [] }; },

@@ -1,6 +1,8 @@
 // ============================================================================
 // fta_canvas_edit.js — v1.0 — 13 Oct 2026 (fix G): the fault tree is built and
 // edited by hand on the canvas. SLFtaEdit.
+// 15 Oct 2026 (v1.1): the toolbox is a full-height strip down the left edge of the canvas (the
+// shared .sl-canvas-strip rule in safety_lab.css), no longer a floating box that stopped partway down.
 //
 // What it adds to the d3 fault tree canvas (fta_view_modules.js updateD3):
 //   * a visible TOOLBOX with every gate and event type (NOT appears only when the
@@ -320,12 +322,14 @@
         const st = document.createElement('style');
         st.id = 'fta-canvas-edit-style';
         st.textContent = [
-            '#fta-toolbox{position:absolute;left:10px;top:10px;z-index:7;width:146px;box-sizing:border-box;max-height:calc(100% - 66px);overflow-y:auto;padding:8px 7px 9px;border-radius:10px;background:var(--color-surface-1,#fff);border:1px solid var(--color-border-strong,#B9C2D0);box-shadow:0 2px 10px rgba(15,23,42,.10);font-family:var(--font-ui,system-ui,sans-serif);user-select:none;}',
+            // 15 Oct 2026: the toolbox is a full-height strip down the left edge of the canvas (shared rule
+            // .sl-canvas-strip in safety_lab.css: position, size, background, border). Only its contents are styled here.
+            '#fta-toolbox{padding:8px 7px 9px;font-family:var(--font-ui,system-ui,sans-serif);user-select:none;}',
             '#fta-toolbox .ftb-title{font-size:11px;font-weight:700;color:var(--color-text-primary,#16213A);margin:0 2px 2px;}',
             '#fta-toolbox .ftb-hint{font-size:10px;line-height:1.35;color:var(--color-text-secondary,#4A5568);margin:0 2px 6px;}',
             '#fta-toolbox .ftb-group{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--color-text-tertiary,#6B7280);margin:7px 2px 3px;}',
             '#fta-toolbox .ftb-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;}',
-            '#fta-toolbox .ftb-item{display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 2px 2px;border-radius:7px;border:1px solid var(--color-border-hair,#E2E8F0);background:var(--color-surface-2,#F7F9FC);cursor:grab;font-size:9.5px;font-weight:600;min-width:0;white-space:nowrap;color:var(--color-text-primary,#16213A);line-height:1.1;touch-action:none;}',
+            '#fta-toolbox .ftb-item{display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 2px 2px;border-radius:7px;border:1px solid var(--color-border-hair,#E2E8F0);background:var(--color-surface-1,#fff);cursor:grab;font-size:9.5px;font-weight:600;min-width:0;white-space:nowrap;color:var(--color-text-primary,#16213A);line-height:1.1;touch-action:none;}',
             '#fta-toolbox .ftb-item:hover{border-color:var(--color-accent,#3B5BDB);background:var(--color-surface-1,#fff);}',
             '#fta-toolbox .ftb-item:focus-visible{outline:2px solid var(--color-accent,#3B5BDB);outline-offset:1px;}',
             '#fta-toolbox .ftb-ico{width:28px;height:23px;color:var(--color-text-secondary,#4A5568);}',
@@ -373,6 +377,7 @@
         if (!tb) {
             tb = document.createElement('div');
             tb.id = 'fta-toolbox';
+            tb.className = 'sl-canvas-strip';
             tb.setAttribute('role', 'toolbar');
             tb.setAttribute('aria-label', 'Fault tree toolbox');
             if (getComputedStyle(host).position === 'static') host.style.position = 'relative';

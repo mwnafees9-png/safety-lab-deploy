@@ -141,7 +141,7 @@ check('removing a feeds-through-a-function link is refused with where to change 
 check('new ids: provides and feeds from their two ends, resources from newRowId, systems sys-*', Mg.CEA_EDIT.newId('connector', 'provides', { from: 'sys:S1', to: 'res:11' }) === 'prov:11>S1' && /^res:/.test(Mg.CEA_EDIT.newId('element', 'resource', {})) && /^sys:sys-/.test(Mg.CEA_EDIT.newId('element', 'system', {})));
 const src = S('cea_graph.js');
 check('the page mounts the editor and keeps the old picture only as the fallback', /editable \? '<div id="cea-graph-slot"><\/div>' : _svgGraph\(g\)/.test(src) && /SLDiagramEditor\.mount\(_ceaHost/.test(src));
-check('index.html loads cea_graph.js v1.3', /cea_graph\.js\?v=1\.3"/.test(S('index.html')));
+check('index.html loads cea_graph.js v1.3 or later', /cea_graph\.js\?v=1\.[34]"/.test(S('index.html')));   // 1.4: 15 Oct 2026, height: 'fill' (regression_canvas_fill_20261015)
 
 // ---------------------------------------------------------------------------------------------
 let chromium = null;

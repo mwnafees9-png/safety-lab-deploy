@@ -42,7 +42,8 @@ const J = o => JSON.stringify(o);
 console.log('\n[1] Loads without a DOM and exposes the API');
 let E = load();
 // 13 Oct 2026 (merge into fix3-M): v1.3 = every hook of the v1.1/v1.2 rounds plus fix3-M's (ctx.model, refreshShapes, field apply, offerOnDrag).
-check('SLDiagramEditor is defined with version 1.4', E && E.version === '1.4');
+// 15 Oct 2026: v1.5 adds the height: 'fill' mode (tests/regression_canvas_fill_20261015.test.js).
+check('SLDiagramEditor is defined with version 1.5', E && E.version === '1.5');
 ['register', 'mount', 'onBeforeChange', 'onAfterChange', 'setSysmlProvider', 'getDiagram', 'types', 'uuid'].forEach(k => check('exposes ' + k, typeof E[k] === 'function'));
 check('the demo notation registered (test only)', E.types().indexOf('sde-demo') >= 0);
 const C = E.core, DEF = E.getDiagram('sde-demo');
@@ -255,14 +256,14 @@ console.log('\n[6] The beforeChange hook (acknowledgement) can say no, now or la
     console.log('\n[10] Wiring');
     const html = fs.readFileSync(path.join(ROOT, 'site', 'index.html'), 'utf8');
     const pos = f => html.indexOf('<script src="' + f);
-    check('index.html loads diagram_editor.js exactly once, versioned', (html.match(/<script src="diagram_editor\.js\?v=1\.[34]" defer><\/script>/g) || []).length === 1);   // v1.3 after the fix3-M merge
+    check('index.html loads diagram_editor.js exactly once, versioned', (html.match(/<script src="diagram_editor\.js\?v=1\.[345]" defer><\/script>/g) || []).length === 1);   // v1.3 after the fix3-M merge; v1.5 on 15 Oct 2026 (height: 'fill')
     ['rbd_module.js', 'cea_graph.js', 'stpa_panel.js', 'event_trees.js', 'bowtie.js', 'markov_ctmc.js'].forEach(f => check('it loads before ' + f, pos('diagram_editor.js') > 0 && pos(f) > pos('diagram_editor.js')));
     check('the test-only demo notation is not shipped', html.indexOf('sde_demo_diagram') < 0 && !fs.existsSync(path.join(ROOT, 'site', 'sde_demo_diagram.js')));
     const code = SRC.replace(/\/\/[^\n]*/g, '');
     check('no native alert/confirm/prompt (house dialogs only)', !/[^.\w](alert|confirm|prompt)\s*\(/.test(code) && /slPrompt/.test(SRC));
     check('no em dashes anywhere in the file', SRC.indexOf('—') < 0 && FIX.indexOf('—') < 0);
     check('no eval or new Function (production CSP)', !/\beval\s*\(|new Function\s*\(/.test(code));
-    check('header carries the dated version note', /diagram_editor\.js - v1\.4/.test(SRC) && /13 Oct 2026 \(v1\.0\)/.test(SRC) && /13 Oct 2026 \(v1\.1/.test(SRC) && /13 Oct 2026 \(v1\.1, fix3-M\)/.test(SRC));
+    check('header carries the dated version note', /diagram_editor\.js - v1\.5/.test(SRC) && /15 Oct 2026 \(v1\.5\)/.test(SRC) && /13 Oct 2026 \(v1\.0\)/.test(SRC) && /13 Oct 2026 \(v1\.1/.test(SRC) && /13 Oct 2026 \(v1\.1, fix3-M\)/.test(SRC));
     check('every change reaches the app: pushUndo before save, then scheduleAutosave', (() => { const i = SRC.indexOf("root.pushUndo('Diagram: '"), j = i + SRC.slice(i).search(/save\.call\((this|self)\.adapter, clone\((this|self)\.store\.m\), change\)/), k = SRC.indexOf('root.scheduleAutosave()', j); return i > 0 && j > i && k > j; })());
     check('American spelling in user text (canceled, color, behavior)', !/cancelled|colour|behaviour|initialis|normalis/.test(SRC));
 

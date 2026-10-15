@@ -1,5 +1,10 @@
 // ============================================================================
-// diagram_editor.js - v1.4 - SLDiagramEditor: the ONE diagram editor core.
+// diagram_editor.js - v1.5 - SLDiagramEditor: the ONE diagram editor core.
+// 15 Oct 2026 (v1.5): opts.height: 'fill' sizes the drawing area (toolbox | canvas | properties) to the
+// shared canvas height token --sl-canvas-h (safety_lab.css, the fault tree canvas height), so every
+// diagram fills the page area the way the fault tree does; the toolbox runs the full height of it.
+// The toolbar and status bar sit outside that height, like the fault tree toolbar. Full screen still
+// takes the whole window. A number or CSS length keeps the old fixed total height.
 // 13 Oct 2026 (v1.4, Waqas rulings 1 and 2): moves, resizes, auto layout and editor Undo / Redo are collected (SLChangeAck.deferred) and acknowledged together on leaving the view; content edits still ask per gesture.
 // 13 Oct 2026 (v1.3, merge of integrate3 into fix3-M): every hook of the v1.1 rounds, v1.2 and fix3-M together.
 // 13 Oct 2026 (v1.2, merge): the hooks of both v1.1 rounds below, together.
@@ -119,7 +124,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.4';
+    var VERSION = '1.5';
     var SVGNS = 'http://www.w3.org/2000/svg';
     var HAS_DOM = (typeof document !== 'undefined' && document && typeof document.createElement === 'function');
 
@@ -821,6 +826,7 @@
         '.sde{--sde-bg:var(--color-surface-1,#fff);--sde-fill:var(--color-surface-1,#fff);--sde-stroke:var(--color-text-primary,#14171c);--sde-line:var(--color-text-secondary,#4a5260);--sde-accent:var(--color-accent,#1A6EF2);--sde-muted:var(--color-text-tertiary,#7a828f);--sde-border:var(--color-border-thin,rgba(20,23,28,.35));--sde-panel:var(--color-surface-2,#f5f6f8);--sde-ok:var(--color-success,#1f8f4e);--sde-bad:var(--color-danger,#c0392b);--sde-griddot:rgba(120,128,140,.28);',
         'position:relative;display:flex;flex-direction:column;border:1px solid var(--sde-border);border-radius:8px;background:var(--sde-bg);color:var(--color-text-primary,#14171c);font:13px/1.35 var(--font-sans,system-ui,-apple-system,"Segoe UI",sans-serif);min-height:360px;overflow:hidden}',
         '.sde.sde-fullscreen{position:fixed;inset:0;z-index:9000;border-radius:0;height:auto!important}',
+        '.sde.sde-fill{height:auto}.sde.sde-fill>.sde-body{flex:0 0 auto;height:var(--sl-canvas-h,640px)}.sde.sde-fill.sde-fullscreen>.sde-body{flex:1 1 0;height:auto}',
         '.sde-bar{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px 8px;border-bottom:1px solid var(--sde-border);background:var(--sde-panel)}',
         '.sde-bar .sde-sep{width:1px;height:20px;background:var(--sde-border);margin:0 4px}',
         '.sde select.sde-btn{width:auto;min-width:0;flex:0 0 auto;margin:0;padding:0 6px}',
@@ -831,7 +837,7 @@
         '.sde-btn:focus-visible,.sde-tool:focus-visible,.sde-canvas:focus-visible{outline:2px solid var(--sde-accent);outline-offset:1px}',
         '.sde-zoom{min-width:48px;text-align:center;font-variant-numeric:tabular-nums;font-size:12px}',
         '.sde-body{position:relative;display:flex;flex:1;min-height:0}',
-        '.sde-toolbox{width:150px;flex:0 0 auto;border-right:1px solid var(--sde-border);background:var(--sde-panel);overflow:auto;padding:8px 6px}',
+        '.sde-toolbox{width:var(--sl-strip-w,150px);flex:0 0 auto;border-right:1px solid var(--sde-border);background:var(--sde-panel);overflow:auto;padding:8px 6px}',
         '.sde-toolbox h4{margin:6px 4px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--sde-muted)}',
         '.sde-tool{display:flex;align-items:center;justify-content:flex-start;gap:8px;box-shadow:none;background-image:none;width:100%;padding:5px 6px;margin:0 0 3px;border:1px solid transparent;border-radius:6px;background:transparent;color:inherit;font:inherit;font-size:12px;text-align:left;cursor:grab;touch-action:none;user-select:none}',
         '.sde-tool:hover{background:var(--sde-bg);border-color:var(--sde-border)}',
@@ -960,7 +966,8 @@
     P._build = function () {
         var self = this, def = this.def;
         var root = h('div', { class: 'sde', 'data-diagram': def.type, 'data-sde': this.prefix });
-        if (this.opts.height) root.style.height = typeof this.opts.height === 'number' ? this.opts.height + 'px' : this.opts.height;
+        if (this.opts.height === 'fill') root.classList.add('sde-fill');
+        else if (this.opts.height) root.style.height = typeof this.opts.height === 'number' ? this.opts.height + 'px' : this.opts.height;
         // toolbar
         var bar = h('div', { class: 'sde-bar', role: 'toolbar', 'aria-label': (def.title || def.type) + ' tools' });
         function btn(act, label, inner, title) { var b = h('button', { type: 'button', class: 'sde-btn', 'data-act': act, title: title || label, 'aria-label': label }, inner || esc(label)); bar.appendChild(b); return b; }

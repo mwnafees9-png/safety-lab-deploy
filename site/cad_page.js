@@ -450,7 +450,8 @@
         }
         _renderRevisions();
         if (!state.viewer && window.SLCadViewer) {
-            state.viewer = window.SLCadViewer.mount(document.getElementById('cad-viewer-host'), { height: 680, onZone: _onZone, onVolume: _onVolume, who: _who, onReview: function () { _renderReviews(); }, onShared: function () { try { if (typeof window.scheduleAutosave === 'function') window.scheduleAutosave(); } catch (_) {} } });
+            // 15 Oct 2026: the viewer takes the shared canvas height (--sl-canvas-h in safety_lab.css, 680px on a 900px window) like every diagram.
+            state.viewer = window.SLCadViewer.mount(document.getElementById('cad-viewer-host'), { height: 'var(--sl-canvas-h)', onZone: _onZone, onVolume: _onVolume, who: _who, onReview: function () { _renderReviews(); }, onShared: function () { try { if (typeof window.scheduleAutosave === 'function') window.scheduleAutosave(); } catch (_) {} } });
             state.unsub = state.viewer.onSelect(_onSelect);
         }
         var ms = _models();

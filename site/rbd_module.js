@@ -349,7 +349,7 @@
         _register(); _ensureProvider();
         const id = m.id;
         _ed = SLDiagramEditor.mount(host, {
-            type: 'rbd', height: 540,
+            type: 'rbd', height: 'fill',
             adapter: {
                 load: () => { const mm = _model(id); return mm ? JSON.parse(JSON.stringify(diagramOf(mm))) : { elements: [], connectors: [] }; },
                 save: (model) => { const mm = _model(id); if (!mm || isLegacy(mm)) return; mm.diagram = { elements: model.elements, connectors: model.connectors }; }

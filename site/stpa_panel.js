@@ -1002,7 +1002,7 @@
         if (_csHost.parentNode !== slot) slot.appendChild(_csHost);
         if (!_csEd) {
             _csEd = SLDiagramEditor.mount(_csHost, {
-                type: 'stpa-cs', height: 620, lockKey: 'stpa:control-structure',
+                type: 'stpa-cs', height: 'fill', lockKey: 'stpa:control-structure',
                 adapter: {
                     load: function () { const d = DATA(); return d ? csModel(d) : { elements: [], connectors: [] }; },
                     save: function (model, change) { _author.applyDiagram(model, change); }

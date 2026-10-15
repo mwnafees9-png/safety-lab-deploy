@@ -610,7 +610,7 @@
         if (_ceaHost.parentNode !== slot) slot.appendChild(_ceaHost);
         if (!_ceaEd) {
             _ceaEd = SLDiagramEditor.mount(_ceaHost, {
-                type: 'cea', height: 600, lockKey: 'cea:graph',
+                type: 'cea', height: 'fill', lockKey: 'cea:graph',
                 adapter: {
                     load: ceaEditorModel,
                     save: function (model, change) {

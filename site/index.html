@@ -27,7 +27,7 @@
     <!-- Phase 53.8 — cache-busting query string. Chrome caches file:// resources
          aggressively even with DevTools "Disable cache" on; bumping this string
          forces a re-fetch. Update the number when CSS/JS changes need to land. -->
-    <link rel="stylesheet" href="safety_lab.css?v=65.66">
+    <link rel="stylesheet" href="safety_lab.css?v=65.67">
     <!-- Phase 56.30 — Boot splash. Hides the app shell behind a brand-mark
          overlay until auth_gate.js (or safety_lab.js, for already-signed-in
          users) calls window.__slDismissBootSplash(). Prevents the app from
@@ -3393,7 +3393,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <span style="display:flex; align-items:center; gap:5px;"><span style="width:11px; height:11px; border-radius:3px; background:#6B7280;"></span>⊘ Obsolete</span>
                 </div>
             </div>
-            <div id="gt-sankey-host" style="width:100%; overflow:auto; border:1px solid var(--color-border-hair); border-radius:var(--r-md); background:var(--color-surface-1);"></div>
+            <div id="gt-sankey-host" class="sl-canvas-fill" style="width:100%; overflow:auto; border:1px solid var(--color-border-hair); border-radius:var(--r-md); background:var(--color-surface-1);"></div>
             <div id="gt-eco" style="margin-top:14px; border:1px solid var(--color-border-hair); border-radius:var(--r-md); background:var(--color-surface-2); padding:14px 16px;"></div>
         </div>
 
@@ -4164,12 +4164,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="node_identity_ui.js?v=1.5" defer></script>
     <script src="fta_view_modules.js?v=66.46" defer></script>
     <!-- 13 Oct 2026 (fix G) — SLFtaEdit: the fault tree built by hand (toolbox, drawn connections, unattached nodes, canvas λ/P, model link, overview map) and the ONE change path (SLFtaEdit.applyEdit). After fta_view_modules.js. -->
-    <script src="fta_canvas_edit.js?v=1.0" defer></script>
+    <script src="fta_canvas_edit.js?v=1.1" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
     <script src="data_ops_modules.js?v=66.54" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.44" defer></script>
+    <script src="support_modules.js?v=66.45" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
     <script src="helpers_modules.js?v=3.27" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
@@ -4246,13 +4246,13 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase F4 — MSG-3 scheduled-maintenance analysis (born modular; pushes into the RAM ledger). Pro+ gated. -->
     <script src="msg3_module.js?v=1.7" defer></script>
     <!-- 13 Oct 2026: SLDiagramEditor, the one diagram editor core (toolbox, connect, move, resize, undo, zoom, pan, full screen, overview, read only). Loads before every diagram built on it: rbd_module, cea_graph, stpa_panel, event_trees, bowtie, markov. -->
-    <script src="diagram_editor.js?v=1.4" defer></script>
+    <script src="diagram_editor.js?v=1.5" defer></script>
     <!-- Phase F5-F7 — the complete R&M analytics suite (born modular). Pro+ gated. -->
     <script src="rel_analytics.js?v=1.5" defer></script>
     <script src="mx_analytics.js?v=1.3" defer></script>
     <!-- 13 Oct 2026: rbd_net.js, the network reliability block diagram engine (IEC 61078: series, parallel, k-out-of-n, standby, bridges, repeated blocks, exact by decision diagram); loads right before rbd_module.js, which draws it on the diagram editor. -->
     <script src="rbd_net.js?v=1.0" defer></script>
-    <script src="rbd_module.js?v=2.0" defer></script>
+    <script src="rbd_module.js?v=2.1" defer></script>
     <script src="tol_derate_module.js?v=1.3" defer></script>
     <!-- Phase F9 — deterministic derivation engine (zero AI; wraps renders, edits nothing). -->
     <script src="ram_derive.js?v=1.2" defer></script>
@@ -4276,7 +4276,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase P4 — validation-vs-verification split (born modular; §5.4 discipline). -->
     <script src="vv_validation.js?v=2.5" defer></script>
     <!-- Phase P5 — CEA dependency graph (born modular; graph vs interdependence reconciliation). -->
-    <script src="cea_graph.js?v=1.3" defer></script>
+    <script src="cea_graph.js?v=1.4" defer></script>
     <!-- Phase P8 — safety-significant events export (born modular; in-service watch list). -->
     <script src="sse_export.js?v=1.3" defer></script>
     <!-- Phase P9 — Items/LRU collapse into system workspaces (born modular; injected ws sub-tab). -->
@@ -4418,7 +4418,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="demo_picker.js?v=6" defer></script>
     <script src="first_run.js?v=3" defer></script>
     <script src="continue_session.js?v=1.1" defer></script>
-    <script src="stpa_panel.js?v=1.46" defer></script>
+    <script src="stpa_panel.js?v=1.47" defer></script>
     <script src="stpa_report.js?v=1.3" defer></script>
     <script src="stpa_ai_apply.js?v=0.3" defer></script>
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
@@ -4457,7 +4457,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="cad_review.js?v=1.0" defer></script>
     <script src="cad_viewer.js?v=2.6" defer></script>
     <script src="cad_viewer_panels.js?v=1.0" defer></script>
-    <script src="cad_page.js?v=1.6" defer></script>
+    <script src="cad_page.js?v=1.7" defer></script>
     <script src="pra_panel.js?v=1.18" defer></script>
     <script src="pra_report.js?v=1.5" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
@@ -4503,11 +4503,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="do_credit.js?v=1.0" defer></script>
     <script src="do160_ledger.js?v=1.0" defer></script>
     <script src="ewis_lane.js?v=1.0" defer></script>
-    <script src="event_trees.js?v=2.0" defer></script>
+    <script src="event_trees.js?v=2.1" defer></script>
     <!-- Bow-Tie Analysis — unified FTA↔ETA. Born-modular: creates its own view + nav,
          joins the fault tree's BDD-exact top probability to the event tree initiator,
          checks cross-side common cause against cut sets, lints generic barriers. -->
-    <script src="bowtie.js?v=3.0" defer></script>
+    <script src="bowtie.js?v=3.1" defer></script>
     <!-- Global UI text-size control (A−/A/A+, Ctrl±). Born-modular; scales the whole
          app via body zoom, persisted. Addresses the "text too small" default. -->
     <script src="text_scale.js?v=2.2" defer></script>
@@ -4529,7 +4529,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fta_freq.js?v=1.34" defer></script>
     <script src="markov_ctmc.js?v=1.4" defer></script>
     <!-- 13 Oct 2026: markov_diagram.js, the Markov state diagram (IEC 61165) on the diagram editor, the second view of each Markov model beside its tables; loads right after markov_ctmc.js. -->
-    <script src="markov_diagram.js?v=1.0" defer></script>
+    <script src="markov_diagram.js?v=1.1" defer></script>
     <script src="mil217f_stress.js?v=1.2" defer></script>
     <!-- Jama live bridge — push FCs into Jama as items, pull the relationship
          graph back; humans assert the links in Jama, we automate the rest. -->
