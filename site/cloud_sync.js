@@ -1,3 +1,4 @@
+// 15 Oct 2026 (v2.6): a project saved under another account is not pushed for ever: the project row is read first (RLS hides another account's project), the push stops with reason 'not-yours', and the person is offered a copy in their own workspace.
 // 13 Oct 2026 (late, AutoSave, Waqas: "when a user saves a choice/change it should be autosaving"): __slCloudSyncPushNow(opts) pushes AT ONCE (no 12 s wait, the writer's quiet window cut) and RESOLVES WITH THE OUTCOME ({ ok, reason }) so save_state.js v2.0 can say Saved / Not saved and retry; opts.snapshot writes the accepted project (moves still waiting for an acknowledgement left out). Every guard below (ITAR, provisioning needs content, demo grace, paywall, shrink) applies to it unchanged.
 // 13 Oct 2026 (Office-style saving, fix2-J): no silent cloud push while the person has unsaved work (SLSaveState.holdsSync()); Save writes the cloud copy itself and __slCloudSyncSchedule lets the next silent push follow.
 // ============================================================================
@@ -186,6 +187,43 @@
     // cloud_writer.js, the ONE writer both this path and the manual Save call.
     // prepare() runs INSIDE the writer's serialized run, so the snapshot is fresh.
     function _writer() { try { var G = (typeof globalThis !== 'undefined') ? globalThis : window; return G.SLCloudWriter || null; } catch (_) { return null; } }
+    // 15 Oct 2026 — a project that is not in the signed-in account. The browser keeps one sign-in for every
+    // tab and one autosave copy, so a tab (or a restored autosave) can hold a project saved under ANOTHER
+    // account (Halcyon b408d862 lived in waqas.nafees@safetylabaero.com's workspace while this browser was
+    // signed in as a different account): every push was refused by the database ("new row violates row-level
+    // security policy") and retried for ever. The project row is read first; RLS hides another account's
+    // project, so no row means not ours: stop pushing it, say so once, and offer a copy in this account.
+    var _access = {};                                   // uid|pid -> true (ours) / false (another account's)
+    var _notYoursAsked = {};
+    async function _canWrite(client, uid, pid) {
+        var k = uid + '|' + pid;
+        if (_access[k] !== undefined) return _access[k];
+        try {
+            var q = await client.from('projects').select('id').eq('id', pid).maybeSingle();
+            if (q && q.error) return null;              // unknown (network): let the write decide
+            _access[k] = !!(q && q.data);
+            return _access[k];
+        } catch (_) { return null; }
+    }
+    function _isRls(err) { var m = String((err && (err.message || err.details)) || err || ''); return (err && err.code === '42501') || /row-level security/i.test(m); }
+    function _notYours(pid, name) {
+        if (_notYoursAsked[pid]) return;
+        _notYoursAsked[pid] = true;
+        var ask = (typeof window.slConfirm === 'function') ? window.slConfirm : null;
+        var msg = '"' + (name || 'This project') + '" is saved in a different account from the one signed in here, so this tab cannot save it to the cloud. Your changes are kept on this device.\n\n'
+            + 'Save a copy to your own workspace, or sign in with the account that owns the project.';
+        if (!ask) { try { if (typeof showToast === 'function') showToast(msg, 'warning', 12000); } catch (_) {} return; }
+        Promise.resolve(ask(msg, { title: 'This project is in another account', okText: 'Save a copy to my workspace', cancelText: 'Not now' })).then(function (yes) {
+            if (!yes) return;
+            _detachCloudIdentity();                     // the copy gets its own row in this account's workspace
+            try { _dirtySinceSave = true; } catch (_) {}
+            try { window.__slDemoLoadedAt = 0; } catch (_) {}
+            _pushNow().then(function (r) {
+                try { if (typeof showToast === 'function') showToast(r && r.ok ? 'A copy is saved in your workspace and autosaves from now on.' : 'The copy could not be saved yet (' + ((r && r.reason) || 'error') + '). Your changes are still on this device.', r && r.ok ? 'success' : 'warning', 6000); } catch (_) {}
+                try { if (r && r.ok && window.SLSaveState) window.SLSaveState.replaced(); } catch (_) {}
+            });
+        }, function () {});
+    }
     async function _tick() {
         if (!_on() || _inFlight) return;
         // 13 Oct 2026 — unsaved work (save_state.js) is never pushed silently: the cloud copy is the
@@ -250,6 +288,8 @@
                 if (!pid) { why = 'provision-failed'; return null; }
                 try { if (typeof showToast === 'function') showToast('Project saved to your workspace — autosaving to the cloud now.', 'success', 3500); } catch (_) {}
             } else {
+                // 15 Oct 2026: another account's project is not pushed (through window: tests run this function on its own)
+                try { if (typeof window !== 'undefined' && typeof window.__slCloudCanWrite === 'function' && (await window.__slCloudCanWrite(client, uid, pid)) === false) { why = 'not-yours'; window.__slCloudNotYours(pid, name); return null; } } catch (_) {}
                 // keep the name / cert basis fresh, fire-and-forget
                 try { client.from('projects').update({ name: name, cert_basis: certBasis, updated_at: new Date().toISOString() }).eq('id', pid).then(function () {}, function () {}); } catch (_) {}
             }
@@ -280,6 +320,11 @@
         if (r && r.ok) {
             _lastPushedTs = Math.max(lw || 0, _lastPushedTs) || Date.now();
             _lastPushedItems = snapItems; _lastPushedByTable = snapByTable;
+        } else if (r && r.reason === 'error' && _pid() && typeof window !== 'undefined' && typeof window.__slCloudRefusedByRls === 'function' && window.__slCloudRefusedByRls(r.error, uid, _pid())) {
+            // the database refused this account (the project row was readable, the document is not writable)
+            try { console.warn('[cloud-sync] this account may not save project ' + _pid() + ': not pushing it again (local save is safe).'); } catch (_) {}
+            try { window.__slCloudNotYours(_pid(), _name(_snapshot(opts.snapshot))); } catch (_) {}
+            return { ok: false, reason: 'not-yours' };
         } else if (r && r.reason === 'error') {
             // The app is never disrupted — local autosave already succeeded.
             try { console.warn('[cloud-sync] push failed (local save is safe):', r.error && (r.error.message || r.error)); } catch (_) {}
@@ -408,6 +453,11 @@
     // renamed and overwrote cloud project de27b117 with the next project's
     // content). _createNewProjectBlank calls this.
     window.__slCloudSyncDetach = _detachCloudIdentity;
+    // 15 Oct 2026: the another-account guard, reached through window by _push
+    window.__slCloudCanWrite = _canWrite;
+    window.__slCloudNotYours = _notYours;
+    window.__slCloudRefusedByRls = function (err, uid, pid) { if (!_isRls(err)) return false; _access[uid + '|' + pid] = false; return true; };
+    window.__slCloudSyncAccess = function () { return JSON.parse(JSON.stringify(_access)); };
 
     // 21 Aug 2026 — a deliberate server-side restore (sl_restore_project_version /
     // sl_restore_project_baseline) legitimately replaces content wholesale, exactly

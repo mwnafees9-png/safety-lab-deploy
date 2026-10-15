@@ -188,6 +188,8 @@ function fakeClient(state) {
         if (state.slowMs) return new Promise(res => setTimeout(() => res({ data: row, error: null }), state.slowMs));
         return Promise.resolve({ data: row, error: null });
       }
+      // 15 Oct 2026 — the project row: visible to its own account (RLS), hidden when state.notMine (another account's project)
+      if (t === 'projects') { const id = (q._eqs.find(e => e[0] === 'id') || [])[1]; return Promise.resolve({ data: state.notMine ? null : { id }, error: null }); }
       return Promise.resolve({ data: null, error: null });
     };
     q.then = function (res, rej) {

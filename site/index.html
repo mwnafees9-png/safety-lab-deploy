@@ -4201,7 +4201,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
     <script src="change_ack.js?v=1.5" defer></script>
-    <script src="save_state.js?v=2.1" defer></script>
+    <script src="save_state.js?v=2.2" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.1" defer></script>
@@ -4326,7 +4326,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Recovery ring + session resume (born modular; rides the autosave cadence). -->
     <script src="session_resume.js?v=1.4" defer></script>
     <!-- Continuous cloud autosave + first-edit project provisioning (born modular; wraps _writeAutosave). -->
-    <script src="cloud_sync.js?v=2.5" defer></script>
+    <script src="cloud_sync.js?v=2.6" defer></script>
+    <!-- 15 Oct 2026: a reload reopens the project this tab was showing (per-tab pin in sessionStorage). -->
+    <script src="tab_project.js?v=1.0" defer></script>
     <!-- ReqIF import — Polarion et al. (born modular; own XML parser; idempotent). -->
     <script src="reqif_import.js?v=1.4" defer></script>
     <!-- M8 — status-back: verdicts return to Jama/Polarion/DOORS via ReqIF. -->

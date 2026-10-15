@@ -1,3 +1,4 @@
+// 15 Oct 2026 (v2.2): reason 'not-yours' (the project is saved in another account): said plainly, never retried.
 // ============================================================================
 // save_state.js - v2.0 - 13 Oct 2026 (late) - AUTOSAVE.
 //
@@ -135,7 +136,8 @@
         offline: 'offline', error: 'the cloud could not be reached', refused: 'the cloud copy was changed elsewhere',
         lease: 'another tab is the active one for this project', shrink: 'the project suddenly looks almost empty, so the cloud copy was left alone',
         'not-ready': 'the app is still starting', 'provision-failed': 'the project could not be created in your workspace',
-        'no-snapshot': 'the project could not be read', local: 'this device could not store it'
+        'no-snapshot': 'the project could not be read', local: 'this device could not store it',
+        'not-yours': 'this project is saved in a different account from the one signed in here'
     };
     function _paint() {
         try { _dirtySinceSave = isDirty(); } catch (_) {}
@@ -164,7 +166,7 @@
         } catch (_) {}
         try { var drawerBtn = document.getElementById('node-drawer-save'); if (drawerBtn) drawerBtn.classList.toggle('has-unsaved', isDirty()); } catch (_) {}
     }
-    function _short(code) { return ({ error: 'no connection to the cloud', refused: 'cloud copy changed', lease: 'another tab is active', shrink: 'paused', local: 'this device', 'provision-failed': 'workspace', 'not-ready': 'starting', 'no-snapshot': 'unreadable' })[code] || 'error'; }
+    function _short(code) { return ({ error: 'no connection to the cloud', refused: 'cloud copy changed', lease: 'another tab is active', shrink: 'paused', local: 'this device', 'provision-failed': 'workspace', 'not-ready': 'starting', 'no-snapshot': 'unreadable', 'not-yours': 'another account' })[code] || 'error'; }
     // helpers_modules._updateSaveIndicator hands its signal here: a local write that failed is a
     // failure to say; everything else is painted from this module's own state.
     function renderIndicator(hint) {
@@ -258,7 +260,7 @@
             var why = REASON_TEXT[code] || code;
             if (code === 'error' && r.error) why += ' (' + String(r.error.message || r.error).slice(0, 120) + ')';
             _setError(code === 'offline' ? 'offline' : code, why);
-            if (code !== 'shrink' && code !== 'refused') _scheduleRetry();
+            if (code !== 'shrink' && code !== 'refused' && code !== 'not-yours') _scheduleRetry();   // 15 Oct 2026: retrying another account's project cannot succeed
             return false;
         }
         _state = 'saved'; _savedAt = _now(); _reason = ''; _reasonCode = ''; _retryN = 0;
