@@ -151,6 +151,8 @@
             title = 'Saved ' + (_where === 'cloud' ? 'on this device and to the cloud' : (_where === 'team' ? 'on this device and shared with your team' : 'on this device')) + ' at ' + _hhmm(_savedAt) + '. Acknowledged changes save automatically.';
         } else { text = 'All changes saved'; title = 'Acknowledged changes save automatically.'; }
         if (n && cls !== 'error') { cls = 'dirty'; text = n + (n === 1 ? ' move or undo' : ' moves and undos') + ' to acknowledge'; title = 'Moves and Undo / Redo are collected and acknowledged together when you leave this view. Click to acknowledge them now; they save as soon as you do.'; }
+        // 15 Oct 2026: a change made by the person that waits for its acknowledgement (for example while they type)
+        try { var A0 = _ack(), st0 = A0 && A0.status ? A0.status() : null; if (st0 && st0.open && st0.user && cls !== 'error' && cls !== 'saving') { cls = 'dirty'; text = 'Waiting for acknowledgement'; title = 'A change waits for your acknowledgement; it is not saved until you acknowledge it.'; } } catch (_) {}
         var el = document.getElementById('save-indicator'), txt = document.getElementById('save-indicator-text');
         if (el && txt) { el.classList.remove('saving', 'error', 'dirty'); if (cls) el.classList.add(cls); txt.textContent = text; el.title = title; }
         try {

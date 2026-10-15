@@ -751,6 +751,40 @@
     // Enter has not been pressed since the change, and it was less than 8 s ago (someone who
     // stops typing and sits in the field is asked anyway).
     var TYPING_IDLE_MS = 8000;
+    // 15 Oct 2026 (user-approved): the dialog never pops over the person while they type ANYWHERE in the app. Typing =
+    // focus in an editable element (input, textarea, select, contenteditable) and a keystroke or input within the last
+    // TYPING_PAUSE_MS (Enter ends it). While typing, a small badge says how many changes wait; the dialog opens when the
+    // typing pauses for TYPING_PAUSE_MS, when focus leaves the editable element, or on a click on the badge. A forced
+    // request (Save, closing the window, leaving) opens it at once. The change stays pending and unsaved until acknowledged.
+    var TYPING_PAUSE_MS = 1500, NON_TEXT_INPUT = { button: 1, submit: 1, reset: 1, checkbox: 1, radio: 1, hidden: 1, range: 1, color: 1, file: 1, image: 1 };
+    function _isEditable(el) {
+        if (!el || !el.tagName) return false;
+        if (el.isContentEditable) return true;
+        if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+        return el.tagName === 'INPUT' && !NON_TEXT_INPUT[String(el.type || 'text').toLowerCase()];
+    }
+    function _typingNow() {
+        try { if (!_isEditable(document.activeElement)) return false; if (_enterAt >= _lastKeyAt) return false; return (_now() - _lastKeyAt) < TYPING_PAUSE_MS; } catch (_) { return false; }
+    }
+    function _pauseLeft() { return Math.max(60, TYPING_PAUSE_MS - (_now() - _lastKeyAt) + 30); }
+    function _showBadge(n) {
+        if (typeof document === 'undefined' || !document.body) return;
+        var el = document.getElementById('sl-ack-badge');
+        if (!el) {
+            el = document.createElement('div'); el.id = 'sl-ack-badge'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+            // fixed bottom right, above the activity strip (30 px), never blocking: only the button takes the pointer
+            el.style.cssText = 'position:fixed;right:16px;bottom:42px;z-index:1500;pointer-events:none;';
+            el.innerHTML = '<button type="button" class="sl-ack-badge-btn" style="pointer-events:auto;font:600 12px/1.2 -apple-system,Segoe UI,Arial,sans-serif;padding:6px 12px;border-radius:14px;border:1px solid var(--color-warning,#B7791F);background:var(--color-bg-elevated,#fff);color:var(--color-text,#1d1d1f);box-shadow:0 2px 8px rgba(0,0,0,0.18);cursor:pointer;"></button>';
+            el.querySelector('button').addEventListener('click', function () { _hideBadge(); if (_win && !_prompting) { _groups = {}; _try(true); } });
+            document.body.appendChild(el);
+        }
+        // above the activity strip and above the Feedback button when it is there (it sits bottom right too)
+        try { var fab = document.getElementById('feedback-fab'), fr = fab && fab.getBoundingClientRect(), bot = 42; if (fr && fr.height > 0 && getComputedStyle(fab).display !== 'none') bot = Math.max(bot, Math.round(W.innerHeight - fr.top + 8)); el.style.bottom = bot + 'px'; el.style.zIndex = '1850'; } catch (_) {}
+        var b = el.querySelector('button'), t = (n === 1 ? '1 change' : n + ' changes') + ' to acknowledge';
+        if (b.textContent !== t) b.textContent = t; b.setAttribute('aria-label', t + ': open the acknowledgement'); el.style.display = 'block';
+        try { var S = _save(); if (S && S.renderIndicator) S.renderIndicator(); } catch (_) {}
+    }
+    function _hideBadge() { try { var el = document.getElementById('sl-ack-badge'); if (el) el.style.display = 'none'; } catch (_) {} }
     function _stillTyping() {
         try {
             var a = document.activeElement;
@@ -784,7 +818,7 @@
         if (!force) {
             if (_openGroupList().length) return;            // end() retries
             if (_win.user && _pointerDown) return;           // pointerup retries
-            if (_win.user && _stillTyping()) { _schedule(TYPING_IDLE_MS); return; }   // focusout / Enter retries sooner
+            if (_win.badged && _typingNow()) { _showBadge(_win.badged); _schedule(_pauseLeft()); return; }   // still typing: the badge stays
             if ((_now() - _win.lastAt) < QUIET_MS - 20) { _schedule(QUIET_MS); return; }
         }
         if (_otherDialog()) { _schedule(400); return; }
@@ -827,6 +861,9 @@
             if (_bucket && D.length) _bucket.contentD.push(D);   // accepted on its own: Cancel on collected moves keeps it, and the accepted state carries it
             return _close(w, 'automatic');
         }   // forced (Save, a guard) skips the waiting, never the question of whether anyone made it
+        // the person is typing (anywhere): no dialog over them; the badge counts what waits and the dialog follows the pause
+        if (!forced && _typingNow()) { _prompting = false; w.badged = shown.length; _showBadge(shown.length); _schedule(_pauseLeft()); return; }
+        _hideBadge();
         _stats.prompts++;
         w.shownSnap = _stash;     // the state the dialog describes (the last write happened before the quiet period ended)
         _dialog(w, shown).then(function (choice) {
@@ -848,7 +885,7 @@
         });
     }
     function _close(w, decision) {
-        _prompting = false;
+        _prompting = false; _hideBadge();
         if (_win === w) _win = null;
         var S = _save();
         try { if (S && S._ackClosed) S._ackClosed(w, decision); } catch (_) {}
@@ -1165,6 +1202,7 @@
         busy: function () { try { return _pointerDown || (_isText(document.activeElement) && (_now() - _lastInputAt) < 4000); } catch (_) { return false; } },
         status: function () { return { open: !!_win, prompting: _prompting, collecting: !!_bucket, collectPrompting: _bucketPrompting, user: !!(_win && _win.user), groups: _openGroupList().length, stashed: _stash != null, stats: JSON.parse(JSON.stringify(_stats)) }; },
         _setTestAnswer: function (a) { _testAnswer = a || null; },
+        typing: function () { return _typingNow(); }, TYPING_PAUSE_MS: TYPING_PAUSE_MS,
         _markInput: function () { _lastInputAt = _now(); },
         _stashValue: function () { return _stash; },
         QUIET_MS: QUIET_MS, USER_WINDOW_MS: USER_WINDOW_MS
