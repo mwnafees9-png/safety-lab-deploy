@@ -1,3 +1,4 @@
+// 15 Oct 2026: ai_assistant.js bumped to v76.82 (PDF text keeps printed lines and paragraphs via pdf_text.js v1.0, loaded just before it).
 // 15 Oct 2026: ai_assistant.js bumped to v76.81 (verifier is the other family from the eval-approved lane defaults).
 // 15 Oct 2026: ai_assistant.js bumped to v76.80 (model defaults through ai_request.js; verifier pairs within the same generation).
 // 13 Oct 2026 (fix G): ai_assistant.js bumped to v76.79 (fault tree proposals accept SEQ, and NOT only when the project allows it).
@@ -22,7 +23,7 @@
 (function () {
     'use strict';
 
-    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'ai_assistant.js?v=76.81', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
+    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'pdf_text.js?v=1.0', 'ai_assistant.js?v=76.82', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
     let _loading = null;
 
     window.slLoadAI = function () {

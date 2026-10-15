@@ -7785,7 +7785,8 @@
             for (let pn = 1; pn <= maxP; pn++) {
                 const page = await pdf.getPage(pn);
                 const tc = await page.getTextContent();
-                out.push('[p.' + pn + '] ' + tc.items.map(function (it) { return it.str; }).join(' '));
+                // (15 Oct 2026) keep the page's printed lines and paragraph breaks (pdf_text.js) so headings anchor passages
+                out.push('[p.' + pn + '] ' + ((typeof window !== 'undefined' && window.SLPdfText) ? window.SLPdfText.pageText(tc.items) : tc.items.map(function (it) { return it.str; }).join(' ')));
             }
             return { text: out.join('\n\n').trim(), tables: [], images: [] };
         }

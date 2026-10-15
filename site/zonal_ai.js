@@ -258,7 +258,13 @@
     }
 
     // ---- 2. report reading: passages with anchors --------------------------------------------
-    var HEADING = /^(?:(?:section|appendix|table|figure)\s+[0-9A-Z][0-9A-Z.\-]*|\d+(?:\.\d+){0,4}\.?)\s+[A-Z][^\n]{0,100}$/i;
+    // (15 Oct 2026) PDFs now keep their printed lines (pdf_text.js), so a heading test sees every wrapped
+    // body line too. A heading is a short numbered or named title that starts with a capital and does not
+    // end like a sentence: "6.2 Bird strike margins", "4 Results", "Appendix B Test rig". Body lines such as
+    // "250 KCAS. No penetration." or "12 tests were run." are not headings (a false heading drops its line).
+    var HEADING_NUM = /^\d{1,2}(?:\.\d{1,3}){0,4}\.?\s+[A-Z][^\n]{0,100}$/;
+    var HEADING_NAMED = /^(?:[Ss]ection|SECTION|[Aa]ppendix|APPENDIX|[Tt]able|TABLE|[Ff]igure|FIGURE)\s+[0-9A-Z][0-9A-Z.\-]*\.?\s+[A-Z][^\n]{0,100}$/;
+    var HEADING = { test: function (t) { return (HEADING_NUM.test(t) || HEADING_NAMED.test(t)) && !/[.,;:]$/.test(t); } };
     function _revisionOf(text) {
         var m = _s(text).slice(0, 3000).match(/\bRev(?:ision)?\.?\s*:?\s*([A-Z0-9]{1,4})\b/);
         return m ? m[1] : null;
@@ -625,6 +631,12 @@
             if ((kind === 'fact' || kind === 'interpretation') && !valid.length) reasons.push(kind + ' with no valid source');
             if (kind === 'fact' || kind === 'interpretation') {
                 var hay = valid.map(function (c) { return _norm(c.text); }).join(' | ');
+                // (15 Oct 2026) the part the question is about is given by the app, not claimed by the AI: an
+                // INTERPRETATION (engineering judgment about that part) may name its part number (PN-NF-411). A FACT
+                // stays strict: its quote must itself name the part, so a result of another panel (Test 4, PN-NF-410)
+                // can never be stated as a fact about this one.
+                var subj = ctx.facts && ctx.facts.part;
+                if (subj && kind === 'interpretation') hay += ' | ' + _norm(_s(subj.name) + ' ' + _s(subj.partNumber));
                 var hayNums = {}; _numbers(hay).forEach(function (n) { hayNums[n] = 1; });
                 var bad = _numbers(text).filter(function (n) { return !hayNums[n]; });
                 if (bad.length && valid.length) reasons.push('number(s) ' + bad.join(', ') + ' not in the cited sources');
@@ -792,7 +804,12 @@
             draft.read.kb.map(function (k) { return '<div style="border-top:1px solid var(--color-border-hair,#ddd);padding:3px 0;"><b>Knowledge base ' + _esc(k.id) + '</b>' + (k.title && k.title !== k.id ? ' ' + _esc(k.title) : '') + '<div>' + _esc(k.text) + '</div></div>'; }).join('') + '</div></details>';
         if ((draft.rejected || []).length) h += '<details style="margin-top:8px;"><summary>Rejected: unsupported (' + draft.rejected.length + ')</summary>' + draft.rejected.map(function (r) { return '<div style="font-size:12px;border-top:1px solid var(--color-border-hair,#ddd);padding:4px 0;" data-zai-rejected>' + _esc(r.statement && r.statement.text) + '<br><i>' + _esc(r.reasons.join('; ')) + '</i></div>'; }).join('') + '</details>';
         h += '<details style="margin-top:6px;"><summary>Sources consulted (' + (draft.consulted || []).length + ' records, ' + (draft.passages || []).length + ' report passages)</summary><div style="font-size:11.5px;">' + (draft.consulted || []).map(_esc).join(', ') + '<br>' + (draft.passages || []).map(function (p) { return _esc(p.doc) + (p.page != null ? ' p.' + p.page : '') + (p.section ? ' (' + _esc(p.section) + ')' : ''); }).join('; ') + '</div></details>';
-        h += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;"><button type="button" data-zai-apply>Apply ticked statements</button><button type="button" data-zai-close>Close</button></div></div>';
+        // (15 Oct 2026) the reviewer names themself here, next to Apply: the name box on the CAD Model tab is not
+        // on screen behind this dialog (and not on the page at all from the Particular Risk tab)
+        h += '<div style="display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;margin-top:10px;">' +
+             '<label style="display:inline-flex;gap:6px;align-items:center;margin-right:auto;">Reviewer (your name) <input data-zai-by type="text" autocomplete="name" value="' + _esc(_who()) + '" style="padding:3px 6px;border:1px solid var(--color-border-hair,#ccc);border-radius:5px;width:200px;"></label>' +
+             '<button type="button" data-zai-apply>Apply ticked statements</button><button type="button" data-zai-close>Close</button></div>' +
+             '<div data-zai-msg role="status" style="color:var(--color-danger,#8E2A2A);margin-top:6px;"></div></div>';
         return h;
     }
     // notesHtml(field, key): the accepted entries for one risk, function or part, with their
@@ -814,8 +831,10 @@
             }).join('') +
             (chk.length ? '<div data-zai-checklist style="border-top:1px solid var(--color-border-hair,#ddd);padding:4px 0;"><b>To complete this assessment</b>' + chk.map(function (i) { var n = list[i], m = n.missing || {}; return '<div data-zai-note="' + i + '">&#9744; ' + _esc(SOURCE_TYPES[m.type] || m.type) + ': ' + _esc(m.where) + ' <a href="#" data-zai-note-del="' + _esc(field) + '|' + _esc(key) + '|' + i + '">Delete</a></div>'; }).join('') + '</div>' : '') + '</div>';
     }
+    var _lastBy = '';   // the reviewer name typed in this dialog, for the next dialog when the CAD Model box is not on the page
     function _who() {
         try { var el = document.getElementById('cad-by'); var v = el ? _norm(el.value) : ''; if (v) return v; } catch (_) {}
+        if (_lastBy) return _lastBy;
         try { if (typeof root._signoffReviewerName === 'function') { var w = _norm(root._signoffReviewerName()); if (w) return w; } } catch (_) {}
         return '';
     }
@@ -854,9 +873,18 @@
             if (t.closest('[data-zai-apply]') && _open) {
                 var ids = Array.prototype.slice.call(_open.el.querySelectorAll('[data-zai-pick]')).filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-zai-pick'); });
                 var cur = _open;
+                // one message line, replaced on every try (it used to stack a new line per click)
+                var say = function (txt) { var m = cur.el.querySelector('[data-zai-msg]'); if (!m) { m = document.createElement('div'); m.setAttribute('data-zai-msg', ''); m.style.color = 'var(--color-danger,#8E2A2A)'; cur.el.firstChild.appendChild(m); } m.textContent = txt || ''; };
+                var byEl = cur.el.querySelector('[data-zai-by]');
+                var by = _norm(byEl ? byEl.value : '') || _who();
+                if (!by) { say('Enter your name as the reviewer first: an AI draft goes into the analysis only with the name of the engineer who accepted it.'); if (byEl) byEl.focus(); return; }
+                // the name typed here is the same name every link and placement records: keep the CAD Model box in step
+                try { var cb = document.getElementById('cad-by'); if (cb && _norm(cb.value) !== by) { cb.value = by; cb.dispatchEvent(new Event('input', { bubbles: true })); } } catch (_) {}
+                _lastBy = by;
+                say('');
                 // the acknowledgement dialog asks next: step aside so it is on top, come back if not applied
                 cur.el.style.display = 'none';
-                applyDraft(cur.draft, ids, { by: _who() }).then(function (r) { if (!r.applied) cur.el.style.display = 'flex'; if (r.applied) { cur.el.remove(); if (_open === cur) _open = null; _rerender(); } else { var m = document.createElement('div'); m.style.color = 'var(--color-danger,#8E2A2A)'; m.textContent = r.reason || 'Not applied (canceled).'; cur.el.firstChild.appendChild(m); } }, function (err) { cur.el.style.display = 'flex'; var m = document.createElement('div'); m.style.color = 'var(--color-danger,#8E2A2A)'; m.textContent = 'Not applied: ' + ((err && err.message) || err); cur.el.firstChild.appendChild(m); });
+                applyDraft(cur.draft, ids, { by: by }).then(function (r) { if (!r.applied) cur.el.style.display = 'flex'; if (r.applied) { cur.el.remove(); if (_open === cur) _open = null; _rerender(); } else say(r.reason || 'Not applied (canceled).'); }, function (err) { cur.el.style.display = 'flex'; say('Not applied: ' + ((err && err.message) || err)); });
             }
         });
     }
