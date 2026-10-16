@@ -41,7 +41,11 @@ ok('the hand-written guide array is gone', !/const _AI_INPUT_GUIDE = \[/.test(ai
 ok('the guide is derived from the launcher', /function _aiInputGuide\(\)/.test(ai) && /_launcherActions\(\)\s*\n\s*\.filter\(function \(a\) \{ return a && a\.needs; \}\)/.test(ai));
 ok('the question that prompted it is recorded', /why do all these analyses not show here\?/.test(ai));
 ok('the third-list diagnosis is recorded', /Because this WAS a third hand-written list/.test(ai));
-ok('the guide groups its entries like the launcher', /if\(g\.group&&g\.group!==_grp\)/.test(ai));
+// 16 Oct 2026: the AI Inputs modal became the AI Assistant page (ai_inputs_page.js); the page shows every
+// launcher action with its needs and readiness, grouped exactly as the launcher groups them.
+const pageSrc = R('site/ai_inputs_page.js');
+ok('the guide groups its entries like the launcher (the AI Assistant page)', /var g = String\(a\.group \|\| 'Start here'\)/.test(pageSrc) && /if \(g !== grp\)/.test(pageSrc) && /API\.inputReady\(a\.needs\.r\)/.test(pageSrc));
+ok('the guide is on the AI API for the page and other readers', /inputGuide: function \(\) \{ try \{ return _aiInputGuide\(\); \}/.test(ai));
 ok('HF lanes carry a per-lane standard', /var _HF_LANE_STD = \{/.test(ai));
 ok('HF lanes carry a per-lane input statement', /var _HF_LANE_NEEDS = \{/.test(ai));
 ok('the MFC lane says plainly that it needs nothing', /the six Appendix D basic workload functions and ten workload factors are fixed/.test(ai));

@@ -1778,11 +1778,16 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
         </div>
 
 
-        <!-- Phase 53.65 — AI Assistant (BYO Anthropic + Voyage keys, Pro-gated). -->
+        <!-- Phase 53.65: AI Assistant (BYO Anthropic + Voyage keys, Pro-gated).
+             16 Oct 2026 (Waqas: the AI Assistant is a page of its own): AI inputs, every AI analysis and
+             the chat, which pages read the inputs (ai_inputs_page.js renders #ai-page-host), then the
+             AI settings below as before. -->
         <div id="view-ai" style="display: none;">
             <div class="header-with-export">
-                <h3>🤖 AI Assistant <span style="font-size: 13px; font-weight: 500; color: var(--color-text-tertiary); margin-left: 8px;">— Claude integration, BYO API key</span></h3>
+                <h3>AI Assistant <span style="font-size: 13px; font-weight: 500; color: var(--color-text-tertiary); margin-left: 8px;">Your documents for the AI, every AI analysis, and the AI settings</span></h3>
             </div>
+            <div id="ai-page-host"></div>
+            <h4 id="aip-settings" class="aip-section-title">AI settings</h4>
             <div id="ai-locked-banner" style="display: none; padding: 14px 16px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.10), rgba(0, 122, 255, 0.10)); border: 1px solid rgba(99, 102, 241, 0.30); border-radius: var(--r-md); margin-bottom: 14px; font-size: 13px;">
                 <strong>🔒 AI features require Safety Lab Aero Pro+.</strong> The Pro+ tier unlocks the AI Assistant, architecture-to-fault-tree generation, FHA effects assist, requirement-quality critique, and the per-project learning memory. All AI calls route through Safety Lab Aero's hosted proxy (no API key management required). ITAR-controlled programs are never routed to public cloud AI endpoints — cloud AI calls are blocked server-side for ITAR projects until a US-sovereign deployment is provisioned; use self-hosted / air-gap mode for controlled programs today.
                 <button class="action-btn btn-cyan" style="margin-left: 12px;" onclick="openProUpgradeModal('AI Assistant (Pro+)')">Upgrade to Pro+</button>
@@ -4171,7 +4176,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.45" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.28" defer></script>
+    <script src="helpers_modules.js?v=3.29" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4179,8 +4184,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
     <script src="bindings_modules.js?v=1.56" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
-    <script src="misc_fn_modules.js?v=66.80" defer></script>
-    <script src="safety_lab.js?v=65.63" defer></script>
+    <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
+    <script src="ai_inputs_exchange.js?v=1.0" defer></script>
+    <script src="misc_fn_modules.js?v=66.81" defer></script>
+    <script src="safety_lab.js?v=65.64" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4200,7 +4207,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="render_pass.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
-    <script src="change_ack.js?v=1.6" defer></script>
+    <script src="change_ack.js?v=1.7" defer></script>
     <script src="save_state.js?v=2.2" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
@@ -4444,7 +4451,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="pra_refs_data.js?v=1.4" defer></script>
     <script src="pra_models.js?v=1.19" defer></script>
     <!-- 14 Oct 2026: grounded AI for zonal and particular risk drafts (sources checked in code, nothing applied without acknowledgement). -->
-    <script src="zonal_ai.js?v=1.6" defer></script>
+    <script src="zonal_ai.js?v=1.7" defer></script>
     <script src="physical_independence.js?v=1.1" defer></script>
     <script src="independence_claims.js?v=1.1" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
@@ -4551,7 +4558,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.16" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.74" defer></script>
+    <script src="ai_loader.js?v=8.75" defer></script>
+    <!-- 16 Oct 2026: the AI Assistant page (AI inputs, every AI analysis and the chat, the pages that read the inputs). -->
+    <script src="ai_inputs_page.js?v=1.0" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
     <!-- IDs & Numbering scheme editor UI (after safety_lab.js — uses window.SafetyLabNumberingState). -->
     <script src="numbering_ui.js?v=1.0.2" defer></script>

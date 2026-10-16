@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 16 Oct 2026 (AI Assistant page): SafetyLabSourceDocs.add stamps who added a document and its text hash and keeps a same-name copy's controlled flag; new setControlled() and replaceAll() (the page's writes, through scheduleAutosave and so SLChangeAck).
 // 13 Oct 2026 (fix G): Change Type offers SEQ, and NOT only when the project allows it and the gate has at most one input. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (analysis model links): PRA, ZSA and FMEA rows show and edit their model links (model_links.js): the PRA/ZSA cell and form field, the FMEA form field; an FMEA edit keeps its links; see tests/regression_analysis_links_20261013b.test.js
 // 13 Oct 2026 (Office-style saving, fix2-J): Ctrl+S / Cmd+S is Save (commitSaveChanges -> SLSaveState.save), no longer the file download.
@@ -88,6 +89,26 @@ let resourcesData = [];
 // Defensive global API the AI module uses to add/list/clear source docs. De-dups by
 // name (replace), stamps id + addedAt, and runs the size guards on add so the live
 // in-memory store is already persist-safe. Tolerant of being called before load.
+// 16 Oct 2026 (AI Assistant page): add() also stamps who added the document and the hash of its
+// text (the shared AI inputs file and the change acknowledgement use it), and a re-upload under the
+// same name keeps the controlled flag the earlier copy carried. setControlled() and replaceAll() are
+// the page's writes; every write ends in scheduleAutosave, so it goes through SLChangeAck.
+// Who is adding: the signed-in account (its name, else its email), else the name or email given at
+// sign-up on this device. Nobody known = null ("Not recorded" on the page), never a placeholder.
+function _slabSourceDocWho() {
+    try {
+        const s = (typeof window.getSupabaseSession === 'function') ? window.getSupabaseSession() : ((typeof _supabaseSession !== 'undefined') ? _supabaseSession : null);
+        const u = s && s.user;
+        if (u) { const md = u.user_metadata || {}; const nm = md.name || md.full_name || u.email; if (nm) return String(nm); }
+    } catch (_) {}
+    try {
+        let nm = ''; try { nm = localStorage.getItem('safetyLab.signup.name') || ''; } catch (_) {}
+        let em = ''; try { em = (typeof getSignupEmail === 'function') ? (getSignupEmail() || '') : ''; } catch (_) {}
+        if (nm || em) return String(nm || em);
+    } catch (_) {}
+    return null;
+}
+function _slabSourceDocSha(text) { try { return (window.SLAiInputsExchange && typeof SLAiInputsExchange.sha256Hex === 'function') ? SLAiInputsExchange.sha256Hex(String(text || '')) : undefined; } catch (_) { return undefined; } }
 window.SafetyLabSourceDocs = {
     add: function (doc) {
         try {
@@ -96,16 +117,44 @@ window.SafetyLabSourceDocs = {
             const name = String(doc.name || 'document');
             const budget = { used: 0 };
             // Recompute the budget already consumed by the docs we are keeping.
+            const prev = projectSourceDocs.filter(function (d) { return d && String(d.name) === name; });
             const kept = projectSourceDocs.filter(function (d) { return d && String(d.name) !== name; });
             kept.forEach(function (d) { (Array.isArray(d.images) ? d.images : []).forEach(function (im) { budget.used += String((im && im.data) || '').length; }); });
             const stamped = _slabGuardSourceDoc({
                 id: doc.id || ('doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
                 name: name, addedAt: Date.now(),
+                addedBy: doc.addedBy || _slabSourceDocWho(),
+                controlled: !!doc.controlled || prev.some(function (d) { return d.controlled; }),
+                revision: doc.revision, sha256: _slabSourceDocSha(doc.text),
                 text: doc.text, tables: doc.tables, images: doc.images
             }, budget);
             projectSourceDocs = kept.concat([stamped]);
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
             return stamped;
+        } catch (_) { return null; }
+    },
+    // Mark or unmark one document as controlled (ITAR / proprietary). Returns the doc or null.
+    setControlled: function (id, on) {
+        try {
+            const d = (Array.isArray(projectSourceDocs) ? projectSourceDocs : []).find(function (x) { return x && String(x.id) === String(id); });
+            if (!d) return null;
+            if (on) d.controlled = true; else delete d.controlled;
+            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+            return d;
+        } catch (_) { return null; }
+    },
+    // Replace the whole list (the shared-file import writes through here). Each doc goes through the
+    // same size guards as add(); a doc without a text hash gets one. Returns the stored list.
+    replaceAll: function (list) {
+        try {
+            const budget = { used: 0 };
+            projectSourceDocs = (Array.isArray(list) ? list : []).filter(function (d) { return d && typeof d === 'object'; }).map(function (d) {
+                const g = _slabGuardSourceDoc(Object.assign({}, d, { id: d.id || ('doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)) }), budget);
+                if (!g.sha256) { const h = _slabSourceDocSha(g.text); if (h) g.sha256 = h; }
+                return g;
+            });
+            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+            return projectSourceDocs.slice();
         } catch (_) { return null; }
     },
     list: function () { try { return Array.isArray(projectSourceDocs) ? projectSourceDocs.slice() : []; } catch (_) { return []; } },

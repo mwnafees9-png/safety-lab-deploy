@@ -1,6 +1,8 @@
 // ============================================================================
 // zonal_ai.js, v1.0, 14 Oct 2026: grounded AI for zonal and particular risk work.
 // window.SLZonalAI (page) + module.exports (node tests).
+// 16 Oct 2026 (v1.0.1, AI Assistant page): passages() labels a document with its stored revision when it has one
+// (an AI input imported from Sys Lab or Cert Lab keeps the revision it came with), else the detected one as before.
 //
 // WAQAS'S RULINGS (14 Oct 2026):
 //   * the AI thinks like an engineer and looks where an engineer in that role would look;
@@ -276,7 +278,7 @@
     function passages(doc) {
         if (!doc) return [];
         var docId = _s(doc.id || doc.name), name = _s(doc.name || doc.id), text = _s(doc.text);
-        var rev = _revisionOf(text), out = [];
+        var rev = (doc.revision != null && _s(doc.revision).trim() !== '') ? _s(doc.revision).trim() : _revisionOf(text), out = [];   // 16 Oct 2026: a stored revision (an imported AI input keeps the one it came with) wins over the detected one
         var pages = [];
         if (/\[p\.\d+\]/.test(text)) {
             var re = /\[p\.(\d+)\]/g, m, last = null, lastIdx = 0;

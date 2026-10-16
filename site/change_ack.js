@@ -1,4 +1,7 @@
 // ============================================================================
+// change_ack.js - v1.3 - 16 Oct 2026 (AI Assistant page): AI inputs (source documents) are compared by id,
+// name, size, controlled flag and text hash (never the text), and each added, removed or changed document
+// is one named line in the dialog ("AI inputs: Propulsion SDD.pdf removed"), not "Source documents changed".
 // change_ack.js - v1.2 - 13 Oct 2026 (late, Waqas: "when a user saves a choice/change it should be
 // autosaving"): an acknowledged change is SAVED at once (save_state.js v2.0 AutoSave). Added for
 // that: acceptedSnapshot() (the project as accepted so far: everything acknowledged, nothing still
@@ -117,6 +120,10 @@
         });
         return { map: map, order: order, key: kf };
     }
+    // A source document (AI input) as the funnel compares it: its id, name, size, controlled flag and
+    // text hash, never the text itself (one real project holds 2.26 MB of documents). 16 Oct 2026: the
+    // AI Assistant page's writes (remove, controlled, import replace) are each seen and named.
+    function _docKey(d) { return d ? { id: String(d.id || ''), name: String(d.name || d.fileName || d.title || ''), chars: String(d.text || '').length, controlled: !!d.controlled, sha: d.sha256 || null } : null; }
     // records(src): src is the live model (_live()) or a parsed snapshot; both have the store names.
     function records(src) {
         var R = {}, K = _keys();
@@ -137,7 +144,7 @@
         var om = new Map(), oo = [];
         OTHER.forEach(function (n) {
             if (!Object.prototype.hasOwnProperty.call(src, n) || src[n] === undefined) return;
-            om.set(n, n === 'projectSourceDocs' ? _S((Array.isArray(src[n]) ? src[n] : []).map(function (d) { return d ? String(d.id || '') + '|' + String(d.name || d.fileName || d.title || '') : ''; })) : _S(src[n]));
+            om.set(n, n === 'projectSourceDocs' ? _S((Array.isArray(src[n]) ? src[n] : []).map(_docKey)) : _S(src[n]));
             oo.push(n);
         });
         R.other = { map: om, order: oo, key: null };
@@ -430,6 +437,22 @@
                 it.area = 'Project'; it.label = e.key === 'projectName' ? 'Project name' : (e.key === 'mlData' ? 'Markov models' : (e.key === 'stpaData' ? 'STPA analysis' : _human(e.key)));
                 if (e.key === 'projectName') it.fields = [{ field: 'projectName', name: 'name', was: _val(a), now: _val(b) }];
                 items.push(it); return;
+            }
+            if (e.space === 'other' && e.key === 'projectSourceDocs') {
+                // one line per document added, removed or changed, by name
+                var A0 = Array.isArray(a) ? a.filter(Boolean) : [], B0 = Array.isArray(b) ? b.filter(Boolean) : [], n0 = items.length;
+                var byId = function (L) { var m = {}; L.forEach(function (d) { m[d.id] = d; }); return m; }, MA = byId(A0), MB = byId(B0);
+                B0.forEach(function (d) { if (!MA[d.id]) items.push({ op: 'added', space: e.space, key: e.key, area: 'AI inputs', label: d.name || 'document', fields: [], book: false, derived: false }); });
+                A0.forEach(function (d) { if (!MB[d.id]) items.push({ op: 'removed', space: e.space, key: e.key, area: 'AI inputs', label: d.name || 'document', fields: [], book: false, derived: false }); });
+                B0.forEach(function (d) {
+                    var o = MA[d.id]; if (!o || _S(o) === _S(d)) return;
+                    var fs0 = [];
+                    if (o.name !== d.name) fs0.push({ field: 'name', name: 'name', was: _val(o.name), now: _val(d.name) });
+                    if (o.controlled !== d.controlled) fs0.push({ field: 'controlled', name: 'controlled', was: o.controlled ? 'yes' : 'no', now: d.controlled ? 'yes' : 'no' });
+                    if (o.chars !== d.chars || (o.sha && d.sha && o.sha !== d.sha)) fs0.push({ field: 'text', name: 'text', was: o.chars.toLocaleString() + ' characters', now: d.chars.toLocaleString() + ' characters' + (o.chars === d.chars ? ', different content' : '') });
+                    items.push({ op: 'changed', space: e.space, key: e.key, area: 'AI inputs', label: d.name || 'document', fields: fs0, book: false, derived: !fs0.length });
+                });
+                if (items.length > n0) return;
             }
             if (e.space === 'other') {
                 it.area = 'Project'; it.label = OTHER_LABEL[e.key] || _human(e.key);

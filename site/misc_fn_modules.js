@@ -1,3 +1,4 @@
+// 16 Oct 2026 (AI Assistant page): _slabGuardSourceDoc keeps controlled, addedBy, revision, the text hash and processedVia through a save (the controlled flag the ITAR fence reads used to be dropped on save).
 // 13 Oct 2026 (fix G): spawns fta_worker.js v1.9 with the engine v1.11 (SEQ gate, NOT gate with prime implicants).
 // 13 Oct 2026 (Office-style saving + change acknowledgement, fix2-J): scheduleAutosave reports every accepted change to SLChangeAck.noteChange() (change_ack.js); the unsaved flag belongs to save_state.js when it is loaded.
 // 13 Oct 2026 (fix 3, MGL): Paste Special CCF writes group-level parameters. Worker bumped to fta_worker.js v1.7 with the merged engine (fta_engine.js v1.9: MGL common cause plus F4/F5).
@@ -22,6 +23,15 @@ function _slabGuardSourceDoc(doc, budgetRef) {
         }) : [],
         images: []
     };
+    // 16 Oct 2026 (AI Assistant page): the facts the page lists and the shared AI inputs file carries
+    // survive a save. Before this the controlled flag (the ITAR fence reads it) was dropped here, so a
+    // document marked controlled came back unmarked after a reload. Written only when present, so a
+    // document that never had them saves exactly as before.
+    if (doc && doc.controlled) out.controlled = true;
+    if (doc && doc.addedBy) out.addedBy = String(doc.addedBy);
+    if (doc && doc.revision != null && String(doc.revision).trim() !== '') out.revision = String(doc.revision).trim();
+    if (doc && typeof doc.sha256 === 'string' && /^[0-9a-f]{64}$/.test(doc.sha256)) out.sha256 = doc.sha256;
+    if (doc && doc.processedVia) { out.processedVia = String(doc.processedVia); if (doc.processedAt) out.processedAt = doc.processedAt; }
     const imgs = Array.isArray(doc && doc.images) ? doc.images : [];
     for (let i = 0; i < imgs.length; i++) {
         const im = imgs[i] || {};

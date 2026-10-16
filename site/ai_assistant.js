@@ -1,3 +1,4 @@
+// 16 Oct 2026 (AI Assistant page, v76.83): the AI Inputs modal is replaced by the AI Assistant page (ai_inputs_page.js); _openAiInputsModal / openAiInputs() open the page, the sidebar and nav entries open the page instead of the floating menu, and the extractor and Import documents into the model are exposed for it (SafetyLabExtractDoc, SafetyLabImportDocsToModel).
 // 13 Oct 2026 (fix G): fault tree proposals accept the SEQ gate, and NOT only when the project allows non-coherent logic (_ftaGateTypesAllowed); a NOT gate never gets a second input. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL): CCF proposals carry the model (beta factor or MGL) explicitly and an unsuggested gamma/delta stays blank (= 1, NUREG/CR-5485 MGL default) instead of a silent 0.
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
@@ -6706,10 +6707,11 @@
         el.style.setProperty('--launcher-border', dark ? '#2a3245' : '#e6e6ee');
     }
     // ---- Single shared "AI Inputs" hub ------------------------------------------
-    // One modal for the whole AI Assistant: import files / paste text once into the
-    // source store every analysis reads (window.SafetyLabSourceDocs via
-    // _projectDocContext), manage what's on file, and see the recommended inputs for
-    // each analysis grounded in ARP 4761A / 4754B. Decoupled from any single feature.
+    // 16 Oct 2026: the hub is the AI Assistant PAGE (ai_inputs_page.js), no longer a modal:
+    // import files / paste text once into the source store every analysis reads
+    // (window.SafetyLabSourceDocs via _projectDocContext), manage what's on file, share it
+    // as the "safetylab-ai-inputs" file, and see what each analysis needs (the guide below,
+    // shown per action on the page). Decoupled from any single feature.
     // ---- AI INPUTS readiness guide -----------------------------------------
     // Waqas, 2 Sep 2026, on the AI Inputs modal: "why do all these analyses not show here?"
     //
@@ -6822,63 +6824,8 @@
         }
         return {ready:false,need:'inputs'};
     }
-    function _aiInputsRenderGuide(){
-        const host=document.getElementById('aii-guide'); if(!host) return;
-        const pal=_chatPalette();
-        var _grp=null;
-        host.innerHTML=_aiInputGuide().map(function(g){
-            var head='';
-            if(g.group&&g.group!==_grp){ _grp=g.group; head='<div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;opacity:.5;margin:14px 0 6px;">'+_esc(g.group.replace('&amp;','&'))+'</div>'; }
-            return head+_aiInputCard(g,pal);
-        }).join('');
-    }
-    function _aiInputCard(g,pal){
-            const rd=_aiInputReady(g.r);
-            const chip=rd.ready
-                ? '<span style="font-size:10.5px;font-weight:700;color:#0b8043;background:#e7f6ec;border-radius:20px;padding:2px 8px;white-space:nowrap;">✓ Inputs ready</span>'
-                : '<span style="font-size:10.5px;font-weight:600;color:#8a5a00;background:#fff4e0;border-radius:20px;padding:2px 8px;white-space:nowrap;">○ Needs ' + _esc(rd.need) + '</span>';
-            return '<div style="border:1px solid ' + pal.border + ';border-radius:8px;padding:9px 11px;margin-bottom:7px;">'
-                + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;"><div style="font-weight:600;font-size:13px;">' + _esc(g.k) + '</div><div style="display:flex;gap:6px;align-items:center;">' + chip + '<span style="font-size:10.5px;color:' + pal.sub + ';letter-spacing:.02em;white-space:nowrap;">' + _esc(g.std) + '</span></div></div>'
-                + '<div style="font-size:12.5px;color:' + pal.sub + ';line-height:1.5;margin-top:3px;">' + _esc(g.t) + '</div></div>';
-    }
-    function _aiInputsRenderSources() {
-        try { _aiInputsRenderGuide(); } catch (_) {}   // keep the per-analysis readiness signal in sync
-        const host = document.getElementById('aii-sources'); if (!host) return;
-        const pal = _chatPalette();
-        const api = _sourceDocsApi();
-        const docs = (api && typeof api.list === 'function') ? api.list() : [];
-        if (!docs.length) { host.innerHTML = '<div style="opacity:.6;font-size:12.5px;padding:6px 0">No source documents yet — add a file or paste text above. Every analysis will read them.</div>'; return; }
-        host.innerHTML = docs.map(function (d) {
-            const chars = String(d.text || '').length, t = (Array.isArray(d.tables) ? d.tables : []).length, m = (Array.isArray(d.images) ? d.images : []).length;
-            const meta = chars.toLocaleString() + ' chars · ' + t + ' table' + (t === 1 ? '' : 's') + ' · ' + m + ' diagram' + (m === 1 ? '' : 's');
-            return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid ' + pal.border + ';border-radius:8px;padding:8px 10px;margin-bottom:6px;">'
-                + '<div style="min-width:0;"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📄 ' + _esc(d.name || 'document') + (d.controlled ? ' <span style="font-size:10px;color:#b91c1c;border:1px solid #b91c1c;border-radius:4px;padding:0 4px;">🔒 controlled</span>' : '') + '</div><div style="font-size:11.5px;color:' + pal.sub + ';">' + _esc(meta) + '</div></div>'
-                + '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'
-                +   '<label title="ITAR / proprietary — process only on your own Claude (GovCloud), Azure Government, or on-prem backend" style="display:flex;align-items:center;gap:5px;font-size:11.5px;color:' + (d.controlled ? '#b91c1c' : pal.sub) + ';cursor:pointer;white-space:nowrap;"><input type="checkbox" data-ctrl="' + _esc(String(d.id)) + '"' + (d.controlled ? ' checked' : '') + ' style="margin:0;">Controlled</label>'
-                +   '<button type="button" data-rm="' + _esc(String(d.id)) + '" style="border:1px solid ' + pal.border + ';background:transparent;color:' + pal.sub + ';border-radius:7px;padding:5px 9px;font:inherit;font-size:12px;cursor:pointer;">Remove</button>'
-                + '</div>'
-                + '</div>';
-        }).join('');
-    }
-    async function _aiInputsHandleFiles(fileList) {
-        const files = Array.prototype.slice.call(fileList || []);
-        if (!files.length) return;
-        const status = document.getElementById('aii-file-status');
-        let ok = 0;
-        for (let i = 0; i < files.length; i++) {
-            const f = files[i]; const nm = String(f.name || '').toLowerCase();
-            if (status) status.textContent = 'Reading ' + f.name + ' (' + (i + 1) + ' of ' + files.length + ')…';
-            try {
-                let text = '', tables = [], images = [];
-                if (/\.(docx|pdf|reqif|reqifz)$/.test(nm)) { const doc = await _extractDoc(f); text = (doc && doc.text) || ''; tables = (doc && doc.tables) || []; images = (doc && doc.images) || []; }
-                else { text = await f.text(); }
-                _persistSourceDoc({ name: f.name, text: text, tables: tables, images: images });
-                ok++;
-            } catch (e) { if (status) status.textContent = 'Could not read ' + f.name + ': ' + ((e && e.message) || e); }
-        }
-        if (ok && status) status.textContent = ok + ' document' + (ok === 1 ? '' : 's') + ' added.';
-        _aiInputsRenderSources();
-    }
+    // 16 Oct 2026 (AI Assistant page): the AI Inputs modal's list, file reader and readiness guide
+    // moved to the page (ai_inputs_page.js), which lists every analysis with its readiness and runs it.
     // #23 — Page-cited "Ask your documents" Q&A over the AI Inputs (evidion "Assist" parity).
     // Reuses the consolidated source-doc store (_projectDocContext, with its UNTRUSTED framing) +
     // the model; answers STRICTLY from the docs, cited to source + page, or says "Not found".
@@ -6934,106 +6881,22 @@
     // #26 — Import → model bridge: mirror EXISTING analysis from an uploaded FHA/PSSA/SDD into the
     // structured model via the unified engine (review → Accept). Doc-first on-ramp (evidion's wedge).
     const _DOC_IMPORT_DIRECTIVE = 'Import EXISTING analysis from the engineer\'s AI Inputs documents into the project model. Read the provided source documents and MIRROR the safety-analysis content they already contain into structured rows — existing failure conditions as add_fha, functions / sub-functions as add_function, requirements as add_requirement, FMEA modes as add_fmea. Mirror exactly what each document states; do NOT invent, re-derive, infer, or add anything not present in the documents. Attach the source document name + a short verbatim quote to every action via its source field. Skip anything already present in the project model. SYSTEMS: when an SDD / architecture document defines a system not yet in the model, emit add_system {name} for it FIRST, then mirror its functions, FHA and interfaces referencing that system by name. INTERFACES: when a document (especially an ICD or interface table) defines an interface between two systems that ALREADY EXIST in the model, emit add_interface {fromSystemId, toSystemId, kind("interface"|"functional"|"resource"), fromFuncId?, toFuncId?, medium?, direction?, icdRef?} for each one — interface = physical/data dependency; functional = one system function relies on another (include fromFuncId+toFuncId); resource = a shared resource/bus (a CMA common-cause candidate). Put the ICD section or interface id in icdRef, and the system ids are in state.systems[]. FORMATS: ReqIF (Jama / DOORS / Polarion) — mirror each requirement as add_requirement, preserving its existing trace link to the function/FC it addresses (traceId). SysML (.xmi) — blocks/parts become add_system, ports and connectors between blocks become add_interface, and SysML requirements become add_requirement. SCHEMATICS / BLOCK DIAGRAMS (attached images): read each diagram — every block is a system (add_system) or function (add_function); every line or connector between blocks is an interface (add_interface). Diagram-derived items are PROVISIONAL: create them, but say plainly in your reply that they must be verified against the model — never treat a diagram as established fact. TRACE-AT-CREATION: every row you create is born connected — set its trace field in the SAME action (add_fha to the function subId it belongs to; add_requirement to the FC/function it mitigates via traceId; add_fmea to its FC). Never create an orphan.';
+    // 16 Oct 2026 (Waqas: the AI Assistant is a page of its own, not a menu or a modal). The AI Inputs
+    // modal is gone: AI inputs are put in and managed on the AI Assistant page (ai_inputs_page.js).
+    // The name stays so every caller (the launcher's first entry, the "no source material yet" path,
+    // openAiInputs()) now opens the page at its AI inputs section.
     function _openAiInputsModal() {
-        const old = document.getElementById('ai-inputs-modal'); if (old) old.remove();
-        const pal = _chatPalette();
-        const surface = (typeof _isDarkTheme === 'function' && _isDarkTheme()) ? '#11151c' : '#ffffff';
-        const ov = document.createElement('div');
-        ov.id = 'ai-inputs-modal';
-        ov.style.cssText = 'position:fixed;inset:0;z-index:99997;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
-        ov.innerHTML = '<div style="background:' + surface + ';color:inherit;border:1px solid ' + pal.border + ';border-radius:14px;width:min(760px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.3);">'
-            + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:16px 18px 12px;border-bottom:1px solid ' + pal.border + ';">'
-            +   '<div><div style="font-size:17px;font-weight:700;">✦ AI Inputs</div><div style="font-size:12px;color:' + pal.sub + ';margin-top:2px;line-height:1.45;">Add your architecture once — files or text. Every AI Assistant analysis reads from here; nothing is invented beyond what you provide.</div></div>'
-            +   '<button type="button" id="aii-x" aria-label="Close" style="border:none;background:transparent;font-size:24px;line-height:.8;cursor:pointer;color:' + pal.sub + ';flex-shrink:0;">×</button>'
-            + '</div>'
-            + '<div style="overflow:auto;padding:16px 18px;">'
-            +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-            +     '<div><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Import files</div>'
-            +       '<label for="aii-file" style="display:block;border:1.5px dashed ' + pal.border + ';border-radius:10px;padding:16px;text-align:center;cursor:pointer;font-size:12.5px;color:' + pal.sub + ';">📎 Choose or drop files<div style="font-size:11px;margin-top:4px;">SDDs, specs, ICDs, requirements (ReqIF from Jama / DOORS / Polarion) — .docx, .pdf, .reqif, .reqifz, .txt, .md, .csv, SysML .xml/.xmi</div></label>'
-            +       '<input id="aii-file" type="file" multiple accept=".docx,.pdf,.reqif,.reqifz,.txt,.md,.csv,.json,.xml,.xmi,.text" style="display:none;">'
-            +       '<div id="aii-file-status" style="font-size:11.5px;color:' + pal.sub + ';margin-top:6px;min-height:14px;"></div></div>'
-            +     '<div><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Paste text</div>'
-            +       '<input id="aii-text-name" type="text" placeholder="Name (e.g. Propulsion SDD)" style="width:100%;box-sizing:border-box;border:1px solid ' + pal.border + ';border-radius:8px;padding:7px 9px;font:inherit;font-size:12.5px;background:' + pal.input + ';color:inherit;margin-bottom:6px;">'
-            +       '<textarea id="aii-text" rows="3" placeholder="Paste a system description, architecture notes, requirements…" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid ' + pal.border + ';border-radius:8px;padding:8px 9px;font:inherit;font-size:12.5px;background:' + pal.input + ';color:inherit;"></textarea>'
-            +       '<button type="button" id="aii-text-add" style="margin-top:6px;border:none;border-radius:8px;background:var(--color-accent,#007aff);color:#fff;font:inherit;font-weight:600;font-size:12.5px;padding:7px 12px;cursor:pointer;">Add text as source</button></div>'
-            +   '</div>'
-            +   '<div style="font-weight:600;font-size:13px;margin:16px 0 7px;">Ask your documents <span style="font-weight:400;color:' + pal.sub + ';font-size:11.5px;">— answers cited to source &amp; page; nothing invented</span></div>'
-            +   '<div style="display:flex;gap:8px;"><input id="aii-ask" type="text" placeholder="e.g. What DAL is allocated to the flight-control computer?" style="flex:1;min-width:0;box-sizing:border-box;border:1px solid ' + pal.border + ';border-radius:8px;padding:8px 10px;font:inherit;font-size:12.5px;background:' + pal.input + ';color:inherit;"><button type="button" id="aii-ask-btn" style="border:none;border-radius:8px;background:var(--color-accent,#007aff);color:#fff;font:inherit;font-weight:600;font-size:12.5px;padding:8px 14px;cursor:pointer;white-space:nowrap;">Ask</button></div>'
-            +   '<div id="aii-ask-answer" style="font-size:12.5px;line-height:1.5;color:inherit;margin-top:8px;white-space:pre-wrap;"></div>'
-            +   '<div style="margin-top:10px;"><button type="button" id="aii-consistency-btn" style="border:1px solid ' + pal.border + ';border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:600;font-size:12.5px;padding:7px 12px;cursor:pointer;">🔎 Check consistency across documents</button></div>'
-            +   '<div id="aii-consistency-answer" style="font-size:12.5px;line-height:1.5;color:inherit;margin-top:8px;white-space:pre-wrap;"></div>'
-            +   '<div style="margin-top:10px;"><button type="button" id="aii-import-btn" style="border:1px solid ' + pal.border + ';border-radius:8px;background:transparent;color:inherit;font:inherit;font-weight:600;font-size:12.5px;padding:7px 12px;cursor:pointer;">📥 Import documents into the model</button> <span style="font-size:11px;color:' + pal.sub + ';">— mirrors existing FHA/PSSA rows in for review</span></div>'
-            +   '<div style="font-weight:600;font-size:13px;margin:16px 0 7px;">Sources on file <span style="font-weight:400;color:' + pal.sub + ';font-size:11.5px;">— read by every analysis</span></div>'
-            +   '<div id="aii-sources"></div>'
-            +   '<details style="margin-top:14px;" open><summary style="cursor:pointer;font-weight:600;font-size:13px;">Recommended inputs per analysis <span style="font-weight:400;color:' + pal.sub + ';font-size:11.5px;">— grounded in ARP 4761A / 4754B</span></summary>'
-            +     '<div id="aii-guide" style="margin-top:9px;"></div>'
-            +   '</details>'
-            + '</div>'
-            + '<div style="padding:11px 18px;border-top:1px solid ' + pal.border + ';display:flex;justify-content:flex-end;gap:8px;"><button type="button" id="aii-done" style="border:none;border-radius:8px;background:var(--color-accent,#007aff);color:#fff;font:inherit;font-weight:600;padding:8px 16px;cursor:pointer;">Done</button></div>'
-            + '</div>';
-        document.body.appendChild(ov);
-        const close = function () { try { ov.remove(); } catch (_) {} };
-        ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
-        const xb = document.getElementById('aii-x'); if (xb) xb.onclick = close;
-        const db = document.getElementById('aii-done'); if (db) db.onclick = close;
-        const askBtn = document.getElementById('aii-ask-btn'); const askIn = document.getElementById('aii-ask'); const askOut = document.getElementById('aii-ask-answer');
-        const runAsk = async function () {
-            const q = askIn ? String(askIn.value || '') : ''; if (!q.trim()) { _toast('Type a question first.', 'info'); return; }
-            if (askBtn) askBtn.disabled = true; if (askOut) askOut.textContent = 'Searching your documents…';
-            try { const ans = await _askDocs(q); if (askOut) askOut.textContent = ans; }
-            catch (e) { if (askOut) askOut.textContent = 'Error: ' + ((e && e.message) || e); }
-            finally { if (askBtn) askBtn.disabled = false; }
-        };
-        if (askBtn) askBtn.onclick = runAsk;
-        if (askIn) askIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); runAsk(); } });
-        const conBtn = document.getElementById('aii-consistency-btn'); const conOut = document.getElementById('aii-consistency-answer');
-        const runCon = async function () {
-            if (conBtn) conBtn.disabled = true; if (conOut) conOut.textContent = 'Checking your documents for contradictions…';
-            try { const res = await _checkDocsConsistency(); if (conOut) conOut.textContent = res; }
-            catch (e) { if (conOut) conOut.textContent = 'Error: ' + ((e && e.message) || e); }
-            finally { if (conBtn) conBtn.disabled = false; }
-        };
-        if (conBtn) conBtn.onclick = runCon;
-        const impBtn = document.getElementById('aii-import-btn');
-        if (impBtn) impBtn.onclick = function () {
-            try { close(); } catch (_) {}   // close AI Inputs so the review panel is visible
-            var _imgs = [];   // #57 — carry schematic/diagram images so the vision model can read block diagrams
-            try { var _a = _sourceDocsApi(); var _docs = (_a && _a.list) ? (_a.list() || []) : []; _docs.forEach(function (d) { (Array.isArray(d && d.images) ? d.images : []).forEach(function (im) { if (im && im.data && _imgs.length < 8) _imgs.push({ type: im.type || 'image/png', data: im.data }); }); }); } catch (_) {}
-            try { _anemBatch(_DOC_IMPORT_DIRECTIVE, { title: '📥 Import documents → model', analysis: 'doc.import', images: _imgs }); }
-            catch (e) { _toast('Import failed: ' + ((e && e.message) || e), 'warning'); }
-        };
-        const fileIn = document.getElementById('aii-file');
-        if (fileIn) fileIn.onchange = function (e) { _aiInputsHandleFiles(e.target.files); try { e.target.value = ''; } catch (_) {} };
-        const drop = ov.querySelector('label[for="aii-file"]');
-        if (drop) {
-            ['dragover', 'dragenter'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.style.borderColor = 'var(--color-accent,#007aff)'; }); });
-            ['dragleave'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.style.borderColor = pal.border; }); });
-            drop.addEventListener('drop', function (e) { e.preventDefault(); drop.style.borderColor = pal.border; if (e.dataTransfer && e.dataTransfer.files) _aiInputsHandleFiles(e.dataTransfer.files); });
-        }
-        const addText = document.getElementById('aii-text-add');
-        if (addText) addText.onclick = function () {
-            const tt = document.getElementById('aii-text'); const txt = tt ? tt.value : '';
-            if (!txt.trim()) { _toast('Paste some text first.', 'warning'); return; }
-            const tn = document.getElementById('aii-text-name'); const nm = (tn && tn.value.trim()) || ('Pasted text — ' + new Date().toLocaleString());
-            _persistSourceDoc({ name: nm, text: txt });
-            if (tn) tn.value = ''; if (tt) tt.value = '';
-            _aiInputsRenderSources();
-            _toast('Added “' + nm + '” to AI inputs.', 'success');
-        };
-        const srcHost = document.getElementById('aii-sources');
-        if (srcHost) srcHost.addEventListener('click', function (e) {
-            const tgt = e.target;
-            const cid = tgt && tgt.getAttribute && tgt.getAttribute('data-ctrl');
-            if (cid != null) {   // #56 — toggle the controlled (ITAR/proprietary) routing flag
-                try { const api = _sourceDocsApi(); const list = (api && api.list) ? (api.list() || []) : []; const d = list.find(function (x) { return String(x.id) === String(cid); }); if (d) { d.controlled = !!tgt.checked; _toast(d.controlled ? '“' + (d.name || 'document') + '” marked controlled — the AI now requires your own Claude (GovCloud), Azure Government, or on-prem backend.' : 'Controlled flag removed.', d.controlled ? 'warning' : 'info'); } } catch (_) {}
-                _aiInputsRenderSources(); return;
-            }
-            const id = tgt && tgt.getAttribute && tgt.getAttribute('data-rm');
-            if (id) { const api = _sourceDocsApi(); if (api && typeof api.remove === 'function') api.remove(id); _aiInputsRenderSources(); }
-        });
-        _aiInputsRenderSources();
+        try { if (window.SLAiInputsPage && typeof window.SLAiInputsPage.open === 'function') return window.SLAiInputsPage.open('inputs'); } catch (_) {}
+        try { if (typeof switchTab === 'function') switchTab('ai'); } catch (_) {}
     }
     try { window.openAiInputs = _openAiInputsModal; } catch (_) {}
+    // "Import documents into the model" (#26), the same run the modal's button made, for the page.
+    function _importDocsToModel() {
+        var _imgs = [];   // #57: carry schematic/diagram images so the vision model can read block diagrams
+        try { var _a = _sourceDocsApi(); var _docs = (_a && _a.list) ? (_a.list() || []) : []; _docs.forEach(function (d) { (Array.isArray(d && d.images) ? d.images : []).forEach(function (im) { if (im && im.data && _imgs.length < 8) _imgs.push({ type: im.type || 'image/png', data: im.data }); }); }); } catch (_) {}
+        return _anemBatch(_DOC_IMPORT_DIRECTIVE, { title: '📥 Import documents → model', analysis: 'doc.import', images: _imgs });
+    }
+    try { window.SafetyLabImportDocsToModel = _importDocsToModel; } catch (_) {}
 
     function _closeAiLauncher() { const p = document.getElementById('ai-launcher'); if (p) p.remove(); }
     // A11 — the launcher actions, extracted so the workflow-sequencing desk can
@@ -7199,7 +7062,7 @@
             { group: 'Review &amp; audit', label: 'Draft comment dispositions', needs: { r: 'comments', std: 'FAA AI Roadmap Fig 3', t: 'Open review comments, each with its ref, its text, and the artifact it targets.' }, sub: 'Advisory replies to open review comments — you resolve', run: function () { return resolveReviewComments(); } },
             { group: 'Review &amp; audit', label: 'Review compliance document', needs: { r: 'docreview', std: 'ARP4754B \u00a75.4 / \u00a76', t: 'At least one uploaded source document, plus the live project model to audit it against.' }, sub: 'Audit AI Inputs against the live model — findings as comments', run: function () { return reviewComplianceDoc(); } },
             { group: 'Review &amp; audit', label: 'AI provenance / audit', sub: 'Every AI-drafted artifact + model', run: function () { return showAiProvenance(); } },
-            { group: 'Review &amp; audit', label: 'AI Settings', sub: 'Keys, model, usage, ITAR routing', run: function () { try { if (typeof switchTab === 'function') switchTab('ai'); } catch (_) {} } }
+            { group: 'Review &amp; audit', label: 'AI Settings', sub: 'Keys, model, usage, ITAR routing', run: function () { try { if (window.SLAiInputsPage && typeof window.SLAiInputsPage.open === 'function') return window.SLAiInputsPage.open('settings'); if (typeof switchTab === 'function') switchTab('ai'); } catch (_) {} } }
         ]).map(_gateAction);
     }
     function _toggleAiLauncher() {
@@ -7279,10 +7142,13 @@
     // (snav-ai) to open the launcher — whichever is visible. Fall back to a floating
     // button only if neither entry is present.
     function _hookAiEntryPoint() {
+        // 16 Oct 2026 (Waqas: "the AI Assistant must be a page of its own, not just a menu"): the
+        // sidebar entry and the nav button open the AI Assistant page, which carries every launcher
+        // action. The floating menu stays for the fallback button below and SafetyLabAI.openLauncher.
         const _wire = function (btn) {
             if (!btn) return false;
-            btn.onclick = function (e) { try { if (e && e.preventDefault) e.preventDefault(); } catch (_) {} _toggleAiLauncher(); return false; };
-            btn.setAttribute('title', 'AI Assistant — upload architecture documentation and build your analysis');
+            btn.onclick = function (e) { try { if (e && e.preventDefault) e.preventDefault(); } catch (_) {} try { if (window.SLAiInputsPage && typeof window.SLAiInputsPage.open === 'function') window.SLAiInputsPage.open(); else if (typeof switchTab === 'function') switchTab('ai'); } catch (_) {} return false; };
+            btn.setAttribute('title', 'AI Assistant: your AI inputs, every AI analysis, and the AI settings');
             return true;
         };
         const navBtn = document.getElementById('tab-ai');
@@ -7829,6 +7695,7 @@
     // keyed by document name so a reload keeps the picks. Module-scoped + transient;
     // the chosen images themselves are re-derived from the persisted store on demand.
     const _docDiagramPicks = {};
+    try { window.SafetyLabExtractDoc = function (f) { return _extractDoc(f); }; } catch (_) {}   // 16 Oct 2026: the AI Assistant page reads Word, PDF and ReqIF files through the same extractor
     function _sourceDocsApi() { try { return (typeof window !== 'undefined' && window.SafetyLabSourceDocs) || null; } catch (_) { return null; } }
     // Persist {name,text,tables,images} into the project store (ADD/REPLACE by name).
     // Images get a default caption (their figure number) so captions survive the size
@@ -13515,7 +13382,9 @@
         launcherActions: function () { try { return _launcherActions(); } catch (_) { return []; } },
         // The in-lane bar asks this so it can disable a button and say what is missing,
         // rather than offering an action that will refuse the moment it is clicked.
-        inputReady: function (r) { try { return _aiInputReady(r); } catch (_) { return { ready: true }; } }
+        inputReady: function (r) { try { return _aiInputReady(r); } catch (_) { return { ready: true }; } },
+        // 16 Oct 2026: what each analysis needs, derived from the launcher (the AI Assistant page shows it per action)
+        inputGuide: function () { try { return _aiInputGuide(); } catch (_) { return []; } }
     };
     window.SafetyLabAI = AI;
 

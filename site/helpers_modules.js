@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 hygiene): store writers announce their own writes with scheduleAutosave; see tests/regression_writers_announce.test.js
+// 16 Oct 2026 (AI Assistant page): renderAiAssistant draws the page (SLAiInputsPage.render, ai_inputs_page.js) above the AI settings.
 // 13 Oct 2026 (late, AutoSave, Waqas: "when a user saves a choice/change it should be autosaving"): _writeAutosave answers whether it wrote (true / false) and leaves its IndexedDB write as window.__slAutosaveIdb so save_state.js v2.0 can wait for it; the autosave meta carries unacked (changes still waiting for an acknowledgement, with the accepted state in its own slot) and cloudPending (accepted work not yet in the cloud) instead of the old unsaved markers; _updateSaveIndicator hands the header to SLSaveState.renderIndicator; snapshot undo is used while anything is held from the live sync.
 // 13 Oct 2026 (night, fix2-J rulings 1-2): app Undo / Redo (fault tree and everywhere) run as COLLECTED changes (SLChangeAck.deferred), acknowledged together on leaving the view, not per press.
 // 13 Oct 2026 (fix G): SEQ and NOT gate symbols and colors, their canvas lines, NOT in the gate walk, and Fit to Workspace leaves room for the toolbox. See tests/regression_fta_handbuild_20261013b.test.js
@@ -6315,6 +6316,9 @@ function calcFMEAProb() {
 }
 
 function renderAiAssistant(){
+    // 16 Oct 2026: the AI Assistant page (ai_inputs_page.js): AI inputs, every AI analysis and the
+    // chat, and the pages that read the inputs, drawn above the settings below on every visit.
+    try { if (window.SLAiInputsPage && typeof window.SLAiInputsPage.render === 'function') window.SLAiInputsPage.render(); } catch (e) { try { console.warn('AI Assistant page:', e); } catch (_) {} }
     // Phase 53.66b — Pro+ tier gates AI now (not Pro).
     const lockedBanner = document.getElementById('ai-locked-banner');
     const settingsBlock = document.getElementById('ai-settings-block');

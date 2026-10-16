@@ -102,9 +102,9 @@ check('the name typed in the dialog is kept in the CAD Model name box', /getElem
 
 // ---- wiring
 const loader = fs.readFileSync(path.join(SITE, 'ai_loader.js'), 'utf8'), ai = fs.readFileSync(path.join(SITE, 'ai_assistant.js'), 'utf8'), index = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-check('ai_loader loads pdf_text.js just before ai_assistant.js', /'pdf_text\.js\?v=1\.0', 'ai_assistant\.js\?v=76\.82'/.test(loader));
+check('ai_loader loads pdf_text.js just before ai_assistant.js', /'pdf_text\.js\?v=1\.0', 'ai_assistant\.js\?v=76\.(8[2-9]|9\d)'/.test(loader));   // 16 Oct 2026: at or past 76.82 (76.83: the AI Assistant page)
 check('the PDF reader uses SLPdfText.pageText', /SLPdfText\.pageText\(tc\.items\)/.test(ai));
-check('index.html loads zonal_ai 1.6 and the new loader', /zonal_ai\.js\?v=1\.6/.test(index) && /ai_loader\.js\?v=8\.74/.test(index));
+check('index.html loads zonal_ai 1.6 or later and the new loader', /zonal_ai\.js\?v=1\.([6-9]|\d\d)/.test(index) && /ai_loader\.js\?v=8\.(7[4-9]|[89]\d)/.test(index));   // 16 Oct 2026: zonal_ai 1.7 (stored revision), ai_loader 8.75
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
