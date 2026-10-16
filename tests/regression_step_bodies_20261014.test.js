@@ -27,6 +27,7 @@ async function scenario(src, occt) {
     check('each body file has the product, its shape and the representation context', R.files.every(t => /PRODUCT\(/.test(t) && /PRODUCT_DEFINITION_SHAPE/.test(t) && /SHAPE_DEFINITION_REPRESENTATION/.test(t) && /GEOMETRIC_REPRESENTATION_CONTEXT/.test(t)));
     check('OpenCascade (our build) reads and meshes every body file on its own', R.tris.every(n => n > 0), JSON.stringify(R.tris));
     const mut = async (name, from, to, test) => { if (SRC.indexOf(from) < 0) { check('anchor present: ' + name, false); return; } let red = false; try { red = !test(await scenario(SRC.replace(from, to), M)); } catch (e) { red = true; } check('mutation goes red: ' + name, red); };
-    await mut('every body written into each file', "var ids = B.base.concat(B.desc[k])", "var ids = B.base.concat([].concat.apply([], B.desc))", r => r.bodyCount.every(n => n === 1));
+    // 15 Oct 2026: the slicer now writes each body file straight into one buffer (add per id); same mutation, new anchor
+    await mut('every body written into each file', "B.base.forEach(add); B.desc[k].forEach(add);", "B.base.forEach(add); [].concat.apply([], B.desc).forEach(add);", r => r.bodyCount.every(n => n === 1));
     console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })();
