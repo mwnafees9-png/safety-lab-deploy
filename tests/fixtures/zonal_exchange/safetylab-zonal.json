@@ -1,0 +1,676 @@
+{
+ "format": "safetylab-zonal",
+ "version": 1,
+ "generator": "Safety Lab Aero zonal exchange 1.0",
+ "projectName": "Synthetic aircraft",
+ "exportedAt": "2026-10-15T09:00:00.000Z",
+ "contentHash": "910989b7",
+ "cad": {
+  "cadId": "cad-1",
+  "revision": "A",
+  "fileName": "ac_revA.step",
+  "partCount": 11,
+  "partsComplete": true
+ },
+ "rules": {
+  "containment": "A part is in the zone whose volume holds its centroid. The deepest zone wins; at equal depth the smaller volume, then the lower zone code, then the lower id, and the part is reported as ambiguous. A part whose box crosses the boundary of its zone is reported as straddling.",
+  "identity": "A link is to one installed copy, never to a part number. Only a reference designator (the installed item tag) that is unique on both sides, one CAD part and one equipment item, links by itself. A shared part number or an ATA code is only a candidate, because the same part can be installed several times doing different jobs. Every candidate waits for the engineer to confirm. Equipment is never placed in a zone without a confirmed link.",
+  "events": "A basic event belongs to the equipment its declared identity names (the system id, or the provider of an interface or resource event).",
+  "impact": "Every basic event of the affected equipment is failed together, everything else works, and each fault tree is evaluated by the existing engine. A failure condition is reached when one of its trees needs no further failure.",
+  "independence": "An AND gate derives a physical and functional independence requirement. Equipment under two different inputs of an AND, priority AND, spare, sequence or k-of-n (k of 2 or more) gate in the same zone is a violation; in nested zones or in sibling zones with no substantiated barrier between them, an advisory; inside the same particular-risk volume, a violation; the same equipment under two inputs, a violation.",
+  "riskVolume": "A part is inside a particular-risk volume when any of 27 points of its box (corners, edge midpoints, face centers, center) is inside the volume."
+ },
+ "kindLabels": {
+  "rotorBurst": "Rotor burst",
+  "tireBurst": "Tire burst",
+  "birdStrike": "Bird strike",
+  "fire": "Fire",
+  "fluidLeak": "Fluid leak",
+  "iceShedding": "Ice shedding",
+  "lightning": "Lightning",
+  "generic": "Other particular risk",
+  "volume": "Particular risk volume",
+  "zonal": "Zonal hazard",
+  "zone": "Zone compromised",
+  "zsa": "Zonal safety analysis row"
+ },
+ "zones": [
+  {
+   "id": "z-1",
+   "code": "100",
+   "name": "Fuselage",
+   "parentId": null,
+   "parentCode": null,
+   "depth": 0,
+   "source": "list",
+   "hasVolume": true,
+   "equipment": [
+    "VALVE"
+   ]
+  },
+  {
+   "id": "z-2",
+   "code": "110",
+   "name": "Avionics bay",
+   "parentId": "z-1",
+   "parentCode": "100",
+   "depth": 1,
+   "source": "list",
+   "hasVolume": true,
+   "equipment": [
+    "FCC1",
+    "FCC2"
+   ]
+  },
+  {
+   "id": "z-3",
+   "code": "120",
+   "name": "Hydraulic bay",
+   "parentId": "z-1",
+   "parentCode": "100",
+   "depth": 1,
+   "source": "list",
+   "hasVolume": true,
+   "equipment": [
+    "HYD"
+   ]
+  },
+  {
+   "id": "z-4",
+   "code": "500",
+   "name": "Wing",
+   "parentId": null,
+   "parentCode": null,
+   "depth": 0,
+   "source": "list",
+   "hasVolume": true,
+   "equipment": [
+    "BAT"
+   ]
+  },
+  {
+   "id": "z-5",
+   "code": "510",
+   "name": "Wing root fwd",
+   "parentId": "z-4",
+   "parentCode": "500",
+   "depth": 1,
+   "source": "list",
+   "hasVolume": true,
+   "equipment": []
+  },
+  {
+   "id": "z-6",
+   "code": "520",
+   "name": "Wing root aft",
+   "parentId": "z-4",
+   "parentCode": "500",
+   "depth": 1,
+   "source": "list",
+   "hasVolume": true,
+   "equipment": []
+  }
+ ],
+ "equipment": [
+  {
+   "sysId": "ADC",
+   "name": "Air data computer",
+   "designator": null,
+   "partNumbers": [],
+   "ata": null,
+   "zoneId": null,
+   "parts": [],
+   "cadZoneIds": [],
+   "functions": []
+  },
+  {
+   "sysId": "BAT",
+   "name": "Main battery",
+   "designator": "BAT-1",
+   "partNumbers": [],
+   "ata": null,
+   "zoneId": "z-4",
+   "parts": [
+    "p-bat"
+   ],
+   "cadZoneIds": [
+    "z-4"
+   ],
+   "functions": []
+  },
+  {
+   "sysId": "FCC1",
+   "name": "Flight control computer 1",
+   "designator": "FCC-1",
+   "partNumbers": [
+    "PN-FCC-100"
+   ],
+   "ata": null,
+   "zoneId": "z-2",
+   "parts": [
+    "p-fcc1"
+   ],
+   "cadZoneIds": [
+    "z-2"
+   ],
+   "functions": [
+    {
+     "funcId": "F-PITCH-1",
+     "name": "Pitch command channel 1",
+     "traces": [
+      "AF-1"
+     ]
+    }
+   ]
+  },
+  {
+   "sysId": "FCC2",
+   "name": "Flight control computer 2",
+   "designator": "FCC-2",
+   "partNumbers": [
+    "PN-FCC-200"
+   ],
+   "ata": null,
+   "zoneId": "z-2",
+   "parts": [
+    "p-fcc2"
+   ],
+   "cadZoneIds": [
+    "z-2"
+   ],
+   "functions": [
+    {
+     "funcId": "F-PITCH-2",
+     "name": "Pitch command channel 2",
+     "traces": [
+      "AF-1"
+     ]
+    }
+   ]
+  },
+  {
+   "sysId": "HYD",
+   "name": "Hydraulic pump",
+   "designator": "HYD-P1",
+   "partNumbers": [
+    "PN-HYD-1"
+   ],
+   "ata": null,
+   "zoneId": "z-3",
+   "parts": [
+    "p-hyd"
+   ],
+   "cadZoneIds": [
+    "z-3"
+   ],
+   "functions": []
+  },
+  {
+   "sysId": "VALVE",
+   "name": "Shutoff valve",
+   "designator": null,
+   "partNumbers": [
+    "PN-VALVE"
+   ],
+   "ata": null,
+   "zoneId": "z-1",
+   "parts": [
+    "p-valve-1"
+   ],
+   "cadZoneIds": [
+    "z-1"
+   ],
+   "functions": []
+  }
+ ],
+ "parts": [
+  {
+   "pid": "p-adc",
+   "name": "Air data computer assy",
+   "partNumber": null,
+   "designator": null,
+   "ata": null,
+   "equipment": null,
+   "zoneId": "z-2"
+  },
+  {
+   "pid": "p-amb",
+   "name": "Wing fitting",
+   "partNumber": null,
+   "designator": null,
+   "ata": null,
+   "equipment": null,
+   "zoneId": "z-5",
+   "ambiguousWith": [
+    "z-6"
+   ]
+  },
+  {
+   "pid": "p-ant",
+   "name": "Antenna coupler",
+   "partNumber": null,
+   "designator": null,
+   "ata": null,
+   "equipment": null,
+   "zoneId": "z-2"
+  },
+  {
+   "pid": "p-bat",
+   "name": "BAT-1",
+   "partNumber": null,
+   "designator": null,
+   "ata": null,
+   "equipment": "BAT",
+   "zoneId": "z-4"
+  },
+  {
+   "pid": "p-bracket",
+   "name": "Bracket",
+   "partNumber": null,
+   "designator": null,
+   "ata": null,
+   "equipment": null,
+   "zoneId": "z-1",
+   "straddles": [
+    "z-2",
+    "z-3"
+   ]
+  },
+  {
+   "pid": "p-fcc1",
+   "name": "FCC-1",
+   "partNumber": "PN-FCC-100",
+   "designator": null,
+   "ata": null,
+   "equipment": "FCC1",
+   "zoneId": "z-2"
+  },
+  {
+   "pid": "p-fcc2",
+   "name": "FCC-2",
+   "partNumber": "PN-FCC-200",
+   "designator": null,
+   "ata": null,
+   "equipment": "FCC2",
+   "zoneId": "z-2"
+  },
+  {
+   "pid": "p-hyd",
+   "name": "HYD pump",
+   "partNumber": "PN-HYD-1",
+   "designator": "HYD-P1",
+   "ata": null,
+   "equipment": "HYD",
+   "zoneId": "z-3"
+  },
+  {
+   "pid": "p-out",
+   "name": "Pitot probe",
+   "partNumber": null,
+   "designator": null,
+   "ata": null,
+   "equipment": null,
+   "zoneId": null
+  },
+  {
+   "pid": "p-valve-1",
+   "name": "Valve",
+   "partNumber": "PN-VALVE",
+   "designator": null,
+   "ata": null,
+   "equipment": "VALVE",
+   "zoneId": "z-1"
+  },
+  {
+   "pid": "p-valve-2",
+   "name": "Valve",
+   "partNumber": "PN-VALVE",
+   "designator": null,
+   "ata": null,
+   "equipment": null,
+   "zoneId": "z-1"
+  }
+ ],
+ "risks": [
+  {
+   "id": "prv-fire",
+   "kind": "fire",
+   "label": "Hydraulic bay fire",
+   "source": "manual",
+   "praId": "12",
+   "parts": [
+    "p-hyd"
+   ],
+   "equipment": [
+    "HYD"
+   ],
+   "zoneIds": [
+    "z-3"
+   ],
+   "conditions": [
+    {
+     "id": "8",
+     "fcId": "SF-002",
+     "desc": "Loss of hydraulic power",
+     "severity": "Major",
+     "domain": "AC"
+    }
+   ],
+   "worst": "Major",
+   "notEvaluated": null,
+   "mitigation": null
+  },
+  {
+   "id": "prv-rotor",
+   "kind": "rotorBurst",
+   "label": "No. 1 engine rotor burst",
+   "source": "manual",
+   "praId": "PRA-001",
+   "parts": [
+    "p-ant",
+    "p-fcc1",
+    "p-fcc2"
+   ],
+   "equipment": [
+    "FCC1",
+    "FCC2"
+   ],
+   "zoneIds": [
+    "z-2"
+   ],
+   "conditions": [
+    {
+     "id": "7",
+     "fcId": "SF-001",
+     "desc": "Loss of pitch control",
+     "severity": "Catastrophic",
+     "domain": "AC"
+    }
+   ],
+   "worst": "Catastrophic",
+   "notEvaluated": null,
+   "mitigation": "Shield the avionics bay"
+  }
+ ],
+ "zoneHazards": [
+  {
+   "zoneId": "z-1",
+   "equipment": [
+    "FCC1",
+    "FCC2",
+    "HYD",
+    "VALVE"
+   ],
+   "conditions": [
+    {
+     "id": "7",
+     "fcId": "SF-001",
+     "desc": "Loss of pitch control",
+     "severity": "Catastrophic",
+     "domain": "AC"
+    },
+    {
+     "id": "8",
+     "fcId": "SF-002",
+     "desc": "Loss of hydraulic power",
+     "severity": "Major",
+     "domain": "AC"
+    }
+   ],
+   "worst": "Catastrophic",
+   "notEvaluated": null,
+   "zsaRows": []
+  },
+  {
+   "zoneId": "z-2",
+   "equipment": [
+    "FCC1",
+    "FCC2"
+   ],
+   "conditions": [
+    {
+     "id": "7",
+     "fcId": "SF-001",
+     "desc": "Loss of pitch control",
+     "severity": "Catastrophic",
+     "domain": "AC"
+    }
+   ],
+   "worst": "Catastrophic",
+   "notEvaluated": null,
+   "zsaRows": [
+    {
+     "id": "1",
+     "zone": "110",
+     "desc": "Avionics bay",
+     "equip": "FCC 1 and 2",
+     "severity": "Catastrophic",
+     "interference": "Both computers on one shelf",
+     "mitigation": "Separate shelves"
+    }
+   ]
+  },
+  {
+   "zoneId": "z-3",
+   "equipment": [
+    "HYD"
+   ],
+   "conditions": [
+    {
+     "id": "8",
+     "fcId": "SF-002",
+     "desc": "Loss of hydraulic power",
+     "severity": "Major",
+     "domain": "AC"
+    }
+   ],
+   "worst": "Major",
+   "notEvaluated": null,
+   "zsaRows": []
+  },
+  {
+   "zoneId": "z-4",
+   "equipment": [
+    "BAT"
+   ],
+   "conditions": [],
+   "worst": null,
+   "notEvaluated": null,
+   "zsaRows": [
+    {
+     "id": "2",
+     "zone": "Wing",
+     "desc": "Wing",
+     "equip": "",
+     "severity": null,
+     "interference": null,
+     "mitigation": null
+    }
+   ]
+  }
+ ],
+ "exposures": [
+  {
+   "sysId": "BAT",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on BAT-1",
+   "worst": null,
+   "src": "bird/p-bat",
+   "pids": []
+  },
+  {
+   "sysId": "FCC1",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on FCC-1",
+   "worst": "Catastrophic",
+   "src": "bird/p-fcc1",
+   "pids": []
+  },
+  {
+   "sysId": "FCC1",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on Pitot probe",
+   "worst": "Catastrophic",
+   "src": "bird/p-out",
+   "pids": []
+  },
+  {
+   "sysId": "FCC1",
+   "kind": "volume",
+   "risk": "rotorBurst",
+   "label": "No. 1 engine rotor burst",
+   "worst": "Catastrophic",
+   "src": "praVolumes/prv-rotor",
+   "pids": [
+    "p-fcc1"
+   ]
+  },
+  {
+   "sysId": "FCC2",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on FCC-1",
+   "worst": "Catastrophic",
+   "src": "bird/p-fcc1",
+   "pids": []
+  },
+  {
+   "sysId": "FCC2",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on Pitot probe",
+   "worst": "Catastrophic",
+   "src": "bird/p-out",
+   "pids": []
+  },
+  {
+   "sysId": "FCC2",
+   "kind": "volume",
+   "risk": "rotorBurst",
+   "label": "No. 1 engine rotor burst",
+   "worst": "Catastrophic",
+   "src": "praVolumes/prv-rotor",
+   "pids": [
+    "p-fcc2"
+   ]
+  },
+  {
+   "sysId": "HYD",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on FCC-1",
+   "worst": "Catastrophic",
+   "src": "bird/p-fcc1",
+   "pids": []
+  },
+  {
+   "sysId": "HYD",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on HYD pump",
+   "worst": "Major",
+   "src": "bird/p-hyd",
+   "pids": []
+  },
+  {
+   "sysId": "HYD",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on Pitot probe",
+   "worst": "Catastrophic",
+   "src": "bird/p-out",
+   "pids": []
+  },
+  {
+   "sysId": "HYD",
+   "kind": "volume",
+   "risk": "fire",
+   "label": "Hydraulic bay fire",
+   "worst": "Major",
+   "src": "praVolumes/prv-fire",
+   "pids": [
+    "p-hyd"
+   ]
+  },
+  {
+   "sysId": "VALVE",
+   "kind": "birdStrike",
+   "risk": "birdStrike",
+   "label": "Bird strike on Valve",
+   "worst": null,
+   "src": "bird/p-valve-1",
+   "pids": []
+  }
+ ],
+ "praRows": [
+  {
+   "id": "PRA-001",
+   "threat": "Uncontained rotor burst",
+   "affectedZones": [
+    "110",
+    "wing",
+    "Wing area",
+    "Z-NOPE"
+   ],
+   "zoneIds": [
+    "z-2",
+    "z-4"
+   ],
+   "mitigation": "Shield the avionics bay"
+  },
+  {
+   "id": "PRA-002",
+   "threat": "Hydraulic fire",
+   "affectedZones": [
+    "120"
+   ],
+   "zoneIds": [
+    "z-3"
+   ],
+   "mitigation": null
+  }
+ ],
+ "sysLabMap": [
+  {
+   "key": "sys:HYDS",
+   "tag": null,
+   "ident": null,
+   "sysId": "HYD",
+   "on": "system"
+  },
+  {
+   "key": "tag:BAT-X",
+   "tag": "BAT-X",
+   "ident": "ELEC-ITM-BAT",
+   "sysId": "BAT",
+   "on": "syslab"
+  },
+  {
+   "key": "tag:FCC-1",
+   "tag": "FCC-1",
+   "ident": "FCS-ITM-FCC1",
+   "sysId": "FCC1",
+   "on": "designator"
+  },
+  {
+   "key": "tag:FCC-2B",
+   "tag": "FCC-2B",
+   "ident": "FCS-ITM-FCC2",
+   "sysId": "FCC2",
+   "on": "cadPart"
+  },
+  {
+   "key": "tag:SOV-1",
+   "tag": "SOV-1",
+   "ident": "FUEL-ITM-SOV1",
+   "sysId": "VALVE",
+   "on": "confirmed"
+  }
+ ],
+ "gaps": [
+  "1 equipment item(s) have no confirmed CAD part, so their exposure to CAD-based risks is not known."
+ ]
+}

@@ -20,7 +20,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.1';
 
     // ---------------------------------------------------------------- one pass over the bytes
     // Entity records: start/end byte offsets of the text after '=' up to (not including) ';'.
@@ -498,7 +498,16 @@
         ix._rev = { rev: rev, mdgprCtx: mdgprCtx };
         return ix._rev;
     }
+    // The last part's closure is kept: reading a part's bodies, its points and colors, its
+    // triangles and its own file all start from the same closure (callers only read it).
     function closureOf(ix, st, pd) {
+        var M = ix._closMemo;
+        if (M && M.st === st && M.pd === pd) return M.c;
+        var c = closureOf0(ix, st, pd);
+        ix._closMemo = { st: st, pd: pd, c: c };
+        return c;
+    }
+    function closureOf0(ix, st, pd) {
         var R = reverseIndex(ix), list = [], stack = [];
         var styled = [];
         // a stamp per call instead of a fresh 'seen' array per part
@@ -532,30 +541,48 @@
         if (!c) return null;
         var ids = c.ids.slice().sort(function (a, b) { return a - b; });
         var R = reverseIndex(ix);
-        var parts = [], total = 0;
-        function push(u) { parts.push(u); total += u.length; }
-        push(ix.header);
-        push(ascii('DATA;\n'));
-        var u8 = ix.u8;
-        var maxSeen = 0;
-        ids.forEach(function (id) {
-            var k = ix.slot[id];
-            push(ascii('#' + id + '='));
-            push(u8.subarray(ix.start[k], ix.end[k]));
-            push(ascii(';\n'));
-            if (id > maxSeen) maxSeen = id;
-        });
+        var W = new Writer();
+        W.bytes(ix.header);
+        W.str('DATA;\n');
+        W.ents(ix, ids);
         if (c.styled.length && R.mdgprCtx) {
             // the presentation that lists this part's colors (its context comes along)
-            var cc = closureCtx(ix, R.mdgprCtx, ids);
-            cc.forEach(function (id) { var k = ix.slot[id]; push(ascii('#' + id + '=')); push(u8.subarray(ix.start[k], ix.end[k])); push(ascii(';\n')); });
-            push(ascii('#' + (ix.maxId + 1) + '=MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION(\'\',(' + c.styled.map(function (s) { return '#' + s; }).join(',') + '),#' + R.mdgprCtx + ');\n'));
+            W.ents(ix, closureCtx(ix, R.mdgprCtx, ids));
+            W.str('#' + (ix.maxId + 1) + '=MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION(\'\',(' + c.styled.map(function (s) { return '#' + s; }).join(',') + '),#' + R.mdgprCtx + ');\n');
         }
-        push(ascii('ENDSEC;\nEND-ISO-10303-21;\n'));
-        var out = new Uint8Array(total), o = 0;
-        parts.forEach(function (p) { out.set(p, o); o += p.length; });
-        return out;
+        W.str('ENDSEC;\nEND-ISO-10303-21;\n');
+        return W.done();
     }
+    // A part's own file, written straight into one buffer: '#id=' + the entity's text + ';\n' per
+    // entity (the digits written by hand, no text encoder call per entity).
+    function Writer() { this.chunks = []; this.n = 0; }
+    Writer.prototype.bytes = function (u) { this.chunks.push(u); this.n += u.length; };
+    Writer.prototype.str = function (s) { this.bytes(ascii(s)); };
+    Writer.prototype.ents = function (ix, ids) {
+        var u8 = ix.u8, S = ix.start, E = ix.end, slot = ix.slot, tot = 0, i, id, k, a, b;
+        for (i = 0; i < ids.length; i++) {
+            id = ids[i]; k = slot[id]; a = S[k]; b = E[k];
+            if (a === undefined) { a = 0; b = u8.length; }   // as subarray(undefined, undefined): an id the file does not hold
+            tot += 4 + _digits(id) + (b - a);
+        }
+        var out = new Uint8Array(tot), o = 0;
+        for (i = 0; i < ids.length; i++) {
+            id = ids[i]; k = slot[id]; a = S[k]; b = E[k];
+            if (a === undefined) { a = 0; b = u8.length; }
+            out[o++] = 35; o = _writeInt(out, o, id); out[o++] = 61;
+            out.set(u8.subarray(a, b), o); o += b - a;
+            out[o++] = 59; out[o++] = 10;
+        }
+        this.bytes(out);
+    };
+    Writer.prototype.done = function () {
+        if (this.chunks.length === 1) return this.chunks[0].byteOffset === 0 && this.chunks[0].buffer.byteLength === this.n ? this.chunks[0] : this.chunks[0].slice();
+        var out = new Uint8Array(this.n), o = 0;
+        for (var i = 0; i < this.chunks.length; i++) { out.set(this.chunks[i], o); o += this.chunks[i].length; }
+        return out;
+    };
+    function _digits(n) { return String(n).length; }
+    function _writeInt(out, o, n) { var s = String(n); for (var i = 0; i < s.length; i++) out[o++] = s.charCodeAt(i); return o; }
     // ---------------------------------------------------------------- one huge part split by body
     // A single product can hold a whole aircraft (the NASA CRM assembly: one product, 134 bodies,
     // 38,000 faces, 265 MB). OpenCascade then reads it in one call on one thread. bodies() finds
@@ -574,14 +601,31 @@
         }
         if (!rep) return null;
         var bodyIds = items.filter(function (r) { return BODY_TYPES[typeName(ix, r)]; }), others = items.filter(function (r) { return !BODY_TYPES[typeName(ix, r)]; });
-        var mark = new Map(), desc = bodyIds.map(function (b, k) { var out = [], stack = [b], tmp = []; while (stack.length) { var x = stack.pop(); var m = mark.get(x); if (m === k) continue; mark.set(x, k); out.push(x); tmp.length = 0; refsOf(ix, x, tmp); for (var j = 0; j < tmp.length; j++) stack.push(tmp[j]); } return out; });
-        var inBody = new Set(); desc.forEach(function (L) { L.forEach(function (x) { inBody.add(x); }); });
+        // which body last reached each entity: a flat array over the file's ids (a Map only for an
+        // id beyond them, a reference to an entity the file does not hold)
+        var NM = ix.maxId + 2, markA = new Int32Array(NM).fill(-1), markX = new Map();
+        var getMark = function (x) { return x >= 0 && x < NM ? markA[x] : (markX.has(x) ? markX.get(x) : -1); };
+        var desc = bodyIds.map(function (b, k) { var out = [], stack = [b], tmp = []; while (stack.length) { var x = stack.pop(); if (getMark(x) === k) continue; if (x >= 0 && x < NM) markA[x] = k; else markX.set(x, k); out.push(x); tmp.length = 0; refsOf(ix, x, tmp); for (var j = 0; j < tmp.length; j++) stack.push(tmp[j]); } return out; });
+        var inA = new Uint8Array(NM), inX = new Set();
+        desc.forEach(function (L) { for (var q = 0; q < L.length; q++) { var x = L[q]; if (x >= 0 && x < NM) inA[x] = 1; else inX.add(x); } });
+        var inBody = { has: function (x) { return x >= 0 && x < NM ? inA[x] === 1 : inX.has(x); } };
         // the shared part of every body file: the product chain, contexts and units only. Loose
         // geometry, other representations and presentation are left out (on the CRM they were
         // 51,000 entities, 3.6 MB repeated in every body file)
         var GEO = /POINT|EDGE|VERTEX|CURVE|LINE|CIRCLE|ELLIPSE|SURFACE|FACE|LOOP|SHELL|BREP|DIRECTION|VECTOR|AXIS|PLACEMENT|STYLE|PRESENTATION|COLOUR|STYLED|CURVE_SET|GEOMETRIC_SET|INVISIBILITY|DRAUGHTING|ANNOTATION/;
+        // what an entity's type alone decides (the same tests as below, once per type)
+        var byType = Object.create(null);
+        var typeRule = function (t) {
+            var r = byType[t]; if (r !== undefined) return r;
+            if (t.indexOf('SHAPE_DEFINITION_REPRESENTATION') >= 0) r = 2;
+            else if (t.indexOf('RELATIONSHIP') >= 0 && t.indexOf('REPRESENTATION') >= 0) r = 0;
+            else if (t.indexOf('REPRESENTATION') >= 0 && t.indexOf('CONTEXT') < 0) r = 0;
+            else r = !GEO.test(t) && !/PLANE\b|PLANE$/.test(t) ? 1 : 0;
+            return (byType[t] = r);
+        };
         var base = c.ids.filter(function (x) {
             if (inBody.has(x) || x === rep) return false; var t = typeName(ix, x) || '';
+            if (t) { var tr = typeRule(t); if (tr !== 2) return tr === 1; var r2 = []; refsOf(ix, x, r2); return r2.indexOf(rep) >= 0; }
             if (!t) { var kk = ix.slot[x], head = ''; for (var q = ix.start[kk]; q < Math.min(ix.end[kk], ix.start[kk] + 400); q++) head += String.fromCharCode(ix.u8[q]); t = head.replace(/'[^']*'/g, '').toUpperCase(); if (!/CONTEXT|UNIT/.test(t)) return false; }   // complex entities: keep contexts and units only
             if (t.indexOf('SHAPE_DEFINITION_REPRESENTATION') >= 0) { var r0 = []; refsOf(ix, x, r0); return r0.indexOf(rep) >= 0; }
             if (t.indexOf('RELATIONSHIP') >= 0 && t.indexOf('REPRESENTATION') >= 0) return false;
@@ -598,11 +642,13 @@
         return { pd: pd, rep: rep, others: others, bodies: bodyIds, base: K, desc: desc, pds: pds, needSdr: !hasSdr && pds != null };
     }
     function extractBody(ix, B, k) {
-        var ids = B.base.concat(B.desc[k]).filter(function (x, i, a) { return x !== B.rep; }), seen = new Set(), list = [];
-        ids.forEach(function (x) { if (!seen.has(x)) { seen.add(x); list.push(x); } }); list.sort(function (a, b) { return a - b; });
-        var parts = [], total = 0, u8 = ix.u8; function push(u) { parts.push(u); total += u.length; }
-        push(ix.header); push(ascii('DATA;\n'));
-        list.forEach(function (id) { var kk = ix.slot[id]; push(ascii('#' + id + '=')); push(u8.subarray(ix.start[kk], ix.end[kk])); push(ascii(';\n')); });
+        // the shared part and this body's entities, each once, in id order
+        var NM = ix.maxId + 2, seenA = new Uint8Array(NM), seenX = new Set(), list = [], u8 = ix.u8;
+        var add = function (x) { if (x === B.rep) return; if (x >= 0 && x < NM) { if (seenA[x]) return; seenA[x] = 1; } else { if (seenX.has(x)) return; seenX.add(x); } list.push(x); };
+        B.base.forEach(add); B.desc[k].forEach(add);
+        list.sort(function (a, b) { return a - b; });
+        var W = new Writer(); W.bytes(ix.header); W.str('DATA;\n'); W.ents(ix, list);
+        var push = function (u) { W.bytes(u); };
         // the representation, listing only this body (and its non-body items such as placements)
         var rk = ix.slot[B.rep], txt = new TextDecoder('latin1').decode(u8.subarray(ix.start[rk], ix.end[rk]));
         var lp = txt.indexOf('('), q = txt.indexOf('(', lp + 1), depth = 0, e = q; for (; e < txt.length; e++) { var ch = txt[e]; if (ch === '(') depth++; else if (ch === ')') { depth--; if (depth === 0) break; } }
@@ -610,7 +656,7 @@
         // the product's shape points straight at this body's representation (the file linked them through representations that are left out)
         if (B.needSdr) push(ascii('#' + (ix.maxId + 1) + '=SHAPE_DEFINITION_REPRESENTATION(#' + B.pds + ',#' + B.rep + ');\n'));
         push(ascii('ENDSEC;\nEND-ISO-10303-21;\n'));
-        var out = new Uint8Array(total), o = 0; parts.forEach(function (p) { out.set(p, o); o += p.length; }); return out;
+        return W.done();
     }
     // the box of the CARTESIAN_POINTs among ids, in mm (s = file unit in mm)
     function boxOfIds(ix, ids, s) { s = s || 1; var cp = ix.typeOf.CARTESIAN_POINT, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity], any = false, tmp = [0, 0, 0];

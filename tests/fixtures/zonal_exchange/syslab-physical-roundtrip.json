@@ -1,0 +1,236 @@
+{
+ "app": "syslab-physical",
+ "version": 2,
+ "exportedAt": "2026-10-15T10:00:00.000Z",
+ "projectName": "Synthetic aircraft",
+ "identity": "installed instance (equipment tag)",
+ "zoneList": "Safety Lab",
+ "zonalFile": "910989b7",
+ "functions": [
+  {
+   "funcId": "F-PITCH-1",
+   "name": "Pitch command channel 1",
+   "level": "System",
+   "system": "FCS",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "F-PITCH-2",
+   "name": "Pitch command channel 2",
+   "level": "System",
+   "system": "FCS",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "F-AIR",
+   "name": "Measure air data",
+   "level": "System",
+   "system": "AVI",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "F-SENSE",
+   "name": "Sense",
+   "level": "System",
+   "system": "AVI",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "F-HYD",
+   "name": "Provide hydraulic power",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "F-SHUT",
+   "name": "Shut off fuel",
+   "level": "System",
+   "system": "AVI",
+   "parent": "",
+   "traces": []
+  }
+ ],
+ "systems": [
+  {
+   "code": "FCS",
+   "name": "Flight controls",
+   "slSystem": "sys-fcs",
+   "performs": []
+  },
+  {
+   "code": "AVI",
+   "name": "Avionics",
+   "slSystem": "",
+   "performs": []
+  },
+  {
+   "code": "HYDS",
+   "name": "Hydraulic pump",
+   "slSystem": "HYD",
+   "performs": [
+    "F-HYD"
+   ]
+  }
+ ],
+ "elements": [
+  {
+   "tag": "FCC-1",
+   "ident": "FCS-ITM-FCC1",
+   "name": "Flight control computer 1",
+   "kind": "Item",
+   "system": "FCS",
+   "partOf": "FCS",
+   "partNumber": "PN-FCC-100",
+   "partDefinition": "",
+   "zone": "110",
+   "cadPart": "",
+   "supplier": "",
+   "slEquipment": "FCC1",
+   "zoneId": "z-2",
+   "zonalFile": "910989b7",
+   "performs": [
+    "F-PITCH-1"
+   ]
+  },
+  {
+   "tag": "FCC-2B",
+   "ident": "FCS-ITM-FCC2",
+   "name": "Flight control computer 2",
+   "kind": "Item",
+   "system": "FCS",
+   "partOf": "FCS",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "120",
+   "cadPart": "p-fcc2",
+   "supplier": "",
+   "slEquipment": "FCC2",
+   "zoneId": "z-3",
+   "zonalFile": "910989b7",
+   "performs": [
+    "F-PITCH-2"
+   ]
+  },
+  {
+   "tag": "ADC-9",
+   "ident": "AVI-ITM-ADC",
+   "name": "Air data computer",
+   "kind": "Item",
+   "system": "AVI",
+   "partOf": "AVI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "500",
+   "cadPart": "",
+   "supplier": "",
+   "slEquipment": "ADC",
+   "zoneId": "z-4",
+   "zonalFile": "910989b7",
+   "performs": [
+    "F-AIR"
+   ]
+  },
+  {
+   "tag": "",
+   "ident": "AVI-ITM-RAD",
+   "name": "Radio",
+   "kind": "Item",
+   "system": "AVI",
+   "partOf": "AVI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "110",
+   "cadPart": "p-ant",
+   "supplier": "",
+   "zoneId": "z-2",
+   "zonalFile": "910989b7",
+   "performs": [
+    "F-AIR"
+   ]
+  },
+  {
+   "tag": "",
+   "ident": "AVI-ITM-SNS",
+   "name": "Sensor unit",
+   "kind": "Item",
+   "system": "AVI",
+   "partOf": "AVI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "110",
+   "cadPart": "",
+   "supplier": "",
+   "zoneId": "z-2",
+   "zonalFile": "910989b7",
+   "performs": [
+    "F-SENSE"
+   ]
+  },
+  {
+   "tag": "SOV-1",
+   "ident": "AVI-ITM-SOV",
+   "name": "Shutoff valve 1",
+   "kind": "Item",
+   "system": "AVI",
+   "partOf": "AVI",
+   "partNumber": "PN-VALVE",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "slEquipment": "VALVE",
+   "zonalFile": "910989b7",
+   "performs": [
+    "F-SHUT"
+   ]
+  }
+ ],
+ "allocations": [
+  {
+   "funcId": "F-PITCH-1",
+   "element": "FCS-ITM-FCC1",
+   "tag": "FCC-1"
+  },
+  {
+   "funcId": "F-PITCH-2",
+   "element": "FCS-ITM-FCC2",
+   "tag": "FCC-2B"
+  },
+  {
+   "funcId": "F-AIR",
+   "element": "AVI-ITM-ADC",
+   "tag": "ADC-9"
+  },
+  {
+   "funcId": "F-AIR",
+   "element": "AVI-ITM-RAD",
+   "tag": ""
+  },
+  {
+   "funcId": "F-SENSE",
+   "element": "AVI-ITM-SNS",
+   "tag": ""
+  },
+  {
+   "funcId": "F-HYD",
+   "element": "HYDS",
+   "tag": ""
+  },
+  {
+   "funcId": "F-SHUT",
+   "element": "AVI-ITM-SOV",
+   "tag": "SOV-1"
+  }
+ ],
+ "zones": [
+  "110",
+  "120",
+  "500"
+ ]
+}

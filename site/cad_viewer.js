@@ -37,7 +37,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '2.1';
+    var VERSION = '2.2';
     var THREE_URL = 'vendor/three/three.min.js';
 
     // =================================================================== pure helpers
@@ -223,6 +223,16 @@
     function _hexRgb(h) { var n = parseInt(String(h).replace('#', ''), 16); return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]; }
     var SEL_RGB = [0.10, 0.43, 0.95], HIT_RGB = [0.2, 0.2, 0.2];
 
+    // What draws the view: a graphics card, or the CPU standing in for one (SwiftShader, llvmpipe,
+    // a remote desktop's basic renderer), which draws about a hundred times fewer triangles per
+    // frame. The frame's triangle budget follows (SLCadRender's default for a graphics card).
+    var SOFTWARE_TRI_BUDGET = 1.5e6;
+    function rendererInfo(r) {
+        var name = '';
+        try { var gl = r.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info'); name = String((ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || ''); } catch (_) {}
+        var software = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(name);
+        return { renderer: name, software: software, triBudget: software ? SOFTWARE_TRI_BUDGET : null };
+    }
     var _threeP = null;
     function loadThree() {
         if (root.THREE && root.THREE.WebGLRenderer) return Promise.resolve(root.THREE);
@@ -548,6 +558,7 @@
             r.setClearColor(0x000000, 0);
             r.autoClear = false;
             self.renderer = r; self.depthMode = rev ? 'reversed' : 'logarithmic';
+            self.gpu = rendererInfo(r);
             self.$.canvas.insertBefore(r.domElement, self.$.labels);
             var scene = self.scene = new T.Scene();
             self.camera = new T.PerspectiveCamera(45, 1, 1, 1e7);
@@ -581,6 +592,8 @@
                     var t0 = performance.now();
                     self._render(now);
                     self.frameTimes.push({ at: now, render: performance.now() - t0 });
+                    var s3 = self.scene3;
+                    if (s3 && !s3._shownTraced && s3.stats.drawn > 0) { s3._shownTraced = true; var TRf = root.SLCadImport && root.SLCadImport._trace; if (TRf) TRf('viewer: first frame of the model'); }
                     if (self.frameTimes.length > 240) self.frameTimes.shift();
                 }
             };
@@ -718,17 +731,31 @@
     // Progressive: the largest parts first, a time slice per frame.
     // Detail streamed in behind the first view (large assemblies): real shapes replace the boxes.
     // Batches are queued and applied a few times a second, so the view stays smooth.
+    // Applied in slices of shapes, each slice a task of its own, its shapes about 8 ms of work (the
+    // slice grows or shrinks with what the last one's shapes cost), so the biggest shapes arriving
+    // together never hold the page for long. Every slice leaves every part decided (replaceProtos). The view
+    // is redrawn (and the chunks of batched parts rebuilt) when the queue is empty or a quarter
+    // second has passed, not after every slice: both cost the graphics (on a computer without a
+    // graphics card, the CPU the readers use).
     P.applyDetail = function (list) {
         var self = this;
         (this._detailQ = this._detailQ || []).push.apply(this._detailQ, list || []);
         if (this._detailT) return;
-        this._detailT = setTimeout(function () {
+        this._detailT = setTimeout(function drain() {
             self._detailT = null;
-            var q = self._detailQ; self._detailQ = [];
+            var q = self._detailQ;
             if (!self.scene3 || !q.length) return;
-            self.scene3.replaceProtos(q);
-            self.detailApplied = (self.detailApplied || 0) + q.length;
-            self.dirty = true;
+            var k = Math.max(1, Math.min(q.length, self._detailK || 64));
+            var part = q.splice(0, k);
+            self.scene3.replaceProtos(part, { deferChunks: true });
+            // the slice is sized by what its shapes cost (about 8 ms), not by the decision over every
+            // part that ends each slice: that is the same for one shape or five hundred
+            var ms = (self.scene3.lastReplaceMs || {}).shapes || 0;
+            self._detailK = ms > 12 ? Math.max(1, Math.floor(k / 2)) : ms < 4 ? Math.min(1024, k * 2) : k;
+            self.detailApplied = (self.detailApplied || 0) + part.length;
+            var now = performance.now();
+            if (!q.length || !(now - (self._detailDrawn || 0) < 250)) { self.scene3.flushChunks(); self.dirty = true; self._detailDrawn = now; }
+            if (q.length) self._detailT = setTimeout(drain, 0);
         }, 250);
     };
     P.showModel = function (entry, geometry) {
@@ -783,6 +810,7 @@
             var N = self.order.length;
             self._overlay('<div class="scv-card">Building ' + N + ' parts...<div class="scv-prog"><div></div></div></div>');
             var sc = self.scene3 = new R.Scene(T, {});
+            if (self.gpu && self.gpu.triBudget) sc.setTriangleBudget(self.gpu.triBudget);
             sc.clipOk = function (p) { return self._clipOk(p); };
             self.gModel.add(sc.group);
             var shown = false;
@@ -2142,7 +2170,7 @@
         for (var i = 1; i < f.length; i++) iv.push(f[i].at - f[i - 1].at);
         iv.sort(function (a, b) { return a - b; });
         var sc = this.scene3, s = sc ? sc.stats : {};
-        return { frames: f.length, medianFrameMs: iv.length ? iv[Math.floor(iv.length / 2)] : null, p95FrameMs: iv.length ? iv[Math.floor(iv.length * 0.95)] : null, medianRenderMs: f.length ? f.map(function (x) { return x.render; }).sort(function (a, b) { return a - b; })[Math.floor(f.length / 2)] : null, parts: this.order.length, drawn: s.drawn, coarse: s.coarseDrawn, culledFrustum: s.culledFrustum, culledSmall: s.culledSmall, chunks: s.chunks, instancedShapes: s.instancedShapes, drawCalls: s.drawCalls, prototypes: s.prototypes, occludedChunks: s.occludedChunks };
+        return { frames: f.length, medianFrameMs: iv.length ? iv[Math.floor(iv.length / 2)] : null, p95FrameMs: iv.length ? iv[Math.floor(iv.length * 0.95)] : null, medianRenderMs: f.length ? f.map(function (x) { return x.render; }).sort(function (a, b) { return a - b; })[Math.floor(f.length / 2)] : null, parts: this.order.length, drawn: s.drawn, coarse: s.coarseDrawn, culledFrustum: s.culledFrustum, culledSmall: s.culledSmall, chunks: s.chunks, instancedShapes: s.instancedShapes, drawCalls: s.drawCalls, prototypes: s.prototypes, occludedChunks: s.occludedChunks, triangles: s.triangles, overBudget: s.overBudget, budgetLodPx: s.budgetLodPx, budgetCullPx: s.budgetCullPx, triBudget: sc ? sc.opts.triBudget : null, software: !!(this.gpu && this.gpu.software) };
     };
     P.dispose = function () {
         if (this._menuOutside) document.removeEventListener('pointerdown', this._menuOutside, true);

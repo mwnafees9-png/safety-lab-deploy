@@ -1,0 +1,1412 @@
+{
+ "app": "syslab-physical",
+ "version": 2,
+ "exportedAt": "2026-10-15T13:00:00.000Z",
+ "projectName": "Untitled project",
+ "identity": "installed instance (equipment tag)",
+ "zoneList": "Safety Lab",
+ "zonalFile": "9492711f",
+ "functions": [
+  {
+   "funcId": "AF-01",
+   "name": "Control the flight path in wing-borne flight",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-01",
+   "name": "Control pitch in cruise",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-01",
+   "traces": []
+  },
+  {
+   "funcId": "SF-02",
+   "name": "Control roll in cruise",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-01",
+   "traces": []
+  },
+  {
+   "funcId": "SF-03",
+   "name": "Control yaw in cruise",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-01",
+   "traces": []
+  },
+  {
+   "funcId": "AF-02",
+   "name": "Control the aircraft in hover and low speed",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-04",
+   "name": "Control vertical thrust in hover",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-02",
+   "traces": []
+  },
+  {
+   "funcId": "SF-05",
+   "name": "Control attitude in hover by differential thrust",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-02",
+   "traces": []
+  },
+  {
+   "funcId": "AF-03",
+   "name": "Manage the transition between hover and cruise",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-06",
+   "name": "Manage the transition corridor",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-03",
+   "traces": []
+  },
+  {
+   "funcId": "AF-04",
+   "name": "Generate distributed lift thrust",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-07",
+   "name": "Generate lift-rotor thrust",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-04",
+   "traces": []
+  },
+  {
+   "funcId": "AF-05",
+   "name": "Generate cruise thrust",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-08",
+   "name": "Generate forward thrust",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-05",
+   "traces": []
+  },
+  {
+   "funcId": "AF-06",
+   "name": "Provide and manage electrical energy",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-09",
+   "name": "Store and deliver propulsion energy",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-06",
+   "traces": []
+  },
+  {
+   "funcId": "SF-10",
+   "name": "Manage battery state and balance",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-06",
+   "traces": []
+  },
+  {
+   "funcId": "AF-07",
+   "name": "Convert and control motor power",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-11",
+   "name": "Convert energy to shaft power",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-07",
+   "traces": []
+  },
+  {
+   "funcId": "AF-08",
+   "name": "Provide flight control computing",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-12",
+   "name": "Compute and command the control laws",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-08",
+   "traces": []
+  },
+  {
+   "funcId": "AF-09",
+   "name": "Indicate flight parameters and alert the crew",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-13",
+   "name": "Display attitude, speed and energy state",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-09",
+   "traces": []
+  },
+  {
+   "funcId": "SF-14",
+   "name": "Alert the crew to hazardous states",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-09",
+   "traces": []
+  },
+  {
+   "funcId": "AF-10",
+   "name": "Manage propulsion and energy thermal state",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-15",
+   "name": "Cool the batteries and motors",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-10",
+   "traces": []
+  },
+  {
+   "funcId": "AF-11",
+   "name": "Operate on the ground and at the vertiport",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-16",
+   "name": "Support, brake and steer on the ground",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-11",
+   "traces": []
+  },
+  {
+   "funcId": "AF-12",
+   "name": "Navigate and guide to the vertiport",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-17",
+   "name": "Navigate and guide to a confined vertipad",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-12",
+   "traces": []
+  },
+  {
+   "funcId": "AF-13",
+   "name": "Protect the occupants",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-18",
+   "name": "Restrain and protect the occupants",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-13",
+   "traces": []
+  },
+  {
+   "funcId": "AF-14",
+   "name": "Protect against fire and thermal runaway",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-19",
+   "name": "Detect and contain battery thermal runaway",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-14",
+   "traces": []
+  },
+  {
+   "funcId": "AF-15",
+   "name": "Protect critical surfaces and sensors from ice",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SF-20",
+   "name": "Protect rotors and sensing surfaces from ice",
+   "level": "Aircraft",
+   "system": "",
+   "parent": "AF-15",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-FCC1",
+   "name": "Compute the stabilising and command control laws",
+   "level": "System",
+   "system": "FCCF",
+   "parent": "",
+   "traces": [
+    "SF-12"
+   ]
+  },
+  {
+   "funcId": "SFN-FCC2",
+   "name": "Allocate control to the rotors in hover",
+   "level": "System",
+   "system": "FCCF",
+   "parent": "",
+   "traces": [
+    "SF-05"
+   ]
+  },
+  {
+   "funcId": "SFN-FCC3",
+   "name": "Protect the transition corridor",
+   "level": "System",
+   "system": "FCCF",
+   "parent": "",
+   "traces": [
+    "SF-06"
+   ]
+  },
+  {
+   "funcId": "SFN-DEP1",
+   "name": "Provide lift-rotor thrust",
+   "level": "System",
+   "system": "DEPI",
+   "parent": "",
+   "traces": [
+    "SF-07"
+   ]
+  },
+  {
+   "funcId": "SFN-DEP2",
+   "name": "Convert energy to shaft power",
+   "level": "System",
+   "system": "DEPI",
+   "parent": "",
+   "traces": [
+    "SF-11"
+   ]
+  },
+  {
+   "funcId": "SFN-R1",
+   "name": "Deliver thrust, rotor 1",
+   "level": "System",
+   "system": "LRD1FL",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-R2",
+   "name": "Deliver thrust, rotor 2",
+   "level": "System",
+   "system": "LRD2FR",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-R3",
+   "name": "Deliver thrust, rotor 3",
+   "level": "System",
+   "system": "LRD3ML",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-R4",
+   "name": "Deliver thrust, rotor 4",
+   "level": "System",
+   "system": "LRD4MR",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-EPS1",
+   "name": "Store and deliver propulsion energy",
+   "level": "System",
+   "system": "HVEI",
+   "parent": "",
+   "traces": [
+    "SF-09"
+   ]
+  },
+  {
+   "funcId": "SFN-EPS2",
+   "name": "Manage state, balance and reserve",
+   "level": "System",
+   "system": "HVEI",
+   "parent": "",
+   "traces": [
+    "SF-10"
+   ]
+  },
+  {
+   "funcId": "SFN-PK1",
+   "name": "Store and deliver energy, pack 1",
+   "level": "System",
+   "system": "BP1",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-PK2",
+   "name": "Store and deliver energy, pack 2",
+   "level": "System",
+   "system": "BP2",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-PK3",
+   "name": "Store and deliver energy, pack 3",
+   "level": "System",
+   "system": "BP3",
+   "parent": "",
+   "traces": []
+  },
+  {
+   "funcId": "SFN-MCA1",
+   "name": "Convert and control shaft torque",
+   "level": "System",
+   "system": "MCI",
+   "parent": "",
+   "traces": [
+    "SF-11"
+   ]
+  },
+  {
+   "funcId": "SFN-FCS1",
+   "name": "Actuate pitch (elevons)",
+   "level": "System",
+   "system": "FCA",
+   "parent": "",
+   "traces": [
+    "SF-01"
+   ]
+  },
+  {
+   "funcId": "SFN-FCS2",
+   "name": "Actuate roll (elevons)",
+   "level": "System",
+   "system": "FCA",
+   "parent": "",
+   "traces": [
+    "SF-02"
+   ]
+  },
+  {
+   "funcId": "SFN-FCS3",
+   "name": "Actuate yaw (rudder)",
+   "level": "System",
+   "system": "FCA",
+   "parent": "",
+   "traces": [
+    "SF-03"
+   ]
+  },
+  {
+   "funcId": "SFN-AVI1",
+   "name": "Display attitude, speed and energy",
+   "level": "System",
+   "system": "ADAD",
+   "parent": "",
+   "traces": [
+    "SF-13"
+   ]
+  },
+  {
+   "funcId": "SFN-AVI2",
+   "name": "Alert the crew",
+   "level": "System",
+   "system": "ADAD",
+   "parent": "",
+   "traces": [
+    "SF-14"
+   ]
+  },
+  {
+   "funcId": "SFN-AVI3",
+   "name": "Provide navigation and approach guidance",
+   "level": "System",
+   "system": "ADAD",
+   "parent": "",
+   "traces": [
+    "SF-17"
+   ]
+  },
+  {
+   "funcId": "SFN-THM1",
+   "name": "Cool the battery packs",
+   "level": "System",
+   "system": "TM",
+   "parent": "",
+   "traces": [
+    "SF-15"
+   ]
+  },
+  {
+   "funcId": "SFN-THM2",
+   "name": "Cool the motors and controllers",
+   "level": "System",
+   "system": "TM",
+   "parent": "",
+   "traces": [
+    "SF-15"
+   ]
+  },
+  {
+   "funcId": "SFN-BMS1",
+   "name": "Monitor cell state and health",
+   "level": "System",
+   "system": "BMTRP",
+   "parent": "",
+   "traces": [
+    "SF-10"
+   ]
+  },
+  {
+   "funcId": "SFN-BMS2",
+   "name": "Detect and contain thermal runaway",
+   "level": "System",
+   "system": "BMTRP",
+   "parent": "",
+   "traces": [
+    "SF-19"
+   ]
+  },
+  {
+   "funcId": "SFN-LDG1",
+   "name": "Support and absorb landing loads",
+   "level": "System",
+   "system": "LGVH",
+   "parent": "",
+   "traces": [
+    "SF-16"
+   ]
+  },
+  {
+   "funcId": "SFN-LDG2",
+   "name": "Brake and hold on the pad",
+   "level": "System",
+   "system": "LGVH",
+   "parent": "",
+   "traces": [
+    "SF-16"
+   ]
+  },
+  {
+   "funcId": "SFN-OCC1",
+   "name": "Restrain the occupants",
+   "level": "System",
+   "system": "OP",
+   "parent": "",
+   "traces": [
+    "SF-18"
+   ]
+  },
+  {
+   "funcId": "SFN-OCC2",
+   "name": "Manage crash energy and egress",
+   "level": "System",
+   "system": "OP",
+   "parent": "",
+   "traces": [
+    "SF-18"
+   ]
+  },
+  {
+   "funcId": "SFN-IPS1",
+   "name": "Protect the lift rotors",
+   "level": "System",
+   "system": "IP",
+   "parent": "",
+   "traces": [
+    "SF-20"
+   ]
+  },
+  {
+   "funcId": "SFN-IPS2",
+   "name": "Protect sensing surfaces",
+   "level": "System",
+   "system": "IP",
+   "parent": "",
+   "traces": [
+    "SF-20"
+   ]
+  },
+  {
+   "funcId": "SFN-EWS1",
+   "name": "Route and segregate high-voltage and signal wiring",
+   "level": "System",
+   "system": "HVWS",
+   "parent": "",
+   "traces": [
+    "SF-09"
+   ]
+  }
+ ],
+ "systems": [
+  {
+   "code": "FCCF",
+   "name": "Flight Control Computers (FBW)",
+   "slSystem": "sys-fcc",
+   "performs": [
+    "SFN-FCC1",
+    "SFN-FCC2",
+    "SFN-FCC3"
+   ]
+  },
+  {
+   "code": "DEPI",
+   "name": "Distributed Electric Propulsion (installation)",
+   "slSystem": "sys-dep",
+   "performs": [
+    "SFN-DEP1",
+    "SFN-DEP2"
+   ]
+  },
+  {
+   "code": "LRD1FL",
+   "name": "Lift-rotor drive 1 (fwd-left)",
+   "slSystem": "sys-rot1",
+   "performs": [
+    "SFN-R1"
+   ]
+  },
+  {
+   "code": "LRD2FR",
+   "name": "Lift-rotor drive 2 (fwd-right)",
+   "slSystem": "sys-rot2",
+   "performs": [
+    "SFN-R2"
+   ]
+  },
+  {
+   "code": "LRD3ML",
+   "name": "Lift-rotor drive 3 (mid-left)",
+   "slSystem": "sys-rot3",
+   "performs": [
+    "SFN-R3"
+   ]
+  },
+  {
+   "code": "LRD4MR",
+   "name": "Lift-rotor drive 4 (mid-right)",
+   "slSystem": "sys-rot4",
+   "performs": [
+    "SFN-R4"
+   ]
+  },
+  {
+   "code": "HVEI",
+   "name": "High-Voltage Energy System (installation)",
+   "slSystem": "sys-eps",
+   "performs": [
+    "SFN-EPS1",
+    "SFN-EPS2"
+   ]
+  },
+  {
+   "code": "BP1",
+   "name": "Battery pack 1",
+   "slSystem": "sys-pk1",
+   "performs": [
+    "SFN-PK1"
+   ]
+  },
+  {
+   "code": "BP2",
+   "name": "Battery pack 2",
+   "slSystem": "sys-pk2",
+   "performs": [
+    "SFN-PK2"
+   ]
+  },
+  {
+   "code": "BP3",
+   "name": "Battery pack 3",
+   "slSystem": "sys-pk3",
+   "performs": [
+    "SFN-PK3"
+   ]
+  },
+  {
+   "code": "MCI",
+   "name": "Motor Controllers (installation)",
+   "slSystem": "sys-mca",
+   "performs": [
+    "SFN-MCA1"
+   ]
+  },
+  {
+   "code": "FCA",
+   "name": "Flight Control Actuation",
+   "slSystem": "sys-fcs",
+   "performs": [
+    "SFN-FCS1",
+    "SFN-FCS2",
+    "SFN-FCS3"
+   ]
+  },
+  {
+   "code": "ADAD",
+   "name": "Avionics, Display & Air Data",
+   "slSystem": "sys-avi",
+   "performs": [
+    "SFN-AVI1",
+    "SFN-AVI2",
+    "SFN-AVI3"
+   ]
+  },
+  {
+   "code": "TM",
+   "name": "Thermal Management",
+   "slSystem": "sys-thm",
+   "performs": [
+    "SFN-THM1",
+    "SFN-THM2"
+   ]
+  },
+  {
+   "code": "BMTRP",
+   "name": "Battery Management & Thermal-Runaway Protection",
+   "slSystem": "sys-bms",
+   "performs": [
+    "SFN-BMS1",
+    "SFN-BMS2"
+   ]
+  },
+  {
+   "code": "LGVH",
+   "name": "Landing Gear & Vertipad Handling",
+   "slSystem": "sys-ldg",
+   "performs": [
+    "SFN-LDG1",
+    "SFN-LDG2"
+   ]
+  },
+  {
+   "code": "OP",
+   "name": "Occupant Protection",
+   "slSystem": "sys-occ",
+   "performs": [
+    "SFN-OCC1",
+    "SFN-OCC2"
+   ]
+  },
+  {
+   "code": "IP",
+   "name": "Ice Protection",
+   "slSystem": "sys-ips",
+   "performs": [
+    "SFN-IPS1",
+    "SFN-IPS2"
+   ]
+  },
+  {
+   "code": "HVWS",
+   "name": "High-Voltage Wiring & Segregation",
+   "slSystem": "sys-ews",
+   "performs": [
+    "SFN-EWS1"
+   ]
+  }
+ ],
+ "elements": [
+  {
+   "tag": "",
+   "ident": "LRU-FCC-01",
+   "name": "Flight control computer, lane A",
+   "kind": "Item",
+   "system": "FCCF",
+   "partOf": "FCCF",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "Z-FCC",
+   "cadPart": "p-fcc-a",
+   "supplier": "",
+   "slEquipment": "sys-fcc",
+   "zoneId": "z-7",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-FCC-02",
+   "name": "Flight control computer, lane B",
+   "kind": "Item",
+   "system": "FCCF",
+   "partOf": "FCCF",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "Z-FCC",
+   "cadPart": "p-fcc-b",
+   "supplier": "",
+   "slEquipment": "sys-fcc",
+   "zoneId": "z-7",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-FCC-03",
+   "name": "Flight control computer, lane C",
+   "kind": "Item",
+   "system": "FCCF",
+   "partOf": "FCCF",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "Z-FCC",
+   "cadPart": "p-fcc-c",
+   "supplier": "",
+   "slEquipment": "sys-fcc",
+   "zoneId": "z-7",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-DEP-01",
+   "name": "Lift-rotor motor (per rotor)",
+   "kind": "Item",
+   "system": "DEPI",
+   "partOf": "DEPI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-DEP-02",
+   "name": "Lift-rotor blade set",
+   "kind": "Item",
+   "system": "DEPI",
+   "partOf": "DEPI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-DEP-05",
+   "name": "Cruise propeller motor",
+   "kind": "Item",
+   "system": "DEPI",
+   "partOf": "DEPI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-MCA-01",
+   "name": "Motor controller (per drive)",
+   "kind": "Item",
+   "system": "MCI",
+   "partOf": "MCI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-EPS-01",
+   "name": "HV battery pack",
+   "kind": "Item",
+   "system": "HVEI",
+   "partOf": "HVEI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-EPS-02",
+   "name": "Cross-tie contactor set",
+   "kind": "Item",
+   "system": "HVEI",
+   "partOf": "HVEI",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-BMS-01",
+   "name": "Battery management and vent-gas sensor unit",
+   "kind": "Item",
+   "system": "BMTRP",
+   "partOf": "BMTRP",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-FCS-01",
+   "name": "Pitch/roll EHA",
+   "kind": "Item",
+   "system": "FCA",
+   "partOf": "FCA",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-FCS-02",
+   "name": "Rudder EHA",
+   "kind": "Item",
+   "system": "FCA",
+   "partOf": "FCA",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-AVI-01",
+   "name": "Inertial/air-data channel",
+   "kind": "Item",
+   "system": "ADAD",
+   "partOf": "ADAD",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-AVI-02",
+   "name": "Primary display unit",
+   "kind": "Item",
+   "system": "ADAD",
+   "partOf": "ADAD",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-THM-01",
+   "name": "Coolant pump (per loop)",
+   "kind": "Item",
+   "system": "TM",
+   "partOf": "TM",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-THM-02",
+   "name": "Radiator (per loop)",
+   "kind": "Item",
+   "system": "TM",
+   "partOf": "TM",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-LDG-01",
+   "name": "Landing gear leg",
+   "kind": "Item",
+   "system": "LGVH",
+   "partOf": "LGVH",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-LDG-02",
+   "name": "Wheel brake unit",
+   "kind": "Item",
+   "system": "LGVH",
+   "partOf": "LGVH",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-OCC-01",
+   "name": "Occupant restraint and energy-absorbing seat",
+   "kind": "Item",
+   "system": "OP",
+   "partOf": "OP",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  },
+  {
+   "tag": "",
+   "ident": "LRU-IPS-01",
+   "name": "Rotor and probe ice protection controller",
+   "kind": "Item",
+   "system": "IP",
+   "partOf": "IP",
+   "partNumber": "",
+   "partDefinition": "",
+   "zone": "",
+   "cadPart": "",
+   "supplier": "",
+   "zonalFile": "9492711f",
+   "performs": []
+  }
+ ],
+ "allocations": [
+  {
+   "funcId": "AF-01",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-01",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-02",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-03",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-02",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-04",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-05",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-03",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-06",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-04",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-07",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-05",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-08",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-06",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-09",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-10",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-07",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-11",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-08",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-12",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-09",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-13",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-14",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-10",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-15",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-11",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-16",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-12",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-17",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-13",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-18",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-14",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-19",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "AF-15",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SF-20",
+   "element": "AIRCRAFT",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-FCC1",
+   "element": "FCCF",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-FCC2",
+   "element": "FCCF",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-FCC3",
+   "element": "FCCF",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-DEP1",
+   "element": "DEPI",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-DEP2",
+   "element": "DEPI",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-R1",
+   "element": "LRD1FL",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-R2",
+   "element": "LRD2FR",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-R3",
+   "element": "LRD3ML",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-R4",
+   "element": "LRD4MR",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-EPS1",
+   "element": "HVEI",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-EPS2",
+   "element": "HVEI",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-PK1",
+   "element": "BP1",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-PK2",
+   "element": "BP2",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-PK3",
+   "element": "BP3",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-MCA1",
+   "element": "MCI",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-FCS1",
+   "element": "FCA",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-FCS2",
+   "element": "FCA",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-FCS3",
+   "element": "FCA",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-AVI1",
+   "element": "ADAD",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-AVI2",
+   "element": "ADAD",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-AVI3",
+   "element": "ADAD",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-THM1",
+   "element": "TM",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-THM2",
+   "element": "TM",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-BMS1",
+   "element": "BMTRP",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-BMS2",
+   "element": "BMTRP",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-LDG1",
+   "element": "LGVH",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-LDG2",
+   "element": "LGVH",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-OCC1",
+   "element": "OP",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-OCC2",
+   "element": "OP",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-IPS1",
+   "element": "IP",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-IPS2",
+   "element": "IP",
+   "tag": ""
+  },
+  {
+   "funcId": "SFN-EWS1",
+   "element": "HVWS",
+   "tag": ""
+  }
+ ],
+ "zones": [
+  "Z-FCC"
+ ]
+}

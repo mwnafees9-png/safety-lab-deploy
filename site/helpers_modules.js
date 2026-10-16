@@ -12373,8 +12373,10 @@ function _zipParse(u8) {
         });
     }, Promise.resolve()).then(function () { return files; });
 }
-function _bundleToZip(project) {
-    var b = _bundleSplit(project), files = Object.assign({}, b.files);
+// extra: files written beside the project that a reader may ignore (15 Oct 2026: zonal-exchange.json, the zonal
+// picture Sys Lab reads, from zonal_exchange.js; _bundleMerge never reads it back).
+function _bundleToZip(project, extra) {
+    var b = _bundleSplit(project), files = Object.assign({}, b.files, extra || {});
     files['manifest.json'] = JSON.stringify(b.manifest);
     return _zipMake(files);
 }
@@ -12385,8 +12387,12 @@ function _bundleFromZip(u8) {
     });
 }
 
+// The zonal picture for Sys Lab, when the project has zones, a CAD model or risk volumes. A failure here never stops the export.
+function _bundleZonalExtra() {
+    try { var X = window.SLZonalExchange; var pic = X && typeof X.exportPicture === 'function' ? X.exportPicture() : null; return pic && X.hasContent(pic) ? { 'zonal-exchange.json': JSON.stringify(pic) } : {}; } catch (e) { try { console.warn('zonal picture left out of the export', e); } catch (_) {} return {}; }
+}
 function exportProjectBundle() {
-    return _bundleToZip(_snapshotProject()).then(function (u8) {
+    return _bundleToZip(_snapshotProject(), _bundleZonalExtra()).then(function (u8) {
         var nm = (typeof _safeFileName === 'function') ? _safeFileName(projectName || 'Untitled') : String(projectName || 'Untitled').replace(/[^a-z0-9_-]+/gi, '_');
         var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([u8], { type: 'application/zip' })); a.download = 'SafetyLab_' + nm + '.slproj';
         document.body.appendChild(a); a.click(); setTimeout(function () { try { URL.revokeObjectURL(a.href); a.remove(); } catch (_) {} }, 1000);

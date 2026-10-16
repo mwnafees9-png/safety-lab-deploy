@@ -77,8 +77,13 @@ const RULES = {
              /function gtZoomFit\(\)\{[\s\S]{0,900}h\.clientHeight - 16[\s\S]{0,200}h\.scrollTop = 0;/.test(s.sup),
     'the CAD viewer takes the shared height':
         s => /SLCadViewer\.mount\(document\.getElementById\('cad-viewer-host'\), \{ height: 'var\(--sl-canvas-h\)'/.test(s.cad),
+    // at least the key this change set (a later change to the same file bumps it again, 15 Oct 2026: cad_page.js 1.8)
     'every changed file has a bumped cache key in index.html':
-        s => ['safety_lab.css?v=65.67', 'fta_canvas_edit.js?v=1.1', 'support_modules.js?v=66.45', 'diagram_editor.js?v=1.5', 'rbd_module.js?v=2.1', 'cea_graph.js?v=1.4', 'stpa_panel.js?v=1.47', 'cad_page.js?v=1.7', 'event_trees.js?v=2.1', 'bowtie.js?v=3.1', 'markov_diagram.js?v=1.1'].every(k => s.idx.indexOf(k + '"') > 0)
+        s => ['safety_lab.css?v=65.67', 'fta_canvas_edit.js?v=1.1', 'support_modules.js?v=66.45', 'diagram_editor.js?v=1.5', 'rbd_module.js?v=2.1', 'cea_graph.js?v=1.4', 'stpa_panel.js?v=1.47', 'cad_page.js?v=1.8', 'event_trees.js?v=2.1', 'bowtie.js?v=3.1', 'markov_diagram.js?v=1.1'].every(k => {
+            const [f, v] = k.split('?v='), m = new RegExp('"' + f.replace(/\./g, '\\.') + '\\?v=([0-9.]+)"').exec(s.idx); if (!m) return false;
+            const a = m[1].split('.').map(Number), b = v.split('.').map(Number);
+            for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; }
+            return true; })
 };
 // one mutation per rule: the mutated copy must FAIL the same rule
 const clone = s => Object.assign({}, s, { callers: Object.assign({}, s.callers) });

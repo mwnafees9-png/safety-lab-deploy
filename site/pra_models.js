@@ -1006,22 +1006,14 @@
     }
 
 
-    // ---- per-function risk view --------------------------------------------------------------
-    // functionRiskView(cadId[, {birdOpts, sweepStep}]): for each function (systemsData
-    // functions, joined by funcId), the equipment that performs it, their zones and CAD parts,
-    // every particular risk and zonal hazard they are exposed to, the worst failure condition
-    // and the independence findings. Each line carries `src`: the record it comes from.
-    function functionRiskView(cadId, opts) {
+    // equipmentExposures(cadId[, {bird, birdOpts, sweepStep}]): every particular risk each piece of equipment
+    // (systemsData id) is exposed to, from the risk volumes, rotor sweeps, tire cases, bird strike and the lightning
+    // zones, each with its source record. The per-function view below and the Sys Lab exchange
+    // (zonal_exchange.js) both read it, so the two never disagree. Sorted by kind, then source.
+    function equipmentExposures(cadId, opts) {
         opts = opts || {};
         var X = _ctx(cadId); if (!X) return { ok: false, err: 'No CAD model or the CAD / zonal engine is not loaded.' };
-        var C = X.C, Z = root.ZONES, sys = _arr(_g('systemsData')).filter(function (s) { return s && s.id != null; });
-        var eqParts = C.equipmentParts(X.cadId);
-        var fns = {};
-        sys.slice().sort(function (a, b) { return _cmp(a.id, b.id); }).forEach(function (s) {
-            _arr(s.functions).forEach(function (f) { if (!f) return; var id = String(f.funcId || f.id || f.funcName || ''); if (!id) return;
-                var r = fns[id] || (fns[id] = { funcId: id, name: f.funcName || f.name || id, elements: [] }); if (r.elements.indexOf(String(s.id)) < 0) r.elements.push(String(s.id)); });
-        });
-        // exposures per equipment, each with its source record
+        var C = X.C;
         var exp = {}; function add(sid, e) { (exp[sid] = exp[sid] || []).push(e); }
         var volTo = {};
         C.riskVolumes().forEach(function (v) {
@@ -1047,6 +1039,27 @@
         }
         var lz = lightningZones(X.cadId);
         if (lz) lz.parts.forEach(function (p) { var sid = X.conf[p.pid]; if (sid) add(sid, { kind: 'lightning', risk: 'lightning', label: 'Lightning zone ' + p.zone + ' (confirmed by ' + lz.confirmedBy + ')', worst: null, src: 'praLightning/' + X.cadId + '#' + p.pid }); });
+        Object.keys(exp).forEach(function (sid) { exp[sid].sort(function (a, b) { return _cmp(a.kind, b.kind) || _cmp(a.src, b.src); }); });
+        return { ok: true, cadId: X.cadId, bySys: exp };
+    }
+
+    // ---- per-function risk view --------------------------------------------------------------
+    // functionRiskView(cadId[, {birdOpts, sweepStep}]): for each function (systemsData
+    // functions, joined by funcId), the equipment that performs it, their zones and CAD parts,
+    // every particular risk and zonal hazard they are exposed to, the worst failure condition
+    // and the independence findings. Each line carries `src`: the record it comes from.
+    function functionRiskView(cadId, opts) {
+        opts = opts || {};
+        var X = _ctx(cadId); if (!X) return { ok: false, err: 'No CAD model or the CAD / zonal engine is not loaded.' };
+        var C = X.C, Z = root.ZONES, sys = _arr(_g('systemsData')).filter(function (s) { return s && s.id != null; });
+        var eqParts = C.equipmentParts(X.cadId);
+        var fns = {};
+        sys.slice().sort(function (a, b) { return _cmp(a.id, b.id); }).forEach(function (s) {
+            _arr(s.functions).forEach(function (f) { if (!f) return; var id = String(f.funcId || f.id || f.funcName || ''); if (!id) return;
+                var r = fns[id] || (fns[id] = { funcId: id, name: f.funcName || f.name || id, elements: [] }); if (r.elements.indexOf(String(s.id)) < 0) r.elements.push(String(s.id)); });
+        });
+        // exposures per equipment, each with its source record (equipmentExposures, shared with the Sys Lab exchange)
+        var EX = equipmentExposures(X.cadId, opts), exp = EX.ok ? EX.bySys : {};
         var zsa = _arr(_g('zsaData'));
         var flags = []; try { flags = C.independenceFlags({ cadId: X.cadId }); } catch (_) {}
         var rows = Object.keys(fns).sort(_cmp).map(function (fid) {
@@ -2005,7 +2018,7 @@
     var api = { VERSION: VERSION, REFS: REFS, ref: ref, cite: cite, FRAGMENT_MODELS: FRAGMENT_MODELS, FRAGMENT_ORDER: FRAGMENT_ORDER,
                 proposeRotors: proposeRotors, rotorIssue: rotorIssue, confirmRotor: confirmRotor, rotors: rotors, rotor: rotor, removeRotor: removeRotor,
                 sweep: sweep, STEP1_FIELDS: STEP1_FIELDS, DEFAULT_TYPES: DEFAULT_TYPES, confirmRotorField: confirmRotorField, step1Status: step1Status, fragmentEnergy: fragmentEnergy, spreadVolume: spreadVolume, modelReach: modelReach, spreadMeshPoints: spreadMeshPoints, readBackSpread: readBackSpread, rotorReport: rotorReport, STEP1: STEP1, TIRE_DEFAULT_CASES: TIRE_DEFAULT_CASES, confirmField: confirmField, stepStatus: stepStatus, tireReport: tireReport, externalParts: externalParts, setTriangleSource: setTriangleSource, skinByRays: skinByRays, proposeSkin: proposeSkin, skinParts: skinParts, confirmSkinParts: confirmSkinParts, editSkinParts: editSkinParts, proposeSkinZones: proposeSkinZones, lightningSkin: lightningSkin, confirmSkinZones: confirmSkinZones, editSkinZone: editSkinZone, setSkinDepth: setSkinDepth, skinZoneReport: skinZoneReport, SKIN_RULE: SKIN_RULE, whyNotReached: whyNotReached, lightningStep1: lightningStep1, saveLightningFlow: saveLightningFlow, lightningFlow: lightningFlow, setLightningWaveform: setLightningWaveform, lightningReport: lightningReport, SOURCE_TYPES: SOURCE_TYPES, sources: sources, saveSource: saveSource, sourceBox: sourceBox, sourceReport: sourceReport, birds: birds, bird: bird, saveBird: saveBird, birdSpeedRule: birdSpeedRule, proposeBirdZones: proposeBirdZones, confirmBirdZones: confirmBirdZones, birdReport: birdReport, birdVolume: birdVolume, tireVolume: tireVolume, setTireArcLimit: setTireArcLimit, setTireGear: setTireGear, tireCases: tireCases, GEAR_MODELS: GEAR_MODELS, GEAR_DEFAULTS: GEAR_DEFAULTS, TIRE_MODELS: TIRE_MODELS, TIRE_ORDER: TIRE_ORDER, proposeTires: proposeTires, confirmTire: confirmTire, tires: tires, tire: tire, tireThreats: tireThreats,
-                birdExposure: birdExposure, LIGHTNING_ZONES: LIGHTNING_ZONES, LIGHTNING_EFFECTS: LIGHTNING_EFFECTS, proposeLightningZones: proposeLightningZones, confirmLightningZones: confirmLightningZones, lightningZones: lightningZones, GENERIC_KINDS: GENERIC_KINDS, pathSegments: pathSegments, functionRiskView: functionRiskView, addGenericVolume: addGenericVolume,
+                birdExposure: birdExposure, LIGHTNING_ZONES: LIGHTNING_ZONES, LIGHTNING_EFFECTS: LIGHTNING_EFFECTS, proposeLightningZones: proposeLightningZones, confirmLightningZones: confirmLightningZones, lightningZones: lightningZones, GENERIC_KINDS: GENERIC_KINDS, pathSegments: pathSegments, functionRiskView: functionRiskView, equipmentExposures: equipmentExposures, addGenericVolume: addGenericVolume,
                 BIRD_CASES: BIRD_CASES, basisKey: basisKey, birdCases: birdCases, GROUP_MIN: GROUP_MIN, tireReach: tireReach, birdRays: birdRays, tireCaseResults: tireCaseResults, setRiskFactor: setRiskFactor, setUnmodeledStagesHarmless: setUnmodeledStagesHarmless, fragmentAxialWidth: fragmentAxialWidth, fawProposal: function (r) { return _fawProposal(r); }, setTireOutboard: setTireOutboard, setTireWheelsPerLeg: setTireWheelsPerLeg, setTireFlangeRadius: setTireFlangeRadius, setBirdDiameter: setBirdDiameter, computeBirdZones: computeBirdZones, birdProposalState: birdProposalState, birdInputHash: _birdInputHash, setBirdLevel4: setBirdLevel4, birdZoneProposal: birdZoneProposal, tireConeMesh: tireConeMesh, creditBirdShield: creditBirdShield, creditTireShield: creditTireShield, setTireStowed: setTireStowed, _wedgeHitTris: _wedgeHitTris, parseBasis: parseBasis, PALETTE: PALETTE, setPhaseFactor: setPhaseFactor, PHASES_681: PHASES_681, exactIntervals: exactIntervals, multipleFragments: multipleFragments, averageRisk: averageRisk, tireDefaultReach: tireDefaultReach, setTireReach: setTireReach, confirmTireReach: confirmTireReach, partGroups: partGroups, describeParts: describeParts, describeCadParts: describeCadParts, locationText: locationText,
                 _internal: { cylT: _cylT, birdScene: _birdScene, birdRay: _birdRay, ptInWedge: _ptInWedge, ptInCone: _ptInCone, wedgeHitTris: _wedgeHitTris, coneHitTris: _coneHitTris, bvh: _bvh, bvhSegment: _bvhSegment, rayTri: _rayTri, pathHit: _pathHit, partGeom: _partGeom, frame: _frame, ranges: _ranges } };
     // D1: an impact evaluation that met a non-monotone tree beyond the subset bound gives no result: every API call that

@@ -4171,7 +4171,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.45" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.27" defer></script>
+    <script src="helpers_modules.js?v=3.28" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4200,7 +4200,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="render_pass.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
-    <script src="change_ack.js?v=1.5" defer></script>
+    <script src="change_ack.js?v=1.6" defer></script>
     <script src="save_state.js?v=2.2" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
@@ -4442,23 +4442,25 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zonal_model.js?v=1.2" defer></script>
     <script src="cad_zonal.js?v=1.6" defer></script>
     <script src="pra_refs_data.js?v=1.4" defer></script>
-    <script src="pra_models.js?v=1.18" defer></script>
+    <script src="pra_models.js?v=1.19" defer></script>
     <!-- 14 Oct 2026: grounded AI for zonal and particular risk drafts (sources checked in code, nothing applied without acknowledgement). -->
     <script src="zonal_ai.js?v=1.6" defer></script>
     <script src="physical_independence.js?v=1.1" defer></script>
     <script src="independence_claims.js?v=1.1" defer></script>
     <script src="physical_crosscheck.js?v=1.1" defer></script>
     <script src="spacemouse.js?v=1.2" defer></script>
-    <script src="zonal_ui.js?v=1.14" defer></script>
+    <script src="zonal_ui.js?v=1.15" defer></script>
     <!-- 13 Oct 2026: CAD Model tab (ZSA area). STEP read in a worker on this computer, geometry cached locally, only metadata in the project. -->
-    <script src="cad_import.js?v=2.3" defer></script>
-    <script src="cad_render.js?v=1.0" defer></script>
+    <script src="cad_import.js?v=2.4" defer></script>
+    <script src="cad_render.js?v=1.1" defer></script>
     <script src="cad_exact.js?v=1.0" defer></script>
     <script src="cad_review.js?v=1.0" defer></script>
-    <script src="cad_viewer.js?v=2.6" defer></script>
+    <script src="cad_viewer.js?v=2.7" defer></script>
     <script src="cad_viewer_panels.js?v=1.0" defer></script>
-    <script src="cad_page.js?v=1.7" defer></script>
+    <script src="cad_page.js?v=1.9" defer></script>
     <script src="pra_panel.js?v=1.18" defer></script>
+    <!-- 15 Oct 2026: the exchange with Sys Lab (zones, CAD containment and risk results out; the physical architecture in). Deterministic, no AI. -->
+    <script src="zonal_exchange.js?v=1.0" defer></script>
     <script src="pra_report.js?v=1.5" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>

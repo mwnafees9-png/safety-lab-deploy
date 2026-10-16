@@ -21,7 +21,7 @@
 // ============================================================================
 (function () {
     'use strict';
-    var VERSION = '1.4';
+    var VERSION = '1.5';
     var state = { cadId: null, viewer: null, job: null, unsub: null, lastSel: null };
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
     function _pc() {
@@ -308,11 +308,14 @@
             (im.functions.length ? '<div style="font-size:12px;margin-top:2px;">Functions: ' + im.functions.map(function (f) { return _esc(f.name); }).join(', ') + '</div>' : '') +
             (im.coverage && im.coverage.equipmentWithoutEvents.length ? '<div style="' + MUTED + 'margin-top:2px;">' + im.coverage.equipmentWithoutEvents.map(_sysName).map(_esc).join(', ') + ': no basic event declares this equipment, so its fault tree effect is not counted.</div>' : '');
     }
+    // 15 Oct 2026 (p3-zones): the Sys Lab exchange (zonal_exchange.js): its panel, and the Sys Lab functions a zone or a risk reaches
+    function _sysLab() { if (window.SLZonalExchange) { try { window.SLZonalExchange.renderPanel(); } catch (e) { try { console.warn('Sys Lab exchange panel', e); } catch (_) {} } } }
+    function _sysLabReach(o) { try { return window.SLZonalExchange ? window.SLZonalExchange.reachHtml(o, state.cadId) : ''; } catch (_) { return ''; } }
     function _onZone(zoneId, quiet) {
         var E = _engine(); if (!E) { _panel('cad-impact', 'Impact', _noEngine()); return; }
         state.focus = { zoneId: zoneId };
         var im = E.zoneImpact(zoneId);
-        _panel('cad-impact', 'Impact: zone ' + _zoneLabel(zoneId), _impactHtml(im, '<div style="' + MUTED + '">Everything placed in this zone and its sub-zones fails together.</div>'), _rule('impact'));
+        _panel('cad-impact', 'Impact: zone ' + _zoneLabel(zoneId), _impactHtml(im, '<div style="' + MUTED + '">Everything placed in this zone and its sub-zones fails together.</div>') + _sysLabReach({ zoneId: zoneId }), _rule('impact'));
         if (!quiet && state.viewer) { try { var c = E.containment(state.cadId); var pids = c.byZone[zoneId] || []; if (pids.length) state.viewer.select(pids); } catch (_) {} }
     }
     function _onVolume(volId, quiet) {
@@ -324,7 +327,7 @@
         var head = '<div style="font-size:12px;">' + inside.length + ' part' + (inside.length === 1 ? '' : 's') + ' inside: ' + inside.slice(0, 40).map(function (p) { return _pidLink(p.pid) + (p.how === 'box' ? ' <span style="' + MUTED + '">(partly)</span>' : ''); }).join(', ') + (inside.length > 40 ? ' and ' + (inside.length - 40) + ' more' : '') + '</div>' +
             (im && im.unlinkedParts && im.unlinkedParts.length ? '<div style="' + MUTED + '">' + im.unlinkedParts.length + ' of them are not linked to equipment, so they are not in the fault tree result.</div>' : '');
         if (!quiet && state.viewer && inside.length) state.viewer.select(inside.map(function (p) { return p.pid; }));
-        _panel('cad-impact', 'Impact: ' + ((v && v.label) || volId), _impactHtml(im, head), _rule('riskVolume'));
+        _panel('cad-impact', 'Impact: ' + ((v && v.label) || volId), _impactHtml(im, head) + _sysLabReach({ volumeId: volId }), _rule('riskVolume'));
     }
 
     // ---- Revision reviews: what a new CAD revision changed, for the engineer to sign off
@@ -342,7 +345,27 @@
         }).join(''));
     }
     function _onSelect(ev) { state.lastSel = ev; _renderContainment(); }
-    function _renderPanels() { var TR = (window.SLCadImport && SLCadImport._trace) || function () {}; _renderMatching(); TR('panel matching'); _renderContainment(); TR('panel containment'); _renderIndependence(); TR('panel independence'); _renderReviews(); TR('panel reviews'); if (window.SLPraPanel) { try { window.SLPraPanel.render(); } catch (e) { try { console.warn('particular risks panel', e); } catch (_) {} } } if (state.focus && state.focus.zoneId) _onZone(state.focus.zoneId, true); else if (state.focus && state.focus.volumeId) _onVolume(state.focus.volumeId, true); else _panel('cad-impact', 'Impact', _engine() ? '<div style="font-size:12px;">Click a zone or a PRA volume (in the viewer\'s lists, or a zone link here) to see what it reaches through the fault trees.</div>' : _noEngine()); }
+    // The panels below the viewer. For a very large model (its part list kept on this computer)
+    // each panel reads every part, so each is drawn in a task of its own when the page is idle:
+    // the view answers the mouse in between instead of waiting for all of them at once. A newer
+    // call supersedes panels an older one has not drawn yet.
+    var _panelGen = 0;
+    function _idle(fn) { if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(fn, { timeout: 250 }); else setTimeout(fn, 0); }
+    function _renderPanels() {
+        var TR = (window.SLCadImport && SLCadImport._trace) || function () {};
+        var steps = [
+            function () { _renderMatching(); TR('panel matching'); },
+            function () { _renderContainment(); TR('panel containment'); },
+            function () { _renderIndependence(); TR('panel independence'); },
+            function () { _renderReviews(); TR('panel reviews'); },
+            function () { if (window.SLPraPanel) { try { window.SLPraPanel.render(); } catch (e) { try { console.warn('particular risks panel', e); } catch (_) {} } } },
+            function () { _sysLab(); TR('panel sys lab exchange'); },
+            function () { if (state.focus && state.focus.zoneId) _onZone(state.focus.zoneId, true); else if (state.focus && state.focus.volumeId) _onVolume(state.focus.volumeId, true); else _panel('cad-impact', 'Impact', _engine() ? '<div style="font-size:12px;">Click a zone or a PRA volume (in the viewer\'s lists, or a zone link here) to see what it reaches through the fault trees.</div>' : _noEngine()); TR('page: panels drawn (all)'); }
+        ];
+        var gen = ++_panelGen, mdl = _model();
+        if (!(mdl && mdl.partStore === 'local')) { steps.forEach(function (s) { s(); }); return; }
+        (function next(i) { if (gen !== _panelGen || i >= steps.length) return; steps[i](); _idle(function () { next(i + 1); }); })(0);
+    }
 
     // ---- a ZSA row's zone, from the Zonal Safety table: show it in 3D
     function _zoneFromText(t) {

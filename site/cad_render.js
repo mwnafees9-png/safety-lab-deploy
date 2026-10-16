@@ -1,5 +1,5 @@
 // ============================================================================
-// cad_render.js, v1.0: drawing very large CAD assemblies (window.SLCadRender, 13 Oct 2026, cad-C).
+// cad_render.js, v1.1: drawing very large CAD assemblies (window.SLCadRender, 13 Oct 2026, cad-C; 1.1 15 Oct 2026: the frame triangle budget).
 //
 // Hundreds of thousands of parts cannot be one three.js mesh each (one draw call per part). This
 // module turns the cached geometry (prototypes + placements, cad_import.js) into a few batches:
@@ -13,8 +13,13 @@
 //   * CULLING. Per part: outside the view frustum, not drawn. Per chunk: three.js skips a chunk
 //     outside the frustum; an occlusion query on the chunk's box (WebGL2) skips a chunk hidden
 //     behind what was drawn, one frame late and only when the camera is outside that box.
-//     Visibility is worked out incrementally, a few milliseconds per frame, only when the view
-//     changed, so a still view costs nothing.
+//     Visibility is worked out over flat arrays, only when the view changed (a still view costs
+//     nothing), and applied to every part at once when a pass is complete.
+//   * TRIANGLE BUDGET (1.1, 15 Oct 2026). One frame draws at most triBudget triangles: when the
+//     parts in view need more, the smallest on screen go coarse first, then the very smallest are
+//     left out. A part is never drawn before it is decided, and when real shapes stream in every
+//     part is decided again at once (a 199,370 part model used to draw all 72 million triangles in
+//     one frame here and froze the page for 84 to 90 s).
 //   * PROGRESSIVE. Chunks are built largest parts first, a time slice per frame, so the shape of
 //     the aircraft appears at once and fills in.
 //   * PICKING without per-triangle scans: a bounding volume hierarchy (BVH) per prototype, built
@@ -26,8 +31,11 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
-    var DEF = { maxInstances: 4096, maxVertices: 1500000, lodMinTris: 200, lodRatio: 0.125, lodPx: 28, cullPx: 0.75, sliceMs: 4 };
+    var VERSION = '1.1';
+    // triBudget: the most triangles one frame may draw. When the parts in view would need more,
+    // the smallest on screen switch to their coarse copy first, then the very smallest are left
+    // out, until the frame fits (budgetLevels). Every part is decided before it is drawn.
+    var DEF = { maxInstances: 4096, maxVertices: 1500000, lodMinTris: 200, lodRatio: 0.125, lodPx: 28, cullPx: 0.75, sliceMs: 8, triBudget: 12e6 };
 
     // ------------------------------------------------------------------ pure: plan
     function _part1by2(n) { n &= 1023; n = (n | (n << 16)) & 0x030000FF; n = (n | (n << 8)) & 0x0300F00F; n = (n | (n << 4)) & 0x030C30C3; n = (n | (n << 2)) & 0x09249249; return n >>> 0; }
@@ -62,6 +70,86 @@
         if (hasCoarse && px < (opts.lodPx != null ? opts.lodPx : DEF.lodPx)) return 1;
         return 0;
     }
+    // The frame's triangle budget, decided from each visible part's size on screen (pixel radius)
+    // and its triangle counts at full detail and coarse. Pure, so the node tests run it.
+    //   px, full, coarse: per part (coarse === full when the part has no coarse copy); skip[i]
+    //   truthy: not drawn whatever its size (hidden, outside the view).
+    // Returns { lodB, cullB, lodPx, cullPx, tris, over }. Parts fall in log-spaced size classes
+    // (a quarter octave each, from opts.cullPx up); a part in a class below cullB is left out, a
+    // part with a coarse copy in a class below lodB draws coarse (levelOf, the one rule). tris is
+    // exactly what the frame then draws. Simplification goes smallest on screen first, so a larger
+    // part is never simplified before a smaller one; with the budget met nothing changes from the
+    // plain rule (lodLevel).
+    var NB = 128;
+    function _bucket(px, cull) { if (!(px < Infinity)) return NB - 1; var b = Math.floor(Math.log2(px / cull) * 4); return b < 0 ? 0 : b >= NB ? NB - 1 : b; }
+    function _bucketTop(b, cull) { return b >= NB - 1 ? Infinity : cull * Math.pow(2, (b + 1) / 4); }
+    function levelOf(px, hasCoarse, L, opts) {
+        opts = opts || {};
+        var cull = opts.cullPx != null ? opts.cullPx : DEF.cullPx, lodPx = opts.lodPx != null ? opts.lodPx : DEF.lodPx;
+        if (!(px >= cull)) return -1;
+        var b = (L.cullB > 0 || L.lodB > 0) ? _bucket(px, cull) : 0;
+        if (b < L.cullB) return -1;
+        if (hasCoarse && (px < lodPx || b < L.lodB)) return 1;
+        return 0;
+    }
+    function budgetLevels(n, px, full, coarse, skip, opts) {
+        opts = opts || {};
+        var cull = opts.cullPx != null ? opts.cullPx : DEF.cullPx, lodPx = opts.lodPx != null ? opts.lodPx : DEF.lodPx, budget = opts.triBudget != null ? opts.triBudget : DEF.triBudget;
+        var save = new Float64Array(NB), drop = new Float64Array(NB), tris = 0, i, b, p, f, c, lvl;
+        // what the plain rule draws; the size classes are worked out only when that is over budget
+        for (i = 0; i < n; i++) {
+            if (skip && skip[i]) continue;
+            p = px[i]; if (!(p >= cull)) continue;
+            f = full[i]; c = coarse[i];
+            tris += c < f && p < lodPx ? c : f;
+        }
+        var lodB = 0, cullB = 0;
+        if (tris > budget) {
+            for (i = 0; i < n; i++) {
+                if (skip && skip[i]) continue;
+                p = px[i]; if (!(p >= cull)) continue;
+                f = full[i]; c = coarse[i]; lvl = c < f && p < lodPx;
+                b = _bucket(p, cull);
+                if (!lvl && c < f) save[b] += f - c;
+                drop[b] += c;
+            }
+            for (b = 0; b < NB && tris > budget; b++) { tris -= save[b]; lodB = b + 1; }
+            for (b = 0; b < NB && tris > budget; b++) { tris -= drop[b]; cullB = b + 1; }
+        }
+        return { lodB: lodB, cullB: cullB, lodPx: lodB ? Math.max(lodPx, _bucketTop(lodB - 1, cull)) : lodPx, cullPx: cullB ? _bucketTop(cullB - 1, cull) : cull, tris: tris, over: tris > budget };
+    }
+    // A shape's coarse copy (vertex clustering, about lodRatio of the triangles) when it has at
+    // least lodMinTris triangles and the copy is clearly smaller; null otherwise. The one rule, used
+    // by the scene and by the part readers (which prepare it next to the meshing).
+    function coarseOf(position, index, opts) {
+        opts = opts || {};
+        var D = root.SLCadImport && root.SLCadImport.decimate, tris = index.length / 3;
+        var min = opts.lodMinTris != null ? opts.lodMinTris : DEF.lodMinTris, ratio = opts.lodRatio != null ? opts.lodRatio : DEF.lodRatio;
+        if (!D || tris < min) return null;
+        var d = D(position, index, Math.max(12, Math.floor(tris * ratio)));
+        return d.decimated && d.index.length < index.length * 0.6 ? { position: d.position, index: d.index } : null;
+    }
+    // Smooth vertex normals exactly as three.js computes them (BufferGeometry.computeVertexNormals
+    // then normalizeNormals, r186: face normals (c - b) x (a - b) summed into float32 per vertex,
+    // then scaled by 1 / length), so a reader can work them out off the page.
+    function vertexNormals(P, I) {
+        if (!I) return null;
+        var N = new Float32Array(P.length), m = I.length;
+        for (var i = 0; i < m; i += 3) {
+            var a = I[i] * 3, b = I[i + 1] * 3, c = I[i + 2] * 3;
+            var bx = P[b], by = P[b + 1], bz = P[b + 2];
+            var hx = P[c] - bx, hy = P[c + 1] - by, hz = P[c + 2] - bz, dx = P[a] - bx, dy = P[a + 1] - by, dz = P[a + 2] - bz;
+            var x = hy * dz - hz * dy, y = hz * dx - hx * dz, z = hx * dy - hy * dx;
+            var ax = N[a] + x, ay = N[a + 1] + y, az = N[a + 2] + z, b0 = N[b] + x, b1 = N[b + 1] + y, b2 = N[b + 2] + z, c0 = N[c] + x, c1 = N[c + 1] + y, c2 = N[c + 2] + z;
+            N[a] = ax; N[a + 1] = ay; N[a + 2] = az; N[b] = b0; N[b + 1] = b1; N[b + 2] = b2; N[c] = c0; N[c + 1] = c1; N[c + 2] = c2;
+        }
+        for (var v = 0; v < N.length; v += 3) {
+            var X = N[v], Y = N[v + 1], Z = N[v + 2], s = 1 / (Math.sqrt(X * X + Y * Y + Z * Z) || 1);
+            N[v] = X * s; N[v + 1] = Y * s; N[v + 2] = Z * s;
+        }
+        return N;
+    }
+    function _keepNormal(o, nrm) { if (nrm && o && nrm.length === o.position.length) { try { Object.defineProperty(o, '_normal', { value: nrm, enumerable: false, configurable: true, writable: true }); } catch (_) {} } }
     // Radial explode: each part moves away from the center by factor x its center's offset.
     function explodeOffsets(parts, factor, center) {
         var out = {};
@@ -678,19 +766,24 @@
         this.chunks = []; this.inst = []; this._byPid = {}; this.list = []; this.protos = []; this.bvh = {};
         this.material = opts && opts.material || new T.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.65, side: T.DoubleSide });
         this.ghostMaterial = new T.MeshStandardMaterial({ color: 0xffffff, metalness: 0.0, roughness: 0.9, side: T.DoubleSide, transparent: true, opacity: 0.12, depthWrite: false });
-        this.stats = { chunks: 0, instancedShapes: 0, instances: 0, prototypes: 0, coarse: 0, drawn: 0, culledFrustum: 0, culledSmall: 0, coarseDrawn: 0, occludedChunks: 0, drawCalls: 0 };
-        this._cursor = 0; this._viewKey = ''; this.ghost = false;
+        this.stats = { chunks: 0, instancedShapes: 0, instances: 0, prototypes: 0, coarse: 0, drawn: 0, culledFrustum: 0, culledSmall: 0, coarseDrawn: 0, occludedChunks: 0, drawCalls: 0, triangles: 0, budgetLodPx: null, budgetCullPx: null, overBudget: false, passes: 0, decisions: 0 };
+        this._viewKey = ''; this.ghost = false; this._vis = null;
     }
     var SP = Scene.prototype;
     Object.defineProperty(SP, 'byPid', { get: function () {
         if (!this._byPid) { var m = {}, L = this.list; for (var i = 0; i < L.length; i++) m[L[i].pid] = L[i]; this._byPid = m; }
         return this._byPid;
     } });
+    // A shape's normals are worked out once and kept with it (a chunk rebuilt while detail streams
+    // in reuses them instead of recomputing every shape it holds). Kept as a property that is not
+    // enumerable, so the local cache (IndexedDB, structured clone) stores exactly what it did.
     function _geomOf(T, p) {
         var g = new T.BufferGeometry();
         g.setAttribute('position', new T.BufferAttribute(p.position, 3));
         g.setIndex(new T.BufferAttribute(p.index, 1));
-        if (p.normal && p.normal.length === p.position.length) g.setAttribute('normal', new T.BufferAttribute(p.normal, 3)); else g.computeVertexNormals();
+        var nn = p.normal && p.normal.length === p.position.length ? p.normal : p._normal && p._normal.length === p.position.length ? p._normal : null;
+        if (nn) g.setAttribute('normal', new T.BufferAttribute(nn, 3));
+        else { g.computeVertexNormals(); try { Object.defineProperty(p, '_normal', { value: g.attributes.normal.array, enumerable: false, configurable: true, writable: true }); } catch (_) {} }
         g.computeBoundingSphere();
         return g;
     }
@@ -751,13 +844,16 @@
         }
         var TR = (I && I._trace) || function () {}; TR('scene: items');
         this.box = box; this.list = items;
-        items.forEach(function (it, i) { it.index = i; it.base = (it.color || [0.75, 0.77, 0.8]).slice(); it.cur = it.base.slice(); it.userVisible = true; it.lod = 0; });
+        // a part is drawn only once the visibility pass has decided it (update): never at full
+        // detail by default
+        items.forEach(function (it, i) { it.index = i; it.base = (it.color || [0.75, 0.77, 0.8]).slice(); it.cur = it.base.slice(); it.userVisible = true; it.lod = -1; it.frustumOut = true; });
+        this._initVis();
         this._byPid = null;   // pid -> item, built on first use (not needed for the first frame)
         // coarse copies for heavy prototypes
         var D = I && I.decimate;
         this.protos = geom.protos.map(function (p) {
-            var tris = p.index.length / 3, out = { src: p, tris: tris, coarse: null };
-            if (D && tris >= self.opts.lodMinTris) { var d = D(p.position, p.index, Math.max(12, Math.floor(tris * self.opts.lodRatio))); if (d.decimated && d.index.length < p.index.length * 0.6) { out.coarse = { position: d.position, index: d.index }; self.stats.coarse++; } }
+            var out = { src: p, tris: p.index.length / 3, coarse: D ? coarseOf(p.position, p.index, self.opts) : null };
+            if (out.coarse) self.stats.coarse++;
             return out;
         });
         TR('scene: prototypes');
@@ -775,7 +871,7 @@
                 self.group.add(im); return im;
             };
             g.full = mk(pr.src); if (pr.coarse) g.coarse = mk(pr.coarse);
-            list.forEach(function (it) { it.group = g; it.drawn = true; });
+            list.forEach(function (it) { it.group = g; it.drawn = false; });
             self.inst.push(g);
         });
         this.stats.instancedShapes = this.inst.length;
@@ -815,6 +911,7 @@
                         bm.setMatrixAt(id, M4);
                         bm.setColorAt(id, C.setRGB(it.base[0], it.base[1], it.base[2]));
                         it.chunk = chunk; it.id = id; it.drawn = true; it.gidNow = gid[it.proto].full;
+                        self._apply(it);   // as decided (hidden until the visibility pass decides it)
                         var ib = self._bboxOf(it); for (var j = 0; j < 3; j++) { cb.min[j] = Math.min(cb.min[j], ib.min[j]); cb.max[j] = Math.max(cb.max[j], ib.max[j]); }
                     });
                     bm.computeBoundingBox(); bm.computeBoundingSphere();
@@ -824,7 +921,6 @@
                 self.stats.chunks = self.chunks.length;
                 if (onProgress) { try { onProgress(plan.length ? k / plan.length : 1); } catch (_) {} }
                 if (k < plan.length) { setTimeout(slice, 0); return; }
-                self._viewKey = ''; self._cursor = 0;
                 resolve(true);
             })();
         });
@@ -844,10 +940,19 @@
             tgt.instanceColor.array[slot * 3] = it.cur[0]; tgt.instanceColor.array[slot * 3 + 1] = it.cur[1]; tgt.instanceColor.array[slot * 3 + 2] = it.cur[2];
             it.slotMesh = tgt; it.slot = slot;
         }
-        F.count = nf; F.instanceMatrix.needsUpdate = true; F.instanceColor.needsUpdate = true;
-        if (Cm) { Cm.count = nc; Cm.instanceMatrix.needsUpdate = true; Cm.instanceColor.needsUpdate = true; }
+        _upload(F, nf); if (Cm) _upload(Cm, nc);
         g.dirty = false;
     };
+    // Only the packed front of the instance buffers goes to the GPU (not the whole buffer sized for
+    // every copy of the shape); nothing at all when no copy is drawn.
+    function _upload(m, k) {
+        m.count = k;
+        if (!k) return;
+        [[m.instanceMatrix, 16], [m.instanceColor, 3]].forEach(function (a) {
+            var at = a[0]; if (at.clearUpdateRanges) { at.clearUpdateRanges(); at.addUpdateRange(0, k * a[1]); }
+            at.needsUpdate = true;
+        });
+    }
     SP._apply = function (it) {
         var want = it.userVisible && !it.ghostHidden && it.lod >= 0 && !it.frustumOut;
         if (it.group) {
@@ -863,15 +968,23 @@
     // Streaming detail: real shapes replace the first view's boxes, prototype by prototype.
     // list = [{ proto, position, index, faces }]. Instanced shapes swap their geometry in place;
     // a chunk of batched parts is rebuilt once per call with every new shape it holds.
-    SP.replaceProtos = function (list) {
-        var T = this.T, self = this, dirtyChunks = [];
+    // opts.deferChunks: the chunks of batched parts holding a new shape are rebuilt later
+    // (flushChunks), once for many calls; until then they draw the shapes they had, which never
+    // cost more triangles than the decision counts for the new ones.
+    SP.replaceProtos = function (list, opts) {
+        var T = this.T, self = this, dirtyChunks = [], t0 = performance.now();
         var D = root.SLCadImport && root.SLCadImport.decimate;
+        // the part readers send each shape's normals and coarse copy with it (worked out off the
+        // page by the same rules: vertexNormals, coarseOf); a shape that comes without is done here
+        var sameRule = self.opts.lodMinTris === DEF.lodMinTris && self.opts.lodRatio === DEF.lodRatio;
         list.forEach(function (n) {
             var pr = self.protos[n.proto]; if (!pr) return;
             var src = { position: n.position, index: n.index, normal: null, faces: n.faces || null };
+            _keepNormal(src, n.normal);
             if (self.geom && self.geom.protos[n.proto]) self.geom.protos[n.proto] = src;
             pr.src = src; pr.tris = n.index.length / 3; pr.coarse = null;
-            if (D && pr.tris >= self.opts.lodMinTris) { var d = D(src.position, src.index, Math.max(12, Math.floor(pr.tris * self.opts.lodRatio))); if (d.decimated && d.index.length < src.index.length * 0.6) pr.coarse = { position: d.position, index: d.index }; }
+            if (n.coarse !== undefined && sameRule) { if (n.coarse) { pr.coarse = { position: n.coarse.position, index: n.coarse.index }; _keepNormal(pr.coarse, n.coarse.normal); } }
+            else if (D) pr.coarse = coarseOf(src.position, src.index, self.opts);
             delete self.bvh[n.proto];
             pr._chunks = pr._chunks || null;
         });
@@ -889,12 +1002,29 @@
                     self.group.add(im); g.coarse = im;
                 }
             } else if (g.coarse) { self.group.remove(g.coarse); g.coarse.geometry.dispose(); g.coarse.dispose(); g.coarse = null; g.items.forEach(function (it) { if (it.lod === 1) it.lodDrawn = -1; }); }
-            g.dirty = true; self._pack(g);
+            g.dirty = true;
         });
-        this.chunks.forEach(function (c) { for (var k in c.gid) if (touched[k]) { dirtyChunks.push(c); return; } });
-        dirtyChunks.forEach(function (c) { self._rebuildChunk(c); });
-        this._viewKey = ''; this._tlas = null;
+        var pend = this._pendChunks || (this._pendChunks = new Set());
+        this.chunks.forEach(function (c) { for (var k in c.gid) if (touched[k]) { dirtyChunks.push(c); pend.add(c); return; } });
+        if (!(opts && opts.deferChunks)) this.flushChunks();
+        // the new shapes change what each part costs to draw: every part is decided again at once,
+        // from the sizes on screen already worked out (no frame draws them undecided)
+        if (this._vis) this._vis.trisDirty = true;
+        var t1 = performance.now();
+        if (this._vis && this._vis.decided) this._decide();
+        this._flush();
+        this._tlas = null;
+        // what this call cost: the shapes, and the one decision over every part (a fixed cost per
+        // call, so a caller slicing the work sizes its slices by the first)
+        this.lastReplaceMs = { shapes: t1 - t0, decide: performance.now() - t1 };
         return { instanced: this.inst.filter(function (g) { return touched[g.proto]; }).length, chunks: dirtyChunks.length };
+    };
+    SP.flushChunks = function () {
+        var self = this, pend = this._pendChunks; if (!pend || !pend.size) return 0;
+        var n = pend.size; this._pendChunks = new Set();
+        pend.forEach(function (c) { if (self.chunks.indexOf(c) >= 0) self._rebuildChunk(c); });
+        this._flush();
+        return n;
     };
     SP._rebuildChunk = function (c) {
         var T = this.T, self = this, items = this.list, M4 = new T.Matrix4(), C = new T.Color();
@@ -924,12 +1054,15 @@
         try { old.dispose(); } catch (_) {}
         c.items.forEach(function (ii) { self._apply(items[ii]); });
     };
-    SP._flush = function () { var self = this; this.inst.forEach(function (g) { if (g.dirty) self._pack(g); }); };
+    SP._flush = function () { var self = this; this.inst.forEach(function (g) { if (g.dirty) self._pack(g); }); this._countCalls(); };
+    // the budget follows what is shown: hiding parts frees it for the rest, at once
+    SP._redecide = function () { if (this._vis && this._vis.decided) this._decide(); };
     SP.setVisible = function (pids, on) {
         var self = this;
-        (pids === true ? this.list.map(function (it) { return it.pid; }) : pids).forEach(function (pid) { var it = self.byPid[pid]; if (it) { it.userVisible = !!on; self._apply(it); } });
+        var V = this._vis;
+        (pids === true ? this.list.map(function (it) { return it.pid; }) : pids).forEach(function (pid) { var it = self.byPid[pid]; if (it) { it.userVisible = !!on; if (V) V.hid[it.index] = (V.hid[it.index] & 2) | (on ? 0 : 1); self._apply(it); } });
+        this._redecide();
         this._flush();
-        this._viewKey = '';
     };
     SP.isVisible = function (pid) { var it = this.byPid[pid]; return !!(it && it.userVisible); };
     SP.setColor = function (pid, rgb, alpha) {
@@ -950,13 +1083,19 @@
         var mat = on ? self.ghostMaterial : self.material;
         this.chunks.forEach(function (c) { c.mesh.material = mat; });
         this.inst.forEach(function (g) { g.full.material = mat; if (g.coarse) g.coarse.material = mat; });
-        this.list.forEach(function (it) { var h = on && focus.has(it.pid); if (!!it.ghostHidden !== h) { it.ghostHidden = h; self._apply(it); } });
+        var V = this._vis;
+        this.list.forEach(function (it) { var h = on && focus.has(it.pid); if (!!it.ghostHidden !== h) { it.ghostHidden = h; if (V) V.hid[it.index] = (V.hid[it.index] & 1) | (h ? 2 : 0); self._apply(it); } });
+        this._redecide();
         this._flush();
     };
     // Explode: offsets { pid: [dx,dy,dz] } or null.
     SP.setOffsets = function (off) {
-        var T = this.T, M4 = new T.Matrix4();
+        var T = this.T, M4 = new T.Matrix4(), V = this._vis;
         this.offsets = off || null;
+        if (V) {   // the visibility pass reads the offsets by position
+            V.off = null;
+            if (off) { V.off = new Float64Array(V.n * 3); for (var q = 0; q < V.n; q++) { var oq = off[this.list[q].pid]; if (oq) { V.off[q * 3] = oq[0]; V.off[q * 3 + 1] = oq[1]; V.off[q * 3 + 2] = oq[2]; } } }
+        }
         this.list.forEach(function (it) {
             if (it.group || !it.chunk) return;
             if (it.matrix) M4.fromArray(it.matrix); else M4.identity();
@@ -970,51 +1109,101 @@
         this._viewKey = ''; this._tlas = null;
     };
     SP.offsetOf = function (pid) { var o = this.offsets && this.offsets[pid]; return o || [0, 0, 0]; };
-    // Level of detail and culling, a time slice per frame, only while the view changes: the parts
-    // are visited round robin (the next slice starts where the last stopped), each against the
-    // latest camera, so a moving camera never starves the parts at the end of the list. The
-    // frustum test uses a sphere 1.5 times the part's, so a part does not pop in at the edge.
+    // ---- visibility: level of detail, culling and the frame's triangle budget
+    // Flat arrays per part (center, radius, prototype, size on screen), so one pass over 200,000
+    // parts takes a few milliseconds.
+    SP._initVis = function () {
+        // hid: 1 hidden by the user, 2 ghosted (drawn apart by the caller); lod and was: the decision
+        // last applied to the part (-2: none yet), so a decision touches only the parts it changes
+        var L = this.list, n = L.length, V = this._vis = { n: n, cx: new Float64Array(n), cy: new Float64Array(n), cz: new Float64Array(n), r: new Float64Array(n), proto: new Int32Array(n), px: new Float32Array(n), out: new Uint8Array(n), hid: new Uint8Array(n), lod: new Int8Array(n).fill(-2), was: new Uint8Array(n), skip: new Uint8Array(n), off: null, pi: n, passKey: null, decided: false, trisDirty: true, full: null, coarse: null };
+        for (var i = 0; i < n; i++) { var it = L[i]; V.cx[i] = it.center[0]; V.cy[i] = it.center[1]; V.cz[i] = it.center[2]; V.r[i] = it.radius; V.proto[i] = it.proto; }
+    };
+    // Each frame, only while the view changes: every part's size on screen and whether it is in
+    // the view (a sphere 1.5 times the part's, so nothing pops in at the edge), against the latest
+    // camera, a time slice per frame (the first pass of a model runs whole). What is drawn changes
+    // only when a pass is complete, all parts at once (_decide), so a frame never mixes an old
+    // decision with a new one or draws a part nobody has decided.
     SP.update = function (camera, heightPx) {
-        var T = this.T, n = this.list.length; if (!n) return false;
+        var T = this.T, V = this._vis, n = this.list.length; if (!n || !V) return false;
         var e = camera.matrixWorld.elements, key = e.map(function (x) { return x.toFixed(3); }).join(',') + '|' + heightPx + '|' + camera.fov + '|' + (this.cullingOff ? 1 : 0);
         if (key !== this._viewKey) {
-            this._viewKey = key; this._left = n;   // visit every part once against this view
+            this._viewKey = key;
             camera.updateMatrixWorld(); this._frustum = this._frustum || new T.Frustum();
             this._pm = this._pm || new T.Matrix4();
             this._pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
             this._frustum.setFromProjectionMatrix(this._pm);
-            this._cam = camera.position.clone(); this._h = heightPx; this._fov = camera.fov;
+            var pl = this._frustum.planes, F = this._fp || (this._fp = new Float64Array(24));
+            for (var q = 0; q < 6; q++) { F[q * 4] = pl[q].normal.x; F[q * 4 + 1] = pl[q].normal.y; F[q * 4 + 2] = pl[q].normal.z; F[q * 4 + 3] = pl[q].constant; }
+            this._cam = [camera.position.x, camera.position.y, camera.position.z];
+            this._k = Math.tan(camera.fov * Math.PI / 360) * 2 / heightPx;   // px = r / (d * k)
+            if (V.pi >= n) { V.pi = 0; V.passKey = key; }   // a pass in progress carries on with the newest camera
         }
-        if (!(this._left > 0)) return false;
-        var t0 = performance.now(), S = this._sphere || (this._sphere = new T.Sphere()), cam = this._cam;
-        var budget = this.opts.sliceMs, off = this.offsets, done = 0;
-        while (this._left > 0) {
-            if (this._cursor >= n) { this._cursor = 0; this._pass = (this._pass || 0) + 1; }
-            var it = this.list[this._cursor++]; this._left--; done++;
-            if (this.cullingOff) { it.frustumOut = false; it.lod = 0; }
-            else {
-                var o = off && off[it.pid];
-                S.center.set(it.center[0] + (o ? o[0] : 0), it.center[1] + (o ? o[1] : 0), it.center[2] + (o ? o[2] : 0)); S.radius = it.radius * 1.5;
-                it.frustumOut = !this._frustum.intersectsSphere(S);
-                var px = pixelRadius(it.radius, S.center.distanceTo(cam), this._fov, this._h);
-                it.lod = lodLevel(px, !!this.protos[it.proto].coarse, this.opts);
+        if (V.pi >= n) return false;
+        var t0 = performance.now(), budget = V.decided ? this.opts.sliceMs : Infinity;
+        var Fp = this._fp, c = this._cam, k = this._k, off = V.off, CX = V.cx, CY = V.cy, CZ = V.cz, R = V.r, PX = V.px, OUT = V.out, off0 = this.cullingOff;
+        var i = V.pi;
+        while (i < n) {
+            var end = Math.min(n, i + 4096);
+            for (; i < end; i++) {
+                var x = CX[i], y = CY[i], z = CZ[i], r = R[i];
+                if (off) { x += off[i * 3]; y += off[i * 3 + 1]; z += off[i * 3 + 2]; }
+                if (off0) { OUT[i] = 0; PX[i] = Infinity; continue; }
+                var rr = -r * 1.5, o = 0;
+                for (var p = 0; p < 24; p += 4) if (Fp[p] * x + Fp[p + 1] * y + Fp[p + 2] * z + Fp[p + 3] < rr) { o = 1; break; }
+                OUT[i] = o;
+                var dx = x - c[0], dy = y - c[1], dz = z - c[2], d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                PX[i] = d <= r ? Infinity : r / (d * k);
             }
-            this._apply(it);
-            if ((done & 255) === 0 && performance.now() - t0 > budget) break;
+            if (performance.now() - t0 > budget) break;
         }
+        V.pi = i;
+        if (i < n) return false;
+        V.decided = true; this.stats.passes++;
+        this._decide();
         this._flush();
-        if (!(this._left > 0)) this._count();
+        if (V.passKey !== this._viewKey) { V.pi = 0; V.passKey = this._viewKey; }   // the camera moved during the pass: once more
         return true;
     };
-    SP._count = function () {
-        var c = { drawn: 0, culledFrustum: 0, culledSmall: 0, coarseDrawn: 0, drawCalls: 0 };
-        this.list.forEach(function (it) { if (!it.userVisible) return; if (it.frustumOut) c.culledFrustum++; else if (it.lod < 0) c.culledSmall++; else { c.drawn++; if (it.lod === 1 && (it.group ? it.group.coarse : it.chunk && it.chunk.gid[it.proto].coarse != null)) c.coarseDrawn++; } });
-        this.chunks.forEach(function (ch) { if (ch.mesh.visible) c.drawCalls++; });
-        this.inst.forEach(function (g) { if (g.full.count) c.drawCalls++; if (g.coarse && g.coarse.count) c.drawCalls++; });
-        Object.assign(this.stats, c);
+    // Decide every part from the last complete pass: in view or not, its level of detail, and
+    // the budget (budgetLevels); then apply only what changed. Also when shapes change (detail
+    // streamed in), hidden or shown parts, ghosting.
+    SP._decide = function () {
+        var V = this._vis, L = this.list, n = L.length, P = this.protos, opts = this.opts, i;
+        if (!V || !V.decided) return;
+        if (V.trisDirty || !V.full) {
+            var np = P.length, fp = new Float64Array(np), cp = new Float64Array(np);
+            for (i = 0; i < np; i++) { var pr = P[i]; fp[i] = pr ? pr.src.index.length / 3 : 0; cp[i] = pr && pr.coarse ? pr.coarse.index.length / 3 : fp[i]; }
+            V.full = new Float64Array(n); V.coarse = new Float64Array(n);
+            for (i = 0; i < n; i++) { V.full[i] = fp[V.proto[i]]; V.coarse[i] = cp[V.proto[i]]; }
+            V.trisDirty = false;
+        }
+        var skip = V.skip, H = V.hid, OUT = V.out, PX = V.px, FU = V.full, CO = V.coarse, LOD = V.lod, WAS = V.was;
+        for (i = 0; i < n; i++) skip[i] = H[i] || OUT[i] ? 1 : 0;
+        var B = this.cullingOff ? { lodB: 0, cullB: 0, lodPx: opts.lodPx, cullPx: opts.cullPx, tris: 0, over: false } : budgetLevels(n, PX, FU, CO, skip, opts);
+        var st = { drawn: 0, culledFrustum: 0, culledSmall: 0, coarseDrawn: 0, triangles: 0 }, off0 = this.cullingOff;
+        for (i = 0; i < n; i++) {
+            var out = OUT[i], lod = off0 ? 0 : levelOf(PX[i], CO[i] < FU[i], B, opts);
+            if (lod !== LOD[i] || out !== WAS[i]) { var t = L[i]; t.frustumOut = out === 1; t.lod = lod; LOD[i] = lod; WAS[i] = out; this._apply(t); }
+            var h = H[i]; if (h & 1) continue;
+            if (out) st.culledFrustum++; else if (lod < 0) st.culledSmall++;
+            else if (!(h & 2)) { st.drawn++; if (lod === 1) { st.coarseDrawn++; st.triangles += CO[i]; } else st.triangles += FU[i]; }
+        }
+        Object.assign(this.stats, st, { budgetLodPx: B.lodPx, budgetCullPx: B.cullPx, overBudget: !!B.over });
+        this.stats.decisions++;
     };
-    // Every part at full detail, nothing culled (for a measurement or a full-quality snapshot).
+    SP._countCalls = function () {
+        var c = 0;
+        this.chunks.forEach(function (ch) { if (ch.mesh.visible) c++; });
+        this.inst.forEach(function (g) { if (g.dirty) return; if (g.full.count) c++; if (g.coarse && g.coarse.count) c++; });
+        this.stats.drawCalls = c;
+    };
+    SP._count = function () { this._flush(); };
+    // Every part at full detail, nothing culled and no budget (for a measurement or a full-quality
+    // snapshot).
     SP.setCulling = function (on) { this.cullingOff = !on; this._viewKey = ''; if (!on) this.disableOcclusion(); };
+    // The frame's triangle budget (the renderer's speed: the viewer sets a lower one on a software
+    // renderer). Takes effect at once.
+    SP.setTriangleBudget = function (n) { this.opts.triBudget = n > 0 ? n : Infinity; if (this._vis && this._vis.decided) { this._decide(); this._flush(); } };
     // ---- occlusion queries per chunk (WebGL2): one frame late, conservative
     SP.setupOcclusion = function (renderer) {
         var gl = renderer.getContext();
@@ -1145,7 +1334,7 @@
 
     var api = {
         VERSION: VERSION, DEFAULTS: DEF, Scene: Scene, Bvh: Bvh, Tlas: Tlas,
-        morton3: morton3, mortonOf: mortonOf, planChunks: planChunks, pixelRadius: pixelRadius, lodLevel: lodLevel, explodeOffsets: explodeOffsets,
+        morton3: morton3, mortonOf: mortonOf, planChunks: planChunks, pixelRadius: pixelRadius, lodLevel: lodLevel, budgetLevels: budgetLevels, levelOf: levelOf, coarseOf: coarseOf, vertexNormals: vertexNormals, explodeOffsets: explodeOffsets,
         rayTri: rayTri, closestOnTri: closestOnTri, closestSegSeg: closestSegSeg, triTriIntersect: triTriIntersect, triTriDistance: triTriDistance,
         meshDistance: meshDistance, fastMeshDistance: fastMeshDistance, classifyPair: classifyPair, broadPhase: broadPhase, clashBatch: clashBatch, clashWorkerMessage: clashWorkerMessage, clashParallel: clashParallel, shapeBoxes: shapeBoxes, triTriCrossProper: triTriCrossProper, clashJob: clashJob, runClash: runClash, sharedVolume: sharedVolume, xf: xf
     };

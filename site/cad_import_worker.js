@@ -141,7 +141,7 @@ function viaStructure(bytes) {
         leaves = items.map(function (it) { return it.B ? it : leaves[it.k]; }); order = leaves.map(function (_, i) { return i; });
         model.streaming.leaves = order.length; model.streaming.bodies = order.length; model.reader = 'structure-bodies';
     }
-    _stream = { ix: ix, st: st, res: res, leaves: leaves, order: order, next: 0, stopped: false };
+    _stream = { ix: ix, st: st, res: res, leaves: leaves, order: order, next: 0, stopped: false, sized: !!split };
     return model;
 }
 function isIdent(m) { for (var i = 0; i < 16; i++) if (Math.abs(m[i] - ((i % 5) === 0 ? 1 : 0)) > 1e-12) return false; return true; }
@@ -272,15 +272,76 @@ function partSessionFor(eng, bytes) {
     return ps;
 }
 
-// ---- the part reader pool: one OpenCascade per worker, as many workers as the computer has
-// cores (at most 8, and fewer on a computer with little memory), each reading whole parts.
-var POOL_MAX = 8;
-function poolSize() {
-    var hc = (self.navigator && self.navigator.hardwareConcurrency) || 2;
-    var mem = self.navigator && self.navigator.deviceMemory;   // GB, when the browser says
-    var n = Math.max(1, Math.min(POOL_MAX, hc));
+// ---- the part reader pool: one OpenCascade per worker, each reading whole parts. One worker per
+// core but one (the page, this worker that hands out the parts, and the graphics need a core of
+// their own; with 2 or 3 cores every core reads), at most POOL_MAX; fewer on a computer with
+// little memory (each reader holds its own OpenCascade).
+var POOL_MAX = 12;
+function poolSize(hc, mem) {
+    if (_importOpts.poolSize > 0) return Math.min(POOL_MAX, _importOpts.poolSize | 0);   // set by a measurement
+    hc = hc || (self.navigator && self.navigator.hardwareConcurrency) || 2;
+    mem = mem != null ? mem : (self.navigator && self.navigator.deviceMemory);   // GB, when the browser says (at most 8)
+    var n = hc >= 4 ? hc - 1 : hc;
+    n = Math.max(1, Math.min(POOL_MAX, n));
     if (mem && mem <= 4) n = Math.min(n, 2);
+    else if (mem && mem < 8) n = Math.min(n, 4);
     return n;
+}
+// The placed copies of each shape (by part position in the model) and their placements, kept
+// when the first view is sent, so each part job carries what its reader needs to box every copy
+// of what it meshes (SLCadImport.placedBoxes): the page does not go over every vertex again.
+function keepPlacements(S, packed) {
+    var n = packed.n, P = packed.proto, np = 0, i;
+    for (i = 0; i < n; i++) if (P[i] + 1 > np) np = P[i] + 1;
+    var cnt = new Int32Array(np + 1); for (i = 0; i < n; i++) cnt[P[i] + 1]++;
+    for (i = 0; i < np; i++) cnt[i + 1] += cnt[i];
+    var all = new Int32Array(n), fill = cnt.slice(0, np);
+    for (i = 0; i < n; i++) all[fill[P[i]]++] = i;
+    S.instStart = cnt; S.instAll = all;
+    S.m16 = SLCadImport.matrices16(packed); S.hasM = packed.hasMatrix.slice();
+}
+function instIdx(S, proto) { return S.instAll && proto + 1 < S.instStart.length ? S.instAll.subarray(S.instStart[proto], S.instStart[proto + 1]) : null; }
+// what a part job carries per shape it will mesh: the copies' placements
+function instFor(S, protos) {
+    if (!S.instAll) return null;
+    var tr = [];
+    var list = protos.map(function (p) {
+        var ix = instIdx(S, p); if (!ix || !ix.length) return null;
+        var k = ix.length, mats = new Float32Array(k * 16), has = new Uint8Array(k);
+        for (var j = 0; j < k; j++) { var mi = ix[j]; has[j] = S.hasM[mi]; if (has[j]) mats.set(S.m16.subarray(mi * 16, mi * 16 + 16), j * 16); }
+        tr.push(mats.buffer, has.buffer);
+        return { k: k, mats: mats, has: has };
+    });
+    return { list: list, transfer: tr };
+}
+// boxes of every placed copy of each meshed shape (in the part reader, or here without a pool)
+function boxGeo(geo, inst) {
+    var tr = [];
+    (geo || []).forEach(function (g, i) { var q = inst && inst[i]; if (!q) return; var b = SLCadImport.placedBoxes(g.position, g.index, q.mats, q.has, q.k); g.placed = { box: b.box, cen: b.cen }; tr.push(b.box.buffer, b.cen.buffer); });
+    return tr;
+}
+// What the page would otherwise work out for each new shape before drawing it: its normals and
+// its coarse copy (SLCadRender.vertexNormals and coarseOf, the same rules as the scene), done here
+// next to the meshing, in parallel across the readers.
+function prepGeo(geo) {
+    if (!self.SLCadRender) importScripts('cad_render.js' + _q);
+    var R = self.SLCadRender, tr = [];
+    (geo || []).forEach(function (g) {
+        g.normal = R.vertexNormals(g.position, g.index); if (g.normal) tr.push(g.normal.buffer);
+        var c = R.coarseOf(g.position, g.index);
+        g.coarse = c ? { position: c.position, index: c.index, normal: R.vertexNormals(c.position, c.index) } : null;
+        if (c) tr.push(c.position.buffer, c.index.buffer, g.coarse.normal.buffer);
+    });
+    return tr;
+}
+// a detail entry for the page: the shape (with its normals and coarse copy when prepared), and its
+// copies' boxes when they were made with it
+function detailEntry(S, proto, g) {
+    var e = { proto: proto, position: g.position, index: g.index, faces: g.faces }, t = [g.position.buffer, g.index.buffer];
+    if (g.coarse !== undefined && g.normal) { e.normal = g.normal; e.coarse = g.coarse; t.push(g.normal.buffer); if (g.coarse) t.push(g.coarse.position.buffer, g.coarse.index.buffer, g.coarse.normal.buffer); }
+    var ix = g.placed ? instIdx(S, proto) : null;
+    if (ix && g.placed.box.length === ix.length * 6) { var idx = ix.slice(); e.placed = { idx: idx, box: g.placed.box, cen: g.placed.cen }; t.push(idx.buffer, g.placed.box.buffer, g.placed.cen.buffer); }
+    return { e: e, t: t };
 }
 function makePool(n) {
     if (typeof Worker === 'undefined' || !_fastModule) return null;
@@ -290,9 +351,25 @@ function makePool(n) {
     catch (e) { ws.forEach(function (x) { try { x.w.terminate(); } catch (_) {} }); return null; }
     return ws;
 }
+// The work left, in S.order's order. For the bodies of one huge part (S.sized: the order runs from
+// the smallest body to the largest) every reader but one takes the largest body left and one
+// takes the smallest: the biggest bodies are read side by side from the start, so the total is
+// bounded by the largest body rather than their sum, while the small ones keep the view filling
+// in. Work handed back (its reader was stopped) goes first.
+function workQueue(S) {
+    var q = S.order.slice(), lo = 0, hi = q.length, again = [];
+    return {
+        left: function () { return hi - lo + again.length; },
+        take: function (big) { if (again.length) return again.shift(); if (lo >= hi) return null; return big ? q[--hi] : q[lo++]; },
+        again: function (k) { again.push(k); }
+    };
+}
 function streamDetailPool(pool) {
     var S = _stream; if (!S) return;
-    var inflight = 0, batch = [], transfer = [], lastPost = Date.now(), done = 0;
+    var inflight = 0, batch = [], transfer = [], lastPost = Date.now(), done = 0, Q = workQueue(S);
+    // a body of a huge part can take a minute: one at a time per reader, so none waits behind it
+    var perReader = S.sized ? 1 : 2;
+    pool.forEach(function (x, i) { x.big = !!S.sized && pool.length > 1 && i > 0; });
     function flush(force) {
         if (!batch.length) return;
         if (!force && Date.now() - lastPost < 150) return;
@@ -306,9 +383,9 @@ function streamDetailPool(pool) {
             try { x.w.terminate(); } catch (_) {}
             ks.forEach(function (k) { k = +k; var L = S.leaves[k], over = Date.now() - x.jobs[k] > cap; inflight--;
                 if (over) { done++; self.postMessage({ type: 'detail-failed', protos: L.protos, name: L.name || L.pd, reason: 'still being read after ' + Math.round(cap / 1000) + ' s (the reader was stopped)', capped: true }); }
-                else S.order.push(k); });   // a body queued behind it is read again by the new reader
+                else Q.again(k); });   // a body queued behind it is read again by the new reader
             x.jobs = {}; x.busy = 0; x.w = new Worker(url); x.w.postMessage({ type: 'pool-init', fast: _fastModule }); attach(x); feed(x);
-            if (!inflight && S.next >= S.order.length) finish();
+            if (!inflight && !Q.left()) finish();
         });
     }, Math.min(5000, cap / 4));
     function finish() {
@@ -319,12 +396,13 @@ function streamDetailPool(pool) {
         setTimeout(function () { fastInstance().catch(function () {}); }, 0);
     }
     function feed(x) {
-        while (x.busy < 2 && S.next < S.order.length && !S.stopped) {
-            var k = S.order[S.next++], L = S.leaves[k];
+        while (x.busy < perReader && Q.left() && !S.stopped) {
+            var k = Q.take(x.big), L = S.leaves[k];
             var mini = L.B ? self.SLCadStep.extractBody(S.ix, L.B, L.body) : self.SLCadStep.extract(S.ix, S.st, L.pd);
             if (L.B && _importOpts.testFailBody === L.body) mini = new TextEncoder().encode('ISO-10303-21;\nnot a step file (test)\n');   // test hook: a body that cannot be read
             x.busy++; inflight++; x.jobs = x.jobs || {}; x.jobs[k] = Date.now();
-            x.w.postMessage({ type: 'part', k: k, bytes: mini }, [mini.buffer]);
+            var inst = instFor(S, L.protos);
+            x.w.postMessage({ type: 'part', k: k, bytes: mini, inst: inst ? inst.list : null }, [mini.buffer].concat(inst ? inst.transfer : []));
         }
     }
     function attach(x) {
@@ -335,11 +413,11 @@ function streamDetailPool(pool) {
             x.busy--; inflight--; done++; if (x.jobs) delete x.jobs[d.k];
             var L = S.leaves[d.k];
             if (!d.geo || !d.geo.length) self.postMessage({ type: 'detail-failed', protos: L.protos, name: L.name || L.pd, reason: d.err || 'OpenCascade returned no shape' });
-            (d.geo || []).forEach(function (g, i) { if (i < L.protos.length) { batch.push({ proto: L.protos[i], position: g.position, index: g.index, faces: g.faces }); transfer.push(g.position.buffer, g.index.buffer); } });
+            (d.geo || []).forEach(function (g, i) { if (i < L.protos.length) { var de = detailEntry(S, L.protos[i], g); batch.push(de.e); transfer.push.apply(transfer, de.t); } });
             flush(false);
             if (S.stopped) { if (!inflight) finish(); return; }
             feed(x);
-            if (!inflight && S.next >= S.order.length) finish();
+            if (!inflight && !Q.left()) finish();
         };
         x.w.onerror = function () { x.busy = 99; };
     }
@@ -366,7 +444,8 @@ function streamDetail() {
             var k = S.order[S.next++], L = S.leaves[k], geo;
             try { geo = fastPartGeometry(M, L.B ? self.SLCadStep.extractBody(S.ix, L.B, L.body) : self.SLCadStep.extract(S.ix, S.st, L.pd)); } catch (e) { geo = null; }
             if (!geo) { self.postMessage({ type: 'detail-failed', protos: L.protos, name: L.name || L.pd, reason: 'OpenCascade returned no shape' }); continue; }
-            for (var i = 0; i < L.protos.length && i < geo.length; i++) { batch.push({ proto: L.protos[i], position: geo[i].position, index: geo[i].index, faces: geo[i].faces }); transfer.push(geo[i].position.buffer, geo[i].index.buffer); }
+            var inst0 = instFor(S, L.protos); boxGeo(geo, inst0 ? inst0.list : null);
+            for (var i = 0; i < L.protos.length && i < geo.length; i++) { var de = detailEntry(S, L.protos[i], geo[i]); batch.push(de.e); transfer.push.apply(transfer, de.t); }
         }
         if (batch.length) self.postMessage({ type: 'detail', protos: batch, done: S.next, total: S.order.length }, transfer);
         if (S.next < S.order.length) setTimeout(streamDetail, 0);
@@ -382,6 +461,8 @@ function partReader(d) {
             var geo = null;
             try { geo = fastPartGeometry(oc, d.bytes); } catch (e) { geo = null; }
             var t = []; (geo || []).forEach(function (g) { t.push(g.position.buffer, g.index.buffer); });
+            try { t = t.concat(boxGeo(geo, d.inst)); } catch (e) { (geo || []).forEach(function (g) { delete g.placed; }); }
+            try { t = t.concat(prepGeo(geo)); } catch (e) { (geo || []).forEach(function (g) { delete g.normal; delete g.coarse; }); }
             self.postMessage({ type: 'part-done', k: d.k, geo: geo }, t);
         }).catch(function () { self.postMessage({ type: 'part-done', k: d.k, geo: null }); });
         return true;
@@ -408,6 +489,7 @@ self.onmessage = function (ev) {
                 // 200,000 parts travel as a few flat arrays: one transferable per part would cost
                 // the browser minutes
                 var packed = SLCadImport.packMeshes(fast.meshes), pp = SLCadImport.packParts(fast.parts, fast.meshes);
+                if (_stream) keepPlacements(_stream, packed);
                 var slim = Object.assign({}, fast, { meshes: null, parts: null, packed: packed, partsPacked: pp });
                 var tl = [];
                 [packed, pp].forEach(function (o) { Object.keys(o).forEach(function (k) { var v = o[k]; if (v && v.buffer instanceof ArrayBuffer && tl.indexOf(v.buffer) < 0) tl.push(v.buffer); }); });
@@ -472,7 +554,8 @@ self.onmessage = function (ev) {
         fastInstance().then(function (M) {
             var geo = null; try { geo = fastPartGeometry(M, L0.B ? self.SLCadStep.extractBody(S0.ix, L0.B, L0.body) : self.SLCadStep.extract(S0.ix, S0.st, L0.pd)); } catch (e) { geo = null; }
             if (!geo || !geo.length) { self.postMessage({ type: 'detail-failed', protos: L0.protos, name: L0.name || L0.pd, reason: 'OpenCascade returned no shape (retry)' }); return; }
-            var b = [], t = []; geo.forEach(function (g, i) { if (i < L0.protos.length) { b.push({ proto: L0.protos[i], position: g.position, index: g.index, faces: g.faces }); t.push(g.position.buffer, g.index.buffer); } });
+            var inst1 = instFor(S0, L0.protos); boxGeo(geo, inst1 ? inst1.list : null);
+            var b = [], t = []; geo.forEach(function (g, i) { if (i < L0.protos.length) { var de = detailEntry(S0, L0.protos[i], g); b.push(de.e); t.push.apply(t, de.t); } });
             self.postMessage({ type: 'detail', protos: b, retry: true }, t);
         }).catch(function (e) { self.postMessage({ type: 'detail-failed', protos: L0.protos, name: L0.name || L0.pd, reason: 'OpenCascade could not start for the retry: ' + ((e && e.message) || String(e)) }); });
         return;

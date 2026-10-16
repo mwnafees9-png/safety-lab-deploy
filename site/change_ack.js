@@ -294,7 +294,7 @@
     // same thing to the engines: that is not a change.
     var DEFAULTS = { lambdaEF: 1, repairModel: 'unmaintained', exposureMode: 'continuous', inputMode: 'probability' };
     // 14 Oct 2026: particular risk records named in plain words, with the item that changed
-    var PRA_PC = { praRotors: 'Rotor burst values', praTires: 'Tire burst values', praBirds: 'Bird strike values', praVolumes: 'Particular risk volume', praLightning: 'Lightning zones', praLightningFlow: 'Lightning values', praLightningSkin: 'Lightning zones on the skin', praSkinParts: 'External skin parts', praSources: 'Fire, fluid leak and ice sources', praWriteups: 'Accepted AI write-ups', cadLinks: 'CAD equipment links', cadModels: 'CAD model revision', cadReviews: 'CAD review' };
+    var PRA_PC = { sysLabPhysical: 'Sys Lab physical architecture and its equipment mapping', praRotors: 'Rotor burst values', praTires: 'Tire burst values', praBirds: 'Bird strike values', praVolumes: 'Particular risk volume', praLightning: 'Lightning zones', praLightningFlow: 'Lightning values', praLightningSkin: 'Lightning zones on the skin', praSkinParts: 'External skin parts', praSources: 'Fire, fluid leak and ice sources', praWriteups: 'Accepted AI write-ups', cadLinks: 'CAD equipment links', cadModels: 'CAD model revision', cadReviews: 'CAD review' };
     var PRA_SEQ = { praRotorSeq: 1, praTireSeq: 1, praBirdSeq: 1, praVolumeSeq: 1, praSourceSeq: 1, cadSeq: 1, cadReviewSeq: 1 };   // counters: booked silently
     function _praLabel(k, a, b) {
         var base = PRA_PC[k]; if (!base) return null;

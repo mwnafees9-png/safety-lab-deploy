@@ -43,7 +43,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '2.3';
+    var VERSION = '2.4';
     var DB_NAME = 'sl-cad', DB_STORE = 'meshes', DB_STEPS = 'steps', DB_VERSION = 2;
     var START_MS = 20000;   // the worker's first message (it comes before any parsing) must arrive within this
     var OCCT_DIR = 'vendor/occt/';
@@ -383,6 +383,35 @@
         if (!(mn[0] <= mx[0])) return { min: [0, 0, 0], max: [0, 0, 0] };
         return { min: mn, max: mx };
     }
+    // Every placed copy of one shape: its box and centroid, exactly the numbers bboxOfXf and _xf
+    // give copy by copy (bit for bit), with the pass over the shape's vertices made once per
+    // distinct rotation. Why that is exact: _xf computes ((m0 x + m4 y) + m8 z) + m12; the part in
+    // brackets depends on the rotation only, and adding the same m12 to every vertex is monotone
+    // under rounding, so min_v fl(a_v + t) = fl(min_v a_v + t) (and the same for max).
+    //   mats: Float32Array, 16 per copy; has: Uint8Array, 1 where the copy has a placement.
+    // Returns { box: Float64Array(6 k) [minx,miny,minz,maxx,maxy,maxz], cen: Float64Array(3 k) }.
+    function placedBoxes(pos, idx, mats, has, k) {
+        var box = new Float64Array(k * 6), cen = new Float64Array(k * 3);
+        var b0 = bboxOf(pos), c0 = pos.length ? centroidOf(pos, idx, b0) : [0, 0, 0], rot = {};
+        for (var i = 0; i < k; i++) {
+            var o = i * 6, q = i * 3, M = has[i] ? mats.subarray(i * 16, i * 16 + 16) : null;
+            if (M && _isIdent(M)) M = null;
+            if (!M) { box[o] = b0.min[0]; box[o + 1] = b0.min[1]; box[o + 2] = b0.min[2]; box[o + 3] = b0.max[0]; box[o + 4] = b0.max[1]; box[o + 5] = b0.max[2]; cen[q] = c0[0]; cen[q + 1] = c0[1]; cen[q + 2] = c0[2]; continue; }
+            var key = M[0] + ',' + M[1] + ',' + M[2] + ',' + M[4] + ',' + M[5] + ',' + M[6] + ',' + M[8] + ',' + M[9] + ',' + M[10], r = rot[key];
+            if (!r) {
+                r = rot[key] = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+                for (var v = 0; v + 2 < pos.length; v += 3) {
+                    var x = pos[v], y = pos[v + 1], z = pos[v + 2];
+                    var ax = M[0] * x + M[4] * y + M[8] * z, ay = M[1] * x + M[5] * y + M[9] * z, az = M[2] * x + M[6] * y + M[10] * z;
+                    if (ax < r[0]) r[0] = ax; if (ax > r[3]) r[3] = ax; if (ay < r[1]) r[1] = ay; if (ay > r[4]) r[4] = ay; if (az < r[2]) r[2] = az; if (az > r[5]) r[5] = az;
+                }
+            }
+            if (!(r[0] <= r[3])) { for (var e = 0; e < 6; e++) box[o + e] = 0; }   // no vertices: bboxOfXf's empty box
+            else { box[o] = r[0] + M[12]; box[o + 1] = r[1] + M[13]; box[o + 2] = r[2] + M[14]; box[o + 3] = r[3] + M[12]; box[o + 4] = r[4] + M[13]; box[o + 5] = r[5] + M[14]; }
+            var w = _xf(M, c0[0], c0[1], c0[2]); cen[q] = w[0]; cen[q + 1] = w[1]; cen[q + 2] = w[2];
+        }
+        return { box: box, cen: cen };
+    }
     // World positions of one part: its prototype's vertices placed by its matrix.
     function worldPosition(geom, meshOrIndex) {
         var m = typeof meshOrIndex === 'number' ? geom.meshes[meshOrIndex] : meshOrIndex;
@@ -552,23 +581,50 @@
     // True when anything in obj looks like geometry: a typed array or buffer, a
     // numeric array longer than a coordinate, or a mesh-shaped key.
     var GEOM_KEYS = { position: 1, positions: 1, normal: 1, normals: 1, index: 1, indices: 1, meshes: 1, vertices: 1, triangles: 1, buffer: 1, bytes: 1, step: 1, stepText: 1, fileBytes: 1 };
+    // One walk with its own stack (a 200,000 part record is checked in tens of milliseconds). A
+    // small piece (a few levels, no deeper object) is decided on the spot (_geoQuick): nothing in it
+    // can lead back to itself, so it needs no record of what was visited. The answer is the same as
+    // the plain depth first visit: true when anything reachable looks like geometry.
+    var _hasAB = typeof ArrayBuffer !== 'undefined', _hop = Object.prototype.hasOwnProperty;
+    function _geoQuick(x, d) {   // 1 geometry, 0 none, -1 too deep to decide here
+        if (x == null || typeof x !== 'object') return 0;
+        if (_hasAB && (x instanceof ArrayBuffer || ArrayBuffer.isView(x))) return 1;
+        if (d > 3) return -1;
+        var res = 0, r, y, i;
+        if (Array.isArray(x)) {
+            var n = x.length, allNum = n > 3;
+            for (i = 0; i < n; i++) { if (!(i in x)) continue; y = x[i]; if (typeof y !== 'number') { allNum = false; if (y != null && typeof y === 'object') { r = _geoQuick(y, d + 1); if (r === 1) return 1; if (r < 0) res = -1; } } }
+            return allNum ? 1 : res;
+        }
+        for (var k in x) {
+            if (!_hop.call(x, k)) continue;
+            if (GEOM_KEYS[k]) return 1;
+            y = x[k]; if (y != null && typeof y === 'object') { r = _geoQuick(y, d + 1); if (r === 1) return 1; if (r < 0) res = -1; }
+        }
+        return res;
+    }
     function containsGeometry(obj) {
-        var seen = typeof Set !== 'undefined' ? new Set() : null, seenA = [];
-        return (function look(o) {
-            if (o == null || typeof o !== 'object') return false;
-            if (seen) { if (seen.has(o)) return false; seen.add(o); } else { if (seenA.indexOf(o) >= 0) return false; seenA.push(o); }
-            if (typeof ArrayBuffer !== 'undefined' && (o instanceof ArrayBuffer || ArrayBuffer.isView(o))) return true;
+        var q0 = _geoQuick(obj, 0); if (q0 >= 0) return q0 === 1;
+        var seen = typeof Set !== 'undefined' ? new Set() : null, seenA = [], stack = [obj];
+        while (stack.length) {
+            var o = stack.pop();
+            if (o == null || typeof o !== 'object') continue;
+            if (seen) { if (seen.has(o)) continue; seen.add(o); } else { if (seenA.indexOf(o) >= 0) continue; seenA.push(o); }
+            if (_hasAB && (o instanceof ArrayBuffer || ArrayBuffer.isView(o))) return true;
+            var i, x, r;
             if (Array.isArray(o)) {
-                if (o.length > 3 && o.every(function (x) { return typeof x === 'number'; })) return true;
-                return o.some(look);
+                var n = o.length, allNum = n > 3;
+                for (i = 0; i < n; i++) { if (!(i in o)) continue; x = o[i]; if (typeof x !== 'number') { allNum = false; if (x != null && typeof x === 'object') { r = _geoQuick(x, 0); if (r === 1) return true; if (r < 0) stack.push(x); } } }
+                if (allNum) return true;
+                continue;
             }
             for (var k in o) {
-                if (!Object.prototype.hasOwnProperty.call(o, k)) continue;
+                if (!_hop.call(o, k)) continue;
                 if (GEOM_KEYS[k]) return true;
-                if (look(o[k])) return true;
+                x = o[k]; if (x != null && typeof x === 'object') { r = _geoQuick(x, 0); if (r === 1) return true; if (r < 0) stack.push(x); }
             }
-            return false;
-        })(obj);
+        }
+        return false;
     }
     function _pc() {
         try { if (root.SLEnv && typeof root.SLEnv.get === 'function') { var v = root.SLEnv.get('projectConfig'); if (v) return v; } } catch (_) {}
@@ -677,19 +733,41 @@
     // promise -> { sha256, model } with model = { parts, meshes, stats, schema, sourceUnit, units }.
     // opts.expectSha: refuse (before parsing) a file whose fingerprint differs.
     // Each part's box and centroid from its prototype mesh and placement; model.parts updated.
+    // model.placed (from the detail stream): per shape, the boxes and centroids of its placed
+    // copies, worked out by the part readers next to the meshing (placedBoxes, the same numbers):
+    // { idx: Int32Array (which parts), box, cen, position (the shape they were made from) }. Used
+    // only while the model still holds that very shape; anything else is computed here.
     function trueBoxes(model) {
-        var pb = model.protos.map(function (p) {
-            var P = p.position, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+        var pb = new Array(model.protos.length), placed = model.placed || null, slot = null;
+        if (placed) {
+            slot = new Int32Array(model.meshes.length).fill(-1);
+            Object.keys(placed).forEach(function (k) {
+                var P = placed[k], pr = model.protos[+k];
+                if (!P || !pr || P.position !== pr.position) return;   // the shape changed since (a retry)
+                for (var j = 0; j < P.idx.length; j++) { var mi = P.idx[j]; if (mi >= 0 && mi < slot.length && model.meshes[mi].proto === +k) slot[mi] = j; }
+            });
+        }
+        function boxOfProto(k) {
+            if (pb[k] !== undefined) return pb[k];
+            var P = model.protos[k].position, mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
             for (var i = 0; i < P.length; i += 3) for (var j = 0; j < 3; j++) { var v = P[i + j]; if (v < mn[j]) mn[j] = v; if (v > mx[j]) mx[j] = v; }
-            return P.length ? { min: mn, max: mx, c: centroidOf(P, p.index, { min: mn, max: mx }) } : null;
-        });
-        var out = [];
+            return (pb[k] = P.length ? { min: mn, max: mx, c: centroidOf(P, model.protos[k].index, { min: mn, max: mx }) } : null);
+        }
+        var out = new Array(model.meshes.length), n = 0;
         model.meshes.forEach(function (m, i) {
-            var b = pb[m.proto], part = model.parts[i]; if (!b || !part || part.pid !== m.pid) return;
-            var bb = bboxOfXf(model.protos[m.proto].position, m.matrix && !_isIdent(m.matrix) ? m.matrix : null);
-            part.bbox = bb; part.centroid = _xf(m.matrix && !_isIdent(m.matrix) ? m.matrix : null, b.c[0], b.c[1], b.c[2]);
-            out.push({ pid: part.pid, bbox: part.bbox, centroid: part.centroid });
+            var part = model.parts[i]; if (!part || part.pid !== m.pid || !model.protos[m.proto].position.length) return;
+            var j = slot ? slot[i] : -1;
+            if (j >= 0) {
+                var P = placed[m.proto], o = j * 6, q = j * 3, B = P.box, C = P.cen;
+                part.bbox = { min: [B[o], B[o + 1], B[o + 2]], max: [B[o + 3], B[o + 4], B[o + 5]] }; part.centroid = [C[q], C[q + 1], C[q + 2]];
+            } else {
+                var b = boxOfProto(m.proto); if (!b) return;
+                var M = m.matrix && !_isIdent(m.matrix) ? m.matrix : null;
+                part.bbox = bboxOfXf(model.protos[m.proto].position, M); part.centroid = _xf(M, b.c[0], b.c[1], b.c[2]);
+            }
+            out[n++] = { pid: part.pid, bbox: part.bbox, centroid: part.centroid };
         });
+        out.length = n;
         return out;
     }
     // The detail stream of a large assembly: batches of real shapes, replayed to late listeners.
@@ -751,7 +829,7 @@
                     else { var e = new Error(d.message || 'The STEP import failed.'); e.code = d.code || 'failed'; reject(e); }
                 };
                 w.onerror = function (ev) { clearTimeout(startTimer); if (done) return; done = true; try { w.terminate(); } catch (_) {} reject(new Error((ev && ev.message) || 'The STEP import worker stopped.')); };
-                w.postMessage({ type: 'import', buffer: buf, expectSha: opts.expectSha || null, opts: { maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, linearDeflection: opts.linearDeflection, reader: opts.reader || 'auto', keepSession: !!opts.keepSession, splitMinBytes: opts.splitMinBytes, partCapMs: opts.partCapMs, testFailBody: opts.testFailBody } }, [buf]);
+                w.postMessage({ type: 'import', buffer: buf, expectSha: opts.expectSha || null, opts: { maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, linearDeflection: opts.linearDeflection, reader: opts.reader || 'auto', keepSession: !!opts.keepSession, splitMinBytes: opts.splitMinBytes, partCapMs: opts.partCapMs, testFailBody: opts.testFailBody, poolSize: opts.poolSize } }, [buf]);
             }, function (e) { done = true; reject(e); });
         });
         return {
@@ -895,14 +973,21 @@
             if (r.stream) {
                 // each real shape replaces its box in the model; the finished model replaces the
                 // cached first view, so the next open is complete
-                r.stream.on(function (b) { (b.protos || []).forEach(function (p) { r.model.protos[p.proto] = { position: p.position, index: p.index, normal: null, faces: p.faces || null }; }); });
+                r.stream.on(function (b) { (b.protos || []).forEach(function (p) {
+                    r.model.protos[p.proto] = { position: p.position, index: p.index, normal: null, faces: p.faces || null };
+                    // the placed copies' boxes, worked out by the part reader with this shape (or dropped: a shape without them is boxed here)
+                    var pl = r.model.placed || (r.model.placed = {});
+                    if (p.placed && p.placed.idx && p.placed.box && p.placed.cen) pl[p.proto] = { idx: p.placed.idx, box: p.placed.box, cen: p.placed.cen, position: p.position }; else delete pl[p.proto];
+                }); });
                 r.stream.onEnd(function (e) {
                     if (e.type !== 'detail-done') return;
                     if (r.model.streaming) r.model.streaming.done = e.total;
                     // every part's true box from its shape (the first view's boxes were estimates)
                     var upd = trueBoxes(r.model), E = root.SLCadZonal;
                     if (E && E.updatePartBoxes) E.updatePartBoxes(entry.id, upd);
-                    Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).catch(function () {});
+                    _trace('true boxes');
+                    // the cache write in a task of its own, so the view draws in between
+                    setTimeout(function () { Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).then(function () { _trace('cache put (complete model)'); }).catch(function () {}); }, 0);
                 });
             }
             return { entry: entry, model: r.model, revision: reviseFrom(entry, o.by), worker: r.worker || null, stream: r.stream || null };
@@ -1026,7 +1111,7 @@
         bboxOf: bboxOf, centroidOf: centroidOf, decimate: decimate, makePid: makePid, buildModel: buildModel, convertStep: convertStep,
         walkParts: walkParts, findInstances: findInstances, _rigid: _rigid, _anchors: _anchors, worldPosition: worldPosition, normalizeGeometry: normalizeGeometry, parseStepAttributes: parseStepAttributes, bboxOfXf: bboxOfXf,
         projectEntry: projectEntry, containsGeometry: containsGeometry, addToProject: addToProject, nextRevision: nextRevision, reviseFrom: reviseFrom, getModel: getModel, latestModel: latestModel,
-        trueBoxes: trueBoxes, _trace: _trace, _cachePayload: _cachePayload, packMeshes: packMeshes, unpackMeshes: unpackMeshes, pidsOf: pidsOf, matrices16: matrices16, colorAt: colorAt, packParts: packParts, unpackParts: unpackParts, sha256Hex: sha256Hex, openDb: openDb, cachePut: cachePut, cacheGet: cacheGet, cacheHas: cacheHas, stepPut: stepPut, stepGet: stepGet, stepHas: stepHas, DB_STEPS: DB_STEPS,
+        trueBoxes: trueBoxes, placedBoxes: placedBoxes, _trace: _trace, _cachePayload: _cachePayload, packMeshes: packMeshes, unpackMeshes: unpackMeshes, pidsOf: pidsOf, matrices16: matrices16, colorAt: colorAt, packParts: packParts, unpackParts: unpackParts, sha256Hex: sha256Hex, openDb: openDb, cachePut: cachePut, cacheGet: cacheGet, cacheHas: cacheHas, stepPut: stepPut, stepGet: stepGet, stepHas: stepHas, DB_STEPS: DB_STEPS,
         workerUrl: workerUrl, runWorker: runWorker, importStep: importStep, finalizeImport: finalizeImport, reopen: reopen,
         parseZoneRows: parseZoneRows, readZoneFile: readZoneFile, handZones: handZones
     };
