@@ -708,10 +708,16 @@
             root: seal(gate('AND', 'Loss of deceleration capability on landing', [
                 xfer('pg-ldg-brakes', 'Wheel braking lost'),
                 gate('AND', 'Reverse thrust unavailable on all powerplants', [
-                    be('Left pair reverse unavailable', 0, { probability: 2e-3 }),
-                    be('Right pair reverse unavailable', 0, { probability: 2e-3 }),
+                    gate('OR', 'Left pair reverse unavailable', [
+                        be('Engine 1 reverser actuation fails', 0, { probability: 1e-3 }),
+                        be('Engine 2 reverser actuation fails', 0, { probability: 1e-3 })]),
+                    gate('OR', 'Right pair reverse unavailable', [
+                        be('Engine 3 reverser actuation fails', 0, { probability: 1e-3 }),
+                        be('Engine 4 reverser actuation fails', 0, { probability: 1e-3 })]),
                 ], { dalOption: 'opt1' }),
-                be('Lift dump unavailable', 0, { probability: 5e-3 }),
+                gate('OR', 'Lift dump unavailable', [
+                    be('Left spoiler actuators fail', 0, { probability: 2.5e-3 }),
+                    be('Right spoiler actuators fail', 0, { probability: 2.5e-3 })]),
             ], { allocatedDAL: 'A', dalOption: 'opt1' })),
         });
 
@@ -898,8 +904,49 @@
             item('LRU-OXY-01', 'Crew oxygen bottle', 'Pneumatic', 'A', 'Hardware', 'sys-oxy', 'Flight-deck installation.', ['SF-17']),
             item('LRU-IPS-01', 'Pitot probe heater, channel 1', 'Electrical', 'A', 'Hardware', 'sys-ips', 'Independently powered and monitored.', ['SF-10']),
             item('LRU-FPR-01', 'Nacelle fire detection loop', 'Sensing', 'A', 'Hardware', 'sys-fpr', 'Dual loop per nacelle.', ['SF-23']),
+            // 17 Oct 2026: the units the PSSA trees reach at their lowest level (fuel feed, reversers, lift dump, brake
+            // reserve, CG confirmation), so each basic event names the item that realizes it
+            item('FUEL-BP-2', 'Fuel boost pump, tank group 2', 'Fluid', 'B', 'Hardware', 'sys-fue', 'Feeds engine 2.', ['SF-11']),
+            item('FUEL-BP-3', 'Fuel boost pump, tank group 3', 'Fluid', 'B', 'Hardware', 'sys-fue', 'Feeds engine 3.', ['SF-11']),
+            item('FUEL-BP-4', 'Fuel boost pump, tank group 4', 'Fluid', 'B', 'Hardware', 'sys-fue', 'Feeds engine 4.', ['SF-11']),
+            item('TRV-ACT-1', 'Thrust reverser actuation, engine 1', 'Electromechanical', 'A', 'Hardware', 'sys-prp1', 'Hydraulic reverser actuators and locks.', ['SF-06']),
+            item('TRV-ACT-2', 'Thrust reverser actuation, engine 2', 'Electromechanical', 'A', 'Hardware', 'sys-prp2', 'As engine 1.', ['SF-06']),
+            item('TRV-ACT-3', 'Thrust reverser actuation, engine 3', 'Electromechanical', 'A', 'Hardware', 'sys-prp3', 'As engine 1.', ['SF-06']),
+            item('TRV-ACT-4', 'Thrust reverser actuation, engine 4', 'Electromechanical', 'A', 'Hardware', 'sys-prp4', 'As engine 1.', ['SF-06']),
+            item('FCS-ACT-SPL-L', 'Left spoiler actuators', 'Electromechanical', 'B', 'Hardware', 'sys-fcs', 'Lift dump and roll assist, left wing.', ['SF-06']),
+            item('FCS-ACT-SPL-R', 'Right spoiler actuators', 'Electromechanical', 'B', 'Hardware', 'sys-fcs', 'Lift dump and roll assist, right wing.', ['SF-06']),
+            item('LDG-ACC', 'Brake accumulator', 'Hydraulic', 'A', 'Hardware', 'sys-ldg', 'Reserve for six full brake applications.', ['SF-06']),
+            item('CRG-WBC', 'Weight and balance computer', 'Computing', 'A', 'Software', 'sys-crg', 'Independent CG confirmation from the station load cells.', ['SF-15']),
             item('LRU-FPR-02', 'Hold fire detection loop', 'Sensing', 'A', 'Hardware', 'sys-fpr', 'Dual loop per hold third.', ['SF-23']),
         ];
+
+        // ---- basic events to the items that realize them (17 Oct 2026) --------
+        // Every basic event that is an equipment failure names its item (realizedByItemId), so a reader of the trees
+        // (Sys Lab's independence check, the EWIS lane, the CMA) can follow a gate to the units under it. Events that are
+        // not one unit failing keep none: a crew action, the weather, a structural load path, a common-cause event
+        // already stated as one.
+        const REALIZED = {
+            'Elevator actuation lane A fails': 'LRU-FCS-01', 'Elevator actuation lane B fails': 'LRU-FCS-02',
+            'Left fin rudder actuation lost': 'LRU-FCS-05', 'Right fin rudder actuation lost': 'LRU-FCS-06',
+            'Engine 1 mechanical failure': 'LRU-PRP-01', 'Engine 2 mechanical failure': 'LRU-PRP-02', 'Engine 3 mechanical failure': 'LRU-PRP-03', 'Engine 4 mechanical failure': 'LRU-PRP-04',
+            'Engine 1 fuel feed lost': 'LRU-FUE-01', 'Engine 2 fuel feed lost': 'FUEL-BP-2', 'Engine 3 fuel feed lost': 'FUEL-BP-3', 'Engine 4 fuel feed lost': 'FUEL-BP-4',
+            'Engine 1 shutdown (left outboard)': 'LRU-PRP-01', 'Engine 2 shutdown (left inboard)': 'LRU-PRP-02', 'Engine 3 shutdown (right inboard)': 'LRU-PRP-03', 'Engine 4 shutdown (right outboard)': 'LRU-PRP-04',
+            'Generator 1 fails': 'LRU-EPS-01', 'Generator 2 fails': 'LRU-EPS-02', 'Generator 3 fails': 'LRU-EPS-03', 'Generator 4 fails': 'LRU-EPS-04',
+            'APU generator unavailable': 'LRU-EPS-05', 'Battery lane depleted or failed': 'LRU-EPS-06',
+            'System A lost': 'LRU-HYD-01', 'System B lost': 'LRU-HYD-02', 'System C lost': 'LRU-HYD-03',
+            'Brake supply from hydraulic system A lost': 'LRU-HYD-01', 'Brake supply from hydraulic system B lost': 'LRU-HYD-02', 'Accumulator reserve unavailable': 'LDG-ACC',
+            'Tension monitoring absent or ignored': 'LRU-CRG-02', 'No independent CG confirmation available': 'CRG-WBC',
+            'Latch mechanism fails or is not engaged': 'LRU-NZD-01', 'Lock mechanism fails or is not engaged': 'LRU-NZD-02', 'Lock not fully engaged': 'LRU-NZD-02',
+            'Indication channel 1 erroneous': 'LRU-NZD-03', 'Indication channel 2 erroneous': 'LRU-NZD-04',
+            'Crew oxygen unavailable': 'LRU-OXY-01', 'Restraint rating margin exceeded at that load': 'LRU-CRG-01',
+            'Engine 1 reverser actuation fails': 'TRV-ACT-1', 'Engine 2 reverser actuation fails': 'TRV-ACT-2', 'Engine 3 reverser actuation fails': 'TRV-ACT-3', 'Engine 4 reverser actuation fails': 'TRV-ACT-4',
+            'Left spoiler actuators fail': 'FCS-ACT-SPL-L', 'Right spoiler actuators fail': 'FCS-ACT-SPL-R',
+        };
+        {
+            const iidOf = new Map(itemsData.map(i => [i.itemId, i.internalId]));
+            const link = n => { if (!n) return; if (n.type === 'basic' && REALIZED[n.name]) { const iid = iidOf.get(REALIZED[n.name]); if (iid == null) throw new Error('HL-1: no item ' + REALIZED[n.name]); n.realizedByItemId = iid; } (n.children || []).forEach(link); };
+            pages.forEach(p => link(p.root));
+        }
 
         // ---- FMEA ------------------------------------------------------------
         const fmeaRow = (fid, sysId, part, mode, local, end, det, sev, rate, beId, comp) => ({

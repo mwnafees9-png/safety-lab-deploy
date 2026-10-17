@@ -263,14 +263,18 @@ Object.keys(outs).forEach(k => {
   const P2 = buildDemo('HL1'), pl2 = C.planImport(P2, [{ name: 'edited', text: edited }]);
   check('mutation: a DAL changed in the file shows as one change to that item, and applying it updates only that', edited !== outs.HL1.text && pl2.changes.length === 1 && pl2.changes[0].fields.join() === 'dal' && pl2.adds.length === 0 &&
     (C.applyImport(P2, pl2, { newId }), P2.itemsData.find(i => i.itemId === 'LRU-FCS-01').dal === 'B' && P2.itemsData.length === demo.HL1.itemsData.length), JSON.stringify(pl2.changes));
-  // a link added in another tool (here: a basic event realized by an item) is previewed and applied, additively
-  const P4 = buildDemo('HL1'), withLink = outs.HL1.text.replace(/(    package Links \{\n)/, "$1        #RealizedBy dependency from 'FaultTrees'::'pg-fcs-pitch'::'G-7070'::'G-7068'::'BE-7066' to 'Architecture'::'sys-fcs'::'LRU-FCS-03';\n");
+  // a link added in another tool (here: a basic event realized by an item) is previewed and applied, additively.
+  // The event is one the demo leaves unlinked (17 Oct 2026: the HL-1 demo links its equipment events to their items,
+  // so the lane A event used before already has its link): both computers rejecting the pitch lane, realized by FCC 1.
+  const P4 = buildDemo('HL1'), withLink = outs.HL1.text.replace(/(    package Links \{\n)/, "$1        #RealizedBy dependency from 'FaultTrees'::'pg-fcs-pitch'::'G-7070'::'BE-7069' to 'Architecture'::'sys-fcs'::'LRU-FCS-03';\n");
+  const ev4 = P4.ftaPages.find(p => p.id === 'pg-fcs-pitch').root.children.find(n => String(n.id) === '7069');
+  check('the event the link goes to has no link in the demo', ev4 && ev4.type === 'basic' && (ev4.realizedByItemId == null || ev4.realizedByItemId === ''));
   const pv = C.previewImport(P4, [{ name: 'linked', text: withLink }]);
-  check('a link added in another tool shows in the preview as a change to that event (realizedByItemId)', withLink !== outs.HL1.text && pv.adds.length === 0 && pv.changes.length === 1 && pv.changes[0].key === 'ftn:pg-fcs-pitch/7066' && pv.changes[0].fields.join() === 'realizedByItemId', JSON.stringify(pv.changes));
+  check('a link added in another tool shows in the preview as a change to that event (realizedByItemId)', withLink !== outs.HL1.text && pv.adds.length === 0 && pv.changes.length === 1 && pv.changes[0].key === 'ftn:pg-fcs-pitch/7069' && pv.changes[0].fields.join() === 'realizedByItemId', JSON.stringify(pv.changes));
   const before = JSON.stringify(P4);
   check('the preview does not touch the project', JSON.stringify(P4) === before && C.previewImport(P4, [{ name: 'self', text: outs.HL1.text }]).changes.length === 0);
   const mk4 = C.applyImport(P4, C.planImport(P4, [{ name: 'linked', text: withLink }]), { newId });
-  const be4 = P4.ftaPages.find(p => p.id === 'pg-fcs-pitch').root.children[0].children[0];
+  const be4 = P4.ftaPages.find(p => p.id === 'pg-fcs-pitch').root.children.find(n => String(n.id) === '7069');
   check('applying it sets realizedByItemId on that event to the item, and nothing else moves', be4.realizedByItemId === P4.itemsData.find(i => i.itemId === 'LRU-FCS-03').internalId && mk4.linkChanges.length === 1 && mk4.added === 0);
   const P3 = buildDemo('HL1'); const n0 = P3.itemsData.length; P3.itemsData = P3.itemsData.slice(1);
   const pl3 = C.planImport(P3, [{ name: 'self', text: outs.HL1.text }]);
