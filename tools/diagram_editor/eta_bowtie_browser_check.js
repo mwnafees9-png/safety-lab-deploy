@@ -10,7 +10,7 @@
  * threat, barriers, consequence, escalation factor and its barrier, pathways drawn with the
  * connector tools); a bow-tie auto-built from the fault tree and then edited; the left side
  * generated from a fault tree and the right side from an event tree; full screen; SVG export;
- * SysML v2 export of both; the change acknowledgement (Acknowledge and Cancel change); a large
+ * SysML v2 export of both; the change confirmation (16 Oct 2026: Confirm all and Discard all); a large
  * event tree (13 headings, 8,192 sequences) drawn and edited within an interactive budget.
  * Usage: node tools/diagram_editor/eta_bowtie_browser_check.js   (exit 1 on any FAIL; SKIP without a browser)
  */
@@ -58,16 +58,20 @@ let __page = null;
         try { PROGRAM_PLAN.setLane('bowtie', true); PROGRAM_PLAN.setLane('eta', true); } catch (e) {}
         document.querySelectorAll('.sl-ack-overlay').forEach(o => { const k = o.querySelector('.sl-ack-keep'); if (k) k.click(); });
     });
-    // the change acknowledgement: answer it (Acknowledge by default) and say whether it asked
+    // the change confirmation: answer it (Confirm all by default, Discard all for cancel) and say whether the
+    // change was there to confirm. 16 Oct 2026 (change_ack.js v2.0): a change is COLLECTED, not asked about at
+    // once; this helper reaches the decision point itself (the one dialog, opened early as the top bar does).
+    const openIfWaiting = () => E(() => { if (window.SLChangeAck && SLChangeAck.count() > 0 && !SLChangeAck.status().open && !SLChangeAck.status().asking) SLChangeAck.ask({ reason: 'early' }); });
     const ack = async (cancel) => {
         for (let i = 0; i < 30; i++) {
+            await openIfWaiting();
             const has = await E(() => !!document.querySelector('.sl-ack-overlay .sl-ack-keep'));
-            if (has) { await page.locator('.sl-ack-overlay ' + (cancel ? '.sl-ack-cancel' : '.sl-ack-keep')).click(); await wait(150); return true; }
+            if (has) { await wait(150); await page.locator('.sl-ack-overlay ' + (cancel ? '.sl-ack-discard' : '.sl-ack-keep')).click(); await wait(150); return true; }
             await wait(100);
         }
         return false;
     };
-    const flushAcks = async () => { await wait(600); while (await E(() => !!document.querySelector('.sl-ack-overlay .sl-ack-keep'))) { await page.locator('.sl-ack-overlay .sl-ack-keep').click(); await wait(200); } };
+    const flushAcks = async () => { await wait(600); for (let i = 0; i < 20; i++) { await openIfWaiting(); await wait(200); if (!(await E(() => !!document.querySelector('.sl-ack-overlay .sl-ack-keep')))) break; await page.locator('.sl-ack-overlay .sl-ack-keep').click(); await wait(200); } };
     const dialog = async (text) => { await page.waitForSelector('#sl-dialog-input', { timeout: 5000 }); await page.fill('#sl-dialog-input', text); await page.click('.sl-dialog-ok'); await wait(300); };
     const at = (sel, id, fx, fy) => E(([sel, id, fx, fy]) => { const ed = sel === 'eta' ? SLEtaUI.editor() : SLBowtieUI.editor(); const e = ed.model().elements.find(x => x.id === id); ed.root.scrollIntoView({ block: 'start' }); const r = ed.root.querySelector('.sde-canvas').getBoundingClientRect(); const k0 = ed.getView().k; ed.setView({ x: r.width * 0.4 - (e.x + e.w / 2) * k0, y: r.height * 0.4 - (e.y + e.h / 2) * k0, k: k0 }); ed.render(); const v = ed.getView(); return { x: r.left + v.x + (e.x + e.w * (fx == null ? 0.5 : fx)) * v.k, y: r.top + v.y + (e.y + e.h * (fy == null ? 0.5 : fy)) * v.k }; }, [sel, id, fx, fy]);
     const shot = async (name, sel) => { if (!process.env.SL_SHOTS) return; await E(s => { const ed = s === 'eta' ? SLEtaUI.editor() : SLBowtieUI.editor(); ed.root.scrollIntoView({ block: 'start' }); ed.select([]); ed.fit(); ed.render(); }, sel); await wait(200); const b = await page.locator(sel === 'eta' ? '#eta-canvas .sde' : '#bt-editor .sde').boundingBox(); await page.screenshot({ path: path.join(process.env.SL_SHOTS, name + '.png'), clip: b }); };
@@ -230,6 +234,10 @@ let __page = null;
     check('the stored HL-1 tree ET-001 is still byte-identical after all of this', await E(() => JSON.stringify(projectConfig.eventTrees.find(t => t.id === 'ET-001'))) === JSON.stringify(JSON.parse(et0).find(t => t.id === 'ET-001')));
 
     console.log('\n[event tree] a large tree stays interactive (only what is on screen is drawn)');
+    // 16 Oct 2026: switching to another event tree is a decision point (change_ack.js v2.0): what the steps
+    // above left open is settled first, so the timing below measures opening the tree and nothing else
+    await flushAcks();
+    await page.waitForFunction(() => !(window.SLChangeAck && SLChangeAck.pending()), null, { timeout: 6000 }).catch(() => {});   // the journal write after the confirmation is decided too
     const big = await E(async () => {
         const bars = []; for (let i = 0; i < 13; i++) bars.push({ name: 'Heading ' + (i + 1), pFail: 0.001 * (i + 1) });
         projectConfig.eventTrees.push({ id: 'ET-BIG', name: 'Large', initiator: { desc: 'Big', freq: 1e-4 }, barriers: bars, consequences: {} });
