@@ -36,6 +36,17 @@
  *       no retry timer (S6 red); guard() ignores a pending upload (S8 red); no live send of the
  *       accepted change while moves wait (S4 red: B does not see it)
  *
+ * 16 Oct 2026 UPDATE (the owner's confirmed rule, change_ack.js v2.0 / save_state.js v3.0): changes are
+ * COLLECTED while the person works and confirmed in ONE dialog. edit() below now makes the change and then
+ * answers the one dialog (SLChangeAck.ask, test answer 'keep' = Confirm all, 'cancel' = Discard all).
+ * S4 is rewritten: there is no "content change acknowledged while moves wait" any more (one collection);
+ * instead S4 proves that a cloud push made while changes wait (the retry of an earlier confirmed change)
+ * holds ONLY confirmed work, and that Confirm all / Discard all on a mixed collection (an edit and a move)
+ * save or leave nothing. M2 guards S4 as before. M5 (pushAccepted while moves wait) is retired: a confirmed
+ * change is released to the live sync at the moment it is confirmed, when nothing else waits, so that path
+ * carries nothing a test could see; the line stays in save_state.js for a change still open at that moment.
+ * S8 adds Keep working (guard() answers false and the project stays).
+ *
  * Run: node tests/regression_save_state_20261013b.test.js
  */
 'use strict';
@@ -134,8 +145,9 @@ function tab(name, fha, srcs, opts) {
 const settle = () => new Promise(r => setImmediate(r));
 async function run(env, p, long) { let out, done = false; Promise.resolve(p).then(v => { out = v; done = true; }, e => { out = e; done = true; }); for (let i = 0; i < 40 && !done; i++) { env.flush(long); await settle(); } return out; }
 async function idle(env, long) { for (let i = 0; i < 12; i++) { env.flush(long); await settle(); } }
-// a person's edit: input, the write, the announcement, and the acknowledgement (answered Keep)
-async function edit(env, mut) { env.ack._markInput(); mut(env.model.acFhaData); env.ctx.scheduleAutosave(); const r = await run(env, env.ack.flush({ changeOnly: true })); await idle(env); return r; }
+// a person's edit: input, the write, the announcement, and the one dialog (answered by the test answer:
+// 'keep' = Confirm all, 'cancel' = Discard all)
+async function edit(env, mut) { env.ack._markInput(); mut(env.model.acFhaData); env.ctx.scheduleAutosave(); const r = await run(env, env.ack.ask({ reason: 'save' })); await idle(env); return r; }
 async function boot(srcs) {
   rooms = {};
   const seed = [{ internalId: 'r1', severity: 'Major' }, { internalId: 'r2', severity: 'Minor' }];
@@ -171,7 +183,7 @@ async function suiteBody(SRC, tag, P) {
   check('this device was written for the save', A.writes > w0);
   check('teammates see it at once (no Save step)', B.rows() === 'r1:Catastrophic,r2:Minor', B.rows());
   check('nothing unsaved, nothing waiting, nothing pending upload', !A.save.isDirty() && !st.cloudPending && !A.save.holdsSync());
-  check('the acknowledgement is in the journal', A.journal.some(j => /^change-ack: a@example\.com acknowledged/.test(j)), A.journal.join(' | '));
+  check('the confirmation is in the journal (who, what)', A.journal.some(j => /^change-ack: a@example\.com confirmed 1 change: /.test(j)), A.journal.join(' | '));
 
   // ---------------------------------------------------------------------- S2
   if (!quiet) console.log('\n[S2' + tag + '] a change still waiting for its acknowledgement is not shared or uploaded');
@@ -193,33 +205,37 @@ async function suiteBody(SRC, tag, P) {
   check('and nothing is left waiting or unsaved', !A.save.isDirty());
 
   // ---------------------------------------------------------------------- S4
-  if (!quiet) console.log('\n[S4' + tag + '] moves collected: a content change acknowledged meanwhile is saved without them');
-  A.ack._markInput();
-  A.ack.deferred({ kind: 'move', label: 'Move r2' }, () => { A.model.acFhaData[1].x = 77; A.ctx.scheduleAutosave(); });
-  await idle(A); both(A, B);
-  check('the move waits (collected), and the indicator count says so', A.ack.collected().length === 1 && A.save.status().collected === 1 && A.save.holdsSync());
-  const c4 = A.cloud.calls.length;
-  await edit(A, rows => { rows[0].severity = 'Major'; });
+  if (!quiet) console.log('\n[S4' + tag + '] changes waiting: a cloud push made meanwhile holds only confirmed work (16 Oct 2026)');
+  A.cloud.mode = 'error';
+  await edit(A, rows => { rows[0].severity = 'Major'; });            // confirmed, but the upload failed (retried later)
   both(A, B);
-  P.s4 = A.cloud.calls.length === c4 + 1 && sev(last(A), 'r1') === 'Major' && sev(last(A), 'r2') === 'Hazardous';
-  check('the content change was uploaded at once', A.cloud.calls.length === c4 + 1 && sev(last(A), 'r1') === 'Major', A.cloud.calls.length - c4 + ' pushes');
-  check('WITHOUT the waiting move (r2 has no position in the upload)', sev(last(A), 'r2') === 'Hazardous', sev(last(A), 'r2'));
-  check('it is "Saved", with the move still waiting', A.save.status().state === 'saved' && A.save.waiting() && !A.save.unsaved());
+  check('a confirmed change whose upload failed is pending upload, and teammates have it live', A.save.status().cloudPending === true && B.rows() === 'r1:Major,r2:Hazardous', B.rows() + ' ' + JSON.stringify(A.save.status()));
+  A.ack._markInput(); A.model.acFhaData[1].severity = 'Catastrophic'; A.ctx.scheduleAutosave(); A.ack.collectNow();
+  A.ack._markInput(); A.ack.deferred({ kind: 'move', label: 'Move r2' }, () => { A.model.acFhaData[1].x = 77; A.ctx.scheduleAutosave(); });
+  await idle(A); both(A, B);
+  check('an edit and a move wait in ONE collection; the top bar counts both', A.ack.collected().length === 2 && A.save.status().collected === 2 && A.save.holdsSync(), JSON.stringify(A.ack.collected()) + ' ' + A.save.status().collected);
+  const c4 = A.cloud.calls.length;
+  A.cloud.mode = 'ok';
+  await idle(A, true); await idle(A, true); both(A, B);
+  P.s4 = A.cloud.calls.length > c4 && sev(last(A), 'r1') === 'Major' && sev(last(A), 'r2') === 'Hazardous';
+  check('the retry uploaded the confirmed change: r1 Major in the cloud copy', A.cloud.calls.length > c4 && sev(last(A), 'r1') === 'Major', (A.cloud.calls.length - c4) + ' pushes');
+  check('WITHOUT what still waits: r2 is not Catastrophic and has no position in the upload', sev(last(A), 'r2') === 'Hazardous', sev(last(A), 'r2'));
   check('the accepted copy is kept on this device for a crash (its id rides in the meta)', !!A.save.status().acceptedId && A.db.m.has(A.save.ACCEPTED_KEY) && A.metas[A.metas.length - 1].unacked === true && A.metas[A.metas.length - 1].acceptedId === A.db.m.get(A.save.ACCEPTED_KEY).id);
   P.s4b = B.rows() === 'r1:Major,r2:Hazardous' && B.model.acFhaData[1].x === undefined;
-  check('B sees the content change live, on its own, and not the waiting move', P.s4b, B.rows() + ' x=' + B.model.acFhaData[1].x);
-  check('A still has the move on screen, waiting', A.model.acFhaData[1].x === 77 && A.ack.collected().length === 1);
+  check('B never sees what waits (neither the edit nor the move)', P.s4b, B.rows() + ' x=' + B.model.acFhaData[1].x);
+  check('A still has both on screen, waiting', A.model.acFhaData[1].x === 77 && A.model.acFhaData[1].severity === 'Catastrophic' && A.ack.pending());
+  const c4b = A.cloud.calls.length;
   await run(A, A.ack.flushDeferred()); await idle(A); both(A, B);
-  check('the move acknowledged: uploaded with it, and B has both', sev(last(A), 'r2') === 'Hazardous@77' && sev(last(A), 'r1') === 'Major' && B.rows() === 'r1:Major,r2:Hazardous' && B.model.acFhaData[1].x === 77, sev(last(A), 'r2') + ' / ' + B.rows());
-  // Cancel on the collection
+  check('Confirm all: ONE upload with the edit and the move, and B has both', A.cloud.calls.length === c4b + 1 && sev(last(A), 'r2') === 'Catastrophic@77' && B.rows() === 'r1:Major,r2:Catastrophic' && B.model.acFhaData[1].x === 77, sev(last(A), 'r2') + ' / ' + B.rows());
+  // Discard all on a mixed collection
   A.ack._markInput();
   A.ack.deferred({ kind: 'move', label: 'Move r1' }, () => { A.model.acFhaData[0].x = 5; A.ctx.scheduleAutosave(); });
-  await idle(A);
-  await edit(A, rows => { rows[1].severity = 'Minor'; });
+  A.ack._markInput(); A.model.acFhaData[1].severity = 'Minor'; A.ctx.scheduleAutosave(); A.ack.collectNow();
+  const c4c = A.cloud.calls.length;
   A.ack._setTestAnswer('cancel');
   await run(A, A.ack.flushDeferred()); await idle(A); both(A, B);
   A.ack._setTestAnswer('keep');
-  check('Cancel on the moves: the move is gone, the content change stays, saved and shared', A.model.acFhaData[0].x === undefined && A.rows() === 'r1:Major,r2:Minor' && B.rows() === 'r1:Major,r2:Minor' && !A.save.isDirty(), A.rows() + ' / ' + B.rows() + ' x=' + A.model.acFhaData[0].x);
+  check('Discard all: the move and the edit are gone, nothing uploaded, B unchanged, nothing waiting', A.model.acFhaData[0].x === undefined && A.rows() === 'r1:Major,r2:Catastrophic' && B.rows() === 'r1:Major,r2:Catastrophic' && A.cloud.calls.length === c4c && !A.save.isDirty(), A.rows() + ' / ' + B.rows() + ' x=' + A.model.acFhaData[0].x);
 
   // ---------------------------------------------------------------------- S5
   if (!quiet) console.log('\n[S5' + tag + '] offline');
@@ -230,7 +246,7 @@ async function suiteBody(SRC, tag, P) {
   check('the pending upload is in the autosave meta (a crash retries it)', A.metas[A.metas.length - 1].cloudPending === true);
   check('no timer burns retries while offline (the online event retries)', A.longTimers().length === 0, A.longTimers().join(','));
   both(A, B);
-  check('the live sync still carried it to B (it queues on its own)', B.rows() === 'r1:Hazardous,r2:Minor', B.rows());
+  check('the live sync still carried it to B (it queues on its own)', B.rows() === 'r1:Hazardous,r2:Catastrophic', B.rows());   // r2 as S4 (16 Oct 2026) leaves it
   A.nav.onLine = true; A.cloud.mode = 'ok';
   const c5 = A.cloud.calls.length;
   A.fire('online'); await idle(A);
@@ -277,7 +293,10 @@ async function suiteBody(SRC, tag, P) {
   A.ack.deferred({ kind: 'move', label: 'Move r1' }, () => { A.model.acFhaData[0].x = 9; A.ctx.scheduleAutosave(); });
   await idle(A);
   const c8 = A.cloud.calls.length;
-  check('a waiting move: acknowledged first (Acknowledge), saved, then go', (await run(A, A.save.guard('sign out'))) === true && A.ack.collected().length === 0 && A.cloud.calls.length === c8 + 1 && sev(last(A), 'r1') === 'Minor@9' && A.save.status().stats.asked === asked);
+  A.ack._setTestAnswer('working');
+  check('Keep working in the one dialog: guard() answers false, the move still waits, nothing saved (16 Oct 2026)', (await run(A, A.save.guard('sign out'))) === false && A.ack.collected().length === 1 && A.cloud.calls.length === c8);
+  A.ack._setTestAnswer('keep');
+  check('a waiting move: Confirm all in the one dialog, saved, then go', (await run(A, A.save.guard('sign out'))) === true && A.ack.collected().length === 0 && A.cloud.calls.length === c8 + 1 && sev(last(A), 'r1') === 'Minor@9' && A.save.status().stats.asked === asked);
   A.nav.onLine = false; A.cloud.mode = 'offline';
   await edit(A, rows => { rows[0].severity = 'Major'; });
   A.ctx.SLChoice._setTestAnswer('stay');
@@ -312,10 +331,11 @@ async function suiteBody(SRC, tag, P) {
     rooms = keepRooms;
     C.ack._setTestAnswer(ans);
     const cc = C.cloud.calls.length;
+    const pr0 = C.ack.status().stats.prompts;
     C.save.recovered(meta); await idle(C, true);
-    const reopened = C.ack.status().open;
+    const reopened = C.ack.status().stats.prompts === pr0 + 1;
     await run(C, C.ack.flush({ changeOnly: true })); await idle(C);
-    check('next open (' + ans + '): the change the crash left unacknowledged is open for its acknowledgement', reopened === true);
+    check('next open (' + ans + '): the change the crash left unconfirmed is offered again in the one dialog', reopened === true);
     if (ans === 'keep') check('next open: the waiting move is asked about again; Acknowledge saves it', C.model.acFhaData[1].x === 31 && C.cloud.calls.length === cc + 1 && /@31$/.test(sev(last(C), 'r2')) && C.ack.status().stats.kept >= 1, JSON.stringify(C.model.acFhaData) + ' pushes ' + (C.cloud.calls.length - cc));
     else check('next open, Cancel change: back to what was accepted (the move undone), nothing uploaded', C.model.acFhaData[1].x === 77 && C.cloud.calls.length === cc && !C.save.isDirty(), JSON.stringify(C.model.acFhaData));
     C.api.stop && C.api.stop();
@@ -344,14 +364,12 @@ async function suiteBody(SRC, tag, P) {
   const m1 = await suite(mutate(SAVE, "if (decision === 'kept') { _requestSave(); return; }", "if (decision === 'kept') { return; }", 'M1'), ' M1');
   const m2 = await suite(mutate(SAVE, "acc = (A && A.acceptedSnapshot) ? A.acceptedSnapshot() : null;", "acc = null;", 'M2'), ' M2');
   const m3 = await suite(mutate(SAVE, "        if (_retryTimer) return;\n        if (!_online()) return;", "        return;", 'M3'), ' M3');
-  const m5 = await suite(mutate(SAVE, "else if (C && acc && C.pushAccepted)", "else if (false)", 'M5'), ' M5');
   const m4 = await suite(mutate(SAVE, "        if (!_cloudPending && !_localFail) return true;\n        _stats.asked++;", "        return true;", 'M4'), ' M4');
   quiet = false; pass = keep.pass; fail = keep.fail;
   check('M1 no save on Acknowledge: S1 goes red', !m1.s1);
-  check('M2 accepted snapshot ignored: S4 goes red (the move rides the upload)', !m2.s4);
+  check('M2 accepted snapshot ignored: S4 goes red (what still waits rides the upload)', !m2.s4);
   check('M3 no retry timer: S6 goes red', !m3.s6a || !m3.s6);
   check('M4 guard() ignores a pending upload: S8 goes red', !m4.s8);
-  check('M5 no live send while moves wait: S4 goes red (B does not see the acknowledged change)', !m5.s4b);
   check('the real suite is green on every guarded point', real.s1 && real.s4 && real.s4b && real.s6 && real.s8);
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

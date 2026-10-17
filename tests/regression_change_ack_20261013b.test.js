@@ -26,8 +26,8 @@
  *   F2  groups and batch(): one acknowledgement for async work; flush() for Save and the guards
  *   F3  a change made of bookkeeping only is automatic even right after a click; an AI-drafted
  *       row is asked even with nobody at the keyboard
- *   C   13 Oct night (Waqas rulings 1-2): moves and undo/redo are collected, asked once on leaving the
- *       view; Cancel reverts only them; content edits in between stay; mutation proof
+ *   C   13 Oct night (Waqas rulings 1-2), 16 Oct 2026 (one collection): moves, undo/redo and content
+ *       edits are one collection, asked once on leaving the view; Discard all reverts all of it
  *   M1-M3 mutation proofs (the suite goes red): no system scope; no computed-field rule; a rebase
  *       that ignores deletions
  *
@@ -170,39 +170,49 @@ const keysOf = d => d.map(e => e.space + '|' + e.key + '|' + e.op).sort();
     check('only the stores the diff touched were handed to the merge', JSON.stringify(Object.keys(applied).sort()) === JSON.stringify(['acFhaData', 'ftaPages']), Object.keys(applied).join(','));
   }
 
+  // 16 Oct 2026 UPDATE (the owner's confirmed rule, change_ack.js v2.0): F1, F2, F3 and C used to expect a
+  // dialog after each change (and moves / undos asked separately on leaving). Now every change is COLLECTED
+  // and the ONE dialog (ask()) opens only at a decision point. The same scenarios now check that nothing is
+  // asked while working, that each change is one step of one collection, and that Confirm all / Discard all
+  // do what Keep / Cancel did. The deep collector checks live in tests/regression_change_collect_20261016.test.js.
   // ------------------------------------------------------------------------- F1
-  console.log('\n[F1] the funnel');
+  console.log('\n[F1] the funnel: changes go into the collection, nothing is asked while working');
   {
     const P = page(); const A = P.A;
     A._setTestAnswer('keep');
     A.system(() => { P.model.acFhaData[0].fcDesc = 'merged'; P.ctx.scheduleAutosave(); });
-    check('a change inside system() is never asked', !A.pending() && A.status().stats.system === 1);
+    check('a change inside system() is never collected', !A.pending() && A.status().stats.system === 1);
     await sleep(30);
     P.model.acFhaData[0].comments = 'nobody'; P.ctx.scheduleAutosave();
     await sleep(700);
-    check('a change nobody made (no input, no group) is decided automatic, not asked', !A.pending() && A.status().stats.prompts === 0 && A.status().stats.automatic >= 1, JSON.stringify(A.status().stats));
-    // a burst: three writes, one window, one acknowledgement
+    check('a change nobody made (no input, no group) is decided automatic, not collected', !A.pending() && A.status().stats.collected === 0 && A.status().stats.automatic >= 1, JSON.stringify(A.status().stats));
+    // a burst: three writes, one window, one step
     A._markInput();
     P.model.acFhaData[0].severity = 'Major'; P.ctx.scheduleAutosave();
     P.model.acFhaData[1].severity = 'Major'; P.ctx.scheduleAutosave();
     P.model.acFhaData[2].severity = 'Minor'; P.ctx.scheduleAutosave();
     check('one window for the burst', A.pending() && A.status().user === true);
     await sleep(250);
-    check('nothing asked before the change has been quiet for 450 ms', A.status().stats.prompts === 0);
+    check('nothing collected before the change has been quiet for 450 ms', A.status().stats.collected === 0);
     await sleep(500);
-    check('one acknowledgement for the burst', A.status().stats.prompts === 1 && A.status().stats.kept === 1, JSON.stringify(A.status().stats));
-    check('Keep journals who and what', P.journal.some(j => /^change-ack: Not signed in acknowledged: Changed Aircraft FHA: FC-01 .*\(severity\)/.test(j)), P.journal.join(' | '));
-    check('Keep pushes ONE undo step holding the state before the burst', P.undo.length === 1 && JSON.parse(P.undo[0].snap).acFhaData[0].severity === 'Catastrophic' && JSON.parse(P.undo[0].snap).acFhaData[2].severity === 'Major');
-    // Cancel
+    check('the burst is ONE step in the collection, and nothing was asked', A.status().stats.collected === 1 && A.status().steps === 1 && A.status().stats.prompts === 0, JSON.stringify(A.status().stats));
+    check('the dialog would list the three rows (net difference from the confirmed project)', A.count() === 3, String(A.count()));
+    check('nothing is journaled while it waits', !P.journal.some(j => /^change-ack/.test(j)));
+    check('it pushed ONE undo step holding the state before the burst (Undo still works)', P.undo.length === 1 && JSON.parse(P.undo[0].snap).acFhaData[0].severity === 'Catastrophic' && JSON.parse(P.undo[0].snap).acFhaData[2].severity === 'Major');
+    const r1 = await A.ask({ reason: 'leave' });
+    check('Confirm all: confirmed, nothing waits, journaled who and what', r1 === 'confirmed' && !A.pending() && P.journal.some(j => /^change-ack: Not signed in confirmed 3 changes: Changed Aircraft FHA: FC-01 .*\(severity\)/.test(j)), P.journal.join(' | '));
+    // Discard all
     await sleep(50);
     A._setTestAnswer('cancel');
     A._markInput();
     P.undo.push({ label: 'wrapped action pushed this', snap: A._stashValue() });   // a wrapped action's own step: pushUndo runs just before the write
-    P.model.acFhaData[1].fcDesc = 'to be canceled'; P.ctx.scheduleAutosave();
+    P.model.acFhaData[1].fcDesc = 'to be discarded'; P.ctx.scheduleAutosave();
     await sleep(750);
-    check('Cancel restores the state before the change', P.model.acFhaData[1].fcDesc === 'Erroneous pitch' && P.model.acFhaData[0].severity === 'Major');
-    check('Cancel drops the undo steps the canceled change pushed', P.undo.length === 1, String(P.undo.length));
-    check('Cancel is journaled', P.journal.some(j => /^change-cancel: .*canceled: Changed Aircraft FHA: FC-02/.test(j)));
+    check('collected, not asked', A.pending() && A.status().stats.prompts === 1);
+    const r2 = await A.ask({ reason: 'leave' });
+    check('Discard all restores the confirmed state', r2 === 'discarded' && P.model.acFhaData[1].fcDesc === 'Erroneous pitch' && P.model.acFhaData[0].severity === 'Major');
+    check('Discard all drops the undo steps the discarded change pushed', P.undo.length === 1, String(P.undo.length));
+    check('Discard all is journaled', P.journal.some(j => /^change-cancel: .*discarded 1 change: Changed Aircraft FHA: FC-02/.test(j)), P.journal.join(' | '));
   }
 
   // ------------------------------------------------------------------------- F2
@@ -217,39 +227,39 @@ const keysOf = d => d.map(e => e.space + '|' + e.key + '|' + e.op).sort();
       return 42;
     });
     await sleep(600);
-    check('no acknowledgement while the batch runs (past the quiet period)', A.status().stats.prompts === 0);
+    check('nothing collected while the batch runs (past the quiet period)', A.status().stats.collected === 0);
     const r = await res;
-    check('batch: one acknowledgement for everything, resolved with the result', A.status().stats.prompts === 1 && r.acknowledged === true && r.result === 42, JSON.stringify(r));
+    check('batch: ONE step for everything, resolved with the result as soon as it is collected (no dialog)', A.status().stats.collected === 1 && A.status().stats.prompts === 0 && r.acknowledged === true && r.collected === true && r.result === 42, JSON.stringify(r));
     await sleep(50);
     const t = A.begin('Drag (test)');
     P.model.acFhaData[2].severity = 'Minor'; P.ctx.scheduleAutosave();
     await sleep(700);
-    check('an open group (a drag) is not asked about', A.status().stats.prompts === 1 && A.pending());
+    check('an open group (a drag) is not collected while it is open', A.status().stats.collected === 1 && A.status().open);
     const ok = await A.flush();
-    check('flush() asks at once, even mid-group (Save and the guards use it)', ok === true && A.status().stats.prompts === 2 && !A.pending());
+    check('flush() (Save, the guards) asks ONCE for everything, even mid-group', ok === true && A.status().stats.prompts === 1 && !A.pending() && A.status().stats.confirmed === 1, JSON.stringify(A.status().stats));
     A.end(t);
     check('flush() with nothing waiting answers true at once', (await A.flush()) === true);
   }
 
   // ------------------------------------------------------------------------- F3
-  console.log('\n[F3] what decides "asked"');
+  console.log('\n[F3] what decides "collected"');
   {
     const P = page(); const A = P.A;
     A._setTestAnswer('keep');
     A._markInput();
     P.model.projectConfig.journal.entries.push({ seq: 9, kind: 'k', s: 's' }); P.ctx.scheduleAutosave();
     await sleep(700);
-    check('bookkeeping only, right after a click: automatic', A.status().stats.prompts === 0 && A.status().stats.automatic === 1, JSON.stringify(A.status().stats));
+    check('bookkeeping only, right after a click: automatic', A.status().stats.collected === 0 && A.status().stats.automatic === 1 && !A.pending(), JSON.stringify(A.status().stats));
     await sleep(3200);   // past the input window
     P.model.acReqData.push({ internalId: 1190, id: 'REQ-AI-9', text: 'drafted', aiModel: 'm' }); P.ctx.scheduleAutosave();
     await sleep(700);
-    check('an AI-drafted row with nobody at the keyboard is still asked', A.status().stats.prompts === 1);
+    check('an AI-drafted row with nobody at the keyboard is still collected for confirmation', A.status().stats.collected === 1 && A.pending());
   }
 
-  // ------------------------------------------------------------------------- C (13 Oct night)
-  console.log('\n[C] moves and undo/redo are collected, then acknowledged together');
-  async function collected(src, answer) {
-    const P = page(src); const A = P.A;
+  // ------------------------------------------------------------------------- C (13 Oct night, 16 Oct 2026)
+  console.log('\n[C] moves, undo/redo and content edits are ONE collection, confirmed together');
+  async function collected(answer) {
+    const P = page(); const A = P.A;
     P.ctx.__crdtApply = p => { Object.keys(p).forEach(k => { P.model[k] = J(p[k]); }); };
     A._setTestAnswer('keep');
     P.model.projectConfig.bowties = [{ id: 'bt1', boxes: [{ id: 'b1', x: 10, y: 10 }] }]; P.ctx._writeAutosave();
@@ -261,45 +271,47 @@ const keysOf = d => d.map(e => e.space + '|' + e.key + '|' + e.op).sort();
     A.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { P.model.projectConfig.bowties[0].boxes[0].x = 90; P.ctx.scheduleAutosave(); });
     await sleep(700);
     const quiet = A.status().stats.prompts === 0 && A.pending() && A.pendingUser() && JSON.stringify(A.collected()) === JSON.stringify([{ kind: 'move', label: 'Bow-tie: Move Pump', count: 2 }]);
-    A._markInput(); P.model.acFhaData[0].severity = 'Minor'; P.ctx.scheduleAutosave();   // a content edit in between: asked on its own
+    A._markInput(); P.model.acFhaData[0].severity = 'Minor'; P.ctx.scheduleAutosave();   // a content edit in between: collected too
     await sleep(750);
-    const contentAsked = A.status().stats.prompts === 1 && A.status().stats.kept === 1;
+    const contentCollected = A.status().stats.prompts === 0 && A.collected().length === 2 && A.collected()[1].kind === 'change';
     await sleep(30);
     A.deferred({ kind: 'undo', label: 'Remove function' }, () => { P.model.acFhaData[2].fcDesc = 'undone text'; P.ctx.scheduleAutosave(); });
     await sleep(700);
-    const stillQuiet = A.status().stats.prompts === 1 && A.collected().length === 2;
+    const stillQuiet = A.status().stats.prompts === 0 && A.collected().length === 3;
     A._setTestAnswer(answer);
     const ok = await A.flushDeferred();
     await sleep(30);
-    return { P, A, quiet, contentAsked, stillQuiet, ok, appMoveIgnored };
+    return { P, A, quiet, contentCollected, stillQuiet, ok, appMoveIgnored };
   }
   {
-    const r = await collected(null, 'cancel');
+    const r = await collected('cancel');
     check('a move nobody made (no input) is not collected', r.appMoveIgnored);
     check('moves are not asked one by one (two moves of one box = one line, "x2")', r.quiet);
-    check('a content edit in between is still asked on its own', r.contentAsked);
+    check('a content edit in between is collected too, not asked', r.contentCollected);
     check('an undo is collected too, not asked', r.stillQuiet);
-    check('leaving the view asks once for the whole collection', r.A.status().stats.prompts === 2 && !r.A.pending());
-    check('Cancel puts back only the collected changes: the box and the undone row are back', r.P.model.projectConfig.bowties[0].boxes[0].x === 10 && r.P.model.acFhaData[2].fcDesc === 'Pitch oscillation', JSON.stringify(r.P.model.projectConfig.bowties[0].boxes[0]));
-    check('...and the content edit acknowledged in between stays', r.P.model.acFhaData[0].severity === 'Minor');
-    check('the cancel lists what moved and what was undone in the journal', r.P.journal.some(j => /^change-cancel: Not signed in canceled 3 collected changes: Moved: Bow-tie: Move Pump \(x2\); Undone: Remove function/.test(j)), r.P.journal.slice(-2).join(' | '));
-    check('flushDeferred answers false after a Cancel', r.ok === false);
-    const k = await collected(null, 'keep');
-    check('Acknowledge keeps the collected changes', k.P.model.projectConfig.bowties[0].boxes[0].x === 90 && k.P.model.acFhaData[2].fcDesc === 'undone text' && k.ok === true);
-    check('...and journals them as acknowledged', k.P.journal.some(j => /^change-ack: Not signed in acknowledged 3 collected changes: Moved: Bow-tie: Move Pump \(x2\); Undone: Remove function/.test(j)));
-    check('flush() (Save, the guards) asks about the collection too', await (async () => { const P = page(); P.A._setTestAnswer('keep'); P.A.deferred({ kind: 'redo', label: 'x' }, () => { P.model.acFhaData[1].comments = 'r'; P.ctx.scheduleAutosave(); }); const ok = await P.A.flush(); return ok === true && !P.A.pending() && P.A.status().stats.kept === 1; })());
-    const m = await collected(ACK.replace("later.forEach(function (D) { try { _applyContent(D); } catch (_) {} });", ''), 'cancel');
-    check('mutation: without laying content back, Cancel would also lose the edit acknowledged in between (proves the check)', m.P.model.acFhaData[0].severity !== 'Minor');
+    check('leaving the view asks ONCE for the whole collection', r.A.status().stats.prompts === 1 && !r.A.pending());
+    check('Discard all puts back everything waiting: the box, the edit and the undone row', r.P.model.projectConfig.bowties[0].boxes[0].x === 10 && r.P.model.acFhaData[2].fcDesc === 'Pitch oscillation' && r.P.model.acFhaData[0].severity === 'Catastrophic', JSON.stringify(r.P.model.projectConfig.bowties[0].boxes[0]));
+    check('the discard lists what moved and what was undone in the journal', r.P.journal.some(j => /^change-cancel: Not signed in discarded \d+ changes: .*Moved: Bow-tie: Move Pump \(x2\).*Undone: Remove function/.test(j)) || r.P.journal.some(j => /^change-cancel: Not signed in discarded \d+ changes: /.test(j) && /Changed Aircraft FHA/.test(j)), r.P.journal.slice(-2).join(' | '));
+    check('flushDeferred answers true after Discard all (nothing left waiting)', r.ok === true);
+    const k = await collected('keep');
+    check('Confirm all keeps everything collected', k.P.model.projectConfig.bowties[0].boxes[0].x === 90 && k.P.model.acFhaData[2].fcDesc === 'undone text' && k.P.model.acFhaData[0].severity === 'Minor' && k.ok === true);
+    check('...and journals them as confirmed', k.P.journal.some(j => /^change-ack: Not signed in confirmed \d+ changes: /.test(j)));
+    const w = await collected('working');
+    check('Keep working: nothing lost, everything still waits, flushDeferred answers false', w.ok === false && w.A.pending() && w.A.collected().length === 3 && w.P.model.projectConfig.bowties[0].boxes[0].x === 90);
+    check('flush() (Save, the guards) asks about the collection too', await (async () => { const P = page(); P.A._setTestAnswer('keep'); P.A._markInput(); P.A.deferred({ kind: 'redo', label: 'x' }, () => { P.model.acFhaData[1].comments = 'r'; P.ctx.scheduleAutosave(); }); const ok = await P.A.flush(); return ok === true && !P.A.pending() && P.A.status().stats.confirmed === 1; })());
   }
 
   // ------------------------------------------------------------------------- mutations
   console.log('\n[M] mutation proofs');
   {
-    const m1 = ACK.replace("if (_sysDepth > 0) { _stats.system++; return 'system'; }", '');
+    // 16 Oct 2026: the anchor follows the v2.0 system branch (it also measures system changes made while changes wait)
+    const M1A = "        if (_sysDepth > 0) {\n            _stats.system++;";
+    check('M1 anchor present in change_ack.js', ACK.indexOf(M1A) >= 0);
+    const m1 = ACK.replace(M1A, "        if (false) {\n            _stats.system++;");
     const P = page(m1); P.A._setTestAnswer('keep'); P.A._markInput();
     P.A.system(() => { P.model.acFhaData[0].fcDesc = 'merged'; P.ctx.scheduleAutosave(); });
     await sleep(700);
-    check('M1 without the system scope a merge right after a click is ASKED (proves F1 tests it)', P.A.status().stats.prompts === 1, JSON.stringify(P.A.status().stats));
+    check('M1 without the system scope a merge right after a click is COLLECTED (proves F1 tests it)', P.A.status().stats.collected === 1, JSON.stringify(P.A.status().stats));
     const m2 = ACK.replace("var computed = (isGate || pmode === 'alloc') ? { probability: 1 } : null;", 'var computed = null;');
     const Q = page(m2), a = Q.R.records(J(Q.model)), mm = J(Q.model);
     mm.ftaPages[0].root.probability = 3e-9;

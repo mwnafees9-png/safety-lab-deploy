@@ -343,7 +343,7 @@ else {
 console.log('\n[6] wiring, versions, plain words');
 {
   const idx = S('index.html'), pos = f => idx.indexOf(f);
-  check('index.html: rbd_net.js loads right before rbd_module.js, after diagram_editor.js', /<script src="rbd_net\.js\?v=1\.0" defer><\/script>\s*<script src="rbd_module\.js\?v=2\.[01]" defer><\/script>/.test(idx) && pos('rbd_net.js') > pos('diagram_editor.js'));
+  check('index.html: rbd_net.js loads right before rbd_module.js, after diagram_editor.js', /<script src="rbd_net\.js\?v=1\.0" defer><\/script>\s*<script src="rbd_module\.js\?v=2\.[012]" defer><\/script>/.test(idx) && pos('rbd_net.js') > pos('diagram_editor.js'));
   check('index.html: markov_diagram.js loads right after markov_ctmc.js', /<script src="markov_ctmc\.js\?v=1\.4" defer><\/script>\s*<!--[^>]*-->\s*<script src="markov_diagram\.js\?v=1\.[01]" defer><\/script>/.test(idx));   // rbd_module 2.1, markov_diagram 1.1: 15 Oct 2026, height: 'fill'
   check('index.html: versions bumped (diagram_editor 1.3, rbd_xcheck 0.3, sysml_model 1.3, fta_quant_modules 66.28; 1.3 after the integrate3 merge)', /diagram_editor\.js\?v=1\.[345]"/.test(idx) && /rbd_xcheck\.js\?v=0\.3"/.test(idx) && /sysml_model\.js\?v=1\.3"/.test(idx) && /fta_quant_modules\.js\?v=66\.(2[89]|[3-9]\d)"/.test(idx));
   const files = ['rbd_net.js', 'rbd_module.js', 'rbd_xcheck.js', 'markov_diagram.js', 'markov_ctmc.js', 'fta_quant_modules.js', 'sysml_model.js', 'diagram_editor.js'];
@@ -378,7 +378,7 @@ async function browser() {
   page.on('pageerror', e => errors.push(String(e)));
   page.on('console', m => { if (m.type() === 'error' && !/401|Failed to load resource/.test(m.text())) errors.push(m.text()); });
   const E = (fn, arg) => page.evaluate(fn, arg);
-  const wait = async ms => { await page.waitForTimeout(ms || 80); if ((ms || 80) >= 150) { await page.waitForTimeout(650); await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).some(x => /^(Acknowledge|Keep change)$/.test(x.textContent.trim()) && x.offsetParent), null, { timeout: 5000 }).catch(() => {}); } };
+  const wait = async ms => { await page.waitForTimeout(ms || 80); if ((ms || 80) >= 150) { await page.waitForTimeout(650); await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).some(x => /^(Confirm all|Acknowledge|Keep change)$/.test(x.textContent.trim()) && x.offsetParent) && !(window.SLChangeAck && SLChangeAck.count() > 0), null, { timeout: 5000 }).catch(() => {}); } };
   try {
     await page.goto('http://127.0.0.1:' + srv.address().port + '/?demo=halcyon');
     await page.waitForFunction(() => typeof window.loadHalcyonDemo === 'function' && window.SLDiagramEditor && window.RBD_NET && window.SLMarkovDiagram, null, { timeout: 30000 });
@@ -390,8 +390,10 @@ async function browser() {
       await loadHalcyonDemo(); await new Promise(r => setTimeout(r, 1200)); ung();
       if (window.SLChangeAck && SLChangeAck.flush) { window.__ackAuto = true; }
     });
-    // every change asks for acknowledgement (change_ack.js): answer "Acknowledge" whenever it shows, and count them
-    await E(() => { window.__acks = 0; setInterval(() => { const k = Array.from(document.querySelectorAll('button')).find(x => /^(Acknowledge|Keep change)$/.test(x.textContent.trim()) && x.offsetParent); if (k) { window.__acks++; window.__lastAck = (k.closest('[role=dialog], .sl-ack-card') || document.body).textContent.slice(0, 300); k.click(); } }, 60); });
+    // every change is confirmed (change_ack.js). 16 Oct 2026 (v2.0): changes are COLLECTED and confirmed in one
+    // dialog at a decision point; this harness reaches that point for each change as soon as it is collected
+    // (the one dialog, opened early as the top bar does), answers "Confirm all", and counts them
+    await E(() => { window.__acks = 0; setInterval(() => { try { if (window.SLChangeAck && SLChangeAck.count() > 0 && !SLChangeAck.status().open && !SLChangeAck.status().asking) SLChangeAck.ask({ reason: 'early' }); } catch (_) {} const k = Array.from(document.querySelectorAll('button')).find(x => /^(Confirm all|Acknowledge|Keep change)$/.test(x.textContent.trim()) && x.offsetParent); if (k) { window.__acks++; window.__lastAck = (k.closest('[role=dialog], .sl-ack-card') || document.body).textContent.slice(0, 300); k.click(); } }, 60); });
     const snap = () => E(() => JSON.stringify({ rbd: projectConfig.rbd, mk: projectConfig.markovModels }));
     const before = await snap();
 

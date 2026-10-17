@@ -12602,10 +12602,17 @@ function _writeAutosave() {
     _autosaveStoredHasContent = snapHasContent;
     // Only an error if NEITHER store is available; localStorage quota alone is no longer fatal.
     _updateSaveIndicator((lsOk || idbAvail) ? 'saved' : 'error');
+    // 16 Oct 2026 (change_ack.js v2.0): while changes wait to be confirmed, the copies other people and
+    // other tools may open (the .sl file in the project folder, the last-good mirror) hold only the
+    // CONFIRMED project. This slot (above) keeps what waits, marked unacked in its meta, so a crash or a
+    // reload can offer it back; it is never promoted to confirmed.
+    var _confirmedOnly = null, _waitingNow = false;
+    try { var _ackW = (typeof window !== 'undefined') ? window.SLChangeAck : null; if (_ackW && (_ackW.pendingUser ? _ackW.pendingUser() : (_ackW.pending && _ackW.pending()))) { _waitingNow = true; _confirmedOnly = _ackW.acceptedSnapshot ? _ackW.acceptedSnapshot() : null; } } catch (_) {}
     // Phase 56.52a — fire-and-forget disk write-through (no await — don't block UI).
-    _writeAutosaveToDisk(payload);
-    // E1 part 3 — keep a throttled copy of the last snapshot that had content.
-    try { _writeLastGood(payload, meta, snapHasContent); } catch (_) {}
+    if (!_waitingNow) _writeAutosaveToDisk(payload);
+    else if (typeof _confirmedOnly === 'string') _writeAutosaveToDisk(_confirmedOnly);
+    // E1 part 3: keep a throttled copy of the last snapshot that had content (confirmed work only).
+    if (!_waitingNow) { try { _writeLastGood(payload, meta, snapHasContent); } catch (_) {} }
     // #16 — non-blocking project-size health advisory.
     try { _checkProjectHealth(meta.size); } catch(_) {}
     return !!(lsOk || idbAvail);
@@ -12859,7 +12866,9 @@ function _restoreSnap(snapStr, beforeStr, undoLabel) {
     };
     // 13 Oct 2026 (night, Waqas): Undo / Redo do not ask per press; they are collected and
     // acknowledged together when the person leaves the view (change_ack.js deferred()).
-    if (_ack && _ack.deferred && undoLabel) _ack.deferred({ kind: /^Redo/.test(undoLabel) ? 'redo' : 'undo', label: undoLabel.replace(/^(Undo|Redo): /, '') }, _run);
+    // 16 Oct 2026: the snapshot rides along, so an Undo landing exactly on the state before the last change
+    // still waiting to be confirmed takes that change out of the collection instead of adding a line.
+    if (_ack && _ack.deferred && undoLabel) _ack.deferred({ kind: /^Redo/.test(undoLabel) ? 'redo' : 'undo', label: undoLabel.replace(/^(Undo|Redo): /, ''), snap: snapStr }, _run);
     else if (_ack) _ack.system(_run); else _run();
     try { if (typeof window !== 'undefined' && window.SLSaveState) window.SLSaveState.afterLocalRestore(snapStr, beforeStr); } catch (_) {}
 }

@@ -1,3 +1,4 @@
+// 16 Oct 2026: the conflict dialog says how many changes here wait to be confirmed (change_ack.js v2.0); loading the newer state drops them.
 // 13 Oct 2026 (change acknowledgement, fix2-J): a tab without the write lease still hands the state after each change to SLChangeAck.stash(), so its acknowledgements diff against the right "before".
 // ============================================================================
 // tab_guard.js — v1.0 — Q9: concurrent-tab overwrite protection.
@@ -168,6 +169,15 @@
                 '</div></div></div>';
             document.body.appendChild(modal);
         }
+        // 16 Oct 2026 (change_ack.js v2.0): changes here that wait to be confirmed are said, with their number,
+        // before the person chooses: loading the newer state drops them
+        try {
+            let w = modal.querySelector('#tg-conflict-waiting');
+            const n = (window.SLChangeAck && SLChangeAck.count) ? SLChangeAck.count() : 0;
+            if (!w) { w = document.createElement('p'); w.id = 'tg-conflict-waiting'; w.style.cssText = 'font-size:13px; font-weight:600; color:var(--color-text,#1d1d1f); margin:0 0 14px;'; const body = modal.querySelector('.modal-body'); if (body) body.insertBefore(w, body.lastElementChild); }
+            w.textContent = n ? ('This tab also has ' + n + (n === 1 ? ' change' : ' changes') + ' that you have not confirmed yet. Loading the newer state drops ' + (n === 1 ? 'it' : 'them') + '. Keeping this tab\u2019s state keeps ' + (n === 1 ? 'it' : 'them') + ' waiting for you to confirm.') : '';
+            w.style.display = n ? '' : 'none';
+        } catch (_) {}
         modal.style.display = 'flex';
         setTimeout(() => modal.classList.add('show'), 10);
     }

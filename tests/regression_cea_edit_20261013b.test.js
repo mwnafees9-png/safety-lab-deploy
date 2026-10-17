@@ -180,13 +180,17 @@ function serve() {
             try { PROGRAM_PLAN.setLane('cea', true); } catch (_) {}
         });
         let acks = 0;
+        // 16 Oct 2026 (change_ack.js v2.0): a hand edit is COLLECTED, not asked about at once. This helper reaches
+        // the decision point itself (the one dialog, opened early as the top bar does) and answers Confirm all.
         const ack = async () => {
             let clicked = false;
             for (let i = 0; i < 60; i++) {
                 await page.waitForTimeout(100);
-                const b = page.locator('.sl-ack-keep');
+                const b = page.locator('#sl-ack-overlay .sl-ack-keep');
                 if (await b.count() && await b.first().isVisible()) { await page.waitForTimeout(200); await b.first().click({ force: true }); acks++; clicked = true; await page.waitForTimeout(200); continue; }
-                const busy = await E2(() => !!(window.SLChangeAck && SLChangeAck.pending()));
+                const st = await E2(() => ({ n: window.SLChangeAck ? SLChangeAck.count() : 0, open: !!(window.SLChangeAck && SLChangeAck.status().open) }));
+                if (st.n > 0 && !st.open) { await E2(() => { SLChangeAck.ask({ reason: 'early' }); }); continue; }
+                const busy = await E2(() => !!(window.SLChangeAck && SLChangeAck.pendingUser()));
                 if (!busy && (clicked || i > 8)) break;
             }
             return clicked;

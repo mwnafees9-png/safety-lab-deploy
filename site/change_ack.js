@@ -1,64 +1,88 @@
 // ============================================================================
+// change_ack.js - v2.0 - 16 Oct 2026 - CHANGES ARE COLLECTED, THEN CONFIRMED ONCE.
+//
+// THE RULE (owner, confirmed 16 Oct 2026; the same rule as Sys Lab):
+//   · While the person works, nothing pops up. Every change they make (an edit, a row added, an AI
+//     review Apply, a box moved, an Undo or Redo, a delete after its own "are you sure") goes into
+//     ONE collection. The top bar says "N changes to confirm"; clicking it opens the dialog early.
+//   · ONE dialog lists everything changed, grouped by kind, in plain words, with what it touches.
+//     It opens only when the person
+//       (a) leaves the page or view: another page or tab, another fault tree, another system or a
+//           system's tabs, another bow-tie or block diagram, closing a walkthrough;
+//       (b) presses Next or Continue in any multi-step flow (wizards, the guided particular risk
+//           flows, walkthroughs), or an Export / Download button;
+//       (c) opens, creates or imports another project, loads a demo, restores a version, signs out,
+//           saves or exports a copy ("Confirm all and export" or Keep working), presses Save
+//           (Ctrl+S, the top bar), or closes or reloads the window (the browser's own prompt is the
+//           last resort; whatever was waiting comes back after a reload or a crash and is offered
+//           again).
+//   · Buttons: Confirm all, Undo last change, Discard all, Keep working (Escape = Keep working: the
+//     dialog closes, the person stays where they are, nothing is lost).
+//   · Every change is still confirmed before it counts: nothing waiting is saved to the cloud,
+//     shared with teammates or written to the journal as confirmed. Views show it at once; the
+//     records, exports and the journal use what was confirmed.
+//   · Exceptions: a destructive delete keeps its own "are you sure" and then joins the collection;
+//     an AI review "Apply" joins the collection (the review window is the check on the AI content).
+//   · One collector: moves and Undo / Redo, collected separately since v1.1, are steps of the same
+//     collection. An Undo (Ctrl+Z) that lands exactly on the state before the last step waiting takes
+//     that step out (there is nothing left of it to confirm).
+//
+// What the collection keeps: the confirmed project (the state before the first change waiting), one
+// step per change (with the state just before it, for Undo last change), and the background changes
+// nobody made meanwhile (they count as confirmed: Discard all keeps them). The dialog lists the
+// difference between the confirmed project and the project on screen, so a value changed and changed
+// back is not listed, and a collection with nothing left in it ends by itself.
+//
+// API (window.SLChangeAck): ask(opts) opens the one dialog and resolves 'none' | 'confirmed' |
+// 'discarded' | 'keep'; count() is the number the top bar shows; collectNow() puts an open change into
+// the collection; batch() / begin() / end() group work into one change; deferred() marks a move or an
+// undo; acceptedSnapshot() is the confirmed project while something waits; reopen() puts changes a
+// crash left back into the collection. save_state.js routes Save, the leave and project guards, the
+// export gates and the window close through ask(). The desktop shell's close guard calls
+// window.__slabRequestClose() (save_state.js) and may read window.__slabPendingCount().
+// Tests: tests/regression_change_collect_20261016.test.js (unit), tests/regression_change_collect_ui_20261016.test.js
+// (browser), and the updated 13-15 Oct suites.
+//
 // change_ack.js - v1.3 - 16 Oct 2026 (AI Assistant page): AI inputs (source documents) are compared by id,
 // name, size, controlled flag and text hash (never the text), and each added, removed or changed document
 // is one named line in the dialog ("AI inputs: Propulsion SDD.pdf removed"), not "Source documents changed".
-// change_ack.js - v1.2 - 13 Oct 2026 (late, Waqas: "when a user saves a choice/change it should be
-// autosaving"): an acknowledged change is SAVED at once (save_state.js v2.0 AutoSave). Added for
-// that: acceptedSnapshot() (the project as accepted so far: everything acknowledged, nothing still
-// waiting, the state AutoSave writes while moves or undos are still collected), SLRecords.applyToObject
-// (a diff laid onto a snapshot without touching the live model) and reopen() (changes a crash left
-// unacknowledged are asked about again on the next open). The dialogs say the change saves.
-// change_ack.js - v1.1 - 13 Oct 2026 (night, Waqas rulings 1 and 2): moving a box on a diagram
-// (a change that only moves or resizes) and Undo / Redo inside diagrams and the fault tree no
-// longer ask per action. They are COLLECTED (deferred()) and acknowledged together, in one list,
-// when the person leaves the view (switching tab or fault tree, opening another project, Save,
-// closing): Acknowledge keeps them, Cancel puts back only them (content changes acknowledged in
-// between are laid back on top). Content edits still ask per gesture.
-// change_ack.js - v1.0 - 13 Oct 2026 - every change asks for acknowledgement.
-//
-// WAQAS, 12 OCT (hand testing, ruling 2, "option B: literally every change"): every change
-// shows what changes and what it touches, and the engineer acknowledges it or cancels it
-// (Cancel puts it back). Undo still works.
+// change_ack.js - v1.2 - 13 Oct 2026 (late): an acknowledged change is SAVED at once (save_state.js v2.0
+// AutoSave); acceptedSnapshot(), SLRecords.applyToObject and reopen() were added for that.
+// change_ack.js - v1.1 - 13 Oct 2026 (night): moves and Undo / Redo were collected and asked about on leaving
+// the view while content edits still asked per gesture. Replaced by v2.0: everything is collected.
+// change_ack.js - v1.0 - 13 Oct 2026 - every change asked for acknowledgement after it was made. Replaced by v2.0.
 //
 // THE FUNNEL. Every edit in this app already ends in scheduleAutosave() (R18: the one
 // "the project changed" call; save_watch.js catches a writer that forgets within a second).
 // scheduleAutosave calls SLChangeAck.noteChange(), so EVERY change reaches this module
 // without any writer having to know about it. What the module does with it:
 //
-//   1. remembers the project as it was just before the first unacknowledged change. That
-//      copy is free: it is the last autosave payload (helpers_modules._writeAutosave hands it
-//      to stash()), taken at the end of the previous change;
-//   2. waits for the change to be FINISHED: 450 ms of quiet, no mouse button held (a drag is
-//      one change), and not while the engineer is still typing in the field that changed (a
-//      field is one change, committed when focus leaves it or Enter is pressed). A synchronous
-//      burst (an AI accept writing 40 rows) is one change; begin()/end() and batch() group
-//      longer work (a generator, an async AI apply, a diagram drag) into one;
+//   1. remembers the project as it was just before the change. That copy is free: it is the last
+//      autosave payload (helpers_modules._writeAutosave hands it to stash()), taken at the end of
+//      the previous change;
+//   2. waits for the change to be FINISHED: 450 ms of quiet, no mouse button held (a drag is one
+//      change), and not while the person is still typing (a typed word is one change). A
+//      synchronous burst (an AI accept writing 40 rows) is one change; begin()/end() and batch()
+//      group longer work (a generator, an async AI apply, a diagram drag) into one;
 //   3. works out WHAT CHANGED, row by row, fault tree node by node and setting by setting
 //      (SLRecords below: the same row keys the live sync uses), in plain words;
-//   4. works out WHAT IT TOUCHES downstream with the existing trace machinery: the golden
-//      thread graph (_gtvBuildGraph) for failure conditions, fault trees and common cause
-//      rows, and the modification impact closure (modImpact, mod_impact.js) for functions,
-//      systems and items, including the handed-off assessments the change will reopen;
-//   5. asks, in one house dialog: Acknowledge, or Cancel change. Cancel restores the copy
-//      from step 1 (the same restore Undo uses) and re-renders. Acknowledge pushes that copy
-//      onto the undo stack, so Undo takes back exactly one acknowledged change;
+//   4. puts it into the collection (no dialog) and pushes one undo step, so Undo still works;
+//   5. when the dialog opens, works out WHAT IT TOUCHES downstream with the existing trace
+//      machinery: the golden thread graph (_gtvBuildGraph) for failure conditions, fault trees and
+//      common cause rows, and the modification impact closure (modImpact, mod_impact.js) for
+//      functions, systems and items, including the handed-off assessments the change will reopen;
 //   6. records the decision in the project journal (who, when, what, what it touches).
 //
-// WHAT IS NOT ASKED. Loads, live-sync merges, undo/redo and restores run as SYSTEM changes
-// (system(), __crdtApply, _restoreSnap). The app's own bookkeeping (the journal, the activity
-// log, empty settings created on first use, recomputed numbers held in underscore fields) is
-// shown to nobody: a change made of nothing else is AUTOMATIC. A change nobody started (no
-// keyboard or mouse input in the last 3 s, no open group) and that carries no AI-drafted
-// rows is also automatic: the background sweeps (seeded MF&MS trees, proposal stores) derive
-// it from the model again whenever it is needed, so asking about it would only teach people
-// to click without reading.
+// WHAT IS NOT COLLECTED. Loads, live-sync merges and restores run as SYSTEM changes (system(),
+// __crdtApply, _restoreSnap). The app's own bookkeeping (the journal, the activity log, empty
+// settings created on first use, recomputed numbers held in underscore fields) is shown to nobody:
+// a change made of nothing else is AUTOMATIC. A change nobody started (no keyboard or mouse input in
+// the last 3 s, no open group) and that carries no AI-drafted rows is also automatic: the background
+// sweeps (seeded MF&MS trees, proposal stores) derive it from the model again whenever it is needed.
 //
-// SAVING (save_state.js v2.0): an acknowledged change is saved at once (this device, the live
-// sync and the cloud copy); only what still waits for an acknowledgement is unsaved.
-//
-// API: see scratchpad CHANGE_ACK_API.md and window.SLChangeAck at the bottom.
-// Tests: tests/regression_change_ack_20261013b.test.js (unit, vm) and
-//        tests/regression_change_ack_ui_20261013b.test.js (browser).
+// SAVING (save_state.js v3.0): Confirm all saves at once (this device, the live sync and the cloud
+// copy). What waits is kept on this device only, marked as not confirmed, so a crash or a reload can
+// offer it back; it is never uploaded, shared or written to the disk copy or the recovery ring.
 // ============================================================================
 (function () {
     'use strict';
@@ -594,26 +618,44 @@
     }
 
     // =======================================================================
-    // The funnel.
+    // The funnel and THE COLLECTION (v2.0, 16 Oct 2026): one collector for every kind of change.
     // =======================================================================
-    var _sysDepth = 0, _restoreDepth = 0, _stash = null, _lastInputAt = 0, _pointerDown = false, _enterAt = 0, _lastKeyAt = 0, _lastKeyEl = null;
-    var _win = null, _seq = 0, _groups = {}, _groupSeq = 0, _prompting = false, _timer = null, _waiters = [], _notes = [];
+    var _sysDepth = 0, _restoreDepth = 0, _stash = null, _lastInputAt = 0, _pointerDown = false, _enterAt = 0, _lastKeyAt = 0;
+    var _win = null, _seq = 0, _groups = {}, _groupSeq = 0, _timer = null, _notes = [];
     var _rc = null;   // { key: the stash string the records describe, R: those records }
-    // The collected (deferred) changes: { id, baseline: the state before the first of them,
-    // items: [{ kind: 'move' | 'undo' | 'redo', label }], contentD: [diffs of the content changes
-    // acknowledged since, oldest first], undoMark }
-    var _bucket = null, _deferDepth = 0, _deferInfo = null, _bucketPrompting = false, _bucketWaiters = [], _lastDeferredAt = 0;
-    var _stats = { noted: 0, system: 0, automatic: 0, kept: 0, canceled: 0, prompts: 0, nothing: 0 };
-    var _testAnswer = null;      // tests only: 'keep' | 'cancel' answers the dialog without a click
+    // _noteSeq counts every change noteChange sees; _stashSeq is the count the stash was taken at.
+    // A stash older than the last change means the write for it is still queued (one microtask).
+    var _noteSeq = 0, _stashSeq = 0;
+    // The collection: null, or
+    //   { id, at, baseline: the confirmed project (a snapshot string) before the first change waiting,
+    //     noRevert: the baseline was taken after the first change (Discard all cannot be offered),
+    //     undoMark: the app undo depth when it began,
+    //     steps: [{ kind: 'change' | 'move' | 'undo' | 'redo', label, before: the project just before
+    //               this step (null: it cannot be taken back here), undoMark, onRevert: [], at, count, ai }],
+    //     autoD: [{ D, n }]: background changes nobody made while it waited (they count as confirmed;
+    //            n = how many steps there were when it came),
+    //     ver: bumped on every step added or taken back, baseR: records of the confirmed project,
+    //     acc: the confirmed project as a snapshot string (cached), net: what the dialog lists }
+    var _col = null, _deferDepth = 0, _deferInfo = null, _lastDeferredAt = 0;
+    var _askState = null;        // the one confirmation dialog while it is open
+    var _stats = { noted: 0, system: 0, automatic: 0, collected: 0, confirmed: 0, discarded: 0, undoneLast: 0, kept: 0, canceled: 0, prompts: 0, nothing: 0, deferred: 0 };
+    var _testAnswer = null;      // tests only: answers the dialog without a click (see _setTestAnswer)
 
     function _snapNow() {
         try { var s = (typeof W._snapshotProject === 'function') ? W._snapshotProject() : (typeof _snapshotProject === 'function' ? _snapshotProject() : null); return s ? JSON.stringify(s) : null; } catch (_) { return null; }
     }
     // helpers_modules._writeAutosave hands every serialized payload here: the state at the end of
     // the last change, which is the state just BEFORE the next one.
-    function stash(payload) { if (typeof payload === 'string') _stash = payload; }
-    function _ensureStash() { if (_stash == null && !_win) _stash = _snapNow(); }
+    function stash(payload) { if (typeof payload === 'string') { _stash = payload; _stashSeq = _noteSeq; } }
+    function _ensureStash() { if (_stash == null && !_win) { _stash = _snapNow(); _stashSeq = _noteSeq; } }
+    // The write for the last change is still queued: take the state now, so what is decided next is
+    // measured from where the project really is.
+    function _freshStash() { if (_stash != null && _stashSeq < _noteSeq) { var s = _snapNow(); if (s) { _stash = s; _stashSeq = _noteSeq; } } }
     function system(fn) { _sysDepth++; try { return fn(); } finally { _sysDepth--; } }
+    // this module's own writes (Discard all, Undo last change, the journal entry): system changes that
+    // are never recorded as background work of the collection
+    var _ownDepth = 0;
+    function _own(fn) { _ownDepth++; _sysDepth++; try { return fn(); } finally { _sysDepth--; _ownDepth--; } }
     // A system change made outside any save call (a migration run while drawing a view) becomes
     // the new "before" at once, so the next change the person makes is measured from it.
     function absorb() { if (_win || _sysDepth > 0) return; system(function () { try { if (typeof W.scheduleAutosave === 'function') W.scheduleAutosave(); } catch (_) {} }); }
@@ -635,91 +677,161 @@
         return d;
     }
     function _save() { try { return W.SLSaveState || null; } catch (_) { return null; } }
+    function _event(detail) { try { if (typeof CustomEvent === 'function' && W.dispatchEvent) W.dispatchEvent(new CustomEvent('sl:change-ack', { detail: detail })); } catch (_) {} }
 
     // scheduleAutosave calls this for every change it accepts. Returns what it decided.
     var _lastNotedAt = 0;
     function noteChange() {
-        _stats.noted++; _lastNotedAt = _now();
-        if (_sysDepth > 0) { _stats.system++; return 'system'; }
+        _stats.noted++; _lastNotedAt = _now(); _noteSeq++;
+        if (_sysDepth > 0) {
+            _stats.system++;
+            // A system change while changes wait (a migration as a view draws, the seed sweep): it is not
+            // the person's, so it is measured on its own and counts as confirmed (Discard all keeps it)
+            if (_col && !_win && _ownDepth === 0 && _restoreDepth === 0 && _stash != null) {
+                _win = { id: ++_seq, at: _now(), lastAt: _now(), baseline: _stash, noRevert: false, user: false, system: true, labels: [], notes: [], onRevert: [], sources: {}, undoMark: _undoDepth() };
+                _schedule();
+            } else if (_win && _win.system) { _win.lastAt = _now(); _schedule(); }
+            return 'system';
+        }
         if (_deferDepth > 0) return _noteDeferred(_deferInfo || {});
         var groupOpen = _openGroupList().length > 0;
         var userish = groupOpen || (_lastInputAt > 0 && (_now() - _lastInputAt) < USER_WINDOW_MS);
-        if (_prompting && _win) { _win.late = true; return 'late'; }
         if (!_win) {
             var base = _stash;
             if (base == null && !userish) { _stats.automatic++; return 'automatic'; }   // nothing to compare against and nobody asked (right after a load)
             var noRevert = false;
             if (base == null) { base = _snapNow(); noRevert = true; }
-            _win = { id: ++_seq, at: _now(), lastAt: _now(), baseline: base, noRevert: noRevert, user: userish, labels: [], notes: _notes.splice(0), onRevert: [], sources: {}, undoMark: _undoMarkFor(base), late: false };
+            _win = { id: ++_seq, at: _now(), lastAt: _now(), baseline: base, noRevert: noRevert, user: userish, labels: [], notes: _notes.splice(0), onRevert: [], sources: {}, undoMark: _undoMarkFor(base) };
             _openGroupList().forEach(_attachGroup);
             var S0 = _save(); if (S0 && S0._ackOpened) { try { S0._ackOpened(_win); } catch (_) {} }
+        } else if (userish && _win.system) {
+            // the person edits while a system change is still being measured: the system change ends at
+            // the state written after it (the stash), and the person's edit is its own change from there.
+            // Written in the same instant (no stash between them): they cannot be told apart, so the
+            // whole of it is the person's to confirm (never the other way round).
+            var sw = _win;
+            if (_stash != null && _stashSeq === _noteSeq - 1 && _stash !== sw.baseline) {
+                if (_timer) { clearTimeout(_timer); _timer = null; }
+                try { var Ds = diff(records(_P(sw.baseline) || {}), records(_P(_stash) || {})); if (_col && Ds.length) _addAuto(Ds); } catch (_) {}
+                _rc = null; _stats.automatic++; _close(sw, 'automatic');
+                _win = { id: ++_seq, at: _now(), lastAt: _now(), baseline: _stash, noRevert: false, user: true, labels: [], notes: _notes.splice(0), onRevert: [], sources: {}, undoMark: _undoMarkFor(_stash) };
+                _openGroupList().forEach(_attachGroup);
+            } else { sw.system = false; sw.user = true; }
         } else if (userish) _win.user = true;
         _win.lastAt = _now();
         try { _win.focusEl = (typeof document !== 'undefined') ? document.activeElement : null; } catch (_) {}
         _schedule();
         return 'noted';
     }
-    // A move or an undo/redo: into the collection, asked about when the person leaves the view.
-    function _noteDeferred(info) {
-        _stats.deferred = (_stats.deferred || 0) + 1;
-        // a move nobody made (no keyboard or mouse input in the last 3 s, no open group): the app
-        // placing shapes by itself, not something to ask about
-        if ((info.kind || 'move') === 'move' && !_openGroupList().length && !(_lastInputAt > 0 && (_now() - _lastInputAt) < USER_WINDOW_MS)) { _stats.automatic++; return 'automatic'; }
-        if (_win && !_prompting) { _win.lastAt = _now(); return 'noted'; }   // inside a content change already open: it goes with it
-        if (!_bucket) {
-            var base = _stash; if (base == null) base = _snapNow();
-            _bucket = { id: ++_seq, at: _now(), baseline: base, items: [], contentD: [], undoMark: _undoDepth() };
-            var S0 = _save(); if (S0 && S0._ackOpened) { try { S0._ackOpened(_bucket); } catch (_) {} }
+
+    // ---- the collection ------------------------------------------------------
+    function _openCol(baseline, noRevert, undoMark) {
+        _col = { id: ++_seq, at: _now(), baseline: baseline, noRevert: !!noRevert, undoMark: undoMark, steps: [], autoD: [], ver: 0, baseR: null, acc: null, net: null };
+        return _col;
+    }
+    function _baseRecords() {
+        if (!_col) return null;
+        if (!_col.baseR) _col.baseR = records(_P(acceptedSnapshot()) || {});
+        return _col.baseR;
+    }
+    // Lay a diff onto records directly (cheap, exact: the diff carries the record strings).
+    function _patchRecords(R, D) {
+        (D || []).forEach(function (e) {
+            if (e.op === 'reordered') return;
+            var sp = R[e.space] || (R[e.space] = { map: new Map(), order: [], key: null });
+            if (e.op === 'removed') { if (sp.map.has(e.key)) { sp.map.delete(e.key); sp.order = sp.order.filter(function (k) { return k !== e.key; }); } }
+            else { if (!sp.map.has(e.key)) sp.order.push(e.key); sp.map.set(e.key, e.b); }
+        });
+    }
+    // Shape positions on diagrams (diagram_editor.js POS_KEYS, and the fault tree layout fields): a
+    // record that differs only in these is a move, listed by its move line, not as a changed record.
+    var POS_DEEP = { x: 1, y: 1, w: 1, h: 1, x0: 1, y0: 1, points: 1, waypoints: 1, route: 1, bends: 1, descBoxHeight: 1 };
+    function _noPos(v) {
+        if (Array.isArray(v)) return v.map(_noPos);
+        if (v && typeof v === 'object') { var o = {}; Object.keys(v).sort().forEach(function (k) { if (!POS_DEEP[k]) o[k] = _noPos(v[k]); }); return o; }
+        return v;
+    }
+    // does any shape position differ between two versions of a record (at any depth)?
+    function _posDiff(a, b) {
+        if (Array.isArray(a) && Array.isArray(b)) { for (var i = 0; i < Math.min(a.length, b.length); i++) if (_posDiff(a[i], b[i])) return true; return false; }
+        if (a && b && typeof a === 'object' && typeof b === 'object') {
+            var ks = {}; Object.keys(a).concat(Object.keys(b)).forEach(function (k) { ks[k] = 1; });
+            return Object.keys(ks).some(function (k) { return POS_DEEP[k] ? _S(a[k]) !== _S(b[k]) : _posDiff(a[k], b[k]); });
         }
-        var kind = info.kind || 'move', label = info.label || (kind === 'move' ? 'Moved a shape' : 'Undo');
-        var last = _bucket.items[_bucket.items.length - 1];
-        if (last && last.kind === kind && last.label === label && kind === 'move') last.count = (last.count || 1) + 1;   // nudging the same box ten times is one line
-        else _bucket.items.push({ kind: kind, label: label, at: _now() });
+        return false;
+    }
+    function _positionsOnly(e) { try { return _S(_noPos(_P(e.a))) === _S(_noPos(_P(e.b))); } catch (_) { return false; } }
+    // what the collection lists: everything that differs from the confirmed project, in plain words
+    function _netFrom(Rb) {
+        var D = diff(_baseRecords(), Rb), items = describe(D), byKey = {};
+        D.forEach(function (e) { byKey[e.space + '|' + e.key] = e; });
+        _fold(items);
+        items.forEach(function (i) { if (i.op === 'changed' && i.space && !i.derived && !i.book) { var e = byKey[i.space + '|' + i.key]; if (e && e.a != null && e.b != null && _positionsOnly(e)) i.layout = true; } });
+        var shown = items.filter(function (i) { return !i.book && !i.derived && !i.view && !i.folded && !i.layout; });
+        return { D: D, items: items, shown: shown };
+    }
+    function _updateNet(Rb) {
+        if (!_col) return;
+        try { _col.net = _netFrom(Rb || records(_live())); } catch (e) { _col.net = null; try { console.warn('[change-ack] list failed', e); } catch (_) {} return; }
+        // nothing is left to confirm (a value changed and changed back): the collection ends quietly
+        if (!_col.net.shown.length && !_col.steps.some(function (s) { return s.kind !== 'change'; })) _endCol('nothing');
+    }
+    var _netTimer = null;
+    function _netLater() { if (_netTimer) clearTimeout(_netTimer); _netTimer = setTimeout(function () { _netTimer = null; if (_col && !_win) { _updateNet(); _event({ decision: 'collected', count: count(), collected: true }); } }, 400); }
+    function _addAuto(D) {
+        if (!_col || !D || !D.length) return;
+        _col.autoD.push({ D: D, n: _col.steps.length });
+        if (_col.baseR) _patchRecords(_col.baseR, D);
+        _col.acc = null;
+    }
+    // A change made by the person goes into the collection as one step.
+    function _collect(w, items, shown, D, Rb) {
+        if (!_col) _openCol(w.baseline, w.noRevert, w.undoMark);
+        var labels = w.labels.filter(Boolean), notes = (w.notes || []).map(function (n) { return n.summary; }).filter(Boolean);
+        var label = labels.length ? labels.join(', ') : (notes[0] || summarize(shown, 1));
+        _col.steps.push({ kind: 'change', label: _clip(label, 140), before: w.noRevert ? null : w.baseline, undoMark: w.undoMark, onRevert: w.onRevert.slice(), at: _now(), count: shown.length, ai: shown.some(function (i) { return i.ai; }) });
+        _col.ver++; _stats.collected++;
+        // one undo step (Ctrl+Z) per collected change, as before: Undo takes it back, and an Undo that
+        // lands exactly on the state before the last step waiting simply takes that step out
+        try { if (typeof W._slUndoPushSnap === 'function' && w.baseline && !w.noRevert) W._slUndoPushSnap(_clip(summarize(items, 1), 60) || 'change', w.baseline, w.undoMark); } catch (_) {}
+        _updateNet(Rb);
+    }
+    // A move, an undo or a redo: a step of its own.
+    function _noteDeferred(info) {
+        _stats.deferred++;
+        var kind = info.kind || 'move';
+        // a move nobody made (no keyboard or mouse input in the last 3 s, no open group): the app
+        // placing shapes by itself, not something to confirm
+        if (kind === 'move' && !_openGroupList().length && !(_lastInputAt > 0 && (_now() - _lastInputAt) < USER_WINDOW_MS)) { _stats.automatic++; return 'automatic'; }
+        if (_win) { _win.lastAt = _now(); return 'noted'; }   // inside a content change already open: it goes with it
+        // Undo (Ctrl+Z) back to exactly the state before the last step waiting: that step is taken
+        // out of the collection (it is undone, there is nothing left of it to confirm)
+        if (kind === 'undo' && _col && typeof info.snap === 'string') {
+            var last = _col.steps[_col.steps.length - 1];
+            if (last && last.before != null && last.before === info.snap) { _takeOutLast(false, info.snap); _lastDeferredAt = _now(); return 'undone'; }
+        }
+        if (!_col) {
+            var base = _stash; if (base == null) base = _snapNow();
+            _openCol(base, false, _undoDepth());
+            var S0 = _save(); if (S0 && S0._ackOpened) { try { S0._ackOpened(_col); } catch (_) {} }
+        }
+        var label = info.label || (kind === 'move' ? 'Moved a shape' : 'Undo');
+        var lastS = _col.steps[_col.steps.length - 1];
+        if (lastS && lastS.kind === kind && lastS.label === label && kind === 'move') lastS.count = (lastS.count || 1) + 1;   // nudging the same box ten times is one line
+        else { _col.steps.push({ kind: kind, label: label, before: _stash, undoMark: _undoDepth(), onRevert: [], at: _now(), count: 1 }); _col.ver++; }
         _lastDeferredAt = _now();
+        _netLater();
+        _event({ decision: 'collected', count: count(), collected: true });
         return 'deferred';
     }
     function deferred(info, fn) {
-        // a change still open when a move or an undo starts is decided first, measured before it, so
-        // the two never mix (a background write closes at once; a person's edit is asked as usual)
-        if (_win && !_prompting) { if (_timer) { clearTimeout(_timer); _timer = null; } try { _resolve(false); } catch (_) {} }
+        // a change still open when a move or an undo starts goes into the collection first, measured
+        // before it, so the two never mix
+        if (_win) { try { _resolve(true); } catch (_) {} }
+        _freshStash();
         _deferDepth++; var prev = _deferInfo; _deferInfo = info || {}; try { return fn(); } finally { _deferDepth--; _deferInfo = prev; } }
-    // Ask about the collected changes now (leaving the view, Save, a guard). true = nothing left.
-    function flushDeferred() {
-        if (!_bucket) return Promise.resolve(true);
-        var p = new Promise(function (res) { _bucketWaiters.push(res); });
-        if (!_bucketPrompting) _resolveBucket();
-        return p;
-    }
-    function _resolveBucket() {
-        var b = _bucket; if (!b) return;
-        if (_win || _otherDialog()) { setTimeout(_resolveBucket, 300); if (_win && !_prompting) _try(true); return; }   // a content change first, then the collection
-        _bucketPrompting = true; _stats.prompts++;
-        var n = b.items.reduce(function (t, i) { return t + (i.count || 1); }, 0);
-        _bucketDialog(b, n).then(function (choice) {
-            var labels = b.items.map(function (i) { return (i.kind === 'move' ? 'Moved: ' : (i.kind === 'redo' ? 'Redone: ' : 'Undone: ')) + i.label + (i.count > 1 ? ' (x' + i.count + ')' : ''); });
-            if (choice === 'cancel') {
-                _stats.canceled++;
-                _rc = null;
-                // back to before the first collected change, then the content changes acknowledged
-                // since are laid back on top: only the collected changes go
-                var later = b.contentD.slice();
-                revertTo(b.baseline, b.undoMark);
-                later.forEach(function (D) { try { _applyContent(D); } catch (_) {} });
-                try { if (later.length && typeof W.scheduleAutosave === 'function') system(function () { W.scheduleAutosave(); }); } catch (_) {}
-                _jr('change-cancel', _who() + ' canceled ' + n + ' collected change' + (n === 1 ? '' : 's') + ': ' + labels.join('; '));
-            } else {
-                _stats.kept++;
-                _jr('change-ack', _who() + ' acknowledged ' + n + ' collected change' + (n === 1 ? '' : 's') + ': ' + labels.join('; '));
-            }
-            _bucket = null; _bucketPrompting = false;
-            var S = _save();
-            try { if (S && S._ackClosed) S._ackClosed({ baseline: b.baseline, summaryText: labels.slice(0, 3).join('; ') }, choice === 'cancel' ? 'canceled' : 'kept'); } catch (_) {}
-            try { if (typeof CustomEvent === 'function' && W.dispatchEvent) W.dispatchEvent(new CustomEvent('sl:change-ack', { detail: { decision: choice === 'cancel' ? 'canceled' : 'kept', id: b.id, summary: labels.join('; '), count: n, collected: true } })); } catch (_) {}
-            var ws = _bucketWaiters.splice(0); ws.forEach(function (f) { try { f(choice !== 'cancel'); } catch (_) {} });
-        });
-    }
-    // Lay one acknowledged content change back on top (synced stores by record; the other stores
-    // whole, through their declared accessor).
+    // Lay one background change back on top (synced stores by record; the other stores whole,
+    // through their declared accessor).
     function _applyContent(D) {
         D = (D || []).filter(function (e) { return !(e.space === 'pc' && (BOOK_PC[e.key] || String(e.key).charAt(0) === '_')); });   // never roll the journal or logs back
         applyToModel(D);
@@ -728,32 +840,87 @@
             try { var st = W.SLStores && W.SLStores.byKey && W.SLStores.byKey(e.key); if (st && st.set) st.set(e.op === 'removed' ? undefined : _P(e.b)); } catch (_) {}
         });
     }
-    function _bucketDialog(b, n) {
-        return new Promise(function (resolve) {
-            if (_testAnswer) { var ta = _testAnswer; setTimeout(function () { resolve(ta); }, 0); return; }
-            if (typeof document === 'undefined' || !document.body) { resolve('keep'); return; }
-            _injectStyle();
-            var ov = document.createElement('div');
-            ov.id = 'sl-ack-overlay'; ov.className = 'modal-overlay sl-ack-overlay sl-ack-collected';
-            var verb = { move: 'Moved', undo: 'Undone', redo: 'Redone' };
-            var rows = b.items.map(function (i) { return '<li><span class="sl-ack-op ' + (i.kind === 'move' ? 'changed' : 'reordered') + '">' + verb[i.kind || 'move'] + '</span>' + _esc(i.label) + (i.count > 1 ? ' <span class="sl-ack-why">(' + i.count + ' times)</span>' : '') + '</li>'; }).join('');
-            ov.innerHTML = '<div class="sl-dialog-card sl-ack-card" role="dialog" aria-modal="true" aria-labelledby="sl-ack-title">'
-                + '<h3 class="sl-dialog-title" id="sl-ack-title">' + (n === 1 ? 'Acknowledge the move or undo you made here' : 'Acknowledge the ' + n + ' moves and undos you made here') + '</h3>'
-                + '<div class="sl-dialog-msg">Moving shapes and Undo / Redo are collected while you work and checked here, together, before you leave this view.</div>'
-                + '<div class="sl-ack-body"><div class="sl-ack-h">What moved or was undone</div><ul class="sl-ack-list" id="sl-ack-items">' + rows + '</ul></div>'
-                + '<div class="sl-ack-foot">Acknowledge saves them at once. Your name and the time go in the project journal. Cancel puts back only these; the edits you acknowledged in between stay.</div>'
-                + '<div class="sl-dialog-actions"><button type="button" class="sl-dialog-cancel sl-ack-cancel">Cancel</button><button type="button" class="sl-dialog-ok sl-ack-keep">Acknowledge</button></div></div>';
-            document.body.appendChild(ov); ov.style.display = 'flex';
-            requestAnimationFrame(function () { ov.classList.add('show'); });
-            var done = false;
-            function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); } else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finish('keep'); } }
-            function finish(c) { if (done) return; done = true; document.removeEventListener('keydown', onKey, true); ov.classList.remove('show'); setTimeout(function () { try { ov.remove(); } catch (_) {} }, 180); resolve(c); }
-            ov.querySelector('.sl-ack-keep').addEventListener('click', function () { finish('keep'); });
-            ov.querySelector('.sl-ack-cancel').addEventListener('click', function () { finish('cancel'); });
-            document.addEventListener('keydown', onKey, true);
-            setTimeout(function () { var k = ov.querySelector('.sl-ack-keep'); if (k) k.focus(); }, 40);
+    // Take the last step back (the dialog's Undo last change, or Ctrl+Z landing on its "before").
+    // restore: put the project back to the state before it (false: the app's Undo already did).
+    // fromSnap: the snapshot the app's Undo restored (Ctrl+Z), when restore is false.
+    function _takeOutLast(restore, fromSnap) {
+        var c = _col; if (!c) return false;
+        var k = c.steps.length - 1, s = c.steps[k]; if (!s) return false;
+        if (restore && s.before == null) return false;
+        c.steps.pop(); c.ver++; _rc = null;
+        var later = c.autoD.filter(function (a) { return a.n > k; });
+        _own(function () {
+            if (restore) revertTo(s.before, s.undoMark);
+            if (later.length) { later.forEach(function (a) { try { _applyContent(a.D); } catch (_) {} }); try { if (typeof W.scheduleAutosave === 'function') W.scheduleAutosave(); } catch (_) {} }
         });
+        // Restoring a snapshot rewrites a little of it (the app normalizes the rows it loads). That is the
+        // app's own work, not the person's: it is measured and counted as confirmed, so the list shows only
+        // the steps still waiting.
+        try {
+            var exp = _P(restore ? s.before : (fromSnap || s.before));
+            if (exp) {
+                later.forEach(function (a) { exp = applyToObject(exp, (a.D || []).filter(function (e) { return !(e.space === 'pc' && (BOOK_PC[e.key] || String(e.key).charAt(0) === '_')); })); });
+                var Dn = diff(records(exp), records(_live())).filter(function (e) { return e.op !== 'reordered'; });
+                if (Dn.length) _addAuto(Dn);
+            }
+        } catch (_) {}
+        s.onRevert.forEach(function (f) { try { f(); } catch (_) {} });
+        _stats.undoneLast++;
+        if (!c.steps.length) { _endCol('emptied'); return true; }
+        _updateNet();
+        _event({ decision: 'collected', count: count(), collected: true });
+        return true;
     }
+    function _endCol(why) {
+        var c = _col; if (!c) return;
+        _col = null; _rc = null;
+        var S = _save();
+        try { if (S && S._ackClosed) S._ackClosed({ baseline: c.baseline }, why === 'confirmed' ? 'kept' : (why === 'nothing' ? 'automatic' : 'canceled')); } catch (_) {}
+        _event({ decision: why === 'confirmed' ? 'kept' : (why === 'nothing' ? 'nothing' : 'canceled'), id: c.id, count: 0, collected: true });
+    }
+    function _lines(c) {
+        c = c || _col; if (!c) return [];
+        var out = (c.net ? c.net.shown : []).slice();
+        c.steps.forEach(function (s) { if (s.kind !== 'change' || !c.net) out.push({ step: s }); });   // no list worked out (it failed): one line per change
+        return out;
+    }
+    // How many lines the one dialog lists (what the top bar counts). A change still being made (typing, a
+    // drag) is counted once it is finished; leaving, closing and every guard put it in first, so nothing
+    // is missed, and a view's own bookkeeping write after a click never shows as a change for a moment.
+    function count() { return _col ? _lines().length : 0; }
+    function _summaryText(c) {
+        var ls = _lines(c), verbs = { added: 'Added', changed: 'Changed', removed: 'Removed', reordered: 'Reordered' };
+        var parts = ls.slice(0, 4).map(function (i) {
+            if (i.step) return (i.step.kind === 'move' ? 'Moved: ' : (i.step.kind === 'redo' ? 'Redone: ' : 'Undone: ')) + i.step.label + (i.step.count > 1 ? ' (x' + i.step.count + ')' : '');
+            return verbs[i.op] + ' ' + i.area + ': ' + i.label + ((i.fields && i.fields.length) ? ' (' + i.fields.slice(0, 3).map(function (x) { return x.name; }).join(', ') + ')' : '');
+        });
+        if (ls.length > 4) parts.push('and ' + (ls.length - 4) + ' more');
+        return parts.join('; ');
+    }
+    function _confirmAll(impactCount) {
+        var c = _col; if (!c) return;
+        var n = _lines(c).length, text = _summaryText(c);
+        _stats.confirmed++; _stats.kept++;
+        _jr('change-ack', _who() + ' confirmed ' + n + ' change' + (n === 1 ? '' : 's') + ': ' + text + (impactCount ? ' (touches ' + impactCount + ')' : ''));
+        _endCol('confirmed');
+    }
+    function _discardAll() {
+        var c = _col; if (!c) return false;
+        if (c.noRevert) return false;
+        var n = _lines(c).length, text = _summaryText(c);
+        _rc = null;
+        _own(function () {
+            revertTo(c.baseline, c.undoMark);
+            // background changes made while it waited are not the person's: they stay
+            if (c.autoD.length) { c.autoD.forEach(function (a) { try { _applyContent(a.D); } catch (_) {} }); try { if (typeof W.scheduleAutosave === 'function') W.scheduleAutosave(); } catch (_) {} }
+        });
+        c.steps.slice().reverse().forEach(function (s) { s.onRevert.forEach(function (f) { try { f(); } catch (_) {} }); });
+        _stats.discarded++; _stats.canceled++;
+        _jr('change-cancel', _who() + ' discarded ' + n + ' change' + (n === 1 ? '' : 's') + ': ' + text);
+        _endCol('discarded');
+        return true;
+    }
+
     function _attachGroup(g) {
         if (!_win || !g) return;
         if (g.label && _win.labels.indexOf(g.label) < 0) _win.labels.push(g.label);
@@ -770,15 +937,10 @@
         var t = String(el.type || 'text').toLowerCase();
         return ['text', 'number', 'search', 'email', 'url', 'tel', 'password', ''].indexOf(t) >= 0;
     }
-    // Still typing in the field that changed: focus is in it, the last keystroke went into it,
-    // Enter has not been pressed since the change, and it was less than 8 s ago (someone who
-    // stops typing and sits in the field is asked anyway).
-    var TYPING_IDLE_MS = 8000;
-    // 15 Oct 2026 (user-approved): the dialog never pops over the person while they type ANYWHERE in the app. Typing =
-    // focus in an editable element (input, textarea, select, contenteditable) and a keystroke or input within the last
-    // TYPING_PAUSE_MS (Enter ends it). While typing, a small badge says how many changes wait; the dialog opens when the
-    // typing pauses for TYPING_PAUSE_MS, when focus leaves the editable element, or on a click on the badge. A forced
-    // request (Save, closing the window, leaving) opens it at once. The change stays pending and unsaved until acknowledged.
+    // Typing: focus in an editable element (input, textarea, select, contenteditable) and a keystroke or
+    // input in the last TYPING_PAUSE_MS (Enter ends it). 16 Oct 2026: nothing opens over the person any
+    // more; what typing still decides is where one change ends, so a typed word is one change in the
+    // collection (and one Undo last change), not one per pause between letters.
     var TYPING_PAUSE_MS = 1500, NON_TEXT_INPUT = { button: 1, submit: 1, reset: 1, checkbox: 1, radio: 1, hidden: 1, range: 1, color: 1, file: 1, image: 1 };
     function _isEditable(el) {
         if (!el || !el.tagName) return false;
@@ -790,61 +952,18 @@
         try { if (!_isEditable(document.activeElement)) return false; if (_enterAt >= _lastKeyAt) return false; return (_now() - _lastKeyAt) < TYPING_PAUSE_MS; } catch (_) { return false; }
     }
     function _pauseLeft() { return Math.max(60, TYPING_PAUSE_MS - (_now() - _lastKeyAt) + 30); }
-    function _showBadge(n) {
-        if (typeof document === 'undefined' || !document.body) return;
-        var el = document.getElementById('sl-ack-badge');
-        if (!el) {
-            el = document.createElement('div'); el.id = 'sl-ack-badge'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
-            // fixed bottom right, above the activity strip (30 px), never blocking: only the button takes the pointer
-            el.style.cssText = 'position:fixed;right:16px;bottom:42px;z-index:1500;pointer-events:none;';
-            el.innerHTML = '<button type="button" class="sl-ack-badge-btn" style="pointer-events:auto;font:600 12px/1.2 -apple-system,Segoe UI,Arial,sans-serif;padding:6px 12px;border-radius:14px;border:1px solid var(--color-warning,#B7791F);background:var(--color-bg-elevated,#fff);color:var(--color-text,#1d1d1f);box-shadow:0 2px 8px rgba(0,0,0,0.18);cursor:pointer;"></button>';
-            el.querySelector('button').addEventListener('click', function () { _hideBadge(); if (_win && !_prompting) { _groups = {}; _try(true); } });
-            document.body.appendChild(el);
-        }
-        // above the activity strip and above the Feedback button when it is there (it sits bottom right too)
-        try { var fab = document.getElementById('feedback-fab'), fr = fab && fab.getBoundingClientRect(), bot = 42; if (fr && fr.height > 0 && getComputedStyle(fab).display !== 'none') bot = Math.max(bot, Math.round(W.innerHeight - fr.top + 8)); el.style.bottom = bot + 'px'; el.style.zIndex = '1850'; } catch (_) {}
-        var b = el.querySelector('button'), t = (n === 1 ? '1 change' : n + ' changes') + ' to acknowledge';
-        if (b.textContent !== t) b.textContent = t; b.setAttribute('aria-label', t + ': open the acknowledgement'); el.style.display = 'block';
-        try { var S = _save(); if (S && S.renderIndicator) S.renderIndicator(); } catch (_) {}
-    }
-    function _hideBadge() { try { var el = document.getElementById('sl-ack-badge'); if (el) el.style.display = 'none'; } catch (_) {} }
-    function _stillTyping() {
-        try {
-            var a = document.activeElement;
-            if (!_isText(a) || a !== _win.focusEl || a !== _lastKeyEl) return false;
-            if (_enterAt > _win.lastAt - 50) return false;
-            if ((_now() - _lastKeyAt) > TYPING_IDLE_MS) return false;
-            return true;
-        } catch (_) { return false; }
-    }
-    function _otherDialog() {
-        var vis = function (el) { try { if (!el) return false; var cs = getComputedStyle(el), r = el.getBoundingClientRect(); return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0; } catch (_) { return false; } };
-        var dq = 0;
-        try { if (typeof W._slDialogQueue === 'function') dq = W._slDialogQueue(); else if (typeof _slDialogQueue === 'function') dq = _slDialogQueue(); } catch (_) {}
-        if (dq > 0 && (typeof document === 'undefined' || vis(document.getElementById('sl-dialog-overlay')))) return true;   // a house dialog the person can see
-        try { if (W.SLChoice && W.SLChoice.open()) return true; } catch (_) {}
-        // any other modal on screen (the live common cause prompt, an editing form, the welcome
-        // card): the person finishes there first, then sees one acknowledgement for the result
-        try {
-            var ovs = document.querySelectorAll('.modal-overlay.show');
-            for (var i = 0; i < ovs.length; i++) {
-                var o = ovs[i]; if (o.id === 'sl-ack-overlay' || o.style.display === 'none') continue;
-                var cs = getComputedStyle(o), r = o.getBoundingClientRect();
-                if (cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0) return true;   // only a modal the person can actually see
-            }
-        } catch (_) {}
-        return false;
-    }
+    // Is the open change finished? Then it goes into the collection (no dialog).
     function _try(force) {
         _timer = null;
-        if (!_win || _prompting) return;
+        if (!_win) return;
         if (!force) {
             if (_openGroupList().length) return;            // end() retries
             if (_win.user && _pointerDown) return;           // pointerup retries
-            if (_win.badged && _typingNow()) { _showBadge(_win.badged); _schedule(_pauseLeft()); return; }   // still typing: the badge stays
+            if (_win.user && _typingNow()) { _schedule(_pauseLeft()); return; }   // still typing: one word is one change
             if ((_now() - _win.lastAt) < QUIET_MS - 20) { _schedule(QUIET_MS); return; }
+            // (v1.x waited while another modal was on screen so two dialogs never stacked; collecting opens
+            // nothing, so an edit made in an editing form is counted in the top bar as soon as it is finished)
         }
-        if (_otherDialog()) { _schedule(400); return; }
         _resolve(force === true);
     }
 
@@ -853,70 +972,50 @@
         try { if (typeof W._wsUser === 'function') { var u = W._wsUser(); if (u && u.email) return u.email; } } catch (_) {}
         return 'Not signed in';
     }
-    function _jr(kind, msg) { try { if (typeof W.jrnl === 'function') W.jrnl(kind, msg); } catch (_) {} }
+    // The journal entry is the app's own bookkeeping: written as a system change, never a change to confirm.
+    function _jr(kind, msg) { try { if (typeof W.jrnl === 'function') _own(function () { W.jrnl(kind, msg); }); } catch (_) {} }
 
-    // Look at the open change and decide: nothing, automatic, or ask.
+    // a tree added or removed whole is one line ("with 480 nodes"), not 480 lines
+    function _fold(items) {
+        var whole = {};
+        items.forEach(function (i) { if (i.space === 'fta:shell' && (i.op === 'added' || i.op === 'removed') && i.ref) { whole[String(i.ref.pageId) + '|' + i.op] = i; i.nodes = 0; } });
+        items.forEach(function (i) { if (i.space === 'fta:node' && i.ref && whole[String(i.ref.pageId) + '|' + i.op]) { whole[String(i.ref.pageId) + '|' + i.op].nodes++; i.folded = true; } });
+        Object.keys(whole).forEach(function (k) { var pg = whole[k]; if (pg.nodes && pg.label.indexOf(' (with ') < 0) pg.label += ' (with ' + pg.nodes + ' node' + (pg.nodes === 1 ? '' : 's') + ')'; });
+    }
+    // Look at the open change and decide: nothing, automatic (a background change nobody made), or
+    // the person's change, which goes into the collection.
     function _resolve(forced) {
-        var w = _win; if (!w) return;
-        _prompting = true;
+        var w = _win; if (!w) return 'none';
+        if (_timer) { clearTimeout(_timer); _timer = null; }
+        _freshStash();
         var items = [], D = [], Rb = null;
         try {
             // The "before" records are usually the "after" records of the previous decision (the
             // stash string is the same object): reusing them halves the cost on a large project
-            // (measured: 100k fault tree nodes, 690 ms -> under 300 ms per acknowledgement).
+            // (measured: 100k fault tree nodes, 690 ms -> under 300 ms per decision).
             var Ra = (_rc && _rc.key === w.baseline) ? _rc.R : records(_P(w.baseline) || {});
             Rb = records(_live());
             D = diff(Ra, Rb); items = describe(D);
-            if (_stash != null) _rc = { key: _stash, R: Rb };
+            _rc = (_stash != null && _stashSeq === _noteSeq) ? { key: _stash, R: Rb } : null;
         } catch (e) { _rc = null; try { console.warn('[change-ack] diff failed', e); } catch (_) {} }
-        // a tree added or removed whole is one line ("with 480 nodes"), not 480 lines
-        var whole = {};
-        items.forEach(function (i) { if (i.space === 'fta:shell' && (i.op === 'added' || i.op === 'removed') && i.ref) { whole[String(i.ref.pageId) + '|' + i.op] = i; i.nodes = 0; } });
-        items.forEach(function (i) { if (i.space === 'fta:node' && i.ref && whole[String(i.ref.pageId) + '|' + i.op]) { whole[String(i.ref.pageId) + '|' + i.op].nodes++; i.folded = true; } });
-        Object.keys(whole).forEach(function (k) { var pg = whole[k]; if (pg.nodes) pg.label += ' (with ' + pg.nodes + ' node' + (pg.nodes === 1 ? '' : 's') + ')'; });
+        _fold(items);
         var shown = items.filter(function (i) { return !i.book && !i.derived && !i.view && !i.folded; });
-        if (w.reopened && !shown.length) shown = items.filter(function (i) { return !i.book && !i.folded; });   // a crash left moves: they still need their acknowledgement
         var ai = items.some(function (i) { return i.ai; });
         w.items = items; w.D = D;
         if (!D.length) { _stats.nothing++; return _close(w, 'nothing'); }
-        if (!shown.length || (!w.user && !ai)) {
+        if (!shown.length || w.system || (!w.user && !ai)) {
             _stats.automatic++;
-            if (_bucket && D.length) _bucket.contentD.push(D);   // accepted on its own: Cancel on collected moves keeps it, and the accepted state carries it
+            if (_col) _addAuto(D);   // counts as confirmed: Discard all keeps it, the confirmed copy carries it
             return _close(w, 'automatic');
-        }   // forced (Save, a guard) skips the waiting, never the question of whether anyone made it
-        // the person is typing (anywhere): no dialog over them; the badge counts what waits and the dialog follows the pause
-        if (!forced && _typingNow()) { _prompting = false; w.badged = shown.length; _showBadge(shown.length); _schedule(_pauseLeft()); return; }
-        _hideBadge();
-        _stats.prompts++;
-        w.shownSnap = _stash;     // the state the dialog describes (the last write happened before the quiet period ended)
-        _dialog(w, shown).then(function (choice) {
-            if (choice === 'dismiss' || _win !== w) return;      // closed from outside (a load, Don't Save): already handled
-            if (choice === 'keep') {
-                _stats.kept++;
-                try { if (typeof W._slUndoPushSnap === 'function' && w.baseline && !w.noRevert) W._slUndoPushSnap(_clip(summarize(items, 1), 60) || 'change', w.baseline, w.undoMark); } catch (_) {}
-                _jr('change-ack', _who() + ' acknowledged: ' + summarize(items, 3) + (w.impactCount ? ' (touches ' + w.impactCount + ')' : ''));
-                if (_bucket && w.D) _bucket.contentD.push(w.D);
-                _close(w, 'kept');
-            } else {
-                _stats.canceled++;
-                _rc = null;
-                revertTo(w.baseline, w.undoMark);
-                _jr('change-cancel', _who() + ' canceled: ' + summarize(items, 3));
-                w.onRevert.forEach(function (f) { try { f(); } catch (_) {} });
-                _close(w, 'canceled');
-            }
-        });
+        }
+        _collect(w, items, shown, D, Rb);
+        return _close(w, 'collected');
     }
     function _close(w, decision) {
-        _prompting = false; _hideBadge();
         if (_win === w) _win = null;
         var S = _save();
         try { if (S && S._ackClosed) S._ackClosed(w, decision); } catch (_) {}
-        try { if (typeof CustomEvent === 'function' && W.dispatchEvent) W.dispatchEvent(new CustomEvent('sl:change-ack', { detail: { decision: decision, id: w.id, summary: w.items ? summarize(w.items, 3) : '', count: w.items ? w.items.filter(function (i) { return !i.book && !i.derived; }).length : 0 } })); } catch (_) {}
-        var ws = _waiters.splice(0); ws.forEach(function (f) { try { f(decision); } catch (_) {} });
-        // a change that arrived while the dialog was open is its own change, measured from the
-        // state the dialog showed (Keep) or from the restored state (Cancel: it was undone too)
-        if (w.late && decision === 'kept' && w.shownSnap) { _stash = w.shownSnap; noteChange(); }
+        _event({ decision: decision, id: w.id, summary: w.items ? summarize(w.items, 3) : '', count: count(), collected: decision === 'collected' });
         return decision;
     }
     // Put the project back exactly as it was (the Undo path), as a system change, and drop the
@@ -930,12 +1029,11 @@
             try { if (undoMark != null && typeof W._slUndoTruncate === 'function') W._slUndoTruncate(undoMark); } catch (_) {}
             try { if (typeof W.scheduleAutosave === 'function') W.scheduleAutosave(); } catch (_) {}
         } finally { _restoreDepth--; _sysDepth--; }
-        _stash = snapStr;
+        _stash = snapStr; _stashSeq = _noteSeq;
         return true;
     }
-    // The project journal is append-only and hash-chained: a restore (Cancel, Undo, Don't Save)
-    // must never take entries back out of it, or the record of the acknowledgement would vanish
-    // with the change it acknowledged.
+    // The project journal is append-only and hash-chained: a restore (Discard, Undo) must never take
+    // entries back out of it, or the record of a decision would vanish with the change it records.
     function keepJournal(fn) {
         var before = null;
         try { if (typeof projectConfig !== 'undefined' && projectConfig && projectConfig.journal && Array.isArray(projectConfig.journal.entries)) before = projectConfig.journal; } catch (_) {}
@@ -955,214 +1053,331 @@
     function sameContent(snapStr) {
         try { var it = describe(diff(records(_P(snapStr) || {}), records(_live()))); return !it.some(function (i) { return !i.book && !i.derived && !i.view; }); } catch (_) { return false; }
     }
-    // Close the open change without asking (Don't Save, a load): revert it or keep it as it is.
+    // Put the open change into the collection now (no waiting for the quiet period or for typing).
+    function collectNow() { if (_win) { try { _resolve(true); } catch (e) { try { console.warn('[change-ack] collect failed', e); } catch (_) {} } } return !!_col; }
+    // Close everything waiting without asking: revert it (opts.revert) or keep it on screen as it is.
     function drop(opts) {
-        if (_bucket && !_win) {   // Don't Save: the collected changes go with the rest (save_state restores the saved version)
-            var b = _bucket; _bucket = null;
-            if (opts && opts.revert && b.baseline) revertTo(b.baseline, b.undoMark);
-            var bw = _bucketWaiters.splice(0); bw.forEach(function (f) { try { f(!(opts && opts.revert)); } catch (_) {} });
-            return true;
-        }
-        var w = _win; if (!w) return false;
-        if (_timer) { clearTimeout(_timer); _timer = null; }
-        if (opts && opts.revert && w.baseline && !w.noRevert) revertTo(w.baseline, w.undoMark);
-        _hideDialog();
-        _close(w, (opts && opts.revert) ? 'canceled' : 'dropped');
-        if (_bucket) { _bucket = null; var bw2 = _bucketWaiters.splice(0); bw2.forEach(function (f) { try { f(true); } catch (_) {} }); }   // the caller restores the saved version
+        if (_win) { if (_timer) { clearTimeout(_timer); _timer = null; } var w = _win; if (opts && opts.revert && w.baseline && !w.noRevert && !_col) revertTo(w.baseline, w.undoMark); _close(w, (opts && opts.revert) ? 'canceled' : 'dropped'); }
+        if (_col) { var c = _col; if (opts && opts.revert && !c.noRevert) _own(function () { revertTo(c.baseline, c.undoMark); }); _col = null; _endColSilently(c); }
+        _closeDialog('none');
         return true;
     }
+    function _endColSilently(c) { var S = _save(); try { if (S && S._ackClosed) S._ackClosed({ baseline: c.baseline }, 'canceled'); } catch (_) {} _event({ decision: 'canceled', id: c.id, count: 0, collected: true }); }
     // A project was loaded or replaced: nothing open, nothing to compare against, and the click
-    // that started the load is not a reason to ask about what the load wrote.
+    // that started the load is not a reason to collect what the load wrote.
     function settle() {
-        if (_win) { _hideDialog(); var w = _win; _win = null; _prompting = false; var ws = _waiters.splice(0); ws.forEach(function (f) { try { f('dropped'); } catch (_) {} }); void w; }
+        _win = null;
         if (_timer) { clearTimeout(_timer); _timer = null; }
-        _stash = null; _lastInputAt = 0; _notes = [];
-        if (_bucket) { _bucket = null; var bw = _bucketWaiters.splice(0); bw.forEach(function (f) { try { f(true); } catch (_) {} }); }
+        _col = null; _closeDialog('none');
+        _stash = null; _stashSeq = _noteSeq; _lastInputAt = 0; _notes = []; _rc = null;
         setTimeout(function () { try { if (_stash == null && !_win) { if (typeof requestIdleCallback === 'function') requestIdleCallback(_ensureStash, { timeout: 2000 }); else _ensureStash(); } } catch (_) {} }, 1200);
     }
 
-    // The project as ACCEPTED so far, as a snapshot string: every acknowledged change, nothing that
-    // still waits for an acknowledgement. null = nothing waits, so the live project is the accepted
-    // one. While moves or undos are collected it is the state before the first of them with the
-    // content changes acknowledged since laid back on top (exactly what Cancel on the collection
-    // would leave on screen). While a content change is open it is the state before that change.
+    // The project as CONFIRMED so far, as a snapshot string: nothing that still waits to be confirmed.
+    // null = nothing waits, so the live project is the confirmed one. While changes are collected it is
+    // the state before the first of them with the background changes made since laid on top (exactly
+    // what Discard all would leave on screen). Its journal is the confirmed journal: what modules wrote
+    // to the journal about changes still waiting is confirmed with them.
     function acceptedSnapshot() {
-        if (_bucket) {
-            if (!_bucket.contentD.length) return _bucket.baseline;
-            var o = _P(_bucket.baseline); if (!o) return null;
-            var journal = null;
-            try { var lv = _live(); if (lv.projectConfig && lv.projectConfig.journal) journal = lv.projectConfig.journal; } catch (_) {}
-            _bucket.contentD.forEach(function (D) { o = applyToObject(o, (D || []).filter(function (e) { return !(e.space === 'pc' && (BOOK_PC[e.key] || String(e.key).charAt(0) === '_')); })); });
-            if (journal) { o.projectConfig = o.projectConfig || {}; o.projectConfig.journal = journal; }   // the record of every acknowledgement goes with it
-            return _S(o);
+        if (_col) {
+            if (_col.acc != null) return _col.acc;
+            if (!_col.autoD.length) return (_col.acc = _col.baseline);
+            var o = _P(_col.baseline); if (!o) return null;
+            _col.autoD.forEach(function (a) { o = applyToObject(o, (a.D || []).filter(function (e) { return !(e.space === 'pc' && (BOOK_PC[e.key] || String(e.key).charAt(0) === '_')); })); });
+            return (_col.acc = _S(o));
         }
         if (_win && !_win.noRevert) return _win.baseline;
         return null;
     }
-    // A crash left changes nobody acknowledged (the autosave on this device holds them): ask about
-    // them now, measured from the accepted state saved with them. Acknowledge saves them; Cancel
-    // puts the project back to what was accepted.
+    // A crash or a reload left changes nobody confirmed (the autosave on this device holds them): they
+    // go back into the collection, measured from the confirmed copy saved with them, and are offered
+    // back (save_state.js recovered() opens the dialog). Confirm all saves them; Discard all returns to
+    // what was confirmed; Keep working leaves them waiting in the top bar.
     // restored (optional): the project exactly as the crash left it, as restored. Then only what
-    // differs between the accepted copy and THAT is asked about: the app's own writes since the
-    // restore (views drawn, settings created on first use) are measured out, by laying the reverse
-    // of the waiting changes onto the project as it is now.
-    // Returns true (asked), false (nothing to ask) or 'busy' (another change is being decided: try
-    // again shortly, so the app's own start-up writes are never mixed into this question).
-    function reopen(acceptedStr, label, restored) {
+    // differs between the confirmed copy and THAT is listed: the app's own writes since the restore
+    // (views drawn, settings created on first use) are measured out, by laying the reverse of the
+    // waiting changes onto the project as it is now.
+    // Returns true (collected), false (nothing was waiting) or 'busy' (the dialog is open, or the app is
+    // still writing as it starts up: try again shortly, so start-up writes are never mixed in).
+    // force: the last try; whatever the person started meanwhile stays on top as its own steps.
+    function reopen(acceptedStr, label, restored, force) {
         if (!acceptedStr) return false;
-        // a change being decided, another dialog on screen, or the app still writing as it starts up
-        // (views drawing, first-use settings): right after, so none of that is mixed into this question
-        if (_bucket || _prompting || _win || _otherDialog() || (_now() - _lastNotedAt) < 2500) return 'busy';
+        if (_askState) return 'busy';
+        if (!force && !_col && (_win || (_now() - _lastNotedAt) < 2500)) return 'busy';
+        collectNow();
         var base = acceptedStr;
         if (restored && typeof restored === 'object') {
             try {
-                var D = diff(records(_P(acceptedStr) || {}), records(restored)).filter(function (e) { return e.op !== 'reordered'; });
-                if (!D.length) return false;   // nothing was waiting after all
-                var back = D.map(function (e) { return { space: e.space, key: e.key, op: e.op === 'added' ? 'removed' : (e.op === 'removed' ? 'added' : 'changed'), a: e.b, b: e.a }; });
-                var now = _P(_snapNow()); if (now) base = _S(applyToObject(now, back));
+                var D0 = diff(records(_P(acceptedStr) || {}), records(restored)).filter(function (e) { return e.op !== 'reordered'; });
+                if (!D0.length) return false;   // nothing was waiting after all
+                var back = D0.map(function (e) { return { space: e.space, key: e.key, op: e.op === 'added' ? 'removed' : (e.op === 'removed' ? 'added' : 'changed'), a: e.b, b: e.a }; });
+                var cur = _P(_col ? _col.baseline : _snapNow()); if (cur) base = _S(applyToObject(cur, back));
             } catch (_) { base = acceptedStr; }
         }
         _rc = null;
-        _stash = base;
-        var t = begin(label || 'Changes from your last session that were not acknowledged');
-        noteChange();
-        if (_win) _win.reopened = true;   // asked even when all it holds is moved shapes (positions)
-        end(t);
-        return !!_win;
+        var before = _col ? _col.baseline : _snapNow();
+        var Dr;
+        try { Dr = diff(records(_P(base) || {}), records(_P(before) || {})); } catch (_) { Dr = []; }
+        if (!Dr.length) return false;
+        var it = describe(Dr); _fold(it);
+        var vis = it.filter(function (i) { return !i.book && !i.derived && !i.view && !i.folded; });
+        // nothing the person made, not even a shape moved (only the journal, settings created on first use,
+        // recomputed numbers): there is nothing to offer back
+        if (!vis.length) {
+            var moved = Dr.some(function (e) { return e.op === 'changed' && !(e.space === 'pc' && (BOOK_PC[e.key] || String(e.key).charAt(0) === '_')) && _posDiff(_P(e.a), _P(e.b)); });
+            if (!moved) return false;
+        }
+        var step = vis.length
+            ? { kind: 'change', label: label || 'Changes from your last session that were not confirmed', before: base, undoMark: 0, onRevert: [], at: _now(), count: vis.length, reopened: true }
+            : { kind: 'move', label: 'Shapes moved on diagrams in your last session', before: base, undoMark: 0, onRevert: [], at: _now(), count: 1, reopened: true };
+        if (_col) {
+            _col.baseline = base; _col.baseR = null; _col.acc = null; _col.noRevert = false; _col.undoMark = 0;
+            _col.steps.unshift(step); _col.autoD.forEach(function (a) { a.n++; }); _col.ver++;
+            if (_col.steps[1] && _col.steps[1].before == null) _col.steps[1].before = before;
+        } else {
+            _openCol(base, false, 0); _col.steps.push(step); _col.ver++;
+            var S0 = _save(); if (S0 && S0._ackOpened) { try { S0._ackOpened(_col); } catch (_) {} }
+        }
+        _updateNet();
+        _event({ decision: 'collected', count: count(), collected: true, reopened: true });
+        return !!_col;
     }
 
     // ---- public grouping ---------------------------------------------------
     function begin(label, opts) { var t = 'g' + (++_groupSeq); _groups[t] = { label: label || '', opts: opts || {} }; if (_win) _attachGroup(_groups[t]); return t; }
     function end(token) { var g = _groups[token]; if (!g) return; delete _groups[token]; if (_win) _attachGroup(g); if (_win) _schedule(); }
-    function waitDecision() { return new Promise(function (res) { if (!_win) return res('none'); _waiters.push(res); }); }
+    // batch(): one change for a piece of work (a generator, an async AI apply). It resolves as soon as
+    // the work is in the collection: { acknowledged: true (in place, waiting to be confirmed with the
+    // rest), collected, result }. Taking it back is Undo last change or Discard all in the dialog,
+    // which also run opts.onRevert.
     function batch(label, fn, opts) {
         var t = begin(label, opts);
-        var finish = function (res) { end(t); if (!_win) return { acknowledged: true, result: res }; return waitDecision().then(function (d) { return { acknowledged: d !== 'canceled', result: res }; }); };
+        var finish = function (res) {
+            end(t);
+            if (_win && !_openGroupList().length) _resolve(true);
+            return { acknowledged: true, collected: !!_col, result: res };
+        };
         try { var r = fn(); if (r && typeof r.then === 'function') return r.then(function (v) { return finish(v); }, function (e) { end(t); throw e; }); return Promise.resolve(finish(r)); }
         catch (e) { end(t); return Promise.reject(e); }
     }
-    function describeChange(info) { if (!info) return; if (_bucket && !_win && (_now() - _lastDeferredAt) < 100) return; var note = { summary: info.summary || '', refs: info.refs || [] }; if (_win) _win.notes.push(note); else { _notes.push(note); if (_notes.length > 20) _notes.shift(); } }
-    // Ask now if something is waiting. true = nothing left unacknowledged. opts.changeOnly: only the
-    // open content change, the collected moves and undos keep waiting (they are asked on leaving).
-    function flush(opts) {
-        var only = !!(opts && opts.changeOnly);
-        if (!_win) return only ? Promise.resolve(true) : flushDeferred();
-        var p = waitDecision().then(function (d) { return d !== 'canceled'; });
-        if (!_prompting) { _groups = {}; _try(true); }
-        return only ? p : p.then(function (ok) { return flushDeferred().then(function (ok2) { return ok && ok2; }); });
+    function describeChange(info) { if (!info) return; if (_col && !_win && (_now() - _lastDeferredAt) < 100) return; var note = { summary: info.summary || '', refs: info.refs || [] }; if (_win) _win.notes.push(note); else { _notes.push(note); if (_notes.length > 20) _notes.shift(); } }
+
+    // ---- THE ONE DIALOG ----------------------------------------------------------
+    // ask(opts): open the one confirmation for everything collected. Resolves 'none' (nothing was
+    // waiting), 'confirmed', 'discarded' (Discard all, or Undo last change took the last one back) or
+    // 'keep' (Keep working: the dialog closes, everything stays waiting, the caller does not go on).
+    // opts.reason: 'leave' | 'step' | 'project' | 'export' | 'save' | 'close' | 'early' | 'recovered';
+    // opts.action: what the person was doing, in words ("open another project"); opts.exportLabel.
+    // A second ask while the dialog is open shares its answer.
+    function ask(opts) {
+        opts = opts || {};
+        if (_askState) return _askState.promise;
+        collectNow();
+        if (!_col) return Promise.resolve('none');
+        var st = { opts: opts, note: '' };
+        st.promise = new Promise(function (res) { st.resolve = res; });
+        _askState = st; _stats.prompts++;
+        _event({ decision: 'asking', count: count(), collected: true });
+        if (_testAnswer) { setTimeout(function () { _testDecide(st); }, 0); return st.promise; }
+        if (typeof document === 'undefined' || !document.body) { setTimeout(function () { _finishAsk(st, 'keep'); }, 0); return st.promise; }
+        _renderDialog(st);
+        return st.promise;
+    }
+    function _testDecide(st) {
+        var a = _testAnswer;
+        if (a === 'keep' || a === 'confirm') return _choose(st, 'confirm');
+        if (a === 'cancel' || a === 'discard') return _choose(st, 'discard');
+        if (a === 'undo') { _choose(st, 'undo'); if (_askState === st) _finishAsk(st, 'keep'); return; }
+        _choose(st, 'working');
+    }
+    function _finishAsk(st, result) {
+        if (_askState !== st) return;
+        _askState = null;
+        if (st.ov) { var ov = st.ov; st.ov = null; try { document.removeEventListener('keydown', st.onKey, true); } catch (_) {} ov.classList.remove('show'); setTimeout(function () { try { ov.remove(); } catch (_) {} }, 180); try { if (st.prevFocus && st.prevFocus.focus && document.contains(st.prevFocus)) st.prevFocus.focus(); } catch (_) {} }
+        _event({ decision: 'answered', answer: result, count: count(), collected: true });
+        try { st.resolve(result); } catch (_) {}
+    }
+    function _closeDialog(result) { if (_askState) _finishAsk(_askState, result); }
+    function _choose(st, choice) {
+        if (_askState !== st) return;
+        if (choice === 'working') return _finishAsk(st, 'keep');
+        // a change still open (a background job writing as the person answers) joins the list first;
+        // if the list grew since it was drawn, it is drawn again: nothing is confirmed unseen
+        collectNow();
+        if (!_col) return _finishAsk(st, 'discarded');
+        if (choice === 'confirm') {
+            if (st.ov && st.shownVer !== _col.ver) { st.note = 'More changes came in while this was open. Check them, then confirm.'; _renderDialog(st); return; }
+            _confirmAll(st.impactCount || 0);
+            return _finishAsk(st, 'confirmed');
+        }
+        if (choice === 'discard') {
+            if (!_discardAll()) { st.note = 'These changes were already in place before a copy could be taken, so they cannot be discarded here. Use Undo instead.'; if (st.ov) _renderDialog(st); else _finishAsk(st, 'keep'); return; }
+            return _finishAsk(st, 'discarded');
+        }
+        if (choice === 'undo') {
+            if (!_takeOutLast(true)) { st.note = 'The last change cannot be taken back here. Use Undo instead.'; if (st.ov) _renderDialog(st); return; }
+            if (!_col) return _finishAsk(st, 'discarded');
+            st.note = '';
+            if (st.ov) _renderDialog(st);
+        }
     }
 
-    // ---- the dialog ----------------------------------------------------------
     function _injectStyle() {
         if (typeof document === 'undefined' || document.getElementById('sl-ack-style')) return;
         var st = document.createElement('style'); st.id = 'sl-ack-style';
-        st.textContent = '.sl-ack-card{max-width:620px;width:94%;max-height:86vh;display:flex;flex-direction:column}'
-            + '.sl-ack-body{overflow:auto;margin-top:6px;padding-right:4px;flex:1 1 auto;min-height:0}.sl-ack-card .sl-dialog-actions{flex:0 0 auto}'
-            + '.sl-ack-h{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-tertiary,#6b7280);margin:14px 0 6px}'
-            + '.sl-ack-list{list-style:none;margin:0;padding:0;font-size:13px}'
-            + '.sl-ack-list li{padding:6px 0;border-bottom:1px solid var(--color-border-hair,#eef0f3)}'
-            + '.sl-ack-op{display:inline-block;min-width:66px;font-size:11px;font-weight:650;padding:1px 7px;border-radius:999px;margin-right:6px;text-align:center;background:var(--color-surface-2,#f3f4f6)}'
-            + '.sl-ack-op.added{color:#0E7A3C}.sl-ack-op.removed{color:#C0231D}.sl-ack-op.changed{color:#2E6BD6}.sl-ack-op.reordered{color:#6b7280}'
-            + '.sl-ack-area{color:var(--color-text-tertiary,#6b7280);font-size:12px}'
-            + '.sl-ack-f{font-size:12px;color:var(--color-text-secondary,#374151);margin:3px 0 0 74px}'
-            + '.sl-ack-was{text-decoration:line-through;opacity:.7}'
-            + '.sl-ack-g{margin:4px 0 8px}.sl-ack-gt{font-size:12.5px;font-weight:600}'
-            + '.sl-ack-g ul{margin:2px 0 0 0;padding-left:18px;font-size:12.5px}'
-            + '.sl-ack-why{color:var(--color-text-tertiary,#6b7280)}'
-            + '.sl-ack-foot{font-size:12px;color:var(--color-text-tertiary,#6b7280);margin-top:12px}'
-            + '.sl-ack-ai{font-size:11px;font-weight:650;color:#7A3EA8;margin-left:6px}'
+        // near-black text everywhere: no gray text in this dialog (house rule)
+        var INK = 'var(--color-text,#1d1d1f)';
+        st.textContent = '#sl-ack-overlay{z-index:2147483642}'
+            + '.sl-ack-card{max-width:660px;width:94%;max-height:88vh;display:flex;flex-direction:column;color:' + INK + '}'
+            + '.sl-ack-card .sl-dialog-msg,.sl-ack-card .sl-dialog-title{color:' + INK + '}'
+            + '.sl-ack-body{overflow:auto;margin-top:6px;padding-right:4px;flex:1 1 auto;min-height:0}.sl-ack-card .sl-dialog-actions{flex:0 0 auto;flex-wrap:wrap;gap:8px}'
+            + '.sl-ack-h{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:' + INK + ';margin:14px 0 6px}'
+            + '.sl-ack-gh{font-size:13px;font-weight:700;color:' + INK + ';margin:10px 0 2px}'
+            + '.sl-ack-list{list-style:none;margin:0;padding:0;font-size:13px;color:' + INK + '}'
+            + '.sl-ack-list li{padding:6px 0;border-bottom:1px solid var(--color-border-hair,#e3e6ea)}'
+            + '.sl-ack-op{display:inline-block;min-width:66px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;margin-right:6px;text-align:center;background:var(--color-surface-2,#f3f4f6);color:' + INK + '}'
+            + '.sl-ack-op.added{color:#0B6B33}.sl-ack-op.removed{color:#B01E18}.sl-ack-op.changed{color:#1F55B8}.sl-ack-op.reordered,.sl-ack-op.moved,.sl-ack-op.undone,.sl-ack-op.redone{color:' + INK + '}'
+            + '.sl-ack-f{font-size:12.5px;color:' + INK + ';margin:3px 0 0 74px}'
+            + '.sl-ack-was{text-decoration:line-through}'
+            + '.sl-ack-g{margin:4px 0 8px}.sl-ack-gt{font-size:12.5px;font-weight:700;color:' + INK + '}'
+            + '.sl-ack-g ul{margin:2px 0 0 0;padding-left:18px;font-size:12.5px;color:' + INK + '}'
+            + '.sl-ack-why,.sl-ack-last,.sl-ack-foot{color:' + INK + '}'
+            + '.sl-ack-last{font-size:12.5px;margin-top:8px}'
+            + '.sl-ack-note{font-size:13px;font-weight:600;color:#8A4B00;margin-top:8px}'
+            + '.sl-ack-foot{font-size:12.5px;margin-top:12px}'
+            + '.sl-ack-ai{font-size:11px;font-weight:700;color:#5E2A86;margin-left:6px}'
             + '.sl-choice-card{max-width:500px}';
         (document.head || document.documentElement).appendChild(st);
     }
-    var _dlgEl = null;
-    function _hideDialog() { if (_dlgEl) { try { _dlgEl._finish && _dlgEl._finish(null); } catch (_) {} } }
     function _itemHtml(i) {
+        if (i.step) {
+            var s = i.step, v = { move: ['moved', 'Moved'], undo: ['undone', 'Undone'], redo: ['redone', 'Redone'], change: ['changed', 'Changed'] }[s.kind] || ['moved', 'Moved'];
+            return '<li><span class="sl-ack-op ' + v[0] + '">' + v[1] + '</span>' + _esc(s.label) + (s.count > 1 ? ' (' + s.count + ' times)' : '') + '</li>';
+        }
         var verbs = { added: 'Added', changed: 'Changed', removed: 'Removed', reordered: 'Reordered' };
-        var h = '<li><span class="sl-ack-op ' + i.op + '">' + verbs[i.op] + '</span><span class="sl-ack-area">' + _esc(i.area) + ':</span> ' + _esc(i.label) + (i.ai ? '<span class="sl-ack-ai">AI drafted</span>' : '');
+        var h = '<li><span class="sl-ack-op ' + i.op + '">' + verbs[i.op] + '</span>' + _esc(i.label) + (i.ai ? '<span class="sl-ack-ai">AI drafted</span>' : '');
         (i.fields || []).slice(0, 5).forEach(function (f) { h += '<div class="sl-ack-f">' + _esc(f.name) + ': <span class="sl-ack-was">' + _esc(f.was) + '</span> → <b>' + _esc(f.now) + '</b></div>'; });
         if ((i.fields || []).length > 5) h += '<div class="sl-ack-f">and ' + (i.fields.length - 5) + ' more fields</div>';
         return h + '</li>';
     }
+    // grouped by kind: one heading per area ("Aircraft FHA", "Fault tree · PSSA pitch"), then the
+    // moves on diagrams, then Undo and Redo
+    function _groupsHtml(lines) {
+        var order = [], by = {}, shown = 0, MAXG = 8, MAX = 40, left = 0;
+        lines.forEach(function (i) {
+            var g = i.step ? (i.step.kind === 'move' ? 'Moves on diagrams' : (i.step.kind === 'change' ? 'Changes' : 'Undo and Redo')) : (i.area || 'Project');
+            if (!by[g]) { by[g] = []; order.push(g); }
+            by[g].push(i);
+        });
+        order.sort(function (a, b) { var r = function (x) { return x === 'Moves on diagrams' ? 1 : (x === 'Undo and Redo' ? 2 : 0); }; return r(a) - r(b); });
+        var h = '';
+        order.forEach(function (g) {
+            var L = by[g];
+            h += '<div class="sl-ack-grp"><div class="sl-ack-gh">' + _esc(g) + ' (' + L.length + ')</div><ul class="sl-ack-list">';
+            L.forEach(function (i, k) { if (k < MAXG && shown < MAX) { h += _itemHtml(i); shown++; } else left++; });
+            if (L.length > MAXG && shown < MAX) h += '<li>and ' + (L.length - Math.min(L.length, MAXG)) + ' more here</li>';
+            h += '</ul></div>';
+        });
+        if (shown >= MAX && left) h += '<div class="sl-ack-why">and ' + left + ' more</div>';
+        return h;
+    }
     function _impactHtml(r) {
-        if (!r || !r.groups.length) return '<div class="sl-dialog-msg">Nothing downstream is traced to this change.</div>';
+        if (!r || !r.groups.length) return '<div class="sl-dialog-msg">Nothing else is traced to these changes.</div>';
         var h = '';
         r.groups.forEach(function (g) {
             h += '<div class="sl-ack-g"><div class="sl-ack-gt">' + _esc(g.title) + ' (' + g.entries.length + ')</div><ul>';
-            g.entries.slice(0, 8).forEach(function (e) { h += '<li>' + _esc(e.label) + ' <span class="sl-ack-why">' + _esc(e.why) + '</span></li>'; });
+            g.entries.slice(0, 8).forEach(function (e) { h += '<li>' + _esc(e.label) + ' <span class="sl-ack-why">(' + _esc(e.why) + ')</span></li>'; });
             if (g.entries.length > 8) h += '<li class="sl-ack-why">and ' + (g.entries.length - 8) + ' more</li>';
             h += '</ul></div>';
         });
         if (r.truncated) h += '<div class="sl-ack-why">This project is very large: the list above stopped after ' + Math.round(r.ms / 100) / 10 + ' s and may not be complete.</div>';
         return h;
     }
-    function _dialog(w, shown) {
-        return new Promise(function (resolve) {
-            if (_testAnswer) { var ta = _testAnswer; setTimeout(function () { resolve(ta); }, 0); try { w.impact = impact(shown); w.impactCount = w.impact.count; } catch (_) {} return; }
-            if (typeof document === 'undefined' || !document.body) { resolve('keep'); return; }
-            _injectStyle();
-            var ov = document.createElement('div');
-            ov.id = 'sl-ack-overlay'; ov.className = 'modal-overlay sl-ack-overlay';
-            var labels = w.labels.filter(Boolean), notes = (w.notes || []).map(function (n) { return n.summary; }).filter(Boolean);
-            var head = labels.length ? labels.join(', ') : (notes[0] || '');
-            var title = shown.length === 1 ? 'Acknowledge this change' : ('Acknowledge these ' + shown.length + ' changes');
-            var lead = (head ? _esc(head) + '. ' : '') + 'Check what changes and what it touches, then acknowledge it or cancel it.';
-            if (w.noRevert) lead += ' This change was already in place before a copy could be taken, so use Undo to take it back.';
-            ov.innerHTML = '<div class="sl-dialog-card sl-ack-card" role="dialog" aria-modal="true" aria-labelledby="sl-ack-title">'
-                + '<h3 class="sl-dialog-title" id="sl-ack-title">' + _esc(title) + '</h3>'
-                + '<div class="sl-dialog-msg">' + lead + '</div>'
-                + '<div class="sl-ack-body"><div class="sl-ack-h">What changes</div><ul class="sl-ack-list" id="sl-ack-items">'
-                + shown.slice(0, SHOW_ITEMS).map(_itemHtml).join('')
-                + (shown.length > SHOW_ITEMS ? '<li class="sl-ack-why">and ' + (shown.length - SHOW_ITEMS) + ' more</li>' : '')
-                + '</ul><div class="sl-ack-h">What it touches</div><div id="sl-ack-impact" class="sl-dialog-msg">Working out what this touches…</div></div>'
-                + '<div class="sl-ack-foot">Acknowledge saves it at once. Your name and the time go in the project journal. Cancel change puts the project back exactly as it was before this change.</div>'
-                + '<div class="sl-dialog-actions"><button type="button" class="sl-dialog-cancel sl-ack-cancel"' + (w.noRevert ? ' disabled title="Use Undo for this one"' : '') + '>Cancel change</button><button type="button" class="sl-dialog-ok sl-ack-keep">Acknowledge</button></div>'
-                + '</div>';
-            document.body.appendChild(ov);
-            ov.style.display = 'flex';
+    var LEAD = {
+        leave: function (a) { return 'Before you ' + (a || 'leave this page') + ', check what you changed.'; },
+        step: function (a) { return 'Before you ' + (a || 'go to the next step') + ', check what you changed.'; },
+        project: function (a) { return 'Before you ' + (a || 'open another project') + ', check what you changed.'; },
+        export: function (a) { return 'Before you ' + (a || 'export') + ', check what you changed. The export holds only confirmed work.'; },
+        save: function () { return 'Check what you changed.'; },
+        close: function () { return 'Before you close the window, check what you changed.'; },
+        early: function () { return 'Here is everything you changed so far.'; },
+        recovered: function () { return 'These changes from your last session were never confirmed. They are back on screen.'; }
+    };
+    function _renderDialog(st) {
+        _injectStyle();
+        var c = _col; if (!c) return;
+        var lines = _lines(c), n = lines.length, o = st.opts || {}, exp = o.reason === 'export';
+        var lead = (LEAD[o.reason] || LEAD.early)(o.action) + ' Nothing you change counts until you confirm it. Confirm all saves it and shares it with your team.';
+        var last = c.steps[c.steps.length - 1];
+        var lastTxt = last ? (last.kind === 'move' ? 'Moved: ' : (last.kind === 'undo' ? 'Undone: ' : (last.kind === 'redo' ? 'Redone: ' : ''))) + last.label : '';
+        var canUndo = !!(last && last.before != null), canDiscard = !c.noRevert;
+        var html = '<div class="sl-dialog-card sl-ack-card" role="dialog" aria-modal="true" aria-labelledby="sl-ack-title" aria-describedby="sl-ack-lead">'
+            + '<h3 class="sl-dialog-title" id="sl-ack-title">' + (n === 1 ? 'Confirm your change' : 'Confirm your ' + n + ' changes') + '</h3>'
+            + '<div class="sl-dialog-msg" id="sl-ack-lead">' + _esc(lead) + '</div>'
+            + (st.note ? '<div class="sl-ack-note" role="alert">' + _esc(st.note) + '</div>' : '')
+            + (!exp && lastTxt ? '<div class="sl-ack-last" id="sl-ack-last"><b>Last change</b> (what Undo last change takes back): ' + _esc(lastTxt) + '</div>' : '')
+            + '<div class="sl-ack-body"><div class="sl-ack-h">What you changed</div><div id="sl-ack-items">' + _groupsHtml(lines) + '</div>'
+            + '<div class="sl-ack-h">What it touches</div><div id="sl-ack-impact" class="sl-dialog-msg">Working out what this touches…</div>'
+            + '</div>'
+            + '<div class="sl-ack-foot">' + (exp
+                ? 'Confirm all and export: your changes are saved and shared, then the export runs. Keep working: nothing is exported and nothing is lost.'
+                : 'Confirm all: saved and shared, with your name and the time in the project journal. Undo last change: takes back only the last one. Discard all: puts the project back as it was before these changes. Keep working: closes this and you stay where you are; nothing is lost.') + '</div>'
+            + '<div class="sl-dialog-actions">'
+            // data-modal-close: Keep working is this dialog's exit, so the app's generic close (x) is not added
+            + '<button type="button" class="sl-dialog-cancel sl-ack-working" data-ack="working" data-modal-close="1">Keep working</button>'
+            + (exp ? '' : '<button type="button" class="sl-dialog-cancel sl-ack-discard" data-ack="discard"' + (canDiscard ? '' : ' disabled title="These changes cannot be discarded here; use Undo"') + '>Discard all</button>'
+                + '<button type="button" class="sl-dialog-cancel sl-ack-undo" data-ack="undo"' + (canUndo ? '' : ' disabled title="The last change cannot be taken back here; use Undo"') + '>Undo last change</button>')
+            + '<button type="button" class="sl-dialog-ok sl-ack-confirm sl-ack-keep" data-ack="confirm">' + (exp ? _esc(o.exportLabel || 'Confirm all and export') : 'Confirm all') + '</button>'
+            + '</div></div>';
+        var ov = st.ov;
+        if (!ov) {
+            try { st.prevFocus = document.activeElement; } catch (_) {}
+            ov = document.createElement('div'); ov.id = 'sl-ack-overlay'; ov.className = 'modal-overlay sl-ack-overlay';
+            document.body.appendChild(ov); ov.style.display = 'flex';
             requestAnimationFrame(function () { ov.classList.add('show'); });
-            var prevFocus = null; try { prevFocus = document.activeElement; } catch (_) {}
-            var done = false;
-            function onKey(e) {
-                if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); }   // a decision is needed: Escape does nothing
-                else if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finish('keep'); }
-                else if (e.key === 'Tab') { /* focus stays inside the two buttons */ var bs = ov.querySelectorAll('button:not([disabled])'); if (bs.length) { var i = Array.prototype.indexOf.call(bs, document.activeElement); e.preventDefault(); bs[(i + (e.shiftKey ? bs.length - 1 : 1)) % bs.length].focus(); } }
-            }
-            function finish(choice) {
-                if (done) return; done = true; _dlgEl = null;
-                document.removeEventListener('keydown', onKey, true);
-                ov.classList.remove('show');
-                setTimeout(function () { try { ov.remove(); } catch (_) {} }, 180);
-                try { if (prevFocus && prevFocus.focus && document.contains(prevFocus)) prevFocus.focus(); } catch (_) {}
-                resolve(choice || 'keep');
-            }
-            ov._finish = function () { finish('dismiss'); };
-            _dlgEl = ov;
-            ov.querySelector('.sl-ack-keep').addEventListener('click', function () { finish('keep'); });
-            var cb = ov.querySelector('.sl-ack-cancel'); if (cb) cb.addEventListener('click', function () { if (!w.noRevert) finish('cancel'); });
-            document.addEventListener('keydown', onKey, true);
-            setTimeout(function () { var b = ov.querySelector('.sl-ack-keep'); if (b) b.focus(); }, 40);
-            // the impact walk runs after the dialog is on screen, so a big project never delays it
-            setTimeout(function () {
-                var r = null; try { r = impact(shown); } catch (_) { r = null; }
-                w.impact = r; w.impactCount = r ? r.count : 0;
-                var el = ov.querySelector('#sl-ack-impact'); if (el) el.innerHTML = r ? _impactHtml(r) : 'The trace could not be worked out for this change.';
-            }, 30);
-        });
+            st.ov = ov;
+            st.onKey = function (e) {
+                if (_askState !== st) return;
+                if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); _choose(st, 'working'); }   // Escape = Keep working: nothing lost
+                else if (e.key === 'Enter') { var f = document.activeElement, a = f && f.getAttribute && f.getAttribute('data-ack'); e.preventDefault(); e.stopImmediatePropagation(); if (a && !f.disabled) _choose(st, a); else _choose(st, 'confirm'); }
+                else if (e.key === 'Tab') { var bs = ov.querySelectorAll('button:not([disabled])'); if (bs.length) { var i = Array.prototype.indexOf.call(bs, document.activeElement); e.preventDefault(); bs[(i + (e.shiftKey ? bs.length - 1 : 1) + bs.length) % bs.length].focus(); } }
+            };
+            document.addEventListener('keydown', st.onKey, true);
+            ov.addEventListener('click', function (e) { var b = e.target && e.target.closest && e.target.closest('button[data-ack]'); if (b && !b.disabled) _choose(st, b.getAttribute('data-ack')); });
+        }
+        ov.innerHTML = html;
+        st.shownVer = c.ver;
+        setTimeout(function () { var b = ov.querySelector('.sl-ack-confirm'); if (b && _askState === st) b.focus(); }, 40);
+        // the impact walk runs after the dialog is on screen, so a big project never delays it
+        var shownItems = (c.net ? c.net.shown : []).slice(), ver = c.ver;
+        setTimeout(function () {
+            if (_askState !== st || !_col || _col.ver !== ver) return;
+            var r = null; try { r = impact(shownItems); } catch (_) { r = null; }
+            st.impactCount = r ? r.count : 0;
+            var el = ov.querySelector('#sl-ack-impact'); if (el) el.innerHTML = r ? _impactHtml(r) : 'The trace could not be worked out for these changes.';
+        }, 30);
     }
 
     // ---- input tracking: was this change made by the person? -----------------
     if (typeof document !== 'undefined' && document.addEventListener) {
         var mark = function (e) { if (e && e.isTrusted === false) return; _lastInputAt = _now(); };
         ['keydown', 'paste', 'drop', 'input', 'change', 'click'].forEach(function (t) { document.addEventListener(t, mark, true); });
-        var key = function (e) { if (e && e.isTrusted === false) return; _lastKeyAt = _now(); _lastKeyEl = e.target || null; };
+        var key = function (e) { if (e && e.isTrusted === false) return; _lastKeyAt = _now(); };
         document.addEventListener('keydown', key, true); document.addEventListener('input', key, true);
         document.addEventListener('pointerdown', function (e) { mark(e); if (!(e.target && e.target.closest && e.target.closest('#sl-ack-overlay, #sl-choice-overlay'))) _pointerDown = true; }, true);
         var up = function () { if (!_pointerDown) return; _pointerDown = false; if (_win) _schedule(); };
         W.addEventListener && W.addEventListener('pointerup', up, true);
         W.addEventListener && W.addEventListener('pointercancel', up, true);
         W.addEventListener && W.addEventListener('blur', up);
-        document.addEventListener('focusout', function () { if (_win && !_prompting) _schedule(60); }, true);
-        document.addEventListener('keyup', function (e) { if (e.key === 'Enter' && _win && !_prompting) { _enterAt = _now(); _schedule(60); } }, true);
+        document.addEventListener('focusout', function () { if (_win) _schedule(60); }, true);
+        document.addEventListener('keyup', function (e) { if (e.key === 'Enter' && _win) { _enterAt = _now(); _schedule(60); } }, true);
+        // a <select> that switches the view (the bow-tie picker): its value before the change, so Keep
+        // working can put the picker back
+        var _selPrev = (typeof WeakMap === 'function') ? new WeakMap() : null;
+        document.addEventListener('focusin', function (e) { try { var t = e.target; if (_selPrev && t && t.tagName === 'SELECT') _selPrev.set(t, t.value); } catch (_) {} }, true);
+        document.addEventListener('pointerdown', function (e) { try { var t = e.target && e.target.closest && e.target.closest('select'); if (_selPrev && t && !_selPrev.has(t)) _selPrev.set(t, t.value); } catch (_) {} }, true);
+        var _selectNow = function () { try { var a = document.activeElement; if (a && a.tagName === 'SELECT' && _selPrev && _selPrev.has(a)) return { el: a, prev: _selPrev.get(a) }; } catch (_) {} return null; };
+        var _selectBack = function (s) { try { if (s && s.el && document.contains(s.el)) s.el.value = s.prev; } catch (_) {} };
         // The seed sweep (idp_seed_trees.js) keeps the MF&MS seed trees in step with the
         // interdependence table on its own: what it writes is derived, never the person's change.
         var wrapIdp = function () {
@@ -1172,33 +1387,88 @@
             } catch (_) {}
         };
         W.addEventListener && W.addEventListener('load', wrapIdp);
-        // Leaving a view (another tab, another fault tree) is when the collected moves and undos
-        // are asked about. Nothing collected: the call goes straight through, unchanged.
-        var _sameView = function (name, target) {
-            try {
-                if (name === 'openFTAPageById') return (typeof activeFTAPageId !== 'undefined') && String(activeFTAPageId) === String(target);
-                var t = document.getElementById('view-' + target);
-                return !!(t && t.style.display !== 'none' && getComputedStyle(t).display !== 'none');
-            } catch (_) { return false; }
+        // ---- WHEN THE ONE DIALOG OPENS (a): leaving a view. Switching page or tab, another fault tree,
+        // another system's workspace or its tabs, another bow-tie or block diagram, closing a walkthrough.
+        // Nothing collected: the call goes straight through, unchanged and synchronous.
+        var _vis = function (id) { try { var t = document.getElementById(id); return !!(t && t.style.display !== 'none' && getComputedStyle(t).display !== 'none'); } catch (_) { return false; } };
+        var LEAVE = {
+            switchTab: { action: 'leave this page', same: function (a) { return _vis('view-' + a[0]); } },
+            openFTAPageById: { action: 'open another fault tree', same: function (a) { try { return (typeof activeFTAPageId !== 'undefined') && String(activeFTAPageId) === String(a[0]); } catch (_) { return false; } } },
+            openSystemWorkspace: { action: 'switch to another system', same: function (a) { try { return (typeof activeSystemId !== 'undefined') && String(activeSystemId) === String(a[0]) && _vis('view-sys-workspace'); } catch (_) { return false; } } },
+            switchWorkspaceTab: { action: 'switch to another tab', same: function (a) { return _vis('view-sys-workspace') && _vis('ws-view-' + a[0]); } },
+            btSelect: { action: 'open another bow-tie', same: function (a) { var s = _selectNow(); return !!(s && String(s.prev) === String(a[0])); } },
+            rbdSelect: { action: 'open another block diagram', same: function (a) { var s = _selectNow(); return !!(s && String(s.prev) === String(a[0])); } },
+            'SLEtaUI.select': { action: 'open another event tree', same: function (a) { var s = _selectNow(); return !!(s && String(s.prev) === String(a[0])); } },
+            _cmaCloseWalk: { action: 'close the walkthrough', same: function () { return false; } },
+            _zsaCloseModal: { action: 'close the walkthrough', same: function () { return false; } },
+            // (b) Next in a multi-step flow, called by name (the assumption walkthrough: forward only)
+            aiAsmWalkNav: { action: 'go to the next step', reason: 'step', same: function (a) { return !(Number(a[0]) > 0); } }
         };
         var wrapLeave = function () {
-            ['switchTab', 'openFTAPageById'].forEach(function (name) {
+            Object.keys(LEAVE).forEach(function (name) {
                 try {
-                    var f = W[name]; if (typeof f !== 'function' || f._ackLeave) return;
+                    // a name may be a method on a module object ("SLEtaUI.select")
+                    var parts = name.split('.'), owner = W, key = parts.pop();
+                    parts.forEach(function (p) { owner = owner ? owner[p] : null; });
+                    if (!owner) return;
+                    var f = owner[key]; if (typeof f !== 'function' || f._ackLeave) return;
+                    var L = LEAVE[name];
                     var g = function () {
                         var self = this, a = arguments;
-                        // only a real move to another view by the person: not a re-render that reopens the
-                        // same tab or tree, and not one a restore or an undo makes on its own
-                        if (!_bucket || _sysDepth > 0 || _deferDepth > 0 || _sameView(name, a[0])) return f.apply(self, a);
-                        return flushDeferred().then(function () { return f.apply(self, a); });
+                        // only a real move by the person: not a re-render that reopens the same view, and not
+                        // one a load, a restore or an undo makes on its own
+                        if ((!_win && !_col) || _sysDepth > 0 || _deferDepth > 0 || _askState || L.same(a)) return f.apply(self, a);
+                        if (!collectNow()) return f.apply(self, a);
+                        var sel = _selectNow();
+                        return ask({ reason: L.reason || 'leave', action: L.action }).then(function (r) { if (r === 'keep') { _selectBack(sel); return undefined; } return f.apply(self, a); });
                     };
                     g._ackLeave = true;
                     try { if (W.SLWrap) W.SLWrap.preserve(f, g); } catch (_) {}
-                    W[name] = g;
+                    owner[key] = g;
                 } catch (_) {}
             });
         };
         W.addEventListener && W.addEventListener('load', function () { wrapLeave(); var k = 0, iv = setInterval(function () { wrapLeave(); if (++k >= 20) clearInterval(iv); }, 500); });
+        // ---- (b) Next / Continue in any multi-step flow, and Export / Download buttons. A click on such a
+        // control while changes wait is held, the one dialog opens, and after Confirm all (or Discard
+        // all) the same control is clicked again. Keep working: nothing happens, nothing is lost.
+        // Declared: data-sl-step="next" (a step), data-sl-step="export" (an export), data-sl-step="none"
+        // (never). Known flows: the particular risk "Build the reports" steps and their report exports.
+        var STEP_SEL = '[data-pra-act="flow-run"],[data-pra-act="tflow-run"],[data-pra-act="lflow-run"],[data-pra-act="sflow-run"],[data-pra-act="bird-run"]';
+        var EXPORT_SEL = '[data-pra-act$="report-export"],[data-pra-act$="report-print"]';
+        var _bypass = false;
+        var _isPager = function (el) {
+            try {
+                if (el.hasAttribute('data-pg')) return true;
+                if (/page|match/i.test((el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || ''))) return true;
+                if (/\.page\(|[Pp]age\(/.test(el.getAttribute('onclick') || '')) return true;
+                for (var i = 0; i < el.attributes.length; i++) { var at = el.attributes[i]; if (/^data-/.test(at.name) && /^page$/i.test(at.value)) return true; }
+            } catch (_) {}
+            return false;
+        };
+        var _kindOf = function (el) {
+            if (!el || el.disabled || el.closest('#sl-ack-overlay, #sl-choice-overlay, #sl-dialog-overlay')) return null;
+            var d = el.getAttribute('data-sl-step');
+            if (d) return d === 'export' ? 'export' : (d === 'none' ? null : 'step');
+            try { if (el.matches(STEP_SEL)) return 'step'; if (el.matches(EXPORT_SEL)) return 'export'; } catch (_) {}
+            if (_isPager(el)) return null;
+            var t = String(el.textContent || el.value || '').replace(/\s+/g, ' ').trim();
+            if (!t || t.length > 48) return null;
+            if (/^(Next|Next step|Continue)(\s|$|[^A-Za-z])/i.test(t)) return 'step';
+            if (/^(\W\s*)?(Export|Download)(\s|$|[^A-Za-z])/i.test(t)) return 'export';
+            return null;
+        };
+        W.addEventListener && W.addEventListener('click', function (e) {
+            if (_bypass || (!_win && !_col) || _askState || _sysDepth > 0) return;
+            var el = e.target && e.target.closest && e.target.closest('button, [role="button"], input[type="button"], input[type="submit"], a[href]');
+            var kind = _kindOf(el); if (!kind) return;
+            if (!collectNow()) return;
+            e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
+            ask(kind === 'export' ? { reason: 'export', action: 'export' } : { reason: 'step', action: 'go to the next step' }).then(function (r) {
+                if (r === 'keep' || !document.contains(el)) return;
+                _bypass = true; try { el.click(); } finally { _bypass = false; }
+            });
+        }, true);
         // The requirement-type migration (req_taxonomy.js) runs while the V&V view draws: an old
         // label rewritten to the ARP4754B class is the app's own upkeep, not an edit.
         var wrapRt = function () {
@@ -1214,16 +1484,25 @@
     var SLRecords = { records: records, diff: diff, describe: describe, summarize: summarize, applyToModel: applyToModel, applyToObject: applyToObject, live: _live, impact: impact };
     var api = {
         noteChange: noteChange, stash: stash, keepJournal: keepJournal, sameContent: sameContent, system: system, systemAsync: systemAsync, restoring: restoring,
-        begin: begin, end: end, batch: batch, describe: describeChange, flush: flush, drop: drop, settle: settle, revertTo: revertTo,
-        pending: function () { return !!_win || !!_bucket; },
-        deferred: deferred, flushDeferred: flushDeferred, acceptedSnapshot: acceptedSnapshot, reopen: reopen,
-        collected: function () { return _bucket ? _bucket.items.map(function (i) { return { kind: i.kind, label: i.label, count: i.count || 1 }; }) : []; },
-        // an open change somebody MADE (input, a group, a batch): what Save / Don't Save / Cancel
-        // and closing the window care about. A background write is decided on its own in 450 ms.
-        pendingUser: function () { return !!(_win && _win.user) || !!_bucket; },
+        begin: begin, end: end, batch: batch, describe: describeChange, drop: drop, settle: settle, revertTo: revertTo,
+        // the one dialog and the collection
+        ask: ask, collectNow: collectNow, count: count,
+        // flush(): Save and the guards; true = nothing left waiting (confirmed or discarded), false = Keep
+        // working. flush({ changeOnly: true }): only put the open change into the collection, ask nothing.
+        flush: function (opts) { if (opts && opts.changeOnly) { collectNow(); return Promise.resolve(true); } return ask({ reason: (opts && opts.reason) || 'save' }).then(function (r) { return r !== 'keep'; }); },
+        flushDeferred: function () { return ask({ reason: 'leave' }).then(function (r) { return r !== 'keep'; }); },
+        pending: function () { return !!_win || !!_col; },
+        // something the PERSON made waits (an open change of theirs, or the collection): what closing the
+        // window, opening another project and the top bar care about. A background write is decided on
+        // its own in 450 ms.
+        pendingUser: function () { return !!(_win && _win.user) || !!_col; },
+        deferred: deferred, acceptedSnapshot: acceptedSnapshot, reopen: reopen,
+        collected: function () { return _col ? _col.steps.map(function (s) { return { kind: s.kind, label: s.label, count: s.count || 1 }; }) : []; },
+        lines: function () { return _lines().map(function (i) { return i.step ? { kind: i.step.kind, label: i.step.label, count: i.step.count || 1 } : { kind: 'change', op: i.op, area: i.area, label: i.label, ai: !!i.ai, fields: (i.fields || []).map(function (f) { return { name: f.name, was: f.was, now: f.now }; }) }; }); },
         // the person is mid-gesture or mid-typing: a rebase (which re-renders) waits
         busy: function () { try { return _pointerDown || (_isText(document.activeElement) && (_now() - _lastInputAt) < 4000); } catch (_) { return false; } },
-        status: function () { return { open: !!_win, prompting: _prompting, collecting: !!_bucket, collectPrompting: _bucketPrompting, user: !!(_win && _win.user), groups: _openGroupList().length, stashed: _stash != null, stats: JSON.parse(JSON.stringify(_stats)) }; },
+        status: function () { return { open: !!_win, timer: !!_timer, openFor: _win ? _now() - _win.at : 0, quietFor: _win ? _now() - _win.lastAt : 0, prompting: !!_askState, asking: !!_askState, collecting: !!_col, collectPrompting: !!_askState, user: !!(_win && _win.user), groups: _openGroupList().length, stashed: _stash != null, steps: _col ? _col.steps.length : 0, count: count(), stats: JSON.parse(JSON.stringify(_stats)) }; },
+        // tests only: 'confirm' (or the old 'keep'), 'discard' (or 'cancel'), 'undo', 'working'
         _setTestAnswer: function (a) { _testAnswer = a || null; },
         typing: function () { return _typingNow(); }, TYPING_PAUSE_MS: TYPING_PAUSE_MS,
         _markInput: function () { _lastInputAt = _now(); },

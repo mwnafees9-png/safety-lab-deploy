@@ -163,7 +163,8 @@ function runSync(o) {
         check('B10 save_state says not-yours in plain words', /'not-yours': 'this project is saved in a different account from the one signed in here'/.test(ss));
         check('B11 save_state never retries not-yours', /code !== 'shrink' && code !== 'refused' && code !== 'not-yours'\) _scheduleRetry\(\)/.test(ss));
         const idx = S('index.html');
-        check('B12 index.html loads cloud_sync 2.6 and save_state 2.2', /cloud_sync\.js\?v=2\.6/.test(idx) && /save_state\.js\?v=2\.2/.test(idx));
+        // 16 Oct 2026: save_state.js 3.0 (changes collected and confirmed once, change_ack.js v2.0) keeps the 2.2 reason 'not-yours'
+        check('B12 index.html loads cloud_sync 2.6 and save_state 3.0 (with the 2.2 not-yours reason)', /cloud_sync\.js\?v=2\.6/.test(idx) && /save_state\.js\?v=3\.0/.test(idx));
     }
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
     process.exit(fail ? 1 : 0);

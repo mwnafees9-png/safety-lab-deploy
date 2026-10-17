@@ -71,6 +71,9 @@
         // the payload the autosave just wrote: prefer the fresh localStorage
         // mirror; fall back to re-serializing (oversized projects)
         let payload = _ls.get('safetyLab.autosave.v1');
+        // 16 Oct 2026 (change_ack.js v2.0): the ring holds confirmed work only; while changes wait to be
+        // confirmed the generation is the confirmed project, never what still waits
+        try { const A = window.SLChangeAck; if (A && (A.pendingUser ? A.pendingUser() : (A.pending && A.pending()))) { const acc = A.acceptedSnapshot ? A.acceptedSnapshot() : null; if (typeof acc !== 'string') return; payload = acc; } } catch (_) {}
         if (!payload) {
             try { payload = JSON.stringify(_slabBuildProjectExport()); } catch (_) { return; }
         }

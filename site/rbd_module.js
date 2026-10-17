@@ -570,7 +570,7 @@
                 else if (act === 'edit-by-hand') rbdEditByHand();
                 else if (act === 'refresh-from-tree') rbdRefreshFromTree();
             });
-            shell.addEventListener('change', e => { if (e.target && e.target.id === 'rbd-pick') rbdSelect(e.target.value); });
+            shell.addEventListener('change', e => { if (e.target && e.target.id === 'rbd-pick') (window.rbdSelect || rbdSelect)(e.target.value); });   // 16 Oct 2026: through window, so changes waiting are confirmed before another diagram opens
         }
         const pages = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(p => p.root);
         const bar = document.getElementById('rbd-bar');

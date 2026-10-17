@@ -1,3 +1,15 @@
+// 16 Oct 2026 (v3.0, the owner's confirmed rule, see change_ack.js v2.0): changes are COLLECTED while the person
+// works and confirmed in ONE dialog (Confirm all, Undo last change, Discard all, Keep working) only when they leave a
+// view, press Next, open or replace the project, export or save a copy, press Save, or close the window. Here:
+//   · the top bar (and every per-view button) says "N changes to confirm" (SLChangeAck.count()); a click opens the
+//     dialog early (save() asks first);
+//   · guard() (opening, creating or importing a project, a demo, a restore, sign out, closing the window) opens the
+//     one dialog for work still waiting; Keep working stops the action; "Not saved yet" is only for CONFIRMED work
+//     that did not reach this device or the cloud yet (offline, another account);
+//   · EXPORTS (saving a copy, a bundle, a folder, the cloud copy, PDF, CSV and report exports) offer "Confirm all and
+//     export" or Keep working; an export never holds work that was not confirmed;
+//   · a reload or a crash: what was waiting comes back into the collection and the dialog offers it again;
+//   · desktop: window.__slabPendingCount() for the shell's close guard (window.__slabRequestClose() as before).
 // 15 Oct 2026 (v2.2): reason 'not-yours' (the project is saved in another account): said plainly, never retried.
 // ============================================================================
 // save_state.js - v2.0 - 13 Oct 2026 (late) - AUTOSAVE.
@@ -129,7 +141,8 @@
     function waiting() { var A = _ack(); return !!(A && (A.pendingUser ? A.pendingUser() : A.pending())); }
     function unsaved() { return !!_saving || !!_localFail || _cloudPending; }
     function isDirty() { return waiting() || unsaved(); }
-    function _collectedCount() { try { var A = _ack(); return (A && A.collected) ? A.collected().reduce(function (t, i) { return t + (i.count || 1); }, 0) : 0; } catch (_) { return 0; } }
+    // how many changes wait to be confirmed (what the top bar counts; change_ack.js count())
+    function _collectedCount() { try { var A = _ack(); return (A && A.count) ? A.count() : 0; } catch (_) { return 0; } }
 
     // ---- the indicator: the header control and every per-view button --------------------------
     var REASON_TEXT = {
@@ -143,18 +156,17 @@
         try { _dirtySinceSave = isDirty(); } catch (_) {}
         if (typeof document === 'undefined' || !document.getElementById) return;
         var n = _collectedCount(), cls = '', text = '', title = '';
-        if (_state === 'saving' || (_saving && _state !== 'error' && _state !== 'offline')) { cls = 'saving'; text = 'Saving…'; title = 'Saving your acknowledged changes.'; }
+        if (_state === 'saving' || (_saving && _state !== 'error' && _state !== 'offline')) { cls = 'saving'; text = 'Saving…'; title = 'Saving your confirmed changes.'; }
         else if (_state === 'error' || _state === 'offline') {
             cls = 'error';
             text = 'Not saved: ' + (_state === 'offline' ? 'offline' : _short(_reasonCode)) + '. Retry';
             title = 'Not saved: ' + _reason + '. ' + (_localFail ? 'Your changes are still on screen; do not close this tab.' : 'Your changes are kept on this device and will be uploaded ' + (_state === 'offline' ? 'when you are back online' : 'automatically') + '. Click to retry now.');
         } else if (_state === 'saved') {
             text = 'Saved ' + _hhmm(_savedAt);
-            title = 'Saved ' + (_where === 'cloud' ? 'on this device and to the cloud' : (_where === 'team' ? 'on this device and shared with your team' : 'on this device')) + ' at ' + _hhmm(_savedAt) + '. Acknowledged changes save automatically.';
-        } else { text = 'All changes saved'; title = 'Acknowledged changes save automatically.'; }
-        if (n && cls !== 'error') { cls = 'dirty'; text = n + (n === 1 ? ' move or undo' : ' moves and undos') + ' to acknowledge'; title = 'Moves and Undo / Redo are collected and acknowledged together when you leave this view. Click to acknowledge them now; they save as soon as you do.'; }
-        // 15 Oct 2026: a change made by the person that waits for its acknowledgement (for example while they type)
-        try { var A0 = _ack(), st0 = A0 && A0.status ? A0.status() : null; if (st0 && st0.open && st0.user && cls !== 'error' && cls !== 'saving') { cls = 'dirty'; text = 'Waiting for acknowledgement'; title = 'A change waits for your acknowledgement; it is not saved until you acknowledge it.'; } } catch (_) {}
+            title = 'Saved ' + (_where === 'cloud' ? 'on this device and to the cloud' : (_where === 'team' ? 'on this device and shared with your team' : 'on this device')) + ' at ' + _hhmm(_savedAt) + '. Confirmed changes save automatically.';
+        } else { text = 'All changes saved'; title = 'Confirmed changes save automatically.'; }
+        // 16 Oct 2026 (v3.0): changes waiting to be confirmed are counted in the top bar; a click opens the one dialog
+        if (n && cls !== 'error') { cls = 'dirty'; text = n + (n === 1 ? ' change' : ' changes') + ' to confirm'; title = 'Your changes are collected while you work. Click to see them and confirm them. Nothing is saved to the cloud or shared with your team until you confirm it.'; }
         var el = document.getElementById('save-indicator'), txt = document.getElementById('save-indicator-text');
         if (el && txt) { el.classList.remove('saving', 'error', 'dirty'); if (cls) el.classList.add(cls); txt.textContent = text; el.title = title; }
         try {
@@ -206,7 +218,14 @@
         return _timeout(z.then(function (v) { return D.set(ACCEPTED_KEY, { id: id, ts: _now(), snap: v }); }).then(function () { return true; }, function () { return false; }), LOCAL_WAIT_MS, false);
     }
     // what the autosave meta carries (helpers_modules._writeAutosave)
-    function autosaveMeta() { var h = holdsSync(); return { unacked: h, cloudPending: _cloudPending, acceptedId: h ? _acceptedId : null }; }
+    var _metaUnacked = false;     // the last autosave meta written said something was waiting
+    function autosaveMeta() { var h = holdsSync(); _metaUnacked = h; return { unacked: h, cloudPending: _cloudPending, acceptedId: h ? _acceptedId : null }; }
+    // Nothing waits any more but the last meta on this device still says it did (a change decided as the
+    // app's own, or taken back): write it again, so a reload never offers back what nobody has to confirm.
+    function _refreshMeta() {
+        if (!_metaUnacked || holdsSync()) return;
+        try { var A = _ack(), run = function () { if (typeof W._writeAutosave === 'function') W._writeAutosave(); }; if (A && A.system) A.system(run); else run(); } catch (_) {}
+    }
 
     // ---- the save ----------------------------------------------------------------------------
     var NO_CLOUD = { 'signed-out': 1, itar: 1, 'no-content': 1, demo: 1, paywall: 1, off: 1, 'no-workspace': 1, current: 1, skipped: 1 };
@@ -299,10 +318,11 @@
     var _slotTimer = null;
     function _ackClosed(w, decision) {
         if (decision === 'kept') { _requestSave(); return; }
+        if (decision === 'collected') { setTimeout(_paint, 0); return; }   // it waits in the collection: nothing new is confirmed, nothing to save
         if (decision === 'automatic' && holdsSync() && !_slotTimer) {   // moves still wait: the accepted copy takes the app's own change too
             _slotTimer = setTimeout(function () { _slotTimer = null; try { var A = _ack(), acc = (A && A.pending() && A.acceptedSnapshot) ? A.acceptedSnapshot() : null; if (acc) _writeSlot(acc); } catch (_) {} }, 1000);
         }
-        setTimeout(function () { _release(); _paint(); }, 0);
+        setTimeout(function () { _release(); _refreshMeta(); _paint(); }, 0);
     }
 
     // ---- teammates' work, while something here waits for an acknowledgement ------------------------
@@ -311,11 +331,16 @@
     function remoteArrived() { _paint(); }
 
     // ---- Save now (Ctrl+S, the header control, the per-view buttons) ----------------------------
-    // Asks about anything waiting first; retries a failed save; after a "changed elsewhere" refusal
-    // with no live sync, runs the manual cloud save, which asks to overwrite or to load.
+    // Opens the one dialog for anything waiting first (Keep working: nothing is saved); retries a failed
+    // save; after a "changed elsewhere" refusal with no live sync, runs the manual cloud save, which asks
+    // to overwrite or to load.
     async function save() {
         var A = _ack();
-        if (A && A.pending()) await A.flush();
+        if (A && A.pending()) {
+            var r0 = A.ask ? await A.ask({ reason: 'save' }) : ((await A.flush()) ? 'confirmed' : 'keep');
+            if (r0 === 'keep') { _paint(); return false; }
+            if (r0 === 'confirmed' && _saving) return _saving;   // Confirm all started the save already: one save, not two
+        }
         if (_reasonCode === 'refused' && typeof W.saveProjectToCloud === 'function') {
             var ok = false;
             try { ok = (await W.saveProjectToCloud()) === true; } catch (_) {}
@@ -329,7 +354,11 @@
     async function guard(reason) {
         _stats.guards++;
         var A = _ack();
-        if (A && A.pending()) await A.flush();             // the waiting change and the collected moves are asked about first
+        // the one dialog for everything waiting; Keep working stops the action here, nothing is lost
+        if (A && A.pending()) {
+            var r0 = A.ask ? await A.ask({ reason: reason === 'close the window' ? 'close' : 'project', action: reason }) : ((await A.flush()) ? 'confirmed' : 'keep');
+            if (r0 === 'keep') { _paint(); return false; }
+        }
         if (_saving) { try { await _saving; } catch (_) {} }
         if (_cloudPending || _localFail) { try { await _requestSave(); } catch (_) {} }   // one more try, now
         if (!_cloudPending && !_localFail) return true;
@@ -337,7 +366,7 @@
         var where = _localFail ? 'could not be stored on this device' : 'are not in the cloud yet';
         var c = await choice({
             title: 'Not saved yet',
-            message: 'Your latest acknowledged changes to "' + _projName() + '" ' + where + ((_reasonCode === 'local' || !_reason) ? '' : ' (' + _reason + ')') + '.\n'
+            message: 'Your latest confirmed changes to "' + _projName() + '" ' + where + ((_reasonCode === 'local' || !_reason) ? '' : ' (' + _reason + ')') + '.\n'
                 + (_localFail ? 'If you continue, a copy goes to the recovery list on the Thread Integrity page first.' : 'They are kept on this device and in the recovery list on the Thread Integrity page, and upload the next time you open this project here.')
                 + '\nStay here to retry, or continue to ' + (reason || 'go on') + ' anyway.',
             buttons: [{ id: 'leave', label: 'Continue anyway' }, { id: 'stay', label: 'Stay', kind: 'primary' }],
@@ -345,7 +374,7 @@
         });
         if (c !== 'leave') { _retryN = 0; _requestSave(); return false; }
         try { if (typeof W._bankWorkingState === 'function') W._bankWorkingState(); } catch (_) {}
-        _jr('save-pending', 'Left with acknowledged changes not yet ' + (_localFail ? 'stored on this device' : 'in the cloud') + ' (' + (_reason || '') + '); a copy is in the recovery list');
+        _jr('save-pending', 'Left with confirmed changes not yet ' + (_localFail ? 'stored on this device' : 'in the cloud') + ' (' + (_reason || '') + '); a copy is in the recovery list');
         return true;
     }
 
@@ -372,15 +401,18 @@
             var D = _db();
             var ask = function (snap) {
                 if (typeof snap !== 'string' || !A || !A.reopen) {
-                    _jr('recovered-unacknowledged', 'Changes from the last session that were not acknowledged came back without the accepted copy to compare them with; they stay as they are');
-                    _toast('Changes from your last session that were not acknowledged are back on screen. Use Undo to take any of them back.', 'info', 7000);
+                    _jr('recovered-unacknowledged', 'Changes from the last session that were not confirmed came back without the confirmed copy to compare them with; they stay as they are');
+                    _toast('Changes from your last session that were not confirmed are back on screen. Use Undo to take any of them back.', 'info', 7000);
                     return;
                 }
                 var tries = 0;
                 var go = function () {
-                    var opened = A.reopen(snap, 'Changes from your last session that were not acknowledged', restored || null);
-                    if (opened === 'busy' && ++tries < 40) { setTimeout(go, 1500); return; }   // the person is mid-change: right after it
-                    if (opened === true) _toast('Changes from your last session were not acknowledged. Check them: Acknowledge saves them, Cancel change returns to what was saved.', 'info', 7000);
+                    // 16 Oct 2026 (v3.0): they go back into the collection (the top bar counts them) and the one
+                    // dialog offers them: Confirm all saves them, Discard all returns to what was confirmed,
+                    // Keep working leaves them waiting
+                    var opened = A.reopen(snap, 'Changes from your last session that were not confirmed', restored || null, tries >= 39);
+                    if (opened === 'busy' && ++tries < 40) { setTimeout(go, 1500); return; }   // the app is still starting up, or the dialog is open: right after
+                    if (opened === true && A.ask) A.ask({ reason: 'recovered' }).then(function (r) { if (r === 'keep') _toast('Your changes from the last session wait in the top bar until you confirm them.', 'info', 6000); });
                 };
                 setTimeout(go, 1500);
             };
@@ -437,7 +469,32 @@
         W[name] = wrapped;
         return true;
     }
-    function _wrapAll() { Object.keys(GUARDS).concat(Object.keys(LOADERS)).forEach(_wrap); }
+    // ---- exports and saved copies: "Confirm all and export" or Keep working (16 Oct 2026, v3.0) --------
+    // A copy or an export holds only confirmed work: with changes waiting, the one dialog opens first.
+    var EXPORTS = {
+        saveProject: 'save a copy of the project', exportProjectBundle: 'export the project bundle', saveProjectToFolder: 'save the project to a folder',
+        saveProjectToCloud: 'save the project to the cloud', exportData: 'export', exportProjectAsPDF: 'export the project as a PDF',
+        exportTabAsPDF: 'export this page as a PDF', exportValidationReport: 'export the validation report', exportIndexPDF: 'export the index as a PDF'
+    };
+    var EXPORT_BUTTON = { saveProject: 'Confirm all and save a copy', saveProjectToFolder: 'Confirm all and save a copy', saveProjectToCloud: 'Confirm all and save' };
+    function _wrapExport(name) {
+        var fn = W[name];
+        if (typeof fn !== 'function' || fn._slExportGate) return false;
+        var gated = function () {
+            var self = this, args = arguments, A = _ack();
+            if (!A || !A.pending() || !A.ask) return fn.apply(self, args);
+            if (A.collectNow && !A.collectNow()) return fn.apply(self, args);   // only a background change was open: nothing to confirm
+            return A.ask({ reason: 'export', action: EXPORTS[name], exportLabel: EXPORT_BUTTON[name] || 'Confirm all and export' }).then(function (r) {
+                if (r === 'keep') { _paint(); return undefined; }
+                return fn.apply(self, args);
+            });
+        };
+        gated._slExportGate = true;
+        try { if (W.SLWrap) W.SLWrap.preserve(fn, gated); } catch (_) {}
+        W[name] = gated;
+        return true;
+    }
+    function _wrapAll() { Object.keys(GUARDS).concat(Object.keys(LOADERS)).forEach(_wrap); Object.keys(EXPORTS).forEach(_wrapExport); }
 
     function _isDesktop() { try { return !!(W.__slabDesktop || (W.slabDesktop && W.slabDesktop.isDesktop) || (navigator.userAgent || '').indexOf('Electron') >= 0); } catch (_) { return false; } }
     var _closing = false;
@@ -474,12 +531,14 @@
     _wrapAll();
 
     W.__slabCanClose = function () { return !_needsGuard(); };
+    // 16 Oct 2026 (v3.0): for the desktop shell's close guard: how many changes wait to be confirmed (0 = none).
+    W.__slabPendingCount = function () { return _collectedCount(); };
     W.__slabRequestClose = function () { return guard('close the window').then(function (ok) { if (ok) _allowUnload = true; return ok; }); };
 
     W.SLSaveState = {
         isDirty: isDirty, waiting: waiting, unsaved: unsaved, holdsSync: holdsSync, save: save, guard: guard,
         remoteArrived: remoteArrived, replaced: replaced, recovered: recovered, afterLocalRestore: afterLocalRestore,
-        renderIndicator: renderIndicator, autosaveMeta: autosaveMeta,
+        renderIndicator: renderIndicator, autosaveMeta: autosaveMeta, pendingCount: _collectedCount, EXPORTS: EXPORTS,
         whenSaved: function () { return _saving || Promise.resolve(!(_cloudPending || _localFail)); },
         status: function () { return { state: _state, savedAt: _savedAt, where: _where, reason: _reason, reasonCode: _reasonCode, cloudPending: _cloudPending, localFail: _localFail, waiting: waiting(), saving: !!_saving, collected: _collectedCount(), acceptedId: _acceptedId, stats: JSON.parse(JSON.stringify(_stats)) }; },
         _ackOpened: _ackOpened, _ackClosed: _ackClosed, _wrapAll: _wrapAll, _allowUnload: function (v) { _allowUnload = !!v; }, _paint: _paint,

@@ -97,11 +97,16 @@ const MD = '# Propulsion SDD notes\n\nThe FADEC has two channels, A and B, each 
         }, projName || null);
         return { page, errors };
     };
-    // answer the next acknowledgement dialog; returns its text
+    // answer the confirmation for what was just done; returns its text.
+    // 16 Oct 2026 (change_ack.js v2.0): a change is COLLECTED, not asked about at once; the one dialog opens at
+    // a decision point. Here that is the top bar ("N changes to confirm": a click confirms early). 'keep' =
+    // Confirm all, 'cancel' = Discard all (what Acknowledge and Cancel change were).
     const ack = async (page, answer) => {
+        await page.waitForFunction(() => window.SLChangeAck && SLChangeAck.count() > 0 && !SLChangeAck.status().open, null, { timeout: 15000 });
+        await page.click('#save-indicator');
         await page.waitForSelector('#sl-ack-overlay .sl-ack-keep', { timeout: 15000 });
         const txt = await page.$eval('#sl-ack-overlay', el => el.innerText);
-        await page.click(answer === 'cancel' ? '#sl-ack-overlay .sl-ack-cancel' : '#sl-ack-overlay .sl-ack-keep');
+        await page.click(answer === 'cancel' ? '#sl-ack-overlay .sl-ack-discard' : '#sl-ack-overlay .sl-ack-keep');
         await page.waitForFunction(() => !document.getElementById('sl-ack-overlay'), null, { timeout: 15000 });
         await page.waitForTimeout(250);
         return txt;
