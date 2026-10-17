@@ -42,8 +42,11 @@ function loadImport() {
 // what OpenCascade (our build, the whole file at once) says: pid, matrix, color per mesh
 function occtView(FM, I, B, bytes) {
     const res = B.readFast(FM, bytes, 0.001, 0.5, false);
+    // 17 Oct 2026: OpenCascade's walk keeps two assembly levels; the import gives every part its full path from the
+    // STEP structure (attachTrails), so both readers name parts the same, at every depth
+    const tree = I.attachTrails(res, bytes);
     const pids = []; I.walkParts(res, (mi, w) => { pids[mi] = w.pid; });
-    return { pids, mats: res.meshes.map(m => m.matrix), colors: res.meshes.map(m => m.color || null), names: res.meshes.map(m => m.name) };
+    return { pids, tree, mats: res.meshes.map(m => m.matrix), colors: res.meshes.map(m => m.color || null), names: res.meshes.map(m => m.name) };
 }
 function structView(S, I, bytes) {
     const ix = S.index(bytes), st = S.structure(ix), res = S.boxRes(ix, st);
@@ -54,6 +57,7 @@ const close = (a, b, tol) => a.length === b.length && a.every((v, i) => Math.abs
 
 (async () => {
     const S = loadStruct(), { I, B } = loadImport();
+    global.SLCadStep = S;   // the structure reader beside the import, as in the worker
     const FM = await require(path.join(SITE, 'vendor', 'occt-fast', 'slcad_occt.js'))({ print: () => {}, printErr: () => {} });
     const TOY = new Uint8Array(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'cad', 'toy_aircraft.step')));
     const GEN = require(path.join(ROOT, 'tests', 'fixtures', 'cad', 'make_aircraft_step.js'));
@@ -246,11 +250,12 @@ const close = (a, b, tol) => a.length === b.length && a.every((v, i) => Math.abs
         check('M3: colors left in sRGB differ from OpenCascade', !s2.colors.every((c, i) => close(c, sv.colors[i], 1e-5)));
     }
     {   // boxes from the points alone
-        const S2 = loadStruct(mutate(SS, '            } else if (curved[t]) {', '            } else if (false) {'));
+        // 17 Oct 2026: circles and ellipses are bounded edge by edge (curveExtents); without it round parts are cut short
+        const S2 = loadStruct(mutate(SS, '        curveExtents(ix, c.ids, add);', ''));
         check('M8: boxes from the points alone (round parts cut short) are caught', boxesHold(S2).bad > 0);
     }
     {   // the part file without its styled items
-        const S2 = loadStruct(mutate(SS, "if (t === 'STYLED_ITEM' || t === 'OVER_RIDING_STYLED_ITEM') { styled.push(bid); stack.push(bid); }", "if (t === 'STYLED_ITEM' || t === 'OVER_RIDING_STYLED_ITEM') { }"));
+        const S2 = loadStruct(mutate(SS, "                    styled.push(bid); stack.push(bid);\n", "\n"));
         const s2 = structView(S2, I, SMALL);
         const mm = S2.extract(s2.ix, s2.st, s2.st.leaves[0]), r2 = B.readFast(FM, mm, 0.001, 0.5, false);
         check('M4: a part file without its colors is caught', !Array.isArray(r2.meshes[0].color));

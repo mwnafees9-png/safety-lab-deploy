@@ -124,7 +124,7 @@ function viaStructure(bytes) {
     var model = SLCadImport.buildModel(res, { productIndex: pidx, maxTrianglesTotal: 0 });
     model.schema = SLCadImport.stepSchema(SLCadImport.bytesToText(bytes.subarray(0, 4000)));
     model.sourceUnit = st.fileMm === 25.4 ? 'inch' : st.fileMm === 1 ? 'mm' : st.fileMm === 1000 ? 'm' : String(st.fileMm) + ' mm';
-    model.units = 'mm'; model.reader = 'structure';
+    model.units = 'mm'; model.reader = 'structure'; model.tree = { full: true };
     model.streaming = { leaves: res.leaves.length, done: 0, components: st.components };
     model.stats.readMs = { structure: Date.now() - t0 };
     // the order detail is read in: the parts that fill the most of the view first (box size

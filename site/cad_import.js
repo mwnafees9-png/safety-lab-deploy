@@ -43,7 +43,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '2.4';
+    var VERSION = '2.5';   // 2.5 (17 Oct 2026): full assembly paths (attachTrails), each part's own part number, estimated boxes marked
     var DB_NAME = 'sl-cad', DB_STORE = 'meshes', DB_STEPS = 'steps', DB_VERSION = 2;
     var START_MS = 20000;   // the worker's first message (it comes before any parsing) must arrive within this
     var OCCT_DIR = 'vendor/occt/';
@@ -258,6 +258,15 @@
                 // mesh (the part IS the node), or as a mesh hung on its parent
                 // assembly (instances, placement applied). The path differs.
                 var partPath = (leaf && (!m.name || name === nm)) ? path : childPath;
+                // 17 Oct 2026: OpenCascade's walk keeps two levels of the assembly. When the STEP structure was read
+                // (attachTrails / SLCadStep.boxRes), each part carries its full path instead: every assembly above it,
+                // and its own product when that product holds several bodies (the bodies are named under it).
+                if (Array.isArray(m.trail)) {
+                    var prodName = String(m.product == null ? '' : m.product).trim();
+                    partPath = m.trail.map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean);
+                    if (m.bodies > 1) { if (prodName) partPath.push(prodName); name = String(m.name || '').trim() || (prodName ? prodName + ' body ' + ((m.solid || 0) + 1) : 'Part'); }
+                    else name = prodName || name;
+                }
                 var key = partPath.join('\u0001') + '\u0002' + name;
                 var occ = counters[key] = (counters[key] || 0) + 1;
                 cb(mi, { pid: makePid(partPath, name, occ), name: name, path: partPath.slice(), key: key, occ: occ });
@@ -265,6 +274,26 @@
             (node.children || []).forEach(function (c) { walk(c, childPath); });
         })(res && res.root, []);
         return counters;
+    }
+
+    // attachTrails(res, u8): gives the parts of an OpenCascade result (occt-import-js or our build, whose walk keeps
+    // two assembly levels) their full assembly path, own product and part number, read from the STEP structure
+    // (SLCadStep). Applied only when the structure reader lists exactly the same parts in the same order (count,
+    // and placements where the result has them); otherwise nothing changes and the reason is returned.
+    function attachTrails(res, u8) {
+        var S = root.SLCadStep;
+        if (!res || !Array.isArray(res.meshes)) return { full: false, why: 'no parts' };
+        if (!S) return { full: false, why: 'the structure reader is not loaded' };
+        var st, b;
+        try { var ix = S.index(u8); st = S.structure(ix); if (st.unsupported) return { full: false, why: st.unsupported }; b = S.boxRes(ix, st, { tessellation: false }); }
+        catch (e) { return { full: false, why: 'the structure could not be read: ' + ((e && e.message) || e) }; }
+        if (b.meshes.length !== res.meshes.length) return { full: false, why: 'the structure lists ' + b.meshes.length + ' parts, OpenCascade ' + res.meshes.length };
+        for (var i = 0; i < b.meshes.length; i++) {
+            var A = res.meshes[i].matrix, B = b.meshes[i].matrix;
+            if (A && B) { var tol = 1e-6 * Math.max(1, Math.abs(A[12]) + Math.abs(A[13]) + Math.abs(A[14])); for (var k = 0; k < 16; k++) if (Math.abs((A[k] || 0) - (B[k] || 0)) > tol) return { full: false, why: 'part ' + (i + 1) + ' is placed differently by the structure reader' }; }
+        }
+        for (var j = 0; j < b.meshes.length; j++) { var t = b.meshes[j], m = res.meshes[j]; m.trail = t.trail; m.product = t.product; m.partNumber = t.partNumber; m.bodies = t.bodies; m.solid = t.solid; m.name = t.name; }   // names as the structure reader decodes them (one rule for every reader)
+        return { full: true };
     }
 
     // ---- instancing: one prototype per repeated geometry, a placement per copy
@@ -468,7 +497,8 @@
                 item = { position: pos, index: idx, normal: nrm, faces: faces };
             }
             rawItems.push(item);
-            var pn = Object.prototype.hasOwnProperty.call(pidx, w.name) ? pidx[w.name] : null;
+            // the part number of the part's own product when the structure was read; else looked up by its name
+            var pn = m.partNumber !== undefined ? m.partNumber : Object.prototype.hasOwnProperty.call(pidx, w.name) ? pidx[w.name] : null;
             parts.push({ pid: w.pid, name: w.name, partNumber: (pn == null || pn === '') ? null : String(pn), path: w.path });
             occOf.push({ key: w.key, parent: w.path.length ? w.path[w.path.length - 1] : null, occ: w.occ, color: Array.isArray(m.color) ? m.color.slice(0, 3) : null, protoIn: protosIn ? m.proto : null });
             n++;
@@ -551,9 +581,10 @@
             angularDeflection: opts.angularDeflection || DEFAULTS.angularDeflection
         });
         if (!res || !res.success) throw new Error('OpenCascade could not read this STEP file.');
+        var tree = attachTrails(res, u8);
         prog('parse', 1);
         var model = buildModel(res, { productIndex: pidx, instances: instances, attributes: attributes, maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, onProgress: opts.onProgress });
-        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm'; model.reader = 'occt-import-js';
+        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm'; model.reader = 'occt-import-js'; model.tree = tree;
         return model;
     }
 
@@ -571,9 +602,13 @@
             revision: info.revision == null ? 1 : info.revision,
             importedAt: info.importedAt || new Date().toISOString(),
             units: 'mm',
-            parts: ((model && model.parts) || []).map(function (p) {
+            parts: ((model && model.parts) || []).map(function (p, i) {
                 var q = { pid: String(p.pid), name: String(p.name), partNumber: p.partNumber == null ? null : String(p.partNumber), path: (p.path || []).map(String), bbox: { min: v3(p.bbox.min), max: v3(p.bbox.max) }, centroid: v3(p.centroid) };
                 if (p.designator) q.designator = String(p.designator);   // optional: the installed copy's tag from the STEP instance name
+                // 17 Oct 2026: a box estimated from the file (the part's real shape not read yet) is marked, so no zone or
+                // risk answer is taken from it; the mark goes when the true box arrives (SLCadZonal.updatePartBoxes)
+                var me = model.meshes && model.meshes[i], pr = me && me.pid === p.pid && model.protos ? model.protos[me.proto] : null;
+                if (p.boxEstimated || (pr && pr.box)) q.boxEstimated = true;
                 return q;
             })
         };
@@ -756,6 +791,7 @@
         var out = new Array(model.meshes.length), n = 0;
         model.meshes.forEach(function (m, i) {
             var part = model.parts[i]; if (!part || part.pid !== m.pid || !model.protos[m.proto].position.length) return;
+            if (model.protos[m.proto].box) return;   // still the estimated box: its shape was not read (it stays marked as an estimate)
             var j = slot ? slot[i] : -1;
             if (j >= 0) {
                 var P = placed[m.proto], o = j * 6, q = j * 3, B = P.box, C = P.cen;
@@ -913,17 +949,18 @@
     // arrays): it never goes to the project.
     function packParts(parts, meshes) {
         var n = parts.length, strs = [], sIdx = {}, S = function (x) { x = x == null ? '' : String(x); var k = sIdx[x]; if (k === undefined) { k = sIdx[x] = strs.length; strs.push(x); } return k; };
-        var name = new Int32Array(n), pn = new Int32Array(n), hasPn = new Uint8Array(n), path = new Int32Array(n), desig = new Int32Array(n), box = new Float64Array(n * 6), cen = new Float64Array(n * 3), pids = new Array(n);
+        var name = new Int32Array(n), pn = new Int32Array(n), hasPn = new Uint8Array(n), path = new Int32Array(n), desig = new Int32Array(n), box = new Float64Array(n * 6), cen = new Float64Array(n * 3), pids = new Array(n), est = new Uint8Array(n);
         for (var i = 0; i < n; i++) {
             var p = parts[i]; pids[i] = p.pid; name[i] = S(p.name); if (p.partNumber != null) { hasPn[i] = 1; pn[i] = S(p.partNumber); }
             path[i] = S((p.path || []).join('\u0001')); desig[i] = p.designator ? S(p.designator) : -1;
             box.set([p.bbox.min[0], p.bbox.min[1], p.bbox.min[2], p.bbox.max[0], p.bbox.max[1], p.bbox.max[2]], i * 6);
             cen.set(p.centroid || [0, 0, 0], i * 3);
+            if (p.boxEstimated) est[i] = 1;
         }
         // part ids follow from path, name and copy number (makePid): stored only when one does not
         var occ = new Int32Array(n), derived = true;
         for (var j = 0; j < n; j++) { var h = pids[j].lastIndexOf('#'), oc = h >= 0 ? parseInt(pids[j].slice(h + 1), 10) : NaN; occ[j] = oc; if (derived && makePid(parts[j].path || [], String(parts[j].name), oc) !== pids[j]) derived = false; }
-        return { n: n, pids: derived ? null : pids.join('\n'), occ: derived ? occ : null, strings: strs.join('\u0002'), name: name, partNumber: pn, hasPartNumber: hasPn, path: path, designator: desig, bbox: box, centroid: cen };
+        return { n: n, pids: derived ? null : pids.join('\n'), occ: derived ? occ : null, strings: strs.join('\u0002'), name: name, partNumber: pn, hasPartNumber: hasPn, path: path, designator: desig, bbox: box, centroid: cen, estimated: est };
     }
     function unpackParts(P, packedMeshes) {
         var pids = !P.n ? [] : P.pids != null ? P.pids.split('\n') : P.occ ? pidsOf(packedMeshes || {}, P) : pidsOf(packedMeshes, null), strs = P.strings.split('\u0002'), out = new Array(P.n), paths = {};
@@ -932,6 +969,7 @@
             var path = paths[pk] || (paths[pk] = strs[pk] ? strs[pk].split('\u0001') : []);
             var q = { pid: pids[i], name: strs[P.name[i]], partNumber: P.hasPartNumber[i] ? strs[P.partNumber[i]] : null, path: path, bbox: { min: [b[o], b[o + 1], b[o + 2]], max: [b[o + 3], b[o + 4], b[o + 5]] }, centroid: [P.centroid[i * 3], P.centroid[i * 3 + 1], P.centroid[i * 3 + 2]] };
             if (P.designator[i] >= 0) q.designator = strs[P.designator[i]];
+            if (P.estimated && P.estimated[i]) q.boxEstimated = true;
             out[i] = q;
         }
         return out;
@@ -1109,7 +1147,7 @@
         VERSION: VERSION, DB_NAME: DB_NAME, DB_STORE: DB_STORE, OCCT_DIR: OCCT_DIR, DEFAULTS: DEFAULTS,
         decodeStepString: decodeStepString, bytesToText: bytesToText, parseStepProducts: parseStepProducts, parseStepInstances: parseStepInstances, designatorFrom: designatorFrom, stepSchema: stepSchema, stepLengthUnit: stepLengthUnit, productIndex: productIndex,
         bboxOf: bboxOf, centroidOf: centroidOf, decimate: decimate, makePid: makePid, buildModel: buildModel, convertStep: convertStep,
-        walkParts: walkParts, findInstances: findInstances, _rigid: _rigid, _anchors: _anchors, worldPosition: worldPosition, normalizeGeometry: normalizeGeometry, parseStepAttributes: parseStepAttributes, bboxOfXf: bboxOfXf,
+        walkParts: walkParts, attachTrails: attachTrails, findInstances: findInstances, _rigid: _rigid, _anchors: _anchors, worldPosition: worldPosition, normalizeGeometry: normalizeGeometry, parseStepAttributes: parseStepAttributes, bboxOfXf: bboxOfXf,
         projectEntry: projectEntry, containsGeometry: containsGeometry, addToProject: addToProject, nextRevision: nextRevision, reviseFrom: reviseFrom, getModel: getModel, latestModel: latestModel,
         trueBoxes: trueBoxes, placedBoxes: placedBoxes, _trace: _trace, _cachePayload: _cachePayload, packMeshes: packMeshes, unpackMeshes: unpackMeshes, pidsOf: pidsOf, matrices16: matrices16, colorAt: colorAt, packParts: packParts, unpackParts: unpackParts, sha256Hex: sha256Hex, openDb: openDb, cachePut: cachePut, cacheGet: cacheGet, cacheHas: cacheHas, stepPut: stepPut, stepGet: stepGet, stepHas: stepHas, DB_STEPS: DB_STEPS,
         workerUrl: workerUrl, runWorker: runWorker, importStep: importStep, finalizeImport: finalizeImport, reopen: reopen,

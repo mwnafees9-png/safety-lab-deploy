@@ -62,7 +62,7 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.3';
+    var VERSION = '1.4';   // 1.4 (17 Oct 2026): a box still estimated from the file gives no zone, risk or placement answer (estimatedParts)
     var KINDS = ['rotorBurst', 'tireBurst', 'birdStrike', 'fire', 'fluidLeak', 'iceShedding', 'lightning', 'generic'];   // 14 Oct 2026: fluidLeak, iceShedding, lightning added (configurable volumes)
     var SHAPES = ['box', 'sphere', 'cone', 'disk-sector'];
     var UNITS = { mm: 1, cm: 10, m: 1000, 'in': 25.4, ft: 304.8 };
@@ -207,6 +207,11 @@
         if (m && m.partStore === 'local' && m.sha256 && _local[m.sha256]) return _local[m.sha256].map;
         var out = {}; _arr(m && m.parts).forEach(function (p) { if (p && p.pid != null) out[p.pid] = p; }); return out;
     }
+    // 17 Oct 2026: parts whose box is still an estimate from the file (their shape not read yet). No zone, risk or
+    // placement answer is taken from such a box: containment lists them apart, a risk volume does not count them and
+    // says its result is not final, and equipment with such a part is not placed.
+    function estimatedParts(cadId) { return partsOf(model(cadId)).filter(function (p) { return p && p.boxEstimated === true; }).map(function (p) { return p.pid; }).sort(_cmp); }
+    function _estSet(cadId) { var s = {}; estimatedParts(cadId).forEach(function (pid) { s[pid] = 1; }); return s; }
     function _partsSorted(cadId) { var m = model(cadId); return partsOf(m).slice().sort(function (a, b) { return _cmp(a.pid, b.pid); }); }
 
     // addCadModel(meta): the viewer hands over the metadata of one imported CAD file. Validated
@@ -231,6 +236,7 @@
                          path: Array.isArray(p.path) ? p.path : [], bbox: { min: mn, max: mx }, centroid: c };
             if (_s(p.designator)) part.designator = _s(p.designator);
             if (_s(p.ata)) part.ata = _s(p.ata);
+            if (p.boxEstimated === true) part.boxEstimated = true;   // its box is an estimate until the shape is read
             parts.push(part);
         });
         var pc = _pc();
@@ -269,6 +275,7 @@
                 if (!p) return;
                 p.bbox = { min: u.bbox.min.slice(), max: u.bbox.max.slice() };
                 if (_n3(u.centroid)) p.centroid = u.centroid.slice();
+                delete p.boxEstimated;   // the true box, from the part's shape
             });
             if (map[u.pid] || synced[u.pid]) n++;
         });
@@ -466,7 +473,7 @@
     function containment(cadId) {
         cadId = cadId || latestCadId();
         var Z = _Z();
-        var res = { cadId: cadId, parts: [], byZone: {}, outside: [], straddling: [], ambiguous: [], envelopes: [], zoneIssues: [] };
+        var res = { cadId: cadId, parts: [], byZone: {}, outside: [], straddling: [], ambiguous: [], envelopes: [], zoneIssues: [], estimated: [] };
         if (!Z || !model(cadId)) return res;
         var zones = [], envelope = {};
         _zonesSorted().forEach(function (z) {
@@ -477,8 +484,10 @@
             zones.push({ z: z, boxes: boxes, depth: Z.depth(z.id), vol: boxes.reduce(function (s, b) { return s + _boxVol(b); }, 0) });
         });
         res.envelopes = Object.keys(envelope).filter(function (p) { return !!_partMap(cadId)[p]; }).sort(_cmp);
+        var est = _estSet(cadId);
         _partsSorted(cadId).forEach(function (p) {
             if (envelope[p.pid]) return;
+            if (est[p.pid]) { res.estimated.push(p.pid); res.parts.push({ pid: p.pid, zoneId: null, estimated: true }); return; }
             var hits = zones.filter(function (e) { return e.boxes.some(function (b) { return _inBox(p.centroid, b.min, b.max); }); });
             hits.sort(function (a, b) { return (b.depth - a.depth) || (a.vol - b.vol) || _nat(a.z.code, b.z.code) || _cmp(a.z.id, b.z.id); });
             var win = hits[0] || null;
@@ -507,12 +516,14 @@
     function applyContainment(cadId, opts) {
         opts = opts || {};
         cadId = cadId || latestCadId();
-        var Z = _Z(), out = { cadId: cadId, assign: [], unchanged: [], conflicts: [], notContained: [], applied: false };
+        var Z = _Z(), out = { cadId: cadId, assign: [], unchanged: [], conflicts: [], notContained: [], waiting: [], applied: false };
         if (!Z || !model(cadId)) return out;
         var c = containment(cadId), zoneOfPid = {};
         c.parts.forEach(function (r) { zoneOfPid[r.pid] = r.zoneId; });
-        var eq = equipmentParts(cadId);
+        var eq = equipmentParts(cadId), est = _estSet(cadId);
         Object.keys(eq).sort(_cmp).forEach(function (sysId) {
+            var waitOn = eq[sysId].filter(function (pid) { return est[pid]; });
+            if (waitOn.length) { out.waiting.push({ sysId: sysId, pids: waitOn }); return; }   // placed when its parts' sizes are known
             var zs = _uniqSorted(eq[sysId].map(function (pid) { return zoneOfPid[pid] || null; }).filter(Boolean));
             var missing = eq[sysId].filter(function (pid) { return !zoneOfPid[pid]; });
             if (!zs.length) { out.notContained.push({ sysId: sysId, pids: eq[sysId].slice() }); return; }
@@ -635,8 +646,9 @@
     function partsInVolume(volumeId, cadId) {
         cadId = cadId || latestCadId();
         var v = riskVolume(volumeId); if (!v || shapeIssue(v.shape) || !model(cadId)) return [];
-        var out = [];
+        var out = [], est = _estSet(cadId);
         _partsSorted(cadId).forEach(function (p) {
+            if (est[p.pid]) return;   // its size is not known yet
             if (inShape(v.shape, p.centroid)) { out.push({ pid: p.pid, how: 'centroid' }); return; }
             if (_samples(p.bbox).some(function (q) { return inShape(v.shape, q); })) out.push({ pid: p.pid, how: 'box' });
         });
@@ -817,8 +829,11 @@
         var cadId = opts.cadId || latestCadId();
         var inside = partsInVolume(volumeId, cadId), c = confirmed(cadId);
         var eq = _uniqSorted(inside.filter(function (p) { return c[p.pid]; }).map(function (p) { return c[p.pid]; }));
-        return _impact(eq, { volume: { id: v.id, kind: v.kind, label: v.label }, cadId: cadId, parts: inside,
+        var out = _impact(eq, { volume: { id: v.id, kind: v.kind, label: v.label }, cadId: cadId, parts: inside,
                              unlinkedParts: inside.filter(function (p) { return !c[p.pid]; }).map(function (p) { return p.pid; }) });
+        var nEst = estimatedParts(cadId).length;
+        if (nEst) { var why = nEst + ' part size' + (nEst === 1 ? ' is' : 's are') + ' still being read from the CAD file, so which parts this volume holds is not final'; out.notEvaluated = out.notEvaluated ? out.notEvaluated + '; ' + why : why; out.estimatedParts = nEst; _refusals.push(why); }
+        return out;
     }
 
     // ---- independence (Waqas's AND-gate rule) ------------------------------------------------
@@ -1055,7 +1070,7 @@
 
     var api = {
         VERSION: VERSION, RULES: RULES, KINDS: KINDS, SHAPES: SHAPES, FRAGMENTS: FRAGMENTS, DEFAULT_FRAGMENT: DEFAULT_FRAGMENT,
-        models: models, model: model, latestCadId: latestCadId, addCadModel: addCadModel, partsOf: partsOf, registerLocalParts: registerLocalParts, updatePartBoxes: updatePartBoxes, hasLocalParts: hasLocalParts, LOCAL_PARTS_MIN: LOCAL_PARTS_MIN,
+        models: models, model: model, latestCadId: latestCadId, addCadModel: addCadModel, partsOf: partsOf, registerLocalParts: registerLocalParts, updatePartBoxes: updatePartBoxes, estimatedParts: estimatedParts, hasLocalParts: hasLocalParts, LOCAL_PARTS_MIN: LOCAL_PARTS_MIN,
         matchEquipment: matchEquipment, applyExactLinks: applyExactLinks, confirmLink: confirmLink, rejectLink: rejectLink, unlink: unlink,
         link: link, linkKey: linkKey, confirmed: confirmed, equipmentParts: equipmentParts, carryLinks: carryLinks,
         importZoneList: importZoneList, containment: containment, applyContainment: applyContainment, clearances: clearances, boxDistance: boxDistance,

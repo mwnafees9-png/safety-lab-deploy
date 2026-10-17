@@ -2,6 +2,8 @@
 // Generates a large, realistic STEP AP214 aircraft assembly for the CAD scale tests (13 Oct 2026, cad-C).
 //   node tests/fixtures/cad/make_aircraft_step.js <out.step> [components]
 //   require('./make_aircraft_step.js').generate({ out, components, sections, ... }) -> stats
+//   realWorld: true adds what real exports do (17 Oct 2026): shared styles, far plane and line origins, wrapped names,
+//   one name for many part numbers
 //
 // Written directly as STEP text (no CAD kernel), fully deterministic: same arguments, same bytes.
 // What it holds, by default (200,000 components):
@@ -48,7 +50,13 @@ function generate(opt) {
     const styled = [];
     const colors = {};
     const colorOf = (r, g, b) => { const k = [r, g, b].join(','); if (colors[k]) return colors[k]; return (colors[k] = E("COLOUR_RGB(''," + f(r) + ',' + f(g) + ',' + f(b) + ')')); };
+    // opt.realWorld (17 Oct 2026): what real exports (Fusion 360) do that the default file does not: one style shared by
+    // every part of a color, plane and line origins written far from the part (the same planes and lines), and long
+    // names wrapped onto a second line inside the string. Off by default: the default file stays byte for byte.
+    const RW = !!opt.realWorld, psaOf = {};
     const style = (item, rgb) => {
+        const key = rgb.join(',');
+        if (RW && psaOf[key]) { styled.push(E("STYLED_ITEM('color',(#" + psaOf[key] + '),#' + item + ')')); return; }
         const c = colorOf(rgb[0], rgb[1], rgb[2]);
         const fill = E("FILL_AREA_STYLE_COLOUR('',#" + c + ')');
         const fa = E("FILL_AREA_STYLE('',(#" + fill + '))');
@@ -56,13 +64,15 @@ function generate(opt) {
         const ssa = E("SURFACE_SIDE_STYLE('',(#" + ssf + '))');
         const usage = E('SURFACE_STYLE_USAGE(.BOTH.,#' + ssa + ')');
         const psa = E('PRESENTATION_STYLE_ASSIGNMENT((#' + usage + '))');
+        if (RW) psaOf[key] = psa;
         styled.push(E("STYLED_ITEM('color',(#" + psa + '),#' + item + ')'));
     };
     // a product with its definition and shape; returns { pd, rep, origin }
     let nProducts = 0;
     const product = (pn, name, repType, items) => {
         nProducts++;
-        const prod = E("PRODUCT('" + pn + "','" + name + "','',(#" + prodCtx + '))');
+        const shown = RW && name.length > 12 ? name.slice(0, 12) + '\r\n' + name.slice(12) : name;
+        const prod = E("PRODUCT('" + pn + "','" + shown + "','',(#" + prodCtx + '))');
         E("PRODUCT_RELATED_PRODUCT_CATEGORY('part',$,(#" + prod + '))');
         const pdf = E("PRODUCT_DEFINITION_FORMATION('','',#" + prod + ')');
         const pd = E("PRODUCT_DEFINITION('design','',#" + pdf + ',#' + pdCtx + ')');
@@ -81,13 +91,15 @@ function generate(opt) {
     const VP = p => E("VERTEX_POINT('',#" + P(p[0], p[1], p[2]) + ')');
     const lineEdge = (va, vb, a, b) => {
         const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], L = Math.hypot(dx, dy, dz);
-        const ln = E("LINE('',#" + P(a[0], a[1], a[2]) + ",#" + E("VECTOR('',#" + D(dx / L, dy / L, dz / L) + ',' + f(L) + ')') + ')');
+        const far = RW ? 500000 : 0;   // the same line, its point written 500 m back along it
+        const ln = E("LINE('',#" + P(a[0] - far * dx / L, a[1] - far * dy / L, a[2] - far * dz / L) + ",#" + E("VECTOR('',#" + D(dx / L, dy / L, dz / L) + ',' + f(L) + ')') + ')');
         return E("EDGE_CURVE('',#" + va + ',#' + vb + ',#' + ln + ',.T.)');
     };
     const OE = (e, fwd) => E("ORIENTED_EDGE('',*,*,#" + e + ',' + (fwd ? '.T.' : '.F.') + ')');
     const loop = oes => E("EDGE_LOOP('',(" + oes.map(o => '#' + o).join(',') + '))');
     const planeFace = (origin, n, xdir, bounds) => {
-        const pl = E("PLANE('',#" + AX(origin, n, xdir) + ')');
+        const o2 = RW ? [origin[0] + 20000 * xdir[0], origin[1] + 20000 * xdir[1], origin[2] + 20000 * xdir[2]] : origin;   // the same plane, its origin 20 m away in it
+        const pl = E("PLANE('',#" + AX(o2, n, xdir) + ')');
         const bs = bounds.map((b, i) => E((i === 0 ? 'FACE_OUTER_BOUND' : 'FACE_BOUND') + "('',#" + b.loop + ',' + (b.sense === false ? '.F.' : '.T.') + ')'));
         return E("ADVANCED_FACE('',(" + bs.map(b => '#' + b).join(',') + '),#' + pl + ',.T.)');
     };
@@ -194,7 +206,8 @@ function generate(opt) {
         const prof = kind === 'hex' ? profiles.hex(a / 3) : profiles[kind](a, b, t);
         nFaces += prof.length + 2;
         if (opt.tessellated) { nTess++; return tessProduct('BK-' + kind.toUpperCase() + '-' + (1000 + i), 'Bracket ' + kind + ' ' + (1000 + i), tessPrism(prof, h), PALETTE[2 + (i % 4)]); }
-        return partProduct('BK-' + kind.toUpperCase() + '-' + (1000 + i), 'Bracket ' + kind + ' ' + (1000 + i), prism(prof, h), PALETTE[2 + (i % 4)]);
+        // real world: many different brackets share one name and differ only by part number
+        return partProduct('BK-' + kind.toUpperCase() + '-' + (1000 + i), RW ? 'Bracket ' + kind : 'Bracket ' + kind + ' ' + (1000 + i), prism(prof, h), PALETTE[2 + (i % 4)]);
     })());
     // assemblies, built bottom up: installations hold parts; returns the assembly rep
     let nComponents = 0, nOcc = 0;

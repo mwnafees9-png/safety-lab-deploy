@@ -1,5 +1,5 @@
 // ============================================================================
-// zonal_exchange.js, v1.1 (1.1, 17 Oct 2026: each risk carries its volume's shape), 15 Oct 2026: the exchange between Safety Lab's CAD / zonal /
+// zonal_exchange.js, v1.2 (1.1, 17 Oct 2026: each risk carries its volume's shape; 1.2: says when CAD part sizes are still being read), 15 Oct 2026: the exchange between Safety Lab's CAD / zonal /
 // particular risk picture and Sys Lab's model (functions and the physical architecture).
 // window.SLZonalExchange (page) + module.exports (node tests).
 //
@@ -76,7 +76,7 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.1';
+    var VERSION = '1.2';
     var FORMAT = 'safetylab-zonal', FORMAT_VERSION = 1, SHAPE_UNITS = 'mm';
     var PART_LIMIT = 20000;
     var KIND_LABELS = { rotorBurst: 'Rotor burst', tireBurst: 'Tire burst', birdStrike: 'Bird strike', fire: 'Fire', fluidLeak: 'Fluid leak', iceShedding: 'Ice shedding', lightning: 'Lightning', generic: 'Other particular risk', volume: 'Particular risk volume', zonal: 'Zonal hazard', zone: 'Zone compromised', zsa: 'Zonal safety analysis row' };
@@ -176,6 +176,8 @@
             if (amb[p.pid]) o.ambiguousWith = amb[p.pid];
             return o;
         });
+        var nEst = m && C.estimatedParts ? C.estimatedParts(cadId).length : 0;
+        if (nEst) gaps.push(nEst + ' CAD part size' + (nEst === 1 ? ' is' : 's are') + ' still being read, so those parts are in no zone or risk volume in this file yet. Export again when the model has finished opening.');
         if (m && !complete) gaps.push('The CAD model has ' + all.length + ' parts; only the ' + parts.length + ' that are linked, carry a designator or sit inside a risk volume are in this file.');
         // equipment
         var equipment = _sys().slice().sort(function (a, b) { return _cmp(a.id, b.id); }).map(function (s) {

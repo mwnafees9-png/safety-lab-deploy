@@ -219,9 +219,10 @@
         M.onReadProgress = function (f) { prog('parse', f); if (f >= 1) prog('transfer', null); };
         var res;
         try { res = readFast(M, u8, opts.linearDeflection || DEFAULTS.linearDeflection, opts.angularDeflection || DEFAULTS.angularDeflection, opts.keep !== false); } finally { M.onReadProgress = null; }
+        var tree = I.attachTrails ? I.attachTrails(res, u8) : { full: false, why: 'no attachTrails' };   // full assembly paths (17 Oct 2026)
         var mats = res.meshes.map(function (m) { return m.matrix; });
         var model = I.buildModel(res, { productIndex: pidx, instances: instances, attributes: attrs, maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, onProgress: opts.onProgress });
-        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm'; model.reader = 'occt-fast';
+        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm'; model.reader = 'occt-fast'; model.tree = tree;
         model.stats.readMs = res.ms || null;
         var session = null;
         if (opts.keep !== false && res.handle) {
@@ -234,6 +235,7 @@
     function openSessionFast(M, bytes) {
         var u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
         var res = readFast(M, u8, DEFAULTS.linearDeflection, DEFAULTS.angularDeflection, true);
+        if (root.SLCadImport.attachTrails) root.SLCadImport.attachTrails(res, u8);   // the same part ids as the import
         var pids = []; root.SLCadImport.walkParts(res, function (mi, w) { pids[mi] = w.pid; });
         var ss = new FastDocSession(M, res.handle, pids, res.meshes.map(function (m) { return m.matrix; }));
         ss.setFileUnit(fileUnitOf(u8));

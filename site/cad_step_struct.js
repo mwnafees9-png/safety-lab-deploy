@@ -20,7 +20,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.1';
+    var VERSION = '1.2';   // 1.2 (17 Oct 2026): a part's closure takes only its own styled items; first boxes from the points on the part (exact arcs); full assembly paths; line breaks in names dropped
 
     // ---------------------------------------------------------------- one pass over the bytes
     // Entity records: start/end byte offsets of the text after '=' up to (not including) ';'.
@@ -202,6 +202,9 @@
         while (p.i < p.end) {
             var c = p.u8[p.i];
             if (c === 39) { if (p.u8[p.i + 1] === 39) { bytes.push(39); p.i += 2; continue; } p.i++; break; }
+            // 17 Oct 2026: a line break inside a string is the writer wrapping its line, not part of the text
+            // (ISO 10303-21: control characters in a string are ignored); a Fusion 360 export breaks long names
+            if (c === 10 || c === 13) { p.i++; continue; }
             bytes.push(c); p.i++;
         }
         return decodeStepString(bytes);
@@ -528,7 +531,15 @@
                 var bid = back[b];
                 if (seen[bid] === stamp || st.assemblyRel[bid]) continue;
                 var t = typeName(ix, bid);
-                if (t === 'STYLED_ITEM' || t === 'OVER_RIDING_STYLED_ITEM') { styled.push(bid); stack.push(bid); }
+                if (t === 'STYLED_ITEM' || t === 'OVER_RIDING_STYLED_ITEM') {
+                    // 17 Oct 2026 (real Fusion 360 files): a styled item belongs to this part only when the item it
+                    // colors is this part's. Many styled items share one style; reached from the shared style they
+                    // would pull in every other part's solids with that color (a 41 m box, 75 solids that are not this
+                    // part's, a 415,000 entity closure per part). STYLED_ITEM(name, styles, item): the item is the third.
+                    var sa = cachedArgs(ix, bid), item = sa && sa[2] && sa[2].ref;
+                    if (item !== id) continue;
+                    styled.push(bid); stack.push(bid);
+                }
                 else stack.push(bid);
             }
         }
@@ -698,6 +709,74 @@
     // What a part's own file says without OpenCascade: its point box, its number of solids and
     // their names, its first color (sRGB, made linear as OpenCascade gives it).
     function srgbToLinear(c) { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+    // The points that lie on a part's boundary: VERTEX_POINT positions, the control points of B-spline edge curves
+    // (simple or complex entities) and the points of POLY_LOOP / POLYLINE. null when there are none.
+    var CURVE_PTS = { B_SPLINE_CURVE_WITH_KNOTS: 1, B_SPLINE_CURVE: 1, BEZIER_CURVE: 1, UNIFORM_CURVE: 1, QUASI_UNIFORM_CURVE: 1, RATIONAL_B_SPLINE_CURVE: 1, POLY_LOOP: 1, POLYLINE: 1 };
+    function boundaryPoints(ix, ids) {
+        var cp = ix.typeOf.CARTESIAN_POINT, vp = ix.typeOf.VERTEX_POINT, codes = {}, out = null, tmp = [];
+        Object.keys(CURVE_PTS).forEach(function (n) { if (ix.typeOf[n] !== undefined) codes[ix.typeOf[n]] = 1; });
+        for (var q = 0; q < ids.length; q++) {
+            var id = ids[q], t = ix.tcode[ix.slot[id]];
+            if (t !== vp && !codes[t] && !(t === 1 && hasWord(ix, id, 'B_SPLINE_CURVE'))) continue;
+            tmp.length = 0; refsOf(ix, id, tmp);
+            for (var j = 0; j < tmp.length; j++) if (ix.slot[tmp[j]] >= 0 && ix.tcode[ix.slot[tmp[j]]] === cp) (out || (out = {}))[tmp[j]] = 1;
+        }
+        return out;
+    }
+    // Every circular or elliptical edge, bounded exactly: its end points (the vertices) and the points of the arc
+    // that are furthest along each axis, when the arc runs through them. EDGE_CURVE(name, start, end, geometry,
+    // same_sense); the geometry is the circle or ellipse itself, or a SURFACE_CURVE / SEAM_CURVE whose first
+    // parameter is it. A full circle (start = end) gives its whole extent.
+    function curveExtents(ix, ids, add) {
+        var ec = ix.typeOf.EDGE_CURVE, circ = ix.typeOf.CIRCLE, ell = ix.typeOf.ELLIPSE;
+        if (ec === undefined || (circ === undefined && ell === undefined)) return;
+        var TWO = 2 * Math.PI, tmp = [0, 0, 0];
+        var norm2pi = function (a) { a %= TWO; return a < 0 ? a + TWO : a; };
+        var pt = function (vid) { var r = refsOf(ix, vid, []); return r.length ? nums(ix, r[0], [0, 0, 0]) : null; };
+        for (var q = 0; q < ids.length; q++) {
+            var id = ids[q]; if (ix.tcode[ix.slot[id]] !== ec) continue;
+            var a = cachedArgs(ix, id); if (!a || !a[3] || !a[3].ref) continue;
+            var g = a[3].ref, gt = ix.tcode[ix.slot[g]];
+            if (gt !== circ && gt !== ell) { var gn = typeName(ix, g); if (gn !== 'SURFACE_CURVE' && gn !== 'SEAM_CURVE') continue; var gr = refsOf(ix, g, []); g = gr[0]; gt = g != null ? ix.tcode[ix.slot[g]] : -1; if (gt !== circ && gt !== ell) continue; }
+            var ca = cachedArgs(ix, g), axId = ca && ca[1] && ca[1].ref; if (!axId) continue;
+            var M = axisMatrix(ix, axId, 1); if (!M) continue;
+            var ra = Math.abs(ca[2]), rb = gt === ell ? Math.abs(ca[3]) : ra; if (!(ra > 0) || !(rb > 0)) continue;
+            var O = [M[12], M[13], M[14]], X = [M[0], M[1], M[2]], Y = [M[4], M[5], M[6]];
+            var at = function (t) { var c1 = ra * Math.cos(t), s1 = rb * Math.sin(t); return [O[0] + c1 * X[0] + s1 * Y[0], O[1] + c1 * X[1] + s1 * Y[1], O[2] + c1 * X[2] + s1 * Y[2]]; };
+            var param = function (P) { var d = [P[0] - O[0], P[1] - O[1], P[2] - O[2]]; return norm2pi(Math.atan2((d[0] * Y[0] + d[1] * Y[1] + d[2] * Y[2]) / rb, (d[0] * X[0] + d[1] * X[1] + d[2] * X[2]) / ra)); };
+            var full = !a[1] || !a[2] || a[1].ref === a[2].ref, t0 = 0, span = TWO;
+            if (!full) {
+                var p1 = pt(a[1].ref), p2 = pt(a[2].ref); if (!p1 || !p2) continue;
+                var u1 = param(p1), u2 = param(p2), same = !(a[4] && a[4].enum === 'F');
+                // with the curve's sense the edge runs start -> end in increasing parameter; against it, end -> start
+                t0 = same ? u1 : u2; span = norm2pi((same ? u2 : u1) - t0); if (span === 0) span = TWO;
+                add(p1); add(p2);
+            }
+            for (var k = 0; k < 3; k++) {
+                var ts = Math.atan2(rb * Y[k], ra * X[k]);
+                [ts, ts + Math.PI].forEach(function (tt) { if (norm2pi(tt - t0) <= span + 1e-12) add(at(tt)); });
+            }
+        }
+    }
+    // The box of each B-spline surface's control net (simple or complex entities), in file units.
+    var SURF_NETS = { B_SPLINE_SURFACE_WITH_KNOTS: 1, B_SPLINE_SURFACE: 1, BEZIER_SURFACE: 1, UNIFORM_SURFACE: 1, QUASI_UNIFORM_SURFACE: 1, RATIONAL_B_SPLINE_SURFACE: 1 };
+    function surfaceNets(ix, ids) {
+        var cp = ix.typeOf.CARTESIAN_POINT, codes = {}, out = [], tmp = [], pt = [0, 0, 0];
+        Object.keys(SURF_NETS).forEach(function (n) { if (ix.typeOf[n] !== undefined) codes[ix.typeOf[n]] = 1; });
+        for (var q = 0; q < ids.length; q++) {
+            var id = ids[q], t = ix.tcode[ix.slot[id]];
+            if (!codes[t] && !(t === 1 && hasWord(ix, id, 'B_SPLINE_SURFACE'))) continue;
+            tmp.length = 0; refsOf(ix, id, tmp);
+            var mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity], n = 0;
+            for (var j = 0; j < tmp.length; j++) {
+                if (ix.slot[tmp[j]] < 0 || ix.tcode[ix.slot[tmp[j]]] !== cp) continue;
+                var p = nums(ix, tmp[j], pt); if (!p) continue; n++;
+                for (var k = 0; k < 3; k++) { if (p[k] < mn[k]) mn[k] = p[k]; if (p[k] > mx[k]) mx[k] = p[k]; }
+            }
+            if (n) out.push({ min: mn, max: mx });
+        }
+        return out;
+    }
     function leafInfo(ix, st, pd) {
         var c = closureOf(ix, st, pd);
         var info = { box: null, solids: [], color: null, entities: c ? c.ids.length : 0 };
@@ -705,24 +784,33 @@
         var cp = ix.typeOf.CARTESIAN_POINT, msb = ix.typeOf.MANIFOLD_SOLID_BREP, bwv = ix.typeOf.BREP_WITH_VOIDS, rgb = ix.typeOf.COLOUR_RGB, tor = ix.typeOf.TOROIDAL_SURFACE;
         var curved = {}; ['CIRCLE', 'ELLIPSE', 'SPHERICAL_SURFACE', 'TOROIDAL_SURFACE', 'DEGENERATE_TOROIDAL_SURFACE'].forEach(function (nm) { if (ix.typeOf[nm] !== undefined) curved[ix.typeOf[nm]] = 1; });
         var mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity], any = false, tmp = [0, 0, 0];
+        // 17 Oct 2026 (real files): the first box is taken from the points ON the part: its vertices, the control
+        // points of its edge curves (a curve lies inside them) and faceted loops. Every other point (the control net
+        // of a B-spline surface, the origin of a line or a plane) can sit far from the part: a Fusion 360 export put
+        // them 20 m to 250 m away, giving a 41 m and a 500 m box for parts a few cm long. Only when a part has none of
+        // these (no edges at all) are all its points used, as before.
+        var onPart = boundaryPoints(ix, c.ids), surf = [], circ = ix.typeOf.CIRCLE, ell = ix.typeOf.ELLIPSE;
         for (var q = 0; q < c.ids.length; q++) {
             var id = c.ids[q], t = ix.tcode[ix.slot[id]];
             if (t === cp) {
+                if (onPart && !onPart[id]) continue;
                 var p = nums(ix, id, tmp);
                 if (!p) continue;
                 for (var j = 0; j < 3; j++) { if (p[j] < mn[j]) mn[j] = p[j]; if (p[j] > mx[j]) mx[j] = p[j]; }
                 any = true;
             } else if (curved[t]) {
-                // a circle, ellipse, sphere or torus reaches beyond its points: its center plus
-                // its largest radius on every axis (conservative; the exact box comes with the shape)
+                // a sphere or torus reaches beyond its points: its center plus its largest radius on every axis
+                // (conservative). 17 Oct 2026: a circle or ellipse is no longer taken whole here: an arc of a big
+                // circle (a 2 m radius blend on a 3 cm part) put the box metres out. Its edges are bounded exactly
+                // below (curveExtents); a surface only when its radius is within the size of the part's edges.
                 var ca = args(ix, id), ax = ca && ca[1] && ca[1].ref, rad = 0;
                 if (!ax) continue;
                 for (var r = 2; r < ca.length; r++) if (typeof ca[r] === 'number') rad = Math.max(rad, Math.abs(ca[r]));
                 if (t === tor) rad = Math.abs(ca[2] || 0) + Math.abs(ca[3] || 0);
                 var axr = refsOf(ix, ax, []), cpt = axr.length ? nums(ix, axr[0], [0, 0, 0]) : null;
                 if (!cpt) continue;
-                for (var jj = 0; jj < 3; jj++) { if (cpt[jj] - rad < mn[jj]) mn[jj] = cpt[jj] - rad; if (cpt[jj] + rad > mx[jj]) mx[jj] = cpt[jj] + rad; }
-                any = true;
+                if (t === circ || t === ell) continue;
+                surf.push([cpt[0], cpt[1], cpt[2], rad]);
             } else if (t === msb || t === bwv) {
                 var a = args(ix, id);
                 info.solids.push({ id: id, name: a && typeof a[0] === 'string' ? a[0] : '' });
@@ -731,6 +819,17 @@
                 if (v) info.color = [srgbToLinear(v[0]), srgbToLinear(v[1]), srgbToLinear(v[2])];
             }
         }
+        var add = function (p) { for (var j = 0; j < 3; j++) { if (p[j] < mn[j]) mn[j] = p[j]; if (p[j] > mx[j]) mx[j] = p[j]; } any = true; };
+        curveExtents(ix, c.ids, add);
+        var size = any ? Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) : Infinity;
+        // a B-spline face can bulge past its edges (a spring, a sculpted part): its surface lies inside its control
+        // net, so a net close to the part is taken whole. A net far larger than the part is the untrimmed surface the
+        // face was cut from (Fusion 360 writes them tens of metres out) and is left out.
+        if (any) surfaceNets(ix, c.ids).forEach(function (nb) {
+            var ns = Math.max(nb.max[0] - nb.min[0], nb.max[1] - nb.min[1], nb.max[2] - nb.min[2]);
+            if (ns <= 4 * size + 10 && [0, 1, 2].every(function (j) { return nb.min[j] >= mn[j] - 2 * size - 10 && nb.max[j] <= mx[j] + 2 * size + 10; })) { add(nb.min); add(nb.max); }
+        });
+        surf.forEach(function (sv) { if (sv[3] <= size) { add([sv[0] - sv[3], sv[1] - sv[3], sv[2] - sv[3]]); add([sv[0] + sv[3], sv[1] + sv[3], sv[2] + sv[3]]); } });
         info.solids.sort(function (a, b) { return a.id - b.id; });
         var s = st.fileMm;
         if (any) info.box = { min: [mn[0] * s, mn[1] * s, mn[2] * s], max: [mx[0] * s, mx[1] * s, mx[2] * s] };
@@ -768,29 +867,34 @@
             leafIdx[pd] = leaves.length; L.index = leaves.length; leaves.push(L);
             return L;
         }
-        function addMeshes(node, pd, m) {
-            var L = leaf(pd), many = L.info.solids.length > 1;
+        // 17 Oct 2026: each placed part also carries its full assembly path (trail: the product names from the top
+        // down to its parent), its own product's name and part number (PRODUCT id), and whether that product holds
+        // several bodies. SLCadImport.walkParts names parts from these; the tree above stays the OpenCascade shape.
+        function addMeshes(node, pd, m, trail) {
+            var L = leaf(pd), many = L.info.solids.length > 1, prod = st.products[st.pdProduct[pd]], pn = prod && prod.id != null && prod.id !== '' ? String(prod.id) : null;
             for (var i = 0; i < L.protos.length; i++) {
                 node.meshes.push(meshes.length);
-                meshes.push({ name: !L.info.solids.length ? '' : many ? L.info.solids[i].name : L.name, color: L.info.color, kind: L.info.solids.length ? 'solid' : 'faces', proto: L.protos[i], matrix: m, leaf: L.index, solid: i });
+                meshes.push({ name: !L.info.solids.length ? '' : many ? L.info.solids[i].name : L.name, color: L.info.color, kind: L.info.solids.length ? 'solid' : 'faces', proto: L.protos[i], matrix: m, leaf: L.index, solid: i,
+                              trail: trail, product: L.name, partNumber: pn, bodies: L.protos.length });
             }
         }
-        function under(node, pd, m) {
+        function under(node, pd, m, trail) {
             var ks = st.kids[pd];
-            if (!ks) { addMeshes(node, pd, m); return; }
-            for (var i = 0; i < ks.length; i++) { var n = st.nauo.get(ks[i]); under(node, n.child, mul(m, n.matrix)); }
+            if (!ks) { addMeshes(node, pd, m, trail); return; }
+            var down = trail.concat([st.pdName[pd]]);
+            for (var i = 0; i < ks.length; i++) { var n = st.nauo.get(ks[i]); under(node, n.child, mul(m, n.matrix), down); }
         }
         var rootNode = { name: '', meshes: [], children: [] };
         st.roots.forEach(function (r) {
             var rn = { name: st.pdName[r], meshes: [], children: [] };
             rootNode.children.push(rn);
             var ks = st.kids[r];
-            if (!ks) { addMeshes(rn, r, IDENT.slice()); return; }
+            if (!ks) { addMeshes(rn, r, IDENT.slice(), []); return; }
             ks.forEach(function (nid) {
                 var n = st.nauo.get(nid);
                 var cn = { name: st.pdName[n.child], meshes: [], children: [] };
                 rn.children.push(cn);
-                under(cn, n.child, n.matrix);
+                under(cn, n.child, n.matrix, [st.pdName[r]]);
             });
         });
         return { success: true, root: rootNode, meshes: meshes, protos: protos, leaves: leaves };

@@ -21,7 +21,7 @@
 // ============================================================================
 (function () {
     'use strict';
-    var VERSION = '1.5';
+    var VERSION = '1.6';   // 1.6 (17 Oct 2026): parts whose size is still being read are named and left out of containment and placement
     var state = { cadId: null, viewer: null, job: null, unsub: null, lastSel: null };
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
     function _pc() {
@@ -244,7 +244,8 @@
             var rec = null; for (var ri = 0; ri < c.parts.length; ri++) if (c.parts[ri].pid === sel) { rec = c.parts[ri]; break; }
             selLine = '<div style="font-size:12px;margin-bottom:6px;" data-cad-sel-zone>Selected: ' + _pidLink(sel) + ' is ' + (rec && rec.zoneId ? 'in ' + _zoneLink(rec.zoneId) + (rec.ambiguousWith ? ' (also inside ' + rec.ambiguousWith.map(_zoneLink).join(', ') + ' at the same depth)' : '') : (c.envelopes.indexOf(sel) >= 0 ? 'part of a zone envelope' : 'outside every zone')) + (c.straddling.some(function (s) { return s.pid === sel; }) ? ', and crosses a zone boundary' : '') + '.</div>';
         }
-        var body = selLine + '<div style="font-size:12px;margin-bottom:4px;">' + c.parts.filter(function (r) { return r.zoneId; }).length + ' parts in zones · ' + c.outside.length + ' outside every zone · ' + c.straddling.length + ' crossing a boundary · ' + c.ambiguous.length + ' ambiguous</div>' +
+        var body = selLine + '<div style="font-size:12px;margin-bottom:4px;">' + c.parts.filter(function (r) { return r.zoneId; }).length + ' parts in zones · ' + c.outside.length + ' outside every zone · ' + c.straddling.length + ' crossing a boundary · ' + c.ambiguous.length + ' ambiguous' + (c.estimated.length ? ' · ' + c.estimated.length + ' still being read' : '') + '</div>' +
+            (c.estimated.length ? '<div style="font-size:12px;margin-bottom:4px;" data-cad-estimated>' + c.estimated.length + ' part' + (c.estimated.length === 1 ? '\'s size is' : 's\' sizes are') + ' still being read from the CAD file. They are left out of zones, risk volumes and placement until their true size is known.</div>' : '') +
             (zones.length ? zones.map(function (zid) { return '<div style="font-size:12px;">' + _zoneLink(zid) + ': ' + c.byZone[zid].length + ' part' + (c.byZone[zid].length === 1 ? '' : 's') + '</div>'; }).join('') : '<div style="' + MUTED + '">No zone with a volume holds any part. Import a zone list with boxes, or define zones from parts.</div>') +
             (c.straddling.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Crossing a boundary</summary>' + _cap(c.straddling, function (s) { return '<div>' + _pidLink(s.pid) + '</div>'; }) + '</details>' : '') +
             (c.outside.length ? '<details style="margin-top:4px;"><summary style="font-size:12px;cursor:pointer;">Outside every zone</summary>' + _cap(c.outside, function (p) { return '<div>' + _pidLink(p) + '</div>'; }) + '</details>' : '') +
@@ -254,6 +255,7 @@
             (plan.assign.length ? plan.assign.map(function (a) { return '<div style="font-size:12px;">' + _esc(_sysName(a.sysId)) + ': ' + (a.fromZoneId ? _esc(_zoneLabel(a.fromZoneId)) + ' to ' : 'into ') + _zoneLink(a.toZoneId) + '</div>'; }).join('') +
                 '<button data-cad-act="place" style="' + BTN + 'margin-top:4px;">Place ' + plan.assign.length + ' item' + (plan.assign.length === 1 ? '' : 's') + ' in zones</button>' : '<div style="' + MUTED + '">' + (plan.unchanged.length ? 'Every linked item is already in its zone.' : 'Nothing to place: link parts to equipment first.') + '</div>') +
             (plan.conflicts.length ? '<div style="font-size:12px;color:var(--color-danger,#8E2A2A);">' + plan.conflicts.map(function (x) { return _esc(_sysName(x.sysId)) + ' has parts in ' + x.zoneIds.map(_zoneLabel).map(_esc).join(' and ') + ': not placed.'; }).join('<br>') + '</div>' : '') +
+            (plan.waiting.length ? '<div style="font-size:12px;">' + plan.waiting.map(function (x) { return _esc(_sysName(x.sysId)); }).join(', ') + ': waiting for the size of ' + (plan.waiting.length === 1 ? 'its' : 'their') + ' linked parts to be read.</div>' : '') +
             (plan.notContained.length ? '<div style="' + MUTED + '">' + plan.notContained.map(function (x) { return _esc(_sysName(x.sysId)); }).join(', ') + ': linked, but no part is inside a zone.</div>' : '') + '</div>';
         _panel('cad-contain', 'Containment', body, _rule('containment'));
     }
