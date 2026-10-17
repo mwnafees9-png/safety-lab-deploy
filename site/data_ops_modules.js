@@ -1420,6 +1420,8 @@ function _offerLastGoodIfAny() {
         if (!payload) return false;
         let parsed; try { parsed = JSON.parse(payload); } catch (_) { return false; }
         if (!_autosaveHasContent(parsed)) return false;
+        // 16 Oct 2026: the IndexedDB read finishes late; by then a cloud project may already be open.
+        if (typeof _liveProjectHasContent === 'function' && _liveProjectHasContent()) return false;
         try { _showLastGoodBanner(ts); } catch (_) {}
         return true;
     };
@@ -1436,11 +1438,21 @@ function _offerLastGoodIfAny() {
     } catch (_) {}
 }
 
+// 16 Oct 2026: is the project on screen holding real work right now? Then it is not empty and the
+// "earlier snapshot" offer must not appear (it showed over the AI test project after a reload).
+function _liveProjectHasContent() {
+    try {
+        if (typeof _activeCloudProjectId !== 'undefined' && _activeCloudProjectId) return true;
+        if (typeof _buildProjectSnapshot === 'function') return _autosaveHasContent(_buildProjectSnapshot());
+    } catch (_) {}
+    return false;
+}
 function _showLastGoodBanner(ts) {
     const host = document.querySelector('.container');
     if (!host || document.querySelector('.recovery-banner')) return;
     const banner = document.createElement('div');
     banner.className = 'recovery-banner';
+    banner.setAttribute('data-sl-lastgood', '1');
     let ago = '';
     if (ts) {
         const age = Math.round((Date.now() - ts) / 1000);
@@ -1541,6 +1553,7 @@ function _dismissRecoveryBanner() {
 
 // Common project-data applier used by recovery + loadSampleProject.
 function _applyProjectData(data) {
+    try { document.querySelectorAll('.recovery-banner[data-sl-lastgood]').forEach(function (b) { b.remove(); }); } catch (_) {}
     _autosaveSuspended = true;
     try { _quantClearCache(); } catch(_) {}   // #45 — new project ⇒ drop any cached quant results
     try {

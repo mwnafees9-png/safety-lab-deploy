@@ -8863,6 +8863,9 @@ function _buildProjectSnapshotLegacy() {
 // Restore in-memory state from a snapshot (used by Open from cloud).
 function _restoreProjectSnapshot(data) {
     if (!data || typeof data !== 'object') throw new Error('Invalid project data');
+    // 16 Oct 2026: a project is being opened, so an "earlier snapshot" offer made for the blank
+    // start-up state no longer applies to what is on screen.
+    try { document.querySelectorAll('.recovery-banner[data-sl-lastgood]').forEach(function (b) { b.remove(); }); } catch (_) {}
     acFunctionsData    = Array.isArray(data.acFunctionsData)   ? data.acFunctionsData   : [];
     acFcimData         = Array.isArray(data.acFcimData)        ? data.acFcimData        : [];
     acExtractedFCs     = Array.isArray(data.acExtractedFCs)    ? data.acExtractedFCs    : [];
@@ -12207,11 +12210,32 @@ function _projectConfigHasAuthoredContent(pc) {
         if (pc.ram && Array.isArray(pc.ram.field) && pc.ram.field.length) return true;
         if (pc.mmel && Array.isArray(pc.mmel.items) && pc.mmel.items.length) return true;
         if (Array.isArray(pc.markovModels) && pc.markovModels.length) return true;
+        // 16 Oct 2026: CAD, zones and the zonal AI work also live here. A project holding only
+        // these (an imported CAD model, its zones, risk areas, AI damage notes) was judged EMPTY,
+        // so a reload showed "This project is empty, but an earlier snapshot exists" over a
+        // project that was not empty at all. None of these is seeded by a new project.
+        var ARR = ['cadModels', 'praVolumes', 'zones', 'interfaces'];
+        for (var j = 0; j < ARR.length; j++) { if (Array.isArray(pc[ARR[j]]) && pc[ARR[j]].length) return true; }
+        var OBJ = ['cadLinks', 'damageAssumptions', 'praWriteups', 'functionRiskNotes', 'aiZonalNotes'];
+        for (var m = 0; m < OBJ.length; m++) {
+            var o = pc[OBJ[m]];
+            if (o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length) return true;
+        }
     } catch (_) {}
     return false;
 }
 function _autosaveHasContent(parsed) {
     if (!parsed) return false;
+    // 16 Oct 2026: every top-level store a person authors (cloud_sync's _CONTENT_KEYS plus the AI
+    // source documents). flightPhasesData is left out on purpose: every new project is seeded with
+    // a default phase table, so it says nothing. Inline so the function stands alone in tests.
+    var TOP = ['acFunctionsData', 'acFcimData', 'acFhaData', 'acReqData', 'acAssumptionsData',
+        'systemsData', 'fmeaData', 'itemsData', 'praData', 'zsaData', 'cmaData', 'routingData',
+        'resourcesData', 'projectSourceDocs', 'aiAssumptions'];
+    for (var i = 0; i < TOP.length; i++) {
+        var a = parsed[TOP[i]];
+        if (Array.isArray(a) && a.length) return true;
+    }
     return !!((parsed.acFhaData && parsed.acFhaData.length) ||
         (parsed.acReqData && parsed.acReqData.length) ||
         (parsed.ftaPages && parsed.ftaPages.some(function (p) { return p && p.root; })) ||
@@ -12220,6 +12244,8 @@ function _autosaveHasContent(parsed) {
         // top-level-array-only test could not see. See _projectConfigHasAuthoredContent.
         _projectConfigHasAuthoredContent(parsed.projectConfig));
 }
+// shared with cloud_sync (its provisioning check) so the two can never disagree again
+try { if (typeof window !== 'undefined') window.__slProjectHasContent = _autosaveHasContent; } catch (_) {}
 function _dismissWelcomeIfOpen() {
     try { const m = document.getElementById('welcome-modal'); if (m) { m.style.display = 'none'; m.classList.remove('active', 'show', 'open'); } } catch (_) {}
 }

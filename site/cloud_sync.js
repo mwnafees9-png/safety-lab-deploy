@@ -83,6 +83,9 @@
             for (var i = 0; i < arrs.length; i++) { var a = s[arrs[i]]; if (Array.isArray(a) && a.length) return true; }
             var fp = s.ftaPages;
             if (Array.isArray(fp)) { for (var k = 0; k < fp.length; k++) { if (fp[k] && fp[k].root) return true; } }
+            // 16 Oct 2026: the app's full content check (CAD, zones, AI inputs, HF, RAM ...), shared
+            // with the reload recovery so a CAD-only project is provisioned too.
+            if (typeof window !== 'undefined' && typeof window.__slProjectHasContent === 'function' && window.__slProjectHasContent(s)) return true;
             var nm = (typeof projectName !== 'undefined' && projectName) ? String(projectName) : (s.projectName || '');
             if (nm && nm !== 'Untitled Project') return true;
         } catch (_) {}

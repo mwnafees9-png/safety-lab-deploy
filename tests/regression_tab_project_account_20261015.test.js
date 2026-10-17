@@ -88,7 +88,7 @@ const AI = '4457de5d-a9df-4896-abe0-e75f95ad11da', HAL = 'b408d862-620f-4435-875
 }
 {
     const idx = S('index.html');
-    const iC = idx.indexOf('cloud_sync.js?v=2.6'), iT = idx.indexOf('tab_project.js?v=1.0');
+    const iC = idx.search(/cloud_sync\.js\?v=/), iT = idx.indexOf('tab_project.js?v=1.0');
     check('A11 index.html loads tab_project.js once, after cloud_sync 2.6', iC > 0 && iT > iC && idx.split('tab_project.js').length === 2);
 }
 
@@ -164,7 +164,7 @@ function runSync(o) {
         check('B11 save_state never retries not-yours', /code !== 'shrink' && code !== 'refused' && code !== 'not-yours'\) _scheduleRetry\(\)/.test(ss));
         const idx = S('index.html');
         // 16 Oct 2026: save_state.js 3.0 (changes collected and confirmed once, change_ack.js v2.0) keeps the 2.2 reason 'not-yours'
-        check('B12 index.html loads cloud_sync 2.6 and save_state 3.0 (with the 2.2 not-yours reason)', /cloud_sync\.js\?v=2\.6/.test(idx) && /save_state\.js\?v=3\.0/.test(idx));
+        check('B12 index.html loads cloud_sync 2.6 or later and save_state 3.0 (with the 2.2 not-yours reason)', /cloud_sync\.js\?v=2\.([6-9]|\d\d)/.test(idx) && /save_state\.js\?v=3\.0/.test(idx));
     }
     console.log('\n' + pass + ' passed, ' + fail + ' failed');
     process.exit(fail ? 1 : 0);
