@@ -139,7 +139,7 @@ const byId = (list, k, v) => list.find(x => x[k] === v);
 
 console.log('\n[A] the file');
 {
-    check('A: format safetylab-zonal version 1 from this generator, project named', P.format === 'safetylab-zonal' && P.version === 1 && /zonal exchange 1\.0/.test(P.generator) && P.projectName === 'Synthetic aircraft');
+    check('A: format safetylab-zonal version 1 from this generator, project named', P.format === 'safetylab-zonal' && P.version === 1 && P.generator === 'Safety Lab Aero zonal exchange ' + X.VERSION && P.projectName === 'Synthetic aircraft');
     check('A: the fingerprint verifies (checkPicture null)', X.checkPicture(P) === null, X.checkPicture(P));
     const t = JSON.parse(J(P)); t.risks[0].worst = 'Minor';
     check('A: a changed file is refused by its fingerprint', /fingerprint/.test(X.checkPicture(t) || ''));

@@ -1,5 +1,5 @@
 // ============================================================================
-// zonal_exchange.js, v1.0, 15 Oct 2026: the exchange between Safety Lab's CAD / zonal /
+// zonal_exchange.js, v1.1 (1.1, 17 Oct 2026: each risk carries its volume's shape), 15 Oct 2026: the exchange between Safety Lab's CAD / zonal /
 // particular risk picture and Sys Lab's model (functions and the physical architecture).
 // window.SLZonalExchange (page) + module.exports (node tests).
 //
@@ -32,8 +32,16 @@
 //                      carrying a designator, or inside a risk volume): partsComplete = false
 //   risks   [{ id, kind, label, source, praId, parts:[pid], equipment:[sysId],
 //              zoneIds:[zoneId], conditions:[{ id, fcId, desc, severity, domain }], worst,
-//              notEvaluated, mitigation }]
-//                      particular-risk volumes, through the fault trees (SLCadZonal.riskImpact)
+//              notEvaluated, mitigation, shape?, shapeUnits?, shapeIssue? }]
+//                      particular-risk volumes, through the fault trees (SLCadZonal.riskImpact).
+//                      1.1, 17 Oct 2026, still format version 1 (an added field; older readers
+//                      skip it, older files have none): shape is the volume exactly as Safety Lab
+//                      stores it, { kind:'box', min, max } | { kind:'sphere', center, radius } |
+//                      { kind:'cone', apex, axis, halfAngleDeg, length? } | { kind:'disk-sector',
+//                      center, axis, range|radius?, spreadDeg?, fragment?, fromDeg?, toDeg?,
+//                      refDir? } (cad_zonal.js shapeIssue / inShape); shapeUnits 'mm' (lengths in
+//                      millimeters, angles in degrees); shapeIssue, only when the engine refuses
+//                      the shape, says why in words
 //   zoneHazards [{ zoneId, equipment:[sysId], conditions:[...], worst, notEvaluated,
 //                  zsaRows:[{ id, zone, desc, equip, severity, interference, mitigation }] }]
 //                      a zone compromised: everything in it and its sub-zones fails together
@@ -68,8 +76,8 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.0';
-    var FORMAT = 'safetylab-zonal', FORMAT_VERSION = 1;
+    var VERSION = '1.1';
+    var FORMAT = 'safetylab-zonal', FORMAT_VERSION = 1, SHAPE_UNITS = 'mm';
     var PART_LIMIT = 20000;
     var KIND_LABELS = { rotorBurst: 'Rotor burst', tireBurst: 'Tire burst', birdStrike: 'Bird strike', fire: 'Fire', fluidLeak: 'Fluid leak', iceShedding: 'Ice shedding', lightning: 'Lightning', generic: 'Other particular risk', volume: 'Particular risk volume', zonal: 'Zonal hazard', zone: 'Zone compromised', zsa: 'Zonal safety analysis row' };
     var ON_LABELS = { syslab: 'mapped in Sys Lab', designator: 'equipment tag equals the designator', cadPart: 'the CAD part it names is linked to this equipment', system: 'same system, matched at the Safety Lab import of Sys Lab', partNumber: 'same part number', name: 'similar name', confirmed: 'confirmed by an engineer' };
@@ -156,6 +164,7 @@
                 parts: inside.map(function (p) { return String(p.pid); }).sort(_cmp), equipment: im ? im.equipment.map(function (e) { return String(e.sysId); }) : [],
                 zoneIds: _uniq(inside.map(function (p) { return zoneOf[p.pid]; })), conditions: im ? im.conditions.map(_cond) : [], worst: im ? (im.worst || null) : null,
                 notEvaluated: !m ? 'no CAD model' : (im && im.notEvaluated) ? String(im.notEvaluated) : null, mitigation: pra ? _s(pra.mitigation) || null : null });
+            _withShape(risks[risks.length - 1], v, C);
         });
         // parts
         var all = m ? C.partsOf(m).slice().sort(function (a, b) { return _cmp(a.pid, b.pid); }) : [];
@@ -217,6 +226,17 @@
         var out = { format: FORMAT, version: FORMAT_VERSION, generator: 'Safety Lab Aero zonal exchange ' + VERSION, projectName: _s(_g('projectName')) || null, exportedAt: opts.at || new Date().toISOString(), contentHash: fp(body) };
         Object.keys(body).forEach(function (k) { out[k] = body[k]; });
         return out;
+    }
+    // 1.1 (17 Oct 2026): each risk carries the volume Safety Lab stores for it, exactly as stored
+    // (projectConfig.praVolumes[].shape, cad_zonal.js), with its unit. Lengths are millimeters, the
+    // unit of the CAD model; angles are degrees. A shape the engine would refuse is still sent, with
+    // shapeIssue saying why, so the reader never draws it and never loses it silently.
+    function _withShape(r, v, C) {
+        if (!v || !v.shape || typeof v.shape !== 'object' || Array.isArray(v.shape)) return r;
+        r.shape = _clone(v.shape); r.shapeUnits = SHAPE_UNITS;
+        var bad = C && typeof C.shapeIssue === 'function' ? C.shapeIssue(v.shape) : null;
+        if (bad) r.shapeIssue = String(bad);
+        return r;
     }
     function _praRowFor(praId) {
         if (praId == null || praId === '') return null;

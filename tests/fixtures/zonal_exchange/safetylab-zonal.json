@@ -1,10 +1,10 @@
 {
  "format": "safetylab-zonal",
  "version": 1,
- "generator": "Safety Lab Aero zonal exchange 1.0",
+ "generator": "Safety Lab Aero zonal exchange 1.1",
  "projectName": "Synthetic aircraft",
  "exportedAt": "2026-10-15T09:00:00.000Z",
- "contentHash": "910989b7",
+ "contentHash": "355e5e3e",
  "cad": {
   "cadId": "cad-1",
   "revision": "A",
@@ -358,7 +358,21 @@
    ],
    "worst": "Major",
    "notEvaluated": null,
-   "mitigation": null
+   "mitigation": null,
+   "shape": {
+    "kind": "box",
+    "min": [
+     4400,
+     -300,
+     -300
+    ],
+    "max": [
+     4900,
+     300,
+     300
+    ]
+   },
+   "shapeUnits": "mm"
   },
   {
    "id": "prv-rotor",
@@ -389,7 +403,23 @@
    ],
    "worst": "Catastrophic",
    "notEvaluated": null,
-   "mitigation": "Shield the avionics bay"
+   "mitigation": "Shield the avionics bay",
+   "shape": {
+    "kind": "disk-sector",
+    "center": [
+     1800,
+     3000,
+     0
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "range": 5000,
+    "spreadDeg": 5
+   },
+   "shapeUnits": "mm"
   }
  ],
  "zoneHazards": [
