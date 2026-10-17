@@ -12,7 +12,7 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const MUTATE = process.argv.includes('--mutate');
 let pass = 0, fail = 0;
-function check(name, ok) { if (ok) { pass++; console.log('  ok   ' + name); } else { fail++; console.log('  FAIL ' + name); } }
+function check(name, ok) { if (ok) { pass++; console.log('  PASS  ' + name); } else { fail++; console.log('  FAIL  ' + name); } }
 const S = f => fs.readFileSync(path.join(ROOT, 'site', f), 'utf8');
 function fn(src, name) {
     const i = src.indexOf('function ' + name + '(');
