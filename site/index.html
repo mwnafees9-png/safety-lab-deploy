@@ -4176,7 +4176,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.45" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.31" defer></script>
+    <script src="helpers_modules.js?v=3.32" defer></script>
     <script src="cloud_writer.js?v=1.1" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4418,7 +4418,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="kestrel_showcase.js?v=2" defer></script>
     <!-- Demo-project picker — one chooser routing to every showcase loader. -->
     <!-- shared showcase authoring helpers; MUST load before any showcase builder runs -->
-    <script src="demo_kit.js?v=2" defer></script>
+    <script src="demo_kit.js?v=3" defer></script>
     <script src="hl1_showcase.js?v=7" defer></script>
     <script src="halcyon_showcase.js?v=7" defer></script>
     <script src="vayu_showcase.js?v=2" defer></script>
@@ -4468,6 +4468,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="pra_panel.js?v=1.18" defer></script>
     <!-- 15 Oct 2026: the exchange with Sys Lab (zones, CAD containment and risk results out; the physical architecture in). Deterministic, no AI. -->
     <script src="zonal_exchange.js?v=1.2" defer></script>
+    <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
+    <script src="requirement_states.js?v=1.0" defer></script>
     <script src="pra_report.js?v=1.5" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>

@@ -329,8 +329,10 @@ let IMPORTED;
     console.log('\n[N] the project export bundle');
     {
         const H = read('helpers_modules.js'), B = read('bindings_modules.js'), MISC = read('misc_fn_modules.js');
-        check('N: the bundle writer takes extra files and the export passes the zonal picture', /function _bundleToZip\(project, extra\)/.test(H) && /'zonal-exchange\.json': JSON\.stringify\(pic\)/.test(H) && /_bundleToZip\(_snapshotProject\(\), _bundleZonalExtra\(\)\)/.test(H));
-        check('N: a failure building the picture never stops the export (caught, empty extra)', /function _bundleZonalExtra\(\) \{\s*try \{[\s\S]*?\} catch \(e\) \{[\s\S]*?return \{\};/.test(H));
+        check('N: the bundle writer takes extra files and the export passes the zonal picture', /function _bundleToZip\(project, extra\)/.test(H) && /out\['zonal-exchange\.json'\] = JSON\.stringify\(pic\)/.test(H) && /_bundleToZip\(_snapshotProject\(\), _bundleZonalExtra\(\)\)/.test(H));
+        // 18 Oct 2026: the extras are gathered in one object (the zonal picture and requirement-states.json), each in its own
+        // try, so a failure in one leaves the other and never stops the export
+        check('N: a failure building the picture never stops the export (caught, empty extra)', /function _bundleZonalExtra\(\) \{\s*var out = \{\};\s*try \{ var X[\s\S]*?\} catch \(e\) \{[\s\S]*?return out;/.test(H));
         check('N: the reader merges only the known files, so zonal-exchange.json is never read back into the project', /Object\.keys\(_BUNDLE_MAP\)\.forEach\(function \(path\) \{ if \(files\[path\]\)/.test(MISC) && !/zonal-exchange/.test(B));
         check('N: hasContent: true with zones, false on an empty project', X.hasContent(P) === true && load().SLZonalExchange.hasContent(load().SLZonalExchange.exportPicture({ at: AT })) === false);
     }

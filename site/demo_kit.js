@@ -27,7 +27,11 @@
         var out = {};
         Object.keys(node).forEach(function (k) { if (k !== 'children') out[k] = node[k]; });
         out.id = nextId();
-        out.logicalId = out.id;
+        // 18 Oct 2026: the logical id is KEPT, exactly as the app's own mirror keeps it (_cloneSubtreeForVerification in
+        // helpers_modules.js: "logicalId is preserved for traceability"). It is how a generated requirement finds its
+        // event's as-built twin (_findNodeByLogicalId in getAutoReqVerificationEvidence); minting a new one here left
+        // every event requirement of every kit-built demo reading "Unmapped" against its verification tree.
+        out.logicalId = node.logicalId != null ? node.logicalId : node.id;
         out.displayId = (node.type === 'gate' ? 'G-' : 'BE-') + out.id;
 
         var lam = parseFloat(node.lambda) || 0;

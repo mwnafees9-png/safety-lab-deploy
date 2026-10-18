@@ -114,6 +114,15 @@ console.log('\n[demo_kit] ids and isolation');
                  return pages.find(p => p.id === m.verifies).root.children[0].probability === 2e-5; })());
     check('displayIds are re-minted, never inherited',
         made.every(m => { let ok = true; (function w(n) { if (!n) return; if (!/^(G|BE)-\d+$/.test(n.displayId || '')) ok = false; (n.children || []).forEach(w); })(m.root); return ok; }));
+    // 18 Oct 2026: a mirror keeps every node's logical id, the way the app's own mirror does
+    // (_cloneSubtreeForVerification). It is how a generated event requirement finds its as-built
+    // twin; a fresh one left every kit-built demo's event requirements "Unmapped".
+    check('logical ids are KEPT, so each mirror node is found by its allocation twin\'s id',
+        made.every(m => { const src = pages.find(p => p.id === m.verifies); const lids = n => { const o = []; (function w(x) { if (!x) return; o.push(x.logicalId != null ? x.logicalId : x.id); (x.children || []).forEach(w); })(n); return o; };
+                          return JSON.stringify(lids(m.root)) === JSON.stringify(lids(src.root)); }));
+    check('while structural ids stay fresh (no node id is shared with its source)',
+        made.every(m => { const src = pages.find(p => p.id === m.verifies); const ids = n => { const o = []; (function w(x) { if (!x) return; o.push(x.id); (x.children || []).forEach(w); })(n); return o; };
+                          const a = new Set(ids(src.root)); return ids(m.root).every(i => !a.has(i)); }));
     check('skip() keeps a page out of the mirror set',
         (() => { const p2 = fixture(); slDemoMirror(p2, { nextId, skip: pg => pg.id === 'pg-ac' });
                  return p2.filter(x => x.verifies).length === 1; })());

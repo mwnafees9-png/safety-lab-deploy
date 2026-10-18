@@ -12417,9 +12417,14 @@ function _bundleFromZip(u8) {
     });
 }
 
-// The zonal picture for Sys Lab, when the project has zones, a CAD model or risk volumes. A failure here never stops the export.
+// The files Sys Lab reads beside the project: the zonal picture, when the project has zones, a CAD model or risk volumes,
+// and (18 Oct 2026) the live state of every generated requirement (requirement_states.js), from which Sys Lab reads
+// independence and credit instead of judging them itself. A failure in either never stops the export.
 function _bundleZonalExtra() {
-    try { var X = window.SLZonalExchange; var pic = X && typeof X.exportPicture === 'function' ? X.exportPicture() : null; return pic && X.hasContent(pic) ? { 'zonal-exchange.json': JSON.stringify(pic) } : {}; } catch (e) { try { console.warn('zonal picture left out of the export', e); } catch (_) {} return {}; }
+    var out = {};
+    try { var X = window.SLZonalExchange; var pic = X && typeof X.exportPicture === 'function' ? X.exportPicture() : null; if (pic && X.hasContent(pic)) out['zonal-exchange.json'] = JSON.stringify(pic); } catch (e) { try { console.warn('zonal picture left out of the export', e); } catch (_) {} }
+    try { var R = window.SLReqStates; var st = R && typeof R.exportFromApp === 'function' ? R.exportFromApp() : null; if (st && R.hasContent(st)) out['requirement-states.json'] = JSON.stringify(st); } catch (e) { try { console.warn('requirement states left out of the export', e); } catch (_) {} }
+    return out;
 }
 function exportProjectBundle() {
     return _bundleToZip(_snapshotProject(), _bundleZonalExtra()).then(function (u8) {
