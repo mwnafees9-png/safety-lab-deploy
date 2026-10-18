@@ -138,7 +138,13 @@ async function shot(pg, name, sel) {
   }));
   const userEdit = (pg, fn) => pg.evaluate('SLChangeAck._markInput(); (' + fn + ')(); scheduleAutosave();');
   async function waitFor(pg, fn, ms) { const t0 = Date.now(); while (Date.now() - t0 < (ms || 5000)) { if (await fn()) return true; await sleep(100); } return false; }
-  async function ackText(pg) { return pg.evaluate(() => { const o = document.getElementById('sl-ack-overlay'); return o ? o.innerText : ''; }); }
+  // 18 Oct 2026: the overlay is in the page one frame before it is shown (it fades in from hidden), and
+  // innerText of a hidden element is empty. Reading it in that frame gave '' and failed B4 and B14 at
+  // random. Read what the person sees: wait (up to 1 s) for the overlay to be visible first.
+  async function ackText(pg) {
+    await waitFor(pg, () => pg.evaluate(() => { const o = document.getElementById('sl-ack-overlay'); return !o || getComputedStyle(o).visibility === 'visible'; }), 1000);
+    return pg.evaluate(() => { const o = document.getElementById('sl-ack-overlay'); return o ? o.innerText : ''; });
+  }
   // 16 Oct 2026: the decision point for a change made on a page is the top bar (confirm early) or leaving
   async function confirmNow(pg) { await pg.click('#save-indicator'); await waitFor(pg, () => ackOpen(pg), 3000); await sleep(200); await pg.click('.sl-ack-confirm'); await sleep(900); }
   const ackCount = pg => pg.evaluate(() => SLChangeAck.count());

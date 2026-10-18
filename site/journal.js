@@ -1,6 +1,6 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
-// journal.js — v1.0 — Q7: append-only, hash-chained project journal.
+// journal.js — v1.2 — Q7: append-only, hash-chained project journal.
 //
 // The audit question a DER eventually asks: "how do I know this history
 // wasn't edited?" Signatures answer WHO; the journal answers WHETHER THE
@@ -81,7 +81,15 @@
                     st.entries.push({ seq: cl.seq + 1, at: cAt, kind: 'compaction', s: cut + ' entries folded into anchor', h: ch });
                 }
             }
-            if (wrote) { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
+            // 18 Oct 2026: the journal's own write is bookkeeping, never a change the person made. It lands
+            // up to a beat after the act it records (the hashing is async), so without this a Confirm all
+            // click was followed by half a second in which the app thought the person was still changing
+            // something, and closing the window then asked again about nothing.
+            if (wrote) {
+                const sa = function () { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
+                const A = window.SLChangeAck;
+                if (A && typeof A.system === 'function') A.system(sa); else sa();
+            }
         } finally { _pumping = false; }
     }
 

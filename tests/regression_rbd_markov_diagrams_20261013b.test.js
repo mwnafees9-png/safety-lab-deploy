@@ -458,7 +458,9 @@ async function browser() {
     check('browser: renaming a state in the table renames it on the diagram (same model)', await E(id => SLMarkovDiagram.editor(id).model().elements.some(e => e.label === 'Normal'), newId));
     // rename on the diagram (double-click): the table follows, transitions follow
     const pw = await at(working); await page.mouse.dblclick(pw.x, pw.y); await wait(150);
-    await page.keyboard.press('Control+a'); await page.keyboard.type('Nominal'); await page.keyboard.press('Enter'); await wait(350);
+    // 18 Oct 2026: select-all in a text box is Cmd+A on a Mac (Ctrl+A there moves to the line start, which typed
+    // 'NominalNormal'); ControlOrMeta is the platform's own select-all, as a person presses it.
+    await page.keyboard.press('ControlOrMeta+a'); await page.keyboard.type('Nominal'); await page.keyboard.press('Enter'); await wait(350);
     mm = await E(id => projectConfig.markovModels.find(m => m.id === id), newId);
     check('browser: renaming on the diagram renames the state in the table and in its transitions', mm.states[0].name === 'Nominal' && mm.transitions.every(t => t.from !== 'Normal' && t.to !== 'Normal') && mm.transitions.some(t => t.from === 'Nominal') && mm.initialState === 'Nominal');
     check('browser: the solver still answers for the hand-drawn model (P(failed) shown in the card)', await E(id => /P\(failed\) = \d/.test(document.querySelector('.mk-card[data-mk-id="' + id + '"]').textContent), newId));

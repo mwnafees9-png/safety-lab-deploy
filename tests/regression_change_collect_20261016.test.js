@@ -253,11 +253,15 @@ async function suite(SRC) {
   const keep = { pass, fail };
   console.log('\n[M] mutation proofs (each mutated copy runs quietly; the guarded check must go red)');
   quiet = true;
-  const m1 = await suite(mutate(ACK, "        _collect(w, items, shown, D, Rb);\n        return _close(w, 'collected');", "        _collect(w, items, shown, D, Rb);\n        setTimeout(function () { ask({ reason: 'early' }); }, 0);\n        return _close(w, 'collected');", 'M1'));
-  const m2 = await suite(mutate(ACK, "        if (c.autoD.length) { c.autoD.forEach(function (a) { try { _applyContent(a.D); } catch (_) {} });", "        if (false) { c.autoD.forEach(function (a) { try { _applyContent(a.D); } catch (_) {} });", 'M2'));
-  const m3 = await suite(mutate(ACK, "        if (restore) revertTo(s.before, s.undoMark);", "", 'M3'));
-  const m4 = await suite(mutate(ACK, "if (last && last.before != null && last.before === info.snap) { _takeOutLast(false, info.snap);", "if (false) { _takeOutLast(false, info.snap);", 'M4'));
-  const m5 = await suite(mutate(ACK, "if (_col && !_win && _ownDepth === 0 && _restoreDepth === 0 && _stash != null) {", "if (false) {", 'M5'));
+  // 18 Oct 2026: the five mutated copies are independent (each builds its own vm pages) and quiet, so they
+  // run side by side: the same proofs in about a third of the time (this suite was the slowest on the wall).
+  const [m1, m2, m3, m4, m5] = await Promise.all([
+    suite(mutate(ACK, "        _collect(w, items, shown, D, Rb);\n        return _close(w, 'collected');", "        _collect(w, items, shown, D, Rb);\n        setTimeout(function () { ask({ reason: 'early' }); }, 0);\n        return _close(w, 'collected');", 'M1')),
+    suite(mutate(ACK, "        if (c.autoD.length) { c.autoD.forEach(function (a) { try { _applyContent(a.D); } catch (_) {} });", "        if (false) { c.autoD.forEach(function (a) { try { _applyContent(a.D); } catch (_) {} });", 'M2')),
+    suite(mutate(ACK, "        if (restore) revertTo(s.before, s.undoMark);", "", 'M3')),
+    suite(mutate(ACK, "if (last && last.before != null && last.before === info.snap) { _takeOutLast(false, info.snap);", "if (false) { _takeOutLast(false, info.snap);", 'M4')),
+    suite(mutate(ACK, "if (_col && !_win && _ownDepth === 0 && _restoreDepth === 0 && _stash != null) {", "if (false) {", 'M5'))
+  ]);
   quiet = false; pass = keep.pass; fail = keep.fail;
   check('M1 a dialog opened as each change is collected: U1 goes red', !m1.u1);
   check('M2 Discard all that drops background work: U3 goes red', !m2.u3);

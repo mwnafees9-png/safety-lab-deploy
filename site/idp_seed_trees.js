@@ -217,7 +217,14 @@
         });
         } finally { _endSweep(); }
         if (seeded || regenerated || removed) {
-            try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+            // 18 Oct 2026: the sweep's save is the app's own work, never a change the person made
+            // (change_ack.js names "the seed sweep" as a system change). It runs on a timer, so
+            // unmarked it was taken for the person's edit whenever it landed just after a click,
+            // and closing the window in that moment asked again about nothing. (change_ack.js wraps the public
+            // SL_IDP.tick as system, but this file's own timer calls its internal tick, so that never covered it.)
+            var sa = function () { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} };
+            var A = (typeof window !== 'undefined') ? window.SLChangeAck : null;
+            if (A && typeof A.system === 'function') A.system(sa); else sa();
             try { if (typeof renderFTASidebar === 'function') renderFTASidebar(); } catch (_) {}
         }
         return { seeded: seeded, regenerated: regenerated, removed: removed, stale: stale, kept: kept };
