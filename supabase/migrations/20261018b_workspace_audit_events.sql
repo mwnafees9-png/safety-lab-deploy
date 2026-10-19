@@ -1,6 +1,10 @@
 -- ============================================================================
 -- 18 Oct 2026 — SEC-0b: the workspace activity log records what happens in a workspace.
--- STATUS: NOT YET APPLIED IN PRODUCTION (waits for Waqas's go). Customer kit: 23_workspace_audit_events.sql.
+-- STATUS: APPLIED IN PRODUCTION 18 Oct 2026 on Waqas's go, as two records (20261018b, and the auth.users
+--   trigger as 20261018b2), with the same end state as this file. The Supabase tool hangs on DROP statements
+--   (it waits for a confirmation), so triggers are created with CREATE OR REPLACE and the policy is renamed
+--   and altered. Probed after (rolled back): the owner archiving a project wrote one project.archived row
+--   naming the owner; a sign-in wrote one user.signed_in row per workspace (2 of 2). Customer kit: 23_workspace_audit_events.sql.
 --
 -- WHAT WAS WRONG (production, read-only, 18 Oct 2026): public.workspace_audit has 0 rows in the product's
 -- whole life. SL-WP-0003 section 17 and the trust page say workspace activity is recorded. The only writer
@@ -73,8 +77,7 @@ begin
   end if;
   return null;
 end $function$;
-drop trigger if exists ws_audit_workspaces on public.workspaces;
-create trigger ws_audit_workspaces after insert or update of owner_id on public.workspaces
+create or replace trigger ws_audit_workspaces after insert or update of owner_id on public.workspaces
   for each row execute function private.tg_ws_audit_workspaces();
 
 -- ---- members ------------------------------------------------------------------
@@ -96,8 +99,7 @@ begin
   end if;
   return null;
 end $function$;
-drop trigger if exists ws_audit_members on public.workspace_members;
-create trigger ws_audit_members after insert or update of role or delete on public.workspace_members
+create or replace trigger ws_audit_members after insert or update of role or delete on public.workspace_members
   for each row execute function private.tg_ws_audit_members();
 
 -- ---- invitations ----------------------------------------------------------------
@@ -119,8 +121,7 @@ begin
   end if;
   return null;
 end $function$;
-drop trigger if exists ws_audit_invitations on public.invitations;
-create trigger ws_audit_invitations after insert or update of accepted_at or delete on public.invitations
+create or replace trigger ws_audit_invitations after insert or update of accepted_at or delete on public.invitations
   for each row execute function private.tg_ws_audit_invitations();
 
 -- ---- projects -------------------------------------------------------------------
@@ -144,8 +145,7 @@ begin
   end if;
   return null;
 end $function$;
-drop trigger if exists ws_audit_projects on public.projects;
-create trigger ws_audit_projects after insert or update of deleted_at or delete on public.projects
+create or replace trigger ws_audit_projects after insert or update of deleted_at or delete on public.projects
   for each row execute function private.tg_ws_audit_projects();
 
 -- ---- sign-ins -------------------------------------------------------------------
@@ -173,8 +173,7 @@ do $signin$
 begin
   -- a plain Postgres with the kit's stub auth.users has no last_sign_in_at: nothing signs in there
   if exists (select 1 from information_schema.columns where table_schema = 'auth' and table_name = 'users' and column_name = 'last_sign_in_at') then
-    execute 'drop trigger if exists ws_audit_signin on auth.users';
-    execute 'create trigger ws_audit_signin after update of last_sign_in_at on auth.users for each row '
+    execute 'create or replace trigger ws_audit_signin after update of last_sign_in_at on auth.users for each row '
          || 'when (new.last_sign_in_at is distinct from old.last_sign_in_at) execute function private.tg_ws_audit_signin()';
   end if;
 end $signin$;
@@ -230,9 +229,17 @@ begin
 end $function$;
 
 -- ---- who reads it -------------------------------------------------------------------
-drop policy if exists ws_audit_member_read on public.workspace_audit;
-drop policy if exists ws_audit_admin_read on public.workspace_audit;
-create policy ws_audit_admin_read on public.workspace_audit for select to authenticated
+-- (renamed and altered, not dropped and recreated: the read rule is never absent, even for a moment)
+do $pol$
+begin
+  if exists (select 1 from pg_policy where polname = 'ws_audit_member_read' and polrelid = 'public.workspace_audit'::regclass) then
+    alter policy ws_audit_member_read on public.workspace_audit rename to ws_audit_admin_read;
+  end if;
+  if not exists (select 1 from pg_policy where polname = 'ws_audit_admin_read' and polrelid = 'public.workspace_audit'::regclass) then
+    create policy ws_audit_admin_read on public.workspace_audit for select to authenticated using (true);
+  end if;
+end $pol$;
+alter policy ws_audit_admin_read on public.workspace_audit to authenticated
   using (private.can_admin_workspace(workspace_id) or user_id = (select auth.uid()));
 
 -- ---- nobody writes it directly ----------------------------------------------------------

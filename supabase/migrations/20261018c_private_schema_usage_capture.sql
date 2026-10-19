@@ -1,6 +1,6 @@
 -- ============================================================================
 -- 18 Oct 2026 — capture a production grant that was never written down. Customer kit: 24_private_schema_usage.sql.
--- STATUS: a no-op on production (the grant is already there: nspacl on 18 Oct 2026 reads
+-- STATUS: APPLIED IN PRODUCTION 18 Oct 2026 (a no-op there, as expected). It is a no-op on production (the grant is already there: nspacl on 18 Oct 2026 reads
 --   {postgres=UC, authenticated=U, anon=U, service_role=U}). Applying it there changes nothing.
 --
 -- FOUND BY THE SEC-0b PROOF (customer-install/db/tests/access_rules/checks_audit.txt): on a database built

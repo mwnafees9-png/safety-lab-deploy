@@ -1,6 +1,7 @@
 -- ============================================================================
 -- 18 Oct 2026 — SEC-3b: the AI proxy writes the AI ledger row itself.
--- STATUS: NOT YET APPLIED IN PRODUCTION (waits for Waqas's go). Customer kit: 25_ai_ledger_from_proxy.sql.
+-- STATUS: APPLIED IN PRODUCTION 18 Oct 2026 on Waqas's go. The 165 existing rows read source 'app'; the
+--   chain verifies clean after (165 checked, 12 segments). Customer kit: 25_ai_ledger_from_proxy.sql.
 -- Apply BEFORE the proxy deploy that calls it; the app change is safe in any order (it only stops writing
 -- its own row when the proxy says it wrote one).
 --

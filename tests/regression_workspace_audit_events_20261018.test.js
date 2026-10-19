@@ -34,7 +34,7 @@ for (const [ev, table] of [['user.signed_in', 'auth.users'], ['workspace.created
   ['project.created', 'public.projects'], ['project.archived', 'public.projects'], ['project.restored', 'public.projects'], ['project.erased', 'public.projects']])
   check(ev + ' is written', M.includes("'" + ev + "'"));
 for (const t of ['public.workspaces', 'public.workspace_members', 'public.invitations', 'public.projects'])
-  check('a trigger on ' + t, new RegExp('create trigger ws_audit_\\w+ after [^;]+ on ' + t.replace('.', '\\.') + '\\s+for each row').test(M));
+  check('a trigger on ' + t, new RegExp('create or replace trigger ws_audit_\\w+ after [^;]+ on ' + t.replace('.', '\\.') + '\\s+for each row').test(M));
 check('sign-ins: a trigger on auth.users, only when the stamp really changes', /after update of last_sign_in_at on auth\.users for each row '\s*\n?\s*\|\| 'when \(new\.last_sign_in_at is distinct from old\.last_sign_in_at\)/.test(M));
 check('...created only where auth.users has the stamp (a plain Postgres kit build does not)', /if exists \(select 1 from information_schema\.columns where table_schema = 'auth' and table_name = 'users' and column_name = 'last_sign_in_at'\)/.test(M));
 
@@ -49,8 +49,8 @@ check('the writer and the trigger functions cannot be called by anyone', /revoke
   && ['tg_ws_audit_workspaces', 'tg_ws_audit_members', 'tg_ws_audit_invitations', 'tg_ws_audit_projects', 'tg_ws_audit_signin'].every(f => new RegExp('revoke execute on function private\\.' + f + '\\(\\)\\s+from public, anon, authenticated;').test(M)));
 
 console.log('\n[3] who reads it, who writes it');
-check('owners and admins read the workspace, each person their own rows', /create policy ws_audit_admin_read on public\.workspace_audit for select to authenticated\s+using \(private\.can_admin_workspace\(workspace_id\) or user_id = \(select auth\.uid\(\)\)\);/.test(M));
-check('the every-member policy is gone', /drop policy if exists ws_audit_member_read on public\.workspace_audit;/.test(M) && !/create policy ws_audit_member_read/.test(M));
+check('owners and admins read the workspace, each person their own rows', /alter policy ws_audit_admin_read on public\.workspace_audit to authenticated\s+using \(private\.can_admin_workspace\(workspace_id\) or user_id = \(select auth\.uid\(\)\)\);/.test(M));
+check('the every-member policy becomes it (renamed, never dropped: the read rule is never absent)', /alter policy ws_audit_member_read on public\.workspace_audit rename to ws_audit_admin_read;/.test(M) && !/create policy ws_audit_member_read/.test(M) && !/drop policy/.test(M));
 check('no direct writes: insert and select revoked from anon, insert from authenticated', /revoke insert, select on public\.workspace_audit from anon;/.test(M) && /revoke insert on public\.workspace_audit from authenticated;/.test(M));
 
 console.log('\n[4] append-only, except when the workspace itself is deleted');

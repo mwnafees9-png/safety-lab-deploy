@@ -1,6 +1,7 @@
 -- ============================================================================
 -- 18 Oct 2026 — SEC-4: an owner or admin can erase a project themselves, as the paper promises.
--- STATUS: NOT YET APPLIED IN PRODUCTION (waits for Waqas's go). Customer kit: 22_self_serve_project_erasure.sql.
+-- STATUS: APPLIED IN PRODUCTION 18 Oct 2026 on Waqas's go. Probed after (rolled back): a signed-in stranger
+--   gets 'not authorized'; the workspace owner gets the dry run. Customer kit: 22_self_serve_project_erasure.sql.
 --
 -- THE PAPER (SL-WP-0003 v3.0, section 18): "self-serve permanent erasure, of an individual project or of
 -- an entire account, that purges the underlying content ... and issues a certificate of destruction".
