@@ -701,16 +701,16 @@
     P._askReopen = function (entry) {
         var self = this;
         this._overlay('<div class="scv-card"><b>The geometry for ' + esc(entry.fileName) + ' is not on this computer.</b><br>' +
-            'CAD geometry is kept only on the computer that read the file and is never uploaded. Open the same STEP file from this computer to view it; it is checked against the project\'s fingerprint first.' +
-            '<div style="margin-top:12px"><button type="button" class="scv-btn" data-reopen>Open the STEP file...</button></div><div class="scv-prog" style="display:none"><div></div></div><div data-reopen-msg style="font-size:12px;color:var(--scv-muted)"></div></div>');
+            'CAD geometry is kept only on the computer that read the file and is never uploaded. Open the same CAD file (STEP or IGES) from this computer to view it; it is checked against the project\'s fingerprint first.' +
+            '<div style="margin-top:12px"><button type="button" class="scv-btn" data-reopen>Open the CAD file...</button></div><div class="scv-prog" style="display:none"><div></div></div><div data-reopen-msg style="font-size:12px;color:var(--scv-muted)"></div></div>');
         var b = this.$.overlay.querySelector('[data-reopen]');
         b.addEventListener('click', function () {
-            var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stp,.step,.p21';
+            var inp = document.createElement('input'); inp.type = 'file'; inp.accept = (root.SLCadImport && root.SLCadImport.ACCEPT) || '.stp,.step,.p21,.igs,.iges';
             inp.onchange = function () { if (inp.files && inp.files[0]) self.reopenWith(inp.files[0], entry); };
             inp.click();
         });
     };
-    var PHASES = { hash: 'Checking the fingerprint...', load: 'Loading the STEP reader...', scan: 'Reading the product structure...', parse: 'Reading the STEP file...', transfer: 'Building the shapes...', mesh: 'Building parts...', fallback: 'Using the smaller reader...', done: 'Saving to this computer...' };
+    var PHASES = { hash: 'Checking the fingerprint...', load: 'Loading the CAD reader...', scan: 'Reading the product structure...', parse: 'Reading the CAD file...', transfer: 'Building the shapes...', mesh: 'Building parts...', fallback: 'Using the smaller reader...', done: 'Saving to this computer...' };
     P.reopenWith = function (file, entry) {
         var self = this, I = root.SLCadImport;
         var msg = this.$.overlay.querySelector('[data-reopen-msg]'), prog = this.$.overlay.querySelector('.scv-prog');
@@ -1457,7 +1457,7 @@
     P._exactReady = function () { var X = root.SLCadExact; return !!(X && this.entry && X.ready(this.entry.id)); };
     P.loadExact = function (file) {
         var X = root.SLCadExact, self = this; if (!X || !this.entry) return Promise.resolve(false);
-        return X.open(this.entry, file ? { file: file } : {}).then(function () { self._syncExact(); self._hint('Exact geometry ready: measurements and PMI come from the STEP file\'s own surfaces.'); if (self._afterExact) self._afterExact(); return true; }, function (e) {
+        return X.open(this.entry, file ? { file: file } : {}).then(function () { self._syncExact(); self._hint('Exact geometry ready: measurements and PMI come from the CAD file\'s own surfaces.'); if (self._afterExact) self._afterExact(); return true; }, function (e) {
             self._syncExact();
             if (e && e.code === 'need-file') self._hint(e.message);
             else self._hint('Exact geometry not available: ' + ((e && e.message) || e) + '. Measurements stay approximate.');
@@ -1465,7 +1465,7 @@
         });
     };
     P._askExactFile = function () {
-        var self = this, inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stp,.step,.p21';
+        var self = this, inp = document.createElement('input'); inp.type = 'file'; inp.accept = (root.SLCadImport && root.SLCadImport.ACCEPT) || '.stp,.step,.p21,.igs,.iges';
         inp.onchange = function () { if (inp.files && inp.files[0]) self.loadExact(inp.files[0]); };
         inp.click();
     };
@@ -1476,7 +1476,7 @@
         el.setAttribute('data-st', s);
         var etxt = s === 'ready' ? 'Exact: ready' : s === 'loading' ? 'Exact: ' + (PHASES[st.phase] || 'loading').replace(/\.\.\.$/, '') + (st.frac != null ? ' ' + Math.round(st.frac * 100) + '%' : '') : s === 'need-file' ? 'Exact: open the file' : s === 'error' ? 'Exact: not available' : 'Exact: off';
         el.textContent = 'Exact'; el.setAttribute('aria-label', etxt); el.classList.toggle('scv-on', s === 'ready'); el.classList.toggle('scv-busy', s === 'loading');   // a status dot; the words are its label and tooltip
-        el.title = s === 'error' ? (st.error || '') : s === 'need-file' ? 'The STEP file is not kept in this browser. Click to open it (checked against the fingerprint).' : 'Exact geometry (B-rep) for measurement and PMI. Click to load.';
+        el.title = s === 'error' ? (st.error || '') : s === 'need-file' ? 'The CAD file is not kept in this browser. Click to open it (checked against the fingerprint).' : 'Exact geometry (B-rep) for measurement and PMI. Click to load.';
         el.title = etxt + (el.title ? '. ' + el.title : '');
     };
     P._clearMeasure = function () {

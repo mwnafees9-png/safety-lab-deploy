@@ -156,6 +156,85 @@
         if (conv) return conv[1].toLowerCase();
         return 'unknown';
     }
+    // ---- IGES (19 Oct 2026): the other neutral format every CAD tool writes. IGES has no product structure,
+    // no part numbers and no user defined attributes, so an IGES model is its shapes, their names and colors.
+    // A file is IGES when its first record is an 80 column line with 'S' (start section) in column 73 and a
+    // sequence number in columns 74 to 80 (IGES 5.3, 2.2.1). The same rule as the engine (tools/occt/slcad_occt.cpp).
+    function isIges(bytes) {
+        var d = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        if (d.length < 80 || d[72] !== 83) return false;
+        var e = 0; while (e < d.length && d[e] !== 10 && d[e] !== 13) e++;
+        if (e < 80) return false;
+        var digit = false;
+        for (var i = 73; i < 80; i++) { if (d[i] >= 48 && d[i] <= 57) digit = true; else if (d[i] !== 32) return false; }
+        if (!digit) return false;
+        if (e === 80) return true;
+        return d.length >= 160 && (d[152] === 83 || d[152] === 71);
+    }
+    function isStep(bytes) { var d = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes); return /ISO-10303-21/.test(bytesToText(d.subarray(0, 2000))); }
+    // 'step', 'iges' or null (not a file Safety Lab reads)
+    function cadFormat(bytes) { return isStep(bytes) ? 'step' : isIges(bytes) ? 'iges' : null; }
+    var NOT_CAD = 'This is not a STEP or IGES file. Export the model from your CAD tool as STEP (AP242, AP214 or AP203), or as IGES.';
+    // The IGES global section (IGES 5.3, 2.2.4): parameter 14 is the unit flag, 15 the unit name, 23 the version.
+    // Parameters are separated by parameter 1 (default ','), the section ends with parameter 2 (default ';'),
+    // and text is Hollerith (nH followed by n characters).
+    var IGES_UNITS = { 1: 'inch', 2: 'mm', 4: 'ft', 5: 'mi', 6: 'm', 7: 'km', 8: 'mil', 9: 'micron', 10: 'cm', 11: 'microinch' };
+    var IGES_VERSIONS = { 1: '1.0', 2: 'ANSI Y14.26M-1981', 3: '2.0', 4: '3.0', 5: 'ASME/ANSI Y14.26M-1987', 6: '4.0', 7: 'ASME Y14.26M-1989', 8: '5.0', 9: '5.1', 10: '5.2', 11: '5.3' };
+    function igesGlobal(bytes) {
+        var d = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        var text = bytesToText(d.subarray(0, Math.min(d.length, 400000)));
+        var recs = /[\r\n]/.test(text.slice(0, 82)) ? text.split(/\r\n|\r|\n/) : text.match(/[\s\S]{1,80}/g) || [];
+        var g = ''; recs.forEach(function (r) { if (r.charAt(72) === 'G') g += r.slice(0, 72); });
+        var pd = ',', rd = ';', i = 0, out = [];
+        // parameters 1 and 2 may themselves change the delimiters (1H/ or a default when empty)
+        function readOne() {
+            while (i < g.length && g.charAt(i) === ' ') i++;
+            var m = /^(\d+)H/.exec(g.slice(i, i + 12));
+            var v = '';
+            if (m) { var n = +m[1]; i += m[0].length; v = g.substr(i, n); i += n; }
+            else { var j = i; while (j < g.length && g.charAt(j) !== pd && g.charAt(j) !== rd) j++; v = g.slice(i, j).trim(); i = j; }
+            while (i < g.length && g.charAt(i) === ' ') i++;
+            var end = g.charAt(i) === rd || i >= g.length; i++;
+            return { v: v, end: end };
+        }
+        if (g.charAt(0) !== pd) { var a = readOne(); out.push(a.v); if (a.v) pd = a.v.charAt(0); } else { out.push(''); i++; }
+        if (g.charAt(i) !== pd) { var b = readOne(); out.push(b.v); if (b.v) rd = b.v.charAt(0); } else { out.push(''); i++; }
+        for (var guard = 0; guard < 40 && i < g.length; guard++) { var r = readOne(); out.push(r.v); if (r.end) break; }
+        var flag = parseInt(out[13], 10), uname = String(out[14] || '').trim().replace(/^\d+H/, '');
+        var unit = IGES_UNITS[flag] || (flag === 3 && uname ? uname.toLowerCase() : 'unknown');
+        var ver = IGES_VERSIONS[parseInt(out[22], 10)] || '';
+        // parameters 3 to 6: the sender's product id, the file name, the native system id, the preprocessor version
+        return { unit: unit, version: ver, product: String(out[2] || ''), fileName: String(out[3] || ''), system: String(out[4] || ''), preprocessor: String(out[5] || '') };
+    }
+    // the schema label of a file: AP242 / AP214 / AP203 for STEP, 'IGES 5.3' for IGES
+    function cadSchema(bytes) { var d = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes); if (isIges(d)) { var g = igesGlobal(d); return 'IGES' + (g.version ? ' ' + g.version : ''); } return stepSchema(bytesToText(d.subarray(0, 4000))); }
+    function cadLengthUnit(bytes) { var d = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes); if (isIges(d)) return igesGlobal(d).unit; return stepLengthUnit(bytesToText(d.subarray(0, Math.min(d.length, 4e6)))); }
+    // the file picker's list
+    var ACCEPT = '.stp,.step,.p21,.igs,.iges';
+    // How to get a file Safety Lab reads out of each CAD tool (19 Oct 2026). Menu names move between releases,
+    // so each line names the export, not every click. STEP carries the assembly, part numbers, instance names
+    // and user defined attributes (route types); IGES carries shapes, names and colors only.
+    var EXPORT_GUIDE = [
+        { tool: 'CATIA V5', how: 'File > Save As, type stp. Pick AP242 (or AP214) under Tools > Options > General > Compatibility > STEP, and turn on the export of user defined properties so route types come across.' },
+        { tool: '3DEXPERIENCE (CATIA)', how: 'Export the product (or the root of the assembly) as STEP, AP242. Include attributes in the export settings.' },
+        { tool: 'Siemens NX', how: 'File > Export > STEP. Choose AP242 and include the assembly structure and attributes.' },
+        { tool: 'PTC Creo', how: 'File > Save As > Save a Copy, type STEP. Export the top assembly so every part comes with it, and include parameters.' },
+        { tool: 'SolidWorks', how: 'File > Save As, type STEP AP242 (or AP214). Save the top assembly, not single parts.' },
+        { tool: 'Autodesk Inventor', how: 'File > Export > CAD Format, type STEP. Under Options pick Application Protocol 242 (or 214).' },
+        { tool: 'Autodesk Fusion', how: 'File > Export, type STEP.' },
+        { tool: 'Solid Edge', how: 'Save As, type STEP.' },
+        { tool: 'Onshape', how: 'Right click the assembly tab > Export, format STEP.' },
+        { tool: 'Rhino and other surface modelers', how: 'File > Export, type STEP. If STEP is not offered, IGES.' },
+        { tool: 'Any other tool', how: 'Any STEP export (AP203, AP214 or AP242) works. IGES works too, for tools or archives that only have it.' }
+    ];
+    function exportGuideHtml() {
+        var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+        return '<details data-cad-export-guide style="margin:6px 0 8px;font-size:12px;"><summary style="cursor:pointer;">Exporting from your CAD tool</summary>' +
+            '<div style="margin:6px 0 4px;">Safety Lab reads STEP from every CAD tool, and IGES. Use STEP when you can: it carries the assembly, part numbers, instance names and the attributes that define each route\'s type. IGES carries the shapes, their names and colors only, so an IGES model has no assembly levels and route types are set by hand.</div>' +
+            '<table style="border-collapse:collapse;width:100%;">' + EXPORT_GUIDE.map(function (g) { return '<tr><td style="padding:3px 8px 3px 0;vertical-align:top;white-space:nowrap;font-weight:600;">' + esc(g.tool) + '</td><td style="padding:3px 0;">' + esc(g.how) + '</td></tr>'; }).join('') + '</table>' +
+            '<div style="margin-top:4px;">Menu names change between releases; the export to look for is STEP (or IGES).</div></details>';
+    }
+
     function productIndex(products) {
         var by = {};
         (products || []).forEach(function (p) {
@@ -566,8 +645,10 @@
         var prog = function (ph, f) { if (opts.onProgress) { try { opts.onProgress(ph, f); } catch (_) {} } };
         var u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
         prog('scan', 0);
+        // the smaller reader (occt-import-js) reads STEP only: IGES is read by Safety Lab's own build
+        if (isIges(u8)) throw new Error('IGES files are read only by the full reader, which could not run here. Export the model as STEP instead, or open Safety Lab in a current browser.');
         var text = bytesToText(u8);
-        if (!/ISO-10303-21/.test(text.slice(0, 2000))) throw new Error('This is not a STEP file (the ISO-10303-21 header is missing).');
+        if (!/ISO-10303-21/.test(text.slice(0, 2000))) throw new Error(NOT_CAD);
         var schema = stepSchema(text), sourceUnit = stepLengthUnit(text);
         var pidx = productIndex(parseStepProducts(text));
         var instances = parseStepInstances(text);
@@ -827,13 +908,13 @@
             Promise.resolve(file.arrayBuffer ? file.arrayBuffer() : file).then(function (buf) {
                 if (done) return;
                 try { w = new Worker(workerUrl()); }
-                catch (e0) { done = true; var e1 = new Error('The STEP reader could not start in this window (' + ((e0 && e0.message) || e0) + ').'); e1.code = 'worker-blocked'; reject(e1); return; }
+                catch (e0) { done = true; var e1 = new Error('The CAD reader could not start in this window (' + ((e0 && e0.message) || e0) + ').'); e1.code = 'worker-blocked'; reject(e1); return; }
                 // A worker refused by a security policy may never start and never report an error.
                 // The worker answers at once (its first progress message comes before any parsing),
                 // so silence for START_MS means it is not running: say so instead of waiting forever.
                 startTimer = setTimeout(function () {
                     if (done) return; done = true; try { w.terminate(); } catch (_) {}
-                    var e2 = new Error('The STEP reader did not start. This window may be blocking its background worker (check the app\'s security policy for worker-src).'); e2.code = 'worker-blocked'; reject(e2);
+                    var e2 = new Error('The CAD reader did not start. This window may be blocking its background worker (check the app\'s security policy for worker-src).'); e2.code = 'worker-blocked'; reject(e2);
                 }, opts.startMs || START_MS);
                 w.onmessage = function (ev) {
                     clearTimeout(startTimer);
@@ -862,9 +943,9 @@
                     }
                     try { w.terminate(); } catch (_) {}
                     if (d.type === 'result') resolve({ sha256: d.sha256, model: d.model });
-                    else { var e = new Error(d.message || 'The STEP import failed.'); e.code = d.code || 'failed'; reject(e); }
+                    else { var e = new Error(d.message || 'The CAD import failed.'); e.code = d.code || 'failed'; reject(e); }
                 };
-                w.onerror = function (ev) { clearTimeout(startTimer); if (done) return; done = true; try { w.terminate(); } catch (_) {} reject(new Error((ev && ev.message) || 'The STEP import worker stopped.')); };
+                w.onerror = function (ev) { clearTimeout(startTimer); if (done) return; done = true; try { w.terminate(); } catch (_) {} reject(new Error((ev && ev.message) || 'The CAD import worker stopped.')); };
                 w.postMessage({ type: 'import', buffer: buf, expectSha: opts.expectSha || null, opts: { maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, linearDeflection: opts.linearDeflection, reader: opts.reader || 'auto', keepSession: !!opts.keepSession, splitMinBytes: opts.splitMinBytes, partCapMs: opts.partCapMs, testFailBody: opts.testFailBody, poolSize: opts.poolSize } }, [buf]);
             }, function (e) { done = true; reject(e); });
         });
@@ -1146,6 +1227,7 @@
     var api = {
         VERSION: VERSION, DB_NAME: DB_NAME, DB_STORE: DB_STORE, OCCT_DIR: OCCT_DIR, DEFAULTS: DEFAULTS,
         decodeStepString: decodeStepString, bytesToText: bytesToText, parseStepProducts: parseStepProducts, parseStepInstances: parseStepInstances, designatorFrom: designatorFrom, stepSchema: stepSchema, stepLengthUnit: stepLengthUnit, productIndex: productIndex,
+        isIges: isIges, isStep: isStep, cadFormat: cadFormat, igesGlobal: igesGlobal, cadSchema: cadSchema, cadLengthUnit: cadLengthUnit, NOT_CAD: NOT_CAD, ACCEPT: ACCEPT, EXPORT_GUIDE: EXPORT_GUIDE, exportGuideHtml: exportGuideHtml,
         bboxOf: bboxOf, centroidOf: centroidOf, decimate: decimate, makePid: makePid, buildModel: buildModel, convertStep: convertStep,
         walkParts: walkParts, attachTrails: attachTrails, findInstances: findInstances, _rigid: _rigid, _anchors: _anchors, worldPosition: worldPosition, normalizeGeometry: normalizeGeometry, parseStepAttributes: parseStepAttributes, bboxOfXf: bboxOfXf,
         projectEntry: projectEntry, containsGeometry: containsGeometry, addToProject: addToProject, nextRevision: nextRevision, reviseFrom: reviseFrom, getModel: getModel, latestModel: latestModel,

@@ -255,7 +255,7 @@ function withMeshFallback(ps, meshOf) {
     return ps;
 }
 function partSessionFor(eng, bytes) {
-    var S = self.SLCadStep; if (!S) return null;
+    var S = self.SLCadStep; if (!S || SLCadImport.isIges(bytes)) return null;   // IGES: read whole (19 Oct 2026)
     var ix, st;
     try { ix = S.index(bytes); st = S.structure(ix); } catch (e) { return null; }
     if (st.unsupported || st.components < FAST_MIN) return null;
@@ -483,7 +483,12 @@ self.onmessage = function (ev) {
     if (d.type === 'import') {
         var bytes = new Uint8Array(d.buffer), o = d.opts || {}, reader = o.reader || 'auto'; _importOpts = o;
         hashThen(bytes, d.expectSha, function (sha) {
-            var fast = (reader === 'auto' || reader === 'structure') ? viaStructure(bytes) : null;
+            // IGES (19 Oct 2026): no product structure to stream from, and the smaller reader is STEP only, so it is
+            // read whole by our own build, with no fallback (a clear message instead)
+            var iges = SLCadImport.isIges(bytes);
+            if (!iges && !SLCadImport.isStep(bytes)) throw new Error(SLCadImport.NOT_CAD);
+            if (iges && reader === 'occt') throw new Error('IGES files are read only by the full reader.');
+            var fast = !iges && (reader === 'auto' || reader === 'structure') ? viaStructure(bytes) : null;
             if (fast) {
                 progress('done', 1);
                 // 200,000 parts travel as a few flat arrays: one transferable per part would cost
@@ -500,7 +505,7 @@ self.onmessage = function (ev) {
             }
             var p = reader === 'occt' ? viaOcct(bytes, d)
                 : viaFast(bytes, d, !!o.keepSession).catch(function (e) {
-                    if (reader === 'fast') throw e;
+                    if (reader === 'fast' || iges) throw e;
                     progress('fallback', null);   // the full build could not load or read it: the smaller reader
                     return viaOcct(bytes, d).then(function (m) { m.fallbackReason = (e && e.message) || String(e); return m; });
                 });

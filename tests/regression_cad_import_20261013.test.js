@@ -254,7 +254,7 @@ const FIX = path.join(__dirname, 'fixtures', 'cad', 'toy_aircraft.step');
     const ix = I.productIndex([{ id: 'A1', name: 'Bolt' }, { id: 'A2', name: 'Bolt' }, { id: 'B', name: 'Nut' }]);
     check('one name with two part numbers is ambiguous, not guessed', ix.Bolt === undefined && ix.Nut === 'B');
     check('schemas recognized', I.stepSchema("FILE_SCHEMA(('AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF'));") === 'AP242' && I.stepSchema("FILE_SCHEMA(('CONFIG_CONTROL_DESIGN'));") === 'AP203');
-    let threw = false; try { I.convertStep(new Uint8Array(Buffer.from('hello')), occt); } catch (e) { threw = /not a STEP file/.test(e.message); }
+    let threw = false; try { I.convertStep(new Uint8Array(Buffer.from('hello')), occt); } catch (e) { threw = /not a STEP or IGES file/.test(e.message); }
     check('a non-STEP file is refused before OpenCascade sees it', threw);
   }
 

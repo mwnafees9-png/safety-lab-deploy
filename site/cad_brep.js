@@ -65,8 +65,8 @@
         return o;
     }
     function isIdentity(m) { for (var i = 0; i < 16; i++) if (Math.abs(m[i] - ((i % 5) === 0 ? 1 : 0)) > 1e-12) return false; return true; }
-    var UNIT_MM = { mm: 1, cm: 10, m: 1000, km: 1e6, inch: 25.4, 'in': 25.4, foot: 304.8, ft: 304.8, micrometre: 1e-3, um: 1e-3 };
-    function fileUnitOf(bytes) { var I = root.SLCadImport; try { return I.stepLengthUnit(I.bytesToText(bytes instanceof Uint8Array ? bytes.subarray(0, Math.min(bytes.length, 4e6)) : bytes)); } catch (_) { return 'unknown'; } }
+    var UNIT_MM = { mm: 1, cm: 10, m: 1000, km: 1e6, inch: 25.4, 'in': 25.4, foot: 304.8, ft: 304.8, micrometre: 1e-3, um: 1e-3, micron: 1e-3, mil: 0.0254, microinch: 2.54e-5, mi: 1609344 };   // the last four: IGES unit flags (19 Oct 2026)
+    function fileUnitOf(bytes) { var I = root.SLCadImport; try { return I.cadLengthUnit(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)); } catch (_) { return 'unknown'; } }
 
     // The same part-by-part session on Safety Lab's own OpenCascade build (vendor/occt-fast):
     // M is its module; where(pid) as for PartSession. Answers are the same objects.
@@ -207,22 +207,27 @@
         var prog = function (ph, f) { if (opts.onProgress) { try { opts.onProgress(ph, f); } catch (_) {} } };
         var u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
         prog('scan', 0);
-        var text = I.bytesToText(u8);
-        if (!/ISO-10303-21/.test(text.slice(0, 2000))) throw new Error('This is not a STEP file (the ISO-10303-21 header is missing).');
-        var schema = I.stepSchema(text), sourceUnit = I.stepLengthUnit(text);
-        var pidx = I.productIndex(I.parseStepProducts(text));
-        var instances = I.parseStepInstances(text);
-        var attrs = I.parseStepAttributes ? I.parseStepAttributes(text) : null;
-        text = null;
+        // IGES (19 Oct 2026): the engine reads it whole; there is no product structure, part number or attribute to scan
+        var iges = I.isIges(u8), schema, sourceUnit, pidx = {}, instances = {}, attrs = null;
+        if (iges) { schema = I.cadSchema(u8); sourceUnit = I.cadLengthUnit(u8); }
+        else {
+            var text = I.bytesToText(u8);
+            if (!/ISO-10303-21/.test(text.slice(0, 2000))) throw new Error(I.NOT_CAD);
+            schema = I.stepSchema(text); sourceUnit = I.stepLengthUnit(text);
+            pidx = I.productIndex(I.parseStepProducts(text));
+            instances = I.parseStepInstances(text);
+            attrs = I.parseStepAttributes ? I.parseStepAttributes(text) : null;
+            text = null;
+        }
         // progress inside the read: the parser reports how far into the file it is
         prog('parse', 0);
         M.onReadProgress = function (f) { prog('parse', f); if (f >= 1) prog('transfer', null); };
         var res;
         try { res = readFast(M, u8, opts.linearDeflection || DEFAULTS.linearDeflection, opts.angularDeflection || DEFAULTS.angularDeflection, opts.keep !== false); } finally { M.onReadProgress = null; }
-        var tree = I.attachTrails ? I.attachTrails(res, u8) : { full: false, why: 'no attachTrails' };   // full assembly paths (17 Oct 2026)
+        var tree = iges ? { full: false, why: 'IGES has no assembly structure' } : I.attachTrails ? I.attachTrails(res, u8) : { full: false, why: 'no attachTrails' };   // full assembly paths (17 Oct 2026)
         var mats = res.meshes.map(function (m) { return m.matrix; });
         var model = I.buildModel(res, { productIndex: pidx, instances: instances, attributes: attrs, maxTrianglesPerPart: opts.maxTrianglesPerPart, maxTrianglesTotal: opts.maxTrianglesTotal, onProgress: opts.onProgress });
-        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm'; model.reader = 'occt-fast'; model.tree = tree;
+        model.schema = schema; model.sourceUnit = sourceUnit; model.units = 'mm'; model.reader = 'occt-fast'; model.tree = tree; model.format = iges ? 'iges' : 'step';
         model.stats.readMs = res.ms || null;
         var session = null;
         if (opts.keep !== false && res.handle) {
@@ -235,7 +240,7 @@
     function openSessionFast(M, bytes) {
         var u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
         var res = readFast(M, u8, DEFAULTS.linearDeflection, DEFAULTS.angularDeflection, true);
-        if (root.SLCadImport.attachTrails) root.SLCadImport.attachTrails(res, u8);   // the same part ids as the import
+        if (root.SLCadImport.attachTrails && !root.SLCadImport.isIges(u8)) root.SLCadImport.attachTrails(res, u8);   // the same part ids as the import
         var pids = []; root.SLCadImport.walkParts(res, function (mi, w) { pids[mi] = w.pid; });
         var ss = new FastDocSession(M, res.handle, pids, res.meshes.map(function (m) { return m.matrix; }));
         ss.setFileUnit(fileUnitOf(u8));

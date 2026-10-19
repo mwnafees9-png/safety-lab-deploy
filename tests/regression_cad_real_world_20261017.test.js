@@ -226,7 +226,7 @@ function estChecks(over) {
         ['struct', 'the path stops at the top two levels', 'var down = trail.concat([st.pdName[pd]]);', 'var down = trail;'],
         ['imp', 'the full path ignored when naming parts', '                if (Array.isArray(m.trail)) {', '                if (false) {'],
         ['imp', 'the part number looked up by name', 'var pn = m.partNumber !== undefined ? m.partNumber : ', 'var pn = '],
-        ['brep', 'the whole-file reader without the full paths', "var tree = I.attachTrails ? I.attachTrails(res, u8) : { full: false, why: 'no attachTrails' };", "var tree = { full: false };"]
+        ['brep', 'the whole-file reader without the full paths', "var tree = iges ? { full: false, why: 'IGES has no assembly structure' } : I.attachTrails ? I.attachTrails(res, u8) : { full: false, why: 'no attachTrails' };", "var tree = { full: false };"]
     ];
     for (const [which, name, a, b] of M) {
         const src = which === 'struct' ? SS : which === 'imp' ? IS : BS;

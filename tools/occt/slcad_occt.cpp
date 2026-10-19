@@ -9,6 +9,9 @@
 //   per prototype: f32 positions[3v], u32 indices[3t], i32 faceRanges[2f]
 #include <STEPCAFControl_Reader.hxx>
 #include <STEPCAFControl_Controller.hxx>
+#include <IGESCAFControl_Reader.hxx>
+#include <IGESControl_Controller.hxx>
+#include <cstdio>
 #include <TDocStd_Document.hxx>
 #include <XCAFApp_Application.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
@@ -94,6 +97,7 @@ namespace {
 struct Geo { std::vector<float> pos; std::vector<uint32_t> idx; std::vector<int32_t> faces; };
 struct MeshRec { std::string name; bool hasColor = false; double rgb[3] = {0, 0, 0}; std::string kind; int proto = -1; double m[16]; };
 struct Node { std::string name; std::vector<int> meshes; std::vector<Node> children; };
+bool g_readIges = false;   // the document being walked came from an IGES file
 struct Ctx {
   Handle(XCAFDoc_ShapeTool) st; Handle(XCAFDoc_ColorTool) ct;
   std::vector<MeshRec> meshes; std::vector<TopoDS_Shape> shapes; std::vector<std::string> kinds;
@@ -134,6 +138,22 @@ void writeNode(Ctx& C, const TDF_Label& l, Node& node) {
       if (p.second != "faces") {
         TDF_Label found;
         if (C.st->Search(p.first, found, true, true, true)) { rec.name = labelName(found); rec.hasColor = labelColor(C.ct, found, rec.rgb); }
+      }
+      // IGES (19 Oct 2026): IGES colors each surface entity, so the reader puts colors on the face sub-shapes; a part
+      // shown in one color takes its own label's color, else the color most of its faces carry. STEP is read as before.
+      if (!rec.hasColor && g_readIges) {
+        rec.hasColor = labelColor(C.ct, l, rec.rgb);
+        if (!rec.hasColor) {
+          std::map<std::string, std::pair<int, std::vector<double>>> votes;
+          for (TDF_ChildIterator it(l, false); it.More(); it.Next()) {
+            if (!XCAFDoc_ShapeTool::IsSubShape(it.Value())) continue;
+            double c[3]; if (!labelColor(C.ct, it.Value(), c)) continue;
+            char kb[96]; snprintf(kb, sizeof kb, "%.9g,%.9g,%.9g", c[0], c[1], c[2]); std::string k(kb);
+            auto& v = votes[k]; v.first++; v.second = {c[0], c[1], c[2]};
+          }
+          int best = 0;
+          for (auto& kv : votes) if (kv.second.first > best) { best = kv.second.first; for (int j = 0; j < 3; j++) rec.rgb[j] = kv.second.second[j]; rec.hasColor = true; }
+        }
       }
       node.meshes.push_back((int)C.meshes.size());
       C.meshes.push_back(rec); C.shapes.push_back(p.first); C.kinds.push_back(p.second);
@@ -183,8 +203,41 @@ bool g_init = false;
 }
 int keepDoc(const Handle(TDocStd_Document)& doc, const std::vector<TopoDS_Shape>& shapes, const std::vector<std::string>& kinds);
 
+// IGES (19 Oct 2026): a file is IGES when its first record is an 80 column line with 'S' (start section)
+// in column 73 and a sequence number in columns 74 to 80 (IGES 5.3, section 2.2.1); otherwise STEP. Records may
+// end in LF, CRLF, or nothing (fixed 80 byte records). IGES is read by OCCT's own IGESCAFControl_Reader
+// (names, colors) from a file in the module's memory file system, since that reader has no stream input.
+static bool isIges(const uint8_t* d, int len) {
+  if (len < 80 || d[72] != 'S') return false;
+  int e = 0; while (e < len && d[e] != '\n' && d[e] != '\r') e++;
+  if (e < 80) return false;
+  bool digit = false;
+  for (int i = 73; i < 80; i++) { if (d[i] >= '0' && d[i] <= '9') digit = true; else if (d[i] != ' ') return false; }
+  if (!digit) return false;
+  if (e == 80) return true;                                              // one record per line
+  return len >= 160 && (d[152] == 'S' || d[152] == 'G');                 // fixed 80 byte records, no line breaks
+}
+static bool g_iges = false;
+static bool readInto(const uint8_t* data, int len, Handle(TDocStd_Document)& doc, bool gdt, std::istream* stepIn) {
+  g_readIges = isIges(data, len);
+  if (g_readIges) {
+    if (!g_iges) { IGESControl_Controller::Init(); g_iges = true; }
+    FILE* f = fopen("/sl_part.igs", "wb"); if (!f) return false;
+    size_t w = fwrite(data, 1, (size_t)len, f); fclose(f); if (w != (size_t)len) return false;
+    IGESCAFControl_Reader reader; reader.SetColorMode(true); reader.SetNameMode(true); reader.SetLayerMode(false);
+    bool ok = reader.ReadFile("/sl_part.igs") == IFSelect_RetDone && reader.Transfer(doc);
+    remove("/sl_part.igs");
+    return ok;
+  }
+  STEPCAFControl_Reader reader;
+  reader.SetColorMode(true); reader.SetNameMode(true); reader.SetLayerMode(false); reader.SetGDTMode(gdt); reader.SetMatMode(false); reader.SetPropsMode(false);
+  if (reader.ReadStream("part.stp", *stepIn) != IFSelect_RetDone) return false;
+  sl_read_progress(1.0);
+  return reader.Transfer(doc);
+}
+
 extern "C" {
-// data/len: the STEP bytes. lin: linear deflection relative to each root's box (0.001), ang: radians (0.5).
+// data/len: the STEP (or IGES) bytes. lin: linear deflection relative to each root's box (0.001), ang: radians (0.5).
 // Returns a malloc'd buffer (caller frees with sl_free); *outLen its size. On failure *outLen = 0.
 // sl_read with keep = 1 also keeps the document for exact queries and PMI; its handle is in the
 // JSON ("handle"). sl_read is sl_read2 with keep = 0.
@@ -201,13 +254,10 @@ EMSCRIPTEN_KEEPALIVE uint8_t* sl_read2(const uint8_t* data, int len, double lin,
     double t0 = nowMs();
     Handle(TDocStd_Document) doc = new TDocStd_Document("BinXCAF");
     XCAFDoc_DocumentTool::SetLengthUnit(doc, 1.0, UnitsMethods_LengthUnit_Millimeter);
-    STEPCAFControl_Reader reader;
-    reader.SetColorMode(true); reader.SetNameMode(true); reader.SetLayerMode(false); reader.SetGDTMode(keep != 0); reader.SetMatMode(false); reader.SetPropsMode(false);
     ProgressBuf pb((const char*)data, (size_t)len); std::istream in(&pb);
-    if (reader.ReadStream("part.stp", in) != IFSelect_RetDone) return nullptr;
-    sl_read_progress(1.0);
     double t1 = nowMs();
-    if (!reader.Transfer(doc)) return nullptr;
+    if (!readInto(data, len, doc, keep != 0, &in)) return nullptr;
+    sl_read_progress(1.0);
     double t2 = nowMs();
     Ctx C; C.st = XCAFDoc_DocumentTool::ShapeTool(doc->Main()); C.ct = XCAFDoc_DocumentTool::ColorTool(doc->Main());
     Node root;
@@ -341,9 +391,8 @@ EMSCRIPTEN_KEEPALIVE int sl_load(const uint8_t* data, int len) {
     if (!g_init) { Message::DefaultMessenger()->RemovePrinters(STANDARD_TYPE(Message_Printer)); STEPCAFControl_Controller::Init(); g_init = true; }
     Handle(TDocStd_Document) doc = new TDocStd_Document("BinXCAF");
     XCAFDoc_DocumentTool::SetLengthUnit(doc, 1.0, UnitsMethods_LengthUnit_Millimeter);
-    STEPCAFControl_Reader reader; reader.SetColorMode(true); reader.SetNameMode(true);
     std::string buf((const char*)data, (size_t)len); std::istringstream in(buf);
-    if (reader.ReadStream("part.stp", in) != IFSelect_RetDone || !reader.Transfer(doc)) return 0;
+    if (!readInto(data, len, doc, false, &in)) return 0;
     Ctx C; C.st = XCAFDoc_DocumentTool::ShapeTool(doc->Main()); C.ct = XCAFDoc_DocumentTool::ColorTool(doc->Main());
     Node root;
     for (TDF_ChildIterator it(C.st->Label(), false); it.More(); it.Next()) {

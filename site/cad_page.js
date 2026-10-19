@@ -44,7 +44,7 @@
     window.cadRetryMesh = function (i) { var r = state.lastImport, q = r && r.model.notMeshed && r.model.notMeshed[i]; if (!q || !r.stream || !r.stream.worker) return false; q.retrying = true; var w = r.stream.worker; var fn = function (ev) { var e = ev.data || {}; if (e.type === 'detail' && e.retry) { w.removeEventListener('message', fn); r.model.notMeshed = (r.model.notMeshed || []).filter(function (x) { return x !== q; }); r.stream._emit(e); _msg('Read <b>' + _esc(q.name) + '</b> on retry.'); } else if (e.type === 'detail-failed' && e.protos && e.protos[0] === q.protos[0]) { w.removeEventListener('message', fn); q.reason = e.reason; q.retrying = false; _msg('Still not meshed: <b>' + _esc(q.name) + '</b>: ' + _esc(e.reason), 'error'); } }; w.addEventListener('message', fn); w.postMessage({ type: 'retry', protos: q.protos }); _msg('Reading <b>' + _esc(q.name) + '</b> again...'); return true; };
     window.cadImportStep = function () {
         var I = window.SLCadImport; if (!I) { _msg('The CAD importer is not loaded.', 'error'); return; }
-        var inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.stp,.step,.p21';
+        var inp = document.createElement('input'); inp.type = 'file'; inp.accept = I.ACCEPT || '.stp,.step,.p21,.igs,.iges';
         inp.onchange = function () { var f = inp.files && inp.files[0]; if (f) cadImportFile(f); };
         inp.click();
     };
@@ -57,7 +57,7 @@
         bar.style.width = frac == null ? '100%' : Math.round(frac * 100) + '%';
         bar.style.opacity = frac == null ? '0.35' : '1';
     }
-    var PHASE = { hash: 'Fingerprinting the file', load: 'Loading the STEP reader', scan: 'Reading the product structure', parse: 'Reading the STEP file', transfer: 'Building the shapes (one OpenCascade step, no fraction)', mesh: 'Meshing parts (each repeated part once)', fallback: 'The full reader could not run here: using the smaller one', done: 'Saving to this computer' };
+    var PHASE = { hash: 'Fingerprinting the file', load: 'Loading the CAD reader', scan: 'Reading the product structure', parse: 'Reading the CAD file', transfer: 'Building the shapes (one OpenCascade step, no fraction)', mesh: 'Meshing parts (each repeated part once)', fallback: 'The full reader could not run here: using the smaller one', done: 'Saving to this computer' };
     function cadImportFile(file) {
         var I = window.SLCadImport;
         if (state.job) { _msg('An import is already running.', 'error'); return null; }
@@ -411,7 +411,7 @@
     function _renderRevisions() {
         var host = document.getElementById('cad-revs'); if (!host) return;
         var ms = _models();
-        if (!ms.length) { host.innerHTML = '<div style="padding:12px;font-size:12.5px;color:var(--color-text-primary);">No CAD model yet. Import a STEP file (AP203, AP214 or AP242) exported from any CAD tool.</div>'; return; }
+        if (!ms.length) { host.innerHTML = '<div style="padding:12px;font-size:12.5px;color:var(--color-text-primary);">No CAD model yet. Import a STEP file (AP203, AP214 or AP242) exported from any CAD tool, or an IGES file.</div>'; return; }
         var cache = {};
         host.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="text-align:left;color:var(--color-text-tertiary,#7a828f);">' +
             '<th style="padding:4px 8px;">File</th><th style="padding:4px 8px;">Revision</th><th style="padding:4px 8px;">Imported</th><th style="padding:4px 8px;">Parts</th><th style="padding:4px 8px;">Fingerprint</th><th style="padding:4px 8px;">On this computer</th><th></th></tr></thead><tbody>' +
@@ -441,11 +441,12 @@
                   '<h2 style="font-size:20px;font-weight:700;color:var(--color-text-primary);margin:0;">CAD Model</h2>' +
                   '<span style="font-size:12px;color:#55555C;">view only · move through the aircraft, link parts to zones</span>' +
                   '<span style="margin-left:auto;display:flex;gap:8px;">' +
-                    '<button id="cad-btn-step" onclick="cadImportStep()" style="font-size:12px;padding:5px 12px;border:1px solid #007AFF;border-radius:6px;background:#007AFF;color:#fff;cursor:pointer;">Import STEP</button>' +
+                    '<button id="cad-btn-step" onclick="cadImportStep()" style="font-size:12px;padding:5px 12px;border:1px solid #007AFF;border-radius:6px;background:#007AFF;color:#fff;cursor:pointer;" title="A STEP file from any CAD tool (AP203, AP214, AP242), or IGES">Import CAD (STEP, IGES)</button>' +
                     '<button id="cad-btn-zones" onclick="cadImportZones()" style="font-size:12px;padding:5px 12px;border:1px solid #007AFF;border-radius:6px;background:transparent;color:#007AFF;cursor:pointer;" title="A CSV or Excel list: code, name, parent code and the box xMin yMin zMin xMax yMax zMax (mm, or a unit column)">Import zone list</button>' +
                   '</span>' +
                 '</div>' +
-                '<div style="font-size:12px;color:#55555C;margin:6px 0 8px;">STEP files are read on this computer. The geometry and the file stay in this browser on this computer and are never uploaded; the project keeps only the part names, part numbers and positions, and what the team shares about them (saved views, notes).</div>' +
+                '<div style="font-size:12px;color:#55555C;margin:6px 0 8px;">STEP and IGES files are read on this computer. The geometry and the file stay in this browser on this computer and are never uploaded; the project keeps only the part names, part numbers and positions, and what the team shares about them (saved views, notes).</div>' +
+                '<div style="color:#55555C;">' + ((window.SLCadImport && window.SLCadImport.exportGuideHtml) ? window.SLCadImport.exportGuideHtml() : '') + '</div>' +
                 '<div id="cad-progress" style="display:none;align-items:center;gap:10px;margin:6px 0;font-size:12px;"><span data-lbl style="min-width:260px;"></span><div style="flex:1;height:6px;border-radius:3px;background:var(--color-surface-2,#eef1f6);overflow:hidden;"><div data-bar style="height:100%;width:0;background:#007AFF;transition:width .2s;"></div></div><button onclick="cadCancelImport()" style="font-size:11.5px;padding:2px 9px;border:1px solid var(--color-border-hair);border-radius:5px;background:transparent;cursor:pointer;color:var(--color-text-primary);">Cancel</button></div>' +
                 '<div id="cad-msg" style="display:none;font-size:12.5px;margin:6px 0;padding:8px 10px;border:1px solid var(--color-border-hair);border-radius:8px;"></div>' +
                 '<div id="cad-revs" style="border:1px solid var(--color-border-hair);border-radius:8px;overflow:auto;max-height:180px;margin-bottom:10px;"></div>' +
