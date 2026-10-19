@@ -36,6 +36,20 @@ had drifted in both directions.
       production, newest 00:47 on 28 Sep). The workspace-events half — sign-ins, role changes,
       invitations, exports, erasures — has never written anything. S13's "unified activity log" is
       half built, and the trust page's activity claims should be read against that.
+      **BUILT 18 Oct 2026 (commit 719626d), NOT YET APPLIED: needs Waqas's go on migration 20261018b.**
+      Checked first: still 0 rows; the app's own writers (baseline cut, review requested/decided) are fine,
+      nobody has used those features. The database now records the events itself, from triggers:
+      user.signed_in (one row per workspace), workspace.created / ownership_transferred, member.added /
+      role_changed / removed, invitation.sent / accepted / revoked, project.created / archived / restored /
+      erased; source 'database', and app reports now marked source 'app'. Owners and admins read the log,
+      each person their own rows (was: every member saw everyone's sign-ins and invited addresses).
+      A failed audit write never fails the action. FOUND ON THE WAY: (1) with rows in the table, account
+      erasure would have failed (deleting an owned workspace cascades into the append-only log); a deleted
+      workspace's rows now go with it, noted in maintenance_events. (2) On a kit-built database account
+      erasure failed for everyone ("permission denied for schema private"): production has USAGE on
+      private for authenticated/anon from the dashboard, never written down; captured as 20261018c / kit 24.
+      Proven on a kit-built Postgres 16: checks_audit.txt 39/0 (with SEC-3b), access 45/0, realtime 27/0,
+      run_audit_mutations.sh 14/14 red. Still S13: a hash chain over workspace_audit and an admin view.
 - [ ] **SEC-0c — the hosted app loads a third-party beacon that is not on its own egress list.**
       Verified live 28 Sep: every `/app/` page load fetches
       `static.cloudflareinsights.com/beacon.min.js`, injected by Cloudflare at the edge.
@@ -70,6 +84,15 @@ had drifted in both directions.
       is the proxy writing its own row from what it actually saw, which is S13's unified activity
       log, not a line in the worker. Deliberately left open on 29 Sep rather than ticked off with
       something cosmetic. Carries SEC-0b (workspace_audit has never written a row) with it.
+      **BUILT 18 Oct 2026, NOT YET LIVE: needs migration 20261018d (Waqas's go), then the proxy deploy, then
+      ./ship.sh.** The proxy (commit 30ebbf5, same file as the self-host kit copy) writes one audit_log row per
+      AI call that reaches it, through audit_ai_call_observed (service role only, source 'proxy'): the model
+      the upstream answered with, its billed tokens, the route actually taken (ITAR or public), latency,
+      outcome, never content; the feature label is the app's, cleaned and capped. A stream's row is written
+      when it ends. The response says x-safetylab-audit: proxy and the app (core_modules 1.13) then writes no
+      second row; it still records every call the proxy did not (desktop-held key, tab key, refusals before
+      the AI, network failures). Proxy test 26 checks, 11/11 mutations; app 12 checks, 4/4; database in
+      checks_audit.txt. source is not in the row hash: that is SEC-0d.
 - [x] **SEC-3c — DONE 2 Oct 2026 in SL-DG-0001 Rev 2.2** (section 4.2), together with the 7.2/7.3
       egress wording and the 6.2 Anthropic Workspace sentence. Rev 2.2 is Released and sitting in
       customer-install/, but it is ON HOLD FROM RADIA until config 1.4 is deployed: section 7.2
@@ -83,6 +106,14 @@ had drifted in both directions.
       erasure via RPC, certificate persisted in destruction_certificates and shown on the account
       page, local wipe on erase and sign-out, complete manifest, ai_org_cache stamped and cascaded.
       This one is a documentation-accuracy risk as much as a security one.
+      **BUILT 18 Oct 2026 (commit 719626d), NOT YET LIVE: migration 20261018a (Waqas's go) BEFORE ./ship.sh,**
+      or the new button meets a permission error. site/erasure.js: owners and admins erase an archived
+      project themselves (dry run listed, DELETE typed; the database checks the role); every certificate can
+      be saved as a file and is listed on the account page; account erasure no longer signs out after 5 s.
+      This device's copies go too (all of them after an account erasure; the project's own after a project
+      erasure), and every writer is stopped first: found that a reload would otherwise have written the
+      erased project straight back (closing save, cloud push, cloud writer, tab pin). 83 checks incl. the real
+      app in Chromium, 19/19 mutations red. Still open from the original list: local wipe on plain sign-out.
 - [ ] **SEC-5 (R8) — legacy API keys.** CORRECTED 1 Oct 2026: the premise of this item was stale.
       The service_role JWT is NOT in any trigger definition. Verified against production: 23 triggers
       in `public`, none takes an argument, none contains a JWT, and the one function that calls out
@@ -95,6 +126,15 @@ had drifted in both directions.
       every backup from before that date, which is why it should be retired rather than left.
       Staged, reversible procedure in SECURITY_ROTATION_RUNBOOK.md section 2. Note S28 still applies:
       the last change to this path killed every outbound email for three days, silently.
+      **18 Oct 2026: step 2 done in code, NOT DEPLOYED.** Simpler than the runbook said: the platform injects
+      SUPABASE_SECRET_KEYS itself, so nobody sets a key. All seven functions read the 'default' secret key and
+      fall back to the legacy key only while none exists (all seven were byte-identical to the deployed
+      versions first; deno type-check clean). Also fixed: notify-feedback checked callers with
+      SUPABASE_ANON_KEY, which this project does not inject, so every feedback notification would have been
+      refused (never seen: 0 feedback rows). tests/regression_edge_secret_key_20261018.test.js 64/0.
+      Next: Waqas confirms a 'default' secret key exists in Settings > API Keys, deploys the seven
+      (`supabase functions deploy`), runs the step 4 checks, then turns the legacy keys off. Also note the
+      AI proxy's SUPABASE_SERVICE_ROLE_KEY secret: switch it to the secret key value BEFORE the legacy keys go.
 - [x] **SEC-6 (S12, remaining half) — kit vs production parity. DONE 2 Oct 2026.** Built the customer
       install kit on a clean Postgres 16 and diffed its signature (tables, columns, functions by body hash,
       policies, triggers, grants, views, indexes) against production. Findings: policies identical (64 of 64);
@@ -155,8 +195,16 @@ had drifted in both directions.
       `node tools/update-signing/sign-manifest.mjs keygen` and paste the printed PUBLIC key into
       update_verify.js, private key stays on his Mac; (b) buy the native code-signing certificate
       (Apple Developer ID plus notarization, Windows Authenticode). Claude cannot handle either.
-- [ ] **SEC-8 (S25) — prove contextIsolation at runtime.** Code landed 17 Sep, never exercised on a
-      running shell.
+- [x] **SEC-8 (S25) — prove contextIsolation at runtime. DONE 18 Oct 2026** (desktop commit 111d8ff).
+      tests/runtime_isolation_probe.mjs runs the real app: main window and onboarding 6/6 each (window
+      settings, no Node in the page, every bridge frozen); red with contextIsolation off. A fused build is
+      probed over the DevTools port.
+- [ ] **SEC-10 (new 18 Oct 2026) — Electron fuses. BUILT, ships with desktop 0.20.4.** Found by the SEC-8
+      probe: the shipped 0.20.3 runs as plain Node under ELECTRON_RUN_AS_NODE=1 and takes NODE_OPTIONS and
+      --inspect. afterPack.js now sets RunAsNode off, NODE_OPTIONS off, --inspect off, app code from
+      app.asar only, on Mac and Windows, before signing; a failure fails the build. tests/fuses.test.js
+      proves each hole open before and closed after on a real Electron binary (5/5 mutations red) and reads
+      the fuses back from dist/. A fused arm64 build launched and passed the probe. Closes when 0.20.4 is out.
 - [ ] **SEC-9 (R7 residual) — one human click-through of an FHA draft on the reference install.** The
       credential, transport and provider path is already proven headless; this is the last step
       before the R15 hold on the Data Security paper can lift.

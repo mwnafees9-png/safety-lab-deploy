@@ -21,7 +21,7 @@
  *   - ADMIN_EMAIL
  *   - WEBHOOK_SECRET
  *   - SUPABASE_URL              (auto-injected)
- *   - SUPABASE_SERVICE_ROLE_KEY (auto-injected)
+ *   - SUPABASE_SECRET_KEYS (auto; the legacy SUPABASE_SERVICE_ROLE_KEY until a secret key exists)
  * ============================================================================
  */
 
@@ -33,7 +33,19 @@ const NOTIFY_FROM_EMAIL  = Deno.env.get('NOTIFY_FROM_EMAIL')  ?? 'Safety Lab <on
 const ADMIN_EMAIL        = Deno.env.get('ADMIN_EMAIL')        ?? 'waqas.nafees@safetylabaero.com';
 const WEBHOOK_SECRET     = Deno.env.get('WEBHOOK_SECRET')     ?? '';
 const SUPABASE_URL       = Deno.env.get('SUPABASE_URL')       ?? '';
-const SERVICE_ROLE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+// SEC-5 (18 Oct 2026): the server key. The modern secret key (sb_secret_...) when the project has one: the
+// platform injects it as SUPABASE_SECRET_KEYS, a JSON object keyed by name, and 'default' is the first one
+// created in Settings > API Keys. The legacy service_role JWT only until then, so this deploy changes nothing
+// on its own and the legacy keys can be turned off afterwards without touching this code again. The same key
+// is the one an administrator may present to call this function by hand.
+function serverKey(): string {
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
+    if (keys && typeof keys.default === 'string' && keys.default) return keys.default;
+  } catch (_) { /* not set, or not JSON: fall back */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+}
+const SERVICE_ROLE_KEY   = serverKey();
 
 const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },

@@ -25,7 +25,19 @@ const STRIPE_API_KEY        = Deno.env.get('STRIPE_API_KEY')        ?? '';
 const PRO_PLUS_PRICE_ID     = Deno.env.get('PRO_PLUS_PRICE_ID')     ?? '';
 const ENTERPRISE_PRICE_ID   = Deno.env.get('ENTERPRISE_PRICE_ID')   ?? '';
 const SUPABASE_URL          = Deno.env.get('SUPABASE_URL')          ?? '';
-const SERVICE_ROLE_KEY      = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+// SEC-5 (18 Oct 2026): the server key. The modern secret key (sb_secret_...) when the project has one: the
+// platform injects it as SUPABASE_SECRET_KEYS, a JSON object keyed by name, and 'default' is the first one
+// created in Settings > API Keys. The legacy service_role JWT only until then, so this deploy changes nothing
+// on its own and the legacy keys can be turned off afterwards without touching this code again. The same key
+// is the one an administrator may present to call this function by hand.
+function serverKey(): string {
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
+    if (keys && typeof keys.default === 'string' && keys.default) return keys.default;
+  } catch (_) { /* not set, or not JSON: fall back */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+}
+const SERVICE_ROLE_KEY      = serverKey();
 
 const PRO_PLUS_ALLOWANCE    = 2_000_000;   // tokens / month (Sonnet-equivalent)
 const ENTERPRISE_ALLOWANCE  = 10_000_000;

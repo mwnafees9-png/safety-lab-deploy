@@ -25,8 +25,7 @@
  *
  * Environment variables (same set as notify-signup):
  *   RESEND_API_KEY, NOTIFY_FROM_EMAIL, ADMIN_EMAIL,
- *   SUPABASE_URL (auto), SUPABASE_SERVICE_ROLE_KEY (auto),
- *   SUPABASE_ANON_KEY (auto)
+ *   SUPABASE_URL (auto), SUPABASE_SECRET_KEYS (auto; legacy SUPABASE_SERVICE_ROLE_KEY until a secret key exists),
  * ============================================================================
  */
 
@@ -37,8 +36,19 @@ const RESEND_API_KEY    = Deno.env.get('RESEND_API_KEY')    ?? '';
 const NOTIFY_FROM_EMAIL = Deno.env.get('NOTIFY_FROM_EMAIL') ?? 'Safety Lab <onboarding@resend.dev>';
 const ADMIN_EMAIL       = Deno.env.get('ADMIN_EMAIL')       ?? 'waqas.nafees@safetylabaero.com';
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')      ?? '';
-const SERVICE_ROLE_KEY  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const ANON_KEY          = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+// SEC-5 (18 Oct 2026): the server key. The modern secret key (sb_secret_...) when the project has one: the
+// platform injects it as SUPABASE_SECRET_KEYS, a JSON object keyed by name, and 'default' is the first one
+// created in Settings > API Keys. The legacy service_role JWT only until then, so this deploy changes nothing
+// on its own and the legacy keys can be turned off afterwards without touching this code again. The same key
+// is the one an administrator may present to call this function by hand.
+function serverKey(): string {
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
+    if (keys && typeof keys.default === 'string' && keys.default) return keys.default;
+  } catch (_) { /* not set, or not JSON: fall back */ }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+}
+const SERVICE_ROLE_KEY  = serverKey();
 
 const RATE_LIMIT_PER_HOUR = 10;
 
@@ -119,12 +129,11 @@ Deno.serve(async (req: Request) => {
   }
   const accessToken = auth.slice('Bearer '.length);
 
-  // Verify the token by asking Supabase Auth who it belongs to.
-  const sbAsUser = createClient(SUPABASE_URL, ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: userRes, error: userErr } = await sbAsUser.auth.getUser();
+  // Verify the token by asking Supabase Auth who it belongs to. 18 Oct 2026: through the server client, as
+  // notify-invite v3 does. This used SUPABASE_ANON_KEY, which this project does not inject (notify-invite v3
+  // found it), so the client was built with an empty key and every call came back 401 'invalid token'.
+  // Never seen in production only because no feedback has ever been sent (feedback table: 0 rows, 18 Oct).
+  const { data: userRes, error: userErr } = await sbAdmin.auth.getUser(accessToken);
   if (userErr || !userRes?.user) {
     return jsonResponse(401, { error: 'invalid token' });
   }
