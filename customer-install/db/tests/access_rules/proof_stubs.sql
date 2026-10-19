@@ -19,3 +19,6 @@ exception when duplicate_object then null; end $t$;
 create table if not exists auth.mfa_factors (
   id uuid primary key default gen_random_uuid(), user_id uuid not null,
   status auth.factor_status not null, factor_type text default 'totp');
+
+-- 18 Oct 2026: the sign-in stamp the real auth.users carries (the activity log records sign-ins from it)
+alter table auth.users add column if not exists last_sign_in_at timestamptz;

@@ -1,0 +1,45 @@
+# SEC-0b (18 Oct 2026): the workspace activity log, 23_workspace_audit_events.sql.
+#   PGHOST=... PGUSER=postgres bash run_proof.sh checks_audit.txt
+# Each check is one rolled-back transaction. W = Company, O owner, E editor, R reviewer, V viewer, X outsider, S the database owner.
+# ---- what the fixture itself did is on record
+the company workspace's creation is recorded|O|aal1||sql|=1|select count(*) from public.workspace_audit where workspace_id='11111111-1111-1111-1111-111111111111' and event_type='workspace.created';
+each of the four members joining is recorded|O|aal1||sql|=4|select count(*) from public.workspace_audit where workspace_id='11111111-1111-1111-1111-111111111111' and event_type='member.added';
+the pending invitation is recorded with its address and role|O|aal1||sql|=outsider@else.test viewer|select details->>'email'||' '||(details->>'role') from public.workspace_audit where event_type='invitation.sent';
+a project archived is recorded|O|aal1||sql|=Archived one|select details->>'name' from public.workspace_audit where event_type='project.archived';
+every row the database writes says so|O|aal1||sql|=0|select count(*) from public.workspace_audit where details->>'source' is distinct from 'database';
+# ---- role changes, removals, ownership
+a role change is recorded, from, to, by whom|O|aal1||sql|=editor>reviewer by 00000000-0000-0000-0000-0000000000a1|update public.workspace_members set role='reviewer' where workspace_id='11111111-1111-1111-1111-111111111111' and user_id='00000000-0000-0000-0000-0000000000a2'; select (details->>'from')||'>'||(details->>'to')||' by '||user_id from public.workspace_audit where event_type='member.role_changed' and target_id='00000000-0000-0000-0000-0000000000a2';
+saving a member with the same role records nothing|O|aal1||sql|=0|update public.workspace_members set role='viewer' where workspace_id='11111111-1111-1111-1111-111111111111' and user_id='00000000-0000-0000-0000-0000000000a4'; select count(*) from public.workspace_audit where event_type='member.role_changed';
+a removal is recorded with the role the person had|O|aal1||sql|=viewer|delete from public.workspace_members where workspace_id='11111111-1111-1111-1111-111111111111' and user_id='00000000-0000-0000-0000-0000000000a4'; select details->>'role' from public.workspace_audit where event_type='member.removed' and target_id='00000000-0000-0000-0000-0000000000a4';
+an ownership transfer is recorded|O|aal1||sql|=00000000-0000-0000-0000-0000000000a1>00000000-0000-0000-0000-0000000000a3|update public.workspace_members set role='admin' where workspace_id='11111111-1111-1111-1111-111111111111' and user_id='00000000-0000-0000-0000-0000000000a3'; select public.transfer_workspace_ownership('11111111-1111-1111-1111-111111111111','00000000-0000-0000-0000-0000000000a3'); select (details->>'from')||'>'||(details->>'to') from public.workspace_audit where event_type='workspace.ownership_transferred';
+# ---- invitations
+a new invitation is recorded|O|aal1||sql|=new@co.test editor|insert into public.invitations(workspace_id, email, role, token, invited_by) values ('11111111-1111-1111-1111-111111111111','new@co.test','editor','tok-new','00000000-0000-0000-0000-0000000000a1'); select details->>'email'||' '||(details->>'role') from public.workspace_audit where event_type='invitation.sent' and details->>'email'='new@co.test';
+an accepted invitation is recorded, by the person who accepted|X|aal1||sql|=1|select public.accept_invitation('tok-123'); select count(*) from public.workspace_audit where event_type='invitation.accepted' and user_id='00000000-0000-0000-0000-0000000000a5';
+...and the person joining is recorded|X|aal1||sql|=1|select public.accept_invitation('tok-123'); select count(*) from public.workspace_audit where event_type='member.added' and target_id='00000000-0000-0000-0000-0000000000a5' and workspace_id='11111111-1111-1111-1111-111111111111';
+removing an invitation that was already accepted is not a withdrawal|S|||sql|=0|update public.invitations set accepted_at = now() where token='tok-123'; delete from public.invitations where token='tok-123'; select count(*) from public.workspace_audit where event_type='invitation.revoked';
+a withdrawn invitation is recorded|S|||sql|=1|delete from public.invitations where token='tok-123'; select count(*) from public.workspace_audit where event_type='invitation.revoked';
+# ---- projects
+a new project is recorded|O|aal1||sql|=Wing|insert into public.projects(workspace_id, name, created_by) values ('11111111-1111-1111-1111-111111111111','Wing','00000000-0000-0000-0000-0000000000a1'); select details->>'name' from public.workspace_audit where event_type='project.created' and details->>'name'='Wing';
+archiving through the app's call is recorded, by whom|O|aal1||sql|=00000000-0000-0000-0000-0000000000a1|select public.archive_project('22222222-2222-2222-2222-222222222222'); select user_id from public.workspace_audit where event_type='project.archived' and target_id='22222222-2222-2222-2222-222222222222';
+restoring is recorded|O|aal1||sql|=1|select public.restore_project('22222222-2222-2222-2222-22222222222a'); select count(*) from public.workspace_audit where event_type='project.restored' and target_id='22222222-2222-2222-2222-22222222222a';
+erasing a project is recorded, by whom, with its name|O|aal1||sql|=Archived one by 00000000-0000-0000-0000-0000000000a1|select public.erase_project('22222222-2222-2222-2222-22222222222a', true); select (details->>'name')||' by '||user_id from public.workspace_audit where event_type='project.erased';
+# ---- sign-ins
+a sign-in is recorded once per workspace the person belongs to|S|||sql|=2|update auth.users set last_sign_in_at = now() where id='00000000-0000-0000-0000-0000000000a1'; select count(*) from public.workspace_audit where event_type='user.signed_in' and user_id='00000000-0000-0000-0000-0000000000a1';
+another change to the account row is not a sign-in, even one that rewrites the stamp unchanged|S|||sql|=0|update auth.users set email=email, last_sign_in_at=last_sign_in_at where id='00000000-0000-0000-0000-0000000000a1'; select count(*) from public.workspace_audit where event_type='user.signed_in';
+# ---- what the app reports is marked as reported
+the app's own report is marked source app|O|aal1||sql|=app|select public.audit_workspace_event('11111111-1111-1111-1111-111111111111','export.evidence_package','22222222-2222-2222-2222-222222222222','{"format":"zip"}'); select details->>'source' from public.workspace_audit where event_type='export.evidence_package';
+# ---- who reads it
+the owner reads every member's rows|O|aal1||sql|=t|select count(distinct user_id) > 1 from public.workspace_audit where workspace_id='11111111-1111-1111-1111-111111111111';
+a viewer reads only their own rows|V|aal1||sql|=0|select count(*) from public.workspace_audit where user_id is distinct from '00000000-0000-0000-0000-0000000000a4';
+...and does see their own|V|aal1||sql|=t|select count(*) > 0 from public.workspace_audit;
+an outsider reads nothing of the company's|X|aal1||sql|=0|select count(*) from public.workspace_audit where workspace_id='11111111-1111-1111-1111-111111111111';
+# ---- nobody writes or edits it directly
+signed-in people and visitors hold no insert grant on it at all|S|||sql|=false false false|select has_table_privilege('authenticated','public.workspace_audit','INSERT')||' '||has_table_privilege('anon','public.workspace_audit','INSERT')||' '||has_table_privilege('anon','public.workspace_audit','SELECT');
+a signed-in person cannot insert a row directly|O|aal1||sql|deny|insert into public.workspace_audit(workspace_id, user_id, event_type) values ('11111111-1111-1111-1111-111111111111','00000000-0000-0000-0000-0000000000a1','forged');
+not even the database owner can change a row|S|||sql|deny|update public.workspace_audit set event_type='x';
+not even the database owner can delete a row|S|||sql|deny|delete from public.workspace_audit;
+# ---- an audit write that fails never fails the action
+an archive still succeeds when its record cannot be written|S|||sql|=1|alter table public.workspace_audit add constraint no_archive_rows check (event_type <> 'project.archived') not valid; update public.projects set deleted_at = now() where id='22222222-2222-2222-2222-222222222222'; select count(*) from public.projects where id='22222222-2222-2222-2222-222222222222' and deleted_at is not null;
+# ---- erasure still works with activity on record
+an account with activity on record can still be erased|X|aal1||sql|ok|select public.erase_my_account(true);
+a project erasure in a workspace with activity on record still issues its certificate|O|aal1||sql|=1|select public.erase_project('22222222-2222-2222-2222-222222222222', true); select count(*) from public.destruction_certificates where target_id='22222222-2222-2222-2222-222222222222';

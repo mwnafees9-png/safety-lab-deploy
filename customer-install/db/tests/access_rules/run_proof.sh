@@ -5,7 +5,7 @@
 # Needs psql and an empty Postgres you can create databases on (no Supabase account).
 #   PGHOST=/tmp PGPORT=5433 PGUSER=postgres bash run_proof.sh checks_access.txt
 #   PGHOST=/tmp PGPORT=5433 PGUSER=postgres bash run_proof.sh checks_realtime.txt
-# usage: run_proof.sh <checks-file>    (each line: NAME|USER|AAL|TOPIC|KIND|EXPECT|SQL)
+# usage: run_proof.sh <checks-file>    (each line: NAME|USER|AAL|TOPIC|KIND|EXPECT|SQL; USER S = the database owner)
 #   KIND recv  -> SQL ignored; counts visible realtime.messages for TOPIC
 #   KIND send  -> SQL ignored; inserts a realtime message on TOPIC
 #   KIND sql   -> runs SQL as USER; EXPECT ok | deny | =<value>
@@ -28,12 +28,14 @@ declare -A EM=( [O]=owner@co.test [E]=editor@co.test [R]=reviewer@co.test [V]=vi
 pass=0; fail=0
 while IFS='|' read -r name who aal topic kind expect sql; do
   [ -z "${name// }" ] && continue; case "$name" in \#*) continue;; esac
-  uid=${U[$who]}
+  uid=${U[$who]:-}
   amr=""; base=${aal%%+*}
   case "$aal" in *+pwold) amr=",\"amr\":[{\"method\":\"password\",\"timestamp\":$(( $(date +%s) - 3600 ))}]";;
                  *+pw)    amr=",\"amr\":[{\"method\":\"password\",\"timestamp\":$(date +%s)}]";; esac
   aal=$base
-  pre="begin; set local request.jwt.claim.sub = '$uid'; set local request.jwt.claims = '{\"sub\":\"$uid\",\"aal\":\"$aal\",\"role\":\"authenticated\",\"email\":\"${EM[$who]}\"$amr}'; set local realtime.topic = '$topic'; set local role authenticated;"
+  # S = the database owner (no role, no session): what the sign-in service or a migration does
+  if [ "$who" = S ]; then pre="begin;"; else
+  pre="begin; set local request.jwt.claim.sub = '$uid'; set local request.jwt.claims = '{\"sub\":\"$uid\",\"aal\":\"$aal\",\"role\":\"authenticated\",\"email\":\"${EM[$who]}\"$amr}'; set local realtime.topic = '$topic'; set local role authenticated;"; fi
   case "$kind" in
     recv) q="select count(*) from realtime.messages where topic = '$topic';";;
     send) q="insert into realtime.messages(topic, extension) values ('$topic', 'broadcast'); select 'ok';";;

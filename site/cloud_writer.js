@@ -208,6 +208,8 @@
     // ---- the queue: coalesce + quiet window + flush ------------------------
     function write(opts) {
         opts = opts || {};
+        // 18 Oct 2026 (SEC-4): an erasure is under way on this page (erasure.js): no write may put the project back.
+        try { if (typeof window !== 'undefined' && window.__slabErasing) return Promise.resolve({ ok: false, reason: 'erased' }); } catch (_) {}
         var mode = (opts.mode === 'silent') ? 'silent' : 'manual';
         var prepare = (typeof opts.prepare === 'function') ? opts.prepare : function () { return null; };
         if (_next) {

@@ -1,0 +1,14 @@
+-- ============================================================================
+-- 18 Oct 2026 — capture a production grant that was never written down. Customer kit: 24_private_schema_usage.sql.
+-- STATUS: a no-op on production (the grant is already there: nspacl on 18 Oct 2026 reads
+--   {postgres=UC, authenticated=U, anon=U, service_role=U}). Applying it there changes nothing.
+--
+-- FOUND BY THE SEC-0b PROOF (customer-install/db/tests/access_rules/checks_audit.txt): on a database built
+-- from the customer kit, "Delete my account & data" fails for everyone with "permission denied for schema
+-- private". public.erase_my_account is not a definer function; it calls private.require_mfa() by name, and
+-- PL/pgSQL looks the name up as the caller, which needs USAGE on the schema. Production has that grant
+-- (made in the dashboard, so the 6 Sep capture never saw it); the kit did not. Row security never showed
+-- it, because a policy stores its functions by id and needs no lookup. USAGE only lets a role find what is
+-- in the schema: every private function still has its own EXECUTE grant, and the API serves public only.
+-- ============================================================================
+grant usage on schema private to authenticated, anon, service_role;

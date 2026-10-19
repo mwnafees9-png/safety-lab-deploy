@@ -1,3 +1,4 @@
+// 18 Oct 2026 (v2.8, SEC-4): nothing is pushed while an erasure is under way (window.__slabErasing, set by erasure.js).
 // 15 Oct 2026 (v2.6): a project saved under another account is not pushed for ever: the project row is read first (RLS hides another account's project), the push stops with reason 'not-yours', and the person is offered a copy in their own workspace.
 // 13 Oct 2026 (late, AutoSave, Waqas: "when a user saves a choice/change it should be autosaving"): __slCloudSyncPushNow(opts) pushes AT ONCE (no 12 s wait, the writer's quiet window cut) and RESOLVES WITH THE OUTCOME ({ ok, reason }) so save_state.js v2.0 can say Saved / Not saved and retry; opts.snapshot writes the accepted project (moves still waiting for an acknowledgement left out). Every guard below (ITAR, provisioning needs content, demo grace, paywall, shrink) applies to it unchanged.
 // 13 Oct 2026 (Office-style saving, fix2-J): no silent cloud push while the person has unsaved work (SLSaveState.holdsSync()); Save writes the cloud copy itself and __slCloudSyncSchedule lets the next silent push follow.
@@ -229,6 +230,9 @@
     }
     async function _tick() {
         if (!_on() || _inFlight) return;
+        // 18 Oct 2026 (SEC-4): an erasure is under way on this page (erasure.js). Nothing is pushed: the
+        // project is gone, and a push now would put back what was just erased.
+        try { if (typeof window !== 'undefined' && window.__slabErasing) return; } catch (_) {}
         // 13 Oct 2026 — unsaved work (save_state.js) is never pushed silently: the cloud copy is the
         // saved version until the person presses Save, which writes it on purpose. (Inline, not a
         // helper: tests run this function on its own.)

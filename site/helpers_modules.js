@@ -8422,6 +8422,7 @@ function openAccountPanel() {
       +     '<div id="acct-msg" style="font-size:12px;min-height:14px;"></div>'
       +     '<div id="acct-mfa-mount" style="border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:12px;"></div>'
       +     '<div id="acct-password-mount" style="border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:10px;"></div>'
+      +     '<div id="acct-erasure-mount" style="border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:10px;"></div>'
       +     '<details style="margin-top:2px;border-top:1px dashed var(--color-border-hair,rgba(0,0,0,.12));padding-top:10px;"><summary style="font-size:12px;font-weight:600;color:#b91c1c;cursor:pointer;">Danger zone</summary>'
       +       '<div style="font-size:11.5px;color:var(--color-text-secondary,#667085);margin:8px 0;line-height:1.45;">Permanently erase your account and all your safety-analysis data, and receive a certificate of destruction. This cannot be undone.</div>'
       +       '<button type="button" id="acct-delete" style="border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:9px;padding:7px 12px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;">Delete my account &amp; data…</button>'
@@ -8437,6 +8438,8 @@ function openAccountPanel() {
     try { if (window.SafetyLabMFA && typeof window.SafetyLabMFA.mount === 'function') window.SafetyLabMFA.mount('acct-mfa-mount'); } catch(_){}
     // Change password (3 Oct 2026, born-modular; account_password.js populates the mount).
     try { if (window.SafetyLabPassword && typeof window.SafetyLabPassword.mount === 'function') window.SafetyLabPassword.mount('acct-password-mount'); } catch(_){}
+    // Certificates of destruction (18 Oct 2026, SEC-4; erasure.js): every one this person was issued, each one savable.
+    try { if (window.SLErasure && typeof window.SLErasure.mount === 'function') window.SLErasure.mount('acct-erasure-mount'); } catch(_){}
     _wireAvatarControls(email, function () { try { return (document.getElementById('acct-name') || {}).value || curName; } catch (_) { return curName; } });
     const close = function(){ try { ov.remove(); } catch(_){} };
     ov.addEventListener('mousedown', function(e){ if (e.target === ov) close(); });
@@ -8507,7 +8510,8 @@ async function _openEraseAccountModal(email) {
       + '</div></div>';
     document.body.appendChild(ov);
     const close = function(){ try { ov.remove(); } catch(_){} };
-    ov.addEventListener('mousedown', function(e){ if (e.target===ov) close(); });
+    let erased = false;   // once erased, the only way out is "Sign out" (the page holds an account that is gone)
+    ov.addEventListener('mousedown', function(e){ if (e.target===ov && !erased) close(); });
     document.getElementById('erase-cancel').onclick = close;
     const inp = document.getElementById('erase-confirm');
     const go = document.getElementById('erase-go');
@@ -8520,17 +8524,28 @@ async function _openEraseAccountModal(email) {
         try {
             const { data, error } = await client.rpc('erase_my_account', { p_confirm: true });   // COMMIT
             if (error) throw error;
+            erased = true;
             const cert = (data && data.certificate_id) || '(issued)';
             const hash = (data && data.manifest_sha256) || '';
+            // 18 Oct 2026 (SEC-4): the certificate is kept as a file, and this device's copies go too (erasure.js).
+            const counts = {}; Object.keys(m).forEach(function (k) { if (typeof m[k] === 'number') counts[k] = m[k]; });
+            const certRec = Object.assign({ scope: 'account', issued_by_email: email, issued_at: new Date().toISOString(), deleted_counts: counts }, data || {});
+            let wiped = null;
+            try { if (window.SLErasure) wiped = await window.SLErasure.wipeAll(); } catch(_){}
             const b = document.getElementById('erase-body');
             if (b) b.innerHTML =
                 '<div style="font-size:16px;font-weight:800;color:#15803d;">✓ Account erased</div>'
               + '<div style="font-size:12.5px;color:#374151;margin-top:8px;line-height:1.5;">Your data has been permanently deleted.</div>'
               + '<div style="font-size:11.5px;color:#374151;margin-top:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;">'
               +   '<b>Certificate of destruction</b><br>ID: ' + esc(String(cert)) + '<br>SHA-256: <span style="word-break:break-all;">' + esc(String(hash)) + '</span><br>Issued: ' + new Date().toISOString().slice(0,19).replace('T',' ') + ' UTC</div>'
-              + '<div style="font-size:12px;color:var(--color-text-primary);margin-top:10px;">Signing you out…</div>';
-            const f = document.getElementById('erase-foot'); if (f) f.remove();
-            setTimeout(function(){ try { supabaseSignOut(); } catch(_){} try { setSignupEmail(''); } catch(_){} try { refreshSigninChip(); } catch(_){} close(); try { location.reload(); } catch(_){} }, 5000);
+              + '<div style="font-size:12px;color:#374151;margin-top:10px;line-height:1.45;">' + (wiped ? 'The copies on this device were cleared too. ' : '') + 'Files you saved to disk yourself are yours and are not touched. Save the certificate now: once you sign out it cannot be opened again.</div>';
+            const f = document.getElementById('erase-foot');
+            if (f) {
+                f.innerHTML = '<button type="button" id="erase-save" style="border:1px solid var(--color-border-hair,rgba(0,0,0,.15));background:#fff;color:#111;border-radius:9px;padding:8px 16px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;">Save certificate</button>'
+                            + '<button type="button" id="erase-done" style="border:none;background:#111827;color:#fff;border-radius:9px;padding:8px 18px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;">Sign out</button>';
+                document.getElementById('erase-save').onclick = function(){ try { window.SLErasure.saveCert(certRec); } catch(_){} };
+                document.getElementById('erase-done').onclick = function(){ try { supabaseSignOut(); } catch(_){} try { setSignupEmail(''); } catch(_){} try { refreshSigninChip(); } catch(_){} close(); try { location.reload(); } catch(_){} };
+            }
         } catch (e) {
             go.disabled = false; go.textContent = 'Delete forever'; if (msg){ msg.style.color='#c0392b'; msg.textContent = 'Deletion failed: ' + ((e&&e.message)||e); }
         }
@@ -9522,9 +9537,17 @@ async function _renderArchivedProjects() {
                         '<div style="font-weight:600;color:var(--color-text-primary);">' + esc(nm) + '</div>' +
                         '<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px;">archived ' + esc(when) + '</div>' +
                     '</div>' +
+                    '<div style="display:flex;gap:6px;flex-shrink:0;">' +
                     '<button class="action-btn" onclick="restoreCloudProject(\'' + esc(p.id) + '\', \'' + esc(String(nm).replace(/'/g, "\\'")) + '\')">Restore</button>' +
+                    // 18 Oct 2026 (SEC-4): erase for good, with a certificate (erasure.js). Data attributes, not inline code: the name is the person's text.
+                    (window.SLErasure ? '<button class="action-btn" data-erase-project="' + esc(p.id) + '" data-erase-name="' + esc(nm) + '" style="color:#b91c1c;border-color:#fca5a5;">Erase permanently</button>' : '') +
+                    '</div>' +
                 '</div>';
             }).join('');
+        list.onclick = function (e) {
+            const b = e.target && e.target.closest ? e.target.closest('[data-erase-project]') : null;
+            if (b && window.SLErasure) window.SLErasure.eraseProject(b.getAttribute('data-erase-project'), b.getAttribute('data-erase-name'));
+        };
     } catch (e) {
         console.error('[Safety Lab Aero] archived_projects failed:', e);
         list.innerHTML = '<div style="padding:12px;color:var(--color-danger);">Failed to load archived projects: ' + esc(_cloudErrText(e)) + '</div>';

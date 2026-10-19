@@ -88,7 +88,7 @@ const AI = '4457de5d-a9df-4896-abe0-e75f95ad11da', HAL = 'b408d862-620f-4435-875
 }
 {
     const idx = S('index.html');
-    const iC = idx.search(/cloud_sync\.js\?v=/), iT = idx.indexOf('tab_project.js?v=1.0');
+    const iC = idx.search(/cloud_sync\.js\?v=/), iT = idx.search(/tab_project\.js\?v=/);
     check('A11 index.html loads tab_project.js once, after cloud_sync 2.6', iC > 0 && iT > iC && idx.split('tab_project.js').length === 2);
 }
 

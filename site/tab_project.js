@@ -32,6 +32,8 @@
 
     function remember() {
         if (!settled || !ss) return;
+        // 18 Oct 2026 (SEC-4): after an erasure there is nothing to reopen (erasure.js clears the pin).
+        try { if (window.__slabErasing) return; } catch (_) {}
         var id = cur(), u = uid();
         if (!id || !u) return;
         var v = JSON.stringify({ id: String(id), uid: u });
