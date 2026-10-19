@@ -36,7 +36,7 @@ had drifted in both directions.
       production, newest 00:47 on 28 Sep). The workspace-events half — sign-ins, role changes,
       invitations, exports, erasures — has never written anything. S13's "unified activity log" is
       half built, and the trust page's activity claims should be read against that.
-      **BUILT 18 Oct 2026 (commit 719626d), NOT YET APPLIED: needs Waqas's go on migration 20261018b.**
+      **LIVE 18 Oct 2026: migrations 20261018b and 20261018c applied on Waqas's go, web shipped.**
       Checked first: still 0 rows; the app's own writers (baseline cut, review requested/decided) are fine,
       nobody has used those features. The database now records the events itself, from triggers:
       user.signed_in (one row per workspace), workspace.created / ownership_transferred, member.added /
@@ -84,8 +84,7 @@ had drifted in both directions.
       is the proxy writing its own row from what it actually saw, which is S13's unified activity
       log, not a line in the worker. Deliberately left open on 29 Sep rather than ticked off with
       something cosmetic. Carries SEC-0b (workspace_audit has never written a row) with it.
-      **BUILT 18 Oct 2026, NOT YET LIVE: needs migration 20261018d (Waqas's go), then the proxy deploy, then
-      ./ship.sh.** The proxy (commit 30ebbf5, same file as the self-host kit copy) writes one audit_log row per
+      **LIVE 18 Oct 2026: migration 20261018d applied, proxy deployed (version 4cff22fd), web shipped.** The proxy (commit 30ebbf5, same file as the self-host kit copy) writes one audit_log row per
       AI call that reaches it, through audit_ai_call_observed (service role only, source 'proxy'): the model
       the upstream answered with, its billed tokens, the route actually taken (ITAR or public), latency,
       outcome, never content; the feature label is the app's, cleaned and capped. A stream's row is written
@@ -106,8 +105,7 @@ had drifted in both directions.
       erasure via RPC, certificate persisted in destruction_certificates and shown on the account
       page, local wipe on erase and sign-out, complete manifest, ai_org_cache stamped and cascaded.
       This one is a documentation-accuracy risk as much as a security one.
-      **BUILT 18 Oct 2026 (commit 719626d), NOT YET LIVE: migration 20261018a (Waqas's go) BEFORE ./ship.sh,**
-      or the new button meets a permission error. site/erasure.js: owners and admins erase an archived
+      **LIVE 18 Oct 2026: migration 20261018a applied on Waqas's go, then shipped; desktop 0.20.4 carries it.** site/erasure.js: owners and admins erase an archived
       project themselves (dry run listed, DELETE typed; the database checks the role); every certificate can
       be saved as a file and is listed on the account page; account erasure no longer signs out after 5 s.
       This device's copies go too (all of them after an account erasure; the project's own after a project
@@ -199,7 +197,7 @@ had drifted in both directions.
       tests/runtime_isolation_probe.mjs runs the real app: main window and onboarding 6/6 each (window
       settings, no Node in the page, every bridge frozen); red with contextIsolation off. A fused build is
       probed over the DevTools port.
-- [ ] **SEC-10 (new 18 Oct 2026) — Electron fuses. BUILT, ships with desktop 0.20.4.** Found by the SEC-8
+- [x] **SEC-10 (new 18 Oct 2026) — Electron fuses. DONE: desktop 0.20.4 published 18 Oct 2026** (all three installers byte-identical to the build, checked by SHA-256 against the live edge). Found by the SEC-8
       probe: the shipped 0.20.3 runs as plain Node under ELECTRON_RUN_AS_NODE=1 and takes NODE_OPTIONS and
       --inspect. afterPack.js now sets RunAsNode off, NODE_OPTIONS off, --inspect off, app code from
       app.asar only, on Mac and Windows, before signing; a failure fails the build. tests/fuses.test.js
