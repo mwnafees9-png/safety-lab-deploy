@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# SEC-0b mutation proof (18 Oct 2026): each line breaks one guarded piece of 23_workspace_audit_events.sql in a
+# SEC-0b and SEC-3b mutation proof (18 Oct 2026): each line breaks one guarded piece of 23_workspace_audit_events.sql
+# (or the file named fourth) in a
 # copy of the kit; checks_audit.txt must then fail. Same Postgres as run_proof.sh.
 #   PGHOST=... PGUSER=postgres bash run_audit_mutations.sh
 set -u
@@ -17,12 +18,15 @@ MUT=(
 "          coalesce(p_details, '{}'::jsonb) || jsonb_build_object('source', 'app'));~          p_details);~app reports not marked"
 "  elsif old.accepted_at is null then~  else~deleting an accepted invitation counts as a withdrawal"
 "    perform private.ws_audit_write(r.workspace_id, 'user.signed_in'~    perform private.ws_audit_write(null, 'user.signed_in'~sign-ins not written"
+"          coalesce(p_ok, true), left(p_error, 500), 'proxy');~          coalesce(p_ok, true), left(p_error, 500), 'app');~proxy rows not marked proxy~25_ai_ledger_from_proxy.sql"
+"revoke execute on function public.audit_ai_call_observed(uuid, text, text, integer, integer, numeric, boolean, integer, boolean, text) from public, anon, authenticated;~select 1;~anyone signed in can write a row claiming the proxy saw it~25_ai_ledger_from_proxy.sql"
+"grant  execute on function public.audit_ai_call_observed(uuid, text, text, integer, integer, numeric, boolean, integer, boolean, text) to service_role;~select 1;~the proxy cannot call its writer~25_ai_ledger_from_proxy.sql"
 )
 red=0; n=0
 for m in "${MUT[@]}"; do
-  IFS='~' read -r from to what <<< "$m"; n=$((n+1))
+  IFS='~' read -r from to what file <<< "$m"; n=$((n+1)); file=${file:-$F}
   K=$(mktemp -d); cp "$KIT0"/*.sql "$K"/
-  python3 - "$K/$F" "$from" "$to" <<'PY' || { echo "  ?     $what (pattern not found)"; continue; }
+  python3 - "$K/$file" "$from" "$to" <<'PY' || { echo "  ?     $what (pattern not found)"; continue; }
 import sys; p,a,b=sys.argv[1:4]; s=open(p).read()
 if s.count(a)!=1: sys.exit(1)
 open(p,'w').write(s.replace(a,b))

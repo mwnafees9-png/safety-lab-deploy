@@ -609,7 +609,7 @@ const AiClient = (function(){
             // Errors (401/402/503/5xx) come back as JSON even when we asked for a stream.
             let emsg = _preErr;
             if (!emsg) { let errJson = {}; try { errJson = await response.json(); } catch (_) {} emsg = (errJson.error && errJson.error.message) || ('HTTP ' + response.status); }
-            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
+            _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar, observed: _proxyAudited(response), temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
             throw new Error(emsg);
         }
         // Phase 66 — assemble the SSE stream client-side (content-type text/event-stream).
@@ -631,7 +631,7 @@ const AiClient = (function(){
         _consumeTokens(model, usage.input_tokens || 0, usage.output_tokens || 0, _cw, _cr);
         // The audit record carries the cache counters so a run's own trail answers "did the
         // cache hit?" — cacheRead large and tokensIn small on the second call is the proof.
-        _logCall({ feature: opts.feature || 'messages', model, ok: true, tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cacheWrite: _cw, cacheRead: _cr, cacheMarkers: _cached, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
+        _logCall({ feature: opts.feature || 'messages', model, ok: true, observed: _proxyAudited(response), tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cacheWrite: _cw, cacheRead: _cr, cacheMarkers: _cached, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
         return json;
     }
 
@@ -689,17 +689,22 @@ const AiClient = (function(){
         }
         const json = await response.json();
         if (!response.ok) {
-            _logCall({ feature: 'embed', model, ok: false, error: (json.detail || json.error || 'HTTP ' + response.status), startedAt, proxy, itar });
+            _logCall({ feature: 'embed', model, ok: false, error: (json.detail || json.error || 'HTTP ' + response.status), startedAt, proxy, itar, observed: _proxyAudited(response) });
             throw new Error(json.detail || json.error || ('HTTP ' + response.status));
         }
         const tokensIn = (json.usage && json.usage.total_tokens) || 0;
         const incCost = _addCost(model, tokensIn, 0);
         _consumeTokens(model, tokensIn, 0);
-        _logCall({ feature: 'embed', model, ok: true, tokensIn, tokensOut: 0, cost: incCost, startedAt, proxy, itar });
+        _logCall({ feature: 'embed', model, ok: true, tokensIn, tokensOut: 0, cost: incCost, startedAt, proxy, itar, observed: _proxyAudited(response) });
         return Array.isArray(input) ? json.data.map(d => d.embedding) : json.data[0].embedding;
     }
 
     // ----- Audit log (lives on projectConfig so it travels with the file) -----
+    // 18 Oct 2026 (SEC-3b): the proxy now writes the server ledger row itself, from what it saw, and says so
+    // on the response (x-safetylab-audit: proxy). Then this page does not write a second, self-reported one.
+    // Every other call is still recorded from here: a key held on the desktop or in this tab, a request the
+    // proxy refused before the AI, a network failure, or a proxy with no ledger to write to.
+    function _proxyAudited(r) { try { return !!(r && r.headers && typeof r.headers.get === 'function' && r.headers.get('x-safetylab-audit') === 'proxy'); } catch (_) { return false; } }
     function _logCall(entry){
         // 16 Sep 2026 — the per-call record ALSO goes to the server audit ledger. This local copy
         // lives inside projectConfig, which means it is ordinary project data: editable by anyone
@@ -708,7 +713,7 @@ const AiClient = (function(){
         // database privilege — and that is audit_log, which until today nothing ever wrote to.
         // Fire and forget: an audit write must never fail the AI call it is recording.
         try {
-            if (window.SLAudit && typeof window.SLAudit.aiCall === 'function') {
+            if (!(entry && entry.observed) && window.SLAudit && typeof window.SLAudit.aiCall === 'function') {
                 window.SLAudit.aiCall({
                     feature: entry && entry.feature, model: entry && entry.model,
                     tokensIn: entry && entry.tokensIn, tokensOut: entry && entry.tokensOut,
@@ -722,6 +727,7 @@ const AiClient = (function(){
         if (!Array.isArray(projectConfig.aiAuditLog)) projectConfig.aiAuditLog = [];
         const e = Object.assign({ ts: Date.now() }, entry);
         if (e.startedAt) { e.latencyMs = Date.now() - e.startedAt; delete e.startedAt; }
+        if (e.observed) { e.ledger = 'proxy'; } delete e.observed;   // the project's own copy says who wrote the server row
         projectConfig.aiAuditLog.push(e);
         // Keep most-recent 500 entries on the project; older purged.
         if (projectConfig.aiAuditLog.length > 500) projectConfig.aiAuditLog.splice(0, projectConfig.aiAuditLog.length - 500);

@@ -62,12 +62,22 @@ check('the maintenance switch is unchanged', /if coalesce\(current_setting\('app
 console.log('\n[5] the customer kit');
 check('23_ is the twin of 20261018b', strip(M.slice(M.indexOf('-- ---- the one writer'))) === strip(K.slice(K.indexOf('-- ---- the one writer'))));
 check('24_ is the twin of 20261018c (USAGE on private, as production has it)', strip(MC) === strip(KC) && /grant usage on schema private to authenticated, anon, service_role;/.test(KC));
-check('apply.sh runs 22, 23, 24 in order after 21', /21_version_archive_prune_cheap 22_self_serve_project_erasure 23_workspace_audit_events 24_private_schema_usage; do/.test(APPLY));
+check('apply.sh runs 22, 23, 24 in order after 21', /21_version_archive_prune_cheap 22_self_serve_project_erasure 23_workspace_audit_events 24_private_schema_usage[ ;]/.test(APPLY));
 const CH = R('customer-install/db/tests/access_rules/checks_audit.txt');
 check('the database proof covers every event, the read rule, the grants, append-only, a failed write and erasure',
   ['workspace.created', 'member.role_changed', 'member.removed', 'ownership_transferred', 'invitation.sent', 'invitation.accepted', 'invitation.revoked', 'project.created', 'project.archived', 'project.restored', 'project.erased', 'user.signed_in',
     'a viewer reads only their own rows', 'an outsider reads nothing', 'no insert grant', 'not even the database owner can change a row', 'not even the database owner can delete a row', 'cannot be written', 'can still be erased'].every(s => CH.includes(s)));
-check('the mutation proof exists and breaks eleven things', (R('customer-install/db/tests/access_rules/run_audit_mutations.sh').match(/^"[^\n]*~[^\n]*~[^\n]*"$/gm) || []).length === 11);
+check('the mutation proof exists and breaks fourteen things', (R('customer-install/db/tests/access_rules/run_audit_mutations.sh').match(/^"[^\n]*~[^\n]*~[^\n]*"$/gm) || []).length === 14);
+
+console.log('\n[6] SEC-3b: the AI ledger row from the proxy (20261018d / 25_)');
+const D = R('supabase/migrations/20261018d_ai_ledger_from_proxy.sql'), K25 = R('customer-install/db/25_ai_ledger_from_proxy.sql');
+check('audit_log.source, app by default, only app or proxy', /add column if not exists source text not null default 'app';/.test(D) && /check \(source in \('app', 'proxy'\)\)/.test(D));
+check('the proxy\'s writer marks its rows proxy', /coalesce\(p_ok, true\), left\(p_error, 500\), 'proxy'\);/.test(D));
+check('...and only the service role may call it', /revoke execute on function public\.audit_ai_call_observed\([^)]*\) from public, anon, authenticated;/.test(D) && /grant  execute on function public\.audit_ai_call_observed\([^)]*\) to service_role;/.test(D));
+check('...a row for a user the database does not know is refused, not stored nameless', /if p_user is null or not exists \(select 1 from public\.users u where u\.id = p_user\) then\s+raise exception/.test(D));
+check('the hash chain is not touched here (widening it is SEC-0d)', !/audit_log_chain/.test(D.replace(/--[^\n]*/g, '')));
+check('25_ is its twin and apply.sh runs it after 24', strip(D.slice(D.indexOf('alter table public.audit_log add column'))) === strip(K25.slice(K25.indexOf('alter table public.audit_log add column'))) && / 24_private_schema_usage 25_ai_ledger_from_proxy; do/.test(APPLY));
+check('the database proof covers the proxy ledger', ['marked proxy', 'claims the proxy saw it', 'marked app', 'same hash chain', 'does not know is refused'].every(t => CH.includes(t)));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

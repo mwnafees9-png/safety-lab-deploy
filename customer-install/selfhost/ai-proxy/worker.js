@@ -69,6 +69,8 @@ const BUILTIN_ORIGINS = ["https://safetylabaero.com", "https://www.safetylabaero
 const CORS_BASE = {
   "access-control-allow-methods": "GET,POST,OPTIONS",
   "access-control-allow-headers": "authorization,content-type,x-safetylab-itar,x-safetylab-feature",
+  // SEC-3b: the app reads this to know the proxy has written the ledger row itself
+  "access-control-expose-headers": "x-safetylab-audit",
   "access-control-max-age": "86400",
   "vary": "Origin",
 };
@@ -146,6 +148,55 @@ async function sbFetch(env, path, opts = {}) {
     ...(opts.headers || {}),
   };
   return fetch(url, { ...opts, headers });
+}
+
+// ---- SEC-3b (18 Oct 2026): the proxy writes the AI ledger row itself ----------------------
+// Until now the BROWSER wrote every audit_log row (audit_ai_call), so the ledger recorded whatever
+// the browser said it did: its model, its token counts, whether it said the call was ITAR. The
+// proxy sees the truth: the model the upstream answered with, the tokens it billed, the ITAR route
+// it actually took, how long it took and whether it failed. Every call that reaches a handler below
+// gets one row, written here with the service key (public.audit_ai_call_observed, service role
+// only, source 'proxy'), and the response carries x-safetylab-audit: proxy so the app does not
+// write a second row. The feature name is the one thing still told to us (x-safetylab-feature):
+// it is the app's own label for what the call was for, cleaned and capped, and stored as such.
+// Never content: there is no column for a prompt or an answer.
+// A write that fails is logged and never fails the AI call. With no database configured (an
+// offline-licence install without one), or a caller with no user to name, nothing is written and the
+// header is not sent, so the app keeps writing its own row as before.
+function auditOn(env) { return !!(env && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY); }
+function auditFeature(request) {
+  const f = String(request.headers.get("x-safetylab-feature") || "").replace(/[^A-Za-z0-9_.:\-]/g, "").slice(0, 64);
+  return f || "unlabelled";
+}
+function newAudit(env, ctx, request, caller) {
+  // only for a caller the ledger can name (every row belongs to a person); any other call stays the app's to record
+  const a = { on: auditOn(env) && !!(caller && caller.userId), start: Date.now(), feature: auditFeature(request), user: (caller && caller.userId) || null, written: false, pending: false, sent: null };
+  a.record = (r) => {
+    if (!a.on || a.written) return null;
+    a.written = true;
+    const n = (v) => (v == null || !isFinite(Number(v)) ? null : Math.round(Number(v)));
+    const body = {
+      p_user: a.user, p_feature: a.feature, p_model: r.model ? String(r.model).slice(0, 64) : null,
+      p_tokens_in: n(r.tokensIn), p_tokens_out: n(r.tokensOut), p_weighted: n(r.weighted),
+      p_itar: !!r.itar, p_latency_ms: Date.now() - a.start, p_ok: r.ok !== false,
+      p_error: r.error ? String(r.error).slice(0, 500) : null,
+    };
+    a.sent = body;
+    const p = sbFetch(env, "/rpc/audit_ai_call_observed", { method: "POST", body: JSON.stringify(body) })
+      .then(async (res) => { if (!res.ok) console.warn("[proxy] audit row not written", res.status, await res.text()); })
+      .catch((e) => console.warn("[proxy] audit row not written", String(e)));
+    if (ctx && ctx.waitUntil) ctx.waitUntil(p);
+    return p;
+  };
+  return a;
+}
+function stampAudited(res, audit) {
+  if (!audit || !audit.on) return res;
+  const h = new Headers(res.headers); h.set("x-safetylab-audit", "proxy");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+async function errorText(res) {
+  try { const j = await res.clone().json(); return (j && j.error && (j.error.message || j.error.type)) || ("HTTP " + res.status); } catch (_) { return "HTTP " + res.status; }
 }
 
 // ---- 4 Oct 2026: retry the auth reads on a transient failure --------------------------
@@ -365,7 +416,7 @@ async function consumeTokens(env, token, amount) {
   } catch (e) { console.warn("[proxy] consume_tokens threw", String(e)); return null; }
 }
 
-function streamAnthropicWithUsage(upstreamRes, env, token, fallbackModel, ctx, meter = true) {
+function streamAnthropicWithUsage(upstreamRes, env, token, fallbackModel, ctx, meter = true, audit = null) {
   const [toClient, toParse] = upstreamRes.body.tee();
   const accounting = (async () => {
     try {
@@ -393,9 +444,14 @@ function streamAnthropicWithUsage(upstreamRes, env, token, fallbackModel, ctx, m
       }
       if (buf.trim()) consumeEvent(buf);
       const burned = weightedTokens(model, inTok, outTok, cacheW, cacheR);
+      if (audit) audit.record({ model, tokensIn: inTok, tokensOut: outTok, weighted: burned, itar: false, ok: true });
       if (meter && burned > 0) await consumeTokens(env, token, burned);
-    } catch (e) { console.warn("[proxy] stream usage accounting failed", String(e)); }
+    } catch (e) {
+      console.warn("[proxy] stream usage accounting failed", String(e));
+      if (audit) audit.record({ model: fallbackModel, itar: false, ok: false, error: "stream interrupted: " + String((e && e.message) || e) });
+    }
   })();
+  if (audit) audit.pending = true;   // the row is written when the stream ends, not by the router
   if (ctx && ctx.waitUntil) ctx.waitUntil(accounting);
   return new Response(toClient, { status: upstreamRes.status, headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", ...CORS } });
 }
@@ -413,7 +469,7 @@ function itarUnconfiguredMessage(env) {
 // SEC-8: the single place that decides whether a request may touch public
 // Anthropic. `itar` here is the ALREADY-RESOLVED effective flag (license OR
 // header) — an ITAR request can never reach the public upstream.
-async function handleAnthropic(request, env, token, itar, ctx, caller) {
+async function handleAnthropic(request, env, token, itar, ctx, caller, audit = null) {
   // S8: which key, and whether Safety Lab pays. A licence caller uses Safety Lab's key and
   // is metered. A JWT caller brings their own key from the vault and is not metered at all.
   let apiKey = env.ANTHROPIC_API_KEY, meter = true;
@@ -434,10 +490,12 @@ async function handleAnthropic(request, env, token, itar, ctx, caller) {
     catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Body must be JSON." } }); }
     try {
       const out = await sovereignChat(bodyObj, env, provider);
+      if (audit) { const u = (out.json && out.json.usage) || {}; audit.record({ model: (out.json && out.json.model) || bodyObj.model, tokensIn: u.input_tokens ?? u.prompt_tokens, tokensOut: u.output_tokens ?? u.completion_tokens, weighted: out.burned, itar: true, ok: out.status < 400, error: out.status < 400 ? null : "HTTP " + out.status }); }
       if (meter && out.burned > 0) await consumeTokens(env, token, out.burned);
       return jsonResponse(out.status, out.json);
     } catch (e) {
       // ITAR safety guarantee: on ANY error we refuse — never fall back to public.
+      if (audit) audit.record({ model: bodyObj && bodyObj.model, itar: true, ok: false, error: "sovereign_error" });
       return jsonResponse(502, { error: { type: "sovereign_error",
         message: "Domestic-only inference failed; request refused (never routed to public cloud)." } });
     }
@@ -458,20 +516,24 @@ async function handleAnthropic(request, env, token, itar, ctx, caller) {
   const wantStream = bodyObj && bodyObj.stream === true;
   const upstreamCt = upstreamRes.headers.get("content-type") || "";
   if (wantStream && upstreamRes.ok && upstreamRes.body && upstreamCt.indexOf("text/event-stream") !== -1) {
-    return streamAnthropicWithUsage(upstreamRes, env, token, bodyObj.model || "claude-sonnet-4-6", ctx, meter);
+    return streamAnthropicWithUsage(upstreamRes, env, token, bodyObj.model || "claude-sonnet-4-6", ctx, meter, audit);
   }
   const text = await upstreamRes.text();
   if (upstreamRes.ok) {
     try {
       const j = JSON.parse(text);
       const u = j && j.usage;
-      if (u && meter) { const model = j.model || bodyObj.model || "claude-sonnet-4-6"; const burned = weightedTokens(model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens); if (burned > 0) await consumeTokens(env, token, burned); }
+      const model = (j && j.model) || bodyObj.model || "claude-sonnet-4-6";
+      const burned = u ? weightedTokens(model, u.input_tokens, u.output_tokens, u.cache_creation_input_tokens, u.cache_read_input_tokens) : 0;
+      if (audit) audit.record({ model, tokensIn: u && u.input_tokens, tokensOut: u && u.output_tokens, weighted: burned, itar: false, ok: true });
+      if (u && meter && burned > 0) await consumeTokens(env, token, burned);
     } catch (_) {}
   }
+  if (audit && !audit.written) { let em = "HTTP " + upstreamRes.status; try { const ej = JSON.parse(text); em = (ej && ej.error && (ej.error.message || ej.error.type)) || em; } catch (_) {} audit.record({ model: bodyObj.model, itar: false, ok: upstreamRes.ok, error: upstreamRes.ok ? null : em }); }
   return passthroughResponse(upstreamRes.status, text);
 }
 
-async function handleVoyage(request, env, token, itar, caller) {
+async function handleVoyage(request, env, token, itar, caller, audit = null) {
   let apiKey = env.VOYAGE_API_KEY, meter = true;
   if (caller && caller.kind === "user") {
     const sec = await readUserSecret(env, caller.userId, "voyage_key");
@@ -490,9 +552,11 @@ async function handleVoyage(request, env, token, itar, caller) {
     catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Body must be JSON." } }); }
     try {
       const out = await sovereignEmbed(bodyObj, env, provider);
+      if (audit) { const u = (out.json && out.json.usage) || {}; audit.record({ model: bodyObj.model, tokensIn: u.total_tokens ?? u.prompt_tokens, tokensOut: 0, weighted: out.burned, itar: true, ok: out.status < 400, error: out.status < 400 ? null : "HTTP " + out.status }); }
       if (meter && out.burned > 0) await consumeTokens(env, token, out.burned);
       return jsonResponse(out.status, out.json);
     } catch (e) {
+      if (audit) audit.record({ model: bodyObj && bodyObj.model, itar: true, ok: false, error: "sovereign_error" });
       return jsonResponse(502, { error: { type: "sovereign_error",
         message: "Domestic-only embeddings failed; request refused (never routed to public cloud)." } });
     }
@@ -508,8 +572,9 @@ async function handleVoyage(request, env, token, itar, caller) {
   });
   const text = await upstreamRes.text();
   if (upstreamRes.ok) {
-    try { const j = JSON.parse(text); const tokensIn = (j && j.usage && j.usage.total_tokens) || 0; const model = bodyObj.model || "voyage-3-large"; const burned = weightedTokens(model, tokensIn, 0); if (meter && burned > 0) await consumeTokens(env, token, burned); } catch (_) {}
+    try { const j = JSON.parse(text); const tokensIn = (j && j.usage && j.usage.total_tokens) || 0; const model = bodyObj.model || "voyage-3-large"; const burned = weightedTokens(model, tokensIn, 0); if (audit) audit.record({ model, tokensIn, tokensOut: 0, weighted: burned, itar: false, ok: true }); if (meter && burned > 0) await consumeTokens(env, token, burned); } catch (_) {}
   }
+  if (audit && !audit.written) { let em = "HTTP " + upstreamRes.status; try { const ej = JSON.parse(text); em = (ej && (ej.detail || (ej.error && (ej.error.message || ej.error.type)) || ej.error)) || em; } catch (_) {} audit.record({ model: bodyObj.model || "voyage-3-large", itar: false, ok: upstreamRes.ok, error: upstreamRes.ok ? null : String(em) }); }
   return passthroughResponse(upstreamRes.status, text);
 }
 
@@ -747,7 +812,7 @@ async function verifyOfflineLicense(env, blob) {
   } catch (_) { return { error: "invalid_token" }; }
 }
 
-export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense };   // metering, testable in isolation (test/cache_metering.test.mjs)
+export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense, auditFeature, auditOn, newAudit };   // metering, testable in isolation (test/cache_metering.test.mjs)
 
 // The router. Everything it returns goes through withCors() at the boundary below, so no
 // handler has to know or care what the calling origin was.
@@ -844,8 +909,17 @@ async function routeRequest(request, env, ctx) {
 
       if (request.method === "GET" && url.pathname === "/v1/ai/usage") return handleUsage(check);
       if (request.method === "GET" && url.pathname === "/v1/ai/bridge") return handleBridge(request, env, caller, url);
-      if (request.method === "POST" && url.pathname === "/v1/ai/anthropic/messages") return handleAnthropic(request, env, token, itar, ctx, caller);
-      if (request.method === "POST" && url.pathname === "/v1/ai/voyage/embeddings") return handleVoyage(request, env, token, itar, caller);
+      // SEC-3b: every AI call that gets this far is recorded by the proxy, once. A handler records
+      // what it saw (model, tokens, route, outcome); anything it returned without recording (a
+      // missing BYO key, a bad body, the ITAR refusal) is recorded here from the response itself.
+      if (request.method === "POST" && (url.pathname === "/v1/ai/anthropic/messages" || url.pathname === "/v1/ai/voyage/embeddings")) {
+        const audit = newAudit(env, ctx, request, caller);
+        const res = url.pathname === "/v1/ai/anthropic/messages"
+          ? await handleAnthropic(request, env, token, itar, ctx, caller, audit)
+          : await handleVoyage(request, env, token, itar, caller, audit);
+        if (!audit.written && !audit.pending) audit.record({ itar, ok: res.status < 400, error: res.status < 400 ? null : await errorText(res) });
+        return stampAudited(res, audit);
+      }
 
       return jsonResponse(404, { error: { type: "not_found", message: "Unknown endpoint." } });
     } catch (e) {
