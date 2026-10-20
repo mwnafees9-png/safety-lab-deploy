@@ -47,7 +47,7 @@
 //                   every AND, priority AND, spare, sequence and k-of-n voting gate (k >= 2),
 //                   equipment under two different inputs that sits in the SAME zone is a
 //                   violation; in nested zones (one inside the other), or in sibling zones
-//                   (same parent, no substantiated barrier between them), an advisory; inside
+//                   (same parent, no credited barrier between them), an advisory; inside
 //                   the SAME particular-risk volume, a violation; the same equipment under two
 //                   inputs, a violation. INHIBIT is left out: its second input is a condition.
 //   Risk volumes    a part is inside a volume when any of 27 points of its box (corners, edge
@@ -74,14 +74,14 @@
     // and the engineer confirms the value against the AC for the engine in question.
     var FRAGMENTS = { oneThirdDisc: 3, intermediate: 5, small: 15 };
     var DEFAULT_FRAGMENT = 'intermediate';
-    var INDEP_GATES = { AND: 1, PAND: 1, SPARE: 1, SEQ: 1, VOTING: 1 };
+    var INDEP_GATES = { AND: 1, PAND: 1, SPARE: 1, SEQ: 1, VOTING: 1, INHIBIT: 1 };   // INHIBIT: 19 Oct 2026, both inputs must happen, as an AND
     var SEV_FALLBACK = { 'Catastrophic': 5, 'Hazardous': 4, 'Major': 3, 'Minor': 2, 'Negligible': 1, 'No Safety Effect': 0 };
     var RULES = {
         containment: 'A part is in the zone whose volume holds its centroid. The deepest zone wins; at equal depth the smaller volume, then the lower zone code, then the lower id, and the part is reported as ambiguous. A part whose box crosses the boundary of its zone is reported as straddling.',
         identity: 'A link is to one installed copy, never to a part number. Only a reference designator (the installed item tag) that is unique on both sides, one CAD part and one equipment item, links by itself. A shared part number or an ATA code is only a candidate, because the same part can be installed several times doing different jobs. Every candidate waits for the engineer to confirm. Equipment is never placed in a zone without a confirmed link.',
         events: 'A basic event belongs to the equipment its declared identity names (the system id, or the provider of an interface or resource event).',
         impact: 'Every basic event of the affected equipment is failed together, everything else works, and each fault tree is evaluated by the existing engine. A failure condition is reached when one of its trees needs no further failure.',
-        independence: 'An AND gate derives a physical and functional independence requirement. Equipment under two different inputs of an AND, priority AND, spare, sequence or k-of-n (k of 2 or more) gate in the same zone is a violation; in nested zones or in sibling zones with no substantiated barrier between them, an advisory; inside the same particular-risk volume, a violation; the same equipment under two inputs, a violation.',
+        independence: 'An AND gate derives a physical and functional independence requirement. Equipment under two different inputs of an AND, priority AND, spare, sequence or k-of-n (k of 2 or more) gate in the same zone is a violation; in nested zones or in sibling zones with no credited barrier between them (material on record, its requirement verified), an advisory; inside the same particular-risk volume, a violation; the same equipment under two inputs, a violation.',
         riskVolume: 'A part is inside a particular-risk volume when any of 27 points of its box (corners, edge midpoints, face centers, center) is inside the volume.'
     };
 
@@ -418,7 +418,10 @@
             list.push(byCode[code]);
         });
         list.sort(function (a, b) { return _nat(a.code, b.code); });
+        // 19 Oct 2026 (zones-3): a listed code finds its zone the way every zone reference does (ignoring case and spacing)
         var zoneByCode = {}; Z.all().forEach(function (z) { if (z && z.code && !zoneByCode[z.code]) zoneByCode[z.code] = z; });
+        list.forEach(function (e) { if (!zoneByCode[e.code] && Z.byCode) { var hit = Z.byCode(e.code); if (hit) zoneByCode[e.code] = hit; } });
+        list.forEach(function (e) { if (e.parentCode && !zoneByCode[e.parentCode] && Z.byCode) { var hp = Z.byCode(e.parentCode); if (hp) zoneByCode[e.parentCode] = hp; } });
         var before = {};
         list.forEach(function (e) {
             var z = zoneByCode[e.code];
@@ -657,7 +660,12 @@
 
     // ---- fault trees: which basic events belong to which equipment ---------------------------
     function _lid(n) { return n.logicalId != null ? n.logicalId : n.id; }
+    // 19 Oct 2026 (build 7): node_identity.js equipmentOf is the one answer (an authored equipment link, the declared
+    // identity, a MAC system event); the lines below are its fallback when that file is not loaded.
     function equipmentOfEvent(n) {
+        var NI = root.SLNodeIdentity || (typeof SLNodeIdentity !== 'undefined' ? SLNodeIdentity : null);
+        if (NI && NI.equipmentOf) return NI.equipmentOf(n);
+        if (n && n.equipmentId) return String(n.equipmentId);
         var id = n && n.identity;
         if (!id || typeof id !== 'object') return null;
         if (id.kind === 'resource') return id.providerSystemId ? String(id.providerSystemId) : null;
@@ -848,14 +856,35 @@
         _kids(n).forEach(function (c) { _leafEquip(c, EI, seenPages, out, seenNodes); });
         return out;
     }
+    // The equipment under a node: its own when it is an event, every event's under it when it is a gate, through
+    // transfers. 19 Oct 2026: also what an independence claim's member is when the member is a sub-tree.
+    function leafEquipment(n) { return Object.keys(_leafEquip(n, eventIndex().byLid, {}, {}, {})).sort(_cmp); }
+    // A credited independence claim: the gate carries an independence requirement or a DAL reduction taken on it.
+    function _isClaim(g) { return !!(g && (g._independenceReq || g._dalReduced)); }
+    // PRA footprints (praData[].affectedZones, zones-3): { id, label, praId, zones:{zoneId:1 for the footprint's
+    // zones and every zone inside them} }. An N/A particular risk has no footprint.
+    function praFootprints() {
+        var Z = _Z(); if (!Z) return [];
+        return _arr(_g('praData')).filter(function (p) { return p && p.disposition !== 'na' && Array.isArray(p.affectedZones) && p.affectedZones.length; }).map(function (p) {
+            var ext = {};
+            p.affectedZones.forEach(function (c) { var z = Z.resolve ? Z.resolve(c) : Z.get(c); if (z) Z.subtree(z.id).forEach(function (x) { ext[x.id] = 1; }); });
+            return { id: String(p.praId || p.internalId), label: p.threat || p.praId || 'PRA', praId: p.praId || null, zones: ext };
+        }).filter(function (f) { return Object.keys(f.zones).length; });
+    }
     function _isIndepGate(g) {
         if (!g || g.type !== 'gate' || !INDEP_GATES[g.gateType]) return false;
         if (g.gateType === 'VOTING') return Math.min(g.votingK || 2, _kids(g).length) >= 2;
         return _kids(g).length >= 2;
     }
+    // 19 Oct 2026 (build 7): THE ONE physical independence check. Every AND-like gate (or, with opts.claimsOnly, only
+    // the credited claims) against: the same equipment under both inputs, the same zone, nested zones, neighbouring
+    // zones without a credited barrier, the same CAD particular-risk volume, and (new) the same PRA footprint
+    // (a PRA's affected zones). The physical cross-check that drives CMA findings and the DAL reduction
+    // (physical_crosscheck.js) is this check on the credited claims; it no longer has a check of its own.
     function independenceFlags(opts) {
         opts = opts || {};
         var Z = _Z(), cadId = opts.cadId || latestCadId();
+        var FP = praFootprints();
         var EI = eventIndex().byLid;
         var eqParts = cadId ? equipmentParts(cadId) : {};
         var parts = cadId ? _partMap(cadId) : {};
@@ -878,12 +907,12 @@
             (function walk(g, seen) {
                 if (!g || seen[g.id]) return; seen[g.id] = 1;
                 if (g.type !== 'gate') return;
-                if (_isIndepGate(g)) {
+                if (_isIndepGate(g) && (!opts.claimsOnly || _isClaim(g))) {
                     var kids = _kids(g);
                     var sets = kids.map(function (k) { return Object.keys(_leafEquip(k, EI, {}, {}, {})).sort(_cmp); });
                     for (var i = 0; i < kids.length; i++) for (var j = i + 1; j < kids.length; j++) {
                         sets[i].forEach(function (a) { sets[j].forEach(function (b) {
-                            var gate = { id: g.id, displayId: g.displayId || null, name: g.name || '', gateType: g.gateType };
+                            var gate = { id: g.id, displayId: g.displayId || null, name: g.name || '', gateType: g.gateType, claimed: _isClaim(g) };
                             var inputs = [nodeRef(kids[i]), nodeRef(kids[j])];
                             var head = pg.id + '|' + g.id + '|' + kids[i].id + '|' + kids[j].id + '|';
                             var mk = function (kind, severity, zoneId, volumeId) { return { treeId: pg.id, treeName: pg.name || String(pg.id), gateId: g.id, gate: gate, inputs: inputs, kind: kind, severity: severity, zoneId: zoneId || null, volumeId: volumeId || null }; };
@@ -894,12 +923,15 @@
                                 else if (Z.isDescendant(za.id, zb.id)) add(head + 'nested-zone|' + zb.id, mk('nested-zone', 'advisory', zb.id, null), a, b, eqParts[a], eqParts[b]);
                                 else if (Z.isDescendant(zb.id, za.id)) add(head + 'nested-zone|' + za.id, mk('nested-zone', 'advisory', za.id, null), a, b, eqParts[a], eqParts[b]);
                                 else if (za.parentId != null && za.parentId === zb.parentId) {
+                                    // 19 Oct 2026: a barrier relieves only with credit (its material on record, a verified requirement on it)
                                     var bar = typeof Z.barrierBetween === 'function' ? Z.barrierBetween(za.id, zb.id) : null;
-                                    if (!(bar && bar.substantiated)) add(head + 'sibling-zone|' + za.parentId, mk('sibling-zone', 'advisory', za.parentId, null), a, b, eqParts[a], eqParts[b]);
+                                    var cred = bar && (typeof Z.barrierCredit === 'function' ? Z.barrierCredit(bar).credit : bar.substantiated);
+                                    if (!cred) add(head + 'sibling-zone|' + za.parentId, mk('sibling-zone', 'advisory', za.parentId, null), a, b, eqParts[a], eqParts[b]);
                                 }
                             }
                             var va = volsOf[a] || {}, vb = volsOf[b] || {};
                             Object.keys(va).sort(_cmp).forEach(function (vid) { if (vb[vid]) add(head + 'same-risk-volume|' + vid, mk('same-risk-volume', 'violation', null, vid), a, b, va[vid], vb[vid]); });
+                            if (za && zb) FP.forEach(function (fp) { if (fp.zones[za.id] && fp.zones[zb.id]) { var f0 = mk('same-pra-footprint', 'violation', null, null); f0.praId = fp.praId; f0.footprintId = fp.id; f0.footprintLabel = fp.label; add(head + 'same-pra-footprint|' + fp.id, f0, a, b, eqParts[a], eqParts[b]); } });
                         }); });
                     }
                 }
@@ -920,9 +952,10 @@
             var eqNames = f.equipment.map(function (s) { var x = _sysById(s); return x ? (x.name || s) : s; }).join(', ');
             var partNames = f.parts.length ? ' (parts: ' + f.parts.map(function (p) { return p.name; }).join(', ') + ')' : '';
             var where = f.kind === 'same-risk-volume' ? 'inside the same particular-risk volume ' + (f.volumeLabel || f.volumeId)
+                : f.kind === 'same-pra-footprint' ? 'inside the footprint of ' + (f.praId ? f.praId + ' ' : '') + (f.footprintLabel || '')
                 : f.kind === 'same-zone' ? 'in the same zone ' + _zoneLabel(z)
                 : f.kind === 'nested-zone' ? 'in nested zones inside ' + _zoneLabel(z)
-                : f.kind === 'sibling-zone' ? 'in neighboring zones under ' + _zoneLabel(z) + ' with no substantiated barrier between them'
+                : f.kind === 'sibling-zone' ? 'in neighboring zones under ' + _zoneLabel(z) + ' with no credited barrier between them'
                 : 'under both inputs (one item of equipment)';
             f.text = (f.severity === 'violation' ? 'Independence violated: ' : 'Independence to check: ') + gname + ' (' + f.gate.gateType + ') in ' + f.treeName + ' needs inputs ' + inName(f.inputs[0]) + ' and ' + inName(f.inputs[1]) + ' to be physically independent, but ' + eqNames + partNames + ' sit ' + where + '.';
             return f;
@@ -1076,7 +1109,7 @@
         importZoneList: importZoneList, containment: containment, applyContainment: applyContainment, clearances: clearances, boxDistance: boxDistance,
         riskVolumes: riskVolumes, riskVolume: riskVolume, addRiskVolume: addRiskVolume, removeRiskVolume: removeRiskVolume, shapeIssue: shapeIssue, inShape: inShape, spreadOf: spreadOf, partsInVolume: partsInVolume,
         equipmentOfEvent: equipmentOfEvent, eventIndex: eventIndex, evaluate: evaluate, sevRank: sevRank,
-        zoneImpact: zoneImpact, riskImpact: riskImpact, independenceFlags: independenceFlags,
+        zoneImpact: zoneImpact, riskImpact: riskImpact, independenceFlags: independenceFlags, leafEquipment: leafEquipment, praFootprints: praFootprints,
         diffRevision: diffRevision, markForReview: markForReview, openReviews: openReviews, closeReviewItem: closeReviewItem,
         aiPayload: aiPayload,
         // 14 Oct 2026 (p3-pra): the same evaluation for a given set of failed equipment, used by the

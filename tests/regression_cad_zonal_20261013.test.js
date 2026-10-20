@@ -169,6 +169,9 @@ function scenario(src, opts) {
     R.flags = C.independenceFlags({ cadId: ma.id });
     // a substantiated barrier between the avionics and hydraulic bays relieves the sibling advisory
     Z.addBarrier(zid('110'), zid('120'), 'firewall', true);
+    R.flagsTickOnly = C.independenceFlags({ cadId: ma.id });   // ticked substantiated only: no credit (19 Oct 2026)
+    sb.acReqData = [{ internalId: 1, id: 'REQ-FW-1', text: 'Firewall between the bays', verifStatus: 'Verified' }];
+    Z.setBarrierMaterial(Z.barriers()[0].id, 'Titanium 0.4 mm', 'REQ-FW-1');
     R.flagsBarrier = C.independenceFlags({ cadId: ma.id });
     Z.removeBarrier(Z.barriers()[0].id);
     // revision B
@@ -189,7 +192,7 @@ console.log('\n[A] zonal_model zones-2');
     const sb = load();
     const Z = sb.ZONES;
     const z1 = Z.addZone({ code: '100', name: 'Fuselage' }).zone;
-    check('A: a zones-1 zone (no volume fields) is valid and reads as schema zones-1', Z.validate().ok && Z.schemaOf() === 'zones-1' && !('volume' in z1) && Z.SCHEMA === 'zones-2');
+    check('A: a zones-1 zone (no volume fields) is valid and reads as schema zones-1', Z.validate().ok && Z.schemaOf() === 'zones-1' && !('volume' in z1) && Z.SCHEMA === 'zones-3');   // 19 Oct 2026: the current schema is zones-3 (one zone identity)
     const m1 = Z.migrate(), snap = J(sb.projectConfig.zones), m2 = Z.migrate();
     check('A: migrate() stamps zones-2, fills neutral fields, and a second run changes nothing', m1.upgraded === 1 && m2.upgraded === 0 && J(sb.projectConfig.zones) === snap && z1.volume === null && z1.source === 'manual' && z1.cadRef === null && Z.schemaOf() === 'zones-2');
     check('A: ids, codes, parents and equipment untouched by migrate', z1.id === 'z-1' && z1.code === '100' && z1.parentId === null && Array.isArray(z1.equipment));
@@ -303,7 +306,8 @@ console.log('\n[I] independence flags (AND gate rule)');
     check('I: pump (120) and channel 2 (110) under the HYD-FC-1 AND: sibling advisory under 100', sib && sib.severity === 'advisory' && sib.gateId === 'G5' && code(sib.zoneId) === '100' && J(sib.equipment) === J(['FCC2', 'HYD']));
     check('I: battery (500) and channel 1 (110) are not flagged: different top zones', !f.some(x => x.equipment.indexOf('BAT') >= 0));
     check('I: violations listed before advisories; ids unique', f.length === 3 && f[f.length - 1].severity === 'advisory' && new Set(f.map(x => x.id)).size === f.length);
-    check('I: a substantiated barrier between the bays relieves the sibling advisory only', !R.flagsBarrier.some(x => x.kind === 'sibling-zone') && R.flagsBarrier.some(x => x.kind === 'same-zone'));
+    check('I: a barrier only ticked substantiated relieves nothing (no material, no verified requirement)', R.flagsTickOnly.some(x => x.kind === 'sibling-zone'));
+    check('I: a credited barrier between the bays (material on record, its requirement verified) relieves the sibling advisory only', !R.flagsBarrier.some(x => x.kind === 'sibling-zone') && R.flagsBarrier.some(x => x.kind === 'same-zone'));
 }
 
 console.log('\n[J] a new CAD revision');
@@ -400,7 +404,7 @@ console.log('\n[N] wiring');
 {
     const at = f => IDX.indexOf('<script src="' + f + '?v=');
     check('N: cad_zonal.js is in the page after zonal_model.js, fta_engine.js, change_ack.js and sl_env.js', at('cad_zonal.js') > at('zonal_model.js') && at('zonal_model.js') > 0 && at('cad_zonal.js') > at('fta_engine.js') && at('cad_zonal.js') > at('change_ack.js') && at('cad_zonal.js') > at('sl_env.js'));
-    check('N: loads right after zonal_model.js', /zonal_model\.js\?v=1\.2" defer><\/script>\s*\n\s*<script src="cad_zonal\.js\?v=[\d.]+" defer><\/script>/.test(IDX));
+    check('N: loads right after zonal_model.js', /zonal_model\.js\?v=[\d.]+" defer><\/script>\s*\n\s*<script src="cad_zonal\.js\?v=[\d.]+" defer><\/script>/.test(IDX));
     check('N: no eval, no new Function, no DOM in the engine', !/\beval\s*\(|new Function|document\./.test(SRC));
     check('N: no em dash in the new module or this test', SRC.indexOf(EM) < 0 && fs.readFileSync(__filename, 'utf8').indexOf(EM) < 0);
     const mod = require(path.join(__dirname, '..', 'site', 'cad_zonal.js'));

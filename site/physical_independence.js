@@ -81,65 +81,16 @@
         while (cur && cur.parentId != null && guard++ < 5000) { if (cur.parentId === ancId) return cur.id; cur = Z.get(cur.parentId); }
         return null;
     }
-    // A SUBSTANTIATED barrier between the two branches under the LCA relieves the co-location
-    // (a firewall / drip-shield / segregation). Unsubstantiated barriers do NOT relieve.
-    function _barrierSeparates(ancId, zA, zB) {
-        var Z = _Z(); if (!Z || typeof Z.barrierBetween !== 'function') return false;
-        if (zA === zB) return false;                       // same zone — nothing separates them
-        var cA = childTowards(ancId, zA), cB = childTowards(ancId, zB);
-        if (!cA || !cB || cA === cB) return false;         // same branch — no cross-branch barrier
-        var bar = Z.barrierBetween(cA, cB);
-        return !!(bar && bar.substantiated);
-    }
-
-    // ZSA: finest shared zone(s) among members. Returns [{zoneId, code, name, depth, members[]}].
-    // Built from pairwise LCA so the reported zone is the tightest co-location for each group.
-    function sharedZones(memberSystemIds) {
-        var Z = _Z(); if (!Z) return [];
-        var placed = (memberSystemIds || []).map(function (m) { var z = Z.zoneOf(m); return z ? { m: m, z: z.id } : null; }).filter(Boolean);
-        var byZone = {}; // lcaZoneId -> Set(members)
-        for (var i = 0; i < placed.length; i++) {
-            for (var j = i + 1; j < placed.length; j++) {
-                var anc = lca(placed[i].z, placed[j].z);
-                if (!anc) continue;
-                if (_barrierSeparates(anc, placed[i].z, placed[j].z)) continue;   // computed barrier relief
-                if (!byZone[anc]) byZone[anc] = {};
-                byZone[anc][placed[i].m] = 1; byZone[anc][placed[j].m] = 1;
-            }
-        }
-        return Object.keys(byZone).map(function (zid) {
-            var z = Z.get(zid) || {};
-            return { zoneId: zid, code: z.code || '', name: z.name || '', depth: Z.depth(zid), members: Object.keys(byZone[zid]) };
-        }).sort(function (a, b) { return b.depth - a.depth; }); // finest (deepest) first
-    }
-    function colocationConflict(memberSystemIds) {
-        var groups = sharedZones(memberSystemIds);
-        return { conflict: groups.length > 0, groups: groups };
-    }
-
-    // Assess one credited-independence claim against co-location + a set of PRA footprints.
-    // claim = { id?, label?, members:[systemId...], footprints:[{id,label,zones:[zoneId...]}] }
-    // Returns deterministic findings; the caller decides how to drive the compromise engine.
-    function assessClaim(claim) {
-        claim = claim || {};
-        var members = claim.members || [];
-        var findings = [];
-        colocationConflict(members).groups.forEach(function (g) {
-            findings.push({ kind: 'zsa', zoneId: g.zoneId, label: 'Co-location in zone ' + (g.code || g.zoneId), depth: g.depth, members: g.members });
-        });
-        (claim.footprints || []).forEach(function (fp) {
-            var r = footprintConflict(fp.zones || [], members);
-            if (r.conflict) findings.push({ kind: 'pra', footprintId: fp.id, label: (fp.label || 'PRA') + ' footprint', members: r.hit });
-        });
-        return { claimId: claim.id || null, members: members, compromised: findings.length > 0, findings: findings };
-    }
+    // 19 Oct 2026 (build 7): the claim check that lived here (sharedZones / colocationConflict / assessClaim) is
+    // gone. It called two members co-located whenever their zones shared ANY ancestor zone, the whole aircraft
+    // included, so a deep zone tree compromised nearly every claim; and it was a second independence check beside
+    // the CAD/zonal engine's. The one check is SLCadZonal.independenceFlags (cad_zonal.js); physical_crosscheck.js runs
+    // it on the credited claims. What stays here is the zone and footprint arithmetic.
 
     ROOT.PHYS_INDEP = {
-        SCHEMA: 'phys-indep-1',
+        SCHEMA: 'phys-indep-2',
         zoneAncestors: zoneAncestors, lca: lca,
         footprintExtent: footprintExtent, equipmentInFootprint: equipmentInFootprint,
-        footprintMembers: footprintMembers, footprintConflict: footprintConflict,
-        sharedZones: sharedZones, colocationConflict: colocationConflict,
-        assessClaim: assessClaim
+        footprintMembers: footprintMembers, footprintConflict: footprintConflict
     };
 })();

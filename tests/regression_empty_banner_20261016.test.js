@@ -74,7 +74,7 @@ check('B5 applying project data removes the banner', /recovery-banner\[data-sl-l
             console.log('\n[C] cloud_sync uses the same check');
             check('C1 _hasRealContent consults the shared check', /window\.__slProjectHasContent\(s\)\) return true/.test(fn(cloud, '_hasRealContent')));
             check('C2 helpers exposes it', /window\.__slProjectHasContent = _autosaveHasContent/.test(helpers));
-            check('C3 index.html loads the new versions', /helpers_modules\.js\?v=3\.(3[1-9]|[4-9]\d)"/.test(idx) && /data_ops_modules\.js\?v=66\.55/.test(idx) && /cloud_sync\.js\?v=2\.([7-9]|\d\d)"/.test(idx));
+            check('C3 index.html loads the new versions', /helpers_modules\.js\?v=3\.(3[1-9]|[4-9]\d)"/.test(idx) && /data_ops_modules\.js\?v=66\.(5[5-9]|[6-9]\d)\"/.test(idx) && /cloud_sync\.js\?v=2\.([7-9]|\d\d)"/.test(idx));
             console.log('\n' + pass + ' passed, ' + fail + ' failed');
             if (MUTATE) { console.log(fail ? 'mutation caught' : 'MUTATION NOT CAUGHT'); process.exit(fail ? 0 : 1); }
             process.exit(fail ? 1 : 0);

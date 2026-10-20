@@ -4,7 +4,8 @@
 // launched from the Zonal Model page. Pre-suggests the standard particular-risk
 // set (PRA_LIBRARY), lets the analyst disposition each (Applies / N/A + reason),
 // and — for the applicable ones — captures the FOOTPRINT as a set of zones over
-// the zonal model. Writes praData rows with a structured `zones` field, which
+// the zonal model. Writes the footprint into praData[].affectedZones as zone codes (19 Oct 2026, zones-3: the
+// one footprint field every check reads; the old model-id list `zones` is folded in by ZONES.upgrade), which
 // PHYS_CROSSCHECK.praFootprints() reads to fire the PRA co-location cross-check.
 //
 // This closes the CCA loop: PRA (here) + ZSA (walkthrough) + CMA (walkthrough)
@@ -25,7 +26,8 @@
     function _certBasis() { var pc = (typeof projectConfig !== 'undefined' ? projectConfig : {}) || {}; return pc.regulation === 'Part 23' ? ('Part 23 ' + (pc.part23Class || 'IV')) : (pc.regulation || 'Part 25'); }
 
     function _row(libId) { return _pra().find(function (r) { return r && r.origin === 'pra-canvas' && r.praLibId === libId; }); }
-    function _zoneCode(id) { var z = _Z() && _Z().get(id); return z ? (z.code || z.name || id) : id; }
+    function _zoneCode(id) { var z = _Z() && (_Z().resolve ? _Z().resolve(id) : _Z().get(id)); return z ? (z.code || z.name || id) : id; }
+    function _same(a, b) { var Z = _Z(); return Z && Z.sameZone ? Z.sameZone(a, b) : String(a) === String(b); }
 
     window._praSetDisp = async function (libId, disp) {
         var lib = window.PRA_LIBRARY.get(libId); if (!lib) return;
@@ -33,15 +35,15 @@
         if (disp === 'applies') {
             if (!row) _pra().push({ internalId: _rowId(), praId: _aid(), praLibId: libId, origin: 'pra-canvas',
                 threat: lib.name, desc: lib.condition, condition: lib.condition, footprintHint: lib.footprint, src: lib.src,
-                disposition: 'applies', naReason: '', zones: [], affectedZones: [], mitigation: '' });
+                disposition: 'applies', naReason: '', affectedZones: [], mitigation: '' });
             else { row.disposition = 'applies'; }
         } else if (disp === 'na') {
             var reason = await slPrompt('Why is "' + lib.name + '" not applicable to this configuration?', (row && row.naReason) || '');
             if (reason == null) return;
             if (!row) _pra().push({ internalId: _rowId(), praId: _aid(), praLibId: libId, origin: 'pra-canvas',
                 threat: lib.name, desc: lib.condition, condition: lib.condition, footprintHint: lib.footprint, src: lib.src,
-                disposition: 'na', naReason: reason, zones: [], affectedZones: [], mitigation: '' });
-            else { row.disposition = 'na'; row.naReason = reason; row.zones = []; row.affectedZones = []; }
+                disposition: 'na', naReason: reason, affectedZones: [], mitigation: '' });
+            else { row.disposition = 'na'; row.naReason = reason; row.affectedZones = []; }
         } else { // candidate -> remove the row
             if (row) { var a = _pra(); var i = a.indexOf(row); if (i >= 0) a.splice(i, 1); }
         }
@@ -49,22 +51,23 @@
     };
     window._praAddZone = function (libId, sel) {
         if (!sel || !sel.value) return; var row = _row(libId); if (!row) return;
-        if (row.zones.indexOf(sel.value) < 0) { row.zones.push(sel.value); row.affectedZones = row.zones.map(_zoneCode); }
+        var code = _zoneCode(sel.value); if (!Array.isArray(row.affectedZones)) row.affectedZones = [];
+        if (!row.affectedZones.some(function (c) { return _same(c, code); })) row.affectedZones.push(code);
         _save(); _renderModal();
     };
     window._praRemoveZone = function (libId, zid) {
         var row = _row(libId); if (!row) return;
-        var i = row.zones.indexOf(zid); if (i >= 0) row.zones.splice(i, 1); row.affectedZones = row.zones.map(_zoneCode);
+        row.affectedZones = (row.affectedZones || []).filter(function (c) { return !_same(c, zid); });
         _save(); _renderModal();
     };
     window._praCloseCanvas = function () { var m = document.getElementById('pra-canvas-modal'); if (m) m.remove(); };
 
     function _zoneChips(libId, row) {
         var Z = _Z(); if (!Z) return '';
-        var chips = (row.zones || []).map(function (zid) {
+        var chips = (row.affectedZones || []).map(function (zid) {
             return '<span style="display:inline-flex;align-items:center;gap:3px;background:var(--color-surface-2);border:1px solid var(--color-border-hair);border-radius:12px;padding:1px 8px;margin:2px;font-size:11px;">' +
                 _esc(_zoneCode(zid)) + '<span onclick="_praRemoveZone(\'' + libId + '\',\'' + zid + '\')" style="cursor:pointer;color:#8E2A2A;font-weight:700;">×</span></span>'; }).join('');
-        var opts = Z.all().filter(function (z) { return (row.zones || []).indexOf(z.id) < 0; })
+        var opts = Z.all().filter(function (z) { return !(row.affectedZones || []).some(function (c) { return _same(c, z.id); }); })
             .map(function (z) { return '<option value="' + z.id + '">' + _esc((z.code || '') + ' ' + (z.name || '')) + '</option>'; }).join('');
         var sel = opts ? '<select onchange="_praAddZone(\'' + libId + '\',this)" style="font-size:11px;padding:1px;margin:2px;border:1px solid var(--color-border-hair);border-radius:5px;"><option value="">+ zone in footprint…</option>' + opts + '</select>' : '<i style="font-size:11px;color:var(--color-text-primary);">define zones on the Zonal Model page first</i>';
         return '<div style="margin-top:3px;">' + chips + sel + '</div>';
@@ -84,7 +87,7 @@
                 }).join('');
                 var detail = '';
                 if (disp === 'applies') detail = '<div style="font-size:11px;color:#55555C;margin-top:2px;">Footprint hint: ' + _esc(lib.footprint) + '</div>' + _zoneChips(lib.id, row) +
-                    (row.zones && row.zones.length >= 1 ? '' : '<div style="font-size:10.5px;color:#8E2A2A;margin-top:2px;">Add the zones this risk’s footprint spans to enable the cross-check.</div>');
+                    (row.affectedZones && row.affectedZones.length >= 1 ? '' : '<div style="font-size:10.5px;color:#8E2A2A;margin-top:2px;">Add the zones this risk’s footprint spans to enable the cross-check.</div>');
                 else if (disp === 'na') detail = '<div style="font-size:11px;color:#1E7A34;margin-top:2px;">N/A — ' + _esc(row.naReason || '') + '</div>';
                 return '<div style="border-bottom:1px solid #EEF2F8;padding:7px 0;">' +
                     '<div style="display:flex;align-items:center;gap:8px;">' +

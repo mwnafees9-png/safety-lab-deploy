@@ -1,5 +1,5 @@
 // ============================================================================
-// zonal_exchange.js, v1.2 (1.1, 17 Oct 2026: each risk carries its volume's shape; 1.2: says when CAD part sizes are still being read), 15 Oct 2026: the exchange between Safety Lab's CAD / zonal /
+// zonal_exchange.js, v1.3 (1.1, 17 Oct 2026: each risk carries its volume's shape; 1.2: says when CAD part sizes are still being read; 1.3, 19 Oct 2026: reads Sys Lab's routes (version 3) and sends the zonal safety analysis), 15 Oct 2026: the exchange between Safety Lab's CAD / zonal /
 // particular risk picture and Sys Lab's model (functions and the physical architecture).
 // window.SLZonalExchange (page) + module.exports (node tests).
 //
@@ -55,6 +55,14 @@
 //   sysLabMap [{ key, tag, ident, sysId, on }]
 //                      Sys Lab elements already mapped to equipment here (FILE 2 below)
 //   gaps    [text]     what is missing, in words
+//   zsa, zsaHash       1.3 (19 Oct 2026, build 7), still format version 1 (added fields, outside contentHash, with
+//                      their own fingerprint): the zonal safety analysis (zsa_engine.js), read only in Sys Lab:
+//                      { engine, summary:{zones,findings,violations,advisories,open}, gaps:[text],
+//                        zones:[{ zoneId, code, name, worst, findings:[id] }],
+//                        findings:[{ id, kind, severity, status, zoneIds, zoneCodes, funcId, lines:[line],
+//                                    elements:[tag], equipment:[sysId], functions:[funcId], functionsAtRisk:[funcId],
+//                                    worst, worstPossible, text, disposition:{ state, reason, requirementId,
+//                                    requirementVerified, by, at, stale } | null }] }
 //
 // FILE 2: Sys Lab to Safety Lab, "syslab-physical" versions 1 and 2 (Sys Lab, SX.physical):
 //   functions [{ funcId, name, level, system, parent }], elements [{ tag, ident, name, kind,
@@ -62,6 +70,13 @@
 //   version 2 adds systems [{ code, name, slSystem, performs }], traces on each function (the functions it
 //   realizes, by ID) and, per element, zoneId
 //   (the Safety Lab zone id) and slEquipment (the equipment it was mapped to in Sys Lab).
+//   version 3 (19 Oct 2026, build 7) adds routing: the routes of the CAD model for the zonal safety analysis,
+//   { cad:{cadId,sha256,fileName,revision}, sepMm, up, rules:[{id,name,a,b,minMm,preferMm,above,clampMm,own,
+//   why,source}], routes:[{line, type, typeName, family, typeFrom, lengthMm, lengthFrom, found, parts:[pid],
+//   zones:[code], harness, connections:[{ident,name,type,from:{ident,tag,name},to}], functions:[{funcId,ends}],
+//   channels:[{funcId,channel,of,element}]}], measured:{state,why,at,by,bandMm,pairs:[{a,b,d,pa,pb,near}]},
+//   findings:{rules,close,unset}, functions:{funcId:{name,severity,why,fcs:[{fcId,severity}]}} }. Facts measured or
+//   declared in Sys Lab; the safety judgement is made here.
 //   Stored as projectConfig.sysLabPhysical (importSysLab), written through SLChangeAck.batch.
 //
 // THE MAPPING RULE (both directions, the CAD link rule of cad_zonal.js): a mapping is to one
@@ -76,7 +91,7 @@
 (function (root) {
     'use strict';
 
-    var VERSION = '1.2';
+    var VERSION = '1.3';
     var FORMAT = 'safetylab-zonal', FORMAT_VERSION = 1, SHAPE_UNITS = 'mm';
     var PART_LIMIT = 20000;
     var KIND_LABELS = { rotorBurst: 'Rotor burst', tireBurst: 'Tire burst', birdStrike: 'Bird strike', fire: 'Fire', fluidLeak: 'Fluid leak', iceShedding: 'Ice shedding', lightning: 'Lightning', generic: 'Other particular risk', volume: 'Particular risk volume', zonal: 'Zonal hazard', zone: 'Zone compromised', zsa: 'Zonal safety analysis row' };
@@ -227,7 +242,29 @@
         };
         var out = { format: FORMAT, version: FORMAT_VERSION, generator: 'Safety Lab Aero zonal exchange ' + VERSION, projectName: _s(_g('projectName')) || null, exportedAt: opts.at || new Date().toISOString(), contentHash: fp(body) };
         Object.keys(body).forEach(function (k) { out[k] = body[k]; });
+        // 1.3 (19 Oct 2026, build 7): the zonal safety analysis, read only in Sys Lab. Its own fingerprint (zsaHash), so
+        // the fingerprint of everything above is what it always was and an older Sys Lab still reads the file.
+        var E = root.SLZsaEngine;
+        if (E && typeof E.compute === 'function' && opts.zsa !== false) {
+            try { out.zsa = zsaOut(E.compute(), E); out.zsaHash = fp(out.zsa); } catch (e) { out.zsa = { engine: 'Safety Lab zonal analysis ' + (E.VERSION || ''), error: 'The zonal safety analysis could not run: ' + _s(e && e.message) }; out.zsaHash = fp(out.zsa); }
+        }
         return out;
+    }
+    // The analysis as Sys Lab shows it: the totals, what is missing, the zones with findings and every finding with what it
+    // reaches (units by tag, routes by line, functions by ID), its consequence and the person's disposition in Safety Lab.
+    function zsaOut(res, E) {
+        var cons = function (f, k) { return f.consequence ? _uniq(_arr(f.consequence[k]).map(function (x) { return x && x.funcId; })) : []; };
+        return {
+            engine: 'Safety Lab zonal analysis ' + (E.VERSION || ''), summary: _clone(res.summary), gaps: _arr(res.gaps).map(_s),
+            zones: _arr(res.zones).filter(function (z) { return z.findings.length; }).map(function (z) { return { zoneId: String(z.zoneId), code: z.code || null, name: z.name || '', worst: z.zoneEvent ? z.zoneEvent.worst || null : null, findings: z.findings.slice() }; }),
+            findings: _arr(res.findings).map(function (f) {
+                var d = f.disposition;
+                return { id: f.id, kind: f.kind, severity: f.severity, status: f.status, zoneIds: _arr(f.zoneIds).map(String), zoneCodes: _arr(f.zoneCodes).map(String), funcId: f.funcId || null,
+                         lines: _uniq(_arr(f.lines).concat(f.reach ? _arr(f.reach.lines) : [])), elements: _uniq(f.reach ? f.reach.elements : []), equipment: _uniq(_arr(f.equipment).concat(f.reach ? _arr(f.reach.equipment) : [])),
+                         functions: cons(f, 'functionsLost'), functionsAtRisk: cons(f, 'functionsAtRisk'), worst: f.consequence ? f.consequence.worst || null : null, worstPossible: f.consequence ? f.consequence.worstPossible || null : null,
+                         text: _s(f.text), disposition: d ? { state: d.state, reason: _s(d.reason), requirementId: _s(d.requirementId) || null, requirementVerified: d.requirementVerified, by: _s(d.by), at: _s(d.at), stale: !!d.stale } : null };
+            })
+        };
     }
     // 1.1 (17 Oct 2026): each risk carries the volume Safety Lab stores for it, exactly as stored
     // (projectConfig.praVolumes[].shape, cad_zonal.js), with its unit. Lengths are millimeters, the
@@ -254,6 +291,7 @@
         if (pic.version !== FORMAT_VERSION) return 'This zonal file is version ' + pic.version + '; this Safety Lab reads version ' + FORMAT_VERSION + '.';
         var body = {}; ['cad', 'rules', 'kindLabels', 'zones', 'equipment', 'parts', 'risks', 'zoneHazards', 'exposures', 'praRows', 'sysLabMap', 'gaps'].forEach(function (k) { body[k] = pic[k]; });
         if (fp(body) !== pic.contentHash) return 'The zonal file was changed after Safety Lab wrote it (its fingerprint does not match).';
+        if (pic.zsa !== undefined && fp(pic.zsa) !== pic.zsaHash) return 'The zonal safety analysis in the file was changed after Safety Lab wrote it (its fingerprint does not match).';
         return null;
     }
 
@@ -265,7 +303,7 @@
     // readSysLab(obj): checks a syslab-physical file and returns it normalized, or { ok:false, err }.
     function readSysLab(obj, fileName) {
         if (!obj || typeof obj !== 'object' || obj.app !== 'syslab-physical') return { ok: false, err: 'This is not a Sys Lab physical architecture file (Export physical architecture in Sys Lab).' };
-        if ([1, 2].indexOf(obj.version) < 0) return { ok: false, err: 'This Sys Lab file is version ' + obj.version + '; this Safety Lab reads versions 1 and 2.' };
+        if ([1, 2, 3].indexOf(obj.version) < 0) return { ok: false, err: 'This Sys Lab file is version ' + obj.version + '; this Safety Lab reads versions 1, 2 and 3.' };
         var issues = [], seen = {};
         var elements = _arr(obj.elements).filter(function (e) { return e && (e.tag || e.ident); }).map(function (e) {
             var x = { key: '', tag: _up(e.tag) || null, ident: _up(e.ident) || null, name: _s(e.name), kind: _s(e.kind), system: _s(e.system), partOf: _s(e.partOf), partNumber: _s(e.partNumber) || null,
@@ -282,7 +320,47 @@
         }
         var functions = _arr(obj.functions).filter(function (f) { return f && f.funcId; }).map(function (f) { return { funcId: _up(f.funcId), name: _s(f.name), level: _s(f.level), system: _s(f.system), parent: _up(f.parent) || null, traces: _uniq(_arr(f.traces).map(_up)) }; })
           .sort(function (a, b) { return _nat(a.funcId, b.funcId); });
-        return { ok: true, data: { file: _s(fileName) || 'Sys Lab file', version: obj.version, projectName: _s(obj.projectName) || null, exportedAt: _s(obj.exportedAt) || null, functions: functions, elements: elements, systems: systems }, issues: issues };
+        var routing = obj.version >= 3 ? _readRouting(obj.routing, issues) : null;
+        return { ok: true, data: { file: _s(fileName) || 'Sys Lab file', version: obj.version, projectName: _s(obj.projectName) || null, exportedAt: _s(obj.exportedAt) || null, routing: routing, functions: functions, elements: elements, systems: systems }, issues: issues };
+    }
+    // The routes Sys Lab sends (version 3), read field by field: what is not a number, a text or a list of them is left
+    // out, never trusted as it came. null when the file carries no routes.
+    function _num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+    function _xyz(v) { return Array.isArray(v) && v.length === 3 && v.every(function (x) { return typeof x === 'number' && isFinite(x); }) ? v.slice() : null; }
+    function _el(e) { return e && typeof e === 'object' ? { ident: _up(e.ident) || null, tag: _up(e.tag) || null, name: _s(e.name), system: !!e.system } : null; }
+    function _readRouting(r, issues) {
+        if (!r || typeof r !== 'object') return null;
+        var seen = {};
+        var routes = _arr(r.routes).filter(function (x) { return x && _s(x.line); }).map(function (x) {
+            return { line: _up(x.line), type: _s(x.type) || null, typeName: _s(x.typeName), family: _s(x.family) || null, typeFrom: _s(x.typeFrom) || null,
+                     lengthMm: _num(x.lengthMm), lengthFrom: _s(x.lengthFrom), found: !!x.found, parts: _uniq(_arr(x.parts).map(_s)), zones: _uniq(_arr(x.zones).map(_s)),
+                     harness: x.harness && typeof x.harness === 'object' ? { partNumber: _s(x.harness.partNumber), file: _s(x.harness.file), wires: _num(x.harness.wires) } : null,
+                     connections: _arr(x.connections).filter(Boolean).map(function (c) { return { ident: _up(c.ident) || null, name: _s(c.name), type: _s(c.type), from: _el(c.from), to: _el(c.to) }; }),
+                     functions: _arr(x.functions).filter(function (f) { return f && f.funcId; }).map(function (f) { return { funcId: _up(f.funcId), ends: _uniq(_arr(f.ends).map(_s)).filter(function (e) { return e === 'from' || e === 'to'; }) }; }),
+                     channels: _arr(x.channels).filter(function (c) { return c && c.funcId && _num(c.channel) != null; }).map(function (c) { return { funcId: _up(c.funcId), channel: c.channel, of: _num(c.of), element: _up(c.element) || null }; }) };
+        }).filter(function (x) { if (seen[x.line]) { issues.push('Route ' + x.line + ' is listed twice; the first is used.'); return false; } seen[x.line] = 1; return true; })
+          .sort(function (a, b) { return _nat(a.line, b.line); });
+        var M = r.measured && typeof r.measured === 'object' ? r.measured : {};
+        var pairs = _arr(M.pairs).filter(function (x) { return x && seen[_up(x.a)] && seen[_up(x.b)] && _num(x.d) != null; }).map(function (x) {
+            return { a: _up(x.a), b: _up(x.b), d: x.d, pa: _xyz(x.pa), pb: _xyz(x.pb), near: _arr(x.near).filter(function (n) { return Array.isArray(n) && n.length >= 3 && typeof n[2] === 'number'; }).map(function (n) { return [_s(n[0]), _s(n[1]), n[2], n[3] === 1 || n[3] === -1 ? n[3] : 0]; }) };
+        });
+        var F = r.findings && typeof r.findings === 'object' ? r.findings : {};
+        var fns = {}, F0 = r.functions && typeof r.functions === 'object' ? r.functions : {};
+        Object.keys(F0).sort(_nat).forEach(function (k) { var f = F0[k]; if (!f || typeof f !== 'object') return; var rd = f.redundancy && typeof f.redundancy === 'object' && _num(f.redundancy.channels) ? { channels: f.redundancy.channels, need: _num(f.redundancy.need) } : null; fns[_up(k)] = { name: _s(f.name), severity: _s(f.severity) || null, why: _s(f.why), redundancy: rd, fcs: _arr(f.fcs).filter(function (x) { return x && x.fcId; }).map(function (x) { return { fcId: _up(x.fcId), severity: _s(x.severity) || null }; }) }; });
+        var els = _arr(r.elements).filter(function (e) { return e && (e.ident || e.tag); }).map(function (e) { return { ident: _up(e.ident) || null, tag: _up(e.tag) || null, channels: _arr(e.channels).filter(function (c) { return c && c.funcId && _num(c.channel) != null; }).map(function (c) { return { funcId: _up(c.funcId), channel: c.channel, of: _num(c.of) }; }) }; });
+        return {
+            functions: fns, elements: els,
+            cad: r.cad && typeof r.cad === 'object' ? { cadId: _s(r.cad.cadId) || null, sha256: _s(r.cad.sha256) || null, fileName: _s(r.cad.fileName) || null, revision: _s(r.cad.revision) || null } : null,
+            sepMm: _num(r.sepMm), up: _s(r.up) || '+Z',
+            rules: _arr(r.rules).filter(function (x) { return x && x.id; }).map(function (x) { return { id: _s(x.id), name: _s(x.name), a: _arr(x.a).map(_s), b: _arr(x.b).map(_s), minMm: _num(x.minMm), preferMm: _num(x.preferMm), above: !!x.above, clampMm: _num(x.clampMm), own: !!x.own, why: _s(x.why), source: _s(x.source) }; }),
+            routes: routes,
+            measured: { state: _s(M.state) || 'none', why: _s(M.why), at: _s(M.at) || null, by: _s(M.by) || null, bandMm: _num(M.bandMm), pairs: pairs },
+            findings: {
+                rules: _arr(F.rules).filter(function (x) { return x && x.rule && Array.isArray(x.lines); }).map(function (x) { return { rule: _s(x.rule), sev: ['error', 'warn', 'info'].indexOf(x.sev) >= 0 ? x.sev : 'info', kind: _s(x.kind) || null, lines: x.lines.map(_up), d: _num(x.d), alongMm: _num(x.alongMm), zone: _s(x.zone) || null, at: _xyz(x.at), text: _s(x.text) }; }),
+                close: _arr(F.close).filter(function (x) { return x && x.funcId && Array.isArray(x.lines); }).map(function (x) { return { funcId: _up(x.funcId), channels: _arr(x.channels).filter(function (n) { return typeof n === 'number'; }), lines: x.lines.map(_up), clearMm: _num(x.clearMm), zone: _s(x.zone) || null, at: _xyz(x.at), text: _s(x.text) }; }),
+                unset: _arr(F.unset).filter(function (x) { return x && x.rule; }).map(function (x) { return { rule: _s(x.rule), text: _s(x.text) }; })
+            }
+        };
     }
     // planSysLab(data): what importing would change, against what is stored. Pure.
     function planSysLab(data) {
@@ -292,6 +370,8 @@
         var plan = { added: [], changed: [], removed: [], mapsKept: [], mapsDropped: [], first: !rec };
         Object.keys(now).sort(_cmp).forEach(function (k) { if (!before[k]) plan.added.push(k); else if (JSON.stringify(before[k]) !== JSON.stringify(now[k])) plan.changed.push(k); });
         Object.keys(before).sort(_cmp).forEach(function (k) { if (!now[k]) plan.removed.push(k); });
+        var rb = rec && rec.routing ? rec.routing.routes.length : 0, ra = data.routing ? data.routing.routes.length : 0;
+        plan.routes = { before: rb, after: ra, changed: JSON.stringify((rec && rec.routing) || null) !== JSON.stringify(data.routing || null) };
         if (rec && rec.map) Object.keys(rec.map).sort(_cmp).forEach(function (k) { var x = rec.map[k]; if (!x || !x.sysId) return; if (now[k] && _sysById(x.sysId)) plan.mapsKept.push(k); else plan.mapsDropped.push({ key: k, sysId: x.sysId, why: now[k] ? 'equipment ' + x.sysId + ' no longer exists' : 'element no longer in Sys Lab' }); });
         return plan;
     }
@@ -305,12 +385,13 @@
         opts = opts || {};
         if (!_s(by)) return Promise.resolve({ ok: false, err: 'An import needs the name of who brought it in (the name box under Equipment links).' });
         var plan = planSysLab(data);
-        return _ack('Sys Lab physical architecture imported from ' + data.file + ': ' + data.elements.length + ' elements, ' + data.functions.length + ' functions', function () {
+        return _ack('Sys Lab physical architecture imported from ' + data.file + ': ' + data.elements.length + ' elements, ' + data.functions.length + ' functions' + (data.routing ? ', ' + data.routing.routes.length + ' routes' : ''), function () {
             var pc = _pc(), old = pc.sysLabPhysical || {}, map = {}, rejected = {};
             plan.mapsKept.forEach(function (k) { map[k] = old.map[k]; });
             Object.keys(old.rejected || {}).forEach(function (k) { if (plan.removed.indexOf(k) < 0) rejected[k] = old.rejected[k]; });
             pc.sysLabPhysical = { schema: 1, file: data.file, version: data.version, projectName: data.projectName, exportedAt: data.exportedAt, importedAt: opts.at || new Date().toISOString(), by: _s(by),
                                   functions: _clone(data.functions), elements: _clone(data.elements), systems: _clone(data.systems), map: map, rejected: rejected };
+            if (data.routing) pc.sysLabPhysical.routing = _clone(data.routing);   // version 3: the routes for the ZSA
             _save();
             return { ok: true, plan: plan };
         });
@@ -579,7 +660,7 @@
     }
 
     var api = {
-        VERSION: VERSION, FORMAT: FORMAT, FORMAT_VERSION: FORMAT_VERSION, PART_LIMIT: PART_LIMIT, KIND_LABELS: KIND_LABELS, ON_LABELS: ON_LABELS, fp: fp,
+        VERSION: VERSION, zsaOut: zsaOut, FORMAT: FORMAT, FORMAT_VERSION: FORMAT_VERSION, PART_LIMIT: PART_LIMIT, KIND_LABELS: KIND_LABELS, ON_LABELS: ON_LABELS, fp: fp,
         exportPicture: exportPicture, checkPicture: checkPicture, hasContent: hasContent,
         readSysLab: readSysLab, planSysLab: planSysLab, importSysLab: importSysLab, stored: stored, matchSysLab: matchSysLab,
         confirmMap: confirmMap, rejectMap: rejectMap, unmap: unmap, acceptExact: acceptExact,

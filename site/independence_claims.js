@@ -24,12 +24,25 @@
     var ROOT = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
     function _pages() { return (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : (ROOT.ftaPages || []); }
 
+    // 19 Oct 2026 (build 7): one answer to "which equipment is this event", node_identity.js equipmentOf (an authored
+    // equipment link, the declared identity, a MAC system event), the same one the CAD/zonal engine uses. A member that
+    // is a gate is the equipment under it (the CAD/zonal engine's leaf walk, through transfers), so a claim whose inputs
+    // are sub-trees is cross-checked instead of reported as unresolved.
+    function _NI() { return ROOT.SLNodeIdentity || (typeof SLNodeIdentity !== 'undefined' ? SLNodeIdentity : null); }
     function resolveEquipment(node) {
         if (!node) return null;
+        var NI = _NI();
+        if (NI && NI.equipmentOf) return NI.equipmentOf(node);
         var lid = String(node.logicalId || '');
-        if (lid.indexOf('macsys:') === 0) return lid.slice(7);   // MAC system event -> systemsData id
-        if (node.equipmentId) return node.equipmentId;            // explicit authored link
-        return null;                                              // unresolved (no equipment identity)
+        if (node.equipmentId) return node.equipmentId;
+        if (lid.indexOf('macsys:') === 0) return lid.slice(7);
+        return null;
+    }
+    function memberEquipment(node) {
+        var own = resolveEquipment(node); if (own) return [own];
+        var C = ROOT.SLCadZonal;
+        if (node && node.type === 'gate' && C && C.leafEquipment) return C.leafEquipment(node);
+        return [];
     }
 
     function extractClaims() {
@@ -43,7 +56,8 @@
                 if (andLike && (n._independenceReq || n._dalReduced)) {
                     var kids = n.children || n._children || [];
                     var members = kids.map(function (c) {
-                        return { displayId: c.displayId || c.id, logicalId: c.logicalId, type: c.type, equipmentId: resolveEquipment(c) };
+                        var eq = memberEquipment(c);
+                        return { id: c.id, displayId: c.displayId || c.id, logicalId: c.logicalId, type: c.type, equipmentId: eq.length === 1 ? eq[0] : (eq.length ? eq.join('+') : null), equipment: eq };
                     });
                     out.push({
                         pageId: p.id, page: p.name, gateId: n.id, gate: n.displayId || n.id, gateType: n.gateType,
@@ -75,5 +89,5 @@
         return { claims: claims.length, crossCheckable: ready, members: totalMembers, membersResolved: resolvedMembers };
     }
 
-    ROOT.INDEP_CLAIMS = { SCHEMA: 'indep-claims-1', resolveEquipment: resolveEquipment, extractClaims: extractClaims, crossCheckable: crossCheckable, coverage: coverage };
+    ROOT.INDEP_CLAIMS = { SCHEMA: 'indep-claims-1', resolveEquipment: resolveEquipment, memberEquipment: memberEquipment, extractClaims: extractClaims, crossCheckable: crossCheckable, coverage: coverage };
 })();

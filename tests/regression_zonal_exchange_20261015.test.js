@@ -255,7 +255,7 @@ console.log('\n[I] reading a Sys Lab file');
     const v1 = { app: 'syslab-physical', version: 1, functions: [{ funcId: 'F-A', name: 'A' }], elements: [{ tag: 'T-1', ident: 'E1', name: 'E', performs: ['F-A'] }], allocations: [{ funcId: 'F-A', element: 'SYSX', tag: '' }, { funcId: 'F-A', element: 'E1', tag: 'T-1' }, { funcId: 'F-A', element: 'AIRCRAFT', tag: '' }] };
     const r1 = X.readSysLab(v1, 'v1.json');
     check('I: version 1 read: systems recovered from the allocations', r1.ok && J(r1.data.systems) === J([{ key: 'sys:SYSX', code: 'SYSX', name: 'SYSX', slSystem: null, performs: ['F-A'] }]));
-    check('I: refused: another file, another version', !X.readSysLab({ app: 'x' }).ok && /version 3/.test(X.readSysLab({ app: 'syslab-physical', version: 3 }).err));
+    check('I: refused: another file, another version', !X.readSysLab({ app: 'x' }).ok && /version 4/.test(X.readSysLab({ app: 'syslab-physical', version: 4 }).err));   // 19 Oct 2026: version 3 (routes) is read now
     const dup = physV2(); dup.elements.push(Object.assign({}, dup.elements[0]));
     check('I: an element listed twice is reported, the first kept', X.readSysLab(dup).issues.some(t => /FCC-1 is listed twice/.test(t)) && X.readSysLab(dup).data.elements.length === 6);
 }

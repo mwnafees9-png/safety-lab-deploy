@@ -4165,18 +4165,18 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase 66.32 — what a fault-tree node IS: the declared coordinate, ownership
          resolution (declared -> transfer -> ancestor -> page -> UNOWNED finding), the
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
-    <script src="node_identity.js?v=1.0" defer></script>
+    <script src="node_identity.js?v=1.1" defer></script>
     <script src="node_identity_ui.js?v=1.5" defer></script>
     <script src="fta_view_modules.js?v=66.46" defer></script>
     <!-- 13 Oct 2026 (fix G) — SLFtaEdit: the fault tree built by hand (toolbox, drawn connections, unattached nodes, canvas λ/P, model link, overview map) and the ONE change path (SLFtaEdit.applyEdit). After fta_view_modules.js. -->
     <script src="fta_canvas_edit.js?v=1.1" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
-    <script src="data_ops_modules.js?v=66.55" defer></script>
+    <script src="data_ops_modules.js?v=66.56" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.45" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.33" defer></script>
+    <script src="helpers_modules.js?v=3.34" defer></script>
     <script src="cloud_writer.js?v=1.2" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4186,7 +4186,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
-    <script src="misc_fn_modules.js?v=66.81" defer></script>
+    <script src="misc_fn_modules.js?v=66.82" defer></script>
     <script src="safety_lab.js?v=65.64" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
@@ -4230,7 +4230,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 27 Sep 2026 (Q11) — PRA survivability framing: taken as certain, nature groups, minimization argument. -->
     <script src="pra_framing.js?v=1.1" defer></script>
     <!-- 27 Sep 2026 (Q10) — per-item zonal threats: emits / susceptible, co-location and carry-over. -->
-    <script src="zonal_threats.js?v=1.1" defer></script>
+    <script src="zonal_threats.js?v=1.2" defer></script>
     <!-- 27 Sep 2026 (Q9) — design baseline stamp: what each analysis was done against, re-check when the design moves. -->
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
@@ -4446,17 +4446,17 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          every write routes through each worksheet's own helpers. -->
     <script src="mass_actions.js?v=0.8" defer></script>
     <script src="mbsa_schema.js?v=1.1" defer></script>
-    <script src="zonal_model.js?v=1.2" defer></script>
-    <script src="cad_zonal.js?v=1.7" defer></script>
+    <script src="zonal_model.js?v=1.3" defer></script>
+    <script src="cad_zonal.js?v=1.8" defer></script>
     <script src="pra_refs_data.js?v=1.4" defer></script>
     <script src="pra_models.js?v=1.19" defer></script>
     <!-- 14 Oct 2026: grounded AI for zonal and particular risk drafts (sources checked in code, nothing applied without acknowledgement). -->
     <script src="zonal_ai.js?v=1.7" defer></script>
-    <script src="physical_independence.js?v=1.1" defer></script>
-    <script src="independence_claims.js?v=1.1" defer></script>
-    <script src="physical_crosscheck.js?v=1.1" defer></script>
+    <script src="physical_independence.js?v=1.2" defer></script>
+    <script src="independence_claims.js?v=1.2" defer></script>
+    <script src="physical_crosscheck.js?v=1.2" defer></script>
     <script src="spacemouse.js?v=1.2" defer></script>
-    <script src="zonal_ui.js?v=1.15" defer></script>
+    <script src="zonal_ui.js?v=1.16" defer></script>
     <!-- 13 Oct 2026: CAD Model tab (ZSA area). STEP read in a worker on this computer, geometry cached locally, only metadata in the project. -->
     <script src="cad_import.js?v=2.5" defer></script>
     <script src="cad_render.js?v=1.1" defer></script>
@@ -4467,18 +4467,21 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="cad_page.js?v=2.0" defer></script>
     <script src="pra_panel.js?v=1.18" defer></script>
     <!-- 15 Oct 2026: the exchange with Sys Lab (zones, CAD containment and risk results out; the physical architecture in). Deterministic, no AI. -->
-    <script src="zonal_exchange.js?v=1.2" defer></script>
+    <script src="zonal_exchange.js?v=1.3" defer></script>
+    <!-- 19 Oct 2026: the zonal safety analysis, computed zone by zone from the zone model, CAD, Sys Lab routes and the fault trees. Deterministic, no AI. -->
+    <script src="zsa_engine.js?v=1.0" defer></script>
+    <script src="zsa_engine_ui.js?v=1.0" defer></script>
     <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
     <script src="requirement_states.js?v=1.0" defer></script>
     <script src="pra_report.js?v=1.5" defer></script>
     <script src="equipment_hazards.js?v=1.1" defer></script>
     <script src="beta_scoring.js?v=1.0" defer></script>
-    <script src="zsa_walkthrough.js?v=1.4" defer></script>
+    <script src="zsa_walkthrough.js?v=1.5" defer></script>
     <script src="cma_walkthrough.js?v=1.31" defer></script>
     <!-- 13 Oct 2026 (fix 6): live common cause detection + forced Accept/Ignore decision + decision log. -->
     <script src="cma_live.js?v=1.1" defer></script>
     <script src="pra_library.js?v=1.3" defer></script>
-    <script src="pra_canvas.js?v=1.22" defer></script>
+    <script src="pra_canvas.js?v=1.23" defer></script>
     <script src="msg3_zonal.js?v=1.21" defer></script>
     <script src="mac_l3.js?v=1.0" defer></script>
     <!-- M1 phase 2 — L3 cockpit: flow editor, per-deviation BDD corroboration, FMEA sign desk. -->

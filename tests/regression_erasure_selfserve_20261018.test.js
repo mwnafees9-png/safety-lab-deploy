@@ -187,7 +187,7 @@ function loadVM(opts) {
   console.log('\n[D] wiring');
   const H = read('index.html'), HM = read('helpers_modules.js'), CS = read('cloud_sync.js'), CW = read('cloud_writer.js'), TP = read('tab_project.js');
   check('index.html loads erasure.js right after account_password.js', /account_password\.js\?v=[\d.]+" defer><\/script>\n\s*<!--[^\n]*-->\n\s*<script src="erasure\.js\?v=1\.0" defer><\/script>/.test(H));
-  check('index.html cache-busts the changed files', /cloud_sync\.js\?v=2\.8"/.test(H) && /cloud_writer\.js\?v=1\.2"/.test(H) && /tab_project\.js\?v=1\.1"/.test(H) && /helpers_modules\.js\?v=3\.33"/.test(H));
+  check('index.html cache-busts the changed files', /cloud_sync\.js\?v=2\.8"/.test(H) && /cloud_writer\.js\?v=1\.2"/.test(H) && /tab_project\.js\?v=1\.1"/.test(H) && /helpers_modules\.js\?v=3\.(3[3-9]|[4-9]\d)"/.test(H));
   check('the account panel has the certificates mount and fills it', HM.includes('id="acct-erasure-mount"') && HM.includes("window.SLErasure.mount('acct-erasure-mount');"));
   const acct = HM.slice(HM.indexOf('async function _openEraseAccountModal'), HM.indexOf('async function _openEraseAccountModal') + 9000);
   check('the account erasure clears this device', acct.includes('await window.SLErasure.wipeAll()'));

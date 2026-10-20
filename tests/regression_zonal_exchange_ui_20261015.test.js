@@ -27,6 +27,7 @@ const ROOT = path.resolve(__dirname, '..'), SITE = path.join(ROOT, 'site'), FIX 
 const SHOTS = path.resolve(ROOT, '..', 'zones_shots');
 let pass = 0, fail = 0;
 const J = x => JSON.stringify(x);
+const sb_codes15 = S => S.codes === 15 && S.dup === 0;
 const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d !== undefined ? ' - ' + d : '')); } };
 
 // The engineer's set-up, run in the page (plain data, no AI).
@@ -101,7 +102,7 @@ const SETUP = () => {
     let tagged = 0;
     ftaPages.forEach(pg => (function w(n) { if (!n) return; if (n.type !== 'gate') { for (const [re, f] of rule) { const mm = re.exec(n.name || ''); if (mm) { n.identity = f(mm); tagged++; break; } } return; } (n.children || n._children || []).forEach(w); })(pg.root));
     try { scheduleAutosave(); } catch (_) {}
-    return { cadId: m.id, created: imp.created.length, issues: imp.issues, placed: placed.assign.length, conflictSys: placed.conflicts.map(c => c.sysId).sort(), tagged };
+    return { codes: C && window.ZONES ? ['Z-FUS','Z-NOSE','Z-FCC','Z-CAB','Z-EWIS','Z-PACK-F','Z-PACK-A','Z-THM','Z-LDG','Z-WING-L','Z-BOOM-FL','Z-BOOM-AL','Z-WING-R','Z-BOOM-FR','Z-BOOM-AR'].filter(c => { const z = window.ZONES.byCode(c); return z && z.volume; }).length : 0, dup: window.ZONES && window.ZONES.duplicateCodes ? window.ZONES.duplicateCodes().length : -1, cadId: m.id, created: imp.created.length, updated: imp.updated.length, unchanged: imp.unchanged.length, issues: imp.issues, placed: placed.assign.length, conflictSys: placed.conflicts.map(c => c.sysId).sort(), tagged };
 };
 
 (async () => {
@@ -133,7 +134,7 @@ const SETUP = () => {
             await loadVayuDemo(); await new Promise(r => setTimeout(r, 1500)); ung();
         });
         const S = await page.evaluate(SETUP);
-        check('setup: 15 zones from the list, single-zone equipment placed, the three systems spread over zones reported as such (not placed), basic events declared', S.created === 15 && !S.issues.length && S.placed >= 15 && J(S.conflictSys) === J(['sys-avi', 'sys-fcs', 'sys-mca']) && S.tagged >= 30, JSON.stringify(S));
+        check('setup: the 15 zones of the list are in the register (one zone per code, 19 Oct 2026: the Vayu ZSA rows already name most of them, so the list gives those their boxes rather than a second zone), single-zone equipment placed, the three systems spread over zones reported as such (not placed), basic events declared', S.created + S.updated + S.unchanged === 15 && sb_codes15(S) && !S.issues.length && S.placed >= 15 && J(S.conflictSys) === J(['sys-avi', 'sys-fcs', 'sys-mca']) && S.tagged >= 30, JSON.stringify(S));
         // keep the change acknowledgement out of the way of the scripted set-up
         await page.evaluate(() => document.querySelectorAll('.sl-ack-overlay .sl-ack-keep').forEach(k => k.click()));
 

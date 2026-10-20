@@ -18,7 +18,7 @@
 //     Emitted in normal operation = the exposure is permanent (gap); only in
 //     abnormal or failed operation = a failure sequence to assess (check).
 //   · carry-over: the emitter is in an ADJACENT zone (parent, child or sibling
-//     in the containment tree) and no substantiated barrier stands between the
+//     in the containment tree) and no credited barrier stands between the
 //     two zones (zonal_model barriers). Fluid runs, heat radiates, debris flies,
 //     EMI couples and vibration travels through structure; a boundary only
 //     stops them when something substantiated says so.
@@ -107,7 +107,8 @@
     function blocked(a, b) {
         var Z = _Z(); if (!Z || typeof Z.barrierBetween !== 'function') return false;
         var bar = Z.barrierBetween(a, b);
-        return !!(bar && bar.substantiated);
+        // 19 Oct 2026: blocked only by a barrier with credit (material on record, a verified requirement on it)
+        return !!(bar && (typeof Z.barrierCredit === 'function' ? Z.barrierCredit(bar).credit : bar.substantiated));
     }
 
     // ---- the analysis ---------------------------------------------------------------------
@@ -147,7 +148,7 @@
                     np.emitted[t.id].forEach(function (e) {
                         victims.forEach(function (v) {
                             out.push({ kind: 'carry-over', sev: _worst(e.states), threat: t.id, zone: z.id, fromZone: n.id, emitter: e.item, victim: v, states: e.states,
-                                       text: _zlabel(z) + ': ' + _sysName(v) + ' is susceptible to ' + _label(t.id).toLowerCase() + '; ' + _sysName(e.item) + ' in adjacent zone ' + _zlabel(n) + ' emits it ' + e.states.map(function (s) { return STATE_LABEL[s]; }).join(' / ') + ' and no substantiated barrier stands between the zones' });
+                                       text: _zlabel(z) + ': ' + _sysName(v) + ' is susceptible to ' + _label(t.id).toLowerCase() + '; ' + _sysName(e.item) + ' in adjacent zone ' + _zlabel(n) + ' emits it ' + e.states.map(function (s) { return STATE_LABEL[s]; }).join(' / ') + ' and no credited barrier stands between the zones (a barrier counts with its material on record and a verified requirement on it)' });
                         });
                     });
                 });
@@ -203,7 +204,7 @@
         var unrec = u.length ? '<div style="font-size:11px;color:#9A6200;margin-top:4px;">' + u.length + ' placed item' + (u.length === 1 ? '' : 's') + ' with no threat record yet: ' + u.slice(0, 8).map(function (x) { return _esc(_sysName(x.item)); }).join(', ') + (u.length > 8 ? ' +' + (u.length - 8) : '') + '</div>' : '';
         return '<div id="zt-section" style="margin-top:12px;border:1px solid var(--color-border-hair);border-radius:8px;padding:10px;">'
             + '<div style="font-weight:700;color:var(--color-text-primary);font-size:12.5px;">Per-item threats (what each item emits, what it is susceptible to)</div>'
-            + '<div style="font-size:11px;color:#55555C;margin-bottom:4px;">Heat, fluid, debris, EMI, vibration; emitted in normal, abnormal or failed operation. A susceptible item next to an emitter is a co-location; an emitter in an adjacent zone with no substantiated barrier carries over. ARP4761A Appendix K, own words.</div>'
+            + '<div style="font-size:11px;color:#55555C;margin-bottom:4px;">Heat, fluid, debris, EMI, vibration; emitted in normal, abnormal or failed operation. A susceptible item next to an emitter is a co-location; an emitter in an adjacent zone with no credited barrier (material on record, its requirement verified) carries over. ARP4761A Appendix K, own words.</div>'
             + body
             + '<div style="margin-top:10px;font-weight:700;font-size:12px;color:var(--color-text-primary);">Findings: ' + f.length + ' (' + gaps + ' permanent exposure' + (gaps === 1 ? '' : 's') + ', ' + (f.length - gaps) + ' failure sequence' + (f.length - gaps === 1 ? '' : 's') + ' to assess)</div>'
             + list + unrec + '</div>';

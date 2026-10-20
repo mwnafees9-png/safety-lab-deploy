@@ -107,6 +107,9 @@
         opts = opts || {};
         if (opts.parentId != null && !get(opts.parentId)) return { ok: false, err: 'Parent zone not found: ' + opts.parentId };
         if (opts.volume != null && volumeIssue(opts.volume)) return { ok: false, err: volumeIssue(opts.volume) };
+        // zones-3: a code names one zone (compared ignoring case and spacing)
+        var dupe = String(opts.code || '').trim() ? byCode(opts.code) : null;
+        if (dupe) return { ok: false, err: 'Zone ' + (dupe.name || dupe.id) + ' already has the code ' + dupe.code + '.', zone: dupe };
         var z = { id: _nextId(), code: String(opts.code || '').trim(), name: String(opts.name || '').trim() || 'Zone',
                   parentId: (opts.parentId != null ? opts.parentId : null), equipment: [] };
         // zones-2 fields only when given, so a zones-1 caller still makes a zones-1 shaped zone
@@ -160,10 +163,10 @@
             if (!('cadRef' in z)) { z.cadRef = null; touched = true; }
             if (touched) n++;
         });
-        pc.zonesSchema = 'zones-2';
-        return { ok: true, upgraded: n, schema: 'zones-2' };
+        if (pc.zonesSchema !== 'zones-3') pc.zonesSchema = 'zones-2';   // never takes a zones-3 project back
+        return { ok: true, upgraded: n, schema: pc.zonesSchema };
     }
-    function schemaOf() { var pc = _pc(); return pc.zonesSchema === 'zones-2' ? 'zones-2' : 'zones-1'; }
+    function schemaOf() { var pc = _pc(); return pc.zonesSchema === 'zones-3' ? 'zones-3' : pc.zonesSchema === 'zones-2' ? 'zones-2' : 'zones-1'; }
 
     function rename(id, name) { var z = get(id); if (!z) return { ok: false, err: 'not found' }; z.name = String(name || '').trim() || z.name; return { ok: true }; }
     function setCode(id, code) { var z = get(id); if (!z) return { ok: false, err: 'not found' }; z.code = String(code || '').trim(); return { ok: true }; }
@@ -208,7 +211,7 @@
             if (!z || !z.id) { issues.push('A zone is missing an id.'); return; }
             if (ids[z.id]) issues.push('Duplicate zone id: ' + z.id);
             ids[z.id] = 1;
-            if (z.code) { if (codes[z.code]) issues.push('Duplicate zone code: ' + z.code + ' (' + z.name + ')'); codes[z.code] = 1; }
+            if (z.code) { var ck = normCode(z.code); if (codes[ck]) issues.push('Duplicate zone code: ' + z.code + ' (' + z.name + ')'); codes[ck] = 1; }
             if (z.parentId != null && !zs.some(function (p) { return p.id === z.parentId; })) issues.push('Zone ' + (z.code || z.id) + ' has a missing parent: ' + z.parentId);
             var vb = volumeIssue(z.volume); if (vb) issues.push('Zone ' + (z.code || z.id) + ': ' + vb);
             if (z.source != null && SOURCES.indexOf(z.source) < 0) issues.push('Zone ' + (z.code || z.id) + ' has an unknown source: ' + z.source);
@@ -227,6 +230,8 @@
                 cur = get(cur.parentId);
             }
         });
+        // zones-3: every row that names a zone names one in the register
+        if (schemaOf() === 'zones-3') danglingReferences().forEach(function (d) { issues.push(d.at + ' names zone "' + d.value + '", which is not in the zone model.'); });
         return { ok: issues.length === 0, issues: issues, zones: zs.length,
                  equipmentPlaced: Object.keys(equipSeen).length, systems: Object.keys(sysIds).length };
     }
@@ -248,14 +253,149 @@
     }
     function removeBarrier(id) { var arr = _barriers(); var i = arr.findIndex(function (x) { return x.id === id; }); if (i >= 0) arr.splice(i, 1); return { ok: true }; }
     function setBarrierSubstantiated(id, v) { var b = _barriers().find(function (x) { return x.id === id; }); if (b) b.substantiated = !!v; return { ok: !!b }; }
+    // ---- barrier credit (19 Oct 2026, build 7): THE rule, used by every check that relieves a hazard at a barrier ----
+    // Waqas, 17 Oct 2026: "no material data means over-allocate (no credit); where requirements specify material types,
+    // allocate as needed; where requirements on stringent materials are verified, give them the credit." So a barrier
+    // earns credit only with its material on record AND a requirement on that material that is verified. A person's
+    // "substantiated" tick alone is not material data. Requirements: acReqData and each system's req, by id.
+    var VERIFIED = { 'Verified': 1, 'Passed': 1 };   // 'Passed': the older spelling some projects carry
+    function _reqs() { var out = []; try { var a = (typeof acReqData !== 'undefined') ? acReqData : ROOT.acReqData; if (Array.isArray(a)) out = out.concat(a); } catch (_) {} _sys().forEach(function (s) { if (s && Array.isArray(s.req)) out = out.concat(s.req); }); return out; }
+    function requirement(ref) { var r = String(ref == null ? '' : ref).trim(); if (!r) return null; return _reqs().find(function (x) { return x && (String(x.id || '').trim() === r || String(x.reqId || '').trim() === r || String(x.internalId) === r); }) || null; }
+    function barrierCredit(bar) {
+        if (!bar) return { credit: false, state: 'none', text: 'no barrier' };
+        var mat = String(bar.material || '').trim(), rq = String(bar.requirementId || '').trim(), x = rq ? requirement(rq) : null;
+        if (!mat) return { credit: false, state: 'no-material', text: 'no material on record, so no credit' + (bar.substantiated ? ' (it is marked substantiated, but credit needs the material and a verified requirement on it)' : '') };
+        if (!rq) return { credit: false, state: 'no-requirement', text: mat + ' is on record but no requirement specifies it, so no credit' };
+        if (!x) return { credit: false, state: 'requirement-missing', text: 'requirement ' + rq + ' is not in this project, so no credit' };
+        if (!VERIFIED[String(x.verifStatus || x.vvStatus || '').trim()]) return { credit: false, state: 'not-verified', text: rq + ' requires ' + mat + ' and is not verified yet, so no credit' };
+        return { credit: true, state: 'verified', text: mat + ', required by ' + rq + ' (verified)' };
+    }
+    function credited(a, b) { var bar = barrierBetween(a, b); return !!(bar && barrierCredit(bar).credit); }
+    function setBarrierMaterial(id, material, requirementId) {
+        var b = _barriers().find(function (x) { return x.id === id; }); if (!b) return { ok: false, err: 'not found' };
+        var m = String(material == null ? '' : material).trim(), r = String(requirementId == null ? '' : requirementId).trim();
+        if (m) b.material = m.slice(0, 200); else delete b.material;
+        if (r) b.requirementId = r.slice(0, 80); else delete b.requirementId;
+        return { ok: true, barrier: b, credit: barrierCredit(b) };
+    }
+
+    // ---- zones-3 (19 Oct 2026): one zone identity ------------------------------------------------------------
+    // Before zones-3 a zone was named two ways: the ZSA table, the PRAs, the routing table and the Items page typed
+    // a zone CODE (zsaData.zoneId, praData.affectedZones, routingData.routesThroughZones, itemsData.zoneId), while
+    // the zone model, the CAD containment and the independence checks used model ids (z-n); the PRA canvas kept
+    // both (praData.zones ids beside affectedZones codes) and the ZSA walkthrough wrote a model id into zoneId.
+    // zones-3: the zone model is the one register of zones and the zone CODE is the zone's identity everywhere a
+    // row names a zone (the industry's own identity: ATA zone numbers and program zone codes). Every reference
+    // resolves to exactly one zone of the model; resolve() takes a code (any case and spacing) or a model id.
+    // upgrade() brings any older project up, losing nothing: a model id written into a code field becomes that
+    // zone's code, a code spelled differently becomes the zone's own spelling, a code no zone carries becomes a
+    // new zone (source 'manual', named from the rows that use it), and praData.zones folds into affectedZones.
+    // What it cannot decide (two zones sharing one code, a zone with no code) it reports and leaves untouched.
+    function normCode(s) { return String(s == null ? '' : s).trim().replace(/\s+/g, ' ').toLowerCase(); }
+    function byCode(code) { var k = normCode(code); if (!k) return null; return _zones().find(function (z) { return z && normCode(z.code) === k; }) || null; }
+    function resolve(ref) {
+        if (ref == null || ref === '') return null;
+        if (typeof ref === 'object') return ref.id ? get(ref.id) : null;
+        return byCode(ref) || get(String(ref).trim()) || null;
+    }
+    function codeOf(ref) { var z = resolve(ref); return z ? (z.code || null) : null; }
+    function sameZone(a, b) { var x = resolve(a), y = resolve(b); return !!(x && y && x.id === y.id); }
+    function _g(name) { try { switch (name) {
+        case 'zsaData': return typeof zsaData !== 'undefined' ? zsaData : ROOT.zsaData;
+        case 'praData': return typeof praData !== 'undefined' ? praData : ROOT.praData;
+        case 'routingData': return typeof routingData !== 'undefined' ? routingData : ROOT.routingData;
+        case 'itemsData': return typeof itemsData !== 'undefined' ? itemsData : ROOT.itemsData;
+    } } catch (_) { } return null; }
+    function _arr(name) { var a = _g(name); return Array.isArray(a) ? a : []; }
+    // Every place a row names a zone: { store, row, field, list, value, label }. list: the field holds a list.
+    var REF_FIELDS = [['zsaData', 'zoneId', false, function (r) { return 'ZSA row ' + (r.zoneId || r.internalId); }],
+                      ['praData', 'affectedZones', true, function (r) { return (r.praId || 'PRA') + ' affected zones'; }],
+                      ['routingData', 'routesThroughZones', true, function (r) { return (r.routingId || r.name || 'Routing') + ' zones'; }],
+                      ['itemsData', 'zoneId', false, function (r) { return 'Item ' + (r.itemId || r.name || r.internalId) + ' zone'; }]];
+    function references() {
+        var out = [];
+        REF_FIELDS.forEach(function (f) {
+            _arr(f[0]).forEach(function (r) {
+                if (!r) return;
+                var v = r[f[1]];
+                if (f[2]) { if (Array.isArray(v)) v.forEach(function (x, i) { if (x != null && String(x).trim()) out.push({ store: f[0], row: r, field: f[1], index: i, value: x, label: f[3](r) }); }); }
+                else if (v != null && String(v).trim()) out.push({ store: f[0], row: r, field: f[1], index: null, value: v, label: f[3](r) });
+            });
+        });
+        return out;
+    }
+    function _setRef(ref, value) { if (ref.index == null) ref.row[ref.field] = value; else ref.row[ref.field][ref.index] = value; }
+    // Codes two zones share (compared ignoring case and spacing): [{ code, zones:[ids] }]
+    function duplicateCodes() {
+        var by = {}; _zones().forEach(function (z) { if (!z) return; var k = normCode(z.code); if (!k) return; (by[k] = by[k] || []).push(z.id); });
+        return Object.keys(by).filter(function (k) { return by[k].length > 1; }).map(function (k) { return { code: k, zones: by[k] }; });
+    }
+    // Bring every reference onto the register. Safe to run any number of times; returns what it did.
+    function reconcile(o) {
+        o = o || {};
+        var rep = { converted: [], respelled: [], created: [], prazones: 0, blocked: [], dropped: [] };
+        var dup = duplicateCodes(); var dupKeys = {}; dup.forEach(function (d) { dupKeys[d.code] = 1; rep.blocked.push('Zones ' + d.zones.join(', ') + ' share the code "' + d.code + '": give each its own code.'); });
+        _zones().forEach(function (z) { if (z && !String(z.code || '').trim()) rep.blocked.push('Zone ' + z.id + ' (' + (z.name || '') + ') has no code.'); });
+        // the PRA canvas's model-id list folds into affectedZones (codes), then the field goes
+        _arr('praData').forEach(function (p) {
+            if (!p || !Array.isArray(p.zones)) return;
+            var aff = Array.isArray(p.affectedZones) ? p.affectedZones.slice() : [];
+            p.zones.forEach(function (zid) { var z = get(zid) || byCode(zid); var c = z ? z.code : String(zid); if (c && !aff.some(function (a) { return normCode(a) === normCode(c); })) aff.push(c); });
+            p.affectedZones = aff; delete p.zones; rep.prazones++;
+        });
+        references().forEach(function (ref) {
+            var raw = String(ref.value), t = raw.trim();
+            if (dupKeys[normCode(t)]) return;                                    // ambiguous: left as it is, reported above
+            var byC = byCode(t);
+            if (byC) { if (byC.code !== raw) { _setRef(ref, byC.code); rep.respelled.push({ at: ref.label, from: raw, to: byC.code }); } return; }
+            var byI = get(t);
+            if (byI && String(byI.code || '').trim()) { _setRef(ref, byI.code); rep.converted.push({ at: ref.label, from: raw, to: byI.code }); return; }
+            if (byI) return;                                                     // a model id of a zone with no code: reported above
+            var name = ref.store === 'zsaData' ? (ref.row.zoneName || ref.row.desc || t) : t;
+            var a = addZone({ code: t, name: String(name).slice(0, 120), source: 'manual' });
+            if (a.ok) { a.zone.volume = null; a.zone.cadRef = null; a.zone.origin = 'reference'; rep.created.push({ code: t, from: ref.label }); if (t !== raw) _setRef(ref, t); }
+        });
+        // a list holding one zone twice (two spellings that were the same zone) keeps it once
+        REF_FIELDS.forEach(function (f) { if (!f[2]) return; _arr(f[0]).forEach(function (r) { if (!r || !Array.isArray(r[f[1]])) return; var seen = {}, keep = []; r[f[1]].forEach(function (x) { var k = normCode(x); if (k && seen[k]) { rep.dropped.push({ at: f[3](r), value: x }); return; } seen[k] = 1; keep.push(x); }); if (keep.length !== r[f[1]].length) r[f[1]] = keep; }); });
+        return rep;
+    }
+    // The upgrade every project gets when it loads: zones-2 fields, then one identity. Idempotent.
+    function upgrade(o) {
+        var pc = _pc(), before = pc.zonesSchema;
+        migrate();
+        var rep = reconcile(o);
+        pc.zonesSchema = 'zones-3';
+        var did = rep.converted.length + rep.respelled.length + rep.created.length + rep.prazones + rep.dropped.length;
+        if (did) {
+            if (!Array.isArray(pc.zoneUpgradeLog)) pc.zoneUpgradeLog = [];
+            pc.zoneUpgradeLog.push({ at: (o && o.at) || new Date().toISOString(), from: before || 'zones-1', converted: rep.converted, respelled: rep.respelled, created: rep.created, prazones: rep.prazones, dropped: rep.dropped });
+        }
+        rep.schema = 'zones-3'; rep.from = before || 'zones-1'; rep.changed = did;
+        return rep;
+    }
+    // Rename a zone's code everywhere it is used, in one step. Refuses a code another zone carries.
+    function recode(id, code) {
+        var z = get(id); if (!z) return { ok: false, err: 'not found' };
+        var c = String(code || '').trim(); if (!c) return { ok: false, err: 'A zone needs a code.' };
+        var other = byCode(c); if (other && other.id !== z.id) return { ok: false, err: 'Zone ' + (other.name || other.id) + ' already has the code ' + other.code + '.' };
+        var old = z.code, n = 0;
+        references().forEach(function (ref) { if (normCode(ref.value) === normCode(old) && normCode(old)) { _setRef(ref, c); n++; } });
+        z.code = c;
+        return { ok: true, references: n };
+    }
+    // References that resolve to no zone (after an upgrade only rows added since can do this).
+    function danglingReferences() { return references().filter(function (ref) { return !resolve(ref.value); }).map(function (ref) { return { at: ref.label, value: ref.value, store: ref.store }; }); }
 
     ROOT.ZONES = {
-        SCHEMA: 'zones-2', SCHEMAS: ['zones-1', 'zones-2'], SOURCES: SOURCES.slice(),
+        SCHEMA: 'zones-3', SCHEMAS: ['zones-1', 'zones-2', 'zones-3'], SOURCES: SOURCES.slice(),
+        normCode: normCode, byCode: byCode, resolve: resolve, codeOf: codeOf, sameZone: sameZone, references: references, duplicateCodes: duplicateCodes,
+        reconcile: reconcile, upgrade: upgrade, recode: recode, danglingReferences: danglingReferences,
         volumeIssue: volumeIssue, setVolume: setVolume, migrate: migrate, schemaOf: schemaOf,
         all: all, get: get, roots: roots, children: children, subtree: subtree,
         depth: depth, isDescendant: isDescendant, equipmentInSubtree: equipmentInSubtree, zoneOf: zoneOf,
         addZone: addZone, rename: rename, setCode: setCode, remove: remove,
         assign: assign, unassign: unassign, validate: validate,
-        barriers: barriers, barrierBetween: barrierBetween, addBarrier: addBarrier, removeBarrier: removeBarrier, setBarrierSubstantiated: setBarrierSubstantiated
+        barriers: barriers, barrierBetween: barrierBetween, addBarrier: addBarrier, removeBarrier: removeBarrier, setBarrierSubstantiated: setBarrierSubstantiated,
+        barrierCredit: barrierCredit, credited: credited, setBarrierMaterial: setBarrierMaterial, requirement: requirement
     };
 })();

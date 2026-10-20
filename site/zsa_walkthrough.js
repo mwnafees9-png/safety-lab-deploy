@@ -39,13 +39,17 @@
     // 23 Sep 2026 (G9) — a new finding starts open and dated today; the analyst adds
     // who assessed it and how, in the ZSA tab (zsa_record.js).
     function _recDefaults() { return (window.SLZsaRecord ? window.SLZsaRecord.newFindingDefaults() : { findingStatus: 'open' }); }
-    function _findings(zoneId, cpId) { return _zsa().filter(function (r) { return r && r.zoneId === zoneId && r.zsaCheckpoint === cpId; }); }
+    // 19 Oct 2026 (zones-3): a ZSA row names its zone by the zone's CODE, the same as every other ZSA row; the
+    // walkthrough used to write the model id here. A row written that way before is read as the same zone.
+    function _code(zoneId) { var z = _zone(zoneId); return z && z.code ? z.code : zoneId; }
+    function _same(a, b) { var Z = window.ZONES; return Z && Z.sameZone ? Z.sameZone(a, b) : a === b; }
+    function _findings(zoneId, cpId) { return _zsa().filter(function (r) { return r && _same(r.zoneId, zoneId) && r.zsaCheckpoint === cpId; }); }
 
     window._zsaRecordFinding = async function (zoneId, cpId) {
         var cp = CHECKPOINTS.find(function (c) { return c.id === cpId; });
         var desc = await slPrompt('Finding / threat, ' + (cp ? cp.label : cpId) + ':', ''); if (desc == null || !desc.trim()) return;
         var mit = (await slPrompt('Mitigation / disposition (optional):', '')) || '';
-        _zsa().push(Object.assign({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: cpId, origin: 'walkthrough',
+        _zsa().push(Object.assign({ internalId: _rowId(), zoneId: _code(zoneId), zsaCheckpoint: cpId, origin: 'walkthrough',
             desc: desc.trim(), equip: '', severity: (typeof normSeverity === 'function') ? normSeverity('Major') : 'Major',
             interference: '', mitigation: mit.trim() }, _recDefaults()));
         _save(); _renderModal(zoneId);
@@ -54,7 +58,7 @@
         var hz = (window.EQUIP_HAZARDS ? window.EQUIP_HAZARDS.zoneHazards(zoneId) : []).find(function (h) { return h.id === hazId; });
         if (!hz) return;
         var from = hz.from.map(function (f) { return f.name; }).join(', ');
-        _zsa().push(Object.assign({ internalId: _rowId(), zoneId: zoneId, zsaCheckpoint: 'housed', origin: 'walkthrough',
+        _zsa().push(Object.assign({ internalId: _rowId(), zoneId: _code(zoneId), zsaCheckpoint: 'housed', origin: 'walkthrough',
             desc: hz.name + ' (' + hz.mechanism + ', ' + hz.state + ')', equip: from,
             severity: (typeof normSeverity === 'function') ? normSeverity('Major') : 'Major',
             interference: hz.threat, mitigation: '' }, _recDefaults()));

@@ -36,7 +36,7 @@ function load(model) {
 }
 // A small aircraft: 100 fuselage (110 avionics bay, 120 hyd bay), 500 wing; hyd pump P in 120, computer C in 110, battery B in 500, sensor S in 110.
 function world() {
-    const sb = load({ projectConfig: {}, systemsData: [{ id: 'P', name: 'Hydraulic pump' }, { id: 'C', name: 'Flight computer' }, { id: 'B', name: 'Battery' }, { id: 'S', name: 'Air data sensor' }] });
+    const sb = load({ projectConfig: {}, acReqData: [{ internalId: 1, id: 'REQ-FW-1', text: 'Firewall between the bays', verifStatus: 'Verified' }], systemsData: [{ id: 'P', name: 'Hydraulic pump' }, { id: 'C', name: 'Flight computer' }, { id: 'B', name: 'Battery' }, { id: 'S', name: 'Air data sensor' }] });
     const Z = sb.ZONES;
     const z100 = Z.addZone({ code: '100', name: 'Fuselage' }).zone, z110 = Z.addZone({ code: '110', name: 'Avionics bay', parentId: z100.id }).zone, z120 = Z.addZone({ code: '120', name: 'Hydraulic bay', parentId: z100.id }).zone, z500 = Z.addZone({ code: '500', name: 'Wing' }).zone;
     Z.assign(z120.id, 'P'); Z.assign(z110.id, 'C'); Z.assign(z110.id, 'S'); Z.assign(z500.id, 'B');
@@ -62,7 +62,9 @@ function world() {
     Z.addBarrier(z110.id, z120.id, 'firewall', false);
     check('G2: an unsubstantiated barrier does not block', !T.blocked(z110.id, z120.id));
     Z.setBarrierSubstantiated(Z.barriers()[0].id, true);
-    check('G2: a substantiated barrier blocks, both ways', T.blocked(z110.id, z120.id) && T.blocked(z120.id, z110.id) && !T.blocked(z110.id, z100.id));
+    check('G2: a barrier only ticked substantiated does not block (no material, no verified requirement)', !T.blocked(z110.id, z120.id));
+    Z.setBarrierMaterial(Z.barriers()[0].id, 'Titanium 0.4 mm', 'REQ-FW-1');
+    check('G2: a credited barrier (material on record, its requirement verified) blocks, both ways', T.blocked(z110.id, z120.id) && T.blocked(z120.id, z110.id) && !T.blocked(z110.id, z100.id));
 }
 
 // ---- G3 findings ----------------------------------------------------------------------
@@ -81,11 +83,13 @@ function world() {
     T.setSusceptible('C', 'emi', false); T.setSusceptible('S', 'emi', false); T.setEmit('C', 'emi', 'failed', false);
     // carry-over: P emits fluid when failed in 120; C susceptible to fluid in 110 (sibling), no barrier
     T.setEmit('P', 'fluid', 'failed', true); T.setSusceptible('C', 'fluid', true);
-    check('G3: carry-over from an adjacent zone with no substantiated barrier', kinds() === 'carry-over:fluid:P>C:warn' && /adjacent zone 120 Hydraulic bay emits it when it fails and no substantiated barrier/.test(T.findings()[0].text));
+    check('G3: carry-over from an adjacent zone with no substantiated barrier', kinds() === 'carry-over:fluid:P>C:warn' && /adjacent zone 120 Hydraulic bay emits it when it fails and no credited barrier/.test(T.findings()[0].text));
     const bar = Z.addBarrier(z110.id, z120.id, 'drip shield', false).barrier;
     check('G3: an unsubstantiated barrier changes nothing', kinds() === 'carry-over:fluid:P>C:warn');
     Z.setBarrierSubstantiated(bar.id, true);
-    check('G3: a substantiated barrier stops the carry-over', T.findings().length === 0);
+    check('G3: a barrier only ticked substantiated changes nothing', kinds() === 'carry-over:fluid:P>C:warn');
+    Z.setBarrierMaterial(bar.id, 'Drip shield, aluminum 1 mm', 'REQ-FW-1');
+    check('G3: a credited barrier stops the carry-over', T.findings().length === 0);
     Z.removeBarrier(bar.id);
     // non-adjacent: B in the wing emits heat in normal operation; C in 110 susceptible to heat; 500 is not adjacent to 110
     T.setEmit('B', 'heat', 'normal', true); T.setSusceptible('C', 'heat', true);

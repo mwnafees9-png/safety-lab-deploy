@@ -1583,6 +1583,8 @@ function _applyProjectData(data) {
         migrateAllFHAAssumptions();
         migrateSysSubFunctionsToFunctions();
         migrateLegacyMultiTraces();
+        // 19 Oct 2026: one zone identity (zones-3, zonal_model.js): every zone a row names is in the zone model, by its code.
+        try { if (window.ZONES && window.ZONES.upgrade) window.ZONES.upgrade(); } catch (e) { try { if (window.SLErrorWatch) SLErrorWatch.report(e, 'zones-upgrade'); } catch (_) {} }
         // Phase 53.42 — rebuild extractedFCs for every system (recovery + sample-project path).
         if (typeof rebuildExtractedFCsForAllSystems === 'function') rebuildExtractedFCsForAllSystems();
         backfillLogicalIds();

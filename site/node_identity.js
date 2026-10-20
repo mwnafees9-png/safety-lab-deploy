@@ -244,7 +244,27 @@
     return res;
   }
 
+  // THE ONE ANSWER to "which equipment is this fault-tree event?" (19 Oct 2026, build 7). Equipment is a
+  // system's id (the identity zones place and CAD parts link to). Before this, three readers answered it three
+  // ways (the CAD/zonal engine by node.identity, the independence claims by logicalId 'macsys:' or equipmentId);
+  // now both ask here. In order: an equipment link a person authored on the node; the declared identity (a
+  // resource node is its PROVIDER's equipment, any other node its own system's); a MAC system event's logical id.
+  // null when the node names none: never guessed from its text.
+  function equipmentOf(node) {
+    if (!node || typeof node !== 'object') return null;
+    if (node.equipmentId != null && String(node.equipmentId).trim()) return String(node.equipmentId).trim();
+    var id = node.identity;
+    if (id && typeof id === 'object') {
+      if (id.kind === 'resource') { if (id.providerSystemId) return String(id.providerSystemId); }
+      else if (id.systemId) return String(id.systemId);
+    }
+    var lid = String(node.logicalId || '');
+    if (lid.indexOf('macsys:') === 0 && lid.length > 7) return lid.slice(7);
+    return null;
+  }
+
   return {
+    equipmentOf: equipmentOf,
     KINDS: KINDS, kindOf: kindOf, isStructured: isStructured, isComplete: isComplete,
     missingFields: missingFields, resolveOwner: resolveOwner, crossesBoundary: crossesBoundary,
     displayText: displayText, nodeFindings: nodeFindings, sweepTree: sweepTree

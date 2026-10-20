@@ -4666,6 +4666,9 @@ function scheduleAutosave() {
     // the person to acknowledge (or cancel) unless it is a load, a merge or the app's own
     // bookkeeping. Saved / not saved is owned by save_state.js once it is loaded (AutoSave, 13 Oct
     // late): an acknowledged change is saved at once; only what waits for an acknowledgement is not.
+    // 19 Oct 2026 (zones-3): a zone code typed anywhere (ZSA, PRA, routing, items, the AI, an import) names a zone of
+    // the zone model; a new code joins the model in this same change, so one change carries both (zonal_model.js).
+    try { if (window.ZONES && window.ZONES.schemaOf && window.ZONES.schemaOf() === 'zones-3') window.ZONES.reconcile(); } catch(_) {}
     try { if (window.SLChangeAck) window.SLChangeAck.noteChange(); } catch(_) {}
     if (!(typeof window !== 'undefined' && window.SLSaveState)) _dirtySinceSave = true;   // Phase 57 — any tracked edit makes the Save Changes control active (no save_state.js: the old behavior)
     try { if (window.SLCmaLive) window.SLCmaLive.onModelChange('edit'); } catch(_) {}   // 13 Oct 2026 (fix 6): live common cause detection (debounced; cma_live.js)

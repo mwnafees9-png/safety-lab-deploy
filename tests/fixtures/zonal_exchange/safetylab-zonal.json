@@ -1,10 +1,10 @@
 {
  "format": "safetylab-zonal",
  "version": 1,
- "generator": "Safety Lab Aero zonal exchange 1.1",
+ "generator": "Safety Lab Aero zonal exchange 1.3",
  "projectName": "Synthetic aircraft",
  "exportedAt": "2026-10-15T09:00:00.000Z",
- "contentHash": "355e5e3e",
+ "contentHash": "1974baa0",
  "cad": {
   "cadId": "cad-1",
   "revision": "A",
@@ -17,7 +17,7 @@
   "identity": "A link is to one installed copy, never to a part number. Only a reference designator (the installed item tag) that is unique on both sides, one CAD part and one equipment item, links by itself. A shared part number or an ATA code is only a candidate, because the same part can be installed several times doing different jobs. Every candidate waits for the engineer to confirm. Equipment is never placed in a zone without a confirmed link.",
   "events": "A basic event belongs to the equipment its declared identity names (the system id, or the provider of an interface or resource event).",
   "impact": "Every basic event of the affected equipment is failed together, everything else works, and each fault tree is evaluated by the existing engine. A failure condition is reached when one of its trees needs no further failure.",
-  "independence": "An AND gate derives a physical and functional independence requirement. Equipment under two different inputs of an AND, priority AND, spare, sequence or k-of-n (k of 2 or more) gate in the same zone is a violation; in nested zones or in sibling zones with no substantiated barrier between them, an advisory; inside the same particular-risk volume, a violation; the same equipment under two inputs, a violation.",
+  "independence": "An AND gate derives a physical and functional independence requirement. Equipment under two different inputs of an AND, priority AND, spare, sequence or k-of-n (k of 2 or more) gate in the same zone is a violation; in nested zones or in sibling zones with no credited barrier between them (material on record, its requirement verified), an advisory; inside the same particular-risk volume, a violation; the same equipment under two inputs, a violation.",
   "riskVolume": "A part is inside a particular-risk volume when any of 27 points of its box (corners, edge midpoints, face centers, center) is inside the volume."
  },
  "kindLabels": {

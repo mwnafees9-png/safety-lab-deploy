@@ -7,11 +7,11 @@
 //
 // Composes the three engines already built and tested:
 //   INDEP_CLAIMS.extractClaims()  — the credited-independent claims + member
-//                                   -> equipment resolution (macsys: | equipmentId)
-//   PHYS_INDEP.assessClaim(...)    — the co-location (ZSA) + footprint (PRA)
-//                                   intersection against the member set
-//   praData[].zones                — authored PRA footprints as zone sets
-//                                   (structured field; empty until authored)
+//                                   -> equipment (node_identity.js equipmentOf)
+//   SLCadZonal.independenceFlags({claimsOnly:true}) — the one physical
+//                                   independence check (19 Oct 2026)
+//   praData[].affectedZones        — authored PRA footprints as zone codes,
+//                                   resolved through the zone model (zones-3)
 //
 // Output gate keys use the canonical "pageId:nodeId" format that the CMA /
 // compromise engine (_cmaCompromisedGateIdSet, linkedGateIds) already speaks —
@@ -21,35 +21,62 @@
     'use strict';
     var ROOT = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
 
-    // Authored PRA footprints: PRA rows that carry a structured `zones` set.
+    // Authored PRA footprints: each PRA row's affectedZones (zone codes), as the zone model's ids. 19 Oct 2026
+    // (zones-3): affectedZones is the one footprint field (the PRA form, the PRA canvas and the AI all write it); a
+    // code the zone model does not carry cannot be placed and is listed in `unplaced`, never guessed.
     function praFootprints() {
         var pd = (typeof praData !== 'undefined' && praData) ? praData : (ROOT.praData || []);
-        return pd.filter(function (p) { return p && Array.isArray(p.zones) && p.zones.length; })
-                 .map(function (p) { return { id: p.praId || p.id, label: p.threat || p.praId || 'PRA', zones: p.zones }; });
+        var Z = ROOT.ZONES;
+        return pd.filter(function (p) { return p && p.disposition !== 'na' && Array.isArray(p.affectedZones) && p.affectedZones.length; })
+                 .map(function (p) {
+                     var ids = [], unplaced = [];
+                     p.affectedZones.forEach(function (c) { var z = Z && Z.resolve ? Z.resolve(c) : null; if (z) { if (ids.indexOf(z.id) < 0) ids.push(z.id); } else unplaced.push(String(c)); });
+                     return { id: p.praId || p.id, label: p.threat || p.praId || 'PRA', zones: ids, unplaced: unplaced };
+                 })
+                 .filter(function (f) { return f.zones.length || f.unplaced.length; });
     }
 
+    // 19 Oct 2026 (build 7): the claims are checked by THE ONE physical independence check, SLCadZonal.independenceFlags
+    // ({ claimsOnly: true }): same equipment, same zone, the same CAD particular-risk volume or the same PRA footprint
+    // under two inputs of a credited gate is a violation and compromises the claim; nested or neighbouring zones without
+    // a substantiated barrier are advisories, shown, and never compromise on their own. Before, this file had a check
+    // of its own (PHYS_INDEP.assessClaim) that called two members co-located whenever their zones shared ANY ancestor,
+    // the whole aircraft included, and read only the PRA canvas's footprints.
+    function _flagFinding(f) {
+        var pra = f.kind === 'same-risk-volume' || f.kind === 'same-pra-footprint';
+        return { kind: pra ? 'pra' : 'zsa', flag: f.kind, zoneId: f.zoneId || null, footprintId: f.footprintId || f.volumeId || null,
+                 label: f.kind === 'same-equipment' ? 'One item of equipment under both inputs'
+                      : f.kind === 'same-zone' ? 'Co-location in zone ' + (f.zoneCode || f.zoneId)
+                      : f.kind === 'same-risk-volume' ? (f.volumeLabel || 'Particular-risk volume') + ' (CAD volume)'
+                      : f.kind === 'same-pra-footprint' ? ((f.praId ? f.praId + ' ' : '') + (f.footprintLabel || 'PRA')) + ' footprint'
+                      : f.kind, members: f.equipment.slice(), text: f.text };
+    }
     function run() {
-        var IC = ROOT.INDEP_CLAIMS, PI = ROOT.PHYS_INDEP;
-        if (!IC || !PI) return { ok: false, err: 'physical-independence engines not loaded' };
-        var footprints = praFootprints();
+        var IC = ROOT.INDEP_CLAIMS, C = ROOT.SLCadZonal;
+        if (!IC || !C || typeof C.independenceFlags !== 'function') return { ok: false, err: 'physical-independence engines not loaded' };
+        var flags = C.independenceFlags({ claimsOnly: true });
+        var byGate = {};
+        flags.forEach(function (f) { var k = f.treeId + ':' + f.gateId; (byGate[k] = byGate[k] || []).push(f); });
         var claims = IC.extractClaims();
         var report = [], compromisedGateKeys = [];
         claims.forEach(function (c) {
-            var members = c.members.map(function (m) { return m.equipmentId; }).filter(Boolean);
             var key = c.pageId + ':' + c.gateId;
-            if (members.length < 2) {
+            var unresolved = c.members.filter(function (m) { return !(m.equipment && m.equipment.length); }).length;
+            if (c.members.length - unresolved < 2) {
                 report.push({ gate: c.gate, page: c.page, key: key, status: 'not-cross-checkable',
-                              reason: c.unresolved + ' of ' + c.members.length + ' member(s) not equipment-linked' });
+                              reason: unresolved + ' of ' + c.members.length + ' member(s) not equipment-linked' });
                 return;
             }
-            var a = PI.assessClaim({ id: key, members: members, footprints: footprints });
-            report.push({ gate: c.gate, page: c.page, key: key,
-                          status: a.compromised ? 'compromised' : 'clear', findings: a.findings });
-            if (a.compromised) compromisedGateKeys.push(key);
+            var fl = byGate[key] || [];
+            var findings = fl.filter(function (f) { return f.severity === 'violation'; }).map(_flagFinding);
+            var advisories = fl.filter(function (f) { return f.severity !== 'violation'; }).map(_flagFinding);
+            report.push({ gate: c.gate, page: c.page, key: key, status: findings.length ? 'compromised' : 'clear', findings: findings, advisories: advisories,
+                          partial: unresolved ? unresolved + ' of ' + c.members.length + ' member(s) not equipment-linked' : null });
+            if (findings.length) compromisedGateKeys.push(key);
         });
         return {
             ok: true,
-            footprints: footprints.length,
+            footprints: praFootprints().length,
             claims: claims.length,
             crossCheckable: report.filter(function (r) { return r.status !== 'not-cross-checkable'; }).length,
             compromised: compromisedGateKeys.length,

@@ -26,14 +26,17 @@
     function _save() { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
 
     // ---- mutations (window-exposed for inline handlers) ------------------
-    window.zoneAddMajor = async function () { var c = await slPrompt('Major zone code (e.g. 100):', ''); if (c == null) return; var n = (await slPrompt('Zone name:', '')) || ''; _Z().addZone({ code: c, name: n }); _save(); _render(); };
-    window.zoneAddSub = async function (pid) { var c = await slPrompt('Sub-zone code (e.g. 110):', ''); if (c == null) return; var n = (await slPrompt('Sub-zone name:', '')) || ''; _Z().addZone({ code: c, name: n, parentId: pid }); _save(); _render(); };
-    window.zoneRename = async function (id) { var z = _Z().get(id); var n = await slPrompt('Zone name:', z ? z.name : ''); if (n == null) return; _Z().rename(id, n); var c = await slPrompt('Zone code:', z ? z.code : ''); if (c != null) _Z().setCode(id, c); _save(); _render(); };
+    // a refused zone change (a code another zone already has) is said, not swallowed (19 Oct 2026, zones-3)
+    function _zErr(msg) { try { if (typeof showToast === 'function') showToast(msg, 'error', 5000); else if (typeof slAlert === 'function') slAlert(msg); } catch (_) {} }
+    window.zoneAddMajor = async function () { var c = await slPrompt('Major zone code (e.g. 100):', ''); if (c == null) return; var n = (await slPrompt('Zone name:', '')) || ''; var r = _Z().addZone({ code: c, name: n }); if (r && r.ok === false) _zErr(r.err); _save(); _render(); };
+    window.zoneAddSub = async function (pid) { var c = await slPrompt('Sub-zone code (e.g. 110):', ''); if (c == null) return; var n = (await slPrompt('Sub-zone name:', '')) || ''; var r = _Z().addZone({ code: c, name: n, parentId: pid }); if (r && r.ok === false) _zErr(r.err); _save(); _render(); };
+    window.zoneRename = async function (id) { var z = _Z().get(id); var n = await slPrompt('Zone name:', z ? z.name : ''); if (n == null) return; _Z().rename(id, n); var c = await slPrompt('Zone code:', z ? z.code : ''); if (c != null && String(c).trim() !== String(z ? z.code : '')) { var rc = _Z().recode ? _Z().recode(id, c) : _Z().setCode(id, c); if (rc && rc.ok === false) _zErr(rc.err); } _save(); _render(); };
     window.zoneDelete = async function (id) { if (!(await slConfirm('Delete this zone and all its sub-zones? Equipment assignments here are removed.', { danger: true, okText: 'Delete' }))) return; _Z().remove(id); _save(); _render(); };
     window.zoneAssign = function (id, sel) { if (sel && sel.value) { _Z().assign(id, sel.value); _save(); _render(); } };
     window.zoneUnassign = function (id, sys) { _Z().unassign(id, sys); _save(); _render(); };
     window.zoneAddBarrier = function () { var a = document.getElementById('zbar-a'), b = document.getElementById('zbar-b'), t = document.getElementById('zbar-type'); if (!a || !b) return; var r = _Z().addBarrier(a.value, b.value, t ? t.value : 'firewall', false); if (!r.ok) { try { if (typeof showToast === 'function') showToast(r.err, 'warning'); } catch (_) {} return; } _save(); _render(); };
     window.zoneRemoveBarrier = function (id) { _Z().removeBarrier(id); _save(); _render(); };
+    window.zoneSetBarrierMaterial = function (id) { var m = document.querySelector('[data-zbar-mat="' + id + '"]'), q = document.querySelector('[data-zbar-req="' + id + '"]'); if (!_Z().setBarrierMaterial) return; var r = _Z().setBarrierMaterial(id, m ? m.value : '', q ? q.value : ''); if (r && r.ok === false) _zErr(r.err); _save(); _render(); };
     window.zoneToggleBarrierSub = function (id) { var b = _Z().barriers().find(function (x) { return x.id === id; }); _Z().setBarrierSubstantiated(id, !(b && b.substantiated)); _save(); _render(); };
 
     window.zoneCrossCheck = function (apply) {
@@ -50,7 +53,9 @@
             } else {
                 var rows = (r.report || []).map(function (x) {
                     var col = x.status === 'compromised' ? '#8E2A2A' : x.status === 'clear' ? '#1E7A34' : '#8a8a8a';
-                    return '<div style="font-size:12px;padding:2px 0;color:' + col + ';">' + _esc(x.gate) + ' · ' + _esc(x.page) + ' — <b>' + x.status + '</b>' + (x.reason ? ' (' + _esc(x.reason) + ')' : '') + '</div>';
+                    return '<div style="font-size:12px;padding:2px 0;color:' + col + ';">' + _esc(x.gate) + ' · ' + _esc(x.page) + ' — <b>' + x.status + '</b>' + (x.reason ? ' (' + _esc(x.reason) + ')' : '') +
+                        ((x.findings || []).length ? '<div style="margin-left:14px;">' + x.findings.map(function (f) { return _esc(f.label); }).join('; ') + '</div>' : '') +
+                        ((x.advisories || []).length ? '<div style="margin-left:14px;">To check (does not compromise on its own): ' + x.advisories.map(function (f) { return _esc(f.label || f.flag); }).join('; ') + '</div>' : '') + '</div>';
                 }).join('');
                 box.innerHTML = '<div style="font-size:12.5px;margin-bottom:4px;">Claims: ' + r.claims + ' · cross-checkable: ' + r.crossCheckable + ' · <b style="color:#8E2A2A;">compromised: ' + r.compromised + '</b> · authored footprints: ' + r.footprints + '</div>' + rows;
             }
@@ -95,7 +100,12 @@
             var za = Z.get(b.a) || {}, zb = Z.get(b.b) || {};
             return '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;padding:2px 0;">' +
                 '<span>' + _esc(za.code || b.a) + ' ⊣ ' + _esc(zb.code || b.b) + ' · ' + _esc(b.type) + '</span>' +
-                '<button onclick="zoneToggleBarrierSub(\'' + b.id + '\')" style="margin-left:auto;font-size:10px;padding:1px 8px;border:1px solid ' + (b.substantiated ? '#1E7A34' : '#8E2A2A') + ';border-radius:5px;cursor:pointer;background:transparent;color:' + (b.substantiated ? '#1E7A34' : '#8E2A2A') + ';">' + (b.substantiated ? 'substantiated ✓' : 'claimed — substantiate') + '</button>' +
+                // 19 Oct 2026: credit needs the material on record and a verified requirement on it (ZONES.barrierCredit)
+                (function () { var cr = Z.barrierCredit ? Z.barrierCredit(b) : { credit: !!b.substantiated, text: '' };
+                  return '<input data-zbar-mat="' + b.id + '" value="' + _esc(b.material || '') + '" placeholder="material (e.g. titanium firewall 0.4 mm)" style="font-size:11px;padding:1px 4px;width:190px;border:1px solid var(--color-border-hair);border-radius:4px;">' +
+                    '<input data-zbar-req="' + b.id + '" value="' + _esc(b.requirementId || '') + '" placeholder="requirement id" style="font-size:11px;padding:1px 4px;width:110px;border:1px solid var(--color-border-hair);border-radius:4px;">' +
+                    '<button onclick="zoneSetBarrierMaterial(\'' + b.id + '\')" style="font-size:10px;padding:1px 8px;border:1px solid #007AFF;border-radius:5px;background:transparent;color:#007AFF;cursor:pointer;">save</button>' +
+                    '<span data-zbar-credit="' + (cr.credit ? 'yes' : 'no') + '" style="margin-left:auto;font-size:11px;font-weight:600;color:' + (cr.credit ? '#1E7A34' : '#8E2A2A') + ';" title="' + _esc(cr.text) + '">' + (cr.credit ? 'credited' : 'no credit') + ': ' + _esc(cr.text) + '</span>'; })() +
                 '<button onclick="zoneRemoveBarrier(\'' + b.id + '\')" style="color:#8E2A2A;border:none;background:transparent;cursor:pointer;font-size:12px;">×</button></div>';
         }).join('') : '<div style="font-size:11px;color:var(--color-text-primary);">No barriers. Add one where a firewall / segregation separates redundant equipment across zones.</div>';
         var form = Z.all().length >= 2 ? '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap;align-items:center;">' +
