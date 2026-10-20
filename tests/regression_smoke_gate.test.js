@@ -48,7 +48,9 @@ console.log('\n[1] The gate is wired into ship.sh, and it blocks');
   // genFTAEvents when A2 shipped — and four builds went out behind a green wall that was
   // not running them. This is the wall lying about itself, which is worse than any single
   // bug it might miss, so it is pinned here.
-  check('the wall captures each suite\'s exit code', /node "\$t" >> "\$LOG" 2>&1\s*\n\s*RC=\$\?/.test(ship),
+  // 19 Oct 2026: each suite now runs through run_suite (time limit, Node exit hang guards) into its own log; the exit
+  // code is still captured straight after, on the first run and on the re-run after a stop at the limit.
+  check('the wall captures each suite\'s exit code', (ship.match(/run_suite "\$t" "\$SLOG"\s*\n\s*RC=\$\?/g) || []).length === 2,
         'without RC=$? a crashed suite is indistinguishable from a clean one');
   check('a non-zero exit with no FAIL line is counted as a CRASH',
         /if \[ \$RC -ne 0 \]; then[\s\S]{0,300}?CRASHES=\$\(\(CRASHES \+ 1\)\)/.test(ship));
@@ -56,7 +58,7 @@ console.log('\n[1] The gate is wired into ship.sh, and it blocks');
         /if \[ "\$CRASHES" != "0" \]; then[\s\S]{0,600}?exit 1/.test(ship));
   check('the crash count is reported every run, green or not', /echo "crashed    : \$CRASHES"/.test(ship));
   check('the crash block names the offending suites and their error',
-        /suites that could not run/.test(ship) && /grep -E 'Error\|error:'/.test(ship));
+        /suites that could not run/.test(ship) && /grep -E 'Error\|error:\|\^  CRASHED  stopped'/.test(ship));
   // Ordering: the crash gate must come BEFORE the "WALL GREEN" line, or a crashed run
   // could still print green above its own refusal.
   check('the crash gate runs before WALL GREEN is printed',

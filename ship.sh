@@ -38,14 +38,40 @@ echo "── wall ────────────────────�
 COUNT=0
 CRASHED=""
 CRASHES=0
+RERUN=""
+# 19 Oct 2026: Node 24 and 26 can hang forever at exit, after a suite has printed every result (0% CPU, the main
+# thread stuck joining V8's background threads while a background compile waits for a garbage collection that never
+# comes; nodejs/node#64274, fix pending in nodejs/node#66171, not in a release yet). It froze a ship for 10+ minutes
+# on regression_fta_transfer_ids. Two guards:
+#   1. every suite runs with the two background compilers that trigger it turned off (--no-maglev
+#      --no-concurrent-sparkplug; measured elsewhere as 6 hangs in 1019 runs down to 0). Same results, a little slower.
+#   2. every suite has a time limit (SUITE_LIMIT seconds, default 300; the slowest suite takes about 85 s). A suite
+#      stopped at the limit runs once more; only its second run counts. Stopped twice: CRASHED, and nothing deploys.
+#      Nothing is ever passed on a guess from its output.
+# Drop guard 1 once a Node release carries the upstream fix.
+SUITE_LIMIT=${SUITE_LIMIT:-300}
+NODE_WALL_FLAGS="--no-maglev --no-concurrent-sparkplug"
+# perl runs the suite as its child and, at the limit, kills it and exits 142 itself (so bash prints no signal notice)
+SUITE_RUNNER='my $t = shift; my $pid = fork; if (!$pid) { exec @ARGV; exit 127 }
+  $SIG{ALRM} = sub { kill "KILL", $pid; waitpid($pid, 0); exit 142 }; alarm $t; waitpid($pid, 0);
+  exit(($? & 127) ? 128 + ($? & 127) : $? >> 8)'
+run_suite() { perl -e "$SUITE_RUNNER" "$SUITE_LIMIT" node $NODE_WALL_FLAGS "$1" > "$2" 2>&1; }
 # 5 Sep 2026 — the glob was tests/*.test.js alone, so eval/regression_ai_repeatability
 # (the scorer's OWN mutation proofs — the checks that prove eval_core's agreement
 # metrics measure what they claim) had never run on a deploy. Waqas: "widen it".
 for t in tests/*.test.js eval/*.test.js; do
   [ -e "$t" ] || continue
   echo "### $t" >> "$LOG"
-  node "$t" >> "$LOG" 2>&1
+  SLOG=$(mktemp /tmp/sla-suite.XXXXXX)
+  run_suite "$t" "$SLOG"
   RC=$?
+  if [ $RC -eq 142 ]; then   # stopped at the time limit (SIGALRM): run it once more, and only that run counts
+    echo "  (stopped at the ${SUITE_LIMIT}s limit: running $t once more)"
+    RERUN="$RERUN $t"
+    run_suite "$t" "$SLOG"
+    RC=$?
+  fi
+  cat "$SLOG" >> "$LOG"
   COUNT=$((COUNT + 1))
   # 20 Aug 2026 — the exit code used to be DISCARDED. The gate grepped only for
   # "  FAIL  " lines, so a suite that threw on load printed a stack trace, emitted no
@@ -53,13 +79,18 @@ for t in tests/*.test.js eval/*.test.js; do
   # that way (regression_req_bucketing and regression_ccmr_pairtrace, both killed by a
   # helper added to assurance_modules) and four builds shipped behind a green wall that
   # was not running them. A suite that cannot start is not a suite that passed.
+  # 19 Oct 2026: judged on THIS suite's own output ($SLOG). It read the last 200 lines of the whole log, so a suite
+  # that crashed right after one that failed borrowed that suite's FAIL line and was not counted as crashed. A suite
+  # stopped at the time limit twice is always counted as crashed.
   if [ $RC -ne 0 ]; then
-    if ! tail -n 200 "$LOG" | grep -qE '^  FAIL  '; then
+    if [ $RC -eq 142 ] || ! grep -qE '^  FAIL  ' "$SLOG"; then
       CRASHES=$((CRASHES + 1))
       CRASHED="$CRASHED $t"
-      echo "  CRASHED  exit $RC — suite did not run to completion" >> "$LOG"
+      if [ $RC -eq 142 ]; then echo "  CRASHED  stopped at the ${SUITE_LIMIT}s limit twice — suite did not finish" >> "$LOG"
+      else echo "  CRASHED  exit $RC — suite did not run to completion" >> "$LOG"; fi
     fi
   fi
+  rm -f "$SLOG"
 done
 
 # House style: a real failure is a line beginning with exactly two spaces + FAIL.
@@ -69,13 +100,14 @@ FAILS=$(grep -cE '^  FAIL  ' "$LOG" || true)
 echo "suites run : $COUNT"
 echo "real fails : $FAILS"
 echo "crashed    : $CRASHES"
+[ -n "$RERUN" ] && echo "run twice  :$RERUN (the first run hit the time limit)"
 
 if [ "$CRASHES" != "0" ]; then
   echo
   echo "── suites that could not run ────────────────────────"
   for c in $CRASHED; do
     echo "  $c"
-    awk -v s="$c" '$0=="### "s{f=1;next} /^### /{f=0} f' "$LOG" | grep -E 'Error|error:' | head -2 | sed 's/^/      /'
+    awk -v s="$c" '$0=="### "s{f=1;next} /^### /{f=0} f' "$LOG" | grep -E 'Error|error:|^  CRASHED  stopped' | head -2 | sed 's/^/      /'
   done
   echo
   echo "NOT DEPLOYING — $CRASHES suite(s) failed to run. A suite that cannot start has not passed."

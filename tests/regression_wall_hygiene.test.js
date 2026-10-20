@@ -107,6 +107,14 @@ check('ship.sh counts failures with the anchored form',
 check('ship.sh distinguishes a crash from a failure with the anchored form',
       /grep -qE '\^  FAIL  '/.test(ship));
 check('ship.sh still treats a non-zero exit with no FAIL line as a crash', /CRASHES=\$\(\(CRASHES \+ 1\)\)/.test(ship));
+// 6. (19 Oct 2026) the Node exit hang guards: Node 24/26 can hang forever at exit after a suite has passed
+// (nodejs/node#64274). It froze two ships on regression_fta_transfer_ids (13 hangs in 40 runs with Node's defaults,
+// 0 in 240 with these two compilers off). Every suite runs with them off and under a time limit, and a suite stopped
+// at the limit runs once more, never passed on a guess.
+check('ship.sh runs every suite with the two background compilers that cause the exit hang turned off', /NODE_WALL_FLAGS="--no-maglev --no-concurrent-sparkplug"/.test(ship) && /node \$NODE_WALL_FLAGS "\$1"/.test(ship));
+check('ship.sh gives every suite a time limit and runs a stopped one once more', /alarm \$t;/.test(ship) && /perl -e "\$SUITE_RUNNER" "\$SUITE_LIMIT"/.test(ship) && /if \[ \$RC -eq 142 \]; then[^\n]*\n[^\n]*running \$t once more/.test(ship));
+check('ship.sh never runs a suite outside those guards', !/^\s*node "\$t"/m.test(ship));
+check('ship.sh judges a crash on the suite\'s own output, never on another suite\'s FAIL line', /grep -qE '\^  FAIL  ' "\$SLOG"/.test(ship) && !/tail -n 200 "\$LOG" \| grep/.test(ship));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
