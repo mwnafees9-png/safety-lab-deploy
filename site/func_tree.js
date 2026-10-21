@@ -1,7 +1,7 @@
 // ============================================================================
 // func_tree.js, v1.0, 21 Oct 2026: aircraft functions to any depth.
 //
-// Waqas's ruling (21 Oct 2026): full tree support. Customers such as Radia keep
+// Waqas's ruling (21 Oct 2026): full tree support. Customers keep
 // a function decomposition that goes far deeper than "function, sub-function",
 // and they keep it live in Jama. Safety Lab must hold the whole tree, not a
 // flattened copy of it.

@@ -38,7 +38,7 @@
 //
 // Write-back stays the M8 ReqIF file until phase 2 earns API writes.
 //
-// v2.0, 21 Oct 2026 (Waqas: track Radia's aircraft functions live from Jama, full tree).
+// v2.0, 21 Oct 2026 (Waqas: track a customer's aircraft functions live from Jama, full tree).
 //   * ITEM TYPES DECIDE WHERE THINGS GO. v1 pulled every item in the project and filed all of
 //     them as requirements, functions and folders included. The engineer now picks which Jama
 //     item types are FUNCTIONS and which are REQUIREMENTS; only those are read, and nothing is
@@ -291,8 +291,59 @@
     function _pending(d) {
         if (!d) return 0;
         const r = d.req ? d.req.fresh.length + d.req.changed.length + d.req.missing.length : 0;
-        const f = (d.fn && _T()) ? _T().pending(d.fn) : 0;
+        const f = (d.fn && _T()) ? _T().pending(d.fn) + ((d.fn.revised || []).length) : 0;
         return r + f;
+    }
+
+    // ---------------------------------------------------- Jama revision numbers
+    // 21 Oct 2026 (the customer AFHA template layout: the Title reads "<Jama key> <name>, Rev <n>"). Jama does
+    // not put an item's version in its item lists; the versions list of one item does, as its
+    // count. It is read only where it can have changed: a function not yet in the model, one never
+    // read, or one Jama modified since the last check. A new number is a change like any other:
+    // listed for review (REVISION) and written only when someone signs. Read only when the
+    // project shows Jama revisions (the customer AFHA template layout), because it costs one call per item.
+    function _wantsRevisions() { try { return !!(window.SLAfhaTpl && window.SLAfhaTpl.active()); } catch (_) { return false; } }
+    async function bridgeReadRevisions(items, cfg, d, fetchVersions) {
+        const T = _T(); if (!T || !d || !d.fn) return d;
+        const ty = _types(cfg), fnSet = new Set(ty.fn);
+        const rows = (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || [];
+        const byRemote = new Map();
+        rows.forEach(r => { if (r && r.fnSource && r.fnSource.tool === TOOL) byRemote.set(Number(r.fnSource.remoteId), r); });
+        const need = (items || []).filter(n => n && fnSet.has(n.type)).filter(n => {
+            const r = byRemote.get(Number(n.id));
+            return !r || r.fnSource.version == null || String(r.fnSource.lastChange || '') !== String(n.modified || '');
+        });
+        const versions = new Map();
+        for (let i = 0; i < need.length; i++) {
+            _setProgress('Reading Jama revision numbers: ' + (i + 1).toLocaleString() + ' of ' + need.length.toLocaleString());
+            try {
+                const data = await fetchVersions(need[i].id);
+                const pi = data && data.meta && data.meta.pageInfo;
+                const n = pi && pi.totalResults != null ? Number(pi.totalResults) : null;
+                if (n != null && isFinite(n) && n > 0) versions.set(Number(need[i].id), n);
+            } catch (e) { if (!d.warnings.some(w => /revision numbers/.test(w))) d.warnings.push('Some Jama revision numbers could not be read (' + (e && e.message || e) + '); they are read again at the next check.'); }
+        }
+        d.fn.versions = versions;
+        d.fn.revised = [];
+        versions.forEach((v, id) => {
+            const r = byRemote.get(id);
+            if (r && Number(r.fnSource.version) !== v) {
+                const it = (items || []).find(n => n && Number(n.id) === id);
+                d.fn.revised.push({ remoteId: id, key: r.fnSource.key || (it && it.key) || '', name: (it && it.name) || r.subName || r.funcName || '', from: r.fnSource.version == null ? null : Number(r.fnSource.version), to: v });
+            }
+        });
+        return d;
+    }
+    // After the signed apply: every row from Jama whose revision was read takes it (new rows too).
+    function _applyRevisions(fn, store, by, at) {
+        if (!fn || !(fn.versions instanceof Map) || !Array.isArray(store)) return 0;
+        let n = 0;
+        store.forEach(r => {
+            if (!r || !r.fnSource || r.fnSource.tool !== TOOL) return;
+            const v = fn.versions.get(Number(r.fnSource.funcOnly ? r.fnSource.remoteId : r.fnSource.remoteId));
+            if (v != null && Number(r.fnSource.version) !== v) { r.fnSource.version = v; r.fnSource.versionReadAt = at; r.fnSource.versionBy = by; n++; }
+        });
+        return n;
     }
 
     // ------------------------------------------------------------ the apply
@@ -331,8 +382,9 @@
             const r = _T().applyFunctions(d.fn, store, { signedBy: by, at, newId: _newId });
             if (!r.ok) return r;
             out.fn = r;
+            r.revised = _applyRevisions(d.fn, store, by, at);
         }
-        const fnTxt = out.fn ? '; functions +' + out.fn.added + ' new, ' + out.fn.updated + ' updated, ' + out.fn.moved + ' moved, ' + out.fn.fnUpdated + ' renamed under a changed top function, ' + out.fn.flagged + ' flagged missing' : '';
+        const fnTxt = out.fn ? '; functions +' + out.fn.added + ' new, ' + out.fn.updated + ' updated, ' + out.fn.moved + ' moved, ' + out.fn.fnUpdated + ' renamed under a changed top function, ' + out.fn.flagged + ' flagged missing' + (out.fn.revised ? ', ' + out.fn.revised + ' Jama revision number(s) recorded' : '') : '';
         try { if (typeof window.jrnl === 'function') window.jrnl('bridge-sync', 'Jama live sync applied: requirements +' + out.added + ' new, ' + out.updated + ' updated, ' + out.flagged + ' flagged missing' + fnTxt + '. Signed ' + by); } catch (_) {}
         try { if (out.fn && typeof window.renderACFunctions === 'function') window.renderACFunctions(); } catch (_) {}
         try { if (typeof window.renderACReq === 'function') window.renderACReq(); } catch (_) {}
@@ -352,6 +404,7 @@
             const base = String(cfg.baseUrl).replace(/\/+$/, '');
             _setProgress('Building the function tree...');
             _lastDiff = await bridgeStage(items, cfg, id => _get(base + '/rest/latest/items/' + encodeURIComponent(id)));
+            if (_lastDiff.fn && _wantsRevisions()) await bridgeReadRevisions(items, cfg, _lastDiff, id => _get(base + '/rest/latest/items/' + encodeURIComponent(id) + '/versions?maxResults=1&startAt=0'));
             const d = _lastDiff, f = d.fn;
             const fnTxt = f ? '; functions ' + f.total + ' read: ' + f.fresh.length + ' new, ' + f.changed.length + ' changed, ' + f.moved.length + ' moved, ' + f.fnChanged.length + ' top function(s) renamed, ' + f.missing.length + ' missing' : '';
             try { if (typeof window.jrnl === 'function') window.jrnl('bridge-check', 'Jama checked: ' + items.length + ' item(s). Requirements ' + d.req.fresh.length + ' new, ' + d.req.changed.length + ' changed, ' + d.req.missing.length + ' missing' + fnTxt); } catch (_) {}
@@ -433,13 +486,14 @@
                 (f ? ' · functions: ' + f.total.toLocaleString() + ' read, ' + f.unchanged.toLocaleString() + ' unchanged' : '') +
                 ' · requirements: ' + r.unchanged.length.toLocaleString() + ' unchanged</span></div>';
             (d.warnings || []).forEach(w => { html += '<div style="font-size:11px; color:var(--color-warning); margin-bottom:4px;">' + _esc(w) + '</div>'; });
-            if (f && _T().pending(f)) {
+            if (f && (_T().pending(f) || (f.revised || []).length)) {
                 html += '<div style="font-size:11px; font-weight:700; margin:6px 0 3px;">Aircraft functions</div><table class="data-table" style="width:100%;"><tbody>' +
                     f.fnChanged.slice(0, SHOW).map(x => _row('FUNCTION RENAMED', 'var(--color-warning)', x.item.key + ', ' + x.item.name, x.fields.join(' and ') + ' changed; applies to ' + x.rows.length + ' row(s)')).join('') + _more(f.fnChanged.length) +
                     f.fresh.slice(0, SHOW).map(x => _row('NEW', 'var(--color-success)', x.item.key + ', ' + x.item.name, x.funcOnly ? 'top-level function, nothing under it yet' : _fnPlace(x))).join('') + _more(f.fresh.length) +
                     f.changed.slice(0, SHOW).map(x => _row('CHANGED', 'var(--color-warning)', (x.row.subId || x.row.funcId) + ', ' + x.item.name, x.fields.join('; '))).join('') + _more(f.changed.length) +
                     f.moved.slice(0, SHOW).map(x => _row('MOVED', 'var(--color-accent)', (x.row.subId || '') + ', ' + x.item.name, 'now ' + _fnPlace(x))).join('') + _more(f.moved.length) +
                     f.missing.slice(0, SHOW).map(x => _row('MISSING', 'var(--color-danger)', (x.row.subId || x.row.funcId) + ', ' + (x.row.subName || x.row.funcName || ''), x.why + '. Flagged, never deleted.')).join('') + _more(f.missing.length) +
+                    (f.revised || []).slice(0, SHOW).map(x => _row('REVISION', 'var(--color-text-secondary)', (x.key || '') + ', ' + (x.name || ''), x.from == null ? 'Jama revision ' + x.to + ' (first read)' : 'Jama revision ' + x.from + ' is now ' + x.to)).join('') + _more((f.revised || []).length) +
                     '</tbody></table>';
             }
             if (r.fresh.length + r.changed.length + r.missing.length) {
@@ -573,5 +627,6 @@
     window.bridgeStage = bridgeStage;
     window.bridgeApply = bridgeApply;
     window.bridgeCheck = bridgeCheck;
+    window.bridgeReadRevisions = bridgeReadRevisions;
     window._bridgeGet = _get;
 })();

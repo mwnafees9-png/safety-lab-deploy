@@ -119,7 +119,7 @@ const ExcelImport = (function() {
             subId:    ['subid', 'subfunctionid'],
             subName:  ['subname', 'subfunctionname'],
             subDef:   ['subdef', 'subfunctiondefinition', 'subfunctiondescription'],
-            // 21 Oct 2026 (Radia: every level in ONE column, only the numbering says which level).
+            // 21 Oct 2026 (a customer's sheet: every level in ONE column, only the numbering says which level).
             // The outline number (1, 1.1, 1.1.1, AF-1.2.3) decides the level and the parent; the
             // name and description columns then hold every level. See _importFunctionOutline.
             outline:  ['outline', 'outlinenumber', 'number', 'no', 'num', 'nr', 'functionnumber', 'functionno', 'fnno',
@@ -997,7 +997,7 @@ const ExcelImport = (function() {
         return count;
     }
 
-    // ---- functions from ONE column, levels from the numbering (21 Oct 2026, Radia) ----------
+    // ---- functions from ONE column, levels from the numbering (21 Oct 2026) ----------
     // Each row: a number (1, 1.1, 1.1.1 ...), a name and a description. Depth 1 is an aircraft
     // function (funcId = its number). Every deeper row is a sub-function row of that function
     // (subId = its number), under the row whose number it extends (parentSubId), to any depth.

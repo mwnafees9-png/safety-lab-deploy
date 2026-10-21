@@ -4356,7 +4356,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- J1 — live bridge: Jama tracking via /api/bridge (read-only phase 1). -->
     <!-- 21 Oct 2026 (live Jama functions): jama_tree.js maps the Jama function tree onto Safety Lab rows; pure, loads before the bridge. -->
     <script src="jama_tree.js?v=1.0" defer></script>
-    <script src="live_bridge.js?v=2.0" defer></script>
+    <script src="live_bridge.js?v=2.1" defer></script>
     <!-- M5 — Cameo/SysML XMI import (draft socket awaiting the program sample). -->
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab
@@ -4604,6 +4604,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 6 Oct 2026: floating seats on a customer's own server (the server holds the license). -->
     <script src="slab_seats.js?v=1.0" defer></script>
     <script src="server_ai_key.js?v=1.0" defer></script>
+    <!-- 21 Oct 2026: the customer AFHA template layout (license feature "afha-customer-template"): the Aircraft FHA page and its export in a customer's own template. Off unless the license names it. -->
+    <script src="afha_template.js?v=1.0" defer></script>
+    <script src="afha_template_export.js?v=1.0" defer></script>
     <script src="auth_gate.js?v=62.76" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the
