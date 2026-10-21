@@ -76,7 +76,8 @@ check('the proxy\'s writer marks its rows proxy', /coalesce\(p_ok, true\), left\
 check('...and only the service role may call it', /revoke execute on function public\.audit_ai_call_observed\([^)]*\) from public, anon, authenticated;/.test(D) && /grant  execute on function public\.audit_ai_call_observed\([^)]*\) to service_role;/.test(D));
 check('...a row for a user the database does not know is refused, not stored nameless', /if p_user is null or not exists \(select 1 from public\.users u where u\.id = p_user\) then\s+raise exception/.test(D));
 check('the hash chain is not touched here (widening it is SEC-0d)', !/audit_log_chain/.test(D.replace(/--[^\n]*/g, '')));
-check('25_ is its twin and apply.sh runs it after 24', strip(D.slice(D.indexOf('alter table public.audit_log add column'))) === strip(K25.slice(K25.indexOf('alter table public.audit_log add column'))) && / 24_private_schema_usage 25_ai_ledger_from_proxy; do/.test(APPLY));
+// 21 Oct 2026: 26_server_admin_check now follows 25 in apply.sh; the check is that 25 runs right after 24.
+check('25_ is its twin and apply.sh runs it after 24', strip(D.slice(D.indexOf('alter table public.audit_log add column'))) === strip(K25.slice(K25.indexOf('alter table public.audit_log add column'))) && / 24_private_schema_usage 25_ai_ledger_from_proxy[ ;]/.test(APPLY));
 check('the database proof covers the proxy ledger', ['marked proxy', 'claims the proxy saw it', 'marked app', 'same hash chain', 'does not know is refused'].every(t => CH.includes(t)));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

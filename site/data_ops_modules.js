@@ -40,13 +40,24 @@ function processCSVUpload(event) {
 // Mirrors triggerCSVImport/processCSVUpload: reads an .xlsx/.xls workbook with
 // SheetJS, converts the FIRST sheet to CSV text, then feeds it through the exact
 // same per-tab importers (importTabularCSV / importFaultTreeCSV / importComponentLibraryCSV).
+const EXCEL_TAB_KINDS = {
+    AC_Functions: 'acFunc', AC_FCIM: 'acFcim', AC_FHA: 'acFha', AC_Requirements: 'acReq', AC_Assumptions: 'acAsm',
+    Sys_Functions: 'sysFunc', Sys_FCIM: 'sysFcim', Sys_FHA: 'sysFha', Sys_Requirements: 'sysReq', Sys_Assumptions: 'sysAsm',
+    PRA: 'pra', ZSA: 'zsa', CMA: 'cma', HW_FMEA: 'fmea'
+};
 function triggerExcelImport(moduleTarget) {
     currentImportTarget = moduleTarget;
     if (moduleTarget && moduleTarget.startsWith('Sys_') && !activeSystemId) { showToast("Please open a specific System Folder first.", 'warning', 4000); return; }
     // Use the full Excel mapping importer (sheet → data type + per-column mapping + saved
     // templates) so users can map their own column headers when they don't match exactly.
+    // 21 Oct 2026: the mapping importer now knows which tab it was started from, so a sheet whose
+    // name says nothing (Sheet1, a Jama export name) lands in THIS tab instead of being skipped.
+    // Tabs the mapping importer has no shape for (Flight Phases, Items, the fault tree, the
+    // component library) keep the header-matched importer they always had.
+    const kind = EXCEL_TAB_KINDS[moduleTarget] || null;
     const mapInput = document.getElementById('import-xlsx-file');
-    if (mapInput && typeof ExcelImport !== 'undefined' && ExcelImport && typeof ExcelImport.onFilePicked === 'function') {
+    if (kind && mapInput && typeof ExcelImport !== 'undefined' && ExcelImport && typeof ExcelImport.onFilePicked === 'function') {
+        if (typeof ExcelImport.setPreferredKind === 'function') ExcelImport.setPreferredKind(kind);
         mapInput.click();
         return;
     }

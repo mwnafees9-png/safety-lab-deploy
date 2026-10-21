@@ -36,6 +36,11 @@ This runs the SQL files in order:
 20. `19_realtime_private_channels.sql`: who may join and send on the live co-editing, lock and presence channels (workspace members receive; editors send edits and locks).
 21. `20_access_rules_hardening.sql`: two-factor enforced by the database for accounts that have it turned on; projects cannot be moved between workspaces; reviewers can only record their own decision; sign-offs record the signer as the database knows them; chain checks report only what the caller can see.
 22. `21_version_archive_prune_cheap.sql`: a project with a long save history keeps saving. Each archived version stores its item count once, so the clean-up of old versions no longer re-reads every archived copy on every save.
+23. `22_self_serve_project_erasure.sql`: a project owner can erase their own project; its certificates are kept.
+24. `23_workspace_audit_events.sql`: workspace membership and role changes are recorded in the audit trail.
+25. `24_private_schema_usage.sql`: the signed-in roles may use the private schema, so account erasure works.
+26. `25_ai_ledger_from_proxy.sql`: the AI service records each AI call in the ledger itself.
+27. `26_server_admin_check.sql`: lets the server's AI service check that the person setting the server's AI key in the app is its administrator.
 
 Run this once, on an empty database. It is a fresh-install sequence, not an upgrade script:
 `00_schema_baseline.sql` fails if the tables already exist. To upgrade an existing install,

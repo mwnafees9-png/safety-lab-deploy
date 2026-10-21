@@ -63,6 +63,7 @@ const NOT_PORTED = {
 // Bucket 5 — kit-only files: things production has that no migration file ever created
 // (made in the dashboard before the repo captured DDL), or customer-install replacements.
 const KIT_ONLY = {
+  '26_server_admin_check.sql': 'customer servers only: lets the server\'s AI service ask whether the caller is the administrator before it lets them set the server\'s AI key from the app (21 Oct 2026); production keeps its AI key in Cloudflare, not in the database',
   '00_schema_baseline.sql': 'the 6 Sep 2026 capture of production, scrubbed of Safety Lab specifics',
   '06_grants_lockdown.sql': 'the 6 Sep capture lost the privilege revokes; this file reproduces production\'s grant state (verified 9 Sep 2026)',
   '17_auth_signup_trigger.sql': 'production\'s on_auth_user_created trigger lives on auth.users and was never in a migration; the kit also replaces handle_new_user() with a customer version (tier from the licence file, no trial clock)',

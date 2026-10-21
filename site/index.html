@@ -1886,6 +1886,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <div id="ai-status" style="margin-top: 10px; font-size: 12px;"></div>
                 </div>
 
+                <!-- 21 Oct 2026: on a customer's own server, its administrator sets the server's AI key here (server_ai_key.js). Hidden everywhere else. -->
+                <div id="server-ai-key-panel" class="controls" style="display:none; margin-top: 14px; border-left-color: var(--color-accent);"></div>
+
                 <!-- Advanced: BYO key fallback. Collapsed by default. -->
                 <details style="margin-top: 14px;">
                     <summary style="cursor: pointer; padding: 10px 14px; background: var(--color-surface-2); border-radius: var(--r-md); font-weight: 600; font-size: 13px; user-select: none;">
@@ -4155,7 +4158,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ui_constants.js?v=1.1" defer></script>
     <script src="config_data.js?v=1.2" defer></script>
     <script src="ai_memory.js?v=1.0" defer></script>
-    <script src="importers.js?v=1.10" defer></script>
+    <script src="importers.js?v=1.11" defer></script>
     <script src="ai_request.js?v=1.1" defer></script>
     <script src="core_modules.js?v=1.13" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
@@ -4182,7 +4185,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="gt_thread.js?v=0.91" defer></script>
     <!-- 21 Oct 2026 (full function tree): func_tree.js is the one place that knows how aircraft functions nest to any depth. Loads before the modules that render and pick functions. -->
     <script src="func_tree.js?v=1.0" defer></script>
-    <script src="data_ops_modules.js?v=66.57" defer></script>
+    <script src="data_ops_modules.js?v=66.58" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
     <script src="support_modules.js?v=66.46" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
@@ -4600,6 +4603,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="erasure.js?v=1.0" defer></script>
     <!-- 6 Oct 2026: floating seats on a customer's own server (the server holds the license). -->
     <script src="slab_seats.js?v=1.0" defer></script>
+    <script src="server_ai_key.js?v=1.0" defer></script>
     <script src="auth_gate.js?v=62.76" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the

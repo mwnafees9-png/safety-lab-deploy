@@ -71,7 +71,8 @@ and 3). Everything else is inside this folder.
    the server name or IP address from Part 1 step 5;
    the certificate file and the key file from step 6 (Windows paths look like
    `/mnt/c/SafetyLab/certs/server.crt`), or just press Enter twice if you have none;
-   the AI key from step 7 (nothing shows while you type; that is normal);
+   the AI key from step 7 (nothing shows while you type; that is normal), or type `later`
+   to add it in the app after you sign in (see "The AI key" below);
    the Workspace ID from step 7;
    the administrator's email address (yours, if you look after this server);
    your mail server's details if IT gave you them, or press Enter to skip (Part 4 explains).
@@ -124,6 +125,12 @@ prints. (Why: without a mail server nobody can check that a person owns the addr
 and the app trusts that address for invitations, the administrator role and sign-off records.
 So open sign-up is off on such a server.)
 
+Someone forgot their password? In the `selfhost` folder run
+`./reset-password.sh person@yourcompany.com`. It prints a new temporary password once, the old
+one stops working, and that person is signed out on every computer. Give them the new password
+yourself; they sign in with it and change it under Account, Change password. Nothing in their
+projects changes.
+
 ## Day to day
 
 Is it running? In the `stack` folder: `docker compose ps`. Every line should say "healthy"
@@ -133,6 +140,15 @@ by itself as long as Docker starts (Docker Desktop on Windows or a Mac; on Ubunt
 Back up these three things somewhere safe, regularly: the folder `stack/volumes/db/data`
 (your data), and the files `stack/.env` and `stack/ai-proxy.env` (the keys). Losing the keys
 with the data intact means nobody can sign in.
+
+## The AI key
+
+The AI runs through this server, so the server holds one Anthropic key for everyone; it never
+sits on anyone's computer. The administrator sets or replaces it in the app: sign in, open
+AI Assistant, Settings, and paste it under "Server AI key". The server checks it with Anthropic
+before keeping it and uses it from the next AI request. Nobody can read it back afterwards, not
+even the administrator. The key typed during the install (in `stack/ai-proxy.env`) still works;
+a key set in the app takes its place.
 
 ## Jama inside your own network (optional)
 

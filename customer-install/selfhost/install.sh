@@ -89,7 +89,9 @@ else
   echo "3) Your Anthropic API key, created INSIDE a Workspace at console.anthropic.com."
   echo "   It is not shown while you type. It is stored only in stack/ai-proxy.env on this machine."
   read -r -s -p "   Anthropic API key: " ANTHROPIC_API_KEY; echo
-  [ -n "$ANTHROPIC_API_KEY" ] || die "The API key cannot be empty. (Leave AI for later? Press Ctrl+C now and ask Safety Lab.)"
+  # 21 Oct 2026: AI can be left for later. Type "later" and the administrator adds the key in the app
+  # after signing in (AI Assistant, Settings, Server AI key); the server holds it either way.
+  [ -n "$ANTHROPIC_API_KEY" ] || die "The API key cannot be empty. Type later to add it in the app after signing in (AI Assistant, Settings, Server AI key)."
   echo
   echo "4) Optional. The Workspace id for that key (starts with wrkspc_), shown on the workspace page at"
   echo "   console.anthropic.com. Needed only for an organization-level key; press Enter to skip."

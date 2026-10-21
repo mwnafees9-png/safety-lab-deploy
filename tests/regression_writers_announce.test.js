@@ -144,7 +144,7 @@ console.log('\n[W3] the class-B reasons still hold');
   check('_chatRunActions: every caller (' + calls.length + ') autosaves after the batch', calls.length === 3 && covered.length === calls.length, covered.length + ' of ' + calls.length);
   // the Excel import commit autosaves once after the per-sheet loop
   const imp = read('importers.js');
-  const at = imp.indexOf('const n = _importInto(sheet);');
+  const at = imp.search(/const n = _importInto\(sheet(, report)?\);/);   // 21 Oct 2026: the loop also collects a report
   check('_importInto: the import commit autosaves after the loop', at > 0 && imp.slice(at, at + 2000).indexOf('scheduleAutosave()') > 0);
   // the undo/autosave wrapper still schedules the autosave
   check('_wrapForUndoAndAutosave still calls scheduleAutosave', /const r = fn\.apply\(this, arguments\);\s*scheduleAutosave\(\);/.test(undoSrc));

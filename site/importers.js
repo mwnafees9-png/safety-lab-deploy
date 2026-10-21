@@ -48,7 +48,7 @@ const ExcelImport = (function() {
             phases:   ['phases', 'flightphases', 'phaseofflight'],
             effAc:    ['effectac', 'aircrafteffect', 'effectonaircraft', 'effectoperational', 'aceffect', 'effectoffailurecondition', 'effectoffailureconditionandrationale', 'failureeffect', 'failureeffects', 'effect', 'effects', 'effectoffailure'],
             effCrew:  ['effectcrew', 'creweffect', 'effectoncrew'],
-            effPax:   ['effectpax', 'effectpassengers', 'paxeffect', 'occupanteffect'],
+            effPax:   ['effectpax', 'effectpassengers', 'effectonpassengers', 'effectonoccupants', 'paxeffect', 'occupanteffect'],
             severity: ['severity', 'classification', 'severityclass', 'hazardclass', 'severityclassification'],
             // assumptionIds must come BEFORE comments — when a single column is named
             // "Assumptions, Comments, Supporting Material" the assumption ref is the
@@ -69,7 +69,7 @@ const ExcelImport = (function() {
             phases:   ['phases', 'flightphases', 'phaseofflight'],
             effAc:    ['effectac', 'aircrafteffect', 'effectonaircraft', 'aceffect', 'failureeffect', 'failureeffects', 'effect', 'effects', 'effectoffailure'],
             effCrew:  ['effectcrew', 'creweffect', 'effectoncrew'],
-            effPax:   ['effectpax', 'effectpassengers', 'paxeffect', 'occupanteffect'],
+            effPax:   ['effectpax', 'effectpassengers', 'effectonpassengers', 'effectonoccupants', 'paxeffect', 'occupanteffect'],
             severity: ['severity', 'classification'],
             assumptionIds: [
                 'assumptionids', 'assumptions', 'assumption', 'asmids', 'asmrefs', 'asmref',
@@ -109,15 +109,21 @@ const ExcelImport = (function() {
             state:    ['state', 'status']
         },
         acFunc: {
-            // 21 Oct 2026 (full function tree): first, so "Parent Sub-Function ID" never falls to subId
-            // on the substring pass. Blank = directly under the aircraft function (never filled down).
-            parentSubId: ['parentsubfunctionid', 'parentsubid', 'parentsubfunction', 'sitsunder'],
+            // 21 Oct 2026 (full function tree). A column whose heading says "parent" (or "sits under")
+            // can only be the parent column, and the parent column only ever comes from such a
+            // heading (detectColumnMap). Blank = directly under the aircraft function.
+            parentSubId: ['parentsubfunctionid', 'parentsubid', 'parentsubfunction', 'parentid', 'parent', 'sitsunder'],
             funcId:   ['funcid', 'functionid', 'fnid', 'id'],
-            funcName: ['funcname', 'functionname', 'name'],
-            funcDef:  ['funcdef', 'definition', 'description'],
+            funcName: ['funcname', 'functionname', 'name', 'title'],
+            funcDef:  ['funcdef', 'functiondefinition', 'functiondescription', 'definition', 'description'],
             subId:    ['subid', 'subfunctionid'],
             subName:  ['subname', 'subfunctionname'],
-            subDef:   ['subdef', 'subfunctiondefinition']
+            subDef:   ['subdef', 'subfunctiondefinition', 'subfunctiondescription'],
+            // 21 Oct 2026 (Radia: every level in ONE column, only the numbering says which level).
+            // The outline number (1, 1.1, 1.1.1, AF-1.2.3) decides the level and the parent; the
+            // name and description columns then hold every level. See _importFunctionOutline.
+            outline:  ['outline', 'outlinenumber', 'number', 'no', 'num', 'nr', 'functionnumber', 'functionno', 'fnno',
+                       'wbs', 'hierarchy', 'hierarchynumber', 'levelnumber', 'itemnumber', 'itemno', 'paragraph', 'section', 'ref', 'refno']
         },
         sysFunc: {
             funcId:   ['funcid', 'functionid', 'fnid', 'id'],
@@ -324,26 +330,146 @@ const ExcelImport = (function() {
         return null;
     }
 
-    // Match a column header against the field aliases for the given kind. Two-pass:
-    //   pass 1 — exact match (a perfectly-named "Comments" beats any substring).
-    //   pass 2 — substring match (handles "Hazard Description and Effect" style headers).
-    function detectFieldFromHeader(kind, header) {
+    // Match column headings to fields (rebuilt 21 Oct 2026). The old matcher took ANY substring in
+    // EITHER direction, so a heading was claimed by whichever alias happened to contain it or be
+    // contained in it: "Global ID" became the function ID, "Owner Name" the function name, and a
+    // heading such as "Function" could land in a field that merely had "function" inside its
+    // alias. Customers' sheets (Jama exports above all) are full of such headings, so columns
+    // landed in the wrong fields with no error. Now:
+    //   exact      the whole heading is an alias ("Function ID", "Comments")              strongest
+    //   words      a run of WHOLE words in the heading is an alias of 5+ letters (so a lone
+    //              "name" or "type" inside "Owner Name" or "Item Type" claims nothing)
+    //              ("Hazard Description and Effect" -> description)
+    //   short      the heading is an alias minus a plural or an ID ("Phase" -> phases)
+    //   "parent"   a heading that says parent (or sits under) only matches a parent alias, and a
+    //              parent alias only matches such a heading
+    //   ids        a heading ending in ID / No / Number / Ref prefers a field that is an id
+    // and the whole sheet is assigned at once, best match first: each field takes ONE column,
+    // each column ONE field, so a stronger heading is never beaten by a weaker one that came first.
+    const _ID_WORDS = { id: 1, no: 1, number: 1, num: 1, nr: 1, ref: 1, key: 1, code: 1 };
+    // a heading may drop only a plural or an "ID" off the end of an alias: "Phase" is phases and
+    // "Function" is the function ID, but "Effect" is never "effect on passengers"
+    const _SHORT_TAILS = { s: 1, es: 1, id: 1, ids: 1 };
+    function _hdrKey(s) { return normName(String(s == null ? '' : s).replace(/#/g, ' number ')); }
+    function _hdrWords(s) {
+        return String(s == null ? '' : s).replace(/#/g, ' number ').replace(/([a-z])([A-Z])/g, '$1 $2')
+            .toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    }
+    function _headerCandidates(kind, header) {
         const aliases = FIELD_ALIASES[kind];
-        if (!aliases) return null;
-        const k = normName(header);
-        for (const [field, list] of Object.entries(aliases)) {
-            if (list.includes(k)) return field;
+        if (!aliases) return [];
+        const k = _hdrKey(header);
+        if (!k) return [];
+        const words = _hdrWords(header);
+        const runs = new Set();
+        for (let i = 0; i < words.length; i++) for (let j = i; j < words.length; j++) runs.add(words.slice(i, j + 1).join(''));
+        const saysParent = runs.has('parent') || runs.has('sitsunder');
+        const idTail = !!_ID_WORDS[words[words.length - 1]];
+        const out = [];
+        Object.entries(aliases).forEach(function (entry, order) {
+            const field = entry[0], list = entry[1];
+            let best = -1;
+            list.forEach(function (raw) {
+                const a = _hdrKey(raw);
+                if (!a) return;
+                if (saysParent !== /parent|sitsunder/.test(a)) return;
+                let sc = -1;
+                if (k === a) sc = 1000 + a.length;
+                else if (a.length >= 5 && runs.has(a)) sc = 500 + a.length * 10;
+                else if (k.length >= 4 && a.indexOf(k) === 0 && _SHORT_TAILS[a.slice(k.length)]) sc = 200 + k.length;
+                if (sc < 0) return;
+                if (idTail && sc < 1000 && !/id$/i.test(field) && field !== 'outline') sc -= 400;
+                if (sc > best) best = sc;
+            });
+            if (best > 0) out.push({ field: field, score: best, order: order });
+        });
+        return out;
+    }
+    function detectColumnMap(kind, headers) {
+        const cands = [];
+        (headers || []).forEach(function (h, hi) {
+            if (!h) return;
+            _headerCandidates(kind, h).forEach(function (c) { cands.push({ h: h, hi: hi, field: c.field, score: c.score, order: c.order }); });
+        });
+        cands.sort(function (a, b) { return (b.score - a.score) || (a.order - b.order) || (a.hi - b.hi); });
+        const map = {}, usedF = {}, usedH = {};
+        cands.forEach(function (c) {
+            if (usedF[c.field] || usedH[c.h]) return;
+            map[c.h] = c.field; usedF[c.field] = 1; usedH[c.h] = 1;
+        });
+        return map;
+    }
+    // One heading on its own (the FCIM pivot sniff): its best field, or null.
+    function detectFieldFromHeader(kind, header) {
+        const c = _headerCandidates(kind, header).sort(function (a, b) { return (b.score - a.score) || (a.order - b.order); });
+        return c.length ? c[0].field : null;
+    }
+
+    // ---- outline numbering (21 Oct 2026) ---------------------------------
+    // "1", "1.2", "1.2.3", "1.2.3." and "AF-1.2.3" all read; the key drops a trailing dot.
+    const _OUTLINE_RE = /^([A-Za-z][A-Za-z0-9]*[-_ ]?)?(\d+)((?:\.\d+)*)\.?$/;
+    function _outlineParts(v) {
+        const str = String(v == null ? '' : v).trim();
+        const m = _OUTLINE_RE.exec(str);
+        if (!m) return null;
+        const prefix = m[1] || '';
+        const segs = [m[2]].concat(m[3] ? m[3].slice(1).split('.') : []);
+        return { key: prefix + segs.join('.'), prefix: prefix, segs: segs, depth: segs.length };
+    }
+    function _outlineParentKey(p) { return p.depth > 1 ? p.prefix + p.segs.slice(0, -1).join('.') : ''; }
+    // Does this column hold outline numbers with more than one level? (most values parse, and at
+    // least two different depths appear, one of them below the top)
+    function _looksLikeOutline(values) {
+        const vals = values.map(v => String(v == null ? '' : v).trim()).filter(Boolean);
+        if (vals.length < 2) return false;
+        const parts = vals.map(_outlineParts);
+        const ok = parts.filter(Boolean);
+        if (ok.length < vals.length * 0.8) return false;
+        const depths = new Set(ok.map(p => p.depth));
+        return depths.size >= 2 && Math.max.apply(null, Array.from(depths)) >= 2;
+    }
+    // A functions sheet with no sub-function columns, whose numbers carry the levels: switch it to
+    // outline mode. The numbering column becomes "Number", and the name / description columns are
+    // read for every level. Returns a short description of the tree for the dialog, or null.
+    function _sniffOutline(sheet) {
+        if (sheet.kind !== 'acFunc') return null;
+        const map = sheet.columnMap, fields = Object.values(map);
+        if (fields.indexOf('subId') >= 0 || fields.indexOf('subName') >= 0 || fields.indexOf('parentSubId') >= 0) return null;
+        const colOf = f => Object.keys(map).find(h => map[h] === f);
+        const values = h => sheet.rows.map(r => r[h]);
+        let col = colOf('outline');
+        if (col && !_looksLikeOutline(values(col))) { delete map[col]; col = null; }
+        if (!col) {
+            const tryCols = [colOf('funcId')].concat(sheet.headers.filter(Boolean)).filter(Boolean);
+            col = tryCols.find(h => _looksLikeOutline(values(h))) || null;
         }
-        for (const [field, list] of Object.entries(aliases)) {
-            if (list.some(a => k.includes(a) || a.includes(k))) return field;
-        }
-        return null;
+        if (!col) return null;
+        Object.keys(map).forEach(h => { if (map[h] === 'outline' && h !== col) delete map[h]; });
+        map[col] = 'outline';
+        // the name and description, for every level
+        const nameCol = colOf('funcName') || colOf('subName') || (colOf('funcId') !== col ? colOf('funcId') : null);
+        const defCol = colOf('funcDef') || colOf('subDef');
+        Object.keys(map).forEach(h => { if (h !== col && h !== nameCol && h !== defCol) delete map[h]; });
+        if (nameCol) map[nameCol] = 'funcName';
+        if (defCol) map[defCol] = 'funcDef';
+        return _outlineSummary(sheet);
+    }
+    function _outlineSummary(sheet) {
+        const col = Object.keys(sheet.columnMap).find(h => sheet.columnMap[h] === 'outline');
+        if (!col) return null;
+        const parts = sheet.rows.map(r => _outlineParts(r[col])).filter(Boolean);
+        const depth = parts.reduce((m, p) => Math.max(m, p.depth), 0);
+        const tops = parts.filter(p => p.depth === 1).length;
+        return { column: col, levels: depth, functions: tops, below: parts.length - tops };
     }
 
     // --------------------------------------------------------------------
     // Parser — file → ImportPlan
     // --------------------------------------------------------------------
     let _currentPlan = null;
+    let _preferredKind = null;
+    // Set by the tab's own Import Excel button just before the file picker opens (data_ops_modules).
+    function setPreferredKind(kind) { _preferredKind = kind && FIELD_ALIASES[kind] ? kind : null; }
 
     async function parseFile(file) {
         const XLSX = await _loadSheetJS();
@@ -384,14 +510,13 @@ const ExcelImport = (function() {
                 routingReason = 'content sniff — ' + pivotHits + ' pivot-mode columns detected';
             }
 
-            const columnMap = {};   // { headerName: fieldName }
-            if (kind !== 'ignore') {
-                headers.forEach(h => {
-                    if (!h) return;
-                    const f = detectFieldFromHeader(kind, h);
-                    if (f && !Object.values(columnMap).includes(f)) columnMap[h] = f;
-                });
+            // The tab the import was started from (21 Oct 2026): a sheet whose name says nothing
+            // (Sheet1, Export, a Jama report name) goes to that tab instead of being skipped.
+            if (kind === 'ignore' && _preferredKind && (wb.SheetNames.length === 1 || !plan.sheets.some(x => x.kind === _preferredKind))) {
+                kind = _preferredKind;
+                routingReason = 'the tab the import was started from';
             }
+            const columnMap = kind !== 'ignore' ? detectColumnMap(kind, headers) : {};   // { headerName: fieldName }
             // Diagnostic — visible to the user in DevTools when something looks off.
             try { console.log('[ExcelImport] Sheet "' + sheetName + '" → ' + kind + ' (' + routingReason + '); columns:', columnMap); } catch(_) {}
             // Build dataRows as raw {header: value} objects so the executor can pick fields
@@ -404,7 +529,7 @@ const ExcelImport = (function() {
                 headers.forEach((h, j) => { if (h) obj[h] = r[j]; });
                 dataRows.push(obj);
             }
-            plan.sheets.push({
+            const sheetObj = {
                 name: sheetName,
                 kind,           // editable in the dialog
                 autoRouted: kind !== 'ignore',
@@ -413,10 +538,15 @@ const ExcelImport = (function() {
                 columnMap,      // editable in the dialog
                 rows: dataRows,
                 rowCount: dataRows.length
-            });
+            };
+            sheetObj.outline = _sniffOutline(sheetObj);
+            plan.sheets.push(sheetObj);
         }
-        // Fingerprint = sorted hash of sheet names; used to look up saved templates.
-        plan.fingerprint = wb.SheetNames.slice().sort().map(normName).join('|');
+        _preferredKind = null;   // one import only
+        // Fingerprint = the sheet names AND their headings (21 Oct 2026). Names alone made every
+        // "Sheet1" workbook share one saved template, so a template saved for one file was applied
+        // to a different file and its columns pointed at headings that were not there.
+        plan.fingerprint = plan.sheets.map(s => normName(s.name) + ':' + s.headers.filter(Boolean).map(normName).join(',')).sort().join('|');
         return plan;
     }
 
@@ -440,6 +570,35 @@ const ExcelImport = (function() {
         { kind: 'cma',     label: 'Common Mode' },
         { kind: 'fmea',    label: 'FMEA' }
     ];
+    // Plain names for the "Tool field" dropdown (21 Oct 2026): it showed code names (funcId,
+    // subDef) that only a developer could read.
+    const FIELD_LABELS = {
+        funcId: 'Function ID', funcName: 'Function name', funcDef: 'Function description',
+        subId: 'Sub-function ID', subName: 'Sub-function name', subDef: 'Sub-function description',
+        parentSubId: 'Sits under (parent sub-function ID)', outline: 'Number (sets the level: 1, 1.1, 1.1.1)',
+        fcId: 'Failure condition ID', fcDesc: 'Failure condition', phases: 'Flight phases',
+        effAc: 'Effect on the aircraft', effCrew: 'Effect on the crew', effPax: 'Effect on passengers',
+        severity: 'Severity', assumptionIds: 'Assumptions', comments: 'Comments', acTrace: 'Traces to aircraft FC',
+        reqId: 'Requirement ID', traceId: 'Traces to (function ID)', level: 'Level', type: 'Type',
+        text: 'Text', rat: 'Rationale', asmId: 'Assumption ID', origin: 'Origin', state: 'State',
+        awareness: 'Crew awareness', pivotTL: 'Total loss', pivotPL: 'Partial loss', pivotM: 'Malfunction',
+        tlId: 'Total loss ID', tlDesc: 'Total loss description', plId: 'Partial loss ID', plDesc: 'Partial loss description',
+        mId: 'Malfunction ID', mDesc: 'Malfunction description',
+        praId: 'PRA ID', threat: 'Threat', desc: 'Description', systems: 'Systems', csfl: 'CSFL impact',
+        affectedZones: 'Affected zones', mitigation: 'Mitigation', zoneId: 'Zone ID', equip: 'Installed equipment',
+        interference: 'Interference', housedFunctions: 'Housed functions', assessedBy: 'Assessed by',
+        assessMethod: 'Assessment method', assessedOn: 'Assessed on', findingStatus: 'Finding status',
+        cmaId: 'CMA ID', subject: 'Subject', claim: 'Claim', findings: 'Findings', status: 'Status',
+        fmeaId: 'FMEA ID', component: 'Component', failureMode: 'Failure mode', cause: 'Cause', effect: 'Effect',
+        occurrence: 'Occurrence', detection: 'Detection'
+    };
+    function _fieldLabel(field, sheet) {
+        if (sheet && sheet.kind === 'acFunc' && Object.values(sheet.columnMap || {}).indexOf('outline') >= 0) {
+            if (field === 'funcName') return 'Name (every level)';
+            if (field === 'funcDef') return 'Description (every level)';
+        }
+        return FIELD_LABELS[field] || field;
+    }
     function _kindLabel(kind) {
         const o = TAB_OPTIONS.find(x => x.kind === kind);
         return o ? o.label : kind;
@@ -504,13 +663,21 @@ const ExcelImport = (function() {
         if (headers.length === 0) {
             return '<div style="font-size:12px; color: var(--color-text-tertiary);">No detectable columns in this sheet.</div>';
         }
-        let html = '<table class="xlsx-col-table">';
+        let html = '';
+        if (sheet.kind === 'acFunc' && sheet.outline) {
+            const o = sheet.outline;
+            html += '<div style="font-size:12px; margin: 2px 0 8px; padding: 8px 10px; border: 1px solid var(--color-border-hair); background: var(--color-surface-2);">' +
+                '<b>Levels from the numbering.</b> The "' + esc(o.column) + '" column sets each row\'s level and parent: ' +
+                o.functions + ' function' + (o.functions === 1 ? '' : 's') + ' and ' + o.below + ' below ' + (o.functions === 1 ? 'it' : 'them') + ', ' + o.levels + ' level' + (o.levels === 1 ? '' : 's') + ' deep. ' +
+                'Rows already in the tool with the same number are updated, not added twice.</div>';
+        }
+        html += '<table class="xlsx-col-table">';
         html += '<thead><tr><th>Excel column</th><th style="width:34%;">→ Tool field</th><th>Sample value</th></tr></thead><tbody>';
         headers.forEach(h => {
             const mapped = sheet.columnMap[h] || '';
             const sample = sheet.rows.length ? String(sheet.rows[0][h] == null ? '' : sheet.rows[0][h]).slice(0, 80) : '';
             const opts = '<option value="">— ignore —</option>' +
-                fieldOpts.map(f => '<option value="' + f + '"' + (f === mapped ? ' selected' : '') + '>' + esc(f) + '</option>').join('');
+                fieldOpts.map(f => '<option value="' + f + '"' + (f === mapped ? ' selected' : '') + '>' + esc(_fieldLabel(f, sheet)) + '</option>').join('');
             html += '<tr>';
             html += '<td><strong>' + esc(h) + '</strong></td>';
             html += '<td><select onchange="ExcelImport.changeColumnMap(' + sheetIdx + ', \'' + esc(h).replace(/'/g, "\\'") + '\', this.value)">' + opts + '</select></td>';
@@ -564,8 +731,9 @@ const ExcelImport = (function() {
         return v == null || String(v).trim() === '';
     }
 
-    function _importInto(sheet) {
+    function _importInto(sheet, report) {
         const kind = sheet.kind;
+        if (kind === 'acFunc' && Object.values(sheet.columnMap).indexOf('outline') >= 0) return _importFunctionOutline(sheet, report || { warnings: [], errors: [] });
         const parentFields = PARENT_FIELDS_BY_KIND[kind] || [];
         const lastSeen = {};   // field → last non-blank value seen this sheet
         let count = 0;
@@ -829,6 +997,90 @@ const ExcelImport = (function() {
         return count;
     }
 
+    // ---- functions from ONE column, levels from the numbering (21 Oct 2026, Radia) ----------
+    // Each row: a number (1, 1.1, 1.1.1 ...), a name and a description. Depth 1 is an aircraft
+    // function (funcId = its number). Every deeper row is a sub-function row of that function
+    // (subId = its number), under the row whose number it extends (parentSubId), to any depth.
+    // A function with nothing under it gets its function-only row, as always.
+    // Importing the same sheet again UPDATES the rows it made (matched by function and number),
+    // so a corrected spreadsheet can be re-imported without duplicates.
+    // Refused, with nothing written, when a number appears twice: Excel stores 1.10 as the number
+    // 1.1, so two rows reading "1.1" means the numbering column lost information and any tree
+    // built from it would be wrong.
+    function _importFunctionOutline(sheet, report) {
+        const rows = [], bad = [];
+        sheet.rows.forEach(function (raw, i) {
+            const r = _pickRow(sheet, raw);
+            const p = _outlineParts(r.outline);
+            const name = String(r.funcName || r.subName || '').trim();
+            const def = String(r.funcDef || r.subDef || '').trim();
+            if (!p) { if (name || def || !_isBlank(r.outline)) bad.push(sheet.headerRow + 2 + i); return; }
+            rows.push({ p: p, name: name, def: def });
+        });
+        const seen = {}, dups = [];
+        rows.forEach(function (x) { if (seen[x.p.key]) dups.push(x.p.key); seen[x.p.key] = x; });
+        if (dups.length) {
+            report.errors.push('"' + sheet.name + '" was not imported: the number' + (dups.length > 1 ? 's ' : ' ') + Array.from(new Set(dups)).slice(0, 5).join(', ') +
+                (dups.length > 1 ? ' appear' : ' appears') + ' more than once. Excel turns 1.10 into 1.1 when the column is a number column. Format the numbering column as Text in Excel, retype those numbers, and import again.');
+            return 0;
+        }
+        if (bad.length) report.warnings.push('"' + sheet.name + '": ' + bad.length + ' row' + (bad.length > 1 ? 's have' : ' has') + ' no number Safety Lab can read and ' + (bad.length > 1 ? 'were' : 'was') + ' skipped (spreadsheet row' + (bad.length > 1 ? 's ' : ' ') + bad.slice(0, 8).join(', ') + (bad.length > 8 ? ', ...' : '') + ').');
+        const byKey = seen;
+        const missingParents = new Set();
+        function ancestorOf(p) {             // the nearest row above this one that exists
+            let k = _outlineParentKey(p), q = p;
+            while (k) {
+                if (byKey[k]) return byKey[k];
+                missingParents.add(k);
+                q = _outlineParts(k); k = q ? _outlineParentKey(q) : '';
+            }
+            return null;
+        }
+        const topKeyOf = p => p.prefix + p.segs[0];
+        const hasKids = {};
+        rows.forEach(function (x) { if (x.p.depth > 1) hasKids[topKeyOf(x.p)] = true; });
+        const store = acFunctionsData;
+        const fnInfo = {};
+        rows.forEach(function (x) { if (x.p.depth === 1) fnInfo[x.p.key] = { funcName: x.name, funcDef: x.def }; });
+        let added = 0, updated = 0;
+        rows.forEach(function (x) {
+            const top = topKeyOf(x.p);
+            if (!fnInfo[top]) { fnInfo[top] = { funcName: top, funcDef: '' }; missingParents.add(top); }
+            const f = fnInfo[top];
+            if (x.p.depth === 1) {
+                // keep every row of this function in step with its name and description
+                store.forEach(function (r) { if (r && String(r.funcId) === top) { r.funcName = f.funcName; r.funcDef = f.funcDef; } });
+                if (hasKids[top]) return;
+                const only = store.find(r => r && String(r.funcId) === top && !String(r.subId || '').trim());
+                if (only) { updated++; return; }
+                store.push({ internalId: newRowId(), funcId: top, funcName: f.funcName, funcDef: f.funcDef, subId: '', subName: '', subDef: '' });
+                added++;
+                return;
+            }
+            const up = ancestorOf(x.p);
+            const parentSubId = up && up.p.depth > 1 ? up.p.key : '';
+            const ex = store.find(r => r && String(r.funcId) === top && String(r.subId || '').trim() === x.p.key);
+            if (ex) {
+                ex.funcName = f.funcName; ex.funcDef = f.funcDef; ex.subName = x.name; ex.subDef = x.def;
+                if (parentSubId) ex.parentSubId = parentSubId; else delete ex.parentSubId;
+                updated++;
+            } else {
+                const rec = { internalId: newRowId(), funcId: top, funcName: f.funcName, funcDef: f.funcDef, subId: x.p.key, subName: x.name, subDef: x.def };
+                if (parentSubId) rec.parentSubId = parentSubId;
+                store.push(rec);
+                added++;
+            }
+        });
+        if (missingParents.size) {
+            const list = Array.from(missingParents).sort();
+            report.warnings.push('"' + sheet.name + '": no row for ' + list.slice(0, 6).join(', ') + (list.length > 6 ? ' and ' + (list.length - 6) + ' more' : '') +
+                '. The rows under ' + (list.length > 1 ? 'them were' : 'it was') + ' placed under the nearest number that does exist' + (list.some(k => !/\./.test(k)) ? ' (a missing top-level function was created with its number as its name)' : '') + '.');
+        }
+        report.counts = report.counts || {};
+        report.counts[sheet.name] = { added: added, updated: updated };
+        return added + updated;
+    }
+
     function runImport() {
         if (!_currentPlan) return;
         const counts = {};
@@ -841,9 +1093,10 @@ const ExcelImport = (function() {
             return;
         }
 
+        const report = { warnings: [], errors: [] };
         for (const sheet of _currentPlan.sheets) {
             if (sheet.kind === 'ignore') continue;
-            const n = _importInto(sheet);
+            const n = _importInto(sheet, report);
             counts[sheet.kind] = (counts[sheet.kind] || 0) + n;
             total += n;
         }
@@ -873,7 +1126,11 @@ const ExcelImport = (function() {
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_) {}
 
         const breakdown = Object.entries(counts).map(([k, v]) => v + ' ' + _kindLabel(k)).join(' · ');
-        showToast('Imported ' + total + ' rows from ' + _currentPlan.fileName + (breakdown ? ' (' + breakdown + ')' : ''), 'success', 5000);
+        showToast('Imported ' + total + ' rows from ' + _currentPlan.fileName + (breakdown ? ' (' + breakdown + ')' : ''), total ? 'success' : 'warning', 5000);
+        if (report.errors.length || report.warnings.length) {
+            try { slAlert(report.errors.concat(report.warnings).join('\n\n'), { title: report.errors.length ? 'Part of the import was refused' : 'Imported, with notes' }); } catch (_) {}
+        }
+        try { if (typeof acFuncPopulateParents === 'function') acFuncPopulateParents(); } catch (_) {}
         _currentPlan = null;
     }
 
@@ -911,7 +1168,10 @@ const ExcelImport = (function() {
             const s = plan.sheets.find(x => x.name === tplSheet.name);
             if (!s) continue;
             s.kind = tplSheet.kind;
-            s.columnMap = Object.assign({}, tplSheet.columnMap || {});
+            const cm = {};
+            Object.keys(tplSheet.columnMap || {}).forEach(h => { if (s.headers.indexOf(h) >= 0) cm[h] = tplSheet.columnMap[h]; });
+            s.columnMap = cm;
+            s.outline = _outlineSummary(s);
             s.autoRouted = false;   // template-driven, not auto
         }
         return true;
@@ -950,15 +1210,8 @@ const ExcelImport = (function() {
         sheet.kind = kind;
         sheet.autoRouted = false;
         // Re-auto-match columns for the new kind (best effort).
-        sheet.columnMap = {};
-        if (kind !== 'ignore') {
-            sheet.headers.forEach(h => {
-                if (!h) return;
-                const f = detectFieldFromHeader(kind, h);
-                if (f === 'pivotFc') sheet.columnMap[h] = f;
-                else if (f && !Object.values(sheet.columnMap).includes(f)) sheet.columnMap[h] = f;
-            });
-        }
+        sheet.columnMap = kind !== 'ignore' ? detectColumnMap(kind, sheet.headers) : {};
+        sheet.outline = _sniffOutline(sheet);
         renderDialog(_currentPlan);
         // Re-expand this card so the user sees the new mapping.
         const card = document.querySelector('[data-sheet-idx="' + idx + '"]');
@@ -969,8 +1222,14 @@ const ExcelImport = (function() {
         if (!_currentPlan) return;
         const sheet = _currentPlan.sheets[sheetIdx];
         if (!sheet) return;
+        // one column per field: choosing a field for this column takes it off any other column
+        if (field) Object.keys(sheet.columnMap).forEach(h => { if (h !== header && sheet.columnMap[h] === field) delete sheet.columnMap[h]; });
         if (field) sheet.columnMap[header] = field;
         else delete sheet.columnMap[header];
+        sheet.outline = sheet.kind === 'acFunc' ? _outlineSummary(sheet) : null;
+        renderDialog(_currentPlan);
+        const card = document.querySelector('[data-sheet-idx="' + sheetIdx + '"]');
+        if (card) card.classList.add('expanded');
     }
 
     // --------------------------------------------------------------------
@@ -978,11 +1237,13 @@ const ExcelImport = (function() {
     // --------------------------------------------------------------------
     return {
         onFilePicked, runImport, closeDialog,
-        toggleSheet, changeSheetKind, changeColumnMap,
+        toggleSheet, changeSheetKind, changeColumnMap, setPreferredKind,
         // Exposed for testing
         _internals: {
             parseFile, normSeverity, normAsmState, splitMulti, normName,
-            detectKindFromSheetName, detectFieldFromHeader, SHEET_ALIASES, FIELD_ALIASES
+            detectKindFromSheetName, detectFieldFromHeader, detectColumnMap, SHEET_ALIASES, FIELD_ALIASES,
+            outlineParts: _outlineParts, looksLikeOutline: _looksLikeOutline, sniffOutline: _sniffOutline,
+            importInto: function (sheet, report) { return _importInto(sheet, report); }, fieldLabel: _fieldLabel
         }
     };
 })();

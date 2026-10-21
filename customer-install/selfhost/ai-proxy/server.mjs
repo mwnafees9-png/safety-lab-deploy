@@ -18,6 +18,7 @@ import http from "node:http";
 import { Readable } from "node:stream";
 import worker, { verifyOfflineLicense } from "./worker.js";
 import { createSeats } from "./seats.mjs";
+import { createServerKey } from "./server_key.mjs";
 
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -31,6 +32,8 @@ if (env.LICENSE_MODE === "offline") {
     env, verifyLicense: verifyOfflineLicense,
     ttlMs: (Number(process.env.SEAT_TTL_MINUTES) || 30) * 60 * 1000,
   });
+  // 21 Oct 2026: the server's AI key, settable by its administrator from inside the app.
+  env.__serverKey = createServerKey({ dataDir: process.env.SEAT_DATA_DIR || "/data", env });
 }
 
 const server = http.createServer(async (req, res) => {

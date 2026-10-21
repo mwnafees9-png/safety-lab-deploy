@@ -13,6 +13,7 @@ if [ ! -f /var/lib/safetylab/setup-done ]; then echo "Setup has not finished yet
 while :; do
   C=$(whiptail --title "$TITLE" --menu "Running at https://${ADDR:-?}\nSetup file for users: https://${ADDR:-?}/safetylab-setup" 22 74 10 \
     add "Add a person (gives them a temporary password)" \
+    reset "Reset a forgotten password" \
     license "Load or replace the license" \
     seats "Who is using a seat now" \
     update "Install an update from Safety Lab" \
@@ -26,6 +27,12 @@ while :; do
     add)
       E=$(whiptail --title "$TITLE" --inputbox "Their work email address:" 10 74 3>&1 1>&2 2>&3) || continue
       R=$(cd $KIT && ./add-user.sh "$E" 2>&1)
+      whiptail --title "$TITLE" --msgbox "$R" 18 74 ;;
+    reset)
+      # 21 Oct 2026: a forgotten password, on a server with no mail server to send a reset link.
+      E=$(whiptail --title "$TITLE" --inputbox "Email address of the account to reset:" 10 74 3>&1 1>&2 2>&3) || continue
+      whiptail --title "$TITLE" --yesno "Give $E a new temporary password?\n\nTheir old password stops working and they are signed out on every computer." 11 74 || continue
+      R=$(cd $KIT && ./reset-password.sh "$E" 2>&1)
       whiptail --title "$TITLE" --msgbox "$R" 18 74 ;;
     license)
       # 6 Oct 2026. The license lives on this server; every user's app takes it from here.

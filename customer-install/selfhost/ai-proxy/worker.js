@@ -496,6 +496,13 @@ async function handleAnthropic(request, env, token, itar, ctx, caller, audit = n
   // S8: which key, and whether Safety Lab pays. A licence caller uses Safety Lab's key and
   // is metered. A JWT caller brings their own key from the vault and is not metered at all.
   let apiKey = env.ANTHROPIC_API_KEY, meter = true;
+  // 21 Oct 2026: on a customer's own server the key can be set by its administrator from inside
+  // the app (server_key.mjs); that one wins over ai-proxy.env. A server with no real key says so
+  // in words, instead of passing Anthropic's "invalid x-api-key" back for a placeholder.
+  if (env.__serverKey && caller && caller.kind === "license") {
+    apiKey = env.__serverKey.get();
+    if (!apiKey) return jsonResponse(503, { error: { type: "no_server_key", message: "This server has no AI key yet. Your Safety Lab administrator adds it in the app: AI Assistant, Settings, Server AI key." } });
+  }
   if (caller && caller.kind === "user") {
     const sec = await readUserSecret(env, caller.userId, "anthropic_key");
     if (sec.error) return jsonResponse(502, { error: { type: "upstream_down", message: "Secret store unreachable." } });
@@ -855,6 +862,12 @@ async function routeRequest(request, env, ctx) {
       // with the caller's sign-in token. Everywhere else these paths do not exist.
       if (url.pathname === "/v1/ai/license" || url.pathname.startsWith("/v1/ai/seat/")) {
         if (env.__seats && typeof env.__seats.handle === "function") return env.__seats.handle(request, url);
+        return jsonResponse(404, { error: { type: "not_found", message: "Unknown endpoint." } });
+      }
+      // 21 Oct 2026: the server's AI key, set by its administrator from inside the app. Only the
+      // customer's own server (server.mjs) provides env.__serverKey; everywhere else it does not exist.
+      if (url.pathname === "/v1/ai/admin/ai-key") {
+        if (env.__serverKey && typeof env.__serverKey.handle === "function") return env.__serverKey.handle(request, url);
         return jsonResponse(404, { error: { type: "not_found", message: "Unknown endpoint." } });
       }
       const auth = request.headers.get("authorization") || "";

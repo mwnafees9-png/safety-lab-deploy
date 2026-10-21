@@ -46,3 +46,42 @@ slab_create_account(){
   echo "The sign-in service refused the new account (HTTP $code): $(printf '%s' "$out" | head -n1 | cut -c1-200)" >&2
   return 1
 }
+
+# ---------------------------------------------------------------------------- password reset
+# 21 Oct 2026 (Waqas: "create the reset kit for ubuntu"). A forgotten password on a server with no
+# mail server had no way back: the sign-in service cannot email a reset link, and the temporary
+# password install.sh and add-user.sh print is shown once. reset-password.sh gives the account a
+# new temporary password the same way add-user.sh makes one, and signs that account out everywhere
+# it is still signed in, so a password that was lost (or seen by someone else) stops working on
+# every computer at once.
+
+# slab_sql STACK SQL  -> runs one statement as the database owner, prints rows unaligned.
+# Only ever called with values this file has already checked (an email that passed slab_email_ok,
+# an id that is a UUID), so nothing a person types reaches the SQL unchecked.
+slab_sql(){ (cd "$1" && docker compose exec -T db psql -U postgres -d postgres -At -v ON_ERROR_STOP=1 -q -c "$2"); }
+
+# slab_user_id STACK EMAIL  -> prints the account's id, or nothing when there is no such account.
+slab_user_id(){
+  slab_email_ok "$2" || return 1
+  slab_sql "$1" "select id from auth.users where lower(email) = lower('$2') and deleted_at is null limit 1" | tr -d '[:space:]'
+}
+
+# slab_reset_password STACK EMAIL  -> on success prints the new temporary password and returns 0.
+# Returns 2 when there is no account with that address, 1 on any other failure. Signing the
+# account out everywhere is reported on stderr and does not undo the new password if it fails.
+slab_reset_password(){
+  local stack="$1" email="$2" id pw out code
+  slab_email_ok "$email" || { echo "Not an email address: $email" >&2; return 1; }
+  [ -n "${SLAB_SERVICE_KEY:-}" ] || { echo "The service key is missing (stack/.env SERVICE_ROLE_KEY)." >&2; return 1; }
+  id="$(slab_user_id "$stack" "$email")" || { echo "Could not reach the database. Is the server running? (docker compose ps)" >&2; return 1; }
+  [ -n "$id" ] || return 2
+  [[ "$id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || { echo "The database answered with something that is not an account id." >&2; return 1; }
+  pw="$(slab_temp_password)"
+  out="$(slab_auth_api PUT "/admin/users/$id" "{\"password\":\"$pw\"}")" || { echo "Could not reach the sign-in service." >&2; return 1; }
+  code="$(printf '%s' "$out" | tail -n1)"
+  case "$code" in 200|201) ;; *) echo "The sign-in service refused the new password (HTTP $code): $(printf '%s' "$out" | head -n1 | cut -c1-200)" >&2; return 1 ;; esac
+  if ! slab_sql "$stack" "delete from auth.refresh_tokens where user_id = '$id'; delete from auth.sessions where user_id = '$id';" >/dev/null; then
+    echo "The password was changed, but signing $email out of other computers failed. Restart the server (docker compose restart) to be sure." >&2
+  fi
+  printf '%s' "$pw"; return 0
+}
