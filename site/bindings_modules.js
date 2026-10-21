@@ -851,11 +851,83 @@ window.acAddSubfuncRow = function () {
     const f = row.querySelector('.ac-xsub-name'); if (f) f.focus();
 };
 
+// 21 Oct 2026 (full function tree). The "Sits under" picker lists every sub-function in tree order,
+// grouped by aircraft function. Editing a node leaves out the node itself and everything below it,
+// so a loop cannot even be offered. Picking a parent fills in the aircraft function it belongs to.
+window.acFuncPopulateParents = function (editingRow) {
+    const sel = document.getElementById('ac-subfunc-parent');
+    if (!sel || typeof SLFuncTree === 'undefined') return;
+    const arr = (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || [];
+    // Called with no row (tab shown, list changed, picker focused) while an edit is open: keep the
+    // edit's exclusions, and keep whatever the engineer has picked so far.
+    const keep = editingRow ? String(editingRow.parentSubId || '') : sel.value;
+    if (!editingRow && typeof editStates !== 'undefined' && editStates.acFunc) {
+        editingRow = arr.find(function (r) { return r && String(r.internalId) === String(editStates.acFunc); }) || null;
+    }
+    const ix = SLFuncTree.index(arr);
+    const banned = new Set();
+    if (editingRow && editingRow.subId) {
+        banned.add(String(editingRow.subId).trim());
+        SLFuncTree.descendants(editingRow.subId, ix).forEach(function (r) { banned.add(String(r.subId || '').trim()); });
+    }
+    let html = '<option value="">Directly under the aircraft function</option>', curFn = null;
+    SLFuncTree.pickList(arr).forEach(function (p) {
+        if (banned.has(p.value)) return;
+        const fid = String(p.row.funcId || '').trim();
+        if (fid !== curFn) {
+            if (curFn !== null) html += '</optgroup>';
+            html += '<optgroup label="' + esc(fid + (p.row.funcName ? ' \u00b7 ' + p.row.funcName : '')) + '">';
+            curFn = fid;
+        }
+        html += '<option value="' + esc(p.value) + '">' + esc(p.label) + '</option>';
+    });
+    if (curFn !== null) html += '</optgroup>';
+    sel.innerHTML = html;
+    if (keep && ![...sel.options].some(function (o) { return o.value === keep; })) {
+        const o = document.createElement('option'); o.value = keep; o.textContent = keep + ' (not found)'; o.dataset.slOrphan = '1'; sel.appendChild(o);
+    }
+    sel.value = keep;
+};
+window.acFuncParentChanged = function () {
+    const sel = document.getElementById('ac-subfunc-parent');
+    if (!sel || !sel.value) return;
+    const p = (acFunctionsData || []).find(function (r) { return r && String(r.subId || '').trim() === sel.value; });
+    if (!p) return;
+    const sv = function (id, v) { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
+    sv('ac-func-id', p.funcId); sv('ac-func-name', p.funcName); sv('ac-func-def', p.funcDef);
+};
+// A node's aircraft function is the function of its whole subtree. When an edit changes the function
+// identity of a node that has sub-functions under it, the change goes down the subtree with it, so the
+// tree never splits across two functions.
+function _acFuncCascadeFunction(before, after) {
+    if (!before || !after || typeof SLFuncTree === 'undefined') return 0;
+    const same = String(before.funcId || '') === String(after.funcId || '') && String(before.funcName || '') === String(after.funcName || '') && String(before.funcDef || '') === String(after.funcDef || '');
+    if (same || !before.subId) return 0;
+    const probe = (acFunctionsData || []).map(function (r) { return r === after ? Object.assign({}, r, { funcId: before.funcId }) : r; });
+    const ix = SLFuncTree.index(probe);
+    const node = ix.bySub.get(String(before.subId).trim());
+    const below = node ? SLFuncTree.descendants(before.subId, ix) : [];
+    let n = 0;
+    below.forEach(function (d) {
+        const real = (acFunctionsData || []).find(function (r) { return r && String(r.internalId) === String(d.internalId); });
+        if (!real) return;
+        real.funcId = after.funcId; real.funcName = after.funcName; real.funcDef = after.funcDef; n++;
+    });
+    return n;
+}
 window.submitACFunction = function () {
-    if (editStates.acFunc) { acFuncCRUD.submit(); _acClearSubfuncExtras(); return; }
+    if (editStates.acFunc) {
+        const before = Object.assign({}, (acFunctionsData || []).find(function (r) { return r && String(r.internalId) === String(editStates.acFunc); }) || {});
+        acFuncCRUD.submit(); _acClearSubfuncExtras();
+        const after = (acFunctionsData || []).find(function (r) { return r && String(r.internalId) === String(before.internalId); });
+        if (after && after !== before && _acFuncCascadeFunction(before, after)) { try { renderACFunctions(); } catch (_) {} }
+        try { acFuncPopulateParents(); } catch (_) {}
+        return;
+    }
     const gv = function (id) { const e = document.getElementById(id); return e ? e.value : ''; };
     const sv = function (id, v) { const e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
     const funcName = gv('ac-func-name'), funcDef = gv('ac-func-def');
+    const parentSubId = gv('ac-subfunc-parent');
     const subRows = [{ id: gv('ac-subfunc-id'), name: gv('ac-subfunc-name'), def: gv('ac-subfunc-def') }];
     const extra = document.querySelectorAll('#ac-subfunc-extra .ac-subfunc-row');
     Array.prototype.forEach.call(extra, function (r) {
@@ -868,11 +940,30 @@ window.submitACFunction = function () {
         const s = plan[i];
         sv('ac-func-id', sharedFuncId);
         sv('ac-func-name', funcName); sv('ac-func-def', funcDef);
+        sv('ac-subfunc-parent', parentSubId);   // every sub-function of one add goes under the same parent
         sv('ac-subfunc-id', s.id); sv('ac-subfunc-name', s.name); sv('ac-subfunc-def', s.def);
         acFuncCRUD.submit();   // validates, auto-numbers blank IDs, pushes, renders, clears the form
         if (i === 0) { const last = acFunctionsData[acFunctionsData.length - 1]; if (last && last.funcId) sharedFuncId = last.funcId; }
     }
     _acClearSubfuncExtras();
+    try { acFuncPopulateParents(); } catch (_) {}
+};
+// Deleting a node that still has sub-functions under it would orphan them (and every FHA, FCIM and
+// trace row hanging off them). Refuse, and say what is underneath, the same way a system with items
+// cannot be deleted from under them.
+window._acFuncDeleteBlocked = function (internalId) {
+    if (typeof SLFuncTree === 'undefined') return false;
+    const arr = acFunctionsData || [];
+    const row = arr.find(function (r) { return r && String(r.internalId) === String(internalId); });
+    if (!row || !row.subId) return false;
+    const ix = SLFuncTree.index(arr);
+    if (ix.bySub.get(String(row.subId).trim()) !== row) return false;
+    const kids = SLFuncTree.descendants(row.subId, ix);
+    if (!kids.length) return false;
+    slAlert(row.subId + ' has ' + kids.length + ' sub-function' + (kids.length === 1 ? '' : 's') + ' under it (' +
+        kids.slice(0, 4).map(function (k) { return k.subId; }).join(', ') + (kids.length > 4 ? ', ...' : '') +
+        '). Move or delete those first, so nothing is left without a parent.');
+    return true;
 };
 
 let _fhaChartActive = null;   // { internalId, scope, fha }

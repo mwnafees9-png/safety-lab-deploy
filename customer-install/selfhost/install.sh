@@ -201,11 +201,14 @@ setenv STUDIO_DEFAULT_PROJECT "Safety Lab Aero"
 # and the service key. It was left readable by every user of this machine. Owner-only, every run.
 chmod 600 .env
 
+# 21 Oct 2026: the administrator's own line (BRIDGE_INTERNAL_HOSTS) survives a rewrite of this file.
+KEEP_BIH_LINE=$(grep '^BRIDGE_INTERNAL_HOSTS=' ai-proxy.env 2>/dev/null | tail -1 || true)
 if [ ! -f ai-proxy.env ] || [ -n "${ANTHROPIC_API_KEY:-}" ]; then
   bold "Writing the AI service settings (stack/ai-proxy.env, keep it private: it holds your AI key)"
   sed -e "s|__ANTHROPIC_API_KEY__|${ANTHROPIC_API_KEY:-}|" \
       -e "s|__ANTHROPIC_WORKSPACE_ID__|${ANTHROPIC_WORKSPACE_ID:-}|" \
       -e "s|__SERVER__|$SERVER_NAME|" "$HERE/ai-proxy.env.template" > ai-proxy.env
+  if [ -n "$KEEP_BIH_LINE" ]; then printf '%s\n' "$KEEP_BIH_LINE" >> ai-proxy.env; fi
   chmod 600 ai-proxy.env
 fi
 unset ANTHROPIC_API_KEY
@@ -387,6 +390,15 @@ if [ "$SELF_SIGNED" = 1 ]; then
   LP=$(fp volumes/proxy/certs/server.leaf.crt)
   if [ ${#LP} -eq 64 ]; then PIN="$LP"; fi
 fi
+# 21 Oct 2026: a Jama (or other ALM tool) that runs inside your own network. The live connector
+# refuses private addresses unless your administrator lists them. List them in stack/ai-proxy.env:
+#     BRIDGE_INTERNAL_HOSTS=jama.yourcompany.local,10.20.30.40:8443
+# then run this script again. The server's AI service reads it (web users), and the setup file
+# carries it to the desktop app (desktop users). Exact names only; host:port to allow a port.
+BIH=$(grep '^BRIDGE_INTERNAL_HOSTS=' ai-proxy.env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r" ' | tr 'A-Z' 'a-z' || true)
+if [ -n "$BIH" ] && ! printf '%s' "$BIH" | grep -Eq '^[a-z0-9.:,-]+$'; then
+  echo "   BRIDGE_INTERNAL_HOSTS in stack/ai-proxy.env has characters a host name cannot have; it is left out of the setup file."; BIH=""
+fi
 {
   echo '{'
   echo '  "format": "safetylab-setup/1",'
@@ -397,6 +409,7 @@ fi
   echo '  "ai": "own",'
   echo '  "aiEndpoint": "https://'"$SERVER_NAME"'/v1/ai",'
   if [ -n "$PIN" ]; then echo '  "backendPin": "'"$PIN"'",'; fi
+  if [ -n "$BIH" ]; then echo '  "bridgeInternalHosts": "'"$BIH"'",'; fi
   if [ -n "$LIC_FILE" ]; then
     printf '  "license": "%s",\n' "$(tr -d '\r\n' < "$LIC_FILE" | sed 's/\\/\\\\/g; s/"/\\"/g')"
   fi

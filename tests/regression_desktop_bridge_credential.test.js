@@ -128,7 +128,7 @@ for (const [name, re] of [
 ]) check('bridge_main enforces: ' + name, re.test(bm));
 
 check('the target host must match the SAVED connector, not one the page supplies',
-  /const meta = secrets\.metaFor\('jama'\);[\s\S]{0,200}?targetProblem\(rawUrl, meta && meta\.baseHost\)/.test(bm),
+  /const meta = secrets\.metaFor\('jama'\);[\s\S]{0,200}?targetProblem\(rawUrl, meta && meta\.baseHost(, opts && opts\.internalHosts)?\)/.test(bm),
   'reading the allowed host from the request would let the renderer point it anywhere');
 check('a fetch failure does not echo the exception, which can carry the auth header',
   /Never echo the exception verbatim/.test(bm) && !/String\(e[\s\S]{0,20}?\)/.test(bm.slice(bm.indexOf('catch (e)'), bm.indexOf('catch (e)') + 300)));

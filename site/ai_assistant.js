@@ -1603,6 +1603,18 @@
         ].filter(Boolean).join('\n');
     }
 
+    // 21 Oct 2026 (full function tree): where a sub-function sits in the decomposition, so a draft
+    // for a deep node is written at that node's level ("Fly > Pitch > Elevator authority"), not as if
+    // it were a top-level function. Only added when the node is below another sub-function.
+    function _withFuncPath(obj, f, s) {
+        try {
+            if (typeof SLFuncTree === 'undefined' || !f || !String(f.parentSubId || '').trim()) return obj;
+            const ix = SLFuncTree.index((s && s.acFunctionsData) || []);
+            if (!ix.pos.has(f) || SLFuncTree.depth(f, ix) < 2) return obj;
+            obj.path = SLFuncTree.pathText(f, ix);
+        } catch (_) {}
+        return obj;
+    }
     // Sub-functions with no FHA coverage yet (the population gap).
     function _funcsNeedingFha() {
         const s = snapshot();
@@ -1613,7 +1625,7 @@
             if (!sid || seen.has(sid)) return;
             seen.add(sid);
             if (covered.has(sid)) return;
-            out.push({ subId: sid, subName: f.subName || f.funcName || sid, subDef: f.subDef || f.funcDef || '' });
+            out.push(_withFuncPath({ subId: sid, subName: f.subName || f.funcName || sid, subDef: f.subDef || f.funcDef || '' }, f, s));
         });
         return out;
     }
@@ -5438,7 +5450,7 @@
             if (!sid || seen.has(sid)) return;
             seen.add(sid);
             if (covered.has(sid)) return;
-            out.push({ subId: sid, subName: f.subName || f.funcName || sid, subDef: f.subDef || f.funcDef || '' });
+            out.push(_withFuncPath({ subId: sid, subName: f.subName || f.funcName || sid, subDef: f.subDef || f.funcDef || '' }, f, s));
         });
         return out;
     }
@@ -8572,7 +8584,7 @@
         const s = snapshot();
         const funcs = (s.acFunctionsData || []).filter(function (f) { return f && (f.subId || f.subName); });
         if (!funcs.length) { _toast('No functions found — decompose first.', 'info'); return; }
-        const list = funcs.slice(0, 18).map(function (f) { return { ref: String(f.subId || f.subName), name: f.subName || f.subId || '' }; });
+        const list = funcs.slice(0, 18).map(function (f) { return _withFuncPath({ ref: String(f.subId || f.subName), name: f.subName || f.subId || '' }, f, s); });
         const byRef = {}; list.forEach(function (f) { byRef[f.ref] = f; });
         const ctx = { certBasis: _certBasis(), functions: list };
         _toast('Drafting functional FMEA…', 'info');
@@ -10807,7 +10819,7 @@
                 cma: (s.cmaData || []).length, items: (s.itemsData || []).length, fmea: (s.fmeaData || []).length,
                 routing: (s.routingData || []).length, systems: (s.systemsData || []).length
             },
-            acFunctions: (s.acFunctionsData || []).slice(0, 80).map(function (f) { return { _id: f.internalId, subId: f.subId, fn: _chatClip(f.subName, 60), of: _chatClip(f.funcName, 40) }; }),
+            acFunctions: (s.acFunctionsData || []).slice(0, 80).map(function (f) { const o = { _id: f.internalId, subId: f.subId, fn: _chatClip(f.subName, 60), of: _chatClip(f.funcName, 40) }; if (f.parentSubId) o.under = f.parentSubId; return o; }),
             acFha:       (s.acFhaData || []).slice(0, 90).map(function (r) { return { _id: r.internalId, fcId: r.fcId, subId: r.subId, sev: r.severity, fc: _chatClip(r.fcDesc, 70) }; }),
             acFcim:      (s.acFcimData || []).slice(0, 90).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlTxt: _chatClip(r.tlDesc, 60), plTxt: _chatClip(r.plDesc, 50), mTxt: _chatClip(r.mDesc, 50), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), tlExtra: (Array.isArray(r.tlExtra) ? r.tlExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), rationale: _chatClip(r.rationale, 40) }; }),
             acReq:       (s.acReqData || []).slice(0, 60).map(reqRow),

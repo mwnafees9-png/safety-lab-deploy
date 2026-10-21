@@ -1,5 +1,7 @@
 /* ============================================================================
- * sysml_model.js, v1.3, 13 Oct 2026: Safety Lab's model as a real SysML v2 model.
+ * sysml_model.js, v1.4, 21 Oct 2026: Safety Lab's model as a real SysML v2 model.
+ * 21 Oct 2026 (v1.4, full function tree): a sub-function under another is a nested action inside its parent's
+ *   action, to any depth; import maps an action nested in an action back to parentSubId.
  * 13 Oct 2026 (v1.3, merge of integrate3 into fix3-M): both sets of additions below; still ONE editor provider
  *   (editorProvider / pick from the v1.2 merge; fix3-M's duplicate was dropped).
  * 13 Oct 2026 (v1.2, merge): the two rounds' additions together; ONE editor provider (editorProvider).
@@ -391,10 +393,18 @@
 
     BUILD.functions = function (P, pkg, L) {
         var groups = [], byId = Object.create(null);
-        arr(P.acFunctionsData).forEach(function (r) {
+        // 21 Oct 2026 (full function tree): a sub-function that sits under another is a nested action
+        // inside its parent's action, to any depth, so the model carries the same decomposition the
+        // worksheet does. Rows go in tree order so a parent's element exists before its children.
+        var T = (typeof SLFuncTree !== 'undefined') ? SLFuncTree : null;
+        var rows0 = arr(P.acFunctionsData), tix = T ? T.index(rows0) : null;
+        var rows = T ? T.ordered(rows0, tix) : rows0, elBySub = Object.create(null);
+        rows.forEach(function (r) {
             var g = r.funcId ? byId[r.funcId] : null;
             if (r.funcId && !g) { g = byId[r.funcId] = add(pkg, El('action def', { short: r.funcId, name: r.funcName || r.funcId, spec: 'SafetyLab::AircraftFunction', ref: 'afn:' + r.funcId, doc: r.funcDef || '' })); groups.push(g); }
-            var e = add(g || pkg, El('action', { short: r.subId, name: r.subName || r.subId || 'Function', type: 'SafetyLab::AircraftFunction', ref: refOf('fn', r), doc: r.subDef || '' }));
+            var par = T ? T.parentOf(r, tix) : null, host = (par && par.subId && elBySub[par.subId]) || g || pkg;
+            var e = add(host, El('action', { short: r.subId, name: r.subName || r.subId || 'Function', type: 'SafetyLab::AircraftFunction', ref: refOf('fn', r), doc: r.subDef || '' }));
+            if (r.subId && !elBySub[r.subId]) elBySub[r.subId] = e;
             aboutRef(e, r);
         });
         systems(P).forEach(function (s) {
@@ -1572,12 +1582,18 @@
         // --- functions (aircraft rows carry their group)
         P.acFunctionsData = P.acFunctionsData || [];
         byKind('afn').forEach(function (op) { var f = fieldsOf(op); keyMap[op.key] = { funcId: f.funcId, funcName: f.funcName, funcDef: op.el.doc || '' }; refMap[op.key] = 'afn:' + f.funcId; if (op.target) { var g = op.target.obj; arr(P.acFunctionsData).forEach(function (r) { if (r.funcId === g.funcId) { if ((op.changed || []).indexOf('funcName') >= 0) r.funcName = f.funcName; } }); } });
+        // 21 Oct 2026 (full function tree): an action nested inside another action is a sub-function
+        // under that one. It takes its parent's aircraft function and records parentSubId.
+        var fnRowByKey = Object.create(null);
         byKind('fn').forEach(function (op) {
-            var f = fieldsOf(op), pk = parentKeyOf(op), g = pk && kindOfKey(pk) === 'afn' ? keyMap[pk] : null;
-            if (op.target) { upd(op, op.target.obj, f); setRef(op, op.target.obj, op.target.ref); return; }
+            var f = fieldsOf(op), pk = parentKeyOf(op), pkind = pk ? kindOfKey(pk) : '';
+            var g = pkind === 'afn' ? keyMap[pk] : null, pr = pkind === 'fn' ? (fnRowByKey[pk] || null) : null;
+            if (op.target) { upd(op, op.target.obj, f); setRef(op, op.target.obj, op.target.ref); fnRowByKey[op.key] = op.target.obj; return; }
+            if (pr) g = { funcId: pr.funcId || '', funcName: pr.funcName || '', funcDef: pr.funcDef || '' };
             var r = { internalId: pickIid(P.acFunctionsData, op.key), funcId: g ? g.funcId : '', funcName: g ? g.funcName : '', subId: f.subId, subName: f.subName, subDef: f.subDef };
             if (g && g.funcDef) r.funcDef = g.funcDef;
-            P.acFunctionsData.push(r); made.added++; setRef(op, r, refOf('fn', r));
+            if (pr && pr.subId && pr.subId !== r.subId) r.parentSubId = pr.subId;
+            P.acFunctionsData.push(r); made.added++; setRef(op, r, refOf('fn', r)); fnRowByKey[op.key] = r;
         });
         byKind('sfn').forEach(function (op) {
             var f = fieldsOf(op), pk = parentKeyOf(op), sid0 = pk && kindOfKey(pk) === 'sfg' ? idOfKey(pk) : splitScoped(idOfKey(op.key))[0];

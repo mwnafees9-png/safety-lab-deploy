@@ -1612,6 +1612,7 @@ window.renderCockpitPage = renderCockpitPage;
 // [P2 batch 5] L3579-3579 moved verbatim to bindings_modules.js
 // [P2 batch 6] L3093-3130 moved verbatim to misc_fn_modules.js
 window.pasaSub = pasaSub;
+window.pasaGo = pasaGo;
 
 // [P2 batch 4] L6207-6302 moved verbatim to helpers_modules.js
 window.cycleSystemRole = cycleSystemRole;
@@ -1697,8 +1698,12 @@ window.formatNodeMetrics = formatNodeMetrics;
 const acFuncCRUD = makeCRUD({
     key: 'acFunc',
     store: () => acFunctionsData,
-    formIds: { funcId: 'ac-func-id', funcName: 'ac-func-name', funcDef: 'ac-func-def', subId: 'ac-subfunc-id', subName: 'ac-subfunc-name', subDef: 'ac-subfunc-def' },
+    // 21 Oct 2026 (full function tree): parentSubId places a sub-function under another one of the
+    // same aircraft function, to any depth (func_tree.js). Blank = directly under the function.
+    formIds: { funcId: 'ac-func-id', funcName: 'ac-func-name', funcDef: 'ac-func-def', parentSubId: 'ac-subfunc-parent', subId: 'ac-subfunc-id', subName: 'ac-subfunc-name', subDef: 'ac-subfunc-def' },
     submitBtn: 'btn-submit-ac-func', cancelBtn: 'btn-cancel-ac-func', defaultText: 'Log Aircraft Function',
+    validate: (data) => (typeof SLFuncTree !== 'undefined' ? SLFuncTree.check(data, acFunctionsData) : ''),
+    onEdit: (item) => { try { if (typeof acFuncPopulateParents === 'function') acFuncPopulateParents(item); } catch (_) {} },
     tableBody: 'ac-func-body',
     editFnName: 'editACFunction', deleteFnName: 'deleteACFunction',
     // Excel-style merged identity cells per aircraft function (see _acFuncRenderRows).
@@ -1707,7 +1712,12 @@ const acFuncCRUD = makeCRUD({
     renderCells: (row, actions) => `<td>${actions}</td><td><strong>${esc(row.funcId)}</strong></td><td>${esc(row.funcName)}</td><td>${esc(row.funcDef)}</td><td><strong>${esc(row.subId)}</strong></td><td>${esc(row.subName)}</td><td>${esc(row.subDef)}</td>`,
 });
 window.editACFunction = acFuncCRUD.edit;
-window.deleteACFunction = acFuncCRUD.deleteItem;
+// 21 Oct 2026 (full function tree): a node with sub-functions under it cannot be deleted from under them.
+window.deleteACFunction = function (internalId) {
+    if (typeof _acFuncDeleteBlocked === 'function' && _acFuncDeleteBlocked(internalId)) return;
+    acFuncCRUD.deleteItem(internalId);
+    try { if (typeof acFuncPopulateParents === 'function') acFuncPopulateParents(); } catch (_) {}
+};
 window.renderACFunctions = acFuncCRUD.render;
 
 // --- Multi sub-function add: log several sub-functions under one aircraft function ----------

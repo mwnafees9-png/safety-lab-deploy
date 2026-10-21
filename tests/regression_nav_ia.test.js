@@ -8,7 +8,9 @@
  * replaced by the AIRCRAFT / SYSTEMS breakdown:
  *
  *   Aircraft  — AFHA (functions·FCIM·FHA·assumptions·reqs, kept TOGETHER,
- *               his words: "keep them together with the AFHA") →
+ *               his words: "keep them together with the AFHA"; SUPERSEDED
+ *               21 Oct 2026: "I want the requirements in Safety Lab to move
+ *               from AFHAs and SFHAs to the PASA and PSSAs respectively") →
  *               PASA (trees·DAL·CCAs·STPA·HF) → ASA (verification·CCMR·
  *               MMEL·SSE)
  *   Systems   — workspaces·PSSA·SSA·FMES·items + #asb-sys-dirs (nav_rail
@@ -63,7 +65,10 @@ check('Aircraft category exists inside Analyze, before Systems',
 check('AFHA is a single rail row — the dropdown never returns',
   at('id="snav-afha"') > 0 && at('id="asb-grp-afha"') < 0 &&
   at('id="snav-ac-func"') < 0 && at('id="snav-ac-fcim"') < 0 &&
-  at('id="snav-ac-fha"') < 0 && at('id="snav-ac-asm"') < 0 && at('id="snav-ac-req"') < 0 &&
+  at('id="snav-ac-fha"') < 0 && at('id="snav-ac-asm"') < 0 &&
+  // 21 Oct 2026 (Waqas: requirements move from the AFHA to the PASA): Aircraft requirements is a
+  // rail row again, but under the PASA group, never as part of an AFHA dropdown.
+  at('id="snav-ac-req"') > at('id="asb-grp-pasa"') && at('id="snav-ac-req"') < at('id="asb-grp-asa"') &&
   at('id="snav-afha"') < at('id="asb-grp-pasa"'));
 // 23 Aug 2026 (3) — the FTA tree-browser group left the rail (Waqas: "remove
 // all the fault trees from the left nav"); a plain row remains and the

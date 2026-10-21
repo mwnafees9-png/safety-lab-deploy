@@ -134,6 +134,24 @@ Back up these three things somewhere safe, regularly: the folder `stack/volumes/
 (your data), and the files `stack/.env` and `stack/ai-proxy.env` (the keys). Losing the keys
 with the data intact means nobody can sign in.
 
+## Jama inside your own network (optional)
+
+Skip this if your Jama address ends in jamacloud.com. The live Jama connector refuses private
+addresses (bare IP addresses, names ending in .local or .internal) unless you approve them.
+To approve yours:
+
+1. Open `stack/ai-proxy.env` in a text editor.
+2. Add one line with your Jama address, exactly as people type it, without https:// and without
+   anything after it: `BRIDGE_INTERNAL_HOSTS=jama.yourcompany.local`. Several go comma
+   separated. If Jama uses a port other than 443, write it as `jama.yourcompany.local:8443`.
+3. Save, then run `bash install.sh` again in the `selfhost` folder.
+4. Give desktop users the new setup file (it now carries the approved address) and have them
+   open it once in the desktop app (Choose setup file).
+
+Only these exact addresses are allowed. Everything else about the connector stays as it was:
+https only, read only, the Jama REST API only, the address saved with the credential, and
+redirects refused.
+
 ## When Safety Lab sends an update
 
 Database updates come as new numbered files for the `db` folder. Copy them in, then in the

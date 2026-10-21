@@ -130,9 +130,10 @@ function exportData(moduleName, format) {
         const _ml = (k, r) => (typeof SLModelLinks !== 'undefined' ? SLModelLinks.csvCell(k, r) : '');
         switch (moduleName) {
             case 'AC_Functions':
+                // 21 Oct 2026 (full function tree): Parent Sub-Function ID carries the tree; rows in tree order.
                 return downloadCSV(file('AC_Functions'),
-                    ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition'],
-                    acFunctionsData.map(r => [r.funcId, r.funcName, r.funcDef, r.subId, r.subName, r.subDef]));
+                    ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition','Parent Sub-Function ID'],
+                    (typeof SLFuncTree !== 'undefined' ? SLFuncTree.ordered(acFunctionsData) : acFunctionsData).map(r => [r.funcId, r.funcName, r.funcDef, r.subId, r.subName, r.subDef, r.parentSubId || '']));
             case 'AC_FCIM':
                 return downloadCSV(file('AC_FCIM'),
                     ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
@@ -719,7 +720,7 @@ function importTabularCSV(text, moduleName) {
         const _mlList = (_ML_IMPORT && _mlCol > -1) ? _ML_IMPORT[1]() : null, _mlLen = _mlList ? _mlList.length : 0;
 
         if(moduleName === 'AC_Functions') {
-            acFunctionsData.push({ internalId: newId, funcId: getValue(row, ['Function ID']), funcName: getValue(row, ['Function', 'Aircraft Function']), funcDef: getValue(row, ['Definition']), subId: getValue(row, ['Sub-Function ID']), subName: getValue(row, ['Sub-Function']), subDef: getValue(row, ['Sub-Definition']) });
+            acFunctionsData.push({ internalId: newId, funcId: getValue(row, ['Function ID']), funcName: getValue(row, ['Function', 'Aircraft Function']), funcDef: getValue(row, ['Definition']), subId: getValue(row, ['Sub-Function ID']), subName: getValue(row, ['Sub-Function']), subDef: getValue(row, ['Sub-Definition']), parentSubId: getValue(row, ['Parent Sub-Function ID', 'Parent Sub-Function', 'Parent ID', 'Parent']) });
         } else if(moduleName === 'AC_FCIM') {
             acFcimData.push({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) });
         } else if(moduleName === 'AC_FHA') {
@@ -1209,6 +1210,28 @@ function _acFuncRenderRows(arr, ctx) {
         if (!g) { g = { funcId: row.funcId, funcName: row.funcName, funcDef: row.funcDef, rows: [] }; byFunc.set(gkey, g); groups.push(g); }
         g.rows.push(row);
     });
+    // 21 Oct 2026 (full function tree): inside each function the sub-functions are drawn in tree
+    // order (each node followed by what sits under it), indented by depth. Position and depth come
+    // from the FULL store, so a paged window still draws the same tree the whole table would.
+    const T = (typeof SLFuncTree !== 'undefined') ? SLFuncTree : null;
+    const full = (typeof acFunctionsData !== 'undefined' && Array.isArray(acFunctionsData)) ? acFunctionsData : (arr || []);
+    const tix = T ? T.index(full) : null;
+    if (T) {
+        const order = new Map();
+        T.ordered(full, tix).forEach((r, i) => order.set(r, i));
+        groups.forEach(g => g.rows.sort((a, b) => (order.has(a) ? order.get(a) : 1e9) - (order.has(b) ? order.get(b) : 1e9)));
+    }
+    const subCells = (row) => {
+        const d = (T && tix.pos.has(row)) ? T.depth(row, tix) : 1;
+        if (d <= 1) return `<td><strong>${esc(row.subId)}</strong></td><td>${esc(row.subName)}</td><td>${esc(row.subDef)}</td>`;
+        const p = T.parentOf(row, tix);
+        const pad = 'padding-left:' + (8 + (d - 1) * 16) + 'px;';
+        const under = p ? `<div style="font-size:10.5px;color:var(--color-text-tertiary);">under ${esc(p.subId)}</div>` : '';
+        return `<td style="${pad}"><span style="color:var(--color-text-tertiary);">\u21b3</span> <strong>${esc(row.subId)}</strong>${under}</td>`
+             + `<td style="${pad}">${esc(row.subName)}</td><td>${esc(row.subDef)}</td>`;
+    };
+    // a parent link that is not valid (missing parent, other function, loop) is shown, not hidden
+    const bad = T ? new Map(T.problems(full).map(x => [x.row, x.reason])) : new Map();
     let html = '';
     groups.forEach((g, gi) => {
         const span = g.rows.length;
@@ -1217,7 +1240,8 @@ function _acFuncRenderRows(arr, ctx) {
         // carry the same band class.
         const band = (gi % 2 === 0) ? 'slab-func-band-a' : 'slab-func-band-b';
         g.rows.forEach((row, i) => {
-            const sub = `<td><strong>${esc(row.subId)}</strong></td><td>${esc(row.subName)}</td><td>${esc(row.subDef)}</td>`;
+            let sub = subCells(row);
+            if (bad.has(row)) sub = sub.replace('</td>', `<div style="font-size:10.5px;color:var(--color-danger);font-weight:600;">${esc(bad.get(row))}</div></td>`);
             if (i === 0) {
                 const rs = span > 1 ? ` rowspan="${span}"` : '';
                 const merged = span > 1 ? ' slab-merged-cell' : '';
@@ -1923,8 +1947,8 @@ function _pdfDataForModule(moduleName) {
     switch (moduleName) {
         case 'AC_Functions':
             return { title: 'Aircraft Functions',
-                headers: ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition'],
-                rows: (acFunctionsData || []).map(r => [r.funcId, r.funcName, r.funcDef, r.subId, r.subName, r.subDef]) };
+                headers: ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition','Parent Sub-Function ID'],
+                rows: (typeof SLFuncTree !== 'undefined' ? SLFuncTree.ordered(acFunctionsData || []) : (acFunctionsData || [])).map(r => [r.funcId, r.funcName, r.funcDef, r.subId, r.subName, r.subDef, r.parentSubId || '']) };
         case 'AC_FCIM':
             return { title: 'Aircraft FCIM',
                 headers: ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],

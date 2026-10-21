@@ -3468,8 +3468,8 @@ function renderMacPage() {
     const stats = macStats();
     const subs = [];
     const seen = new Set();
-    (acFunctionsData || []).forEach(f => { const id = (f.subId || '').trim(); if (id && !seen.has(id)) { seen.add(id); subs.push({ id, label: id + (f.subName ? ' · ' + f.subName : '') }); } });
-    subs.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+    // 21 Oct 2026 (full function tree): tree order, indented, one entry per sub-function.
+    slAcFuncOptions().forEach(o => { if (!seen.has(o.value)) { seen.add(o.value); subs.push({ id: o.value, label: o.label }); } });
     const phases = ['All phases'].concat((flightPhasesData || []).map(p => p.phase).filter(Boolean));
 
     let html = '<div class="ckpt-posture" style="margin-top:0;">' +
@@ -3835,6 +3835,22 @@ function populateDropdowns(selectId, dataArray, valProp, labelProp, isFlat = fal
     // Restore previous selection if still valid (fixes audit Q4).
     if (previousValue && Array.from(select.options).some(o => o.value === previousValue)) select.value = previousValue;
 }
+// 21 Oct 2026 (full function tree): the aircraft sub-function pickers (FCIM, FHA, requirement trace)
+// list the function tree in tree order, indented by depth, one option per sub-function (func_tree.js).
+function slAcFuncOptions() {
+    if (typeof SLFuncTree !== 'undefined') return SLFuncTree.pickList(acFunctionsData || []).map(p => ({ value: p.value, label: p.label }));
+    const seen = new Set(), out = [];
+    (acFunctionsData || []).forEach(f => { const id = String((f && f.subId) || '').trim(); if (!id || seen.has(id)) return; seen.add(id); out.push({ value: id, label: id + (f.subName ? '  ·  ' + f.subName : '') }); });
+    return out;
+}
+function populateFuncDropdown(selectId) {
+    const select = document.getElementById(selectId); if (!select) return;
+    if (typeof SLFuncTree === 'undefined') { populateDropdowns(selectId, acFunctionsData || [], 'subId', 'subName'); return; }
+    const previousValue = select.value;
+    select.innerHTML = '<option value="">-- Select --</option>' +
+        SLFuncTree.pickList(acFunctionsData || []).map(p => '<option value="' + esc(p.value) + '">' + esc(p.label) + '</option>').join('');
+    if (previousValue && Array.from(select.options).some(o => o.value === previousValue)) select.value = previousValue;
+}
 function getCheckedValues(containerId) { return Array.from(document.querySelectorAll(`#${containerId} input:checked`)).map(cb => cb.value).join(', '); }
 // 28 Aug 2026 — tolerant of the array shape AI-accepted rows carried before the
 // phase-shape migration (String([...]) joins with commas, so one coercion covers
@@ -4051,7 +4067,8 @@ function _renderSidebarContext() {
         // Auto-expand the CHAIN of groups containing the active tab (Rev C nav,
         // 15 Aug 2026: Analyze > Aircraft [AFHA | PASA | ASA] / Systems / RAM).
         const openIf = (gid, cond) => { const g = document.getElementById(gid); if (g && cond) g.open = true; };
-        const inAfha = cur.indexOf('ac-') === 0;
+        // 21 Oct 2026: aircraft requirements are a PASA page, not an AFHA one.
+        const inAfha = cur.indexOf('ac-') === 0 && cur !== 'ac-req';
         // 2 Sep 2026 (Waqas: "when I select some of the stuff in the HF drop down it also
         // opens aircraft level analyses") — Human Factors has been its OWN top-level group
         // (asb-grp-hf) since the HF lanes multiplied, but the three original HF tabs were
@@ -4060,7 +4077,7 @@ function _renderSidebarContext() {
         // expanded nothing. Both are the same defect — a hand-maintained list drifting from
         // the DOM — so HF is now matched by PREFIX, like the AFHA group is, and the next
         // HF lane is covered the day it is born.
-        const inPasa = ['pasa','fta','markov','eta','zsa','pra','cma','cea','routing','ipledger','stpa','mlas'].indexOf(cur) >= 0;
+        const inPasa = ['pasa','ac-req','fta','markov','eta','zsa','pra','cma','cea','routing','ipledger','stpa','mlas'].indexOf(cur) >= 0;
         const inHf   = cur.indexOf('hfa') === 0;
         const inAsa  = ['asa','ccmr','mmel','sse'].indexOf(cur) >= 0;
         const inSys  = ['sys-dir','sys-workspace','pssa','ssa','fmes','items'].indexOf(cur) >= 0;
@@ -4107,13 +4124,47 @@ function _syncAcWorkspaceNav(tabId) {
     if (activeView && activeView.parentNode && header.nextElementSibling !== activeView) {
         try { activeView.parentNode.insertBefore(header, activeView); } catch(_) {}
     }
-    ['func','fcim','fha','req','asm'].forEach(s => {
+    ['func','fcim','fha','asm'].forEach(s => {
         const btn = document.getElementById('ac-ws-tab-' + s);
         if (btn) {
             if (s === sub) btn.classList.add('active');
             else btn.classList.remove('active');
         }
     });
+}
+
+// 21 Oct 2026 (Waqas: requirements move from the AFHA to the PASA). Aircraft requirements keep
+// their own view (view-ac-req) and tab id, and are shown inside the PASA frame: the one PASA tab
+// bar (#pasa-subnav) is moved above the requirements view while it is on screen, with "Aircraft
+// Requirements" active, and moved back into the PASA view when the PASA is shown. One bar, never
+// a copy, so the two can never list different pages.
+let _pasaNavHome = null;
+function _syncPasaNav(tabId) {
+    const nav = document.getElementById('pasa-subnav');
+    if (!nav) return;
+    if (!_pasaNavHome) { _pasaNavHome = document.createComment('pasa-subnav home'); nav.parentNode.insertBefore(_pasaNavHome, nav); }
+    const reqBtn = document.getElementById('pasa-tab-req');
+    if (tabId === 'ac-req') {
+        const view = document.getElementById('view-ac-req');
+        if (view && view.parentNode && nav.nextElementSibling !== view) view.parentNode.insertBefore(nav, view);
+        nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === reqBtn));
+    } else if (nav.previousSibling !== _pasaNavHome && _pasaNavHome.parentNode) {
+        _pasaNavHome.parentNode.insertBefore(nav, _pasaNavHome.nextSibling);
+        if (reqBtn) reqBtn.classList.remove('active');
+    }
+}
+
+// 21 Oct 2026 (Waqas: system requirements move from the SFHA to the PSSA). The PSSA tab has two
+// pages, 'pssa' (allocation and DAL) and 'req' (system requirements); both keep their sub-tab
+// ids, so every caller of switchWorkspaceTab('req') still lands on the requirements.
+const WS_PSSA_PAGES = { pssa: 'ws-pssa-tab-overview', req: 'ws-pssa-tab-req' };
+function _syncWsPssaNav(subTab) {
+    const inPssa = Object.prototype.hasOwnProperty.call(WS_PSSA_PAGES, subTab);
+    const bar = document.getElementById('ws-pssa-subnav');
+    if (bar) bar.style.display = inPssa ? '' : 'none';
+    Object.keys(WS_PSSA_PAGES).forEach(k => { const b = document.getElementById(WS_PSSA_PAGES[k]); if (b) b.classList.toggle('active', k === subTab); });
+    const top = document.getElementById('ws-tab-pssa');
+    if (top) top.classList.toggle('active', inPssa);
 }
 
 function switchWorkspaceTab(subTab) {
@@ -4124,6 +4175,7 @@ function switchWorkspaceTab(subTab) {
         if (view) view.style.display = (t === subTab) ? 'block' : 'none';
         let btn = document.getElementById(`ws-tab-${t}`); if(btn) { if(t === subTab) btn.classList.add('active'); else btn.classList.remove('active'); }
     });
+    _syncWsPssaNav(subTab);
 
     if(!sys()) return;
 
@@ -5258,19 +5310,8 @@ function populateSysFuncTraceDropdown(selectedIds) {
     // acFunctionsData store keeps one row per sub-function (so "Control Flight
     // Path" appears N times with sub-functions 1.1–1.6); we want each sub-id
     // to show exactly once.
-    const seen = new Set();
-    const options = [];
-    (acFunctionsData || []).forEach(f => {
-        const id = (f.subId || '').trim();
-        if (!id || seen.has(id)) return;
-        seen.add(id);
-        // Display "1.1 · Provide Pitch Control" (sub-function id + name).
-        // Fall back gracefully when subName is missing.
-        const label = id + (f.subName ? '  ·  ' + f.subName : '');
-        options.push({ value: id, label });
-    });
-    // Stable order: lexicographic on sub-id so 1.1 / 1.2 / … render in sequence.
-    options.sort((a, b) => a.value.localeCompare(b.value, undefined, { numeric: true }));
+    // 21 Oct 2026 (full function tree): tree order, indented by depth, deduped by subId.
+    const options = slAcFuncOptions();
     _renderCheckboxList(el, options, current, {
         emptyText: 'No aircraft sub-functions defined yet — add some in Aircraft Functions first.'
     });
@@ -5725,13 +5766,10 @@ function _populateRoutingFunctions(selected) {
     const el = document.getElementById('routing-functions');
     if (!el) return;
     const current = selected || _getCheckboxListValues(el);
-    const funcs = (acFunctionsData || []).slice();
+    const options = slAcFuncOptions();
     (systemsData || []).forEach(s => {
-        (s.functions || []).forEach(f => funcs.push({ subId: f.funcId, subName: (f.funcName || '') + ' [' + (s.name || s.id) + ']' }));
+        (s.functions || []).forEach(f => { if (f && f.funcId != null && String(f.funcId) !== '') options.push({ value: String(f.funcId), label: String(f.funcId) + '  ·  ' + (f.funcName || '') + ' [' + (s.name || s.id) + ']' }); });
     });
-    const options = funcs
-        .filter(f => f && f.subId != null && String(f.subId) !== '')
-        .map(f => ({ value: String(f.subId), label: String(f.subId) + (f.subName ? '  ·  ' + f.subName : '') }));
     _renderCheckboxList(el, options, current, { emptyText: 'No functions defined yet — add Aircraft or System functions first.' });
 }
 function _populateRoutingItems(selected) {
@@ -6282,10 +6320,7 @@ function _populateFmeaFunctionLink() {
     if (!sel) return;
     const current = sel.value;
     const opts = ['<option value="">-- Select a sub-function --</option>'];
-    (acFunctionsData || []).forEach(f => {
-        const label = (f.subId || '') + (f.subName ? '  ·  ' + f.subName : '');
-        opts.push('<option value="' + esc(f.subId || '') + '">' + esc(label) + '</option>');
-    });
+    slAcFuncOptions().forEach(o => { opts.push('<option value="' + esc(o.value) + '">' + esc(o.label) + '</option>'); });
     sel.innerHTML = opts.join('');
     sel.value = current;
 }
@@ -6487,7 +6522,8 @@ function _renderItemTraceList(checked){
     const host = document.getElementById('item-trace-list');
     if (!host) return;
     const checkedSet = new Set((checked || []).map(String));
-    const funcs = (acFunctionsData || []).slice();
+    // 21 Oct 2026 (full function tree): aircraft sub-functions in tree order, indented.
+    const funcs = slAcFuncOptions().map(o => ({ subId: o.value, _label: o.label }));
     // Also offer system-scope functions when an item has a system selected — these
     // share the function namespace (per Phase 24 rename, sys functions have funcId).
     (systemsData || []).forEach(s => {
@@ -6499,7 +6535,7 @@ function _renderItemTraceList(checked){
     }
     const rows = funcs.map(f => {
         const id = f.subId || '';
-        const label = id + (f.subName ? '  ·  ' + f.subName : '');
+        const label = f._label || (id + (f.subName ? '  ·  ' + f.subName : ''));
         const c = checkedSet.has(String(id)) ? ' checked' : '';
         return '<label class="checkbox-list-item" style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; font-size: 12px;">'
              + '<input type="checkbox" value="' + esc(id) + '"' + c + '> ' + esc(label) + '</label>';

@@ -109,6 +109,9 @@ const ExcelImport = (function() {
             state:    ['state', 'status']
         },
         acFunc: {
+            // 21 Oct 2026 (full function tree): first, so "Parent Sub-Function ID" never falls to subId
+            // on the substring pass. Blank = directly under the aircraft function (never filled down).
+            parentSubId: ['parentsubfunctionid', 'parentsubid', 'parentsubfunction', 'sitsunder'],
             funcId:   ['funcid', 'functionid', 'fnid', 'id'],
             funcName: ['funcname', 'functionname', 'name'],
             funcDef:  ['funcdef', 'definition', 'description'],
@@ -707,6 +710,8 @@ const ExcelImport = (function() {
                     rec.subId = String(r.subId || '').trim();
                     rec.subName = String(r.subName || '').trim();
                     rec.subDef = String(r.subDef || '').trim();
+                    const _par = String(r.parentSubId || '').trim();
+                    if (_par && _par !== rec.subId) rec.parentSubId = _par;
                     acFunctionsData.push(rec);
                 } else if (sys()) sys().functions.push(rec);
                 count++;

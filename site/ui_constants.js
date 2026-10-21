@@ -4,8 +4,12 @@
 const DAL_COLORS = { A: '#dc3545', B: '#f97316', C: '#eab308', D: '#fcd34d', E: '#cbd5e1' };
 
 const AC_WORKSPACE_TABS = {
-    'ac-func': 'func', 'ac-fcim': 'fcim', 'ac-fha': 'fha', 'ac-req': 'req', 'ac-asm': 'asm'
+    'ac-func': 'func', 'ac-fcim': 'fcim', 'ac-fha': 'fha', 'ac-asm': 'asm'
 };
+// 21 Oct 2026 (Waqas: requirements move from the AFHA to the PASA): 'ac-req' is no longer an
+// Aircraft Safety workspace tab. It keeps its own view and tab id (every lock, save, lazy render,
+// deep link and journal entry keys on 'ac-req'); it is shown inside the PASA frame instead
+// (helpers_modules.js _syncPasaNav).
 
 const CMA_MODE_LABELS = {
     'design':            'Design',

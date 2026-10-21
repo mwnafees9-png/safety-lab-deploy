@@ -2483,6 +2483,14 @@ function _pasaReparent() {
     }
     _pasaReparented = true;
 }
+// A PASA tab from wherever its bar is showing (it also sits above the aircraft requirements,
+// 21 Oct 2026): open the PASA first when it is not on screen, then the page.
+function pasaGo(name) {
+    let cur = '';
+    try { cur = window._slCurrentTab || ''; } catch (_) {}
+    if (cur !== 'pasa' && typeof switchTab === 'function') switchTab('pasa');
+    pasaSub(name);
+}
 function pasaSub(name) {
     _pasaReparent();
     if (name === 'resources') name = 'interdep';   // merged
@@ -2754,7 +2762,7 @@ function _populateResourceConsumedBy(selected) {
     const el = document.getElementById('resources-consumed-by');
     if (!el) return;
     const current = selected || _getCheckboxListValues(el);
-    const options = (acFunctionsData || [])
+    const options = (typeof slAcFuncOptions === 'function') ? slAcFuncOptions() : (acFunctionsData || [])
         .filter(f => f && f.subId != null && String(f.subId) !== '')
         .map(f => ({ value: String(f.subId), label: String(f.subId) + (f.subName ? '  ·  ' + f.subName : '') }));
     _renderCheckboxList(el, options, current, { emptyText: 'No aircraft sub-functions defined yet — add some in Aircraft Functions first.' });

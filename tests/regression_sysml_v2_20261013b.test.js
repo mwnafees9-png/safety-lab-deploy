@@ -339,7 +339,8 @@ console.log('\n[8] wiring, persistence and the XMI import');
   // 13 Oct 2026: sysml_model.js v1.1 (STPA actuators / sensors / external elements, SLSysML.pick); the pin follows the version.
   // 13 Oct 2026 (hand-built event trees and bow-ties): sysml_model.js moved to v1.1 (bte/btl kinds, event tree extras, the editor's model picker); the pin moves with it.
   // 13 Oct 2026 (merge into fix3-M): v1.3 adds drawn RBDs and Markov extras.
-  check('index.html loads sysml_model.js (deferred, after the XMI import)', /<script src="sysml_model\.js\?v=1\.3" defer><\/script>/.test(idx) && idx.indexOf('sysml_model.js') > idx.indexOf('xmi_import.js'));
+  // 21 Oct 2026: v1.4 nests sub-functions to any depth (regression_jama_live_functions_20261021).
+  check('index.html loads sysml_model.js (deferred, after the XMI import)', /<script src="sysml_model\.js\?v=1\.4" defer><\/script>/.test(idx) && idx.indexOf('sysml_model.js') > idx.indexOf('xmi_import.js'));
   const src = S('sysml_model.js');
   check('the menus: every Data Actions menu and the Project menu get the export / import pair', /querySelectorAll\('\.tab-dropdown-content'\)/.test(src) && /'Export SysML v2'/.test(src) && /'Import SysML v2'/.test(src) && /project-export/.test(src));
   check('the API other features reuse is exposed: linkPicker(container, currentRef, onPick), refLabel(ref), resolve(ref)', /linkPicker: linkPicker/.test(src) && /refLabel: refLabel/.test(src) && /function linkPicker\(container, currentRef, onPick, opts\)/.test(src));

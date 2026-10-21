@@ -1900,9 +1900,10 @@ function switchTab(tabId) {
         if (tabId === 'cma')  { populateCmaModesCheckboxes([]); renderCMA(); }
         if (tabId === 'routing') { _populateRoutingMultiselects({}); renderRouting(); }
         if (tabId === 'resources') { _populateResourceMultiselects({}); renderResources(); }
-        if (tabId === 'ac-fcim') populateDropdowns('ac-fcim-subfunc', acFunctionsData, 'subId', 'subName');
-        if (tabId === 'ac-fha') { populateDropdowns('ac-fha-subfunc', acFunctionsData, 'subId', 'subName'); populateDropdowns('ac-fha-fcid', acExtractedFCs, 'id', 'id', true); if (typeof _refreshFhaFcOptions === 'function') _refreshFhaFcOptions('ac'); populateFhaAsmDropdown('ac'); }
-        if (tabId === 'ac-req') { populateDropdowns('ac-req-trace', acFunctionsData, 'subId', 'subName'); _populateReqParentPicker('ac'); }
+        if (tabId === 'ac-func') { try { if (typeof acFuncPopulateParents === 'function') acFuncPopulateParents(); } catch (_) {} }
+        if (tabId === 'ac-fcim') populateFuncDropdown('ac-fcim-subfunc');
+        if (tabId === 'ac-fha') { populateFuncDropdown('ac-fha-subfunc'); populateDropdowns('ac-fha-fcid', acExtractedFCs, 'id', 'id', true); if (typeof _refreshFhaFcOptions === 'function') _refreshFhaFcOptions('ac'); populateFhaAsmDropdown('ac'); }
+        if (tabId === 'ac-req') { populateFuncDropdown('ac-req-trace'); _populateReqParentPicker('ac'); }
         if (tabId === 'phases') renderFlightPhases(); 
         if (tabId === 'sys-dir') renderSystemDirectory();
         if (tabId === 'items') { _populateItemOwningSystem(); _populateItemZone(''); _renderItemTraceList([]); renderItems(); }
@@ -1928,6 +1929,7 @@ function switchTab(tabId) {
         // Phase 53.7 — Aircraft Safety workspace nav: show the shared header + highlight
         // the active sub-tab when one of the ac-* views is on screen, hide otherwise.
         try { _syncAcWorkspaceNav(tabId); } catch(e) { console.warn('_syncAcWorkspaceNav:', e); }
+        try { _syncPasaNav(tabId); } catch(e) { console.warn('_syncPasaNav:', e); }
         if (tabId === 'review') {
             // Sync the reviewer-name input with whatever's in localStorage.
             const nameInput = document.getElementById('review-reviewer-name');
@@ -2278,10 +2280,12 @@ function populateZsaHousedFunctionsDropdown(selectedSubIds) {
     const el = document.getElementById('zsa-housed-functions');
     if (!el) return;
     const current = selectedSubIds || _getCheckboxListValues(el);
-    const options = (acFunctionsData || []).map(f => ({
-        value: f.subId || '',
-        label: (f.subId || '') + (f.subName ? '  ·  ' + f.subName : '')
-    }));
+    const options = (typeof SLFuncTree !== 'undefined')
+        ? SLFuncTree.pickList(acFunctionsData || []).map(p => ({ value: p.value, label: p.label }))
+        : (acFunctionsData || []).map(f => ({
+            value: f.subId || '',
+            label: (f.subId || '') + (f.subName ? '  ·  ' + f.subName : '')
+        }));
     _renderCheckboxList(el, options, current, { emptyText: 'No aircraft sub-functions defined yet.' });
 }
 

@@ -1,4 +1,7 @@
 // ============================================================================
+// prove_tabs.js, v1.7: aircraft requirements leave the AFHA area (21 Oct 2026, Waqas: "I want the
+// requirements in Safety Lab to move from AFHAs and SFHAs to the PASA and PSSAs respectively").
+// They are a PASA page now: the PASA tab bar shows above them (helpers_modules.js _syncPasaNav).
 // prove_tabs.js, v1.6: the ZSA area gains the CAD Model tab after Zonal Model
 // (13 Oct 2026, cad_page.js).
 // prove_tabs.js — v1.5 — CCA CONSOLIDATION: ZSA and CMA become areas (26 Aug
@@ -63,8 +66,7 @@
             { t: 'ac-func', k: '1 · Functions' },
             { t: 'ac-fcim', k: '2 · FCIM' },
             { t: 'ac-fha',  k: '3 · Hazard assessment' },
-            { t: 'ac-asm',  k: 'Assumptions' },
-            { t: 'ac-req',  k: 'Requirements' }
+            { t: 'ac-asm',  k: 'Assumptions' }
         ] },
         // 23 Aug 2026 (v1.2) — the tree family, out of the left nav for good.
         { label: 'Fault trees', tabs: [

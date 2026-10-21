@@ -300,14 +300,37 @@ async function readUserSecret(env, userId, kind) {
 // before (https, public host, port 443, /rest/ only, redirects not followed) plus the one
 // the desktop bridge already had: the target host must equal the host SAVED with the
 // credential, so a caller cannot point a stored credential at a different server.
-function bridgeTargetProblem(rawUrl, savedHost) {
+// 21 Oct 2026 (Waqas: allow a customer's own internal Jama, server installs only). A Jama that runs
+// inside the customer's network (a bare IP, a .local or .internal name, a non-443 port) is refused by
+// the public-host rule, because on a SHARED proxy that rule is what stops a caller using the relay to
+// reach somebody's private network. On a customer's own server the private network IS theirs, and
+// their administrator can name the internal ALM host(s) the relay may reach:
+//     BRIDGE_INTERNAL_HOSTS=jama.radia.local,10.20.30.40:8443        (in ai-proxy.env)
+// Only exact entries match (host, or host:port to allow that port). https is still required, the
+// path must still be an ALM /rest/ path, redirects are still refused, and the target must still be
+// the host saved with the credential. The setting is IGNORED unless this is a customer-hosted server
+// (LICENSE_MODE=offline), so it can never widen Safety Lab's own shared relay.
+function bridgeInternalAllowList(env) {
+  if (!env || env.LICENSE_MODE !== "offline") return [];
+  return String(env.BRIDGE_INTERNAL_HOSTS || "").split(",").map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean);
+}
+function bridgeTargetProblem(rawUrl, savedHost, env) {
   let target;
   try { target = new URL(rawUrl || ""); } catch (_) { return { status: 400, error: "invalid target URL" }; }
   const host = target.hostname;
-  const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
-  if (target.protocol !== "https:" || isIp || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal"))
-    return { status: 400, error: "target must be a public https host" };
-  if (target.port && target.port !== "443") return { status: 400, error: "only port 443 is bridged" };
+  const allow = bridgeInternalAllowList(env);
+  const hostL = host.toLowerCase().replace(/^\[|\]$/g, "");
+  const listed = allow.indexOf(hostL) >= 0 || (target.port && allow.indexOf(hostL + ":" + target.port) >= 0);
+  if (listed) {
+    if (target.protocol !== "https:") return { status: 400, error: "target must be https" };
+    if (target.port && target.port !== "443" && allow.indexOf(hostL + ":" + target.port) < 0)
+      return { status: 400, error: "port " + target.port + " is not allowed for " + hostL + " (list it as " + hostL + ":" + target.port + ")" };
+  } else {
+    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":");
+    if (target.protocol !== "https:" || isIp || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal"))
+      return { status: 400, error: allow.length ? "target must be a public https host, or one of this server's approved internal hosts" : "target must be a public https host" };
+    if (target.port && target.port !== "443") return { status: 400, error: "only port 443 is bridged" };
+  }
   if (!target.pathname.includes("/rest/")) return { status: 400, error: "only ALM /rest/ APIs are bridged" };
   if (!savedHost || host.toLowerCase() !== String(savedHost).toLowerCase())
     return { status: 403, error: "target host does not match the saved connector" };
@@ -323,7 +346,7 @@ async function handleBridge(request, env, caller, url) {
   if (sec.error) return jsonResponse(502, { error: { type: "upstream_down", message: "Secret store unreachable." } });
   if (sec.missing) return jsonResponse(404, { error: { type: "no_connector", message: "No connector credential saved. Connect the tool first." } });
 
-  const chk = bridgeTargetProblem(url.searchParams.get("target"), sec.meta && sec.meta.baseHost);
+  const chk = bridgeTargetProblem(url.searchParams.get("target"), sec.meta && sec.meta.baseHost, env);
   if (chk.error) return jsonResponse(chk.status, { error: { type: "bad_target", message: chk.error } });
 
   const basic = "Basic " + btoa(String((sec.meta && sec.meta.user) || "") + ":" + sec.secret);
@@ -812,7 +835,7 @@ async function verifyOfflineLicense(env, blob) {
   } catch (_) { return { error: "invalid_token" }; }
 }
 
-export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense, auditFeature, auditOn, newAudit };   // metering, testable in isolation (test/cache_metering.test.mjs)
+export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense, auditFeature, auditOn, newAudit, bridgeTargetProblem };   // metering, testable in isolation (test/cache_metering.test.mjs)
 
 // The router. Everything it returns goes through withCors() at the boundary below, so no
 // handler has to know or care what the calling origin was.

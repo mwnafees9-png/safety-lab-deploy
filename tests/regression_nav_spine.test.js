@@ -49,8 +49,10 @@ check('ten Prove tabs, one per former dropdown option, in the dropdown\'s order'
   PROVE.map(x => x.t).join(' ') === 'trace gt-integrity evpkg appa validation cm review pr mod sora-thread');
 // 23 Aug 2026 (3) — Waqas: "same thing for both the FHAs". The AFHA dropdown
 // emptied into these five tabs; SFHA was already tabbed (system workspace).
-check('the five AFHA pages ride as area tabs, in the dropdown\'s order',
-  AFHA.map(x => x.t).join(' ') === 'ac-func ac-fcim ac-fha ac-asm ac-req');
+// 21 Oct 2026 (Waqas: "I want the requirements in Safety Lab to move from AFHAs and SFHAs to the PASA
+// and PSSAs respectively"): requirements left the AFHA area for the PASA (regression_requirements_in_pasa_pssa).
+check('the four AFHA pages ride as area tabs, in the dropdown\'s order; requirements are not one of them',
+  AFHA.map(x => x.t).join(' ') === 'ac-func ac-fcim ac-fha ac-asm');
 // Reachability, not literal presence: bow-tie self-mounts its view (moat).
 const siteJs = fs.readdirSync(path.join(__dirname, '..', 'site')).filter(f => f.endsWith('.js'))
   .map(f => { try { return fs.readFileSync(path.join(__dirname, '..', 'site', f), 'utf8'); } catch (_) { return ''; } }).join('\n');
