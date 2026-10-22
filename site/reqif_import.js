@@ -1,4 +1,5 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
+// 22 Oct 2026 (v1.5): redraws go through window.renderReqifPage so the panels other modules add (live Jama bridge, status-back) always draw.
 // ============================================================================
 // reqif_import.js — ReqIF import (Polarion / DOORS / any OMG-ReqIF tool).
 //
@@ -454,7 +455,7 @@
                     text = await f.text();
                 }
                 _pending = { parsed: reqifParse(text), fileName: f.name };
-                renderReqifPage();
+                _drawReqifPage();
             } catch (e) { slAlert('Parse failed: ' + e.message, { title: 'ReqIF import' }); }
         };
         inp.click();
@@ -486,10 +487,20 @@
                 (res.unclassified ? '\n⚠ ' + res.unclassified + ' severity value(s) unrecognized, imported UNCLASSIFIED, classify manually' : '') +
                 '\n' + res.relations + ' relation(s) · ' + res.headings + ' heading(s) skipped', { title: 'ReqIF import' });
             _pending = null;
-            renderReqifPage();
+            _drawReqifPage();
         } catch (e) { slAlert('Import failed: ' + e.message, { title: 'ReqIF import' }); }
     };
-    window.reqifDiscard = function () { _pending = null; renderReqifPage(); };
+    window.reqifDiscard = function () { _pending = null; _drawReqifPage(); };
+
+    // 22 Oct 2026: every redraw of this page goes through window.renderReqifPage, never the local
+    // function. Other modules add their panels to this page by wrapping window.renderReqifPage
+    // (live_bridge.js: the live Jama bridge; status_back.js: the status-back box). Calling the local
+    // function skipped those wrappers, so opening the page drew the ReqIF part alone and the Jama
+    // bridge never appeared (found on a customer call). tests/regression_reqif_page_panels_20261022.
+    function _drawReqifPage() {
+        const f = (typeof window.renderReqifPage === 'function') ? window.renderReqifPage : renderReqifPage;
+        return f();
+    }
 
     function renderReqifPage() {
         const host = document.getElementById('reqif-host');
@@ -544,7 +555,7 @@
                 if (v) v.style.display = (tabId === 'reqif') ? 'block' : 'none';
                 const s = document.getElementById('snav-reqif');
                 if (s) s.classList.toggle('snav-active', tabId === 'reqif');
-                if (tabId === 'reqif') renderReqifPage();
+                if (tabId === 'reqif') _drawReqifPage();
             } catch (_) {}
             return r;
         };
