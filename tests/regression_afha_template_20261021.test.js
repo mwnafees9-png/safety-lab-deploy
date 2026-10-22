@@ -94,6 +94,9 @@ const ctxOf = rows => ({ rows, functions, fcim: [{ subId: 'RAD-F-3.1', tlId: 'FC
   const hr = mkRows();
   check('first sight: one entry each', C.recordChanges(hr, 'brian@radia.com', '2026-10-21T22:00:00Z') === 4 && hr[0].revLog.length === 1 && /First recorded/.test(hr[0].revLog[0].what));
   check('nothing changed: nothing recorded', C.recordChanges(hr, 'brian@radia.com', '2026-10-21T22:05:00Z') === 0);
+  const synced = { internalId: 'x', severity: 'Major', revLog: [{ at: '2026-10-20', by: 'a@radia.com', what: 'First recorded' }] };
+  C.recordChanges([synced], 'b@radia.com', '2026-10-21T00:00:00Z');
+  check('a row that already has a history is never given a second first entry', synced.revLog.length === 1 && !!synced._afhaLast);
   hr[1].severity = 'Catastrophic'; hr[1].effAc = 'Loss of control';
   check('a change: who, when, and what, with the severity move spelled out', C.recordChanges(hr, 'eng@radia.com', '2026-10-22T09:00:00Z') === 1 && hr[1].revLog[1].what === 'aircraft effect, severity HAZ to CAT changed' && C.revisionText(hr[1]).split('\n')[1] === '2026-10-22 eng@radia.com: aircraft effect, severity HAZ to CAT changed', C.revisionText(hr[1]));
 

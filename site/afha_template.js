@@ -189,8 +189,12 @@
             var now = snap(r), was = r._afhaLast;
             if (!Array.isArray(r.revLog)) r.revLog = [];
             if (!was) {
-                r.revLog.push({ at: at, by: by, what: 'First recorded' });
-                r._afhaLast = now; n++;
+                // a row seen for the first time: its history starts here. A row that already has a
+                // history (made on another computer before this one recorded it) only takes the
+                // starting point, so its first entry is never written twice.
+                r._afhaLast = now;
+                if (!r.revLog.length) r.revLog.push({ at: at, by: by, what: 'First recorded' });
+                n++;
                 return;
             }
             var changed = TRACK.filter(function (k) { return S(was[k]) !== S(now[k]); });
@@ -235,7 +239,7 @@
             var topId = fn ? S(fn.funcId) : '', topName = fn ? S(fn.funcName) : '';
             var key = topId || '(no function)';
             if (!sheetOf[key]) { sheetOf[key] = { funcId: topId, funcName: topName || topId || 'Failure conditions not under a function', groups: [] }; sheets.push(sheetOf[key]); }
-            var rows = bySub[sub].slice().sort(function (a, b) { return S(a.fcId).localeCompare(S(b.fcId), undefined, { numeric: true }); });
+            var rows = bySub[sub].slice();   // in the worksheet's own order, as the engineer arranged them
             var fdal = fdalFor(rows);
             sheetOf[key].groups.push({ subId: sub, rows: rows.map(function (r) { var v = rowValues(r, ctx); v.fdal = fdal; v.internalId = r.internalId; return v; }) });
         });
