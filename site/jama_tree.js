@@ -1,5 +1,6 @@
 // ============================================================================
-// jama_tree.js, v1.1, 22 Oct 2026: the Jama function tree, as Safety Lab rows (v1.1: the project's level limit).
+// jama_tree.js, v1.2, 22 Oct 2026: the Jama function tree, as Safety Lab rows (v1.1: the project's level limit;
+// v1.2: items keep their raw fields; the parent lookup answers for any item type, with a shared cache).
 //
 // Waqas's ruling (21 Oct 2026): track a customer's aircraft functions live from
 // Jama, the same way requirements are tracked, with the full decomposition
@@ -69,6 +70,9 @@
             parentItemId: par.item != null ? Number(par.item) : null,
             sort: loc.globalSortOrder != null ? Number(loc.globalSortOrder) : (loc.sortOrder != null ? Number(loc.sortOrder) : null),
             seq: S(loc.sequence),
+            // 22 Oct 2026: the item's own fields as Jama sent them, for the per-kind field choices
+            // (severity, flight phases, effects of a failure condition; see jama_kinds.js)
+            fields: Object.assign({}, f),
         };
     }
 
@@ -76,13 +80,16 @@
     // top function), looking through folders, sets and other types. fetchItem(id)
     // is async and returns a raw Jama item (or null); results are cached and the
     // number of lookups is capped so a broken payload cannot loop or flood the server.
+    // 22 Oct 2026: opts.fromTypes asks the same question for other items (a failure condition:
+    // which function is it under?); opts.cache shares the folder lookups between the two asks.
     async function resolveFunctionParents(items, fnTypes, fetchItem, opts) {
         const o = opts || {};
         const maxLookups = o.maxLookups || 400, maxHops = o.maxHops || 25;
         const fnSet = new Set(arrOf(fnTypes).map(Number));
+        const fromSet = o.fromTypes ? new Set(arrOf(o.fromTypes).map(Number)) : fnSet;
         const byId = new Map();
         arrOf(items).forEach(function (n) { if (n) byId.set(n.id, n); });
-        const cache = new Map(); let lookups = 0; const warnings = [];
+        const cache = o.cache instanceof Map ? o.cache : new Map(); let lookups = 0; const warnings = [];
         async function get(id) {
             if (byId.has(id)) return byId.get(id);
             if (cache.has(id)) return cache.get(id);
@@ -96,7 +103,7 @@
         }
         const out = new Map();
         for (const n of arrOf(items)) {
-            if (!n || !fnSet.has(n.type)) continue;
+            if (!n || !fromSet.has(n.type)) continue;
             let pid = n.parentItemId, hops = 0, found = null;
             const seen = new Set([n.id]);
             while (pid != null && hops++ < maxHops) {

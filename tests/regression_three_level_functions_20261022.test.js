@@ -197,7 +197,7 @@ function rowsOf(list) {   // as the outline import writes them
     const d3 = JT.diffFunctions(tree, [], { levelLimit: 3 });
     check('with the 3-level limit, the 4th-level item is not staged and is listed', d3.fresh.length === 2 && d3.tooDeep.length === 1 && d3.tooDeep[0].item.key === 'F-4' && d3.tooDeep[0].level === 4);
     const lb = read('site/live_bridge.js');
-    check('the bridge passes the project limit and puts the refusal in the review', /T\.diffFunctions\(tree, .*\{ levelLimit: _lim \}\);/.test(lb) && /refusedText\(fn\.tooDeep\.map\(x => x\.item\.key\), 'brought in'\)/.test(lb));
+    check('the bridge passes the project limit and puts the refusal in the review', /T\.diffFunctions\(tree, .*\{ levelLimit: _lim \}\);/.test(lb) && /refusedText\(d\.fn\.tooDeep\.map\(x => x\.item\.key\), 'brought in'\)/.test(lb));
   }
 
   // --------------------------------------------------------------- the form
