@@ -245,9 +245,13 @@ function rowsOf(list) {   // as the outline import writes them
   console.log('\n[wiring] cache keys');
   {
     const idx = read('site/index.html');
-    check('every changed file has a bumped cache key', ['func_tree.js?v=1.1', 'data_ops_modules.js?v=66.59', 'importers.js?v=1.12', 'jama_tree.js?v=1.1', 'live_bridge.js?v=2.2',
-      'bindings_modules.js?v=1.58', 'helpers_modules.js?v=3.36', 'support_modules.js?v=66.47', 'mass_actions.js?v=0.9', 'afha_template.js?v=1.1', 'ai_loader.js?v=8.77'].every(k => idx.indexOf(k) >= 0)
-      && /ai_assistant\.js\?v=76\.85/.test(read('site/ai_loader.js')));
+    // at least the version this build shipped with (a later build may bump them again)
+    const ver = (src, f) => { const m = new RegExp(f.replace('.', '\\.') + '\\?v=([0-9.]+)').exec(src); return m ? m[1].split('.').map(Number) : null; };
+    const atLeast = (have, want) => { if (!have) return false; const w = want.split('.').map(Number); for (let i = 0; i < Math.max(have.length, w.length); i++) { const d = (have[i] || 0) - (w[i] || 0); if (d) return d > 0; } return true; };
+    const want = { 'func_tree.js': '1.1', 'data_ops_modules.js': '66.59', 'importers.js': '1.12', 'jama_tree.js': '1.1', 'live_bridge.js': '2.2', 'bindings_modules.js': '1.58',
+                   'helpers_modules.js': '3.36', 'support_modules.js': '66.47', 'mass_actions.js': '0.9', 'afha_template.js': '1.1', 'ai_loader.js': '8.77' };
+    const low = Object.keys(want).filter(f => !atLeast(ver(idx, f), want[f]));
+    check('every changed file has a bumped cache key (at least the 22 Oct versions)', low.length === 0 && atLeast(ver(read('site/ai_loader.js'), 'ai_assistant.js'), '76.85'), low.join(', '));
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -208,7 +208,7 @@ function jama() {
     check('item type names are kept, so no panel says "type 89001"', /cfg\.typeNames = \{\}/.test(lb) && /\(cfg\.typeNames \|\| \{\}\)\[id\]/.test(lb));
     check('until a system has its Jama folder, every aircraft panel and the full panel say its items would come in at aircraft level', /function _unassignedSystems\(cfg\)/.test(lb) && /comes in here, at aircraft level/.test(lb) && /if \(loose\.length\) warnings\.push\(_looseText\(loose\)\)/.test(lb) && /const loose = p\.scope === 'ac' \? _unassignedSystems\(cfg\) : \[\]/.test(lb));
     check('read-only: the bridge only ever GETs', !/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(lb));
-    check('index.html loads jama_kinds.js between jama_tree.js and live_bridge.js', /jama_tree\.js\?v=1\.2[\s\S]*jama_kinds\.js\?v=1\.0[\s\S]*live_bridge\.js\?v=3\.0/.test(idx));
+    check('index.html loads jama_kinds.js between jama_tree.js and live_bridge.js', /jama_tree\.js\?v=[0-9.]+[\s\S]*jama_kinds\.js\?v=[0-9.]+[\s\S]*live_bridge\.js\?v=[0-9.]+/.test(idx));
   }
 
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
