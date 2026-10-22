@@ -135,7 +135,7 @@ const ctxOf = rows => ({ rows, functions, fcim: [{ subId: 'RAD-F-3.1', tlId: 'FC
   check('Informal Review Comments are not a column on the page', !/Informal Review/.test(page.slice(page.indexOf('var COLS'), page.indexOf('function renderTable'))));
   check('no AI in any derived column', !/AiClient|askClaude|anthropic/i.test(page.slice(0, page.indexOf('// The page'))));
   const idx = S('index.html');
-  check('both scripts load', /<script src="afha_template\.js\?v=1\.0" defer><\/script>\s*<script src="afha_template_export\.js\?v=1\.0" defer><\/script>/.test(idx));
+  check('both scripts load', /<script src="afha_template\.js\?v=1\.1" defer><\/script>\s*<script src="afha_template_export\.js\?v=1\.0" defer><\/script>/.test(idx));
   check('no customer is named anywhere in the shipped modules', ['afha_template.js', 'afha_template_export.js'].every(f => !/radia(?!t|n|l)/i.test(S(f))));
   check('the template is kept in the project, not shipped in the bundle', /c\.afhaTemplate = \{ name: f\.name, b64: b64\(buf\)/.test(S('afha_template_export.js')) && !fs.readdirSync(SITE).some(f => /afha.*\.xlsx$/i.test(f)));
 

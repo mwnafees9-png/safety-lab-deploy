@@ -3843,13 +3843,26 @@ function slAcFuncOptions() {
     (acFunctionsData || []).forEach(f => { const id = String((f && f.subId) || '').trim(); if (!id || seen.has(id)) return; seen.add(id); out.push({ value: id, label: id + (f.subName ? '  ·  ' + f.subName : '') }); });
     return out;
 }
-function populateFuncDropdown(selectId) {
+// 22 Oct 2026 (Waqas: failure conditions belong to the lowest tier of functions, for everyone):
+// opts.leavesOnly (the FCIM and FHA pickers) keeps the whole tree visible for orientation, but only the
+// bottom of each branch can be picked; a function with sub-functions under it is shown, greyed. A row
+// already linked to such a function keeps its value (it is listed, marked), so nothing is lost on edit.
+function populateFuncDropdown(selectId, opts) {
     const select = document.getElementById(selectId); if (!select) return;
     if (typeof SLFuncTree === 'undefined') { populateDropdowns(selectId, acFunctionsData || [], 'subId', 'subName'); return; }
+    const leavesOnly = !!(opts && opts.leavesOnly) && typeof SLFuncTree.isLeaf === 'function';
+    const arr = acFunctionsData || [];
+    const ix = leavesOnly ? SLFuncTree.index(arr) : null;
     const previousValue = select.value;
     select.innerHTML = '<option value="">-- Select --</option>' +
-        SLFuncTree.pickList(acFunctionsData || []).map(p => '<option value="' + esc(p.value) + '">' + esc(p.label) + '</option>').join('');
-    if (previousValue && Array.from(select.options).some(o => o.value === previousValue)) select.value = previousValue;
+        SLFuncTree.pickList(arr).map(p => {
+            const leaf = !leavesOnly || SLFuncTree.isLeaf(p.row, ix);
+            return '<option value="' + esc(p.value) + '"' + (leaf ? '' : ' disabled data-sl-branch="1"') + '>' + esc(p.label) + (leaf ? '' : '  (has functions under it)') + '</option>';
+        }).join('');
+    if (previousValue) {
+        const o = Array.from(select.options).find(x => x.value === previousValue);
+        if (o) { if (o.disabled) { o.disabled = false; o.textContent += ' (linked before; pick the lowest level)'; } select.value = previousValue; }
+    }
 }
 function getCheckedValues(containerId) { return Array.from(document.querySelectorAll(`#${containerId} input:checked`)).map(cb => cb.value).join(', '); }
 // 28 Aug 2026 — tolerant of the array shape AI-accepted rows carried before the

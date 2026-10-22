@@ -145,7 +145,8 @@ console.log('\n[W3] the class-B reasons still hold');
   // the Excel import commit autosaves once after the per-sheet loop
   const imp = read('importers.js');
   const at = imp.search(/const n = _importInto\(sheet(, report)?\);/);   // 21 Oct 2026: the loop also collects a report
-  check('_importInto: the import commit autosaves after the loop', at > 0 && imp.slice(at, at + 2000).indexOf('scheduleAutosave()') > 0);
+  // 22 Oct 2026: the commit now also takes back function rows below the project's level limit before it saves, so the save sits further down
+  check('_importInto: the import commit autosaves after the loop', at > 0 && imp.slice(at, at + 3500).indexOf('scheduleAutosave()') > 0);
   // the undo/autosave wrapper still schedules the autosave
   check('_wrapForUndoAndAutosave still calls scheduleAutosave', /const r = fn\.apply\(this, arguments\);\s*scheduleAutosave\(\);/.test(undoSrc));
 }

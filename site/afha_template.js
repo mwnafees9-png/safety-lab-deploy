@@ -35,6 +35,10 @@
 (function (root) {
     'use strict';
     var FEATURE = 'afha-customer-template';
+    // 22 Oct 2026 (Waqas): the same customer keeps aircraft functions exactly three levels deep,
+    // Function > Sub-function > Sub-sub-function, with a column set for each level. Switched on by
+    // the same license feature: it is part of their AFHA layout. func_tree.js enforces the number.
+    var FUNCTION_LEVELS = 3;
     function S(v) { return v == null ? '' : String(v).trim(); }
     function arr(a) { return Array.isArray(a) ? a : []; }
 
@@ -246,7 +250,7 @@
         return sheets;
     }
 
-    var core = { FEATURE: FEATURE, sevCode: sevCode, fdalFor: fdalFor, phasesConsolidated: phasesConsolidated, fcimSlot: fcimSlot, ffcText: ffcText,
+    var core = { FEATURE: FEATURE, FUNCTION_LEVELS: FUNCTION_LEVELS, sevCode: sevCode, fdalFor: fdalFor, phasesConsolidated: phasesConsolidated, fcimSlot: fcimSlot, ffcText: ffcText,
                  impactFor: impactFor, effectsText: effectsText, assumptionsText: assumptionsText, supportingDefault: supportingDefault,
                  validationParts: validationParts, validationText: validationText, verificationText: verificationText, titleFor: titleFor,
                  recordChanges: recordChanges, revisionText: revisionText, rowValues: rowValues, buildGroups: buildGroups,
@@ -428,7 +432,16 @@
         }
         ['afha-tpl-export', 'afha-tpl-template'].forEach(function (id) { var el = document.getElementById(id); if (el) el.style.display = active() ? '' : 'none'; });
     }
-    function refresh() { try { wrapAll(); if (typeof W.renderACFHA === 'function') W.renderACFHA(); } catch (_) {} }
+    // the function table changes shape with the layout (three column sets); redraw it when that flips
+    var _lastLevels = null;
+    function refresh() {
+        try { wrapAll(); if (typeof W.renderACFHA === 'function') W.renderACFHA(); } catch (_) {}
+        try {
+            var lv = W.SLFuncTree ? W.SLFuncTree.levelLimit() : 0;
+            if (lv !== _lastLevels) { _lastLevels = lv; if (typeof W.renderACFunctions === 'function') W.renderACFunctions(); if (typeof W.acFuncPopulateParents === 'function') W.acFuncPopulateParents(); }
+        } catch (_) {}
+    }
+    if (W.SLFuncTree && typeof W.SLFuncTree.setLevelLimit === 'function') W.SLFuncTree.setLevelLimit(function () { return active() ? C.FUNCTION_LEVELS : 0; });
     W.SLAfhaTpl = { active: active, refresh: refresh, render: renderTable, fillForm: fillForm, readForm: readForm, ctx: ctx };
     function boot() {
         wrapAll();

@@ -870,9 +870,15 @@ window.acFuncPopulateParents = function (editingRow) {
         banned.add(String(editingRow.subId).trim());
         SLFuncTree.descendants(editingRow.subId, ix).forEach(function (r) { banned.add(String(r.subId || '').trim()); });
     }
+    // 22 Oct 2026: the project's level limit (the 3-level layout). Only parents that keep the row,
+    // and whatever sits under it, inside the limit are offered: with three levels, only sub-functions.
+    const lim = SLFuncTree.levelLimit ? SLFuncTree.levelLimit() : 0;
+    const below = (editingRow && editingRow.subId && ix.bySub.get(String(editingRow.subId).trim()) === editingRow) ? SLFuncTree.height(editingRow.subId, ix) : 0;
+    const maxParentDepth = lim ? lim - 2 - below : Infinity;   // a node at depth d is level d + 1
     let html = '<option value="">Directly under the aircraft function</option>', curFn = null;
     SLFuncTree.pickList(arr).forEach(function (p) {
         if (banned.has(p.value)) return;
+        if (p.depth > maxParentDepth) return;
         const fid = String(p.row.funcId || '').trim();
         if (fid !== curFn) {
             if (curFn !== null) html += '</optgroup>';
@@ -887,8 +893,26 @@ window.acFuncPopulateParents = function (editingRow) {
         const o = document.createElement('option'); o.value = keep; o.textContent = keep + ' (not found)'; o.dataset.slOrphan = '1'; sel.appendChild(o);
     }
     sel.value = keep;
+    _acFuncLevelLabels();
 };
+// 22 Oct 2026 (the 3-level layout): the entry fields say which level is being logged. Directly under the
+// function it is a Sub-Function; under a sub-function it is a Sub-Sub-Function. Without the layout the
+// labels stay as written in the page.
+function _acFuncLevelLabels() {
+    const sel = document.getElementById('ac-subfunc-parent');
+    const three = typeof SLFuncTree !== 'undefined' && SLFuncTree.levelLimit && SLFuncTree.levelLimit() === 3;
+    const subsub = three && sel && !!sel.value;
+    [['ac-subfunc-id', 'Aircraft Sub-Sub-Function ID'], ['ac-subfunc-name', 'Aircraft Sub-Sub-Function'], ['ac-subfunc-def', 'Sub-Sub-Function Definition']].forEach(function (x) {
+        const inp = document.getElementById(x[0]);
+        const lab = inp && inp.previousElementSibling;
+        if (!lab || String(lab.tagName).toUpperCase() !== 'LABEL') return;
+        if (lab.dataset.slStd == null) lab.dataset.slStd = lab.textContent;
+        lab.textContent = subsub ? x[1] : lab.dataset.slStd;
+    });
+}
+window._acFuncLevelLabels = _acFuncLevelLabels;
 window.acFuncParentChanged = function () {
+    try { _acFuncLevelLabels(); } catch (_) {}
     const sel = document.getElementById('ac-subfunc-parent');
     if (!sel || !sel.value) return;
     const p = (acFunctionsData || []).find(function (r) { return r && String(r.subId || '').trim() === sel.value; });

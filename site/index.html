@@ -4158,7 +4158,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ui_constants.js?v=1.1" defer></script>
     <script src="config_data.js?v=1.2" defer></script>
     <script src="ai_memory.js?v=1.0" defer></script>
-    <script src="importers.js?v=1.11" defer></script>
+    <script src="importers.js?v=1.12" defer></script>
     <script src="ai_request.js?v=1.1" defer></script>
     <script src="core_modules.js?v=1.13" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
@@ -4184,18 +4184,18 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
     <script src="gt_thread.js?v=0.91" defer></script>
     <!-- 21 Oct 2026 (full function tree): func_tree.js is the one place that knows how aircraft functions nest to any depth. Loads before the modules that render and pick functions. -->
-    <script src="func_tree.js?v=1.0" defer></script>
-    <script src="data_ops_modules.js?v=66.58" defer></script>
+    <script src="func_tree.js?v=1.1" defer></script>
+    <script src="data_ops_modules.js?v=66.59" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.46" defer></script>
+    <script src="support_modules.js?v=66.47" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.35" defer></script>
+    <script src="helpers_modules.js?v=3.36" defer></script>
     <script src="cloud_writer.js?v=1.2" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.2" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.57" defer></script>
+    <script src="bindings_modules.js?v=1.58" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
@@ -4355,8 +4355,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="status_back.js?v=1.0" defer></script>
     <!-- J1 — live bridge: Jama tracking via /api/bridge (read-only phase 1). -->
     <!-- 21 Oct 2026 (live Jama functions): jama_tree.js maps the Jama function tree onto Safety Lab rows; pure, loads before the bridge. -->
-    <script src="jama_tree.js?v=1.0" defer></script>
-    <script src="live_bridge.js?v=2.1" defer></script>
+    <script src="jama_tree.js?v=1.1" defer></script>
+    <script src="live_bridge.js?v=2.2" defer></script>
     <!-- M5 — Cameo/SysML XMI import (draft socket awaiting the program sample). -->
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab
@@ -4459,7 +4459,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ml_assurance.js?v=0.5" defer></script>
     <!-- Mass actions for tabulated analyses — selection layer over the worksheet tables;
          every write routes through each worksheet's own helpers. -->
-    <script src="mass_actions.js?v=0.8" defer></script>
+    <script src="mass_actions.js?v=0.9" defer></script>
     <script src="mbsa_schema.js?v=1.1" defer></script>
     <script src="zonal_model.js?v=1.3" defer></script>
     <script src="cad_zonal.js?v=1.8" defer></script>
@@ -4578,7 +4578,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.16" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.76" defer></script>
+    <script src="ai_loader.js?v=8.77" defer></script>
     <!-- 16 Oct 2026: the AI Assistant page (AI inputs, every AI analysis and the chat, the pages that read the inputs). -->
     <script src="ai_inputs_page.js?v=1.0" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
@@ -4605,7 +4605,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="slab_seats.js?v=1.0" defer></script>
     <script src="server_ai_key.js?v=1.0" defer></script>
     <!-- 21 Oct 2026: the customer AFHA template layout (license feature "afha-customer-template"): the Aircraft FHA page and its export in a customer's own template. Off unless the license names it. -->
-    <script src="afha_template.js?v=1.0" defer></script>
+    <script src="afha_template.js?v=1.1" defer></script>
     <script src="afha_template_export.js?v=1.0" defer></script>
     <script src="auth_gate.js?v=62.76" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives

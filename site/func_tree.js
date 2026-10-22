@@ -1,5 +1,5 @@
 // ============================================================================
-// func_tree.js, v1.0, 21 Oct 2026: aircraft functions to any depth.
+// func_tree.js, v1.1, 22 Oct 2026: aircraft functions to any depth; leaves; a per-project level limit.
 //
 // Waqas's ruling (21 Oct 2026): full tree support. Customers keep
 // a function decomposition that goes far deeper than "function, sub-function",
@@ -39,6 +39,22 @@
 //                         deduped by subId, in tree order, indented
 //   check(row, arr)       '' if the row's parent is valid, else the reason
 //   problems(arr)         every row whose parent is not valid, with reason
+//   isLeaf(row, ix)       the bottom of its branch: a node with nothing
+//                         under it, or a function with no nodes at all
+//   leaves(arr)           every bottom-of-branch row, tree order, deduped
+//   levelLimit()          how many levels aircraft functions may have in
+//                         this project (0 = no limit). The function itself
+//                         is level 1, a node directly under it level 2.
+//   setLevelLimit(fn|n)   who decides that (afha_template.js, from the
+//                         license: the customer's 3-level layout)
+//   level(row, ix)        a row's level: 1 + its depth (1 for a function-
+//                         only row)
+//   tooDeep(arr)          rows below the limit, with the reason
+//   threeLevel(row, ix)   the row as Function / Sub-function / Sub-sub-
+//                         function columns (the 3-level layout)
+//   fromThreeLevel(rec)   the reverse, for imports of those columns
+//   dropTooDeep(arr, isNew) take back imported rows below the limit
+//   refusedText(ids, verb) the sentence that says so
 // ============================================================================
 (function (root) {
     'use strict';
@@ -192,6 +208,18 @@
         if (S(p.funcId) !== S(row.funcId)) return 'The parent ' + pid + ' belongs to aircraft function ' + (S(p.funcId) || '(none)') + ', not ' + (S(row.funcId) || '(none)') + '. A sub-function and its parent must be in the same function.';
         // would the new link make a loop? walk up from the parent using the store with this row's new values
         const ix = index(others.concat([row]));
+        // 22 Oct 2026: the level limit (0 = none). The row's own level plus whatever hangs below it.
+        const lim = levelLimit();
+        if (lim) {
+            const below = S(row.subId) ? height(row.subId, ix) : 0;
+            const lv = 1 + depth(row, ix) + below;
+            if (lv > lim) {
+                const what = below
+                    ? S(row.subId) + ' has functions under it, so under ' + pid + ' they would reach level ' + lv + '.'
+                    : 'Under ' + pid + ', ' + (S(row.subId) || 'this row') + ' would be a level ' + lv + ' function.';
+                return what + ' ' + limitText(lim);
+            }
+        }
         let cur = p, guard = 0;
         while (cur && guard++ < 10000) {
             if (S(cur.subId) === S(row.subId) && S(row.subId)) return 'That parent sits under ' + S(row.subId) + ' already, so this would make a loop.';
@@ -212,9 +240,128 @@
         return out;
     }
 
+
+    // ------------------------------------------------------------------ the bottom of each branch
+    // 22 Oct 2026 (Waqas): "the AI will now be evaluating the lowest tiered functions", for every
+    // customer. Failure conditions belong to the bottom of each branch; the levels above are the
+    // context they sit in. A node with nothing under it is a leaf. A function-only row (no subId)
+    // is a leaf when its function has no nodes at all.
+    function isLeaf(row, ix) {
+        if (!row) return false;
+        const id = S(row.subId);
+        if (id) return childrenOf(id, ix).length === 0 || ix.bySub.get(id) !== row;
+        const f = S(row.funcId);
+        return !ix.rows.some(function (r) { return r && r !== row && S(r.funcId) === f && S(r.subId); });
+    }
+    function leaves(arr, ixIn) {
+        const ix = ixIn || index(arr), seen = new Set(), out = [];
+        ordered(arr, ix).forEach(function (r) {
+            if (!isLeaf(r, ix)) return;
+            const k = S(r.subId) ? 's:' + S(r.subId) : 'f:' + S(r.funcId);
+            if (seen.has(k)) return;
+            seen.add(k); out.push(r);
+        });
+        return out;
+    }
+
+    // ------------------------------------------------------------------ level limit
+    // 22 Oct 2026 (Waqas): a customer's aircraft functions go exactly three levels, Function >
+    // Sub-function > Sub-sub-function, only for that customer (their license). Everyone else
+    // keeps any depth. The limit is one number: the day they want a fourth level it changes in
+    // one place. A row that would go below the limit is refused by name, never hidden.
+    let _limitSrc = null;
+    function setLevelLimit(src) { _limitSrc = src; }
+    function levelLimit() {
+        try {
+            const v = (typeof _limitSrc === 'function') ? _limitSrc() : _limitSrc;
+            const n = Number(v);
+            return (isFinite(n) && n >= 2) ? Math.floor(n) : 0;
+        } catch (_) { return 0; }
+    }
+    function level(row, ix) { return S(row && row.subId) ? 1 + depth(row, ix) : 1; }
+    // how many levels hang below a node (0 = a leaf)
+    function height(subId, ix) {
+        let best = 0;
+        const seen = new Set();
+        const walk = function (id, d) {
+            childrenOf(id, ix).forEach(function (c) {
+                if (seen.has(c)) return; seen.add(c);
+                if (d + 1 > best) best = d + 1;
+                walk(S(c.subId), d + 1);
+            });
+        };
+        walk(S(subId), 0);
+        return best;
+    }
+    function levelName(n) {
+        return ['', 'function', 'sub-function', 'sub-sub-function'][n] || ('level ' + n + ' function');
+    }
+    function limitText(lim) {
+        return 'Aircraft functions in this project go ' + lim + ' levels deep (' +
+            ['Function', 'Sub-function', 'Sub-sub-function'].slice(0, lim).join(' > ') + ').';
+    }
+    function tooDeep(arr) {
+        const lim = levelLimit(); if (!lim) return [];
+        const ix = index(arr), out = [];
+        ix.rows.forEach(function (r) {
+            if (!r || !S(r.subId)) return;
+            const lv = level(r, ix);
+            if (lv > lim) out.push({ row: r, level: lv, reason: S(r.subId) + ' would be a level ' + lv + ' function. ' + limitText(lim) });
+        });
+        return out;
+    }
+
+    // Imports: take back the rows an import just added that sit below the limit (and so everything
+    // under them), in place, and say which. Rows that were already there are never touched here.
+    function dropTooDeep(arr, isNew) {
+        const bad = tooDeep(arr).filter(function (x) { return !isNew || isNew(x.row); });
+        if (!bad.length) return [];
+        const gone = new Set(bad.map(function (x) { return x.row; }));
+        for (let i = arr.length - 1; i >= 0; i--) if (gone.has(arr[i])) arr.splice(i, 1);
+        return bad.map(function (x) { return S(x.row.subId); });
+    }
+    function refusedText(ids, verb) {
+        const lim = levelLimit();
+        return ids.length + ' row' + (ids.length === 1 ? ' was' : 's were') + ' not ' + (verb || 'imported') + ' because ' + (ids.length === 1 ? 'it sits' : 'they sit') +
+            ' below level ' + lim + ': ' + ids.slice(0, 6).join(', ') + (ids.length > 6 ? ' and ' + (ids.length - 6) + ' more' : '') + '. ' + limitText(lim);
+    }
+
+    // ------------------------------------------------------------------ the 3-level columns
+    // The store stays one row per node (every reader keeps working). The 3-level layout only
+    // changes how a row is SHOWN and exported: a level 2 row is the Sub-function, a level 3 row
+    // is the Sub-sub-function with its parent in the Sub-function columns.
+    function threeLevel(row, ix) {
+        const out = { funcId: S(row.funcId), funcName: S(row.funcName), funcDef: S(row.funcDef),
+                      subId: '', subName: '', subDef: '', subSubId: '', subSubName: '', subSubDef: '', level: level(row, ix) };
+        if (!S(row.subId)) return out;
+        const p = parentOf(row, ix);
+        if (p) {
+            out.subId = S(p.subId); out.subName = S(p.subName); out.subDef = S(p.subDef);
+            out.subSubId = S(row.subId); out.subSubName = S(row.subName); out.subSubDef = S(row.subDef);
+        } else {
+            out.subId = S(row.subId); out.subName = S(row.subName); out.subDef = S(row.subDef);
+        }
+        return out;
+    }
+    // An imported line that fills the Sub-sub-function columns is the sub-sub-function node, under
+    // the Sub-function in the same line. A line without them is the sub-function (or the function).
+    function fromThreeLevel(rec) {
+        const r = Object.assign({}, rec);
+        const ss = S(r.subSubId);
+        if (ss || S(r.subSubName)) {
+            r.parentSubId = S(r.subId);
+            r.subId = ss; r.subName = S(r.subSubName); r.subDef = S(r.subSubDef);
+        }
+        delete r.subSubId; delete r.subSubName; delete r.subSubDef;
+        return r;
+    }
+
     const API = { index: index, parentOf: parentOf, depth: depth, ordered: ordered, path: path, pathText: pathText,
                   childrenOf: childrenOf, descendants: descendants, pickLabel: pickLabel, pickList: pickList,
-                  check: check, problems: problems };
+                  check: check, problems: problems, isLeaf: isLeaf, leaves: leaves,
+                  setLevelLimit: setLevelLimit, levelLimit: levelLimit, level: level, height: height,
+                  levelName: levelName, limitText: limitText, tooDeep: tooDeep,
+                  threeLevel: threeLevel, fromThreeLevel: fromThreeLevel, dropTooDeep: dropTooDeep, refusedText: refusedText };
     root.SLFuncTree = API;
     if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof window !== 'undefined' ? window : globalThis);

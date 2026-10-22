@@ -1,7 +1,7 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // 13 Sep 2026 (R19 step 2): every fire-and-forget promise chain in this file now ends in .catch → SLErrorWatch.report(e, module), so a failure is recorded and told to the person instead of dying in the console.
 // ============================================================================
-// mass_actions.js — v0.6 — MASS ACTIONS FOR TABULATED ANALYSES (beta demand).
+// mass_actions.js — v0.9 — MASS ACTIONS FOR TABULATED ANALYSES (beta demand).
 //
 // One shared module, not fifteen table hacks: a selection layer that rides on
 // top of the existing worksheet tables and routes EVERY write through each
@@ -13,6 +13,9 @@
 //   · AFHA  (ac-fha-body)  — batch delete via deleteACFHA
 //   · SFHA  (sys-fha-body) — batch delete via deleteSysFHA
 //   · Requirements (ac-req-body) — batch soft-delete via deleteACReq
+//   · Aircraft Functions (ac-func-body) — v0.9, 22 Oct 2026: batch delete via
+//     deleteACFunction, bottom up; a row with rows still under it is refused by name
+//   · Aircraft FCIM (ac-fcim-body) — v0.9: batch delete via deleteACFCIM
 //   (v0.6: batch DELETE is the product — bulk edit/export were cut on
 //    Waqas's call: severity is a per-FC judgment, not a sweep.)
 //
@@ -48,6 +51,8 @@
     const GLOBALS = {
         acFhaData:      function () { return (typeof acFhaData      !== 'undefined') ? acFhaData      : undefined; },
         acReqData:      function () { return (typeof acReqData      !== 'undefined') ? acReqData      : undefined; },
+        acFunctionsData: function () { return (typeof acFunctionsData !== 'undefined') ? acFunctionsData : undefined; },
+        acFcimData:     function () { return (typeof acFcimData     !== 'undefined') ? acFcimData     : undefined; },
         systemsData:    function () { return (typeof systemsData    !== 'undefined') ? systemsData    : undefined; },
         activeSystemId: function () { return (typeof activeSystemId !== 'undefined') ? activeSystemId : undefined; },
         ftaPages:       function () { return (typeof ftaPages       !== 'undefined') ? ftaPages       : undefined; }
@@ -67,7 +72,43 @@
         });
         return linked ? ((row.fcId || row.internalId) + ' has a linked fault tree — unlink or delete the tree first') : null;
     }
+    // 22 Oct 2026 (Waqas: mass actions on the Functions and FCIM pages, "just tick rows and delete them").
+    // A function row with rows still under it is refused by name. The batch deletes from the bottom
+    // up, so ticking a sub-function together with everything under it deletes the whole branch.
+    function _fnIdOf(row) { return row.subId || row.funcId || row.internalId; }
+    function _fnStillHasKids(row) {
+        if (typeof SLFuncTree === 'undefined' || !row || !row.subId) return null;
+        const arr = _g('acFunctionsData') || [];
+        const ix = SLFuncTree.index(arr);
+        if (ix.bySub.get(String(row.subId).trim()) !== row) return null;
+        const kids = SLFuncTree.childrenOf(row.subId, ix);
+        if (!kids.length) return null;
+        return _fnIdOf(row) + ' still has ' + kids.length + ' function' + (kids.length === 1 ? '' : 's') + ' under it (' +
+            kids.slice(0, 3).map(_fnIdOf).join(', ') + (kids.length > 3 ? ', ...' : '') + '); tick those too, or delete them first';
+    }
+    function _fnBottomUp(ids) {
+        if (typeof SLFuncTree === 'undefined') return ids;
+        const arr = _g('acFunctionsData') || [];
+        const ix = SLFuncTree.index(arr);
+        const d = id => { const r = arr.find(x => x && String(x.internalId) === String(id)); return (r && r.subId && ix.pos.has(r)) ? SLFuncTree.depth(r, ix) : 0; };
+        return ids.slice().sort((a, b) => d(b) - d(a));
+    }
     const TARGETS = [
+        {
+            key: 'acFunc', label: 'Aircraft Functions', tbodyId: 'ac-func-body',
+            store: () => _g('acFunctionsData') || [],
+            deleteFn: 'deleteACFunction', renderFn: 'renderACFunctions',
+            order: _fnBottomUp,
+            guardDelete: _fnStillHasKids,
+            idOf: _fnIdOf
+        },
+        {
+            key: 'acFcim', label: 'Aircraft FCIM', tbodyId: 'ac-fcim-body',
+            store: () => _g('acFcimData') || [],
+            deleteFn: 'deleteACFCIM', renderFn: 'renderACFCIM',
+            guardDelete: null,
+            idOf: row => row.subId || row.internalId
+        },
         {
             key: 'acFha', label: 'Aircraft FHA', tbodyId: 'ac-fha-body',
             store: () => _g('acFhaData') || [],
@@ -239,7 +280,7 @@
         },
         bulkDelete: function () {
             const t = _activeTarget(); if (!t) return;
-            const ids = Array.from(sel[t.key]);
+            const ids = t.order ? t.order(Array.from(sel[t.key])) : Array.from(sel[t.key]);
             const del = _fn(t.deleteFn);
             if (!del) { _toast('Delete helper unavailable for ' + t.label + '.', 'error'); return; }
             (async function () {
@@ -260,7 +301,7 @@
                         if (!row) { refused.push(id + ': not found (already gone?)'); continue; }
                         const why = t.guardDelete ? t.guardDelete(row) : null;
                         if (why) { refused.push(why); continue; }
-                        try { await del(row.internalId); done++; sel[t.key].delete(id); } catch (e) { refused.push((row.fcId || row.traceId || id) + ': ' + e.message); }
+                        try { await del(row.internalId); done++; sel[t.key].delete(id); } catch (e) { refused.push((t.idOf ? t.idOf(row) : (row.fcId || row.traceId || id)) + ': ' + e.message); }
                     }
                 } finally {
                     window.slConfirm = _slConfirm;

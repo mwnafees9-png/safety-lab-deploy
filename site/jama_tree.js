@@ -1,5 +1,5 @@
 // ============================================================================
-// jama_tree.js, v1.0, 21 Oct 2026: the Jama function tree, as Safety Lab rows.
+// jama_tree.js, v1.1, 22 Oct 2026: the Jama function tree, as Safety Lab rows (v1.1: the project's level limit).
 //
 // Waqas's ruling (21 Oct 2026): track a customer's aircraft functions live from
 // Jama, the same way requirements are tracked, with the full decomposition
@@ -145,7 +145,11 @@
     //   fnChanged  top functions whose name or description changed (applies to every row of it)
     //   missing    rows from Jama whose item is no longer there (flagged, never deleted)
     //   unchanged  count
-    function diffFunctions(tree, rows) {
+    //   tooDeep    (22 Oct 2026) Jama items below the project's level limit (opts.levelLimit, the
+    //              3-level layout): never staged, named in the review so nothing is hidden
+    function diffFunctions(tree, rows, opts) {
+        const lim = Number(opts && opts.levelLimit) || 0;
+        const tooDeep = [];
         const mine = _jamaRows(rows);
         const nodeByRemote = new Map(), onlyByRemote = new Map(), rowsByTop = new Map();
         mine.forEach(function (r) {
@@ -181,6 +185,8 @@
             const wantParent = (parentNode && parentNode.id !== top.id) ? parentNode.id : null;
             const ex = nodeByRemote.get(n.id);
             let depth = 0; { let c = n, g = 0; while (c && tree.parentId.get(c.id) != null && g++ < 10000) { depth++; c = tree.byId.get(tree.parentId.get(c.id)); } }
+            // the function itself is level 1, so a node `depth` parents down is level depth + 1
+            if (lim && depth + 1 > lim) { tooDeep.push({ item: n, level: depth + 1, row: ex || null }); if (ex) seenNode.add(n.id); return; }
             if (!ex) { fresh.push({ item: n, top: top, parent: wantParent != null ? tree.byId.get(wantParent) : null, funcOnly: false, depth: depth }); return; }
             seenNode.add(n.id);
             const fields = [];
@@ -218,7 +224,7 @@
         });
         fresh.sort(function (a, b) { return a.depth - b.depth; });
         moved.sort(function (a, b) { return a.depth - b.depth; });
-        return { fresh: fresh, changed: changed, moved: moved, fnChanged: fnChanged, missing: missing, unchanged: unchanged };
+        return { fresh: fresh, changed: changed, moved: moved, fnChanged: fnChanged, missing: missing, unchanged: unchanged, tooDeep: tooDeep };
     }
 
     function pending(d) { return d ? d.fresh.length + d.changed.length + d.moved.length + d.fnChanged.length + d.missing.length : 0; }

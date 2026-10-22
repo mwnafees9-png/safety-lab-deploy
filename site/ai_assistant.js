@@ -1605,22 +1605,38 @@
 
     // 21 Oct 2026 (full function tree): where a sub-function sits in the decomposition, so a draft
     // for a deep node is written at that node's level ("Fly > Pitch > Elevator authority"), not as if
-    // it were a top-level function. Only added when the node is below another sub-function.
+    // it were a top-level function.
+    // 22 Oct 2026 (Waqas): "the AI will now be evaluating the lowest tiered functions", for everyone.
+    // The AI drafts only for the bottom of each branch (_leafFunctions); the levels above are the
+    // context, so every unit now carries its full path, from the aircraft function down.
     function _withFuncPath(obj, f, s) {
         try {
-            if (typeof SLFuncTree === 'undefined' || !f || !String(f.parentSubId || '').trim()) return obj;
+            if (typeof SLFuncTree === 'undefined' || !f || !String(f.subId || '').trim()) return obj;
             const ix = SLFuncTree.index((s && s.acFunctionsData) || []);
-            if (!ix.pos.has(f) || SLFuncTree.depth(f, ix) < 2) return obj;
-            obj.path = SLFuncTree.pathText(f, ix);
+            if (!ix.pos.has(f)) return obj;
+            const p = SLFuncTree.pathText(f, ix);
+            if (p && p.indexOf(' > ') > 0) obj.path = p;
         } catch (_) {}
         return obj;
+    }
+    // The bottom of each branch: a sub-function (any level) with nothing under it, or a function with
+    // no sub-functions at all. Failure conditions are drafted for these and nothing else.
+    function _leafFunctions(s) {
+        const arr = ((s || snapshot()).acFunctionsData || []).filter(Boolean);
+        if (typeof SLFuncTree === 'undefined' || typeof SLFuncTree.leaves !== 'function') return arr;
+        return SLFuncTree.leaves(arr);
+    }
+    // a unit for a drafting batch: a copy of the row with its path (the row itself is never mutated)
+    function _leafUnits(s) {
+        s = s || snapshot();
+        return _leafFunctions(s).filter(function (f) { return f && f.subId; }).map(function (f) { return _withFuncPath(Object.assign({}, f), f, s); });
     }
     // Sub-functions with no FHA coverage yet (the population gap).
     function _funcsNeedingFha() {
         const s = snapshot();
         const covered = new Set((s.acFhaData || []).map(function (r) { return r.subId; }).filter(Boolean));
         const seen = new Set(), out = [];
-        (s.acFunctionsData || []).forEach(function (f) {
+        _leafFunctions(s).forEach(function (f) {
             const sid = f.subId || f.funcId;
             if (!sid || seen.has(sid)) return;
             seen.add(sid);
@@ -2609,7 +2625,7 @@
                 }, _draftForConditions);
                 return;
             }
-            const _fns = (snapshot().acFunctionsData || []).filter(function (f) { return f && f.subId; });
+            const _fns = _leafUnits();   // 22 Oct 2026: the bottom of each branch only, each with its path
             const _draftForFunctions = function (picked) {
                 _anemBatch(_FEATURE_DIRECTIVE.fha, {
                     title: '✨ AI-drafted FHA · review', analysis: 'fha', verifyKind: 'fha',
@@ -5445,7 +5461,7 @@
         const s = snapshot();
         const covered = new Set((s.acFcimData || []).map(function (r) { return r.subId; }).filter(Boolean));
         const seen = new Set(), out = [];
-        (s.acFunctionsData || []).forEach(function (f) {
+        _leafFunctions(s).forEach(function (f) {
             const sid = f.subId || f.funcId;
             if (!sid || seen.has(sid)) return;
             seen.add(sid);
@@ -5609,7 +5625,7 @@
             // so the function list is the unit list and coverage is checkable.
             // Evening ruling, same day: the engineer picks WHICH functions get
             // their failure conditions decomposed — all pre-checked by default.
-            const _fns = (snapshot().acFunctionsData || []).filter(function (f) { return f && f.subId; });
+            const _fns = _leafUnits();   // 22 Oct 2026: the bottom of each branch only, each with its path
             _openScopePicker(_fns, {
                 title: '✨ AI-drafted FCIM · which functions?',
                 disclaimer: _fns.length + ' aircraft function(s) on file. All are selected — leave it that way to decompose failure conditions for the full set, or narrow the scope. One matrix row per selected function.',
@@ -8582,7 +8598,7 @@
     }
     async function _runFunctionalFmea() {
         const s = snapshot();
-        const funcs = (s.acFunctionsData || []).filter(function (f) { return f && (f.subId || f.subName); });
+        const funcs = _leafFunctions(s).filter(function (f) { return f && (f.subId || f.subName); });   // 22 Oct 2026: bottom of each branch
         if (!funcs.length) { _toast('No functions found — decompose first.', 'info'); return; }
         const list = funcs.slice(0, 18).map(function (f) { return _withFuncPath({ ref: String(f.subId || f.subName), name: f.subName || f.subId || '' }, f, s); });
         const byRef = {}; list.forEach(function (f) { byRef[f.ref] = f; });
@@ -11578,7 +11594,8 @@
             }
         } catch (_) {}
         const fcimSubs = {}; (s.acFcimData || []).forEach(function (r) { fcimSubs[String(r.subId)] = 1; });
-        const noFcim = (s.acFunctionsData || []).filter(function (f) { return !fcimSubs[String(f.subId)]; }).map(function (f) { return f.subId; });
+        // 22 Oct 2026: only the bottom of each branch needs an FCIM row; the levels above are its context
+        const noFcim = _leafFunctions(s).filter(function (f) { return f.subId && !fcimSubs[String(f.subId)]; }).map(function (f) { return f.subId; });
         return { groups: groups, coverageGaps: noFcim, consistency: _aiConsistencyFindings(s) };
     }
 

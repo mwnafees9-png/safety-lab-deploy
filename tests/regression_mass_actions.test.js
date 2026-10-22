@@ -26,8 +26,9 @@ const src = S('mass_actions.js'), idx = S('index.html');
 const all = ['helpers_modules.js', 'safety_lab.js', 'support_modules.js', 'misc_fn_modules.js', 'bindings_modules.js'].map(S).join('\n');
 
 // ---- [1] registry integrity -----------------------------------------------------
-check('3 targets in v0.1 (AFHA · SFHA · Requirements)', MA.TARGETS.length === 3 &&
-  ['acFha', 'sysFha', 'acReq'].every(k => MA.TARGETS.some(t => t.key === k)));
+// 22 Oct 2026 (v0.9): Aircraft Functions and Aircraft FCIM joined (Waqas: "just tick rows and delete them").
+check('5 targets (Aircraft Functions · Aircraft FCIM · AFHA · SFHA · Requirements)', MA.TARGETS.length === 5 &&
+  ['acFunc', 'acFcim', 'acFha', 'sysFha', 'acReq'].every(k => MA.TARGETS.some(t => t.key === k)));
 check('every target tbody exists in index.html', MA.TARGETS.every(t => idx.indexOf('id="' + t.tbodyId + '"') >= 0));
 check('every delete/render helper exists in the codebase', MA.TARGETS.every(t =>
   (all.indexOf('function ' + t.deleteFn) >= 0 || all.indexOf('window.' + t.deleteFn) >= 0) &&

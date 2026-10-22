@@ -282,7 +282,10 @@
             const res = await T.resolveFunctionParents(items || [], ty.fn, fetchItem);
             warnings = res.warnings.slice();
             const tree = T.buildTree(fnItems, ty.fn, res.parentOf);
-            fn = T.diffFunctions(tree, (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || []);
+            // 22 Oct 2026: the project's level limit (the 3-level layout). Items below it are never staged; the review names them.
+            const _lim = (typeof SLFuncTree !== 'undefined' && SLFuncTree.levelLimit) ? SLFuncTree.levelLimit() : 0;
+            fn = T.diffFunctions(tree, (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || [], { levelLimit: _lim });
+            if (_lim && fn.tooDeep && fn.tooDeep.length) warnings.push('Jama: ' + SLFuncTree.refusedText(fn.tooDeep.map(x => x.item.key), 'brought in'));
             fn.tops = tree.tops.length; fn.total = fnItems.length;
         }
         if (items && items._truncated) warnings.push('Read the first ' + (MAX_PAGES * PAGE).toLocaleString() + ' items only (Jama reports ' + Number(items._total || 0).toLocaleString() + '). Narrow the item types or ask Safety Lab to raise the limit.');

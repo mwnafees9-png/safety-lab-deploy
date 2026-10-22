@@ -127,6 +127,23 @@ function flattenFTAForExport(node, parentId, rows) {
     if (kids) kids.forEach(c => flattenFTAForExport(c, node.displayId, rows));
 }
 
+// The aircraft function table as exported (CSV and PDF). Rows in tree order. Any depth: the parent
+// column carries the tree. The 3-level layout (22 Oct 2026): the three column sets as on screen, one
+// line per row; a sub-sub-function line repeats its sub-function, so the file reads on its own and
+// imports back (importers.js and the CSV import read the Sub-Sub-Function columns).
+function _acFuncExportTable() {
+    const T = (typeof SLFuncTree !== 'undefined') ? SLFuncTree : null;
+    const arr = (typeof acFunctionsData !== 'undefined' && acFunctionsData) || [];
+    const rows = T ? T.ordered(arr) : arr.slice();
+    if (T && typeof T.levelLimit === 'function' && T.levelLimit() === 3) {
+        const ix = T.index(arr);
+        return { headers: ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition','Sub-Sub-Function ID','Sub-Sub-Function','Sub-Sub-Definition'],
+                 rows: rows.map(r => { const v = T.threeLevel(r, ix); return [v.funcId, v.funcName, v.funcDef, v.subId, v.subName, v.subDef, v.subSubId, v.subSubName, v.subSubDef]; }) };
+    }
+    return { headers: ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition','Parent Sub-Function ID'],
+             rows: rows.map(r => [r.funcId, r.funcName, r.funcDef, r.subId, r.subName, r.subDef, r.parentSubId || '']) };
+}
+
 // Dispatch table for every module wired to the Data Actions dropdowns.
 // 'excel' and 'pdf' currently degrade to CSV; full Excel/PDF exporters are tracked as roadmap work.
 function exportData(moduleName, format) {
@@ -140,11 +157,12 @@ function exportData(moduleName, format) {
         // kind:id=code tokens (model_links.js csvCell); the import reads them back.
         const _ml = (k, r) => (typeof SLModelLinks !== 'undefined' ? SLModelLinks.csvCell(k, r) : '');
         switch (moduleName) {
-            case 'AC_Functions':
+            case 'AC_Functions': {
                 // 21 Oct 2026 (full function tree): Parent Sub-Function ID carries the tree; rows in tree order.
-                return downloadCSV(file('AC_Functions'),
-                    ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition','Parent Sub-Function ID'],
-                    (typeof SLFuncTree !== 'undefined' ? SLFuncTree.ordered(acFunctionsData) : acFunctionsData).map(r => [r.funcId, r.funcName, r.funcDef, r.subId, r.subName, r.subDef, r.parentSubId || '']));
+                // 22 Oct 2026: the 3-level layout exports its three column sets instead (_acFuncExportTable).
+                const t = _acFuncExportTable();
+                return downloadCSV(file('AC_Functions'), t.headers, t.rows);
+            }
             case 'AC_FCIM':
                 return downloadCSV(file('AC_FCIM'),
                     ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
@@ -726,12 +744,19 @@ function importTabularCSV(text, moduleName) {
         'HF_HEA': ['hfHea', () => _hfRows], 'HF_Alerts': ['hfAlerts', () => _hfRows], 'HF_Tasks': ['hfTasks', () => _hfRows], 'HF_Ergo': ['hfErgo', () => _hfRows],
         'HF_ControlsDisplays': ['hfCd', () => _hfRows], 'HF_TaskIdentification': ['hfTid', () => _hfRows], 'HF_SituationAwareness': ['hfSa', () => _hfRows] }[moduleName] || null;
     const _mlCol = getColIndex(['Model Links']);
+    const _fnBefore = new Set((typeof acFunctionsData !== 'undefined' && acFunctionsData) || []);   // 22 Oct 2026: the level limit only judges rows this import adds
     for(let i=1; i<arr.length; i++) {
         const row = arr[i]; const newId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
         const _mlList = (_ML_IMPORT && _mlCol > -1) ? _ML_IMPORT[1]() : null, _mlLen = _mlList ? _mlList.length : 0;
 
         if(moduleName === 'AC_Functions') {
-            acFunctionsData.push({ internalId: newId, funcId: getValue(row, ['Function ID']), funcName: getValue(row, ['Function', 'Aircraft Function']), funcDef: getValue(row, ['Definition']), subId: getValue(row, ['Sub-Function ID']), subName: getValue(row, ['Sub-Function']), subDef: getValue(row, ['Sub-Definition']), parentSubId: getValue(row, ['Parent Sub-Function ID', 'Parent Sub-Function', 'Parent ID', 'Parent']) });
+            // 22 Oct 2026: a line from the 3-level export fills the Sub-Sub-Function columns; that line is the
+            // sub-sub-function node, under the sub-function in the same line (func_tree fromThreeLevel).
+            const _fr = { internalId: newId, funcId: getValue(row, ['Function ID']), funcName: getValue(row, ['Function', 'Aircraft Function']), funcDef: getValue(row, ['Definition']), subId: getValue(row, ['Sub-Function ID']), subName: getValue(row, ['Sub-Function']), subDef: getValue(row, ['Sub-Definition']), parentSubId: getValue(row, ['Parent Sub-Function ID', 'Parent Sub-Function', 'Parent ID', 'Parent']),
+                          subSubId: getValue(row, ['Sub-Sub-Function ID']), subSubName: getValue(row, ['Sub-Sub-Function']), subSubDef: getValue(row, ['Sub-Sub-Definition']) };
+            const _fx = (typeof SLFuncTree !== 'undefined' && SLFuncTree.fromThreeLevel) ? SLFuncTree.fromThreeLevel(_fr) : _fr;
+            if (!_fx.parentSubId) delete _fx.parentSubId;
+            acFunctionsData.push(_fx);
         } else if(moduleName === 'AC_FCIM') {
             acFcimData.push({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) });
         } else if(moduleName === 'AC_FHA') {
@@ -830,6 +855,11 @@ function importTabularCSV(text, moduleName) {
             if (typeof scheduleAutosave === 'function') scheduleAutosave();
             if (_allocMisses.length) slAlert('Imported. ' + _allocMisses.length + ' row(s) named a sub-function that is not in the functions lane and were refused rather than orphaned: ' + _allocMisses.slice(0, 8).join(', ') + (_allocMisses.length > 8 ? '\u2026' : ''));
         } catch(_) {}
+    }
+
+    if (moduleName === 'AC_Functions' && typeof SLFuncTree !== 'undefined' && SLFuncTree.levelLimit && SLFuncTree.levelLimit()) {
+        const _deep = SLFuncTree.dropTooDeep(acFunctionsData, r => !_fnBefore.has(r));
+        if (_deep.length) { try { slAlert(SLFuncTree.refusedText(_deep), { title: 'Import' }); } catch (_) {} }
     }
 
     // Sync Extractors
@@ -1205,6 +1235,79 @@ function removeAsmFromFHA(domain, asmId) {
 // Driven by the makeCRUD factory — each module declares its form↔data map,
 // render template, and (optionally) afterChange/validate hooks. FHA stays custom below.
 // ==========================================
+// 22 Oct 2026 (Waqas, for the customer whose aircraft functions go exactly three levels): a column set
+// per level, Function / Sub-function / Sub-sub-function, each merged over the rows under it the way the
+// Function cell already is. The store is unchanged (one row per node, func_tree.js); only the drawing
+// is. Every row keeps its own Actions and Review cells, so a sub-function with sub-sub-functions under
+// it is its own line (its sub-sub columns empty) at the top of its merged block.
+function _acFuncHeadSync(three) {
+    if (typeof document === 'undefined') return;
+    const tr = document.querySelector('#ac-func-table thead tr');
+    if (!tr) return;
+    const have = tr.querySelectorAll('th.slab-func-l3');
+    if (!three) { Array.prototype.forEach.call(have, th => th.remove()); return; }
+    if (have.length) return;
+    const ths = Array.prototype.slice.call(tr.children);
+    const after = ths.find(th => /^sub-definition$/i.test(String(th.textContent || '').trim())) || ths[ths.length - 1];
+    let ref = after ? after.nextSibling : null;
+    ['Sub-Sub-Function ID', 'Sub-Sub-Function', 'Sub-Sub-Definition'].forEach(label => {
+        const th = document.createElement('th'); th.className = 'slab-func-l3'; th.textContent = label;
+        tr.insertBefore(th, ref);
+    });
+}
+function _acFuncRenderRows3(groups, ctx, T, tix, bad) {
+    const tooDeep = new Map(T.tooDeep(T.index(tix.rows)).map(x => [x.row, x.reason]));
+    const note = (row) => {
+        const why = bad.get(row) || tooDeep.get(row);
+        return why ? `<div style="font-size:10.5px;color:var(--color-danger);font-weight:600;">${esc(why)}</div>` : '';
+    };
+    const blank3 = '<td></td><td></td><td></td>';
+    let html = '';
+    groups.forEach((g, gi) => {
+        const band = (gi % 2 === 0) ? 'slab-func-band-a' : 'slab-func-band-b';
+        const plan = g.rows.map(row => ({ row, v: T.threeLevel(row, tix), lv: T.level(row, tix), subSpan: 1 }));
+        // a Sub-function block: the sub-function's own line, then the lines under it (or, when a page
+        // boundary cut the sub-function's line off, the lines under it with its identity repeated)
+        for (let i = 0; i < plan.length;) {
+            const p = plan[i];
+            if (p.lv <= 1) { p.subSpan = 1; i++; continue; }
+            let j = i + 1;
+            while (j < plan.length && plan[j].lv >= 3 && plan[j].v.subId === p.v.subId) { plan[j].subSpan = 0; j++; }
+            p.subSpan = j - i;
+            i = j;
+        }
+        const span = plan.length;
+        plan.forEach((p, i) => {
+            const row = p.row, v = p.v;
+            let cells = '';
+            if (i === 0) {
+                const rs = span > 1 ? ` rowspan="${span}"` : '';
+                const merged = span > 1 ? ' slab-merged-cell' : '';
+                cells += `<td${rs} class="slab-func-id${merged}"><strong>${esc(g.funcId)}</strong></td>`
+                       + `<td${rs} class="slab-func-name${merged}">${esc(g.funcName)}</td>`
+                       + `<td${rs} class="slab-func-def${merged}">${esc(g.funcDef)}</td>`;
+            }
+            if (p.subSpan > 0) {
+                if (p.lv <= 1) cells += blank3;
+                else {
+                    const rs = p.subSpan > 1 ? ` rowspan="${p.subSpan}"` : '';
+                    const merged = p.subSpan > 1 ? ' slab-merged-cell' : '';
+                    const own = p.lv === 2 ? note(row) : '';
+                    cells += `<td${rs} class="slab-sub-id${merged}"><strong>${esc(v.subId)}</strong>${own}</td>`
+                           + `<td${rs} class="slab-sub-name${merged}">${esc(v.subName)}</td>`
+                           + `<td${rs} class="slab-sub-def${merged}">${esc(v.subDef)}</td>`;
+                }
+            }
+            if (p.lv >= 3) {
+                cells += `<td><strong>${esc(v.subSubId)}</strong>${note(row)}</td><td>${esc(v.subSubName)}</td><td>${esc(v.subSubDef)}</td>`;
+            } else cells += blank3;
+            html += `<tr class="${i === 0 ? 'slab-func-group-start' : 'slab-func-group-child'} ${band}">`
+                  + `<td>${ctx.actionsFor(row.internalId)}</td>` + cells + `${ctx.reviewFor(row.internalId)}</tr>`;
+        });
+    });
+    return html;
+}
+
 // Decomposition view — render the AC Functions table with each aircraft function's
 // identity (ID / name / definition) merged once across all of its sub-functions,
 // Excel-style (rowspan), instead of repeating the function on every sub-function row.
@@ -1243,6 +1346,10 @@ function _acFuncRenderRows(arr, ctx) {
     };
     // a parent link that is not valid (missing parent, other function, loop) is shown, not hidden
     const bad = T ? new Map(T.problems(full).map(x => [x.row, x.reason])) : new Map();
+    // 22 Oct 2026: the 3-level layout (a license switch, func_tree.levelLimit() === 3)
+    const three = !!(T && typeof T.levelLimit === 'function' && T.levelLimit() === 3);
+    try { _acFuncHeadSync(three); } catch (_) {}
+    if (three) return _acFuncRenderRows3(groups, ctx, T, tix, bad);
     let html = '';
     groups.forEach((g, gi) => {
         const span = g.rows.length;
@@ -1956,10 +2063,10 @@ function _pdfDataForModule(moduleName) {
     const sName = (typeof sys === 'function' && sys()) ? sys().name : 'System';
     const fmtNum = v => v == null ? '' : (typeof v === 'number' ? v : v);
     switch (moduleName) {
-        case 'AC_Functions':
-            return { title: 'Aircraft Functions',
-                headers: ['Function ID','Aircraft Function','Definition','Sub-Function ID','Sub-Function','Sub-Definition','Parent Sub-Function ID'],
-                rows: (typeof SLFuncTree !== 'undefined' ? SLFuncTree.ordered(acFunctionsData || []) : (acFunctionsData || [])).map(r => [r.funcId, r.funcName, r.funcDef, r.subId, r.subName, r.subDef, r.parentSubId || '']) };
+        case 'AC_Functions': {
+            const t = _acFuncExportTable();
+            return { title: 'Aircraft Functions', headers: t.headers, rows: t.rows };
+        }
         case 'AC_FCIM':
             return { title: 'Aircraft FCIM',
                 headers: ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],

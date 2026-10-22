@@ -1901,8 +1901,8 @@ function switchTab(tabId) {
         if (tabId === 'routing') { _populateRoutingMultiselects({}); renderRouting(); }
         if (tabId === 'resources') { _populateResourceMultiselects({}); renderResources(); }
         if (tabId === 'ac-func') { try { if (typeof acFuncPopulateParents === 'function') acFuncPopulateParents(); } catch (_) {} }
-        if (tabId === 'ac-fcim') populateFuncDropdown('ac-fcim-subfunc');
-        if (tabId === 'ac-fha') { populateFuncDropdown('ac-fha-subfunc'); populateDropdowns('ac-fha-fcid', acExtractedFCs, 'id', 'id', true); if (typeof _refreshFhaFcOptions === 'function') _refreshFhaFcOptions('ac'); populateFhaAsmDropdown('ac'); }
+        if (tabId === 'ac-fcim') populateFuncDropdown('ac-fcim-subfunc', { leavesOnly: true });
+        if (tabId === 'ac-fha') { populateFuncDropdown('ac-fha-subfunc', { leavesOnly: true }); populateDropdowns('ac-fha-fcid', acExtractedFCs, 'id', 'id', true); if (typeof _refreshFhaFcOptions === 'function') _refreshFhaFcOptions('ac'); populateFhaAsmDropdown('ac'); }
         if (tabId === 'ac-req') { populateFuncDropdown('ac-req-trace'); _populateReqParentPicker('ac'); }
         if (tabId === 'phases') renderFlightPhases(); 
         if (tabId === 'sys-dir') renderSystemDirectory();

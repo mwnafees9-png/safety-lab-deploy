@@ -114,15 +114,21 @@ const ExcelImport = (function() {
             // heading (detectColumnMap). Blank = directly under the aircraft function.
             parentSubId: ['parentsubfunctionid', 'parentsubid', 'parentsubfunction', 'parentid', 'parent', 'sitsunder'],
             funcId:   ['funcid', 'functionid', 'fnid', 'id'],
-            funcName: ['funcname', 'functionname', 'name', 'title'],
+            funcName: ['funcname', 'functionname', 'name', 'title', 'aircraftfunction'],
             funcDef:  ['funcdef', 'functiondefinition', 'functiondescription', 'definition', 'description'],
             subId:    ['subid', 'subfunctionid'],
             subName:  ['subname', 'subfunctionname'],
-            subDef:   ['subdef', 'subfunctiondefinition', 'subfunctiondescription'],
+            subDef:   ['subdef', 'subfunctiondefinition', 'subfunctiondescription', 'subdefinition'],
+            // 22 Oct 2026 (the 3-level layout): the Sub-Sub-Function columns its export writes. A line that
+            // fills them is the sub-sub-function, under the sub-function in the same line.
+            subSubId:   ['subsubid', 'subsubfunctionid'],
+            subSubName: ['subsubname', 'subsubfunction', 'subsubfunctionname'],
+            subSubDef:  ['subsubdef', 'subsubdefinition', 'subsubfunctiondefinition', 'subsubfunctiondescription'],
             // 21 Oct 2026 (a customer's sheet: every level in ONE column, only the numbering says which level).
             // The outline number (1, 1.1, 1.1.1, AF-1.2.3) decides the level and the parent; the
             // name and description columns then hold every level. See _importFunctionOutline.
-            outline:  ['outline', 'outlinenumber', 'number', 'no', 'num', 'nr', 'functionnumber', 'functionno', 'fnno',
+            // 22 Oct 2026: "code" (the customer's own heading for the numbering, found on the call).
+            outline:  ['outline', 'outlinenumber', 'number', 'no', 'num', 'nr', 'functionnumber', 'functionno', 'fnno', 'code', 'functioncode',
                        'wbs', 'hierarchy', 'hierarchynumber', 'levelnumber', 'itemnumber', 'itemno', 'paragraph', 'section', 'ref', 'refno']
         },
         sysFunc: {
@@ -383,6 +389,13 @@ const ExcelImport = (function() {
             });
             if (best > 0) out.push({ field: field, score: best, order: order });
         });
+        // 22 Oct 2026: "Function" / "Sub-Function" on its own is the ID column (ruling of 21 Oct), unless
+        // the sheet also has a "... ID" column for it, as the tool's own export does: then it is the
+        // NAME. Offered as a weak second choice, so it only lands there once the ID column is taken.
+        out.slice().forEach(function (c) {
+            const sib = { funcId: 'funcName', subId: 'subName', subSubId: 'subSubName' }[c.field];
+            if (sib && c.score < 1000 && !idTail && aliases[sib] && !out.some(function (o) { return o.field === sib; })) out.push({ field: sib, score: 100, order: c.order });
+        });
         return out;
     }
     function detectColumnMap(kind, headers) {
@@ -434,7 +447,7 @@ const ExcelImport = (function() {
     function _sniffOutline(sheet) {
         if (sheet.kind !== 'acFunc') return null;
         const map = sheet.columnMap, fields = Object.values(map);
-        if (fields.indexOf('subId') >= 0 || fields.indexOf('subName') >= 0 || fields.indexOf('parentSubId') >= 0) return null;
+        if (fields.indexOf('subId') >= 0 || fields.indexOf('subName') >= 0 || fields.indexOf('subSubId') >= 0 || fields.indexOf('subSubName') >= 0) return null;
         const colOf = f => Object.keys(map).find(h => map[h] === f);
         const values = h => sheet.rows.map(r => r[h]);
         let col = colOf('outline');
@@ -575,6 +588,7 @@ const ExcelImport = (function() {
     const FIELD_LABELS = {
         funcId: 'Function ID', funcName: 'Function name', funcDef: 'Function description',
         subId: 'Sub-function ID', subName: 'Sub-function name', subDef: 'Sub-function description',
+        subSubId: 'Sub-sub-function ID', subSubName: 'Sub-sub-function name', subSubDef: 'Sub-sub-function description',
         parentSubId: 'Sits under (parent sub-function ID)', outline: 'Number (sets the level: 1, 1.1, 1.1.1)',
         fcId: 'Failure condition ID', fcDesc: 'Failure condition', phases: 'Flight phases',
         effAc: 'Effect on the aircraft', effCrew: 'Effect on the crew', effPax: 'Effect on passengers',
@@ -669,7 +683,9 @@ const ExcelImport = (function() {
             html += '<div style="font-size:12px; margin: 2px 0 8px; padding: 8px 10px; border: 1px solid var(--color-border-hair); background: var(--color-surface-2);">' +
                 '<b>Levels from the numbering.</b> The "' + esc(o.column) + '" column sets each row\'s level and parent: ' +
                 o.functions + ' function' + (o.functions === 1 ? '' : 's') + ' and ' + o.below + ' below ' + (o.functions === 1 ? 'it' : 'them') + ', ' + o.levels + ' level' + (o.levels === 1 ? '' : 's') + ' deep. ' +
-                'Rows already in the tool with the same number are updated, not added twice.</div>';
+                'Rows already in the tool with the same number are updated, not added twice.' +
+                ((typeof SLFuncTree !== 'undefined' && SLFuncTree.levelLimit && SLFuncTree.levelLimit() && o.levels > SLFuncTree.levelLimit())
+                    ? ' <b style="color:var(--color-warning);">Numbers below level ' + SLFuncTree.levelLimit() + ' will not be imported: ' + esc(SLFuncTree.limitText(SLFuncTree.levelLimit())) + '</b>' : '') + '</div>';
         }
         html += '<table class="xlsx-col-table">';
         html += '<thead><tr><th>Excel column</th><th style="width:34%;">→ Tool field</th><th>Sample value</th></tr></thead><tbody>';
@@ -880,6 +896,14 @@ const ExcelImport = (function() {
                     rec.subDef = String(r.subDef || '').trim();
                     const _par = String(r.parentSubId || '').trim();
                     if (_par && _par !== rec.subId) rec.parentSubId = _par;
+                    // 22 Oct 2026: a line that fills the Sub-Sub-Function columns (the 3-level export) is the
+                    // sub-sub-function, under the sub-function in the same line.
+                    const _ss = String(r.subSubId || '').trim(), _ssn = String(r.subSubName || '').trim();
+                    if (_ss || _ssn) {
+                        rec.parentSubId = rec.subId;
+                        rec.subId = _ss; rec.subName = _ssn; rec.subDef = String(r.subSubDef || '').trim();
+                        if (!rec.parentSubId || rec.parentSubId === rec.subId) delete rec.parentSubId;
+                    }
                     acFunctionsData.push(rec);
                 } else if (sys()) sys().functions.push(rec);
                 count++;
@@ -1008,7 +1032,8 @@ const ExcelImport = (function() {
     // 1.1, so two rows reading "1.1" means the numbering column lost information and any tree
     // built from it would be wrong.
     function _importFunctionOutline(sheet, report) {
-        const rows = [], bad = [];
+        let rows = [];
+        const bad = [];
         sheet.rows.forEach(function (raw, i) {
             const r = _pickRow(sheet, raw);
             const p = _outlineParts(r.outline);
@@ -1025,6 +1050,16 @@ const ExcelImport = (function() {
             return 0;
         }
         if (bad.length) report.warnings.push('"' + sheet.name + '": ' + bad.length + ' row' + (bad.length > 1 ? 's have' : ' has') + ' no number Safety Lab can read and ' + (bad.length > 1 ? 'were' : 'was') + ' skipped (spreadsheet row' + (bad.length > 1 ? 's ' : ' ') + bad.slice(0, 8).join(', ') + (bad.length > 8 ? ', ...' : '') + ').');
+        // 22 Oct 2026: the project's level limit (the 3-level layout). Numbers deeper than it are not
+        // imported, and the note names them. 1 is level 1, 1.1 level 2, 1.1.1 level 3.
+        const lim = (typeof SLFuncTree !== 'undefined' && SLFuncTree.levelLimit) ? SLFuncTree.levelLimit() : 0;
+        if (lim) {
+            const deep = rows.filter(function (x) { return x.p.depth > lim; });
+            if (deep.length) {
+                report.warnings.push('"' + sheet.name + '": ' + SLFuncTree.refusedText(deep.map(function (x) { return x.p.key; })));
+                rows = rows.filter(function (x) { return x.p.depth <= lim; });
+            }
+        }
         const byKey = seen;
         const missingParents = new Set();
         function ancestorOf(p) {             // the nearest row above this one that exists
@@ -1094,12 +1129,24 @@ const ExcelImport = (function() {
         }
 
         const report = { warnings: [], errors: [] };
+        const _fnBefore = new Set((typeof acFunctionsData !== 'undefined' && acFunctionsData) || []);
         for (const sheet of _currentPlan.sheets) {
             if (sheet.kind === 'ignore') continue;
             const n = _importInto(sheet, report);
             counts[sheet.kind] = (counts[sheet.kind] || 0) + n;
             total += n;
         }
+        // 22 Oct 2026: a project with a level limit (the 3-level layout) takes back any imported
+        // function row below it, and says which. Rows that were already there are not touched.
+        try {
+            if (typeof SLFuncTree !== 'undefined' && SLFuncTree.levelLimit && SLFuncTree.levelLimit() && typeof acFunctionsData !== 'undefined') {
+                const deep = SLFuncTree.dropTooDeep(acFunctionsData, r => !_fnBefore.has(r));
+                if (deep.length) {
+                    report.warnings.push(SLFuncTree.refusedText(deep));
+                    if (counts.acFunc) { counts.acFunc = Math.max(0, counts.acFunc - deep.length); total = Math.max(0, total - deep.length); }
+                }
+            }
+        } catch (_) {}
 
         // Optional: save mapping template.
         const saveChk = document.getElementById('xlsx-save-template');
