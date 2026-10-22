@@ -174,6 +174,9 @@
         console.warn('[Safety Lab Aero] no valid license on this install — ' + result.reason);
       }
     } catch (_) {}
+    // 22 Oct 2026: tell the page the license verdict is in (or changed, after sign-in): the paywall
+    // and the customer layouts decide on it. Before this they could decide before it was known.
+    try { if (typeof W.dispatchEvent === 'function' && typeof Event === 'function') W.dispatchEvent(new Event('slab-license-changed')); } catch (_) {}
     return result;
   }
   // The AI proxy in offline-licence mode (customer-hosted) verifies the SIGNED LICENSE ITSELF as

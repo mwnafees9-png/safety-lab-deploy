@@ -449,6 +449,8 @@
         if (ready && typeof ready.then === 'function') ready.then(function () { if (active()) refresh(); }, function () {});
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-    // a license checked again after sign-in (SLLicenseCheckIdentity) can switch it on later
+    // a license checked again after sign-in (SLLicenseCheckIdentity), or newly loaded, can switch it
+    // on or off later: every verdict redraws (22 Oct 2026: the event replaces a single 4 s retry)
+    try { W.addEventListener('slab-license-changed', function () { refresh(); }); } catch (_) {}
     setTimeout(function () { if (active()) refresh(); }, 4000);
 })();

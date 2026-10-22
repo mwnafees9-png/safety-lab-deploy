@@ -4976,6 +4976,10 @@ body:has(.modal-overlay.show) { overflow: hidden; }
     user-select: none;
 }
 #sl-onramp.collapsed .sl-onramp-head { border-bottom: none; }
+/* 22 Oct 2026: folded, the card is a small bar, and while it shows the page keeps room at the
+   bottom so the last table rows (tick boxes, row menus) scroll clear of it. */
+#sl-onramp.collapsed { width: auto; min-width: 200px; }
+body.sl-onramp-on .container { padding-bottom: calc(var(--s-6) + var(--sl-onramp-space, 0px)) !important; }   /* on .container: body.nav-sidebar pins body padding and the container's margins to 0 */
 #sl-onramp .sl-onramp-title { font-weight: 700; font-size: 13px; flex: 1; min-width: 0; }
 #sl-onramp .sl-onramp-prog {
     font-size: 11px; color: var(--color-accent, #007aff); font-weight: 700;

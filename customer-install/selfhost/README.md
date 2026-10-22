@@ -177,6 +177,11 @@ Database updates come as new numbered files for the `db` folder. Copy them in, t
 A new package version: unzip it over the old one, keep your `selfhost/stack` folder and
 `selfhost/answers.env`, and run `bash install.sh` again.
 
+Unzip it in the same place as the install that is running. If you unzip it somewhere else,
+`install.sh` notices that Safety Lab is running from another folder, changes nothing, and prints
+the exact command to update the running one. At the end of every run it restarts the AI service
+on the new version and checks that the version running is the one you just installed.
+
 ## What is switched off, for the technically curious
 
 The stock Supabase stack carries a connection pooler and an edge-function runtime. The

@@ -91,7 +91,8 @@ const last = (C) => { const l = C.getAuditLog(); return l[l.length - 1]; };
     }
 
     console.log('\n[3] wiring');
-    check('index.html loads core_modules.js 1.13', /core_modules\.js\?v=1\.13"/.test(idx));
+    // at least 1.13 (a later change to core_modules.js bumps it again: 22 Oct 2026, 1.14)
+    { const m = /core_modules\.js\?v=1\.(\d+)"/.exec(idx); check('index.html loads core_modules.js 1.13 or later', !!m && Number(m[1]) >= 13, m && m[0]); }
     check('the app reads the header only through the one helper', (core.match(/x-safetylab-audit/g) || []).length === 2 && /function _proxyAudited\(r\)/.test(core));
 
     console.log('\n' + pass + ' passed, ' + fail + ' failed');

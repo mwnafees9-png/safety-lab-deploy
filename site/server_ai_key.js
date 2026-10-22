@@ -1,5 +1,5 @@
 // ============================================================================
-// server_ai_key.js, v1.0, 21 Oct 2026: the AI key of a customer's own server, set from the app.
+// server_ai_key.js, v1.1, 22 Oct 2026 (v1.0 21 Oct): the AI key of a customer's own server, set from the app.
 //
 // Waqas: "why cant he just save his API key directly in safety lab". On a customer's own server
 // the AI runs through that server, so the key belongs on the server, and until now the only way
@@ -37,6 +37,21 @@
     return fetch(b + '/admin/ai-key', opts).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d || {} }; });
     }).catch(function () { return { status: 0, data: { message: 'The server did not answer.' } }; });
+  }
+  // 22 Oct 2026: say WHY, never just "the server answered 502". The admin handler (server_key.mjs)
+  // answers { error: "<code>", message }. An answer whose error is an OBJECT came from the AI
+  // service's general path instead, which means the running AI service has no admin handler: it
+  // is older than this app (the "Missing Bearer token." case at a customer).
+  var OLDER = 'This server\'s AI service is older than this app, so the key can only be set on the server itself. Ask IT to install the latest Safety Lab server package.';
+  function reason(r, fallback) {
+    var d = (r && r.data) || {};
+    if (typeof d.message === 'string' && d.message) return d.message;
+    if (d.error && typeof d.error === 'object') {
+      if (d.error.type === 'upstream_unreachable' && d.error.message) return String(d.error.message);
+      return OLDER + (d.error.message ? ' (The server said: ' + String(d.error.message) + ')' : '');
+    }
+    if (typeof d.error === 'string' && d.error) return d.error;
+    return fallback;
   }
   function host() { return document.getElementById('server-ai-key-panel'); }
 
@@ -79,8 +94,8 @@
     return call('GET').then(function (r) {
       if (r.status === 200) { last = r.data; paint({ kind: 'admin', s: r.data }); }
       else if (r.status === 403) paint({ kind: 'notadmin', s: null });
-      else if (r.status === 404) paint({ kind: 'error', msg: 'This server\'s AI service is older than this app, so the key can only be set on the server itself. Ask IT to install the latest Safety Lab server package.' });
-      else paint({ kind: 'error', msg: (r.data && r.data.message) || ('The server answered ' + r.status + '.') });
+      else if (r.status === 404) paint({ kind: 'error', msg: OLDER });
+      else paint({ kind: 'error', msg: reason(r, r.status ? 'The server answered ' + r.status + ' without saying why.' : 'The server did not answer.') });
     });
   }
 
@@ -98,7 +113,7 @@
         paint({ kind: 'admin', s: r.data, msg: '<span style="color:var(--color-success); font-weight:600;">Saved.</span> Everyone on this server can use the AI now.' });
         try { if (typeof W.jrnl === 'function') W.jrnl('server-ai-key', 'Server AI key ' + (r.data.last4 ? '(ending ' + r.data.last4 + ') ' : '') + 'set from the app'); } catch (_) {}
       } else {
-        paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc((r.data && r.data.message) || ('Not saved: the server answered ' + r.status + '.')) + '</span>' });
+        paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(reason(r, 'Not saved: the server answered ' + r.status + ' without saying why.')) + '</span>' });
       }
     });
   }
@@ -109,7 +124,7 @@
       return call('POST', { remove: true }).then(function (r) {
         busy = false;
         if (r.status === 200) { last = r.data; paint({ kind: 'admin', s: r.data, msg: 'Removed.' + (r.data.set ? ' The server now uses the key in its settings file.' : '') }); }
-        else paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc((r.data && r.data.message) || 'Not removed.') + '</span>' });
+        else paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(reason(r, 'Not removed.')) + '</span>' });
       });
     };
     if (typeof W.slConfirm === 'function') return Promise.resolve(W.slConfirm('Remove the server\'s AI key? AI stops working for everyone on this server until a key is added again.', { title: 'Remove the AI key' })).then(function (ok) { if (ok) return go(); });

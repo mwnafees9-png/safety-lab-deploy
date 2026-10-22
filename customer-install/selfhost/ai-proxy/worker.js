@@ -492,6 +492,22 @@ function itarUnconfiguredMessage(env) {
 // SEC-8: the single place that decides whether a request may touch public
 // Anthropic. `itar` here is the ALREADY-RESOLVED effective flag (license OR
 // header) — an ITAR request can never reach the public upstream.
+// 22 Oct 2026 (a customer saw "fetch failed"): the AI provider could not be reached at all. Say which
+// address, why when the network layer says (DNS, refused, timed out), and what fixes it. The network
+// error itself never leaves (it can carry request details).
+function upstreamUnreachable(url, e) {
+  let host = "the AI provider";
+  try { host = new URL(String(url)).host; } catch (_) {}
+  const c = String((e && e.cause && (e.cause.code || (e.cause.errors && e.cause.errors[0] && e.cause.errors[0].code))) || (e && e.code) || "");
+  const why = ({ ENOTFOUND: "its address could not be looked up (DNS)", EAI_AGAIN: "its address could not be looked up (DNS)",
+                 ECONNREFUSED: "the connection was refused", ETIMEDOUT: "the connection timed out", UND_ERR_CONNECT_TIMEOUT: "the connection timed out",
+                 ECONNRESET: "the connection was cut off", EHOSTUNREACH: "there is no route to it", ENETUNREACH: "there is no route to it",
+                 UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "its certificate was not trusted (a proxy or inspection device may be in the way)",
+                 SELF_SIGNED_CERT_IN_CHAIN: "its certificate was not trusted (a proxy or inspection device may be in the way)" })[c] || "the connection failed";
+  return jsonResponse(502, { error: { type: "upstream_unreachable",
+    message: "The AI service cannot reach " + host + ": " + why + (c ? " (" + c + ")" : "") + ". Ask IT to allow outbound HTTPS (port 443) from the Safety Lab server to " + host + "." } });
+}
+
 async function handleAnthropic(request, env, token, itar, ctx, caller, audit = null) {
   // S8: which key, and whether Safety Lab pays. A licence caller uses Safety Lab's key and
   // is metered. A JWT caller brings their own key from the vault and is not metered at all.
@@ -534,7 +550,8 @@ async function handleAnthropic(request, env, token, itar, ctx, caller, audit = n
   try { bodyText = await request.text(); } catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Body unreadable." } }); }
   let bodyObj;
   try { bodyObj = JSON.parse(bodyText); } catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Body must be JSON." } }); }
-  const upstreamRes = await fetch(ANTHROPIC_UPSTREAM, {
+  let upstreamRes;
+  try { upstreamRes = await fetch(ANTHROPIC_UPSTREAM, {
     method: "POST",
     // 16 Sep 2026: Anthropic refuses an org-level key unless the request names a workspace
     // ("This API key is not scoped to a workspace..."). A key created INSIDE a workspace needs
@@ -542,7 +559,7 @@ async function handleAnthropic(request, env, token, itar, ctx, caller, audit = n
     headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01",
                ...(env.ANTHROPIC_WORKSPACE_ID ? { "anthropic-workspace-id": String(env.ANTHROPIC_WORKSPACE_ID).trim() } : {}) },
     body: bodyText,
-  });
+  }); } catch (e) { return upstreamUnreachable(ANTHROPIC_UPSTREAM, e); }
   const wantStream = bodyObj && bodyObj.stream === true;
   const upstreamCt = upstreamRes.headers.get("content-type") || "";
   if (wantStream && upstreamRes.ok && upstreamRes.body && upstreamCt.indexOf("text/event-stream") !== -1) {
@@ -595,11 +612,12 @@ async function handleVoyage(request, env, token, itar, caller, audit = null) {
   try { bodyText = await request.text(); } catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Body unreadable." } }); }
   let bodyObj;
   try { bodyObj = JSON.parse(bodyText); } catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Body must be JSON." } }); }
-  const upstreamRes = await fetch(VOYAGE_UPSTREAM, {
+  let upstreamRes;
+  try { upstreamRes = await fetch(VOYAGE_UPSTREAM, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
     body: bodyText,
-  });
+  }); } catch (e) { return upstreamUnreachable(VOYAGE_UPSTREAM, e); }
   const text = await upstreamRes.text();
   if (upstreamRes.ok) {
     try { const j = JSON.parse(text); const tokensIn = (j && j.usage && j.usage.total_tokens) || 0; const model = bodyObj.model || "voyage-3-large"; const burned = weightedTokens(model, tokensIn, 0); if (audit) audit.record({ model, tokensIn, tokensOut: 0, weighted: burned, itar: false, ok: true }); if (meter && burned > 0) await consumeTokens(env, token, burned); } catch (_) {}

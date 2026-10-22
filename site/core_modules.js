@@ -144,6 +144,18 @@ const AiClient = (function(){
     // 2 Oct 2026 — the desktop key door: the user's own Anthropic key sits in the OS keychain and
     // the desktop's main process makes the call (window.slabAi). No proxy, no server, nothing of
     // ours in the path. The shell sets the flag only when AI mode is "my own key".
+    // 22 Oct 2026 (a customer saw "fetch failed" and "Failed to fetch"): a request that never got an answer
+    // says, in plain words, which address could not be reached and what fixes it. Errors that did get an
+    // answer keep their own message.
+    function _plainNetError(e, viaProxy) {
+        const m = String((e && e.message) || e || '');
+        if (!/failed to fetch|fetch failed|networkerror|network error|load failed|err_(connection|name|internet|address)/i.test(m)) return e;
+        let host = 'api.anthropic.com';
+        if (viaProxy) { try { host = new URL(String(AI_PROXY_BASE_URL)).host || 'your AI service'; } catch (_) { host = 'your AI service'; } }
+        return new Error(viaProxy
+            ? 'Safety Lab cannot reach the AI service at ' + host + '. Check that this computer can reach that server and that the server is running.'
+            : 'This computer cannot reach api.anthropic.com. Ask IT to allow outbound HTTPS (port 443) to api.anthropic.com.');
+    }
     function _desktopKeyDoor()  { try { return !!(typeof window !== 'undefined' && window.__SLAB_AI_DESKTOP_KEY__ && window.slabAi && typeof window.slabAi.messages === 'function'); } catch (_) { return false; } }
     function isProxyMode()     { return !_desktopKeyDoor() && !!(typeof isProPlusLicensed === 'function' && isProPlusLicensed() && getLicenseToken()); }
     function isConfigured()    { return isProxyMode() || _hasByo('anthropic_key'); }
@@ -602,6 +614,7 @@ const AiClient = (function(){
                 }
             }
         } catch (e) {
+            e = _plainNetError(e, proxy || _byoViaProxy());
             _logCall({ feature: opts.feature || 'messages', model, ok: false, error: String(e), startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
             throw e;
         }
@@ -684,13 +697,17 @@ const AiClient = (function(){
                 });
             }
         } catch (e) {
+            e = _plainNetError(e, proxy || _byoViaProxy());
             _logCall({ feature: 'embed', model, ok: false, error: String(e), startedAt, proxy, itar });
             throw e;
         }
-        const json = await response.json();
+        let json = {};
+        try { json = await response.json(); } catch (_) { json = {}; }
         if (!response.ok) {
-            _logCall({ feature: 'embed', model, ok: false, error: (json.detail || json.error || 'HTTP ' + response.status), startedAt, proxy, itar, observed: _proxyAudited(response) });
-            throw new Error(json.detail || json.error || ('HTTP ' + response.status));
+            // 22 Oct 2026: the proxy's errors are { error: { message } }; this used to show "[object Object]"
+            const emsg = (json.error && typeof json.error === 'object' && json.error.message) || json.detail || (typeof json.error === 'string' ? json.error : '') || ('HTTP ' + response.status);
+            _logCall({ feature: 'embed', model, ok: false, error: emsg, startedAt, proxy, itar, observed: _proxyAudited(response) });
+            throw new Error(emsg);
         }
         const tokensIn = (json.usage && json.usage.total_tokens) || 0;
         const incCost = _addCost(model, tokensIn, 0);

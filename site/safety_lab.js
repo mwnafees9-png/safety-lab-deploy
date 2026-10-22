@@ -5236,15 +5236,32 @@ window._bulkSel = new Set();
     window.SafetyLab._renderTrialBanner = _renderTrialOrGrandfatherBanner;
     window.SafetyLab._recheckPaywall = function () { try { _check(); } catch(_) {} };
 
+    // 22 Oct 2026 (a customer saw "Your trial has ended" with a valid license): on a customer install
+    // the signed license IS the answer, and it is checked asynchronously (WebCrypto). The page used to
+    // decide 100 ms after load, before the verdict existed, fell back to the hosted trial rules, put
+    // the paywall up, and never took it down. Now: a customer install waits for the verdict; every
+    // verdict (first check, re-check after sign-in, a newly loaded license) decides again; and the
+    // paywall comes down when the answer is no longer "paywalled".
     function _check() {
         if (typeof isPaywalled === 'function' && isPaywalled()) {
             _renderPaywallScreen();
         } else {
+            const g = document.getElementById(GATE_ID);
+            if (g) g.remove();
             _renderTrialOrGrandfatherBanner();
         }
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _check);
-    else setTimeout(_check, 100);
+    function _customerInstall() {
+        try { const m = window.SLConfig && window.SLConfig.mode; return m === 'self-hosted' || m === 'browser-only' || m === 'desktop'; } catch (_) { return false; }
+    }
+    function _boot() {
+        const ready = window.__slabSignedLicenseReady;
+        if (_customerInstall() && ready && typeof ready.then === 'function') ready.then(_check, _check);
+        else _check();
+    }
+    try { window.addEventListener('slab-license-changed', function () { try { _check(); } catch (_) {} }); } catch (_) {}
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _boot);
+    else setTimeout(_boot, 100);
 })();
 
 
@@ -7235,15 +7252,29 @@ window._bulkSel = new Set();
         if (head) head.addEventListener('click', function (e) {
             if (e.target.closest && e.target.closest('[data-act="dismiss"]')) return;
             var collapsed = el.classList.toggle('collapsed');
-            _setState(collapsed ? 'collapsed' : '');
+            _setState(collapsed ? 'collapsed' : 'open');
+            _reserveSpace(el);
         });
         var x = el.querySelector('[data-act="dismiss"]');
-        if (x) x.addEventListener('click', function (e) { e.stopPropagation(); _setState('dismissed'); el.remove(); });
+        if (x) x.addEventListener('click', function (e) { e.stopPropagation(); _setState('dismissed'); el.remove(); _reserveSpace(null); });
+    }
+    // 22 Oct 2026: the card sits in the bottom-left corner, which is exactly where table rows keep
+    // their tick boxes and row menus. So while the card shows, the page keeps that much room free
+    // at the bottom (body.sl-onramp-on + --sl-onramp-space), letting every last row scroll clear
+    // of it, and the card folds down to a small bar once the user has made a start.
+    function _reserveSpace(el) {
+        try {
+            var b = document.body, r = document.documentElement;
+            if (!el || !el.isConnected) { b.classList.remove('sl-onramp-on'); r.style.removeProperty('--sl-onramp-space'); return; }
+            var h = Math.ceil(el.getBoundingClientRect().height || el.offsetHeight || 0);
+            r.style.setProperty('--sl-onramp-space', (h + 30) + 'px');
+            b.classList.add('sl-onramp-on');
+        } catch (_) {}
     }
     function renderOnramp() {
         var st = _state();
         var el = document.getElementById('sl-onramp');
-        if (st === 'dismissed') { if (el) el.remove(); return; }
+        if (st === 'dismissed') { if (el) el.remove(); _reserveSpace(null); return; }
         var steps = _steps();
         var results = steps.map(function (s) { try { return !!s.done(); } catch (_) { return false; } });
         var doneCount = results.filter(Boolean).length;
@@ -7251,7 +7282,9 @@ window._bulkSel = new Set();
         // Already-complete project on a fresh load → don't nag a returning power user.
         if (allDone && !el && st === '') { _setState('dismissed'); return; }
         if (!el) { el = document.createElement('div'); el.id = 'sl-onramp'; document.body.appendChild(el); }
-        if (st === 'collapsed') el.classList.add('collapsed'); else el.classList.remove('collapsed');
+        // Folded unless the user opened it, or nothing is done yet (then the steps are the point).
+        var folded = st === 'collapsed' || (st !== 'open' && doneCount > 0);
+        if (folded) el.classList.add('collapsed'); else el.classList.remove('collapsed');
         var head = '<div class="sl-onramp-head" data-act="toggle"><span class="sl-onramp-caret">▾</span>'
             + '<span class="sl-onramp-title">Getting started</span>'
             + '<span class="sl-onramp-prog">' + doneCount + '/' + steps.length + '</span>'
@@ -7260,7 +7293,7 @@ window._bulkSel = new Set();
             el.innerHTML = head + '<div class="sl-onramp-body"><div class="sl-onramp-done-banner"><b>✓ You traced the thread.</b>'
                 + 'Functions → hazards → systems → fault tree → requirements are all linked. Open the '
                 + '<a href="#" data-go="golden-thread" style="color:var(--color-accent,#4E63D8);font-weight:600;">Golden Thread</a> to see it end to end.</div></div>';
-            _wire(el); return;
+            _wire(el); _reserveSpace(el); return;
         }
         var body = '';
         steps.forEach(function (s, i) {
@@ -7273,6 +7306,9 @@ window._bulkSel = new Set();
         el.innerHTML = head + '<div class="sl-onramp-body">' + body
             + '<div class="sl-onramp-foot">Grounded in ARP 4761A / 4754B · click a step to jump there</div></div>';
         _wire(el);
+        _reserveSpace(el);
+        // first_run.js / onboarding_tour.js add buttons into the card a moment later: measure again.
+        setTimeout(function () { _reserveSpace(document.getElementById('sl-onramp')); }, 400);
     }
     // Public hooks — reopen from anywhere, or force a refresh after a data change.
     window.showOnramp = function () { _setState(''); try { renderOnramp(); } catch (_) {} };

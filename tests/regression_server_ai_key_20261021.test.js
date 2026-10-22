@@ -115,7 +115,7 @@ const JWT_ADMIN = 'aaa.admin.sig', JWT_USER = 'aaa.user.sig';
 
   console.log('\n[app] the panel');
   const idx = fs.readFileSync(path.join(REPO, 'site/index.html'), 'utf8'), js = fs.readFileSync(path.join(REPO, 'site/server_ai_key.js'), 'utf8');
-  check('the panel sits in AI settings and the script loads', /id="server-ai-key-panel"/.test(idx) && /<script src="server_ai_key\.js\?v=1\.0" defer><\/script>/.test(idx));
+  check('the panel sits in AI settings and the script loads', /id="server-ai-key-panel"/.test(idx) && /<script src="server_ai_key\.js\?v=1\.[0-9]+" defer><\/script>/.test(idx));   // 1.0 or later (22 Oct 2026: 1.1)
   check('it shows only on a customer\'s own server (the same test the seats use)', /pointsAtSafetyLab\(c\.aiEndpoint\) \|\| c\.pointsAtSafetyLab\(c\.supabaseUrl\)/.test(js) && /h\.style\.display = 'none'/.test(js));
   check('the pasted key is cleared from the page before the request goes out', js.indexOf("if (el) el.value = '';") < js.indexOf("call('POST', { key: key })"));
   check('the key is never written to the console, storage or the journal', !/console\.(log|info|warn)\([^)]*key/i.test(js) && !/localStorage|sessionStorage/.test(js) && /jrnl\('server-ai-key', 'Server AI key ' \+ \(r\.data\.last4/.test(js));

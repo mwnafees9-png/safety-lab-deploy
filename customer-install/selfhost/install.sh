@@ -22,6 +22,8 @@ STACK="$HERE/stack"
 ANSWERS="$HERE/answers.env"
 bold(){ printf '\n\033[1m%s\033[0m\n' "$*"; }
 die(){ printf '\nSTOP: %s\n' "$*"; exit 1; }
+# 22 Oct 2026: the running-install and fresh-code checks (kit_checks.sh says why)
+. "$HERE/kit_checks.sh"
 
 # ---------------------------------------------------------------- 0. checks
 bold "Checking this machine"
@@ -60,6 +62,9 @@ docker compose version >/dev/null 2>&1 || die "Docker Compose is missing. Docker
 [ -d "$KIT_DB" ] || die "The database files are missing (expected $KIT_DB). Unzip the whole package, not just this folder."
 command -v openssl >/dev/null 2>&1 || die "openssl is missing. On Windows run this script from the Ubuntu terminal; on Linux install the openssl package."
 echo "   Docker is running."
+# 22 Oct 2026: Safety Lab already installed on this machine from another folder? Stop now, before any
+# question, naming that folder (kit_checks.sh).
+slab_kit_check_early "$STACK" "$(cd "$HERE/.." && pwd)"
 
 # ---------------------------------------------------------------- 1. answers
 if [ -f "$ANSWERS" ]; then
@@ -161,6 +166,9 @@ if [ ! -f "$STACK/docker-compose.yml" ]; then
 fi
 cp -r "$HERE/ai-proxy" "$STACK/"
 cp "$HERE/docker-compose.safetylab.yml" "$STACK/docker-compose.safetylab.yml"
+# 22 Oct 2026: if Safety Lab already runs on this machine, it must be from THIS folder (else stop and
+# say which folder to update; nothing running is touched).
+slab_kit_check_running "$STACK" "$(cd "$HERE/.." && pwd)"
 
 # ---------------------------------------------------------------- 3. secrets and settings
 cd "$STACK"
@@ -297,6 +305,11 @@ fi
 docker compose up -d --wait --wait-timeout 600 || {
   echo; echo "A service did not come up. This is what Docker reports:"; docker compose ps
   die "Send the output above to Safety Lab, or run 'docker compose logs <service>' in $STACK to see why."; }
+
+# 22 Oct 2026: "up" does not restart the AI service when only its code changed (its container
+# settings did not), so a re-run left the old code running. Recreate it, wait for it, and check the
+# running code is this version.
+slab_ai_proxy_refresh "$STACK"
 
 # Caddy reads its configuration and certificate at start. A re-run that changed either (new
 # certificate, new server name) must restart it, or it keeps serving the old one.
