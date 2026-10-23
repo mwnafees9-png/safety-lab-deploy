@@ -9,15 +9,16 @@
  *     when the answer is no longer "paywalled". The customer layout (afha_template.js) also
  *     redraws on the same event.
  *  2. The Server AI key panel said "The server answered 502." Now it says the server's own
- *     reason, and when the running AI service is too old to have the admin handler (its answer
- *     carries an error OBJECT, the generic path), it says so and what fixes it.
+ *     reason. It does not guess whether the running AI service is too old: it asks the service,
+ *     whose /health lists what it can do ("server-ai-key" when it has the admin handler).
  *  3. "fetch failed" / "Failed to fetch". The server's AI service now answers 502
  *     upstream_unreachable naming the host, the network reason and the fix; the app turns a
  *     request that never got an answer into plain words. Embedding errors no longer read
  *     "[object Object]". worker.js is byte-identical in both places it ships.
- *  4. The "Getting started" card covered the bottom-left of tables (row tick boxes and menus).
- *     It now folds to a small bar once the user has made a start, and while it shows the page
- *     keeps that much room at the bottom so every last row scrolls clear of it.
+ *  4. The "Getting started" card floated over the bottom-left of tables (row tick boxes and
+ *     menus). It now has a home in the layout and never floats over the page: the bottom of the
+ *     full-width sidebar, otherwise a strip at the top of the page. It folds to a small bar once
+ *     the user has made a start.
  *
  * Each rule is checked on the real code, then on a mutated copy that must fail.
  * Run: node tests/regression_customer_bugs_20261022.test.js
@@ -67,10 +68,14 @@ async function paywallScenario(src) {
 }
 
 // ------------------------------------------------------------------ 2. server AI key says why
-function reasonFn(src) {
+// explain() with a stubbed /health: 'yes' (lists server-ai-key), 'no' (an older service), 'down'
+function explainWith(src, health) {
   const older = grab(src, /var OLDER = '[^\n]*;\n/, 'OLDER');
-  const fn = grab(src, /function reason\(r, fallback\) \{[\s\S]*?\n  \}\n/, 'reason()');
-  const ctx = {}; vm.createContext(ctx); vm.runInContext(older + fn + 'this.reason = reason; this.OLDER = OLDER;', ctx);
+  const fns = ['hostName', 'noAnswer', 'features', 'explain'].map(n => grab(src, new RegExp('function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?\\n  \\}\\n'), n)).join('');
+  const fetch = () => health === 'down' ? Promise.reject(new TypeError('Failed to fetch'))
+    : Promise.resolve({ ok: true, json: () => Promise.resolve(health === 'yes' ? { ok: true, features: ['server-ai-key'] } : { ok: true, service: 'safety-lab-proxy' }) });
+  const ctx = { URL, Promise, fetch, base: () => 'https://10.99.0.5/v1/ai' }; vm.createContext(ctx);
+  vm.runInContext(older + fns + 'this.explain = explain; this.OLDER = OLDER;', ctx);
   return ctx;
 }
 
@@ -109,17 +114,33 @@ const RULES = {
     return /W\.dispatchEvent\(new Event\('slab-license-changed'\)\)/.test(s.lic) && s.lic.indexOf("dispatchEvent(new Event('slab-license-changed'))") < s.lic.indexOf('return result;\n  }');
   },
   'customer layout redraws on a new license verdict'(s) { return /addEventListener\('slab-license-changed',[^\n]*refresh/.test(s.afha); },
-  'server AI key: the server\'s own message is shown'(s) {
-    const c = reasonFn(s.sak); return c.reason({ status: 502, data: { error: 'verify', message: 'Anthropic said the key is not valid.' } }, 'x') === 'Anthropic said the key is not valid.';
+  async 'server AI key: the admin handler\'s own message is shown as it is'(s) {
+    const c = explainWith(s.sak, 'yes'); return (await c.explain({ status: 400, data: { error: 'verify', message: 'Anthropic says this key is not valid.' } }, 'x')) === 'Anthropic says this key is not valid.';
   },
-  'server AI key: an older AI service (error object, e.g. "Missing Bearer token.") is named, with the fix'(s) {
-    const c = reasonFn(s.sak), m = c.reason({ status: 401, data: { error: { type: 'unauthorized', message: 'Missing Bearer token.' } } }, 'x');
-    return m.indexOf(c.OLDER) === 0 && /latest Safety Lab server package/.test(m) && /Missing Bearer token/.test(m);
+  async 'server AI key: "older" only when the service itself does not list the feature'(s) {
+    const r = { status: 401, data: { error: { type: 'unauthorized', message: 'Missing Bearer token.' } } };
+    const old = await explainWith(s.sak, 'no').explain(r, 'x'), cur = await explainWith(s.sak, 'yes').explain(r, 'x');
+    const c = explainWith(s.sak, 'no');
+    return old.indexOf(c.OLDER) === 0 && /Missing Bearer token/.test(old) && cur === 'Missing Bearer token.';
   },
-  'server AI key: an unreachable provider shows the server\'s words, not "answered 502"'(s) {
-    const c = reasonFn(s.sak); return c.reason({ status: 502, data: { error: { type: 'upstream_unreachable', message: 'The AI service cannot reach api.anthropic.com: x.' } } }, 'The server answered 502.') === 'The AI service cannot reach api.anthropic.com: x.';
+  async 'server AI key: a current service\'s reason (e.g. Anthropic unreachable) is shown, never "answered 502"'(s) {
+    const m = await explainWith(s.sak, 'yes').explain({ status: 502, data: { error: { type: 'upstream_unreachable', message: 'The AI service cannot reach api.anthropic.com: x.' } } }, 'The server answered 502.');
+    return m === 'The AI service cannot reach api.anthropic.com: x.';
   },
-  'server AI key: no "The server answered N." without a reason anywhere'(s) { return !/'The server answered ' \+ r\.status \+ '\.'/.test(s.sak) && (s.sak.match(/reason\(r, /g) || []).length >= 3; },
+  async 'server AI key: no answer at all names the server, not "older"'(s) {
+    const c = explainWith(s.sak, 'down'), m = await c.explain({ status: 502, data: {} }, 'x');
+    return /10\.99\.0\.5/.test(m) && m.indexOf(c.OLDER) === -1;
+  },
+  'server AI key: every failure goes through explain(), no bare status codes'(s) { return !/'The server answered ' \+ r\.status \+ '\.'/.test(s.sak) && (s.sak.match(/explain\(r, /g) || []).length >= 3 && !/function reason\(/.test(s.sak); },
+  async 'server: /health lists "server-ai-key" only where the admin handler exists'(s) {
+    const body = grab(s.worker, /if \(request\.method === "GET" && url\.pathname === "\/v1\/ai\/health"\) \{[\s\S]*?\n      \}\n/, 'health');
+    const jr = grab(s.worker, /function jsonResponse\(status, body, extra = \{\}\) \{[\s\S]*?\n\}\n/, 'jsonResponse');
+    const run = async env => { const ctx = { Response, Headers, JSON, Date }; vm.createContext(ctx);
+      vm.runInContext('const CORS = {}, CORS_HEADERS = {};\n' + jr + 'this.f = async (request, url, env) => { ' + body + ' return null; };', ctx);
+      const r = await ctx.f({ method: 'GET' }, { pathname: '/v1/ai/health' }, env); return JSON.parse(await r.text()); };
+    const own = await run({ __serverKey: { handle() {} } }), hosted = await run({});
+    return Array.isArray(own.features) && own.features.includes('server-ai-key') && Array.isArray(hosted.features) && !hosted.features.includes('server-ai-key');
+  },
   'app: "Failed to fetch" straight to Anthropic says which host and what IT allows'(s) {
     const e = plainNetFn(s.core)(new TypeError('Failed to fetch'), false); return /api\.anthropic\.com/.test(e.message) && /port 443/.test(e.message);
   },
@@ -140,16 +161,16 @@ const RULES = {
     return /catch \(e\) \{ return upstreamUnreachable\(ANTHROPIC_UPSTREAM, e\); \}/.test(s.worker) && /catch \(e\) \{ return upstreamUnreachable\(VOYAGE_UPSTREAM, e\); \}/.test(s.worker);
   },
   'server: worker.js is byte-identical in the customer kit and the hosted deploy'(s) { return s.proxy === null || s.proxy === s.worker; },
-  'card: while it shows, the page keeps room at the bottom the size of the card'(s) {
-    const r = reserveFn(s.sl); r.f({ isConnected: true, getBoundingClientRect: () => ({ height: 44 }) });
-    const on = r.cls.has('sl-onramp-on') && r.props['--sl-onramp-space'] === '74px';
-    r.f(null); return on && !r.cls.has('sl-onramp-on') && !('--sl-onramp-space' in r.props);
+  'card: never fixed over the page (no position: fixed anywhere in its styles)'(s) {
+    const css = (s.css.match(/#sl-onramp[^{]*\{[^}]*\}/g) || []).join('\n'); return css.length > 0 && !/position:\s*fixed/.test(css);
   },
-  'card: the CSS turns that room into space below the page'(s) { return /body\.sl-onramp-on \.container \{ padding-bottom: calc\(var\(--s-6\) \+ var\(--sl-onramp-space, 0px\)\) !important; \}/.test(s.css); },
+  'card: home in the full-width sidebar is its footer, the menu scrolls in its own area above it'(s) { return /#sl-onramp\.home-side \{[^}]*flex: 0 0 auto;/.test(s.css) && /\.app-sidebar\.has-onramp \{ overflow: hidden; \}/.test(s.css) && /\.app-sidebar\.has-onramp > \.asb-nav \{ flex: 1 1 auto; min-height: 0; overflow-y: auto;/.test(s.css) && /sb\.appendChild\(el\)/.test(s.sl) && /sb\.classList\.toggle\('has-onramp', where === 'side'\)/.test(s.sl); },
+  'card: gone means the sidebar scrolls as before'(s) { return (s.sl.match(/el\.remove\(\); _unhome\(\);/g) || []).length >= 2; },
+  'card: otherwise a strip at the top of the page, in the flow'(s) { return /#sl-onramp\.home-page \{ margin: 0 0 14px; \}/.test(s.css) && /page\.insertBefore\(el, hdr \? hdr\.nextSibling : page\.firstChild\)/.test(s.sl); },
+  'card: it moves home when the layout changes'(s) { return /new MutationObserver\(again\)\.observe\(document\.body, \{ attributes: true, attributeFilter: \['class'\] \}\)/.test(s.sl) && /addEventListener\('resize', again\)/.test(s.sl); },
   'card: folded to a bar once the user has made a start, unless they opened it'(s) { return /var folded = st === 'collapsed' \|\| \(st !== 'open' && doneCount > 0\);/.test(s.sl) && /_setState\(collapsed \? 'collapsed' : 'open'\)/.test(s.sl); },
-  'card: dismissing it gives the room back'(s) { return /_setState\('dismissed'\); el\.remove\(\); _reserveSpace\(null\);/.test(s.sl); },
   'every changed file has a newer cache key'(s) {
-    const want = { 'safety_lab.css': '65.68', 'slab_license.js': '1.4', 'core_modules.js': '1.14', 'safety_lab.js': '65.66', 'server_ai_key.js': '1.1', 'afha_template.js': '1.2' };
+    const want = { 'safety_lab.css': '65.69', 'slab_license.js': '1.4', 'core_modules.js': '1.14', 'safety_lab.js': '65.67', 'server_ai_key.js': '1.2', 'afha_template.js': '1.2' };
     return Object.keys(want).every(f => { const m = new RegExp('"' + f.replace(/\./g, '\\.') + '\\?v=([0-9.]+)"').exec(s.idx); if (!m) return false;
       const a = m[1].split('.').map(Number), b = want[f].split('.').map(Number);
       for (let i = 0; i < Math.max(a.length, b.length); i++) { const x = a[i] || 0, y = b[i] || 0; if (x !== y) return x > y; } return true; });
@@ -161,10 +182,6 @@ const MUT = {
   'paywall: a later license verdict (slab-license-changed) takes a paywall that is up back down': s => { s.sl = s.sl.replace("const g = document.getElementById(GATE_ID);\n            if (g) g.remove();", ''); },
   'license: every verdict tells the page (slab-license-changed)': s => { s.lic = s.lic.replace(/W\.dispatchEvent\(new Event\('slab-license-changed'\)\)/, 'void 0'); },
   'customer layout redraws on a new license verdict': s => { s.afha = s.afha.replace(/addEventListener\('slab-license-changed'/, "addEventListener('x'"); },
-  'server AI key: the server\'s own message is shown': s => { s.sak = s.sak.replace("if (typeof d.message === 'string' && d.message) return d.message;", ''); },
-  'server AI key: an older AI service (error object, e.g. "Missing Bearer token.") is named, with the fix': s => { s.sak = s.sak.replace("return OLDER + (d.error.message", "return (d.error.message"); },
-  'server AI key: an unreachable provider shows the server\'s words, not "answered 502"': s => { s.sak = s.sak.replace("if (d.error.type === 'upstream_unreachable' && d.error.message) return String(d.error.message);", ''); },
-  'server AI key: no "The server answered N." without a reason anywhere': s => { s.sak += "\nvar z = 'The server answered ' + r.status + '.';"; },
   'app: "Failed to fetch" straight to Anthropic says which host and what IT allows': s => { s.core = s.core.replace(/failed to fetch\|/, ''); },
   'app: "fetch failed" through the server names the server': s => { s.core = s.core.replace("host = new URL(String(AI_PROXY_BASE_URL)).host || 'your AI service';", "host = 'the server';"); },
   'app: an error that got an answer keeps its own message': s => { s.core = s.core.replace(/if \(!\/failed to fetch[^\n]*return e;/, ''); },
@@ -173,11 +190,19 @@ const MUT = {
   'server: an unreachable provider answers 502 upstream_unreachable with host, reason and fix': s => { s.worker = s.worker.replace('ENOTFOUND: "its address could not be looked up (DNS)", ', ''); },
   'server: both provider calls (Anthropic, Voyage) are caught': s => { s.worker = s.worker.replace('catch (e) { return upstreamUnreachable(VOYAGE_UPSTREAM, e); }', 'catch (e) { throw e; }'); },
   'server: worker.js is byte-identical in the customer kit and the hosted deploy': s => { s.proxy = (s.proxy || s.worker) + ' '; },
-  'card: while it shows, the page keeps room at the bottom the size of the card': s => { s.sl = s.sl.replace("(h + 30) + 'px'", "'0px'"); },
-  'card: the CSS turns that room into space below the page': s => { s.css = s.css.replace('body.sl-onramp-on .container { padding-bottom', 'body.sl-onramp-on .container { padding-top'); },
-  'card: folded to a bar once the user has made a start, unless they opened it': s => { s.sl = s.sl.replace("(st !== 'open' && doneCount > 0)", 'false'); },
-  'card: dismissing it gives the room back': s => { s.sl = s.sl.replace("_setState('dismissed'); el.remove(); _reserveSpace(null);", "_setState('dismissed'); el.remove();"); },
   'every changed file has a newer cache key': s => { s.idx = s.idx.replace(/server_ai_key\.js\?v=[0-9.]+"/, 'server_ai_key.js?v=1.0"'); },
+  'server AI key: the admin handler\'s own message is shown as it is': s => { s.sak = s.sak.replace("if (typeof d.message === 'string' && d.message) return Promise.resolve(d.message);", ''); },
+  'server AI key: "older" only when the service itself does not list the feature': s => { s.sak = s.sak.replace("if (f === 'no') return OLDER", "if (true) return OLDER"); },
+  'server AI key: a current service\'s reason (e.g. Anthropic unreachable) is shown, never "answered 502"': s => { s.sak = s.sak.replace("if (d.error && typeof d.error === 'object' && d.error.message) return String(d.error.message);", ''); },
+  'server AI key: no answer at all names the server, not "older"': s => { s.sak = s.sak.replace("if (f === 'unreachable') return noAnswer();", "if (f === 'unreachable') return OLDER;"); },
+  'server AI key: every failure goes through explain(), no bare status codes': s => { s.sak += "\nvar z = 'The server answered ' + r.status + '.';"; },
+  'server: /health lists "server-ai-key" only where the admin handler exists': s => { s.worker = s.worker.replace('if (env.__serverKey && typeof env.__serverKey.handle === "function") features.push("server-ai-key");', ''); },
+  'card: never fixed over the page (no position: fixed anywhere in its styles)': s => { s.css = s.css.replace('#sl-onramp.home-page { margin: 0 0 14px; }', '#sl-onramp.home-page { position: fixed; margin: 0 0 14px; }'); },
+  'card: home in the full-width sidebar is its footer, the menu scrolls in its own area above it': s => { s.css = s.css.replace('.app-sidebar.has-onramp > .asb-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto;', '.app-sidebar.has-onramp > .asb-nav { flex: 1 1 auto;'); },
+  'card: gone means the sidebar scrolls as before': s => { s.sl = s.sl.replace(/el\.remove\(\); _unhome\(\);/g, 'el.remove();'); },
+  'card: otherwise a strip at the top of the page, in the flow': s => { s.sl = s.sl.replace('page.insertBefore(el, hdr ? hdr.nextSibling : page.firstChild)', 'document.body.appendChild(el)'); },
+  'card: it moves home when the layout changes': s => { s.sl = s.sl.replace("window.addEventListener('resize', again)", 'void 0'); },
+  'card: folded to a bar once the user has made a start, unless they opened it': s => { s.sl = s.sl.replace("(st !== 'open' && doneCount > 0)", 'false'); },
 };
 
 (async () => {

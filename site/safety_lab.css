@@ -4931,7 +4931,6 @@ body.theme-dark .node-delete-btn-inner:hover {
 :root {
     --z-content: 1;
     --z-sticky: 100;
-    --z-onramp: 1500;          /* first-run guide — above content, below modals */
     --z-modal-backdrop: 2000;  /* .modal-overlay */
     --z-modal: 2000;
     --z-drawer: 9999;          /* #node-config-panel (non-blocking) */
@@ -4961,14 +4960,27 @@ body:has(.modal-overlay.show) { overflow: hidden; }
    the whole card auto-hides once every step is satisfied or on dismiss.
    ===================================================================== */
 #sl-onramp {
-    position: fixed; left: 18px; bottom: 18px; z-index: var(--z-onramp, 1500);
-    width: 312px; max-width: calc(100vw - 36px);
     background: var(--color-surface-1, #fff); color: var(--color-text-primary, #111);
     border: 1px solid var(--color-border, rgba(0,0,0,.12)); border-radius: 14px;
-    box-shadow: 0 18px 48px rgba(0,0,0,.20), 0 4px 14px rgba(0,0,0,.10);
     font: 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     overflow: hidden; animation: slOnrampIn .26s cubic-bezier(.22,1,.36,1);
 }
+/* 23 Oct 2026: the card has a home in the layout and never floats over the page (it covered row
+   tick boxes and menus in the bottom-left of tables). safety_lab.js picks the home. */
+#sl-onramp.home-side {                      /* the footer of the full-width left sidebar */
+    flex: 0 0 auto; margin-top: 10px;
+    max-height: 50vh; overflow-y: auto; overscroll-behavior: contain;
+}
+/* With the card in it, the sidebar itself stops scrolling and its navigation scrolls in its own
+   area above the card: the card is beside the menu, never over it. */
+body.nav-sidebar:not(.nav-rail) .app-sidebar.has-onramp { overflow: hidden; }
+body.nav-sidebar:not(.nav-rail) .app-sidebar.has-onramp > .asb-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+#sl-onramp.home-page { margin: 0 0 14px; }  /* a strip at the top of the page, in the flow */
+#sl-onramp.home-page.collapsed { width: fit-content; min-width: 220px; }
+#sl-onramp.home-page .sl-onramp-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px; }
+#sl-onramp.home-page .sl-onramp-body > :not(.sl-onramp-step) { grid-column: 1 / -1; }
+#sl-onramp.home-page.collapsed .sl-onramp-body { display: none; }
+body.fta-fullscreen #sl-onramp { display: none; }
 @keyframes slOnrampIn { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 #sl-onramp .sl-onramp-head {
     display: flex; align-items: center; gap: 8px; padding: 11px 13px;
@@ -4976,10 +4988,6 @@ body:has(.modal-overlay.show) { overflow: hidden; }
     user-select: none;
 }
 #sl-onramp.collapsed .sl-onramp-head { border-bottom: none; }
-/* 22 Oct 2026: folded, the card is a small bar, and while it shows the page keeps room at the
-   bottom so the last table rows (tick boxes, row menus) scroll clear of it. */
-#sl-onramp.collapsed { width: auto; min-width: 200px; }
-body.sl-onramp-on .container { padding-bottom: calc(var(--s-6) + var(--sl-onramp-space, 0px)) !important; }   /* on .container: body.nav-sidebar pins body padding and the container's margins to 0 */
 #sl-onramp .sl-onramp-title { font-weight: 700; font-size: 13px; flex: 1; min-width: 0; }
 #sl-onramp .sl-onramp-prog {
     font-size: 11px; color: var(--color-accent, #007aff); font-weight: 700;
@@ -5014,7 +5022,6 @@ body.sl-onramp-on .container { padding-bottom: calc(var(--s-6) + var(--sl-onramp
 .sl-onramp-done-banner { padding: 16px 14px; text-align: center; font-size: 12px; line-height: 1.5; color: var(--color-text-secondary, #667085); }
 .sl-onramp-done-banner b { display: block; font-size: 13.5px; margin-bottom: 4px; color: var(--color-text-primary, #111); }
 body.theme-dark #sl-onramp { background: var(--color-surface-2, #0e1219); }
-@media (max-width: 560px) { #sl-onramp { left: 10px; right: 10px; bottom: 10px; width: auto; } }
 
 
 /* ==========================================

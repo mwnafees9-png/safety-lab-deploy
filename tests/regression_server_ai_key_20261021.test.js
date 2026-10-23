@@ -124,7 +124,11 @@ const JWT_ADMIN = 'aaa.admin.sig', JWT_USER = 'aaa.user.sig';
     const els = { 'server-ai-key-panel': { style: {}, innerHTML: '' }, 'server-ai-key-input': { value: '' } };
     const sent = [];
     const ctx = { console, document: { getElementById: id => els[id] || null }, SLConfig: cfg, getSupabaseSession: () => ({ access_token: JWT_ADMIN }),
-      fetch: async (u, o) => { sent.push({ u, o }); return { status: answer.status, json: async () => answer.data }; } };
+      fetch: async (u, o) => {
+        // 23 Oct 2026: the panel asks the AI service what it can do (/health) before it calls a
+        // server "older". An older service answers /health without "features"; a current one lists them.
+        if (/\/health$/.test(u)) return { ok: true, status: 200, json: async () => answer.health || { ok: true, service: 'safety-lab-proxy', ts: 1 } };
+        sent.push({ u, o }); return { ok: answer.status === 200, status: answer.status, json: async () => answer.data }; } };
     ctx.window = ctx; vm.createContext(ctx); vm.runInContext(js, ctx);
     return { ctx, els, sent };
   }
@@ -145,6 +149,9 @@ const JWT_ADMIN = 'aaa.admin.sig', JWT_USER = 'aaa.user.sig';
   const p3 = page(radia, { status: 404, data: {} });
   await p3.ctx.SLServerAiKey.render();
   check('an older server without the service: says IT must install the latest server package', /older than this app/.test(p3.els['server-ai-key-panel'].innerHTML));
+  const p4 = page(radia, { status: 401, data: { error: { type: 'unauthorized', message: 'Malformed token.' } }, health: { ok: true, service: 'safety-lab-proxy', features: ['server-ai-key'] } });
+  await p4.ctx.SLServerAiKey.render();
+  check('a current server that refuses: its own words, never "older"', /Malformed token\./.test(p4.els['server-ai-key-panel'].innerHTML) && !/older than this app/.test(p4.els['server-ai-key-panel'].innerHTML));
   check('no em dashes in what was added', [js, fs.readFileSync(path.join(PROXY, 'server_key.mjs'), 'utf8'), sql, fs.readFileSync(__filename, 'utf8')].every(t => t.indexOf(String.fromCharCode(0x2014)) < 0));
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

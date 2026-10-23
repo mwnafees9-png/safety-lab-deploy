@@ -27,7 +27,7 @@
     <!-- Phase 53.8 — cache-busting query string. Chrome caches file:// resources
          aggressively even with DevTools "Disable cache" on; bumping this string
          forces a re-fetch. Update the number when CSS/JS changes need to land. -->
-    <link rel="stylesheet" href="safety_lab.css?v=65.68">
+    <link rel="stylesheet" href="safety_lab.css?v=65.69">
     <!-- Phase 56.30 — Boot splash. Hides the app shell behind a brand-mark
          overlay until auth_gate.js (or safety_lab.js, for already-signed-in
          users) calls window.__slDismissBootSplash(). Prevents the app from
@@ -4200,7 +4200,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
     <script src="misc_fn_modules.js?v=66.83" defer></script>
-    <script src="safety_lab.js?v=65.66" defer></script>
+    <script src="safety_lab.js?v=65.67" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4605,7 +4605,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="erasure.js?v=1.0" defer></script>
     <!-- 6 Oct 2026: floating seats on a customer's own server (the server holds the license). -->
     <script src="slab_seats.js?v=1.0" defer></script>
-    <script src="server_ai_key.js?v=1.1" defer></script>
+    <script src="server_ai_key.js?v=1.2" defer></script>
     <!-- 21 Oct 2026: the customer AFHA template layout (license feature "afha-customer-template"): the Aircraft FHA page and its export in a customer's own template. Off unless the license names it. -->
     <script src="afha_template.js?v=1.2" defer></script>
     <script src="afha_template_export.js?v=1.0" defer></script>

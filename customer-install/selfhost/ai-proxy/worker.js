@@ -869,7 +869,13 @@ async function routeRequest(request, env, ctx) {
     try {
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/v1/ai/health") {
-        return jsonResponse(200, { ok: true, service: "safety-lab-proxy", ts: Date.now() });
+        // 23 Oct 2026: say what this service can do, so the app never has to guess from an error
+        // whether the running service is older than the app. Only the customer's own server has
+        // the admin AI key handler (server_key.mjs).
+        const features = [];
+        if (env.__serverKey && typeof env.__serverKey.handle === "function") features.push("server-ai-key");
+        if (env.__seats && typeof env.__seats.handle === "function") features.push("seats");
+        return jsonResponse(200, { ok: true, service: "safety-lab-proxy", ts: Date.now(), features });
       }
       if (!url.pathname.startsWith("/v1/ai/")) {
         return jsonResponse(404, { error: { type: "not_found", message: "Unknown endpoint." } });

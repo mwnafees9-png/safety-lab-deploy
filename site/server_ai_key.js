@@ -1,5 +1,5 @@
 // ============================================================================
-// server_ai_key.js, v1.1, 22 Oct 2026 (v1.0 21 Oct): the AI key of a customer's own server, set from the app.
+// server_ai_key.js, v1.2, 23 Oct 2026 (v1.1 22 Oct, v1.0 21 Oct): the AI key of a customer's own server, set from the app.
 //
 // Waqas: "why cant he just save his API key directly in safety lab". On a customer's own server
 // the AI runs through that server, so the key belongs on the server, and until now the only way
@@ -36,22 +36,35 @@
     if (body) { opts.headers['content-type'] = 'application/json'; opts.body = JSON.stringify(body); }
     return fetch(b + '/admin/ai-key', opts).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d || {} }; });
-    }).catch(function () { return { status: 0, data: { message: 'The server did not answer.' } }; });
+    }).catch(function () { return { status: 0, data: { message: noAnswer() } }; });
   }
-  // 22 Oct 2026: say WHY, never just "the server answered 502". The admin handler (server_key.mjs)
-  // answers { error: "<code>", message }. An answer whose error is an OBJECT came from the AI
-  // service's general path instead, which means the running AI service has no admin handler: it
-  // is older than this app (the "Missing Bearer token." case at a customer).
+  // 23 Oct 2026: say WHY, never just "the server answered 502", and never by guessing. The
+  // server's AI service says what it can do on /health ("features"); only a service that has the
+  // admin handler lists "server-ai-key". So when a call fails without the admin handler's own
+  // message, the app ASKS the service: not listed means the running service is older than this
+  // app (the case at a customer), listed means the service's own words are shown, and no answer
+  // means the server could not be reached at all.
   var OLDER = 'This server\'s AI service is older than this app, so the key can only be set on the server itself. Ask IT to install the latest Safety Lab server package.';
-  function reason(r, fallback) {
+  function hostName() { try { return new URL(base()).host; } catch (_) { return 'the server'; } }
+  function noAnswer() { return 'Safety Lab cannot reach the AI service on ' + hostName() + '. Check that this computer can reach the server and that the server is running.'; }
+  function features() {
+    var b = base();
+    if (!b) return Promise.resolve('unreachable');
+    return fetch(b + '/health', { cache: 'no-store', headers: { accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json().catch(function () { return null; }) : null; })
+      .then(function (d) { return !d ? 'unreachable' : ((Array.isArray(d.features) && d.features.indexOf('server-ai-key') !== -1) ? 'yes' : 'no'); })
+      .catch(function () { return 'unreachable'; });
+  }
+  function explain(r, fallback) {
     var d = (r && r.data) || {};
-    if (typeof d.message === 'string' && d.message) return d.message;
-    if (d.error && typeof d.error === 'object') {
-      if (d.error.type === 'upstream_unreachable' && d.error.message) return String(d.error.message);
-      return OLDER + (d.error.message ? ' (The server said: ' + String(d.error.message) + ')' : '');
-    }
-    if (typeof d.error === 'string' && d.error) return d.error;
-    return fallback;
+    if (typeof d.message === 'string' && d.message) return Promise.resolve(d.message);   // the admin handler's own words
+    return features().then(function (f) {
+      if (f === 'no') return OLDER + ((d.error && d.error.message) ? ' (The server said: ' + String(d.error.message) + ')' : '');
+      if (f === 'unreachable') return noAnswer();
+      if (d.error && typeof d.error === 'object' && d.error.message) return String(d.error.message);
+      if (typeof d.error === 'string' && d.error) return d.error;
+      return fallback;
+    });
   }
   function host() { return document.getElementById('server-ai-key-panel'); }
 
@@ -94,8 +107,7 @@
     return call('GET').then(function (r) {
       if (r.status === 200) { last = r.data; paint({ kind: 'admin', s: r.data }); }
       else if (r.status === 403) paint({ kind: 'notadmin', s: null });
-      else if (r.status === 404) paint({ kind: 'error', msg: OLDER });
-      else paint({ kind: 'error', msg: reason(r, r.status ? 'The server answered ' + r.status + ' without saying why.' : 'The server did not answer.') });
+      else return explain(r, 'The server answered ' + r.status + ' without saying why.').then(function (m) { paint({ kind: 'error', msg: m }); });
     });
   }
 
@@ -113,7 +125,7 @@
         paint({ kind: 'admin', s: r.data, msg: '<span style="color:var(--color-success); font-weight:600;">Saved.</span> Everyone on this server can use the AI now.' });
         try { if (typeof W.jrnl === 'function') W.jrnl('server-ai-key', 'Server AI key ' + (r.data.last4 ? '(ending ' + r.data.last4 + ') ' : '') + 'set from the app'); } catch (_) {}
       } else {
-        paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(reason(r, 'Not saved: the server answered ' + r.status + ' without saying why.')) + '</span>' });
+        return explain(r, 'Not saved: the server answered ' + r.status + ' without saying why.').then(function (m) { paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(m) + '</span>' }); });
       }
     });
   }
@@ -124,7 +136,7 @@
       return call('POST', { remove: true }).then(function (r) {
         busy = false;
         if (r.status === 200) { last = r.data; paint({ kind: 'admin', s: r.data, msg: 'Removed.' + (r.data.set ? ' The server now uses the key in its settings file.' : '') }); }
-        else paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(reason(r, 'Not removed.')) + '</span>' });
+        else return explain(r, 'Not removed.').then(function (m) { paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(m) + '</span>' }); });
       });
     };
     if (typeof W.slConfirm === 'function') return Promise.resolve(W.slConfirm('Remove the server\'s AI key? AI stops working for everyone on this server until a key is added again.', { title: 'Remove the AI key' })).then(function (ok) { if (ok) return go(); });

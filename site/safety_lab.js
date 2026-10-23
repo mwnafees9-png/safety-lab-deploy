@@ -7253,35 +7253,61 @@ window._bulkSel = new Set();
             if (e.target.closest && e.target.closest('[data-act="dismiss"]')) return;
             var collapsed = el.classList.toggle('collapsed');
             _setState(collapsed ? 'collapsed' : 'open');
-            _reserveSpace(el);
         });
         var x = el.querySelector('[data-act="dismiss"]');
-        if (x) x.addEventListener('click', function (e) { e.stopPropagation(); _setState('dismissed'); el.remove(); _reserveSpace(null); });
+        if (x) x.addEventListener('click', function (e) { e.stopPropagation(); _setState('dismissed'); el.remove(); _unhome(); });
     }
-    // 22 Oct 2026: the card sits in the bottom-left corner, which is exactly where table rows keep
-    // their tick boxes and row menus. So while the card shows, the page keeps that much room free
-    // at the bottom (body.sl-onramp-on + --sl-onramp-space), letting every last row scroll clear
-    // of it, and the card folds down to a small bar once the user has made a start.
-    function _reserveSpace(el) {
-        try {
-            var b = document.body, r = document.documentElement;
-            if (!el || !el.isConnected) { b.classList.remove('sl-onramp-on'); r.style.removeProperty('--sl-onramp-space'); return; }
-            var h = Math.ceil(el.getBoundingClientRect().height || el.offsetHeight || 0);
-            r.style.setProperty('--sl-onramp-space', (h + 30) + 'px');
-            b.classList.add('sl-onramp-on');
-        } catch (_) {}
+    // 23 Oct 2026: the card never floats over the page. It used to be fixed in the bottom-left
+    // corner, which is exactly where tables keep their row tick boxes and menus, and no amount of
+    // spare room at the bottom helps a table inside its own scroll box. Now it has a HOME in the
+    // layout, so it can cover nothing:
+    //   - the left sidebar is showing at full width: the card is the sidebar's footer. The sidebar
+    //     stops scrolling as a whole and its navigation scrolls in its own area above the card, so
+    //     the card never sits over a menu item either (home-side, .app-sidebar.has-onramp);
+    //   - anything else (top navigation, the narrow icon rail, narrow windows where the sidebar
+    //     drops into the page): the card is a strip at the top of the page, in the flow (home-page).
+    // It moves home whenever the layout changes (sidebar on/off, rail, window width).
+    function _homeOf() {
+        var sb = document.getElementById('app-sidebar');
+        if (!sb || !document.body.classList.contains('nav-sidebar') || document.body.classList.contains('nav-rail')) return 'page';
+        var cs = getComputedStyle(sb);
+        return (cs.display !== 'none' && cs.position === 'fixed' && sb.getBoundingClientRect().width >= 200) ? 'side' : 'page';
+    }
+    function _home(el) {
+        if (!el) return;
+        var where = _homeOf(), sb = document.getElementById('app-sidebar');
+        if (sb) sb.classList.toggle('has-onramp', where === 'side');
+        if (where === 'side') {
+            if (el.parentNode !== sb || sb.lastElementChild !== el) sb.appendChild(el);
+        } else {
+            var page = document.querySelector('.container') || document.body;
+            var hdr = page.querySelector(':scope > .global-header');          // right under the page header
+            var ok = el.parentNode === page && (hdr ? el.previousElementSibling === hdr : page.firstElementChild === el);
+            if (!ok) page.insertBefore(el, hdr ? hdr.nextSibling : page.firstChild);
+        }
+        el.classList.toggle('home-side', where === 'side');
+        el.classList.toggle('home-page', where === 'page');
+    }
+    function _unhome() { var sb = document.getElementById('app-sidebar'); if (sb) sb.classList.remove('has-onramp'); }
+    var _homeWatch = false;
+    function _watchHome() {
+        if (_homeWatch) return; _homeWatch = true;
+        var again = function () { var el = document.getElementById('sl-onramp'); if (el) _home(el); };
+        try { new MutationObserver(again).observe(document.body, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
+        try { window.addEventListener('resize', again); } catch (_) {}
     }
     function renderOnramp() {
         var st = _state();
         var el = document.getElementById('sl-onramp');
-        if (st === 'dismissed') { if (el) el.remove(); _reserveSpace(null); return; }
+        if (st === 'dismissed') { if (el) el.remove(); _unhome(); return; }
         var steps = _steps();
         var results = steps.map(function (s) { try { return !!s.done(); } catch (_) { return false; } });
         var doneCount = results.filter(Boolean).length;
         var allDone = doneCount === steps.length;
         // Already-complete project on a fresh load → don't nag a returning power user.
-        if (allDone && !el && st === '') { _setState('dismissed'); return; }
-        if (!el) { el = document.createElement('div'); el.id = 'sl-onramp'; document.body.appendChild(el); }
+        if (allDone && !el && st === '') { _setState('dismissed'); _unhome(); return; }
+        if (!el) { el = document.createElement('div'); el.id = 'sl-onramp'; }
+        _home(el); _watchHome();
         // Folded unless the user opened it, or nothing is done yet (then the steps are the point).
         var folded = st === 'collapsed' || (st !== 'open' && doneCount > 0);
         if (folded) el.classList.add('collapsed'); else el.classList.remove('collapsed');
@@ -7293,7 +7319,7 @@ window._bulkSel = new Set();
             el.innerHTML = head + '<div class="sl-onramp-body"><div class="sl-onramp-done-banner"><b>✓ You traced the thread.</b>'
                 + 'Functions → hazards → systems → fault tree → requirements are all linked. Open the '
                 + '<a href="#" data-go="golden-thread" style="color:var(--color-accent,#4E63D8);font-weight:600;">Golden Thread</a> to see it end to end.</div></div>';
-            _wire(el); _reserveSpace(el); return;
+            _wire(el); return;
         }
         var body = '';
         steps.forEach(function (s, i) {
@@ -7306,9 +7332,6 @@ window._bulkSel = new Set();
         el.innerHTML = head + '<div class="sl-onramp-body">' + body
             + '<div class="sl-onramp-foot">Grounded in ARP 4761A / 4754B · click a step to jump there</div></div>';
         _wire(el);
-        _reserveSpace(el);
-        // first_run.js / onboarding_tour.js add buttons into the card a moment later: measure again.
-        setTimeout(function () { _reserveSpace(document.getElementById('sl-onramp')); }, 400);
     }
     // Public hooks — reopen from anywhere, or force a refresh after a data change.
     window.showOnramp = function () { _setState(''); try { renderOnramp(); } catch (_) {} };
