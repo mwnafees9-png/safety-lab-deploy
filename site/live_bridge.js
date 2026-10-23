@@ -169,6 +169,23 @@
     function _hasKeychain() {
         try { return !!(window.slabSecrets && window.slabBridge && typeof window.slabBridge.get === 'function'); } catch (_) { return false; }
     }
+    // 23 Oct 2026: on the desktop the login lives in the keychain, so the page cannot read it back.
+    // The keychain's plain details (host, username or Client ID, sign-in method) can be, and the
+    // connection dialog shows them, so a saved login is visible as saved.
+    let _deskMeta = null;
+    async function _refreshDeskMeta() {
+        if (!_isDesktop() || !window.slabSecrets || typeof window.slabSecrets.status !== 'function') return;
+        try {
+            const r = await window.slabSecrets.status();
+            const e = ((r && r.secrets) || []).find(x => x && x.kind === 'jama');
+            _deskMeta = e ? (e.meta || {}) : null;
+        } catch (_) {}
+    }
+    function _savedLogin() {   // { user, auth, has } of the login saved for this door
+        if (_isDesktop()) return { user: (_deskMeta && _deskMeta.user) || '', auth: (_deskMeta && _deskMeta.auth) || 'basic', has: !!_deskMeta };
+        const st = _store(), m = st ? (st.meta('jama_token') || {}) : {};
+        return { user: m.user || '', auth: m.auth || 'basic', has: !!(st && st.has('jama_token')) };
+    }
     function _hasCredential() {
         if (_isDesktop()) return _hasKeychain();
         const st = _store();
@@ -212,12 +229,44 @@
         const token = st ? st.get('jama_token') : '';
         const meta = st ? (st.meta('jama_token') || {}) : {};
         if (!token) throw new Error('Connect the tool first: no credential is saved in this tab.');
-        const auth = 'Basic ' + btoa((meta.user || '') + ':' + token);
-        const res = await fetch('/api/bridge?target=' + encodeURIComponent(targetUrl), {
-            headers: { 'Authorization': auth, 'Accept': 'application/json' }
-        });
+        const basic = 'Basic ' + btoa((meta.user || '') + ':' + token);
+        const relay = auth => fetch('/api/bridge?target=' + encodeURIComponent(targetUrl), { headers: { 'Authorization': auth, 'Accept': 'application/json' } });
+        let res;
+        if (meta.auth === 'oauth') {
+            // 23 Oct 2026: Jama API credentials. The same stateless relay trades them for a short-lived
+            // access token (POST, Jama's token endpoint only); the token stays in this tab's memory.
+            let access = await _sessionToken(targetUrl, basic, false);
+            res = await relay('Bearer ' + access);
+            if (res.status === 401) { access = await _sessionToken(targetUrl, basic, true); res = await relay('Bearer ' + access); }
+        } else {
+            res = await relay(basic);
+        }
+        if (res.status === 401) throw new Error(meta.auth === 'oauth'
+            ? 'Jama refused the request with a fresh sign-in (HTTP 401). The API credentials may belong to a user without access to this project.'
+            : 'Jama did not accept the username and password (HTTP 401). If your company signs in to Jama through single sign-on, choose "Jama API credentials" in the connection and use a Client ID and Client Secret instead.');
         if (!res.ok) throw new Error('HTTP ' + res.status + ' from bridge');
         return res.json();
+    }
+    let _sessTok = null;   // { key, access, exp } for the browser-only door, this tab's memory only
+    function _tokenUrlFor(targetUrl) {
+        const u = new URL(String(targetUrl)), i = u.pathname.indexOf('/rest/');
+        return u.origin + (i > 0 ? u.pathname.slice(0, i) : '') + '/rest/oauth/token';
+    }
+    async function _sessionToken(targetUrl, basic, fresh) {
+        const key = _tokenUrlFor(targetUrl) + '|' + basic;
+        if (!fresh && _sessTok && _sessTok.key === key && _sessTok.exp > Date.now()) return _sessTok.access;
+        _sessTok = null;
+        const r = await fetch('/api/bridge?target=' + encodeURIComponent(_tokenUrlFor(targetUrl)), {
+            method: 'POST', body: 'grant_type=client_credentials',
+            headers: { 'Authorization': basic, 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' }
+        });
+        if (r.status === 400 || r.status === 401 || r.status === 403) throw new Error('Jama did not accept the API credentials (HTTP ' + r.status + '). Check the Client ID and Client Secret, and that they have not been deleted in Jama under Set API Credentials.');
+        if (r.status === 404) throw new Error('This Jama does not offer sign-in with API credentials (HTTP 404). Ask your Jama administrator to turn on API credentials (OAuth).');
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' from Jama while signing in with the API credentials.');
+        const j = await r.json().catch(() => null);
+        if (!j || typeof j.access_token !== 'string' || !j.access_token) throw new Error('Jama answered the sign-in without a token.');
+        _sessTok = { key: key, access: j.access_token, exp: Date.now() + (Math.max(60, Number(j.expires_in) || 3600) - 60) * 1000 };
+        return _sessTok.access;
     }
     // A large check is many requests. The relay caps each user at 60 a minute; hitting the cap
     // waits it out and carries on, instead of failing half way through a 3,000 item read.
@@ -893,6 +942,31 @@
     const _render = _renderAll;
 
     // ---- the one connection dialog
+    let _authPick = null;   // the sign-in method chosen in the open dialog, before it is saved
+    function _authHelp(auth) {
+        return auth === 'oauth'
+            ? 'For a company that signs in to Jama through single sign-on. In Jama: click your name (top right), Set API Credentials, type a name, Create. Copy the Client ID and the Client Secret here; Jama shows the secret only once.'
+            : 'Your Jama username and Jama password. If you sign in to Jama through your company\'s single sign-on, you have no Jama password: choose "Jama API credentials" instead.';
+    }
+    // The saved login arrives a moment after the dialog opens (the keychain is asked over IPC). Show
+    // it without redrawing: only boxes the person has not touched are filled, nothing typed is lost.
+    function _showSavedLogin() {
+        if (!_setupOpen()) return;
+        const login = _savedLogin(), sel = document.getElementById('lb-auth'), u = document.getElementById('lb-user');
+        if (sel && !_authPick && login.has) sel.value = login.auth;
+        if (u && !u.value && login.user) u.value = login.user;
+        const keep = _authPick;
+        window.bridgeAuthUi();
+        _authPick = keep;
+    }
+    window.bridgeAuthUi = function () {
+        const sel = document.getElementById('lb-auth'); if (!sel) return;
+        _authPick = sel.value;
+        const login = _savedLogin(), u = document.getElementById('lb-user'), t = document.getElementById('lb-token'), h = document.getElementById('lb-auth-help');
+        if (u) u.placeholder = _authPick === 'oauth' ? 'Client ID' : 'username';
+        if (t) t.placeholder = login.has && login.auth === _authPick ? 'saved, leave blank to keep' : (_authPick === 'oauth' ? 'Client Secret' : 'password');
+        if (h) h.textContent = _authHelp(_authPick);
+    };
     function _setupOpen() { const m = document.getElementById('jb-setup'); return !!(m && m.style.display !== 'none'); }
     let _typeFields = null;   // fields of the failure-condition item type, when read
     function _renderSetup() {
@@ -905,6 +979,8 @@
             document.body.appendChild(m);
         }
         const cfg = bridgeConfig(), ty = _types(cfg);
+        const login = _savedLogin();
+        const auth = _authPick || login.auth || cfg.auth || 'basic';
         const fieldCss = 'font-size:12px; padding:5px 9px; border:1px solid var(--color-border-strong); background:var(--color-surface-1); color:var(--color-text-primary);';
         const nameOf = id => { const t = (_itemTypes || []).find(x => x.id === id); return t ? t.name : (((cfg.typeNames || {})[id]) || ('type ' + id)); };
         let html = '<div style="background:var(--color-surface-1); color:var(--color-text-primary); border:1px solid var(--color-border-strong); max-width:860px; width:100%; padding:16px 18px;">' +
@@ -914,10 +990,14 @@
             '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">' +
             '<input id="lb-url" type="text" placeholder="https://yourco.jamacloud.com" value="' + _esc(cfg.baseUrl || '') + '" style="' + fieldCss + ' width:230px;">' +
             '<input id="lb-pid" type="text" placeholder="project id" value="' + _esc(cfg.projectId || '') + '" style="' + fieldCss + ' width:90px;">' +
-            '<input id="lb-user" type="text" placeholder="username" value="' + _esc((_store() && (_store().meta('jama_token') || {}).user) || cfg.user || '') + '" style="' + fieldCss + ' width:120px;">' +
-            '<input id="lb-token" type="password" placeholder="' + ((_store() && _store().has('jama_token')) || (_isDesktop() && _hasCredential() && cfg.baseUrl) ? 'saved, leave blank to keep' : 'API token or password') + '" value="" style="' + fieldCss + ' width:150px;">' +
+            '<select id="lb-auth" onchange="bridgeAuthUi()" title="How this connection signs in to Jama" style="' + fieldCss + '">' +
+                '<option value="basic"' + (auth === 'basic' ? ' selected' : '') + '>Jama username and password</option>' +
+                '<option value="oauth"' + (auth === 'oauth' ? ' selected' : '') + '>Jama API credentials (single sign-on)</option></select>' +
+            '<input id="lb-user" type="text" placeholder="' + (auth === 'oauth' ? 'Client ID' : 'username') + '" value="' + _esc(login.user || '') + '" autocomplete="off" spellcheck="false" style="' + fieldCss + ' width:150px;">' +
+            '<input id="lb-token" type="password" placeholder="' + (login.has && login.auth === auth ? 'saved, leave blank to keep' : (auth === 'oauth' ? 'Client Secret' : 'password')) + '" value="" autocomplete="off" style="' + fieldCss + ' width:150px;">' +
             '<label style="display:inline-flex; align-items:center; gap:4px; font-size:11px;"><input id="lb-auto" type="checkbox"' + (cfg.auto ? ' checked' : '') + '> watch every 5 min (this computer)</label>' +
-            _btn('Save', 'bridgeSaveUi()', true) + '</div>';
+            _btn('Save', 'bridgeSaveUi()', true) + '</div>' +
+            '<div id="lb-auth-help" style="font-size:11px; color:var(--color-text-secondary); margin:-4px 0 10px;">' + _authHelp(auth) + '</div>';
         // item types
         html += '<div style="font-size:12px; margin-bottom:6px;"><b>Item types.</b> ' +
             KINDS.map(x => x.label + ': ' + (ty[x.k].length ? _esc(ty[x.k].map(nameOf).join(', ')) : 'none')).join('. ') + '. ' +
@@ -949,7 +1029,9 @@
         m.style.display = 'flex';
     }
     window.bridgeSetupUi = function (focus) {
+        _authPick = null;
         _renderSetup();
+        if (_isDesktop()) _refreshDeskMeta().then(_showSavedLogin).catch(e => { try { if (window.SLErrorWatch) window.SLErrorWatch.report(e, "live_bridge: saved login"); } catch (_) {} });
         if (focus === 'types' && !_itemTypes) { try { window.bridgeTypesUi(); } catch (_) {} }
     };
     window.bridgeSetupClose = function () { const m = document.getElementById('jb-setup'); if (m) m.style.display = 'none'; };
@@ -959,9 +1041,18 @@
     window.bridgeSaveUi = async function () {
         const g = id => { const el = document.getElementById(id); return el ? (el.type === 'checkbox' ? el.checked : el.value.trim()) : ''; };
         const baseUrl = g('lb-url'), user = g('lb-user'), token = g('lb-token');
+        const auth = g('lb-auth') === 'oauth' ? 'oauth' : 'basic';
+        const login = _savedLogin();
         const prev = bridgeConfig();
+        // A blank secret box keeps the saved login, but only that login: a different sign-in method
+        // or a different username / Client ID needs its own password or secret.
+        if (!token && login.has && (login.auth !== auth || (user && user !== login.user))) {
+            try { showToast(auth === 'oauth' ? 'Enter the Client Secret for this Client ID.' : 'Enter the password for this username.', 'error', 4200); } catch (_) {}
+            return;
+        }
+        if (auth === 'oauth' && !user) { try { showToast('Enter the Client ID.', 'error', 3200); } catch (_) {} return; }
         // 22 Oct 2026: everything else in the connection (item types, fields, system folders) stays
-        const cfg = Object.assign({}, prev, { kind: 'jama', baseUrl: baseUrl, projectId: g('lb-pid'), user: user, token: token, auto: g('lb-auto') });
+        const cfg = Object.assign({}, prev, { kind: 'jama', baseUrl: baseUrl, projectId: g('lb-pid'), user: user, token: token, auto: g('lb-auto'), auth: auth });
 
         if (_isDesktop()) {
             if (!_hasKeychain()) {
@@ -974,13 +1065,15 @@
             }
             // Keep the existing credential if the token box was left blank on a re-save.
             if (token) {
-                const r = await window.slabSecrets.save('jama', { user: user, token: token }, { baseHost: _baseHost(baseUrl), user: user });
+                const r = await window.slabSecrets.save('jama', { user: user, token: token }, { baseHost: _baseHost(baseUrl), user: user, auth: auth });
                 if (!r || !r.ok) {
                     try { showToast((r && r.error) || 'The credential could not be stored. Nothing was saved.', 'error', 6200); } catch (_) {}
                     return;                                  // fail CLOSED: no keychain, no connector
                 }
             }
             bridgeConfigSave(cfg);
+            _authPick = null;
+            await _refreshDeskMeta();
             _armPoll();
             try { showToast('Connector saved. The credential is in this computer\'s keychain.', 'success', 3200); } catch (_) {}
             _render();
@@ -997,7 +1090,7 @@
         const st = _store();
         if (!st) { try { showToast('The secret store is not available on this page. Reload and try again.', 'error', 4200); } catch (_) {} return; }
         if (token) {
-            const r = await st.save('jama_token', token, { baseHost: _baseHost(baseUrl), user: user });
+            const r = await st.save('jama_token', token, { baseHost: _baseHost(baseUrl), user: user, auth: auth });
             if (!r || !r.ok) {
                 try { showToast((r && r.error) || 'The credential could not be stored. Nothing was saved.', 'error', 6200); } catch (_) {}
                 return;

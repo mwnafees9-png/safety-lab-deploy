@@ -207,7 +207,10 @@ function jama() {
     check('a system page asks which Jama folder holds that system, and one folder cannot hold two systems', /Choose the Jama folder or set that holds/.test(lb) && /already holds/.test(lb));
     check('item type names are kept, so no panel says "type 89001"', /cfg\.typeNames = \{\}/.test(lb) && /\(cfg\.typeNames \|\| \{\}\)\[id\]/.test(lb));
     check('until a system has its Jama folder, every aircraft panel and the full panel say its items would come in at aircraft level', /function _unassignedSystems\(cfg\)/.test(lb) && /comes in here, at aircraft level/.test(lb) && /if \(loose\.length\) warnings\.push\(_looseText\(loose\)\)/.test(lb) && /const loose = p\.scope === 'ac' \? _unassignedSystems\(cfg\) : \[\]/.test(lb));
-    check('read-only: the bridge only ever GETs', !/method:\s*'(POST|PUT|PATCH|DELETE)'/.test(lb));
+    // 23 Oct 2026: one POST is allowed, the Jama sign-in with API credentials (token exchange at
+    // <base>/rest/oauth/token, grant_type=client_credentials). It changes nothing in Jama.
+    { const posts = lb.match(/method:\s*'POST'[^\n]*/g) || [];
+      check('read-only: the bridge only ever GETs, apart from the API-credentials sign-in', !/method:\s*'(PUT|PATCH|DELETE)'/.test(lb) && posts.length === 1 && /_tokenUrlFor\(targetUrl\)\), \{\s*method: 'POST', body: 'grant_type=client_credentials'/.test(lb), posts.join(' | ')); }
     check('index.html loads jama_kinds.js between jama_tree.js and live_bridge.js', /jama_tree\.js\?v=[0-9.]+[\s\S]*jama_kinds\.js\?v=[0-9.]+[\s\S]*live_bridge\.js\?v=[0-9.]+/.test(idx));
   }
 

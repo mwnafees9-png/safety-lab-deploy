@@ -337,6 +337,36 @@ function bridgeTargetProblem(rawUrl, savedHost, env) {
   return { target };
 }
 
+// 23 Oct 2026: Jama API credentials (OAuth client credentials), for companies whose people sign in
+// to Jama through single sign-on and so have no Jama password. Saved with meta.auth = "oauth"; the
+// Client ID is meta.user, the Client Secret is the vault secret. Traded at <base>/rest/oauth/token
+// for a short-lived token, kept in this process's memory only, refreshed once on a 401.
+const _bridgeTokens = new Map();
+function bridgeTokenUrl(target) {
+  const i = target.pathname.indexOf("/rest/");
+  return target.origin + (i > 0 ? target.pathname.slice(0, i) : "") + "/rest/oauth/token";
+}
+async function bridgeOauthToken(target, basic, fresh) {
+  const key = bridgeTokenUrl(target) + "|" + basic, now = Date.now();
+  const hit = _bridgeTokens.get(key);
+  if (!fresh && hit && hit.exp > now) return { access: hit.access };
+  _bridgeTokens.delete(key);
+  let r;
+  try {
+    r = await fetch(bridgeTokenUrl(target), { method: "POST", redirect: "manual",
+      headers: { authorization: basic, accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
+      body: "grant_type=client_credentials" });
+  } catch (_) { return { status: 502, error: "The connector did not answer the sign-in." }; }
+  if (r.status === 400 || r.status === 401 || r.status === 403)
+    return { status: 401, error: "Jama did not accept the API credentials (HTTP " + r.status + "). Check the Client ID and Client Secret, and that they have not been deleted in Jama under Set API Credentials." };
+  if (r.status === 404) return { status: 404, error: "This Jama does not offer sign-in with API credentials (HTTP 404). Ask your Jama administrator to turn on API credentials (OAuth)." };
+  if (!r.ok) return { status: 502, error: "HTTP " + r.status + " from Jama while signing in with the API credentials." };
+  let j = null; try { j = await r.json(); } catch (_) {}
+  if (!j || typeof j.access_token !== "string" || !j.access_token) return { status: 502, error: "Jama answered the sign-in without a token." };
+  _bridgeTokens.set(key, { access: j.access_token, exp: now + (Math.max(60, Number(j.expires_in) || 3600) - 60) * 1000 });
+  return { access: j.access_token };
+}
+
 async function handleBridge(request, env, caller, url) {
   if (!caller.userId) return jsonResponse(401, { error: { type: "unauthorized", message: "The bridge needs a signed-in user." } });
   const rl = await checkRateLimit(env, "br:" + caller.userId, 60);
@@ -350,12 +380,30 @@ async function handleBridge(request, env, caller, url) {
   if (chk.error) return jsonResponse(chk.status, { error: { type: "bad_target", message: chk.error } });
 
   const basic = "Basic " + btoa(String((sec.meta && sec.meta.user) || "") + ":" + sec.secret);
-  try {
-    const upstream = await fetch(chk.target.toString(), {
+  const oauth = !!(sec.meta && sec.meta.auth === "oauth");
+  const call = (auth) => fetch(chk.target.toString(), {
       method: "GET", redirect: "manual",
-      headers: { authorization: basic, accept: "application/json" },
+      headers: { authorization: auth, accept: "application/json" },
       signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
     });
+  try {
+    let upstream;
+    if (oauth) {
+      let t = await bridgeOauthToken(chk.target, basic, false);
+      if (t.error) return jsonResponse(t.status, { error: { type: "connector_sign_in", message: t.error } });
+      upstream = await call("Bearer " + t.access);
+      if (upstream.status === 401) {
+        t = await bridgeOauthToken(chk.target, basic, true);
+        if (t.error) return jsonResponse(t.status, { error: { type: "connector_sign_in", message: t.error } });
+        upstream = await call("Bearer " + t.access);
+      }
+    } else {
+      upstream = await call(basic);
+    }
+    if (upstream.status === 401)
+      return jsonResponse(401, { error: { type: "connector_refused", message: oauth
+        ? "Jama refused the request with a fresh sign-in (HTTP 401). The API credentials may belong to a user without access to this project."
+        : "Jama did not accept the username and password (HTTP 401). If your company signs in to Jama through single sign-on, choose \"Jama API credentials\" in the connection and use a Client ID and Client Secret instead." } });
     if (upstream.status >= 300 && upstream.status < 400)
       return jsonResponse(502, { error: { type: "upstream_redirect", message: "upstream redirected (" + upstream.status + ") — redirects are not followed" } });
     const text = await upstream.text();

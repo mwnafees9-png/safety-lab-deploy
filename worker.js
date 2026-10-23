@@ -316,7 +316,18 @@ export default {
         }
 
         if (path === '/api/bridge') {
-            if (request.method !== 'GET')
+            // 23 Oct 2026: one POST is allowed, and only one: Jama's OAuth token endpoint
+            // (<base>/rest/oauth/token) with the body grant_type=client_credentials, so the
+            // browser-only door can sign in with Jama API credentials (companies on single sign-on
+            // have no Jama passwords). It trades credentials for a token and changes nothing in Jama.
+            let tokenExchange = false;
+            if (request.method === 'POST') {
+                let t0 = null; try { t0 = new URL(url.searchParams.get('target') || ''); } catch (_) {}
+                const body = await request.text().catch(() => '');
+                if (!t0 || !/\/rest\/oauth\/token$/.test(t0.pathname) || body.trim() !== 'grant_type=client_credentials')
+                    return new Response(JSON.stringify({ error: 'read-only bridge: GET only, apart from the Jama sign-in (POST <base>/rest/oauth/token, grant_type=client_credentials)' }), { status: 405, headers: { 'content-type': 'application/json' } });
+                tokenExchange = true;
+            } else if (request.method !== 'GET')
                 return new Response(JSON.stringify({ error: 'read-only bridge: GET only' }), { status: 405, headers: { 'content-type': 'application/json' } });
             const auth = request.headers.get('authorization');
             if (!auth)
@@ -341,7 +352,12 @@ export default {
                 // can no longer bounce the relay (with the caller's Authorization
                 // header) to an arbitrary host. The client sees the redirect
                 // status and can decide for itself.
-                const upstream = await fetch(target.toString(), {
+                const upstream = await fetch(target.toString(), tokenExchange ? {
+                    method: 'POST',
+                    redirect: 'manual',
+                    headers: { 'authorization': auth, 'accept': 'application/json', 'content-type': 'application/x-www-form-urlencoded' },
+                    body: 'grant_type=client_credentials',
+                } : {
                     method: 'GET',
                     redirect: 'manual',
                     headers: { 'authorization': auth, 'accept': 'application/json' },
