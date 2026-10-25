@@ -215,7 +215,8 @@
     function _render() {
         if (typeof document === 'undefined') return;
         const host = document.getElementById('view-freq'); if (!host) return;
-        const trees = sweep();
+        // 24 Oct 2026 (tree_homes.js): the trees of the level being worked on (the aircraft, one system, Standalone)
+        const trees = (typeof SLTreeHomes !== 'undefined' && SLTreeHomes.pageInLevel) ? sweep().filter(r => SLTreeHomes.pageInLevel(r.pageId)) : sweep();
         const chip = function (txt, col) { return '<span class="u-mono" style="font-size:9.5px; font-weight:700; color:' + col + '; border:1px solid ' + col + '55; background:' + col + '0D; border-radius:4px; padding:1px 7px;">' + esc(txt) + '</span>'; };
         host.innerHTML =
             '<div class="header-with-export"><h3>Failure frequency <span class="u-mono" style="font-size:10.5px; font-weight:700; color:#6D28D9; border:1px solid #6D28D955; background:#6D28D90D; border-radius:5px; padding:2px 8px; vertical-align:3px;">ARP4761A G.12</span></h3></div>' +

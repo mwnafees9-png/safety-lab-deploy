@@ -93,7 +93,8 @@ check('slices are dispatched concurrently through a worker pool',
   /await Promise\.all\(Array\.from\(\{ length: Math\.min\(_POOL, _slices\.length\) \}, _worker\)\)/.test(ai),
   'awaiting slices one by one multiplies wall-clock by the slice count');
 check('…but bounded, so a long unit list cannot fire every request at once',
-  /const _worker = async function \(\) \{ while \(_next < _slices\.length\) \{ const i = _next\+\+; await _runSlice\(i\); \} \};/.test(ai));
+  // 24 Oct 2026 (NS-6): the worker also stops taking turns once a permanent error is seen
+  /const _worker = async function \(\) \{ while \(_next < _slices\.length( && !_permanentErr)?\) \{ const i = _next\+\+; await _runSlice\(i\); \} \};/.test(ai) && /Math\.min\(_POOL, _slices\.length\)/.test(ai));
 check('results are consumed in SLICE order, not completion order',
   /for \(let _ci = 0; _ci < _slices\.length; _ci\+\+\) \{\s*\n\s*const _r = _results\[_ci\];/.test(ai),
   'consuming in completion order would make row order and assumption de-dup non-deterministic');

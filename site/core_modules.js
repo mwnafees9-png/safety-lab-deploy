@@ -144,6 +144,31 @@ const AiClient = (function(){
     // 2 Oct 2026 — the desktop key door: the user's own Anthropic key sits in the OS keychain and
     // the desktop's main process makes the call (window.slabAi). No proxy, no server, nothing of
     // ours in the path. The shell sets the flag only when AI mode is "my own key".
+    // 24 Oct 2026 (Radia, open item NS-6): a failed AI call used to throw a bare Error with only
+    // the message, so the drafting turns could not tell "this server has no AI key" (a 503 from
+    // the server's AI service) from a busy provider, and retried it twice with a pause each time
+    // before saying so. Every failure now carries the HTTP status and the error type the backend
+    // sent, and isPermanentError() is the one rule for "no retry can clear this": a missing key or
+    // credentials, a refused key, no permission, no credit or quota. Callers stop at once and say
+    // the backend's own words. A busy, overloaded or unreachable backend is still retried.
+    const _PERMANENT_TYPES = { no_server_key: 1, authentication_error: 1, permission_error: 1, billing_error: 1 };
+    const _PERMANENT_RE = /credit balance|plans & billing|purchase credits|quota|insufficient_quota|payment required|invalid[_ ]api[_ ]key|authentication|unauthorized|forbidden|permission|not entitled|account (is )?(suspended|disabled)|has no ai key|no ai key|no ai credentials|no embedding credentials|no embeddings key|sign in again/i;
+    function isPermanentError(e) {
+        try {
+            if (!e) return false;
+            if (e.permanent === true) return true;
+            if (e.status === 401 || e.status === 402 || e.status === 403) return true;
+            if (e.type && _PERMANENT_TYPES[e.type]) return true;
+            return _PERMANENT_RE.test(String((e && e.message) || e));
+        } catch (_) { return false; }
+    }
+    function _aiError(message, status, type) {
+        const e = new Error(message);
+        if (status) e.status = status;
+        if (type) e.type = String(type);
+        e.permanent = isPermanentError(e);
+        return e;
+    }
     // 22 Oct 2026 (a customer saw "fetch failed" and "Failed to fetch"): a request that never got an answer
     // says, in plain words, which address could not be reached and what fixes it. Errors that did get an
     // answer keep their own message.
@@ -594,7 +619,7 @@ const AiClient = (function(){
                 body: JSON.stringify(b)
             });
         }
-        let response, _preErr = null;   // _preErr: error already read off the first response (body is single-use)
+        let response, _preErr = null, _preType = '';   // _preErr: error already read off the first response (body is single-use)
         try {
             response = await _send(body);
             // Self-heal: newer models (Opus 4.7+ and reasoning/extended-thinking models)
@@ -611,6 +636,7 @@ const AiClient = (function(){
                     response = await _send(body);   // retry once, without the sampling param
                 } else {
                     _preErr = em;   // real error — hand to the throw block below (body already consumed)
+                    _preType = (ej.error && ej.error.type) || '';
                 }
             }
         } catch (e) {
@@ -620,10 +646,10 @@ const AiClient = (function(){
         }
         if (_preErr || !response.ok) {
             // Errors (401/402/503/5xx) come back as JSON even when we asked for a stream.
-            let emsg = _preErr;
-            if (!emsg) { let errJson = {}; try { errJson = await response.json(); } catch (_) {} emsg = (errJson.error && errJson.error.message) || ('HTTP ' + response.status); }
+            let emsg = _preErr, etype = _preType;
+            if (!emsg) { let errJson = {}; try { errJson = await response.json(); } catch (_) {} emsg = (errJson.error && errJson.error.message) || ('HTTP ' + response.status); etype = (errJson.error && errJson.error.type) || ''; }
             _logCall({ feature: opts.feature || 'messages', model, ok: false, error: emsg, startedAt, proxy, itar, observed: _proxyAudited(response), temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
-            throw new Error(emsg);
+            throw _aiError(emsg, response && response.status, etype);   // 24 Oct 2026: with its status and type (isPermanentError)
         }
         // Phase 66 — assemble the SSE stream client-side (content-type text/event-stream).
         // Fall back to a buffered JSON body for any path that didn't stream (e.g. an
@@ -752,7 +778,7 @@ const AiClient = (function(){
     }
     function getAuditLog(){ return (projectConfig && projectConfig.aiAuditLog) || []; }
 
-    return { isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage, unconfiguredRefusal, systemBlocks, billableTokens: _billableTokens };
+    return { isPermanentError, isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage, unconfiguredRefusal, systemBlocks, billableTokens: _billableTokens };
 })();
 window.AiClient = AiClient;
 

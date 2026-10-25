@@ -1,4 +1,14 @@
 // ============================================================================
+// change_ack.js - v3.0 - 24 Oct 2026 - THE QUIET BAR (Waqas: "replace the confirm changes pop-up with a quiet bar").
+//   · Leaving a page or view, switching tree, system, tab or diagram, and pressing Next or Continue open NOTHING.
+//   · A small bar (#sl-ack-bar, bottom centre) says how many changes wait, with a Review button.
+//   · The review opens only when the person asks (Review, the top bar), saves, closes or reloads, opens or
+//     switches project, restores, signs out, or exports (an export holds only confirmed work).
+//   · The review gives each change its context: what it is, where it is, every field with its old and new
+//     value, and who changed it when. Confirm all records who and when in the journal, as before.
+//   Everything below about the collection, saving and the journal is unchanged; the v2.0 list of moments
+//   that opened the dialog, (a) and (b), is replaced by the list above.
+// ============================================================================
 // change_ack.js - v2.0 - 16 Oct 2026 - CHANGES ARE COLLECTED, THEN CONFIRMED ONCE.
 //
 // THE RULE (owner, confirmed 16 Oct 2026; the same rule as Sys Lab):
@@ -652,6 +662,17 @@
     // measured from where the project really is.
     function _freshStash() { if (_stash != null && _stashSeq < _noteSeq) { var s = _snapNow(); if (s) { _stash = s; _stashSeq = _noteSeq; } } }
     function system(fn) { _sysDepth++; try { return fn(); } finally { _sysDepth--; } }
+    // 25 Oct 2026: background work on a timer (the verification-tree and failure-condition-tree sweeps).
+    // It runs as a system change, is decided at once (never left open for a Review to list), and the
+    // "before" of the next change is taken right after it: the autosave write that would carry it is
+    // still queued, so without this the person's next edit was measured from before the sweep and the
+    // sweep's new trees were listed as theirs.
+    function background(fn) {
+        var r = system(fn);
+        try { if (_win && _win.system) { _win.background = true; _resolve(true); } } catch (_) {}
+        try { if (!_win && _restoreDepth === 0) { var s = _snapNow(); if (s) { _stash = s; _stashSeq = _noteSeq; } } } catch (_) {}
+        return r;
+    }
     // this module's own writes (Discard all, Undo last change, the journal entry): system changes that
     // are never recorded as background work of the collection
     var _ownDepth = 0;
@@ -677,7 +698,24 @@
         return d;
     }
     function _save() { try { return W.SLSaveState || null; } catch (_) { return null; } }
-    function _event(detail) { try { if (typeof CustomEvent === 'function' && W.dispatchEvent) W.dispatchEvent(new CustomEvent('sl:change-ack', { detail: detail })); } catch (_) {} }
+    function _event(detail) { try { if (typeof CustomEvent === 'function' && W.dispatchEvent) W.dispatchEvent(new CustomEvent('sl:change-ack', { detail: detail })); } catch (_) {} _bar(); }
+    // ---- the quiet bar (24 Oct 2026, Waqas): nothing opens while the person works; a small bar says how many
+    // changes wait, with Review. It is gone when nothing waits and while the review itself is open.
+    function _bar() {
+        if (typeof document === 'undefined' || !document.body) return;
+        var n = count(), el = document.getElementById('sl-ack-bar');
+        if (!el) {
+            if (!n) return;
+            _injectStyle();
+            el = document.createElement('div'); el.id = 'sl-ack-bar'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+            el.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="txt"></span><button type="button" class="sl-ack-review">Review</button>';
+            el.querySelector('button').addEventListener('click', function () { ask({ reason: 'early' }); });
+            document.body.appendChild(el);
+        }
+        var on = n > 0 && !_askState;
+        el.classList.toggle('on', on);
+        if (on) el.querySelector('.txt').textContent = n + (n === 1 ? ' change' : ' changes') + ' waiting to be confirmed';
+    }
 
     // scheduleAutosave calls this for every change it accepts. Returns what it decided.
     var _lastNotedAt = 0;
@@ -726,7 +764,7 @@
 
     // ---- the collection ------------------------------------------------------
     function _openCol(baseline, noRevert, undoMark) {
-        _col = { id: ++_seq, at: _now(), baseline: baseline, noRevert: !!noRevert, undoMark: undoMark, steps: [], autoD: [], ver: 0, baseR: null, acc: null, net: null };
+        _col = { id: ++_seq, at: _now(), baseline: baseline, noRevert: !!noRevert, undoMark: undoMark, steps: [], autoD: [], ver: 0, baseR: null, acc: null, net: null, when: {} };
         return _col;
     }
     function _baseRecords() {
@@ -791,6 +829,9 @@
         var label = labels.length ? labels.join(', ') : (notes[0] || summarize(shown, 1));
         _col.steps.push({ kind: 'change', label: _clip(label, 140), before: w.noRevert ? null : w.baseline, undoMark: w.undoMark, onRevert: w.onRevert.slice(), at: _now(), count: shown.length, ai: shown.some(function (i) { return i.ai; }) });
         _col.ver++; _stats.collected++;
+        // 24 Oct 2026: who changed each record and when (first and last time in this collection), for the review list
+        var t = _now(), by = _who();
+        (shown || []).forEach(function (i) { if (!i || !i.space) return; var k = i.space + '|' + i.key, w0 = _col.when[k]; _col.when[k] = { first: w0 ? w0.first : t, last: t, by: by }; });
         // one undo step (Ctrl+Z) per collected change, as before: Undo takes it back, and an Undo that
         // lands exactly on the state before the last step waiting simply takes that step out
         try { if (typeof W._slUndoPushSnap === 'function' && w.baseline && !w.noRevert) W._slUndoPushSnap(_clip(summarize(items, 1), 60) || 'change', w.baseline, w.undoMark); } catch (_) {}
@@ -978,6 +1019,22 @@
     // a tree added or removed whole is one line ("with 480 nodes"), not 480 lines
     function _fold(items) {
         var whole = {};
+        // 25 Oct 2026: a verification tree follows its top-down tree (mirror_modes.js, verify_sync.js). The same
+        // edit echoed onto the twin node (same logical id, same fields, same new values) is part of the person's
+        // one change, not a second one: it is folded into the source line.
+        try {
+            var ver = {};
+            (_live().ftaPages || []).forEach(function (p) { if (p && p.id != null && p.verifies != null) ver[String(p.id)] = String(p.verifies); });
+            var src = {};
+            var sig = function (i) { return (i.fields || []).map(function (f) { return f.field + '=' + _S(f.now); }).join('|'); };
+            items.forEach(function (i) { if (i.space === 'fta:node' && i.ref && i.ref.logicalId && !ver[String(i.ref.pageId)]) src[String(i.ref.pageId) + '|' + i.ref.logicalId + '|' + i.op] = sig(i); });
+            items.forEach(function (i) {
+                if (i.space !== 'fta:node' || !i.ref || !i.ref.logicalId) return;
+                var vs = ver[String(i.ref.pageId)]; if (!vs) return;
+                var k = vs + '|' + i.ref.logicalId + '|' + i.op;
+                if (src[k] !== undefined && (i.op !== 'changed' || src[k] === sig(i))) i.folded = true;
+            });
+        } catch (_) {}
         items.forEach(function (i) { if (i.space === 'fta:shell' && (i.op === 'added' || i.op === 'removed') && i.ref) { whole[String(i.ref.pageId) + '|' + i.op] = i; i.nodes = 0; } });
         items.forEach(function (i) { if (i.space === 'fta:node' && i.ref && whole[String(i.ref.pageId) + '|' + i.op]) { whole[String(i.ref.pageId) + '|' + i.op].nodes++; i.folded = true; } });
         Object.keys(whole).forEach(function (k) { var pg = whole[k]; if (pg.nodes && pg.label.indexOf(' (with ') < 0) pg.label += ' (with ' + pg.nodes + ' node' + (pg.nodes === 1 ? '' : 's') + ')'; });
@@ -1246,18 +1303,41 @@
             + '.sl-ack-note{font-size:13px;font-weight:600;color:#8A4B00;margin-top:8px}'
             + '.sl-ack-foot{font-size:12.5px;margin-top:12px}'
             + '.sl-ack-ai{font-size:11px;font-weight:700;color:#5E2A86;margin-left:6px}'
+            + '.sl-ack-meta{font-size:12px;color:' + INK + ';margin:3px 0 0 74px}'
+            + '.sl-ack-ft{margin:5px 0 0 74px;border-collapse:collapse;font-size:12.5px;color:' + INK + '}'
+            + '.sl-ack-ft th{text-align:left;font-weight:700;padding:2px 10px 2px 0;font-size:11.5px}'
+            + '.sl-ack-ft td{padding:2px 10px 2px 0;vertical-align:top;max-width:240px;word-break:break-word}'
+            // the quiet bar (24 Oct 2026): what waits, and one button to review it; it never covers the page
+            + '#sl-ack-bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:1850;display:none;align-items:center;gap:12px;padding:7px 8px 7px 14px;border-radius:999px;background:var(--color-surface-1,#fff);border:1px solid var(--color-border-strong,#c9ced6);box-shadow:0 4px 16px rgba(0,0,0,.12);font-size:13px;color:' + INK + '}'
+            + '#sl-ack-bar.on{display:flex}#sl-ack-bar .dot{width:8px;height:8px;border-radius:50%;background:#C88A00;flex:none}'
+            + '#sl-ack-bar button{font-size:12.5px;font-weight:700;padding:5px 14px;border-radius:999px;border:1px solid var(--color-accent,#2E6BD6);background:var(--color-accent,#2E6BD6);color:#fff;cursor:pointer}'
             + '.sl-choice-card{max-width:500px}';
         (document.head || document.documentElement).appendChild(st);
     }
-    function _itemHtml(i) {
+    function _clock(t) { try { return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (_) { return ''; } }
+    function _whenText(w) {
+        if (!w) return '';
+        var a = _clock(w.first), b = _clock(w.last);
+        return (w.by ? w.by + ', ' : '') + (a === b ? 'at ' + a : 'between ' + a + ' and ' + b);
+    }
+    // 24 Oct 2026: each line says what it is, where it is, every field that changed (old and new), and who
+    // changed it when
+    var SHOW_FIELDS = 8;
+    function _itemHtml(i, c) {
         if (i.step) {
             var s = i.step, v = { move: ['moved', 'Moved'], undo: ['undone', 'Undone'], redo: ['redone', 'Redone'], change: ['changed', 'Changed'] }[s.kind] || ['moved', 'Moved'];
-            return '<li><span class="sl-ack-op ' + v[0] + '">' + v[1] + '</span>' + _esc(s.label) + (s.count > 1 ? ' (' + s.count + ' times)' : '') + '</li>';
+            return '<li><span class="sl-ack-op ' + v[0] + '">' + v[1] + '</span>' + _esc(s.label) + (s.count > 1 ? ' (' + s.count + ' times)' : '')
+                + (s.at ? '<div class="sl-ack-meta">' + _esc(_whenText({ first: s.at, last: s.at, by: _who() })) + '</div>' : '') + '</li>';
         }
         var verbs = { added: 'Added', changed: 'Changed', removed: 'Removed', reordered: 'Reordered' };
-        var h = '<li><span class="sl-ack-op ' + i.op + '">' + verbs[i.op] + '</span>' + _esc(i.label) + (i.ai ? '<span class="sl-ack-ai">AI drafted</span>' : '');
-        (i.fields || []).slice(0, 5).forEach(function (f) { h += '<div class="sl-ack-f">' + _esc(f.name) + ': <span class="sl-ack-was">' + _esc(f.was) + '</span> → <b>' + _esc(f.now) + '</b></div>'; });
-        if ((i.fields || []).length > 5) h += '<div class="sl-ack-f">and ' + (i.fields.length - 5) + ' more fields</div>';
+        var h = '<li><span class="sl-ack-op ' + i.op + '">' + verbs[i.op] + '</span><b>' + _esc(i.label) + '</b>' + (i.ai ? '<span class="sl-ack-ai">AI drafted</span>' : '');
+        h += '<div class="sl-ack-meta">In ' + _esc(i.area || 'the project') + (c && c.when && c.when[i.space + '|' + i.key] ? ' · ' + _esc(_whenText(c.when[i.space + '|' + i.key])) : '') + '</div>';
+        var F = i.fields || [];
+        if (i.op === 'changed' && F.length) h += '<table class="sl-ack-ft"><thead><tr><th>Field</th><th>Was</th><th>Now</th></tr></thead><tbody>'
+            + F.slice(0, SHOW_FIELDS).map(function (f) { return '<tr><td>' + _esc(f.name) + '</td><td class="sl-ack-was">' + _esc(f.was) + '</td><td><b>' + _esc(f.now) + '</b></td></tr>'; }).join('')
+            + '</tbody></table>';
+        else F.slice(0, SHOW_FIELDS).forEach(function (f) { h += '<div class="sl-ack-f">' + _esc(f.name) + ': <b>' + _esc(i.op === 'removed' ? f.was : f.now) + '</b></div>'; });
+        if (F.length > SHOW_FIELDS) h += '<div class="sl-ack-f">and ' + (F.length - SHOW_FIELDS) + ' more fields</div>';
         return h + '</li>';
     }
     // grouped by kind: one heading per area ("Aircraft FHA", "Fault tree · PSSA pitch"), then the
@@ -1274,7 +1354,7 @@
         order.forEach(function (g) {
             var L = by[g];
             h += '<div class="sl-ack-grp"><div class="sl-ack-gh">' + _esc(g) + ' (' + L.length + ')</div><ul class="sl-ack-list">';
-            L.forEach(function (i, k) { if (k < MAXG && shown < MAX) { h += _itemHtml(i); shown++; } else left++; });
+            L.forEach(function (i, k) { if (k < MAXG && shown < MAX) { h += _itemHtml(i, _col); shown++; } else left++; });
             if (L.length > MAXG && shown < MAX) h += '<li>and ' + (L.length - Math.min(L.length, MAXG)) + ' more here</li>';
             h += '</ul></div>';
         });
@@ -1300,19 +1380,22 @@
         export: function (a) { return 'Before you ' + (a || 'export') + ', check what you changed. The export holds only confirmed work.'; },
         save: function () { return 'Check what you changed.'; },
         close: function () { return 'Before you close the window, check what you changed.'; },
-        early: function () { return 'Here is everything you changed so far.'; },
+        early: function () { return 'Here is everything you changed and have not confirmed yet.'; },
         recovered: function () { return 'These changes from your last session were never confirmed. They are back on screen.'; }
     };
     function _renderDialog(st) {
         _injectStyle();
         var c = _col; if (!c) return;
         var lines = _lines(c), n = lines.length, o = st.opts || {}, exp = o.reason === 'export';
-        var lead = (LEAD[o.reason] || LEAD.early)(o.action) + ' Nothing you change counts until you confirm it. Confirm all saves it and shares it with your team.';
+        var lead = (exp && o.exportKind === 'cloud') ? 'Before you ' + (o.action || 'save the project to the cloud') + ', check what you changed. Only confirmed work is saved.'
+            : (exp && o.exportKind === 'copy') ? 'Before you ' + (o.action || 'save a copy') + ', check what you changed. The copy holds only confirmed work.'
+            : (LEAD[o.reason] || LEAD.early)(o.action);
+        lead += ' Nothing you change counts until you confirm it. Confirm all saves it and shares it with your team.';
         var last = c.steps[c.steps.length - 1];
         var lastTxt = last ? (last.kind === 'move' ? 'Moved: ' : (last.kind === 'undo' ? 'Undone: ' : (last.kind === 'redo' ? 'Redone: ' : ''))) + last.label : '';
         var canUndo = !!(last && last.before != null), canDiscard = !c.noRevert;
         var html = '<div class="sl-dialog-card sl-ack-card" role="dialog" aria-modal="true" aria-labelledby="sl-ack-title" aria-describedby="sl-ack-lead">'
-            + '<h3 class="sl-dialog-title" id="sl-ack-title">' + (n === 1 ? 'Confirm your change' : 'Confirm your ' + n + ' changes') + '</h3>'
+            + '<h3 class="sl-dialog-title" id="sl-ack-title">' + (n === 1 ? 'Review your change' : 'Review your ' + n + ' changes') + '</h3>'
             + '<div class="sl-dialog-msg" id="sl-ack-lead">' + _esc(lead) + '</div>'
             + (st.note ? '<div class="sl-ack-note" role="alert">' + _esc(st.note) + '</div>' : '')
             + (!exp && lastTxt ? '<div class="sl-ack-last" id="sl-ack-last"><b>Last change</b> (what Undo last change takes back): ' + _esc(lastTxt) + '</div>' : '')
@@ -1320,7 +1403,9 @@
             + '<div class="sl-ack-h">What it touches</div><div id="sl-ack-impact" class="sl-dialog-msg">Working out what this touches…</div>'
             + '</div>'
             + '<div class="sl-ack-foot">' + (exp
-                ? 'Confirm all and export: your changes are saved and shared, then the export runs. Keep working: nothing is exported and nothing is lost.'
+                ? (o.exportKind === 'cloud' ? 'Confirm all and save: your changes are confirmed, then the project is saved to the cloud. Keep working: nothing is saved and nothing is lost.'
+                   : o.exportKind === 'copy' ? 'Confirm all and save a copy: your changes are confirmed, then the copy is saved. Keep working: nothing is saved and nothing is lost.'
+                   : 'Confirm all and export: your changes are saved and shared, then the export runs. Keep working: nothing is exported and nothing is lost.')
                 : 'Confirm all: saved and shared, with your name and the time in the project journal. Undo last change: takes back only the last one. Discard all: puts the project back as it was before these changes. Keep working: closes this and you stay where you are; nothing is lost.') + '</div>'
             + '<div class="sl-dialog-actions">'
             // data-modal-close: Keep working is this dialog's exit, so the app's generic close (x) is not added
@@ -1371,13 +1456,6 @@
         W.addEventListener && W.addEventListener('blur', up);
         document.addEventListener('focusout', function () { if (_win) _schedule(60); }, true);
         document.addEventListener('keyup', function (e) { if (e.key === 'Enter' && _win) { _enterAt = _now(); _schedule(60); } }, true);
-        // a <select> that switches the view (the bow-tie picker): its value before the change, so Keep
-        // working can put the picker back
-        var _selPrev = (typeof WeakMap === 'function') ? new WeakMap() : null;
-        document.addEventListener('focusin', function (e) { try { var t = e.target; if (_selPrev && t && t.tagName === 'SELECT') _selPrev.set(t, t.value); } catch (_) {} }, true);
-        document.addEventListener('pointerdown', function (e) { try { var t = e.target && e.target.closest && e.target.closest('select'); if (_selPrev && t && !_selPrev.has(t)) _selPrev.set(t, t.value); } catch (_) {} }, true);
-        var _selectNow = function () { try { var a = document.activeElement; if (a && a.tagName === 'SELECT' && _selPrev && _selPrev.has(a)) return { el: a, prev: _selPrev.get(a) }; } catch (_) {} return null; };
-        var _selectBack = function (s) { try { if (s && s.el && document.contains(s.el)) s.el.value = s.prev; } catch (_) {} };
         // The seed sweep (idp_seed_trees.js) keeps the MF&MS seed trees in step with the
         // interdependence table on its own: what it writes is derived, never the person's change.
         var wrapIdp = function () {
@@ -1387,84 +1465,31 @@
             } catch (_) {}
         };
         W.addEventListener && W.addEventListener('load', wrapIdp);
-        // ---- WHEN THE ONE DIALOG OPENS (a): leaving a view. Switching page or tab, another fault tree,
-        // another system's workspace or its tabs, another bow-tie or block diagram, closing a walkthrough.
-        // Nothing collected: the call goes straight through, unchanged and synchronous.
-        var _vis = function (id) { try { var t = document.getElementById(id); return !!(t && t.style.display !== 'none' && getComputedStyle(t).display !== 'none'); } catch (_) { return false; } };
-        var LEAVE = {
-            switchTab: { action: 'leave this page', same: function (a) { return _vis('view-' + a[0]); } },
-            openFTAPageById: { action: 'open another fault tree', same: function (a) { try { return (typeof activeFTAPageId !== 'undefined') && String(activeFTAPageId) === String(a[0]); } catch (_) { return false; } } },
-            openSystemWorkspace: { action: 'switch to another system', same: function (a) { try { return (typeof activeSystemId !== 'undefined') && String(activeSystemId) === String(a[0]) && _vis('view-sys-workspace'); } catch (_) { return false; } } },
-            switchWorkspaceTab: { action: 'switch to another tab', same: function (a) { return _vis('view-sys-workspace') && _vis('ws-view-' + a[0]); } },
-            btSelect: { action: 'open another bow-tie', same: function (a) { var s = _selectNow(); return !!(s && String(s.prev) === String(a[0])); } },
-            rbdSelect: { action: 'open another block diagram', same: function (a) { var s = _selectNow(); return !!(s && String(s.prev) === String(a[0])); } },
-            'SLEtaUI.select': { action: 'open another event tree', same: function (a) { var s = _selectNow(); return !!(s && String(s.prev) === String(a[0])); } },
-            _cmaCloseWalk: { action: 'close the walkthrough', same: function () { return false; } },
-            _zsaCloseModal: { action: 'close the walkthrough', same: function () { return false; } },
-            // (b) Next in a multi-step flow, called by name (the assumption walkthrough: forward only)
-            aiAsmWalkNav: { action: 'go to the next step', reason: 'step', same: function (a) { return !(Number(a[0]) > 0); } }
-        };
-        var wrapLeave = function () {
-            Object.keys(LEAVE).forEach(function (name) {
-                try {
-                    // a name may be a method on a module object ("SLEtaUI.select")
-                    var parts = name.split('.'), owner = W, key = parts.pop();
-                    parts.forEach(function (p) { owner = owner ? owner[p] : null; });
-                    if (!owner) return;
-                    var f = owner[key]; if (typeof f !== 'function' || f._ackLeave) return;
-                    var L = LEAVE[name];
-                    var g = function () {
-                        var self = this, a = arguments;
-                        // only a real move by the person: not a re-render that reopens the same view, and not
-                        // one a load, a restore or an undo makes on its own
-                        if ((!_win && !_col) || _sysDepth > 0 || _deferDepth > 0 || _askState || L.same(a)) return f.apply(self, a);
-                        if (!collectNow()) return f.apply(self, a);
-                        var sel = _selectNow();
-                        return ask({ reason: L.reason || 'leave', action: L.action }).then(function (r) { if (r === 'keep') { _selectBack(sel); return undefined; } return f.apply(self, a); });
-                    };
-                    g._ackLeave = true;
-                    try { if (W.SLWrap) W.SLWrap.preserve(f, g); } catch (_) {}
-                    owner[key] = g;
-                } catch (_) {}
-            });
-        };
-        W.addEventListener && W.addEventListener('load', function () { wrapLeave(); var k = 0, iv = setInterval(function () { wrapLeave(); if (++k >= 20) clearInterval(iv); }, 500); });
-        // ---- (b) Next / Continue in any multi-step flow, and Export / Download buttons. A click on such a
-        // control while changes wait is held, the one dialog opens, and after Confirm all (or Discard
-        // all) the same control is clicked again. Keep working: nothing happens, nothing is lost.
-        // Declared: data-sl-step="next" (a step), data-sl-step="export" (an export), data-sl-step="none"
-        // (never). Known flows: the particular risk "Build the reports" steps and their report exports.
-        var STEP_SEL = '[data-pra-act="flow-run"],[data-pra-act="tflow-run"],[data-pra-act="lflow-run"],[data-pra-act="sflow-run"],[data-pra-act="bird-run"]';
+        // 24 Oct 2026 (v3.0, Waqas): leaving a page or view, switching tree, system, tab or diagram, and pressing
+        // Next / Continue open NOTHING. What waits stays in the quiet bar until the person reviews it, saves or
+        // closes. (v2.0 opened the dialog on every one of those moves.)
+        // ---- Export / Download buttons. An export holds only confirmed work, so a click on one while changes
+        // wait is held, the review opens, and after Confirm all (or Discard all) the same control is clicked
+        // again. Keep working: nothing is exported and nothing is lost. Declared: data-sl-step="export";
+        // data-sl-step="none" opts a button out. Known: the particular risk report exports.
         var EXPORT_SEL = '[data-pra-act$="report-export"],[data-pra-act$="report-print"]';
         var _bypass = false;
-        var _isPager = function (el) {
-            try {
-                if (el.hasAttribute('data-pg')) return true;
-                if (/page|match/i.test((el.getAttribute('title') || '') + ' ' + (el.getAttribute('aria-label') || ''))) return true;
-                if (/\.page\(|[Pp]age\(/.test(el.getAttribute('onclick') || '')) return true;
-                for (var i = 0; i < el.attributes.length; i++) { var at = el.attributes[i]; if (/^data-/.test(at.name) && /^page$/i.test(at.value)) return true; }
-            } catch (_) {}
-            return false;
-        };
-        var _kindOf = function (el) {
-            if (!el || el.disabled || el.closest('#sl-ack-overlay, #sl-choice-overlay, #sl-dialog-overlay')) return null;
+        var _isExport = function (el) {
+            if (!el || el.disabled || el.closest('#sl-ack-overlay, #sl-choice-overlay, #sl-dialog-overlay, #sl-ack-bar')) return false;
             var d = el.getAttribute('data-sl-step');
-            if (d) return d === 'export' ? 'export' : (d === 'none' ? null : 'step');
-            try { if (el.matches(STEP_SEL)) return 'step'; if (el.matches(EXPORT_SEL)) return 'export'; } catch (_) {}
-            if (_isPager(el)) return null;
+            if (d) return d === 'export';
+            try { if (el.matches(EXPORT_SEL)) return true; } catch (_) {}
             var t = String(el.textContent || el.value || '').replace(/\s+/g, ' ').trim();
-            if (!t || t.length > 48) return null;
-            if (/^(Next|Next step|Continue)(\s|$|[^A-Za-z])/i.test(t)) return 'step';
-            if (/^(\W\s*)?(Export|Download)(\s|$|[^A-Za-z])/i.test(t)) return 'export';
-            return null;
+            if (!t || t.length > 48) return false;
+            return /^(\W\s*)?(Export|Download)(\s|$|[^A-Za-z])/i.test(t);
         };
         W.addEventListener && W.addEventListener('click', function (e) {
             if (_bypass || (!_win && !_col) || _askState || _sysDepth > 0) return;
             var el = e.target && e.target.closest && e.target.closest('button, [role="button"], input[type="button"], input[type="submit"], a[href]');
-            var kind = _kindOf(el); if (!kind) return;
+            if (!_isExport(el)) return;
             if (!collectNow()) return;
             e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation();
-            ask(kind === 'export' ? { reason: 'export', action: 'export' } : { reason: 'step', action: 'go to the next step' }).then(function (r) {
+            ask({ reason: 'export', action: 'export' }).then(function (r) {
                 if (r === 'keep' || !document.contains(el)) return;
                 _bypass = true; try { el.click(); } finally { _bypass = false; }
             });
@@ -1483,7 +1508,7 @@
 
     var SLRecords = { records: records, diff: diff, describe: describe, summarize: summarize, applyToModel: applyToModel, applyToObject: applyToObject, live: _live, impact: impact };
     var api = {
-        noteChange: noteChange, stash: stash, keepJournal: keepJournal, sameContent: sameContent, system: system, systemAsync: systemAsync, restoring: restoring,
+        noteChange: noteChange, stash: stash, keepJournal: keepJournal, sameContent: sameContent, system: system, background: background, systemAsync: systemAsync, restoring: restoring,
         begin: begin, end: end, batch: batch, describe: describeChange, drop: drop, settle: settle, revertTo: revertTo,
         // the one dialog and the collection
         ask: ask, collectNow: collectNow, count: count,

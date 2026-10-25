@@ -127,9 +127,12 @@
         const log = parseFloat(await _ask('Logistics delay (hours):', '0.25')) || 0;
         const adm = parseFloat(await _ask('Admin delay (hours):', '0.1')) || 0;
         const itv = parseFloat(await _ask('Scheduled inspection/test interval (FH, 0 = on-condition):', '0')) || 0;
-        _ramStore().tasks.push(Object.assign(draft, {
+        const _row = Object.assign(draft, {
             activeRepair: act, logistics: log, admin: adm, interval: itv, demonstrated: null, by: '',
-        }));
+        });
+        // 25 Oct 2026: a new task joins the level on screen, the aircraft or the system picked (level_view.js)
+        try { if (window.SLLevelView) window.SLLevelView.stamp('ramTask', _row); } catch (_) {}
+        _ramStore().tasks.push(_row);
         _save(); renderRamPage();
     }
     async function ramDemonstrate(id) {
@@ -388,7 +391,12 @@
         if (!_ramHasAccess()) { host.innerHTML = _ramGateHtml(); return; }
         const S = _ramStore();
         const _pageFcMap = _ramPageFcMap();
-        const taskRows = S.tasks.map(t => {
+        // 25 Oct 2026 (level_view.js): the tasks of the level on screen, the aircraft or one system; the golden
+        // thread, the CCMR bridge and every count outside this page still read every task
+        const LV = window.SLLevelView;
+        try { if (LV) LV.mount('ramTask'); } catch (_) {}
+        const tasks = LV ? S.tasks.filter(t => LV.shows('ramTask', t)) : S.tasks;
+        const taskRows = tasks.map(t => {
             const hit = t.beRef ? _findBe(t.beRef) : null;
             const lam = hit ? _beLambda(hit.node) : 0;
             const mdtH = _mdt(t);
@@ -405,7 +413,7 @@
         const fleetAi = taskRows.filter(r => r.ai != null).reduce((a, r) => a * r.ai, 1);
 
         let html = '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">' +
-            _chip('Tasks', String(S.tasks.length)) +
+            _chip('Tasks', String(tasks.length)) +
             _chip('Mean MTTR (λ-wt)', meanMttr ? (meanMttr * 60).toFixed(0) + ' min' : '—') +
             _chip('Linked-item Ai', taskRows.some(r => r.ai != null) ? (fleetAi * 100).toFixed(4) + '%' : '—') + '</div>';
 
@@ -414,7 +422,7 @@
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">MDT = active + logistics + admin (MIL-HDBK-338B) · link a basic event to compute Ai/Ao and enable the CCMR τ bridge · ⇢ shows the golden threads the task protects</span></div>';
         html += '<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12.5px;"><thead><tr>' +
             '<th>Task</th><th>Model links</th><th>Basic event</th><th>λ (/FH)</th><th>MTTR (h)</th><th>MDT (h)</th><th>Ai</th><th>Ao (est)</th><th>Interval (FH)</th><th>Demonstrated</th><th></th></tr></thead><tbody>';
-        if (!taskRows.length) html += '<tr><td colspan="11" style="color:var(--color-text-tertiary);">No tasks yet — the maintenance program starts here (or push tasks from the MSG-3 analysis).</td></tr>';
+        if (!taskRows.length) html += '<tr><td colspan="11" style="color:var(--color-text-tertiary);">' + (S.tasks.length ? 'No tasks at this level yet. ' + S.tasks.length + ' task' + (S.tasks.length === 1 ? '' : 's') + ' belong' + (S.tasks.length === 1 ? 's' : '') + ' to other levels (the line above links to them).' : 'No tasks yet — the maintenance program starts here (or push tasks from the MSG-3 analysis).') + '</td></tr>';
         taskRows.forEach(r => {
             const t = r.t;
             const demoOk = t.demonstrated != null ? t.demonstrated <= (t.activeRepair || 0) : null;

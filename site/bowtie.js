@@ -1,3 +1,4 @@
+// 24 Oct 2026 (v3.2, tree_homes.js): the page shows the bow-ties of the level being worked on (the aircraft, one system, or Standalone); a bow-tie's level is its fault tree's, else the level it was made at, else Standalone. Its fault tree and event tree pickers offer that level's.
 // 13 Oct 2026 (v3.0, hand-built bow-ties): the bow-tie is now DRAWN BY HAND on the one diagram editor (SLDiagramEditor) in the CCPS / Energy Institute notation: hazard, top event, threats, consequences, preventive and mitigative barriers on their pathways, escalation factors and escalation-factor barriers; barrier type, effectiveness, owner and the trace links as before; full screen, undo, SVG and SysML v2 export. The fault tree (left) and event tree (right) still join at the top event and generate either side as an editable shortcut; old bow-ties open drawn from their links, unchanged. See tests/regression_eta_bowtie_handbuild_20261013b.test.js
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
@@ -43,6 +44,12 @@
 
     function _ftaPages() { return (typeof ftaPages !== 'undefined' ? ftaPages : (_pc().ftaPages || [])) || []; }
     function _etaStore() { return (_pc().eventTrees || []); }
+    // 24 Oct 2026 (v3.2): the level being worked on (tree_homes.js); without it, everything, as before
+    function _homes() { return (typeof window !== 'undefined' && window.SLTreeHomes) || null; }
+    function _inScope(b) { const h = _homes(); return !h || h.inLevel('bowtie', b); }
+    function _scoped() { return _store().filter(_inScope); }
+    function _lvPages() { const h = _homes(); return h ? _ftaPages().filter(p => h.pageInLevel(p)) : _ftaPages(); }
+    function _lvEtas() { const h = _homes(); return h ? _etaStore().filter(t => h.inLevel('eta', t)) : _etaStore(); }
 
     // ---- the join: FTA top probability + causal cut sets ---------------------
     function _ftaEvidence(pageId) {
@@ -308,7 +315,7 @@
     // Interactive picker — one click per fault tree, badges preview what will
     // auto-link (FC + severity, matched event tree, allocation⇄verification pair).
     function btAutoBuild() {
-        const pages = _ftaPages(); if (!pages.length) { _toast('No fault trees to build from — the FTA is the left side.', 'warn'); return; }
+        const pages = _lvPages(); if (!pages.length) { _toast('No fault trees at this level to build from: the fault tree is the left side.', 'warn'); return; }
         let m = document.getElementById('bt-autobuild-modal'); if (m) m.remove();
         m = document.createElement('div'); m.id = 'bt-autobuild-modal';
         m.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;';
@@ -478,11 +485,13 @@
     }
     function createBowtie(name, ftaPageId, etaId) {
         const id = _nextId();
-        _store().push({ id: id, name: String(name || 'Bow-tie ' + id).trim(), ftaPageId: ftaPageId || '', etaId: etaId || '', barriers: [], by: (typeof currentUserName !== 'undefined' ? currentUserName : ''), at: new Date().toISOString() });
+        const _nb = { id: id, name: String(name || 'Bow-tie ' + id).trim(), ftaPageId: ftaPageId || '', etaId: etaId || '', barriers: [], by: (typeof currentUserName !== 'undefined' ? currentUserName : ''), at: new Date().toISOString() };
+        if (!ftaPageId && _homes()) _homes().stamp(_nb);   // v3.2: no fault tree to take a level from: the level it was made at
+        _store().push(_nb);
         _sel = id; _save(); _render();
         return id;
     }
-    function _bt() { return _store().find(b => b.id === _sel) || _store()[0] || null; }
+    function _bt() { const s = _scoped(); return s.find(b => b.id === _sel) || s[0] || null; }
     async function addBarrier(side) {
         const bt = _bt(); if (!bt) return;
         const name = await _ask('Barrier name (' + side + '):', ''); if (!name) return;
@@ -731,7 +740,12 @@
             if (Object.keys(p).length) o.props = p;
             if (e.sysmlRef) o.sysmlRef = e.sysmlRef;
             D.elements.push(o);
-            if (e.kind === 'top') { b2.ftaPageId = String(p.ftaPageId || ''); b2.etaId = String(p.etaId || ''); }
+            if (e.kind === 'top') {
+                // 25 Oct 2026: the top event's tree at the bow-tie's own level (the one it already has is kept)
+                const nf = String(p.ftaPageId || ''), was = String(bt.ftaPageId || ''), H = _homes();
+                b2.ftaPageId = (!nf || nf === was || !H || !H.linkAllowed || H.linkAllowed('top', nf, H.itemLevel('bowtie', bt))) ? nf : was;
+                b2.etaId = String(p.etaId || '');
+            }
         });
         ((m && m.connectors) || []).forEach(c => { const l = { id: c.id, kind: c.kind, from: c.from, to: c.to }; if (c.label) l.label = c.label; if (c.sysmlRef) l.sysmlRef = c.sysmlRef; D.links.push(l); });
         b2.diagram = D;
@@ -974,6 +988,10 @@
     }
 
     function _pageOpts(cur) {
+        // 25 Oct 2026 (tree_homes.js v1.1): the top event links a tree at the bow-tie's own level only (the level it
+        // is shown at, which its top event's tree decides); a link it has from before is shown, never dropped
+        const H = _homes();
+        if (H && H.linkOptions) return [{ value: '', label: 'None' }].concat(H.linkOptions('top', cur, _bt() ? H.itemLevel('bowtie', _bt()) : H.levelScope(), 60));
         const o = [{ value: '', label: 'None' }].concat(_ftaPages().filter(p => p && p.root).map(p => ({ value: p.id, label: String(p.name || p.id).slice(0, 60) })));
         if (cur && !o.some(x => x.value === cur)) o.push({ value: cur, label: cur + ' (not found)' });
         return o;
@@ -1210,21 +1228,23 @@
 
     function _render() {
         const host = document.getElementById('view-bowtie'); if (!host) return;
-        const store = _store();
-        const pages = _ftaPages(), etas = _etaStore();
+        const store = _scoped();
+        const pages = _lvPages(), etas = _lvEtas();
         let head = '<div class="header-with-export"><h3>Bow-Tie Analysis <span style="font-weight:400;font-size:12px;color:var(--color-text-tertiary,#888);">: threats, barriers, top event, consequences and escalation factors (CCPS / Energy Institute), joined to the fault tree and the event tree</span></h3></div>';
         const bt0 = _bt();
-        let bar = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 12px;">';
-        bar += '<label for="bt-select" style="font-size:12px;font-weight:600;">Bow-tie</label><select id="bt-select" onchange="btSelect(this.value)" style="padding:6px 8px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;max-width:360px;">' +
+        // 25 Oct 2026 (Waqas: "these need to be aligned and sized equally"): the shared diagram toolbar (.sl-diag-bar in
+        // safety_lab.css), the same as the event tree's: one height, one picker width, + New in blue, the rest plain
+        let bar = '<div class="sl-diag-bar">';
+        bar += '<label for="bt-select">Bow-tie</label><select id="bt-select" onchange="btSelect(this.value)">' +
             store.map(b => '<option value="' + _esc(b.id) + '"' + (b.id === (bt0 && bt0.id) ? ' selected' : '') + '>' + _esc(b.id + ' · ' + b.name) + '</option>').join('') +
             (store.length ? '' : '<option>— none yet —</option>') + '</select>';
-        bar += '<button class="btn-cyan" onclick="btCreate()" style="font-size:12px;">+ New bow-tie</button>';
-        bar += '<button class="btn-cyan" onclick="btAutoBuild()" style="font-size:12px;" title="Compile a bow-tie from an existing fault tree: matches the event tree via the shared failure condition, derives barriers from monitor specs, AND-gate redundancy and the event tree, and auto-links requirements (incl. Jama imports). Everything it makes stays editable.">⚡ Auto-build from fault tree</button>';
-        bar += '<button onclick="btAutoLinkAll()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;" title="Re-run requirement auto-linking on every bow-tie — run after importing requirements (e.g. from Jama).">↻ Re-link requirements</button>';
+        bar += '<button type="button" class="sl-db-primary" onclick="btCreate()">+ New bow-tie</button>';
+        bar += '<button type="button" onclick="btAutoBuild()" title="Compile a bow-tie from an existing fault tree: matches the event tree via the shared failure condition, derives barriers from monitor specs, AND-gate redundancy and the event tree, and auto-links requirements (incl. Jama imports). Everything it makes stays editable.">⚡ Auto-build from fault tree</button>';
+        bar += '<button type="button" onclick="btAutoLinkAll()"  title="Re-run requirement auto-linking on every bow-tie — run after importing requirements (e.g. from Jama).">↻ Re-link requirements</button>';
         let _tcDim = ''; try { const tc = (typeof window.declaredToolchain === 'function') ? window.declaredToolchain() : null; if (tc && tc.rm && tc.rm.tool && tc.rm.tool !== 'jama') _tcDim = 'opacity:.45;'; } catch (_) {}
-        bar += '<button onclick="btJamaPull()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;' + _tcDim + '" title="Pull mitigations and requirements for this critical event: relationship-traced items first (tier 3), text matches as candidates.' + (_tcDim ? ' (Declared RM toolchain is not Jama — ReqIF traces still feed tier-3 links automatically.)' : '') + '">🔗 Pull from Jama</button>';
-        bar += '<button onclick="jbOpen()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;" title="The live bridge: push failure conditions into Jama as items; the program traces its requirements to them there (human act); pull the relationship graph back for tier-3 links.">🔁 Jama bridge</button>';
-        if (bt0) bar += '<button onclick="SLBowtieUI.rename()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;">Rename</button><button onclick="SLBowtieUI.remove()" style="font-size:12px;padding:5px 10px;border:1px solid var(--color-border-hair,rgba(0,0,0,.2));border-radius:6px;background:transparent;color:inherit;cursor:pointer;">Delete</button>';
+        bar += '<button type="button" onclick="btJamaPull()" style="' + _tcDim + '" title="Pull mitigations and requirements for this critical event: relationship-traced items first (tier 3), text matches as candidates.' + (_tcDim ? ' (Declared RM toolchain is not Jama — ReqIF traces still feed tier-3 links automatically.)' : '') + '">🔗 Pull from Jama</button>';
+        bar += '<button type="button" onclick="jbOpen()"  title="The live bridge: push failure conditions into Jama as items; the program traces its requirements to them there (human act); pull the relationship graph back for tier-3 links.">🔁 Jama bridge</button>';
+        if (bt0) bar += '<button type="button" onclick="SLBowtieUI.rename()" >Rename</button><button type="button" onclick="SLBowtieUI.remove()" >Delete</button>';
         bar += '</div>';
         if (!store.length) {
             host.innerHTML = head + bar + '<p style="color:var(--color-text-secondary,#666);font-size:13px;">A bow-tie shows how a hazard is released into a <strong>top event</strong>: the <strong>threats</strong> that cause it and the preventive barriers that stop them on the left, the <strong>consequences</strong> and the mitigative barriers on the right, and the escalation factors that weaken barriers. Click <em>New bow-tie</em> to draw one by hand, or <em>Auto-build from fault tree</em> to generate it from your fault tree and event tree. ' + pages.length + ' fault tree(s) and ' + etas.length + ' event tree(s) available.</p>';
@@ -1239,9 +1259,10 @@
     }
 
     window.SLBowtieUI = {
+        topOptions() { const bt = _bt(); return _pageOpts(bt ? bt.ftaPageId : ''); },   // 25 Oct 2026: what the top event's picker offers
         async genLeft() {
             const ed = _curEd, bt = _bt(); if (!ed || !bt) return;
-            const pages = _ftaPages().filter(p => p && p.root);
+            const pages = _lvPages().filter(p => p && p.root);
             if (!pages.length) { _toast('There is no fault tree yet. Build one on the Fault Tree Analysis tab, then generate the left side from it.', 'warn'); return; }
             const pid = await _pick('Left side from a fault tree', pages.map(p => ({ value: p.id, label: p.name || p.id })), 'Threats come from the inputs of the top gate; AND and INHIBIT gates and monitors become preventive barriers on their threat lines. Only what is missing is added, and all of it stays editable.');
             if (!pid) return;
@@ -1252,8 +1273,8 @@
         },
         async genRight() {
             const ed = _curEd, bt = _bt(); if (!ed || !bt) return;
-            const etas = _etaStore();
-            if (!etas.length) { _toast('There is no event tree yet. Draw one on the Event Trees tab, then generate the right side from it.', 'warn'); return; }
+            const etas = _lvEtas();
+            if (!etas.length) { _toast('There is no event tree at this level yet. Draw one on the Event Trees tab, then generate the right side from it.', 'warn'); return; }
             const id = await _pick('Right side from an event tree', etas.map(t => ({ value: t.id, label: t.id + ' ' + (t.name || '') })), 'The headings become mitigative barriers in order; the end states, grouped by severity, become consequences. Only what is missing is added, and all of it stays editable.');
             if (!id) return;
             const eta = etas.find(t => t.id === id);
@@ -1304,6 +1325,10 @@
     function _setTopProp(k, v) {
         const bt = _bt(); if (!bt) return;
         try { if (typeof pushUndo === 'function') pushUndo('Bow-tie link'); } catch (_) {}
+        if (k === 'ftaPageId' && v && v !== bt.ftaPageId) {
+            const H = _homes();   // 25 Oct 2026: the top event links a tree at the bow-tie's own level
+            if (H && H.linkAllowed && !H.linkAllowed('top', v, H.itemLevel('bowtie', bt))) { _toast('That fault tree is at another level: a bow-tie\u2019s top event links a fault tree at its own level.', 'warn'); return; }
+        }
         if (k === 'ftaPageId') bt.ftaPageId = v; else bt.etaId = v;
         const te = bt.diagram && (bt.diagram.elements || []).find(e => e.kind === 'top');
         if (te) { te.props = Object.assign({}, te.props || {}); te.props[k] = v; }
@@ -1317,8 +1342,10 @@
         const name = await _ask('Name this bow-tie (usually the hazard or the top event):', ''); if (name === null) return;
         try { if (typeof pushUndo === 'function') pushUndo('New bow-tie'); } catch (_) {}
         const id = _nextId();
-        _store().push({ id: id, name: String(name || 'Bow-tie ' + id).trim() || ('Bow-tie ' + id), ftaPageId: '', etaId: '', barriers: [], diagram: { v: 1, elements: [], links: [], pos: {} },
-            by: (typeof currentUserName !== 'undefined' ? currentUserName : ''), at: new Date().toISOString() });
+        const _nb = { id: id, name: String(name || 'Bow-tie ' + id).trim() || ('Bow-tie ' + id), ftaPageId: '', etaId: '', barriers: [], diagram: { v: 1, elements: [], links: [], pos: {} },
+            by: (typeof currentUserName !== 'undefined' ? currentUserName : ''), at: new Date().toISOString() };
+        if (_homes()) _homes().stamp(_nb);   // v3.2: it belongs to the level it was made at
+        _store().push(_nb);
         _sel = id; _save(); _render();
         _toast(id + ' created. Drag the hazard, the top event, threats and consequences from the toolbox, or generate a side from a fault tree or an event tree.', 'success');
     }

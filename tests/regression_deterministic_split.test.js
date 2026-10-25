@@ -140,90 +140,18 @@ console.log('\n[spec] …and the row the AI path writes is in the product vocabu
 }
 
 // ---------------------------------------------------------------------------
-console.log('\n[iface] §5.3.1.8 interface requirements, executed');
-function runIface(edges, systems, scope) {
-    const sb = { console, Object, String, Array, JSON, Date }; sb.window = sb;
-    vm.createContext(sb);
-    const fn = (asr.match(/function genInterface\(scopeKey\)\{[\s\S]*?\n    \}/) || [''])[0];
-    vm.runInContext('let projectConfig = { interfaces: [] }, systemsData = [];\n' +
-        'function fp(){ return "fp"; }\n' + fn +
-        '\n;globalThis.T = { gen: genInterface, set: (e, s) => { projectConfig.interfaces = e; systemsData = s; } };', sb);
-    sb.T.set(edges, systems || []);
-    return sb.T.gen(scope || 'ac');
-}
-const SYS = [{ id: 'sys-avi', name: 'Avionics' }, { id: 'sys-fcs', name: 'Flight Controls' }];
+// 24 Oct 2026 (Waqas): the interface-requirement lane is RETIRED. Interfaces and their requirements belong to
+// Sys Lab (or the customer's own tool); Safety Lab imports interfaces for its analyses and writes no requirement
+// from them. Rows it wrote before are offered as "source gone" on the next generation, never removed silently.
+console.log('\n[iface] the interface-requirement lane is retired');
 {
-    const complete = { id: 'IF-1', fromSystemId: 'sys-avi', toSystemId: 'sys-fcs', kind: 'functional',
-                       direction: 'a_to_b', medium: 'Attitude/air data (ARINC 429)', icdRef: 'ICD-AVI-FCS-001' };
-    const out = runIface([complete], SYS);
-    check('a complete edge yields one interface requirement',
-        out.length === 1 && out[0].reqSource.generator === 'iface-def');
-    check('the text names both ends, the medium and the ICD',
-        /The interface from Avionics to Flight Controls carrying Attitude\/air data \(ARINC 429\) shall be defined in accordance with ICD-AVI-FCS-001/.test(out[0].text),
-        out[0].text);
-    check('…and demands source, destination and signal behaviour, as the clause does',
-        /the source of every input, the destination of every output, and the behavior of the signals fully described/.test(out[0].text));
-    check('it is Interface class, L2, from the interface register',
-        out[0].type === 'Interface' && out[0].level === 'L2' && out[0].analysis === 'Interface register');
-    check('a complete edge says so rather than implying a gap',
-        /the clause's completeness conditions are met/.test(out[0].rat) &&
-        !/INCOMPLETE/.test(out[0].rat));
-    check('a functional edge is called out as a propagation path',
-        /a loss here propagates as a functional failure/.test(out[0].rat));
-
-    const bare = runIface([{ fromSystemId: 'sys-avi', toSystemId: 'sys-fcs', kind: 'interface' }], SYS);
-    check('an INCOMPLETE edge still generates a requirement',
-        bare.length === 1,
-        'skipping it would hide the gap; the requirements register is where it becomes somebody\'s problem');
-    check('…and the rationale names every missing element',
-        /INCOMPLETE against the clause/.test(bare[0].rat) &&
-        /no medium or signal set is recorded/.test(bare[0].rat) &&
-        /no direction is recorded/.test(bare[0].rat) &&
-        /no ICD reference, so nothing fully describes the behavior of the signals/.test(bare[0].rat));
-    check('…and the text does not pretend an ICD or medium exists',
-        !/in accordance with/.test(bare[0].text) && !/carrying/.test(bare[0].text));
-    check('a missing endpoint is reported, not crashed on',
-        (function () { const o = runIface([{ fromSystemId: 'sys-avi', kind: 'interface' }], SYS);
-            return o.length === 1 && /an endpoint is undefined/.test(o[0].rat); })());
-
-    const res = runIface([Object.assign({}, complete, { id: 'IF-2', kind: 'resource' })], SYS);
-    check('a shared-resource edge is flagged as a common-cause candidate',
-        /SHARED RESOURCE edge/.test(res[0].rat) && /the CMA evaluates whether it defeats an independence claim/.test(res[0].rat));
-
-    const bidi = runIface([Object.assign({}, complete, { direction: 'bidirectional' })], SYS);
-    check('a bidirectional edge says so', /, in both directions/.test(bidi[0].text));
-    const rev = runIface([Object.assign({}, complete, { direction: 'b_to_a' })], SYS);
-    check('a reversed edge reads in the right order',
-        /from Flight Controls to Avionics/.test(rev[0].text));
-
-    check('no interfaces means no requirements, not an empty stub',
-        runIface([], SYS).length === 0);
-    check('the lane is aircraft scope only',
-        runIface([complete], SYS, 'sys-avi').length === 0,
-        'a system scope would be claiming ownership of the far end of the edge too');
-    check('sourceIds are stable across a rerun',
-        runIface([complete], SYS)[0].reqSource.sourceId === 'ac:iface-def:IF-1');
-    check('an edge with no id still gets a deterministic sourceId',
-        runIface([{ fromSystemId: 'sys-avi', toSystemId: 'sys-fcs', kind: 'interface' }], SYS)[0]
-            .reqSource.sourceId === 'ac:iface-def:sys-avi->sys-fcs:interface');
-}
-
-console.log('\n[iface] the lane is reachable');
-{
-    check('genInterface is called from generate()',
-        /if\(opts\.iface\) candidates\.push\(\.\.\.genInterface\(scope\)\);/.test(asr));
-    // Not anchored to the end of the object — that exact regex broke once when a
-    // key was added after it (HANDOFF §7.3: assert the invariant, not the literal).
-    check('…and defaults ON', /hfOperational:true, iface:true/.test(asr));
-    check('the orphan sweep knows the prefix',
-        /\(g\.startsWith\('iface'\) && opts\.iface\)/.test(asr),
-        'without it, turning the lane off DELETES its requirements');
-    check('the preview reads the toggle', /iface:            cb\('ar-gen-iface'\)/.test(help));
-    check('the toggle exists and cites the clause',
-        /id="ar-gen-iface" checked/.test(html) && /ARP4754B &sect;5\.3\.1\.8/.test(html));
-    check('"Interface register" is a declared analysis kind',
-        T.ANALYSIS_LABELS.indexOf('Interface register') >= 0);
-    check('Interface is a §5.3.1.8 class in the taxonomy',
+    check('genInterface no longer exists', !/function genInterface\(/.test(asr));
+    check('generate() no longer calls it, and no iface switch is defaulted on',
+        !/genInterface\(scope\)/.test(asr) && !/iface:true/.test(asr));
+    check('stored interface requirements are always swept as source gone (the engineer decides)',
+        /g\.startsWith\('iface'\) \|\|/.test(asr) && !/\(g\.startsWith\('iface'\) && opts\.iface\)/.test(asr));
+    check('the preview has no interface toggle', !/ar-gen-iface/.test(help) && !/id="ar-gen-iface"/.test(html));
+    check('"Interface" stays a requirement class (imported interface requirements keep their class)',
         T.clauseFor('Interface') === 'ARP4754B §5.3.1.8');
 }
 

@@ -44,8 +44,9 @@ const ids = PP.CATALOGUE.map(l => l.id);
     PP.CATALOGUE.every(l => groupIds.includes(l.group)),
     'saw ' + ids.length + ' lanes / groups [' + groupIds.join(', ') + ']' +
     '; orphans: ' + PP.CATALOGUE.filter(l => !groupIds.includes(l.group)).map(l => l.id).join(', '));
-  check('the four expected groups are all present',
-    ['safety','ram','hf','ml'].every(g => groupIds.includes(g)), groupIds.join(', '));
+  // 25 Oct 2026: the AI/ML group is removed with its lane (Waqas: "AI/ML assurance can be completely removed")
+  check('the three expected groups are present, and AI/ML is not',
+    ['safety','ram','hf'].every(g => groupIds.includes(g)) && !groupIds.includes('ml') && !PP.CATALOGUE.some(l => l.id === 'mlas'), groupIds.join(', '));
 }
 check('every lane is well formed (id, name, group, snav[], tabs[])',
   PP.CATALOGUE.every(l => l.id && l.name && l.group && Array.isArray(l.snav) && Array.isArray(l.tabs)));

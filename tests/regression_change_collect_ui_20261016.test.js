@@ -110,55 +110,56 @@ async function scenarios(browser, siteDir, quick) {
   await sleep(300);
   R.c1 = await S();
   dbg('C2');
-  // ------------------------------------------------------------------ C2
+  // ------------------------------------------------------------------ C2 (24 Oct 2026, v3.0: the quiet bar)
+  const bar = () => pg.evaluate(() => { const b = document.getElementById('sl-ack-bar'); return b && b.classList.contains('on') ? b.innerText.replace(/\s+/g, ' ').trim() : ''; });
   const navSel = await pg.evaluate(() => { const el = document.querySelector('[onclick*="switchTab(\'dashboard\')"]'); if (!el) return null; el.setAttribute('data-test-nav', 'dash'); return '[data-test-nav="dash"]'; });
   R.c2nav = !!navSel;
-  const leave = async () => { if (navSel) { try { await pg.click(navSel, { timeout: 3000 }); return; } catch (_) {} } pg.evaluate(() => { switchTab('dashboard'); }).catch(() => {}); };
-  await leave();
-  R.c2opened = await waitFor(ackOpen, 3000);
-  await sleep(300);
+  R.c2barBefore = await bar();
+  if (navSel) await click(navSel); else await pg.evaluate(() => { switchTab('dashboard'); });
+  await sleep(1200);
+  R.c2left = await S();
+  R.c2barAfter = await bar();
+  await click('#sl-ack-bar .sl-ack-review');
+  R.c2opened = await waitFor(ackOpen, 3000); await sleep(400);
   R.c2text = await ackText();
+  R.c2html = await pg.evaluate(() => { const o = document.getElementById('sl-ack-overlay'); return o ? o.innerHTML : ''; });
   R.c2buttons = await pg.evaluate(() => [...document.querySelectorAll('#sl-ack-overlay button')].map(b => b.textContent.trim()));
-  R.c2autoExit = await pg.evaluate(() => !!document.querySelector('#sl-ack-overlay .sl-auto-exit'));
+  R.c2barWhileOpen = await bar();
   await pg.keyboard.press('Escape'); await sleep(500);
   R.c2esc = await S();
   R.c2escValues = await pg.evaluate(() => [acFhaData[0].comments, acFhaData[3].comments]);
   if (!quick) {
-    await leave();
+    await click('#sl-ack-bar .sl-ack-review');
     await waitFor(ackOpen, 3000); await sleep(200);
     await click('.sl-ack-undo'); await sleep(900);
     R.c2undoText = await ackText();
     R.c2undo = await S();
     R.c2undoValue = await pg.evaluate(() => acFhaData[3].comments);
     await click('.sl-ack-confirm'); await sleep(1500);
-    await waitFor(async () => !(await S()).pending, 4000);   // the new page's own bookkeeping write is decided in 450 ms (slower under load)
+    await waitFor(async () => !(await S()).pending, 4000);
     R.c2after = await S();
+    R.c2barGone = (await bar()) === '';
     R.c2journal = await pg.evaluate(() => ((projectConfig.journal && projectConfig.journal.entries) || []).map(e => e.kind + ': ' + e.s).slice(-3));
     R.c2stored = await pg.evaluate(() => (localStorage.getItem(AUTOSAVE_KEY) || '').indexOf('C1 edit 2') >= 0);
-    await pg.evaluate(() => { switchTab('ac-fha'); }); await sleep(600);
-    R.c2again = await S();
   }
   dbg('C3');
-  // ------------------------------------------------------------------ C3
+  // ------------------------------------------------------------------ C3: Next runs at once, nothing opens
+  await pg.evaluate(() => { switchTab('ac-fha'); }); await sleep(600);
   await pg.evaluate(() => {
     const box = document.createElement('div'); box.id = 't-flow'; box.style.cssText = 'position:fixed;top:200px;left:420px;z-index:5;background:#fff;padding:8px';
-    box.innerHTML = '<button type="button" id="t-next" onclick="window.__next=(window.__next||0)+1">Next →</button> <button type="button" id="t-pg" data-pg="next" onclick="window.__pg=(window.__pg||0)+1">Next ›</button>';
-    document.body.appendChild(box); window.__next = 0; window.__pg = 0;
+    box.innerHTML = '<button type="button" id="t-next" onclick="window.__next=(window.__next||0)+1">Next →</button>';
+    document.body.appendChild(box); window.__next = 0;
   });
   const o3 = (await S()).opens;
   await userEdit('() => { acFhaData[4].comments = "C3 step edit"; }'); await sleep(700);
-  await click('#t-pg'); await sleep(400);
-  R.c3pager = await pg.evaluate(() => window.__pg) === 1 && (await S()).opens === o3;
-  await click('#t-next');
-  R.c3opened = await waitFor(ackOpen, 3000); await sleep(200);
-  R.c3text = await ackText();
-  R.c3held = await pg.evaluate(() => window.__next) === 0;
-  await click('.sl-ack-working'); await sleep(400);
-  R.c3keep = await pg.evaluate(() => window.__next) === 0 && (await S()).pending;
-  await click('#t-next'); await waitFor(ackOpen, 3000); await sleep(200);
-  await click('.sl-ack-confirm'); await sleep(900);
+  await click('#t-next'); await sleep(900);
   R.c3ran = await pg.evaluate(() => window.__next);
   R.c3after = await S();
+  R.c3opened = R.c3after.opens > o3 || R.c3after.open;
+  R.c3bar = await bar();
+  // put it away so later scenarios start clean
+  // (bounded: a mutated copy may already hold a dialog open, and a proof must never hang on it)
+  await pg.evaluate(() => { SLChangeAck._setTestAnswer('confirm'); return Promise.race([SLChangeAck.ask({ reason: 'early' }), new Promise(r => setTimeout(r, 3000))]).then(() => SLChangeAck._setTestAnswer(null)); }); await sleep(600);
   if (quick) { await ctx.close(); srv.close(); return R; }
   dbg('C4');
   // ------------------------------------------------------------------ C4
@@ -253,20 +254,25 @@ async function scenarios(browser, siteDir, quick) {
     check('three row edits and a typed word: NO dialog ever appeared', R.c1.opens === 0 && !R.c1.open, JSON.stringify(R.c1));
     check('the top bar says "4 changes to confirm"', R.c1.ind === '4 changes to confirm' && R.c1.count === 4, R.c1.ind);
     check('no floating badge (the old "to acknowledge" badge is gone)', !R.c1.badge);
-    console.log('\n[C2] leaving the page');
-    check('a click on the side bar to leave opens exactly ONE dialog', R.c2nav && R.c2opened && R.c2esc.opens === 1, JSON.stringify(R.c2esc));
-    check('it lists all four, grouped by kind, in plain words', /Confirm your 4 changes/.test(R.c2text) && /Aircraft FHA \(4\)/.test(R.c2text) && /C1 edit 0/.test(R.c2text) && /C1 edit 2/.test(R.c2text) && /typed/.test(R.c2text) && /Before you leave this page/.test(R.c2text), R.c2text.slice(0, 500));
-    check('buttons: Keep working, Discard all, Undo last change, Confirm all (and no generic close)', JSON.stringify(R.c2buttons) === JSON.stringify(['Keep working', 'Discard all', 'Undo last change', 'Confirm all']) && !R.c2autoExit, JSON.stringify(R.c2buttons));
-    check('Escape = Keep working: the dialog closes, still on the same page, nothing lost', !R.c2esc.open && R.c2esc.tab === 'ac-fha' && R.c2esc.count === 4 && R.c2escValues[0] === 'C1 edit 0' && R.c2escValues[1] === 'typed', JSON.stringify([R.c2esc, R.c2escValues]));
-    check('Undo last change takes only the typed word back; three are left', R.c2undo.open && R.c2undo.count === 3 && /Confirm your 3 changes/.test(R.c2undoText) && R.c2undoValue !== 'typed', JSON.stringify([R.c2undo, R.c2undoValue]));
-    check('Confirm all: saved, nothing waits, and then the page changed', !R.c2after.pending && R.c2after.save === 'saved' && /^Saved/.test(R.c2after.ind) && R.c2after.tab === 'dashboard' && R.c2stored, JSON.stringify(R.c2after));
-    check('the journal says who confirmed how many', R.c2journal.some(j => /^change-ack: Not signed in confirmed 3 changes: /.test(j)), R.c2journal.join(' | '));
-    check('leaving again with nothing waiting asks nothing', R.c2again.opens === R.c2after.opens && !R.c2again.open && R.c2again.tab === 'ac-fha', JSON.stringify(R.c2again));
+    console.log('\n[C2] leaving the page: nothing opens; the quiet bar; Review');
+    check('nothing waiting: no bar', R.c2barBefore === '' || /4 changes waiting/.test(R.c2barBefore), R.c2barBefore);
+    check('a click on the side bar leaves the page at once, and NO dialog opens', R.c2nav && R.c2left.tab === 'dashboard' && R.c2left.opens === 0 && !R.c2left.open, JSON.stringify(R.c2left));
+    check('the changes still wait, and the quiet bar says how many, with Review', R.c2left.count === 4 && /^4 changes waiting to be confirmed Review$/.test(R.c2barAfter), R.c2barAfter);
+    check('Review opens the list of all four, grouped by kind', R.c2opened && /Review your 4 changes/.test(R.c2text) && /Aircraft FHA \(4\)/.test(R.c2text) && /C1 edit 0/.test(R.c2text) && /C1 edit 2/.test(R.c2text) && /typed/.test(R.c2text), R.c2text.slice(0, 500));
+    check('each change says where it is, and who changed it when', /In Aircraft FHA · Not signed in, (at|between) \d/.test(R.c2text), R.c2text.slice(0, 600));
+    check('each changed field shows its old and new value in a Field / Was / Now table', /<table class="sl-ack-ft">/.test(R.c2html) && /<th>Field<\/th><th>Was<\/th><th>Now<\/th>/.test(R.c2html));
+    check('it still says what the changes touch', /what it touches/i.test(R.c2text));
+    check('buttons: Keep working, Discard all, Undo last change, Confirm all', JSON.stringify(R.c2buttons) === JSON.stringify(['Keep working', 'Discard all', 'Undo last change', 'Confirm all']), JSON.stringify(R.c2buttons));
+    check('the bar steps aside while the list is open', R.c2barWhileOpen === '');
+    check('Escape = Keep working: the list closes, nothing lost', !R.c2esc.open && R.c2esc.count === 4 && R.c2escValues[0] === 'C1 edit 0' && R.c2escValues[1] === 'typed', JSON.stringify([R.c2esc, R.c2escValues]));
+    if (R.c2undo) {
+        check('Undo last change takes only the typed word back; three are left', R.c2undo.open && R.c2undo.count === 3 && /Review your 3 changes/.test(R.c2undoText) && R.c2undoValue !== 'typed', JSON.stringify(R.c2undo));
+        check('Confirm all: saved, nothing waits, the bar is gone', !R.c2after.pending && R.c2after.save === 'saved' && /^Saved/.test(R.c2after.ind) && R.c2barGone && R.c2stored, JSON.stringify(R.c2after));
+        check('the journal says who confirmed how many', R.c2journal.some(j => /^change-ack: Not signed in confirmed 3 changes: /.test(j)), R.c2journal.join(' | '));
+    }
     console.log('\n[C3] Next in a flow');
-    check('a pagination "Next" is never held', R.c3pager);
-    check('Next with a change waiting: the click is held and the one dialog opens', R.c3opened && R.c3held && /Before you go to the next step/.test(R.c3text), R.c3text.slice(0, 200));
-    check('Keep working: the step did not run, the change still waits', R.c3keep);
-    check('Confirm all: the step ran exactly once, nothing waits', R.c3ran === 1 && !R.c3after.pending, String(R.c3ran));
+    check('Next with a change waiting runs at once and opens nothing', R.c3ran === 1 && !R.c3opened, JSON.stringify(R.c3after));
+    check('... and the change still waits in the bar', R.c3after.pending && /1 change waiting to be confirmed/.test(R.c3bar), R.c3bar);
     console.log('\n[C4] opening the sample project with a change waiting');
     check('the one dialog opens (not "Not saved yet"), naming what the person was doing', R.c4opened && !R.c4choice && /Before you open the sample project/.test(R.c4text), R.c4text.slice(0, 200));
     check('Keep working: the project was not replaced, the change still waits', R.c4keep.pending && R.c4keepValue === 'C4 edit before the demo' && R.c4name && !R.c4keep.open, JSON.stringify(R.c4keep));
@@ -309,8 +315,8 @@ async function scenarios(browser, siteDir, quick) {
       fs.rmSync(dir, { recursive: true, force: true });
     };
     await mut('M1 a dialog after each change (the old behavior)', "        _collect(w, items, shown, D, Rb);\n        return _close(w, 'collected');", "        _collect(w, items, shown, D, Rb);\n        setTimeout(function () { ask({ reason: 'early' }); }, 0);\n        return _close(w, 'collected');", R2 => R2.c1.opens > 0);
-    await mut('M2 no dialog when leaving the page', "if ((!_win && !_col) || _sysDepth > 0 || _deferDepth > 0 || _askState || L.same(a)) return f.apply(self, a);", "return f.apply(self, a);", R2 => !R2.c2opened);
-    await mut('M3 no dialog on Next', "            var kind = _kindOf(el); if (!kind) return;", "            var kind = null; if (!kind) return;", R2 => !R2.c3opened);
+    await mut('M2 the quiet bar never shows', "        var on = n > 0 && !_askState;", "        var on = false;", R2 => !/4 changes waiting/.test(R2.c2barAfter || ''));
+    await mut('M3 leaving the page opens the review again (the v2.0 behavior)', "        // 24 Oct 2026 (v3.0, Waqas): leaving a page or view,", "        W.addEventListener && W.addEventListener('load', function () { var f = W.switchTab; W.switchTab = function () { var a = arguments, self = this; if (!_col) return f.apply(self, a); return ask({ reason: 'leave' }).then(function (r) { if (r !== 'keep') return f.apply(self, a); }); }; });\n        // 24 Oct 2026 (v3.0, Waqas): leaving a page or view,", R2 => R2.c2left.opens > 0 || R2.c2left.tab !== 'dashboard');
     fs.rmSync(tmp, { recursive: true, force: true });
   } catch (e) { check('the browser suite ran to the end', false, String(e && e.stack || e).split('\n').slice(0, 8).join(' ')); }
   await browser.close();

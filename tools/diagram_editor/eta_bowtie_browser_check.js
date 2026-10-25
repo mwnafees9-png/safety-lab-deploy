@@ -56,22 +56,31 @@ let __page = null;
         ung(); window.__ung = ung;
         await loadHL1Demo(); await new Promise(r => setTimeout(r, 1500)); ung();
         try { PROGRAM_PLAN.setLane('bowtie', true); PROGRAM_PLAN.setLane('eta', true); } catch (e) {}
-        document.querySelectorAll('.sl-ack-overlay').forEach(o => { const k = o.querySelector('.sl-ack-keep'); if (k) k.click(); });
+        document.querySelectorAll('.sl-ack-overlay').forEach(o => { const k = o.querySelector('.sl-ack-confirm') || o.querySelector('.sl-ack-keep'); if (k) k.click(); });
     });
     // the change confirmation: answer it (Confirm all by default, Discard all for cancel) and say whether the
     // change was there to confirm. 16 Oct 2026 (change_ack.js v2.0): a change is COLLECTED, not asked about at
     // once; this helper reaches the decision point itself (the one dialog, opened early as the top bar does).
     const openIfWaiting = () => E(() => { if (window.SLChangeAck && SLChangeAck.count() > 0 && !SLChangeAck.status().open && !SLChangeAck.status().asking) SLChangeAck.ask({ reason: 'early' }); });
+    // 25 Oct 2026: the one dialog's buttons since change_ack v3.0 are Confirm all (.sl-ack-confirm), Undo last, Discard all and
+    // Keep working (.sl-ack-keep, which now confirms nothing); confirming is .sl-ack-confirm (the older dialog's .sl-ack-keep)
+    const okBtn = () => E(() => { const o = document.querySelector('.sl-ack-overlay'); if (!o) return null; return o.querySelector('.sl-ack-confirm') ? '.sl-ack-confirm' : (o.querySelector('.sl-ack-keep') ? '.sl-ack-keep' : null); });
     const ack = async (cancel) => {
         for (let i = 0; i < 30; i++) {
             await openIfWaiting();
-            const has = await E(() => !!document.querySelector('.sl-ack-overlay .sl-ack-keep'));
-            if (has) { await wait(150); await page.locator('.sl-ack-overlay ' + (cancel ? '.sl-ack-discard' : '.sl-ack-keep')).click(); await wait(150); return true; }
+            const sel = await okBtn();
+            if (sel) {
+                // the dialog can close by itself between looking and clicking (the collection ended with nothing left
+                // to confirm): find and press the button in one step, or look again
+                await wait(150);
+                const done = await E(s0 => { const b = document.querySelector('.sl-ack-overlay ' + s0); if (!b) return false; b.click(); return true; }, cancel ? '.sl-ack-discard' : sel);
+                if (done) { await wait(150); return true; }
+            }
             await wait(100);
         }
         return false;
     };
-    const flushAcks = async () => { await wait(600); for (let i = 0; i < 20; i++) { await openIfWaiting(); await wait(200); if (!(await E(() => !!document.querySelector('.sl-ack-overlay .sl-ack-keep')))) break; await page.locator('.sl-ack-overlay .sl-ack-keep').click(); await wait(200); } };
+    const flushAcks = async () => { await wait(600); for (let i = 0; i < 20; i++) { await openIfWaiting(); await wait(200); const sel = await okBtn(); if (!sel) break; await E(s0 => { const b = document.querySelector('.sl-ack-overlay ' + s0); if (b) b.click(); }, sel); await wait(200); } };
     const dialog = async (text) => { await page.waitForSelector('#sl-dialog-input', { timeout: 5000 }); await page.fill('#sl-dialog-input', text); await page.click('.sl-dialog-ok'); await wait(300); };
     const at = (sel, id, fx, fy) => E(([sel, id, fx, fy]) => { const ed = sel === 'eta' ? SLEtaUI.editor() : SLBowtieUI.editor(); const e = ed.model().elements.find(x => x.id === id); ed.root.scrollIntoView({ block: 'start' }); const r = ed.root.querySelector('.sde-canvas').getBoundingClientRect(); const k0 = ed.getView().k; ed.setView({ x: r.width * 0.4 - (e.x + e.w / 2) * k0, y: r.height * 0.4 - (e.y + e.h / 2) * k0, k: k0 }); ed.render(); const v = ed.getView(); return { x: r.left + v.x + (e.x + e.w * (fx == null ? 0.5 : fx)) * v.k, y: r.top + v.y + (e.y + e.h * (fy == null ? 0.5 : fy)) * v.k }; }, [sel, id, fx, fy]);
     const shot = async (name, sel) => { if (!process.env.SL_SHOTS) return; await E(s => { const ed = s === 'eta' ? SLEtaUI.editor() : SLBowtieUI.editor(); ed.root.scrollIntoView({ block: 'start' }); ed.select([]); ed.fit(); ed.render(); }, sel); await wait(200); const b = await page.locator(sel === 'eta' ? '#eta-canvas .sde' : '#bt-editor .sde').boundingBox(); await page.screenshot({ path: path.join(process.env.SL_SHOTS, name + '.png'), clip: b }); };
@@ -123,7 +132,7 @@ let __page = null;
     for (const [i, name, pf] of [[0, 'Pressure controller holds cabin altitude', '1e-3'], [1, 'Crew dons oxygen masks', '1e-2']]) {
         p = await at('eta', hs[i], 0.5, 0.45);
         await page.mouse.dblclick(p.x, p.y); await wait(100);
-        await page.keyboard.press('Control+A'); await page.keyboard.type(name); await page.keyboard.press('Enter'); await ack();
+        await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.type(name); await page.keyboard.press('Enter'); await ack();
         await page.fill(etaRoot + ' .sde-props input[data-key="props.pFail"]', pf); await page.keyboard.press('Tab'); await ack();
     }
     let t = await E(id => projectConfig.eventTrees.find(x => x.id === id), etId);
@@ -154,7 +163,7 @@ let __page = null;
     await shot('eta_handbuilt_multi_skip', 'eta');
     // undo / redo with the keyboard
     await page.locator(etaRoot + ' .sde-canvas').focus();
-    await page.keyboard.press('Control+z'); await ack();
+    await page.keyboard.press('ControlOrMeta+z'); await ack();
     ev = await E(id => etaEvaluate(id).outcomes.length, etId);
     check('Ctrl+Z undoes the skip (6 sequences again)', ev === 6 && await E(id => !projectConfig.eventTrees.find(x => x.id === id).nodeRules, etId), ev);
     await page.keyboard.press('Control+Shift+z'); await ack();
@@ -178,9 +187,12 @@ let __page = null;
     // links: heading quantified by a fault tree page
     p = await at('eta', hs[0], 0.5, 0.5);
     await page.mouse.click(p.x, p.y); await wait(100);
-    await page.selectOption(etaRoot + ' .sde-props select[data-key="props.linkedPageId"]', 'pg-nzd-indication'); await ack();
+    // 25 Oct 2026 (tree homes): a diagram's heading links the fault trees of its own level; this event tree is the
+    // aircraft's (made on the PASA diagrams), so it offers the aircraft's top-down trees, the first of which is used here
+    const linkPg = await E(sel => { const o = [...document.querySelectorAll(sel + ' option')].map(x => x.value).filter(v => v && !/-v$/.test(v)); return o[0] || ''; }, etaRoot + ' .sde-props select[data-key="props.linkedPageId"]');
+    await page.selectOption(etaRoot + ' .sde-props select[data-key="props.linkedPageId"]', linkPg); await ack();
     t = await E(id => projectConfig.eventTrees.find(x => x.id === id), etId);
-    check('a heading links to the fault tree page that quantifies it (linkedPageId)', t.barriers[0].linkedPageId === 'pg-nzd-indication');
+    check('a heading links to the fault tree page that quantifies it (linkedPageId)', !!linkPg && t.barriers[0].linkedPageId === linkPg, linkPg);
     check('its panel shows the linked tree P(top) for review only', await E(() => /Linked fault tree P\(top\)/.test(SLEtaUI.editor().root.querySelector('.sde-props').textContent)));
     // end the sequence early: heading 2 not reached after heading 1 fails
     m = await E(() => SLEtaUI.editor().model());
@@ -190,7 +202,7 @@ let __page = null;
     t = await E(id => projectConfig.eventTrees.find(x => x.id === id), etId);
     ev = await E(id => { const r = etaEvaluate(id); return { n: r.outcomes.length, sum: r.sum }; }, etId);
     check('"End sequence here": the sequence ends before the later heading (2 sequences, Σp = 1); calls on the removed sequences go with them', t.nodeRules['1'] === 'end' && ev.n === 2 && Math.abs(ev.sum - 1) < 1e-12 && !t.consequences['21'], JSON.stringify([t.nodeRules, ev, Object.keys(t.consequences)]));
-    await page.locator(etaRoot + ' .sde-canvas').focus(); await page.keyboard.press('Control+z'); await ack();
+    await page.locator(etaRoot + ' .sde-canvas').focus(); await page.keyboard.press('ControlOrMeta+z'); await ack();
     check('and Undo brings the sequence and its assessment back', await E(id => { const t = projectConfig.eventTrees.find(x => x.id === id); return !(t.nodeRules || {})['1'] && t.consequences['21'] && t.consequences['21'].severity === 'Catastrophic'; }, etId));
     // from the keyboard: select a branch point, then Enter on a tool applies it there
     m = await E(() => SLEtaUI.editor().model());
@@ -199,14 +211,14 @@ let __page = null;
     await page.mouse.click(p.x + 10, p.y); await wait(100);
     await page.locator(etaRoot + ' .sde-tool[data-kind="stamp-end"]').focus(); await page.keyboard.press('Enter'); await ack();
     check('keyboard: select a branch point, then Enter on "End sequence here" ends that sequence', await E(id => (projectConfig.eventTrees.find(x => x.id === id).nodeRules || {})['1'] === 'end', etId));
-    await page.locator(etaRoot + ' .sde-canvas').focus(); await page.keyboard.press('Control+z'); await ack();
+    await page.locator(etaRoot + ' .sde-canvas').focus(); await page.keyboard.press('ControlOrMeta+z'); await ack();
     // the heading panel: Move right swaps the columns and the assessments follow their sequences
     p = await at('eta', hs[0], 0.5, 0.5);
     await page.mouse.click(p.x, p.y); await wait(100);
     await page.click(etaRoot + ' .sde-props button:has-text("Move right")'); await ack();
     t = await E(id => projectConfig.eventTrees.find(x => x.id === id), etId);
     check('"Move right" in the heading panel swaps the two columns; the Catastrophic assessment follows its sequence (21 becomes 12)', t.barriers[1].name === 'Pressure controller holds cabin altitude' && t.consequences['12'] && t.consequences['12'].severity === 'Catastrophic' && !t.consequences['21'], JSON.stringify([t.barriers.map(b => b.name), Object.keys(t.consequences)]));
-    await page.locator(etaRoot + ' .sde-canvas').focus(); await page.keyboard.press('Control+z'); await ack();
+    await page.locator(etaRoot + ' .sde-canvas').focus(); await page.keyboard.press('ControlOrMeta+z'); await ack();
     check('and Undo puts the columns back', await E(id => { const t = projectConfig.eventTrees.find(x => x.id === id); return t.barriers[0].name === 'Pressure controller holds cabin altitude' && t.consequences['21'] && t.consequences['21'].severity === 'Catastrophic'; }, etId));
     // a refused gesture: a stamp dropped on empty canvas
     const before = await E(id => JSON.stringify(projectConfig.eventTrees.find(x => x.id === id)), etId);
@@ -240,7 +252,10 @@ let __page = null;
     await page.waitForFunction(() => !(window.SLChangeAck && SLChangeAck.pending()), null, { timeout: 6000 }).catch(() => {});   // the journal write after the confirmation is decided too
     const big = await E(async () => {
         const bars = []; for (let i = 0; i < 13; i++) bars.push({ name: 'Heading ' + (i + 1), pFail: 0.001 * (i + 1) });
-        projectConfig.eventTrees.push({ id: 'ET-BIG', name: 'Large', initiator: { desc: 'Big', freq: 1e-4 }, barriers: bars, consequences: {} });
+        const etBig = { id: 'ET-BIG', name: 'Large', initiator: { desc: 'Big', freq: 1e-4 }, barriers: bars, consequences: {} };
+        // 25 Oct 2026 (tree homes): a diagram belongs to a level; made here, it takes the level on screen (as + New does)
+        try { if (window.SLTreeHomes && SLTreeHomes.stamp) SLTreeHomes.stamp(etBig); } catch (_) {}
+        projectConfig.eventTrees.push(etBig);
         const t0 = performance.now(); SLEtaUI.select('ET-BIG'); const t1 = performance.now();
         const ed = SLEtaUI.editor(); const m = ed.model();
         const dom = ed.root.querySelectorAll('.sde-el').length;
@@ -282,7 +297,7 @@ let __page = null;
         await dragTool(btRoot, kind, bcv.x + bcv.width * fx, bcv.y + bcv.height * fy); await ack();
         const id = await E(k => { const s = SLBowtieUI.editor().selection(); return s[0]; }, kind);
         const q = await at('bt', id, 0.5, 0.45);
-        await page.mouse.dblclick(q.x, q.y); await wait(100); await page.keyboard.press('Control+A'); await page.keyboard.type(name); await page.keyboard.press('Enter'); await ack();
+        await page.mouse.dblclick(q.x, q.y); await wait(100); await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.type(name); await page.keyboard.press('Enter'); await ack();
         return id;
     };
     const hz = await place('hazard', 0.5, 0.12, 'Pressurized fuselage');
@@ -330,7 +345,7 @@ let __page = null;
     await connect('path', top, cq);
     fk = await E(id => bowtieEvaluate(projectConfig.bowties.find(x => x.id === id)).findings.map(f => f.kind), btId);
     check('a consequence reached with no mitigative barrier is a finding', fk.indexOf('consequence-unmitigated') >= 0, JSON.stringify(fk));
-    await page.locator(btRoot + ' .sde-canvas').focus(); await page.keyboard.press('Control+z'); await ack(); await page.keyboard.press('Control+z'); await ack();
+    await page.locator(btRoot + ' .sde-canvas').focus(); await page.keyboard.press('ControlOrMeta+z'); await ack(); await page.keyboard.press('ControlOrMeta+z'); await ack();
     check('Undo twice restores the barrier and its pathways', await E(([id, mb]) => { const b = projectConfig.bowties.find(x => x.id === id); return b.barriers.some(x => x.id === mb) && b.diagram.links.filter(l => l.from === mb || l.to === mb).length === 2; }, [btId, mb]));
     // model link: the threat is "about" an item of the architecture
     q = await at('bt', th); await page.mouse.click(q.x, q.y); await wait(80);
@@ -368,7 +383,7 @@ let __page = null;
     b = await E(id => projectConfig.bowties.find(x => x.id === id), abId);
     check('auto-build makes a stored drawing at once (threats, barriers on their lines, consequences)', b && b.diagram && b.diagram.elements.some(e => e.kind === 'threat') && b.diagram.links.length > 0 && b.barriers.some(x => x.side === 'mitigative'), JSON.stringify(b && b.diagram && b.diagram.elements.map(e => e.kind)));
     const thr = await E(() => SLBowtieUI.editor().model().elements.find(e => e.kind === 'threat').id);
-    q = await at('bt', thr, 0.5, 0.5); await page.mouse.dblclick(q.x, q.y); await wait(100); await page.keyboard.press('Control+A'); await page.keyboard.type('Latch not engaged before take-off'); await page.keyboard.press('Enter'); await ack();
+    q = await at('bt', thr, 0.5, 0.5); await page.mouse.dblclick(q.x, q.y); await wait(100); await page.keyboard.press('ControlOrMeta+A'); await page.keyboard.type('Latch not engaged before take-off'); await page.keyboard.press('Enter'); await ack();
     const m0 = await E(() => SLBowtieUI.editor().model().elements.find(e => e.kind === 'threat'));
     q = await at('bt', thr, 0.5, 0.5); await page.mouse.move(q.x, q.y); await page.mouse.down(); await page.mouse.move(q.x + 40, q.y + 60, { steps: 6 }); await page.mouse.up(); await ack();
     b = await E(id => projectConfig.bowties.find(x => x.id === id), abId);

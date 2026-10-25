@@ -1,5 +1,5 @@
 // ============================================================================
-// server_ai_key.js, v1.2, 23 Oct 2026 (v1.1 22 Oct, v1.0 21 Oct): the AI key of a customer's own server, set from the app.
+// server_ai_key.js, v1.3, 24 Oct 2026 (v1.2 23 Oct, v1.1 22 Oct, v1.0 21 Oct): the AI key of a customer's own server, set from the app.
 //
 // Waqas: "why cant he just save his API key directly in safety lab". On a customer's own server
 // the AI runs through that server, so the key belongs on the server, and until now the only way
@@ -9,6 +9,13 @@
 // it on the server and uses it from the next AI call. The key never comes back: this page can
 // only learn THAT a key is set and its last four characters. Everyone else sees who to ask.
 //
+// 24 Oct 2026 (v1.3, Radia): the box still empties when a save is tried (a pasted key never stays
+// in the page), so the RESULT now stays: it names the key it was about by its last four characters,
+// gives the time, carries Anthropic's own reason word for word (the server quotes it), and is
+// still there when the person leaves AI settings and comes back, until the next save or removal.
+// A Claude app sign-in token (sk-ant-oat) or an Admin key (sk-ant-admin) is named as such here,
+// before anything is sent, with the same words the server uses.
+//
 // Shown only on a customer's own server (the same test slab_seats.js uses); on Safety Lab's
 // cloud the AI is ours and this panel stays hidden.
 // ============================================================================
@@ -16,7 +23,7 @@
   'use strict';
   var W = (typeof window !== 'undefined') ? window : {};
   var _esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-  var busy = false, last = null;
+  var busy = false, last = null, result = '';   // result: the outcome of the last save or removal, kept until the next one
 
   function base() {
     var c = W.SLConfig || {};
@@ -67,6 +74,17 @@
     });
   }
   function host() { return document.getElementById('server-ai-key-panel'); }
+  // Same words as wrongKind in selfhost/ai-proxy/server_key.mjs (a test keeps them identical).
+  function wrongKind(k) {
+    var s = String(k || '').trim();
+    if (/^sk-ant-oat/i.test(s)) return "That is a Claude app sign-in token (it starts with sk-ant-oat), not an API key. A Claude subscription or Claude Code sign-in cannot run this server's AI. Create an API key at console.anthropic.com under API keys (it starts with sk-ant-api) and paste that. Nothing was saved.";
+    if (/^sk-ant-admin/i.test(s)) return "That is an Anthropic Admin key (it starts with sk-ant-admin), which manages an organization but cannot run AI requests. Create an API key at console.anthropic.com under API keys (it starts with sk-ant-api) and paste that. Nothing was saved.";
+    return '';
+  }
+  function clock() { try { var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); } catch (_) { return ''; } }
+  function last4(k) { k = String(k || ''); return k.length >= 8 ? k.slice(-4) : ''; }   // only these are kept, to say which key a result is about
+  function ending(t) { return t ? ' ending \u2026' + _esc(t) : ''; }
+  function failed(t, why) { return '<span style="color:var(--color-danger); font-weight:600;">Not saved</span> (' + clock() + ', the key' + ending(t) + '). ' + '<span style="color:var(--color-danger);">' + _esc(why) + '</span> Paste the key again to retry.'; }
 
   function statusLine(s) {
     if (!s || !s.set) return '<span style="color:var(--color-warning); font-weight:600;">No AI key on this server yet.</span> The AI buttons will not work until one is added.';
@@ -105,7 +123,7 @@
     if (!base()) { paint({}); return Promise.resolve(); }
     paint({ kind: 'loading' });
     return call('GET').then(function (r) {
-      if (r.status === 200) { last = r.data; paint({ kind: 'admin', s: r.data }); }
+      if (r.status === 200) { last = r.data; paint({ kind: 'admin', s: r.data, msg: result }); }
       else if (r.status === 403) paint({ kind: 'notadmin', s: null });
       else return explain(r, 'The server answered ' + r.status + ' without saying why.').then(function (m) { paint({ kind: 'error', msg: m }); });
     });
@@ -115,17 +133,21 @@
     var el = document.getElementById('server-ai-key-input');
     var key = el ? String(el.value || '').trim() : '';
     if (el) el.value = '';                              // never leave a pasted key sitting in the page
-    if (!key) { paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">Paste the key first.</span>' }); return Promise.resolve(); }
-    busy = true; paint({ kind: 'admin', s: last, msg: 'Checking the key with Anthropic…' });
+    if (!key) { paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">Paste the key first.</span>' + (result ? '<div style="margin-top:4px;">Last time: ' + result + '</div>' : '') }); return Promise.resolve(); }
+    var kind = wrongKind(key);
+    if (kind) { result = failed(last4(key), kind); key = ''; paint({ kind: 'admin', s: last, msg: result }); return Promise.resolve(); }
+    var tail = last4(key);
+    busy = true; paint({ kind: 'admin', s: last, msg: 'Checking the key' + ending(tail) + ' with Anthropic…' });
     return call('POST', { key: key }).then(function (r) {
       key = '';
       busy = false;
       if (r.status === 200) {
         last = r.data;
-        paint({ kind: 'admin', s: r.data, msg: '<span style="color:var(--color-success); font-weight:600;">Saved.</span> Everyone on this server can use the AI now.' });
+        result = '<span style="color:var(--color-success); font-weight:600;">Saved</span> (' + clock() + '). Everyone on this server can use the AI now.';
+        paint({ kind: 'admin', s: r.data, msg: result });
         try { if (typeof W.jrnl === 'function') W.jrnl('server-ai-key', 'Server AI key ' + (r.data.last4 ? '(ending ' + r.data.last4 + ') ' : '') + 'set from the app'); } catch (_) {}
       } else {
-        return explain(r, 'Not saved: the server answered ' + r.status + ' without saying why.').then(function (m) { paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(m) + '</span>' }); });
+        return explain(r, 'The server answered ' + r.status + ' without saying why.').then(function (m) { result = failed(tail, m); paint({ kind: 'admin', s: last, msg: result }); });
       }
     });
   }
@@ -135,8 +157,8 @@
       busy = true;
       return call('POST', { remove: true }).then(function (r) {
         busy = false;
-        if (r.status === 200) { last = r.data; paint({ kind: 'admin', s: r.data, msg: 'Removed.' + (r.data.set ? ' The server now uses the key in its settings file.' : '') }); }
-        else return explain(r, 'Not removed.').then(function (m) { paint({ kind: 'admin', s: last, msg: '<span style="color:var(--color-danger);">' + _esc(m) + '</span>' }); });
+        if (r.status === 200) { last = r.data; result = 'Removed (' + clock() + ').' + (r.data.set ? ' The server now uses the key in its settings file.' : ''); paint({ kind: 'admin', s: r.data, msg: result }); }
+        else return explain(r, 'Not removed.').then(function (m) { result = '<span style="color:var(--color-danger);">Not removed (' + clock() + '). ' + _esc(m) + '</span>'; paint({ kind: 'admin', s: last, msg: result }); });
       });
     };
     if (typeof W.slConfirm === 'function') return Promise.resolve(W.slConfirm('Remove the server\'s AI key? AI stops working for everyone on this server until a key is added again.', { title: 'Remove the AI key' })).then(function (ok) { if (ok) return go(); });
@@ -156,5 +178,5 @@
     W.switchTab = wrapped;
   })();
 
-  W.SLServerAiKey = { render: render, save: save, remove: remove, _base: base };
+  W.SLServerAiKey = { render: render, save: save, remove: remove, _base: base, _wrongKind: wrongKind };
 })();

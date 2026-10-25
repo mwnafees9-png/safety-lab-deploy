@@ -2423,6 +2423,8 @@ const cmaCRUD = makeCRUD({
     submitBtn: 'btn-submit-cma', cancelBtn: 'btn-cancel-cma', defaultText: 'Log CMA Entry',
     tableBody: 'cma-body',
     editFnName: 'editCMA', deleteFnName: 'deleteCMA',
+    // 25 Oct 2026: the rows of the level on screen, the aircraft or one system (level_view.js)
+    view: (row) => !(window.SLLevelView) || window.SLLevelView.shows('cma', row),
     renderCells: (row, actions) => {
         return '<td>' + _threadInKebab(actions, { kind:'cma', id: row.internalId }) + '</td>' +
             _renderScopeCell(row.scope, row.owningSystemId) +
@@ -2440,12 +2442,18 @@ const _origCmaSubmit = cmaCRUD.submit;
 const _origCmaEdit = cmaCRUD.edit;
 const _origCmaRender = cmaCRUD.render;
 window.submitCMA = function() {
+    // 25 Oct 2026: a new CMA belongs to the level on screen (level_view.js); an edited one keeps its own
+    if (editStates.cma == null) _cmaLevelForm();
     const scopeEl = document.getElementById('cma-scope');
     const scope = (scopeEl && scopeEl.value) || 'aircraft';
     if (scope === 'system') {
         const owner = (document.getElementById('cma-owning-system') || {}).value || '';
         if (!owner) { showToast('System-scope CMAs require an owning System Folder. Pick one or switch the scope to Aircraft.', 'warning', 4000); return; }
     }
+    const isNew = editStates.cma == null;
+    // read the owner now: the factory's submit clears the form (cancelEdit) before the fields below are written,
+    // so reading it afterwards always gave '' (25 Oct 2026: a system CMA lost its system that way)
+    const ownerNow = scope === 'system' ? ((document.getElementById('cma-owning-system') || {}).value || '') : '';
     const modes = _getCmaModesSelection();
     const linkedGateIds = _getCmaLinkedGatesSelection();
     // Capture editingId BEFORE _origCmaSubmit (the factory's cancelEdit clears editStates.cma).
@@ -2457,7 +2465,8 @@ window.submitCMA = function() {
         target.linkedGateIds = linkedGateIds;
         // Normalize the scope fields the factory just wrote.
         target.scope = scope;
-        target.owningSystemId = scope === 'system' ? ((document.getElementById('cma-owning-system') || {}).value || '') : '';
+        target.owningSystemId = ownerNow;
+        if (isNew) target.level = scope === 'system' ? 'system' : 'aircraft';
     }
     // Reset both checkbox lists after a new submission.
     populateCmaModesCheckboxes([]);
@@ -2466,11 +2475,28 @@ window.submitCMA = function() {
     try { AutoReq.recomputeFlags('ac'); systemsData.forEach(s => AutoReq.recomputeFlags('sys-' + s.id)); } catch(e){}
     if (typeof renderACReq === 'function') renderACReq();
     if (typeof renderSysReq === 'function') renderSysReq();
-    // Reset scope picker to default for next entry.
-    if (scopeEl) scopeEl.value = 'aircraft';
-    onCmaScopeChange();
+    // the form is back on the level on screen for the next entry
+    _cmaLevelForm();
     renderCMA();
 };
+// 25 Oct 2026: the CMA form takes its level from where you are (level_view.js), the way a fault tree takes its
+// home: the scope picker is set from the level on screen and hidden; the form says which level a new row joins.
+function _cmaLevelForm() {
+    const LV = window.SLLevelView; if (!LV) return;
+    const v = LV.view();
+    const scopeEl = document.getElementById('cma-scope');
+    if (scopeEl) scopeEl.value = v == null ? 'aircraft' : 'system';
+    populateCmaOwningSystem(v == null ? '' : v);
+    const own = document.getElementById('cma-owning-system'); if (own) own.value = v == null ? '' : v;
+    const box = scopeEl && scopeEl.closest('div[style*="grid-template-columns: 1fr 2fr"]');
+    if (box) {
+        box.style.display = 'none';
+        let t = document.getElementById('cma-level-note');
+        if (!t) { t = document.createElement('div'); t.id = 'cma-level-note'; t.style.cssText = 'font-size:12px;margin-bottom:var(--s-3);color:var(--color-text-secondary)'; box.parentNode.insertBefore(t, box); }
+        const name = v == null ? 'the aircraft' : (((systemsData || []).find(s => String(s.id) === String(v)) || {}).name || v);
+        t.textContent = 'New entries join ' + (v == null ? 'the aircraft-level CMA' : name + '\u2019s CMA') + '.';
+    }
+}
 window.editCMA = function(iId) {
     _origCmaEdit(iId);
     const row = cmaData.find(r => String(r.internalId) === String(iId));   // 28 Aug 2026 — numeric-id rows vs the kebab's string id
@@ -4939,7 +4965,7 @@ window._bulkSel = new Set();
         'fta-event':      'FTA basic event → Reliability allocation',
         'fta-interval':   'FTA basic event → Maintenance interval (CMR candidate)',
         'dalgebra':       'DALgebra carrier node → FDAL/IDAL allocation',
-        'dalgebra-default': 'DALgebra → Default DAL statement (compressed mode)',
+        'dalgebra-default': 'DALgebra → Default DAL statement (retired 24 Oct 2026: one requirement per function and item)',
         'gate-indep-and': 'AND gate → Functional independence claim',
         'gate-indep-dev': 'AND gate → Development independence (DAL reduction predicate)',
         'gate-indep-phys':'AND gate → Physical separation (Catastrophic top)',

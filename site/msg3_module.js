@@ -115,12 +115,16 @@
         const isMsi = msg3IsMsi(sel);
         if (!isMsi) {
             _store().screened = _store().screened || [];
-            _store().screened.push({ id: 'SCR-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, at: new Date().toISOString(), modelLinks: draft.modelLinks });
+            const _scr = { id: 'SCR-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, at: new Date().toISOString(), modelLinks: draft.modelLinks };
+            try { if (window.SLLevelView) window.SLLevelView.stamp('msg3', _scr); } catch (_) {}   // 25 Oct 2026: the level on screen
+            _store().screened.push(_scr);
             _save();
             _toast('All four selection questions NO — recorded as screened out (auditable), not an MSI. Note: SHM systems not selected as MSI go to the Structures WG for awareness (IP-105).', 'info', 6000);
             renderMsg3Page(); return;
         }
-        _store().msis.push({ id: 'MSI-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, ffs: [], modelLinks: draft.modelLinks });
+        const _msi = { id: 'MSI-' + Date.now(), name: name.trim(), itemId: itemId.trim(), sel, ffs: [], modelLinks: draft.modelLinks };
+        try { if (window.SLLevelView) window.SLLevelView.stamp('msg3', _msi); } catch (_) {}   // 25 Oct 2026: the level on screen
+        _store().msis.push(_msi);
         _save(); renderMsg3Page();
     }
     function msg3IsMsi(sel) { return !!(sel && (sel.hidden || sel.safety || sel.ops || sel.econ)); }
@@ -183,11 +187,14 @@
         if (typeof window._ramStore !== 'function') { _toast('RAM module not loaded.', 'error', 3000); return; }
         const ledger = window._ramStore();
         const id = 'RAM-' + Date.now();
-        ledger.tasks.push({
+        const _row = {
             id, name: task.type + ' · ' + (task.desc || m.name), itemId: m.itemId || '', beRef: '',
             activeRepair: 0, logistics: 0, admin: 0, interval: task.interval || 0, demonstrated: null, by: '',
             msg3: m.id + '/' + ff.id,
-        });
+        };
+        // 25 Oct 2026: the task takes the level of the significant item it came from (level_view.js)
+        try { if (window.SLLevelView) window.SLLevelView.stamp('ramTask', _row, window.SLLevelView.sysOf('msg3', m)); } catch (_) {}
+        ledger.tasks.push(_row);
         task.pushedTaskId = id;
         _save();
         _toast('Task pushed to the MTTR/MDT ledger — link its basic event there and apply → τ to bound it in CCMR.', 'success', 4500);
@@ -206,12 +213,16 @@
             return;
         }
         const S = _store();
-        const nFf = S.msis.reduce((a, m) => a + m.ffs.length, 0);
-        const nRedesign = S.msis.reduce((a, m) => a + m.ffs.filter(f => msg3Disposition(f).state === 'redesign').length, 0);
-        const nPushed = S.msis.reduce((a, m) => a + m.ffs.reduce((b, f) => b + f.tasks.filter(t => t.pushedTaskId).length, 0), 0);
+        // 25 Oct 2026 (level_view.js): the significant items of the level on screen, the aircraft or one system
+        const LV = window.SLLevelView;
+        try { if (LV) LV.mount('msg3'); } catch (_) {}
+        const msis = LV ? S.msis.filter(m => LV.shows('msg3', m)) : S.msis;
+        const nFf = msis.reduce((a, m) => a + m.ffs.length, 0);
+        const nRedesign = msis.reduce((a, m) => a + m.ffs.filter(f => msg3Disposition(f).state === 'redesign').length, 0);
+        const nPushed = msis.reduce((a, m) => a + m.ffs.reduce((b, f) => b + f.tasks.filter(t => t.pushedTaskId).length, 0), 0);
 
         let html = '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">' +
-            ['MSIs <b style="margin-left:6px;">' + S.msis.length + '</b>',
+            ['MSIs <b style="margin-left:6px;">' + msis.length + '</b>',
              'Functional failures <b style="margin-left:6px;">' + nFf + '</b>',
              'Redesign flags <b style="margin-left:6px;' + (nRedesign ? 'color:#8E2A2A;' : '') + '">' + nRedesign + '</b>',
              'Tasks in ledger <b style="margin-left:6px;">' + nPushed + '</b>']
@@ -220,9 +231,9 @@
             '<div style="margin:0 0 12px;"><button class="btn-cyan" onclick="msg3AddMsi()">+ Add MSI</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">Level 1: click the Evident / Safety / Operational cells to cycle YES / NO · category derives · Level 2: tasks in MSG-3 order · categories 5 &amp; 8 demand an applicable &amp; effective task or redesign</span></div>';
 
-        if (!S.msis.length) html += '<p style="color:var(--color-text-tertiary); font-size:13px;">No Maintenance Significant Items yet — start with the LRUs whose failure is safety-significant, hidden, or economically heavy.</p>';
+        if (!msis.length) html += '<p style="color:var(--color-text-tertiary); font-size:13px;">No Maintenance Significant Items yet — start with the LRUs whose failure is safety-significant, hidden, or economically heavy.</p>';
 
-        S.msis.forEach(m => {
+        msis.forEach(m => {
             html += '<div style="border:1px solid var(--color-border-strong); margin-bottom:16px; background:var(--color-surface-1);">' +
                 '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:2px solid var(--color-text-primary);">' +
                 '<div><b>' + _esc(m.name) + '</b>' + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('msg3Msi', m) : (m.itemId ? ' <span class="u-mono" style="font-size:11px; color:var(--color-text-tertiary);">' + _esc(m.itemId) + '</span>' : '')) +
@@ -263,7 +274,7 @@
             html += '</tbody></table></div></div>';
         });
 
-        const scr = S.screened || [];
+        const scr = LV ? (S.screened || []).filter(x => LV.shows('msg3', x)) : (S.screened || []);
         if (scr.length) {
             html += '<h3 style="margin-top:var(--s-4);">Screened out — selection questions all NO (auditable register)</h3>' +
                 '<table class="data-table" style="width:100%;  font-size:12px;"><tbody>' +

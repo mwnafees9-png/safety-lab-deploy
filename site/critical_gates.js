@@ -196,8 +196,16 @@
 
     // ---- CMA page panel ------------------------------------------------------------
     var _showAll = false;
+    // 25 Oct 2026 (found testing the live app): the CMA page shows the level on screen (level_view.js), so this panel
+    // lists the gates of that level's trees only: the aircraft's trees, or one system's PSSA and SSA trees. The
+    // advisory check (INV-58) still looks at every tree.
+    function _inLevel(res) {
+        var LV = root.SLLevelView; if (!LV || !LV.showsPage) return true;
+        var p = _pages().find(function (x) { return x && String(x.id) === String(res.pageId); });
+        return !p || LV.showsPage(p);
+    }
     function panelHtml() {
-        var all = analyzeAll();
+        var all = analyzeAll().filter(_inLevel);
         var body = '';
         var nCrit = 0, nRev = 0, nGates = 0;
         all.forEach(function (res) {
@@ -220,7 +228,7 @@
                     + '<td>' + revCell + '</td></tr>';
             });
         });
-        if (!all.length) body = '<tr><td colspan="8" style="color:var(--color-text-secondary);">No fault tree is linked to a failure condition with a probability objective yet. Link a tree to its failure condition and the test runs here.</td></tr>';
+        if (!all.length) body = '<tr><td colspan="8" style="color:var(--color-text-secondary);">No fault tree at this level is linked to a failure condition with a probability objective yet. Link a tree to its failure condition and the test runs here.</td></tr>';
         else if (!body) body = '<tr><td colspan="8" style="color:var(--color-text-secondary);">No critical AND gates: every failure condition stays inside its budget even if any single independence claim is lost.</td></tr>';
         var summary = nGates + ' AND gates tested · <b>' + nCrit + ' critical</b> · ' + nRev + ' of those reviewed · ' + (nCrit - nRev) + ' need a review';
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;">'

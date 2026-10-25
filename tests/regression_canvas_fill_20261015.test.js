@@ -184,7 +184,9 @@ async function browserPhase() {
                 window._ramHasAccess = () => true;   // the RBD lane is Pro+; layout is what is under test here
             });
             for (const o of VIEWS) {
-                await page.evaluate(v => { switchTab(v); window.__ung(); }, o.v);
+                // 24 Oct 2026 (tree_homes.js): the diagram pages show the level being worked on; a Markov model no tree
+                // uses belongs to Standalone (HL-1's), so its page opens there
+                await page.evaluate(v => { if (v === 'markov' && window.SLTreeHomes) { const m = (projectConfig.markovModels || [])[0]; const l = m ? SLTreeHomes.itemLevel('markov', m) : null; if (l) SLTreeHomes.openDiagrams(l.level === 'aircraft' ? 'pasa' : l.level === 'system' ? 'pssa' : 'standalone', l.systemId); } switchTab(v); window.__ung(); }, o.v);
                 await page.waitForTimeout(900);
                 if (o.v === 'stpa') { await page.evaluate(() => STPA_PANEL.go(2)); await page.waitForTimeout(500); }
                 if (o.v === 'ram-rbd' && !(await page.evaluate(() => !!document.querySelector('#view-ram-rbd .sde')))) {

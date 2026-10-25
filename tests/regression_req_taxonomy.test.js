@@ -163,7 +163,9 @@ console.log('\n[taxonomy] the generators emit the class AND the analysis');
         /type: 'Maintainability', analysis: 'Maintenance'/.test(asr));
     check('independence, DAL and probability requirements are all Safety class',
         (asr.match(/type: 'Safety', analysis: 'Independence'/g) || []).length === 10 &&
-        (asr.match(/type: 'Safety', analysis: 'Design Assurance'/g) || []).length === 4 &&
+        // 24 Oct 2026: 4 -> 2, the compressed default-DAL mode (its default line and its exception line) is retired:
+        // one requirement per function and item from DALgebra (explicit), plus the FHA function DAL
+        (asr.match(/type: 'Safety', analysis: 'Design Assurance'/g) || []).length === 2 &&
         // A3 (22 Aug 2026) added the collapsed provider-resource L3 — a third
         // Safety/Probabilistic emitter (the consumer side is Interface class).
         (asr.match(/type: 'Safety', analysis: 'Probabilistic'/g) || []).length === 3);

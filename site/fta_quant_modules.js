@@ -2367,6 +2367,8 @@ function addMarkovModel() {
         transitions: [{ id: _mkNewId('tr'), from: 'Working', to: 'Failed', rate: 1e-5, kind: 'failure' }],
         initialState: 'Working'
     };
+    // 24 Oct 2026 (tree_homes.js): a model made now belongs to the level being worked on (until a tree uses it)
+    try { if (typeof SLTreeHomes !== 'undefined' && SLTreeHomes.stamp) SLTreeHomes.stamp(m); } catch (_) {}
     (projectConfig.markovModels = projectConfig.markovModels || []).push(m);
     try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
     renderMarkovModels();
@@ -2508,8 +2510,11 @@ function renderMarkovModels() {
     if (typeof SLLazy !== 'undefined' && SLLazy.defer('markov-models-container', 'renderMarkovModels', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const container = document.getElementById('markov-models-container');
     if (!container) return;
-    const models = (projectConfig && projectConfig.markovModels) || [];
-    if (models.length === 0) { container.innerHTML = '<p style="color: var(--text-secondary); font-style: italic; padding: 10px;">No Markov models defined. Click + Add Markov Model to create one.</p>'; try { if (window.SLMarkovDiagram) SLMarkovDiagram.attach(container); } catch (_) {} return; }
+    // 24 Oct 2026 (tree_homes.js): the models of the level being worked on: those the level's trees use, else
+    // the level a model was made at, else Standalone
+    const _allModels = (projectConfig && projectConfig.markovModels) || [];
+    const models = (typeof SLTreeHomes !== 'undefined' && SLTreeHomes.inLevel) ? _allModels.filter(m => SLTreeHomes.inLevel('markov', m)) : _allModels;
+    if (models.length === 0) { container.innerHTML = '<p style="color: var(--text-secondary); font-style: italic; padding: 10px;">No Markov models at this level. Click + Add Markov Model to create one.</p>'; try { if (window.SLMarkovDiagram) SLMarkovDiagram.attach(container); } catch (_) {} return; }
     container.innerHTML = models.map(m => {
         const result = solveMarkovModel(m);
         const starts = _markovStartProbs(m);

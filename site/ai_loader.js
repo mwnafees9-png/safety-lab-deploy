@@ -1,3 +1,5 @@
+// 25 Oct 2026: ai_assistant.js bumped to v76.87 (the AI/ML assurance correction capture is removed with the lane).
+// 24 Oct 2026: ai_assistant.js bumped to v76.86 (the assistant's add / update / delete interface actions are refused: interfaces come from Sys Lab or a SysML import).
 // 22 Oct 2026: ai_assistant.js bumped to v76.85 (failure conditions are drafted for the bottom of each function branch, with the full path as context).
 // 16 Oct 2026: ai_assistant.js bumped to v76.83 (the AI Inputs modal is replaced by the AI Assistant page, ai_inputs_page.js).
 // 15 Oct 2026: ai_assistant.js bumped to v76.82 (PDF text keeps printed lines and paragraphs via pdf_text.js v1.0, loaded just before it).
@@ -25,7 +27,7 @@
 (function () {
     'use strict';
 
-    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'pdf_text.js?v=1.0', 'ai_assistant.js?v=76.85', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
+    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'pdf_text.js?v=1.0', 'ai_assistant.js?v=76.87', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
     let _loading = null;
 
     window.slLoadAI = function () {

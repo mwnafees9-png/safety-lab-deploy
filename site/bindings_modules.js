@@ -1222,48 +1222,18 @@ window.setCmaScopeFilter = function(scope) {
 window.renderCMA = function() {
     // Re-populate the owning-system dropdown each render so it stays in sync with systemsData.
     populateCmaOwningSystem();
-    onCmaScopeChange();
+    // 25 Oct 2026 (level_view.js): the level on screen decides which rows show and where a new row goes; the
+    // All / Aircraft / System chips are gone (the level comes from the navigation, the way a tree's home does).
+    // An edit in progress keeps its row's own level on the form.
+    if (editStates.cma == null && typeof _cmaLevelForm === 'function') _cmaLevelForm(); else onCmaScopeChange();
+    try { const fb = document.querySelector('[data-cma-scope]'); if (fb && fb.parentNode) fb.parentNode.style.display = 'none'; } catch (_) {}
+    try { if (window.SLLevelView) window.SLLevelView.mount('cma'); } catch (_) {}
     // Keep the linked-gates dropdown in sync with the current FTA pages.
     populateCmaLinkedGatesDropdown();
     // 13 Oct 2026 (fix 6): the common cause decision log sits under the CMA table, in every scope.
     try { if (window.SLCmaLive) window.SLCmaLive.renderLogPanel(); } catch (_) {}
-    if (_cmaScopeFilter === 'all') {
-        _origCmaRender();
-        return;
-    }
-    // Temporarily filter the store by swapping the body innerHTML after the base render.
+    // the worksheet's own render shows the rows of the level on screen (cmaCRUD view), paged like every other
     _origCmaRender();
-    const tbody = document.getElementById('cma-body');
-    if (!tbody) return;
-    // Filter rows in-place by matching data attribute we'll add: re-render manually instead.
-    const rows = (cmaData || []).filter(r => ((r.scope || 'aircraft') === _cmaScopeFilter));
-    // 6 Sep 2026 — the scope-filtered view pages through the shared pager like the unfiltered
-    // one (it used to render every filtered row at once). Key carries the scope so each
-    // filter remembers its own page.
-    const _cmaRowHtml = row => {
-        const actions = rowActionsHTML('editCMA', 'deleteCMA', row.internalId);
-        // Phase 53.73 — Review column on filtered CMA rows.
-        const reviewTd = reviewCellHtml('cma', row.internalId, null);
-        return '<tr>' +
-            '<td>' + actions + '</td>' +
-            _renderScopeCell(row.scope, row.owningSystemId) +
-            '<td><strong>' + esc(row.cmaId) + '</strong></td>' +
-            '<td>' + _cmaSuggestBadge(row) + esc(row.subject) + '</td>' +
-            '<td>' + esc(row.claim) + '</td>' +
-            '<td>' + _renderCmaLinkedGatesCell(row.linkedGateIds) + '</td>' +
-            '<td>' + _renderCmaModesCell(row.modes) + '</td>' +
-            '<td>' + esc(row.findings) + '</td>' +
-            '<td>' + esc(row.mitigation) + '</td>' +
-            '<td>' + _renderCmaStatusCell(row.status) + '</td>' +
-            reviewTd +
-        '</tr>';
-    };
-    if (typeof SLPaginate !== 'undefined' && typeof SLPaginate.pageTbody === 'function') {
-        SLPaginate.pageTbody({ key: 'cma-' + _cmaScopeFilter, tbody, rows, rowHtml: _cmaRowHtml,
-            label: (f, t, n) => 'rows ' + f.toLocaleString() + '–' + t.toLocaleString() + ' of ' + n.toLocaleString() + ' in this scope — counts computed over the full set' });
-    } else {
-        tbody.innerHTML = rows.map(_cmaRowHtml).join('');
-    }
 };
 
 // 13 Oct 2026 (fix 6 part B): SUPERSEDED. This button used to stage SUGGESTED shared-resource
@@ -2260,9 +2230,9 @@ const _GTV_LNAME  = { func:'Function', sys:'System', stpa:'STPA', fc:'Failure co
 
 const _GTV_COLOR  = { func:'#2E6FB0', sys:'#1D9E75', stpa:'#6D28D9', fc:'#7F77DD', fta:'#D85A30', cca:'#BA7517', ph:'#A8552E', ip:'#0E7490', req:'#D4537E', vv:'#639922', ram:'#C88A00', hf:'#7A3EA8' };
 
-const _GTV_FLAGC  = { compromised:'#E2524A', obsolete:'#6B7280', stale:'#E0A53A' };
+const _GTV_FLAGC  = { compromised:'#E2524A', obsolete:'#6B7280', stale:'#E0A53A', finding:'#E0A53A' };
 
-const _GTV_FLAGM  = { compromised:'⚠ ', obsolete:'⊘ ', stale:'↻ ' };
+const _GTV_FLAGM  = { compromised:'⚠ ', obsolete:'⊘ ', stale:'↻ ', finding:'⚑ ' };
 
 let _gtvEcoEscHandler = null;
 

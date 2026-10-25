@@ -745,13 +745,24 @@ const AutoReq = (function(){
             isRedundant:          _rollupChartProp(members, 'isRedundant', false),
             isSimpleConventional: _rollupChartProp(members, 'isSimpleConventional', false)
         };
-        // Union of phases (comma-separated lists in each member).
+        // 25 Oct 2026 (Waqas: "auto req should just be picking the most conservative phases and generating
+        // requirements against those"): the requirement is written against the phases of the MOST SEVERE
+        // classification only; the stricter objective covers every milder phase, which is named in the
+        // rationale with its own classification (never dropped). Was: the union of every member's phases.
+        const _ph = m => ((m && m.phases) ? String(m.phases) : '').split(/[,;\/|]/).map(x => x.trim()).filter(Boolean);
         const phasesSet = new Set();
-        members.forEach(m => {
-            const s = (m && m.phases) ? String(m.phases) : '';
-            s.split(',').map(x => x.trim()).filter(Boolean).forEach(p => phasesSet.add(p));
-        });
+        members.forEach(m => { if (m && m.severity === canonical.severity) _ph(m).forEach(p => phasesSet.add(p)); });
         out.phases = Array.from(phasesSet).join(', ');
+        const milder = new Map();   // phase -> its most severe milder classification
+        members.forEach(m => {
+            if (!m || m.severity === canonical.severity) return;
+            _ph(m).forEach(p => {
+                if (phasesSet.has(p)) return;
+                const was = milder.get(p);
+                milder.set(p, was ? moreRestrictiveSev(was, m.severity) : m.severity);
+            });
+        });
+        out._milderPhases = Array.from(milder.entries()).map(e => ({ phase: e[0], severity: e[1] }));
         // Union of subIds across all members.
         const subSet = new Set();
         members.forEach(m => {
@@ -957,8 +968,20 @@ const AutoReq = (function(){
             if (t.prob === null) return;   // no quantitative target (shouldn't happen for Cat/Haz/Maj)
 
             const fcSubject = _midSentence(fha.fcDesc || (fha.fcId ? 'failure condition ' + fha.fcId : 'the identified failure condition'));
-            const phaseLabel = fha.phases ? fha.phases : 'all applicable flight phases';
-            const phaseClause = fha.phases ? ` during ${fha.phases}` : '';
+            // 25 Oct 2026: the phases of the most severe classification only (_canonicalizeFhaGroup); every
+            // phase of the flight phase table -> "in any phase of flight"; the milder phases go to the rationale
+            const govPhases = (fha.phases ? String(fha.phases) : '').split(/[,;\/|]/).map(x => x.trim()).filter(Boolean);
+            let allPhases = [];
+            try { allPhases = ((typeof flightPhasesData !== 'undefined' && Array.isArray(flightPhasesData)) ? flightPhasesData : []).map(p => String((p && p.phase) || '').trim().toLowerCase()).filter(Boolean); } catch (_) {}
+            const govLc = govPhases.map(x => x.toLowerCase());
+            const everyPhase = govPhases.length > 0 && allPhases.length > 0 && allPhases.every(x => govLc.indexOf(x) >= 0);
+            const joinPhases = arr => arr.length <= 1 ? arr.join('') : arr.slice(0, -1).join(', ') + ' and ' + arr[arr.length - 1];
+            const phaseLabel = !govPhases.length ? 'all applicable flight phases' : everyPhase ? 'every phase of flight' : govPhases.join(', ');
+            const phaseClause = !govPhases.length ? '' : everyPhase ? ' in any phase of flight' : ` during ${joinPhases(govPhases)}`;
+            const milder = fha._milderPhases || [];
+            const milderRat = milder.length
+                ? ` Milder in ${milder.map(m => m.phase + ' (' + m.severity + ')').join(', ')}: covered by this objective.`
+                : '';
             let linkRat = '';
             if(linkedSysFha){
                 const winner = effSev === fha.severity ? 'AC' : 'System';
@@ -1006,7 +1029,7 @@ const AutoReq = (function(){
                     : `The probability of ${fcSubject}${phaseClause} shall not exceed ${t.prob.toExponential(2)} per flight hour.`,
                 rat: `${fha.fcId ? fha.fcId + ' — ' : ''}${effSev} per ${certBasis.acRef}.` +
                      (pFc != null ? ` Equivalent to ≤ ${t.prob.toExponential(2)} per flight hour averaged over the ${mhFc.toFixed(2)} h flight envelope (cert-basis form).` : '') +
-                     `${linkRat} Phase: ${phaseLabel}.${exposureRat}${implRat}`,
+                     `${linkRat} Phase: ${phaseLabel}.${milderRat}${exposureRat}${implRat}`,
                 level: 'L1', type: 'Safety', analysis: 'Probabilistic',
                 verifMethod: 'Analysis',
                 traceId: fha.subId || '',
@@ -1015,6 +1038,7 @@ const AutoReq = (function(){
                     sourceId: `${scopeKey}:fha:prob:${fha.internalId}`,
                     context: {
                         severity: fha.severity, phases: fha.phases, fcId: fha.fcId,
+                        milderPhases: milder.map(m => m.phase + ':' + m.severity),
                         effSeverity: effSev, dal: t.dal, prob: t.prob, scope: t.scope,
                         linkedSysFcId: linkedSysFha ? linkedSysFha.fcId : null,
                         linkedSysSeverity: linkedSysFha ? linkedSysFha.severity : null,
@@ -1029,7 +1053,8 @@ const AutoReq = (function(){
                         // CCMR pair-trace — the maintenance requirements that implement this one.
                         implementedBy:   implIds
                     },
-                    fingerprint: fp('fha-prob', 'v2', fha.severity, fha.phases, fha.fcId, fha.fcDesc,
+                    fingerprint: fp('fha-prob', 'v3', fha.severity, fha.phases, fha.fcId, fha.fcDesc,
+                                    milder.map(m => m.phase + ':' + m.severity).sort(), everyPhase ? 'every' : '',
                                     t.dal, t.prob, t.scope,
                                     linkedSysFha ? linkedSysFha.fcId : '',
                                     linkedSysFha ? linkedSysFha.severity : '',
@@ -1164,7 +1189,9 @@ const AutoReq = (function(){
                 if (!f || (SEV_ORDER[cand.severity] || 0) > (SEV_ORDER[f.severity] || 0)) f = cand;
             }
             if (!f || !f.phases) return;
-            const exp = getPhaseExposureRatio(f.phases);
+            // 24 Oct 2026 (fc_auto_trees.js): several linked rows with the worst classification: their phases add up
+            const _gp = (typeof slGoverningPhases === 'function') ? slGoverningPhases(p) : '';
+            const exp = getPhaseExposureRatio(_gp || f.phases);
             pageExposure.set(p.id, Object.assign({}, exp, { fhaFcId: f.fcId, fhaSeverity: f.severity }));
         });
 
@@ -1625,15 +1652,8 @@ const AutoReq = (function(){
 
     // ----- Generator 3: DALgebra → DAL allocation requirements -----
     // Phase 56.49f — Two output modes:
-    //   compressed (default): emit one default-DAL statement covering the
-    //     dominant (modal) DAL/kind combination across the scope, plus a
-    //     per-node exception line for every node whose DAL differs from the
-    //     default. ~70% fewer lines on typical trees where OR pass-through
-    //     keeps most nodes at the same DAL.
-    //   explicit: emit one per-node DAL line as before. Engineers (or their
-    //     DERs) who prefer everything spelled out can flip the toggle in the
-    //     AutoReq settings panel.
-    // Toggle stored on projectConfig.autoreqDalMode (default 'compressed').
+    //   One requirement per function and item (24 Oct 2026; the compressed default-DAL mode and its
+    //   projectConfig.autoreqDalMode toggle are retired, see the emit below).
     function genDALgebra(scopeKey){
         const out = [];
         // Option-based DALgebra rationale (ARP4754B §5.2.3 / ARP4761A Table P2). The standards define
@@ -1675,8 +1695,6 @@ const AutoReq = (function(){
             if (d.basis === 'inherit') return a.kind + ' ' + a.dal + ' inherited from the top level — an OR/XOR/VOTING member whose single failure causes the condition takes the full FC DAL (' + tp2 + ', single-member basis).';
             return a.kind + ' ' + a.dal + ' allocated by top-down apportionment from the linked failure condition severity (' + tp2 + ').';
         }
-        const mode = (typeof projectConfig === 'object' && projectConfig && projectConfig.autoreqDalMode === 'explicit')
-            ? 'explicit' : 'compressed';
         // First pass — collect every unique-logicalId DAL allocation in the
         // scope. We then either emit them all (explicit) or compute the
         // modal default and emit the exceptions (compressed).
@@ -1755,77 +1773,25 @@ const AutoReq = (function(){
         const _disagreeFpTokens = a => a._disagree && a._disagree.length
             ? ['a5-strictest', a._disagree.slice().sort()] : [];
 
-        // Phase 56.49f — emit per mode.
-        if (mode === 'explicit') {
-            perLid.forEach(a => {
-                out.push({
-                    text: `${a.node.name || a.node.displayId || 'Item'} shall be developed to ${a.kind} ${a.dal}.`,
-                    rat: _dalgebraRat(a) + _disagreeRat(a),
-                    level: 'L2', type: 'Safety', analysis: 'Design Assurance',
-                    verifMethod: 'Inspection',
-                    traceId: a.node.displayId || '',
-                    reqSource: {
-                        generator: 'dalgebra',
-                        sourceId: `${scopeKey}:dalgebra:${a.page.id}:${a.lid}`,
-                        context: { dal: a.dal, dalOption: a.opt, kind: a.kind, type: a.node.type, treeLevel: a.level, disagree: a._disagree.length ? a._disagree : undefined },
-                        fingerprint: fp('dalgebra', a.dal, a.opt, a.kind, a.node.type, a.level, ...(_disagreeFpTokens(a))),
-                        generatedAt: Date.now()
-                    }
-                });
-            });
-            return out;
-        }
-
-        // Compressed mode: compute modal (kind, dal) combo across all per-lid
-        // governing allocations (A5 — one physical item, one strictest DAL).
-        if (perLid.length === 0) return out;
-        const tally = new Map();   // "kind|dal" → count
+        // 24 Oct 2026 (Waqas): ONE requirement per function and item, each read from what DALgebra derived for it
+        // in its tree, with that derivation in its rationale and its own trace. The FHA sets the function DAL
+        // (fha-dal); the fault trees reduce it where independence is substantiated. The former "compressed" mode
+        // (one scope-wide "each function shall be developed to FDAL A unless ..." line plus exceptions) is retired:
+        // a summary line cannot be traced to a failure condition, verified item by item or flowed down, and it
+        // silently changes meaning when one item moves. Stored default rows become "source gone" orphans on the
+        // next generation (the engineer decides; nothing is removed automatically).
         perLid.forEach(a => {
-            const k = a.kind + '|' + a.dal;
-            tally.set(k, (tally.get(k) || 0) + 1);
-        });
-        let defaultKey = null, defaultCount = 0;
-        tally.forEach((c, k) => { if (c > defaultCount) { defaultCount = c; defaultKey = k; } });
-        const [defaultKind, defaultDal] = defaultKey.split('|');
-
-        // Emit the default-DAL statement only if at least 2 allocations share it;
-        // otherwise every line is an exception and the compressed form gains nothing.
-        if (defaultCount >= 2) {
-            const scopeLabel = scopeKey === 'ac' ? 'aircraft' : 'system';
-            out.push({
-                text: `Each ${defaultKind === 'FDAL' ? 'function' : 'item'} within ${scopeLabel} scope shall be developed to ${defaultKind} ${defaultDal} unless a ${defaultKind === 'FDAL' ? 'function' : 'item'}-specific allocation requirement states otherwise.`,
-                rat: `Default applies to ${defaultCount} of ${perLid.length} ${defaultKind === 'FDAL' ? 'functions' : 'items'} in scope; the exceptions are stated as individual allocation requirements. Per ARP4754B §5.2.3 / ARP4761A Table P2.`,
-                level: 'L2', type: 'Safety', analysis: 'Design Assurance',
-                verifMethod: 'Inspection',
-                traceId: '',
-                reqSource: {
-                    generator: 'dalgebra-default',
-                    sourceId: `${scopeKey}:dalgebra-default:${defaultKey}`,
-                    context: { defaultDal, defaultKind, defaultCount, totalCount: perLid.length },
-                    fingerprint: fp('dalgebra-default', 'v2', defaultDal, defaultKind, defaultCount, perLid.length),
-                    generatedAt: Date.now()
-                }
-            });
-        }
-
-        // Exception requirements: any allocation that doesn't match the default.
-        // (Or if defaultCount < 2, every allocation becomes an "exception" — same
-        // output as explicit mode, which is fine.)
-        const emitAll = defaultCount < 2;
-        perLid.forEach(a => {
-            const aKey = a.kind + '|' + a.dal;
-            if (!emitAll && aKey === defaultKey) return;
             out.push({
                 text: `${a.node.name || a.node.displayId || 'Item'} shall be developed to ${a.kind} ${a.dal}.`,
-                rat: 'Exception to default. ' + _dalgebraRat(a) + _disagreeRat(a),
+                rat: _dalgebraRat(a) + _disagreeRat(a),
                 level: 'L2', type: 'Safety', analysis: 'Design Assurance',
                 verifMethod: 'Inspection',
                 traceId: a.node.displayId || '',
                 reqSource: {
                     generator: 'dalgebra',
                     sourceId: `${scopeKey}:dalgebra:${a.page.id}:${a.lid}`,
-                    context: { dal: a.dal, dalOption: a.opt, kind: a.kind, type: a.node.type, treeLevel: a.level, isException: !emitAll, disagree: a._disagree.length ? a._disagree : undefined },
-                    fingerprint: fp('dalgebra', a.dal, a.opt, a.kind, a.node.type, a.level, defaultKey, ...(_disagreeFpTokens(a))),
+                    context: { dal: a.dal, dalOption: a.opt, kind: a.kind, type: a.node.type, treeLevel: a.level, disagree: a._disagree.length ? a._disagree : undefined },
+                    fingerprint: fp('dalgebra', a.dal, a.opt, a.kind, a.node.type, a.level, ...(_disagreeFpTokens(a))),
                     generatedAt: Date.now()
                 }
             });
@@ -2558,83 +2524,12 @@ const AutoReq = (function(){
         return out;
     }
 
-    // ----- Generator 8: interface register -> ARP4754B §5.3.1.8 interface requirements -----
-    //
-    // §5.3.1.8 asks for the interconnections plus the relevant characteristics of
-    // the information communicated; every input with a source and every output
-    // destination defined; and descriptions that fully describe signal behaviour.
-    // projectConfig.interfaces holds exactly those fields — fromSystemId,
-    // fromFuncId, toSystemId, toFuncId, kind, medium, direction, icdRef,
-    // resourceId — and is already read by cea_graph, sneak_module,
-    // oos_independence and gt_integrity. Nothing was turning it into requirements.
-    //
-    // The clause's own completeness conditions are checkable, so an incomplete
-    // edge produces a requirement that SAYS what is missing rather than a tidy
-    // sentence that implies the interface is defined when it is not. That is the
-    // whole value here: a silent gap in an interface register is invisible, and
-    // the requirement register is where it becomes somebody's problem.
-    function genInterface(scopeKey){
-        const out = [];
-        // Interfaces are aircraft-level architecture: system-to-system edges. A
-        // system scope would be claiming ownership of the far end too.
-        if (scopeKey !== 'ac') return out;
-        const edges = (typeof projectConfig === 'object' && projectConfig && Array.isArray(projectConfig.interfaces))
-            ? projectConfig.interfaces : [];
-        if (!edges.length) return out;
-        const sysName = id => {
-            const s = (systemsData || []).find(x => x.id === id);
-            return s ? (s.name || s.id) : (id || '(undefined endpoint)');
-        };
-        const DIR = { a_to_b: 'unidirectional', b_to_a: 'unidirectional', bidirectional: 'bidirectional' };
-
-        edges.forEach(e => {
-            if (!e) return;
-            const from = sysName(e.fromSystemId), to = sysName(e.toSystemId);
-            const eid = e.id || (String(e.fromSystemId) + '->' + String(e.toSystemId) + ':' + String(e.kind || ''));
-            const arrow = (e.direction === 'b_to_a') ? (to + ' to ' + from) : (from + ' to ' + to);
-            const both  = e.direction === 'bidirectional';
-
-            // What the clause requires, and whether this edge supplies it.
-            const missing = [];
-            if (!e.fromSystemId || !e.toSystemId) missing.push('an endpoint is undefined, so the input has no source or the output no destination');
-            if (!String(e.medium || '').trim())   missing.push('no medium or signal set is recorded, so the characteristics of the information communicated are undefined');
-            if (!e.direction)                     missing.push('no direction is recorded');
-            if (!String(e.icdRef || '').trim())   missing.push('no ICD reference, so nothing fully describes the behavior of the signals');
-
-            const mediumClause = String(e.medium || '').trim() ? ` carrying ${e.medium}` : '';
-            const dirClause = both ? ', in both directions' : '';
-            const icdClause = String(e.icdRef || '').trim() ? ` in accordance with ${e.icdRef}` : '';
-            const kindNote = e.kind === 'resource'
-                ? ' This is a SHARED RESOURCE edge — it is a common-cause candidate, and the CMA evaluates whether it defeats an independence claim resting on these two systems.'
-                : (e.kind === 'functional'
-                    ? ' This is a FUNCTIONAL dependency — the far system relies on this interface to deliver its function, so a loss here propagates as a functional failure rather than only a data one.'
-                    : '');
-
-            out.push({
-                text: `The interface from ${arrow}${mediumClause}${dirClause} shall be defined${icdClause}, with the source of every input, the destination of every output, and the behavior of the signals fully described.`,
-                rat: `ARP4754B §5.3.1.8 — interface requirements cover the interconnections and the relevant characteristics of the information communicated; inputs are to have a defined source and outputs a defined destination, and the descriptions are to fully describe signal behavior.` +
-                     ` Derived from the project interface register (${e.kind || 'interface'} edge${e.id ? ' ' + e.id : ''}).` + kindNote +
-                     (missing.length
-                        ? ` INCOMPLETE against the clause: ${missing.join('; ')}. The requirement is generated anyway — an interface the safety case leans on that nobody has defined is exactly the gap this class exists to surface.`
-                        : ` The register supplies endpoints, medium, direction and an ICD reference, so the clause's completeness conditions are met.`),
-                level: 'L2', type: 'Interface', analysis: 'Interface register',
-                verifMethod: 'Inspection',
-                traceId: '',
-                reqSource: {
-                    generator: 'iface-def',
-                    sourceId: `${scopeKey}:iface-def:${eid}`,
-                    context: { from: e.fromSystemId || '', to: e.toSystemId || '', kind: e.kind || '',
-                               medium: e.medium || '', direction: e.direction || '', icdRef: e.icdRef || '',
-                               resourceId: e.resourceId || '', incomplete: missing },
-                    fingerprint: fp('iface-def', e.fromSystemId || '', e.toSystemId || '', e.kind || '',
-                                    e.medium || '', e.direction || '', e.icdRef || '', e.resourceId || '',
-                                    missing.slice().sort()),
-                    generatedAt: Date.now()
-                }
-            });
-        });
-        return out;
-    }
+    // ----- Generator 8 (interface register -> interface requirements): RETIRED 24 Oct 2026 (Waqas) -----
+    // Interfaces and their requirements belong to systems engineering: Sys Lab (or the customer's own tool)
+    // defines them and writes the interface requirements from its ICDs. Safety Lab imports interfaces and uses
+    // them in its analyses (cascade effects, sneak paths, common mode) but no longer writes requirements from
+    // them. Rows it wrote before are swept as "source gone" orphans below; the engineer decides, nothing is
+    // removed automatically.
 
     function storeForScope(scope){
         if(scope === 'ac') return acReqData;
@@ -2954,7 +2849,7 @@ const AutoReq = (function(){
     // generate({ fha, ftaEvent, dalgebra, gateIndependence }, scope) → preview merge
     function generate(opts, scope){
         scope = scope || 'ac';
-        opts = opts || { fha:true, ftaEvent:true, dalgebra:true, gateIndependence:true, praZonal:true, zsaSeparation:true, hfOperational:true, iface:true, fcimMonitor:true };
+        opts = opts || { fha:true, ftaEvent:true, dalgebra:true, gateIndependence:true, praZonal:true, zsaSeparation:true, hfOperational:true, fcimMonitor:true };
 
         const candidates = [];
         if(opts.fha) candidates.push(...genFHA(fhaArrForScope(scope), scope));
@@ -2964,7 +2859,6 @@ const AutoReq = (function(){
         if(opts.praZonal) candidates.push(...genPRA(scope));
         if(opts.zsaSeparation) candidates.push(...genZSA(scope));
         if(opts.hfOperational) candidates.push(...genHfOperational(scope));
-        if(opts.iface) candidates.push(...genInterface(scope));
         if(opts.fcimMonitor) candidates.push(...genFcimMonitoring(scope));
         // 23 Sep 2026 (G5) — unsafe system operating conditions owe timely crew information
         // (F3061 §4.2.6); same crew-awareness family, same switch (usoc.js).
@@ -3018,7 +2912,7 @@ const AutoReq = (function(){
                 ((g === 'pra-zonal' || g === 'pra-scenario') && opts.praZonal) ||
                 (g.startsWith('zsa') && opts.zsaSeparation) ||
                 (g.startsWith('hf-op') && opts.hfOperational) ||
-                (g.startsWith('iface') && opts.iface) ||
+                g.startsWith('iface') ||   // retired generator (24 Oct 2026): its stored rows are always offered as source gone
                 ((g === 'fcim-monitor' || g === 'usoc-info') && opts.fcimMonitor)
             );
             // Pending a move out of this bucket — its source still exists, it just belongs
@@ -3125,7 +3019,7 @@ const AutoReq = (function(){
         'fta-event':        'FTA event → Reliability',
         'fta-interval':     'FTA event → Maintenance interval (CMR candidate)',
         'dalgebra':         'DALgebra → DAL allocation',
-        'dalgebra-default': 'DALgebra → Default DAL',
+        'dalgebra-default': 'DALgebra → Default DAL (retired)',
         'gate-indep-and':   'Gate → Functional independence',
         'gate-indep-dev':   'Gate → Development independence (DAL reduction)',
         'gate-indep-phys':  'Gate → Physical separation (Cat top)',

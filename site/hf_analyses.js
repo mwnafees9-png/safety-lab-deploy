@@ -104,6 +104,20 @@
         return p.hf[kind];
     }
     function _save() { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
+    // 25 Oct 2026 (level_view.js): five lanes are also a system's own (the crew interface that system provides).
+    // Their pages show the rows of the level on screen, the aircraft or one system, and a new row joins that level.
+    // The store, the edits (by id) and every check outside the page still see every row.
+    var _LV_KIND = { tid: 'hfTid', tasks: 'hfTasks', hea: 'hfHea', alerts: 'hfAlerts', cd: 'hfCd' };
+    function _lv() { try { return (typeof window !== 'undefined' && window.SLLevelView) || null; } catch (_) { return null; } }
+    function _visRows(lane, rows) {
+        var LV = _lv(), k = _LV_KIND[lane];
+        if (!LV || !k) return rows;
+        return rows.filter(function (r) { return LV.shows(k, r); });
+    }
+    // the page's own view of a lane: the rows of the level on screen
+    function _view(lane) { var st = _read(lane); return { rows: _visRows(lane, st.rows), all: st.rows }; }
+    function _lvStamp(lane, row) { var LV = _lv(), k = _LV_KIND[lane]; if (LV && k) LV.stamp(k, row); return row; }
+    function _lvMount(lane) { var LV = _lv(), k = _LV_KIND[lane]; if (LV && k) { try { LV.mount(k); } catch (_) {} } }
     function _toastSafe(msg, kind) { try { if (typeof _toast === 'function') _toast(msg, kind || 'info'); } catch (_) {} }
     // Review column — the SAME per-row comment/thread affordance the FHA / FTA / requirement
     // artifacts carry (misc_fn_modules reviewCellHtml -> commentTriggerHtml -> Review). HF lane
@@ -267,7 +281,7 @@
         if (!st) return;
         // id = max existing suffix + 1 — row removal must never recycle an id
         var n = 1 + st.rows.reduce(function (m, r) { var x = parseInt(String(r.heaId || '').replace(/^\D+/, ''), 10); return isNaN(x) ? m : Math.max(m, x); }, 0);
-        st.rows.push({ heaId: 'HEA-' + String(n).padStart(3, '0'), asmId: '', task: '', errorMode: '', effect: '', detection: '', recovery: '', fcIds: '' });
+        st.rows.push(_lvStamp('hea', { heaId: 'HEA-' + String(n).padStart(3, '0'), asmId: '', task: '', errorMode: '', effect: '', detection: '', recovery: '', fcIds: '' }));
         _save();
         renderHea();
     }
@@ -280,8 +294,8 @@
         renderHea();
     }
     function removeHea(i) { var st = _ensure('hea'); if (!st) return; st.rows.splice(i, 1); _save(); renderHea(); }
-    function heaFindings() {
-        var rows = _read('hea').rows;
+    function heaFindings(rowsIn) {
+        var rows = rowsIn || _read('hea').rows;
         var tasks = _hfAsm();
         var covered = {};
         rows.forEach(function (r) { if (r.asmId) covered[String(r.asmId)] = true; });
@@ -301,8 +315,9 @@
         if (typeof document === 'undefined') return;
         var host = document.getElementById('hfa-hea-host');
         if (!host) return;
-        var st = _read('hea');
-        var find = heaFindings();
+        _lvMount('hea');
+        var st = _view('hea');
+        var find = heaFindings(st.rows);
         var findHtml = '';
         if (find.tasksWithoutError.length) {
             findHtml += '<div class="hfx-finding u-mono" style="font-size:11px; color:#B7791F; border:1px solid #B7791F55; border-radius:5px; padding:8px 12px; margin-bottom:10px;">' +
@@ -340,7 +355,7 @@
         var st = _ensure('alerts');
         if (!st) return;
         var n = 1 + st.rows.reduce(function (m, r) { var x = parseInt(String(r.alertId || '').replace(/^\D+/, ''), 10); return isNaN(x) ? m : Math.max(m, x); }, 0);
-        st.rows.push({ alertId: 'ALR-' + String(n).padStart(3, '0'), name: '', priority: '', modality: '', fcIds: '', notes: '' });
+        st.rows.push(_lvStamp('alerts', { alertId: 'ALR-' + String(n).padStart(3, '0'), name: '', priority: '', modality: '', fcIds: '', notes: '' }));
         _save();
         renderAlerts();
     }
@@ -354,8 +369,8 @@
         renderAlerts();
     }
     function removeAlert(i) { var st = _ensure('alerts'); if (!st) return; st.rows.splice(i, 1); _save(); renderAlerts(); }
-    function alertFindings() {
-        var rows = _read('alerts').rows;
+    function alertFindings(rowsIn) {
+        var rows = rowsIn || _read('alerts').rows;
         var fcSet = {};
         _fha().forEach(function (f) { if (f.fcId) fcSet[String(f.fcId)] = true; });
         var orphans = rows.filter(function (r) { return !String(r.fcIds || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean).length; });
@@ -371,8 +386,9 @@
         if (typeof document === 'undefined') return;
         var host = document.getElementById('hfa-alerts-host');
         if (!host) return;
-        var st = _read('alerts');
-        var find = alertFindings();
+        _lvMount('alerts');
+        var st = _view('alerts');
+        var find = alertFindings(st.rows);
         var teach = '';
         if (!st.rows.length) {
             teach = '<div class="hfx-teach" style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); border-radius:6px; padding:16px 20px; margin-bottom:12px; ">' +
@@ -408,7 +424,7 @@
     function addTask() {
         var st = _ensure('tasks');
         if (!st) return;
-        st.rows.push({ taskId: _nextId(st.rows, 'taskId', 'TASK-'), phase: '', crewmember: '', task: '', reactionS: '', execS: '', timeS: '', basis: '', channels: '', notes: '', asmId: '' });
+        st.rows.push(_lvStamp('tasks', { taskId: _nextId(st.rows, 'taskId', 'TASK-'), phase: '', crewmember: '', task: '', reactionS: '', execS: '', timeS: '', basis: '', channels: '', notes: '', asmId: '' }));
         _save(); renderTasks();
     }
     function setTask(i, field, value) {
@@ -460,7 +476,8 @@
         if (typeof document === 'undefined') return;
         var host = document.getElementById('hfa-tasks-host');
         if (!host) return;
-        var st = _read('tasks');
+        _lvMount('tasks');
+        var st = _view('tasks');
         var teach = '';
         if (!st.rows.length) {
             teach = '<div class="hfx-teach" style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); border-radius:6px; padding:16px 20px; margin-bottom:12px; ">' +
@@ -521,7 +538,7 @@
     function addCd() {
         var st = _ensure('cd');
         if (!st) return;
-        st.rows.push({ cdId: _nextId(st.rows, 'cdId', 'CD-'), item: '', kind: 'Control', consideration: '', supports: '', finding: '', status: 'Open', notes: '' });
+        st.rows.push(_lvStamp('cd', { cdId: _nextId(st.rows, 'cdId', 'CD-'), item: '', kind: 'Control', consideration: '', supports: '', finding: '', status: 'Open', notes: '' }));
         _save(); renderCd();
     }
     function setCd(i, field, value) {
@@ -534,8 +551,8 @@
         _save(); renderCd();
     }
     function removeCd(i) { var st = _ensure('cd'); if (!st) return; st.rows.splice(i, 1); _save(); renderCd(); }
-    function cdFindings() {
-        var st = _read('cd'); var rows = (st && st.rows) || [];
+    function cdFindings(rowsIn) {
+        var st = _read('cd'); var rows = rowsIn || (st && st.rows) || [];
         var open = rows.filter(function (r) { return r.status !== 'Closed'; });
         var unconsidered = rows.filter(function (r) { return !r.consideration; });
         var covered = {};
@@ -547,8 +564,9 @@
         if (typeof document === 'undefined') return;
         var host = document.getElementById('hfa-cd-host');
         if (!host) return;
-        var st = _read('cd');
-        var find = cdFindings();
+        _lvMount('cd');
+        var st = _view('cd');
+        var find = cdFindings(st.rows);
         var teach = '';
         if (!st.rows.length) {
             teach = '<div class="hfx-teach" style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); border-radius:6px; padding:14px 18px; margin-bottom:12px; ">' +
@@ -751,11 +769,11 @@
     function addTid() {
         var st = _ensure('tid');
         if (!st) return;
-        st.rows.push({
+        st.rows.push(_lvStamp('tid', {
             taskId: _nextId(st.rows, 'taskId', 'TSK-'),
             procId: '', procName: '', opsMode: 'Normal', phase: '',
             taskName: '', taskDef: '', crew: '', trigger: '', source: '', notes: ''
-        });
+        }));
         _save(); renderTid();
     }
     function setTid(i, field, value) {
@@ -770,8 +788,8 @@
 
     // Findings are computed live and never persisted. Five checks, each of which
     // names a way the enumeration is not yet trustworthy rather than untidy.
-    function tidFindings() {
-        var st = _read('tid'); var rows = (st && st.rows) || [];
+    function tidFindings(rowsIn) {
+        var st = _read('tid'); var rows = rowsIn || (st && st.rows) || [];
         var uncited = rows.filter(function (r) { return !String(r.source || '').trim(); });
         var noCrew = rows.filter(function (r) { return !String(r.crew || '').trim(); });
         var noTrigger = rows.filter(function (r) { return !String(r.trigger || '').trim(); });
@@ -791,8 +809,9 @@
         if (typeof document === 'undefined') return;
         var host = document.getElementById('hfa-tid-host');
         if (!host) return;
-        var st = _read('tid');
-        var find = tidFindings();
+        _lvMount('tid');
+        var st = _view('tid');
+        var find = tidFindings(st.rows);
         var teach = '';
         if (!st.rows.length) {
             teach = '<div class="hfx-teach" style="border:1px solid var(--color-border-strong); background:var(--color-surface-1); border-radius:6px; padding:14px 18px; margin-bottom:12px; ">' +
@@ -1144,8 +1163,13 @@
     function _mlKey(lane) { return (_ML_LANE[lane] && typeof window !== 'undefined' && window.SLModelLinks) ? _ML_LANE[lane] : null; }
     function _hfTableHtml(lane) {
         var cfg = HF_SCHEMA[lane]; if (!cfg) return '';
-        var rows = _hfRowsOf(lane);
-        if (!rows.length) return '';
+        var allRows = _hfRowsOf(lane);
+        var rows = _visRows(lane, allRows);
+        if (!rows.length) {
+            if (!allRows.length || !_LV_KIND[lane]) return '';
+            var LV0 = _lv(), v0 = LV0 && LV0.view();
+            return '<div class="u-mono sl-lv-empty" style="font-size:11.5px; color:var(--color-text-tertiary); padding:10px 2px 14px;">No rows at ' + (v0 == null ? 'aircraft level' : 'this system\u2019s level') + ' yet. ' + allRows.length + ' row' + (allRows.length === 1 ? '' : 's') + ' belong' + (allRows.length === 1 ? 's' : '') + ' to other levels (the line above links to them).</div>';
+        }
         var mlk = _mlKey(lane);
         var head = '<tr><th style="width:52px;">Actions</th>' + cfg.cols.map(function (c, ci) {
             return '<th' + (c.w ? ' style="min-width:' + c.w + ';"' : '') + (c.legend ? ' title="' + esc(c.legend) + '"' : '') + '>' + c.label + (c.legend ? ' <span aria-hidden="true" style="opacity:.55;font-weight:400;">\u24d8</span>' : '') + '</th>' +

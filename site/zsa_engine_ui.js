@@ -72,9 +72,11 @@
         var s = res.summary, by = _who();
         var h = '<div class="zsae-panel"><div class="zsae-head"><b>Zonal analysis</b> <span class="zsae-muted">computed from the zone model, the CAD model, the Sys Lab routes and the fault trees</span></div>'
               + '<div class="zsae-sum">' + s.zones + ' zones, ' + s.findings + ' findings: <b style="color:#b91c1c">' + s.violations + ' violations</b>, <b style="color:#b45309">' + s.advisories + ' advisories</b>, ' + s.open + ' open.</div>'
-              + '<div class="zsae-bar"><label>Your name <input type="text" id="zsae-by" value="' + _esc(by) + '" placeholder="who dispositions" style="width:12em"></label> '
-              + '<label>Show <select id="zsae-filter"><option value="open-violations"' + (state.filter === 'open-violations' ? ' selected' : '') + '>Open violations</option><option value="open"' + (state.filter === 'open' ? ' selected' : '') + '>Everything open</option><option value="all"' + (state.filter === 'all' ? ' selected' : '') + '>Every zone and finding</option></select></label> '
-              + '<button type="button" class="btn-sm" data-zsae-act="refresh">Run again</button> <button type="button" class="btn-sm" data-zsae-act="materialize" style="background:#c2410c;color:#fff">Update the ZSA table</button></div>';
+              // 25 Oct 2026 (Waqas: "these need to be lined up and the same size"): every control in one row, each label
+              // above its box, the boxes and both buttons one height, the two boxes one width
+              + '<div class="zsae-bar"><div class="zsae-f"><label for="zsae-by">Your name</label><input type="text" id="zsae-by" value="' + _esc(by) + '" placeholder="who dispositions"></div>'
+              + '<div class="zsae-f"><label for="zsae-filter">Show</label><select id="zsae-filter"><option value="open-violations"' + (state.filter === 'open-violations' ? ' selected' : '') + '>Open violations</option><option value="open"' + (state.filter === 'open' ? ' selected' : '') + '>Everything open</option><option value="all"' + (state.filter === 'all' ? ' selected' : '') + '>Every zone and finding</option></select></div>'
+              + '<button type="button" class="btn-sm zsae-btn" data-zsae-act="refresh">Run again</button><button type="button" class="btn-sm zsae-btn zsae-btn-go" data-zsae-act="materialize">Update the ZSA table</button></div>';
         if (res.gaps.length) h += '<div class="zsae-gaps"><b>What the analysis is missing</b><ul>' + res.gaps.map(function (g) { return '<li>' + _esc(g) + '</li>'; }).join('') + '</ul></div>';
         var zs = res.zones.map(function (z) { return _zone(z, byId); }).join('');
         var loose = res.findings.filter(function (f) { return !f.zoneIds.length && _shown(f); });
@@ -115,7 +117,13 @@
     }
     function _onChange(ev) { if (ev.target && ev.target.id === 'zsae-filter') { state.filter = ev.target.value; render(); } }
     var CSS = '#zsa-analysis .zsae-panel{border:1px solid rgba(148,163,184,.45);border-left:4px solid #c2410c;border-radius:6px;padding:10px 12px;margin:8px 0 12px}'
-            + '#zsa-analysis .zsae-muted{color:#64748b;font-size:12px}#zsa-analysis .zsae-sum{margin:4px 0}#zsa-analysis .zsae-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0}'
+            + '#zsa-analysis .zsae-muted{color:#64748b;font-size:12px}#zsa-analysis .zsae-sum{margin:4px 0}#zsa-analysis .zsae-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:6px 0}'
+            + '#zsa-analysis .zsae-f{display:flex;flex-direction:column;gap:4px;margin:0}'
+            + '#zsa-analysis .zsae-f label{display:block;margin:0;padding:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;line-height:1.2}'
+            + '#zsa-analysis .zsae-bar input,#zsa-analysis .zsae-bar select,#zsa-analysis .zsae-bar .zsae-btn{box-sizing:border-box;height:38px;margin:0;font-size:14px;line-height:1;vertical-align:bottom}'
+            + '#zsa-analysis .zsae-bar input,#zsa-analysis .zsae-bar select{width:15em;padding:0 12px}'
+            + '#zsa-analysis .zsae-bar .zsae-btn{display:inline-flex;align-items:center;justify-content:center;padding:0 18px;white-space:nowrap}'
+            + '#zsa-analysis .zsae-bar .zsae-btn-go{background:#c2410c;color:#fff;border-color:#c2410c}'
             + '#zsa-analysis .zsae-badge{color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600}#zsa-analysis .zsae-gaps{background:rgba(234,179,8,.12);border-radius:4px;padding:6px 10px;margin:6px 0;font-size:13px}'
             + '#zsa-analysis .zsae-zone{border-top:1px solid rgba(148,163,184,.3);padding:4px 0}#zsa-analysis .zsae-zone summary{cursor:pointer;padding:3px 0}#zsa-analysis .zsae-body{padding:4px 0 6px 14px}'
             + '#zsa-analysis .zsae-items{font-size:12px;margin:4px 0}#zsa-analysis .zsae-list{list-style:none;padding:0;margin:6px 0}#zsa-analysis .zsae-finding{padding:6px 0;border-top:1px dashed rgba(148,163,184,.3)}'

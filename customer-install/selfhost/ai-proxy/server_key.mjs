@@ -26,6 +26,28 @@ import path from "node:path";
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
 const KEY_RE = /^sk-ant-[A-Za-z0-9_-]{20,400}$/;
 export function looksLikeAnthropicKey(k) { return KEY_RE.test(String(k || "").trim()); }
+// 24 Oct 2026 (Radia): an Anthropic string that is NOT an API key still matches KEY_RE, and Anthropic
+// then only says "invalid x-api-key", which tells the person nothing. The two that get pasted:
+// a Claude app sign-in token (sk-ant-oat..., from "claude setup-token" or a Claude subscription)
+// and an Admin API key (sk-ant-admin..., for managing an organization, not for calling models).
+// Named plainly, refused before anything is sent to Anthropic. The same words are in the app
+// (site/server_ai_key.js) so an older server's answer is never the only one.
+export function wrongKind(k) {
+  const s = String(k || "").trim();
+  if (/^sk-ant-oat/i.test(s)) return "That is a Claude app sign-in token (it starts with sk-ant-oat), not an API key. A Claude subscription or Claude Code sign-in cannot run this server's AI. Create an API key at console.anthropic.com under API keys (it starts with sk-ant-api) and paste that. Nothing was saved.";
+  if (/^sk-ant-admin/i.test(s)) return "That is an Anthropic Admin key (it starts with sk-ant-admin), which manages an organization but cannot run AI requests. Create an API key at console.anthropic.com under API keys (it starts with sk-ant-api) and paste that. Nothing was saved.";
+  return "";
+}
+// Anthropic's own words, exactly as it sent them: { type, message } from its error body.
+async function anthropicSaid(r) {
+  try {
+    const j = await r.json();
+    const e = j && j.error;
+    if (e && (e.type || e.message)) return { status: r.status, type: String(e.type || "").slice(0, 80), message: String(e.message || "").slice(0, 400) };
+  } catch (_) {}
+  return { status: r.status, type: "", message: "" };
+}
+function quote(a) { return "Anthropic answered " + a.status + (a.type ? " " + a.type : "") + (a.message ? ': "' + a.message + '"' : " with no reason given") + "."; }
 
 export function createServerKey({ dataDir, env, fetchImpl = fetch, now = () => Date.now() }) {
   const file = path.join(dataDir, "anthropic-key.json");
@@ -100,9 +122,11 @@ export function createServerKey({ dataDir, env, fetchImpl = fetch, now = () => D
     } catch (_) {
       return { ok: false, status: 502, error: "This server could not reach Anthropic to check the key, so nothing was saved. The server needs to reach api.anthropic.com for the AI to work at all; ask IT to allow it." };
     }
-    if (r.status === 401 || r.status === 403) return { ok: false, status: 400, error: "Anthropic says this key is not valid (it may have been revoked, or copied with a character missing). Nothing was saved." };
-    if (!r.ok) return { ok: false, status: 502, error: "Anthropic answered " + r.status + " while checking the key. Nothing was saved; try again in a minute." };
-    return { ok: true };
+    if (r.ok) return { ok: true };
+    const a = await anthropicSaid(r);
+    if (r.status === 401) return { ok: false, status: 400, anthropic: a, error: quote(a) + " The key is not valid: it may have been revoked or deleted, or copied with a character missing. Nothing was saved." };
+    if (r.status === 403) return { ok: false, status: 400, anthropic: a, error: quote(a) + " The key exists but is not allowed to use the models (check the key's workspace and the organization's permissions at console.anthropic.com). Nothing was saved." };
+    return { ok: false, status: 502, anthropic: a, error: quote(a) + " Nothing was saved; try again in a minute." };
   }
 
   async function handle(request) {
@@ -120,8 +144,10 @@ export function createServerKey({ dataDir, env, fetchImpl = fetch, now = () => D
     }
     const key = String((body && body.key) || "").trim();
     if (!looksLikeAnthropicKey(key)) return json(400, { error: "format", message: "That is not an Anthropic key. It starts with sk-ant- and is one long line with no spaces." });
+    const kind = wrongKind(key);
+    if (kind) return json(400, { error: "kind", message: kind });
     const v = await verifyWithAnthropic(key);
-    if (!v.ok) return json(v.status, { error: "verify", message: v.error });
+    if (!v.ok) return json(v.status, Object.assign({ error: "verify", message: v.error }, v.anthropic ? { anthropic: v.anthropic } : {}));
     try { write({ key, setAt: new Date(now()).toISOString(), setBy: me.email }); }
     catch (_) { return json(500, { error: "store", message: "The key is valid but could not be stored on the server (its data folder is not writable)." }); }
     return json(200, Object.assign({ saved: true }, status()));

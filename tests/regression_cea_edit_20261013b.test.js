@@ -91,17 +91,22 @@ apply(M2, ops1);
 const r = G2.resourcesData.find(x => x.internalId === '777');
 check('a drawn resource is a resourcesData row (next RES id, name, type, empty link lists)', r && r.resId === 'RES-002' && r.name === '28 V DC bus' && r.type === 'Electrical' && r.description === 'main bus' && Array.isArray(r.consumedBy), JSON.stringify(r));
 check('provides and feeds land in providedBy / consumedBySystems', r && r.providedBy.join() === 'S6' && r.consumedBySystems.join() === 'S4');
-const nif = G2.projectConfig.interfaces[4];
-check('the drawn interface is a projectConfig.interfaces row (id, ends, medium, ICD, one way)', nif && nif.id === 'iface-1' && nif.fromSystemId === 'S3' && nif.toSystemId === 'S1' && nif.medium === 'Brake pressure demand' && nif.icdRef === 'ICD-9' && nif.direction === 'a_to_b' && nif.status === 'active', JSON.stringify(nif));
+// 24 Oct 2026 (Waqas): interfaces come from Sys Lab or a SysML import; the cascade graph never adds, edits or removes one.
+check('24 Oct 2026: a drawn interface writes no projectConfig.interfaces row (the save path writes none)', G2.projectConfig.interfaces.length === 4 && !G2.projectConfig.interfaces.some(i => i.id === 'iface-1'), JSON.stringify(G2.projectConfig.interfaces.map(i => i.id || i.medium)));
+check('... and the graph\'s guard refuses it, saying where interfaces come from', /Sys Lab or your SysML model import/.test(String(M2.CEA_EDIT.guard({ ops: [op('cn', ifc.id, null, ifc)] }))));
+// the same interface as an import brings it: the cascade follows it
+G2.projectConfig.interfaces.push({ id: 'iface-1', fromSystemId: 'S3', toSystemId: 'S1', direction: 'a_to_b', kind: 'interface', medium: 'Brake pressure demand', icdRef: 'ICD-9', origin: 'sysml-import' });
 const reach = M2.ceaCascade('S6').map(x => x.id + ':' + x.hops).sort().join();
 // hand-derived: S6 -provides-> RES-002 (1) -feeds-> S4 (2) -interface both-> S5 (3); S6's own b_to_a interface reaches S5 at 1 hop already.
 check('the cascade engine follows the new links: Power reaches its bus (1), Displays (1, the old interface), Avionics (2)', reach === 'S4:2,S5:1,res:RES-002:1', reach);
-check('the brake interface makes Hydraulics reachable from Brakes', M2.ceaCascade('S3').some(x => x.id === 'S1' && x.hops === 1));
+check('the imported brake interface makes Hydraulics reachable from Brakes', M2.ceaCascade('S3').some(x => x.id === 'S1' && x.hops === 1));
+const nif = G2.projectConfig.interfaces[4];
 check('the positions are stored once, as diagram data (projectConfig.ceaLayout)', G2.projectConfig.ceaLayout && G2.projectConfig.ceaLayout['res:777'].x === 400);
 // edit: rename the resource, flip the interface to both ways, retype it
 apply(M2, [op('el', newRes.id, newRes, Object.assign(clone(newRes), { label: '28 V DC bus 1', props: { type: 'Electrical', description: 'left bus', resId: 'RES-002' } })),
            op('cn', ifc.id, ifc, Object.assign(clone(ifc), { kind: 'interface2', props: { ifKind: 'resource', icdRef: 'ICD-9A', rowKey: 'iface-1' } }))]);
-check('rename and description reach the resource row; the interface becomes both ways, shared resource, new ICD', r.name === '28 V DC bus 1' && r.description === 'left bus' && nif.direction === 'bidirectional' && nif.kind === 'resource' && nif.icdRef === 'ICD-9A');
+check('rename and description reach the resource row; the imported interface is not changed from the graph', r.name === '28 V DC bus 1' && r.description === 'left bus' && nif.direction === 'a_to_b' && nif.kind === 'interface' && nif.icdRef === 'ICD-9');
+G2.projectConfig.interfaces.pop();   // the import is taken back out by hand before the undo comparison
 // undo everything with the core's inverse ops (what the editor's undo sends)
 apply(M2, Core.invertOps([op('el', newRes.id, newRes, Object.assign(clone(newRes), { label: '28 V DC bus 1', props: { type: 'Electrical', description: 'left bus', resId: 'RES-002' } })),
                            op('cn', ifc.id, ifc, Object.assign(clone(ifc), { kind: 'interface2', props: { ifKind: 'resource', icdRef: 'ICD-9A', rowKey: 'iface-1' } }))]));
@@ -112,9 +117,9 @@ check('undo with the inverse ops gives back every row byte for byte (resources, 
 const G3 = model(), M3 = load(G3), em3 = M3.CEA_EDIT.model();
 const legacyIf = em3.connectors.find(c => c.from === 'sys:S6');   // the b_to_a row
 apply(M3, [op('cn', legacyIf.id, legacyIf, Object.assign(clone(legacyIf), { label: '115 V AC', props: Object.assign({}, legacyIf.props) }))]);
-check('editing an old interface row without an id keeps its direction (b_to_a) and ends, sets the medium', G3.projectConfig.interfaces[2].medium === '115 V AC' && G3.projectConfig.interfaces[2].direction === 'b_to_a' && G3.projectConfig.interfaces[2].fromSystemId === 'S5' && !('id' in G3.projectConfig.interfaces[2]));
+check('24 Oct 2026: an old interface row is read-only here: an edit from the graph changes nothing', G3.projectConfig.interfaces[2].medium !== '115 V AC' && G3.projectConfig.interfaces[2].direction === 'b_to_a' && G3.projectConfig.interfaces[2].fromSystemId === 'S5' && !('id' in G3.projectConfig.interfaces[2]));
 apply(M3, [op('cn', legacyIf.id, legacyIf, null)]);
-check('deleting it removes exactly that row; the dangling row and the others stay', G3.projectConfig.interfaces.length === 3 && G3.projectConfig.interfaces.map(i => i.medium || i.id).join() === 'ARINC 429,IF-2,dangling');
+check('... and a delete from the graph removes nothing (the row is kept and still used)', G3.projectConfig.interfaces.length === 4);
 // a system drawn here is a real system; removing it again (empty) takes it out
 const G4 = model(), M4 = load(G4);
 const ns = { id: 'sys:sys-x', kind: 'system', x: 0, y: 0, w: 230, h: 40, label: 'Fuel system', props: { role: 'function' } };
@@ -141,7 +146,7 @@ check('removing a feeds-through-a-function link is refused with where to change 
 check('new ids: provides and feeds from their two ends, resources from newRowId, systems sys-*', Mg.CEA_EDIT.newId('connector', 'provides', { from: 'sys:S1', to: 'res:11' }) === 'prov:11>S1' && /^res:/.test(Mg.CEA_EDIT.newId('element', 'resource', {})) && /^sys:sys-/.test(Mg.CEA_EDIT.newId('element', 'system', {})));
 const src = S('cea_graph.js');
 check('the page mounts the editor and keeps the old picture only as the fallback', /editable \? '<div id="cea-graph-slot"><\/div>' : _svgGraph\(g\)/.test(src) && /SLDiagramEditor\.mount\(_ceaHost/.test(src));
-check('index.html loads cea_graph.js v1.3 or later', /cea_graph\.js\?v=1\.[34]"/.test(S('index.html')));   // 1.4: 15 Oct 2026, height: 'fill' (regression_canvas_fill_20261015)
+check('index.html loads cea_graph.js v1.3 or later', (m => !!m && (+m[1] > 1 || +m[2] >= 3))(/cea_graph\.js\?v=(\d+)\.(\d+)"/.exec(S('index.html'))));   // a floor, not a literal (1.5: 24 Oct 2026, interfaces read-only)   // 1.4: 15 Oct 2026, height: 'fill' (regression_canvas_fill_20261015)
 
 // ---------------------------------------------------------------------------------------------
 let chromium = null;
@@ -198,7 +203,7 @@ function serve() {
         const snap = () => E2(() => JSON.stringify({ s: systemsData, r: resourcesData, i: projectConfig.interfaces, l: projectConfig.ceaLayout || null }));
         const s0 = await snap();
         await E2(async () => { switchTab('cea'); await new Promise(r => setTimeout(r, 400)); __ung(); document.getElementById('cea-graph-slot').scrollIntoView(); });
-        check('browser: the cascading effects page shows the diagram editor (toolbox: System, Resource; Provides, Feeds, two Interface kinds)', await E2(() => !!document.querySelector('#cea-graph-slot .sde[data-diagram="cea"]') && Array.from(document.querySelectorAll('#cea-graph-slot .sde-tool')).map(b => b.textContent).join('|') === 'System|Resource|Provides|Feeds|Interface (one way)|Interface (both ways)'));
+        check('browser: the cascading effects page shows the diagram editor (toolbox: System, Resource; Provides, Feeds; 24 Oct 2026: no Interface tool, interfaces are imported)', await E2(() => !!document.querySelector('#cea-graph-slot .sde[data-diagram="cea"]') && Array.from(document.querySelectorAll('#cea-graph-slot .sde-tool')).map(b => b.textContent).join('|') === 'System|Resource|Provides|Feeds'));
         check('browser: opening the showcase graph wrote nothing (no layout, no row changed)', await snap() === s0);
         const scr = id => E2(id => { const e = CEA_EDIT.editor(); const el = e.model().elements.find(x => x.id === id); const v = e.getView(); const r = e.$.canvas.getBoundingClientRect(); return { x: r.left + v.x + (el.x + el.w / 2) * v.k, y: r.top + v.y + (el.y + el.h / 2) * v.k }; }, id);
         // the failure-source click: Electrical Power System
@@ -243,10 +248,9 @@ function serve() {
         check('browser: the Resources table and the golden thread read the same rows', await E2(() => { try { renderResources(); } catch (_) {} const tb = document.getElementById('resources-body'); const r = resourcesData[resourcesData.length - 1]; const inTable = !tb || tb.innerText.indexOf('Emergency DC bus') >= 0; const gt = window.SLModelLinks || window.GT_THREAD || null; return inTable && SLSysML.resolve('res:' + r.internalId) && SLSysML.resolve('res:' + r.internalId).name === 'Emergency DC bus'; }));
         // an interface both ways between two systems, via the API (same change path), then undo it with Ctrl+Z
         const nIf = await E2(() => projectConfig.interfaces.length);
-        await E2(a => CEA_EDIT.editor().connect(a.fcs, a.eps, 'interface2', { label: 'Load shed discrete' }), { fcs, eps }); await page.waitForTimeout(200); await ack();
-        check('browser: an interface drawn both ways is a projectConfig.interfaces row, bidirectional', await E2(n => projectConfig.interfaces.length === n + 1 && projectConfig.interfaces[n].direction === 'bidirectional' && projectConfig.interfaces[n].medium === 'Load shed discrete', nIf));
-        await page.locator('#cea-graph-slot .sde-canvas').focus(); await page.keyboard.press('Control+z'); await page.waitForTimeout(250); await ack();
-        check('browser: Ctrl+Z removes the interface row again', await E2(n => projectConfig.interfaces.length === n, nIf));
+        // 24 Oct 2026: interfaces are read-only here (Sys Lab or a SysML import): drawing one through the editor writes nothing
+        await E2(a => { try { CEA_EDIT.editor().connect(a.fcs, a.eps, 'interface2', { label: 'Load shed discrete' }); } catch (_) {} }, { fcs, eps }); await page.waitForTimeout(200);
+        check('browser: an interface drawn on the graph is refused: no projectConfig.interfaces row', await E2(n => projectConfig.interfaces.length === n && !projectConfig.interfaces.some(i => i.medium === 'Load shed discrete'), nIf));
         await page.locator('#cea-graph-slot .sde-btn[data-act="undo"]').click(); await page.waitForTimeout(250); await ack();
         check('browser: the Undo button takes the feeds link back out of the row', await E2(f => resourcesData[resourcesData.length - 1].consumedBySystems.indexOf(f.replace(/^sys:/, '')) < 0, fcs));
         await page.locator('#cea-graph-slot .sde-btn[data-act="redo"]').click(); await page.waitForTimeout(250); await ack();

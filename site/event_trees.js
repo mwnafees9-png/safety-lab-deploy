@@ -529,6 +529,14 @@
         const pid = String(pageId || '').trim();
         if (pid) {
             if (!_pageById(pid)) return { ok: false, err: 'Fault-tree page not found.' };
+            // 25 Oct 2026 (tree_homes.js v1.1): an aircraft event tree's heading may link any system's tree; a
+            // system's event tree only its own system's. The link it already has is always kept.
+            const H = window.SLTreeHomes;
+            if (H && H.linkAllowed && pid !== bar.linkedPageId) {
+                const sc = H.ownLevel(t);
+                if (!H.linkAllowed('branch', pid, sc)) return { ok: false, err: sc.level === 'system' ? 'That fault tree is at another level: a system’s event tree links only its own system’s fault trees.' : 'That fault tree is at another level: this event tree links its own level’s fault trees.' };
+                if (!t.level && !H.pageInLevel(pid, sc)) H.stamp(t, sc);   // it stays where it is worked on, not where the tree it links lives
+            }
             bar.linkedPageId = pid;
             _jr('eta', treeId + ': barrier "' + bar.name + '" linked to fault tree ' + pid);
         } else {
@@ -751,7 +759,13 @@
                 if (p.pFail === undefined || p.pFail === null || p.pFail === '') delete h.pFail; else h.pFail = p.pFail;
                 if (p.pCcf === undefined || p.pCcf === null || p.pCcf === '') delete h.pCcf; else h.pCcf = p.pCcf;
             }
-            if (p.linkedPageId) h.linkedPageId = String(p.linkedPageId); else delete h.linkedPageId;
+            if (p.linkedPageId) {
+                // 25 Oct 2026: the same rule as etaLinkBarrier; a link the heading already had is kept
+                const H = window.SLTreeHomes, pid = String(p.linkedPageId), was = bi >= 0 ? baseBars[bi].linkedPageId : undefined;
+                if (!H || !H.linkAllowed || pid === was) h.linkedPageId = pid;
+                else if (H.linkAllowed('branch', pid, H.ownLevel(t))) { h.linkedPageId = pid; if (!t.level && !H.pageInLevel(pid, H.ownLevel(t))) H.stamp(t, H.ownLevel(t)); }
+                else if (was) h.linkedPageId = was; else delete h.linkedPageId;
+            } else delete h.linkedPageId;
             if (p.note === undefined) delete h.note; else h.note = p.note;
             if (e.sysmlRef) h.sysmlRef = e.sysmlRef; else delete h.sysmlRef;
             return h;
@@ -1049,8 +1063,12 @@
         if (cur && ids.indexOf(cur) < 0) ids.push(cur);
         return [{ value: '', label: 'Not linked' }].concat(ids.map(v => ({ value: v, label: v })));
     }
-    function _pageOptions(cur) {
-        const pages = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(p => p && p.root);
+    function _pageOptions(cur, tr, max) {
+        // 25 Oct 2026: the trees this event tree may link (tree_homes.js linkOptions: an aircraft tree's headings also
+        // offer every system's trees, named with their system); a link it has from before is shown "(at another level)"
+        const H = window.SLTreeHomes;
+        if (H && H.linkOptions) return [{ value: '', label: 'Not linked' }].concat(H.linkOptions('branch', cur, H.ownLevel(tr || {}), max || 60));
+        const pages = (typeof _lvPages === 'function') ? _lvPages() : ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(p => p && p.root);
         const o = [{ value: '', label: 'Not linked' }].concat(pages.map(p => ({ value: p.id, label: String(p.name || p.id).slice(0, 60) })));
         if (cur && !pages.some(p => p.id === cur)) o.push({ value: cur, label: cur + ' (not found)' });
         return o;
@@ -1076,7 +1094,7 @@
                 { key: 'props.pCcf', label: 'P(failure) once an earlier heading did not succeed (optional)', type: 'number', validate: _pNum, help: 'Common-cause coupling. Leave blank for an independent heading.' },
             ];
             return f.concat([
-                { key: 'props.linkedPageId', label: 'Quantified by fault tree', type: 'select', options: _pageOptions(item.props.linkedPageId) },
+                { key: 'props.linkedPageId', label: 'Quantified by fault tree', type: 'select', options: _pageOptions(item.props.linkedPageId, tr) },
                 { key: 'props.note', label: 'Note', type: 'textarea' },
             ]);
         }
@@ -1227,19 +1245,24 @@
 
     let _selId = null, _page = 0;
     const PAGE = 200;
-    function _sel() { const s = _store(); return s.find(t => t.id === _selId) || s[0] || null; }
+    // 24 Oct 2026 (tree_homes.js): the page shows the event trees of the level being worked on (the aircraft, one
+    // system, or Standalone): a tree's level is the one it was made at, else the level of the fault trees it is
+    // joined to (a bow-tie, a heading's fault tree), else Standalone. Its fault tree pickers offer that level's trees.
+    function _homes() { return (typeof window !== 'undefined' && window.SLTreeHomes) || null; }
+    function _scoped() { const h = _homes(); return h ? _store().filter(t => h.inLevel('eta', t)) : _store(); }
+    function _lvPages() { const h = _homes(); const all = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(p => p && p.root); return h ? all.filter(p => h.pageInLevel(p)) : all; }
+    function _sel() { const s = _scoped(); return s.find(t => t.id === _selId) || s[0] || null; }
 
     function _barrierRegister(t) {
         if (!(t.barriers || []).length) return '';
         const cps = etaCoupling(t);
-        const pageOpts = ((typeof ftaPages !== 'undefined' ? ftaPages : []) || []).filter(p => p && p.root);
         return '<div style="margin:12px 0 0; border:1px solid var(--color-border-strong);">' +
             '<table class="data-table" style="width:100%; font-size:11.5px; margin:0;"><thead><tr>' +
             '<th style="width:26px;">#</th><th>Heading</th><th>pFail (elicited)</th><th>pFail | upstream failed</th><th>Implemented by (fault tree — elicited link)</th><th>Linked tree P(top) — annotation only</th><th>Coupling</th></tr></thead><tbody>' +
             (t.barriers || []).map((b, bi) => {
                 const sel = '<select aria-label="Fault tree that implements heading ' + (bi + 1) + '" style="font-size:11px; padding:2px 4px; max-width:220px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); color:var(--color-text-primary);" onchange="_etaLinkUi(\'' + t.id + '\',' + bi + ', this.value)">' +
                     '<option value="">— not linked —</option>' +
-                    pageOpts.map(p => '<option value="' + _esc(p.id) + '"' + (b.linkedPageId === p.id ? ' selected' : '') + '>' + _esc(String(p.name || p.id).slice(0, 40)) + '</option>').join('') + '</select>';
+                    _pageOptions(b.linkedPageId, t, 40).slice(1).map(o => '<option value="' + _esc(o.value) + '"' + (b.linkedPageId === o.value ? ' selected' : '') + '>' + _esc(o.label) + '</option>').join('') + '</select>';
                 let pTopCell = '<span style="color:var(--color-text-tertiary);">—</span>';
                 if (b.linkedPageId) {
                     const pt = _linkedPTop(_pageById(b.linkedPageId));
@@ -1349,17 +1372,17 @@
     function _render() {
         const host = document.getElementById('eta-host');
         if (!host) return;
-        const s = _store(), t = _sel();
+        const s = _scoped(), t = _sel();
         if (t) _selId = t.id;
-        const B = 'font-size:11.5px; padding:4px 12px;';
-        let html = '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">' +
-            '<label for="eta-pick" style="font-size:12px; font-weight:600;">Event tree</label>' +
-            '<select id="eta-pick" onchange="SLEtaUI.select(this.value)" style="font-size:12px; padding:4px 8px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); color:var(--color-text-primary); max-width:360px;">' +
+        // 25 Oct 2026: the shared diagram toolbar (.sl-diag-bar in safety_lab.css), the same as the bow-tie's
+        let html = '<div class="sl-diag-bar">' +
+            '<label for="eta-pick">Event tree</label>' +
+            '<select id="eta-pick" onchange="SLEtaUI.select(this.value)">' +
             (s.length ? s.map(x => '<option value="' + _esc(x.id) + '"' + (t && x.id === t.id ? ' selected' : '') + '>' + _esc(x.id + ' · ' + (x.name || '')) + '</option>').join('') : '<option value="">No event trees yet</option>') + '</select>' +
-            '<button class="ckpt-m-btn ckpt-m-btn-primary" style="' + B + '" onclick="SLEtaUI.create()">+ New event tree</button>' +
-            (t ? '<button class="ckpt-m-btn" style="' + B + '" onclick="SLEtaUI.rename()">Rename</button><button class="ckpt-m-btn" title="Delete this event tree" style="' + B + '" onclick="_etaDeleteUi(\'' + t.id + '\')">Delete</button>' : '') +
+            '<button type="button" class="sl-db-primary" onclick="SLEtaUI.create()">+ New event tree</button>' +
+            (t ? '<button type="button" onclick="SLEtaUI.rename()">Rename</button><button type="button" title="Delete this event tree" onclick="_etaDeleteUi(\'' + t.id + '\')">Delete</button>' : '') +
             // 30 Aug 2026 - export parity batch 2b
-            '<button class="ckpt-m-btn" style="font-size:11.5px; padding:4px 12px;" onclick="exportData(&quot;Event_Trees&quot;, &quot;csv&quot;)" title="Export every tree&#39;s full outcome enumeration as CSV">&#8595; Export CSV</button>' +
+            '<button type="button" onclick="exportData(&quot;Event_Trees&quot;, &quot;csv&quot;)" title="Export every tree&#39;s full outcome enumeration as CSV">&#8595; Export CSV</button>' +
             '<span id="eta-err" style="color:var(--color-danger); font-size:11px; font-weight:600;"></span></div>';
         if (!t) {
             html += '<div style="padding:18px; border:1px dashed var(--color-border-strong); font-size:12.5px; color:var(--color-text-secondary);">An event tree follows an initiating event through the headings (barriers and pivotal events) that decide how it ends. Click <b>New event tree</b> to draw one by hand: name it, then drag headings onto the canvas, set their probabilities, and assess the end states.</div>';
@@ -1378,12 +1401,14 @@
 
     window.SLEtaUI = {
         select(id) { _selId = id; _page = 0; _render(); },
+        headingOptions(id, cur) { return _pageOptions(cur, _store().find(x => x.id === id) || null); },   // 25 Oct 2026: what a heading's picker offers
         page(d) { _page = Math.max(0, _page + d); _renderSide(); },
         async create() {
             const name = await slPrompt('Name the new event tree (usually the initiating event it follows):', '', { title: 'New event tree', okText: 'Create' });
             if (name == null) return;
             const r = window.etaCreateBlank(name);
             if (!r.ok) { _toast(r.err, 'error', 3200); return; }
+            try { const nt = _store().find(x => x.id === r.id); if (nt && _homes()) { _homes().stamp(nt); _save(); } } catch (_) {}   // it belongs to the level it was made at
             _selId = r.id; _page = 0; _render();
             _toast(r.id + ' created. Name the initiating event, then drag headings onto the canvas.', 'success', 4200);
         },

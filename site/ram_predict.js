@@ -116,6 +116,40 @@
         };
     }
 
+    // ------------------------------------------------- the level on screen
+    // 25 Oct 2026 (level_view.js): a system has its own parts count. The page lists the rows of the level on
+    // screen (the aircraft, or one system) with that level's use environment (a system's own: st.envBy[id]);
+    // the aircraft page adds the roll-up of every system's prediction. Rows stay addressed by their place in
+    // the one store, so editing works the same at every level.
+    function _LV() { try { return (typeof window !== 'undefined' && window.SLLevelView) || null; } catch (_) { return null; } }
+    function _level() { const LV = _LV(); return LV ? LV.view() : null; }
+    function _levelEnv(st, sys) { return (sys != null && st.envBy && st.envBy[sys]) ? st.envBy[sys] : st.env; }
+    function _pairs(st, sys) {
+        const LV = _LV();
+        return st.rows.map((r, i) => ({ r: r, i: i })).filter(p => !LV || LV.shows('ramPredict', p.r, sys));
+    }
+    function _read2() {
+        const st = _read(); if (!st) return null;
+        const p = (_ram() && _ram().predict) || {};
+        st.envBy = (p.envBy && typeof p.envBy === 'object') ? p.envBy : {};
+        return st;
+    }
+    // the aircraft's roll-up: its own rows plus each system's prediction (each in its own environment)
+    function rollup() {
+        const st = _read2(), LV = _LV();
+        if (!st || !LV) return null;
+        const parts = [];
+        const add = (sys, name) => {
+            const rows = _pairs(st, sys).map(p => p.r); if (!rows.length) return;
+            try { const r = predict(rows, _levelEnv(st, sys)); parts.push({ sys: sys, name: name, lambda: r.lambdaTotal, env: r.env }); }
+            catch (e) { parts.push({ sys: sys, name: name, error: e.message }); }
+        };
+        add(null, 'Aircraft level');
+        ((typeof systemsData !== 'undefined' && systemsData) || []).forEach(s => { if (s && s.id != null) add(String(s.id), s.name || String(s.id)); });
+        const ok = parts.filter(x => x.lambda != null), total = ok.reduce((a, x) => a + x.lambda, 0);
+        return { parts: parts, lambdaTotal: total, mtbfHrs: total > 0 ? 1e6 / total : null, complete: ok.length === parts.length };
+    }
+
     // ---------------------------------------------------------------- UI
     function renderPage() {
         if (typeof document === 'undefined') return;
@@ -132,12 +166,15 @@
                 'This lane computes λ = Σ N·λg·πQ from MIL-HDBK-217F Notice 2 — and refuses to run until the handbook tables are staged with citations. A prediction from remembered numbers is a rumor.</div></div>';
             return;
         }
-        const st = _read();
+        const st = _read2();
         if (!st) { host.innerHTML = ''; return; }
+        const lv = _level();
+        try { const LV = _LV(); if (LV) LV.mount('ramPredict'); } catch (_) {}
+        const pairs = _pairs(st, lv), env = _levelEnv(st, lv);
         const catOpts = Object.keys(db.categories).map(k => '<option value="' + k + '">' + _esc(db.categories[k].name) + '</option>').join('');
-        const envOpts = Object.keys(db.environments).map(k => '<option value="' + k + '"' + (st.env === k ? ' selected' : '') + '>' + k + ' — ' + _esc(db.environments[k]) + '</option>').join('');
+        const envOpts = Object.keys(db.environments).map(k => '<option value="' + k + '"' + (env === k ? ' selected' : '') + '>' + k + ' — ' + _esc(db.environments[k]) + '</option>').join('');
         const IN = 'style="font:inherit; font-size:11px; padding:3px 5px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); color:inherit; border-radius:4px;"';
-        let rowsHtml = st.rows.map((r, i) => {
+        let rowsHtml = pairs.map(({ r, i }) => {
             const cat = db.categories[r.cat];
             const qOpts = cat ? Object.keys(cat.piQ).map(k => '<option value="' + k + '"' + ((r.quality || cat.defaultQuality) === k ? ' selected' : '') + '>' + k + '</option>').join('') : '';
             return '<tr><td class="u-mono" style="font-size:11px;">' + _esc(cat ? cat.name : r.cat) + '</td>' +
@@ -151,10 +188,10 @@
             '<label class="u-mono" style="font-size:10px;">use environment<br><select id="rp-env" ' + IN + ' onchange="RAM_PREDICT.setEnv(this.value)">' + envOpts + '</select></label>' +
             '<label class="u-mono" style="font-size:10px;">add part<br><select id="rp-cat" ' + IN + '>' + catOpts + '</select></label>' +
             '<button onclick="RAM_PREDICT.addRow()" class="btn-cyan" style="font-size:11px;">+ Add</button>' +
-            (st.rows.length ? '<button onclick="RAM_PREDICT.compute()" class="btn-cyan" style="font-size:11px;" title="Results already update live on every change — this re-runs the computation explicitly">Recompute</button>' : '') +
-            (st.rows.length ? '<button onclick="exportData(\'RM_Predictions\', \'csv\')" class="btn-cyan" style="font-size:11px;" title="Export the computed parts-count prediction with handbook citations as CSV">↓ Export CSV</button>' : '') +
+            (pairs.length ? '<button onclick="RAM_PREDICT.compute()" class="btn-cyan" style="font-size:11px;" title="Results already update live on every change — this re-runs the computation explicitly">Recompute</button>' : '') +
+            (pairs.length ? '<button onclick="exportData(\'RM_Predictions\', \'csv\')" class="btn-cyan" style="font-size:11px;" title="Export the computed parts-count prediction with handbook citations as CSV">↓ Export CSV</button>' : '') +
             '</div>' +
-            (st.rows.length ? '<table class="data-table" style="width:100%;  font-size:12px;"><thead><tr><th>Part category</th><th>N</th><th>Quality</th><th>Source</th><th></th></tr></thead><tbody>' + rowsHtml + '</tbody></table>'
+            (pairs.length ? '<table class="data-table" style="width:100%;  font-size:12px;"><thead><tr><th>Part category</th><th>N</th><th>Quality</th><th>Source</th><th></th></tr></thead><tbody>' + rowsHtml + '</tbody></table>'
                             // v0.5 teach-on-empty: what this page is, in three
                             // steps, before any jargon lands. Same tokens the
                             // rest of the site uses; nothing is invented — the
@@ -173,14 +210,15 @@
         // v0.5 live results: a populated page never shows a stale or empty
         // result block — compute on every render (defensive; refusals render
         // inline exactly as before).
-        if (st.rows.length) { try { compute(); } catch (_) {} }
+        if (pairs.length) { try { compute(); } catch (_) {} }
     }
 
     function compute() {
-        const st = _read(); const db = _db();
+        const st = _read2(); const db = _db();
         if (!st || !db) return;
+        const lv = _level();
         let r;
-        try { r = predict(st.rows, st.env); } catch (e) { _toast(e.message, 'error', 6800); const o = document.getElementById('rp-out'); if (o) o.innerHTML = '<div class="u-mono" style="font-size:10.5px; color:#8E2A2A;">' + _esc(e.message) + '</div>'; return; }
+        try { r = predict(_pairs(st, lv).map(p => p.r), _levelEnv(st, lv)); } catch (e) { _toast(e.message, 'error', 6800); const o = document.getElementById('rp-out'); if (o) o.innerHTML = '<div class="u-mono" style="font-size:10.5px; color:#8E2A2A;">' + _esc(e.message) + '</div>'; return; }
         // drift vs demonstrated, if any field record exists
         const ram = _ram();
         const recs = (ram && ram.field || []).filter(f => f.hours > 0);
@@ -197,7 +235,16 @@
             r.rows.map(x => _esc(x.name) + ': ' + x.qty + ' × λg ' + x.lambdaG + ' × πQ ' + x.piQ + ' (' + _esc(x.quality) + ') = ' + x.contrib.toFixed(4) + ' /10⁶h  <span style="color:var(--color-text-tertiary);">[' + _esc(x.cite) + ']</span>').join('<br>') +
             '<br><br><b>λ total = ' + r.lambdaTotal.toFixed(4) + ' per 10⁶ h · predicted MTBF = ' + Math.round(r.mtbfHrs).toLocaleString() + ' h</b>' +
             driftHtml +
-            '<br><br><span style="color:var(--color-text-tertiary);">' + _esc(r.basis) + '</span></div>';
+            '<br><br><span style="color:var(--color-text-tertiary);">' + _esc(r.basis) + '</span></div>' + (lv == null ? _rollupHtml() : '');
+    }
+    function _rollupHtml() {
+        const ru = rollup();
+        if (!ru || ru.parts.length < 2) return '';
+        return '<div class="u-mono sl-rp-rollup" style="font-size:11px; border:1px solid var(--color-border); border-radius:4px; padding:9px 12px; margin-top:8px;">' +
+            '<b>Aircraft roll-up</b> (the aircraft rows and each system\u2019s own prediction, each in its own use environment)<br>' +
+            ru.parts.map(x => _esc(x.name) + ': ' + (x.lambda != null ? x.lambda.toFixed(4) + ' /10\u2076h (' + _esc(x.env) + ')' : '<span style="color:#8E2A2A;">' + _esc(x.error) + '</span>')).join('<br>') +
+            '<br><b>\u03bb aircraft = ' + ru.lambdaTotal.toFixed(4) + ' per 10\u2076 h' + (ru.mtbfHrs ? ' \u00b7 MTBF = ' + Math.round(ru.mtbfHrs).toLocaleString() + ' h' : '') + '</b>' +
+            (ru.complete ? '' : '<br><span style="color:#8E2A2A;">Incomplete: a level above refused, so this total leaves it out.</span>') + '</div>';
     }
 
     function addRow() {
@@ -205,7 +252,9 @@
         if (!st || !db) return;
         const cat = (document.getElementById('rp-cat') || {}).value;
         if (!db.categories[cat]) return;
-        st.rows.push({ cat: cat, qty: 1, quality: db.categories[cat].defaultQuality });
+        const row = { cat: cat, qty: 1, quality: db.categories[cat].defaultQuality };
+        try { const LV = _LV(); if (LV) LV.stamp('ramPredict', row); } catch (_) {}   // 25 Oct 2026: the level on screen
+        st.rows.push(row);
         _save(); renderPage();
     }
     function removeRow(i) { const st = _ensure(); if (!st) return; st.rows.splice(i, 1); _save(); renderPage(); }
@@ -214,9 +263,14 @@
     function _live() { try { compute(); } catch (_) {} }
     function setQty(i, v) { const st = _ensure(); if (!st || !st.rows[i]) return; st.rows[i].qty = Math.max(1, Math.floor(Number(v) || 1)); _save(); _live(); }
     function setQuality(i, v) { const st = _ensure(); if (!st || !st.rows[i]) return; st.rows[i].quality = v; _save(); _live(); }
-    function setEnv(v) { const st = _ensure(); if (!st) return; st.env = v; _save(); _live(); }
+    function setEnv(v) {
+        const st = _ensure(); if (!st) return;
+        const lv = _level();
+        if (lv == null) st.env = v; else { if (!st.envBy || typeof st.envBy !== 'object') st.envBy = {}; st.envBy[lv] = v; }   // a system's own environment
+        _save(); _live();
+    }
 
-    const API = { predict: predict, drift: drift, renderPage: renderPage, compute: compute, addRow: addRow, removeRow: removeRow, setQty: setQty, setQuality: setQuality, setEnv: setEnv };
+    const API = { predict: predict, drift: drift, rollup: rollup, renderPage: renderPage, compute: compute, addRow: addRow, removeRow: removeRow, setQty: setQty, setQuality: setQuality, setEnv: setEnv };
 
     // ------------------------------------------------------------- wiring
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {

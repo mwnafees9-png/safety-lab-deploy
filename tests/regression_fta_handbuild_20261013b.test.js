@@ -425,9 +425,9 @@ function editContext() {
     check('[9a] undo / redo restores go through SLChangeAck.deferred with their label', /_ack\.deferred\(\{ kind: \/\^Redo\/\.test\(undoLabel\) \? 'redo' : 'undo'/.test(body));
     check('[9b] undo() and redo() pass "Undo: " / "Redo: " labels', /_restoreSnap\(prev\.snap, current, 'Undo: ' \+ prev\.label\)/.test(H) && /_restoreSnap\(next\.snap, current, 'Redo: ' \+ next\.label\)/.test(H));
     const A = read('change_ack.js');
-    // 16 Oct 2026 (change_ack.js v2.0): the leave points are a table (LEAVE) and open the ONE dialog (ask);
-    // Keep working stops the move, anything else lets it go on
-    check('[9c] leaving a fault tree (openFTAPageById) or a tab asks about the collection first', /switchTab: \{ action: 'leave this page'/.test(A) && /openFTAPageById: \{ action: 'open another fault tree'/.test(A) && /return ask\(\{ reason: L\.reason \|\| 'leave', action: L\.action \}\)\.then\(function \(r\) \{ if \(r === 'keep'\) \{ _selectBack\(sel\); return undefined; \} return f\.apply\(self, a\); \}\)/.test(A));
+    // 24 Oct 2026 (change_ack.js v3.0, the quiet bar): leaving a fault tree or a tab asks nothing; the changes wait in
+    // the bar until the person reviews them, saves or closes
+    check('[9c] leaving a fault tree (openFTAPageById) or a tab asks nothing: no leave table, the quiet bar instead', !/var LEAVE = \{/.test(A) && !/openFTAPageById: \{ action:/.test(A) && /function _bar\(\)/.test(A));
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

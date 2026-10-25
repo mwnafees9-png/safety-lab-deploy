@@ -207,6 +207,8 @@
     function _render() {
         const host = document.getElementById('view-monitors'); if (!host) return;
         const ev = monitorEval();
+        // 24 Oct 2026 (tree_homes.js): the events of the level being worked on (the aircraft, one system, Standalone)
+        if ((typeof SLTreeHomes !== 'undefined' && SLTreeHomes.pageInLevel)) { ev.rows = ev.rows.filter(r => SLTreeHomes.pageInLevel(r.pageId)); ev.findings = ev.findings.filter(f => SLTreeHomes.pageInLevel(f.pageId)); }
         let html = '<div class="header-with-export"><h3>Monitors &amp; Coverage <span style="font-weight:400;font-size:12px;color:var(--color-text-tertiary,#888);">— D.4.3.1 monitor specs · G.11.1.3.4 imperfect coverage</span></h3></div>';
         html += '<p class="cfg-hint" style="margin-bottom:8px;" title="Every basic event taking monitored or periodic credit is listed. A spec makes the credit real: threshold, cycle, coverage, scrub interval, and the monitor channel (checked for independence against the tree). Coverage < 100% splits the event — the undetected fraction accumulates latently until the scrub. AutoReq turns specs into requirements.">Every credit-taking event listed · spec makes the credit real · AutoReq emits the requirement.</p>';
 

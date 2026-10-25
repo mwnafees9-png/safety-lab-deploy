@@ -3247,50 +3247,7 @@ body.fta-fullscreen .feedback-fab { display: none !important; }
     opacity: 1;
 }
 
-/* =================================================================
-   Phase 14.7 — Active system breadcrumb
-   ================================================================= */
-.sys-breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(0, 122, 255, 0.06));
-    border: 1px solid rgba(139, 92, 246, 0.2);
-    border-radius: var(--r-md);
-    margin-bottom: var(--s-3);
-    font-size: 13px;
-}
-.sys-breadcrumb-label {
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    font-weight: 600;
-    color: var(--color-text-tertiary);
-}
-.sys-breadcrumb-name {
-    font-weight: 600;
-    color: #8b5cf6;
-}
-.sys-breadcrumb-switcher {
-    margin-left: auto;
-    font-size: 11px;
-    color: var(--color-text-secondary);
-    /* Phase 53.72 — use background-color (not background shorthand). The shorthand wipes
-       background-repeat:no-repeat + background-position set by the global `select { ... }`,
-       which causes the chevron from `body.theme-dark select` (higher specificity, survives
-       the shorthand on background-image) to tile across the full width. */
-    background-color: transparent;
-    border: 1px solid var(--color-border-thin);
-    padding: 3px 8px;
-    border-radius: var(--r-sm);
-    cursor: pointer;
-    transition: all var(--t-fast);
-}
-.sys-breadcrumb-switcher:hover {
-    border-color: #8b5cf6;
-    color: #8b5cf6;
-}
+/* Phase 14.7 — the active system breadcrumb ("Working in") — REMOVED 25 Oct 2026: the "Working on" picker in the left menu does its job. */
 
 /* Phase 14.9 — FTA canvas req-count badges — REMOVED 2026-06-28 (see safety_lab.js). */
 
@@ -4509,6 +4466,13 @@ body.node-modal-open::before {
     transition: background .12s, color .12s, border-color .12s;
 }
 .row-kebab:hover { background: var(--color-surface-2); color: var(--color-text-primary); border-color: var(--color-border-thin); }
+/* 24 Oct 2026 (fc_auto_trees.js, Waqas: "a subtle red blinky thing over the skewer ... like you get for
+   notifications"): the row whose failure condition still needs its 1309 chart answered */
+.row-actions:has([data-needs-chart]) .row-kebab { position: relative; }
+.row-actions:has([data-needs-chart]) .row-kebab::after { content: ''; position: absolute; top: 2px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--color-danger, #d4453a); box-shadow: 0 0 0 0 rgba(212, 69, 58, 0.55); animation: sl-needs-chart-pulse 1.8s ease-out infinite; pointer-events: none; }
+.row-action-menu [data-needs-chart] { color: var(--color-danger, #d4453a); font-weight: 600; }
+@keyframes sl-needs-chart-pulse { 0% { box-shadow: 0 0 0 0 rgba(212, 69, 58, 0.55); } 70% { box-shadow: 0 0 0 6px rgba(212, 69, 58, 0); } 100% { box-shadow: 0 0 0 0 rgba(212, 69, 58, 0); } }
+@media (prefers-reduced-motion: reduce) { .row-actions:has([data-needs-chart]) .row-kebab::after { animation: none; } }
 .row-action-menu {
     display: none;
     position: fixed;
@@ -5967,3 +5931,17 @@ thead th,
     border: none; border-right: 1px solid var(--color-border-strong);
 }
 .sl-canvas-fill { height: var(--sl-canvas-h); box-sizing: border-box; }
+
+/* 25 Oct 2026 (Waqas: "these need to be aligned and sized equally"): the diagram toolbars (bow-tie, event tree)
+   share one bar: label, picker and every button on one line, one height; the picker one width on both pages; the
+   + New button in blue, the rest plain. */
+.sl-diag-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 12px; }
+.sl-diag-bar > label { margin: 0; padding: 0; min-width: 7.5em; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; line-height: 1; }
+.sl-diag-bar > select,
+.sl-diag-bar > button { box-sizing: border-box; height: 34px; margin: 0; font-size: 13px; line-height: 1; border-radius: 6px; }
+.sl-diag-bar > select { width: 360px; max-width: 100%; padding: 0 10px; border: 1px solid var(--color-border-strong); background-color: var(--color-surface-2); color: var(--color-text-primary); }
+.sl-diag-bar > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 14px; white-space: nowrap; cursor: pointer;
+    border: 1px solid var(--color-border-strong); background: var(--color-surface-1); background-image: none; color: var(--color-text-primary); box-shadow: none; }
+.sl-diag-bar > button:hover { border-color: var(--color-accent); }
+.sl-diag-bar > button.sl-db-primary { background: var(--color-accent); border-color: var(--color-accent); color: #F2F7FF; }
+.sl-diag-bar > button.sl-db-primary:hover { background: var(--color-accent-hover); }

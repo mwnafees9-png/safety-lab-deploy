@@ -251,7 +251,7 @@ console.log('\n[7] the exceptions stay blocked everywhere');
 {
   const send = strip(fn(notify, 'function naSend('));
   check('alerts ask "is it controlled?", not "may it go to the cloud?"', /SC\.controlledReason\(null\)/.test(send) && before(send, 'controlledReason', 'blocksCloud') && before(send, 'controlledReason', 'fetch('));
-  for (const f of ['corpus_retrieve.js', 'thread_client.js', 'ml_assurance.js']) {
+  for (const f of ['corpus_retrieve.js', 'thread_client.js']) {   // ml_assurance.js removed 25 Oct 2026 (the AI/ML lane is out of the product)
     check(f + ': no own-server exception', !/ownServer/.test(S(f)));
   }
   check('per-browser AI memory: still off for ITAR projects, no exception', !/ownServer/.test(fn(ai, 'function _memoryExemplars')) && /isITARControlled\) return ''/.test(fn(ai, 'function _memoryExemplars')));

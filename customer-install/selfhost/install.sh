@@ -244,9 +244,36 @@ chmod 600 ai-proxy.env
 # The server's license lives in stack/license/server.lic (loaded from the maintenance menu, or a
 # .lic file Safety Lab sent placed next to this script). The seat records live in ai-proxy-data.
 mkdir -p license ai-proxy-data
-if [ ! -s license/server.lic ]; then
-  NEW_LIC=$(ls "$HERE"/*.lic 2>/dev/null | head -1 || true)
-  if [ -n "$NEW_LIC" ]; then tr -d '\r\n' < "$NEW_LIC" > license/server.lic; fi
+# 24 Oct 2026: a NEWER license placed next to this script replaces the one the server has (it used to be read
+# only when the server had none, so a renewed license could only be loaded in each user's app). "Newer" is the
+# license's own issue time (issuedAt, inside the signed payload); the one it replaces is kept beside it, never
+# deleted. The signature is checked where it is used (the AI service and every app), not here.
+_lic_issued() {
+  local p; p=$(tr -d '\r\n' < "$1" | cut -d. -f1 | tr '_-' '/+')
+  while [ $(( ${#p} % 4 )) -ne 0 ]; do p="$p="; done
+  printf '%s' "$p" | base64 -d 2>/dev/null | tr -d '\n' | sed -n 's/.*"issuedAt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
+NEW_LIC=""; NEW_AT=""
+for f in "$HERE"/*.lic; do
+  [ -s "$f" ] || continue
+  at=$(_lic_issued "$f")
+  if [ -z "$NEW_LIC" ] || [[ "$at" > "$NEW_AT" ]]; then NEW_LIC="$f"; NEW_AT="$at"; fi
+done
+if [ -n "$NEW_LIC" ]; then
+  if [ ! -s license/server.lic ]; then
+    tr -d '\r\n' < "$NEW_LIC" > license/server.lic
+    echo "   License: loaded $(basename "$NEW_LIC")${NEW_AT:+ (issued $NEW_AT)}."
+  elif ! cmp -s <(tr -d '\r\n' < "$NEW_LIC") <(tr -d '\r\n' < license/server.lic); then
+    OLD_AT=$(_lic_issued license/server.lic)
+    if [ -z "$OLD_AT" ] || { [ -n "$NEW_AT" ] && [[ "$NEW_AT" > "$OLD_AT" ]]; }; then
+      KEEP="license/server.lic.replaced-$(date +%Y%m%d-%H%M%S)"
+      cp license/server.lic "$KEEP"
+      tr -d '\r\n' < "$NEW_LIC" > license/server.lic
+      echo "   License: replaced with $(basename "$NEW_LIC") (issued ${NEW_AT:-unknown}); the previous one is kept as $KEEP."
+    else
+      echo "   License: kept the server's license (issued $OLD_AT). $(basename "$NEW_LIC") next to this script was issued ${NEW_AT:-at an unknown time}, which is not newer."
+    fi
+  fi
 fi
 [ -f license/server.lic ] && chmod 644 license/server.lic
 

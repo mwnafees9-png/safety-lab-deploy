@@ -225,7 +225,8 @@
     function _render() {
         if (typeof document === 'undefined') return;
         const host = document.getElementById('view-expcase'); if (!host) return;
-        const rows = sweep();
+        // 24 Oct 2026 (tree_homes.js): the events of the level being worked on (the aircraft, one system, Standalone)
+        const rows = (typeof SLTreeHomes !== 'undefined' && SLTreeHomes.pageInLevel) ? sweep().filter(r => SLTreeHomes.pageInLevel(r.pageId)) : sweep();
         const opts = sel => '<option value="">— select case —</option>' + CASES.map(c =>
             '<option value="' + c.id + '"' + (sel && sel.caseId === c.id ? ' selected' : '') + '>' + esc(c.name + ' · ' + c.clause) + '</option>').join('');
         host.innerHTML =

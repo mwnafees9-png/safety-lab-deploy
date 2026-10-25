@@ -166,8 +166,8 @@ async function shot(pg, name, sel) {
     await userEdit(pg, () => { acFhaData[1].fcDesc = 'Edited description (B3)'; });
     await sleep(1200);
     check('16 Oct 2026: NO dialog after the change; it is collected and the top bar counts it', !(await ackOpen(pg)) && (await ackCount(pg)) === 1 && /1 change to confirm/.test((await state(pg)).ind), (await state(pg)).ind);
-    const leave3 = pg.evaluate(() => switchTab('dashboard'));
-    check('leaving the page opens the one dialog', await waitFor(pg, () => ackOpen(pg), 3000));
+    const leave3 = (async () => { await pg.evaluate(() => switchTab('dashboard')); await sleep(700); if (await ackOpen(pg)) { global.__leaveOpened = true; return; } await pg.click('#sl-ack-bar .sl-ack-review'); })();
+    check('24 Oct 2026: leaving the page opens nothing; Review on the quiet bar opens the list', await waitFor(pg, () => ackOpen(pg), 4000) && !global.__leaveOpened);
     await sleep(300);   // the dialog fades in: its text is readable once it is shown
     let txt = await ackText(pg);
     check('it says what changes, in plain words (area, row, field, old and new value)', /Aircraft FHA/.test(txt) && /FC-02/.test(txt) && /description/.test(txt) && /Edited description \(B3\)/.test(txt), txt.slice(0, 300));
@@ -198,10 +198,10 @@ async function shot(pg, name, sel) {
     await sleep(1200);
     check('16 Oct 2026: leaving the field opens nothing; the typed name waits in the collection', !(await ackOpen(pg)) && (await ackCount(pg)) >= 1);
     const prompts2 = (await state(pg)).stats.prompts;
-    const leave2 = pg.evaluate(() => switchTab('ac-fha'));
-    check('leaving the fault tree page brings ONE dialog', await waitFor(pg, () => ackOpen(pg), 3000));
+    const leave2 = (async () => { await pg.evaluate(() => switchTab('ac-fha')); await sleep(700); if (await ackOpen(pg)) { global.__leaveOpened = true; return; } await pg.click('#sl-ack-bar .sl-ack-review'); })();
+    check('leaving the fault tree page opens nothing; Review brings ONE list', await waitFor(pg, () => ackOpen(pg), 4000));
     txt = await ackText(pg);
-    check('the dialog names the fault tree node and its new name, as ONE change (not one per keystroke)', /Fault tree/.test(txt) && /typed/.test(txt) && /Confirm your change/.test(txt), txt.slice(0, 300));
+    check('the dialog names the fault tree node and its new name, as ONE change (not one per keystroke)', /Fault tree/.test(txt) && /typed/.test(txt) && /Review your change/.test(txt), txt.slice(0, 300));
     await pg.click('.sl-ack-keep'); await leave2; await sleep(900);
     s = await state(pg);
     check('one dialog for the whole word (not one per keystroke)', s.stats.prompts === prompts2 + 1 && prompts2 === 1, 'prompts ' + s.stats.prompts);
@@ -221,7 +221,7 @@ async function shot(pg, name, sel) {
     await pg.click('#save-indicator');
     check('a click on the top bar opens the one dialog', await waitFor(pg, () => ackOpen(pg), 3000));
     txt = await ackText(pg);
-    check('its title counts every row (' + n4 + ')', new RegExp('Confirm your ' + n4 + ' changes').test(txt), txt.slice(0, 120));
+    check('its title counts every row (' + n4 + ')', new RegExp('Review your ' + n4 + ' changes').test(txt), txt.slice(0, 120));
     check('it lists the first rows and says how many more', /and \d+ more/.test(txt) || n4 <= 8);
     await pg.click('.sl-ack-keep'); await sleep(800);
     check('one dialog only', (await state(pg)).stats.prompts === 3);
@@ -282,8 +282,8 @@ async function shot(pg, name, sel) {
     check('Undo walked every acknowledged change back (the typed name is gone)', (await pg.evaluate(() => window.__b2node && ftaPages.some(p => JSON.stringify(p.root || {}).indexOf(' typed"') >= 0))) === false);
     check('the undos are waiting as steps of the one collection', (await pg.evaluate(() => SLChangeAck.collected().filter(c => c.kind === 'undo').length)) === u8);
     await pg.evaluate(() => switchTab('ac-fha')); await sleep(400);
-    const leave8 = pg.evaluate(() => switchTab('dashboard'));
-    check('leaving the view brings ONE dialog listing what was undone', await waitFor(pg, () => ackOpen(pg), 3000));
+    const leave8 = (async () => { await pg.evaluate(() => switchTab('dashboard')); await sleep(700); if (await ackOpen(pg)) { global.__leaveOpened = true; return; } await pg.click('#sl-ack-bar .sl-ack-review'); })();
+    check('Review brings ONE list of what was undone', await waitFor(pg, () => ackOpen(pg), 4000));
     await sleep(300); txt = await ackText(pg);
     check('it lists the undos (one "Undone" line each, under Undo and Redo)', /Undo and Redo \(/.test(txt) && (await pg.evaluate(() => document.querySelectorAll('#sl-ack-overlay .sl-ack-op.undone').length)) === u8, txt.slice(0, 600));
     await pg.click('.sl-ack-keep'); await leave8; await sleep(800);
@@ -298,14 +298,14 @@ async function shot(pg, name, sel) {
     await shot(pg, 'as_02_moves_waiting', '#save-indicator');
     // a diagram move: collected the same way; Cancel on leaving puts back only it
     await pg.evaluate(() => { SLChangeAck._markInput(); SLChangeAck.deferred({ kind: 'move', label: 'Bow-tie: Move Pump' }, () => { projectConfig.__b8box = { x: 99 }; scheduleAutosave(); }); });   // 16 Oct 2026: made by the person (input), as the other moves here; a move with no input is the app's own
-    const leave8b = pg.evaluate(() => switchTab('ac-fha'));
+    const leave8b = (async () => { await pg.evaluate(() => switchTab('ac-fha')); await sleep(700); if (await ackOpen(pg)) { global.__leaveOpened = true; return; } await pg.click('#sl-ack-bar .sl-ack-review'); })();
     await waitFor(pg, () => ackOpen(pg), 3000);
     await sleep(300); txt = await ackText(pg);
     check('the move and the redo are in one list', /Moved/.test(txt) && /Bow-tie: Move Pump/.test(txt) && /Redone/.test(txt), txt.slice(0, 300));
     await pg.click('.sl-ack-discard'); await leave8b; await sleep(900);
     check('Discard all put back everything waiting (the move and the redo)', await pg.evaluate(() => !projectConfig.__b8box && !ftaPages.some(p => JSON.stringify(p.root || {}).indexOf(' typed"') >= 0)));
     await pg.evaluate(() => redo()); await sleep(500);
-    const leave8c = pg.evaluate(() => switchTab(window._slCurrentTab === 'dashboard' ? 'ac-fha' : 'dashboard'));
+    const leave8c = (async () => { await pg.evaluate(() => switchTab(window._slCurrentTab === 'dashboard' ? 'ac-fha' : 'dashboard')); await sleep(700); if (await ackOpen(pg)) { global.__leaveOpened = true; return; } await pg.click('#sl-ack-bar .sl-ack-review'); })();
     await waitFor(pg, () => ackOpen(pg), 3000); await pg.click('.sl-ack-keep'); await leave8c; await sleep(700);
     await waitFor(pg, async () => !(await state(pg)).dirty, 3000);
     s = await state(pg);
@@ -457,7 +457,7 @@ async function shot(pg, name, sel) {
     check('the move left waiting is offered again in the one dialog on the next open', await waitFor(pg2, () => ackOpen(pg2), 9000));
     await sleep(500);
     const t15 = await ackText(pg2);
-    check('the list says what it is, and only that (the app\'s own writes since the restore are not listed)', /last session/i.test(t15) && /b15 box/i.test(t15) && /Confirm your change/.test(t15), t15.slice(0, 400));
+    check('the list says what it is, and only that (the app\'s own writes since the restore are not listed)', /last session/i.test(t15) && /b15 box/i.test(t15) && /Review your change/.test(t15), t15.slice(0, 400));
     await shot(pg2, 'as_06_crash_reask');
     await pg2.click('.sl-ack-discard'); await sleep(1200);
     // 16 Oct 2026: the journal and the integrity checks write right after (decided as the app's own within a

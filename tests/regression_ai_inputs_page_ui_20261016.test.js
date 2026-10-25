@@ -118,7 +118,7 @@ const MD = '# Propulsion SDD notes\n\nThe FADEC has two channels, A and B, each 
 
         console.log('\n[A] the page opens from the sidebar');
         await page.evaluate(() => { const g = document.getElementById('asb-grp-admin'); if (g) g.open = true; });
-        await page.click('#snav-ai');
+        await page.click('#app-sidebar .asb-area[data-area="ai"]');   // 24 Oct 2026: the AI Assistant section on the left (nav_areas.js)
         await page.waitForSelector('#aip-assist .aip-act', { timeout: 20000 });
         const A = await page.evaluate(() => ({
             shown: document.getElementById('view-ai').style.display !== 'none',
@@ -235,7 +235,7 @@ const MD = '# Propulsion SDD notes\n\nThe FADEC has two channels, A and B, each 
         const B = await boot(ctxB);
         const pb = B.page;
         await pb.evaluate(() => { const g = document.getElementById('asb-grp-admin'); if (g) g.open = true; });
-        await pb.click('#snav-ai');
+        await pb.click('#app-sidebar .asb-area[data-area="ai"]');
         await pb.waitForSelector('#aip-import');
         check('the fresh project starts with no AI inputs', (await pb.evaluate(() => SafetyLabSourceDocs.list().length)) === 0);
         // a damaged copy first: refused, nothing changes

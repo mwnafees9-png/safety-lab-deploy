@@ -132,16 +132,14 @@ check('the vision-confirm gate covers save as well as accept',
   /\(act === 'accept' \|\| act === 'save'\) && hasAccept && !_vc\.ok\(\)/.test(panel),
   'otherwise Edit would be a way around the diagram-verification checkbox');
 
-check('the save path calls recordCorrection', /ML_ASSURANCE\.recordCorrection\(/.test(panel));
+// 25 Oct 2026 (Waqas: "AI/ML assurance can be completely removed from the software for now"): the AI/ML capture
+// register (ML_ASSURANCE.recordCorrection) is out with the lane; an edit is still recorded field by field in the
+// AI log's diff and marks the row human-edited.
+check('the save path no longer feeds the removed AI/ML capture register', !/ML_ASSURANCE/.test(panel));
 check('a field the engineer did not change is skipped',
   /if \(before === after\) return;/.test(panel),
   'acceptance is not a correction — recording it would poison the corpus with no-ops');
-check('the correction is keyed to the lane AND the field',
-  /cfg\.id \+ ' · ' \+ f\.key/.test(panel),
-  'per-feature attribution is what makes the telemetry useful');
-check('recordCorrection is called defensively',
-  /try \{[\s\S]{0,220}ML_ASSURANCE\.recordCorrection[\s\S]{0,220}\} catch/.test(panel),
-  'the capture register must never be able to break an accept');
+check('each changed field is recorded by name in the edit diff', /diff\.push\(\{ field: f\.key, from: before, to: after \}\)/.test(panel));
 check('the drafted value is read BEFORE the item is mutated',
   panel.indexOf('const before = String(it[f.key]') < panel.indexOf('it[f.key] = after;'),
   'reading after assignment would record every correction as a no-op');

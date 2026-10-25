@@ -27,7 +27,7 @@
     <!-- Phase 53.8 — cache-busting query string. Chrome caches file:// resources
          aggressively even with DevTools "Disable cache" on; bumping this string
          forces a re-fetch. Update the number when CSS/JS changes need to land. -->
-    <link rel="stylesheet" href="safety_lab.css?v=65.69">
+    <link rel="stylesheet" href="safety_lab.css?v=65.72">
     <!-- Phase 56.30 — Boot splash. Hides the app shell behind a brand-mark
          overlay until auth_gate.js (or safety_lab.js, for already-signed-in
          users) calls window.__slDismissBootSplash(). Prevents the app from
@@ -185,7 +185,6 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             </div></details>
             <details class="asb-grp asb-cat" id="asb-grp-systems" open><summary><span class="asb-lbl asb-cat-lbl">Systems</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
                 <a class="asb-item sub" id="snav-sys-dir" onclick="switchTab('sys-dir')" role="button" tabindex="0"><span class="asb-lbl">System workspaces — SFHA · trees · reqs</span></a>
-                <a class="asb-item sub" id="snav-mlas" onclick="switchTab('mlas')" role="button" tabindex="0"><span class="asb-lbl">AI/ML learning assurance</span></a>
                 <div id="asb-sys-dirs"></div>
             </div></details>
             <details class="asb-grp asb-cat" id="asb-grp-hf" open><summary><span class="asb-lbl asb-cat-lbl">Human Factors</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
@@ -501,8 +500,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
         <div id="view-sys-workspace" style="display: none;">
             <div class="header-with-export" style="margin-bottom: 15px; border-bottom: 2px solid var(--border-primary); padding-bottom: 15px;">
                 <div>
-                    <h2 id="ws-sys-title" style="margin:0; color: #0284c7;">System Workspace</h2>
-                    <p style="margin: 0; font-size: 0.85em; color: var(--text-secondary);">Isolated Data Environment</p>
+                    <h2 id="ws-sys-title" style="margin:0; color: #0284c7;">SFHA</h2>
+                    <p style="margin: 0; font-size: 0.85em; color: var(--text-secondary);">This system's functions, FCIM, FHA and assumptions</p>
                 </div>
                 <button class="btn-word" onclick="switchTab('sys-dir')" style="background: var(--border-primary); color: var(--text-primary);">⬅ Return to Directory</button>
             </div>
@@ -1763,7 +1762,6 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
         <div id="view-hfa-task" style="display: none;"></div>
         <div id="view-hfa-ergo" style="display: none;"></div>
         <div id="view-stpa" style="display: none;"></div>
-        <div id="view-mlas" style="display: none;"></div>
         <div id="view-ac-asm" style="display: none;">
             <div class="header-with-export">
                 <h3>Aircraft Assumptions Log</h3>
@@ -3410,6 +3408,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 </div>
             </div>
             <div id="gt-sankey-host" class="sl-canvas-fill" style="width:100%; overflow:auto; border:1px solid var(--color-border-hair); border-radius:var(--r-md); background:var(--color-surface-1);"></div>
+            <div id="gt-unthreaded" style="display:none;"></div>
             <div id="gt-eco" style="margin-top:14px; border:1px solid var(--color-border-hair); border-radius:var(--r-md); background:var(--color-surface-2); padding:14px 16px;"></div>
         </div>
 
@@ -3492,7 +3491,6 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                         <label><input type="checkbox" id="ar-gen-gate" checked> <strong>Gate structure</strong> &rarr; AND-independence + OR-SPF requirements</label>
                         <label><input type="checkbox" id="ar-gen-pra" checked> <strong>PRA</strong> &rarr; zonal protection requirements <span style="font-weight: 400; color: var(--color-text-tertiary);">(AC scope only)</span></label>
                         <label><input type="checkbox" id="ar-gen-zsa" checked> <strong>ZSA</strong> &rarr; housed-function separation requirements <span style="font-weight: 400; color: var(--color-text-tertiary);">(AC scope only)</span></label>
-                        <label><input type="checkbox" id="ar-gen-iface" checked> <strong>Interface register</strong> &rarr; interface requirements <span style="font-weight: 400; color: var(--color-text-tertiary);" title="ARP4754B §5.3.1.8 — interconnections plus the characteristics of the information communicated; every input with a source, every output with a destination, and signal behavior fully described. An edge missing a medium, a direction or an ICD reference still generates a requirement, and that requirement says what is missing.">(ARP4754B &sect;5.3.1.8 &middot; AC scope)</span></label>
                         <label><input type="checkbox" id="ar-gen-hf" checked> <strong>HF register</strong> &rarr; operational requirements <span style="font-weight: 400; color: var(--color-text-tertiary);" title="ARP4754B §5.1.8 — a human-performed task relied on to ensure safety is to be identified and recorded in the certification data. §5.3.1.4 names actions, decisions, information requirements and timing; three of the four are derivable from the HF register. Decisions are not — there is no decision field, and deriving one would be invention.">(ARP4754B &sect;5.3.1.4 &middot; actions, timing, information)</span></label>
                         <label><input type="checkbox" id="ar-gen-fcim-mon" checked> <strong>FCIM pairs</strong> &rarr; crew-awareness monitoring requirements <span style="font-weight: 400; color: var(--color-text-tertiary);" title="An aware/unaware pair whose AWARE (lower) risk was chosen to govern takes credit for crew awareness — the credit holds only if the crew is made aware, so the annunciation requirement is owed. Unaware-governs, undecided pairs and standalone Unaware rows owe nothing. ARP4761A §A.3 awareness distinction / §xx.1309 warning information.">(ARP4761A &sect;A.3 &middot; AC scope)</span></label>
                     </div>
@@ -4160,9 +4158,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ai_memory.js?v=1.0" defer></script>
     <script src="importers.js?v=1.12" defer></script>
     <script src="ai_request.js?v=1.1" defer></script>
-    <script src="core_modules.js?v=1.14" defer></script>
+    <script src="core_modules.js?v=1.15" defer></script>
     <!-- P2 batch 1 — FTA quantification math, moved verbatim from safety_lab.js. Must load AFTER fta_engine.js (these newer copies intentionally override the engine's page-side globals, exactly as the monolith did) and BEFORE safety_lab.js. -->
-    <script src="fta_quant_modules.js?v=66.29" defer></script>
+    <script src="fta_quant_modules.js?v=66.30" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
     <script src="event_reuse.js?v=1.2" defer></script>
     <!-- Phase 66.29 — MAC as minimum acceptable CAPABILITY, and the three lanes one
@@ -4178,29 +4176,31 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.1" defer></script>
     <script src="node_identity_ui.js?v=1.5" defer></script>
-    <script src="fta_view_modules.js?v=66.46" defer></script>
+    <script src="fta_view_modules.js?v=66.47" defer></script>
     <!-- 13 Oct 2026 (fix G) — SLFtaEdit: the fault tree built by hand (toolbox, drawn connections, unattached nodes, canvas λ/P, model link, overview map) and the ONE change path (SLFtaEdit.applyEdit). After fta_view_modules.js. -->
     <script src="fta_canvas_edit.js?v=1.1" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
-    <script src="gt_thread.js?v=0.91" defer></script>
+    <!-- 24 Oct 2026: req_thread.js (SLReqThread) follows every safety-generated requirement back to its failure conditions for the Golden Thread; after fta_view_modules.js, before gt_thread.js. -->
+    <script src="req_thread.js?v=1.0" defer></script>
+    <script src="gt_thread.js?v=0.93" defer></script>
     <!-- 21 Oct 2026 (full function tree): func_tree.js is the one place that knows how aircraft functions nest to any depth. Loads before the modules that render and pick functions. -->
     <script src="func_tree.js?v=1.1" defer></script>
-    <script src="data_ops_modules.js?v=66.59" defer></script>
+    <script src="data_ops_modules.js?v=66.60" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.47" defer></script>
+    <script src="support_modules.js?v=66.51" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.36" defer></script>
+    <script src="helpers_modules.js?v=3.39" defer></script>
     <script src="cloud_writer.js?v=1.2" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.2" defer></script>
     <!-- P2 batch 5 — self-contained constants + single-assignment window API bindings, machine-proven pure (empty-VM eval + load-time-read screen). -->
-    <script src="bindings_modules.js?v=1.58" defer></script>
+    <script src="bindings_modules.js?v=1.60" defer></script>
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
-    <script src="misc_fn_modules.js?v=66.83" defer></script>
-    <script src="safety_lab.js?v=65.67" defer></script>
+    <script src="misc_fn_modules.js?v=66.85" defer></script>
+    <script src="safety_lab.js?v=65.69" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4216,12 +4216,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="save_watch.js?v=1.2" defer></script>
     <script src="data_change.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (analysis model links): model_links.js links every analysis row to the model elements it is about; loads after data_change.js (its cache key) and before the worksheet decorators. -->
-    <script src="model_links.js?v=1.0" defer></script>
+    <script src="model_links.js?v=1.1" defer></script>
     <script src="render_pass.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
-    <script src="change_ack.js?v=2.0" defer></script>
-    <script src="save_state.js?v=3.0" defer></script>
+    <script src="change_ack.js?v=3.2" defer></script>
+    <script src="save_state.js?v=3.2" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.1" defer></script>
@@ -4233,7 +4233,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Q7 (26 Sep 2026) — the critical AND-gate test that scopes the CMA: which independence claims the
          failure condition's budget depends on (as OR / as certain, BDD-exact). Panel on the CMA page, a stage on
          the Golden Thread, INV-58. Loads after qual_arg.js; wraps renderCMA and _renderGoldenThread lazily. -->
-    <script src="critical_gates.js?v=1.2" defer></script>
+    <script src="critical_gates.js?v=1.3" defer></script>
     <!-- 27 Sep 2026 (Q1-Q3) — assumption → requirement, rationale required, source-analysis tag. -->
     <script src="req_basis.js?v=1.1" defer></script>
     <!-- 27 Sep 2026 (Q4-Q6) — alert independence, crew response credit, engine / propeller severity anchors. -->
@@ -4248,14 +4248,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.37" defer></script>
+    <script src="assurance_modules.js?v=1.39" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
     <script src="autonomy_metrics.js?v=0.3" defer></script>
     <script src="reports.js?v=66.17" defer></script>
     <!-- Phase F — R&M module (born modular; wraps switchTab, zero monolith edits). Pro+ gated. -->
-    <script src="ram_modules.js?v=1.10" defer></script>
+    <script src="ram_modules.js?v=1.11" defer></script>
     <!-- FRACAS-2 — the incident ledger (case manager) under the statistical FRACAS;
          events feed failure counts, closure requires a named effectiveness verifier. -->
     <script src="fracas_ledger.js?v=0.3" defer></script>
@@ -4264,7 +4264,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          (seeded per MC-SEED). A forecast, not a demonstration: claimed-lane by construction. -->
     <script src="ops_mc.js?v=0.2" defer></script>
     <!-- Phase F4 — MSG-3 scheduled-maintenance analysis (born modular; pushes into the RAM ledger). Pro+ gated. -->
-    <script src="msg3_module.js?v=1.7" defer></script>
+    <script src="msg3_module.js?v=1.8" defer></script>
     <!-- 13 Oct 2026: SLDiagramEditor, the one diagram editor core (toolbox, connect, move, resize, undo, zoom, pan, full screen, overview, read only). Loads before every diagram built on it: rbd_module, cea_graph, stpa_panel, event_trees, bowtie, markov. -->
     <script src="diagram_editor.js?v=1.5" defer></script>
     <!-- Phase F5-F7 — the complete R&M analytics suite (born modular). Pro+ gated. -->
@@ -4289,14 +4289,14 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Phase P2 — problem reports / OPRs (born modular; upgrades the SSA E.4.d gate at runtime). -->
     <script src="problem_reports.js?v=1.2" defer></script>
     <!-- Phase P7 — MMEL/TLD dispatch analysis (born modular; evaluated through the live trees). Pro+ gated. -->
-    <script src="mmel_module.js?v=1.5" defer></script>
+    <script src="mmel_module.js?v=1.6" defer></script>
     <script src="mel_fha_crosscheck.js?v=1.0" defer></script>
     <!-- Phase P6 — modification impact wizard (born modular; deterministic closure). -->
     <script src="mod_impact.js?v=1.10" defer></script>
     <!-- Phase P4 — validation-vs-verification split (born modular; §5.4 discipline). -->
     <script src="vv_validation.js?v=2.5" defer></script>
     <!-- Phase P5 — CEA dependency graph (born modular; graph vs interdependence reconciliation). -->
-    <script src="cea_graph.js?v=1.4" defer></script>
+    <script src="cea_graph.js?v=1.5" defer></script>
     <!-- Phase P8 — safety-significant events export (born modular; in-service watch list). -->
     <script src="sse_export.js?v=1.3" defer></script>
     <!-- Phase P9 — Items/LRU collapse into system workspaces (born modular; injected ws sub-tab). -->
@@ -4363,7 +4363,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab
          library (sysml_safety_lib.sysml), and the "Model element" link field (SLSysML, see sysml_model.js). -->
-    <script src="sysml_model.js?v=1.4" defer></script>
+    <script src="sysml_model.js?v=1.5" defer></script>
     <!-- Q5 — save/load round-trip proof (born modular; the pipeline proves itself). -->
     <script src="roundtrip_proof.js?v=1.1" defer></script>
     <script src="ccf_similarity.js?v=1.4" defer></script>
@@ -4387,7 +4387,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          Data lives in ram_predict_data.js, generated ONLY from the staged handbook PDF with
          per-table citations; the engine refuses without it. -->
     <script src="ram_predict_data.js?v=0.1" defer></script>
-    <script src="ram_predict.js?v=0.6" defer></script>
+    <script src="ram_predict.js?v=0.7" defer></script>
     <script src="ram_hub.js?v=1.3" defer></script>
     <script src="engine_selftest.js?v=1.1" defer></script>
     <script src="ram_trace.js?v=1.12" defer></script>
@@ -4403,7 +4403,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="hf_ergo.js?v=0.2" defer></script>
     <script src="hf_assumptions.js?v=0.9" defer></script>
     <script src="hf_register_panel.js?v=1.9" defer></script>
-    <script src="hf_analyses.js?v=1.19" defer></script>
+    <script src="hf_analyses.js?v=1.20" defer></script>
     <script src="field_defs.js?v=1.7" defer></script>
     <script src="lane_ai_bar.js?v=1.3" defer></script>
     <script src="hf_evidence.js?v=0.2" defer></script>
@@ -4448,7 +4448,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
          Loads after the panels whose tabs it gates; wraps switchTab last-ish so its guard
          sits outermost on the chain. -->
-    <script src="program_plan.js?v=2.6" defer></script>
+    <script src="program_plan.js?v=2.8" defer></script>
     <!-- Rev C nav services: per-system rail directories, open-state persistence,
          and the SILENT ⌘K palette (23 Aug: the catalogue service and its residue
          are deleted — see nav_rail.js v1.2). Loads AFTER program_plan.js (reads
@@ -4458,7 +4458,6 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          next. Must load AFTER program_plan.js: it consumes CATALOGUE, laneOn,
          laneData and the DERIVED map from it rather than keeping its own copy. -->
     <script src="next_step.js?v=0.7" defer></script>
-    <script src="ml_assurance.js?v=0.5" defer></script>
     <!-- Mass actions for tabulated analyses — selection layer over the worksheet tables;
          every write routes through each worksheet's own helpers. -->
     <script src="mass_actions.js?v=0.9" defer></script>
@@ -4487,7 +4486,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zonal_exchange.js?v=1.3" defer></script>
     <!-- 19 Oct 2026: the zonal safety analysis, computed zone by zone from the zone model, CAD, Sys Lab routes and the fault trees. Deterministic, no AI. -->
     <script src="zsa_engine.js?v=1.0" defer></script>
-    <script src="zsa_engine_ui.js?v=1.0" defer></script>
+    <script src="zsa_engine_ui.js?v=1.1" defer></script>
     <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
     <script src="requirement_states.js?v=1.0" defer></script>
     <script src="pra_report.js?v=1.5" defer></script>
@@ -4534,30 +4533,37 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="do_credit.js?v=1.0" defer></script>
     <script src="do160_ledger.js?v=1.0" defer></script>
     <script src="ewis_lane.js?v=1.0" defer></script>
-    <script src="event_trees.js?v=2.1" defer></script>
+    <script src="event_trees.js?v=2.4" defer></script>
     <!-- Bow-Tie Analysis — unified FTA↔ETA. Born-modular: creates its own view + nav,
          joins the fault tree's BDD-exact top probability to the event tree initiator,
          checks cross-side common cause against cut sets, lints generic barriers. -->
-    <script src="bowtie.js?v=3.1" defer></script>
+    <script src="bowtie.js?v=3.4" defer></script>
     <!-- Global UI text-size control (A−/A/A+, Ctrl±). Born-modular; scales the whole
          app via body zoom, persisted. Addresses the "text too small" default. -->
     <script src="text_scale.js?v=2.2" defer></script>
     <!-- Monitors & Coverage — M7 (D.4.3.1 / G.11.1.3.4). Born-modular: monitor spec
          records on credit-taking events, imperfect-coverage split, monitor-channel
          independence checks feeding the IP ledger, stats tile on the MBSA cockpit. -->
-    <script src="monitor_spec.js?v=1.5" defer></script>
-    <script src="exposure_case.js?v=1.24" defer></script>
+    <script src="monitor_spec.js?v=1.6" defer></script>
+    <script src="exposure_case.js?v=1.25" defer></script>
     <script src="cra_matrix.js?v=1.5" defer></script>
     <script src="fta_proposals.js?v=1.4" defer></script>
-    <script src="prove_tabs.js?v=1.7" defer></script>
-    <script src="fta_tree_picker.js?v=1.2" defer></script>
+    <!-- 24 Oct 2026: tree_homes.js (SLTreeHomes) gives every fault tree and diagram one home: PASA, ASA, a system's PSSA or SSA, or Standalone. After helpers_modules.js, fta_view_modules.js and misc_fn_modules.js, before prove_tabs.js and nav_areas.js. -->
+    <script src="tree_homes.js?v=1.1" defer></script>
+    <!-- 24 Oct 2026: verify_sync.js (SLVerifySync): every top-down tree gets its verification tree, kept in step with it; removed branches and deleted trees are asked about. After tree_homes.js. -->
+    <script src="verify_sync.js?v=1.1" defer></script>
+    <script src="prove_tabs.js?v=1.8" defer></script>
+    <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
+    <script src="level_view.js?v=1.2" defer></script>
+    <script src="nav_areas.js?v=1.4" defer></script>
+    <script src="fta_tree_picker.js?v=1.3" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /
          _gtvNavigateTo / switchTab, so it must load AFTER the files that
          declare them (fta_view_modules, helpers_modules, support_modules) —
          it also re-wraps on a short poll, so defer order is belt and braces. -->
     <script src="nav_return.js?v=1.0" defer></script>
-    <script src="fta_freq.js?v=1.34" defer></script>
+    <script src="fta_freq.js?v=1.35" defer></script>
     <script src="markov_ctmc.js?v=1.4" defer></script>
     <!-- 13 Oct 2026: markov_diagram.js, the Markov state diagram (IEC 61165) on the diagram editor, the second view of each Markov model beside its tables; loads right after markov_ctmc.js. -->
     <script src="markov_diagram.js?v=1.1" defer></script>
@@ -4572,6 +4578,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          operational/environmental tags, coupling-derived candidates, INV-29/30. -->
     <script src="fc_variants.js?v=1.06" defer></script>
     <script src="fc_tree_flow.js?v=1.03" defer></script>
+    <!-- 24 Oct 2026: fc_auto_trees.js (SLFcTrees): every Major-or-worse failure condition the 1309 chart sends to a quantitative analysis (or whose chart is not answered) gets its PASA or PSSA tree, its top event filled in; a system tree takes the stricter of the aircraft allocation and its class target. After fc_tree_flow.js. -->
+    <script src="fc_auto_trees.js?v=1.2" defer></script>
     <script src="cca_models.js?v=1.03" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its
@@ -4580,7 +4588,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.16" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.77" defer></script>
+    <script src="ai_loader.js?v=8.79" defer></script>
     <!-- 16 Oct 2026: the AI Assistant page (AI inputs, every AI analysis and the chat, the pages that read the inputs). -->
     <script src="ai_inputs_page.js?v=1.0" defer></script>
     <script src="config_management.js?v=1.12" defer></script>
@@ -4605,11 +4613,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="erasure.js?v=1.0" defer></script>
     <!-- 6 Oct 2026: floating seats on a customer's own server (the server holds the license). -->
     <script src="slab_seats.js?v=1.0" defer></script>
-    <script src="server_ai_key.js?v=1.2" defer></script>
+    <script src="server_ai_key.js?v=1.3" defer></script>
     <!-- 21 Oct 2026: the customer AFHA template layout (license feature "afha-customer-template"): the Aircraft FHA page and its export in a customer's own template. Off unless the license names it. -->
     <script src="afha_template.js?v=1.2" defer></script>
     <script src="afha_template_export.js?v=1.0" defer></script>
-    <script src="auth_gate.js?v=62.76" defer></script>
+    <script src="auth_gate.js?v=62.77" defer></script>
     <!-- Microsoft 365 / Entra SSO ("SharePoint-style" login). Born-modular; drives
          Supabase Azure OAuth. The "Sign in with Microsoft" button is rendered by the
          auth gate itself (auth_gate.js ssoBlockHTML) and calls window.signInWithMicrosoft.

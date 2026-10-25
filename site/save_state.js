@@ -319,7 +319,13 @@
     function _ackClosed(w, decision) {
         if (decision === 'kept') { _requestSave(); return; }
         if (decision === 'collected') { setTimeout(_paint, 0); return; }   // it waits in the collection: nothing new is confirmed, nothing to save
-        if (decision === 'automatic' && holdsSync() && !_slotTimer) {   // moves still wait: the accepted copy takes the app's own change too
+        // 25 Oct 2026: background work on a timer (SLChangeAck.background: the verification and failure condition
+        // tree sweeps) is copied into the accepted state at once, not a second later: a crash in that second
+        // offered the app's new trees back as the person's unconfirmed changes
+        if (decision === 'automatic' && holdsSync() && w && w.background) {
+            if (_slotTimer) { clearTimeout(_slotTimer); _slotTimer = null; }
+            try { var A0 = _ack(), acc0 = (A0 && A0.pending() && A0.acceptedSnapshot) ? A0.acceptedSnapshot() : null; if (acc0) _writeSlot(acc0); } catch (_) {}
+        } else if (decision === 'automatic' && holdsSync() && !_slotTimer) {   // moves still wait: the accepted copy takes the app's own change too
             _slotTimer = setTimeout(function () { _slotTimer = null; try { var A = _ack(), acc = (A && A.pending() && A.acceptedSnapshot) ? A.acceptedSnapshot() : null; if (acc) _writeSlot(acc); } catch (_) {} }, 1000);
         }
         setTimeout(function () { _release(); _refreshMeta(); _paint(); }, 0);
@@ -477,6 +483,9 @@
         exportTabAsPDF: 'export this page as a PDF', exportValidationReport: 'export the validation report', exportIndexPDF: 'export the index as a PDF'
     };
     var EXPORT_BUTTON = { saveProject: 'Confirm all and save a copy', saveProjectToFolder: 'Confirm all and save a copy', saveProjectToCloud: 'Confirm all and save' };
+    // 25 Oct 2026 (found testing the live app): what the dialog calls it. A save to the cloud is a save and a saved copy
+    // is a copy; only the rest are exports (the dialog used to say "then the export runs" before a cloud save)
+    var EXPORT_KIND = { saveProject: 'copy', saveProjectToFolder: 'copy', saveProjectToCloud: 'cloud' };
     function _wrapExport(name) {
         var fn = W[name];
         if (typeof fn !== 'function' || fn._slExportGate) return false;
@@ -484,7 +493,7 @@
             var self = this, args = arguments, A = _ack();
             if (!A || !A.pending() || !A.ask) return fn.apply(self, args);
             if (A.collectNow && !A.collectNow()) return fn.apply(self, args);   // only a background change was open: nothing to confirm
-            return A.ask({ reason: 'export', action: EXPORTS[name], exportLabel: EXPORT_BUTTON[name] || 'Confirm all and export' }).then(function (r) {
+            return A.ask({ reason: 'export', action: EXPORTS[name], exportLabel: EXPORT_BUTTON[name] || 'Confirm all and export', exportKind: EXPORT_KIND[name] || 'export' }).then(function (r) {
                 if (r === 'keep') { _paint(); return undefined; }
                 return fn.apply(self, args);
             });

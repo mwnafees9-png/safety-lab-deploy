@@ -376,7 +376,7 @@
             if (!sysIds.has(a) || !sysIds.has(b) || a === b) return;   // a dangling row stays in the store, untouched (gt_integrity reports it)
             const key = _ifKey(f, i, I), both = f.direction === 'bidirectional', rev = f.direction === 'b_to_a';
             const c = { id: 'if:' + key, kind: both ? 'interface2' : 'interface', from: 'sys:' + (rev ? b : a), to: 'sys:' + (rev ? a : b),
-                label: f.medium || '', props: { ifKind: f.kind || 'interface', icdRef: f.icdRef || '', rowKey: key } };
+                label: f.medium || '', props: { ifKind: f.kind || 'interface', icdRef: f.icdRef || '', rowKey: key, origin: f.origin || '' } };
             if (f.id) c.sysmlRef = 'iface:' + f.id; else if (f.icdRef && I.filter(x => x && x.icdRef === f.icdRef).length === 1) c.sysmlRef = 'iface:' + f.icdRef;
             connectors.push(c);
         });
@@ -389,8 +389,6 @@
         const S = _sys(), R = _res();
         const sysOf = id => String(id).replace(/^sys:/, '');
         const resRow = id => R.find(r => r && ('res:' + _resKey(r)) === id) || null;
-        const ifList = () => { if (pc && !Array.isArray(pc.interfaces)) pc.interfaces = []; return pc ? pc.interfaces : []; };
-        const ifRow = key => { const L = ifList(); for (let i = 0; i < L.length; i++) if (L[i] && _ifKey(L[i], i, L) === key) return { row: L[i], i: i }; return null; };
         const addU = (arr, v) => { if (arr.indexOf(v) < 0) arr.push(v); };
         const rmV = (arr, v) => { const i = arr.findIndex(x => String(x) === String(v)); if (i >= 0) arr.splice(i, 1); };
         let sysTouched = false;
@@ -442,27 +440,9 @@
                     const key = kind === 'provides' ? 'providedBy' : 'consumedBySystems';
                     if (!Array.isArray(r[key])) r[key] = [];
                     if (add) addU(r[key], sid); else rmV(r[key], sid);
-                } else if (kind === 'interface' || kind === 'interface2') {
-                    if (!b && a) {
-                        const p = a.props || {};
-                        const id = String(a.id).replace(/^if:/, '');
-                        ifList().push({ id: id, fromSystemId: sysOf(a.from), fromFuncId: null, toSystemId: sysOf(a.to), toFuncId: null,
-                            kind: p.ifKind || 'interface', medium: a.label || '', direction: a.kind === 'interface2' ? 'bidirectional' : 'a_to_b',
-                            icdRef: p.icdRef || '', resourceId: null, status: 'active' });
-                    } else if (b && !a) {
-                        const hit = ifRow((b.props && b.props.rowKey) || String(b.id).replace(/^if:/, ''));
-                        if (hit) ifList().splice(hit.i, 1);
-                    } else {
-                        const hit = ifRow((b.props && b.props.rowKey) || String(b.id).replace(/^if:/, ''));
-                        if (!hit) return;
-                        const f = hit.row, p = a.props || {};
-                        f.medium = a.label || '';
-                        if (p.ifKind) f.kind = p.ifKind;
-                        f.icdRef = p.icdRef || '';
-                        if (a.kind === 'interface2') f.direction = 'bidirectional';
-                        else if (!(f.direction === 'b_to_a' && String(f.toSystemId) === sysOf(a.from))) { f.fromSystemId = sysOf(a.from); f.toSystemId = sysOf(a.to); f.direction = 'a_to_b'; }
-                    }
                 }
+                // interface / interface2: read-only here (24 Oct 2026, IFACE_RO); the guard refuses the change before
+                // it reaches this point, and nothing below writes projectConfig.interfaces from the diagram
             }
         });
         // positions: the only diagram data
@@ -474,6 +454,7 @@
         return { sysTouched: sysTouched };
     }
     // What a diagram change may not do, in plain words (null = fine).
+    const IFACE_RO = 'Interfaces come from Sys Lab or your SysML model import and are read here, not drawn or edited. Change the interface there and import it again.';
     function ceaGuard(change) {
         const items = _arr(typeof itemsData !== 'undefined' ? itemsData : null);
         for (const op of change.ops || []) {
@@ -483,6 +464,10 @@
                 const busy = s && (_arr(s.functions).length || _arr(s.fha).length || _arr(s.req).length || _arr(s.asm).length || items.some(it => it && String(it.owningSystemId) === sid));
                 if (busy) return '"' + (op.before.label || sid) + '" carries functions, hazards, requirements or items. Remove a system in the System Directory, where everything it owns is shown.';
             }
+            // 24 Oct 2026 (Waqas): interfaces are defined in Sys Lab or the customer's SysML model and come into
+            // Safety Lab by import. The cascade graph shows them and uses them; it never adds, edits or removes one.
+            if (op.t === 'cn' && ((op.before && (op.before.kind === 'interface' || op.before.kind === 'interface2')) || (op.after && (op.after.kind === 'interface' || op.after.kind === 'interface2'))))
+                return IFACE_RO;
             if (op.t === 'cn' && op.before && !op.after && op.before.kind === 'feedsFn')
                 return 'This link comes from the resource being consumed by function ' + ((op.before.props && op.before.props.subId) || '') + ', which this system performs. Change it in the Resources table (consumed by functions).';
         }
@@ -540,11 +525,11 @@
                 provides: { label: 'Provides', description: 'A system provides a resource (its failure degrades the resource)', from: ['system'], to: ['resource'], route: 'curved', style: { stroke: '#9A6200', width: 1.5 }, labelEditable: false, sysmlLinkable: false },
                 feeds: { label: 'Feeds', description: 'A resource feeds a system (losing it degrades the system)', from: ['resource'], to: ['system'], route: 'curved', style: { stroke: '#4A6741', width: 1.5 }, labelEditable: false, sysmlLinkable: false },
                 feedsFn: { label: 'Feeds (through a function)', description: 'Derived: the resource is consumed by a function this system performs', from: ['resource'], to: ['system'], route: 'curved', style: { stroke: '#4A6741', width: 1.3, dash: '5 4' }, hidden: true, labelEditable: false, sysmlLinkable: false },
-                interface: { label: 'Interface (one way)', description: 'Declared reliance between two systems: a failure flows along the arrow', from: ['system'], to: ['system'], route: 'curved', allowDuplicate: true, style: { stroke: '#4E63D8', width: 1.5 }, sysmlLinkable: false },
-                interface2: { label: 'Interface (both ways)', description: 'Mutual reliance: a failure flows both ways', from: ['system'], to: ['system'], route: 'curved', allowDuplicate: true, directed: false, arrow: 'both', style: { stroke: '#4E63D8', width: 1.5 }, sysmlLinkable: false }
+                interface: { hidden: true, labelEditable: false, label: 'Interface (one way)', description: 'Declared reliance between two systems: a failure flows along the arrow', from: ['system'], to: ['system'], route: 'curved', allowDuplicate: true, style: { stroke: '#4E63D8', width: 1.5 }, sysmlLinkable: false },
+                interface2: { hidden: true, labelEditable: false, label: 'Interface (both ways)', description: 'Mutual reliance: a failure flows both ways', from: ['system'], to: ['system'], route: 'curved', allowDuplicate: true, directed: false, arrow: 'both', style: { stroke: '#4E63D8', width: 1.5 }, sysmlLinkable: false }
             },
             newId: _ceaNewId,
-            canConnect: function (a, b, kind) { return kind === 'feedsFn' ? 'This kind of link comes from function traces; it is not drawn by hand.' : true; },
+            canConnect: function (a, b, kind) { return kind === 'feedsFn' ? 'This kind of link comes from function traces; it is not drawn by hand.' : ((kind === 'interface' || kind === 'interface2') ? IFACE_RO : true); },
             layout: 'layered', layoutOptions: { direction: 'right' },
             fields: function (item, ctx) {
                 if (ctx.isElement && item.kind === 'system') return [{ key: 'props.role', label: 'Role', type: 'select', options: [{ value: 'function', label: 'Implements functions' }, { value: 'resource', label: 'Provides a resource' }, { value: 'both', label: 'Both' }] }];
@@ -552,10 +537,12 @@
                     { key: 'props.type', label: 'Type', type: 'select', options: types },
                     { key: 'props.description', label: 'Description', type: 'textarea' }];
                 if (item.kind === 'interface' || item.kind === 'interface2') {
-                    const opts = [{ value: 'interface', label: 'Physical or data dependency' }, { value: 'resource', label: 'Shared resource (common cause candidate)' }];
-                    if ((item.props || {}).ifKind === 'functional') opts.push({ value: 'functional', label: 'Functional reliance' });
-                    return [{ key: 'props.ifKind', label: 'Interface type', type: 'select', options: opts, readOnly: (item.props || {}).ifKind === 'functional', help: 'The name on the arrow is the medium (for example 28 V DC bus, ARINC 429).' },
-                        { key: 'props.icdRef', label: 'ICD reference', type: 'text' }];
+                    const opts = [{ value: 'interface', label: 'Physical or data dependency' }, { value: 'resource', label: 'Shared resource (common cause candidate)' }, { value: 'functional', label: 'Functional reliance' }];
+                    const imported = (item.props || {}).origin === 'sysml-import';
+                    const from = imported ? 'From your architecture model import. Change it there and import again.'
+                        : 'Entered in Safety Lab before interfaces moved to the architecture model. It is still used by the analyses; bring it in from Sys Lab or your SysML model to keep it current.';
+                    return [{ key: 'props.ifKind', label: 'Interface type', type: 'select', options: opts, readOnly: true, help: from },
+                        { key: 'props.icdRef', label: 'ICD reference', type: 'text', readOnly: true }];
                 }
                 if (item.kind === 'feedsFn') return [{ key: 'props.subId', label: 'Through function', readOnly: true, help: 'Change it in the Resources table (consumed by functions).' }];
                 return [];

@@ -137,45 +137,22 @@ function renderFTASidebar() {
         return kids.some(subtreeMatches);
     }
 
-    // Group root pages by section.
-    const aircraftRoots = rootPages.filter(p => p.treeLevel === 'aircraft' && (!isSearching || subtreeMatches(p)));
-    const standaloneRoots = rootPages.filter(p => p.treeLevel !== 'aircraft' && p.treeLevel !== 'system' && (!isSearching || subtreeMatches(p)));
-
-    // System-level: one section per system, sorted by system name. Pages whose
-    // declared systemId no longer resolves get an "Unassigned System Trees" bucket.
-    const sysIds = new Set();
-    rootPages.forEach(p => { if (p.treeLevel === 'system' && p.systemId) sysIds.add(p.systemId); });
-    const sysList = Array.from(sysIds).map(id => {
-        const sys = (systemsData || []).find(s => s.id === id);
-        return { id, name: sys ? (sys.name || '(unnamed system)') : '(unknown system)', exists: !!sys };
-    }).sort((a, b) => a.name.localeCompare(b.name));
-
-    const sections = []; // { id, label, pages: [rootPage,…] }
-    if (aircraftRoots.length) {
-        sections.push({ id: 'aircraft', label: 'Aircraft Fault Trees', pages: aircraftRoots });
-    }
-    sysList.forEach(s => {
-        // 23 Aug 2026 — an EXISTING system's trees live in that system's folder
-        // in the rail (Waqas: "why are system fault trees showing in the
-        // PASA?"). They leave this aircraft-level browser — except while
-        // searching, which stays level-blind so any node id or name surfaces
-        // its tree no matter where it lives. Trees whose system no longer
-        // resolves keep their section here: a folder that does not exist
-        // cannot carry them.
-        if (s.exists && !isSearching) return;
-        const pages = rootPages.filter(p => p.systemId === s.id && (!isSearching || subtreeMatches(p)));
-        if (pages.length) {
-            sections.push({ id: 'sys-' + s.id, label: 'System · ' + s.name, pages });
-        }
-    });
-    const unassignedSys = rootPages.filter(p => p.treeLevel === 'system' && (!p.systemId || !sysList.find(s => s.id === p.systemId)) && (!isSearching || subtreeMatches(p)));
-    if (unassignedSys.length) {
-        sections.push({ id: 'sys-unassigned', label: 'Unassigned System Trees', pages: unassignedSys });
-    }
-    if (standaloneRoots.length) {
-        // Phase 56.17 — sandbox flag so the section header gets a visible
-        // "Sandbox" pill, and the children render with reduced visual weight.
-        sections.push({ id: 'standalone', label: 'Standalone', pages: standaloneRoots, isSandbox: true });
+    // 24 Oct 2026 (tree_homes.js): the page shows the trees of ONE home (PASA, ASA, a system's PSSA or SSA,
+    // Standalone); a search looks in every home and groups its hits by home. Waqas: "top down fault trees to be
+    // in the PASA, and bottom up trees to be in ASA, top down system trees in that systems PSSA, and bottom up
+    // ones in that systems SSA". The old level sections (and the all-trees list) are gone.
+    const sections = (typeof SLTreeHomes !== 'undefined' && SLTreeHomes.sections)
+        ? SLTreeHomes.sections(rootPages, isSearching, subtreeMatches)
+        : [{ id: 'all', label: 'Fault Trees', pages: rootPages.filter(p => !isSearching || subtreeMatches(p)) }];
+    if (!isSearching && sections.length === 1 && !sections[0].pages.length) {
+        const empty = document.createElement('div');
+        empty.style.cssText = 'padding: 14px 8px; font-size: 12px; color: var(--text-secondary); font-style: italic;';
+        const _h = (typeof SLTreeHomes !== 'undefined') ? SLTreeHomes.current().home : '';
+        empty.innerText = (_h === 'asa' || _h === 'ssa')
+            ? 'No verification trees here yet. Each ' + (_h === 'asa' ? 'PASA' : 'PSSA') + ' fault tree gets its verification tree here.'
+            : (_h === 'standalone' ? 'No standalone fault trees.' : 'No fault trees here yet.') + ' Use "+ New" below to make one.';
+        list.appendChild(empty);
+        return;
     }
 
     if (sections.length === 0) {
@@ -331,6 +308,8 @@ function renderFTASidebar() {
         delBtn.className = 'action-btn btn-red'; delBtn.style.padding = '2px 5px'; delBtn.innerText = 'X';
         delBtn.onclick = async (e) => {
             e.stopPropagation();
+            // 24 Oct 2026 (verify_sync.js): a tree's verification tree is asked about when the tree is deleted
+            if (typeof SLVerifySync !== 'undefined' && SLVerifySync.deleteTree) { await SLVerifySync.deleteTree(page.id); return; }
             if (await slConfirm(`Delete page ${page.name}?`, { danger: true, okText: 'Delete' })) {
                 ftaPages = ftaPages.filter(p => p.id !== page.id);
                 if (activeFTAPageId === page.id) activeFTAPageId = ftaPages.length > 0 ? ftaPages[0].id : null;
@@ -2106,12 +2085,21 @@ function refreshFTARequiredTarget() {
     // Top-event target panel shows ONLY the unnormalized headline — severity → /FH averaged + DAL.
     // No exposure context here; phase-exposure interpretation belongs to the basic-event
     // allocations (see the generated FTA event requirements + the separate panel below).
-    const target = getSafetyTarget(fha.severity);
+    const target = Object.assign({}, getSafetyTarget(fha.severity));
+    // 24 Oct 2026 (fc_auto_trees.js, Waqas: "if the system level failure condition has a more stringent allocation
+    // from the aircraft level then it needs to keep its allocation for the PSSA top gate from the aircraft"): a
+    // system tree takes the aircraft tree's allocation at the bottom event linked to it when that is stricter
+    let _fromAc = null;
+    try {
+        const _ap = (ftaPages || []).find(p => p.id === activeFTAPageId);
+        const _e = (_ap && typeof SLFcTrees !== 'undefined') ? SLFcTrees.effectiveTarget(_ap) : null;
+        if (_e && _e.used === 'aircraft' && _e.aircraft) { _fromAc = _e.aircraft; target.prob = _e.rate; }
+    } catch (_) {}
     const probTxt = target.prob === null
         ? '<span class="u-muted">No quantitative requirement (severity = ' + esc(fha.severity || 'unknown') + ')</span>'
-        : `Severity: ${_sevPill(fha.severity)} &middot; Top-event target: <strong>&lt; ${target.prob.toExponential(0)} /FH</strong> &middot; Required <strong>DAL ${target.dal}</strong>`;
+        : `Severity: ${_sevPill(fha.severity)} &middot; Top-event target: <strong>&lt; ${target.prob.toExponential(_fromAc ? 2 : 0)} /FH</strong> &middot; Required <strong>DAL ${target.dal}</strong>`;
 
-    detail.innerHTML = `${probTxt}<br><span class="u-muted">Basis: ${esc(target.scope)} &middot; Hazard: ${esc(fha.fcId || '(no FC ID)')}</span>`;
+    detail.innerHTML = `${probTxt}<br><span class="u-muted">Basis: ${_fromAc ? esc('the aircraft tree "' + _fromAc.pageName + '", its event "' + _fromAc.nodeName + '" (stricter than the ' + (fha.severity || '') + ' class target)') : esc(target.scope)} &middot; Hazard: ${esc(fha.fcId || '(no FC ID)')}</span>`;
     panel.style.display = 'block';
 
     // Render a separate event-allocation-basis panel (visually distinct from the top-target
@@ -2148,7 +2136,10 @@ function _renderEventAllocBasisPanel(fha) {
         host.style.cssText = 'margin-top: var(--s-3); padding: 10px 12px; border-radius: var(--r-md); background: var(--color-surface-2); border: 1px solid var(--color-border-hair);';
         parent.parentNode.insertBefore(host, parent.nextSibling);
     }
-    const exp = getPhaseExposureRatio(fha.phases);
+    // 24 Oct 2026 (fc_auto_trees.js): the tree's exposure is every phase of its linked rows with the worst classification
+    let _gph = fha.phases;
+    try { const _ap = (ftaPages || []).find(p => p.id === activeFTAPageId); const _g = (_ap && typeof slGoverningPhases === 'function') ? slGoverningPhases(_ap) : ''; if (_g) _gph = _g; } catch (_) {}
+    const exp = getPhaseExposureRatio(_gph);
     // A contingency phase holds r at 1 deliberately (support_modules.js). Falling
     // through to the r >= 0.999 hide would leave the engineer looking at a hazard
     // scoped to a go-around with no exposure panel at all, and no way to tell
@@ -2953,9 +2944,15 @@ function _gtvBuildGraph(opts){
     (acFhaData||[]).forEach(f => rows.push({ fha: f, domain: 'AC', system: null }));
     (systemsData||[]).forEach(s => (s.fha||[]).forEach(f => rows.push({ fha: f, domain: 'SYS', system: s })));
 
+    // 24 Oct 2026 (req_thread.js): every safety-generated requirement, followed back through its own
+    // source to the failure conditions it protects; built once per graph. A system failure condition
+    // joins the thread of the aircraft sub-function its system function traces up to.
+    const _RT = (typeof window !== 'undefined' && window.SLReqThread) ? window.SLReqThread : null;
+    let _rtIdx = null;
+    try { if(_RT) _rtIdx = _RT.index(); } catch(_){ _rtIdx = null; }
     rows.forEach(({ fha, domain, system }) => {
         const subId = fha.subId;
-        if(scopeSub && subId !== scopeSub) return;
+        if(scopeSub && !(_RT ? _RT.fcInScope(fha, domain, system, scopeSub) : subId === scopeSub)) return;
         // 21 Aug 2026 (L1) — SFHA rows key to SYSTEM functions (funcId); resolve those too.
         const fn = (acFunctionsData||[]).find(f => f.subId === subId) || (system && (system.functions||[]).find(f => f.subId === subId || f.funcId === subId));
 
@@ -3066,26 +3063,6 @@ function _gtvBuildGraph(opts){
             addLink(rk, addNode('vv', 'st:' + st, st, 'Verification', null));
         });
 
-        // Also surface gate-independence requirements attached via this FC's linked fault trees —
-        // they reference a gate (not the FHA), so getReferrers misses them, yet they carry the compromise flags.
-        const _allReqs = (acReqData||[]).map(rr => ({ req: rr, kind: 'acReq', systemId: null }))
-            .concat((systemsData||[]).reduce((a, s) => a.concat((s.req||[]).map(rr => ({ req: rr, kind: 'sysReq', systemId: s.id }))), []));
-        _allReqs.forEach(({ req, kind, systemId }) => {
-            const sid = req.reqSource && req.reqSource.sourceId; if(!sid) return;
-            const gi = sid.indexOf(':gate-indep:'); if(gi < 0) return;
-            const pageId = sid.slice(gi + 12).split(':')[0];
-            if(!pageIds.includes(String(pageId))) return;
-            let gf = null, gr = '';
-            if(req.compromised){ gf = 'compromised'; gr = (Array.isArray(req.compromiseReasons) && req.compromiseReasons.length) ? req.compromiseReasons.map(x => (x && (x.detail || x.kind)) || '').filter(Boolean).join(' · ') : ''; }
-            else if(req.ipCompromised){ gf = 'compromised'; gr = 'Independence principle compromised — ' + req.ipCompromised.principle + ' (' + req.ipCompromised.why + ')'; }
-            else if(req.reqSource && req.reqSource.obsolete){ gf = 'obsolete'; gr = (req.reqSource.obsolete && req.reqSource.obsolete.reason) || ''; }
-            else if(req.reqSource && req.reqSource.stale){ gf = 'stale'; }
-            const gk = addNode('req', kind + ':' + req.internalId, (req.traceId || req.id || ('REQ-' + req.internalId)), req.type || 'Independence', { kind: kind, id: req.internalId, systemId: systemId }, gf, gr);
-            addLink(fcKey, gk);
-            const gst = req.verifStatus || req.vvStatus || 'Planned';
-            addLink(gk, addNode('vv', 'st:' + gst, gst, 'Verification', null));
-        });
-
         // ---- Authored requirements linked by traceId to this FC (+ verification) ----
         // The FHA-referrer index misses reqs that trace by fcId string; join them
         // directly so every requirement and its verification status reach the thread.
@@ -3191,7 +3168,46 @@ function _gtvBuildGraph(opts){
                 });
             }
         } catch(e){}
+        // ---- Safety-generated requirements (24 Oct 2026, req_thread.js) ----
+        // Each hangs under the analysis element it came from when that element is on this thread
+        // (its fault tree, zone or particular risk), otherwise directly under the failure condition.
+        if(_rtIdx){
+            (_rtIdx.byFc[domain + ':' + fha.internalId] || []).forEach(e => {
+                const r = e.req, fl = _RT.flagOf(r);
+                const rk = addNode('req', e.kind + ':' + r.internalId, (r.id || r.traceId || ('REQ-' + r.internalId)), r.type || 'Safety',
+                    { kind: e.kind, id: r.internalId, systemId: e.systemId }, fl.flag, fl.reason);
+                const viaKey = e.via ? (e.via.kind + ':' + e.via.id) : null;
+                if(viaKey && nodes.has(viaKey)) addLink(viaKey, rk); else addLink(fcKey, rk);
+                const st = r.verifStatus || r.vvStatus || 'Planned';
+                addLink(rk, addNode('vv', 'st:' + st, st, 'Verification', null));
+            });
+        }
     });
+    // ---- STPA requirements: their own set (24 Oct 2026, Waqas) ----
+    // A requirement drafted from an unsafe control action whose hazards were not created from a
+    // failure condition has no failure condition above it: it threads STPA hazard -> requirement ->
+    // verification on its own, never forced under a failure condition it does not come from.
+    if(_rtIdx && (!scopeSub || scopeSub === '__stpa__')){
+        try {
+            const _sd = (typeof stpaData !== 'undefined' && stpaData) ? stpaData : null;
+            const _haz = id => _sd && Array.isArray(_sd.hazards) ? _sd.hazards.find(h => h && h.id === id) : null;
+            _rtIdx.stpa.forEach(e => {
+                const r = e.req, ucaKey = String(r.uca || '').replace(/^UCA-/, '');
+                const disp = _sd && _sd.dispositions ? _sd.dispositions[ucaKey] : null;
+                const hz = (disp && Array.isArray(disp.hazardIds)) ? disp.hazardIds.map(_haz).filter(Boolean) : [];
+                const _fcIds = new Set(rows.map(x => String(x.fha.fcId)));
+                if(disp && disp.status === 'assessed' && hz.some(h => h.fromFcId && _fcIds.has(String(h.fromFcId)))) return;   // already on its failure condition's thread (the STPA pass above)
+                const fl = _RT.flagOf(r);
+                const rk = addNode('req', e.kind + ':' + r.internalId, ('STPA · ' + (r.uca || r.id || r.internalId)), r.type || 'Safety',
+                    { kind: e.kind, id: r.internalId, systemId: e.systemId }, fl.flag, fl.reason);
+                if(hz.length) hz.forEach(h => { const untraced = !(h.lossIds || []).length;
+                    addLink(addNode('stpa', 'h:' + h.id, h.id, 'STPA hazard' + (h.group ? ' · ' + h.group : ''), { kind: 'stpaHazard', id: h.id }, untraced ? 'stale' : null, untraced ? 'STPA hazard not yet traced to a loss (1b)' : ''), rk); });
+                else addLink(addNode('stpa', 'uca:' + (r.uca || r.internalId), String(r.uca || 'Unsafe control action'), 'STPA unsafe control action', null, 'stale', 'Unsafe control action cites no hazard'), rk);
+                const st = r.verifStatus || r.vvStatus || 'Planned';
+                addLink(rk, addNode('vv', 'st:' + st, st, 'Verification', null));
+            });
+        } catch(e){}
+    }
     // ---- Physical hazards (8 Aug 2026) — the twelfth node kind ----
     // A CCA-found physical hazard is NOT a functional hazard (ruling): it joins
     // the graph as its own object — source CCA artifact → hazard → its

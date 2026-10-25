@@ -1256,7 +1256,17 @@
     // threadIndex() maps each target (failure condition, function, basic event, item) to the
     // analysis rows linked to it, once per graph build. threadPass() is called by
     // _gtvBuildGraph for each failure condition and adds the rows that touch it.
-    var GT_KIND = { pra: 'cca', zsa: 'cca', fmea: 'fta' };
+    // 24 Oct 2026 (Waqas): an FMEA is verification evidence, not a requirement source: its rows sit on the
+    // VERIFICATION side of the thread (fed by the fault tree they back up), and a failure mode with no
+    // means of detection, or not covered by any fault tree event, is a named finding for an engineer.
+    var GT_KIND = { pra: 'cca', zsa: 'cca', fmea: 'vv' };
+    function fmeaFinding(r) {
+        if (!r) return null;
+        var det = String(r.detection == null ? '' : r.detection).trim();
+        if (!det || /^(none|n\/a|na|-|not detected|undetected|no detection)\b/i.test(det)) return 'No means of detection is recorded: this failure mode would go undetected.';
+        if ((r.fmeaType || 'piece-part') === 'piece-part' && !(r.beId != null && String(r.beId).trim() !== '') && !arr(r.modelLinks && r.modelLinks.be).length) return 'Not covered by any fault tree event: the failure mode is in the FMEA but no tree accounts for it.';
+        return null;
+    }
     function threadIndex() {
         var map = {};
         var put = function (k, v) { (map[k] = map[k] || []).push(v); };
@@ -1300,10 +1310,11 @@
             if (A.key === 'pra' || A.key === 'zsa') key = addNode('cca', A.key + ':' + r.internalId, (A.key === 'pra' ? 'PRA ' + (r.praId || '') : 'ZSA ' + (r.zoneId || '')).trim(), (A.key === 'pra' ? r.threat : r.desc) || A.label, { kind: A.key, id: r.internalId });
             else key = addNode(kind, 'ml:' + A.key + ':' + h.e.id, A.title(r), A.label, { kind: 'modelLinkRow', analysis: A.key, id: h.e.id });
             var st = status(A.key, r);
+            if (A.key === 'fmea') { var fnd = fmeaFinding(r); if (fnd) { try { addNode(kind, key.slice(kind.length + 1), '', '', null, 'finding', fnd); } catch (_) {} } }
             if (st.state === 'broken') { try { var nn = addNode(kind, key.slice(kind.length + 1), '', '', null, 'stale', 'Broken model link: ' + st.broken.map(function (b) { return b.code; }).join(', ')); } catch (_) {} }
             if (kind === 'hf' && h.via === 'fn' && ctx.funcKey) { addLink(ctx.funcKey, key); addLink(key, ctx.fcKey); }
-            else if ((kind === 'ram' || kind === 'fta') && ctx.ftaKeys && ctx.ftaKeys.length) {
-                if (kind === 'fta') ctx.ftaKeys.forEach(function (fk) { addLink(fk, key); });
+            else if ((kind === 'ram' || kind === 'fta' || A.key === 'fmea') && ctx.ftaKeys && ctx.ftaKeys.length) {
+                if (kind !== 'ram') ctx.ftaKeys.forEach(function (fk) { addLink(fk, key); });
                 else ctx.ftaKeys.forEach(function (fk) { addLink(key, fk); });
             }
             else if (kind === 'hf' || kind === 'ram') addLink(key, ctx.fcKey);
@@ -1350,7 +1361,7 @@
         open: open, closePicker: closePicker, picker: defaultPicker, specFor: specFor,
         pickNew: pickNew, refreshCells: refreshCells,
         stageFor: stageFor, formOpen: formOpen, formPeek: formPeek, formRestore: formRestore, formCommit: formCommit, formReset: formReset, drawForm: drawForm, _staged: _staged,
-        threadIndex: threadIndex, threadPass: threadPass, registerInvariant: registerInvariant,
+        threadIndex: threadIndex, threadPass: threadPass, fmeaFinding: fmeaFinding, registerInvariant: registerInvariant,
         _norm: norm, _codes: codes
     };
     ROOT.SLModelLinks = API;

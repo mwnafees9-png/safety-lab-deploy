@@ -176,7 +176,9 @@ console.log('\n[5] fallback + [6] wiring (source-level)');
   // 6 Sep 2026 — merged-cell (renderRows) worksheets page too: the pager windows the array and
   // the group renderer draws the window. Previously they returned unpaged.
   check('CRUD factory paginates merged-cell (renderRows) worksheets too', /renderRows\(arr\.slice\(from, to\), \{ actionsFor, reviewFor, renderCells \}\)/.test(sup) && (sup.match(/_crudPagerHost\(tbody, tableBody, arr\.length\)/g) || []).length === 2);
-  check('CMA scope-filtered view pages through the shared pager', /SLPaginate\.pageTbody\(\{ key: 'cma-' \+ _cmaScopeFilter/.test(SITE('bindings_modules.js')));
+  // 25 Oct 2026 (level_view.js): the CMA shows the rows of the level on screen through the factory's own view
+  // filter, so the filtered list pages through the same pager as every worksheet
+  check('CMA level-filtered view pages through the shared pager', /view: \(row\) => !\(window\.SLLevelView\) \|\| window\.SLLevelView\.shows\('cma', row\)/.test(SITE('safety_lab.js')) && /const arr = \(all && typeof config\.view === 'function'\) \? all\.filter\(config\.view\) : all;/.test(sup) && /_origCmaRender\(\);\s*\};/.test(SITE('bindings_modules.js')));
   // EXEC: a 137-row merged-cell store through makeCRUD renders one page of groups + a bar
   if (jsdomOk) (function () {
     const supSrc = sup; const vm = require('vm');

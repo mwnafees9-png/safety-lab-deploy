@@ -429,8 +429,14 @@ function exportData(moduleName, format) {
                 if (!RP || typeof RP.predict !== 'function') { showToast('Reliability prediction engine not loaded in this session.', 'warning', 4000); return; }
                 const st = (projectConfig && projectConfig.ram && projectConfig.ram.predict) || null;
                 if (!st || !Array.isArray(st.rows) || !st.rows.length) { showToast('No parts in the prediction yet. Add part categories on the R&M prediction page first.', 'warning', 4000); return; }
+                // 25 Oct 2026 (level_view.js): the export is the page's: the parts of the level on screen in that
+                // level's environment, and on the aircraft page the roll-up of every level after its own total
+                const _LV = (typeof window !== 'undefined' && window.SLLevelView) || null, _lv = _LV ? _LV.view() : null;
+                const _mine = _LV ? st.rows.filter(x => _LV.shows('ramPredict', x)) : st.rows;
+                const _env = (_lv != null && st.envBy && st.envBy[_lv]) || st.env;
+                if (!_mine.length) { showToast('No parts in the prediction at this level yet.', 'warning', 4000); return; }
                 let r;
-                try { r = RP.predict(st.rows, st.env); }
+                try { r = RP.predict(_mine, _env); }
                 catch (e) { slAlert('Export refused, same as the engine: ' + e.message, { title: 'Export refused' }); return; }
                 const rows = r.rows.map(x => [
                     String(x.name || ''), String(x.qty), String(x.lambdaG),
@@ -440,6 +446,11 @@ function exportData(moduleName, format) {
                 rows.push(['TOTAL λ_EQUIP', '', '', '', '', Number(r.lambdaTotal).toFixed(4),
                     'MTBF ' + (r.mtbfHrs ? Math.round(r.mtbfHrs).toLocaleString() + ' h' : '—')
                     + ' · environment ' + r.env + ' (' + (r.envName || '') + ') · ' + (r.source || '')]);
+                const _ru = (_lv == null && typeof RP.rollup === 'function') ? RP.rollup() : null;
+                if (_ru && _ru.parts.length > 1) {
+                    _ru.parts.forEach(x => rows.push(['ROLL-UP · ' + x.name, '', '', '', '', x.lambda != null ? Number(x.lambda).toFixed(4) : '', x.lambda != null ? 'environment ' + x.env : 'refused: ' + x.error]));
+                    rows.push(['AIRCRAFT λ (roll-up)', '', '', '', '', Number(_ru.lambdaTotal).toFixed(4), 'MTBF ' + (_ru.mtbfHrs ? Math.round(_ru.mtbfHrs).toLocaleString() + ' h' : '—') + (_ru.complete ? '' : ' · incomplete: a level refused')]);
+                }
                 return downloadCSV(file('RM_Predictions'),
                     ['Part category','N','λg (/10⁶h)','Quality','πQ','Contribution (/10⁶h)','Handbook citation'],
                     rows);
@@ -745,6 +756,7 @@ function importTabularCSV(text, moduleName) {
         'HF_ControlsDisplays': ['hfCd', () => _hfRows], 'HF_TaskIdentification': ['hfTid', () => _hfRows], 'HF_SituationAwareness': ['hfSa', () => _hfRows] }[moduleName] || null;
     const _mlCol = getColIndex(['Model Links']);
     const _fnBefore = new Set((typeof acFunctionsData !== 'undefined' && acFunctionsData) || []);   // 22 Oct 2026: the level limit only judges rows this import adds
+    const _hfLen0 = _hfRows ? _hfRows.length : 0;   // 25 Oct 2026: the rows this import adds join the level on screen (level_view.js)
     for(let i=1; i<arr.length; i++) {
         const row = arr[i]; const newId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
         const _mlList = (_ML_IMPORT && _mlCol > -1) ? _ML_IMPORT[1]() : null, _mlLen = _mlList ? _mlList.length : 0;
@@ -846,6 +858,12 @@ function importTabularCSV(text, moduleName) {
         if (_mlList && _mlList.length > _mlLen && typeof SLModelLinks !== 'undefined') {
             try { SLModelLinks.csvApply(_ML_IMPORT[0], _mlList[_mlList.length - 1], row[_mlCol] || ''); } catch (_) {}
         }
+    }
+    // 25 Oct 2026 (level_view.js): an HF lane that is also a system's own: what this import added belongs to the
+    // level on screen, the aircraft or the system picked (an imported row is never left to drift by its links)
+    if (_hfRows && typeof window !== 'undefined' && window.SLLevelView) {
+        const _lvk = { hea: 'hfHea', alerts: 'hfAlerts', tasks: 'hfTasks', cd: 'hfCd', tid: 'hfTid' }[_HF_IMPORT_KEY];
+        if (_lvk) _hfRows.slice(_hfLen0).forEach(r => { try { window.SLLevelView.stamp(_lvk, r); } catch (_) {} });
     }
 
     if(moduleName === 'HF_FunctionAllocation') {

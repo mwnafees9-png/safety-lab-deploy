@@ -161,8 +161,8 @@ console.log('Markov_Models');
 console.log('buttons + pins');
 check('Markov page carries the CSV export button',
   /exportData\('Markov_Models', 'csv'\)/.test(indexSrc));
-check('217F toolbar shows Export CSV only when rows exist',
-  /st\.rows\.length \? '<button onclick="exportData\(\\'RM_Predictions\\', \\'csv\\'\)"/.test(rpSrc));
+check('217F toolbar shows Export CSV only when rows exist (25 Oct 2026: the rows of the level on screen)',
+  /(st\.rows|pairs)\.length \? '<button onclick="exportData\(\\'RM_Predictions\\', \\'csv\\'\)"/.test(rpSrc));
 function pin(s2, re) { const m = s2.match(re); return m ? parseFloat(m[1]) : -1; }
 check('data_ops pin floor >= 66.20', pin(indexSrc, /data_ops_modules\.js\?v=([\d.]+)/) >= 66.20);
 check('ram_predict pin floor >= 0.4', pin(indexSrc, /ram_predict\.js\?v=([\d.]+)/) >= 0.4);

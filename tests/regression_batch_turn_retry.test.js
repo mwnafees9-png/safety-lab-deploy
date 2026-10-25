@@ -46,7 +46,8 @@ console.log('\n[1b] billing / auth / quota fail fast and say so');
   check('it catches quota and auth shapes too, by status AND by text',
     /e\.status === 401 \|\| e\.status === 402 \|\| e\.status === 403/.test(ai) && /insufficient_quota/.test(ai) && /invalid\[_ \]api\[_ \]key/.test(ai));
   check('the operator message is passed through verbatim, not replaced by a generic one',
-    /the AI backend refused every turn and a retry cannot clear it: ' \+ \(\(_permanentErr && _permanentErr\.message\)/.test(ai));
+    // 24 Oct 2026 (NS-6): the backend's own words come first, then why nothing more was sent
+    /_toast\('Nothing drafted\. ' \+ \(\(_permanentErr && _permanentErr\.message\) \|\| _permanentErr\) \+ ' Trying again cannot fix this, so no further turns were sent\.'/.test(ai));
   check('a PARTLY drafted batch says the rest was refused, not that turns "did not complete"',
     /then the AI backend refused the rest: /.test(ai) && /Re-draft the missing /.test(ai));
   check('the console line marks the permanent case rather than blaming attempts',

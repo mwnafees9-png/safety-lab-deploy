@@ -367,6 +367,9 @@
   }
   function _idleWriteShared(now) {
     if ((now - _idleLastWrite) < IDLE_LS_THROTTLE_MS) return;
+    // 25 Oct 2026: after an erasure this device keeps no Safety Lab keys, so a click on the erasure
+    // screen must not write the activity stamp back (window.__slabErasing, set by erasure.js)
+    try { if (typeof window !== 'undefined' && window.__slabErasing) return; } catch (_) {}
     _idleLastWrite = now;
     try { localStorage.setItem(IDLE_LS_KEY, String(now)); } catch (_) {}
   }

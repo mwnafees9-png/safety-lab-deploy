@@ -26,8 +26,9 @@ let pass = 0, fail = 0;
 const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' — ' + d : '')); } };
 const gt = fs.readFileSync(path.join(__dirname, '..', 'site', 'gt_thread.js'), 'utf8');
 
-check('the three flag colours are still declared',
-  /FLAG = \{ compromised: RED, stale: AMBER, obsolete: INK3 \}/.test(gt),
+// 24 Oct 2026: a fourth flag, finding (an open FMEA finding on the verification side), amber like stale
+check('the flag colours are still declared (compromised red, stale amber, obsolete grey, finding amber)',
+  /FLAG = \{ compromised: RED, stale: AMBER, obsolete: INK3, finding: AMBER \}/.test(gt),
   'if the palette changed, this test needs rewriting, not deleting');
 
 check('the link painter no longer colours on mere presence',

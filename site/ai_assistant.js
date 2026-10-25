@@ -536,9 +536,19 @@
             for (let i = 0; i < totalAttempts; i++) {
                 const useAlt = i > maxRepairs;
                 let gen = null, err = null;
+                let permanent = false;
                 try { gen = await generate({ correction: lastCorrection, attempt: i, useAlt: useAlt }); }
-                catch (e) { err = (e && e.message) || String(e); }
-                if (err || !gen) { iterations.push({ attempt: i, useAlt: useAlt, error: err || 'no result' }); continue; }
+                catch (e) {
+                    err = (e && e.message) || String(e);
+                    // 24 Oct 2026 (NS-6): a condition no retry can clear (no AI key on the server, a
+                    // refused key, no credit) ends the loop at once instead of being tried 5 more times.
+                    try { permanent = typeof AiClient !== 'undefined' && AiClient && typeof AiClient.isPermanentError === 'function' && AiClient.isPermanentError(e); } catch (_) {}
+                }
+                if (err || !gen) {
+                    iterations.push({ attempt: i, useAlt: useAlt, error: err || 'no result', permanent: permanent || undefined });
+                    if (permanent) return { status: 'failed', result: best ? best.gen : null, verdict: best ? best.verdict : null, iterations: iterations, attempts: iterations.length, permanentError: err, escalation: { kind: 'none', ask: err } };
+                    continue;
+                }
                 const v = validate(gen) || { verdict: 'blocked', blockingFailures: [{ name: 'validate() returned nothing' }], advisories: [] };
                 let criticIssues = [];
                 if (v.verdict === 'validated' && typeof critic === 'function') {
@@ -4261,9 +4271,9 @@
     // A lane that declares nothing behaves exactly as it did before — the edit
     // controls are not rendered at all, so no existing lane can regress.
     //
-    // Every changed field is handed to ML_ASSURANCE.recordCorrection(), which is
-    // OFF by default per project and refuses outright on an export-controlled
-    // project. Nothing is captured unless somebody deliberately turned it on.
+    // 25 Oct 2026: the AI/ML assurance lane (and its opt-in correction capture,
+    // ML_ASSURANCE.recordCorrection) is removed from the product for now; a
+    // correction is kept on the row (humanEdited) and in the AI log only.
     // =====================================================================
     function _rvFieldEditorHtml(it, editable, key) {
         return '<div class="rv-edit" style="padding:2px 0 0;">' + editable.map(function (f, i) {
@@ -4731,14 +4741,6 @@
                             const after  = String(el.value == null ? '' : el.value);
                             if (before === after) return;          // acceptance is not a correction
                             diff.push({ field: f.key, from: before, to: after });
-                            // #12 substrate. No-op unless the project opted in; refused outright
-                            // on an export-controlled project. Never transmitted.
-                            try {
-                                if (window.ML_ASSURANCE && typeof window.ML_ASSURANCE.recordCorrection === 'function') {
-                                    window.ML_ASSURANCE.recordCorrection(
-                                        cfg.id + ' · ' + f.key, before, after, _acceptedByLabel() || '', '');
-                                }
-                            } catch (_) {}
                             it[f.key] = after;
                         });
                         if (diff.length) {
@@ -6634,71 +6636,10 @@
         _markovRender(); return { ok: true, summary: 'Deleted transition ' + from + ' → ' + to };
     }
 
-    // ---- #IFACE — system↔system interface edges (Phase 1, doc-driven traceability) ----
-    // The lateral golden-thread links the trace model previously lacked. Three kinds:
-    //   interface  = physical/data dependency (medium + direction)
-    //   functional = system A's function relies on system B's function
-    //   resource   = shared resource/bus → CMA common-cause candidate
-    // Gated like every ANEM write; structure/link only — never authors λ/DAL/severity.
-    var _IFACE_KINDS = ['interface', 'functional', 'resource'];
-    var _IFACE_DIRS = ['a_to_b', 'b_to_a', 'bidirectional'];
-    function _ifaceArr() {
-        try { if (typeof projectConfig === 'undefined' || !projectConfig) return []; if (!Array.isArray(projectConfig.interfaces)) projectConfig.interfaces = []; return projectConfig.interfaces; } catch (_) { return []; }
-    }
-    function _ifaceSys(id) { try { return (typeof _chatSysByIdOrName === 'function') ? _chatSysByIdOrName(id) : null; } catch (_) { return null; } }
-    function _ifaceRender() {
-        try { if (typeof renderInterfaces === 'function') renderInterfaces(); } catch (_) {}
-        try { if (typeof updateGoldenThread === 'function') updateGoldenThread(); } catch (_) {}
-        try { if (typeof refreshTraceMatrix === 'function') refreshTraceMatrix(); } catch (_) {}
-        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
-        try { _aiConsistencyAutoCheck(); } catch (_) {}
-    }
-    function _ifaceAdd(a, model) {
-        var arr = _ifaceArr();
-        var fromS = _ifaceSys(a.fromSystemId), toS = _ifaceSys(a.toSystemId);
-        if (!fromS) return { ok: false, error: 'no source system "' + a.fromSystemId + '"' };
-        if (!toS) return { ok: false, error: 'no destination system "' + a.toSystemId + '"' };
-        if (String(fromS.id) === String(toS.id)) return { ok: false, error: 'an interface links two different systems' };
-        var kind = _IFACE_KINDS.indexOf(String(a.kind)) >= 0 ? String(a.kind) : 'interface';
-        if (kind === 'functional' && !(a.fromFuncId && a.toFuncId)) return { ok: false, error: 'functional reliance needs fromFuncId + toFuncId' };
-        var dup = arr.find(function (r) { return String(r.fromSystemId) === String(fromS.id) && String(r.toSystemId) === String(toS.id) && r.kind === kind && (kind !== 'functional' || (String(r.fromFuncId) === String(a.fromFuncId) && String(r.toFuncId) === String(a.toFuncId))); });
-        if (dup) return { ok: false, error: 'that ' + kind + ' interface already exists' };
-        var rec = {
-            id: 'iface-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-            fromSystemId: fromS.id, fromFuncId: a.fromFuncId != null ? String(a.fromFuncId) : null,
-            toSystemId: toS.id, toFuncId: a.toFuncId != null ? String(a.toFuncId) : null,
-            kind: kind,
-            medium: a.medium ? String(a.medium) : '',
-            direction: _IFACE_DIRS.indexOf(String(a.direction)) >= 0 ? String(a.direction) : 'a_to_b',
-            icdRef: a.icdRef ? String(a.icdRef) : '',
-            resourceId: a.resourceId != null ? String(a.resourceId) : null,
-            status: 'active', aiChatEdited: true, aiEditModel: model || null
-        };
-        arr.push(rec);
-        _ifaceRender();
-        var lbl = (kind === 'resource' ? 'Shared-resource' : kind === 'functional' ? 'Functional-reliance' : 'Interface');
-        return { ok: true, summary: lbl + ' link: ' + (fromS.name || a.fromSystemId) + ' → ' + (toS.name || a.toSystemId) + (kind === 'resource' ? ' (CMA common-cause candidate)' : ''), id: rec.id };
-    }
-    function _ifaceUpdate(a) {
-        var arr = _ifaceArr();
-        var rec = arr.find(function (r) { return String(r.id) === String(a.id); });
-        if (!rec) return { ok: false, error: 'no interface "' + a.id + '"' };
-        var f = a.fields || {}; var changed = []; var diff = [];
-        ['medium', 'icdRef'].forEach(function (k) { if (f[k] != null) { diff.push({ field: k, from: rec[k], to: String(f[k]) }); rec[k] = String(f[k]); changed.push(k); } });
-        if (f.direction != null && _IFACE_DIRS.indexOf(String(f.direction)) >= 0) { diff.push({ field: 'direction', from: rec.direction, to: String(f.direction) }); rec.direction = String(f.direction); changed.push('direction'); }
-        if (f.kind != null && _IFACE_KINDS.indexOf(String(f.kind)) >= 0) { diff.push({ field: 'kind', from: rec.kind, to: String(f.kind) }); rec.kind = String(f.kind); changed.push('kind'); }
-        rec.aiChatEdited = true;
-        _ifaceRender();
-        return { ok: true, summary: 'Updated interface' + (changed.length ? ' (' + changed.join(', ') + ')' : ''), diff: diff };
-    }
-    function _ifaceDelete(a) {
-        var arr = _ifaceArr();
-        var idx = arr.findIndex(function (r) { return String(r.id) === String(a.id); });
-        if (idx < 0) return { ok: false, error: 'no interface "' + a.id + '"' };
-        arr.splice(idx, 1);
-        _ifaceRender();
-        return { ok: true, summary: 'Deleted interface' };
-    }
+    // ---- #IFACE (retired 24 Oct 2026, Waqas) ----
+    // The assistant used to add, edit and remove system interface edges. Interfaces are now defined in Sys Lab
+    // or the customer's SysML model and imported; the three actions are refused where actions run (see the
+    // add_interface / update_interface / delete_interface case below).
 
     // =========================================================================
     // IN-APP ENTRY POINT — a single floating "✨ AI" button (no dev console).
@@ -12196,9 +12137,13 @@
                     case 'delete_markov_state':   { const r2 = _markovDeleteState(a);   results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'add_markov_transition': { const r2 = _markovAddTransition(a); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'delete_markov_transition': { const r2 = _markovDeleteTransition(a); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
-                    case 'add_interface':    { const r2 = _ifaceAdd(a, model);  results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
-                    case 'update_interface': { const r2 = _ifaceUpdate(a);       results.push(r2.ok ? { ok: true, summary: r2.summary, diff: r2.diff } : { ok: false, error: r2.error }); break; }
-                    case 'delete_interface': { const r2 = _ifaceDelete(a);       results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
+                    // 24 Oct 2026 (Waqas): interfaces are defined in Sys Lab or the customer's SysML model and imported;
+                    // Safety Lab never adds, edits or removes one, the assistant included. Refused here, at the one
+                    // place every assistant action runs. (The action list in the prompt is AI-facing wording, changed
+                    // only through the eval, so it still names them; the refusal says why.)
+                    case 'add_interface':
+                    case 'update_interface':
+                    case 'delete_interface': results.push({ ok: false, error: 'Interfaces come from Sys Lab or your SysML model import and cannot be changed in Safety Lab. Change the interface there and import it again.' }); break;
                     case 'add_pra': { const ok = _applyPra({ threat: a.threat, affectedZones: a.affectedZones, desc: a.desc, systems: a.systems, csfl: a.csfl, mitigation: a.mitigation, requirements: a.requirements, functions: a.functions, _model: model }); results.push(ok ? { ok: true, summary: 'PRA added — ' + _chatClip(a.threat, 44) } : { ok: false, error: 'add_pra failed' }); break; }
                     case 'add_zsa': { const ok = _applyZsa({ zoneId: a.zoneId, desc: a.desc, equip: a.equip, severity: a.severity, interference: a.interference, mitigation: a.mitigation, housedFunctions: a.housedFunctions, _model: model }); results.push(ok ? { ok: true, summary: 'ZSA added — zone ' + _chatClip(a.zoneId, 24) } : { ok: false, error: 'add_zsa failed' }); break; }
                     case 'add_cma': { const ok = _applyCma({ subject: a.subject, claim: a.claim, principle: a.principle, findings: a.findings, mitigation: a.mitigation, status: a.status, requirements: a.requirements, verification: a.verification, _model: model }); results.push(ok ? { ok: true, summary: 'CMA added — ' + _chatClip(a.subject, 44) } : { ok: false, error: 'add_cma failed' }); break; }
@@ -12498,9 +12443,14 @@
         // and on a metered backend can spend money to learn nothing. These fail on the
         // FIRST attempt and are reported in the operator's own words.
         const _PERMANENT_RE = /credit balance|plans & billing|purchase credits|quota|insufficient_quota|payment required|invalid[_ ]api[_ ]key|authentication|unauthorized|forbidden|permission|not entitled|account (is )?(suspended|disabled)/i;
+        // 24 Oct 2026 (Radia, NS-6): the one rule now lives in AiClient.isPermanentError, which
+        // also reads the status and error type the backend sent (a server with no AI key answers
+        // 503 no_server_key, which this regex never matched, so it was retried twice). The local
+        // copy below stays only for a page whose core_modules is older.
         const _isPermanent = function (e) {
             try {
                 if (!e) return false;
+                if (typeof AiClient !== 'undefined' && AiClient && typeof AiClient.isPermanentError === 'function') return AiClient.isPermanentError(e);
                 if (e.status === 401 || e.status === 402 || e.status === 403) return true;
                 return _PERMANENT_RE.test(String((e && e.message) || e));
             } catch (_) { return false; }
@@ -12554,7 +12504,9 @@
         if (_chunk) { try { if (window.slabAiBusyBegin) window.slabAiBusyBegin('drafting ' + String(_chunk.noun || 'item') + 's — ' + _slices.length + ' turn(s) in parallel'); } catch (_) {} }
         {
             let _next = 0;
-            const _worker = async function () { while (_next < _slices.length) { const i = _next++; await _runSlice(i); } };
+            // 24 Oct 2026: once a turn has met a condition no retry can clear, the turns not yet
+            // started are not sent at all (they would only meet it again).
+            const _worker = async function () { while (_next < _slices.length && !_permanentErr) { const i = _next++; await _runSlice(i); } };
             await Promise.all(Array.from({ length: Math.min(_POOL, _slices.length) }, _worker));
         }
 
@@ -12616,7 +12568,7 @@
                 _anemNoActionsPanel(cfg, { reply: 'Nothing drafted — ' + _unparsed + ' of ' + _slices.length + ' turn(s) came back as text that was not the JSON asked for, after one retry each.' + (_rawTail ? ' The reply began: "' + _rawTail + '"' : ' The reply was empty.'), actions: [], choices: [] }, null, _rerun);
                 return;
             }
-            if (_permanentErr) { _toast('Nothing drafted — the AI backend refused every turn and a retry cannot clear it: ' + ((_permanentErr && _permanentErr.message) || _permanentErr), 'warning', 12000); return; }
+            if (_permanentErr) { _toast('Nothing drafted. ' + ((_permanentErr && _permanentErr.message) || _permanentErr) + ' Trying again cannot fix this, so no further turns were sent.', 'warning', 12000); return; }   // 24 Oct 2026: the backend's own words first
             if (_hardErr) { _toast('Nothing drafted — every turn failed after ' + _TURN_TRIES + ' attempts. Last error: ' + ((_hardErr && _hardErr.message) || _hardErr), 'warning', 8000); return; }
             // Neither a reasoned abstention nor a hard error, and still nothing:
             // say so rather than opening an empty panel with no explanation.
@@ -12624,7 +12576,7 @@
         } else if (_permanentErr) {
             // Half an analysis, and the reason is not flakiness — say the real thing.
             _toast('Drafted ' + actions.length + ' row(s), then the AI backend refused the rest: ' + ((_permanentErr && _permanentErr.message) || _permanentErr)
-                 + ' — ' + (_slices.length - _slicesRun) + ' of ' + _slices.length + ' turn(s) never ran. Re-draft the missing ' + (_chunk ? String(_chunk.noun || 'item') + 's' : 'rows') + ' once it is cleared.', 'warning', 12000);
+                 + ' ' + (_slices.length - _slicesRun) + ' of ' + _slices.length + ' turn(s) never ran. Re-draft the missing ' + (_chunk ? String(_chunk.noun || 'item') + 's' : 'rows') + ' once it is cleared.', 'warning', 12000);
         } else if (_hardErr || _declined) {
             _toast('Drafted ' + actions.length + ' row(s); ' + (_slices.length - _slicesRun) + ' of ' + _slices.length + ' turn(s) did not complete after ' + _TURN_TRIES + ' attempts'
                  + (_retried ? (' (' + _retried + ' other turn(s) succeeded on a retry)') : '') + ' — see the coverage note on the panel.', 'warning', 7000);

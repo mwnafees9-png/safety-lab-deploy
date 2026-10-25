@@ -53,13 +53,9 @@
     const GROUPS = [
         { id: 'safety', label: 'Safety analyses' },
         { id: 'ram',    label: 'RAM — reliability & maintainability' },
-        { id: 'hf',     label: 'Human factors' },
-        // AI/ML learning assurance is its own axis, not a safety sub-lane: it
-        // assures somebody else's ML constituent rather than analysing our own
-        // failure conditions. Opt-in and off by default — no certification basis
-        // yet requires it, and ARP6983 / ED-324 is not an accepted means of
-        // compliance on its own.
-        { id: 'ml',     label: 'AI/ML learning assurance' }
+        { id: 'hf',     label: 'Human factors' }
+        // 25 Oct 2026: the AI/ML learning assurance group is removed (Waqas: "AI/ML assurance can be completely
+        // removed from the software for now"); a project's saved AI/ML records (mlData) are kept, never deleted
     ];
     // ---------------------------------------------------------------------------
     // APPENDIX LETTERS — CORRECTED 1 Aug 2026 against SAE ARP4761A (2023) itself.
@@ -131,9 +127,6 @@
         { id: 'ram-mmel', group: 'ram', name: 'Dispatch relief (MMEL / TLD)', std: 'MMEL policy · CS-MMEL',
           snav: ['snav-mmel'], tabs: ['mmel'], expected: [] },
         // ---- Human factors ---------------------------------------------------
-        { id: 'mlas',   group: 'ml', name: 'AI/ML learning assurance (MLC · ODD · data management)',
-          std: 'ARP6983 / ED-324 (SAE G-34 · EUROCAE WG-114)',
-          snav: ['snav-mlas'], tabs: ['mlas'], optIn: true, expected: [] },
         // 30 Aug 2026 — label refreshed for the HF lane expansion (Waqas: "human
         // factors is not just about assumptions"): the lane now spans its own
         // analyses; the typed-assumption register is the bridge into the
@@ -276,12 +269,6 @@
                 case 'routing':   return (typeof routingData !== 'undefined') ? _len(routingData) : 0;
                 case 'bowtie':    { const pc = _pc(); return pc ? _len(pc.bowties) : 0; }
                 case 'sora':      { const pc = _pc(); return (pc && pc.sora && typeof pc.sora === 'object') ? 1 : 0; }
-                case 'mlas':      {
-                    const d = (typeof mlData !== 'undefined' && mlData) ? mlData : null;
-                    if (!d) return 0;
-                    // capture[] is the AI correction buffer, not authored content.
-                    return _len(d.constituents) + _len(d.odd) + _len(d.datasets) + _len(d.monitors);
-                }
                 case 'hfa-task':  return (typeof HF_ASSUMPTIONS !== 'undefined' && HF_ASSUMPTIONS.asmAllTyped)
                                     ? HF_ASSUMPTIONS.asmAllTyped().filter(a => a && a.type === 'hf' && a.hf &&
                                         (a.hf.taskTimeS != null || a.hf.responsePhase || a.hf.crewmember)).length : 0;
@@ -677,11 +664,17 @@
         if (!st.systemPlans || typeof st.systemPlans !== 'object') st.systemPlans = {};
         return st.systemPlans;
     }
-    function planLanes() { return CATALOGUE.filter(l => !l.parent); }   // per-system scope = top-level lanes
+    // 25 Oct 2026 (Waqas: "ZSA and PRAs remain at aircraft level"): zones and particular risks are the aircraft's;
+    // a system's plan never offers them (nor their sub-lanes), and asking a system for them says no
+    const AIRCRAFT_ONLY = { zsa: true, pra: true };
+    function _sysLane(l) { return !!l && !AIRCRAFT_ONLY[l.id] && !(l.parent && AIRCRAFT_ONLY[l.parent]); }
+    function aircraftOnly(laneId) { const l = _byId[laneId]; return !!l && !_sysLane(l); }
+    function planLanes() { return CATALOGUE.filter(l => !l.parent && _sysLane(l)); }   // per-system scope = top-level lanes
     function _revLabel(n) { let out = ''; n = n | 0; do { out = String.fromCharCode(65 + (n % 26)) + out; n = Math.floor(n / 26) - 1; } while (n >= 0); return out; }
     function systemPlan(sysId) { const sp = _sysPlans(); return sp ? (sp[sysId] || null) : null; }
     // Effective lane state for a system: its own plan value, else inherit the aircraft scope.
     function systemLaneOn(sysId, laneId) {
+        if (aircraftOnly(laneId)) return false;
         const pl = systemPlan(sysId);
         if (pl && pl.lanes && Object.prototype.hasOwnProperty.call(pl.lanes, laneId)) return pl.lanes[laneId] !== false;
         return laneOn(laneId);
@@ -764,8 +757,8 @@
             // to grow without bound as systems were added.
             const pl = systemPlan(sys.id);
             const rev = pl ? ((pl.history && pl.history.length) ? pl.history[pl.history.length - 1].rev : (pl.baseline && pl.baseline.rev)) : null;
-            const total = CATALOGUE.length;
-            const on = CATALOGUE.filter(function (l) { return systemLaneOn(sys.id, l.id); }).length;
+            const total = CATALOGUE.filter(_sysLane).length;
+            const on = CATALOGUE.filter(function (l) { return _sysLane(l) && systemLaneOn(sys.id, l.id); }).length;
             return '<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border-bottom:1px solid var(--color-border-hair);">' +
                 '<b style="font-size:13px;flex:1;min-width:0;">' + _esc(sys.name) + '</b>' +
                 '<span style="font-family:var(--u-mono,monospace);font-size:10.5px;color:var(--color-text-tertiary);white-space:nowrap;">' +
@@ -803,8 +796,8 @@
     const PLAN_MODAL_ID = 'pp-sys-plan-modal';
 
     function allPlanLanes() { return CATALOGUE.slice(); }
-    function _childrenOf(id) { return CATALOGUE.filter(function (l) { return l.parent === id; }); }
-    function _topLanes() { return CATALOGUE.filter(function (l) { return !l.parent; }); }
+    function _childrenOf(id) { return CATALOGUE.filter(function (l) { return l.parent === id && _sysLane(l); }); }
+    function _topLanes() { return CATALOGUE.filter(function (l) { return !l.parent && _sysLane(l); }); }
 
     function closeSystemPlanModal() {
         const el = document.getElementById(PLAN_MODAL_ID);
@@ -856,7 +849,7 @@
             body += '</div>';
         });
         // sub-lanes whose parent sits in another group (or none) still need a home
-        const orphans = CATALOGUE.filter(function (l) { return l.parent && !_byId[l.parent]; });
+        const orphans = CATALOGUE.filter(function (l) { return l.parent && !_byId[l.parent] && _sysLane(l); });
         orphans.forEach(function (l) { body += _planRow(sysId, l, 0); });
 
         const ov = document.createElement('div');
@@ -950,7 +943,7 @@
     const API = { CATALOGUE, GROUPS, BASES, DERIVED, NO_STORE, defaultsFor, scope, laneOn, setLane, initScope, laneData,
                   isExpected, tailoring, applyNav, renderScopeSection, renderWizardScope,
                   applyWizardScope, _uiToggle, _guardTab, basisNow,
-                  systemPlan, systemLaneOn, initSystemPlan, setSystemLane, planLanes,
+                  systemPlan, systemLaneOn, initSystemPlan, setSystemLane, planLanes, aircraftOnly,
                   renderSystemPlans, _sysToggle, renderSystemWorkspaceBanner,
                   allPlanLanes, openSystemPlanModal, closeSystemPlanModal };
     if (typeof window !== 'undefined') window.PROGRAM_PLAN = API;

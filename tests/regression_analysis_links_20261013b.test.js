@@ -175,11 +175,13 @@ check('L5 SysML v2 refs: a basic event maps to ftn:<page>/<node>', L.sysmlRefs('
 // ---- 6. golden thread ------------------------------------------------------------------------------
 const idx = L.threadIndex();
 const nodes = {}, links = [];
-const addNode = (kind, id) => { const k = kind + ':' + id; nodes[k] = 1; return k; };
+const addNode = (kind, id, label, sub, ref, flag, why) => { const k = kind + ':' + id; nodes[k] = nodes[k] || {}; if (flag && !nodes[k].flag) { nodes[k].flag = flag; nodes[k].flagReason = why || ''; } return k; };   // the flag kept, as _gtvBuildGraph's addNode does
 const addLink = (a, b) => links.push(a + '>' + b);
 const n = L.threadPass(idx, { fha: fha0, domain: 'AC', fn: c.acFunctionsData[0], linkedPages: c.ftaPages, fcKey: 'fc:AC:100', funcKey: 'func:SF-01', ftaKeys: ['fta:pg-1'] }, addNode, addLink);
-check('L6 the thread of FC-01 picks up the FMEA row on its tree, the PRA and ZSA rows on its items, the error row citing it', nodes['fta:ml:fmea:70'] && nodes['cca:pra:50'] && nodes['cca:zsa:60'] && nodes['hf:ml:hfHea:HEA-001'], Object.keys(nodes).join(' '));
-check('L6 an FMEA row hangs under the fault tree it feeds', links.indexOf('fta:pg-1>fta:ml:fmea:70') >= 0);
+// 24 Oct 2026 (Waqas: an FMEA is verification evidence): its rows sit on the VERIFICATION side, fed by the tree they back up
+check('L6 the thread of FC-01 picks up the FMEA row on its tree, the PRA and ZSA rows on its items, the error row citing it', nodes['vv:ml:fmea:70'] && nodes['cca:pra:50'] && nodes['cca:zsa:60'] && nodes['hf:ml:hfHea:HEA-001'], Object.keys(nodes).join(' '));
+check('L6 an FMEA row hangs under the fault tree it feeds, on the verification side', links.indexOf('fta:pg-1>vv:ml:fmea:70') >= 0);
+check('L6 an FMEA row with no means of detection recorded is a named finding', nodes['vv:ml:fmea:70'] && nodes['vv:ml:fmea:70'].flag === 'finding' && /undetected/.test(nodes['vv:ml:fmea:70'].flagReason), JSON.stringify(nodes['vv:ml:fmea:70']));
 check('L6 a row on another thread stays off it', !nodes['ram:ml:lcc:LCC-1'] || true);
 
 // ---- 7. wiring in the real site files ----------------------------------------------------------------

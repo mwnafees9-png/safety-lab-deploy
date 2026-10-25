@@ -88,7 +88,7 @@ check('ASA sub-group owns close-out companions: CCMR, MMEL, SSE',
 // rows. Waqas: "these do not need to be separate menu items they will live in
 // each systems directory" — the rows are deleted and nav_rail v1.3 renders each
 // system as a folder carrying them. The pin now guards the deletion.
-check('Systems category: directory + AI/ML only — PSSA/SSA/FMES/Items live in the system folders',
+check('Systems category: directory only — PSSA/SSA/FMES/Items live in the system folders',
   at('id="asb-grp-systems"') < at('id="snav-sys-dir"') &&
   at('id="snav-pssa"') < 0 && at('id="snav-ssa"') < 0 &&
   at('id="snav-fmes"') < 0 && at('id="snav-items"') < 0 &&
@@ -178,13 +178,12 @@ check('no tree row anywhere in the rail — Markov, Event Trees and Bow-Tie are 
 // Safety/HF/System-lane/R&M categories with AIRCRAFT/SYSTEMS but two survived in
 // the markup. HFA left on 22 Aug; "System lane" — one item, wrong level — dies
 // here. The lane keeps its optIn/default-off gating; only its home changed.
-check('AI/ML learning assurance lives in SYSTEMS, not in the aircraft group',
-  at('id="snav-mlas"') > at('id="asb-grp-systems"') &&
-  at('id="snav-mlas"') < at('id="asb-grp-ram"') &&
-  at('id="snav-mlas"') > at('id="asb-grp-asa"'));
+// 25 Oct 2026 (Waqas: "AI/ML assurance can be completely removed from the software for now"): no link, no page.
+check('AI/ML learning assurance is out of the product: no link, no page, no script',
+  at('id="snav-mlas"') < 0 && !idx.includes('id="view-mlas"') && !idx.includes('ml_assurance.js'));
 check('the pre-Rev-C "System lane" category is gone', !idx.includes('asb-cat-lbl">System lane<'));
 check('…and the per-system directory slot still trails the static Systems entries',
-  at('id="asb-sys-dirs"') > at('id="snav-mlas"'));
+  at('id="asb-sys-dirs"') > at('id="snav-sys-dir"'));
 check('RAM category after Systems; Maintainability nested with its LOAD-BEARING id',
   at('id="asb-grp-ram"') > at('id="asb-grp-systems"') &&
   (idx.match(/id="asb-grp-ram-mx"/g) || []).length === 1 &&

@@ -1,4 +1,7 @@
 // ============================================================================
+// prove_tabs.js, v1.8 (24 Oct 2026): the Fault trees bar follows the tree home on screen (tree_homes.js):
+// its label names the home (PASA, ASA, a system's PSSA or SSA, Standalone) and a verification home shows only
+// its trees (the diagram tools are the allocation level's: PASA, a system's PSSA, Standalone).
 // prove_tabs.js, v1.7: aircraft requirements leave the AFHA area (21 Oct 2026, Waqas: "I want the
 // requirements in Safety Lab to move from AFHAs and SFHAs to the PASA and PSSAs respectively").
 // They are a PASA page now: the PASA tab bar shows above them (helpers_modules.js _syncPasaNav).
@@ -69,7 +72,7 @@
             { t: 'ac-asm',  k: 'Assumptions' }
         ] },
         // 23 Aug 2026 (v1.2) — the tree family, out of the left nav for good.
-        { label: 'Fault trees', tabs: [
+        { label: 'Fault trees', dynamic: true, tabs: [
             { t: 'fta',    k: 'Fault Tree Analysis' },
             { t: 'bowtie', k: 'Bow-Tie', gateLane: 'bowtie' },
             { t: 'eta',    k: 'Event Trees', gateLane: 'eta' },
@@ -156,10 +159,15 @@
             bar.setAttribute('aria-label', 'Prove');
             view.insertBefore(bar, view.firstChild);
         }
-        bar.innerHTML = '<span class="prove-tabbar-lbl">' + _esc(area.label) + '</span>' + area.tabs.map(function (x) {
+        var spec = area;
+        if (area.dynamic) { try { if (window.SLTreeHomes && typeof SLTreeHomes.barSpec === 'function') spec = SLTreeHomes.barSpec(activeTab) || area; } catch (_) { spec = area; } }
+        bar.innerHTML = '<span class="prove-tabbar-lbl">' + _esc(spec.label) + '</span>' + spec.tabs.map(function (x) {
             if (x.gateLane) {
                 try {
-                    if (window.PROGRAM_PLAN && typeof PROGRAM_PLAN.laneOn === 'function' && !PROGRAM_PLAN.laneOn(x.gateLane)) return '';
+                    // 24 Oct 2026: on a system's tree pages, the system's own plan decides (tree_homes.js level)
+                    var _lv = (area.dynamic && window.SLTreeHomes) ? SLTreeHomes.levelScope() : null;
+                    if (_lv && _lv.level === 'system' && window.PROGRAM_PLAN && typeof PROGRAM_PLAN.systemLaneOn === 'function') { if (!PROGRAM_PLAN.systemLaneOn(_lv.systemId, x.gateLane)) return ''; }
+                    else if (window.PROGRAM_PLAN && typeof PROGRAM_PLAN.laneOn === 'function' && !PROGRAM_PLAN.laneOn(x.gateLane)) return '';
                 } catch (_) {}
             }
             var on = x.t === activeTab;

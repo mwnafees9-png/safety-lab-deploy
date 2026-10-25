@@ -177,14 +177,16 @@
         const installed = parseInt(await _ask('Number installed:', '2')) || 1;
         const required = parseInt(await _ask('Number required for dispatch:', '1')) || 0;
         const cat = ((await _ask('Rectification category — A (as specified) / B (3 days) / C (10 days) / D (120 days):', 'C')) || 'C').trim().toUpperCase();
-        _store().items.push({
+        const _row = {
             id: 'MMEL-' + String((projectConfig.mmelCounter = (projectConfig.mmelCounter || 0) + 1)).padStart(3, '0'),
             title: title.trim(), ata: ata.trim(), itemId: itemId.trim(), beRef: beRef.trim(),
             installed, required, category: CATEGORIES[cat] !== undefined ? cat : 'C',
             catDays: CATEGORIES[cat] !== undefined ? CATEGORIES[cat] : 10,
             mProc: '', oProc: '', state: 'draft', history: [],
             protection: null, quant: null,
-        });
+        };
+        try { if (window.SLLevelView) window.SLLevelView.stamp('mmel', _row); } catch (_) {}   // 25 Oct 2026: the level on screen
+        _store().items.push(_row);
         _save();
         mmelAnalyze(_store().items[_store().items.length - 1].id);
         renderMmelPage();
@@ -256,14 +258,18 @@
         if (!host) return;
         if (!_access()) { host.innerHTML = '<div style="border:1px solid var(--color-border-strong); background:var(--color-surface-2); padding:26px 30px; "><h3 style="margin:0 0 10px; border:none; padding:0;">MMEL / TLD analysis is a Pro+ capability</h3><p style="font-size:13px; color:var(--color-text-secondary);">Dispatch candidacy evaluated through the live fault trees: protection retained, quantitative margin, rectification intervals, time-limited dispatch.</p></div>'; return; }
         const S = _store();
-        const rejected = S.items.filter(i => i.protection && i.protection.ok === false).length;
-        const approved = S.items.filter(i => i.state === 'approved').length;
+        // 25 Oct 2026 (level_view.js): the items of the level on screen, the aircraft or one system
+        const LV = window.SLLevelView;
+        try { if (LV) LV.mount('mmel'); } catch (_) {}
+        const items = LV ? S.items.filter(i => LV.shows('mmel', i)) : S.items;
+        const rejected = items.filter(i => i.protection && i.protection.ok === false).length;
+        const approved = items.filter(i => i.state === 'approved').length;
         const annualFH = _annualFH();
         const fhPerDay = annualFH / 365;
         const derivable = mmelDerive(false).length;
 
         let html = '<div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center;">' +
-            ['Items <b style="margin-left:6px;">' + S.items.length + '</b>',
+            ['Items <b style="margin-left:6px;">' + items.length + '</b>',
              'Approved <b style="margin-left:6px; color:#1D6E3E;">' + approved + '</b>',
              'No-dispatch (protection) <b style="margin-left:6px;' + (rejected ? ' color:#8E2A2A;' : '') + '">' + rejected + '</b>',
              'Utilization <b style="margin-left:6px;">' + annualFH + ' FH/yr (' + fhPerDay.toFixed(1) + ' FH/day)</b>',
@@ -280,8 +286,8 @@
         html += '<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12px;"><thead><tr>' +
             '<th style="width:76px">Item</th><th>Equipment</th><th style="min-width:170px">Model links</th><th style="width:60px">ATA</th><th style="width:70px">Inst/Req</th><th style="width:96px">Category</th>' +
             '<th>Protection check (exact)</th><th>Quantitative (dispatched)</th><th style="width:110px">TLD max</th><th style="width:120px">(m)/(o)</th><th style="width:100px">State</th><th style="width:110px"></th></tr></thead><tbody>';
-        if (!S.items.length) html += '<tr><td colspan="12" style="color:var(--color-text-tertiary);">No MMEL items yet — add one or derive candidates from ledger-linked LRUs.</td></tr>';
-        S.items.forEach(it => {
+        if (!items.length) html += '<tr><td colspan="12" style="color:var(--color-text-tertiary);">No MMEL items yet — add one or derive candidates from ledger-linked LRUs.</td></tr>';
+        items.forEach(it => {
             const p = it.protection, q = it.quant;
             const catFh = it.catDays != null ? Math.round(it.catDays * fhPerDay) : null;
             const tld = q && q.tldMaxFH != null ? q.tldMaxFH : null;

@@ -119,7 +119,9 @@ check("'interdep' is registered in the core switchTab tabs array (a view not in 
     /'interdep'\]/.test(S('support_modules.js')) || /, 'interdep'/.test(S('support_modules.js')));
 check("READS DON'T WRITE: renderPage/compute use _read(); only authored actions _ensure() (battery-caught in v0.1)",
     /function _read\(\)/.test(src) && /function _ensure\(\)/.test(src) &&
-    /const st = _read\(\); const db = _db\(\)/.test(src) && !/renderPage[\s\S]{0,400}_ensure\(\)/.test(src.split('function renderPage')[1].split('function compute')[0]));
+    /const st = _read2?\(\); const db = _db\(\)/.test(src) && !/renderPage[\s\S]{0,400}_ensure\(\)/.test(src.split('function renderPage')[1].split('function compute')[0]) &&
+    // 25 Oct 2026: _read2 (the level's view: the read plus each system's environment) reads only
+    (!/function _read2\(\)/.test(src) || !/_ensure\(\)/.test(src.split('function _read2()')[1].split('\n    }')[0])));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exitCode = fail ? 1 : 0;

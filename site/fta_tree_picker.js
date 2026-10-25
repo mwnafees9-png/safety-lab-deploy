@@ -1,4 +1,8 @@
 // ============================================================================
+// fta_tree_picker.js, v1.3 (24 Oct 2026, tree_homes.js): the picker lists the trees of the home on screen
+// (PASA, ASA, a system's PSSA or SSA, Standalone) and its label names that home; the tree on screen decides the
+// home, so a tree opened from anywhere lists with its own. The + New button is the home's (none in ASA or SSA:
+// their trees are the verification trees of PASA and PSSA).
 // fta_tree_picker.js — v1.1 — the picker REPLACES the pane (23 Aug 2026,
 // Waqas, seeing the browser pane back on the page: "we dont need this when we
 // have the selection menu up top"). The pane is hidden outright; + New Fault
@@ -37,8 +41,11 @@
         });
     }
 
+    function _homes() { return (typeof window !== 'undefined' && window.SLTreeHomes) || null; }
     function _groups() {
         var roots = _roots();
+        var H = _homes();
+        if (H) { try { H.followActive(); } catch (_) {} roots = roots.filter(function (p) { return H.inHome(p); }); }
         var out = [];
         // 23 Aug 2026 (v1.1) — Waqas: "MF&MS should also be in here" — the
         // MF&MS family (MAC-compiled, interdependence-seeded, authored) gets
@@ -47,7 +54,7 @@
             return String(p.id).indexOf('mac-pg-') === 0 || String(p.id).indexOf('idp-pg-') === 0 || /MF&MS/.test(p.name || '');
         };
         var air = roots.filter(function (p) { return p.treeLevel === 'aircraft' && !isMfms(p); });
-        if (air.length) out.push({ label: 'Aircraft', pages: air });
+        if (air.length) out.push({ label: H ? H.label() : 'Aircraft', pages: air });
         var mfms = roots.filter(isMfms);
         if (mfms.length) out.push({ label: 'MF&MS', pages: mfms });
         var names = {};
@@ -58,9 +65,9 @@
             (bySys[k] = bySys[k] || []).push(p);
         });
         Object.keys(bySys).sort(function (a, b) { return String(names[a] || a).localeCompare(String(names[b] || b)); })
-            .forEach(function (k) { out.push({ label: 'System · ' + (names[k] || k), pages: bySys[k] }); });
+            .forEach(function (k) { out.push({ label: H ? H.label() : 'System · ' + (names[k] || k), pages: bySys[k] }); });
         var rest = roots.filter(function (p) { return p.treeLevel !== 'aircraft' && p.treeLevel !== 'system'; });
-        if (rest.length) out.push({ label: 'Standalone', pages: rest });
+        if (rest.length) out.push({ label: H ? H.label() : 'Standalone', pages: rest });
         return out;
     }
 
@@ -86,8 +93,9 @@
     }
 
     function _sig() {
-        return _roots().map(function (p) { return p.id + ':' + (p.name || ''); }).join('|') + '@' +
-            String(_activeId() || '');
+        var H = _homes(), c = H ? H.current() : null;
+        return _roots().map(function (p) { return p.id + ':' + (p.name || '') + ':' + (p.treeLevel || '') + ':' + (p.systemId || '') + ':' + (p.mode || '') + ':' + (p.verifies || ''); }).join('|') + '@' +
+            String(_activeId() || '') + (c ? '#' + c.home + ':' + (c.systemId || '') : '');
     }
 
     var _last = '';
@@ -142,7 +150,11 @@
         } catch (_) {}
         var sel2 = document.getElementById('fta-tree-pick');
         var cur = _activeId();
-        sel2.innerHTML = '<option value="">— pick a fault tree —</option>' + _groups().map(function (g) {
+        var _gs = _groups(), H = _homes();
+        // v1.2: the label names the home, the + New button is the home's (tree_homes.js decides both)
+        try { if (H) { H.followActive(); var lb = host.querySelector('label'); if (lb) lb.textContent = H.label(); H.decorate(); } } catch (_) {}
+        var _none = !_gs.some(function (g) { return g.pages.length; });
+        sel2.innerHTML = '<option value="">' + (_none ? (H ? 'No trees here yet' : '— pick a fault tree —') : '— pick a fault tree —') + '</option>' + _gs.map(function (g) {
             return '<optgroup label="' + _esc(g.label) + '">' + g.pages.map(function (p) {
                 return '<option value="' + _esc(p.id) + '"' + (String(p.id) === String(cur) ? ' selected' : '') + '>' +
                     _esc(p.name || p.id) + '</option>';

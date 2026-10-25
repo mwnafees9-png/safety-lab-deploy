@@ -352,14 +352,24 @@ function renderAiAssumptions() {
     host.innerHTML = html;
 }
 
+// 25 Oct 2026 (tree homes): a verification tree shares its top-down tree's logical ids (that is how its
+// branches are traced), but it is a different SIDE: the top-down tree holds budgets, the verification tree
+// holds the real rates. An edit is copied in full only to repeats on the same side; across the sides only
+// the identity follows (name, id, type), the same rule as verify_sync.js. Before, an edit on a top-down
+// node wrote its budget over the verification twin's failure rate, CCF group and beta.
+const _REPEAT_IDENTITY_FIELDS = ['name', 'displayId', 'type', 'gateType'];
+function _repeatSideOf(page) { return (page && (page.verifies || page.mode === 'bottom-up')) ? 'verify' : 'alloc'; }
 function propagateRepeatedEventEdit(srcNode) {
     if (!srcNode || srcNode.logicalId == null) return;
     const lid = srcNode.logicalId;
+    let srcSide = null;
+    ftaPages.forEach(page => { if (srcSide) return; (function find(n) { if (!n || srcSide) return; if (n === srcNode) { srcSide = _repeatSideOf(page); return; } (n.children || n._children || []).forEach(find); })(page.root); });
     ftaPages.forEach(page => {
+        const fields = (!srcSide || _repeatSideOf(page) === srcSide) ? REPEATED_EVENT_SYNCED_FIELDS : _REPEAT_IDENTITY_FIELDS;
         (function walk(n) {
             if (!n) return;
             if (n !== srcNode && n.logicalId === lid) {
-                REPEATED_EVENT_SYNCED_FIELDS.forEach(f => { n[f] = srcNode[f]; });
+                fields.forEach(f => { n[f] = srcNode[f]; });
             }
             const kids = n.children || n._children;
             if (kids) kids.forEach(walk);
@@ -1709,7 +1719,10 @@ function makeCRUD(config) {
     }
     function render() {
         const tbody = document.getElementById(tableBody); if (!tbody) return;
-        const arr = store();
+        // 25 Oct 2026 (level_view.js): config.view(row) keeps a worksheet to the rows of the level on screen (the
+        // aircraft, or one system). Edits and deletes still find rows by id in the whole store.
+        const all = store();
+        const arr = (all && typeof config.view === 'function') ? all.filter(config.view) : all;
         if (!arr) { tbody.innerHTML = ''; return; }
         if (!arr.length) { tbody.innerHTML = _crudEmptyRowHtml(); return; }   // #274 — action-oriented empty state
         // Phase 53.73 — auto-append the Review column (comment trigger + approval control)
@@ -1859,7 +1872,7 @@ function switchTab(tabId) {
         // navigation (restored last-tab, command palette, stray link) lands on the Sankey so
         // nobody hits a dead view.
         if (tabId === 'graph') { tabId = 'golden-thread'; }
-        const tabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'mlas', 'pasa', 'asa', 'spp', 'hfa', 'hfa-tid', 'hfa-alloc', 'hfa-hea', 'hfa-alerts', 'hfa-task', 'hfa-cd', 'hfa-sa', 'hfa-mfc', 'hfa-ergo', 'stpa', 'interdep'];
+        const tabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'pasa', 'asa', 'spp', 'hfa', 'hfa-tid', 'hfa-alloc', 'hfa-hea', 'hfa-alerts', 'hfa-task', 'hfa-cd', 'hfa-sa', 'hfa-mfc', 'hfa-ergo', 'stpa', 'interdep'];
         // 2 Sep 2026 — the seven HF sub-lanes added after hfa-task/hfa-ergo were never
         // registered here. Their own module hid and showed them, so the views did not
         // stack, but the sidebar active state, the last-tab memory and the stepper all
@@ -3087,8 +3100,12 @@ function renderGoldenThreadView(){
     const pick = document.getElementById('gt-func-pick');
     if(pick){
         const cur = pick.value;
-        pick.innerHTML = ['<option value="" disabled' + (cur ? '' : ' selected') + '>Select an aircraft function…</option>'].concat((acFunctionsData||[]).map(f => '<option value="' + esc(f.subId) + '">' + esc(f.subId + ' · ' + (f.subName || '')) + '</option>')).join('');
-        if((acFunctionsData||[]).some(f => f.subId === cur)) pick.value = cur;
+        // 24 Oct 2026: STPA requirements with no failure condition above them are their own set (Waqas)
+        let _stpaOwn = 0;
+        try { if(window.SLReqThread){ const _g = _gtvBuildGraph({ functionSubId: '__stpa__' }); _stpaOwn = _g.nodes.filter(n => n.kind === 'req').length; } } catch(_){}
+        pick.innerHTML = ['<option value="" disabled' + (cur ? '' : ' selected') + '>Select an aircraft function…</option>'].concat((acFunctionsData||[]).map(f => '<option value="' + esc(f.subId) + '">' + esc(f.subId + ' · ' + (f.subName || '')) + '</option>'))
+            .concat(_stpaOwn ? ['<option value="__stpa__">STPA requirements (their own set, ' + _stpaOwn + ')</option>'] : []).join('');
+        if((acFunctionsData||[]).some(f => f.subId === cur) || (cur === '__stpa__' && _stpaOwn)) pick.value = cur;
         if(!pick.dataset.wired){ pick.addEventListener('change', renderGoldenThreadView); pick.dataset.wired = '1'; }
     }
     // v0.1 — the branded Golden Thread (gt_thread.js) replaces the Sankey: pick a
@@ -3097,6 +3114,7 @@ function renderGoldenThreadView(){
         const _scope = pick ? pick.value : '';
         // No "all functions" firehose — the thread is per-function. Empty scope → prompt.
         const _graph = (_scope && typeof _gtvBuildGraph === 'function') ? _gtvBuildGraph({ functionSubId: _scope }) : { nodes: [], links: [] };
+        try { if(window.SLReqThread) window.SLReqThread.renderUnthreaded(document.getElementById('gt-unthreaded')); } catch(_){}
         if(typeof window !== 'undefined' && window.GT_THREAD && typeof GT_THREAD.render === 'function'){
             GT_THREAD.render(host, _graph);
             try {

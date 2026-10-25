@@ -1418,9 +1418,14 @@ function rowActionsHTML(editFnName, deleteFnName, internalId, extra = '') {
 
     // Phase 57 — consolidate row actions into one Apple-style kebab dropdown. Edit / References /
     // any extra (Thread, Chart…) / Delete all live in the menu; the row shows a single ⋮ trigger.
+    // 24 Oct 2026: an item that needs the person (the 1309 chart not answered) comes first, and the ⋮ wears a dot
+    let _first = '';
+    const _needs = /<button[^>]*data-needs-chart="1"[^>]*>[\s\S]*?<\/button>/.exec(extra || '');
+    if (_needs) { _first = _needs[0]; extra = extra.replace(_needs[0], ''); }
     return `<div class="row-actions">`
-        + `<button type="button" class="row-kebab" aria-label="Row actions" aria-haspopup="true" onclick="toggleRowMenu(event)">⋮</button>`
+        + `<button type="button" class="row-kebab" aria-label="Row actions${_needs ? ' (the 1309 chart is not answered)' : ''}" aria-haspopup="true" onclick="toggleRowMenu(event)"${_needs ? ' title="The 1309 chart is not answered for this failure condition"' : ''}>⋮</button>`
         + `<div class="row-action-menu" role="menu">`
+        +   _first
         +   `<button type="button" role="menuitem" onclick="${editFnName}('${id}')">✎ Edit</button>`
         +   backref
         +   extra
@@ -4027,7 +4032,7 @@ function renderSystemDirectory() {
 }
 
 function openSystemWorkspace(id) {
-    activeSystemId = id; const s = sys(); document.getElementById('ws-sys-title').textContent = s ? `Workspace: ${s.name}` : 'System Workspace';
+    activeSystemId = id; const s = sys(); document.getElementById('ws-sys-title').textContent = s ? `${s.name} \u00b7 SFHA` : 'SFHA';   // 25 Oct 2026: there are no system workspaces any more, a system's SFHA
     try { if (window.PROGRAM_PLAN) PROGRAM_PLAN.renderSystemWorkspaceBanner(id); } catch (_) {}
     switchTab('sys-workspace'); switchWorkspaceTab('func');
 }
@@ -4090,7 +4095,7 @@ function _renderSidebarContext() {
         // expanded nothing. Both are the same defect — a hand-maintained list drifting from
         // the DOM — so HF is now matched by PREFIX, like the AFHA group is, and the next
         // HF lane is covered the day it is born.
-        const inPasa = ['pasa','ac-req','fta','markov','eta','zsa','pra','cma','cea','routing','ipledger','stpa','mlas'].indexOf(cur) >= 0;
+        const inPasa = ['pasa','ac-req','fta','markov','eta','zsa','pra','cma','cea','routing','ipledger','stpa'].indexOf(cur) >= 0;
         const inHf   = cur.indexOf('hfa') === 0;
         const inAsa  = ['asa','ccmr','mmel','sse'].indexOf(cur) >= 0;
         const inSys  = ['sys-dir','sys-workspace','pssa','ssa','fmes','items'].indexOf(cur) >= 0;
@@ -4189,6 +4194,17 @@ function switchWorkspaceTab(subTab) {
         let btn = document.getElementById(`ws-tab-${t}`); if(btn) { if(t === subTab) btn.classList.add('active'); else btn.classList.remove('active'); }
     });
     _syncWsPssaNav(subTab);
+    // 25 Oct 2026: there are no system workspaces any more. The SFHA pages (functions, FCIM, FHA, assumptions) keep the
+    // SFHA heading and its tabs; a PSSA page (allocation, requirements) or the SSA's FMEA shows without them, under
+    // the left menu's own section bar (nav_areas.js), so an SSA page never sits under an SFHA heading.
+    try {
+        const sfha = ['func', 'fcim', 'fha', 'asm'].indexOf(subTab) >= 0;
+        const ws = document.getElementById('view-sys-workspace');
+        if (ws) {
+            const head = ws.querySelector(':scope > .header-with-export'), nav = ws.querySelector(':scope > .sys-workspace-nav'), plan = document.getElementById('ws-plan-banner');
+            [head, nav, plan].forEach(el => { if (el) el.style.display = sfha ? '' : 'none'; });
+        }
+    } catch (_) {}
 
     if(!sys()) return;
 
@@ -4441,7 +4457,11 @@ function _fhaExposureContext(linkedFhaId, phaseTable) {
     // FTA-side exposure: cost the FHA's selected phases at the active tree's mission-profile
     // durations (long-haul = longer cruise = more exposure). FHA still chooses WHICH phases.
     const tbl = phaseTable || _activeTreeMissionPhases();
-    const exp = getPhaseExposureRatio(fha.phases, tbl);
+    // 24 Oct 2026 (Waqas: "whichever gives us the most conservative one"): the active tree's exposure is every
+    // phase of its linked rows that carry the worst classification (fc_auto_trees.js slGoverningPhases)
+    let _phases = fha.phases;
+    try { const _ap = (ftaPages || []).find(p => p.id === activeFTAPageId); const _gp = (_ap && typeof slGoverningPhases === 'function') ? slGoverningPhases(_ap) : ''; if (_gp) _phases = _gp; } catch (_) {}
+    const exp = getPhaseExposureRatio(_phases, tbl);
     if (!exp) return null;
     // Override t_mission if the user pinned a Certification Mission Duration.
     const md = (typeof projectConfig !== 'undefined' && projectConfig.missionDuration && projectConfig.missionDuration > 0)
@@ -5111,7 +5131,7 @@ function renderACFHA() {
         // opens the Comments cell of the group head instead, so nothing is lost. Sub-Function
         // a bit wider; Effects and Comments much wider.
         const _findingHtml = _grpBadge ? `<div style="margin:0 0 4px 0;">${_grpBadge.replace('margin-left:6px;', 'margin-left:0;')}</div>` : '';
-        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('acFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('acFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'ac')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'fha-ac', tbody, rows: _fhaGrouping.ordered, rowHtml: _fhaRowHtml,
@@ -5121,6 +5141,19 @@ function renderACFHA() {
     }
     // Phase 54 — keep the thead in sync with the body.
     if (typeof _injectCustomColumnHeaders === 'function') _injectCustomColumnHeaders();
+}
+
+// 24 Oct 2026 (fc_auto_trees.js): every Major-or-worse row says, in words, where the 1309 chart routes it; a
+// click opens the walkthrough. It decides whether the failure condition gets a quantitative fault tree.
+function _fhaRouteChip(row, scope) {
+    if (typeof SLFcTrees === 'undefined' || !row) return '';
+    const r = SLFcTrees.route(row);
+    if (r === 'none') return '';
+    const words = SLFcTrees.ROUTE_WORDS[r] || r;
+    const col = r === 'unanswered' ? 'var(--color-danger, #b42318)' : r === 'quant' ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)';
+    return '<div><a href="#" class="fha-route-chip" data-route="' + esc(r) + '" style="font-size:10.5px;color:' + col + ';text-decoration:none;white-space:nowrap;" '
+        + 'title="Where the AC 1309 chart routes this row (it decides whether the failure condition needs a quantitative fault tree). Click to open the chart." '
+        + 'onclick="openFhaChartModal(\'' + esc(row.internalId) + '\', \'' + scope + '\'); return false;">' + esc(words) + '</a></div>';
 }
 
 // Phase 53.13 — chart trigger button + modal plumbing.
@@ -5136,9 +5169,14 @@ function _fhaChartTriggerHtml(row, scope) {
     else if (sev === 'Major' && (cp.isSimple !== null && cp.isSimple !== undefined) && (cp.isRedundant !== null && cp.isRedundant !== undefined)) characterized = true;
     else if ((sev === 'Hazardous' || sev === 'Catastrophic') && (cp.isSimpleConventional !== null && cp.isSimpleConventional !== undefined)) characterized = true;
     const tip = characterized ? 'Chart characterized — click to review' : 'Chart not characterized — click to walk through AC 25.1309-1B Fig 2';
+    // 24 Oct 2026 (Waqas: "those failure conditions must be flagged to be charted, just a subtle red blinky thing
+    // over the skewer ... only for the worst case severities"): the row whose chart decides its condition, not yet
+    // answered, flags the row menu (CSS: .row-actions:has([data-needs-chart])) and its Chart item comes first
+    const needs = (typeof SLFcTrees !== 'undefined' && SLFcTrees.needsChart) ? SLFcTrees.needsChart(row) : false;
     return '<button class="fha-chart-trigger ' + (characterized ? 'characterized' : '') + '" '
+        + (needs ? 'data-needs-chart="1" ' : '')
         + 'onclick="openFhaChartModal(\'' + esc(row.internalId) + '\', \'' + scope + '\')" '
-        + 'title="' + esc(tip) + '">📋 Chart</button>';
+        + 'title="' + esc(needs ? 'The 1309 chart decides whether this failure condition needs a quantitative fault tree. A tree was made in case it does: answer the chart.' : tip) + '">' + (needs ? '📋 Answer the 1309 chart' : '📋 Chart') + '</button>';
 }
 
 function _patchReqRowActions(tr, row, scopeKind) {
@@ -5572,7 +5610,7 @@ function renderSysFHA() {
                   _l1Fns.map(f => `<option value="${esc(f.funcId)}"${_l1Sugg === String(f.funcId) ? ' selected-suggested' : ''}>${esc(f.funcName || f.funcId)}${_l1Sugg === String(f.funcId) ? ' (FCIM match)' : ''}</option>`).join('') + `</select>`
                 : `<div style="font-size:10px; color:var(--color-text-tertiary);">declare functions on this system first</div>`)
         ;
-        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('sysFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('sysFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'sys')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
     };
     // 31 Aug 2026 — same ordered view as the AC table: natural ascending fcId,
     // same-id phase rows clustered, blank ids last.
@@ -5733,7 +5771,10 @@ function populateCmaLinkedGatesDropdown(selected) {
     const el = document.getElementById('cma-linked-gates');
     if (!el) return;
     const current = selected || _getCheckboxListValues(el);
-    const gates = _enumerateAllGates();
+    // 25 Oct 2026 (level_view.js): the gates of the level on screen, the aircraft's trees or one system's PSSA and SSA
+    // trees; a gate the entry already names is always kept, whatever its level
+    const _LV = window.SLLevelView, _cur = (current || []).map(String);
+    const gates = _enumerateAllGates().filter(({ page, node }) => !_LV || !_LV.showsPage || _LV.showsPage(page) || _cur.indexOf(page.id + ':' + node.id) >= 0);
     const options = gates.map(({ page, node }) => ({
         value: page.id + ':' + node.id,
         label: '[' + (page.name || 'Untitled') + ']  ' +
@@ -6767,6 +6808,8 @@ function syncFtaConfigFromActivePage() {
             try { seedTopDownWeights(page.root); } catch (_) {}
         }
     }
+    // 24 Oct 2026 (fc_auto_trees.js): the override follows the tree (a target set by hand is that tree's)
+    try { const _ovr = document.getElementById('fta-target-override'); if (_ovr) { _ovr.checked = !!page.targetManual; projectConfig.override = !!page.targetManual; } } catch (_) {}
     // Phase 76 — mission profile follows the page; re-pull exposure under its phase durations.
     ftaConfig.missionProfileId = page.missionProfileId || '';
     if (typeof refreshFtaMissionProfileDropdown === 'function') refreshFtaMissionProfileDropdown();
@@ -10995,6 +11038,8 @@ function togglePanelCollapse(selector, btn) {
 function onTargetOverrideToggle() {
     const overrideChk = document.getElementById('fta-target-override');
     projectConfig.override = !!(overrideChk && overrideChk.checked);
+    // 24 Oct 2026 (fc_auto_trees.js): a target set by hand belongs to its tree, and the automatic targets leave it alone
+    try { const _p = (ftaPages || []).find(p => p.id === activeFTAPageId); if (_p) { if (projectConfig.override) _p.targetManual = true; else delete _p.targetManual; } } catch (_) {}
     refreshFTARequiredTarget();
     syncFTAConfig();
 }
@@ -11953,7 +11998,6 @@ function autoReqPreview(){
         praZonal:         cb('ar-gen-pra'),
         zsaSeparation:    cb('ar-gen-zsa'),
         hfOperational:    cb('ar-gen-hf'),
-        iface:            cb('ar-gen-iface'),
         fcimMonitor:      cb('ar-gen-fcim-mon')
     };
     const merge = AutoReq.generate(opts, scope);

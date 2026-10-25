@@ -87,7 +87,10 @@ and 3). Everything else is inside this folder.
 
 8. When the license file from Safety Lab arrives (it ends in `.lic`), put it next to
    `install.sh` and run `bash install.sh` again. The setup file is rewritten with the license
-   inside, and from then on it is the only file a user needs.
+   inside, and from then on it is the only file a user needs. A renewed license works the same
+   way: put the new `.lic` next to `install.sh` and run it again. A newer license replaces the
+   server's one (the old one is kept as `license/server.lic.replaced-<date>`); an older one is
+   left alone, and the script says which it did. Then send users the rewritten setup file.
 
 If something goes wrong the script stops and prints a sentence starting with STOP that
 says what to do. Running `bash install.sh` again is always safe: it remembers your answers

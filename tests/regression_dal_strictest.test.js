@@ -97,17 +97,17 @@ const disRow = genDALgebra('ac').find(r => r.reqSource.sourceId.endsWith(':X'));
 check('a disagreement CHANGES the fingerprint (stale-flagging sees the movement)',
   disRow.reqSource.fingerprint !== soloRow.reqSource.fingerprint);
 
-// ---- compressed mode rides the same per-event set --------------------------
+// ---- 24 Oct 2026: the compressed mode is retired (Waqas). The old toggle no longer changes anything:
+// one requirement per event, never a scope-wide default line.
 projectConfig.autoreqDalMode = 'compressed';
 const comp = genDALgebra('ac');
-const defRow = comp.find(r => r.reqSource.generator === 'dalgebra-default');
-check('compressed mode counts EVENTS, not per-tree allocations',
-  defRow ? defRow.reqSource.context.totalCount === 4 : comp.length === 4,   // gates 1,2 + lids X,12 — X once, not twice
-  JSON.stringify(comp.map(r => r.reqSource.sourceId)));
+check('the retired compressed toggle writes no scope-wide default line',
+  !comp.some(r => r.reqSource.generator === 'dalgebra-default'), JSON.stringify(comp.map(r => r.reqSource.generator)));
+check('... and still one requirement per EVENT (gates 1,2 + lids X,12: X once, not twice)',
+  comp.length === 4 && comp.every(r => r.reqSource.generator === 'dalgebra'), JSON.stringify(comp.map(r => r.reqSource.sourceId)));
 const compX = comp.find(r => r.reqSource.sourceId.endsWith(':X'));
-check('compressed mode: the shared event still lands at the max, disagreement named',
-  (compX ? / A\.$/.test(compX.text) && /not merged/.test(compX.rat) : !!defRow),
-  compX ? compX.rat : 'folded into default');
+check('... the shared event lands at the max, disagreement named, no "Exception to default" wording',
+  !!compX && / A\.$/.test(compX.text) && /not merged/.test(compX.rat) && !/Exception to default/.test(compX.rat), compX ? compX.rat : 'missing');
 projectConfig.autoreqDalMode = 'explicit';
 
 // ---- A11: linkedFhaIds-only pages seed --------------------------------------

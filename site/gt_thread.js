@@ -37,7 +37,7 @@
     const SAF_C = '#586472', RAM_C = '#C88A00', HF_C = '#7A3EA8';
     const INK = '#101216', INK3 = '#14171c', MUTE = '#14171c', HAIR = '#14171c';
     const RED = '#C0231D', GREEN = '#0E7A3C', AMBER = '#C88A00', BLUE = '#2E6BD6';
-    const FLAG = { compromised: RED, stale: AMBER, obsolete: INK3 };
+    const FLAG = { compromised: RED, stale: AMBER, obsolete: INK3, finding: AMBER };   // finding (24 Oct 2026): an open FMEA finding on the verification side
     const PROVC = { human: '#2E6BD6', ai: '#7A3EA8', engine: '#0E7490' };
     const PROVL = { human: 'Human', ai: 'AI', engine: 'Engine' };
 
@@ -46,6 +46,16 @@
 
     // Provenance — engine-computed for the deterministic engines (trees, reliability);
     // AI where the underlying row was AI-sourced and not engineer-edited; else human.
+    // 25 Oct 2026 (Waqas: "why is it saying human on everything, AI generated or engine generated?"), two faults:
+    // (1) the lookup read window.acFhaData and the like, but the project stores are `let` bindings that are never
+    //     window properties, so every lookup missed and every card fell through to Human: they are read through
+    //     SLEnv now (the same reader req_thread.js uses);
+    // (2) a requirement made by a generator (AutoReq, its reqSource.generator: deterministic, no AI) is the
+    //     engine's; one an engineer has rewritten (reqSource.userOverridden, or marked edited) is theirs.
+    function _st(name) {
+        try { if (typeof window !== 'undefined' && window.SLEnv && typeof window.SLEnv.get === 'function') { const v = window.SLEnv.get(name); if (v !== undefined) return v; } } catch (_) {}
+        try { return (typeof window !== 'undefined') ? window[name] : undefined; } catch (_) { return undefined; }
+    }
     function provOf(n) {
         const k = n.kind;
         if (k === 'fta' || k === 'ram') return 'engine';
@@ -55,16 +65,19 @@
                 const it = _lookupItem(r);
                 const _he = (typeof window !== 'undefined' && window.slHumanEdited) || function (r) { if (!r) return false; if (r.humanEdited === true) return true; if (r.aiChatEdited === true) return false; if (r.aiEdited === true) return !r.aiEditModel && !r.aiEditedAt; return false; };
                 if (it && (it.aiModel || (it.reqSource && it.reqSource.aiModel)) && !_he(it)) return 'ai';
+                const rs = it && it.reqSource;
+                if (rs && rs.generator && rs.generator !== 'reqif' && !rs.userOverridden && !_he(it)) return 'engine';
             }
         } catch (_) {}
         return 'human';
     }
     function _lookupItem(r) {
         try {
-            const g = (typeof window !== 'undefined') ? window : {};
+            const g = { systemsData: _st('systemsData'), acFhaData: _st('acFhaData'), acReqData: _st('acReqData'), ftaPages: _st('ftaPages'), itemsData: _st('itemsData'), acFunctionsData: _st('acFunctionsData') };
             const sys = (id) => (g.systemsData || []).find(s => String(s.id) === String(id));
             switch (r.kind) {
                 case 'acFha': return (g.acFhaData || []).find(f => String(f.internalId) === String(r.id));
+                case 'acFunc': return (g.acFunctionsData || []).find(f => String(f.subId) === String(r.id));   // the sub-function's row
                 case 'sysFha': { const s = sys(r.systemId); return s && (s.fha || []).find(f => String(f.internalId) === String(r.id)); }
                 case 'acReq': return (g.acReqData || []).find(x => String(x.internalId) === String(r.id));
                 case 'sysReq': { const s = sys(r.systemId); return s && (s.req || []).find(x => String(x.internalId) === String(r.id)); }
@@ -264,7 +277,7 @@
             c += '<text x="' + (px + pw / 2) + '" y="' + (py + 8.7) + '" text-anchor="middle" font-size="7" font-weight="700" fill="#fff">' + PROVL[pv] + '</text>';
             // bottom-left chip: flag OR role
             let bl = null;
-            if (n.flag) bl = { t: n.flag.toUpperCase(), c: (n.flag === 'stale' ? AMBER : n.flag === 'obsolete' ? INK3 : RED) };
+            if (n.flag) bl = { t: n.flag.toUpperCase(), c: ((n.flag === 'stale' || n.flag === 'finding') ? AMBER : n.flag === 'obsolete' ? INK3 : RED) };
             else if (n.kind === 'sys' && n.role) { const base = n.role === 'primary' ? 'PRIMARY' : 'RESOURCE'; bl = { t: (n.role === 'resource' && (n.hops || 1) > 1) ? base + ' ·' + n.hops : base, c: n.role === 'primary' ? '#12A150' : AMBER }; }
             if (bl) {
                 const rw = bl.t.length * 5.1 + 10, rx = p.x + 11, ry = p.y + p.h - 15;

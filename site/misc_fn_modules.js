@@ -4588,14 +4588,20 @@ function _slDialogShow(opts) {
         if (ov._hideTimer) { clearTimeout(ov._hideTimer); ov._hideTimer = null; }   // cancel a prior dialog's pending hide
         const isPrompt = opts.type === 'prompt';
         const isAlert = opts.type === 'alert';          // R19 step 3: one OK button, nothing to cancel
+        // 24 Oct 2026 (slChoose): a question with named answers, one button each, plus Cancel
+        const isChoose = opts.type === 'choose' && Array.isArray(opts.choices) && opts.choices.length;
         ov.innerHTML =
             '<div class="sl-dialog-card" role="dialog" aria-modal="true">'
             + (opts.title ? '<h3 class="sl-dialog-title">' + esc(opts.title) + '</h3>' : '')
             + '<div class="sl-dialog-msg">' + esc(opts.message || '').replace(/\n/g, '<br>') + '</div>'
             + (isPrompt ? '<input type="text" id="sl-dialog-input" class="sl-dialog-input" value="' + esc(opts.def || '') + '">' : '')
+            + (isChoose ? '<div class="sl-dialog-choices" style="display:flex;flex-direction:column;gap:8px;margin:12px 0 4px;">' + opts.choices.map(function (c, i) {
+                return '<button type="button" class="sl-dialog-choice" data-choice="' + i + '" style="text-align:left;padding:10px 12px;border:1px solid var(--color-border-thin);border-radius:var(--r-md);background:var(--color-surface-1);color:var(--color-text-primary);cursor:pointer;">'
+                    + '<strong style="font-size:13px;">' + esc(c.label) + '</strong>' + (c.hint ? '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px;">' + esc(c.hint) + '</div>' : '') + '</button>';
+            }).join('') + '</div>' : '')
             + '<div class="sl-dialog-actions">'
             + (isAlert ? '' : '<button type="button" class="sl-dialog-cancel">' + esc(opts.cancelText || 'Cancel') + '</button>')
-            + '<button type="button" class="sl-dialog-ok' + (opts.danger ? ' sl-danger' : '') + '">' + esc(opts.okText || 'OK') + '</button>'
+            + (isChoose ? '' : '<button type="button" class="sl-dialog-ok' + (opts.danger ? ' sl-danger' : '') + '">' + esc(opts.okText || 'OK') + '</button>')
             + '</div></div>';
         ov.style.display = 'flex';
         requestAnimationFrame(() => ov.classList.add('show'));
@@ -4607,18 +4613,22 @@ function _slDialogShow(opts) {
             resolve(val);
         };
         const onOk = () => finish(isPrompt ? (input ? input.value : '') : true);
-        const onCancel = () => finish(isPrompt ? null : isAlert ? true : false);   // dismissing a notice is the same as reading it
+        const onCancel = () => finish(isPrompt || isChoose ? null : isAlert ? true : false);   // dismissing a notice is the same as reading it
         function onKey(e) {
             if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); onCancel(); }
-            else if (e.key === 'Enter') { e.preventDefault(); onOk(); }
+            else if (e.key === 'Enter' && !isChoose) { e.preventDefault(); onOk(); }
         }
-        ov.querySelector('.sl-dialog-ok').addEventListener('click', onOk);
+        const okBtn = ov.querySelector('.sl-dialog-ok'); if (okBtn) okBtn.addEventListener('click', onOk);
+        if (isChoose) ov.querySelectorAll('.sl-dialog-choice').forEach(function (b) { b.addEventListener('click', function () { finish(opts.choices[+b.getAttribute('data-choice')].value); }); });
         const cancelBtn = ov.querySelector('.sl-dialog-cancel'); if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
         ov.addEventListener('click', e => { if (e.target === ov) onCancel(); });
         document.addEventListener('keydown', onKey, true);
-        setTimeout(() => { if (input) { input.focus(); input.select(); } else { const b = ov.querySelector('.sl-dialog-ok'); if (b) b.focus(); } }, 40);
+        setTimeout(() => { if (input) { input.focus(); input.select(); } else { const b = ov.querySelector('.sl-dialog-ok') || ov.querySelector('.sl-dialog-choice'); if (b) b.focus(); } }, 40);
     });
 }
+// 24 Oct 2026: slChoose(message, [{ value, label, hint }], { title, cancelText }) -> the value picked, or null.
+function slChoose(message, choices, opts) { opts = opts || {}; return _slDialog({ type: 'choose', message: message, title: opts.title, choices: choices || [], cancelText: opts.cancelText }); }
+try { window.slChoose = slChoose; } catch (_) {}
 function slConfirm(message, opts) { opts = opts || {}; return _slDialog({ type: 'confirm', message: message, title: opts.title, okText: opts.okText, cancelText: opts.cancelText, danger: opts.danger }); }
 // 13 Sep 2026 (R19 step 3) — slAlert: the app's own notice dialog. One OK button; resolves true when
 // dismissed (OK, Enter, Escape or a click outside). Replaces every native alert() that carried a real
@@ -5032,37 +5042,12 @@ function _renderShortcutsBody() {
 }
 
 function updateSystemBreadcrumb() {
-    const host = document.getElementById('sys-breadcrumb-host');
-    if (!host) {
-        // First render — try to insert the breadcrumb into the system workspace header.
-        const ws = document.getElementById('view-sys-workspace');
-        if (!ws) return;
-        const bc = document.createElement('div');
-        bc.className = 'sys-breadcrumb';
-        bc.id = 'sys-breadcrumb-host';
-        ws.insertBefore(bc, ws.firstChild);
-    }
-    const bc = document.getElementById('sys-breadcrumb-host');
-    if (!bc) return;
-    const s = (typeof sys === 'function') ? sys() : null;
-    if (!s) { bc.style.display = 'none'; return; }
-    bc.style.display = 'flex';
-    const others = (systemsData || []).filter(x => x.id !== s.id);
-    const switcher = others.length
-        ? '<select class="sys-breadcrumb-switcher" onchange="if(this.value)openSystemWorkspace(this.value)" aria-label="Switch system">' +
-          '<option value="">Switch to…</option>' +
-          others.map(x => '<option value="' + esc(x.id) + '">' + esc(x.name || x.id) + '</option>').join('') +
-          '</select>'
-        : '';
-    bc.innerHTML =
-        '<span class="sys-breadcrumb-label">Working in</span>' +
-        '<span class="sys-breadcrumb-name">' + esc(s.name || s.id) + '</span>' +
-        '<span class="u-muted-small">·</span>' +
-        '<span style="font-size: 11px; color: var(--color-text-secondary);">' + (s.functions || []).length + ' functions · ' + (s.fha || []).length + ' FHAs · ' + (s.req || []).length + ' reqs</span>' +
-        switcher +
-        '<a href="javascript:void(0)" onclick="switchTab(\'sys-dir\')" style="font-size: 11px; color: var(--color-text-tertiary); text-decoration: none; margin-left: 6px;" title="Back to directory">↩ All systems</a>';
+    // 25 Oct 2026 (Waqas: "I dont think we need this bar anymore"): the "Working in" bar is gone. The "Working on"
+    // picker in the left menu names the system and switches it; All systems is a tab of the SFHA section; each
+    // count is on its own tab. A bar left over from before is taken off the page.
+    const old = document.getElementById('sys-breadcrumb-host'); if (old) old.remove();
+    return;
 }
-
 function ensureFilterBar(viewId, opts) {
     opts = opts || {};
     const view = document.getElementById(viewId);

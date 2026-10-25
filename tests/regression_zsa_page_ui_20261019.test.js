@@ -87,6 +87,15 @@ const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } els
         await page.evaluate(id => document.querySelector('#zsa-analysis [data-zsae-zone="' + id + '"]').scrollIntoView(), cwbId);
         await shoot(page, 'sl_zsa_02_wing_box_open');
 
+        // 25 Oct 2026 (Waqas: "these need to be lined up and the same size", "run again and update buttons too")
+        const BAR = await page.evaluate(() => { const b = document.querySelector('#zsa-analysis .zsae-bar'); if (!b) return null;
+            const r = sel => { const e = b.querySelector(sel); if (!e) return null; const x = e.getBoundingClientRect(); return { t: Math.round(x.top), b: Math.round(x.bottom), h: Math.round(x.height), w: Math.round(x.width) }; };
+            const lab = [...b.querySelectorAll('label')].map(l => { const x = l.getBoundingClientRect(), c = document.getElementById(l.getAttribute('for')); return c ? Math.round(x.bottom) <= Math.round(c.getBoundingClientRect().top) : false; });
+            return { by: r('#zsae-by'), f: r('#zsae-filter'), run: r('[data-zsae-act="refresh"]'), up: r('[data-zsae-act="materialize"]'), lab }; });
+        const ctl = BAR ? [BAR.by, BAR.f, BAR.run, BAR.up] : [];
+        check('the analysis controls: every label above its box; the boxes and both buttons one height, on one line; the two boxes one width',
+            BAR && ctl.every(Boolean) && BAR.lab.length === 2 && BAR.lab.every(Boolean) && ctl.every(c => c.h === ctl[0].h && c.t === ctl[0].t && c.b === ctl[0].b) && BAR.by.w === BAR.f.w, J(BAR));
+
         console.log('\n[C] dispositions');
         const FID = 'ZSA:channels-close:SFN-FCS2:H-A-01|H-B-01';
         const has = await page.evaluate(id => !!document.querySelector('#zsa-analysis [data-zsae-finding="' + CSS.escape(id) + '"]'), FID);

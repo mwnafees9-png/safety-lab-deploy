@@ -1687,7 +1687,7 @@
             var endSys = function (ref) { if (!ref) return null; var u = R.scope.resolve(ref.segs, e.owner); var d = u && u.type ? R.scope.resolve(u.type.segs, u.owner) : null; var k = d ? R.keyOfEl.get(d) : null; return k ? keyMap[k] : null; };
             var a = endSys(e.from), b = endSys(e.to);
             if (!a || !b) { plan.notes.push('Interface ' + (f.icdRef || nameOf(e)) + ': one of its systems is not in the file, so it was left out.'); return; }
-            var x = { fromSystemId: a.id, toSystemId: b.id, kind: f.kind || 'interface', direction: f.direction || '', medium: f.medium || '', icdRef: f.icdRef || '' };
+            var x = { fromSystemId: a.id, toSystemId: b.id, kind: f.kind || 'interface', direction: f.direction || '', medium: f.medium || '', icdRef: f.icdRef || '', origin: 'sysml-import' };
             if (e.doc) x.notes = e.doc;
             C.interfaces.push(x); made.added++; keyMap[op.key] = x;
         });
@@ -2115,7 +2115,7 @@
         });
         f.ifaces.forEach(function (x) {
             if (!x.from.target || !x.to.target) return;
-            P.projectConfig.interfaces.push({ fromSystemId: x.from.target.id, toSystemId: x.to.target.id, kind: 'interface', direction: 'a_to_b', medium: x.medium || '', icdRef: x.icdRef || '' }); made.added++;
+            P.projectConfig.interfaces.push({ fromSystemId: x.from.target.id, toSystemId: x.to.target.id, kind: 'interface', direction: 'a_to_b', medium: x.medium || '', icdRef: x.icdRef || '', origin: 'sysml-import' }); made.added++;
         });
         var sysT = function (sy) { return sy ? (sy.existing || sy.target || null) : null; };
         // a function another tool left without an ID gets the next free one, so failure conditions can point at it
