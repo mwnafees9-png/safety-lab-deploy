@@ -2628,7 +2628,11 @@ function _fcimRenderCells(row, actions) {
     // mExtra: MF2…MFn). Additive — rows without extras render exactly as before.
     const _extraHtml = list => (Array.isArray(list) ? list : []).map(e =>
         `<div style="margin-top:3px;border-top:1px dashed var(--color-border-hair);padding-top:2px;"><strong>${esc(e.id || '')}</strong><br>${esc(e.desc || '')}</div>`).join('');
-    return `<td>${actions}</td>${subCell}${awareCell}<td><strong>${esc(row.tlId)}</strong><br>${esc(row.tlDesc)}</td><td><strong>${esc(row.plId)}</strong><br>${esc(row.plDesc)}${_extraHtml(row.plExtra)}</td><td><strong>${esc(row.mId)}</strong><br>${esc(row.mDesc)}${_extraHtml(row.mExtra)}</td>${comboCell}`;
+    // 26 Oct 2026: each TL / PL / M cell shows its condition, or "N/A" with the reason it does not apply (fcim_na.js),
+    // or nothing (not assessed yet), with what the engineer can do about it. Without fcim_na.js: the cells as before.
+    const NA = (typeof window !== 'undefined' && window.SLFcimNa && typeof window.SLFcimNa.cellHtml === 'function') ? window.SLFcimNa : null;
+    const _cell = (s, extras) => NA ? NA.cellHtml(row, s, extras) : `<strong>${esc(row[s + 'Id'])}</strong><br>${esc(row[s + 'Desc'])}${extras}`;
+    return `<td>${actions}</td>${subCell}${awareCell}<td>${_cell('tl', '')}</td><td>${_cell('pl', _extraHtml(row.plExtra))}</td><td>${_cell('m', _extraHtml(row.mExtra))}</td>${comboCell}`;
 }
 
 // FCIM "N/A" marks a sub-function whose crew-UNAWARE case is inapplicable — the failure is
@@ -2651,12 +2655,26 @@ function _fcimRenderCells(row, actions) {
 // and nothing downstream can recover from it.
 // `combined: true` marks Table A3 combined conditions, which span related sub-functions BY
 // DEFINITION — those are legitimately cross-sub-function and the guard must not reject them.
+// 26 Oct 2026 (Waqas: a cell that does not apply is "N/A with the rationale", and the engine must "NOT count them as
+// failure conditions at all ... they are stopped right at the FCIM level"): THIS is where an FCIM cell becomes a failure
+// condition, so this is where N/A stops. A cell with a reason it does not apply (row.tlNa / plNa / mNa) and no condition
+// text is not a failure condition, even if an FC ID was left on it; its additional conditions (plExtra / mExtra) go with
+// it. A condition written into the cell later stands (fcim_na.js settle). The cell model lives in fcim_na.js.
+function _fcimIsNaCell(d, s) {
+    if (!d) return false;
+    const t = v => String(v == null ? '' : v).trim();
+    return !!t(d[s + 'Na']) && !t(d[s + 'Desc']) && !((s === 'pl' ? d.plExtra : (s === 'm' ? d.mExtra : null)) || []).some(e => e && t(e.desc));
+}
 function _pushExtractedFCs(fcimArr, out) {
     (fcimArr || []).forEach(d => {
         if (!d) return;
-        if (d.tlId) out.push({ id: d.tlId, desc: d.tlDesc, subId: d.subId });
-        if (d.plId) out.push({ id: d.plId, desc: d.plDesc, subId: d.subId });
-        if (d.mId)  out.push({ id: d.mId,  desc: d.mDesc,  subId: d.subId });
+        // self-contained (tests and tools lift this function alone): the same test as _fcimIsNaCell above
+        const _t = v => String(v == null ? '' : v).trim();
+        const _na = s => !!_t(d[s + 'Na']) && !_t(d[s + 'Desc']) && !((s === 'pl' ? d.plExtra : (s === 'm' ? d.mExtra : null)) || []).some(e => e && _t(e.desc));
+        const naTl = _na('tl'), naPl = _na('pl'), naM = _na('m');
+        if (d.tlId && !naTl) out.push({ id: d.tlId, desc: d.tlDesc, subId: d.subId });
+        if (d.plId && !naPl) out.push({ id: d.plId, desc: d.plDesc, subId: d.subId });
+        if (d.mId && !naM)  out.push({ id: d.mId,  desc: d.mDesc,  subId: d.subId });
         // 2 Aug 2026 — combined failure conditions (Table A3's related-sub-
         // functions rule) trace forward like every other condition: an FHA row
         // can be built on a combined condition, and the AI drafting the FHA sees
@@ -2668,9 +2686,50 @@ function _pushExtractedFCs(fcimArr, out) {
         // 2 Aug 2026 — Table A3 multiplicity: every additional distinct condition
         // traces forward exactly like the primaries. A condition held by the
         // matrix but invisible to the FHA silently never happened.
-        (Array.isArray(d.plExtra) ? d.plExtra : []).forEach(e => { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId }); });
-        (Array.isArray(d.mExtra)  ? d.mExtra  : []).forEach(e => { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId }); });
+        if (!naPl) (Array.isArray(d.plExtra) ? d.plExtra : []).forEach(e => { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId }); });
+        if (!naM)  (Array.isArray(d.mExtra)  ? d.mExtra  : []).forEach(e => { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId }); });
     });
+}
+// 26 Oct 2026: an FCIM cell in an export (CSV, the report tables) and back in from one. A cell that does not apply is
+// written "N/A" in its ID column and "N/A: <reason>" in its text column; reading those back marks the cell not
+// applicable with that reason. "N/A" with no reason reads back as a blank cell (not assessed): a cell cannot be not
+// applicable without one.
+function _fcimCellOut(r, s) {
+    if (_fcimIsNaCell(r, s)) return ['N/A', 'N/A: ' + String(r[s + 'Na']).trim()];
+    return [r ? r[s + 'Id'] : '', r ? r[s + 'Desc'] : ''];
+}
+function _fcimExportRow(r) {
+    const tl = _fcimCellOut(r, 'tl'), pl = _fcimCellOut(r, 'pl'), m = _fcimCellOut(r, 'm');
+    return [r.subId, r.awareness, tl[0], tl[1], pl[0], pl[1], m[0], m[1]];
+}
+// The FCIM forms' afterChange (safety_lab.js): a condition written into an N/A cell overrules it (fcim_na.js settle),
+// and a settled cell without an FC ID is numbered like a new condition. Without fcim_na.js: nothing to do.
+function _fcimSettleAfterEdit(fcim, fha, key) {
+    try {
+        const NA = (typeof window !== 'undefined') ? window.SLFcimNa : null;
+        if (!NA || typeof NA.settle !== 'function') return 0;
+        let n = 0;
+        (fcim || []).forEach(r => { if (NA.settle(r, fha).length) { n++; if (typeof _slAutoNumber === 'function') _slAutoNumber(key, r); } });
+        return n;
+    } catch (_) { return 0; }
+}
+function _fcimCellIn(row, s, id, desc) {
+    const t = v => String(v == null ? '' : v).trim();
+    const d = t(desc), i = t(id);
+    const m = d.match(/^(?:n\/a|na|not applicable)\b\s*(?:[:\-–,.]\s*)?(.*)$/i);
+    if (m && (!i || /^n\/?a$/i.test(i))) {
+        row[s + 'Id'] = ''; row[s + 'Desc'] = '';
+        if (t(m[1])) { row[s + 'Na'] = t(m[1]); row[s + 'NaBy'] = 'engineer'; }
+        return row;
+    }
+    row[s + 'Id'] = /^n\/?a$/i.test(i) ? '' : i; row[s + 'Desc'] = d;
+    return row;
+}
+// an imported FCIM row (the CSV / spreadsheet import, data_ops_modules.js): each cell read through _fcimCellIn
+function _fcimImportCells(row) {
+    if (!row) return row;
+    ['tl', 'pl', 'm'].forEach(s => _fcimCellIn(row, s, row[s + 'Id'], row[s + 'Desc']));
+    return row;
 }
 
 // Phase 53.42 — rebuild extractedFCs for every system from its FCIM rows. Used on project

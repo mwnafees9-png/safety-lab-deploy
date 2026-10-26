@@ -90,7 +90,9 @@ console.log('\n[mult] the accept path allocates ids per extra, executed');
     allIds.every(Boolean) && new Set(allIds).size === 6 && allIds.indexOf('FC-007') === -1,
     'got: ' + allIds.join(', '));
   check('extractedFCs sees all six', sb.acExtractedFCs.length === 6, String(sb.acExtractedFCs.length));
-  const legacy = sb._a({ subId: 'SF-10', awareness: 'N/A', malfunction: 'Single malfunction phrase', _model: 'm' });
+  // 26 Oct 2026 (FCIM N/A ruling, regression_fcim_na_20261026): every cell is answered, so the other two cells carry
+  // N/A with a reason; the single-string malfunction is what this check is about
+  const legacy = sb._a({ subId: 'SF-10', awareness: 'N/A', totalLoss: { na: true, rationale: 'Covered by SF-9' }, partialLoss: 'N/A: no partial state', malfunction: 'Single malfunction phrase', _model: 'm' });
   check('a legacy single-string call behaves exactly as before',
     legacy === true && sb.acFcimData[1].mDesc === 'Single malfunction phrase' && !sb.acFcimData[1].mExtra);
 }

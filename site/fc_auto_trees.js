@@ -40,7 +40,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.3';
+    var VERSION = '1.4';   // 1.4 26 Oct 2026: a tree whose failure condition was marked not applicable in the FCIM is asked about in those words
     var MAJOR = 3;
 
     // 26 Oct 2026 (v1.3): the project stores are top-level `let`s, not window properties, and the app's CSP forbids
@@ -316,6 +316,15 @@
     }
 
     // ---- the sweep ------------------------------------------------------------------------------------------
+    // 26 Oct 2026 (fcim_na.js): the FHA rows of a failure condition whose FCIM cell was marked not applicable were set
+    // aside with that cell; its tree is asked about in those words
+    function _setAside(key) {
+        var id = String(key || '').indexOf('fc:') === 0 ? String(key).slice(3).trim() : '';
+        if (!id) return false;
+        var rows = [].concat(_g('acFcimData') || []);
+        _systems().forEach(function (s) { rows = rows.concat((s && s.fcim) || []); });
+        return rows.some(function (r) { return r && ['tl', 'pl', 'm'].some(function (k) { return String(r[k + 'NaPrevId'] || '').trim() === id && String(r[k + 'Na'] || '').trim() !== ''; }); });
+    }
     var _asking = false;
     function sweep(opts) {
         opts = opts || {};
@@ -343,7 +352,7 @@
             var a = p.autoFcTree, scope = a.scope === 'ac' ? 'ac' : _systems().find(function (s) { return s && String(s.id) === String(a.systemId); });
             var g = scope ? groups(scope).find(function (x) { return x.key === a.key; }) : null;
             if (g && g.needsTree) return;
-            if (shapeFp(p.root) === a.fp) gone.push(p.id); else ask.push({ p: p, why: !g ? 'its failure condition is gone' : (_rank(g.gov.severity) < MAJOR ? 'its failure condition is ' + g.gov.severity + ' now' : 'the 1309 chart now routes it to ' + (ROUTE_WORDS[g.route] || g.route).toLowerCase()) });
+            if (shapeFp(p.root) === a.fp) gone.push(p.id); else ask.push({ p: p, why: !g ? (_setAside(a.key) ? 'its failure condition was marked not applicable in the FCIM' : 'its failure condition is gone') : (_rank(g.gov.severity) < MAJOR ? 'its failure condition is ' + g.gov.severity + ' now' : 'the 1309 chart now routes it to ' + (ROUTE_WORDS[g.route] || g.route).toLowerCase()) });
         });
         if (gone.length) { var keep = _pages().filter(function (p) { return gone.indexOf(p.id) < 0; }); try { ftaPages = keep; } catch (_) { root.ftaPages = keep; } }
         var targets = _applyTargets();

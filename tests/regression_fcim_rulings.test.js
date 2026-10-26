@@ -76,8 +76,11 @@ console.log('\n[rulings] _runFcim mapper: malfunctions[]/partials[] survive the 
   const fn = (ai.match(/async function _runFcim\(scope, funcs, opts\)[\s\S]*?_makeReviewPanel\(\{/) || [''])[0];
   check('mapper passes the arrays through',
     /malfunctions: _arr\(x\.malfunctions\) \|\| undefined/.test(fn) && /partials: _arr\(x\.partials\) \|\| undefined/.test(fn));
-  check('filter keeps a row whose ONLY content is an array',
-    /\(_arr\(x\.malfunctions\) \|\| \[\]\)\.length \|\| \(_arr\(x\.partials\) \|\| \[\]\)\.length/.test(fn));
+  // 26 Oct 2026 (FCIM N/A ruling, regression_fcim_na_20261026): the filter is the one rule now. A row whose only
+  // condition is an array is kept when its other cells are answered (a condition, or N/A with its reason); a row with
+  // a cell left empty is refused. The arrays still count as the cell's conditions (_fcimCellsOf reads them).
+  check('filter: the one rule decides, and an array counts as its cell\'s condition',
+    /\.map\(function \(x\) \{ return _fcimNormAction\(x\); \}\)\.filter\(function \(x\) \{\s*if \(_rowMissing\('fcim', x\)\)/.test(fn) && /\(_has\(n\[c\.k\]\) \|\| _has\(n\[c\.arr\]\)\) \? 'condition'/.test(ai));
   check('review cards render every array entry, numbered',
     /Partial Loss ' \+ \(pi \+ 1\)/.test(ai) && /Malfunction ' \+ \(mi \+ 1\)/.test(ai));
   check('token budget raised (16000) and batch cap lowered (8) — the starvation pair',

@@ -166,7 +166,7 @@ function exportData(moduleName, format) {
             case 'AC_FCIM':
                 return downloadCSV(file('AC_FCIM'),
                     ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
-                    acFcimData.map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]));
+                    acFcimData.map(r => (typeof _fcimExportRow === 'function' ? _fcimExportRow : (r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]))(r)));   // 26 Oct 2026: a cell that does not apply exports as N/A with its reason
             case 'AC_FHA': {
                 // 31 Aug 2026 — the CSV is the deliverable: same order as the
                 // worksheet (natural ascending fcId, phase groups clustered).
@@ -199,7 +199,7 @@ function exportData(moduleName, format) {
                 if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 return downloadCSV(file(`${sys().name}_FCIM`),
                     ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
-                    sys().fcim.map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]));
+                    sys().fcim.map(r => (typeof _fcimExportRow === 'function' ? _fcimExportRow : (r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]))(r)));
             }
             case 'Sys_FHA': {
                 if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
@@ -770,7 +770,7 @@ function importTabularCSV(text, moduleName) {
             if (!_fx.parentSubId) delete _fx.parentSubId;
             acFunctionsData.push(_fx);
         } else if(moduleName === 'AC_FCIM') {
-            acFcimData.push({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) });
+            acFcimData.push((typeof _fcimImportCells === 'function' ? _fcimImportCells : (x => x))({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) }));   // 26 Oct 2026: "N/A: reason" reads back as not applicable
         } else if(moduleName === 'AC_FHA') {
             let combinedEffects = getValue(row, ['Effects']); let effA = '', effC = '', effP = '';
             if(combinedEffects) { const parts = combinedEffects.split('\n'); parts.forEach(p => { if(p.includes('AC:')) effA = p.split('AC:')[1].trim(); if(p.includes('Crew:')) effC = p.split('Crew:')[1].trim(); if(p.includes('Pax:')) effP = p.split('Pax:')[1].trim(); }); } else { effA = getValue(row, ['Aircraft Effect']); effC = getValue(row, ['Crew Effect']); effP = getValue(row, ['Pax Effect']); }
@@ -797,7 +797,7 @@ function importTabularCSV(text, moduleName) {
                 funcDef: getValue(row, ['Definition'])
             });
         } else if(moduleName === 'Sys_FCIM') {
-            sys().fcim.push({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) });
+            sys().fcim.push((typeof _fcimImportCells === 'function' ? _fcimImportCells : (x => x))({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) }));   // 26 Oct 2026: "N/A: reason" reads back as not applicable
         } else if(moduleName === 'Sys_FHA') {
             let combinedEffects = getValue(row, ['Effects']); let effA = '', effC = '', effP = '';
             if(combinedEffects) { const parts = combinedEffects.split('\n'); parts.forEach(p => { if(p.includes('AC:')) effA = p.split('AC:')[1].trim(); if(p.includes('Crew:')) effC = p.split('Crew:')[1].trim(); if(p.includes('Pax:')) effP = p.split('Pax:')[1].trim(); }); } else { effA = getValue(row, ['Aircraft Effect']); effC = getValue(row, ['Crew Effect']); effP = getValue(row, ['Pax Effect']); }
@@ -2091,7 +2091,7 @@ function _pdfDataForModule(moduleName) {
         case 'AC_FCIM':
             return { title: 'Aircraft FCIM',
                 headers: ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
-                rows: (acFcimData || []).map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]) };
+                rows: (acFcimData || []).map(r => (typeof _fcimExportRow === 'function' ? _fcimExportRow : (r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]))(r)) };   // 26 Oct 2026: N/A with its reason
         case 'AC_FHA':
             return { title: 'Aircraft FHA',
                 headers: ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
@@ -2120,7 +2120,7 @@ function _pdfDataForModule(moduleName) {
             if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }
             return { title: sName + ' FCIM',
                 headers: ['Sub-Function','Awareness','Total Loss ID','Total Loss','Partial Loss ID','Partial Loss','Malfunction ID','Malfunction'],
-                rows: sys().fcim.map(r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]) };
+                rows: sys().fcim.map(r => (typeof _fcimExportRow === 'function' ? _fcimExportRow : (r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]))(r)) };
         }
         case 'Sys_FHA': {
             if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }

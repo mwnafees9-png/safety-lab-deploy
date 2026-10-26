@@ -146,7 +146,23 @@
         if (laneKey === 'mal') { if (row.mId) ids.push(row.mId); (row.mExtra || []).forEach(function (e) { if (e && e.id) ids.push(e.id); }); }
         return ids;
     }
+    // 26 Oct 2026 (Waqas: a cell that does not apply is "stopped right at the FCIM level"): a lane whose FCIM cell is
+    // marked not applicable binds nothing, not even the total-loss lane's reach to the function's worst row below.
+    var LANE_SLOT = { tl: 'tl', pl: 'pl', mal: 'm' };
+    function laneNa(subId, laneKey) {
+        var row = fcimFor(subId), s = LANE_SLOT[laneKey];
+        if (!row || !s) return '';
+        var NA = G('SLFcimNa');
+        if (NA && typeof NA.isNa === 'function') return NA.isNa(row, s) ? String(row[s + 'Na']).trim() : '';
+        var t = function (v) { return String(v == null ? '' : v).trim(); };
+        return (t(row[s + 'Na']) && !t(row[s + 'Desc'])) ? t(row[s + 'Na']) : '';
+    }
     function bindLane(rule, laneKey) {
+        var naWhy = laneNa(rule.subId, laneKey);
+        if (naWhy) {
+            var lnN = LANES.find(function (l) { return l.key === laneKey; });
+            return { fc: null, na: true, finding: 'The FCIM marks the ' + lnN.label.toLowerCase() + ' of ' + rule.subId + ' not applicable (' + naWhy + '): no failure condition, so no top event for this lane.' };
+        }
         var ids = laneConditionIds(rule.subId, laneKey);
         var cands = fhaRows().filter(function (f) {
             if (String(f.subId) !== String(rule.subId)) return false;
@@ -425,7 +441,7 @@
     function compileLane(rule, laneKey) {
         var ln = LANES.find(function (l) { return l.key === laneKey; });
         var b = bindLane(rule, laneKey);
-        if (!b.fc) return { ok: false, reason: b.finding };
+        if (!b.fc) return { ok: false, na: !!b.na, reason: b.finding };
         var ls = laneSets(rule, laneKey);
         if (ls.error) return { ok: false, reason: ls.error };
         if (!ls.sets.length) return { ok: false, reason: 'the ' + ln.label.toLowerCase() + ' lane derives no sets — nothing to generate' };
@@ -508,7 +524,7 @@
         }
         LANES.forEach(function (ln) {
             out.lanes[ln.key] = compileLane(rule, ln.key);
-            if (!out.lanes[ln.key].ok) out.findings.push({ kind: 'lane-' + ln.key, msg: out.lanes[ln.key].reason });
+            if (!out.lanes[ln.key].ok && !out.lanes[ln.key].na) out.findings.push({ kind: 'lane-' + ln.key, msg: out.lanes[ln.key].reason });   // 26 Oct 2026: a lane the FCIM marks not applicable is not a gap
         });
         var tb = bindLane(rule, 'tl');
         idpFindings(rule, tb.fc).forEach(function (f) { out.findings.push(f); });
@@ -549,6 +565,7 @@
                 var st = status(r.id, ln.key);
                 var rec = recs[ln.key];
                 var b = bindLane(r, ln.key);
+                if (st === 'missing' && !b.fc && b.na) return '<td style="text-align:center;" title="' + _esc(b.finding || '') + '"><span style="color:var(--color-text-tertiary); font-size:10.5px; font-weight:700;">N/A</span></td>';   // 26 Oct 2026
                 if (st === 'missing' && !b.fc) return '<td style="text-align:center;" title="' + _esc(b.finding || '') + '"><span style="color:#9A6200; font-size:10.5px;">unbound</span></td>';
                 var col = st === 'fresh' ? 'var(--color-success)' : st === 'stale' ? 'var(--color-warning)' : 'var(--color-text-tertiary)';
                 var mark = rec ? (rec.verified === true ? ' ✓≡' : rec.verified === false ? ' ✕' : '') + (rec.routes === false ? ' routes!' : '') + (rec.residue ? ' +' + rec.residue : '') : '';
@@ -567,7 +584,7 @@
     }
     function compilePreviewFindings(rule) {
         var out = [];
-        LANES.forEach(function (ln) { var b = bindLane(rule, ln.key); if (!b.fc) out.push({ kind: 'lane-' + ln.key, msg: b.finding }); });
+        LANES.forEach(function (ln) { var b = bindLane(rule, ln.key); if (!b.fc && !b.na) out.push({ kind: 'lane-' + ln.key, msg: b.finding }); });
         var tb = bindLane(rule, 'tl');
         idpFindings(rule, tb.fc).forEach(function (f) { out.push(f); });
         var M = G('SLMacLanes');

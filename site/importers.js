@@ -996,6 +996,9 @@ const ExcelImport = (function() {
                     plId: pl.id, plDesc: pl.desc,
                     mId:  mm.id, mDesc:  mm.desc
                 };
+                // 26 Oct 2026: a cell exported as "N/A: <reason>" comes back not applicable, with its reason; it is
+                // not a failure condition, so it carries no FC ID and is not extracted below.
+                if (typeof _fcimImportCells === 'function') _fcimImportCells(rec);
                 if (kind === 'acFcim') acFcimData.push(rec);
                 else if (sys()) sys().fcim.push(rec);
                 // Phase 53.42 — mirror what {ac,sys}FcimCRUD.afterChange does so the FHA tab's
@@ -1005,15 +1008,15 @@ const ExcelImport = (function() {
                 // condition — so imported N/A rows trace forward like any other.
                 // Corrected 1 Aug 2026 alongside _pushExtractedFCs, which this mirrors.
                 if (kind === 'acFcim') {
-                    if (tl.id) acExtractedFCs.push({ id: tl.id, desc: tl.desc });
-                    if (pl.id) acExtractedFCs.push({ id: pl.id, desc: pl.desc });
-                    if (mm.id) acExtractedFCs.push({ id: mm.id, desc: mm.desc });
+                    if (rec.tlId) acExtractedFCs.push({ id: rec.tlId, desc: rec.tlDesc });
+                    if (rec.plId) acExtractedFCs.push({ id: rec.plId, desc: rec.plDesc });
+                    if (rec.mId) acExtractedFCs.push({ id: rec.mId, desc: rec.mDesc });
                 } else if (kind === 'sysFcim' && sys()) {
                     const s = sys();
                     if (!Array.isArray(s.extractedFCs)) s.extractedFCs = [];
-                    if (tl.id) s.extractedFCs.push({ id: tl.id, desc: tl.desc });
-                    if (pl.id) s.extractedFCs.push({ id: pl.id, desc: pl.desc });
-                    if (mm.id) s.extractedFCs.push({ id: mm.id, desc: mm.desc });
+                    if (rec.tlId) s.extractedFCs.push({ id: rec.tlId, desc: rec.tlDesc });
+                    if (rec.plId) s.extractedFCs.push({ id: rec.plId, desc: rec.plDesc });
+                    if (rec.mId) s.extractedFCs.push({ id: rec.mId, desc: rec.mDesc });
                 }
                 count++;
             }

@@ -897,6 +897,9 @@
         (rows || []).forEach(function (d) {
             if (!d) return;
             [['tlId', 'tlDesc', 'tlExtra'], ['plId', 'plDesc', 'plExtra'], ['mId', 'mDesc', 'mExtra']].forEach(function (t) {
+                // 26 Oct 2026: a cell marked not applicable (tlNa / plNa / mNa, no condition text) is not a failure condition
+                const _s = t[0].slice(0, -2);
+                if (String(d[_s + 'Na'] == null ? '' : d[_s + 'Na']).trim() && !String(d[t[1]] == null ? '' : d[t[1]]).trim()) return;
                 if (d[t[0]]) out.push({ id: d[t[0]], desc: d[t[1]] || '', subId: d.subId });
                 (d[t[2]] || []).forEach(function (x) { if (x && x.id) out.push({ id: x.id, desc: x.desc || '', subId: d.subId }); });
             });
@@ -1710,6 +1713,25 @@
     function _fhaEscapesClause() {
         try { const t = (typeof window !== 'undefined' && window.SLFhaDerive) ? window.SLFhaDerive.escapesPromptText() : ''; return t ? (' ' + t) : ''; } catch (_) { return ''; }
     }
+    // 26 Oct 2026 (Waqas: an FCIM cell marked N/A is "stopped right at the FCIM level"): the per-function FHA path names
+    // the cells of its functions that the FCIM marks not applicable, so the model never drafts them back. '' when none.
+    function _fhaNaClause(scope, funcs) {
+        try {
+            const arr = scope && scope.systemId
+                ? ((((typeof systemsData !== 'undefined' ? systemsData : []) || []).find(function (x) { return String(x.id) === String(scope.systemId); }) || {}).fcim || [])
+                : ((typeof acFcimData !== 'undefined' ? acFcimData : []) || []);
+            const ids = (funcs || []).map(function (f) { return String(f.subId); });
+            const t = function (v) { return String(v == null ? '' : v).trim(); };
+            const lines = [];
+            (arr || []).forEach(function (r) {
+                if (!r || ids.indexOf(String(r.subId)) < 0) return;
+                [['tl', 'total loss'], ['pl', 'partial loss'], ['m', 'malfunction']].forEach(function (c) {
+                    if (t(r[c[0] + 'Na']) && !t(r[c[0] + 'Desc'])) lines.push('- subId=' + r.subId + ' | ' + c[1] + ' | ' + t(r[c[0] + 'Na']));
+                });
+            });
+            return lines.length ? ('\n\nNOT APPLICABLE (the FCIM marks these not applicable, with the reason; they are not failure conditions: draft NO rows for them):\n' + lines.join('\n')) : '';
+        } catch (_) { return ''; }
+    }
     // 5 Sep 2026 (lever 2) — the levels the product derives by rule for these conditions, told
     // to the drafter so it writes the sentences and judges only what is not derived.
     function _fhaDerivedClause(conds, systemId) {
@@ -1948,7 +1970,9 @@
         // (fcimTopicModeJaccard 0.83 vs golden v5). The 12-word cap is load-bearing:
         // the capless variant blocked 4+1 rows on the cell-length check and FAILED.
         // BYTE-IDENTICAL to the ai_skills.js registry body (regression_ai_skills pins it).
-        'CANONICAL CONDITION PHRASING: word every condition, in 12 words or fewer, as "<Loss-form> <capability>" using EXACTLY these loss-forms: "Total loss of", "Partial loss of", "Erroneous", "Uncommanded", "Inadvertent", "Undetected". <capability> is the sub-function\'s own name recast as the delivered capability, the SAME words every time ("Provide wheel braking" -> TL "Total loss of wheel braking", PL "Partial loss of wheel braking", M "Uncommanded wheel braking"). Add at most ONE short qualifier, two words or fewer, and only where a cell holds two distinct conditions that need telling apart ("— asymmetric", "— undetected"). Never synonymise loss-forms (no "complete/full/gross loss", no "degraded" as the loss-form, no "spurious/false" where Erroneous applies), never write "MAC" into a condition, never restate the mechanism, never exceed 12 words in a cell.'
+        'CANONICAL CONDITION PHRASING: word every condition, in 12 words or fewer, as "<Loss-form> <capability>" using EXACTLY these loss-forms: "Total loss of", "Partial loss of", "Erroneous", "Uncommanded", "Inadvertent", "Undetected". <capability> is the sub-function\'s own name recast as the delivered capability, the SAME words every time ("Provide wheel braking" -> TL "Total loss of wheel braking", PL "Partial loss of wheel braking", M "Uncommanded wheel braking"). Add at most ONE short qualifier, two words or fewer, and only where a cell holds two distinct conditions that need telling apart ("— asymmetric", "— undetected"). Never synonymise loss-forms (no "complete/full/gross loss", no "degraded" as the loss-form, no "spurious/false" where Erroneous applies), never write "MAC" into a condition, never restate the mechanism, never exceed 12 words in a cell.',
+        // v5 26 Oct 2026 (Waqas): N/A with its rationale, never a blank cell. BYTE-IDENTICAL to ai_skills.js fcim.draft.
+        'EVERY CELL IS ANSWERED (Waqas ruling, 26 Oct 2026): each row carries all three cells, total loss, partial loss and malfunction. A cell with a credible failure condition carries it as above. A cell that does not apply to the function is never left empty or omitted: return it as {"na": true, "rationale": "<one short sentence, grounded in the function, saying why this type of failure cannot occur>"}, for example "partialLoss": {"na": true, "rationale": "The function has no partial state: it either works or it does not."}. An empty cell, or an N/A with no rationale, is refused. A cell marked N/A is not a failure condition: it is never classified in the FHA and nothing is built from it. Do not mark a cell N/A to avoid work: if a credible failure of that type exists, it is a failure condition. This is a different thing from the "N/A" awareness value, which is about the crew-unaware case only.'
     ].join('\n');
     const _SPEC_FTA_SYNTH = [
         'STANDARD GROUNDING — ARP4761A Appendix G Fault Tree Analysis (synthesis).',
@@ -2635,6 +2659,10 @@
                 }, _draftForConditions);
                 return;
             }
+            // 26 Oct 2026: an FCIM that holds no failure condition (every cell marked not applicable, or not assessed yet) is
+            // not "no FCIM": drafting the FHA per function would bring back, unasked, the conditions the FCIM says do not apply
+            const _fcimRowsNow = (snapshot().acFcimData || []).filter(Boolean);
+            if (_fcimRowsNow.length) { _toast('The FCIM identifies no failure conditions yet: every cell is marked not applicable or not assessed. Draft or write the FCIM cells first; the FHA classifies what the FCIM identifies.', 'info', 9000); return; }
             const _fns = _leafUnits();   // 22 Oct 2026: the bottom of each branch only, each with its path
             const _draftForFunctions = function (picked) {
                 _anemBatch(_FEATURE_DIRECTIVE.fha, {
@@ -2714,6 +2742,7 @@
             + (_condsFor.length ? ('\n\nFAILURE CONDITIONS TO CLASSIFY (from the FCIM — classify EXACTLY these; as many rows per condition as its effects across the flight phases require, the rows for one condition together covering every phase of the mission profile; "fcDesc" echoed WORD FOR WORD and "srcCondId" set to the id; do not invent or reword conditions):\n'
                 + _condsFor.map(function (e) { return '- srcCondId=' + e.id + ' | subId=' + e.subId + ' | fcDesc=' + e.desc; }).join('\n')) : '')
             + (scope.systemId ? ('\n' + _macRulesForSystemPrompt(scope.systemId)) : '')   // 4 Sep 2026 — the SFHA parses the MAC detail out; the AFHA never sees it
+            + _fhaNaClause(scope, batch)   // 26 Oct 2026: what the FCIM marks not applicable is never drafted here
             + _fhaDerivedClause(_condsFor, scope.systemId || '');   // 5 Sep 2026 (lever 2)
             let r;
             try {
@@ -5531,7 +5560,9 @@
             '• Total Loss — complete loss of the function.',
             '• Partial Loss / Degraded — reduced or partial capability.',
             '• Malfunction — erroneous / uncommanded / out-of-tolerance operation.',
-            'Include only the levels that are credible (omit any that do not apply).',
+            // 26 Oct 2026 (Waqas): "instead of leaving non-applicable failure conditions blank the AI should be populating
+            // them as N/A with the rationale". Was: 'Include only the levels that are credible (omit any that do not apply).'
+            'Fill ALL THREE levels on every row. A level with a credible failure condition carries it. A level that does not apply to this function is NOT left empty or omitted: return it as {"na": true, "rationale": "<one short sentence, grounded in the function, saying why this type of failure cannot occur>"}, for example "partialLoss": {"na": true, "rationale": "The function has no partial state: it either works or it does not."}. An empty level, or an N/A with no rationale, is refused. A level marked N/A is not a failure condition: the FHA never classifies it. Do not mark a level N/A to avoid work: if a credible failure of that type exists, it is a failure condition. This is a different thing from the "N/A" awareness value below, which is about the crew-unaware case only.',
             '',
             'STYLE — a failure condition must be CLEAN and SHORT (entries have been coming out FAR too long — fix this):',
             '1. Each failure condition is a TERSE noun phrase of 4–12 words naming ONLY the lost / degraded / erroneous capability (e.g. "Total loss of pitch trajectory control"). No sentences, no semicolons, no "because / regardless / whereas / not altered by", no rationale. If it reads like a sentence, it is too long — cut it down.',
@@ -5548,7 +5579,7 @@
             'THOROUGHNESS — be complete: cover every sub-function and every credible failure level (Total Loss / Partial Loss / Malfunction), and emit the awareness split above wherever it applies. Do not under-populate the matrix.',
             '',
             'Return STRICT JSON only — no prose, no fences (emit MULTIPLE rows with the same subId when the awareness split calls for it):',
-            '{ "rows": [ { "subId":"<echo the subId>", "awareness":"Aware|Unaware|Both|N/A", "rationale":"<ONLY for N/A: why the crew-unaware case is inapplicable; leave empty otherwise>", "totalLoss":"...", "partialLoss":"...", "malfunction":"..." } ] }'
+            '{ "rows": [ { "subId":"<echo the subId>", "awareness":"Aware|Unaware|Both|N/A", "rationale":"<ONLY for awareness N/A: why the crew-unaware case is inapplicable; leave empty otherwise>", "totalLoss":"...", "partialLoss":"...", "malfunction":"..." } ] }  where each of totalLoss / partialLoss / malfunction is the condition text, or {"na": true, "rationale": "<why it does not apply>"}'
         ].join('\n');
     }
     // 4 Sep 2026 (Waqas): "the MAC drafter should also aid the AI to draft partial loss
@@ -5733,11 +5764,16 @@
         // returned on the direct panel path was silently discarded (and a row whose
         // only content was an array was dropped by the filter). The arrays now ride.
         const _arr = function (v) { return Array.isArray(v) ? v.filter(Boolean).map(String) : null; };
+        // 26 Oct 2026 (Waqas): every cell is a failure condition or N/A with its reason ({"na": true, "rationale": ...});
+        // a row with a cell left empty, or an N/A with no reason, is refused by the one rule (_ROW_RULES) and counted
+        let _refused = 0;
         const suggestions = rows.filter(function (x) {
-            return x && validSub.has(x.subId) && (x.totalLoss || x.partialLoss || x.malfunction || x.rationale
-                || (_arr(x.malfunctions) || []).length || (_arr(x.partials) || []).length);
+            return x && validSub.has(x.subId);
+        }).map(function (x) { return _fcimNormAction(x); }).filter(function (x) {
+            if (_rowMissing('fcim', x)) { _refused++; return false; }
+            return true;
         }).map(function (x, i) {
-            return {
+            const o = {
                 _k: 'aifcim-' + Date.now() + '-' + i,
                 subId: x.subId, subName: nameFor.get(x.subId) || x.subId,
                 awareness: _normAwareness(x.awareness),
@@ -5747,11 +5783,15 @@
                 malfunction: String(x.malfunction || '').trim(),
                 malfunctions: _arr(x.malfunctions) || undefined,
                 partials: _arr(x.partials) || undefined,
-                _abstained: _abstainedFields(x, ['totalLoss', 'partialLoss', 'malfunction', 'rationale']),   // A10
+                // A10. 26 Oct 2026: a cell answered N/A with its reason (or by a partials[] / malfunctions[] list) is not undetermined
+                _abstained: _abstainedFields(x, ['totalLoss', 'partialLoss', 'malfunction', 'rationale']).filter(function (k) { return !x[k + 'Na'] && !(k === 'partialLoss' && _has(x.partials)) && !(k === 'malfunction' && _has(x.malfunctions)); }),
                 _model: r.model || MODELS.reason,
                 _systemId: scope.systemId || '', _systemName: scope.systemName || ''
             };
+            _FCIM_CELLS.forEach(function (c) { if (x[c.k + 'Na']) o[c.k + 'Na'] = x[c.k + 'Na']; });
+            return o;
         });
+        if (_refused) _toast(_refused + ' drafted FCIM row(s) left out: a cell was left empty, or marked not applicable with no reason.', 'warning', 6000);
         if (!suggestions.length) { _toast('Model returned no usable FCIM rows — try again.', 'warning'); return { suggestions: [], assumptions: _assumptions, raw: r.text }; }
         _makeReviewPanel({
             id: 'ai-rev-panel-fcim',
@@ -5769,7 +5809,9 @@
                     ((Array.isArray(x.partials) && x.partials.length) ? x.partials.map(function (p, pi) { return '<div class="aifh-eff"><strong>Partial Loss ' + (pi + 1) + ':</strong> ' + _esc(p) + '</div>'; }).join('') :
                         (x.partialLoss ? '<div class="aifh-eff"><strong>Partial Loss:</strong> ' + _esc(x.partialLoss) + '</div>' : '')) +
                     ((Array.isArray(x.malfunctions) && x.malfunctions.length) ? x.malfunctions.map(function (mf, mi) { return '<div class="aifh-eff"><strong>Malfunction ' + (mi + 1) + ':</strong> ' + _esc(mf) + '</div>'; }).join('') :
-                        (x.malfunction ? '<div class="aifh-eff"><strong>Malfunction:</strong> ' + _esc(x.malfunction) + '</div>' : ''));
+                        (x.malfunction ? '<div class="aifh-eff"><strong>Malfunction:</strong> ' + _esc(x.malfunction) + '</div>' : '')) +
+                    // 26 Oct 2026: a cell that does not apply, with the reason
+                    _FCIM_CELLS.map(function (c) { return x[c.k + 'Na'] ? '<div class="aifh-eff" style="color:var(--color-text-secondary);"><strong>' + _esc(c.label.charAt(0).toUpperCase() + c.label.slice(1)) + ': N/A</strong> <span style="font-style:italic;">' + _esc(x[c.k + 'Na']) + '</span></div>' : ''; }).join('');
             },
             onAccept: _applyFcimSuggestion,
             doneMsg: 'FCIM row(s) added'
@@ -5830,6 +5872,7 @@
     }
     function _applyFcimSuggestion(s) {
         if (_refuseEmpty('fcim', s)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
+        if (s && typeof s === 'object') _fcimNormAction(s);   // 26 Oct 2026: a cell is a condition, or N/A with its reason
         try {
             const sysScoped = !!(s && s._systemId);
             // 2 Aug 2026 — Table A3 multiplicity (Waqas's ruling). The model may
@@ -5854,6 +5897,11 @@
             };
             if (_mfs && _mfs.length > 1) row.mExtra = _mfs.slice(1).map(function (d) { return { id: '', desc: d }; });
             if (_pls && _pls.length > 1) row.plExtra = _pls.slice(1).map(function (d) { return { id: '', desc: d }; });
+            // 26 Oct 2026: a cell that does not apply carries its reason and nothing else: no text, so no FC ID is minted
+            // for it below, and _pushExtractedFCs never makes it a failure condition (fcim_na.js holds the cell model)
+            _FCIM_CELLS.forEach(function (c) {
+                if (s[c.k + 'Na'] && !_has(row[c.s + 'Desc'])) { row[c.s + 'Na'] = String(s[c.k + 'Na']).trim(); row[c.s + 'NaBy'] = 'ai'; row[c.s + 'NaAt'] = row.aiAt; }
+            });
             // Allocate ids for the extras through the same allocator as the
             // primaries (each allocation lands on the row before the next scan,
             // so they never collide with each other or anything else).
@@ -5922,6 +5970,121 @@
             try { _aiConsistencyAutoCheck(); } catch (_) {}   // #255 — flag structural inconsistencies after every AI write
             return true;
         } catch (e) { _toast('Could not add FCIM row: ' + ((e && e.message) || e), 'warning'); return false; }
+    }
+
+    // =========================================================================
+    // 26 Oct 2026: DRAFT ONE FCIM CELL (Waqas: "the engineer can overrule N/A and ask ANEM to draft that failure
+    // condition or do it manually"). The FCIM page offers "draft with ANEM" on an open cell (fcim_na.js); this drafts
+    // that one cell with the FCIM generator's own instructions, scoped to the row's function and that failure type,
+    // and shows it for review. Accept writes the cell (a failure condition with its FC ID, or N/A with its reason).
+    // =========================================================================
+    const _FCIM_SLOT = { tl: { k: 'totalLoss', arr: null, label: 'total loss', mode: 'TL' }, pl: { k: 'partialLoss', arr: 'partials', label: 'partial loss', mode: 'PL' }, m: { k: 'malfunction', arr: 'malfunctions', label: 'malfunction', mode: 'M' } };
+    function _fcimLocate(iid) {
+        const ac = (typeof acFcimData !== 'undefined' ? acFcimData : []) || [];
+        let row = ac.find(function (r) { return r && String(r.internalId) === String(iid); });
+        if (row) return { row: row, fcim: ac, fha: (typeof acFhaData !== 'undefined' ? acFhaData : []) || [], sys: null, funcs: (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || [] };
+        const systems = (typeof systemsData !== 'undefined' ? systemsData : []) || [];
+        for (let i = 0; i < systems.length; i++) {
+            const sy = systems[i]; if (!sy) continue;
+            row = (sy.fcim || []).find(function (r) { return r && String(r.internalId) === String(iid); });
+            if (row) return { row: row, fcim: sy.fcim, fha: sy.fha || [], sys: sy, funcs: sy.functions || [] };
+        }
+        return null;
+    }
+    function _fcimCellState(row, s) {
+        const t = function (v) { return String(v == null ? '' : v).trim(); };
+        const ex = s === 'pl' ? row.plExtra : (s === 'm' ? row.mExtra : null);
+        if (t(row[s + 'Desc']) || (Array.isArray(ex) && ex.some(function (e) { return e && t(e.desc); }))) return 'condition';
+        if (t(row[s + 'Na'])) return 'na';
+        return t(row[s + 'Id']) ? 'condition' : 'blank';
+    }
+    // the user message for one cell: the function, the row as it stands, which cell, and the answer's shape
+    function _fcimCellDraftMsg(ctx, s, certBasis) {
+        const sl = _FCIM_SLOT[s], row = ctx.row;
+        const fn = (ctx.funcs || []).find(function (f) { return f && (String(f.subId) === String(row.subId) || String(f.funcId) === String(row.subId)); }) || {};
+        const name = ctx.sys ? (fn.funcName || fn.subName || row.subId) : (fn.subName || fn.funcName || row.subId);
+        const def = ctx.sys ? (fn.funcDef || fn.subDef || '') : (fn.subDef || fn.funcDef || '');
+        const cellTxt = function (x) { const st = _fcimCellState(row, x); return st === 'condition' ? ('"' + String(row[x + 'Desc'] || row[x + 'Id'] || '') + '"') : (st === 'na' ? ('not applicable: ' + row[x + 'Na']) : 'open'); };
+        return 'Cert basis: ' + certBasis + (ctx.sys ? ('\nSystem: ' + (ctx.sys.name || ctx.sys.id)) : '')
+            + '\nDraft ONE cell only: the ' + sl.label.toUpperCase() + ' cell of this FCIM row. The engineer opened it and asked for it.'
+            + '\nSub-function: subId=' + row.subId + ' | name=' + name + (def ? ' | definition=' + def : '')
+            + '\nThe row as it stands: awareness=' + (row.awareness || 'not set') + '; total loss ' + cellTxt('tl') + '; partial loss ' + cellTxt('pl') + '; malfunction ' + cellTxt('m') + '.'
+            + (ctx.sys ? ('\n' + _macRulesForSystemPrompt(ctx.sys.id)) : '')
+            + '\nReturn { "rows": [ { "subId": "' + row.subId + '", "' + sl.k + '": ... } ] } with "' + sl.k + '" holding the failure condition (or several in "' + (sl.arr || sl.k) + '"' + (sl.arr ? ' as an array' : '') + '), or {"na": true, "rationale": "<why this type of failure cannot occur for the function>"}. Nothing else is needed.';
+    }
+    // the drafted cell out of the reply: { texts: [...] } | { na: reason } | { missing: words }
+    function _fcimCellFromReply(text, subId, s) {
+        const sl = _FCIM_SLOT[s];
+        const rows = _parseItems(text, 'rows') || [];
+        const x = rows.find(function (r) { return r && String(r.subId) === String(subId); }) || (rows.length === 1 ? rows[0] : null);
+        if (!x) return { missing: 'no row came back for ' + subId };
+        const n = _fcimNormAction(Object.assign({}, x, sl.arr && Array.isArray(x[sl.arr]) ? { [sl.arr]: x[sl.arr].slice() } : {}));
+        const texts = [].concat(_has(n[sl.k]) ? [String(n[sl.k])] : [], (sl.arr && Array.isArray(n[sl.arr])) ? n[sl.arr].filter(function (v) { return _has(v) && String(v) !== String(n[sl.k]); }).map(String) : []);
+        if (texts.length) return { texts: texts };
+        if (n[sl.k + 'Na']) return { na: String(n[sl.k + 'Na']) };
+        if (n[sl.k + 'NaMissing']) return { missing: 'it was marked not applicable with no reason' };
+        return { missing: 'the cell came back empty' };
+    }
+    // write the reviewed cell into its row. Refused unless the cell is still open (blank): a condition typed in the
+    // meantime, or an N/A, is never overwritten by a draft.
+    function _applyFcimCellDraft(x) {
+        const ctx = x && _fcimLocate(x.iid), sl = x && _FCIM_SLOT[x.slot];
+        if (!ctx || !sl) { _toast('Not written: the FCIM row is gone.', 'warning'); return false; }
+        const row = ctx.row, s = x.slot;
+        if (_fcimCellState(row, s) !== 'blank') { _toast('Not written: the ' + sl.label + ' cell of ' + row.subId + ' is no longer open.', 'warning'); return false; }
+        const texts = (x.texts || []).filter(_has);
+        if (!texts.length && !_has(x.na)) { _toast('Not written: the draft has no failure condition and no reason it does not apply.', 'warning'); return false; }
+        if (texts.length) {
+            row[s + 'Desc'] = texts[0];
+            if (texts.length > 1 && (s === 'pl' || s === 'm')) row[s === 'pl' ? 'plExtra' : 'mExtra'] = texts.slice(1).map(function (d) { return { id: '', desc: d }; });
+            const sysCtx = ctx.sys ? { SYS: String(ctx.sys.id || '') } : undefined;
+            _fcimFcId(row, s + 'Id', ctx.fcim, ctx.fha, sysCtx);
+            const ek = s === 'pl' ? 'plExtra' : (s === 'm' ? 'mExtra' : null);
+            if (ek) (Array.isArray(row[ek]) ? row[ek] : []).forEach(function (e, i) {
+                if (e && !e.id && e.desc) { const t = { _x: '', subId: row.subId, tlId: row.tlId, plId: row.plId, mId: row.mId, plExtra: row.plExtra, mExtra: row.mExtra, combined: row.combined }; _fcimFcId(t, '_x', ctx.fcim, ctx.fha, Object.assign({ MODE: sl.mode + (i + 2) }, sysCtx || {})); e.id = t._x; }
+            });
+            ['Na', 'NaBy', 'NaAt', 'NaKeep'].forEach(function (f) { delete row[s + f]; });
+        } else {
+            row[s + 'Na'] = String(x.na).trim(); row[s + 'NaBy'] = 'ai'; row[s + 'NaAt'] = new Date().toISOString();
+        }
+        row.aiCellDrafts = (Array.isArray(row.aiCellDrafts) ? row.aiCellDrafts : []).concat([{ slot: s, aiModel: x._model || null, aiSkill: _skillStampFor('fcim.populate'), aiAt: new Date().toISOString() }]);
+        try { if (typeof rebuildExtractedFCsForAllSystems === 'function') rebuildExtractedFCsForAllSystems(); } catch (_) {}
+        try { if (typeof renderACFCIM === 'function') renderACFCIM(); } catch (_) {}
+        try { if (typeof renderSysFCIM === 'function') renderSysFCIM(); } catch (_) {}
+        if (typeof scheduleAutosave === 'function') scheduleAutosave();
+        return true;
+    }
+    async function draftFcimCell(iid, s) {
+        const sl = _FCIM_SLOT[s], ctx = _fcimLocate(iid);
+        if (!sl || !ctx) { _toast('That FCIM cell was not found.', 'warning'); return { ok: false }; }
+        if (_fcimCellState(ctx.row, s) !== 'blank') { _toast('The ' + sl.label + ' cell of ' + ctx.row.subId + ' is not open: overrule its N/A, or clear it, first.', 'info'); return { ok: false }; }
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return { ok: false }; }
+        const certBasis = _certBasis();
+        _toast('ANEM is drafting the ' + sl.label + ' cell of ' + ctx.row.subId + '…', 'info');
+        const r = await Provider.complete({
+            feature: 'fcim.populate', model: MODELS.reason, system: _fcimSystemPrompt(certBasis, ctx.sys ? (ctx.sys.name || ctx.sys.id) : ''),
+            messages: [{ role: 'user', content: _fcimCellDraftMsg(ctx, s, certBasis) }], maxTokens: 6000,
+            thread: { scope: ctx.sys ? 'system' : 'aircraft', systemId: ctx.sys ? ctx.sys.id : undefined, funcKeys: [ctx.row.subId].filter(Boolean) }
+        });
+        const got = _fcimCellFromReply(r.text, ctx.row.subId, s);
+        if (got.missing) { _toast('Nothing drafted for the ' + sl.label + ' cell of ' + ctx.row.subId + ': ' + got.missing + '. Try again, or write it by hand.', 'warning', 7000); return { ok: false, missing: got.missing }; }
+        const item = { _k: 'aifcimcell-' + Date.now(), iid: iid, slot: s, subId: ctx.row.subId, texts: got.texts || [], na: got.na || '', _model: r.model || MODELS.reason };
+        _makeReviewPanel({
+            id: 'ai-rev-panel-fcim-cell',
+            title: '✨ ANEM draft · ' + ctx.row.subId + ' ' + sl.label,
+            disclaimer: 'Advisory draft of one FCIM cell. Nothing is written until you Accept.' + (got.na ? ' A cell marked not applicable is not a failure condition: nothing downstream is built from it.' : ' The failure condition then feeds the FHA like any other.'),
+            items: [item],
+            getKey: function (x) { return x._k; },
+            cardHtml: function (x) {
+                const lab = sl.label.charAt(0).toUpperCase() + sl.label.slice(1);
+                return '<h4>' + _esc(x.subId) + ' · ' + _esc(lab) + '</h4>' + (x.texts.length
+                    ? x.texts.map(function (t, i) { return '<div class="aifh-eff"><strong>' + _esc(lab) + (x.texts.length > 1 ? ' ' + (i + 1) : '') + ':</strong> ' + _esc(t) + '</div>'; }).join('')
+                    : '<div class="aifh-eff" style="color:var(--color-text-secondary);"><strong>' + _esc(lab) + ': N/A</strong> <span style="font-style:italic;">' + _esc(x.na) + '</span></div>');
+            },
+            onAccept: _applyFcimCellDraft,
+            doneMsg: 'FCIM cell written'
+        });
+        return { ok: true, item: item };
     }
 
     // =========================================================================
@@ -10826,7 +10989,7 @@
             },
             acFunctions: (s.acFunctionsData || []).slice(0, 80).map(function (f) { const o = { _id: f.internalId, subId: f.subId, fn: _chatClip(f.subName, 60), of: _chatClip(f.funcName, 40) }; if (f.parentSubId) o.under = f.parentSubId; return o; }),
             acFha:       (s.acFhaData || []).slice(0, 90).map(function (r) { return { _id: r.internalId, fcId: r.fcId, subId: r.subId, sev: r.severity, fc: _chatClip(r.fcDesc, 70) }; }),
-            acFcim:      (s.acFcimData || []).slice(0, 90).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlTxt: _chatClip(r.tlDesc, 60), plTxt: _chatClip(r.plDesc, 50), mTxt: _chatClip(r.mDesc, 50), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), tlExtra: (Array.isArray(r.tlExtra) ? r.tlExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), rationale: _chatClip(r.rationale, 40) }; }),
+            acFcim:      (s.acFcimData || []).slice(0, 90).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlNa: r.tlNa || undefined, plNa: r.plNa || undefined, mNa: r.mNa || undefined, tlTxt: _chatClip(r.tlDesc, 60), plTxt: _chatClip(r.plDesc, 50), mTxt: _chatClip(r.mDesc, 50), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), tlExtra: (Array.isArray(r.tlExtra) ? r.tlExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), rationale: _chatClip(r.rationale, 40) }; }),
             acReq:       (s.acReqData || []).slice(0, 60).map(reqRow),
             ftaPages:    (s.ftaPages || []).slice(0, 40).map(treePage),
             pra:         (s.praData || []).slice(0, 30).map(function (p) { return { _id: p.internalId, praId: p.praId, threat: _chatClip(p.threat, 40) }; }),
@@ -10842,7 +11005,7 @@
                 id: sy.id, name: sy.name,
                 functions: (sy.functions || []).slice(0, 28).map(function (f) { return { _id: f.internalId, fid: f.funcId, fn: _chatClip(f.funcName, 48), tracesUpTo: (f.traceIds || []).join(',') || null }; }),
                 fha:       (sy.fha || []).slice(0, 32).map(function (r) { return { _id: r.internalId, fcId: r.fcId, sev: r.severity, fc: _chatClip(r.fcDesc, 56), rollsUpTo: r.acTrace || (r.acTraces && r.acTraces[0]) || null }; }),
-                fcim:      (sy.fcim || []).slice(0, 40).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlTxt: _chatClip(r.tlDesc, 56), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }) }; }),
+                fcim:      (sy.fcim || []).slice(0, 40).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlNa: r.tlNa || undefined, plNa: r.plNa || undefined, mNa: r.mNa || undefined, tlTxt: _chatClip(r.tlDesc, 56), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }) }; }),
                 req:       (sy.req || []).slice(0, 30).map(reqRow)
             }; })
         };
@@ -10878,7 +11041,7 @@
             '- add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale, arbitration?}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these REDUNDANT CONFIGURATION ITEMS available" (the copies of the same thing — engines, channels, computers). Members are ids from the project state: a system id, a system function id (fid) or an item id. Positional / symmetric minima are one clause per group. Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it. arbitration {scheme:"voting"|"none", k, of?, ref} ONLY where the document states how the copies are arbitrated (k erroneous copies defeat voting; none = a single erroneous output propagates); omit it otherwise — never guess.',
             '- add_system {name}  — create a system (idempotent by name) from an SDD/architecture doc. Emit this BEFORE the system\'s functions/interfaces so they can reference it by name.',
             '- add_function {scope, systemId?, funcName, funcDef, subName, subDef, traceIds?}   (ONE level of decomposition; for scope "system", traceIds = the aircraft sub-function ids this system function implements)',
-            '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" (empty FCs + short rationale) when the unaware case is inapplicable.',
+            '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" awareness (with a short rationale) when the unaware case is inapplicable. EVERY CELL IS ANSWERED: totalLoss / partialLoss / malfunction each hold a condition, or {"na": true, "rationale": "why this type of failure cannot occur for the function"}; an empty cell, or N/A with no rationale, is refused.',
             '- add_requirement {scope, systemId?, text("The X shall ..."), rationale, traceSubId, level, type, verifMethod} — ADVISORY: files as a review comment on the traced failure condition for the engineer to disposition; the AI never writes requirement rows (document import mirroring the engineer\'s own existing requirements is the one exception)',
             '- add_fta_tree {scope, systemId?, topEvent, kind("allocation"|"verification"), fhaFcId?, root:{name,type("gate"|"basic"),gateType("AND"|"OR"),children:[...]}}  (lambda always blank)',
             '- add_fta_node {pageId, parentId, node:{name, type("basic"|"gate"), gateType("AND"|"OR") for gates}}  — splice ONE node under an existing GATE on a tree page (λ left blank). Use the page id + node ids in state.ftaPages[].nodes (each {id, p=parent id, name, t=type/gate}).',
@@ -10956,9 +11119,78 @@
        empty (an empty field is the honest answer the abstention rule asks for); these may not, because without them
        there is nothing there. */
     const _has = function (v) { return Array.isArray(v) ? v.some(function (x) { return String(x == null ? '' : x).trim() !== ''; }) : String(v == null ? '' : v).trim() !== ''; };
+    /* 26 Oct 2026 (Waqas): "instead of leaving non-applicable failure conditions blank the AI should be populating them as
+       N/A with the rationale why the AI did not consider those failure conditions". Every FCIM cell the AI hands over is a
+       failure condition, or {"na": true, "rationale": "..."}; "N/A: <reason>" as text is read the same way. An empty cell,
+       or an N/A with no reason, is not an answer: the row is refused (the one rule below), never taken as N/A. */
+    const _FCIM_CELLS = [{ k: 'totalLoss', arr: null, s: 'tl', label: 'total loss' }, { k: 'partialLoss', arr: 'partials', s: 'pl', label: 'partial loss' }, { k: 'malfunction', arr: 'malfunctions', s: 'm', label: 'malfunction' }];
+    // one AI cell value -> { text } | { na: reason } | { naNoWhy: true } | {}
+    function _fcimCellIn(v) {
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const na = v.na === true || /^(true|yes|n\/?a)$/i.test(String(v.na == null ? '' : v.na).trim()) || /^(n\/?a|not applicable)$/i.test(String(v.status || '').trim());
+            const why = String(v.rationale || v.reason || v.why || '').trim();
+            const text = String(v.text || v.condition || v.desc || '').trim();
+            if (text && !na) return { text: text };
+            if (na) return why ? { na: why } : { naNoWhy: true };
+            return {};
+        }
+        const s = String(v == null ? '' : v).trim();
+        if (!s) return {};
+        const m = s.match(/^(?:n\/a|na|not applicable)\b\s*(?:[:\-–—,.]\s*)?([\s\S]*)$/i);
+        if (m) { const why = m[1].trim(); return why ? { na: why } : { naNoWhy: true }; }
+        return { text: s };
+    }
+    // an add_fcim action (or classic FCIM suggestion) in one shape: totalLoss / partialLoss / malfunction as text (or
+    // partials[] / malfunctions[]), and totalLossNa / partialLossNa / malfunctionNa as the reason a cell does not apply.
+    // Idempotent; a cell that holds a condition is never also N/A.
+    function _fcimNormAction(x) {
+        if (!x || typeof x !== 'object') return x;
+        _FCIM_CELLS.forEach(function (c) {
+            const cell = _fcimCellIn(x[c.k]);
+            let texts = [], naWhy = '', naNoWhy = !!x[c.k + 'NaMissing'];
+            if (cell.text) texts.push(cell.text);
+            if (cell.na) naWhy = cell.na;
+            if (cell.naNoWhy) naNoWhy = true;
+            if (c.arr && Array.isArray(x[c.arr])) {
+                const keepArr = [];
+                x[c.arr].forEach(function (e) { const ce = _fcimCellIn(e); if (ce.text) keepArr.push(ce.text); else if (ce.na && !naWhy) naWhy = ce.na; else if (ce.naNoWhy) naNoWhy = true; });
+                if (keepArr.length) x[c.arr] = keepArr; else delete x[c.arr];
+                texts = texts.concat(keepArr);
+            }
+            const prior = String(x[c.k + 'Na'] == null ? '' : x[c.k + 'Na']).trim();
+            x[c.k] = cell.text || '';
+            if (texts.length) { delete x[c.k + 'Na']; delete x[c.k + 'NaMissing']; return; }
+            if (naWhy || prior) { x[c.k + 'Na'] = naWhy || prior; delete x[c.k + 'NaMissing']; return; }
+            delete x[c.k + 'Na'];
+            if (naNoWhy) x[c.k + 'NaMissing'] = true; else delete x[c.k + 'NaMissing'];
+        });
+        return x;
+    }
+    // per cell: 'condition' | 'na' | 'na-no-reason' | 'blank', for an action / suggestion or for a stored FCIM row
+    function _fcimCellsOf(x) {
+        const stored = ['tlDesc', 'plDesc', 'mDesc', 'tlId', 'plId', 'mId', 'tlNa', 'plNa', 'mNa'].some(function (k) { return Object.prototype.hasOwnProperty.call(x, k); })
+            && !_FCIM_CELLS.some(function (c) { return Object.prototype.hasOwnProperty.call(x, c.k); });
+        if (stored) {
+            return _FCIM_CELLS.map(function (c) {
+                const ex = c.s === 'pl' ? x.plExtra : (c.s === 'm' ? x.mExtra : null);
+                if (_has(x[c.s + 'Desc']) || (Array.isArray(ex) && ex.some(function (e) { return e && _has(e.desc); }))) return 'condition';
+                if (_has(x[c.s + 'Na'])) return 'na';
+                return _has(x[c.s + 'Id']) ? 'condition' : 'blank';
+            });
+        }
+        const n = _fcimNormAction(Object.assign({}, x, _FCIM_CELLS.reduce(function (o, c) { if (Array.isArray(x[c.arr])) o[c.arr] = x[c.arr].slice(); return o; }, {})));
+        return _FCIM_CELLS.map(function (c) { return (_has(n[c.k]) || _has(n[c.arr])) ? 'condition' : (_has(n[c.k + 'Na']) ? 'na' : (n[c.k + 'NaMissing'] ? 'na-no-reason' : 'blank')); });
+    }
+    function _fcimRowSay(x) {
+        const st = _fcimCellsOf(x), blank = [], noWhy = [];
+        st.forEach(function (v, i) { if (v === 'blank') blank.push(_FCIM_CELLS[i].label); else if (v === 'na-no-reason') noWhy.push(_FCIM_CELLS[i].label); });
+        const list = function (a) { return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; };
+        return [blank.length ? 'an FCIM row with no failure condition and no reason it does not apply for ' + list(blank) : '', noWhy.length ? (blank.length ? 'and' : 'an FCIM row') + ' marked not applicable with no reason for ' + list(noWhy) : ''].filter(Boolean).join(' ');
+    }
     const _ROW_RULES = {
         fha:         { label: 'FHA row',            need: 'a failure condition', ok: function (x) { return _has(x.fcDesc) || _has(x.srcCondId); } },
-        fcim:        { label: 'FCIM row',           need: 'a failure condition (total loss, partial loss or malfunction)', ok: function (x) { return _has(x.totalLoss) || _has(x.partialLoss) || _has(x.malfunction) || _has(x.partials) || _has(x.malfunctions) || _has(x.tlDesc) || _has(x.plDesc) || _has(x.mDesc); } },
+        // 26 Oct 2026: every cell answered, by a failure condition or by the reason it does not apply (above)
+        fcim:        { label: 'FCIM row',           need: 'failure condition or reason it does not apply in every cell (total loss, partial loss, malfunction)', ok: function (x) { return _fcimCellsOf(x).every(function (v) { return v === 'condition' || v === 'na'; }); }, say: _fcimRowSay },
         'func.ac':   { label: 'aircraft function',  need: 'function or sub-function name', ok: function (x) { return _has(x.funcName) && _has(x.subName); } },
         'func.sys':  { label: 'system function',    need: 'function name', ok: function (x) { return _has(x.subName) || _has(x.funcName); } },
         fmea:        { label: 'FMEA row',           need: 'failure mode or effect', ok: function (x) { const item = (x.level || x._level || (x.fmeaType === 'piece-part' ? 'item' : '')) === 'item'; return (item ? (_has(x.mode) || _has(x.failureMode)) : (_has(x.funcSubId) || _has(x._funcSubId))) && (_has(x.localEffect) || _has(x.nextEffect) || _has(x.endEffect) || _has(x.effect)); } },
@@ -10979,7 +11211,7 @@
     const _TABLE_KIND = { ac_fha: 'fha', sys_fha: 'fha', ac_func: 'func.ac', sys_func: 'func.sys', ac_fcim: 'fcim', sys_fcim: 'fcim', ac_req: 'req', sys_req: 'req', pra: 'pra', zsa: 'zsa', cma: 'cma', routing: 'routing', item: 'item', fmea: 'fmea' };
     function _rowKindOf(a) { if (!a) return ''; if (a.op === 'add_function') return (a.scope === 'system' && a.systemId) ? 'func.sys' : 'func.ac'; return _OP_KIND[a.op] || ''; }
     // '' when the row may be written; otherwise what is missing, in words ("an FCIM row with no failure condition ...")
-    function _rowMissing(kind, x) { const r = _ROW_RULES[kind]; if (!r || !x) return ''; let ok = true; try { ok = !!r.ok(x); } catch (_) { ok = false; } return ok ? '' : ('a' + (/^[aeiouAEIOU]|^FCIM|^FHA|^FMEA/.test(r.label) ? 'n ' : ' ') + r.label + ' with no ' + r.need.replace(/^an? /, '')); }
+    function _rowMissing(kind, x) { const r = _ROW_RULES[kind]; if (!r || !x) return ''; let ok = true; try { ok = !!r.ok(x); } catch (_) { ok = false; } if (!ok && typeof r.say === 'function') { try { const t = r.say(x); if (t) return t; } catch (_) {} } return ok ? '' : ('a' + (/^[aeiouAEIOU]|^FCIM|^FHA|^FMEA/.test(r.label) ? 'n ' : ' ') + r.label + ' with no ' + r.need.replace(/^an? /, '')); }
     function _actionMissing(a) { const k = _rowKindOf(a); return k ? _rowMissing(k, a) : ''; }
     // a writer called with nothing to write: say so once, and write nothing
     function _refuseEmpty(kind, x) { const m = _rowMissing(kind, x); if (!m) return false; try { _toast('Not written: ' + m + '.', 'warning'); } catch (_) {} return true; }
@@ -11095,7 +11327,9 @@
             if (_SEV_WORD_RE.test(String(txt))) out.push(label + ' has a severity word — severity belongs in the FHA, not the FCIM');
         };
         if (a.op === 'add_fcim') {
-            cell('Total Loss', a.totalLoss); cell('Partial Loss', a.partialLoss); cell('Malfunction', a.malfunction);
+            const n = _fcimNormAction(Object.assign({}, a));   // 26 Oct 2026: a cell may be {na, rationale}
+            cell('Total Loss', n.totalLoss); cell('Partial Loss', n.partialLoss); cell('Malfunction', n.malfunction);
+            _FCIM_CELLS.forEach(function (c) { if (n[c.k + 'Na'] && _SEV_WORD_RE.test(String(n[c.k + 'Na']))) out.push('The reason ' + c.label + ' does not apply has a severity word: severity belongs in the FHA, not the FCIM'); });
         } else if (a.op === 'update' && a.table && /fcim/.test(String(a.table)) && a.fields) {
             cell('Total Loss', a.fields.tlDesc); cell('Partial Loss', a.fields.plDesc); cell('Malfunction', a.fields.mDesc);
         }
@@ -11962,7 +12196,8 @@
         const certBasis = _certBasis();
         const userMsg = 'Cert basis: ' + certBasis + '\nSub-functions:\n' + c.funcs.map(function (f) { return '- subId=' + f.subId + ' | name=' + f.subName + (f.subDef ? ' | definition=' + f.subDef : ''); }).join('\n');
         const r = await Provider.complete({ feature: 'fcim.populate', model: MODELS.reason, system: _fcimSystemPrompt(certBasis, ''), messages: [{ role: 'user', content: userMsg }], maxTokens: 6000, thread: { scope: 'aircraft', funcKeys: c.funcs.map(function (f) { return f.subId; }) } });
-        const raw = _parseItems(r.text, 'rows').filter(function (x) { return x && (x.totalLoss || x.partialLoss || x.malfunction || x.rationale); });
+        // 26 Oct 2026: a cell may come back {"na": true, "rationale": ...}: put in one shape first (an N/A cell grades as no text)
+        const raw = _parseItems(r.text, 'rows').filter(Boolean).map(function (x) { return _fcimNormAction(x); }).filter(function (x) { return x && (x.totalLoss || x.partialLoss || x.malfunction || x.rationale || x.totalLossNa || x.partialLossNa || x.malfunctionNa); });
         const rows = raw.map(function (x) { return { awareness: _normAwareness(x.awareness), totalLoss: String(x.totalLoss || '').trim(), partialLoss: String(x.partialLoss || '').trim(), malfunction: String(x.malfunction || '').trim(), rationale: String(x.rationale || '').trim() }; });
         let flagged = 0; const issues = [];
         rows.forEach(function (row) { const v = _validateRow('fcim', { awareness: row.awareness, tlDesc: row.totalLoss, plDesc: row.partialLoss, mDesc: row.malfunction, rationale: row.rationale }); if (v.length) { flagged++; if (issues.length < 4) issues.push(v.join('; ')); } });
@@ -12182,7 +12417,8 @@
                         // omitted them would discard the answer on accept: the §8
                         // captured-then-discarded shape, caught here on 2 Aug before it
                         // shipped a fourth time.
-                        const ok = _applyFcimSuggestion({ subId: a.subId, awareness: a.awareness, totalLoss: a.totalLoss, partialLoss: a.partialLoss, malfunction: a.malfunction, malfunctions: a.malfunctions, partials: a.partials, _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
+                        // 26 Oct 2026: and the reason a cell does not apply (totalLossNa / partialLossNa / malfunctionNa)
+                        const ok = _applyFcimSuggestion({ subId: a.subId, awareness: a.awareness, totalLoss: a.totalLoss, partialLoss: a.partialLoss, malfunction: a.malfunction, malfunctions: a.malfunctions, partials: a.partials, totalLossNa: a.totalLossNa, partialLossNa: a.partialLossNa, malfunctionNa: a.malfunctionNa, _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
                         results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'System' : 'AC') + ' FCIM added for ' + _chatClip(a.subId, 24) } : { ok: false, error: 'add_fcim failed' }); break;
                     }
                     case 'add_requirement': {
@@ -12399,8 +12635,16 @@
                 return d.length ? '<div class="aifh-meta" style="color:#7A5300;font-weight:700;">⚠ Not a phase in this project\'s mission profile: ' + _esc(d.join(', ')) + ' — it will not be ticked; the row comment will name it so you can tick the right phase.</div>' : '';
             } catch (_) { return ''; }
         })();
+        // 26 Oct 2026: an FCIM row shows each cell: its failure condition(s), or N/A with the reason it does not apply
+        const _fcimCells = (op === 'add_fcim') ? _FCIM_CELLS.map(function (c) {
+            const conds = [].concat(_has(a[c.k]) ? [String(a[c.k])] : [], (c.arr && Array.isArray(a[c.arr])) ? a[c.arr].filter(function (x) { return _has(x) && String(x) !== String(a[c.k]); }).map(String) : []);
+            const lab = c.label.charAt(0).toUpperCase() + c.label.slice(1);
+            if (conds.length) return conds.map(function (t, i) { return '<div class="aifh-eff"><strong>' + _esc(lab) + (conds.length > 1 ? ' ' + (i + 1) : '') + ':</strong> ' + _esc(t) + '</div>'; }).join('');
+            if (a[c.k + 'Na']) return '<div class="aifh-eff" style="color:var(--color-text-secondary);"><strong>' + _esc(lab) + ': N/A</strong> <span style="font-style:italic;">' + _esc(a[c.k + 'Na']) + '</span></div>';
+            return '';
+        }).join('') : '';
         return '<h4>' + _esc(title) + (a.scope === 'system' ? ' · System' : '') + sev + _judge + '</h4><div class="aifh-eff">' + _esc(String(body).slice(0, 220)) + '</div>'
-             + _abReason + _judgeNote + _droppedPh
+             + _fcimCells + _abReason + _judgeNote + _droppedPh
              + _abstainChips(a, { fcDesc: 'Failure condition', effAc: 'Aircraft effect', effCrew: 'Crew effect', effPax: 'Passenger effect', severity: 'Severity', severityRationale: 'Severity rationale', text: 'Requirement', rationale: 'Rationale', totalLoss: 'Total loss', partialLoss: 'Partial loss', malfunction: 'Malfunction', desc: 'Description', mitigation: 'Mitigation', claim: 'Independence claim', verification: 'Verification', threat: 'Particular risk', interference: 'Interference' })
              + _confidenceBadge(a);
     }
@@ -12552,7 +12796,9 @@
         const _turnErrs = [];           // what the failed attempts said, for the console summary
         const _results = new Array(_slices.length);
         // 26 Oct 2026: a turn with no actions at all (unreadable, or readable with nothing in it)
-        const _emptyTurn = function (a) { const pp = a && a.parsed; return !(pp && Array.isArray(pp.actions) && pp.actions.length); };
+        // 26 Oct 2026: a turn whose every row fails the one rule (_ROW_RULES: an FCIM row with a cell left empty, say)
+        // brought nothing back either, so it is asked again like an empty one
+        const _emptyTurn = function (a) { const pp = a && a.parsed; return !(pp && Array.isArray(pp.actions) && pp.actions.some(function (x) { try { return !_actionMissing(x); } catch (_) { return true; } })); };
         let _emptyTurns = 0;
         const _runSlice = async function (_ci) {
             const _slice = _slices[_ci];
@@ -12700,6 +12946,9 @@
         // panel says how many, so the coverage note names the conditions still to draft. A row that carries a
         // condition id is kept: on accept its text comes from the FCIM (_applyFhaSuggestion).
         // 26 Oct 2026, across the board: every kind of row, by the one rule (_ROW_RULES), not the FHA alone.
+        // 26 Oct 2026: an FCIM cell the AI says does not apply arrives as {"na": true, "rationale": ...} (or "N/A: ...");
+        // it is put in one shape here, before the rule reads it and before the review panel shows it
+        actions.forEach(function (_x) { if (_x && _x.op === 'add_fcim') _fcimNormAction(_x); });
         const _emptyBy = {};
         for (let _i = actions.length - 1; _i >= 0; _i--) {
             const _x = actions[_i], _m = _actionMissing(_x);
@@ -12768,7 +13017,8 @@
         const items = actions.map(function (a, i) {
             a._k = 'anemb-' + Date.now() + '-' + i;
             const fl = _OP_FIELDS[a.op];
-            if (fl) a._abstained = _abstainedFields(a, fl.map(function (f) { return f.key; }).concat(a.op === 'add_fha' ? ['severity'] : []));
+            if (fl) a._abstained = _abstainedFields(a, fl.map(function (f) { return f.key; }).concat(a.op === 'add_fha' ? ['severity'] : []))
+                .filter(function (k) { return !(a.op === 'add_fcim' && (a[k + 'Na'] || (k === 'partialLoss' && _has(a.partials)) || (k === 'malfunction' && _has(a.malfunctions)))); });   // 26 Oct 2026: a cell that does not apply is an answer
             return a;
         });
         // Hardening (#1) — wire the independent verifier on safety-critical batch features.
@@ -12934,7 +13184,7 @@
     const _FEATURE_DIRECTIVE = {
         req:   'Recommend derived SAFETY REQUIREMENTS that close the project\'s open analysis gaps (failure conditions lacking mitigating requirements; fault-tree contributors lacking controls). Write each as "The <item> shall …", trace it to the function / failure condition it addresses, and set level + type + verification method. Emit them as add_requirement actions; ground every requirement in the current project state. These are ADVISORY PROPOSALS — an accepted one is filed as a review comment on its traced failure condition, never written into the requirements register.',
         fha:   'Draft the AIRCRAFT-level FHA. For each aircraft function, identify its failure condition(s) with effects on Aircraft / Crew / Passengers and a SEVERITY classified per §__.1309 (Catastrophic ↔ Extremely Improbable … No Safety Effect ↔ none), DERIVED from the effects you state for that condition. Ground every row strictly in the project\'s functions. If a function\'s definition is too thin to settle the class, do NOT return a blank: make the call an experienced safety engineer would make from what is known, set the class, and mark the row judgementCall: true with a judgementNote naming the missing fact and what you assumed. Do NOT reach for the benign end of the scale either — "No Safety Effect" is a finding about the aircraft, not a way of saying you do not know. Emit add_fha actions with scope "aircraft".',
-        fcim:  'Generate the FCIM (Failure Conditions, Indications & Mitigations) per aircraft function — Total Loss / Partial Loss / Malfunction as concise capability phrases, the crew-Aware vs crew-Unaware awareness split, and the indications + mitigations. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[]/malfunctions[] arrays, never merged into one phrase. Put NO severity words anywhere (severity lives in the FHA, never the FCIM). Emit add_fcim actions.',
+        fcim:  'Generate the FCIM (Failure Conditions, Indications & Mitigations) per aircraft function — Total Loss / Partial Loss / Malfunction as concise capability phrases, the crew-Aware vs crew-Unaware awareness split, and the indications + mitigations. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[]/malfunctions[] arrays, never merged into one phrase. Put NO severity words anywhere (severity lives in the FHA, never the FCIM). Fill every cell: a failure condition, or {"na": true, "rationale": "<why it does not apply to this function>"} where that type of failure cannot occur; never leave a cell empty. Emit add_fcim actions.',
         items: 'From the architecture / source documents, list each system\'s CONFIGURATION ITEMS — every redundant copy the document names as a separate unit (engines 1–4, flight control computers A and B, hydraulic systems 1/2/3, generators, pumps, channels). One add_item per copy, named exactly as the document names it with its side or position, owningSystemId = the system\'s exact name, description citing the section. A system with no stated redundancy gets one item. Never merge copies into one entry and never invent a copy the document does not state.',
         mac: 'For each named aircraft sub-function, draft its Minimum Acceptable Configuration from the architecture / source documents: how much control / configuration authority must remain available for continued safe flight and landing, as clauses "at least min of [redundant configuration items]" — the members are the COPIES of the same thing (engines, channels, computers, pumps), by their ids in the project state — use the configuration ITEMS listed under each system (itemId) wherever they exist, and fall back to the system id or a system function id only where no items are listed; never echo an internal _id. A positional or symmetric minimum is one clause per group (per side, per axis), never a flat count. Read the minimum from the document\'s redundancy and dispatch statements and cite the section in sddRef; where the document is silent, require every copy (min = all) and say so in rationale. Emit one add_mac per sub-function (per phase only where the document states a phase-specific minimum). Never name a member that does not serve the aircraft function.',
         systems: 'From the project architecture / source documents, identify the aircraft SYSTEMS the design allocates functions to, and each system\'s own functions. Emit add_system {name} for each system FIRST, then add_function {scope:"system", systemId:<that name>, funcName, funcDef, traceIds:[aircraft sub-function ids it implements]} for each of its functions. Never invent a system or a function the document does not describe; trace only where the document says the system delivers that aircraft function.',
@@ -13428,6 +13678,8 @@
             return populateFha({ systemId: sy.id, systemName: sy.name || sy.id, funcs: funcs });
         }),                // async: draft FCIM rows → review panel
         fcimGaps:     _funcsNeedingFcim,           // sub-functions without FCIM coverage
+        // 26 Oct 2026: one open FCIM cell, drafted for review (the FCIM page's "draft with ANEM", fcim_na.js)
+        draftFcimCell: _captureGuard('draftFcimCell', draftFcimCell),
         // ---- Feature #49 — functional decomposition from architecture docs --
         decompose:   _captureGuard('decompose', decompose),                    // open input panel (or pass { text })
         decomposeSystems: _captureGuard('decomposeSystems', decomposeSystems),

@@ -1742,6 +1742,9 @@ const acFcimCRUD = makeCRUD({
     editFnName: 'editACFCIM', deleteFnName: 'deleteACFCIM',
     // FCIM rows define the set of failure conditions referenced by the FHA tab.
     afterChange: () => {
+        // 26 Oct 2026: a failure condition typed into a cell marked not applicable overrules it (fcim_na.js settle):
+        // what the N/A set aside comes back, and the cell is numbered like any other condition.
+        _fcimSettleAfterEdit(acFcimData, acFhaData, 'acFcim');
         acExtractedFCs = [];
         _pushExtractedFCs(acFcimData, acExtractedFCs);
     },
@@ -2136,6 +2139,7 @@ const sysFcimCRUD = makeCRUD({
     editFnName: 'editSysFCIM', deleteFnName: 'deleteSysFCIM',
     afterChange: () => {
         const s = sys(); if (!s) return;
+        _fcimSettleAfterEdit(s.fcim, s.fha, 'sysFcim');   // 26 Oct 2026, as the aircraft FCIM above
         s.extractedFCs = [];
         _pushExtractedFCs(s.fcim, s.extractedFCs);
     },

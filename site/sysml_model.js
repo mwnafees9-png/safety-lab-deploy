@@ -290,12 +290,15 @@
         var out = [];
         arr(rows).forEach(function (d, ri) {
             if (!d) return;
-            if (d.tlId) out.push({ id: d.tlId, desc: d.tlDesc, subId: d.subId, slot: 'tl', row: ri });
-            if (d.plId) out.push({ id: d.plId, desc: d.plDesc, subId: d.subId, slot: 'pl', row: ri });
-            if (d.mId) out.push({ id: d.mId, desc: d.mDesc, subId: d.subId, slot: 'm', row: ri });
+            // 26 Oct 2026: a cell marked not applicable (its reason in tlNa / plNa / mNa, no condition text) is not a
+            // failure condition, so it is not exported as one (the same rule as _pushExtractedFCs)
+            var na = function (k) { return String(d[k + 'Na'] == null ? '' : d[k + 'Na']).trim() !== '' && String(d[k + 'Desc'] == null ? '' : d[k + 'Desc']).trim() === '' && !arr(k === 'pl' ? d.plExtra : (k === 'm' ? d.mExtra : null)).some(function (e) { return e && String(e.desc || '').trim(); }); };
+            if (d.tlId && !na('tl')) out.push({ id: d.tlId, desc: d.tlDesc, subId: d.subId, slot: 'tl', row: ri });
+            if (d.plId && !na('pl')) out.push({ id: d.plId, desc: d.plDesc, subId: d.subId, slot: 'pl', row: ri });
+            if (d.mId && !na('m')) out.push({ id: d.mId, desc: d.mDesc, subId: d.subId, slot: 'm', row: ri });
             arr(d.combined).forEach(function (c) { if (c && c.cbId) out.push({ id: c.cbId, desc: c.cbDesc, subId: d.subId, slot: 'cb', row: ri }); });
-            arr(d.plExtra).forEach(function (e) { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId, slot: 'plx', row: ri }); });
-            arr(d.mExtra).forEach(function (e) { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId, slot: 'mx', row: ri }); });
+            if (!na('pl')) arr(d.plExtra).forEach(function (e) { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId, slot: 'plx', row: ri }); });
+            if (!na('m')) arr(d.mExtra).forEach(function (e) { if (e && e.id) out.push({ id: e.id, desc: e.desc, subId: d.subId, slot: 'mx', row: ri }); });
         });
         return out;
     }

@@ -5495,9 +5495,11 @@ function autoFillFcIdsForActiveSystem() {
     const all = [];
     (s.fcim || []).forEach(f => {
         const entries = [];
-        if (f.tlId) entries.push({ id: f.tlId, desc: f.tlDesc, type: 'TL', subId: f.subId });
-        if (f.plId) entries.push({ id: f.plId, desc: f.plDesc, type: 'PL', subId: f.subId });
-        if (f.mId)  entries.push({ id: f.mId,  desc: f.mDesc,  type: 'M',  subId: f.subId });
+        // 26 Oct 2026: a cell marked not applicable is not a failure condition (misc_fn_modules _fcimIsNaCell)
+        const _na = s2 => (typeof _fcimIsNaCell === 'function') && _fcimIsNaCell(f, s2);
+        if (f.tlId && !_na('tl')) entries.push({ id: f.tlId, desc: f.tlDesc, type: 'TL', subId: f.subId });
+        if (f.plId && !_na('pl')) entries.push({ id: f.plId, desc: f.plDesc, type: 'PL', subId: f.subId });
+        if (f.mId && !_na('m'))  entries.push({ id: f.mId,  desc: f.mDesc,  type: 'M',  subId: f.subId });
         entries.forEach(e => {
             all.push(e);
             if (e.subId) {

@@ -318,6 +318,14 @@
     var AREA = { acFunctionsData: 'Aircraft functions', acFhaData: 'Aircraft FHA', acReqData: 'Aircraft requirements', acAssumptionsData: 'Assumptions', praData: 'Particular risk analysis', zsaData: 'Zonal safety analysis', cmaData: 'Common mode analysis', fmeaData: 'FMEA', acFcimData: 'Aircraft FCIM', routingData: 'Routing', resourcesData: 'Resources', itemsData: 'Items', flightPhasesData: 'Flight phases', systemsData: 'Systems' };
     var REFKIND = { acFunctionsData: 'acFunc', acFhaData: 'acFha', acReqData: 'acReq', cmaData: 'cma', itemsData: 'item', systemsData: 'system' };
     var FIELD = { fcDesc: 'description', fcId: 'ID', severity: 'severity', probability: 'probability', name: 'name', text: 'text', verifStatus: 'verification status', verifMethod: 'verification method', verifEvidence: 'verification evidence', type: 'type', gateType: 'gate type', allocatedDAL: 'DAL', dal: 'DAL', subName: 'function name', funcName: 'function name', subDef: 'definition', funcDef: 'definition', phases: 'flight phases', effAc: 'effect on the aircraft', effCrew: 'effect on the crew', effPax: 'effect on occupants', lambda: 'failure rate', rate: 'failure rate', exposureTime: 'exposure time', rat: 'rationale', traceId: 'trace', traceIds: 'traces', linkedFhaIds: 'linked failure conditions', linkedFhaId: 'linked failure condition', targetP: 'target probability', comments: 'comments', subject: 'subject', claim: 'claim', mitigation: 'mitigation', status: 'status', mode: 'failure mode', part: 'part', level: 'level', parentId: 'position in the tree', order: 'position in the tree', kidsCollapsed: 'collapsed', description: 'description', desc: 'description', threat: 'threat', title: 'title', role: 'role' };
+    // 26 Oct 2026 (fcim_na.js): the FCIM cells and their "not applicable" fields, named in words in the review
+    [['tl', 'total loss'], ['pl', 'partial loss'], ['m', 'malfunction']].forEach(function (c) {
+        var s = c[0], w = c[1];
+        FIELD[s + 'Id'] = w + ' ID'; FIELD[s + 'Desc'] = w;
+        FIELD[s + 'Na'] = w + ': does not apply, because'; FIELD[s + 'NaBy'] = w + ': marked not applicable by'; FIELD[s + 'NaAt'] = w + ': marked not applicable at';
+        FIELD[s + 'NaPrevId'] = w + ': ID of the failure condition it held'; FIELD[s + 'NaPrevDesc'] = w + ': the failure condition it held'; FIELD[s + 'NaPrevExtra'] = w + ': the other conditions it held';
+        FIELD[s + 'NaParked'] = w + ': FHA rows set aside'; FIELD[s + 'NaKeep'] = w + ': FHA rows kept by choice';
+    });
     // Settings the app keeps for itself: never shown as a change, and a change made only of
     // these is automatic.
     var BOOK_PC = { journal: 1, changeLog: 1, acWorkspace: 1, aiAuditLog: 1, aiDraftLog: 1, aiDraftCounter: 1, cmaDecisionTag: 1, staleBaselines: 1, uiState: 1, lastOpened: 1, lastPlace: 1, invariantsLast: 1, cmaDecisionLog: 1 };   // cmaDecisionLog: each entry IS a recorded decision (cma_live.js), answered in its own dialog

@@ -70,7 +70,7 @@ const cut = (start, endMark) => { const a = ai.indexOf(start), b = ai.indexOf(en
     ];
     const full = [
       { op: 'add_fha', fcDesc: 'Loss of wheel braking' }, { op: 'add_fha', fcDesc: '', srcCondId: 'SF-002-TL' },
-      { op: 'add_fcim', totalLoss: 'Loss of fire detection' }, { op: 'add_fcim', malfunctions: ['Spurious fire warning'] },
+      { op: 'add_fcim', totalLoss: 'Loss of fire detection', partialLoss: { na: true, rationale: 'Detection works or it does not' }, malfunction: 'N/A: no erroneous mode' }, { op: 'add_fcim', totalLoss: { na: true, rationale: 'Warning only' }, partialLoss: 'N/A: one channel', malfunctions: ['Spurious fire warning'] },   // 26 Oct 2026 (FCIM N/A ruling): every cell answered, a condition or N/A with its reason (regression_fcim_na_20261026)
       { op: 'add_function', funcName: 'Protect against fire', subName: 'Detect fire' }, { op: 'add_function', scope: 'system', systemId: 'sys-1', subName: 'Detect engine fire' },
       { op: 'add_fmea', level: 'functional', funcSubId: 'SF-001', funcMode: 'loss', endEffect: 'Loss of braking' }, { op: 'add_fmea', level: 'item', mode: 'Open circuit', localEffect: 'No signal' },
       { op: 'add_zsa', zoneId: 'Z-100', interference: 'Hydraulic line near wiring' }, { op: 'add_pra', threat: 'Rotor burst' }, { op: 'add_cma', claim: 'Channels independent' },

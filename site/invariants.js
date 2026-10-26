@@ -376,7 +376,8 @@
                 // 26 Oct 2026: an empty row, by the writers' own rule (ai_assistant.js _ROW_RULES)
                 const _has = v => Array.isArray(v) ? v.some(x => String(x == null ? '' : x).trim() !== '') : String(v == null ? '' : v).trim() !== '';
                 const EMPTY = ': the row is empty; delete it or draft it again';
-                const fcimEmpty = c => !(_has(c.tlDesc) || _has(c.plDesc) || _has(c.mDesc) || (c.plExtra || []).some(e => e && _has(e.desc)) || (c.mExtra || []).some(e => e && _has(e.desc)) || (c.tlExtra || []).some(e => e && _has(e.desc)));
+                // 26 Oct 2026: a cell marked not applicable with its reason (tlNa / plNa / mNa) is an answer, not an empty cell
+                const fcimEmpty = c => !(_has(c.tlDesc) || _has(c.plDesc) || _has(c.mDesc) || _has(c.tlNa) || _has(c.plNa) || _has(c.mNa) || (c.plExtra || []).some(e => e && _has(e.desc)) || (c.mExtra || []).some(e => e && _has(e.desc)) || (c.tlExtra || []).some(e => e && _has(e.desc)));
                 const chkFcim = (c, scope) => { if (!isAi(c)) return; checked++; if (fcimEmpty(c)) fails.push(scope + ' FCIM ' + (c.subId || c.internalId) + ' [AI]: no failure condition (total loss, partial loss or malfunction)' + EMPTY); };
                 ((typeof acFcimData !== 'undefined' ? acFcimData : []) || []).forEach(c => chkFcim(c, 'Aircraft'));
                 ((typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || []).forEach(f => {
