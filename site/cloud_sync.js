@@ -321,7 +321,7 @@
             snapItems = _contentItems(snap); snapByTable = _countsByTable(snap);
             return { client: client, projectId: pid, userId: uid, snapshot: snap };
         };
-        var wp = W.write({ mode: 'silent', prepare: prepare });
+        var wp = W.write({ mode: (opts.mode === 'merged' || opts.mode === 'manual') ? opts.mode : 'silent', prepare: prepare });
         if (opts.now) { try { if (typeof W.flush === 'function') W.flush(); } catch (_) {} }   // AutoSave: no quiet-window wait
         var r = await wp;
         if (r && r.ok) {
@@ -354,7 +354,7 @@
         var W = _writer(); if (!W) return { ok: false, reason: 'not-ready' };
         while (_inFlight) { await new Promise(function (r) { setTimeout(r, 60); }); }
         _inFlight = true; _lastPushAt = Date.now();
-        try { return await _push(client, ws, uid, W, { snapshot: opts.snapshot, force: true, now: true }); }
+        try { return await _push(client, ws, uid, W, { snapshot: opts.snapshot, force: true, now: true, mode: opts.mode }); }
         catch (e) { return { ok: false, reason: 'error', error: e }; }
         finally { _inFlight = false; }
     }

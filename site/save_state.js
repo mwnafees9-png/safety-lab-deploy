@@ -135,11 +135,75 @@
     var _cloudPending = false;    // accepted work the cloud copy does not have yet
     var _saving = null, _again = false, _retryTimer = null, _retryN = 0, _allowUnload = false;
     var _acceptedId = null;       // the id of the accepted-state slot the autosave meta points to
-    var _stats = { saves: 0, ok: 0, failures: 0, retries: 0, guards: 0, asked: 0, localWrites: 0, cloudOk: 0, slotWrites: 0 };
+    var _stats = { saves: 0, ok: 0, failures: 0, retries: 0, guards: 0, asked: 0, localWrites: 0, cloudOk: 0, slotWrites: 0, fileWrites: 0 };
 
     function holdsSync() { var A = _ack(); return !!(A && A.pending()); }
     function waiting() { var A = _ack(); return !!(A && (A.pendingUser ? A.pendingUser() : A.pending())); }
-    function unsaved() { return !!_saving || !!_localFail || _cloudPending; }
+    function unsaved() { return !!_saving || !!_localFail || _cloudPending || !!_fileFail; }
+
+    // ---- the project file on this computer (desktop, 26 Oct 2026, Radia) ----------------------------
+    // The owner's ruling: "the file should always auto save back to where it was opened". In the desktop app the
+    // shell (main.js, window.slabProjectFile from its preload) knows which .sl file the open project came from or
+    // was last saved to; every confirmed save here ALSO writes the confirmed project back to that file, and a
+    // failed write says "Not saved to <file>: <why>" with Retry and Save As, and is never shown as saved.
+    //   · only what is CONFIRMED: the same accepted state the save stores (acceptedSnapshot() while changes still
+    //     wait; otherwise the project as it is when the save starts, taken before anything else can change it);
+    //   · the right project only: _fileEpoch goes up by one every time a project is opened or replaced
+    //     (replaced(), which every loader runs). The shell binds the file to the epoch the project was opened or
+    //     saved with, and writes nothing that carries another one (shell_rules.createProjectFile);
+    //   · the browser has no window.slabProjectFile: nothing here runs there.
+    var _fileEpoch = 0;          // which project is open (see above)
+    var _fileName = null;        // the file the shell saves this project to (its name only; the shell owns the path)
+    var _fileFail = null;        // { name, reason, code }: the last write to that file failed
+    function _pf() { try { var P = W.slabProjectFile; return (P && typeof P.write === 'function') ? P : null; } catch (_) { return null; } }
+    function _fileShort(code) { return ({ ENOENT: 'file not found', ENODIR: 'folder not reachable', READONLY: 'read-only', EROFS: 'read-only', ENOSPC: 'disk full', EBUSY: 'file locked', EPERM: 'file locked', EACCES: 'file locked' })[code] || 'could not write'; }
+    // The confirmed project as the file holds it, taken NOW (at the start of a save): the .sl export when nothing
+    // waits, otherwise the accepted state with the numbering scheme and counters (not content) laid on.
+    function _fileJob(acc) {
+        if (!_pf()) return null;
+        var json = '';
+        try {
+            if (acc == null) json = (typeof W.__slabGetProjectJSON === 'function') ? String(W.__slabGetProjectJSON() || '') : '';
+            else {
+                var o = JSON.parse(acc);
+                try { if (o.numberingScheme == null && typeof slNumberingScheme !== 'undefined') o.numberingScheme = slNumberingScheme; } catch (_) {}
+                try { if (o.numberingStore == null && typeof slNumberingStore !== 'undefined') o.numberingStore = slNumberingStore; } catch (_) {}
+                json = JSON.stringify(o, null, 2);
+            }
+        } catch (_) { json = ''; }
+        return { json: json, epoch: _fileEpoch };
+    }
+    // Writes it. null = nothing to say (written, no file, or the job is about a project no longer open);
+    // otherwise the failure, which is also kept in _fileFail.
+    async function _writeFile(job) {
+        var P = _pf(); if (!P || !job) return null;
+        var r;
+        try { r = await P.write(job.json, job.epoch); } catch (e) { r = { ok: false, code: 'IPC', reason: 'the app could not reach the file (' + String(e && e.message || e).slice(0, 120) + ')' }; }
+        r = r || { ok: false, reason: 'the app did not answer' };
+        if (job.epoch !== _fileEpoch) return null;          // another project was opened meanwhile: not about it
+        if (r.ok) {
+            if (r.skipped === 'no-file') { _fileName = null; _fileFail = null; }
+            else if (!r.skipped) { _fileName = r.name || _fileName; _fileFail = null; _stats.fileWrites++; }
+            return null;
+        }
+        _fileFail = { name: r.name || _fileName || 'the project file', reason: r.reason || r.error || 'it could not be written', code: r.code || '' };
+        return _fileFail;
+    }
+    function _fileState(s) {
+        s = s || {};
+        if (s.epoch != null && s.epoch !== _fileEpoch) return;   // about a project no longer open
+        _fileName = s.name || null;
+        if (s.saved && s.name) {   // File > Save / Save As just wrote the whole project there
+            _fileFail = null;
+            if (_state === 'error' && _reasonCode === 'file') {
+                if (_localFail) _setError(_localFail === 'lease' ? 'lease' : 'local');
+                else if (_cloudPending) _setError(_online() ? 'error' : 'offline');
+                else { _state = 'saved'; _savedAt = _now(); _reason = ''; _reasonCode = ''; _where = _where || 'device'; }
+            }
+        }
+        if (!s.name) _fileFail = null;
+        _paint();
+    }
     function isDirty() { return waiting() || unsaved(); }
     // how many changes wait to be confirmed (what the top bar counts; change_ack.js count())
     function _collectedCount() { try { var A = _ack(); return (A && A.count) ? A.count() : 0; } catch (_) { return 0; } }
@@ -157,13 +221,18 @@
         if (typeof document === 'undefined' || !document.getElementById) return;
         var n = _collectedCount(), cls = '', text = '', title = '';
         if (_state === 'saving' || (_saving && _state !== 'error' && _state !== 'offline')) { cls = 'saving'; text = 'Saving…'; title = 'Saving your confirmed changes.'; }
-        else if (_state === 'error' || _state === 'offline') {
+        else if (_state === 'error' && _reasonCode === 'file' && _fileFail) {
+            // 26 Oct 2026 (desktop): the file the project was opened from was not written: said plainly, with its name
+            cls = 'error';
+            text = 'Not saved to ' + _fileFail.name + ': ' + _fileShort(_fileFail.code) + '. Retry';
+            title = 'Not saved to ' + _fileFail.name + ': ' + _fileFail.reason + '. Your confirmed changes are kept in the app on this computer and are tried again automatically. Click to retry now, or to save the project to another file (Save As).';
+        } else if (_state === 'error' || _state === 'offline') {
             cls = 'error';
             text = 'Not saved: ' + (_state === 'offline' ? 'offline' : _short(_reasonCode)) + '. Retry';
             title = 'Not saved: ' + _reason + '. ' + (_localFail ? 'Your changes are still on screen; do not close this tab.' : 'Your changes are kept on this device and will be uploaded ' + (_state === 'offline' ? 'when you are back online' : 'automatically') + '. Click to retry now.');
         } else if (_state === 'saved') {
-            text = 'Saved ' + _hhmm(_savedAt);
-            title = 'Saved ' + (_where === 'cloud' ? 'on this device and to the cloud' : (_where === 'team' ? 'on this device and shared with your team' : 'on this device')) + ' at ' + _hhmm(_savedAt) + '. Confirmed changes save automatically.';
+            text = 'Saved ' + (_fileName ? 'to ' + _fileName + ' ' : '') + _hhmm(_savedAt);
+            title = 'Saved ' + (_where === 'cloud' ? 'on this device and to the cloud' : (_where === 'team' ? 'on this device and shared with your team' : 'on this device')) + (_fileName ? ' and to the file ' + _fileName : '') + ' at ' + _hhmm(_savedAt) + '. Confirmed changes save automatically.';
         } else { text = 'All changes saved'; title = 'Confirmed changes save automatically.'; }
         // 16 Oct 2026 (v3.0): changes waiting to be confirmed are counted in the top bar; a click opens the one dialog
         if (n && cls !== 'error') { cls = 'dirty'; text = n + (n === 1 ? ' change' : ' changes') + ' to confirm'; title = 'Your changes are collected while you work. Click to see them and confirm them. Nothing is saved to the cloud or shared with your team until you confirm it.'; }
@@ -178,7 +247,7 @@
         } catch (_) {}
         try { var drawerBtn = document.getElementById('node-drawer-save'); if (drawerBtn) drawerBtn.classList.toggle('has-unsaved', isDirty()); } catch (_) {}
     }
-    function _short(code) { return ({ error: 'no connection to the cloud', refused: 'cloud copy changed', lease: 'another tab is active', shrink: 'paused', local: 'this device', 'provision-failed': 'workspace', 'not-ready': 'starting', 'no-snapshot': 'unreadable', 'not-yours': 'another account' })[code] || 'error'; }
+    function _short(code) { return ({ error: 'no connection to the cloud', refused: 'cloud copy changed', lease: 'another tab is active', shrink: 'paused', local: 'this device', 'provision-failed': 'workspace', 'not-ready': 'starting', 'no-snapshot': 'unreadable', 'not-yours': 'another account', file: 'the project file' })[code] || 'error'; }
     // helpers_modules._updateSaveIndicator hands its signal here: a local write that failed is a
     // failure to say; everything else is painted from this module's own state.
     function renderIndicator(hint) {
@@ -229,10 +298,22 @@
 
     // ---- the save ----------------------------------------------------------------------------
     var NO_CLOUD = { 'signed-out': 1, itar: 1, 'no-content': 1, demo: 1, paywall: 1, off: 1, 'no-workspace': 1, current: 1, skipped: 1 };
+    var _askAfter = false;     // 26 Oct 2026: the server copy moved and no live sync carries it: ask once this save is over
+    var _choosing = false;     // the manual save is asking: overwrite the cloud copy, or load it (this tab's state banked first)
+    async function _manualAfterRefusal() {
+        if (typeof W.saveProjectToCloud !== 'function') return false;
+        var ok = false;
+        _choosing = true;          // its "load the cloud copy" IS the person's choice: guard() lets that load through
+        try { ok = (await W.saveProjectToCloud()) === true; } catch (_) {} finally { _choosing = false; }
+        if (ok) { _cloudPending = false; if (!_fileFail && !_localFail) { _state = 'saved'; _savedAt = _now(); _where = 'cloud'; _reasonCode = ''; _reason = ''; _retryN = 0; } }   // a file or device write that failed is still said
+        _paint();
+        return ok && !_fileFail && !_localFail;
+    }
     function _requestSave() {
         if (_saving) { _again = true; return _saving; }
         _saving = _doSave().then(function (ok) {
             _saving = null;
+            if (!ok && _askAfter) { _askAfter = false; return _manualAfterRefusal(); }
             if (_again) { _again = false; return _requestSave(); }
             _paint();
             return ok;
@@ -244,29 +325,47 @@
         if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
         var A = _ack(), acc = (A && A.acceptedSnapshot) ? A.acceptedSnapshot() : null;   // null: nothing waits, the live project is the accepted one
         if (acc != null && !(A && A.pending())) acc = null;
+        // 26 Oct 2026 (desktop): the confirmed project for the file it was opened from, taken now, before anything can change it
+        var fileJob = _fileJob(acc);
         if (_signedIn() && typeof W.__slCloudSyncPushNow === 'function') _cloudPending = true;   // recorded in the meta written next: a crash retries the upload
         _state = 'saving'; _paint();
         // 1. this device, waited for
         var lf = await _writeLocal(acc);
         _localFail = lf;
+        // 1b. the project file on this computer (desktop): the same confirmed state, written back to it (atomic, in the shell)
+        var ff = fileJob ? await _writeFile(fileJob) : null;
         // 2. the live sync: teammates see it (held while moves still wait; they go together)
         var C = _crdt(), team = false;
         if (C && !holdsSync()) { try { C.release(); team = !!(C.status().online !== false); } catch (_) {} }
         else if (C && acc && C.pushAccepted) { try { team = C.pushAccepted(JSON.parse(acc)) === true && C.status().online !== false; } catch (_) {} }   // moves still wait: this change goes on its own
         // 3. the cloud copy
+        // 26 Oct 2026 (Radia): a confirmed change REACHES the server copy. With the live team sync on, this tab holds
+        // every teammate's work, so a server copy that moved is written over ('merged'). Without it, a moved copy is
+        // asked about (the manual save: overwrite it, or load it). A refused save is never reported as saved.
         var r = { ok: false, reason: 'signed-out' };
         if (typeof W.__slCloudSyncPushNow === 'function') {
-            try { r = (await W.__slCloudSyncPushNow({ snapshot: acc })) || r; } catch (e) { r = { ok: false, reason: 'error', error: e }; }
+            try { r = (await W.__slCloudSyncPushNow({ snapshot: acc, mode: team ? 'merged' : 'silent' })) || r; } catch (e) { r = { ok: false, reason: 'error', error: e }; }
         }
         var code = r.ok ? 'ok' : r.reason;
-        if (code === 'refused' && team) code = 'ok-team';     // the live doc carries the change; the backup copy catches up on the next push
+        // no live sync and the server copy moved: once this save is over, the manual save asks (overwrite or load). It
+        // runs AFTER this save, never inside it: "load the cloud copy" opens a project, which waits for the save in
+        // flight, and inside it that would wait for itself. Only when nothing still waits to be confirmed (the manual
+        // save writes the whole project).
+        _askAfter = (code === 'refused' && !team && acc == null);
         var wasMarked = _cloudPending;
-        if (code === 'ok' || code === 'ok-team' || NO_CLOUD[code]) {
+        if (code === 'ok' || NO_CLOUD[code]) {
             _cloudPending = false;
             if (code === 'ok') _stats.cloudOk++;
         } else {
             _cloudPending = true;
             if (!wasMarked && !lf) { try { _writeLocal(acc); } catch (_) {} }   // the meta on this device now says an upload is pending (a crash retries it)
+        }
+        // the file comes first: it is the copy the person opens next time, and a failure there is never shown as saved
+        if (ff) {
+            _stats.failures++;
+            _setError('file', 'not saved to ' + ff.name + ': ' + ff.reason);
+            _scheduleRetry();
+            return false;
         }
         if (lf) {
             _stats.failures++;
@@ -279,21 +378,23 @@
             var why = REASON_TEXT[code] || code;
             if (code === 'error' && r.error) why += ' (' + String(r.error.message || r.error).slice(0, 120) + ')';
             _setError(code === 'offline' ? 'offline' : code, why);
-            if (code !== 'shrink' && code !== 'refused' && code !== 'not-yours') _scheduleRetry();   // 15 Oct 2026: retrying another account's project cannot succeed
+            // a refusal with the live sync on (the copy kept moving under a merged save) is tried again; without it the
+            // manual save asks instead (_askAfter)
+            if (code !== 'shrink' && (code !== 'refused' || team) && code !== 'not-yours') _scheduleRetry();   // 15 Oct 2026: retrying another account's project cannot succeed
             return false;
         }
         _state = 'saved'; _savedAt = _now(); _reason = ''; _reasonCode = ''; _retryN = 0;
-        _where = (code === 'ok') ? 'cloud' : ((team || code === 'ok-team') ? 'team' : 'device');
+        _where = (code === 'ok') ? 'cloud' : (team ? 'team' : 'device');
         _stats.ok++;
         try { if (typeof W.__slCloudSyncSchedule === 'function' && !holdsSync()) W.__slCloudSyncSchedule(); } catch (_) {}
         return true;
     }
     function _scheduleRetry() {
         if (_retryTimer) return;
-        if (!_online()) return;                    // the 'online' event retries
+        if (!_online() && !_fileFail) return;      // the 'online' event retries (a file on this computer does not wait for the network)
         var ms = RETRY_MS[Math.min(_retryN, RETRY_MS.length - 1)];
         _retryN++;
-        _retryTimer = setTimeout(function () { _retryTimer = null; if (_cloudPending || _localFail) { _stats.retries++; _requestSave(); } }, ms);
+        _retryTimer = setTimeout(function () { _retryTimer = null; if (_cloudPending || _localFail || _fileFail) { _stats.retries++; _requestSave(); } }, ms);
     }
 
     // Let held work go after a decision that saved nothing new (Cancel, a background change).
@@ -347,6 +448,17 @@
             if (r0 === 'keep') { _paint(); return false; }
             if (r0 === 'confirmed' && _saving) return _saving;   // Confirm all started the save already: one save, not two
         }
+        // 26 Oct 2026 (desktop): the project file was not written: Retry, or Save As to another file
+        if (_fileFail && _pf() && !(A && A.pending())) {
+            var fc = await choice({
+                title: 'Not saved to ' + _fileFail.name,
+                message: 'Your confirmed changes could not be saved to ' + _fileFail.name + ': ' + _fileFail.reason + '.\nThey are kept in the app on this computer. Try again, or save the project to another file.',
+                buttons: [{ id: 'cancel', label: 'Not now' }, { id: 'saveas', label: 'Save As…' }, { id: 'retry', label: 'Retry', kind: 'primary' }],
+                escape: 'cancel', enter: 'retry'
+            });
+            if (fc === 'cancel') { _paint(); return false; }
+            if (fc === 'saveas') { var sa = null; try { sa = await _pf().saveAs(); } catch (_) {} return !!(sa && sa.ok); }
+        }
         if (_reasonCode === 'refused' && typeof W.saveProjectToCloud === 'function') {
             var ok = false;
             try { ok = (await W.saveProjectToCloud()) === true; } catch (_) {}
@@ -359,6 +471,9 @@
     // ---- leaving or replacing the project --------------------------------------------------------
     async function guard(reason) {
         _stats.guards++;
+        // 26 Oct 2026: the person chose "load the cloud copy" in the manual save after a refusal: that load is the
+        // decision (this tab's state was banked to the recovery list first), so nothing is asked or saved here
+        if (_choosing) return true;
         var A = _ack();
         // the one dialog for everything waiting; Keep working stops the action here, nothing is lost
         if (A && A.pending()) {
@@ -366,14 +481,14 @@
             if (r0 === 'keep') { _paint(); return false; }
         }
         if (_saving) { try { await _saving; } catch (_) {} }
-        if (_cloudPending || _localFail) { try { await _requestSave(); } catch (_) {} }   // one more try, now
-        if (!_cloudPending && !_localFail) return true;
+        if (_cloudPending || _localFail || _fileFail) { try { await _requestSave(); } catch (_) {} }   // one more try, now
+        if (!_cloudPending && !_localFail && !_fileFail) return true;
         _stats.asked++;
-        var where = _localFail ? 'could not be stored on this device' : 'are not in the cloud yet';
+        var where = _localFail ? 'could not be stored on this device' : (_fileFail ? 'could not be saved to ' + _fileFail.name : 'are not in the cloud yet');
         var c = await choice({
             title: 'Not saved yet',
-            message: 'Your latest confirmed changes to "' + _projName() + '" ' + where + ((_reasonCode === 'local' || !_reason) ? '' : ' (' + _reason + ')') + '.\n'
-                + (_localFail ? 'If you continue, a copy goes to the recovery list on the Thread Integrity page first.' : 'They are kept on this device and in the recovery list on the Thread Integrity page, and upload the next time you open this project here.')
+            message: 'Your latest confirmed changes to "' + _projName() + '" ' + where + ((_reasonCode === 'local' || !_reason) ? '' : ' (' + (_reasonCode === 'file' && _fileFail ? _fileFail.reason : _reason) + ')') + '.\n'
+                + (_localFail ? 'If you continue, a copy goes to the recovery list on the Thread Integrity page first.' : (_fileFail ? 'If you continue, the file keeps the version it had; a copy of your latest work goes to the recovery list on the Thread Integrity page first.' : 'They are kept on this device and in the recovery list on the Thread Integrity page, and upload the next time you open this project here.'))
                 + '\nStay here to retry, or continue to ' + (reason || 'go on') + ' anyway.',
             buttons: [{ id: 'leave', label: 'Continue anyway' }, { id: 'stay', label: 'Stay', kind: 'primary' }],
             escape: 'stay', enter: 'stay'
@@ -390,6 +505,10 @@
         if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
         _cloudPending = false; _localFail = null; _again = false; _retryN = 0;
         _state = 'idle'; _reason = ''; _reasonCode = ''; _savedAt = 0; _where = '';
+        // 26 Oct 2026 (desktop): another project is open now: the file the last one saved to is not its file. The shell
+        // unbinds it (it keeps a file only for the epoch it was bound to), and nothing of this project goes there.
+        _fileEpoch++; _fileFail = null; _fileName = null;
+        try { var P = _pf(), pr = (P && typeof P.replaced === 'function') ? P.replaced(_fileEpoch) : null; if (pr && typeof pr.catch === 'function') pr.catch(function () {}); } catch (_) {}
         _paint();
     }
     // Boot recovery restored the autosave. An upload that never landed is retried; changes that were
@@ -471,6 +590,7 @@
             });
         };
         wrapped._slSaveGuard = true;
+        wrapped._slRaw = fn;   // the desktop's file open (openProjectFileText) runs the guard and the load itself
         try { if (W.SLWrap) W.SLWrap.preserve(fn, wrapped); } catch (_) {}
         W[name] = wrapped;
         return true;
@@ -523,8 +643,8 @@
             if (_isDesktop()) { e.preventDefault(); e.returnValue = false; setTimeout(_desktopClose, 0); return false; }
             e.preventDefault(); e.returnValue = ''; return '';
         });
-        W.addEventListener('online', function () { if (_cloudPending || _localFail) { _retryN = 0; _requestSave(); } });
-        W.addEventListener('offline', function () { if (_cloudPending) { _setError('offline', REASON_TEXT.offline); _paint(); } });
+        W.addEventListener('online', function () { if (_cloudPending || _localFail || _fileFail) { _retryN = 0; _requestSave(); } });
+        W.addEventListener('offline', function () { if (_cloudPending && !_fileFail) { _setError('offline', REASON_TEXT.offline); _paint(); } });
         // Ctrl+S / Cmd+S: save now (and acknowledge what waits), wherever focus is
         if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') document.addEventListener('keydown', function (e) {
             if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 's' || e.key === 'S')) {
@@ -539,6 +659,64 @@
     }
     _wrapAll();
 
+    // ---- desktop: opening a project file (26 Oct 2026) ---------------------------------------------------
+    // The shell reads the .sl (File > Open, the Project menu's Open, a file the system hands over) and hands its
+    // text here. Asked about first like any open (guard); then the app's own file loader runs, and only when the
+    // project from the file is on screen does it get its epoch, which the shell binds the file to. A load that
+    // failed part way still gets a new epoch (the file the old project had is unbound) but no file.
+    function _bootSettled() {
+        return new Promise(function (resolve) {
+            var n = 0;
+            (function chk() { var busy = false; try { busy = (typeof _autosaveRecoveryPending !== 'undefined') && !!_autosaveRecoveryPending; } catch (_) {} if (!busy || ++n > 60) resolve(); else setTimeout(chk, 250); })();
+        });
+    }
+    function openProjectFileText(str) {
+        var data = null;
+        try { data = JSON.parse(String(str)); } catch (_) { data = null; }
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return Promise.resolve({ ok: false, reason: 'parse', error: 'this file is not a Safety Lab project' });
+        var lp = W.loadProject, raw = (lp && lp._slRaw) || lp;
+        if (typeof raw !== 'function') return Promise.resolve({ ok: false, reason: 'unavailable', error: 'the app is still starting' });
+        return _bootSettled().then(function () { return _needsGuard() ? guard('open another project') : true; }).then(function (ok) {
+            if (!ok) return { ok: false, reason: 'cancelled' };
+            var A = _ack();
+            var body = function () {
+                return new Promise(function (resolve) {
+                    var done = false, t = null;
+                    function finish(ok2, err) { if (done) return; done = true; if (t) clearTimeout(t); resolve({ ok: ok2, error: err || '' }); }
+                    t = setTimeout(function () { finish(false, 'the project did not finish opening'); }, 60000);
+                    var f;
+                    try { f = new File([String(str)], 'project.sl', { type: 'application/json' }); } catch (e) { finish(false, String(e && e.message || e)); return; }
+                    try { raw.call(W, { target: { files: [f], value: '' }, onLoaded: function (ok2, err) { finish(ok2 !== false, err ? String(err && err.message || err) : ''); } }); }
+                    catch (e) { finish(false, String(e && e.message || e)); }
+                });
+            };
+            return Promise.resolve(A && A.systemAsync ? A.systemAsync(body) : body()).then(function (r) {
+                replaced();   // a new project is on screen (or part of one): a new epoch, the old file unbound
+                if (r && r.ok) return { ok: true, epoch: _fileEpoch };
+                return { ok: false, reason: 'load', error: (r && r.error) || 'the project could not be read' };
+            });
+        });
+    }
+    if (typeof window !== 'undefined') {
+        window.__slabOpenProjectFile = function (str) { return openProjectFileText(str); };
+        // File > Save / Save As: the whole project as the .sl export, with the epoch the shell binds the file to
+        window.__slabProjectFileSnapshot = function () { return { json: (typeof W.__slabGetProjectJSON === 'function') ? String(W.__slabGetProjectJSON() || '') : '', epoch: _fileEpoch }; };
+    }
+    // The Project menu's "Load Project" and the welcome card click the hidden file input: in the desktop that is the
+    // native Open instead (the same as File > Open), so the shell always knows the file. The browser is unchanged.
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') document.addEventListener('click', function (e) {
+        var t = e && e.target, P = _pf();
+        if (!P || typeof P.open !== 'function' || !t || t.id !== 'load-file') return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        try { var o = P.open(); if (o && typeof o.catch === 'function') o.catch(function () {}); } catch (_) {}
+    }, true);
+    // which file the shell saves this project to (its name), now and whenever it changes
+    (function () {
+        var P = _pf(); if (!P) return;
+        try { if (typeof P.onState === 'function') P.onState(_fileState); } catch (_) {}
+        try { var s = (typeof P.status === 'function') ? P.status() : null; if (s && typeof s.then === 'function') s.then(function (x) { if (x && x.ok && x.name) _fileState({ name: x.name, epoch: x.epoch }); }, function () {}); } catch (_) {}
+    })();
+
     W.__slabCanClose = function () { return !_needsGuard(); };
     // 16 Oct 2026 (v3.0): for the desktop shell's close guard: how many changes wait to be confirmed (0 = none).
     W.__slabPendingCount = function () { return _collectedCount(); };
@@ -548,8 +726,9 @@
         isDirty: isDirty, waiting: waiting, unsaved: unsaved, holdsSync: holdsSync, save: save, guard: guard,
         remoteArrived: remoteArrived, replaced: replaced, recovered: recovered, afterLocalRestore: afterLocalRestore,
         renderIndicator: renderIndicator, autosaveMeta: autosaveMeta, pendingCount: _collectedCount, EXPORTS: EXPORTS,
-        whenSaved: function () { return _saving || Promise.resolve(!(_cloudPending || _localFail)); },
-        status: function () { return { state: _state, savedAt: _savedAt, where: _where, reason: _reason, reasonCode: _reasonCode, cloudPending: _cloudPending, localFail: _localFail, waiting: waiting(), saving: !!_saving, collected: _collectedCount(), acceptedId: _acceptedId, stats: JSON.parse(JSON.stringify(_stats)) }; },
+        whenSaved: function () { return _saving || Promise.resolve(!(_cloudPending || _localFail || _fileFail)); },
+        status: function () { return { state: _state, savedAt: _savedAt, where: _where, reason: _reason, reasonCode: _reasonCode, cloudPending: _cloudPending, localFail: _localFail, waiting: waiting(), saving: !!_saving, collected: _collectedCount(), acceptedId: _acceptedId, file: { name: _fileName, epoch: _fileEpoch, fail: _fileFail ? JSON.parse(JSON.stringify(_fileFail)) : null }, stats: JSON.parse(JSON.stringify(_stats)) }; },
+        openProjectFile: openProjectFileText, _fileState: _fileState,
         _ackOpened: _ackOpened, _ackClosed: _ackClosed, _wrapAll: _wrapAll, _allowUnload: function (v) { _allowUnload = !!v; }, _paint: _paint,
         ACCEPTED_KEY: ACCEPTED_KEY, RETRY_MS: RETRY_MS
     };

@@ -40,16 +40,23 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.2';
+    var VERSION = '1.3';
     var MAJOR = 3;
 
-    function _g(n) { try { return (0, eval)(n); } catch (_) { return root[n]; } }
-    function _pages() { var p = _g('typeof ftaPages !== "undefined" ? ftaPages : null'); return Array.isArray(p) ? p : (root.ftaPages || []); }
-    function _ac() { var a = _g('typeof acFhaData !== "undefined" ? acFhaData : null'); return Array.isArray(a) ? a : []; }
-    function _systems() { var s = _g('typeof systemsData !== "undefined" ? systemsData : null'); return Array.isArray(s) ? s : []; }
-    function _rank(sev) { var R = _g('typeof SEVERITY_RANK !== "undefined" ? SEVERITY_RANK : null') || { 'Catastrophic': 5, 'Hazardous': 4, 'Major': 3, 'Minor': 2, 'Negligible': 1 }; return R[sev] || 0; }
-    function _call(name) { var f = root[name]; if (typeof f !== 'function') { try { f = (0, eval)(name); } catch (_) { f = null; } } if (typeof f !== 'function') return; try { return f.apply(root, Array.prototype.slice.call(arguments, 1)); } catch (e) { try { console.warn('[fc_auto_trees] ' + name, e); } catch (_) {} } }
+    // 26 Oct 2026 (v1.3): the project stores are top-level `let`s, not window properties, and the app's CSP forbids
+    // eval, so v1.2's eval read threw on every install and the sweep saw an empty project (Radia: no trees made, the
+    // tree selector empty). Read through SLEnv (sl_env.js, rule 5); window only for what really is on it.
+    function _g(n) {
+        try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(n); if (v !== undefined) return v; } } catch (_) {}
+        try { return root[n]; } catch (_) { return undefined; }
+    }
+    function _pages() { var p = _g('ftaPages'); return Array.isArray(p) ? p : (root.ftaPages || []); }
+    function _ac() { var a = _g('acFhaData'); return Array.isArray(a) ? a : []; }
+    function _systems() { var s = _g('systemsData'); return Array.isArray(s) ? s : []; }
+    function _rank(sev) { var R = _g('SEVERITY_RANK') || { 'Catastrophic': 5, 'Hazardous': 4, 'Major': 3, 'Minor': 2, 'Negligible': 1 }; return R[sev] || 0; }
+    function _call(name) { var f = root[name]; if (typeof f !== 'function') f = _g(name); if (typeof f !== 'function') return; try { return f.apply(root, Array.prototype.slice.call(arguments, 1)); } catch (e) { try { console.warn('[fc_auto_trees] ' + name, e); } catch (_) {} } }
     function _toast(m, k, ms) { _call('showToast', m, k || 'info', ms || 5000); }
+    // the app's one id counter: a top-level `let` every classic script shares by name (no eval needed to write it)
     function _nid() { try { return internalIdCounter++; } catch (_) { return Date.now() + Math.floor(Math.random() * 1000); } }
     function _kids(n) { return (n && (n.children || n._children)) || []; }
     function _lid(n) { return String(n.logicalId != null ? n.logicalId : n.id); }
@@ -71,7 +78,7 @@
         if (!row || _rank(row.severity) < MAJOR) return 'none';
         if (!characterized(row)) return 'unanswered';
         var d = null;
-        try { var AR = _g('typeof AutoReq !== "undefined" ? AutoReq : null'); if (AR && AR.decideAnalysisDepth) d = AR.decideAnalysisDepth(row); } catch (_) {}
+        try { var AR = _g('AutoReq'); if (AR && AR.decideAnalysisDepth) d = AR.decideAnalysisDepth(row); } catch (_) {}
         if (!d) return 'quant';
         if (d.skip) return 'none';
         if (d.mode === 'similarity') return 'similarity';
@@ -137,7 +144,7 @@
     // redraws the table. Every few seconds the rows on screen are compared with what they should show; a table that
     // disagrees is drawn again (only on screen, never while the person types or a dialog is open).
     var FHA_TABLES = [{ body: 'ac-fha-body', render: 'renderACFHA', rows: function () { return _ac(); } },
-                      { body: 'sys-fha-body', render: 'renderSysFHA', rows: function () { var id = _g('typeof activeSystemId !== "undefined" ? activeSystemId : null'); var sy = _systems().find(function (x) { return x && String(x.id) === String(id); }); return (sy && sy.fha) || []; } }];
+                      { body: 'sys-fha-body', render: 'renderSysFHA', rows: function () { var id = _g('activeSystemId'); var sy = _systems().find(function (x) { return x && String(x.id) === String(id); }); return (sy && sy.fha) || []; } }];
     function flagsOutOfStep() {
         if (typeof document === 'undefined') return [];
         var out = [];
@@ -245,7 +252,7 @@
     var _allocMemo = { gen: -1, map: {} };
     function _allocated(p, ids) {
         var dc = root.SLDataChange, gen = dc ? dc.gen() : null;
-        var mk = p.id + '|' + p.targetP + '|' + (function () { try { return ftaConfig.apportion; } catch (_) { return ''; } })() + '|' + (ids || []).join(',');
+        var mk = p.id + '|' + p.targetP + '|' + (function () { var c = _g('ftaConfig'); return (c && c.apportion) || ''; })() + '|' + (ids || []).join(',');
         if (gen != null) { if (_allocMemo.gen !== gen) { _allocMemo.gen = gen; _allocMemo.map = {}; } if (_allocMemo.map[mk] !== undefined) return _allocMemo.map[mk]; }
         var res = null;
         try {
@@ -256,7 +263,7 @@
                 var copy = JSON.parse(JSON.stringify(p.root));
                 (function free(n) { if (!n) return; if (n.externalSource && (ids || []).indexOf(String(n.externalSource.targetId)) >= 0) { n._wasLinked = n.externalSource; delete n.externalSource; delete n._externalAllocation; } _kids(n).forEach(free); })(copy);
                 var all = new Set(_pages().map(function (x) { return x && x.id; }));
-                var ap = (function () { try { return ftaConfig.apportion; } catch (_) { return 'equal'; } })();
+                var ap = (function () { var c = _g('ftaConfig'); return (c && c.apportion) || 'equal'; })();
                 fn(copy, top, ap, all);
                 res = copy;
             }
@@ -387,7 +394,44 @@
     }
     try { root.slGoverningPhases = governingPhases; } catch (_) {}
 
-    var api = { VERSION: VERSION, groups: groups, route: route, ROUTE_WORDS: ROUTE_WORDS, characterized: characterized, needsChart: needsChart, treeFor: treeFor,
+    // ---- the most conservative instance (26 Oct 2026, Waqas: "fault trees should be generated for the most
+    // conservative severity classification only ... same with CoFFEE and other analyses we just need the most
+    // conservative instances") ------------------------------------------------------------------------------------
+    // A failure condition shown in several rows (one per phase) is offered ONCE wherever someone picks or views
+    // failure conditions: its governing row (worst severity, ties: the longest exposure), labelled with how many rows
+    // it stands for. The FHA tables still show every row: that is where the phase copies are written.
+    function _scopeOfRow(row) {
+        if (_ac().indexOf(row) >= 0) return 'ac';
+        return _systems().find(function (s) { return s && (s.fha || []).indexOf(row) >= 0; }) || null;
+    }
+    // the groups of one scope ('ac', a system object or a system id) or of all ('all')
+    function _groupsOf(scope) {
+        if (scope === 'all') { var all = groups('ac'); _systems().forEach(function (s) { all = all.concat(groups(s)); }); return all; }
+        if (scope === 'ac' || scope === 'aircraft') return groups('ac');
+        var sy = (scope && typeof scope === 'object') ? scope : _systems().find(function (s) { return s && String(s.id) === String(scope); });
+        return sy ? groups(sy) : [];
+    }
+    function _fresh(scope, row) {
+        var gs = _groupsOf(scope), g = gs.find(function (x) { return x.rows.indexOf(row) >= 0; });
+        if (!g) { var s = scope === 'all' || scope === 'aircraft' ? _scopeOfRow(row) : scope; if (s) g = _groupsNow(s === 'aircraft' ? 'ac' : s).find(function (x) { return x.rows.indexOf(row) >= 0; }); }
+        return g || null;
+    }
+    // the governing rows of a scope, in the order their failure conditions first appear
+    function governingRows(scope) { return _groupsOf(scope == null ? 'all' : scope).map(function (g) { return g.gov; }); }
+    function groupOf(row) { var s = _scopeOfRow(row); return s ? _fresh(s, row) : null; }
+    function governingOf(row) { var g = groupOf(row); return g ? g.gov : row; }
+    function isGoverning(row) { var g = groupOf(row); return !g || g.gov === row; }
+    // the governing row for an FC ID in a scope (replaces "the first row with that ID")
+    function byFcId(fcId, scope) {
+        var id = String(fcId == null ? '' : fcId).trim(); if (!id) return null;
+        var g = _groupsOf(scope == null ? 'all' : scope).find(function (x) { return x.fcId === id; });
+        return g ? g.gov : null;
+    }
+    // " (most conservative of 3)" when the failure condition has several rows, else ''
+    function copiesNote(row) { var g = groupOf(row); return g && g.rows.length > 1 ? ' (most conservative of ' + g.rows.length + ')' : ''; }
+
+    var api = { VERSION: VERSION, groups: groups, route: route,
+        governingRows: governingRows, governingOf: governingOf, isGoverning: isGoverning, groupOf: groupOf, byFcId: byFcId, copiesNote: copiesNote, ROUTE_WORDS: ROUTE_WORDS, characterized: characterized, needsChart: needsChart, treeFor: treeFor,
         sweep: sweep, tick: tick, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, governingPhases: governingPhases, shapeFp: shapeFp };
     try { root.SLFcTrees = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

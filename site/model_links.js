@@ -95,6 +95,13 @@
             }
         });
     }
+    // { copy, note } for an FHA row: copy when another row of its failure condition governs (SLFcTrees, loaded late:
+    // without it every row is offered as before)
+    function fcGov(f) {
+        var FT = ROOT.SLFcTrees;
+        if (!FT || typeof FT.isGoverning !== 'function') return { copy: false, note: '' };
+        try { return { copy: !FT.isGoverning(f), note: (typeof FT.copiesNote === 'function' && FT.copiesNote(f)) || '' }; } catch (_) { return { copy: false, note: '' }; }
+    }
     function ifcId(x, i) { return x && x.id ? String(x.id) : (x && x.icdRef ? 'icd:' + x.icdRef : 'ifc:' + (x ? (x.fromSystemId + '>' + x.toSystemId + ':' + (x.medium || i)) : i)); }
 
     var KINDS = {
@@ -126,12 +133,16 @@
         zsaZone: { label: 'ZSA zone record', plural: 'ZSA zone records', list: function () {
             return S_zsa().filter(Boolean).map(function (z) { return { id: String(z.internalId), code: z.zoneId || '', name: z.desc || '', sub: 'Zonal safety analysis' }; });
         } },
+        // 26 Oct 2026 (Waqas: "we just need the most conservative instances"): a failure condition written as several
+        // FHA rows (one per flight phase) is offered ONCE, as its governing row (worst severity, ties: the longest
+        // exposure), labelled with how many rows it stands for. The other rows stay in the index as `copy` entries so a
+        // link already made to one still resolves by id, but they are never offered and never match a typed code.
         fc: { label: 'Aircraft failure condition', plural: 'Aircraft failure conditions', list: function () {
-            return S_fha().filter(Boolean).map(function (f) { return { id: String(f.internalId), code: f.fcId || '', name: f.fcDesc || '', sub: f.severity || '' }; });
+            return S_fha().filter(Boolean).map(function (f) { var g = fcGov(f); return { id: String(f.internalId), code: f.fcId || '', name: f.fcDesc || '', sub: (f.severity || '') + g.note, copy: g.copy }; });
         } },
         sysFc: { label: 'System failure condition', plural: 'System failure conditions', list: function () {
             var out = [];
-            S_sys().forEach(function (s) { arr(s && s.fha).forEach(function (f) { if (f) out.push({ id: String(f.internalId), code: f.fcId || '', name: f.fcDesc || '', sub: (s.name || s.id) + (f.severity ? ' · ' + f.severity : ''), sys: s.id }); }); });
+            S_sys().forEach(function (s) { arr(s && s.fha).forEach(function (f) { if (f) { var g = fcGov(f); out.push({ id: String(f.internalId), code: f.fcId || '', name: f.fcDesc || '', sub: (s.name || s.id) + (f.severity ? ' · ' + f.severity : '') + g.note, sys: s.id, copy: g.copy }); } }); });
             return out;
         } },
         be: { label: 'Basic event', plural: 'Basic events', list: function () {
@@ -157,7 +168,7 @@
     // "code name") for exact-match resolution of codes and typed names.
     var _idx = {}, _idxGen = {}, _forceGen = 0;
     function _gen() {
-        try { if (ROOT.SLDataChange && typeof ROOT.SLDataChange.gen === 'function') return ROOT.SLDataChange.gen() + ':' + _forceGen; } catch (_) {}
+        try { if (ROOT.SLDataChange && typeof ROOT.SLDataChange.gen === 'function') return ROOT.SLDataChange.gen() + ':' + _forceGen + (ROOT.SLFcTrees ? ':fc' : ''); } catch (_) {}   // SLFcTrees loads late: the FC lists change when it arrives
         return null;   // no generation signal: never cache (tests, headless)
     }
     function index(kind) {
@@ -170,6 +181,7 @@
         var add = function (m, k, id) { if (!k) return; (m[k] = m[k] || []); if (m[k].indexOf(id) < 0) m[k].push(id); };
         list.forEach(function (e) {
             byId[e.id] = e;
+            if (e.copy) return;   // a phase copy of a failure condition: resolvable by id, never matched by code or name
             var c = norm(e.code), n = norm(e.name);
             add(byCode, c, e.id);
             if (e.alt) add(byCode, norm(e.alt), e.id);
@@ -1010,7 +1022,8 @@
             var q = norm((ov.querySelector('[data-ml-q="' + si + '"]') || {}).value || '');
             var sel = state[s.key];
             var all = [];
-            s.kinds.forEach(function (k) { index(k.kind).list.forEach(function (e) { all.push({ kind: k.kind, e: e }); }); });
+            // a phase copy of a failure condition is shown only while it is the one selected (an older link), never offered
+            s.kinds.forEach(function (k) { index(k.kind).list.forEach(function (e) { if (!e.copy || sel.indexOf(e.id) >= 0) all.push({ kind: k.kind, e: e }); }); });
             var selected = all.filter(function (x) { return sel.indexOf(x.e.id) >= 0; });
             var rest = all.filter(function (x) { return sel.indexOf(x.e.id) < 0 && (!q || norm(x.e.code + ' ' + x.e.name + ' ' + (x.e.sub || '')).indexOf(q) >= 0); });
             var LIMIT = 200;

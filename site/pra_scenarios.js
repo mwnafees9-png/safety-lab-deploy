@@ -71,14 +71,23 @@
         });
     }
     // AC failure conditions of those sub-functions — the suggestions for a scenario.
+    // 26 Oct 2026 (Waqas: "we just need the most conservative instances"): a failure condition written as several AFHA
+    // rows (one per flight phase) is suggested ONCE, as its governing row (worst severity, ties: the longest exposure),
+    // labelled with how many rows it stands for; a linked phase copy classifies as its governing row. SLFcTrees loads
+    // late: without it every row, as before.
+    function _FT() { var F = root.SLFcTrees; return (F && typeof F.governingOf === 'function') ? F : null; }
+    function _gov(f) { var F = _FT(); if (!F || !f) return f; try { return F.governingOf(f) || f; } catch (_) { return f; } }
+    function govNote(f) { var F = _FT(); if (!F || !f) return ''; try { return F.copiesNote(f) || ''; } catch (_) { return ''; } }
     function fcsFor(subIds) {
         var want = {}; (subIds || []).forEach(function (s) { want[String(s)] = 1; });
-        return _g('acFhaData').filter(function (f) { return f && _fhaIds(f).some(function (x) { return want[x]; }); });
+        var out = [];
+        _g('acFhaData').forEach(function (f) { if (!f || !_fhaIds(f).some(function (x) { return want[x]; })) return; var g = _gov(f); if (out.indexOf(g) === -1) out.push(g); });
+        return out;
     }
     function fc(iid) { var a = _g('acFhaData'); for (var i = 0; i < a.length; i++) if (a[i] && String(a[i].internalId) === String(iid)) return a[i]; return null; }
     function classification(scn) {
         var worst = -1, name = null;
-        ((scn && scn.fcIds) || []).forEach(function (id) { var f = fc(id); var r = f ? SEV.indexOf(f.severity) : -1; if (r > worst) { worst = r; name = f.severity; } });
+        ((scn && scn.fcIds) || []).forEach(function (id) { var f = _gov(fc(id)); var r = f ? SEV.indexOf(f.severity) : -1; if (r > worst) { worst = r; name = f.severity; } });
         return name;
     }
     // Other applicable risks sharing a zone with this risk or an affected function with this scenario.
@@ -233,7 +242,7 @@
                 '<div style="font-size:11.5px;margin-top:6px;"><b>Hit together</b> (functions housed in the risk\'s zones; untick what this scenario spares)</div>' +
                 '<div>' + (pool.length ? pool.map(function (f) { return '<label style="display:inline-flex;gap:4px;margin:2px 10px 2px 0;font-size:11.5px;text-transform:none;letter-spacing:0;"><input type="checkbox" data-f="aff" value="' + _esc(f) + '"' + ((s.affected || []).indexOf(f) !== -1 ? ' checked' : '') + '> ' + _esc(_fnName(f)) + '</label>'; }).join('') : '<i style="font-size:11px;">No functions housed in the chosen zones — record the zones\' housed functions in the ZSA.</i>') + '</div>' +
                 '<div style="font-size:11.5px;margin-top:6px;"><b>Failure condition(s) this can cause</b> (suggested from the functions hit)</div>' +
-                '<div>' + (fcPool.length ? fcPool.map(function (f) { return '<label style="display:inline-flex;gap:4px;margin:2px 10px 2px 0;font-size:11.5px;text-transform:none;letter-spacing:0;"><input type="checkbox" data-f="fc" value="' + _esc(f.internalId) + '"' + ((s.fcIds || []).map(String).indexOf(String(f.internalId)) !== -1 ? ' checked' : '') + '> ' + _esc((f.fcId || '') + ' ' + (f.fcDesc || '')) + ' <i>(' + _esc(f.severity || '?') + ')</i></label>'; }).join('') : '<i style="font-size:11px;">No aircraft failure condition traces to these functions.</i>') + '</div>' +
+                '<div>' + (fcPool.length ? fcPool.map(function (f) { return '<label style="display:inline-flex;gap:4px;margin:2px 10px 2px 0;font-size:11.5px;text-transform:none;letter-spacing:0;"><input type="checkbox" data-f="fc" value="' + _esc(f.internalId) + '"' + ((s.fcIds || []).map(String).indexOf(String(f.internalId)) !== -1 ? ' checked' : '') + '> ' + _esc((f.fcId || '') + ' ' + (f.fcDesc || '')) + ' <i>(' + _esc(f.severity || '?') + ')' + _esc(govNote(f)) + '</i></label>'; }).join('') : '<i style="font-size:11px;">No aircraft failure condition traces to these functions.</i>') + '</div>' +
                 '<label style="margin-top:6px;">Aircraft effect</label><input type="text" data-f="effect" value="' + _esc(s.effect || '') + '" placeholder="What the aircraft loses when these are hit together" style="width:100%;">' +
                 '<div style="display:flex;gap:10px;margin-top:6px;"><div style="flex:0 0 260px;"><label>Acceptable?</label><select data-f="acceptable" style="width:100%;">' + ACCEPT.map(function (a) { return '<option value="' + a.v + '"' + ((s.acceptable || 'open') === a.v ? ' selected' : '') + '>' + _esc(a.label) + '</option>'; }).join('') + '</select></div>' +
                 '<div style="flex:1;"><label>Rationale</label><input type="text" data-f="rationale" value="' + _esc(s.rationale || '') + '" placeholder="Why it is (or is not) acceptable — or why no failure condition applies" style="width:100%;"></div></div>' +

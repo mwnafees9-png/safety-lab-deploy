@@ -175,6 +175,11 @@
         var hit = null;
         _arr(_g('acFhaData')).forEach(function (r) { if (!hit && r && _s(r.fcId).toUpperCase() === f) hit = r; });
         if (!hit) _sys().forEach(function (s) { _arr(s && s.fha).forEach(function (r) { if (!hit && r && _s(r.fcId).toUpperCase() === f) hit = r; }); });
+        // 26 Oct 2026 (Waqas: "we just need the most conservative instances"): an FC written as several rows (one per
+        // flight phase) answers with its governing row (SLFcTrees: worst severity, ties longest exposure), never the
+        // first row found. SLFcTrees loads late: without it, the first row as before.
+        var FT = root.SLFcTrees;
+        if (hit && FT && typeof FT.governingOf === 'function') { try { hit = FT.governingOf(hit) || hit; } catch (_) {} }
         return hit;
     }
     // a Sys Lab function's worst consequence: Safety Lab's FHA rows for the FCs Sys Lab names, else Sys Lab's criticality

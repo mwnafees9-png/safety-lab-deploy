@@ -425,7 +425,7 @@ console.log('\n[3c] cloud_sync shrink guard + history on the automatic path');
         code.indexOf('_wouldGut(snap)') < code.indexOf('return { client: client, projectId: pid, userId: uid, snapshot: snap }'));
   check('a gutting push RETURNS null instead of writing (13 Sep 2026: either guard, total or per-table)', /if \(_wouldGut\(snap\) \|\| gutTable\) \{[\s\S]*?return null;\s*\}/.test(code));
   check('the automatic path records version history — through the writer, after a landed write',
-        /W\.write\(\{ mode: 'silent'/.test(code) && /_recordSaveHistory[\s\S]{0,80}\(projectId, nextVersion, snapshot, userId\)/.test(cw) &&
+        /W\.write\(\{ mode: \(opts\.mode === 'merged' \|\| opts\.mode === 'manual'\) \? opts\.mode : 'silent'/.test(code) && /_recordSaveHistory[\s\S]{0,80}\(projectId, nextVersion, snapshot, userId\)/.test(cw) &&
         cw.indexOf('_setToken(nextVersion)') < cw.indexOf('_recordSaveHistory'));
   check('the shrink baseline is updated only after a successful push',
         /if \(r && r\.ok\) \{[\s\S]{0,120}_lastPushedItems = snapItems/.test(code));

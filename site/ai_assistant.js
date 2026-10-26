@@ -4911,10 +4911,9 @@
                 leafCount: sum.leafCount, ccfGroups: sum.ccfGroups, sharedRepeated: sum.sharedRepeated, sampleEvents: sum.leaves
             };
         }).filter(Boolean);
-        const linked = new Set();
-        pages.forEach(function (p) { if (p.linkedFhaId) linked.add(p.linkedFhaId); (p.linkedFhaIds || []).forEach(function (i) { linked.add(i); }); });
-        const fhaWithoutTree = _allFhaFCs().filter(function (f) { return !linked.has(f.internalId); })
-            .map(function (f) { return { fcId: f.fcId, fcDesc: f.fcDesc, severity: f.severity, scope: f.scopeLabel }; });
+        // 26 Oct 2026: a failure condition with several rows (one per flight phase) is one gap, its governing row
+        const fhaWithoutTree = _fhaTreeGaps(pages)
+            .map(function (f) { return { fcId: f.fcId, fcDesc: f.note ? (f.fcDesc || '') + f.note : f.fcDesc, severity: f.severity, scope: f.scopeLabel }; });
         return { certBasis: _certBasis(), trees: trees, fhaWithoutTree: fhaWithoutTree };
     }
     // ---- FTA knowledge-base retrieval (canonical method grounding) --------------
@@ -5935,14 +5934,40 @@
     // numbers. Accept builds real ftaPages nodes (internalIdCounter + scheme
     // display IDs) and links the page to its FHA failure condition.
     // =========================================================================
+    // 26 Oct 2026 (Waqas: "fault trees should be generated for the most conservative severity classification only"):
+    // a failure condition written as several FHA rows (one per flight phase) needs ONE tree, for its governing row
+    // (SLFcTrees: worst severity, ties longest exposure). Only governing rows are listed, labelled with how many rows
+    // they stand for, and a condition counts as treed when a tree is linked to ANY of its rows. SLFcTrees loads late:
+    // without it, every row without a tree of its own, as before.
+    function _fhaTreeGaps(pages) {
+        const s = snapshot();
+        const linked = new Set(), linkedS = new Set();
+        (pages || []).forEach(function (p) { if (!p) return; [].concat(p.linkedFhaId ? [p.linkedFhaId] : [], p.linkedFhaIds || []).forEach(function (i) { linked.add(i); linkedS.add(String(i).replace(/^(AC_|SYS_)/, '')); }); });
+        const all = _allFhaFCs();
+        const FT = (typeof window !== 'undefined') ? window.SLFcTrees : null;
+        if (!FT || typeof FT.groupOf !== 'function') return all.filter(function (f) { return !linked.has(f.internalId); });
+        // the real rows, in _allFhaFCs' order (aircraft, then each system)
+        const rows = [];
+        (s.acFhaData || []).forEach(function (f) { rows.push(f); });
+        (s.systemsData || []).forEach(function (sys) { (sys.fha || []).forEach(function (f) { rows.push(f); }); });
+        const out = [];
+        all.forEach(function (f, i) {
+            const r = rows[i]; let g = null;
+            try { g = r ? FT.groupOf(r) : null; } catch (_) { g = null; }
+            if (!g) { if (!linked.has(f.internalId)) out.push(f); return; }
+            if (g.gov !== r) return;
+            if (g.rows.some(function (x) { return x && linkedS.has(String(x.internalId)); })) return;
+            let note = ''; try { note = FT.copiesNote(r) || ''; } catch (_) {}
+            out.push(Object.assign({}, f, { note: note }));
+        });
+        return out;
+    }
     function _fcsNeedingTree() {
         const s = snapshot();
-        const linked = new Set();
-        (s.ftaPages || []).forEach(function (p) { if (p.linkedFhaId) linked.add(p.linkedFhaId); (p.linkedFhaIds || []).forEach(function (i) { linked.add(i); }); });
         // Covers AFHA (aircraft) AND every system's SFHA — each FC carries its scope so the
         // synthesised tree is filed aircraft- vs system-level and named correctly.
-        return _allFhaFCs().filter(function (f) { return !linked.has(f.internalId); })
-            .map(function (f) { return { fhaInternalId: f.internalId, fcId: f.fcId, fcDesc: f.fcDesc, severity: f.severity, subId: f.subId, scope: f.scope, systemId: f.systemId, systemName: f.systemName, scopeLabel: f.scopeLabel }; });
+        return _fhaTreeGaps(s.ftaPages || [])
+            .map(function (f) { return { fhaInternalId: f.internalId, fcId: f.fcId, fcDesc: f.fcDesc, severity: f.severity, subId: f.subId, scope: f.scope, systemId: f.systemId, systemName: f.systemName, scopeLabel: f.scopeLabel, note: f.note || '' }; });
     }
     function _synthSystemPrompt() {
         return [
@@ -6180,7 +6205,7 @@
                 + '<input type="checkbox" class="synth-fc" data-i="' + i + '" checked>'
                 + '<span style="font-weight:700;white-space:nowrap;">' + _esc(String(f.fcId)) + '</span>'
                 + '<span style="font-size:12px;color:var(--aifh-dim);white-space:nowrap;">' + _esc(String(f.severity || 'unclassified')) + '</span>'
-                + '<span style="font-size:13px;">' + _esc(String(f.fcDesc || '')) + '</span>'
+                + '<span style="font-size:13px;">' + _esc(String(f.fcDesc || '') + String(f.note || '')) + '</span>'
                 + '</label>';
         }).join('');
         p.innerHTML =

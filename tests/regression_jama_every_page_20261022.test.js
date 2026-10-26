@@ -205,7 +205,9 @@ function jama() {
     check('a page panel signs for that page only', /bridgeApply\(_lastDiff, by, p \? \{ scope: _scopeOf\(p\), kinds: p\.kinds \} : null\)/.test(lb));
     check('the connection form exists once, in one dialog (no second copy of the login boxes)', (lb.match(/id="lb-token"/g) || []).length === 1 && /id = 'jb-setup'/.test(lb));
     check('a system page asks which Jama folder holds that system, and one folder cannot hold two systems', /Choose the Jama folder or set that holds/.test(lb) && /already holds/.test(lb));
-    check('item type names are kept, so no panel says "type 89001"', /cfg\.typeNames = \{\}/.test(lb) && /\(cfg\.typeNames \|\| \{\}\)\[id\]/.test(lb));
+    // 26 Oct 2026 (Waqas: the Jama browser replaces the item-type chooser): no chooser writes typeNames
+    // any more; names already saved are still read for a project that chose item types before.
+    check('item type names already saved are still shown, so no panel says "type 89001"', /\(cfg\.typeNames \|\| \{\}\)\[id\]/.test(lb));
     check('until a system has its Jama folder, every aircraft panel and the full panel say its items would come in at aircraft level', /function _unassignedSystems\(cfg\)/.test(lb) && /comes in here, at aircraft level/.test(lb) && /if \(loose\.length\) warnings\.push\(_looseText\(loose\)\)/.test(lb) && /const loose = p\.scope === 'ac' \? _unassignedSystems\(cfg\) : \[\]/.test(lb));
     // 23 Oct 2026: one POST is allowed, the Jama sign-in with API credentials (token exchange at
     // <base>/rest/oauth/token, grant_type=client_credentials). It changes nothing in Jama.

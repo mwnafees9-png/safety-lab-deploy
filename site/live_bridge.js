@@ -69,6 +69,22 @@
 //     Hazard assessment, Assumptions, Requirements): that page's changes, Check Jama now, and Sign
 //     and apply for that page. The full panel on Requirements exchange shows and signs everything.
 //     The connection form lives in one dialog, opened from any of them.
+//
+// v4.0, 26 Oct 2026 (Waqas: "once they click everything it should give them the JAMA browser and they
+// select what they want rather than having them select specific item types").
+//   * THE JAMA BROWSER replaces the item-type chooser. After the connection is saved it opens: pick
+//     the project, browse its tree the way Jama shows it (folders, sets, items; children read only
+//     when a row is opened, 50 at a time), tick whole folders or sets or single items, say what each
+//     one is in Safety Lab (functions, requirements, assumptions, failure conditions) and press Bring
+//     in. A ticked folder means everything under it, at this check and every later one, because each
+//     check reads the folder's place in Jama fresh and takes everything below it.
+//   * WHAT IS TICKED FEEDS THE SAME CHECK, REVIEW AND SIGNED APPLY. Each chosen item is given the
+//     kind of the nearest ticked thing above it; folders and sets are still looked through, never
+//     filed. Identity is still Jama's item id, so rows brought in by item type match unchanged.
+//   * ITEM TYPES ARE OPTIONAL. Their names label the tree when Jama lets us read them; when it does
+//     not (seen at a customer: HTTP 403 on /itemtypes) the browser, the check and the system folder
+//     choice all still work. A project that chose item types before keeps reading them until
+//     someone chooses in the browser.
 // ============================================================================
 (function () {
     'use strict';
@@ -122,7 +138,19 @@
         { k: 'asm', cfg: 'asmTypes', label: 'Assumptions',        cls: 'lb-asm-type' },
         { k: 'fc',  cfg: 'fcTypes',  label: 'Failure conditions', cls: 'lb-fc-type' },
     ];
+    // 26 Oct 2026: what was ticked in the Jama browser. Each pick is { id, key, name, seq, kind, container }.
+    // A chosen item is marked with its kind's stand-in type (below), so the review, the function tree
+    // and the apply, which sort by type, work unchanged; its real Jama type is kept as jamaType.
+    const KIND_V = { fn: -101, req: -102, asm: -103, fc: -104 };
+    function _picks(cfg) {
+        return (Array.isArray(cfg && cfg.picks) ? cfg.picks : []).filter(p => p && p.id != null && isFinite(Number(p.id)) && KIND_V[p.kind] != null);
+    }
     function _types(cfg) {
+        const pk = _picks(cfg);
+        if (pk.length) {
+            const has = k => pk.some(p => p.kind === k) ? [KIND_V[k]] : [];
+            return { fn: has('fn'), req: has('req'), asm: has('asm'), fc: has('fc') };
+        }
         const n = a => (Array.isArray(a) ? a : []).map(Number).filter(x => isFinite(x));
         return { fn: n(cfg && cfg.fnTypes), req: n(cfg && cfg.reqTypes), asm: n(cfg && cfg.asmTypes), fc: n(cfg && cfg.fcTypes) };
     }
@@ -306,9 +334,11 @@
     async function bridgeFetchItems() {
         const cfg = bridgeConfig();
         if (!cfg.baseUrl || !cfg.projectId) throw new Error('Configure the connector first (Jama address and project id).');
+        const picks = _picks(cfg);
+        if (picks.length) return _fetchPicked(cfg, picks);
         const ty = _types(cfg);
         const all = _allTypes(ty);
-        if (!all.length) throw new Error('Choose which Jama item types are functions, requirements, assumptions or failure conditions first (Connection and item types). Nothing is read until you do.');
+        if (!all.length) throw new Error('Choose what comes in from Jama first: open Choose what comes in, tick the folders or items you want and say what each one is. Nothing is read until you do.');
         const T = _T(); if (!T) throw new Error('The Jama tree module did not load. Reload the page.');
         const base = String(cfg.baseUrl).replace(/\/+$/, '');
         const typeQ = all.map(t => '&itemType=' + encodeURIComponent(t)).join('');
@@ -330,6 +360,52 @@
         return out;
     }
 
+    // 26 Oct 2026: everything under what was ticked in the Jama browser. Each pick is read fresh first
+    // (it may have moved in Jama, and its place decides what is under it), then the project's items,
+    // all pages, and each item takes the kind of the deepest pick that holds it. Folders and sets are
+    // never filed; they go into the look-up so the function tree can look through them without
+    // asking Jama again. Nothing here needs the item types.
+    function _isContainerTypeId(id) { return !!(_itemTypes && _itemTypes.some(t => t.id === id && _isContainerType(t))); }
+    async function _fetchPicked(cfg, picks) {
+        const T = _T(); if (!T) throw new Error('The Jama tree module did not load. Reload the page.');
+        const base = String(cfg.baseUrl).replace(/\/+$/, '');
+        const warnings = [], live = [];
+        for (const p of picks) {
+            const gone = 'The Jama item ' + (p.key || p.id) + (p.name ? ', ' + p.name + ',' : '') + ' chosen to come in is no longer in this Jama project, so nothing is read from it. Choose again in Choose what comes in if it moved.';
+            let raw = null;
+            try { raw = await _get(base + '/rest/latest/items/' + encodeURIComponent(p.id)); }
+            catch (e) { if (/\b404\b/.test(String((e && e.message) || e))) { warnings.push(gone); continue; } throw e; }
+            const n = T.normalizeItem(raw && raw.data ? raw.data : raw);
+            if (!n) { warnings.push(gone); continue; }
+            live.push({ kind: p.kind, id: n.id, seq: n.seq, depth: n.seq ? n.seq.split('.').length : 999 });
+        }
+        live.sort((a, b) => b.depth - a.depth);                 // the deepest pick decides
+        const out = [], context = new Map();
+        let startAt = 0, total = null, truncated = false;
+        if (live.length) {
+            for (let page = 0; page < MAX_PAGES; page++) {
+                const data = await _get(base + '/rest/latest/abstractitems?project=' + encodeURIComponent(cfg.projectId) + '&maxResults=' + PAGE + '&startAt=' + startAt,
+                    ms => _setProgress('Waiting ' + Math.round(ms / 1000) + ' s for the relay limit, then carrying on (' + out.length + ' chosen so far).'));
+                const items = (data && data.data) || [];
+                items.forEach(raw => {
+                    const n = T.normalizeItem(raw); if (!n) return;
+                    const container = (raw && raw.childItemType != null) || _isContainerTypeId(n.type);
+                    const hit = container ? null : live.find(l => l.id === n.id || (l.seq && n.seq && n.seq.indexOf(l.seq + '.') === 0));
+                    if (hit) { n.jamaType = n.type; n.type = KIND_V[hit.kind]; out.push(n); }
+                    else context.set(n.id, n);
+                });
+                const pi = data && data.meta && data.meta.pageInfo;
+                total = pi && pi.totalResults != null ? pi.totalResults : total;
+                _setProgress('Reading Jama: ' + (startAt + items.length).toLocaleString() + (total ? ' of ' + Number(total).toLocaleString() : '') + ' items, ' + out.length.toLocaleString() + ' chosen');
+                if (!pi || startAt + items.length >= (pi.totalResults || 0) || !items.length) break;
+                startAt += items.length;
+                if (page === MAX_PAGES - 1) truncated = true;
+            }
+        }
+        out._truncated = truncated; out._total = total; out._context = context; out._warnings = warnings;
+        return out;
+    }
+
 
     // 22 Oct 2026: the fields of one Jama item type (for the failure-condition field choices)
     async function bridgeFetchTypeFields(typeId) {
@@ -346,15 +422,19 @@
         const cfg = bridgeConfig();
         if (!cfg.baseUrl || !cfg.projectId) throw new Error('Connect Jama first (address and project).');
         const T = _T(); if (!T) throw new Error('The Jama tree module did not load. Reload the page.');
-        const types = (_itemTypes && _itemTypes.length ? _itemTypes : (_itemTypes = await bridgeFetchItemTypes())).filter(_isContainerType);
-        if (!types.length) throw new Error('This Jama project has no Folder or Set item type to choose from.');
+        // 26 Oct 2026: when Jama will not list the item types (seen at a customer: HTTP 403 on /itemtypes),
+        // folders and sets are found by their shape instead: they are the items that carry a child item type.
+        let types = null;
+        try { types = (_itemTypes && _itemTypes.length ? _itemTypes : (_itemTypes = await bridgeFetchItemTypes())).filter(_isContainerType); }
+        catch (_) { types = null; }
+        if (types && !types.length) throw new Error('This Jama project has no Folder or Set item type to choose from.');
         const base = String(cfg.baseUrl).replace(/\/+$/, '');
-        const typeQ = types.map(t => '&itemType=' + encodeURIComponent(t.id)).join('');
+        const typeQ = types ? types.map(t => '&itemType=' + encodeURIComponent(t.id)).join('') : '';
         const out = [];
         for (let page = 0, startAt = 0; page < MAX_PAGES; page++) {
             const data = await _get(base + '/rest/latest/abstractitems?project=' + encodeURIComponent(cfg.projectId) + typeQ + '&maxResults=' + PAGE + '&startAt=' + startAt);
             const items = (data && data.data) || [];
-            items.forEach(it => { const n = T.normalizeItem(it); if (n) out.push({ id: n.id, key: n.key, name: n.name, seq: n.seq }); });
+            items.forEach(it => { if (!types && !(it && it.childItemType != null)) return; const n = T.normalizeItem(it); if (n) out.push({ id: n.id, key: n.key, name: n.name, seq: n.seq }); });
             const pi = data && data.meta && data.meta.pageInfo;
             if (!pi || startAt + items.length >= (pi.totalResults || 0) || !items.length) break;
             startAt += items.length;
@@ -422,6 +502,10 @@
         const ty = _types(cfg);
         const warnings = [];
         const cache = new Map();
+        // 26 Oct 2026: what the Jama browser read around the chosen items (folders, sets, everything not
+        // chosen) is the look-up for the function tree, so looking through folders asks Jama nothing more
+        if (items && items._context instanceof Map) items._context.forEach((n, id) => cache.set(id, n));
+        if (items && Array.isArray(items._warnings)) items._warnings.forEach(w => warnings.push(w));
         // each system's folder, read fresh (it may have moved in Jama)
         const containers = [];
         const sysCfg = (cfg && cfg.systems) || {};
@@ -739,7 +823,7 @@
     function _armPoll() {
         if (_timer) { clearInterval(_timer); _timer = null; }
         const cfg = bridgeConfig(), ty = _types(cfg);
-        if (cfg.auto && cfg.baseUrl && cfg.projectId && (ty.fn.length || ty.req.length) && _hasCredential()) {
+        if (cfg.auto && cfg.baseUrl && cfg.projectId && _allTypes(ty).length && _hasCredential()) {
             _timer = setInterval(() => { bridgeCheck(true).catch(() => {}); }, 5 * 60 * 1000);
         }
     }
@@ -821,8 +905,10 @@
         if (!cfg.baseUrl) return '<span style="color:var(--color-warning); font-weight:600;">Not connected.</span>';
         const ty = _types(cfg);
         const kinds = KINDS.filter(x => ty[x.k].length).map(x => x.label.toLowerCase());
+        const np = _picks(cfg).length;
         return 'Connected to <b>' + _esc(_baseHost(cfg.baseUrl)) + '</b>, project ' + _esc(cfg.projectId || '?') + '. ' +
-            (kinds.length ? 'Reading ' + _esc(kinds.join(', ')) + '.' : '<span style="color:var(--color-warning); font-weight:600;">Item types not chosen yet, so nothing is read.</span>') +
+            (kinds.length ? 'Reading ' + _esc(kinds.join(', ')) + (np ? ' from the ' + np + ' folder' + (np === 1 ? '' : 's') + ' and item' + (np === 1 ? '' : 's') + ' chosen in Jama' : '') + '.'
+                          : '<span style="color:var(--color-warning); font-weight:600;">Nothing chosen to come in yet, so nothing is read.</span>') +
             (_hasCredential() ? '' : ' <span style="color:var(--color-warning); font-weight:600;">No login saved on this computer yet.</span>');
     }
     function _checkedLine(d, n) {
@@ -848,7 +934,7 @@
                 ' Never in the project file.</div>' +
             '<div style="font-size:12px; margin-bottom:8px;">' + _connLine(cfg) + '</div>' +
             '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">' +
-                _btn('Connection and item types…', 'bridgeSetupUi()') + _btn('Check Jama now', 'bridgeCheckUi()', true) + '</div>' +
+                _btn('Connection…', 'bridgeSetupUi()') + _btn('Choose what comes in…', 'bridgeBrowseUi()') + _btn('Check Jama now', 'bridgeCheckUi()', true) + '</div>' +
             '<div id="lb-progress" class="jb-progress" style="font-size:11px; color:var(--color-text-secondary); margin-bottom:6px;">' + _esc(_progress) + '</div>';
         if (_lastDiff) {
             const d = _lastDiff;
@@ -890,8 +976,8 @@
         }
         if (!kindsOn.length) {
             return '<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">' + line +
-                '<span style="font-size:12px; color:var(--color-text-secondary);">No Jama item type is chosen as ' + _esc(KIND_TITLE[p.kinds[0]].toLowerCase()) + ', so this page reads nothing from Jama.</span>' +
-                _btn('Choose item types…', 'bridgeSetupUi(\'types\')') + '</div>';
+                '<span style="font-size:12px; color:var(--color-text-secondary);">Nothing in Jama is chosen to come in as ' + _esc(KIND_TITLE[p.kinds[0]].toLowerCase()) + ', so this page reads nothing from Jama.</span>' +
+                _btn('Choose what comes in…', 'bridgeBrowseUi()') + '</div>';
         }
         // a system page: which Jama folder or set holds this system
         let sysLine = '';
@@ -989,7 +1075,7 @@
                 ({ desktop: 'its keychain', vault: 'your account\'s server-side vault', session: 'this tab only' }[_door()] || 'this computer') + '), never in the project file.</div>' +
             '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">' +
             '<input id="lb-url" type="text" placeholder="https://yourco.jamacloud.com" value="' + _esc(cfg.baseUrl || '') + '" style="' + fieldCss + ' width:230px;">' +
-            '<input id="lb-pid" type="text" placeholder="project id" value="' + _esc(cfg.projectId || '') + '" style="' + fieldCss + ' width:90px;">' +
+            '<input id="lb-pid" type="text" placeholder="project id" title="Jama project id. You can also leave it and pick the project after saving." value="' + _esc(cfg.projectId || '') + '" style="' + fieldCss + ' width:90px;">' +
             '<select id="lb-auth" onchange="bridgeAuthUi()" title="How this connection signs in to Jama" style="' + fieldCss + '">' +
                 '<option value="basic"' + (auth === 'basic' ? ' selected' : '') + '>Jama username and password</option>' +
                 '<option value="oauth"' + (auth === 'oauth' ? ' selected' : '') + '>Jama API credentials (single sign-on)</option></select>' +
@@ -998,17 +1084,14 @@
             '<label style="display:inline-flex; align-items:center; gap:4px; font-size:11px;"><input id="lb-auto" type="checkbox"' + (cfg.auto ? ' checked' : '') + '> watch every 5 min (this computer)</label>' +
             _btn('Save', 'bridgeSaveUi()', true) + '</div>' +
             '<div id="lb-auth-help" style="font-size:11px; color:var(--color-text-secondary); margin:-4px 0 10px;">' + _authHelp(auth) + '</div>';
-        // item types
-        html += '<div style="font-size:12px; margin-bottom:6px;"><b>Item types.</b> ' +
-            KINDS.map(x => x.label + ': ' + (ty[x.k].length ? _esc(ty[x.k].map(nameOf).join(', ')) : 'none')).join('. ') + '. ' +
-            _btn(_itemTypes ? 'Refresh item types' : 'Choose item types', 'bridgeTypesUi()') + '</div>';
-        if (_itemTypes) {
-            html += '<div style="max-height:260px; overflow:auto; border:1px solid var(--color-border-hair); padding:6px 10px; margin-bottom:8px;"><table class="data-table" style="width:100%;"><thead><tr><th style="font-size:11px;">Jama item type</th>' +
-                KINDS.map(x => '<th style="font-size:11px;">' + x.label + '</th>').join('') + '</tr></thead><tbody>' +
-                _itemTypes.map(t => '<tr><td style="font-size:11.5px;">' + _esc(t.name) + (t.key ? ' <span class="u-mono" style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(t.key) + '</span>' : '') + '</td>' +
-                    KINDS.map(x => '<td><input type="checkbox" class="' + x.cls + '" value="' + t.id + '"' + (ty[x.k].includes(t.id) ? ' checked' : '') + '></td>').join('') + '</tr>').join('') +
-                '</tbody></table><div style="margin-top:6px;">' + _btn('Save item types', 'bridgeTypesSaveUi()', true) + ' <span style="font-size:11px; color:var(--color-text-tertiary);">Folders and sets do not need ticking: the bridge looks through them to find which function sits under which, and each system workspace picks its own folder.</span></div></div>';
-        }
+        // 26 Oct 2026: what comes in is chosen in the Jama browser (folders, sets, single items), not by item type.
+        // A project that chose item types before keeps reading them until someone chooses in the browser.
+        const picks = _picks(cfg);
+        html += '<div class="lb-what" style="font-size:12px; margin-bottom:6px;"><b>What comes in.</b> ' +
+            (picks.length ? picks.length + ' chosen in Jama: ' + _esc(picks.slice(0, 6).map(p => (p.key || p.id) + (p.name ? ' ' + p.name : '') + ' as ' + KIND_TITLE[p.kind].toLowerCase()).join('; ')) + (picks.length > 6 ? '; and ' + (picks.length - 6) + ' more' : '') + '. '
+             : _allTypes(ty).length ? 'Chosen earlier by Jama item type: ' + KINDS.map(x => x.label + ': ' + (ty[x.k].length ? _esc(ty[x.k].map(nameOf).join(', ')) : 'none')).join('. ') + '. Choose folders and items in Jama instead to replace this. '
+             : 'Nothing chosen yet, so nothing is read. ') +
+            _btn('Choose what comes in…', 'bridgeBrowseUi()', !picks.length) + '</div>';
         // failure condition fields
         if (ty.fc.length) {
             const f = (cfg.fields && cfg.fields.fc) || {};
@@ -1029,10 +1112,10 @@
         m.style.display = 'flex';
     }
     window.bridgeSetupUi = function (focus) {
+        if (focus === 'types') return window.bridgeBrowseUi();     // the item-type chooser became the Jama browser
         _authPick = null;
         _renderSetup();
         if (_isDesktop()) _refreshDeskMeta().then(_showSavedLogin).catch(e => { try { if (window.SLErrorWatch) window.SLErrorWatch.report(e, "live_bridge: saved login"); } catch (_) {} });
-        if (focus === 'types' && !_itemTypes) { try { window.bridgeTypesUi(); } catch (_) {} }
     };
     window.bridgeSetupClose = function () { const m = document.getElementById('jb-setup'); if (m) m.style.display = 'none'; };
     window.bridgeStripToggle = function (key) { _open[key] = !_open[key]; _renderStrips(); };
@@ -1077,6 +1160,7 @@
             _armPoll();
             try { showToast('Connector saved. The credential is in this computer\'s keychain.', 'success', 3200); } catch (_) {}
             _render();
+            _openBrowserAfterSave();
             return;
         }
 
@@ -1108,29 +1192,28 @@
                 'success', 4200);
         } catch (_) {}
         _render();
+        _openBrowserAfterSave();
     };
-    window.bridgeTypesUi = function () {
-        bridgeFetchItemTypes().then(list => { _itemTypes = list; _renderSetup(); })
-            .catch(e => { try { showToast('Bridge: ' + e.message, 'error', 4200); } catch (_) {} });
-    };
-    window.bridgeTypesSaveUi = function () {
-        const root = document.getElementById('jb-setup') || document;
-        const pick = cls => Array.prototype.map.call(root.querySelectorAll('.' + cls + ':checked'), el => Number(el.value));
-        const chosen = {}; KINDS.forEach(x => { chosen[x.k] = pick(x.cls); });
-        const all = [].concat(...KINDS.map(x => chosen[x.k]));
-        const twice = all.filter((v, i) => all.indexOf(v) !== i);
-        if (twice.length) { try { showToast('A Jama item type can be one kind of thing only (functions, requirements, assumptions or failure conditions). Untick the extra one.', 'error', 5200); } catch (_) {} return; }
-        const cfg = bridgeConfig();
-        KINDS.forEach(x => { cfg[x.cfg] = chosen[x.k]; });
-        // keep the names, so every panel says "Function", not "type 89001"
-        cfg.typeNames = {}; (_itemTypes || []).forEach(t => { if (all.indexOf(t.id) >= 0) cfg.typeNames[t.id] = t.name; });
-        bridgeConfigSave(cfg); _itemTypes = null; _typeFields = null; _lastDiff = null; _stageIn = null; _armPoll(); _renderAll();
-        try { showToast('Item types saved. Check Jama now to see what comes in.', 'success', 3200); } catch (_) {}
-    };
+    // 26 Oct 2026 (Waqas: "once they click everything it should give them the JAMA browser"): a saved
+    // connection goes straight on to choosing what comes in. The item-type chooser that was here is gone.
+    function _openBrowserAfterSave() {
+        try { window.bridgeSetupClose(); } catch (_) {}
+        try { const p = window.bridgeBrowseUi(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+    }
     window.bridgeFieldsUi = function () {
-        const ty = _types(bridgeConfig());
+        const cfg = bridgeConfig(), ty = _types(cfg);
         if (!ty.fc.length) return;
-        Promise.all(ty.fc.map(id => bridgeFetchTypeFields(id))).then(lists => {
+        // chosen in the Jama browser: the failure conditions' own item types, as seen at the last check;
+        // and if Jama will not describe those types, the field names the items themselves carry
+        let typeIds = ty.fc, fromItems = [];
+        if (_picks(cfg).length) {
+            const its = ((_stageIn && _stageIn.items) || []).filter(n => n && n.type === KIND_V.fc);
+            if (!its.length) { try { showToast('Check Jama once first, so Safety Lab has seen the failure conditions and their fields.', 'info', 4200); } catch (_) {} return; }
+            typeIds = Array.from(new Set(its.map(n => n.jamaType).filter(x => x != null)));
+            const seen = new Set();
+            its.forEach(n => Object.keys(n.fields || {}).forEach(k => { if (!seen.has(k)) { seen.add(k); fromItems.push({ name: k, label: k, type: '', pickList: null }); } }));
+        }
+        Promise.all(typeIds.map(id => bridgeFetchTypeFields(id))).catch(e => { if (fromItems.length) return [fromItems]; throw e; }).then(lists => {
             const seen = new Set(); _typeFields = [];
             lists.forEach(l => l.forEach(f => { if (!seen.has(f.name)) { seen.add(f.name); _typeFields.push(f); } }));
             _typeFields.sort((a, b) => a.label.localeCompare(b.label));
@@ -1196,6 +1279,240 @@
         _renderAll();
     };
 
+    // ------------------------------------------------------- the Jama browser
+    // 26 Oct 2026 (Waqas: "once they click everything it should give them the JAMA browser and they select
+    // what they want"). Standard Jama REST only: /projects, /items?project=&rootOnly=true and
+    // /items/{id}/children, 50 at a time, children read only when a row is opened. Item types label
+    // the rows when Jama lets us read them; nothing here depends on them.
+    let _br = null;
+    const KIND_OPTS = [['', 'Choose what this is'], ['fn', 'Functions'], ['req', 'Requirements'], ['asm', 'Assumptions'], ['fc', 'Failure conditions']];
+    function _brNew(cfg) {
+        return { projectId: String(cfg.projectId || ''), projects: null, projErr: '', types: null, typesErr: '',
+                 nodes: new Map(), roots: null, rootTotal: 0, rootErr: '', rootLoading: false, msg: '',
+                 picks: new Map(_picks(cfg).map(p => [Number(p.id), Object.assign({}, p, { id: Number(p.id) })])) };
+    }
+    function _brBase() { return String(bridgeConfig().baseUrl || '').replace(/\/+$/, ''); }
+    async function _brPage(url, startAt) {
+        const d = await _get(url + (url.indexOf('?') >= 0 ? '&' : '?') + 'maxResults=' + PAGE + '&startAt=' + startAt);
+        const pi = d && d.meta && d.meta.pageInfo;
+        return { list: (d && d.data) || [], total: pi && pi.totalResults != null ? Number(pi.totalResults) : NaN };
+    }
+    async function bridgeFetchProjects() {
+        const base = _brBase(); if (!base) throw new Error('Enter the Jama address first.');
+        const out = [];
+        for (let page = 0, startAt = 0; page < 20; page++) {
+            const r = await _brPage(base + '/rest/latest/projects', startAt);
+            r.list.forEach(p => { if (p && p.id != null) out.push({ id: String(p.id), key: String(p.projectKey || ''), name: String((p.fields && p.fields.name) || p.name || ('Project ' + p.id)) }); });
+            if (!r.list.length || !isFinite(r.total) || startAt + r.list.length >= r.total) break;
+            startAt += r.list.length;
+        }
+        return out;
+    }
+    function _brNode(b, raw, parentId) {
+        const T = _T(); const n = T ? T.normalizeItem(raw) : null; if (!n) return null;
+        const x = { id: n.id, key: n.key, name: n.name || n.key, type: n.type, seq: n.seq, parent: parentId, container: !!(raw && raw.childItemType != null),
+                    kids: null, kidsTotal: 0, open: false, loading: false, err: '' };
+        b.nodes.set(x.id, x);
+        return x;
+    }
+    async function _brLoadRoots(more) {
+        const b = _br; if (!b || !b.projectId) return;
+        const start = more && b.roots ? b.roots.length : 0;
+        if (!more) b.roots = null;
+        b.rootLoading = true; b.rootErr = ''; _brRender();
+        try {
+            const r = await _brPage(_brBase() + '/rest/latest/items?project=' + encodeURIComponent(b.projectId) + '&rootOnly=true', start);
+            if (_br !== b) return;
+            const ids = r.list.map(it => _brNode(b, it, null)).filter(Boolean).map(x => x.id);
+            b.roots = (more && b.roots ? b.roots : []).concat(ids);
+            b.rootTotal = isFinite(r.total) ? r.total : b.roots.length;
+        } catch (e) { b.rootErr = String((e && e.message) || e); }
+        b.rootLoading = false; _brRender();
+    }
+    async function _brLoadKids(x, more) {
+        const b = _br; if (!b) return;
+        const start = more && x.kids ? x.kids.length : 0;
+        x.loading = true; x.err = ''; _brRender();
+        try {
+            const r = await _brPage(_brBase() + '/rest/latest/items/' + encodeURIComponent(x.id) + '/children', start);
+            if (_br !== b) return;
+            const ids = r.list.map(it => _brNode(b, it, x.id)).filter(Boolean).map(k => k.id);
+            x.kids = (more && x.kids ? x.kids : []).concat(ids);
+            x.kidsTotal = isFinite(r.total) ? r.total : x.kids.length;
+        } catch (e) { x.err = String((e && e.message) || e); }
+        x.loading = false; _brRender();
+    }
+    // a first guess at what a ticked thing is, from its Jama type name, else its own name; always shown, always changeable
+    function _guessKind(b, x) {
+        const t = (b.types && x.type != null && b.types.get(x.type)) || '';
+        for (const s of [t, x.name || '']) {
+            if (/failure\s*condition|hazard/i.test(s)) return 'fc';
+            if (/assumption/i.test(s)) return 'asm';
+            if (/requirement/i.test(s)) return 'req';
+            if (/function/i.test(s)) return 'fn';
+        }
+        return '';
+    }
+    function _coveredBy(b, x) {
+        let p = x.parent, g = 0;
+        while (p != null && g++ < 200) { if (b.picks.has(p)) return b.picks.get(p); const n = b.nodes.get(p); p = n ? n.parent : null; }
+        return null;
+    }
+    function _brRows(b, ids, depth) {
+        return ids.map(id => {
+            const x = b.nodes.get(id); if (!x) return '';
+            const cov = _coveredBy(b, x), picked = b.picks.has(x.id);
+            const tn = (b.types && x.type != null && b.types.get(x.type)) || (x.container ? 'Folder or set' : '');
+            let r = '<div class="jb-br-row" data-id="' + x.id + '" style="display:flex; gap:6px; align-items:center; font-size:12px; padding:2px 0 2px ' + (depth * 18) + 'px;">' +
+                '<button type="button" class="jb-br-exp" aria-expanded="' + (x.open ? 'true' : 'false') + '" aria-label="' + (x.open ? 'Close ' : 'Open ') + _esc(x.key) + '" onclick="bridgeBrowseToggle(' + x.id + ')" style="border:0; background:none; color:var(--color-text-secondary); cursor:pointer; width:16px; padding:0;">' + (x.open ? '&#9662;' : '&#9656;') + '</button>' +
+                '<input type="checkbox" class="jb-br-pick" value="' + x.id + '"' + (picked ? ' checked' : '') + (cov ? ' disabled title="Comes in with ' + _esc(cov.key || cov.id) + '"' : '') + ' onchange="bridgeBrowsePick(' + x.id + ', this.checked)" aria-label="Bring in ' + _esc(x.key) + '">' +
+                '<span class="u-mono" style="font-size:10.5px; color:var(--color-text-tertiary);">' + _esc(x.key) + '</span> <span>' + _esc(x.name) + '</span>' +
+                (tn ? ' <span class="jb-br-type" style="font-size:10.5px; color:var(--color-text-tertiary);">' + _esc(tn) + '</span>' : '') +
+                (cov ? ' <span style="font-size:10.5px; color:var(--color-text-secondary);">comes in with ' + _esc(cov.key || cov.id) + '</span>' : '') + '</div>';
+            if (x.open) {
+                const pad = 'font-size:11px; color:var(--color-text-secondary); padding-left:' + ((depth + 1) * 18 + 22) + 'px;';
+                if (x.kids) r += _brRows(b, x.kids, depth + 1);
+                if (x.loading) r += '<div style="' + pad + '">Reading...</div>';
+                else if (x.err) r += '<div class="jb-br-err" style="' + pad + ' color:var(--color-danger);">' + _esc(x.err) + '</div>';
+                else if (x.kids && !x.kids.length) r += '<div style="' + pad + '">Nothing under it.</div>';
+                else if (x.kids && x.kids.length < x.kidsTotal) r += '<div style="' + pad + '">' + _btn('Show more (' + x.kids.length + ' of ' + x.kidsTotal + ')', 'bridgeBrowseMore(' + x.id + ')') + '</div>';
+            }
+            return r;
+        }).join('');
+    }
+    function _brHtml(b) {
+        const fieldCss = 'font-size:12px; padding:4px 8px; border:1px solid var(--color-border-strong); background:var(--color-surface-1); color:var(--color-text-primary);';
+        let h = '<div style="background:var(--color-surface-1); color:var(--color-text-primary); border:1px solid var(--color-border-strong); max-width:900px; width:100%; padding:16px 18px;">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;"><b style="font-size:14px;">Choose what comes in from Jama</b>' + _btn('Close', 'bridgeBrowseClose()') + '</div>' +
+            '<div style="font-size:11.5px; color:var(--color-text-secondary); margin-bottom:10px;">Browse the project the way Jama shows it. Tick a folder or set to bring in everything under it, now and at every later check, or tick single items. Say what each one is in Safety Lab, then press Bring in. Nothing changes in your project until someone signs the review, and nothing is ever written to Jama.</div>';
+        // the project
+        h += '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px; margin-bottom:8px;"><b>Project</b> ';
+        if (b.projects && b.projects.length) {
+            const known = b.projects.some(p => p.id === b.projectId);
+            h += '<select id="jb-br-proj" onchange="bridgeBrowseProject(this.value)" style="' + fieldCss + ' max-width:420px;">' +
+                (known ? '' : '<option value=""' + (b.projectId ? '' : ' selected') + '>Choose a project</option>') +
+                b.projects.map(p => '<option value="' + _esc(p.id) + '"' + (p.id === b.projectId ? ' selected' : '') + '>' + _esc(p.name + (p.key ? ' (' + p.key + ')' : '') + ', id ' + p.id) + '</option>').join('') + '</select>';
+            if (b.projectId && !known) h += '<span class="jb-br-note" style="color:var(--color-warning);">Project ' + _esc(b.projectId) + ' from the connection is not among the projects this login can see in Jama.</span>';
+        } else if (b.projErr) {
+            h += '<span class="jb-br-err" style="color:var(--color-danger);">The project list could not be read. ' + _esc(b.projErr) + '</span>' +
+                (b.projectId ? ' <span>Showing project ' + _esc(b.projectId) + ' from the connection.</span>' : '');
+        } else if (b.projects) {
+            h += '<span>This login sees no projects in Jama.</span>';
+        } else {
+            h += '<span style="color:var(--color-text-secondary);">Reading the projects...</span>';
+        }
+        h += '</div>';
+        if (b.typesErr) h += '<div class="jb-br-note" style="font-size:11px; color:var(--color-text-secondary); margin-bottom:6px;">Jama did not list its item types, so rows show without their type names. Everything else works. (' + _esc(b.typesErr) + ')</div>';
+        // the tree
+        h += '<div class="jb-br-tree" style="max-height:340px; overflow:auto; border:1px solid var(--color-border-hair); padding:6px 10px; margin-bottom:8px;">';
+        if (!b.projectId) h += '<div style="font-size:12px; color:var(--color-text-secondary);">Choose a project to see its folders and items.</div>';
+        else if (b.rootErr) h += '<div class="jb-br-err" style="font-size:12px; color:var(--color-danger);">' + _esc(b.rootErr) + '</div>';
+        else if (!b.roots) h += '<div style="font-size:12px; color:var(--color-text-secondary);">Reading the project...</div>';
+        else if (!b.roots.length) h += '<div style="font-size:12px; color:var(--color-text-secondary);">This project has nothing in it that this login can see.</div>';
+        else {
+            h += _brRows(b, b.roots, 0);
+            if (b.roots.length < b.rootTotal) h += '<div style="padding:4px 0;">' + (b.rootLoading ? '<span style="font-size:11px;">Reading...</span>' : _btn('Show more (' + b.roots.length + ' of ' + b.rootTotal + ')', 'bridgeBrowseMore()')) + '</div>';
+        }
+        h += '</div>';
+        // what comes in
+        const picks = Array.from(b.picks.values());
+        h += '<div style="font-size:12px; font-weight:700; margin:8px 0 4px;">What comes in (' + picks.length + ')</div>';
+        if (!picks.length) h += '<div style="font-size:11.5px; color:var(--color-text-secondary);">Nothing ticked yet.</div>';
+        else h += '<table class="data-table jb-br-chosen" style="width:100%;"><tbody>' + picks.map(p =>
+            '<tr data-id="' + p.id + '"><td style="font-size:11.5px;"><span class="u-mono" style="font-size:10.5px;">' + _esc(p.key || p.id) + '</span> ' + _esc(p.name || '') + '</td>' +
+            '<td style="font-size:11px; color:var(--color-text-secondary);">' + (p.container ? 'everything in it' : 'this item and anything under it') + '</td>' +
+            '<td><select class="jb-br-kind" aria-label="What ' + _esc(p.key || p.id) + ' is in Safety Lab" onchange="bridgeBrowseKind(' + p.id + ', this.value)" style="' + fieldCss + '">' +
+                KIND_OPTS.map(([v, l]) => '<option value="' + v + '"' + ((p.kind || '') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></td>' +
+            '<td>' + _btn('Remove', 'bridgeBrowsePick(' + p.id + ', false)') + '</td></tr>').join('') + '</tbody></table>';
+        h += '<div style="display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap;">' + _btn('Bring in', 'bridgeBrowseBring()', true) + _btn('Cancel', 'bridgeBrowseClose()') +
+            '<span class="jb-br-msg" style="font-size:11.5px; color:var(--color-danger); font-weight:600;">' + _esc(b.msg) + '</span></div>';
+        return h + '</div>';
+    }
+    function _brRender() {
+        const b = _br; if (!b) return;
+        try {
+            let m = document.getElementById('jb-browse');
+            if (!m) {
+                if (!document.body || typeof document.createElement !== 'function') return;
+                m = document.createElement('div'); m.id = 'jb-browse';
+                m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Choose what comes in from Jama');
+                m.style.cssText = 'position:fixed; inset:0; z-index:9001; background:rgba(15,23,42,0.45); display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:6vh 16px;';
+                m.addEventListener('click', e => { if (e.target === m) window.bridgeBrowseClose(); });
+                document.body.appendChild(m);
+            }
+            m.innerHTML = _brHtml(b);
+            m.style.display = 'flex';
+        } catch (_) {}
+    }
+    window.bridgeBrowseUi = function () {
+        const cfg = bridgeConfig();
+        if (!cfg.baseUrl) { try { showToast('Enter the Jama address and save the connection first.', 'error', 4200); } catch (_) {} return Promise.resolve(); }
+        const b = _br = _brNew(cfg);
+        _brRender();
+        // one after the other, so the first request signs in once and the rest reuse it
+        return bridgeFetchProjects().then(l => { if (_br !== b) return; b.projects = l; if (!b.projectId && l.length === 1) b.projectId = l[0].id; })
+            .catch(e => { if (_br === b) b.projErr = String((e && e.message) || e); })
+            .then(() => bridgeFetchItemTypes()).then(l => { if (_br === b) { _itemTypes = l; b.types = new Map(l.map(t => [t.id, t.name])); } })
+            .catch(e => { if (_br === b) b.typesErr = String((e && e.message) || e); })
+            .then(() => { if (_br !== b) return; _brRender(); if (b.projectId) return _brLoadRoots(false); });
+    };
+    window.bridgeBrowseClose = function () { _br = null; const m = document.getElementById('jb-browse'); if (m) m.style.display = 'none'; };
+    window.bridgeBrowseProject = function (pid) {
+        const b = _br; if (!b) return Promise.resolve();
+        // what is ticked belongs to one project; another project starts empty
+        b.projectId = String(pid || ''); b.nodes = new Map(); b.picks = new Map(); b.roots = null; b.rootErr = ''; b.msg = '';
+        if (!b.projectId) { _brRender(); return Promise.resolve(); }
+        return _brLoadRoots(false);
+    };
+    window.bridgeBrowseToggle = function (id) {
+        const b = _br, x = b && b.nodes.get(Number(id)); if (!x) return Promise.resolve();
+        x.open = !x.open;
+        if (x.open && x.kids == null && !x.loading) return _brLoadKids(x, false);
+        _brRender(); return Promise.resolve();
+    };
+    window.bridgeBrowseMore = function (id) {
+        const b = _br; if (!b) return Promise.resolve();
+        if (id == null) return _brLoadRoots(true);
+        const x = b.nodes.get(Number(id)); return x ? _brLoadKids(x, true) : Promise.resolve();
+    };
+    window.bridgeBrowsePick = function (id, on) {
+        const b = _br; if (!b) return;
+        id = Number(id);
+        if (on) {
+            const x = b.nodes.get(id); if (!x) return;
+            const was = b.picks.get(id);
+            b.picks.set(id, { id: id, key: x.key, name: x.name, seq: x.seq, container: x.container, kind: (was && was.kind) || _guessKind(b, x) });
+        } else b.picks.delete(id);
+        b.msg = ''; _brRender();
+    };
+    window.bridgeBrowseKind = function (id, kind) {
+        const b = _br, p = b && b.picks.get(Number(id)); if (!p) return;
+        p.kind = KIND_V[kind] != null ? kind : ''; b.msg = ''; _brRender();
+    };
+    // what is ticked becomes the project's choice, and the usual check runs: review, then a signed apply
+    window.bridgeBrowseBring = function () {
+        const b = _br; if (!b) return Promise.resolve(null);
+        const picks = Array.from(b.picks.values());
+        let msg = '';
+        if (!b.projectId) msg = 'Choose a project first.';
+        else if (!picks.length) msg = 'Tick at least one folder, set or item first.';
+        else {
+            const unset = picks.filter(p => KIND_V[p.kind] == null);
+            if (unset.length) msg = 'Say what ' + (unset.length === 1 ? 'this is' : 'these are') + ' in Safety Lab first: ' + unset.slice(0, 4).map(p => p.key || p.id).join(', ') + (unset.length > 4 ? ' and ' + (unset.length - 4) + ' more' : '') + '.';
+        }
+        if (msg) { b.msg = msg; _brRender(); return Promise.resolve(null); }
+        const cfg = bridgeConfig();
+        if (cfg.projectId && String(cfg.projectId) !== b.projectId) cfg.systems = {};   // the system folders were in the other project
+        cfg.projectId = b.projectId;
+        cfg.picks = picks.map(p => ({ id: p.id, key: p.key || '', name: p.name || '', seq: p.seq || '', kind: p.kind, container: !!p.container }));
+        bridgeConfigSave(cfg);
+        _lastDiff = null; _stageIn = null; _typeFields = null;
+        _armPoll();
+        window.bridgeBrowseClose();
+        _renderAll();
+        return bridgeCheck(false).catch(e => { try { showToast('Bridge: ' + e.message, 'error', 6200); } catch (_) {} return null; });
+    };
+
     // ------------------------------------------------------------- the wraps
     (function wrap() {
         if (typeof window.renderReqifPage === 'function' && !window.renderReqifPage._lbWrapped) {
@@ -1233,6 +1550,8 @@
     window._bridgeGet = _get;
     window.bridgeFetchContainers = bridgeFetchContainers;
     window.bridgeFetchTypeFields = bridgeFetchTypeFields;
+    window.bridgeFetchProjects = bridgeFetchProjects;
+    window._bridgeBrowserHtml = () => (_br ? _brHtml(_br) : '');
     window._bridgeLastDiff = () => _lastDiff;
     window._bridgePending = _pending;
     window._bridgeRender = _renderAll;

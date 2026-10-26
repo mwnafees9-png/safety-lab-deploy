@@ -1839,13 +1839,14 @@ async function idpQuickAddResource() {
 }
 
 function interdepExportCsv() {
-    const fcs = acFhaData || [];
+    // 26 Oct 2026: one line per failure condition, its governing row (the interdependence page shows the same)
+    const fcs = _slGovOnly(acFhaData);
     const syss = systemsData || [];
     const rows = [['Aircraft function', 'FC ID', 'Severity'].concat(syss.map(s => s.name)).concat(['Contributors']).join(',')];
     fcs.forEach(fc => {
         const fn = ((acFunctionsData || []).find(f => f.subId === fc.subId) || {});
         const cells = syss.map(s => { const c = idpCell(fc, s.id); return c.state === 'contributes' ? ('X (' + c.kind + ')') : c.state === 'cleared' ? 'cleared' : ''; });
-        rows.push([fn.funcName || fc.subId || '', fc.fcId || '', fc.severity || ''].concat(cells).concat([String(idpContributors(fc).length)]).map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
+        rows.push([fn.funcName || fc.subId || '', fc.fcId || '', (fc.severity || '') + _slCopiesNote(fc)].concat(cells).concat([String(idpContributors(fc).length)]).map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','));
     });
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -2343,10 +2344,11 @@ function coffeFindings(fc) {
 }
 
 async function mfmsNewAuthoredTree() {
-    const crit = (acFhaData || []).filter(f => f.severity === 'Catastrophic' || f.severity === 'Hazardous');
+    // 26 Oct 2026: one entry per failure condition, its governing row (a phase copy is never offered or linked)
+    const crit = _slGovOnly(acFhaData).filter(f => f.severity === 'Catastrophic' || f.severity === 'Hazardous');
     if (!crit.length) { if (typeof showToast === 'function') showToast('No cat/haz failure conditions yet — add AFHA rows first.', 'warning', 3500); return; }
-    const pick = (await slPrompt('Link to failure condition — enter an FC ID:\n' + crit.map(f => '  ' + f.fcId + ' — ' + (f.fcDesc || '').slice(0, 50)).join('\n'), crit[0].fcId)) || '';
-    const fc = crit.find(f => f.fcId === pick.trim());
+    const pick = (await slPrompt('Link to failure condition — enter an FC ID:\n' + crit.map(f => '  ' + f.fcId + ' — ' + (f.fcDesc || '').slice(0, 50) + _slCopiesNote(f)).join('\n'), crit[0].fcId)) || '';
+    const fc = _slByFcId(crit, pick, 'ac');
     if (!fc) { if (typeof showToast === 'function') showToast('No cat/haz FC with id "' + pick + '".', 'warning', 3000); return; }
     const rootId = internalIdCounter++;
     const page = {
@@ -2365,11 +2367,12 @@ async function mfmsNewAuthoredTree() {
 async function wsPssaNewTree() {
     const s = sys();
     if (!s) return;
-    const rows = s.fha || [];
+    // 26 Oct 2026: one entry per failure condition, its governing row (a phase copy is never offered or linked)
+    const rows = _slGovOnly(s.fha);
     let linkedFhaId = '';
     if (rows.length) {
-        const pick = (await slPrompt('Link to a system failure condition — enter an FC ID (blank for none):\n' + rows.map(f => '  ' + f.fcId + ' — ' + (f.fcDesc || '').slice(0, 50)).join('\n'), rows[0].fcId)) || '';
-        const fc = rows.find(f => f.fcId === pick.trim());
+        const pick = (await slPrompt('Link to a system failure condition — enter an FC ID (blank for none):\n' + rows.map(f => '  ' + f.fcId + ' — ' + (f.fcDesc || '').slice(0, 50) + _slCopiesNote(f)).join('\n'), rows[0].fcId)) || '';
+        const fc = _slByFcId(rows, pick, s);
         if (fc) linkedFhaId = fc.internalId;
     }
     const rootId = internalIdCounter++;
@@ -4117,6 +4120,27 @@ function onFtaMissionProfileChange() {
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
 }
 
+// 26 Oct 2026 (Waqas: "we just need the most conservative instances"): a failure condition written as several FHA
+// rows (one per phase, same FC ID) is offered ONCE wherever someone picks one: its governing row (worst severity,
+// ties: the longest exposure), from fc_auto_trees.js (SLFcTrees). That file loads late: without it, every row as
+// before. `keepVal` ('AC_12' / 'SYS_34' / a bare id) keeps a row that is already linked in the list even when it is
+// a phase copy, so an existing link is never silently dropped from its own dropdown.
+function _slFcT() { return (typeof SLFcTrees !== 'undefined' && SLFcTrees && typeof SLFcTrees.isGoverning === 'function') ? SLFcTrees : null; }
+function _slGovOnly(rows, keepVal, prefix) {
+    rows = (rows || []).filter(Boolean);
+    const T = _slFcT(); if (!T) return rows;
+    const keep = keepVal == null ? '' : String(keepVal);
+    return rows.filter(r => { try { return T.isGoverning(r) || (keep !== '' && (keep === (prefix || '') + r.internalId || keep === String(r.internalId))); } catch (_) { return true; } });
+}
+function _slCopiesNote(row) { const T = _slFcT(); if (!T || typeof T.copiesNote !== 'function') return ''; try { return T.copiesNote(row) || ''; } catch (_) { return ''; } }
+// the row an FC ID names in `rows`: its governing row (was: the first row with that ID)
+function _slByFcId(rows, fcId, scope) {
+    const id = String(fcId == null ? '' : fcId).trim(); if (!id) return null;
+    const T = _slFcT();
+    if (T && typeof T.byFcId === 'function') { try { const g = T.byFcId(id, scope); if (g && (rows || []).indexOf(g) >= 0) return g; } catch (_) {} }
+    return (rows || []).find(f => f && String(f.fcId || '').trim() === id) || null;
+}
+
 function updateFTAConfigUI() {
     let mode = document.getElementById('fta-calc-mode').value;
     // Phase 53.28 — toolbar layout depends on mode (Apportionment + Target Rate hide in bottom-up).
@@ -4139,7 +4163,7 @@ function updateFTAConfigUI() {
     const hazardLinked = !!document.getElementById('fta-fha-link').value;
     const overrideOn = !!(document.getElementById('fta-target-override') && document.getElementById('fta-target-override').checked);
     document.getElementById('fta-target-p').disabled = (mode === 'bottom-up') || (hazardLinked && !overrideOn);
-    let linkSel = document.getElementById('fta-fha-link'); let currentVal = linkSel.value; linkSel.innerHTML = '<option value="">-- No Link (1 Hr Default) --</option>'; let acGroup = '<optgroup label="Aircraft FHA">'; acFhaData.forEach(d => acGroup += `<option value="AC_${esc(d.internalId)}">${esc(d.fcId)}: ${esc((d.fcDesc||'').substring(0,25))}...</option>`); acGroup += '</optgroup>'; let sysGroup = '<optgroup label="System FHA">'; getAllSysFha().forEach(d => sysGroup += `<option value="SYS_${esc(d.internalId)}">${esc(d.fcId)}: ${esc((d.fcDesc||'').substring(0,25))}...</option>`); sysGroup += '</optgroup>'; linkSel.innerHTML += acGroup + sysGroup; linkSel.value = currentVal; if(selectedNodeData) { let isEvent = selectedNodeData.type !== 'gate' && selectedNodeData.gateType !== 'TRANSFER'; const isRoot = (typeof getActiveFTARoot === 'function') ? (getActiveFTARoot() === selectedNodeData) : false; const isGate = selectedNodeData.type === 'gate' && selectedNodeData.gateType !== 'TRANSFER'; document.getElementById('config-lambda-container').style.display = isEvent ? 'block' : 'none'; const showWeight = !isRoot && mode === 'top-down' && ftaConfig.apportion === 'weighted'; document.getElementById('config-weight-container').style.display = showWeight ? 'block' : 'none'; if (showWeight && typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); document.getElementById('config-voting-container').style.display = (selectedNodeData.gateType === 'VOTING') ? 'block' : 'none'; document.getElementById('config-lambda').disabled = mode === 'top-down'; if(isEvent && mode === 'top-down') { document.getElementById('config-lambda').value = selectedNodeData.lambda; } const prescribedC = document.getElementById('config-prescribed-container'); if (prescribedC) { prescribedC.style.display = isGate ? 'flex' : 'none'; if (isGate && typeof syncPrescribedFromNode === 'function') syncPrescribedFromNode(); } } }
+    let linkSel = document.getElementById('fta-fha-link'); let currentVal = linkSel.value; linkSel.innerHTML = '<option value="">-- No Link (1 Hr Default) --</option>'; let acGroup = '<optgroup label="Aircraft FHA">'; _slGovOnly(acFhaData, currentVal, 'AC_').forEach(d => acGroup += `<option value="AC_${esc(d.internalId)}">${esc(d.fcId)}: ${esc((d.fcDesc||'').substring(0,25))}...${esc(_slCopiesNote(d))}</option>`); acGroup += '</optgroup>'; let sysGroup = '<optgroup label="System FHA">'; _slGovOnly(getAllSysFha(), currentVal, 'SYS_').forEach(d => sysGroup += `<option value="SYS_${esc(d.internalId)}">${esc(d.fcId)}: ${esc((d.fcDesc||'').substring(0,25))}...${esc(_slCopiesNote(d))}</option>`); sysGroup += '</optgroup>'; linkSel.innerHTML += acGroup + sysGroup; linkSel.value = currentVal; if(selectedNodeData) { let isEvent = selectedNodeData.type !== 'gate' && selectedNodeData.gateType !== 'TRANSFER'; const isRoot = (typeof getActiveFTARoot === 'function') ? (getActiveFTARoot() === selectedNodeData) : false; const isGate = selectedNodeData.type === 'gate' && selectedNodeData.gateType !== 'TRANSFER'; document.getElementById('config-lambda-container').style.display = isEvent ? 'block' : 'none'; const showWeight = !isRoot && mode === 'top-down' && ftaConfig.apportion === 'weighted'; document.getElementById('config-weight-container').style.display = showWeight ? 'block' : 'none'; if (showWeight && typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); document.getElementById('config-voting-container').style.display = (selectedNodeData.gateType === 'VOTING') ? 'block' : 'none'; document.getElementById('config-lambda').disabled = mode === 'top-down'; if(isEvent && mode === 'top-down') { document.getElementById('config-lambda').value = selectedNodeData.lambda; } const prescribedC = document.getElementById('config-prescribed-container'); if (prescribedC) { prescribedC.style.display = isGate ? 'flex' : 'none'; if (isGate && typeof syncPrescribedFromNode === 'function') syncPrescribedFromNode(); } } }
 
 // Phase 56.38 — paste-origin constraint helper. Mirrors _getExternalSourceTarget
 // for nodes that carry an allocation snapshot from a cross-tree paste. Returns

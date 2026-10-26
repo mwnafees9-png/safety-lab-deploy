@@ -45,7 +45,15 @@
     function _fcim() { try { if (typeof acFcimData !== 'undefined' && Array.isArray(acFcimData)) return acFcimData; } catch (_) {} return Array.isArray(root.acFcimData) ? root.acFcimData : []; }
     function store() { var pc = _pc(); if (!pc) return []; if (!Array.isArray(pc.usocs)) pc.usocs = []; return pc.usocs; }
     function fc(iid) { var a = _fha(); for (var i = 0; i < a.length; i++) if (a[i] && String(a[i].internalId) === String(iid)) return a[i]; return null; }
-    function fcByFcId(fcId) { var a = _fha(); for (var i = 0; i < a.length; i++) if (a[i] && a[i].fcId && String(a[i].fcId).trim() === String(fcId).trim()) return a[i]; return null; }
+    // 26 Oct 2026 (Waqas: "we just need the most conservative instances"): an FC ID written as several AFHA rows (one
+    // per flight phase) means its governing row (worst severity, ties: longest exposure), offered once and labelled.
+    // SLFcTrees loads late: without it, the first row with the ID and every row in the picker, as before.
+    function _FT() { var F = root.SLFcTrees; return (F && typeof F.governingRows === 'function') ? F : null; }
+    function _govNote(f) { var F = _FT(); try { return F && f ? (F.copiesNote(f) || '') : ''; } catch (_) { return ''; } }
+    function fcByFcId(fcId) {
+        var F = _FT();
+        if (F) { try { var g = F.byFcId(fcId, 'ac'); if (g) return g; } catch (_) {} }
+        var a = _fha(); for (var i = 0; i < a.length; i++) if (a[i] && a[i].fcId && String(a[i].fcId).trim() === String(fcId).trim()) return a[i]; return null; }
     function rank(sev) { return SEV.indexOf(sev); }
     function _label(f) { return f ? ((f.fcId ? f.fcId + ' ' : '') + '"' + (f.fcDesc || 'failure condition') + '" (' + (f.severity || '?') + ')') : '(failure condition not found)'; }
 
@@ -175,7 +183,11 @@
     function _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function _opts(list, sel, ph) { return (ph ? '<option value="">' + _esc(ph) + '</option>' : '') + list.map(function (o) { return '<option value="' + o.v + '"' + (o.v === sel ? ' selected' : '') + '>' + _esc(o.label) + '</option>'; }).join(''); }
     var _draft = null;
-    function _fcOptions(sel) { return '<option value="">Choose…</option>' + _fha().map(function (f) { return '<option value="' + _esc(f.internalId) + '"' + (String(f.internalId) === String(sel) ? ' selected' : '') + '>' + _esc(_label(f)) + '</option>'; }).join(''); }
+    function _fcOptions(sel) {
+        var F = _FT(), rows = _fha();
+        if (F) { try { rows = F.governingRows('ac') || rows; } catch (_) {} }
+        return '<option value="">Choose…</option>' + rows.map(function (f) { return '<option value="' + _esc(f.internalId) + '"' + (String(f.internalId) === String(sel) ? ' selected' : '') + '>' + _esc(_label(f) + _govNote(f)) + '</option>'; }).join('');
+    }
     function _card(u) {
         var f1 = fc(u.fcIid), f2 = fc(u.escFcIid), s = u.subst || {};
         var head = '<div style="display:flex;gap:8px;align-items:center;"><b>' + _esc(u.id) + '</b><span style="font-size:11.5px;">' + _esc(_label(f1)) + ' → ' + _esc(_label(f2)) + '</span></div>';

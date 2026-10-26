@@ -1499,6 +1499,12 @@ function _cssZoomOf(el) {
 }
 
 async function saveProject() {
+    // 26 Oct 2026 (desktop, Radia): the native Save As, the same as File > Save As, so the shell knows the file and
+    // every confirmed save from now on goes back to it (save_state.js). The browser keeps its download below.
+    if (typeof window !== 'undefined' && window.slabProjectFile && typeof window.slabProjectFile.saveAs === 'function') {
+        try { await window.slabProjectFile.saveAs(); } catch (e) { showToast('Save failed: ' + ((e && e.message) || e), 'error', 5000); }
+        return;
+    }
     // Phase 42 — beta build watermark + timestamp now travel inside _slabBuildProjectExport().
     const projectData = _slabBuildProjectExport();
     const blob = new Blob([JSON.stringify(projectData, null, 2)], {type: 'application/json'});
@@ -1598,7 +1604,9 @@ function loadProject(event) {
             renderPRA(); renderZSA(); renderFMEA(); renderFlightPhases();
             switchTab('dashboard'); renderFTASidebar(); calculateAllProbabilities(); document.getElementById('load-file').value = '';
             try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18) — the opened file is now the project: announce it (sync push, local + cloud save)
-        } catch (err) { showToast("Error loading project file.", 'error', 4000); console.error(err); }
+            // 26 Oct 2026 (desktop): the shell's file open (save_state.js openProjectFileText) waits for this: the project from the file is on screen
+            try { if (event && typeof event.onLoaded === 'function') event.onLoaded(true); } catch (_) {}
+        } catch (err) { showToast("Error loading project file.", 'error', 4000); console.error(err); try { if (event && typeof event.onLoaded === 'function') event.onLoaded(false, err); } catch (_) {} }
     }; reader.readAsText(file);
 }
 
@@ -1826,10 +1834,18 @@ function _ccmrPageFha(page) {
         if (src) { const r = _ccmrPageFha(src); if (r) return r; }
     }
     const ids = (Array.isArray(page.linkedFhaIds) && page.linkedFhaIds.length) ? page.linkedFhaIds : (page.linkedFhaId ? [page.linkedFhaId] : []);
+    // 26 Oct 2026: the same resolution as _governingFhaForPage (assurance_modules.js): each linked row stands as its
+    // failure condition's governing row (window.SLFcTrees), the worst of them governs, ties the longest exposure
+    let F = null;
+    try { F = (typeof window !== 'undefined' && window.SLFcTrees && typeof window.SLFcTrees.governingOf === 'function') ? window.SLFcTrees : null; } catch (_) { F = null; }
     let best = null;
     ids.forEach(id => {
         const r = _ccmrResolveFha(id);
-        if (r && (!best || (_CKPT_SEV_RANK[r.fha.severity] || 0) > (_CKPT_SEV_RANK[best.fha.severity] || 0))) best = r;
+        if (r && F) { try { const g = F.governingOf(r.fha); if (g) r.fha = g; } catch (_) {} }
+        if (!r) return;
+        if (!best) { best = r; return; }
+        const a = _CKPT_SEV_RANK[r.fha.severity] || 0, b = _CKPT_SEV_RANK[best.fha.severity] || 0;
+        if (a > b || (F && a === b && r.fha !== best.fha && slFcExposureHours(r.fha) > slFcExposureHours(best.fha))) best = r;
     });
     return best;
 }
@@ -2588,7 +2604,9 @@ function idpContributorFns(fc) {
 // "multi" stays distinct contributing SYSTEMS ≥ 2 (the MF&MS/MAC trigger).
 function idpStats() { return idpIndexBatch(_idpStatsImpl); }
 function _idpStatsImpl() {
-    const fcs = acFhaData || [];
+    // 26 Oct 2026: the failure conditions the interdependence table shows, one per FC (its most conservative row)
+    const _fcV = (typeof slFcGovView === 'function') ? slFcGovView('ac') : null;
+    const fcs = _fcV ? _fcV.only(acFhaData || []) : (acFhaData || []);
     const cols = idpColumns();
     let unreviewed = 0, contributes = 0, cleared = 0, multi = 0, proposed = 0, coarse = 0;
     // 23 Sep 2026 (perf round 4): each FC's row of counts is remembered the same
@@ -2628,11 +2646,49 @@ function _idpStatsImpl() {
              cells: fcs.length * cols.length, unreviewed, contributes, cleared, multi, proposed, coarse };
 }
 
+// ---- the most conservative instance (26 Oct 2026, Waqas: "fault trees should be generated for the most conservative
+// severity classification only ... same with CoFFEE and other analyses we just need the most conservative instances").
+// A failure condition written as several FHA rows (one per phase, sharing an FC ID) is offered ONCE wherever someone
+// picks or views failure conditions: its governing row (fc_auto_trees.js, window.SLFcTrees: worst severity, ties the
+// longest exposure), labelled " (most conservative of N)". The FHA tables keep every row. fc_auto_trees.js loads late
+// (defer): until it is there every row is offered, as before. scope: 'ac' or a system object.
+// Tests: tests/regression_fc_most_conservative_helpers_20261026.test.js
+function slFcGovView(scope) {
+    let F = null;
+    try { F = (typeof window !== 'undefined' && window.SLFcTrees) || null; } catch (_) { F = null; }
+    if (!F || typeof F.groups !== 'function') return null;
+    let gs;
+    try { gs = F.groups(scope == null ? 'ac' : scope) || []; } catch (_) { return null; }
+    const of = new Map(), gov = new Set();
+    gs.forEach(g => { if (!g || !g.gov) return; gov.add(g.gov); (g.rows || []).forEach(r => of.set(r, g)); });
+    // a row no group holds (the store changed under the remembered groups) is kept: never hide what cannot be placed
+    const keep = r => gov.has(r) || !of.has(r);
+    return {
+        keep,
+        group: r => of.get(r) || null,
+        govOf: r => { const g = of.get(r); return (g && g.gov) || r; },
+        note: r => { if (!of.has(r) || !gov.has(r)) return ''; try { return (typeof F.copiesNote === 'function' ? F.copiesNote(r) : '') || ''; } catch (_) { return ''; } },
+        only: rows => (rows || []).filter(keep)
+    };
+}
+// the exposure the tie rule reads (the same reading fc_auto_trees.js uses)
+function slFcExposureHours(row) {
+    try { const e = getPhaseExposureRatio(row && row.phases); return (e && e.exposedHours) || 0; } catch (_) { return 0; }
+}
+// an option picked by row id: a pick of a row that is not governing moves to its failure condition's governing row
+function _slFcGovPick(V, rows, id) {
+    if (!V || id == null || id === '') return id;
+    const r = (rows || []).find(x => x && String(x.internalId) === String(id));
+    return r ? String(V.govOf(r).internalId) : id;
+}
+
 function renderInterdepPage() {
     if (typeof SLLazy !== 'undefined' && SLLazy.defer('interdep-host', 'renderInterdepPage', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('interdep-host');
     if (!host) return;
-    const fcs = acFhaData || [];
+    // 26 Oct 2026: one row per failure condition, its most conservative instance (slFcGovView above)
+    const _fcV = slFcGovView('ac');
+    const fcs = _fcV ? _fcV.only(acFhaData || []) : (acFhaData || []);
     const syss = systemsData || [];
     const cols = idpColumns();
     const stats = idpStats();
@@ -2701,7 +2757,8 @@ function renderInterdepPage() {
             : (unrev ? '<span style="font-size:10.5px; color: var(--color-warning); font-family: var(--font-mono);">' + unrev + ' unreviewed</span>'
                      : '<span style="font-size:10.5px; color: var(--color-text-tertiary); font-family: var(--font-mono);">' + (n === 1 ? 'single' : '—') + '</span>');
         html += '<tr><td>' + esc(funcName.funcName || funcName.subName || fc.subId || '—') + '</td>' +
-            '<td><span class="u-mono">' + esc(fc.fcId || '') + '</span> ' + (fc.severity ? sevPillHtml(fc.severity) : '<span class="sla-stamp">?</span>') + '</td>' +
+            '<td><span class="u-mono">' + esc(fc.fcId || '') + '</span> ' + (fc.severity ? sevPillHtml(fc.severity) : '<span class="sla-stamp">?</span>') +
+            (_fcV && _fcV.note(fc) ? '<span style="font-size:10.5px; color:var(--color-text-tertiary);">' + esc(_fcV.note(fc)) + '</span>' : '') + '</td>' +
             cellsHtml + '<td>' + chip + '</td></tr>';
     });
     html += '</tbody></table></div>';
@@ -2758,13 +2815,14 @@ function renderInterdepPage() {
     // itself is still system-level).
     const craFcs = fcs.filter(fc => idpContributors(fc).length >= 1);
     if (craFcs.length) {
+        if (_fcV && _idpSelectedFc) _idpSelectedFc = _slFcGovPick(_fcV, acFhaData, _idpSelectedFc);
         if (!_idpSelectedFc || !craFcs.some(f => String(f.internalId) === String(_idpSelectedFc))) _idpSelectedFc = String(craFcs[0].internalId);
         const fc = craFcs.find(f => String(f.internalId) === String(_idpSelectedFc));
         const craCols = cols.filter(col => _idpCellRaw(fc, col.colId).state === 'contributes');
         const store = _idpStore();
         html += '<h4 style="margin: var(--s-5) 0 6px;">Common Resource Analysis — B.4.3.2 · one matrix per failure condition</h4>';
         html += '<div style="margin-bottom:8px;"><select class="state-select" style="max-width:420px;" onchange="_idpSelectedFc=this.value; renderInterdepPage();">' +
-            craFcs.map(f => '<option value="' + esc(String(f.internalId)) + '"' + (String(f.internalId) === _idpSelectedFc ? ' selected' : '') + '>' + esc(f.fcId + ' — ' + (f.fcDesc || '').slice(0, 60)) + '</option>').join('') + '</select>' +
+            craFcs.map(f => '<option value="' + esc(String(f.internalId)) + '"' + (String(f.internalId) === _idpSelectedFc ? ' selected' : '') + '>' + esc(f.fcId + ' — ' + (f.fcDesc || '').slice(0, 60) + (_fcV ? _fcV.note(f) : '')) + '</option>').join('') + '</select>' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono); margin-left:10px;">columns = this FC\'s contributing system functions, per its interdependence row</span></div>';
         if (!(resourcesData || []).length) {
             html += '<p style="color: var(--color-text-tertiary); font-size: 13px;">No resources defined yet — add provide/consume rows in the Resources view; each becomes three matrix rows (total loss / partial loss / degraded).</p>';
@@ -2949,7 +3007,19 @@ function macFidAssumed(rule) {
 function _macFcForRule(rule) {
     const rows = (acFhaData || []).filter(f => f.subId === rule.subId);
     if (!rows.length) return null;
-    return rows.slice().sort((a, b) => (_CKPT_SEV_RANK[b.severity] || 0) - (_CKPT_SEV_RANK[a.severity] || 0))[0];
+    // 26 Oct 2026: the same rule as everywhere else (slFcGovView): each failure condition stands as its governing row,
+    // then the worst of them, ties the longest exposure. Before SLFcTrees loads: the worst severity, first row on ties.
+    const V = slFcGovView('ac');
+    if (!V) return rows.slice().sort((a, b) => (_CKPT_SEV_RANK[b.severity] || 0) - (_CKPT_SEV_RANK[a.severity] || 0))[0];
+    const cand = [];
+    rows.forEach(r => { const g = V.govOf(r); if (cand.indexOf(g) < 0) cand.push(g); });
+    let best = null;
+    cand.forEach(r => {
+        if (!best) { best = r; return; }
+        const a = _CKPT_SEV_RANK[r.severity] || 0, b = _CKPT_SEV_RANK[best.severity] || 0;
+        if (a > b || (a === b && slFcExposureHours(r) > slFcExposureHours(best))) best = r;
+    });
+    return best;
 }
 function _macRuleFp(rule) {
     // L1/L2 fields are APPENDED only when present — L0 fingerprints are
@@ -3157,7 +3227,10 @@ function renderCoffePanel() {
     if (typeof SLLazy !== 'undefined' && SLLazy.defer('coffe-host', 'renderCoffePanel', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     const host = document.getElementById('coffe-host');
     if (!host) return;
-    const fcs = (acFhaData || []).filter(fc => idpContributors(fc).length >= 2);
+    // 26 Oct 2026 (Waqas: "same with CoFFEE"): one entry per failure condition, its most conservative instance
+    const _fcV = slFcGovView('ac');
+    const fcs = (_fcV ? _fcV.only(acFhaData || []) : (acFhaData || [])).filter(fc => idpContributors(fc).length >= 2);
+    if (_fcV && _coffeSelectedFc) _coffeSelectedFc = _slFcGovPick(_fcV, acFhaData, _coffeSelectedFc);
     if (!fcs.length) {
         host.innerHTML = '<p style="color: var(--color-text-tertiary); font-size: 13px;">CoFFE cases enumerate over each FC\'s contributing systems — mark contributions in the interdependence table first (an FC needs ≥2 contributors).</p>';
         return;
@@ -3193,7 +3266,7 @@ function renderCoffePanel() {
         '<div class="ckpt-tile' + (findings.length ? ' ckpt-tile-danger' : ' ckpt-tile-ok') + '"><div class="ckpt-tile-label">Lane disagreements</div><div class="ckpt-tile-value">' + findings.length + '</div><div class="ckpt-tile-sub">' + (findings.length ? 'findings — review' : 'lanes agree') + '</div></div></div>';
 
     html += '<div style="margin-bottom:8px;"><select class="state-select" style="max-width:420px;" onchange="_coffeSelectedFc=this.value; renderCoffePanel();">' +
-        fcs.map(f => '<option value="' + esc(String(f.internalId)) + '"' + (String(f.internalId) === _coffeSelectedFc ? ' selected' : '') + '>' + esc(f.fcId + ' — ' + (f.fcDesc || '').slice(0, 60)) + '</option>').join('') + '</select></div>';
+        fcs.map(f => '<option value="' + esc(String(f.internalId)) + '"' + (String(f.internalId) === _coffeSelectedFc ? ' selected' : '') + '>' + esc(f.fcId + ' — ' + (f.fcDesc || '').slice(0, 60) + (_fcV ? _fcV.note(f) : '')) + '</option>').join('') + '</select></div>';
     if (unmod.size) {
         html += '<div style="border:1px solid var(--color-warning); padding:6px 12px; margin-bottom:var(--s-3); font-size:12px;">' +
             'No MAC clause models: <strong>' + [...unmod].map(id => esc(_macSysName(id))).join(', ') + '</strong> — their cases cannot be computed and need elicitation (or add them to the MAC).</div>';
@@ -5767,6 +5840,38 @@ function _enumerateAllGates() {
     });
     return out;
 }
+// 26 Oct 2026: the ids of the fault tree pages that exist only for rows of a failure condition that are not its
+// governing row, when the governing row has a tree of its own (the same kind: allocation or verification). Every
+// other tree, a tree linked to the governing row or to several failure conditions, and a tree whose link does not
+// resolve, is kept. Empty until fc_auto_trees.js (window.SLFcTrees) has loaded.
+function _slFcCopyPages() {
+    const out = new Set();
+    let F = null;
+    try { F = (typeof window !== 'undefined' && window.SLFcTrees) || null; } catch (_) { F = null; }
+    if (!F || typeof F.governingOf !== 'function' || typeof F.isGoverning !== 'function') return out;
+    try {
+        const pages = (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : [];
+        const links = p => (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds.map(String) : (p.linkedFhaId != null && p.linkedFhaId !== '' ? [String(p.linkedFhaId)] : []);
+        const byId = new Map();
+        (acFhaData || []).forEach(r => { if (r) byId.set(String(r.internalId), r); });
+        (systemsData || []).forEach(s => ((s && s.fha) || []).forEach(r => { if (r && !byId.has(String(r.internalId))) byId.set(String(r.internalId), r); }));
+        const linkedBy = new Map();   // row id -> the pages linked to it
+        pages.forEach(p => { if (p) links(p).forEach(id => { const a = linkedBy.get(id) || []; a.push(p); linkedBy.set(id, a); }); });
+        pages.forEach(p => {
+            if (!p) return;
+            const ids = links(p);
+            if (!ids.length) return;
+            const rows = ids.map(id => byId.get(id));
+            if (rows.some(r => !r) || rows.some(r => F.isGoverning(r))) return;
+            const covered = rows.every(r => {
+                const g = F.governingOf(r);
+                return g && g !== r && (linkedBy.get(String(g.internalId)) || []).some(q => q !== p && !!q.verifies === !!p.verifies);
+            });
+            if (covered) out.add(String(p.id));
+        });
+    } catch (_) { return new Set(); }
+    return out;
+}
 function populateCmaLinkedGatesDropdown(selected) {
     const el = document.getElementById('cma-linked-gates');
     if (!el) return;
@@ -5774,7 +5879,10 @@ function populateCmaLinkedGatesDropdown(selected) {
     // 25 Oct 2026 (level_view.js): the gates of the level on screen, the aircraft's trees or one system's PSSA and SSA
     // trees; a gate the entry already names is always kept, whatever its level
     const _LV = window.SLLevelView, _cur = (current || []).map(String);
-    const gates = _enumerateAllGates().filter(({ page, node }) => !_LV || !_LV.showsPage || _LV.showsPage(page) || _cur.indexOf(page.id + ':' + node.id) >= 0);
+    // 26 Oct 2026: a tree that is only a per-phase copy of a failure condition whose most conservative row has its own
+    // tree is not offered (its gates repeat that tree's); a gate the entry already names is always kept
+    const _copies = _slFcCopyPages();
+    const gates = _enumerateAllGates().filter(({ page, node }) => _cur.indexOf(page.id + ':' + node.id) >= 0 || (!_copies.has(String(page.id)) && (!_LV || !_LV.showsPage || _LV.showsPage(page))));
     const options = gates.map(({ page, node }) => ({
         value: page.id + ':' + node.id,
         label: '[' + (page.name || 'Untitled') + ']  ' +
@@ -6383,14 +6491,20 @@ function _populateFmeaFunctionLink() {
 // functional FMEA from the aircraft FHA failure conditions, so a functional failure
 // mode can be tied to the FHA failure condition it contributes to (closes the
 // functional-FMEA ↔ FHA gap).
-function _populateFmeaFuncLinkedFc() {
+// 26 Oct 2026: one option per failure condition, its most conservative row (slFcGovView), labelled with how many rows
+// it stands for. keepId (the row being edited's stored link, or the current pick) is always offered, so an existing
+// link to another row of the condition is shown as it is and never dropped on save.
+function _populateFmeaFuncLinkedFc(keepId) {
     const sel = document.getElementById('fmea-func-linked-fc');
     if (!sel) return;
     const current = sel.value;
+    const keep = String(keepId != null && keepId !== '' ? keepId : (current || ''));
     const opts = ['<option value="">-- Not linked --</option>'];
+    const _fcV = slFcGovView('ac');
     (acFhaData || []).forEach(h => {
         const id = String(h.internalId);
-        const label = (h.fcId || ('FC#' + id)) + (h.fcDesc ? '  ·  ' + h.fcDesc : '') + (h.severity ? '  [' + h.severity + ']' : '');
+        if (_fcV && !_fcV.keep(h) && id !== keep) return;
+        const label = (h.fcId || ('FC#' + id)) + (h.fcDesc ? '  ·  ' + h.fcDesc : '') + (h.severity ? '  [' + h.severity + ']' : '') + (_fcV && _fcV.keep(h) ? _fcV.note(h) : '');
         opts.push('<option value="' + esc(id) + '">' + esc(label) + '</option>');
     });
     sel.innerHTML = opts.join('');

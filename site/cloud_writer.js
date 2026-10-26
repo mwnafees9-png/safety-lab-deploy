@@ -68,6 +68,11 @@
     function _toast(msg, kind, ms) { try { var t = _fn('showToast'); if (t) t(msg, kind || 'info', ms || 4000); } catch (_) {} }
     function _token() { try { return (typeof _activeCloudDocVersion !== 'undefined') ? _activeCloudDocVersion : null; } catch (_) { return null; } }
     function _setToken(v) { try { _activeCloudDocVersion = v; } catch (_) {} }
+    // 26 Oct 2026: the version this device last WROTE, per project. The autosave meta records the version before the
+    // server write raises it, so a reload restored an older number and the next save was refused as "changed elsewhere".
+    var VER_KEY = 'safetyLab.cloudDocVersion.';
+    function _rememberVersion(projectId, v) { try { if (G.localStorage && projectId && typeof v === 'number') G.localStorage.setItem(VER_KEY + projectId, String(v)); } catch (_) {} }
+    function lastWritten(projectId) { try { var s = G.localStorage && projectId ? G.localStorage.getItem(VER_KEY + projectId) : null; var n = s == null ? NaN : parseInt(s, 10); return isFinite(n) ? n : null; } catch (_) { return null; } }
     function _sleep(ms) { return new Promise(function (r) { _wake = r; setTimeout(function () { if (_wake === r) _wake = null; r(); }, ms); }); }
 
     // ---- the tab lease (tab_guard.js) ------------------------------------
@@ -142,6 +147,14 @@
                 if (locks.length && _auditedAt[projectId] !== serverVersion) { _auditedAt[projectId] = serverVersion; _auditBreach(locks, projectId, _token(), serverVersion, mode); }
                 return false;
             }
+            // 26 Oct 2026, 'merged': a CONFIRMED save while the live team sync is on. Every teammate's work is already
+            // merged into this tab, so the moved copy is banked and written over, never asked about and never skipped.
+            if (mode === 'merged') {
+                try { var bankM = _fn('_bankWorkingState'); if (bankM) bankM(); } catch (_) {}
+                if (locks.length && _auditedAt[projectId] !== serverVersion) { _auditedAt[projectId] = serverVersion; _auditBreach(locks, projectId, _token(), serverVersion, 'manual'); }
+                _setToken(serverVersion);
+                return true;
+            }
             try { var bank = _fn('_bankWorkingState'); if (bank) bank(); } catch (_) {}
             if (locks.length) {
                 _auditBreach(locks, projectId, _token(), serverVersion, mode);
@@ -167,7 +180,7 @@
             }
             var stamp = function () { return { data: snapshot, updated_by: userId, updated_at: new Date().toISOString() }; };
             var nextVersion = null;
-            var attempts = (mode === 'manual') ? 2 : 1;
+            var attempts = (mode === 'silent') ? 1 : 2;
             for (var attempt = 0; attempt < attempts; attempt++) {
                 if (_token() == null) {
                     var ins = await client.from('project_documents').insert(Object.assign({ project_id: projectId, version: 1 }, stamp()));
@@ -189,10 +202,11 @@
                 if (!(await reconcile(now))) return { ok: false, reason: mode === 'silent' ? 'refused' : 'cancelled' };
             }
             if (nextVersion == null) {
-                if (mode === 'silent') return { ok: false, reason: 'refused' };
+                if (mode !== 'manual') return { ok: false, reason: 'refused' };   // merged: the copy moved again in between
                 throw new Error('cloud save refused twice — the document changed under this tab both times; nothing was overwritten and your state is banked in the recovery ring');
             }
             _setToken(nextVersion);
+            _rememberVersion(projectId, nextVersion);
             try { var hist = _fn('_recordSaveHistory'); if (hist) await hist(projectId, nextVersion, snapshot, userId); } catch (_) {}
             // 8 Sep 2026 — Stage 2: a CONFIRMED backup write means the CRDT doc is now
             // known to be at least as fresh as snapshot vN; advance the reconcile stamp
@@ -210,11 +224,13 @@
         opts = opts || {};
         // 18 Oct 2026 (SEC-4): an erasure is under way on this page (erasure.js): no write may put the project back.
         try { if (typeof window !== 'undefined' && window.__slabErasing) return Promise.resolve({ ok: false, reason: 'erased' }); } catch (_) {}
-        var mode = (opts.mode === 'silent') ? 'silent' : 'manual';
+        var mode = (opts.mode === 'silent' || opts.mode === 'merged') ? opts.mode : 'manual';
         var prepare = (typeof opts.prepare === 'function') ? opts.prepare : function () { return null; };
         if (_next) {
-            // a follow-up is already waiting: share it; manual outranks silent (it asks, silent skips)
-            if (mode === 'manual' && _next.mode !== 'manual') { _next.mode = 'manual'; _next.prepare = prepare; }
+            // a follow-up is already waiting: share it; manual outranks merged outranks silent (manual asks, merged
+            // writes over a moved copy, silent skips it)
+            var RANK = { silent: 0, merged: 1, manual: 2 };
+            if (RANK[mode] > RANK[_next.mode]) { _next.mode = mode; _next.prepare = prepare; }
             return new Promise(function (res) { _next.resolvers.push(res); });
         }
         var slot = { mode: mode, prepare: prepare, resolvers: [] };
@@ -243,5 +259,5 @@
         }
     } catch (_) {}
 
-    G.SLCloudWriter = { _v: '1.0', write: write, flush: flush, status: status, heldLocks: _heldLocks, QUIET_MS: QUIET_MS };
+    G.SLCloudWriter = { _v: '1.1', write: write, flush: flush, status: status, heldLocks: _heldLocks, lastWritten: lastWritten, QUIET_MS: QUIET_MS };
 })();

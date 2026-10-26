@@ -43,6 +43,8 @@ function mutate(file, body) {
     if (MUT === 'unanswered') return body.replace("(g.route === 'quant' || g.route === 'unanswered')", "(g.route === 'quant')");
     if (MUT === 'stricter') return body.replace('if (cls == null || best.rate < cls) { out.rate = best.rate; out.used = \'aircraft\'; }', '');
     if (MUT === 'worstonly') return body.replace('return !!g && g.gov === row;', 'return !!g;');
+    // the v1.2 read: eval, which the app's CSP blocks (Radia, 26 Oct 2026: no trees made at all)
+    if (MUT === 'eval') return body.replace("function _g(n) {", "function _g(n) { try { return (0, eval)('typeof ' + n + ' !== \"undefined\" ? ' + n + ' : null'); } catch (_) { return root[n]; }");
     return body;
 }
 
@@ -59,8 +61,11 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     check('the flag is a small pulsing dot on the row menu, still for people who ask for less motion', /\.row-actions:has\(\[data-needs-chart\]\) \.row-kebab::after \{[^}]*border-radius: 50%[^}]*animation: sl-needs-chart-pulse/.test(css) && /prefers-reduced-motion: reduce\) \{ \.row-actions:has\(\[data-needs-chart\]\) \.row-kebab::after \{ animation: none; \}/.test(css));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
     const demo = require('./lib/demo_projects_all.js').all().find(d => d.key === 'showcase:hl1');
+    // the policy the server sends (worker.js CSP_POLICY), so the app runs here as it runs at a customer: no eval
+    const CSP = (() => { const w = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8'); const m = /const CSP_POLICY = \[([\s\S]*?)\]\.join\('; '\)/.exec(w); if (!m) throw new Error('worker.js CSP_POLICY not found'); return eval('[' + m[1] + ']').join('; '); })();
+    check('the test serves the server\'s CSP, and it forbids eval', /script-src [^;]*'self'/.test(CSP) && !/unsafe-eval/.test(CSP), CSP);
     const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2' };
-    const srv = await new Promise(res => { const s = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html'; const f = path.join(SITE, path.normalize(p)); if (!f.startsWith(SITE)) { r.writeHead(403); return r.end(); } fs.readFile(f, (e, b) => { if (e) { r.writeHead(404); return r.end(); } let body = b; if (MUT && f.endsWith('.js')) body = Buffer.from(mutate(path.basename(f), b.toString('utf8'))); r.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream' }); r.end(body); }); }).listen(0, '127.0.0.1', () => res(s)); });
+    const srv = await new Promise(res => { const s = http.createServer((q, r) => { let p = decodeURIComponent(q.url.split('?')[0]); if (p.endsWith('/')) p += 'index.html'; const f = path.join(SITE, path.normalize(p)); if (!f.startsWith(SITE)) { r.writeHead(403); return r.end(); } fs.readFile(f, (e, b) => { if (e) { r.writeHead(404); return r.end(); } let body = b; if (MUT && f.endsWith('.js')) body = Buffer.from(mutate(path.basename(f), b.toString('utf8'))); r.writeHead(200, Object.assign({ 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream' }, f.endsWith('.html') ? { 'Content-Security-Policy': CSP } : {})); r.end(body); }); }).listen(0, '127.0.0.1', () => res(s)); });
     const browser = await pw.chromium.launch();
     try {
         const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });

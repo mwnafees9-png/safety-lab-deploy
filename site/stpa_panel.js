@@ -457,16 +457,26 @@
     function _ask(msg, def, opts) { return slPrompt(msg, def, opts); }
 
     // ----------------------------------------------------------- data reads
+    // 26 Oct 2026 (Waqas: "we just need the most conservative instances"): a failure condition written as several
+    // FHA rows (one per flight phase) is offered ONCE, as its governing row (worst severity, ties: longest exposure),
+    // labelled with how many rows it stands for. Without SLFcTrees (loads late) every row is offered as before.
     function candidateFcs() {
         const out = [];
+        const FT = (typeof window !== 'undefined' ? window : globalThis).SLFcTrees;
+        const gov = (rows, scopeArg) => {
+            if (!FT || typeof FT.governingRows !== 'function') return rows || [];
+            try { return FT.governingRows(scopeArg) || []; } catch (_) { return rows || []; }
+        };
         const push = (f, scope) => {
             if (!f) return;
             const sev = f.severity || '';
             if (sev !== 'Catastrophic' && sev !== 'Hazardous') return;
-            out.push({ fcId: f.fcId || f.internalId || '', desc: f.fcDesc || f.desc || '', severity: sev, scope });
+            let note = '';
+            try { if (FT && typeof FT.copiesNote === 'function') note = FT.copiesNote(f) || ''; } catch (_) {}
+            out.push({ fcId: f.fcId || f.internalId || '', desc: f.fcDesc || f.desc || '', severity: sev, scope, note, internalId: f.internalId });
         };
-        (typeof acFhaData !== 'undefined' ? acFhaData : []).forEach(f => push(f, 'Aircraft'));
-        ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => (s.fha || []).forEach(f => push(f, s.name || s.id)));
+        gov(typeof acFhaData !== 'undefined' ? acFhaData : [], 'ac').forEach(f => push(f, 'Aircraft'));
+        ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => s && gov(s.fha || [], s).forEach(f => push(f, s.name || s.id)));
         return out.filter(c => c.fcId);
     }
     function resolver(asmId) {
@@ -1142,7 +1152,7 @@
             '<div style="font-size:11px; color:var(--color-text-tertiary); margin:2px 0 4px;">The FHA stays master; STPA references it. “Import” CREATES a spine hazard from the FC — a real object with its own id, carrying its origin.</div>' +
             '<table class="data-table" style="width:100%; font-size:12px;"><thead><tr><th>FHA failure condition</th><th>Class</th><th>Scope</th><th style="text-align:right;">In STPA scope</th><th style="text-align:right;"></th></tr></thead><tbody>' +
             cands.map(f =>
-                '<tr><td><span class="u-mono" style="font-weight:700;">' + esc(f.fcId) + '</span> — ' + esc(f.desc) + '</td>' +
+                '<tr><td><span class="u-mono" style="font-weight:700;">' + esc(f.fcId) + '</span> — ' + esc(f.desc) + (f.note ? '<span style="font-size:11px; color:var(--color-text-tertiary);">' + esc(f.note) + '</span>' : '') + '</td>' +
                 '<td>' + _sevPill(f.severity) + '</td><td style="font-size:11px; color:var(--color-text-tertiary);">' + esc(f.scope) + '</td>' +
                 '<td style="text-align:right;"><button class="u-mono" style="font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:6px; cursor:pointer; border:1px solid ' +
                 (inScope.has(f.fcId) ? GREEN + '; color:' + GREEN + '; background:' + GREEN + '14;' : 'var(--color-border-strong); color:var(--color-text-secondary); background:var(--color-surface-2);') +

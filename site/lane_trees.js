@@ -84,7 +84,9 @@
     function pages() { return G('ftaPages') || []; }
     function nextId() {
         // internalIdCounter is a shared top-level binding across the app scripts.
-        try { return (0, eval)('internalIdCounter++'); } catch (_) { return Math.floor(1e9 + (Date.now ? 0 : 0)) + (nextId._f = (nextId._f || 0) + 1); }
+        // 26 Oct 2026: written by name. The (0, eval) form threw under the app's CSP and every id fell back to a
+        // per-load counter from 1e9+1, so two sessions could mint the same node id.
+        try { return internalIdCounter++; } catch (_) { return Math.floor(1e9 + (Date.now ? 0 : 0)) + (nextId._f = (nextId._f || 0) + 1); }
     }
     function resolveFn(id) {
         var r = {};
@@ -160,8 +162,28 @@
                      (ids.length ? ' — the FCIM names ' + ids.join(', ') + ' but no FHA row classifies it. Classify it first.'
                                  : ' — author the FCIM ' + ln.mode + ' cell and its FHA row first. The tool never guesses a severity.') };
         }
+        // 26 Oct 2026 (Waqas: "fault trees should be generated for the most conservative severity classification
+        // only"): the same rule as SLFcTrees everywhere else: each condition stands as its governing row (worst
+        // severity, ties: the longest exposure), and between conditions the worst severity wins, ties the longest
+        // exposure. SLFcTrees loads late: without it, the worst severity, first row on a tie, as before.
+        var FT = fcTrees();
+        if (FT) {
+            var gov = [];
+            cands.forEach(function (f) { var g = f; try { g = FT.governingOf(f) || f; } catch (_) {} if (gov.indexOf(g) === -1) gov.push(g); });
+            var pool2 = gov.map(function (f, i) { return { f: f, i: i, s: SEV_RANK[f.severity] || 0, e: exposureOf(f) }; })
+                .sort(function (a, b) { return (b.s - a.s) || (b.e - a.e) || (a.i - b.i); });
+            return { fc: pool2[0].f, finding: null };
+        }
         var pool = cands.slice().sort(function (a, b) { return (SEV_RANK[b.severity] || 0) - (SEV_RANK[a.severity] || 0); });
         return { fc: pool[0], finding: null };
+    }
+    function fcTrees() {
+        var F = null;
+        try { F = (typeof window !== 'undefined' && window.SLFcTrees) || G('SLFcTrees') || null; } catch (_) { F = null; }
+        return (F && typeof F.governingOf === 'function') ? F : null;
+    }
+    function exposureOf(row) {
+        try { var f = G('getPhaseExposureRatio'); var e = typeof f === 'function' ? f(row && row.phases) : null; return (e && e.exposedHours) || 0; } catch (_) { return 0; }
     }
 
     // ---- CRA: resources serving a member function ---------------------------

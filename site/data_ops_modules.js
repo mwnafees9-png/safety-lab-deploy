@@ -1483,6 +1483,9 @@ function _adoptCloudIdentityFromMeta(m) {
         if (typeof m.cloudProjectId === 'string' && m.cloudProjectId.length >= 8) {
             _activeCloudProjectId = m.cloudProjectId;
             _activeCloudDocVersion = (typeof m.cloudDocVersion === 'number') ? m.cloudDocVersion : null;
+            // 26 Oct 2026: the meta is written before the server save raises the version; the number this device
+            // last WROTE (cloud_writer.js) is never older, so a reload does not start from a stale one
+            try { var lw = window.SLCloudWriter && window.SLCloudWriter.lastWritten ? window.SLCloudWriter.lastWritten(m.cloudProjectId) : null; if (typeof lw === 'number' && (_activeCloudDocVersion == null || lw > _activeCloudDocVersion)) _activeCloudDocVersion = lw; } catch (_) {}
             try { if (typeof _rtUpdatePresenceProject === 'function') _rtUpdatePresenceProject(); } catch (_) {}
         }
     } catch (_) {}

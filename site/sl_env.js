@@ -47,7 +47,11 @@
     internalIdCounter: function () { return internalIdCounter; },
     idpContributors:   function () { return idpContributors; },
     idpCell:           function () { return idpCell; },
-    esc:               function () { return esc; }
+    esc:               function () { return esc; },
+    // 26 Oct 2026: read by fc_auto_trees.js (const/let at top level: not on window)
+    SEVERITY_RANK:     function () { return SEVERITY_RANK; },
+    AutoReq:           function () { return AutoReq; },
+    activeSystemId:    function () { return activeSystemId; }
   };
 
   // 20 Aug 2026 — this list was hand-maintained and therefore short: acReqData and

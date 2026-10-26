@@ -119,7 +119,7 @@ function tab(name, fha, srcs, opts) {
   };
   // the cloud push (cloud_sync.js __slCloudSyncPushNow): records what it was handed, answers as told
   ctx.__slCloudSyncPushNow = (o) => {
-    env.cloud.calls.push(o && o.snapshot ? JSON.parse(o.snapshot) : J(env.model));
+    env.cloud.calls.push(o && o.snapshot ? JSON.parse(o.snapshot) : J(env.model)); (env.cloud.modes = env.cloud.modes || []).push(o && o.mode || 'silent');
     const m = env.cloud.mode;
     if (m === 'hold') return new Promise(r => { env.cloud.hold = () => r({ ok: true, reason: 'ok' }); });
     return Promise.resolve(m === 'ok' ? { ok: true, reason: 'ok' } : { ok: false, reason: m, error: m === 'error' ? new Error('HTTP 503') : undefined });
@@ -271,8 +271,13 @@ async function suiteBody(SRC, tag, P) {
   check('the retry landed: Saved, nothing pending, no timers left', st.state === 'saved' && !st.cloudPending && A.longTimers().length === 0 && sevOnly(last(A), 'r2') === 'Major', JSON.stringify(st));
   A.cloud.mode = 'refused';
   await edit(A, rows => { rows[1].severity = 'Minor'; });
-  check('the cloud copy refused while the live sync carries it: saved (shared with the team)', A.save.status().state === 'saved' && A.save.status().where === 'team', JSON.stringify(A.save.status()));
+  // 26 Oct 2026 (Radia): a refusal is never "Saved". With the live sync on the confirm save is 'merged' (it writes over
+  // a moved copy); one still refused is said and tried again
+  check('the confirm push with the live sync on is a merged save', A.cloud.modes[A.cloud.modes.length - 1] === 'merged', JSON.stringify(A.cloud.modes.slice(-3)));
+  check('the cloud copy refused while the live sync carries it: NOT saved, said, and tried again', A.save.status().state !== 'saved' && A.save.status().reasonCode === 'refused' && A.longTimers().length > 0, JSON.stringify(A.save.status()));
   A.cloud.mode = 'ok';
+  await idle(A, true); await idle(A, true);
+  check('the retry landed: Saved to the cloud', A.save.status().state === 'saved' && A.save.status().where === 'cloud' && !A.save.status().cloudPending, JSON.stringify(A.save.status()));
 
   // ---------------------------------------------------------------------- S7
   if (!quiet) console.log('\n[S7' + tag + '] a change acknowledged while a save runs is not lost');
@@ -363,8 +368,9 @@ async function suiteBody(SRC, tag, P) {
   quiet = true;
   const m1 = await suite(mutate(SAVE, "if (decision === 'kept') { _requestSave(); return; }", "if (decision === 'kept') { return; }", 'M1'), ' M1');
   const m2 = await suite(mutate(SAVE, "acc = (A && A.acceptedSnapshot) ? A.acceptedSnapshot() : null;", "acc = null;", 'M2'), ' M2');
-  const m3 = await suite(mutate(SAVE, "        if (_retryTimer) return;\n        if (!_online()) return;", "        return;", 'M3'), ' M3');
-  const m4 = await suite(mutate(SAVE, "        if (!_cloudPending && !_localFail) return true;\n        _stats.asked++;", "        return true;", 'M4'), ' M4');
+  // 26 Oct 2026: the two guarded lines also name the desktop project file (_fileFail); same mutations
+  const m3 = await suite(mutate(SAVE, "        if (_retryTimer) return;\n        if (!_online() && !_fileFail) return;", "        return;", 'M3'), ' M3');
+  const m4 = await suite(mutate(SAVE, "        if (!_cloudPending && !_localFail && !_fileFail) return true;\n        _stats.asked++;", "        return true;", 'M4'), ' M4');
   quiet = false; pass = keep.pass; fail = keep.fail;
   check('M1 no save on Acknowledge: S1 goes red', !m1.s1);
   check('M2 accepted snapshot ignored: S4 goes red (what still waits rides the upload)', !m2.s4);

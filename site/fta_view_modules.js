@@ -1970,9 +1970,14 @@ function _refreshSysWizard(page) {
     }
     if (fcHint) fcHint.style.display = 'none';
     const SEV_RANK_LOCAL = SEVERITY_RANK;   // Phase 27 refactor B5 — alias to module-scope constant.
+    // 26 Oct 2026: the governing row comes from the one shared rule (fc_auto_trees.js, SLFcTrees: worst severity,
+    // ties the longest exposure), so this list, the trees and every other picker agree on which row it is. Without
+    // SLFcTrees (it loads late), the old local pick: worst severity, first row on a tie.
+    const _T = (typeof SLFcTrees !== 'undefined' && SLFcTrees && typeof SLFcTrees.governingOf === 'function') ? SLFcTrees : null;
     const groups = new Map();
     matching.forEach(f => {
         const key = (f.fcId || '#' + f.internalId);
+        if (_T) { if (!groups.has(key)) { let g = f; try { g = _T.governingOf(f) || f; } catch (_) {} groups.set(key, g); } return; }
         const prev = groups.get(key);
         const rank = SEV_RANK_LOCAL[f.severity] || 0;
         if (!prev || rank > (SEV_RANK_LOCAL[prev.severity] || 0)) {
@@ -1985,7 +1990,8 @@ function _refreshSysWizard(page) {
         // "most conservative wins" choice transparent.
         const variants = matching.filter(x => (x.fcId || '#' + x.internalId) === fcKey);
         const sev = f.severity ? ' [' + f.severity + ']' : '';
-        const variantTag = variants.length > 1 ? '  (most conservative of ' + variants.length + ' variants)' : '';
+        let variantTag = variants.length > 1 ? '  (most conservative of ' + variants.length + ' variants)' : '';
+        if (_T && typeof _T.copiesNote === 'function') { try { const n = _T.copiesNote(f); if (n) variantTag = ' ' + n; } catch (_) {} }
         const label = fcKey + ': ' + (f.fcDesc || 'failure condition') + sev + variantTag;
         fcOpts.push('<option value="' + esc(f.internalId) + '">' + esc(label) + '</option>');
     });
@@ -2008,15 +2014,23 @@ function refreshFcLinkPanel() {
     panel.style.display = 'block';
     // Populate the dropdown from AC FHAs (by fcId, matching sysFha.acTrace's semantics).
     const curr = sysFha.acTrace || '';
+    // 26 Oct 2026: one entry per aircraft failure condition (its governing row: worst severity, ties the longest
+    // exposure, SLFcTrees), and the trace resolves to that row, so the effective severity and target are the worst
+    // of its phases, not whichever phase row came first. Without SLFcTrees (it loads late): every row, first match.
+    const _T = (typeof SLFcTrees !== 'undefined' && SLFcTrees && typeof SLFcTrees.isGoverning === 'function') ? SLFcTrees : null;
+    const _acList = _T ? (acFhaData || []).filter(a => { try { return _T.isGoverning(a); } catch (_) { return true; } }) : (acFhaData || []);
     let html = '<option value="">-- Not linked --</option>';
-    acFhaData.forEach(ac => {
+    _acList.forEach(ac => {
         const sel = (ac.fcId === curr) ? ' selected' : '';
-        html += `<option value="${esc(ac.fcId)}"${sel}>${esc(ac.fcId)}: ${esc((ac.fcDesc || '').slice(0, 40))}</option>`;
+        let note = ''; if (_T && typeof _T.copiesNote === 'function') { try { note = _T.copiesNote(ac) || ''; } catch (_) {} }
+        html += `<option value="${esc(ac.fcId)}"${sel}>${esc(ac.fcId)}: ${esc((ac.fcDesc || '').slice(0, 40))}${esc(note)}</option>`;
     });
     sel.innerHTML = html;
     // Show the effective combined target.
     if (curr) {
-        const ac = acFhaData.find(a => a.fcId === curr);
+        let ac = null;
+        if (_T && typeof _T.byFcId === 'function') { try { ac = _T.byFcId(curr, 'ac'); } catch (_) { ac = null; } }
+        if (!ac) ac = acFhaData.find(a => a.fcId === curr);
         if (ac) {
             const sevOrder = SEVERITY_RANK;   // Phase 27 refactor B5 — alias to module-scope constant.
             const winner = (sevOrder[ac.severity] || 0) >= (sevOrder[sysFha.severity] || 0) ? ac.severity : sysFha.severity;
@@ -2940,6 +2954,7 @@ function _gtvBuildGraph(opts){
     // thread (FMEA, PRA, ZSA, human factors, R&M) joins it; the index is built once per graph.
     let _mlIdx = null;
     try { if (typeof window !== 'undefined' && window.SLModelLinks && typeof window.SLModelLinks.threadIndex === 'function') _mlIdx = window.SLModelLinks.threadIndex(); } catch(_){ _mlIdx = null; }
+    const _gtvFcT = (typeof SLFcTrees !== 'undefined' && SLFcTrees && typeof SLFcTrees.governingOf === 'function') ? SLFcTrees : null;
     const rows = [];
     (acFhaData||[]).forEach(f => rows.push({ fha: f, domain: 'AC', system: null }));
     (systemsData||[]).forEach(s => (s.fha||[]).forEach(f => rows.push({ fha: f, domain: 'SYS', system: s })));
@@ -2986,10 +3001,18 @@ function _gtvBuildGraph(opts){
         }); }
         else { sysKeys.push(addNode('sys', '_aircraft', 'Aircraft level', 'System', null)); }
 
-        const fcKey = addNode('fc', domain + ':' + fha.internalId, (fha.fcId || ('FC#' + fha.internalId)),
-            (domain === 'AC' ? 'AFHA' : 'SFHA') + (fha.severity ? ' · ' + fha.severity : ''),
-            { kind: domain === 'AC' ? 'acFha' : 'sysFha', id: fha.internalId, systemId: system ? system.id : null },
-            fha.obsolete ? 'obsolete' : null, fha.obsoleteReason || '');
+        // 26 Oct 2026: ONE node per failure condition. A condition written as several rows (one per phase, same FC ID)
+        // is drawn as its governing row (worst severity, ties the longest exposure: SLFcTrees), labelled with how many
+        // rows it stands for; every phase row's own links (trees, requirements, analyses) join that one node, so
+        // nothing linked to a phase copy drops off the thread. Without SLFcTrees (it loads late): one node per row.
+        let _gov = fha;
+        if (_gtvFcT) { try { _gov = _gtvFcT.governingOf(fha) || fha; } catch (_) { _gov = fha; } }
+        let _govNote = '';
+        if (_gtvFcT && typeof _gtvFcT.copiesNote === 'function') { try { _govNote = _gtvFcT.copiesNote(_gov) || ''; } catch (_) {} }
+        const fcKey = addNode('fc', domain + ':' + _gov.internalId, (_gov.fcId || ('FC#' + _gov.internalId)),
+            (domain === 'AC' ? 'AFHA' : 'SFHA') + (_gov.severity ? ' · ' + _gov.severity : '') + _govNote,
+            { kind: domain === 'AC' ? 'acFha' : 'sysFha', id: _gov.internalId, systemId: system ? system.id : null },
+            _gov.obsolete ? 'obsolete' : null, _gov.obsoleteReason || '');
 
         sysKeys.forEach(sk => { if(funcKey) addLink(funcKey, sk); addLink(sk, fcKey); });
         // One lane, two roles: tag the systems that realize the function PRIMARY,

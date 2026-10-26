@@ -238,7 +238,8 @@ const JT = require('../site/jama_tree.js');
     const p = page({ baseUrl: 'https://radia.jamacloud.com', projectId: '77' });
     let err = '';
     try { await p.ctx.bridgeFetchItems(); } catch (e) { err = e.message; }
-    check('no item types chosen: nothing is read, and it says why', /Choose which Jama item types/.test(err) && p.srv.log.length === 0);
+    // 26 Oct 2026 (Waqas: the Jama browser replaces the item-type chooser): the words now point at it
+    check('nothing chosen: nothing is read, and it says why', /Choose what comes in from Jama first/.test(err) && p.srv.log.length === 0, err);
     const types = await page(base).ctx.bridgeFetchItemTypes();
     check('item types are listed for the picker', types.length === 4 && types.some(t => t.id === rig.FN && t.name === 'Function'));
     const p2 = page(base, {});

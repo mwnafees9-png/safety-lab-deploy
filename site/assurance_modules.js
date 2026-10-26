@@ -841,6 +841,13 @@ const AutoReq = (function(){
     function _governingFhaForPage(page){
         if (!page) return null;
         const ids = (Array.isArray(page.linkedFhaIds) && page.linkedFhaIds.length) ? page.linkedFhaIds : (page.linkedFhaId ? [page.linkedFhaId] : []);
+        // 26 Oct 2026 (Waqas: "we just need the most conservative instances"): each linked row stands as its failure
+        // condition's governing row (fc_auto_trees.js SLFcTrees: worst severity, ties the longest exposure), and the
+        // page's is the worst of those, ties the longest exposure: the rule every picker uses. Before SLFcTrees has
+        // loaded: the worst linked row, the first on ties, as before.
+        let _F = null;
+        try { _F = (typeof window !== 'undefined' && window.SLFcTrees && typeof window.SLFcTrees.governingOf === 'function') ? window.SLFcTrees : null; } catch (_) { _F = null; }
+        const _expo = r => { try { const e = getPhaseExposureRatio(r && r.phases); return (e && e.exposedHours) || 0; } catch (_) { return 0; } };
         let best = null;
         ids.forEach(id => {
             let fha = (acFhaData || []).find(x => x && String(x.internalId) === String(id));
@@ -851,9 +858,23 @@ const AutoReq = (function(){
                     if (m) { fha = m; home = 'sys-' + s.id; break; }
                 }
             }
-            if (fha && fha.severity && (!best || (SEV_ORDER[fha.severity] || 0) > (SEV_ORDER[best.fha.severity] || 0))) best = { fha, home };
+            if (fha && _F) { try { const g = _F.governingOf(fha); if (g) fha = g; } catch (_) {} }
+            if (!fha || !fha.severity) return;
+            if (!best) { best = { fha, home }; return; }
+            const a = SEV_ORDER[fha.severity] || 0, b = SEV_ORDER[best.fha.severity] || 0;
+            if (a > b || (_F && a === b && fha !== best.fha && _expo(fha) > _expo(best.fha))) best = { fha, home };
         });
         if (!best) return null;
+        // the safety requirement genFHA writes for a failure condition with several rows carries the id of its
+        // canonical row (_canonicalizeFhaGroup): the pair-trace names that one, whichever row the page links
+        let _srcRowId = best.fha.internalId;
+        if (_F && typeof _F.groupOf === 'function') {
+            try {
+                const g = _F.groupOf(best.fha);
+                const mem = g && g.fcId ? (g.rows || []).filter(r => r && r.severity) : [];
+                if (mem.length > 1) _srcRowId = _canonicalizeFhaGroup(mem).internalId;
+            } catch (_) {}
+        }
         // Effective severity mirrors genFHA's linkage rule (more restrictive wins),
         // so the pair-trace gates on the same target the safety requirement carries.
         let effSev = best.fha.severity;
@@ -868,7 +889,7 @@ const AutoReq = (function(){
         return {
             fha: best.fha, home: best.home, effSev, prob,
             fcId: best.fha.fcId || ('#' + best.fha.internalId),
-            sourceId: best.home + ':fha:prob:' + best.fha.internalId
+            sourceId: best.home + ':fha:prob:' + _srcRowId
         };
     }
     // Is the governing safety requirement ACCEPTED into its home register, or
@@ -3866,8 +3887,11 @@ const Traceability = (function(){
             const labelDesc = c.tlDesc || c.plDesc || c.mDesc || '';
             out.push({ kind: 'acFcim', id: c.internalId, label: labelId + ' · ' + labelDesc, searchText: [c.tlId, c.plId, c.mId, c.tlDesc, c.plDesc, c.mDesc, c.subId].filter(Boolean).join(' '), tab: 'ac-fcim' });
         });
-        // AC FHA
-        (acFhaData || []).forEach(f => out.push({ kind: 'acFha', id: f.internalId, label: (f.fcId || '#' + f.internalId) + ' · ' + (f.fcDesc || '') + ' [' + (f.severity || '—') + ']', searchText: [f.fcId, f.fcDesc, f.severity, f.subId].join(' '), tab: 'ac-fha' }));
+        // AC FHA. 26 Oct 2026: one entry per failure condition, its most conservative row (slFcGovView,
+        // helpers_modules.js), labelled with how many rows it stands for; every row before SLFcTrees has loaded
+        const _gv = sc => (typeof slFcGovView === 'function') ? slFcGovView(sc) : null;
+        const _acV = _gv('ac');
+        (acFhaData || []).forEach(f => { if (_acV && !_acV.keep(f)) return; out.push({ kind: 'acFha', id: f.internalId, label: (f.fcId || '#' + f.internalId) + ' · ' + (f.fcDesc || '') + ' [' + (f.severity || '—') + ']' + (_acV ? _acV.note(f) : ''), searchText: [f.fcId, f.fcDesc, f.severity, f.subId].join(' '), tab: 'ac-fha' }); });
         // AC Reqs
         (acReqData || []).forEach(r => out.push({ kind: 'acReq', id: r.internalId, label: (r.traceId || '#' + r.internalId) + ' · ' + trim(r.text, 80), searchText: [r.traceId, r.text, r.level, r.type].join(' '), tab: 'ac-req' }));
         // AC Assumptions
@@ -3880,7 +3904,8 @@ const Traceability = (function(){
                 const labelDesc = c.tlDesc || c.plDesc || c.mDesc || '';
                 out.push({ kind: 'sysFcim', id: c.internalId, systemId: s.id, label: '[' + s.name + '] ' + labelId + ' · ' + labelDesc, searchText: [s.name, c.tlId, c.plId, c.mId, c.tlDesc, c.plDesc, c.mDesc, c.subId].filter(Boolean).join(' '), tab: 'sys-workspace', sysSubtab: 'sys-fcim' });
             });
-            (s.fha || []).forEach(f => out.push({ kind: 'sysFha', id: f.internalId, systemId: s.id, label: '[' + s.name + '] ' + (f.fcId || '') + ' · ' + (f.fcDesc || '') + ' [' + (f.severity || '—') + ']', searchText: [s.name, f.fcId, f.fcDesc, f.severity].join(' '), tab: 'sys-workspace', sysSubtab: 'sys-fha' }));
+            const _sV = _gv(s);
+            (s.fha || []).forEach(f => { if (_sV && !_sV.keep(f)) return; out.push({ kind: 'sysFha', id: f.internalId, systemId: s.id, label: '[' + s.name + '] ' + (f.fcId || '') + ' · ' + (f.fcDesc || '') + ' [' + (f.severity || '—') + ']' + (_sV ? _sV.note(f) : ''), searchText: [s.name, f.fcId, f.fcDesc, f.severity].join(' '), tab: 'sys-workspace', sysSubtab: 'sys-fha' }); });
             (s.req || []).forEach(r => out.push({ kind: 'sysReq', id: r.internalId, systemId: s.id, label: '[' + s.name + '] ' + (r.traceId || '#' + r.internalId) + ' · ' + trim(r.text, 70), searchText: [s.name, r.traceId, r.text, r.level].join(' '), tab: 'sys-workspace', sysSubtab: 'sys-req' }));
             (s.asm || []).forEach(a => out.push({ kind: 'sysAsm', id: a.internalId, systemId: s.id, label: '[' + s.name + '] ' + (a.asmId || '#' + a.internalId) + ' · ' + trim(a.statement, 60), searchText: [s.name, a.asmId, a.statement].join(' '), tab: 'sys-workspace', sysSubtab: 'sys-asm' }));
         });

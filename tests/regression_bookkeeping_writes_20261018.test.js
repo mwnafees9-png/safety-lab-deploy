@@ -35,7 +35,8 @@ check('journal.js saves its entries inside SLChangeAck.system', /if \(wrote\) \{
 check('journal.js falls back to a plain save where change_ack is absent', /if \(A && typeof A\.system === 'function'\) A\.system\(sa\); else sa\(\);/.test(J));
 check('journal.js no longer calls scheduleAutosave bare after a write', !/if \(wrote\) \{ try \{ if \(typeof scheduleAutosave === 'function'\) scheduleAutosave\(\); \} catch \(_\) \{\} \}/.test(J));
 check('idp_seed_trees.js saves the sweep inside SLChangeAck.system', /if \(seeded \|\| regenerated \|\| removed\) \{[\s\S]{0,1200}A\.system\(sa\)/.test(I));
-check('index.html loads journal.js v1.2 and idp_seed_trees.js v1.3', /journal\.js\?v=1\.2"/.test(H) && /idp_seed_trees\.js\?v=1\.3"/.test(H));
+// pins as floors (rule 12): idp_seed_trees.js moved to 1.4 on 26 Oct 2026 (one seed per failure condition)
+check('index.html loads journal.js v1.2 and idp_seed_trees.js v1.3 or later', /journal\.js\?v=1\.2"/.test(H) && /idp_seed_trees\.js\?v=1\.([3-9]|\d\d)"/.test(H));
 
 let pw = null;
 for (const p of ['playwright', '/home/claude/.npm-global/lib/node_modules/playwright']) { try { pw = require(p); break; } catch (_) {} }

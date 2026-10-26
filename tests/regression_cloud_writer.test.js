@@ -45,7 +45,7 @@ console.log('\n[1] census — every served JS that writes project_documents');
   check('no upsert to project_documents anywhere', !writers.some(x => x.endsWith(':upsert')));
   check('index.html loads cloud_writer.js right after helpers_modules', /helpers_modules\.js\?v=[\d.]+" defer><\/script>\s*<script src="cloud_writer\.js\?v=/.test(S('index.html')));
   check('helpers.saveProjectToCloud is a thin caller (hands the writer a prepare, manual mode)', /W\.write\(\{ mode: 'manual', prepare \}\)/.test(S('helpers_modules.js')));
-  check('cloud_sync is a thin caller (silent mode)', /W\.write\(\{ mode: 'silent', prepare: prepare \}\)/.test(S('cloud_sync.js')));
+  check('cloud_sync is a thin caller (silent unless the caller says merged or manual)', /W\.write\(\{ mode: \(opts\.mode === 'merged' \|\| opts\.mode === 'manual'\) \? opts\.mode : 'silent', prepare: prepare \}\)/.test(S('cloud_sync.js')));
   check('commitSaveChanges only claims a cloud save when one landed', /cloud = \(await saveProjectToCloud\(\)\) === true/.test(S('helpers_modules.js')));
   check('the write carries its precondition: WHERE version = the token this tab read, and reads back what landed', PRECOND.test(W));
 }

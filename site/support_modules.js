@@ -2725,7 +2725,7 @@ function _writeFmeaForm(row) {
     if (row.fmeaType === 'functional') {
         _applyFmeaModeUI('functional');
         _populateFmeaFunctionLink();
-        _populateFmeaFuncLinkedFc();
+        _populateFmeaFuncLinkedFc(row.linkedFcId || '');   // 26 Oct 2026: its stored link stays offered (one option per FC otherwise)
         set('fmea-function-link', row.funcSubId);
         set('fmea-func-mode', row.funcMode || 'loss');
         set('fmea-phase', row.phase);
@@ -3242,20 +3242,31 @@ function renderGoldenThreadView(){
 function _gtvReportRows(functionSubId){
     const rows = [];
     const fcRows = [];
-    (acFhaData||[]).forEach(f => fcRows.push({ fha: f, domain: 'AC', system: null }));
-    (systemsData||[]).forEach(s => (s.fha||[]).forEach(f => fcRows.push({ fha: f, domain: 'SYS', system: s })));
-    fcRows.forEach(({ fha, domain, system }) => {
+    // 26 Oct 2026: one thread per failure condition, its most conservative row (slFcGovView, helpers_modules.js); its
+    // trees and requirements are gathered from every row of the condition. Every row before SLFcTrees has loaded.
+    const _gv = sc => (typeof slFcGovView === 'function') ? slFcGovView(sc) : null;
+    const _acV = _gv('ac');
+    (acFhaData||[]).forEach(f => { if (!_acV || _acV.keep(f)) fcRows.push({ fha: f, domain: 'AC', system: null, V: _acV }); });
+    (systemsData||[]).forEach(s => { const V = _gv(s); (s.fha||[]).forEach(f => { if (!V || V.keep(f)) fcRows.push({ fha: f, domain: 'SYS', system: s, V }); }); });
+    fcRows.forEach(({ fha, domain, system, V }) => {
         const subId = fha.subId;
         if(functionSubId && subId !== functionSubId) return;
+        const _grp = V ? V.group(fha) : null;
+        const _members = (_grp && _grp.rows && _grp.rows.length) ? _grp.rows : [fha];
+        const _memberIds = _members.map(m => m.internalId);
         const fn = (acFunctionsData||[]).find(f => f.subId === subId) || (system && (system.functions||[]).find(f => f.subId === subId));
         const syss = _gtvSystemsForFc(fha, domain).map(s => s.name);
-        const linkedPages = (ftaPages||[]).filter(p => { const L = (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds : (p.linkedFhaId ? [p.linkedFhaId] : []); return L.includes(fha.internalId); });
+        const linkedPages = (ftaPages||[]).filter(p => { const L = (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds : (p.linkedFhaId ? [p.linkedFhaId] : []); return L.some(id => _memberIds.includes(id)); });
         const pageIds = linkedPages.map(p => String(p.id));
         const cc = [];
         (cmaData||[]).forEach(c => { if((c.linkedGateIds||[]).some(k => pageIds.includes(String(k).split(':')[0]))) cc.push('CMA ' + (c.cmaId || '')); });
         (zsaData||[]).forEach(z => { if((z.housedFunctions||[]).includes(subId)) cc.push('ZSA ' + (z.zoneId || '')); });
         (praData||[]).forEach(p => { if((p.affectedZones||[]).some(zid => { const z = (zsaData||[]).find(zz => zz.zoneId === zid); return z && (z.housedFunctions||[]).includes(subId); })) cc.push('PRA ' + (p.praId || '')); });
-        let refs = []; try { refs = Traceability.getReferrers({ kind: domain === 'AC' ? 'acFha' : 'sysFha', id: fha.internalId, systemId: system ? system.id : null }) || []; } catch(e){}
+        let refs = [];
+        _members.forEach(m => {
+            let got = []; try { got = Traceability.getReferrers({ kind: domain === 'AC' ? 'acFha' : 'sysFha', id: m.internalId, systemId: system ? system.id : null }) || []; } catch(e){}
+            got.forEach(r => { if (!refs.some(x => x.kind === r.kind && String(x.id) === String(r.id) && String(x.systemId || '') === String(r.systemId || ''))) refs.push(r); });
+        });
         const reqLabels = [], verifs = [];
         refs.filter(r => r.kind === 'acReq' || r.kind === 'sysReq').forEach(r => {
             const req = (r.kind === 'acReq') ? (acReqData||[]).find(x => String(x.internalId) === String(r.id)) : (function(){ const s = (systemsData||[]).find(ss => ss.id === r.systemId); return s ? (s.req||[]).find(x => String(x.internalId) === String(r.id)) : null; })();
@@ -3267,7 +3278,7 @@ function _gtvReportRows(functionSubId){
             'Function': fn ? (fn.subId + ' · ' + (fn.subName || '')) : (subId || '—'),
             'System': syss.length ? syss.join(', ') : 'Aircraft level',
             'FC ID': fha.fcId || '',
-            'Failure Condition': fha.fcDesc || '',
+            'Failure Condition': (fha.fcDesc || '') + (V ? V.note(fha) : ''),
             'Severity': fha.severity || '',
             'DAL': (sevTarget && sevTarget.dal) || '',
             'Fault Tree(s)': linkedPages.map(p => p.name || ('Tree ' + p.id)).join('; ') || '—',

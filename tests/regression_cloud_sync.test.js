@@ -48,12 +48,12 @@ check('cloud_sync does not compose a project_documents write of its own any more
   !/from\('project_documents'\)/.test(c.replace(/\/\/[^\n]*/g, '')));
 check('the silent write is the writer\'s conditional UPDATE keyed on the token it read',
   /from\('project_documents'\)[\s\S]{0,200}\.update\([\s\S]{0,200}\.eq\('version', expected\)[\s\S]{0,60}\.select\('version'\)/.test(w));
-check('a refused silent write is SKIPPED, never retried into an overwrite (one attempt in silent mode)',
-  /var attempts = \(mode === 'manual'\) \? 2 : 1;/.test(w));
+check('a refused silent write is SKIPPED, never retried into an overwrite (one attempt in silent mode; merged and manual try twice)',
+  /var attempts = \(mode === 'silent'\) \? 1 : 2;/.test(w));
 check('no row yet: INSERT at version 1, duplicate-key is the same refusal',
   /\.insert\(Object\.assign\(\{ project_id: projectId, version: 1 \}/.test(w) && /'23505'/.test(w));
 check('the silent path hands the writer a prepare() — same queue as the manual Save',
-  /W\.write\(\{ mode: 'silent', prepare: prepare \}\)/.test(c) && /__slabCloudSaveQ/.test(w));
+  /W\.write\(\{ mode: \(opts\.mode === 'merged' \|\| opts\.mode === 'manual'\) \? opts\.mode : 'silent', prepare: prepare \}\)/.test(c) && /__slabCloudSaveQ/.test(w));
 // 13 Oct 2026 (AutoSave): _snapshot(opts.snapshot) = the accepted state handed over, still read inside the run
 check('the snapshot is taken INSIDE the writer\'s queued run (prepare), never before it',
   /var prepare = async function \(\) \{[\s\S]{0,300}var snap = _snapshot\((opts\.snapshot)?\)/.test(c) && !/async function _tick\([\s\S]{0,900}_snapshot\(\)[\s\S]{0,900}async function _push/.test(c));

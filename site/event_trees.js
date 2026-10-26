@@ -310,7 +310,12 @@
         return { bySev, unassessed, worst, worstFreq: worst ? bySev[worst].freq : 0 };
     }
 
+    // 26 Oct 2026 (Waqas: "we just need the most conservative instances"): an FC written as several FHA rows (one per
+    // flight phase) is classified by its governing row (SLFcTrees: worst severity, ties longest exposure), never by
+    // whichever row comes first. SLFcTrees loads late: without it, the first row as before.
     function _fcSeverity(fcId) {
+        const FT = window.SLFcTrees;
+        if (FT && typeof FT.byFcId === 'function') { try { const g = FT.byFcId(fcId, 'all'); if (g) return g.severity || ''; } catch (_) {} }
         const ac = (typeof acFhaData !== 'undefined' ? acFhaData : []) || [];
         let f = ac.find(x => x && x.fcId === fcId);
         if (!f) {
@@ -1061,7 +1066,11 @@
         ((typeof acFhaData !== 'undefined' ? acFhaData : []) || []).forEach(f => { if (f && f.fcId && ids.indexOf(f.fcId) < 0) ids.push(f.fcId); });
         ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => (s.fha || []).forEach(f => { if (f && f.fcId && ids.indexOf(f.fcId) < 0) ids.push(f.fcId); }));
         if (cur && ids.indexOf(cur) < 0) ids.push(cur);
-        return [{ value: '', label: 'Not linked' }].concat(ids.map(v => ({ value: v, label: v })));
+        // 26 Oct 2026: one entry per FC ID already; an FC written as several rows (one per flight phase) stands for its
+        // governing row (SLFcTrees: worst severity, ties longest exposure) and says how many rows it covers
+        const FT = window.SLFcTrees;
+        const note = v => { try { const g = FT && FT.byFcId ? FT.byFcId(v, 'all') : null; return g ? (FT.copiesNote(g) || '') : ''; } catch (_) { return ''; } };
+        return [{ value: '', label: 'Not linked' }].concat(ids.map(v => ({ value: v, label: v + note(v) })));
     }
     function _pageOptions(cur, tr, max) {
         // 25 Oct 2026: the trees this event tree may link (tree_homes.js linkOptions: an aircraft tree's headings also

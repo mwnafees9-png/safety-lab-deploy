@@ -4176,7 +4176,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.1" defer></script>
     <script src="node_identity_ui.js?v=1.5" defer></script>
-    <script src="fta_view_modules.js?v=66.47" defer></script>
+    <script src="fta_view_modules.js?v=66.48" defer></script>
     <!-- 13 Oct 2026 (fix G) — SLFtaEdit: the fault tree built by hand (toolbox, drawn connections, unattached nodes, canvas λ/P, model link, overview map) and the ONE change path (SLFtaEdit.applyEdit). After fta_view_modules.js. -->
     <script src="fta_canvas_edit.js?v=1.1" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
@@ -4185,12 +4185,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="gt_thread.js?v=0.93" defer></script>
     <!-- 21 Oct 2026 (full function tree): func_tree.js is the one place that knows how aircraft functions nest to any depth. Loads before the modules that render and pick functions. -->
     <script src="func_tree.js?v=1.1" defer></script>
-    <script src="data_ops_modules.js?v=66.60" defer></script>
+    <script src="data_ops_modules.js?v=66.61" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.51" defer></script>
+    <script src="support_modules.js?v=66.52" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.39" defer></script>
-    <script src="cloud_writer.js?v=1.2" defer></script>
+    <script src="helpers_modules.js?v=3.40" defer></script>
+    <script src="cloud_writer.js?v=1.3" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
     <script src="fha_derive.js?v=1.2" defer></script>
@@ -4199,12 +4199,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
-    <script src="misc_fn_modules.js?v=66.85" defer></script>
+    <script src="misc_fn_modules.js?v=66.86" defer></script>
     <script src="safety_lab.js?v=65.69" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
-    <script src="sl_env.js?v=1.1" defer></script>
+    <script src="sl_env.js?v=1.2" defer></script>
     <!-- 20 Aug 2026 — ONE declaration of what a project is (get/set/reset/coerce per
          store). The local autosave, the cloud push, the .slab export, the new-project
          reset and both load paths derive from it. Same load-order rule as sl_env: it
@@ -4216,17 +4216,17 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="save_watch.js?v=1.2" defer></script>
     <script src="data_change.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (analysis model links): model_links.js links every analysis row to the model elements it is about; loads after data_change.js (its cache key) and before the worksheet decorators. -->
-    <script src="model_links.js?v=1.1" defer></script>
+    <script src="model_links.js?v=1.2" defer></script>
     <script src="render_pass.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
     <script src="change_ack.js?v=3.2" defer></script>
-    <script src="save_state.js?v=3.2" defer></script>
+    <script src="save_state.js?v=3.4" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.1" defer></script>
-    <script src="pra_scenarios.js?v=1.0" defer></script>
-    <script src="usoc.js?v=1.0" defer></script>
+    <script src="pra_scenarios.js?v=1.1" defer></script>
+    <script src="usoc.js?v=1.1" defer></script>
     <script src="pa_audit.js?v=1.0" defer></script>
     <script src="ub_stimuli.js?v=1.0" defer></script>
     <script src="qual_arg.js?v=1.0" defer></script>
@@ -4248,7 +4248,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="design_baseline.js?v=1.0" defer></script>
     <!-- Phase 76 — these modules read safety_lab.js constants at definition time (or are only referenced at runtime), so they load AFTER the monolith. None are referenced at the monolith's top level. -->
     <script src="req_taxonomy.js?v=1.1" defer></script>
-    <script src="assurance_modules.js?v=1.39" defer></script>
+    <script src="assurance_modules.js?v=1.40" defer></script>
     <script src="engine_modules.js?v=1.3" defer></script>
     <!-- Backlog #1 — AI confidence-tied-to-fidelity badges (born modular; deterministic verdicts from recorded provenance; decorates worksheets, feeds reports + evidence package). Loads BEFORE reports.js so final outputs pick up the labels. -->
     <script src="ai_badges.js?v=1.4" defer></script>
@@ -4330,7 +4330,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="ffs_module.js?v=1.32" defer></script>
     <!-- Phase D gap 1 (§3.5) — ASA working surface: deterministic triage + measured MF&MS re-run (born modular; upgrades the ASA F.4 gate). -->
     <script src="asa_triage.js?v=1.13" defer></script>
-    <script src="idp_seed_trees.js?v=1.3" defer></script>
+    <script src="idp_seed_trees.js?v=1.4" defer></script>
     <!-- Golden Thread integrity sweep + link bindings (born modular). -->
     <script src="gt_integrity.js?v=1.8" defer></script>
     <!-- App Q output-set harness. MUST load after gt_integrity.js: it wraps
@@ -4346,7 +4346,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Recovery ring + session resume (born modular; rides the autosave cadence). -->
     <script src="session_resume.js?v=1.5" defer></script>
     <!-- Continuous cloud autosave + first-edit project provisioning (born modular; wraps _writeAutosave). -->
-    <script src="cloud_sync.js?v=2.8" defer></script>
+    <script src="cloud_sync.js?v=2.9" defer></script>
     <!-- 15 Oct 2026: a reload reopens the project this tab was showing (per-tab pin in sessionStorage). -->
     <script src="tab_project.js?v=1.1" defer></script>
     <!-- ReqIF import — Polarion et al. (born modular; own XML parser; idempotent). -->
@@ -4358,7 +4358,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="jama_tree.js?v=1.2" defer></script>
     <!-- 22 Oct 2026 (live Jama on every page, aircraft and system level): jama_kinds.js maps assumptions, failure conditions, system functions and which system an item belongs to; pure, loads before the bridge. -->
     <script src="jama_kinds.js?v=1.0" defer></script>
-    <script src="live_bridge.js?v=3.1" defer></script>
+    <script src="live_bridge.js?v=3.2" defer></script>
     <!-- M5 — Cameo/SysML XMI import (draft socket awaiting the program sample). -->
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab
@@ -4442,7 +4442,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="demo_picker.js?v=6" defer></script>
     <script src="first_run.js?v=3" defer></script>
     <script src="continue_session.js?v=1.1" defer></script>
-    <script src="stpa_panel.js?v=1.47" defer></script>
+    <script src="stpa_panel.js?v=1.48" defer></script>
     <script src="stpa_report.js?v=1.3" defer></script>
     <script src="stpa_ai_apply.js?v=0.3" defer></script>
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
@@ -4485,7 +4485,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 15 Oct 2026: the exchange with Sys Lab (zones, CAD containment and risk results out; the physical architecture in). Deterministic, no AI. -->
     <script src="zonal_exchange.js?v=1.3" defer></script>
     <!-- 19 Oct 2026: the zonal safety analysis, computed zone by zone from the zone model, CAD, Sys Lab routes and the fault trees. Deterministic, no AI. -->
-    <script src="zsa_engine.js?v=1.0" defer></script>
+    <script src="zsa_engine.js?v=1.1" defer></script>
     <script src="zsa_engine_ui.js?v=1.1" defer></script>
     <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
     <script src="requirement_states.js?v=1.0" defer></script>
@@ -4503,7 +4503,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- M1 phase 2 — L3 cockpit: flow editor, per-deviation BDD corroboration, FMEA sign desk. -->
     <script src="mac_flows.js?v=1.2" defer></script>
     <script src="mac_fcim.js?v=1.2" defer></script>
-    <script src="lane_trees.js?v=1.4" defer></script>
+    <script src="lane_trees.js?v=1.5" defer></script>
     <script src="stale_watch.js?v=1.3" defer></script>
     <script src="mirror_modes.js?v=1.1" defer></script>
     <script src="phys_hazards.js?v=1.5" defer></script>
@@ -4533,11 +4533,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="do_credit.js?v=1.0" defer></script>
     <script src="do160_ledger.js?v=1.0" defer></script>
     <script src="ewis_lane.js?v=1.0" defer></script>
-    <script src="event_trees.js?v=2.4" defer></script>
+    <script src="event_trees.js?v=2.5" defer></script>
     <!-- Bow-Tie Analysis — unified FTA↔ETA. Born-modular: creates its own view + nav,
          joins the fault tree's BDD-exact top probability to the event tree initiator,
          checks cross-side common cause against cut sets, lints generic barriers. -->
-    <script src="bowtie.js?v=3.4" defer></script>
+    <script src="bowtie.js?v=3.5" defer></script>
     <!-- Global UI text-size control (A−/A/A+, Ctrl±). Born-modular; scales the whole
          app via body zoom, persisted. Addresses the "text too small" default. -->
     <script src="text_scale.js?v=2.2" defer></script>
@@ -4579,7 +4579,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="fc_variants.js?v=1.06" defer></script>
     <script src="fc_tree_flow.js?v=1.03" defer></script>
     <!-- 24 Oct 2026: fc_auto_trees.js (SLFcTrees): every Major-or-worse failure condition the 1309 chart sends to a quantitative analysis (or whose chart is not answered) gets its PASA or PSSA tree, its top event filled in; a system tree takes the stricter of the aircraft allocation and its class target. After fc_tree_flow.js. -->
-    <script src="fc_auto_trees.js?v=1.2" defer></script>
+    <script src="fc_auto_trees.js?v=1.4" defer></script>
     <script src="cca_models.js?v=1.03" defer></script>
     <!-- Skills V1 — versioned drafting-instruction registry. Loads EAGERLY (tiny,
          static) and BEFORE ai_loader so the engine finds window.SLABSkills on its
@@ -4588,7 +4588,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="eval_core.js?v=1.9" defer></script>
     <script src="ai_skills.js?v=2.16" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
-    <script src="ai_loader.js?v=8.79" defer></script>
+    <script src="ai_loader.js?v=8.80" defer></script>
     <!-- 16 Oct 2026: the AI Assistant page (AI inputs, every AI analysis and the chat, the pages that read the inputs). -->
     <script src="ai_inputs_page.js?v=1.0" defer></script>
     <script src="config_management.js?v=1.12" defer></script>

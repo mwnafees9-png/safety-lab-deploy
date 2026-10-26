@@ -56,8 +56,47 @@
     //     edit to one FHA row re-derives that row only.
     // See tests/regression_perf_idp_sweep.test.js.
     var _ctx = null;
-    function _contribs(fc) {
+    // ---- one seed per FAILURE CONDITION (26 Oct 2026) ------------------------------------------------------------
+    // Waqas: "fault trees should be generated for the most conservative severity classification only". An aircraft
+    // failure condition written as several AFHA rows (one per phase, same FC ID) gets ONE seed, on its governing row
+    // (worst severity, ties the longest exposure: SLFcTrees in fc_auto_trees.js), built from what ALL its rows say:
+    // the contributors of any of its rows, the SFHA rows traced to any of them, an MF&MS page on any of them. A
+    // project already holding a seed on a phase copy keeps it: that page IS the condition's seed (no second one is
+    // made beside it), and seeds an older build made on the other copies are left exactly as they are (never deleted,
+    // never regenerated). Without SLFcTrees (it loads late): one seed per row, as before.
+    function _fcT() {
+        var T = (typeof SLFcTrees !== 'undefined' && SLFcTrees) ? SLFcTrees : ((typeof window !== 'undefined' && window.SLFcTrees) || null);
+        return (T && typeof T.groupOf === 'function') ? T : null;
+    }
+    // the rows of fc's failure condition (fc first); [fc] when nothing groups them
+    function _rowsOf(fc) {
+        if (_ctx && _ctx.rows && _ctx.rows.has(fc)) return _ctx.rows.get(fc);
+        var T = _fcT(), out = [fc];
+        if (T) { try { var g = T.groupOf(fc); if (g && Array.isArray(g.rows)) g.rows.forEach(function (r) { if (r && out.indexOf(r) < 0) out.push(r); }); } catch (_) {} }
+        return out;
+    }
+    // the failure conditions of the AFHA, each { gov, rows } in the order they first appear
+    function _units() {
+        var T = _fcT(), out = [], byGov = new Map();
+        _fcs().forEach(function (r) {
+            if (!r || r.internalId == null) return;
+            var gov = r, rows = [r];
+            if (T) { try { var g = T.groupOf(r); if (g && g.gov && Array.isArray(g.rows)) { gov = g.gov; rows = g.rows.filter(function (x) { return x && x.internalId != null; }); } } catch (_) {} }
+            if (byGov.has(gov)) return;
+            var u = { gov: gov, rows: [gov].concat(rows.filter(function (x) { return x !== gov; })) };
+            byGov.set(gov, u); out.push(u);
+        });
+        return out;
+    }
+    function _contribs1(fc) {
         try { return (typeof idpContributors === 'function') ? (idpContributors(fc) || []) : []; } catch (_) { return []; }
+    }
+    function _contribs(fc) {
+        var rows = _rowsOf(fc);
+        if (rows.length === 1) return _contribs1(fc);
+        var out = [];
+        rows.forEach(function (r) { _contribs1(r).forEach(function (s) { if (out.indexOf(s) < 0) out.push(s); }); });
+        return out;
     }
     function _beginSweep() {
         var sys = _sys();
@@ -70,7 +109,7 @@
             var lids = Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds : (p.linkedFhaId != null ? [p.linkedFhaId] : []);
             lids.forEach(function (l) { foreign.add(String(l)); });
         });
-        _ctx = { sysById: sysById, traced: new Map(), foreign: foreign, pageIdx: null };
+        _ctx = { sysById: sysById, traced: new Map(), foreign: foreign, pageIdx: null, rows: new Map() };
     }
     function _endSweep() { _ctx = null; }
     function _sysGet(id) {
@@ -81,7 +120,15 @@
         var s = _sysGet(id);
         return s ? (s.name || String(id)) : String(id);
     }
+    // the SFHA rows of a system traced to ANY row of fc's failure condition (each once)
     function _tracedRows(sysId, fc) {
+        var rows = _rowsOf(fc);
+        if (rows.length === 1) return _tracedRows1(sysId, fc);
+        var out = [];
+        rows.forEach(function (r) { _tracedRows1(sysId, r).forEach(function (t) { if (out.indexOf(t) < 0) out.push(t); }); });
+        return out;
+    }
+    function _tracedRows1(sysId, fc) {
         if (_ctx) {
             var byTrace = _ctx.traced.get(sysId);
             if (!byTrace) {
@@ -125,7 +172,11 @@
     }
 
     // The same MF&MS-page match the ASA triage uses — plus our own seeds.
+    // any row of fc's failure condition covered by a real MF&MS page
     function _hasForeignMfms(fc) {
+        return _rowsOf(fc).some(_hasForeignMfms1);
+    }
+    function _hasForeignMfms1(fc) {
         if (_ctx) return _ctx.foreign.has(String(fc.internalId));
         return (_pages() || []).some(function (p) {
             if (!p || !p.root) return false;
@@ -191,8 +242,12 @@
         var live = {};
         _beginSweep();
         try {
-        _fcs().forEach(function (fc) {
-            if (!fc || fc.internalId == null) return;
+        // one pass per failure condition (26 Oct 2026). Its seed sits on the governing row, unless one of its rows
+        // already carries a seed from an older build: then that page is the condition's seed and stays where it is.
+        _units().forEach(function (u) {
+            var fc = u.gov;
+            for (var i = 0; i < u.rows.length; i++) { if (_pageIndex(pages, 'idp-pg-' + u.rows[i].internalId) !== -1) { fc = u.rows[i]; break; } }
+            if (_ctx) _ctx.rows.set(fc, [fc].concat(u.rows.filter(function (x) { return x !== fc; })));
             var contribs = _contribs(fc);
             var pid = 'idp-pg-' + fc.internalId;
             var idx = _pageIndex(pages, pid);

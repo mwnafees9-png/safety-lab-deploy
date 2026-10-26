@@ -1006,7 +1006,11 @@
         ((typeof acFhaData !== 'undefined' ? acFhaData : []) || []).forEach(f => { if (f && f.fcId && ids.indexOf(f.fcId) < 0) ids.push(f.fcId); });
         ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => (s.fha || []).forEach(f => { if (f && f.fcId && ids.indexOf(f.fcId) < 0) ids.push(f.fcId); }));
         if (cur && ids.indexOf(cur) < 0) ids.push(cur);
-        return [{ value: '', label: 'Not linked' }].concat(ids.map(v => ({ value: v, label: v })));
+        // 26 Oct 2026: one entry per FC ID already; an FC written as several rows (one per flight phase) stands for its
+        // governing row (SLFcTrees: worst severity, ties longest exposure) and says how many rows it covers
+        const FT = window.SLFcTrees;
+        const note = v => { try { const g = FT && FT.byFcId ? FT.byFcId(v, 'all') : null; return g ? (FT.copiesNote(g) || '') : ''; } catch (_) { return ''; } };
+        return [{ value: '', label: 'Not linked' }].concat(ids.map(v => ({ value: v, label: v + note(v) })));
     }
     const _pNum = v => (v == null || (v >= 0 && v <= 1)) ? null : 'Enter a probability between 0 and 1 (for example 1e-3).';
     function _fields(item, ctx) {
