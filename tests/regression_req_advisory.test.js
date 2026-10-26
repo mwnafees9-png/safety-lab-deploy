@@ -158,7 +158,7 @@ console.log('\n[req] the accept path, executed');
   vm.createContext(sandbox);
   const rsrc = fs.readFileSync(path.join(SITE, 'assurance_modules.js'), 'utf8');
   vm.runInContext(rsrc.slice(rsrc.indexOf('const Review = (function()'), rsrc.indexOf('const AutoReq = (function()')) + '\n; globalThis.Review = Review;', sandbox);
-  vm.runInContext(apply + '\n; globalThis._fn = _applyReqSuggestion;', sandbox);
+  vm.runInContext(ai.slice(ai.indexOf('    const _has = function (v) {'), ai.indexOf('\n    // F1c batch (30 Aug 2026)')) + '\n' + apply + '\n; globalThis._fn = _applyReqSuggestion;', sandbox);   // 26 Oct 2026: the writer asks the one row rule first
   vm.runInContext(imp + '\n; globalThis._imp = _importReqRow;', sandbox);
 
   const ok = sandbox._fn({ text: 'The FCS shall annunciate loss of X within 1 s.', rationale: 'closes FC-01', traceSubId: 'FN-2', type: 'Safety', verifMethod: 'Test', _model: 'test-model' });

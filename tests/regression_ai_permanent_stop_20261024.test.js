@@ -54,6 +54,7 @@ const ai = fs.readFileSync(process.env.SL_AI || path.join(SITE, 'ai_assistant.js
   const at = ai.indexOf('const _runSlice = async function (_ci) {'), end = ai.indexOf('\n        };', at);
   const pa = ai.indexOf('        const _isPermanent = function (e) {'), pe = ai.indexOf('\n        };', pa);
   const wl = (ai.match(/const _worker = async function \(\) \{[^\n]*\};/) || [])[0];
+  const emptyFn = (ai.match(/const _emptyTurn = function \(a\) \{[^\n]*\};/) || [''])[0];   // 26 Oct 2026: the turn runner reads it
   check('extracted the turn runner, the classifier and the pool worker', at > 0 && end > at && pa > 0 && pe > pa && !!wl);
   async function batch(errOf, n) {
     const c = { console, setTimeout, Math, Promise, Array, String, AiClient: { isPermanentError } };
@@ -68,7 +69,8 @@ const ai = fs.readFileSync(process.env.SL_AI || path.join(SITE, 'ai_assistant.js
       const _CHUNK_TURN_TOKENS = 4000, _sysExtra = '', _sysBreaks = [], _batchLane = 'fha';
       const _mkMessages = x => [{ role: 'user', content: x }];
       const calls = [];
-      const _anemRun = async function (m) { calls.push(m[0].content); await new Promise(r => setTimeout(r, 5)); const e = errOf(calls.length); if (e) throw e; return { ok: 1 }; };
+      const _anemRun = async function (m) { calls.push(m[0].content); await new Promise(r => setTimeout(r, 5)); const e = errOf(calls.length); if (e) throw e; return { parsed: { actions: [{ op: 'add_fha' }] } }; };
+      ${emptyFn}
       ${ai.slice(at, end + '\n        };'.length)}
       (async function () { let _next = 0; ${wl} await Promise.all(Array.from({ length: Math.min(4, _slices.length) }, _worker)); return { calls: calls.length, permanent: _permanentErr, results: _results, retried: _retried }; })()`;
     c.errOf = errOf;

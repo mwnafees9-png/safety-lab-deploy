@@ -4373,7 +4373,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- Legacy-id renumber migration (slate #12). MUST load after rename_guard:
          it composes rgRenameOwner + rgApply and owns no reference logic itself. -->
     <script src="renumber_migration.js?v=1.1" defer></script>
-    <script src="invariants.js?v=1.6" defer></script>
+    <script src="invariants.js?v=1.7" defer></script>
     <!-- RBD-XCHECK — every RBD figure computed twice (minimal tie-sets vs minimal cut-sets),
          agreement asserted (INV-33, hard) before anything shows. Disagreement = refusal.
          MUST load after invariants.js (invRegister) and after rbd_module.js (_rbdR/_rbdParseDsl);

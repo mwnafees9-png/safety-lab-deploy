@@ -73,7 +73,8 @@ console.log('\n[mult] the accept path allocates ids per extra, executed');
   sb._skillStampFor = () => 'fcim.draft@v1#harness';
   vm.createContext(sb);
   const push = mfn.match(/function _pushExtractedFCs\(fcimArr, out\)[\s\S]*?\n\}/)[0];
-  vm.runInContext(push + '\n' + fcid + '\n' + apply + '\n; globalThis._a = _applyFcimSuggestion;', sb);
+  const ruleSrc = ai.slice(ai.indexOf('    const _has = function (v) {'), ai.indexOf('\n    // F1c batch (30 Aug 2026)'));   // 26 Oct 2026: the writer asks the one row rule first
+  vm.runInContext(ruleSrc + '\n' + push + '\n' + fcid + '\n' + apply + '\n; globalThis._a = _applyFcimSuggestion;', sb);
   const ok = sb._a({ subId: 'SF-9', awareness: 'Both',
     totalLoss: 'Complete loss of deceleration on ground',
     partials: ['Degraded deceleration within MAC limits', 'Degraded deceleration outside MAC'],

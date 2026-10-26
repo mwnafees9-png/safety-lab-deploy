@@ -248,7 +248,7 @@ check('editable fields are declared, so the edit gate and coverage both work',
   /editableFields: \[\{ key: 'statement'/.test(run));
 check('Accept is wired', /onAccept: _applyHfAsm/.test(run));
 check('the disclaimer states what is deliberately left empty',
-  /deliberately <b>left empty<\/b>/.test(run));
+  /deliberately \*\*left empty\*\*/.test(run));   // 26 Oct 2026: notes take **bold**, never tags
 check('and that nothing here validates anything', /Nothing here validates anything/.test(run));
 check('the card shows the crew-effect text the draft came from',
   /Crew effect on the FHA row/.test(run),

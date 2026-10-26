@@ -3348,6 +3348,7 @@
         return { action: 'updated', row: hit };
     }
     function _applyFhaSuggestion(s) {
+        _applyFhaSuggestion._last = null;   // 26 Oct 2026: what the last call did, never a stale answer from an earlier one
         try {
             const sysScoped = !!(s && s._systemId);
             // 31 Aug 2026 (Waqas): "failure conditions IDs in the FCIM should be
@@ -3376,6 +3377,12 @@
                     _srcHit = (_pool || []).find(function (e) { return e && e.id && String(e.id).trim().toLowerCase() === _low; }) || null;
                 }
             } catch (_) { _srcHit = null; }
+            // 26 Oct 2026 (live Aeolus AFHA: three empty rows, FC-002 to FC-004). A row is a failure condition: with
+            // no condition text, and no condition id that finds it in the FCIM, nothing is written. With the id,
+            // the FCIM's own words are the condition (the drafter was told to echo them word for word anyway).
+            const _condText = String((s && s.fcDesc) || '').replace(/\s+/g, ' ').trim() || (_srcHit ? String(_srcHit.desc || '').replace(/\s+/g, ' ').trim() : '');
+            if (!_condText) { _applyFhaSuggestion._last = { action: 'nocondition' }; _toast('Not applied: the drafted row names no failure condition.', 'warning'); return false; }
+            s = Object.assign({}, s, { fcDesc: _condText });
             // 3 Sep 2026 — THE TOP STEP IS JOINT (Waqas): any axis at its catastrophic
             // step carries the other two there, so a drafted row that credits a
             // survivable aircraft or a working pilot beside dead occupants is completed
@@ -3934,7 +3941,12 @@
     function _applyDecompGroup(g) {
         const scope = _decompScope || {};
         try {
-            const subs = g.subs.length ? g.subs : [{ subName: '(general)', subDef: '' }];
+            // 26 Oct 2026 (live Aeolus: AF-010 "Protect against fire" landed with a blank sub-function, SF-025, and the
+            // FCIM then had nothing to break down). A sub-function with no name is not one, and a function with none
+            // left is not written: the engineer is told which, to draft it again. Before, an empty list became a
+            // placeholder "(general)" sub-function the model never proposed.
+            const subs = (g.subs || []).filter(function (sub) { return sub && _has(sub.subName); });
+            if (!_has(g.funcName) || !subs.length) { _toast('Not written: ' + (_has(g.funcName) ? ('"' + String(g.funcName).trim() + '" has no named sub-function') : 'a function with no name') + '. Draft it again, or add its sub-functions by hand.', 'warning'); return 0; }
             let added = 0;
             if (scope.systemId) {
                 // ---- System decomposition: each sub-function becomes a row in the system's flat
@@ -4396,6 +4408,10 @@
     // opened with ~5,000 characters of prose above the first row. The commentary is
     // genuinely useful — it is where the model says which severities it left blank
     // and why — so it is kept, collapsed, and out of the way of the decision.
+    // 26 Oct 2026 (live Aeolus AFHA): a panel's note is plain text, escaped like everything else, and **these
+    // words** is the one emphasis it takes. Three panels put <b> tags in their notes, which the escaping then
+    // showed as text ("<b style=...>").
+    function _noteHtml(t) { return _esc(String(t || '')).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>'); }
     function _modelNotesBlock(notes) {
         const list = (Array.isArray(notes) ? notes : (notes ? [notes] : []))
             .map(function (n) { return String(n || '').trim(); }).filter(Boolean);
@@ -4667,7 +4683,7 @@
         const needVC = !!cfg.requireVisionConfirm && hasAccept;   // #260
         p.innerHTML =
             '<div class="aifh-head"><h3>' + _esc(cfg.title) + '</h3><button type="button" class="rv-close">Close</button></div>' +
-            '<div class="aifh-disclaimer">' + _esc(cfg.disclaimer || '') + '</div>' +
+            '<div class="aifh-disclaimer">' + _noteHtml(cfg.disclaimer) + '</div>' +
             _coverageBanner(cfg.coverage) +   // 26 Aug — a partial analysis must be impossible to mistake for a complete one
             _modelNotesBlock(cfg.notes) +     // 26 Aug — narration collapsed, so the rows and their Accept buttons stay above the fold
             _skillLine(cfg) +               // Skills V1.1 - which drafting instructions produced these rows, visible without the console
@@ -5303,6 +5319,7 @@
     // content is the engineer's, not the model's; filing their own baseline back
     // to them as "advice" would be wrong.
     function _applyReqSuggestion(rq) {
+        if (_refuseEmpty('req', rq)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         try {
             // Review.addComment, not a bare addComment — the review module keeps its
             // functions inside an IIFE and exports them on `Review`. A bare call here
@@ -5813,6 +5830,7 @@
         }
     }
     function _applyFcimSuggestion(s) {
+        if (_refuseEmpty('fcim', s)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         try {
             const sysScoped = !!(s && s._systemId);
             // 2 Aug 2026 — Table A3 multiplicity (Waqas's ruling). The model may
@@ -7882,6 +7900,7 @@
     }
 
     function _applyPra(x) {
+        if (_refuseEmpty('pra', x)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         try {
             if (typeof praData === 'undefined') { _toast('PRA data not loaded.', 'warning'); return false; }
             // Derived separation/segregation/shielding requirement candidates (additive):
@@ -8086,6 +8105,7 @@
         } catch (_) { return ''; }
     }
     function _applyZsa(x) {
+        if (_refuseEmpty('zsa', x)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         try {
             if (typeof zsaData === 'undefined') { _toast('ZSA data not loaded.', 'warning'); return false; }
             const zid = x.zoneId || x.zone || '';
@@ -8240,6 +8260,7 @@
         ].join('\n');
     }
     function _applyCma(x) {
+        if (_refuseEmpty('cma', x)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         try {
             if (typeof cmaData === 'undefined') { _toast('CMA data not loaded.', 'warning'); return false; }
             // M2 rows (Concern -> Effect -> Mitigating Factor / Lack of Independence) +
@@ -8460,6 +8481,7 @@
     // funcSubId/funcMode/linkedFcId; piece-part rows carry beId/parentLibKey/part/mode +
     // the localEffect/nextEffect/endEffect chain. Rows are born linked — no orphans.
     function _applyFmea(x) {
+        if (_refuseEmpty('fmea', x)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         try {
             if (typeof fmeaData === 'undefined') { _toast('FMEA data not loaded.', 'warning'); return false; }
             const level = x._level || 'functional';
@@ -9810,8 +9832,8 @@
 
         _makeReviewPanel({ id: 'ai-rev-panel-hfa', feature: 'hfa.draft', title: '✨ Human Factors · crew credit to register',
             editableFields: [{ key: 'statement', label: 'Assumption' }, { key: 'crewmember', label: 'Crewmember' }, { key: 'responsePhase', label: 'Response phase' }],
-            disclaimer: 'These failure conditions rely on the crew, and nothing on the register says so. Accept writes a <b>Proposed</b> Human Factors assumption and links it to its failure condition. ' +
-                'Task time, its basis, the workload band and the credited/uncredited posture are deliberately <b>left empty</b> — those are measured or decided by you, never drafted. ' +
+            disclaimer: 'These failure conditions rely on the crew, and nothing on the register says so. Accept writes a **Proposed** Human Factors assumption and links it to its failure condition. ' +
+                'Task time, its basis, the workload band and the credited/uncredited posture are deliberately **left empty**, as those are measured or decided by you, never drafted. ' +
                 'Nothing here validates anything.',
             items: rows, assumptions: _assumptions, getKey: function (x) { return x._k; },
             cardHtml: function (x) {
@@ -10025,7 +10047,7 @@
         });
         if (!recs.length) { _toast('No recommendations drafted — try again.', 'warning'); return; }
         _makeReviewPanel({ id: 'ai-rev-panel-hfimp', feature: 'hf.improve', title: '✨ ' + cfg.name + ' · design improvements',
-            disclaimer: 'Advisory design improvements rooted in the standard — <b>not</b> compliance findings, requirements, or design decisions. ' +
+            disclaimer: 'Advisory design improvements rooted in the standard, **not** compliance findings, requirements, or design decisions. ' +
                 'Accept files the recommendation as a review comment on the failure condition(s) and/or lane row(s) it names, so it survives this panel and lands where you review or edit that item. ' +
                 'A recommendation grounded in general best practice (no failure condition named) is shown but cannot be filed — keep it as advice, or edit it to name one.',
             items: recs, assumptions: _assumptions, getKey: function (x) { return x._k; },
@@ -10529,6 +10551,7 @@
         ].join('\n');
     }
     function _applyResource(x) {
+        if (_refuseEmpty('resource', x)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         try {
             if (typeof resourcesData === 'undefined') { _toast('Resources not loaded in this session.', 'warning'); return false; }
             const s = snapshot();
@@ -10900,6 +10923,41 @@
         }
         return null;
     }
+    /* 26 Oct 2026: WHAT A ROW MUST CARRY TO BE A ROW. Found on the live Aeolus run: the AI handed over rows with the part
+       that makes them a row left empty (an AFHA row with no failure condition, a function with no sub-function, an FCIM
+       row with no failure condition at all), and every writer saved them as blank lines. One rule per kind of row; it is
+       read in four places: the AI's reply (an empty row never reaches the review panel), the executor every accept goes
+       through, each writer the classic lanes call directly, and an AI edit of an existing row. Other fields may stay
+       empty (an empty field is the honest answer the abstention rule asks for); these may not, because without them
+       there is nothing there. */
+    const _has = function (v) { return Array.isArray(v) ? v.some(function (x) { return String(x == null ? '' : x).trim() !== ''; }) : String(v == null ? '' : v).trim() !== ''; };
+    const _ROW_RULES = {
+        fha:         { label: 'FHA row',            need: 'a failure condition', ok: function (x) { return _has(x.fcDesc) || _has(x.srcCondId); } },
+        fcim:        { label: 'FCIM row',           need: 'a failure condition (total loss, partial loss or malfunction)', ok: function (x) { return _has(x.totalLoss) || _has(x.partialLoss) || _has(x.malfunction) || _has(x.partials) || _has(x.malfunctions) || _has(x.tlDesc) || _has(x.plDesc) || _has(x.mDesc); } },
+        'func.ac':   { label: 'aircraft function',  need: 'function or sub-function name', ok: function (x) { return _has(x.funcName) && _has(x.subName); } },
+        'func.sys':  { label: 'system function',    need: 'function name', ok: function (x) { return _has(x.subName) || _has(x.funcName); } },
+        fmea:        { label: 'FMEA row',           need: 'failure mode or effect', ok: function (x) { const item = (x.level || x._level || (x.fmeaType === 'piece-part' ? 'item' : '')) === 'item'; return (item ? (_has(x.mode) || _has(x.failureMode)) : (_has(x.funcSubId) || _has(x._funcSubId))) && (_has(x.localEffect) || _has(x.nextEffect) || _has(x.endEffect) || _has(x.effect)); } },
+        zsa:         { label: 'ZSA row',            need: 'zone or finding', ok: function (x) { return (_has(x.zoneId) || _has(x.zone)) && (_has(x.desc) || _has(x.interference) || _has(x.mitigation)); } },
+        pra:         { label: 'PRA row',            need: 'a threat', ok: function (x) { return _has(x.threat); } },
+        cma:         { label: 'CMA row',            need: 'independence claim', ok: function (x) { return _has(x.claim) || _has(x.subject); } },
+        req:         { label: 'requirement',        need: 'requirement text', ok: function (x) { return _has(x.text); } },
+        item:        { label: 'item',               need: 'a name', ok: function (x) { return _has(x.name); } },
+        routing:     { label: 'routing',            need: 'a name', ok: function (x) { return _has(x.name); } },
+        system:      { label: 'system',             need: 'a name', ok: function (x) { return _has(x.name); } },
+        mac:         { label: 'MAC rule',           need: 'the sub-function it applies to', ok: function (x) { return _has(x.subId); } },
+        fta_tree:    { label: 'fault tree',         need: 'a top event', ok: function (x) { return _has(x.topEvent) || !!(x.root && _has(x.root.name)); } },
+        fta_node:    { label: 'fault tree node',    need: 'a name', ok: function (x) { return !!(x.node && _has(x.node.name)); } },
+        markov_state:{ label: 'Markov state',       need: 'a name', ok: function (x) { return _has(x.name); } },
+        resource:    { label: 'resource',           need: 'a name', ok: function (x) { return _has(x.name); } }
+    };
+    const _OP_KIND = { add_fha: 'fha', add_fcim: 'fcim', add_fmea: 'fmea', add_zsa: 'zsa', add_pra: 'pra', add_cma: 'cma', add_requirement: 'req', add_item: 'item', add_routing: 'routing', add_system: 'system', add_mac: 'mac', add_fta_tree: 'fta_tree', add_fta_node: 'fta_node', add_markov_state: 'markov_state' };
+    const _TABLE_KIND = { ac_fha: 'fha', sys_fha: 'fha', ac_func: 'func.ac', sys_func: 'func.sys', ac_fcim: 'fcim', sys_fcim: 'fcim', ac_req: 'req', sys_req: 'req', pra: 'pra', zsa: 'zsa', cma: 'cma', routing: 'routing', item: 'item', fmea: 'fmea' };
+    function _rowKindOf(a) { if (!a) return ''; if (a.op === 'add_function') return (a.scope === 'system' && a.systemId) ? 'func.sys' : 'func.ac'; return _OP_KIND[a.op] || ''; }
+    // '' when the row may be written; otherwise what is missing, in words ("an FCIM row with no failure condition ...")
+    function _rowMissing(kind, x) { const r = _ROW_RULES[kind]; if (!r || !x) return ''; let ok = true; try { ok = !!r.ok(x); } catch (_) { ok = false; } return ok ? '' : ('a' + (/^[aeiouAEIOU]|^FCIM|^FHA|^FMEA/.test(r.label) ? 'n ' : ' ') + r.label + ' with no ' + r.need.replace(/^an? /, '')); }
+    function _actionMissing(a) { const k = _rowKindOf(a); return k ? _rowMissing(k, a) : ''; }
+    // a writer called with nothing to write: say so once, and write nothing
+    function _refuseEmpty(kind, x) { const m = _rowMissing(kind, x); if (!m) return false; try { _toast('Not written: ' + m + '.', 'warning'); } catch (_) {} return true; }
     // F1c batch (30 Aug 2026): the unified batch applies ops through these chat
     // writers, so decompose-accepted rows carried aiFeature 'chat.edit' with an
     // empty skill stamp — the lane identity died at the executor boundary (found
@@ -10925,6 +10983,7 @@
                 if (mk && mk.ok) { sysObj = _chatSysByIdOrName(mk.id) || _chatSysByIdOrName(a.systemId); createdSys = String(a.systemId).trim(); }
             }
             if (!sysObj) return { ok: false, error: 'system not found: ' + String(a.systemId) };
+            { const _m = _rowMissing('func.sys', a); if (_m) return { ok: false, blocked: true, error: 'not written: ' + _m }; }   // 26 Oct 2026
             if (!Array.isArray(sysObj.functions)) sysObj.functions = [];
             const row = { internalId: newRowId(), funcId: '', funcName: a.subName || a.funcName || '', funcDef: a.subDef || a.funcDef || '', traceIds: a.traceIds || [], ..._chatProv(model) };
             try { if (typeof _slAutoNumber === 'function') _slAutoNumber('sysFunc', row); } catch (_) {}
@@ -10934,6 +10993,7 @@
             return { ok: true, summary: 'System function ' + row.funcId + ' added — ' + _chatClip(row.funcName, 40) + (createdSys ? ' (system “' + createdSys + '” created — it was named but not added)' : '') };
         }
         if (typeof acFunctionsData === 'undefined') return { ok: false, error: 'functions not loaded' };
+        { const _m = _rowMissing('func.ac', a); if (_m) return { ok: false, blocked: true, error: 'not written: ' + _m }; }   // 26 Oct 2026
         const row = { internalId: newRowId(), funcId: '', funcName: a.funcName || '', funcDef: a.funcDef || '', subId: '', subName: a.subName || '', subDef: a.subDef || '', ..._chatProv(model) };
         if (typeof _slAutoNumber === 'function') _slAutoNumber('acFunc', row);
         if (typeof _fallbackFuncIds === 'function') _fallbackFuncIds(row);
@@ -10943,6 +11003,7 @@
     }
     function _chatAddRouting(a, model) {
         if (typeof routingData === 'undefined') return { ok: false, error: 'routing not loaded' };
+        { const _m = _rowMissing('routing', a); if (_m) return { ok: false, blocked: true, error: 'not written: ' + _m }; }   // 26 Oct 2026
         const row = { internalId: newRowId(), routingId: a.routingId || ('RTG-' + String((routingData.length || 0) + 1).padStart(3, '0')), name: a.name || '', kind: a.kind || 'Data', desc: a.desc || '', routesThroughZones: a.routesThroughZones || [], carriesFunctions: a.carriesFunctions || [], carriesItems: a.carriesItems || [], history: [], ..._chatProv(model) };
         routingData.push(row);
         if (typeof renderRouting === 'function') renderRouting();
@@ -10950,6 +11011,7 @@
     }
     function _chatAddItem(a, model) {
         if (typeof itemsData === 'undefined') return { ok: false, error: 'items not loaded' };
+        { const _m = _rowMissing('item', a); if (_m) return { ok: false, blocked: true, error: 'not written: ' + _m }; }   // 26 Oct 2026
         // 4 Sep 2026 (F15) — owningSystemId may be the system's NAME (the systems lane
         // creates systems by name in the same draft); an item of the same name under the
         // same system is reused, never duplicated (the MAC counts copies, not repeats).
@@ -10969,6 +11031,8 @@
         if (!row) return { ok: false, error: 'no ' + (ref.label || a.table) + ' with _id ' + a._id };
         const fields = a.fields || {};
         let changed = []; let diff = [];
+        // 26 Oct 2026: an edit that would leave the row with nothing in it (by the one rule, _ROW_RULES) is refused
+        { const _k = _TABLE_KIND[a.table], _after = Object.assign({}, row, fields), _m = _k ? _rowMissing(_k, _after) : ''; if (_m && !(_k && _rowMissing(_k, row))) return { ok: false, blocked: true, error: 'not changed: it would leave ' + _m }; }
         Object.keys(fields).forEach(function (k) { if (k !== 'internalId' && k !== '_id' && k !== 'aiGenerated') { diff.push({ field: k, from: row[k], to: fields[k] }); row[k] = fields[k]; changed.push(k); } });
         row.aiChatEdited = true; row.aiEditedAt = new Date().toISOString(); if (model) row.aiEditModel = model;
         if (ref.render) try { ref.render(); } catch (_) {}
@@ -12064,6 +12128,8 @@
         try {
         (actions || []).forEach(function (a) {
             if (!a || !a.op) { results.push({ ok: false, error: 'missing op' }); return; }
+            const _empty = _actionMissing(a);   // 26 Oct 2026: a row with nothing in it is never written
+            if (_empty) { results.push({ ok: false, blocked: true, error: 'not written: ' + _empty }); return; }
             const _offLane = _opLaneBlocked(a);
             if (_offLane) { results.push({ ok: false, blocked: true, error: 'out of program scope — the ' + _offLane + ' lane is not in this program\'s plan. Add it on the Program Planning tab first; nothing was drafted into it.' }); return; }
             const pre = _preflightAction(a);
@@ -12078,6 +12144,7 @@
                         const ok = _applyFhaSuggestion({ subId: a.subId, fcDesc: a.fcDesc, phases: a.phases || [], effAc: a.effAc, effCrew: a.effCrew, effPax: a.effPax, effAcLevel: a.effAcLevel, effCrewLevel: a.effCrewLevel, effPaxLevel: a.effPaxLevel, severity: a.severity, severityRationale: a.severityRationale, sevBasis: a.sevBasis, srcCondId: a.srcCondId, judgementCall: a.judgementCall === true, judgementNote: a.judgementNote, realized: a.realized, escape: a.escape, escapeDefeated: a.escapeDefeated, _assumptions: Array.isArray(a._assumptions) ? a._assumptions : [], _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
                         const _did = (_applyFhaSuggestion._last && _applyFhaSuggestion._last.action) || (ok ? 'add' : '');
                         if (ok === 'protected') results.push({ ok: false, blocked: true, error: 'row for ' + (a.srcCondId || _chatClip(a.fcDesc, 30)) + ' (same phases) was edited by hand — not overwritten; newer draft noted on it' });
+                        else if (!ok && _applyFhaSuggestion._last && _applyFhaSuggestion._last.action === 'nocondition') results.push({ ok: false, blocked: true, error: 'the drafted row names no failure condition (no text, and no condition id found in the FCIM), so nothing was written' });   // 26 Oct 2026
                         else results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'SFHA' : 'AFHA') + ' FC ' + (_did === 'updated' ? 'updated in place' : 'added') + ' — ' + _chatClip(a.fcDesc, 50) + (a.judgementCall === true ? ' · JUDGMENT CALL flagged' : '') } : { ok: false, error: 'add_fha failed' });
                         break;
                     }
@@ -12459,6 +12526,9 @@
         let _permanentErr = null;       // a condition no retry can clear (billing, auth, quota)
         const _turnErrs = [];           // what the failed attempts said, for the console summary
         const _results = new Array(_slices.length);
+        // 26 Oct 2026: a turn with no actions at all (unreadable, or readable with nothing in it)
+        const _emptyTurn = function (a) { const pp = a && a.parsed; return !(pp && Array.isArray(pp.actions) && pp.actions.length); };
+        let _emptyTurns = 0;
         const _runSlice = async function (_ci) {
             const _slice = _slices[_ci];
             let _extra = '';
@@ -12486,7 +12556,13 @@
             let _lastErr = null;
             for (let _try = 1; _try <= _TURN_TRIES; _try++) {
                 try {
-                    _results[_ci] = { ok: true, a: await _anemRun(_mkMessages(_extra), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks, _batchLane), tries: _try };   // 5 Sep — analysis batches at temperature 0
+                    const _a = await _anemRun(_mkMessages(_extra), _sysExtra, _chunk ? _CHUNK_TURN_TOKENS : undefined, 0, _sysBreaks, _batchLane);   // 5 Sep — analysis batches at temperature 0
+                    // 26 Oct 2026 (live Aeolus AFHA run): a turn that came back with no rows for its slice was
+                    // counted as returned, never tried again, and the run said every turn was done. A slice of
+                    // work that comes back empty is not done: it is tried again like a failed turn, and if it is
+                    // still empty it is reported as not completed (its reply, if any, is kept for the notes).
+                    if (_slice && _emptyTurn(_a)) { const _ee = new Error('the reply came back with no rows for its ' + _slice.length + ' ' + String(_chunk.noun || 'item') + (_slice.length === 1 ? '' : 's')); _ee.emptyTurn = true; _ee.a = _a; throw _ee; }
+                    _results[_ci] = { ok: true, a: _a, tries: _try };
                     if (_try > 1) _retried++;
                     return;
                 } catch (e) {
@@ -12518,6 +12594,12 @@
                 if (e && e.isInsufficient) {
                     if (!_declined) _declined = { parsed: e.parsed, insufficient: e.insufficient };
                     continue;   // one slice declining must not discard the slices that worked
+                }
+                if (e && e.emptyTurn) {   // 26 Oct 2026: empty after every try; its cause is kept
+                    _emptyTurns++;
+                    const _ea = e.a || {};
+                    if (!_ea.parsed) { _unparsed++; if (!_rawTail) _rawTail = String((_ea.rr && _ea.rr.text) || '').replace(/\s+/g, ' ').trim().slice(0, 240); }
+                    else if (_ea.parsed.reply) _replies.push(String(_ea.parsed.reply));
                 }
                 if (!_hardErr) _hardErr = e;
                 continue;
@@ -12557,6 +12639,7 @@
             console.info('[AI] batch ' + (cfg.analysis || 'batch') + ': ' + _slicesRun + '/' + _slices.length
                 + ' turn(s) returned' + (_retried ? (', ' + _retried + ' after a retry') : '')
                 + ', ' + actions.length + ' row(s)'
+                + (_emptyTurns ? (', ' + _emptyTurns + ' came back empty after ' + _TURN_TRIES + ' tries') : '')
                 + ((_slices.length - _slicesRun) ? (' — ' + (_slices.length - _slicesRun) + ' still failed'
                     + (_permanentErr ? (' (permanent: ' + ((_permanentErr && _permanentErr.message) || _permanentErr) + ')') : (' after ' + _TURN_TRIES + ' attempts'))) : ''));
             if (_turnErrs.length) console.info('[AI] retried turns: ' + _turnErrs.slice(0, 12).join(' | '));
@@ -12564,6 +12647,10 @@
 
         if (!actions.length) {
             if (_declined) { _anemNoActionsPanel(cfg, _declined.parsed, _declined.insufficient, _rerun); return; }
+            if (_emptyTurns && !_permanentErr && _emptyTurns === _slices.length - _slicesRun) {   // 26 Oct 2026: every turn came back empty
+                _anemNoActionsPanel(cfg, { reply: 'Nothing drafted: ' + _emptyTurns + ' of ' + _slices.length + ' turn(s) came back with no rows after ' + _TURN_TRIES + ' tries each.' + (_unparsed ? (' ' + _unparsed + ' of them were not the JSON asked for' + (_rawTail ? '; the reply began: "' + _rawTail + '"' : '') + '.') : '') + (_replies.length ? ' What the model said: ' + _replies.join(' ') : ' The model gave no reason.'), actions: [], choices: [] }, null, _rerun);
+                return;
+            }
             if (_unparsed && !_permanentErr && !_hardErr) {   // F16d — an unreadable reply is a stated reason, not a blank one
                 _anemNoActionsPanel(cfg, { reply: 'Nothing drafted — ' + _unparsed + ' of ' + _slices.length + ' turn(s) came back as text that was not the JSON asked for, after one retry each.' + (_rawTail ? ' The reply began: "' + _rawTail + '"' : ' The reply was empty.'), actions: [], choices: [] }, null, _rerun);
                 return;
@@ -12583,6 +12670,19 @@
         } else if (_retried) {
             _toast('Drafted ' + actions.length + ' row(s) — all ' + _slices.length + ' turn(s) complete (' + _retried + ' needed a retry).', 'success', 5000);
         }
+        // 26 Oct 2026 (live Aeolus AFHA: FC-002, FC-003 and FC-004 landed as empty rows). A drafted FHA row with no
+        // failure condition text and no condition id to find it by is not a row: it is left out here, and the
+        // panel says how many, so the coverage note names the conditions still to draft. A row that carries a
+        // condition id is kept: on accept its text comes from the FCIM (_applyFhaSuggestion).
+        // 26 Oct 2026, across the board: every kind of row, by the one rule (_ROW_RULES), not the FHA alone.
+        const _emptyBy = {};
+        for (let _i = actions.length - 1; _i >= 0; _i--) {
+            const _x = actions[_i], _m = _actionMissing(_x);
+            if (_m) { actions.splice(_i, 1); const _k = _rowKindOf(_x); _emptyBy[_k] = (_emptyBy[_k] || 0) + 1; }
+        }
+        const _noCond = Object.keys(_emptyBy).reduce(function (n, k) { return n + _emptyBy[k]; }, 0);
+        const _emptyWords = Object.keys(_emptyBy).map(function (k) { const r = _ROW_RULES[k]; return _emptyBy[k] + ' ' + r.label + (_emptyBy[k] === 1 ? '' : 's') + ' with no ' + r.need.replace(/^an? /, ''); }).join(', ');
+        if (_noCond) { try { console.info('[AI] ' + _noCond + ' drafted row(s) were empty and left out: ' + _emptyWords); } catch (_) {} }
         const parsed = { reply: _replies.join(' '), actions: actions, assumptions: _batchAsms };
 
         // The assertion the whole change exists for: what did we ask for, and what
@@ -12687,7 +12787,8 @@
                 // said up front so the engineer knows how much of the sheet needs a closer look.
                 const _jc = (_gvr.rows || []).filter(function (r) { return r && r.op === 'add_fha' && r.judgementCall === true; }).length;
                 return 'Advisory drafts from the unified AI engine. Severities are proposed for your confirmation. Accept applies through the same executor + safeguards as the live assistant.'
-                     + (_jc ? (' <b style="color:#7A5300;">' + _jc + ' row' + (_jc === 1 ? '' : 's') + ' classified by JUDGMENT on limited information — each is flagged and its assumption is filed on accept.</b>') : '');
+                     + (_jc ? (' **' + _jc + ' row' + (_jc === 1 ? '' : 's') + ' classified by JUDGMENT on limited information: each is flagged and its assumption is filed on accept.**') : '')
+                     + (_noCond ? (' **' + _noCond + ' drafted row' + (_noCond === 1 ? ' was' : 's were') + ' empty and left out (' + _emptyWords + '); draft ' + (_noCond === 1 ? 'it' : 'them') + ' again.**') : '');
             })(),
             notes: _replies,
             items: _gvr.rows,

@@ -171,15 +171,16 @@ if (runFn) {
   const provVar = "var _chatExecFeature = '';";
   const addFn = extractFn(aiSrc, '_chatAddFunction');
   try {
-    vm.runInContext(preamble + provVar + provFn + addFn + runFn +
+    const ruleSrc = aiSrc.slice(aiSrc.indexOf('    const _has = function (v) {'), aiSrc.indexOf('\n    // F1c batch (30 Aug 2026)'));   // 26 Oct 2026: the executor and the writer ask the one row rule
+    vm.runInContext(preamble + ruleSrc + provVar + provFn + addFn + runFn +
       ';globalThis.__run = _chatRunActions; globalThis.__feat = function(){ return _chatExecFeature; };', sb3);
-    vm.runInContext("__run([{ op: 'add_function', subName: 'Lock nose door', subDef: 'Per §5.7.' }], 'test-model', undefined, 'arch.decompose')", sb3);
+    vm.runInContext("__run([{ op: 'add_function', funcName: 'Secure the doors', subName: 'Lock nose door', subDef: 'Per §5.7.' }], 'test-model', undefined, 'arch.decompose')", sb3);
     const row = vm.runInContext('acFunctionsData[0]', sb3);
     check('EXECUTED: batch-accepted function row carries the LANE, not chat.edit',
       row && row.aiFeature === 'arch.decompose' && row.aiSkill === 'arch.decompose@v2#deadbeef',
       row && JSON.stringify({ f: row.aiFeature, s: row.aiSkill }));
     check('EXECUTED: lane cleared after the apply', vm.runInContext('__feat()', sb3) === '');
-    vm.runInContext("__run([{ op: 'add_function', subName: 'Plain chat add' }], 'test-model')", sb3);
+    vm.runInContext("__run([{ op: 'add_function', funcName: 'Chat function', subName: 'Plain chat add' }], 'test-model')", sb3);
     const row2 = vm.runInContext('acFunctionsData[1]', sb3);
     check('EXECUTED: plain chat apply still stamps chat.edit', row2 && row2.aiFeature === 'chat.edit');
   } catch (e) {

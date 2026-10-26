@@ -23,7 +23,7 @@ function check(name, cond, detail) { if (cond) { pass++; console.log('  PASS  ' 
 console.log('[1] the pool retries, and says what it did');
 {
   check('a retry budget exists and is more than one attempt', /_TURN_TRIES = (\d+)/.test(ai) && Number((ai.match(/_TURN_TRIES = (\d+)/) || [])[1]) >= 2);
-  check('the attempt loop wraps the model call', /for \(let _try = 1; _try <= _TURN_TRIES; _try\+\+\)/.test(ai) && /_results\[_ci\] = \{ ok: true, a: await _anemRun\(/.test(ai));
+  check('the attempt loop wraps the model call', /for \(let _try = 1; _try <= _TURN_TRIES; _try\+\+\)/.test(ai) && /const _a = await _anemRun\(/.test(ai) && /_results\[_ci\] = \{ ok: true, a: _a, tries: _try \}/.test(ai));   // 26 Oct 2026: the reply is looked at before it counts
   check('a reasoned abstention is NEVER retried', /if \(e && e\.isInsufficient\) break;/.test(ai));
   check('backoff is exponential with jitter, not a tight loop', /500 \* Math\.pow\(3, _try - 1\) \+ Math\.floor\(Math\.random\(\) \* 400\)/.test(ai));
   check('only the final failure is recorded as the slice result', /_results\[_ci\] = \{ ok: false, e: _lastErr, tries: _TURN_TRIES \}/.test(ai));
@@ -61,6 +61,8 @@ console.log('\n[2] EXECUTED — the real _runSlice against a fake provider');
   const end = ai.indexOf('\n        };', at);
   check('extracted the real _runSlice', at > 0 && end > at);
   const body = ai.slice(at, end + '\n        };'.length);
+  const emptyFn = (ai.match(/const _emptyTurn = function \(a\) \{[^\n]*\};/) || [''])[0];   // 26 Oct 2026: the real rule, beside the real runner
+  check('extracted the real empty-turn rule', !!emptyFn);
 
   const harness = `
     const _TURN_TRIES = 3;
@@ -82,8 +84,12 @@ console.log('\n[2] EXECUTED — the real _runSlice against a fake provider');
       if (globalThis.__mode === 'abstain') { const e = new Error('insufficient'); e.isInsufficient = true; e.parsed = {}; throw e; }
       if (globalThis.__mode === 'dead') throw new Error('provider down');
       if (globalThis.__mode === 'billing') throw new Error('Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.');
+      if (globalThis.__mode === 'empty') return { parsed: { reply: 'Here you go.', actions: [] } };   // 26 Oct 2026: readable, and nothing in it
+      if (globalThis.__mode === 'unreadable') return { parsed: null, rr: { text: 'Sorry, I cannot' } };
+      if (globalThis.__mode === 'emptyOnce' && n < 2) return { parsed: { actions: [] } };
       return { parsed: { actions: [{ op: 'add_fha' }] } };
     };
+    ${emptyFn}
     ${body}
     globalThis.__run = _runSlice; globalThis.__results = _results;
     globalThis.__stats = () => ({ retried: _retried, errs: _turnErrs.length });
@@ -109,6 +115,20 @@ console.log('\n[2] EXECUTED — the real _runSlice against a fake provider');
     await ctx.__run(1);
     check('a reasoned abstention is asked ONCE and left alone', ctx.__calls.length === 1 && ctx.__results[1].ok === false && ctx.__results[1].e.isInsufficient === true);
     check('an abstention adds no retry noise', ctx.__stats().retried === 0 && ctx.__stats().errs === 0);
+
+    // 26 Oct 2026 (live Aeolus AFHA run): an empty turn used to count as returned and was never asked again
+    ctx.__reset(); ctx.__mode = 'empty';
+    await ctx.__run(0);
+    check('a turn that comes back with no rows is asked again, then reported as not completed', ctx.__calls.length === 3 && ctx.__results[0].ok === false && ctx.__results[0].e && ctx.__results[0].e.emptyTurn === true, JSON.stringify({ calls: ctx.__calls.length, r: ctx.__results[0] && ctx.__results[0].ok }));
+    check('the empty reply rides along, for the notes', ctx.__results[0].e.a && ctx.__results[0].e.a.parsed && ctx.__results[0].e.a.parsed.reply === 'Here you go.');
+    ctx.__reset(); ctx.__mode = 'unreadable';
+    await ctx.__run(0);
+    check('a reply that is not the JSON asked for is asked again too, then not completed', ctx.__calls.length === 3 && ctx.__results[0].ok === false && ctx.__results[0].e.emptyTurn === true);
+    ctx.__reset(); ctx.__mode = 'emptyOnce';
+    await ctx.__run(0);
+    check('empty once, then rows: it completes on the retry and the retry is counted', ctx.__calls.length === 2 && ctx.__results[0].ok === true && ctx.__stats().retried === 1);
+    check('an empty turn is not counted as returned in the batch line, and the line says how many came back empty', /if \(e && e\.emptyTurn\) \{/.test(ai) && /_emptyTurns\+\+/.test(ai) && /came back empty after ' \+ _TURN_TRIES \+ ' tries/.test(ai));
+    check('every turn empty: the no-actions panel names it', /Nothing drafted: ' \+ _emptyTurns \+ ' of ' \+ _slices\.length \+ ' turn\(s\) came back with no rows after/.test(ai));
 
     // c. a genuinely dead provider gives up after the budget, keeping the last error
     ctx.__reset(); ctx.__mode = 'dead';

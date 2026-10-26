@@ -62,7 +62,7 @@ check('a recommendation naming no failure condition is refused, not filed somewh
 check('panel wires Accept to _applyHfImprovement (per-row: Accept captures, Dismiss = advice only)',
   /onAccept: _applyHfImprovement/.test(ai));
 check('disclaimer states advisory posture (not compliance/requirement/decision)',
-  /not<\/b> compliance findings, requirements, or design decisions/.test(ai));
+  /\*\*not\*\* compliance findings, requirements, or design decisions/.test(ai));   // 26 Oct 2026: notes take **bold**, never tags
 
 console.log('3. integrity guardrails in the prompt');
 // 2 Sep 2026 (Skills V1.3) — the doctrine moved OUT of this function and into the

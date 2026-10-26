@@ -1,3 +1,4 @@
+// 26 Oct 2026: INV-31 also names an AI row with nothing in it (an FHA or FCIM row with no failure condition, a function with no name), by the writers' own rule; see tests/regression_afha_drafting_fixes_20261026.test.js
 // 13 Oct 2026 (math audit F1): INV-03 reads both tops through SLTopBasis.exactTop, never root.probability (the independent roll-up on pages not open). See tests/regression_exact_top_20261013.test.js
 // 13 Oct 2026 (math fix 7): INV-05 reads a claimed (not yet CMA-substantiated) independence as a withheld DAL reduction, since claims no longer reduce; see tests/regression_dal_row_20261013.test.js
 // ============================================================================
@@ -372,9 +373,20 @@
                 const SEVS = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'No Safety Effect'];
                 const SEVWORD = /\b(catastrophic|hazardous|major|minor|no safety effect)\b|\bseverity\b/i;
                 const isAi = r => r && (r.aiGenerated || r.aiModel || String(r.origin || '').indexOf('AI') === 0);
+                // 26 Oct 2026: an empty row, by the writers' own rule (ai_assistant.js _ROW_RULES)
+                const _has = v => Array.isArray(v) ? v.some(x => String(x == null ? '' : x).trim() !== '') : String(v == null ? '' : v).trim() !== '';
+                const EMPTY = ': the row is empty; delete it or draft it again';
+                const fcimEmpty = c => !(_has(c.tlDesc) || _has(c.plDesc) || _has(c.mDesc) || (c.plExtra || []).some(e => e && _has(e.desc)) || (c.mExtra || []).some(e => e && _has(e.desc)) || (c.tlExtra || []).some(e => e && _has(e.desc)));
+                const chkFcim = (c, scope) => { if (!isAi(c)) return; checked++; if (fcimEmpty(c)) fails.push(scope + ' FCIM ' + (c.subId || c.internalId) + ' [AI]: no failure condition (total loss, partial loss or malfunction)' + EMPTY); };
+                ((typeof acFcimData !== 'undefined' ? acFcimData : []) || []).forEach(c => chkFcim(c, 'Aircraft'));
+                ((typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || []).forEach(f => {
+                    if (!isAi(f)) return; checked++;
+                    if (!_has(f.funcName) || !_has(f.subName)) fails.push('Aircraft function ' + (f.subId || f.funcId || f.internalId) + ' [AI]: no ' + (_has(f.funcName) ? 'sub-function' : 'function') + ' name' + EMPTY);
+                });
                 const chkFha = (f, scope) => {
                     if (!isAi(f)) return;
                     checked++;
+                    if (!_has(f.fcDesc)) fails.push(scope + ' ' + (f.fcId || f.internalId) + ' [AI]: no failure condition' + EMPTY);
                     if (f.severity && SEVS.indexOf(f.severity) === -1)
                         fails.push(scope + ' ' + (f.fcId || f.internalId) + ' [AI]: invalid severity "' + f.severity + '"');
                     if (!f.aiModel && !f.aiAt && f.aiGenerated)
@@ -383,9 +395,11 @@
                 ((typeof acFhaData !== 'undefined' ? acFhaData : []) || []).forEach(f => chkFha(f, 'AFHA'));
                 ((typeof systemsData !== 'undefined' ? systemsData : []) || []).forEach(s => {
                     (s.fha || []).forEach(f => chkFha(f, 'SFHA ' + (s.name || s.id)));
+                    (s.functions || []).forEach(f => { if (!isAi(f)) return; checked++; if (!_has(f.funcName)) fails.push((s.name || s.id) + ' function ' + (f.funcId || f.internalId) + ' [AI]: no function name' + EMPTY); });
                     (s.fcim || []).forEach(c => {
                         if (!isAi(c)) return;
                         checked++;
+                        if (fcimEmpty(c)) fails.push((s.name || s.id) + ' FCIM ' + (c.subId || c.internalId) + ' [AI]: no failure condition (total loss, partial loss or malfunction)' + EMPTY);
                         ['tlDesc', 'plDesc', 'mDesc'].forEach(k => {
                             if (c[k] && SEVWORD.test(String(c[k])))
                                 fails.push('FCIM ' + (c.subId || c.internalId) + ' [AI]: severity word in ' + k + ' — severity belongs in the FHA');
