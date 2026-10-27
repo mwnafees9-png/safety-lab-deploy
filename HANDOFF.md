@@ -1,3 +1,9 @@
+## 27 Oct 2026 (evening): THE RIGHT-HAND AI PANELS. NOT YET DEPLOYED.
+
+**Customer report, Waqas's ruling:** toasts covered the Close button at the top right of the AI panels; Close goes to the bottom row with the other buttons and is red; Draft and Accept buttons more pronounced; the disclaimer can stay grey but all relevant information must be clearly legible.
+**Built (ai_assistant v76.91, tools/patch_ai_panels_20261027.py):** _dockPanelClose moves every .ai-rev-panel's Close into its bottom row, last, red (.aifh-close), run by one observer for every panel, including ones that redraw or are added later. The ANEM chat's Undo, Clear and Close sit in a bottom row (#anem-actions); its header has no close. Accept / Accept all / Generate / "Draft ... selected" are solid blue, bold, 13.5px. The panel dim tone is now dark (--aifh-faint keeps the old grey for the disclaimer only); body text is floored at 12px and full opacity. Found and fixed: an ANEM-drafted card showed one line and the class (an FHA row had no phase, effects or rationale on screen); _ANEM_CARD_FIELDS now lists every field of every op in the action catalog.
+**Tests:** regression_ai_panels_20261027 (42 checks; browser part on a stand-in model; mutation-proven). Wall green, 486 suites.
+
 ## 27 Oct 2026 (later): FAULT TREE NODES SHOW ONE NUMBER LINE; NOTES MOVE BEHIND A WARNING PILL. NOT YET DEPLOYED.
 
 **Found (customer screenshot):** the "Actual: P=..." line sat under the gate symbol, the DAL badge and the input-mode dropdown (drawn later, on top), and "≈2.00E-10/FH" was cut off to "/I" by the node width.

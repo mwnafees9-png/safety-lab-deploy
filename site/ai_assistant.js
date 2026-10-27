@@ -1,3 +1,4 @@
+// 27 Oct 2026 (v76.91, customer report): the right-hand AI panels. Close is red and docked in the bottom row (_dockPanelClose, one observer for every .ai-rev-panel; the ANEM chat's Undo, Clear and Close sit in a bottom row), Accept / Accept all / Generate / Draft selected are large solid buttons, every line but the disclaimer is dark and legible, and an ANEM card lists every field it would write (_anemCardFields). See tests/regression_ai_panels_20261027.test.js
 // 16 Oct 2026 (AI Assistant page, v76.83): the AI Inputs modal is replaced by the AI Assistant page (ai_inputs_page.js); _openAiInputsModal / openAiInputs() open the page, the sidebar and nav entries open the page instead of the floating menu, and the extractor and Import documents into the model are exposed for it (SafetyLabExtractDoc, SafetyLabImportDocsToModel).
 // 13 Oct 2026 (fix G): fault tree proposals accept the SEQ gate, and NOT only when the project allows non-coherent logic (_ftaGateTypesAllowed); a NOT gate never gets a second input. See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL): CCF proposals carry the model (beta factor or MGL) explicitly and an unsuggested gamma/delta stays blank (= 1, NUREG/CR-5485 MGL default) instead of a silent 0.
@@ -3108,11 +3109,12 @@
     function _applyPanelPalette(panel) {
         const dark = _isDarkTheme();
         const p = dark
-            ? { bg: '#0f1420', text: '#e8eaf0', dim: '#9aa3b2', card: '#1a2030', border: '#2a3245', btn: '#222b3d' }
-            : { bg: '#ffffff', text: '#1a1a1a', dim: '#5c6470', card: '#f7f8fa', border: '#e2e2e2', btn: '#ffffff' };
+            ? { bg: '#0f1420', text: '#e8eaf0', dim: '#c9d0db', faint: '#9aa3b2', card: '#1a2030', border: '#2a3245', btn: '#222b3d' }
+            : { bg: '#ffffff', text: '#1a1a1a', dim: '#363c46', faint: '#5c6470', card: '#f7f8fa', border: '#e2e2e2', btn: '#ffffff' };
         panel.style.setProperty('--aifh-bg', p.bg);
         panel.style.setProperty('--aifh-text', p.text);
         panel.style.setProperty('--aifh-dim', p.dim);
+        panel.style.setProperty('--aifh-faint', p.faint);   // 27 Oct 2026: the disclaimer only
         panel.style.setProperty('--aifh-card', p.card);
         panel.style.setProperty('--aifh-border', p.border);
         panel.style.setProperty('--aifh-btn', p.btn);
@@ -3127,21 +3129,66 @@
             '.ai-rev-panel{position:fixed;top:64px;right:0;bottom:0;width:min(560px,96vw);z-index:99999;background:var(--aifh-bg);color:var(--aifh-text);border-left:1px solid var(--aifh-border);box-shadow:-8px 0 30px rgba(0,0,0,.28);display:flex;flex-direction:column;font:13px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}',
             '.ai-rev-panel .aifh-head{padding:12px 14px;border-bottom:1px solid var(--aifh-border);display:flex;align-items:center;gap:8px}',
             '.ai-rev-panel .aifh-head h3{margin:0;font-size:14px;font-weight:700;flex:1;color:var(--aifh-text)}',
-            '.ai-rev-panel .aifh-disclaimer{font-size:11px;color:var(--aifh-dim);padding:8px 12px 0}',
+            '.ai-rev-panel .aifh-disclaimer{font-size:11px;color:var(--aifh-faint);padding:8px 12px 0}',
             '.ai-rev-panel .aifh-body{overflow:auto;padding:10px 12px;flex:1}',
             '.ai-rev-panel .aifh-card{border:1px solid var(--aifh-border);border-radius:10px;padding:10px 12px;margin:0 0 10px;background:var(--aifh-card);color:var(--aifh-text)}',
             '.ai-rev-panel .aifh-card h4{margin:0 0 4px;font-size:13px;color:var(--aifh-text)}',
             '.ai-rev-panel .aifh-card div{color:var(--aifh-text)}',
-            '.ai-rev-panel .aifh-meta{font-size:11px;color:var(--aifh-dim) !important;margin-bottom:6px}',
+            '.ai-rev-panel .aifh-meta{font-size:12px;color:var(--aifh-dim) !important;margin-bottom:6px}',
             '.ai-rev-panel .aifh-eff{margin:3px 0}',
             '.ai-rev-panel .aifh-sev{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:700;font-size:11px;border:1px solid currentColor}',
             '.ai-rev-panel .aifh-actions{display:flex;gap:6px;margin-top:8px}',
             '.ai-rev-panel button{font:inherit;border-radius:8px;padding:5px 10px;border:1px solid var(--aifh-border);cursor:pointer;background:var(--aifh-btn);color:var(--aifh-text)}',
-            '.ai-rev-panel .aifh-accept{background:#2563eb;color:#fff !important;border-color:#2563eb}',
-            '.ai-rev-panel .aifh-foot{padding:10px 12px;border-top:1px solid var(--aifh-border);display:flex;gap:8px}'
+            // 27 Oct 2026 (customer report): the actions that do the work are large and solid; Close is red, last in the
+            // bottom row, apart from them, so nobody hits it by accident and no toast covers it.
+            '.ai-rev-panel .aifh-accept,.ai-rev-panel .rv-accept-all{background:#1d4ed8;color:#fff !important;border:1px solid #1e40af;font-weight:700;font-size:13.5px;padding:8px 18px;border-radius:8px;box-shadow:0 2px 6px rgba(29,78,216,.35)}',
+            '.ai-rev-panel .aifh-accept:hover:not(:disabled),.ai-rev-panel .rv-accept-all:hover:not(:disabled){background:#1e40af}',
+            '.ai-rev-panel .aifh-actions .aifh-accept{padding:7px 16px}',
+            '.ai-rev-panel .aifh-close{margin-left:auto;background:#dc2626;color:#fff !important;border:1px solid #b91c1c;font-weight:700;font-size:13.5px;padding:8px 18px;border-radius:8px}',
+            '.ai-rev-panel .aifh-close:hover{background:#b91c1c}',
+            '.ai-rev-panel .aifh-foot .rv-verify{margin-right:0 !important}',
+            '.ai-rev-panel .aifh-field{margin:3px 0;font-size:12.5px;line-height:1.45;color:var(--aifh-text)}',
+            '.ai-rev-panel .aifh-field b{font-weight:700}',
+            // every line in the panel body is at least 12px and fully opaque, whatever inline size a lane wrote
+            '.ai-rev-panel .aifh-body [style*="font-size:9"],.ai-rev-panel .aifh-body [style*="font-size:10"],.ai-rev-panel .aifh-body [style*="font-size:11"],.ai-rev-panel .aifh-body [style*="font-size: 11"],.ai-rev-panel .aifh-body [style*="font-size: 10"]{font-size:12px !important}',
+            '.ai-rev-panel .aifh-body [style*="opacity:."],.ai-rev-panel .aifh-body [style*="opacity: ."],.ai-rev-panel .aifh-body [style*="opacity:0."]{opacity:1 !important}',
+            '.ai-rev-panel .aifh-foot{padding:10px 12px;border-top:1px solid var(--aifh-border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}'
         ].join('\n');
         document.head.appendChild(st);
     }
+    // 27 Oct 2026 (customer report): "the toasts cover the close button on the slide out panels, so move the
+    // close button to the bottom with the rest". Every right-hand panel (.ai-rev-panel) gets its Close moved
+    // out of the header into the bottom row, last, red (.aifh-close). One function, run for every panel by
+    // one observer, so a panel added later docks the same way without anyone remembering to. Moving the
+    // button keeps its id, class and click handler.
+    function _isPanelClose(b) {
+        return !!b && (b.classList.contains('rv-close') || /-close\d*$/.test(b.id || '') || String(b.textContent || '').trim() === 'Close');
+    }
+    function _dockPanelClose(p) {
+        if (!p || !p.classList || !p.classList.contains('ai-rev-panel')) return;
+        const head = p.querySelector(':scope > .aifh-head');
+        let btn = head ? Array.prototype.slice.call(head.querySelectorAll('button')).filter(_isPanelClose)[0] : null;
+        let foot = p.querySelector(':scope > .aifh-foot');
+        if (!btn) btn = foot ? foot.querySelector(':scope > .aifh-close') : null;
+        if (!btn) return;
+        if (!foot) { foot = document.createElement('div'); foot.className = 'aifh-foot'; p.appendChild(foot); }
+        btn.classList.add('aifh-close');
+        if (!btn.title) btn.title = 'Close this panel';
+        if (btn.parentNode !== foot || foot.lastElementChild !== btn) foot.appendChild(btn);
+    }
+    function _installPanelCloseDock() {
+        if (typeof document === 'undefined' || !document.body || typeof MutationObserver === 'undefined' || window.__slPanelDock) return;
+        window.__slPanelDock = true;
+        const watch = function (p) {
+            if (p.__slDockObs) return;
+            _dockPanelClose(p);
+            try { p.__slDockObs = new MutationObserver(function () { _dockPanelClose(p); }); p.__slDockObs.observe(p, { childList: true }); } catch (_) {}
+        };
+        const scan = function (nodes) { nodes.forEach(function (n) { if (n && n.nodeType === 1 && n.classList.contains('ai-rev-panel')) watch(n); }); };
+        try { new MutationObserver(function (ms) { ms.forEach(function (m) { scan(Array.prototype.slice.call(m.addedNodes)); }); }).observe(document.body, { childList: true }); } catch (_) {}
+        scan(Array.prototype.slice.call(document.querySelectorAll('.ai-rev-panel')));
+    }
+    try { _installPanelCloseDock(); } catch (_) {}
     function _closeFhaPanel() { const p = document.getElementById('ai-fha-panel'); if (p) p.remove(); }
     let _fhaAssumptions = [];   // F6 — model-declared assumptions for the current FHA draft (display-only)
     function _openFhaReviewPanel(suggestions, scope, assumptions, verifyReport) {
@@ -12601,11 +12648,75 @@
         }
         return attempt;
     }
+    // 27 Oct 2026 (customer report): "all relevant information needs to be clearly legible". An ANEM card used
+    // to show one line (the failure condition, the requirement text...) and the class: an FHA row was accepted
+    // without its phases, its three effects or its rationale on screen. Every field an action would write is
+    // listed here, labeled, in the order the analysis reads it. An op not listed shows every field it carries.
+    const _ANEM_CARD_FIELDS = {
+        add_fha: [['subId', 'Function'], ['srcCondId', 'Failure condition id'], ['phases', 'Flight phases'], ['effAc', 'Aircraft effect'], ['effCrew', 'Crew effect'], ['effPax', 'Passenger effect'], ['severityRationale', 'Severity rationale'], ['sevBasis', 'Basis']],
+        add_function: [['funcName', 'Function'], ['funcDef', 'Function definition'], ['subName', 'Sub-function'], ['subDef', 'Sub-function definition'], ['traceIds', 'Traces to']],
+        add_system: [['name', 'System']],
+        add_mac: [['subId', 'Sub-function'], ['phase', 'Phase'], ['clauses', 'Clauses'], ['sddRef', 'SDD reference'], ['rationale', 'Rationale'], ['arbitration', 'Arbitration']],
+        add_fcim: [['subId', 'Function'], ['awareness', 'Crew awareness']],
+        add_requirement: [['text', 'Requirement'], ['rationale', 'Rationale'], ['traceSubId', 'Traces to'], ['level', 'Level'], ['type', 'Type'], ['verifMethod', 'Verification method']],
+        add_fta_tree: [['topEvent', 'Top event'], ['kind', 'Kind'], ['fhaFcId', 'Failure condition'], ['root', 'Structure']],
+        add_fta_node: [['pageId', 'Tree'], ['parentId', 'Under node'], ['node', 'Node']],
+        update_fta_node: [['pageId', 'Tree'], ['nodeId', 'Node'], ['fields', 'Changes']],
+        delete_fta_node: [['pageId', 'Tree'], ['nodeId', 'Node']],
+        link: [['fromTable', 'From table'], ['fromId', 'From'], ['toId', 'To'], ['clear', 'Removes the link']],
+        add_markov_state: [['modelId', 'Model'], ['name', 'State'], ['isFailed', 'Failed state']],
+        delete_markov_state: [['modelId', 'Model'], ['name', 'State']],
+        add_markov_transition: [['modelId', 'Model'], ['from', 'From'], ['to', 'To']],
+        delete_markov_transition: [['modelId', 'Model'], ['from', 'From'], ['to', 'To']],
+        add_interface: [['fromSystemId', 'From system'], ['toSystemId', 'To system'], ['kind', 'Kind'], ['fromFuncId', 'From function'], ['toFuncId', 'To function'], ['medium', 'Medium'], ['direction', 'Direction'], ['icdRef', 'ICD reference']],
+        update_interface: [['id', 'Interface'], ['fields', 'Changes']],
+        delete_interface: [['id', 'Interface']],
+        add_pra: [['threat', 'Particular risk'], ['affectedZones', 'Zones'], ['desc', 'Description'], ['systems', 'Systems'], ['csfl', 'CSFL impact'], ['mitigation', 'Mitigation'], ['requirements', 'Requirements'], ['functions', 'Functions']],
+        add_zsa: [['zoneId', 'Zone'], ['desc', 'Description'], ['equip', 'Equipment'], ['interference', 'Interference'], ['mitigation', 'Mitigation'], ['housedFunctions', 'Housed functions']],
+        add_cma: [['subject', 'Subject'], ['claim', 'Independence claim'], ['principle', 'Principle'], ['findings', 'Findings'], ['mitigation', 'Mitigation'], ['status', 'Status'], ['requirements', 'Requirements'], ['verification', 'Verification']],
+        add_routing: [['name', 'Name'], ['kind', 'Kind'], ['desc', 'Description'], ['routesThroughZones', 'Zones'], ['carriesFunctions', 'Functions'], ['carriesItems', 'Items']],
+        add_item: [['itemId', 'Item id'], ['name', 'Name'], ['type', 'Type'], ['dal', 'DAL'], ['daType', 'Assurance type'], ['owningSystemId', 'Owning system'], ['zoneId', 'Zone'], ['description', 'Description']],
+        add_fmea: [['level', 'Level'], ['funcSubId', 'Function'], ['funcMode', 'Failure mode'], ['linkedFcId', 'Failure condition'], ['localEffect', 'Local effect'], ['nextEffect', 'Next higher effect'], ['endEffect', 'End effect'], ['detection', 'Detection'], ['compensating', 'Compensating provisions'], ['remarks', 'Remarks']],
+        update: [['table', 'Table'], ['_id', 'Row'], ['fields', 'Changes']],
+        'delete': [['table', 'Table'], ['_id', 'Row']]
+    };
+    // Never listed: what the card already says elsewhere (title, class, badges) or what is bookkeeping.
+    const _ANEM_CARD_SKIP = { op: 1, scope: 1, systemId: 1, confidence: 1, source: 1, severity: 1, judgementCall: 1, judgementNote: 1,
+        effAcLevel: 1, effCrewLevel: 1, effPaxLevel: 1, totalLoss: 1, partialLoss: 1, malfunction: 1, partials: 1, malfunctions: 1,
+        totalLossNa: 1, partialLossNa: 1, malfunctionNa: 1 };
+    function _anemFieldValue(key, v) {
+        if (v == null) return '';
+        if (key === 'clauses' && Array.isArray(v)) return v.map(function (c) { return c ? ('at least ' + (c.min != null ? c.min : '?') + ' of ' + (Array.isArray(c.of) ? c.of.join(', ') : String(c.of || ''))) : ''; }).filter(Boolean).join('; ');
+        if (key === 'root' && typeof v === 'object') { try { return (typeof _countLeaves === 'function' ? _countLeaves(v) + ' basic event(s) under ' : '') + (v.gateType || v.type || 'gate') + ' "' + (v.name || '') + '"'; } catch (_) { return ''; } }
+        if (key === 'node' && typeof v === 'object') return (v.name || '') + ' (' + (v.type === 'gate' ? ((v.gateType || '') + ' gate') : (v.type || 'event')) + ')';
+        if (Array.isArray(v)) return v.map(function (x) { return (x && typeof x === 'object') ? (x.name || x.text || x.id || JSON.stringify(x)) : String(x); }).filter(function (x) { return String(x).trim(); }).join(', ');
+        if (typeof v === 'boolean') return v ? 'Yes' : '';
+        if (typeof v === 'object') return Object.keys(v).map(function (k) { const x = v[k]; return k + ': ' + ((x && typeof x === 'object') ? JSON.stringify(x) : String(x)); }).join('; ');
+        return String(v).trim();
+    }
+    function _anemCardFields(a, op, bodyKey) {
+        const list = _ANEM_CARD_FIELDS[op] || Object.keys(a || {}).filter(function (k) { return !_ANEM_CARD_SKIP[k] && k.charAt(0) !== '_'; }).map(function (k) { return [k, k]; });
+        let out = '';
+        if (a && a.scope === 'system' && a.systemId) {
+            let nm = a.systemId;
+            try { const so = (typeof _chatSysByIdOrName === 'function') ? _chatSysByIdOrName(a.systemId) : null; if (so && so.name) nm = so.name; } catch (_) {}
+            out += '<div class="aifh-field"><b>System:</b> ' + _esc(String(nm)) + '</div>';
+        }
+        list.forEach(function (f) {
+            if (f[0] === bodyKey) return;
+            const v = _anemFieldValue(f[0], a ? a[f[0]] : null);
+            if (!v) return;
+            out += '<div class="aifh-field"><b>' + _esc(f[1]) + ':</b> ' + _esc(v.length > 1200 ? v.slice(0, 1200) + '\u2026' : v) + '</div>';
+        });
+        if (op === 'add_fha' && typeof _axisLevelsHtml === 'function') { try { out += _axisLevelsHtml(a); } catch (_) {} }
+        return out;
+    }
     // Render a heterogeneous ANEM action as a review card (op-aware; carries #258 confidence/source).
     function _anemActionCard(a) {
         const op = String(a.op || '?');
         const title = ({ add_fha: 'Failure condition', add_function: 'Function', add_system: 'System', add_mac: 'MAC rule', add_fcim: 'FCIM', add_requirement: 'Requirement', add_fta_tree: 'Fault tree', add_fta_node: 'FTA node', update_fta_node: 'FTA node', delete_fta_node: 'FTA node', link: 'Link', add_markov_state: 'Markov state', delete_markov_state: 'Markov state', add_markov_transition: 'Markov transition', delete_markov_transition: 'Markov transition', add_interface: 'Interface', update_interface: 'Interface', delete_interface: 'Interface', add_pra: 'Particular risk', add_zsa: 'Zonal', add_cma: 'Common mode', add_fmea: 'FMEA', add_routing: 'Routing', add_item: 'Item', update: 'Update', 'delete': 'Delete' })[op] || op;
-        const body = a.fcDesc || a.funcName || a.subName || a.text || a.topEvent || a.threat || a.zoneId || a.subject || a.mode || (a.subId ? ('subId ' + a.subId) : '') || '';
+        const _bodyKey = ['fcDesc', 'funcName', 'subName', 'text', 'topEvent', 'threat', 'zoneId', 'subject', 'mode'].filter(function (k) { return a[k]; })[0] || '';
+        const body = (_bodyKey ? a[_bodyKey] : '') || (a.subId ? ('subId ' + a.subId) : '') || '';
         // A classified row says "· Catastrophic". An abstained row used to say
         // nothing at all — the absence shown only by OMISSION, which on a stack of
         // five cards is easy to skim straight past. An abstention the engineer does
@@ -12643,7 +12754,8 @@
             if (a[c.k + 'Na']) return '<div class="aifh-eff" style="color:var(--color-text-secondary);"><strong>' + _esc(lab) + ': N/A</strong> <span style="font-style:italic;">' + _esc(a[c.k + 'Na']) + '</span></div>';
             return '';
         }).join('') : '';
-        return '<h4>' + _esc(title) + (a.scope === 'system' ? ' · System' : '') + sev + _judge + '</h4><div class="aifh-eff">' + _esc(String(body).slice(0, 220)) + '</div>'
+        return '<h4>' + _esc(title) + (a.scope === 'system' ? ' · System' : '') + sev + _judge + '</h4><div class="aifh-eff">' + _esc(String(body).slice(0, 1200)) + '</div>'
+             + _anemCardFields(a, op, _bodyKey)   // 27 Oct 2026: every field the action would write
              + _fcimCells + _abReason + _judgeNote + _droppedPh
              + _abstainChips(a, { fcDesc: 'Failure condition', effAc: 'Aircraft effect', effCrew: 'Crew effect', effPax: 'Passenger effect', severity: 'Severity', severityRationale: 'Severity rationale', text: 'Requirement', rationale: 'Rationale', totalLoss: 'Total loss', partialLoss: 'Partial loss', malfunction: 'Malfunction', desc: 'Description', mitigation: 'Mitigation', claim: 'Independence claim', verification: 'Verification', threat: 'Particular risk', interference: 'Interference' })
              + _confidenceBadge(a);
@@ -13294,9 +13406,9 @@
         // Surfaces ride the site's digital-paper tokens (Phase 62 paper+ink) so the
         // panel sits on the SAME warm paper as the app — fallbacks mirror safety_lab.css.
         return dark
-            ? { userBg: 'var(--color-surface-3, #20252F)', userFg: '#e9ecf2', botBg: 'var(--color-surface-2, #171B24)', botFg: '#e9ecf2', chip: '#16351f', chipFg: '#bff0c8', err: '#3f1d1d', errFg: '#ffd4d4', warnBg: 'rgba(245,158,11,.15)', warnFg: '#f0bf72', border: 'rgba(255,255,255,.13)', sub: '#9aa3b2', input: 'var(--color-surface-2, #171B24)',
+            ? { userBg: 'var(--color-surface-3, #20252F)', userFg: '#e9ecf2', botBg: 'var(--color-surface-2, #171B24)', botFg: '#e9ecf2', chip: '#16351f', chipFg: '#bff0c8', err: '#3f1d1d', errFg: '#ffd4d4', warnBg: 'rgba(245,158,11,.15)', warnFg: '#f0bf72', border: 'rgba(255,255,255,.13)', sub: '#c9d0db', faint: '#9aa3b2', input: 'var(--color-surface-2, #171B24)',
                 eg: 'rgba(142,92,240,.18)', egFg: '#cdb4f7', link: '#c9a6f2', cardBd: 'rgba(175,82,222,.42)', cardBg: 'rgba(142,92,240,.09)' }
-            : { userBg: 'var(--color-surface-3, #E5E0D1)', userFg: '#1a1f29', botBg: 'var(--color-surface-2, #F2EEE1)', botFg: '#1a1f29', chip: '#e7f6ec', chipFg: '#14633a', err: '#fdecec', errFg: '#9b1c1c', warnBg: '#fff4e0', warnFg: '#8a5a00', border: 'rgba(0,0,0,.10)', sub: '#667085', input: 'var(--color-surface-2, #F2EEE1)',
+            : { userBg: 'var(--color-surface-3, #E5E0D1)', userFg: '#1a1f29', botBg: 'var(--color-surface-2, #F2EEE1)', botFg: '#1a1f29', chip: '#e7f6ec', chipFg: '#14633a', err: '#fdecec', errFg: '#9b1c1c', warnBg: '#fff4e0', warnFg: '#8a5a00', border: 'rgba(0,0,0,.10)', sub: '#3c4350', faint: '#667085', input: 'var(--color-surface-2, #F2EEE1)',
                 eg: '#EDDFFB', egFg: '#5B21B6', link: '#7A3EA8', cardBd: '#DCC8F5', cardBg: 'rgba(142,92,240,.06)' };
     }
     // The cursive gradient wordmark — named for Anya and Emma.
@@ -13432,8 +13544,9 @@
         p.style.cssText = 'position:fixed;top:0;right:0;height:100vh;width:min(440px,96vw);z-index:99996;display:flex;flex-direction:column;background:' + surface + ';color:inherit;border-left:1px solid ' + pal.border + ';box-shadow:-10px 0 32px rgba(0,0,0,.22);font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;';
         const available = (typeof Provider !== 'undefined' && Provider.available && Provider.available());
         if (!available) {
-            p.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px;border-bottom:1px solid ' + pal.border + ';"><div>' + _anemWordmark(26) + '</div><button id="anem-x" title="Close" style="border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:' + pal.sub + ';">×</button></div>'
-                + '<div style="padding:20px;color:' + pal.sub + ';font-size:13px;line-height:1.6;">ANEM needs the AI backend (Pro+). Open <b>AI Tools → AI Assistant → AI Settings</b> to configure it, then reopen ANEM.</div>';
+            p.innerHTML = '<div style="display:flex;align-items:center;padding:14px;border-bottom:1px solid ' + pal.border + ';"><div>' + _anemWordmark(26) + '</div></div>'
+                + '<div style="padding:20px;color:' + pal.sub + ';font-size:13px;line-height:1.6;">ANEM needs the AI backend (Pro+). Open <b>AI Tools → AI Assistant → AI Settings</b> to configure it, then reopen ANEM.</div>'
+                + '<div style="margin-top:auto;display:flex;padding:10px 12px;border-top:1px solid ' + pal.border + ';"><button id="anem-x" title="Close" style="margin-left:auto;font-size:13.5px;padding:7px 18px;border:1px solid #b91c1c;border-radius:8px;background:#dc2626;color:#fff;cursor:pointer;font-weight:700;">Close</button></div>';
             document.body.appendChild(p);
             const x0 = document.getElementById('anem-x'); if (x0) x0.onclick = _anemClose;
             return;
@@ -13444,11 +13557,6 @@
             +   '<span style="font-size:14.5px;color:' + pal.sub + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">for safety engineering</span>'
             +   '<span title="Live editor — edits apply to the model as you talk" style="font-size:9px;font-weight:700;color:' + pal.sub + ';letter-spacing:.06em;border:1px solid ' + pal.border + ';border-radius:6px;padding:2px 6px;flex-shrink:0;">BETA</span>'
             +   '<span style="flex:1;"></span>'
-            +   '<button id="anem-x" title="Close (Esc)" style="border:none;background:transparent;font-size:24px;line-height:.8;cursor:pointer;color:' + pal.sub + ';flex-shrink:0;">×</button>'
-            + '</div>'
-            + '<div style="display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid ' + pal.border + ';">'
-            +   '<button id="ai-chat-undo" style="font-size:12px;padding:6px 10px;border:1px solid ' + pal.border + ';border-radius:8px;background:transparent;color:inherit;cursor:pointer;">↶ Undo last turn</button>'
-            +   '<button id="ai-chat-clear" style="font-size:12px;padding:6px 10px;border:1px solid ' + pal.border + ';border-radius:8px;background:transparent;color:inherit;cursor:pointer;">Clear</button>'
             + '</div>'
             + '<div id="ai-chat-scroll" style="flex:1;overflow:auto;padding:14px;"></div>'
             + '<div style="border-top:1px solid ' + pal.border + ';">'
@@ -13459,7 +13567,13 @@
             +     '<textarea id="ai-chat-input" rows="1" placeholder="Ask ANEM for edits…" style="flex:1;margin:0;resize:none;min-height:40px;max-height:150px;padding:10px 16px;border:1.5px solid ' + pal.border + ';border-radius:22px;font:inherit;font-size:13.5px;background:' + pal.input + ';color:inherit;outline:none;"></textarea>'
             +     '<button id="ai-chat-send" title="Send" aria-label="Send" style="width:40px;height:40px;flex-shrink:0;border:none;border-radius:50%;background:' + _ANEM_GRAD + ';color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">➤</button>'
             +   '</div>'
-            +   '<div style="padding:2px 12px 9px;font-size:10.5px;color:' + pal.sub + ';text-align:center;line-height:1.4;">ANEM is powered by ' + ((typeof Provider !== 'undefined' && Provider.describe && Provider.describe().mode === 'local') ? 'your configured model' : 'Claude') + ' and can make mistakes. Review every edit — it never sets λ, DAL, or severity as fact.</div>'
+            // 27 Oct 2026 (customer report): Undo, Clear and Close live down here, out from under the toasts; Close is red.
+            +   '<div id="anem-actions" style="display:flex;gap:8px;padding:0 12px 8px;align-items:center;">'
+            +     '<button id="ai-chat-undo" style="font-size:12.5px;padding:7px 12px;border:1px solid ' + pal.border + ';border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-weight:600;">↶ Undo last turn</button>'
+            +     '<button id="ai-chat-clear" style="font-size:12.5px;padding:7px 12px;border:1px solid ' + pal.border + ';border-radius:8px;background:transparent;color:inherit;cursor:pointer;font-weight:600;">Clear</button>'
+            +     '<button id="anem-x" title="Close (Esc)" style="margin-left:auto;font-size:13.5px;padding:7px 18px;border:1px solid #b91c1c;border-radius:8px;background:#dc2626;color:#fff;cursor:pointer;font-weight:700;">Close</button>'
+            +   '</div>'
+            +   '<div style="padding:2px 12px 9px;font-size:10.5px;color:' + pal.faint + ';text-align:center;line-height:1.4;">ANEM is powered by ' + ((typeof Provider !== 'undefined' && Provider.describe && Provider.describe().mode === 'local') ? 'your configured model' : 'Claude') + ' and can make mistakes. Review every edit — it never sets λ, DAL, or severity as fact.</div>'
             + '</div>';
         document.body.appendChild(p);
         const ta = document.getElementById('ai-chat-input');
