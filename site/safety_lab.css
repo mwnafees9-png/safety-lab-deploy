@@ -5945,3 +5945,29 @@ thead th,
 .sl-diag-bar > button:hover { border-color: var(--color-accent); }
 .sl-diag-bar > button.sl-db-primary { background: var(--color-accent); border-color: var(--color-accent); color: #F2F7FF; }
 .sl-diag-bar > button.sl-db-primary:hover { background: var(--color-accent-hover); }
+
+/* 27 Oct 2026 (customer report): the fault tree's warning pill at the bottom of the canvas (fta_warn_pill.js). */
+.fta-warn-pill { position: relative; }
+#fta-warn-pill .fwp-btn { height: 30px !important; min-width: 0 !important; padding: 0 12px !important; margin: 0 !important; border-radius: 999px !important; font: inherit; font-size: 12.5px !important; font-weight: 700 !important; cursor: pointer; border: 1px solid rgba(245, 158, 11, .6) !important; background: #fff7e6 !important; color: #b45309 !important; box-shadow: 0 1px 3px rgba(0, 0, 0, .12) !important; white-space: nowrap; }
+#fta-warn-pill .fwp-btn.fwp-only-info { border-color: var(--color-border-hair, #d0d5dd) !important; background: var(--color-surface-1, #fff) !important; color: var(--color-text-secondary, #555) !important; }
+#fta-warn-pill .fwp-btn[aria-expanded="true"] { box-shadow: 0 0 0 3px rgba(245, 158, 11, .3) !important; }
+.fta-warn-pill .fwp-list { position: absolute; bottom: 38px; left: 0; width: 460px; max-width: calc(100vw - 48px); max-height: 260px; overflow-y: auto; overscroll-behavior: contain; flex-direction: column; gap: 2px; padding: 6px; background: var(--color-surface-1, #fff); border: 1px solid var(--color-border-hair, #d0d5dd); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); z-index: 120; cursor: default; }
+.fta-warn-pill .fwp-hint { font-size: 11px; color: var(--color-text-tertiary, #888); padding: 2px 6px 4px; }
+#fta-warn-pill .fwp-row { display: flex; align-items: flex-start; gap: 8px; width: 100%; height: auto !important; min-height: 0 !important; margin: 0 !important; text-align: left; background: transparent !important; border: 1px solid transparent !important; border-radius: 6px !important; padding: 5px 6px !important; font: inherit; font-size: 12px !important; font-weight: 500 !important; line-height: 1.4; color: var(--color-text-primary, #1d1d1f) !important; box-shadow: none !important; cursor: pointer; }
+#fta-warn-pill .fwp-row:hover { background: var(--color-surface-2, rgba(0,0,0,.05)) !important; }
+#fta-warn-pill .fwp-row.is-active { border-color: #f59e0b !important; background: rgba(245, 158, 11, .14) !important; }
+.fta-warn-pill .fwp-glyph { width: 14px; text-align: center; font-weight: 700; flex: 0 0 auto; }
+.fta-warn-pill .fwp-warn .fwp-glyph { color: #b45309; }
+.fta-warn-pill .fwp-info .fwp-glyph { color: var(--color-text-secondary, #555); }
+.fta-warn-pill .fwp-title { flex: 1 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.fta-warn-pill .fwp-who { flex: 0 0 auto; font-family: var(--font-mono); font-size: 11px; color: var(--color-text-tertiary, #888); }
+body.theme-dark #fta-warn-pill .fwp-btn.fwp-has-warn { background: #5c3a06 !important; color: #fde68a !important; border-color: rgba(245, 158, 11, .7) !important; }
+.node.fta-warn-hit > path { stroke: #f59e0b !important; stroke-width: 4px !important; filter: drop-shadow(0 0 6px rgba(245, 158, 11, .85)); }
+.node.fta-warn-hit .inline-desc { outline: 3px solid #f59e0b; outline-offset: 1px; box-shadow: 0 0 10px rgba(245, 158, 11, .7); }
+/* the number line sits on the canvas color so the dot grid never runs through the digits */
+#fta-svg .inline-metrics { background: var(--canvas-bg, #fff); border-radius: 4px; }
+.cfg-node-warnings { margin: 0 0 12px; display: flex; flex-direction: column; gap: 4px; }
+.cfg-node-warnings .cnw-item { display: flex; gap: 8px; font-size: 12px; line-height: 1.5; padding: 6px 8px; border-radius: 6px; overflow-wrap: anywhere; }
+.cfg-node-warnings .cnw-warn { background: rgba(245, 158, 11, .12); color: var(--color-warning, #b45309); }
+.cfg-node-warnings .cnw-info { background: var(--color-surface-2, rgba(0,0,0,.04)); color: var(--color-text-secondary, #555); }
+.cfg-node-warnings .cnw-glyph { font-weight: 700; flex: 0 0 auto; }

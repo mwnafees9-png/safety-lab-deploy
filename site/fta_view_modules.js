@@ -594,6 +594,26 @@ function _ftaCullPill(shown, total, capped) {
     } catch (_) {}
 }
 
+// 27 Oct 2026 (customer report): the number line under a node ("P=6.00E-10 · ≈2.00E-10/FH") always fits
+// on one line inside the node: the font shrinks from 11.5px until the text fits the field, never below
+// 7px. Measured with the field's own font, so a different number or a different font still fits.
+function _ftaFitMetricLine(el) {
+    try {
+        const BASE = 11.5, MIN = 7;
+        const text = String(el.value || '');
+        if (!text) { el.style.setProperty('font-size', BASE + 'px', 'important'); return; }
+        const c = _ftaFitMetricLine._ctx || (_ftaFitMetricLine._ctx = document.createElement('canvas').getContext('2d'));
+        const cs = getComputedStyle(el);
+        c.font = (cs.fontWeight || '600') + ' ' + BASE + 'px ' + (cs.fontFamily || 'monospace');
+        const spacing = parseFloat(cs.letterSpacing) || 0;
+        const width = c.measureText(text).width + spacing * text.length;
+        const avail = Math.max(60, (el.clientWidth || 160) - 6);
+        const size = width > avail ? Math.max(MIN, Math.floor((BASE * avail / width) * 10) / 10) : BASE;
+        el.style.setProperty('font-size', size + 'px', 'important');
+        el.title = text;
+    } catch (_) {}
+}
+
 function updateD3() {
     if (typeof SLLazy !== 'undefined' && SLLazy.defer('fta-svg', 'updateD3', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     try {
@@ -604,6 +624,7 @@ function updateD3() {
             g.selectAll("*").remove(); updateToolbarState();
             // 13 Oct 2026 (fix G): an empty page still shows the toolbox, its unattached nodes and the overview map.
             try { if (typeof SLFtaEdit !== 'undefined') SLFtaEdit.afterRender(null, [], document.body.classList.contains('theme-dark')); } catch (_) {}
+            try { if (typeof SLFtaWarn !== 'undefined') SLFtaWarn.afterRender(null, []); } catch (_) {}
             return;
         }
         // Phase 53.40 — refresh nodeSize on every render so Reconfigure Layout (and any future
@@ -814,31 +835,10 @@ function updateD3() {
             .on('dblclick', e => e.stopPropagation())
             .on('click', function (event, d) { try { event.stopPropagation(); _ftaCcfPopover(d.data, event); } catch (_) {} });
 
-        // Phase 56.42 — Actual line for top-down + shared events. The inline-metrics
-        // foreignObject is only 160px wide, so the combined "Target: ... Actual: ..."
-        // string gets truncated. Render the Actual on a second line as a native SVG
-        // <text> element, which can extend beyond the 160px and stays compact.
-        nodeEnter.append('text')
-            .attr('class', 'node-actual-line')
-            .attr('x', 0).attr('y', -10)
-            .attr('text-anchor', 'middle')
-            .style('font-size', '11px')
-            .style('font-family', 'ui-monospace, Menlo, monospace')
-            .style('fill', 'var(--color-text-secondary, #555)')
-            .style('pointer-events', 'none');
-
-        // Phase 56.45 — Feasibility marker. Small ⚠ next to the metrics line when
-        // an event's allocated λ exceeds its engineer-set achievable λ. Hover
-        // tooltip explains the delta.
-        nodeEnter.append('text')
-            .attr('class', 'node-feasibility-mark')
-            .attr('x', 78).attr('y', -32)
-            .attr('text-anchor', 'end')
-            .style('font-size', '14px')
-            .style('font-family', 'system-ui, sans-serif')
-            .style('fill', '#ff453a')
-            .style('font-weight', '700')
-            .style('cursor', 'help');
+        // 27 Oct 2026 (customer report): the node carries ONE line, P and its per flight hour value. The
+        // Actual line and the feasibility ⚠ drawn here sat under the gate symbol, the DAL badge and the
+        // input-mode dropdown (drawn later, on top). Every note now lives behind the warning pill at the
+        // bottom of the canvas and in the node properties box (fta_warn_pill.js, ftaNodeWarnings).
 
         // Backlog #4 — ◇ mark on qualitative development-error events
         // (ARP 4761A 4.1.1.1). Top-left of the shape, opposite the ⚠ mark.
@@ -1001,6 +1001,7 @@ function updateD3() {
             this.classList.toggle('fta-metric-edit', editable);
             this.title = _FE ? _FE.metricTitle(d.data) : '';
             if (!this._ftaEditing) this.value = formatNodeMetrics(d);
+            _ftaFitMetricLine(this);
         });
         // 13 Oct 2026 (fix G): handle sits on the top edge of the description box; hidden on the top event.
         nodeUpdate.select('.fta-conn-handle')
@@ -1015,56 +1016,6 @@ function updateD3() {
             gsel.style('display', null).attr('transform', 'translate(0,' + (leaf ? 94 : 50) + ')');
             gsel.select('rect').attr('x', -w / 2).attr('width', w);
             gsel.select('text').text(txt.length > 26 ? txt.slice(0, 25) + '\u2026' : txt);
-        });
-        // Phase 56.42 \u2014 Actual line for top-down + shared events. Populated by
-        // formatNodeActualLine, which returns '' for nodes where the actual is
-        // not divergent (so the line silently hides).
-        // Phase 63.9 \u2014 long advisory notes (\u26a0/\u25b3 prefixed) collapse to a caution
-        // flag on the canvas; the full message moves to a click-toast + tooltip.
-        // Short data lines ("Actual: P=\u2026") still render as text.
-        nodeUpdate.select('.node-actual-line').each(function(d) {
-            const txt = (typeof formatNodeActualLine === 'function') ? formatNodeActualLine(d) : '';
-            const isFlag = !!txt && (txt.charAt(0) === '\u26a0' || txt.charAt(0) === '\u25b3');
-            if (isFlag) {
-                const glyph = txt.charAt(0);
-                this.textContent = glyph;
-                this.style.display = '';
-                this.style.cursor = 'pointer';
-                this.style.fontSize = '15px';
-                const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                titleEl.textContent = txt.slice(1).trim();
-                this.appendChild(titleEl);
-                this.onclick = function(ev) {
-                    try { ev.stopPropagation(); if (typeof showToast === 'function') showToast(txt.slice(1).trim(), glyph === '\u26a0' ? 'warning' : 'info', 6500); } catch (_) {}
-                };
-            } else {
-                this.textContent = txt;
-                this.style.cursor = '';
-                this.style.fontSize = '';
-                this.onclick = null;
-                this.style.display = txt ? '' : 'none';
-            }
-        });
-        // Phase 56.45 — Feasibility marker. Show ⚠ on leaves where allocated > achievable.
-        nodeUpdate.select('.node-feasibility-mark').each(function(d) {
-            const node = d.data;
-            if (node && node.type !== 'gate' && node._feasibilityViolation) {
-                const v = node._feasibilityViolation;
-                this.textContent = '⚠';
-                this.style.display = '';
-                let titleEl = this.querySelector('title');
-                if (!titleEl) {
-                    titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                    this.appendChild(titleEl);
-                }
-                titleEl.textContent = 'Physically achievable failure probability ' + v.achievable.toExponential(2) +
-                    (v.achievableLambda ? ' (from λ_ach = ' + v.achievableLambda.toExponential(2) + ' /hr over the exposure window)' : '') +
-                    ' exceeds the allocated budget P ≤ ' + v.allocated.toExponential(2) +
-                    ' — component would need to be ' + v.delta.toFixed(1) + '× more reliable than physics allows. Architecture change or higher-grade component required.';
-            } else {
-                this.textContent = '';
-                this.style.display = 'none';
-            }
         });
         // Backlog #4 — ◇ marker sync on qualitative development-error events.
         nodeUpdate.select('.node-dev-error-mark').each(function(d) {
@@ -1155,6 +1106,8 @@ function updateD3() {
         nodes.exit().remove(); updateToolbarState();
         // 13 Oct 2026 (fix G): toolbox, unattached nodes, overview map (full layout, culling-independent).
         try { if (_FE) _FE.afterRender(root, _allDesc, isDark); } catch (_) {}
+        // 27 Oct 2026 (customer report): the tree's warning pill on the canvas, and its node highlight.
+        try { if (typeof SLFtaWarn !== 'undefined') SLFtaWarn.afterRender(rootNode, _allDesc); } catch (_) {}
     } catch (err) { console.error("D3 Rendering Error:", err); }
 }
 
@@ -1278,6 +1231,8 @@ function selectNode(dataNode) {
     // identity editor is additive, and a node with no coordinate is still perfectly
     // editable — it just cannot be owned, shared or traced until someone declares it.
     try { if (typeof slRenderNodeIdentity === 'function') slRenderNodeIdentity(); } catch (_) {}
+    // 27 Oct 2026 (customer report): this node's warnings and notes, in full (the canvas shows only its numbers).
+    try { if (typeof SLFtaWarn !== 'undefined') SLFtaWarn.fillPanel(dataNode); } catch (_) {}
     // Subtle common-mode hint next to the node ID — only shown if this logicalId appears elsewhere.
     const _hint = document.getElementById('config-common-mode-hint');
     const _miBtn = document.getElementById('btn-make-independent');

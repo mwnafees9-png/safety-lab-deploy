@@ -317,7 +317,8 @@ function fnSrc(file, name) {
     check('[5a] the spare panel no longer says only the Monte Carlo reads dormancy', !/Only the DFT Monte-Carlo reads this/.test(idx));
     const ctx = { ftaConfig: { mode: 'bottom-up' }, getActiveFTARoot: () => null };
     vm.createContext(ctx);
-    const f = vm.runInContext('(' + fnSrc('helpers_modules.js', 'formatNodeActualLine') + ')', ctx);
+    // 27 Oct 2026: the wording lives in ftaNodeWarnings; formatNodeActualLine returns its first note.
+    const f = vm.runInContext(fnSrc('helpers_modules.js', 'ftaNodeWarnings') + '\n(' + fnSrc('helpers_modules.js', 'formatNodeActualLine') + ')', ctx);
     const line = n => f({ data: n });
     check('[5b] exact spare says "solved exactly"', /solved exactly/.test(line({ type: 'gate', gateType: 'SPARE', _dynStatic: { mode: 'exact' } })));
     check('[5b] bound spare says "upper bound" and names the switch', /upper bound.*switch fails/.test(line({ type: 'gate', gateType: 'SPARE', _dynStatic: { mode: 'bound', reason: 'x' } })));
