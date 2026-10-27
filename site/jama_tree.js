@@ -1,5 +1,6 @@
 // ============================================================================
-// jama_tree.js, v1.2, 22 Oct 2026: the Jama function tree, as Safety Lab rows (v1.1: the project's level limit;
+// jama_tree.js, v1.3, 27 Oct 2026: descriptions keep table cells apart, list dashes and a marker for each image or diagram.
+// v1.2, 22 Oct 2026: the Jama function tree, as Safety Lab rows (v1.1: the project's level limit;
 // v1.2: items keep their raw fields; the parent lookup answers for any item type, with a shared cache).
 //
 // Waqas's ruling (21 Oct 2026): track a customer's aircraft functions live from
@@ -45,6 +46,16 @@
     // Jama descriptions are rich text (HTML). Safety Lab cells are plain text.
     function plain(html) {
         let t = String(html == null ? '' : html);
+        // 27 Oct 2026: a diagram or image leaves a marker (with its caption when it has one) instead of
+        // vanishing; table cells stay apart; list items keep a dash.
+        t = t.replace(/<\s*(script|style)\b[\s\S]*?<\/\s*\1\s*>/gi, '');
+        t = t.replace(/<\s*(img|svg|object|embed|canvas)\b[^>]*>/gi, function (m) {
+            const a = /\b(?:alt|title)\s*=\s*("([^"]*)"|'([^']*)')/i.exec(m);
+            const cap = a ? (a[2] != null ? a[2] : a[3]).replace(/[\[\]<>]/g, '').trim() : '';
+            return ' [image or diagram in Jama' + (cap ? ': ' + cap : '') + '] ';
+        });
+        t = t.replace(/<\/\s*svg\s*>/gi, '');
+        t = t.replace(/<\/\s*(td|th)\s*>/gi, ' | ').replace(/<\s*li\b[^>]*>/gi, '\n- ');
         t = t.replace(/<\s*br\s*\/?>/gi, '\n').replace(/<\/\s*(p|div|li|tr|h[1-6])\s*>/gi, '\n').replace(/<[^>]*>/g, '');
         const ent = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
         t = t.replace(/&(#x[0-9a-f]+|#\d+|[a-z0-9]+);/gi, function (m, k) {
@@ -52,7 +63,7 @@
             if (kl[0] === '#') { const n = kl[1] === 'x' ? parseInt(kl.slice(2), 16) : parseInt(kl.slice(1), 10); return isFinite(n) ? String.fromCodePoint(n) : m; }
             return Object.prototype.hasOwnProperty.call(ent, kl) ? ent[kl] : m;
         });
-        return t.split('\n').map(function (l) { return l.replace(/[ \t ]+/g, ' ').trim(); }).filter(Boolean).join('\n');
+        return t.split('\n').map(function (l) { return l.replace(/[ \t ]+/g, ' ').trim().replace(/^\|\s*/, '').replace(/\s*\|$/, '').trim(); }).filter(function (l) { return l && l !== '-'; }).join('\n');
     }
 
     // One Jama item (abstractitems / items payload) in the shape the rest uses.
@@ -234,6 +245,16 @@
         return { fresh: fresh, changed: changed, moved: moved, fnChanged: fnChanged, missing: missing, unchanged: unchanged, tooDeep: tooDeep };
     }
 
+    // 27 Oct 2026: how many Jama functions sit at each level (1 = top function), for the review
+    function levelCounts(tree) {
+        const out = [];
+        arrOf(tree && tree.order).forEach(function (n) {
+            let d = 0, c = n, g = 0; while (c && tree.parentId.get(c.id) != null && g++ < 10000) { d++; c = tree.byId.get(tree.parentId.get(c.id)); }
+            out[d] = (out[d] || 0) + 1;
+        });
+        for (let i = 0; i < out.length; i++) out[i] = out[i] || 0;
+        return out;
+    }
     function pending(d) { return d ? d.fresh.length + d.changed.length + d.moved.length + d.fnChanged.length + d.missing.length : 0; }
 
     // Write the staged review into the rows. Mutates `rows` (acFunctionsData) in place and
@@ -325,7 +346,7 @@
         return { ok: true, added: added, updated: updated, moved: movedN, flagged: flagged, fnUpdated: fnUpdated };
     }
 
-    const API = { TOOL: TOOL, plain: plain, normalizeItem: normalizeItem, resolveFunctionParents: resolveFunctionParents,
+    const API = { TOOL: TOOL, plain: plain, normalizeItem: normalizeItem, levelCounts: levelCounts, resolveFunctionParents: resolveFunctionParents,
                   buildTree: buildTree, diffFunctions: diffFunctions, applyFunctions: applyFunctions, pending: pending };
     root.SLJamaTree = API;
     if (typeof module !== 'undefined' && module.exports) module.exports = API;

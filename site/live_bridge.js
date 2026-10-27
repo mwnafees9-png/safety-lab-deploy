@@ -85,6 +85,16 @@
 //     not (seen at a customer: HTTP 403 on /itemtypes) the browser, the check and the system folder
 //     choice all still work. A project that chose item types before keeps reading them until
 //     someone chooses in the browser.
+//
+// v4.1, 27 Oct 2026 (Waqas: "make sure there are no bugs on our side for their jama connection or the
+// browser, they have three tiers of functions, how do we enable them to map that stuff acurately").
+//   * EACH JAMA ITEM TYPE UNDER A TICKED FOLDER IS DECIDED. A Text item no longer comes in as a function,
+//     nor a requirement nested under a function as a sub-function. Text stays out; a type whose name says
+//     what it is goes there; a folder holding one kind of item takes the ticked kind; anything else is
+//     asked, by Jama type, with a count and examples, and nothing is staged until it is answered. The
+//     answer is kept with the ticked folder (picks[].types).
+//   * The review counts the function tree by level and names each new row's level; the page panels show
+//     the check's warnings; a read cut short at the item limit flags nothing as missing.
 // ============================================================================
 (function () {
     'use strict';
@@ -145,10 +155,15 @@
     function _picks(cfg) {
         return (Array.isArray(cfg && cfg.picks) ? cfg.picks : []).filter(p => p && p.id != null && isFinite(Number(p.id)) && KIND_V[p.kind] != null);
     }
-    function _types(cfg) {
+    function _types(cfg, items) {
         const pk = _picks(cfg);
         if (pk.length) {
-            const has = k => pk.some(p => p.kind === k) ? [KIND_V[k]] : [];
+            // 27 Oct 2026: a Jama item type under a ticked folder can be another kind (a requirement nested
+            // under a function); what it was said or named to be is read too
+            const extra = new Set();
+            pk.forEach(p => { if (p.types && typeof p.types === 'object') Object.keys(p.types).forEach(t => { if (KIND_V[p.types[t]] != null) extra.add(p.types[t]); }); });
+            ((items && items._types) || []).forEach(t => { if (KIND_V[t.kind] != null) extra.add(t.kind); });
+            const has = k => (pk.some(p => p.kind === k) || extra.has(k)) ? [KIND_V[k]] : [];
             return { fn: has('fn'), req: has('req'), asm: has('asm'), fc: has('fc') };
         }
         const n = a => (Array.isArray(a) ? a : []).map(Number).filter(x => isFinite(x));
@@ -365,6 +380,33 @@
     // all pages, and each item takes the kind of the deepest pick that holds it. Folders and sets are
     // never filed; they go into the look-up so the function tree can look through them without
     // asking Jama again. Nothing here needs the item types.
+    // 27 Oct 2026: what one Jama item type under one ticked thing is in Safety Lab.
+    //   chosen  the person said so (picks[].types)       ticked  it is the ticked item's own type
+    //   text    a Jama Text item: stays out               name    the type's name says what it is
+    //   only    the one kind of item under that folder    ask     nobody can tell: asked, nothing staged
+    const _TEXT_RE = /^(text|txt)$/i;
+    function _kindFromText(s) {
+        s = String(s || '');
+        if (/failure\s*condition|hazard/i.test(s)) return 'fc';
+        if (/assumption/i.test(s)) return 'asm';
+        if (/requirement/i.test(s)) return 'req';
+        if (/function/i.test(s)) return 'fn';
+        return '';
+    }
+    function _typeOf(id) { return (_itemTypes || []).find(t => t.id === id) || null; }
+    function _isTextType(id) { const t = _typeOf(id); return !!(t && (_TEXT_RE.test(t.key || '') || _TEXT_RE.test(t.name || ''))); }
+    function _typeLabel(id) { const t = _typeOf(id); return t ? t.name : 'Jama item type ' + id; }
+    function _typeDecide(L, tid) {
+        const saved = L.types && Object.prototype.hasOwnProperty.call(L.types, String(tid)) ? L.types[String(tid)] : null;
+        if (saved === 'skip' || KIND_V[saved] != null) return { kind: saved, how: 'chosen' };
+        if (L.ownType != null && tid === L.ownType) return { kind: L.kind, how: 'ticked' };
+        if (_isTextType(tid)) return { kind: 'skip', how: 'text' };
+        const t = _typeOf(tid), g = t ? _kindFromText(t.name) : '';
+        if (g) return { kind: g, how: 'name' };
+        const others = Array.from(L.counts.keys()).filter(x => !_isTextType(x));
+        if (others.length === 1) return { kind: L.kind, how: 'only' };
+        return { kind: '', how: 'ask' };
+    }
     function _isContainerTypeId(id) { return !!(_itemTypes && _itemTypes.some(t => t.id === id && _isContainerType(t))); }
     async function _fetchPicked(cfg, picks) {
         const T = _T(); if (!T) throw new Error('The Jama tree module did not load. Reload the page.');
@@ -375,12 +417,19 @@
             let raw = null;
             try { raw = await _get(base + '/rest/latest/items/' + encodeURIComponent(p.id)); }
             catch (e) { if (/\b404\b/.test(String((e && e.message) || e))) { warnings.push(gone); continue; } throw e; }
-            const n = T.normalizeItem(raw && raw.data ? raw.data : raw);
+            const rawN = raw && raw.data ? raw.data : raw;
+            const n = T.normalizeItem(rawN);
             if (!n) { warnings.push(gone); continue; }
-            live.push({ kind: p.kind, id: n.id, seq: n.seq, depth: n.seq ? n.seq.split('.').length : 999 });
+            const isBox = (rawN && rawN.childItemType != null) || _isContainerTypeId(n.type);
+            live.push({ kind: p.kind, id: n.id, key: n.key || p.key || String(p.id), name: n.name || p.name || '', seq: n.seq, depth: n.seq ? n.seq.split('.').length : 999,
+                        ownType: isBox ? null : n.type, types: (p.types && typeof p.types === 'object') ? p.types : {}, counts: new Map(), examples: new Map() });
+        }
+        // 27 Oct 2026: the item type names decide Text items and named types; read once when Jama allows it
+        if (live.length && _itemTypes == null && !_itemTypesRefused) {
+            try { _itemTypes = await bridgeFetchItemTypes(); } catch (_) { _itemTypesRefused = true; }
         }
         live.sort((a, b) => b.depth - a.depth);                 // the deepest pick decides
-        const out = [], context = new Map();
+        const out = [], context = new Map(), hits = [];
         let startAt = 0, total = null, truncated = false;
         if (live.length) {
             for (let page = 0; page < MAX_PAGES; page++) {
@@ -391,7 +440,11 @@
                     const n = T.normalizeItem(raw); if (!n) return;
                     const container = (raw && raw.childItemType != null) || _isContainerTypeId(n.type);
                     const hit = container ? null : live.find(l => l.id === n.id || (l.seq && n.seq && n.seq.indexOf(l.seq + '.') === 0));
-                    if (hit) { n.jamaType = n.type; n.type = KIND_V[hit.kind]; out.push(n); }
+                    if (hit) {
+                        hits.push([n, hit]);
+                        hit.counts.set(n.type, (hit.counts.get(n.type) || 0) + 1);
+                        const ex = hit.examples.get(n.type) || []; if (ex.length < 3) ex.push(n.key + (n.name ? ' ' + n.name : '')); hit.examples.set(n.type, ex);
+                    }
                     else context.set(n.id, n);
                 });
                 const pi = data && data.meta && data.meta.pageInfo;
@@ -402,7 +455,22 @@
                 if (page === MAX_PAGES - 1) truncated = true;
             }
         }
+        // 27 Oct 2026: each Jama item type under each ticked thing, decided (_typeDecide). An item left out
+        // is still looked through (context), so a function under it keeps its place in the tree.
+        const types = [];
+        live.forEach(L => L.counts.forEach((count, tid) => {
+            const dcs = _typeDecide(L, tid);
+            types.push({ pickId: L.id, pickKey: L.key, pickName: L.name, pickKind: L.kind, typeId: tid, label: _typeLabel(tid), named: !!_typeOf(tid),
+                         count: count, examples: L.examples.get(tid) || [], kind: dcs.kind, how: dcs.how });
+        }));
+        const kindOf = new Map(types.map(t => [t.pickId + ':' + t.typeId, t.kind]));
+        hits.forEach(([n, L]) => {
+            const k = kindOf.get(L.id + ':' + n.type);
+            if (KIND_V[k] != null) { n.jamaType = n.type; n.type = KIND_V[k]; out.push(n); }
+            else context.set(n.id, n);
+        });
         out._truncated = truncated; out._total = total; out._context = context; out._warnings = warnings;
+        out._types = types; out._undecided = types.filter(t => t.how === 'ask');
         return out;
     }
 
@@ -499,7 +567,7 @@
     let _stageIn = null;
     async function bridgeStage(items, cfg, fetchItem) {
         const T = _T(), K = _K();
-        const ty = _types(cfg);
+        const ty = _types(cfg, items);
         const warnings = [];
         const cache = new Map();
         // 26 Oct 2026: what the Jama browser read around the chosen items (folders, sets, everything not
@@ -533,8 +601,8 @@
             const fcSet = new Set(ty.fc);
             await _nameOptions(K.optionIds((items || []).filter(n => n && fcSet.has(n.type)), fcFields));
         }
-        if (items && items._truncated) warnings.push('Read the first ' + (MAX_PAGES * PAGE).toLocaleString() + ' items only (Jama reports ' + Number(items._total || 0).toLocaleString() + '). Narrow the item types or ask Safety Lab to raise the limit.');
-        _stageIn = { items: items || [], cfg: cfg, parents, fcParents, containers, warnings };
+        if (items && items._truncated) warnings.push('Read the first ' + (MAX_PAGES * PAGE).toLocaleString() + ' items of the Jama project only (Jama reports ' + Number(items._total || 0).toLocaleString() + '), so nothing is flagged as missing from this check. Ask Safety Lab to raise the limit.');
+        _stageIn = { items: items || [], cfg: cfg, parents, fcParents, containers, warnings, truncated: !!(items && items._truncated) };
         return _compute(_stageIn);
     }
     function _leafNote(store) {
@@ -547,7 +615,7 @@
     }
     function _compute(inp) {
         const T = _T(), K = _K();
-        const cfg = inp.cfg, ty = _types(cfg), items = inp.items;
+        const cfg = inp.cfg, ty = _types(cfg, inp.items), items = inp.items;
         const warnings = inp.warnings.slice();
         const set = a => new Set(a);
         const fnSet = set(ty.fn), reqSet = set(ty.req), asmSet = set(ty.asm), fcSet = set(ty.fc);
@@ -592,6 +660,7 @@
             d.fn = T.diffFunctions(tree, (typeof acFunctionsData !== 'undefined' ? acFunctionsData : []) || [], { levelLimit: _lim });
             if (_lim && d.fn.tooDeep && d.fn.tooDeep.length) warnings.push('Jama: ' + SLFuncTree.refusedText(d.fn.tooDeep.map(x => x.item.key), 'brought in'));
             d.fn.tops = tree.tops.length; d.fn.total = fnItems.length;
+            d.fn.levels = T.levelCounts ? T.levelCounts(tree) : [];   // 27 Oct 2026: the review counts the tree by level
             if (inp.versions instanceof Map) _revisedInto(d, inp.versions);
         }
         if (K && ty.asm.length) d.asm = K.diffAssumptions(of(asmSet, null), (typeof acAssumptionsData !== 'undefined' ? acAssumptionsData : []) || []);
@@ -614,7 +683,13 @@
             }
             d.sys[c.sysId] = sd;
         });
+        // 27 Oct 2026: a read cut short at the item limit cannot say anything is gone from Jama
+        if (inp.truncated) [d].concat(Object.keys(d.sys).map(k => d.sys[k])).forEach(s => ['fn', 'req', 'asm', 'fc'].forEach(k => { const x = s && s[k]; if (x && Array.isArray(x.missing)) x.missing = []; }));
         return d;
+    }
+    function _heldText(und) {
+        return 'Nothing from Jama is staged yet: ' + und.length + ' kind' + (und.length === 1 ? '' : 's') + ' of Jama item under what you chose ' + (und.length === 1 ? 'needs' : 'need') +
+            ' saying what ' + (und.length === 1 ? 'it is' : 'they are') + ' in Safety Lab (' + und.slice(0, 3).map(t => t.label + ' under ' + t.pickKey).join('; ') + (und.length > 3 ? '; ...' : '') + '). Choose below, or Leave out.';
     }
     // System workspaces with no Jama folder yet: until one is chosen, that system's items in Jama read
     // as aircraft level. Said on every aircraft panel, so nobody signs them in at the wrong level.
@@ -789,7 +864,7 @@
     }
 
     // --------------------------------------------------------------- check
-    let _lastDiff = null, _checking = false, _itemTypes = null;
+    let _lastDiff = null, _checking = false, _itemTypes = null, _itemTypesRefused = false;
     async function bridgeCheck(silent) {
         if (_checking) return _lastDiff;
         _checking = true;
@@ -798,8 +873,20 @@
             _setProgress('Reading Jama...');
             const items = await bridgeFetchItems();
             const base = String(cfg.baseUrl).replace(/\/+$/, '');
+            // 27 Oct 2026: a Jama item type nobody can name yet holds the whole check, so nothing comes in
+            // under the wrong kind; the panels ask, and the answer runs the check again.
+            if (items && Array.isArray(items._undecided) && items._undecided.length) {
+                _lastDiff = { held: true, types: items._types, req: null, fn: null, asm: null, fc: null, sys: {},
+                              warnings: (items._warnings || []).slice().concat([_heldText(items._undecided)]), checkedAt: new Date().toISOString() };
+                _stageIn = null;
+                try { if (typeof window.jrnl === 'function') window.jrnl('bridge-check', 'Jama checked: ' + items.length + ' item(s); held until ' + items._undecided.length + ' Jama item type(s) are said what they are.'); } catch (_) {}
+                if (!silent) { try { showToast('Jama: say what ' + (items._undecided.length === 1 ? 'one kind' : items._undecided.length + ' kinds') + ' of Jama item is first, then the changes are staged.', 'info', 5200); } catch (_) {} }
+                _setProgress(''); _render();
+                return _lastDiff;
+            }
             _setProgress('Building the function tree...');
             _lastDiff = await bridgeStage(items, cfg, id => _get(base + '/rest/latest/items/' + encodeURIComponent(id)));
+            if (items && Array.isArray(items._types)) _lastDiff.types = items._types;
             if (_lastDiff.fn && _wantsRevisions()) await bridgeReadRevisions(items, cfg, _lastDiff, id => _get(base + '/rest/latest/items/' + encodeURIComponent(id) + '/versions?maxResults=1&startAt=0'));
             const d = _lastDiff, f = d.fn;
             const fnTxt = (f ? '; functions ' + f.total + ' read: ' + f.fresh.length + ' new, ' + f.changed.length + ' changed, ' + f.moved.length + ' moved, ' + f.fnChanged.length + ' top function(s) renamed, ' + f.missing.length + ' missing' : '') +
@@ -842,9 +929,42 @@
         return '<tr><td><span style="font-size:10px; font-weight:700; color:' + color + ';">' + tag + '</span></td><td style="font-size:11.5px;"><b>' + _esc(name) + '</b></td><td style="font-size:11px; color:var(--color-text-secondary);">' + _esc(detail) + '</td></tr>';
     }
     function _more(n) { return n > SHOW ? '<tr><td></td><td colspan="2" style="font-size:11px; color:var(--color-text-tertiary);">and ' + (n - SHOW).toLocaleString() + ' more of this kind, all included when you sign</td></tr>' : ''; }
+    const _LEVEL = ['function', 'sub-function', 'sub-sub-function'];
+    const _levelName = d => _LEVEL[d] || ('level ' + (d + 1) + ' function');
     function _fnPlace(x) {
         const parts = [x.top ? x.top.key : ''].concat(x.parent ? [x.parent.key] : []).filter(Boolean);
-        return parts.length ? 'under ' + parts.join(' > ') : 'top-level function';
+        // 27 Oct 2026: the level it lands at, so the mapping is checked at a glance
+        const lv = (x.depth != null && x.depth > 0) ? _levelName(x.depth) + ' ' : '';
+        return parts.length ? lv + 'under ' + parts.join(' > ') : 'top-level function';
+    }
+    // 27 Oct 2026: Jama's own tree order (its sequence, 1.2.10 after 1.2.9), for reading a branch top to bottom
+    function _bySeq(list) {
+        const segs = s => String(s || '').split('.').map(Number);
+        return (list || []).slice().sort((a, b) => { const x = segs(a.item && a.item.seq), y = segs(b.item && b.item.seq); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; });
+    }
+    function _levelsLine(f) {
+        const lv = (f && f.levels) || []; if (!lv.length) return '';
+        const parts = lv.map((n, i) => n.toLocaleString() + ' ' + _levelName(i) + (n === 1 ? '' : 's'));
+        const deep = (f.tooDeep || []).length;
+        return '<div class="jb-levels" style="font-size:11px; color:var(--color-text-secondary); margin:2px 0 4px;">In Jama: ' + _esc(parts.join(', ')) +
+            (deep ? ' (' + deep + ' below the levels this project allows, not brought in)' : '') + '.</div>';
+    }
+    const _HOW = { chosen: 'chosen by you', ticked: 'the item you ticked', text: 'a Jama Text item', name: 'from its Jama type name', only: 'the only kind of item there', ask: 'needs your answer' };
+    const _TYPE_OPTS = [['', 'Choose what this is'], ['fn', 'Functions'], ['req', 'Requirements'], ['asm', 'Assumptions'], ['fc', 'Failure conditions'], ['skip', 'Leave out']];
+    // 27 Oct 2026: each Jama item type under each ticked thing, what it comes in as, changeable
+    function _typesHtml(d, onlyAsk) {
+        const list = ((d && d.types) || []).filter(t => !onlyAsk || t.how === 'ask');
+        if (!list.length) return '';
+        const sel = 'font-size:11.5px; padding:2px 6px; border:1px solid var(--color-border-strong); background:var(--color-surface-1); color:var(--color-text-primary);';
+        return '<div class="jb-types" style="margin:6px 0;"><div style="font-size:11px; font-weight:700; margin-bottom:3px;">Jama item types under what you chose</div>' +
+            '<table class="data-table" style="width:100%;"><tbody>' + list.map(t =>
+                '<tr data-pick="' + Number(t.pickId) + '" data-type="' + Number(t.typeId) + '"' + (t.how === 'ask' ? ' class="jb-type-ask"' : '') + '>' +
+                '<td style="font-size:11.5px;"><b>' + _esc(t.label) + '</b> <span style="color:var(--color-text-secondary);">under ' + _esc(t.pickKey) + ', ' + Number(t.count).toLocaleString() + ' item' + (t.count === 1 ? '' : 's') + '</span>' +
+                    '<div style="font-size:10.5px; color:var(--color-text-secondary);">e.g. ' + _esc(t.examples.join('; ')) + '</div></td>' +
+                '<td style="font-size:11px; color:' + (t.how === 'ask' ? 'var(--color-warning); font-weight:700' : 'var(--color-text-secondary)') + ';">' + _esc(_HOW[t.how] || '') + '</td>' +
+                '<td><select class="jb-type-kind" aria-label="What ' + _esc(t.label) + ' under ' + _esc(t.pickKey) + ' is in Safety Lab" onchange="bridgeTypeKind(' + Number(t.pickId) + ', ' + Number(t.typeId) + ', this.value)" style="' + sel + '">' +
+                    _TYPE_OPTS.map(([v, l]) => '<option value="' + v + '"' + ((t.kind || '') === v ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></td></tr>').join('') +
+            '</tbody></table></div>';
     }
     const KIND_TITLE = { fn: 'Functions', req: 'Requirements', asm: 'Assumptions', fc: 'Failure conditions' };
     const C_NEW = 'var(--color-success)', C_CHG = 'var(--color-warning)', C_MOV = 'var(--color-accent)', C_MIS = 'var(--color-danger)', C_DIM = 'var(--color-text-secondary)';
@@ -855,7 +975,7 @@
         const K = _K();
         if (k === 'fn' && x.fnChanged) {   // the aircraft function tree
             return _cap(x.fnChanged, y => _row('FUNCTION RENAMED', C_CHG, y.item.key + ', ' + y.item.name, y.fields.join(' and ') + ' changed; applies to ' + y.rows.length + ' row(s)')) +
-                _cap(x.fresh, y => _row('NEW', C_NEW, y.item.key + ', ' + y.item.name, y.funcOnly ? 'top-level function, nothing under it yet' : _fnPlace(y))) +
+                _cap(_bySeq(x.fresh), y => _row('NEW', C_NEW, y.item.key + ', ' + y.item.name, y.funcOnly ? 'top-level function, nothing under it yet' : _fnPlace(y))) +
                 _cap(x.changed, y => _row('CHANGED', C_CHG, (y.row.subId || y.row.funcId) + ', ' + y.item.name, y.fields.join('; '))) +
                 _cap(x.moved, y => _row('MOVED', C_MOV, (y.row.subId || '') + ', ' + y.item.name, 'now ' + _fnPlace(y))) +
                 _cap(x.missing, y => _row('MISSING', C_MIS, (y.row.subId || y.row.funcId) + ', ' + (y.row.subName || y.row.funcName || ''), y.why + '. Flagged, never deleted.')) +
@@ -890,6 +1010,7 @@
             const body = _kindRows(k, s[k], scope, view);
             if (!body) return;
             if (titled) html += '<div style="font-size:11px; font-weight:700; margin:6px 0 3px;">' + (scope === 'ac' ? 'Aircraft ' : (s.name || scope) + ' · ') + KIND_TITLE[k].toLowerCase() + '</div>';
+            if (k === 'fn' && scope === 'ac') html += _levelsLine(s.fn);
             html += _tbl(body);
             if (k === 'fc' && s.fc && (s.fc.notes || []).length) html += s.fc.notes.slice(0, 8).map(n => '<div style="font-size:11px; color:var(--color-warning);">' + _esc(n) + '</div>').join('');
         });
@@ -940,6 +1061,7 @@
             const d = _lastDiff;
             html += '<div style="font-size:12px; margin-bottom:6px;">' + _checkedLine(d, n) + '</div>';
             (d.warnings || []).forEach(w => { html += '<div style="font-size:11px; color:var(--color-warning); margin-bottom:4px;">' + _esc(w) + '</div>'; });
+            html += _typesHtml(d, false);
             html += _reviewHtml(d, 'ac', ['fn', 'req', 'asm', 'fc'], 'fcim', true);
             Object.keys(d.sys || {}).forEach(id => { html += _reviewHtml(d, id, ['fn', 'req', 'asm', 'fc'], 'fcim', true); });
             if (n) html += _signHtml('all', n);
@@ -1001,6 +1123,10 @@
             (n ? _btn(_open[p.key] ? 'Hide changes' : 'Review ' + n + ' change(s)', 'bridgeStripToggle(\'' + p.key + '\')') : '') +
             _btn('Connection…', 'bridgeSetupUi()') + '</div>' +
             '<div class="jb-progress" style="font-size:11px; color:var(--color-text-secondary);">' + _esc(_progress) + '</div>' + sysLine;
+        // 27 Oct 2026: the check's warnings and, while it is held, the question, on every page
+        if (d && (d.warnings || []).length) html += '<div class="jb-warn">' + d.warnings.slice(0, 6).map(w => '<div style="font-size:11px; color:var(--color-warning); margin-top:3px;">' + _esc(w) + '</div>').join('') + '</div>';
+        if (d && d.held) html += _typesHtml(d, true);
+        else if (d && p.key === 'ac-func' && n && _open[p.key]) html += '<div style="margin-top:6px;">' + _levelsLine(d.fn) + '</div>';
         if (n && _open[p.key]) {
             html += '<div style="margin-top:6px;">' + _reviewHtml(d, scope, p.kinds, p.view, false) + '</div>' +
                 (p.also ? '<div style="font-size:11px; color:var(--color-text-tertiary); margin-top:4px;">' + _esc(p.also) + '</div>' : '') +
@@ -1345,12 +1471,7 @@
     // a first guess at what a ticked thing is, from its Jama type name, else its own name; always shown, always changeable
     function _guessKind(b, x) {
         const t = (b.types && x.type != null && b.types.get(x.type)) || '';
-        for (const s of [t, x.name || '']) {
-            if (/failure\s*condition|hazard/i.test(s)) return 'fc';
-            if (/assumption/i.test(s)) return 'asm';
-            if (/requirement/i.test(s)) return 'req';
-            if (/function/i.test(s)) return 'fn';
-        }
+        for (const s of [t, x.name || '']) { const k = _kindFromText(s); if (k) return k; }
         return '';
     }
     function _coveredBy(b, x) {
@@ -1452,8 +1573,8 @@
         // one after the other, so the first request signs in once and the rest reuse it
         return bridgeFetchProjects().then(l => { if (_br !== b) return; b.projects = l; if (!b.projectId && l.length === 1) b.projectId = l[0].id; })
             .catch(e => { if (_br === b) b.projErr = String((e && e.message) || e); })
-            .then(() => bridgeFetchItemTypes()).then(l => { if (_br === b) { _itemTypes = l; b.types = new Map(l.map(t => [t.id, t.name])); } })
-            .catch(e => { if (_br === b) b.typesErr = String((e && e.message) || e); })
+            .then(() => bridgeFetchItemTypes()).then(l => { if (_br === b) { _itemTypes = l; _itemTypesRefused = false; b.types = new Map(l.map(t => [t.id, t.name])); } })
+            .catch(e => { _itemTypesRefused = true; if (_br === b) b.typesErr = String((e && e.message) || e); })
             .then(() => { if (_br !== b) return; _brRender(); if (b.projectId) return _brLoadRoots(false); });
     };
     window.bridgeBrowseClose = function () { _br = null; const m = document.getElementById('jb-browse'); if (m) m.style.display = 'none'; };
@@ -1481,7 +1602,7 @@
         if (on) {
             const x = b.nodes.get(id); if (!x) return;
             const was = b.picks.get(id);
-            b.picks.set(id, { id: id, key: x.key, name: x.name, seq: x.seq, container: x.container, kind: (was && was.kind) || _guessKind(b, x) });
+            b.picks.set(id, Object.assign({ id: id, key: x.key, name: x.name, seq: x.seq, container: x.container, kind: (was && was.kind) || _guessKind(b, x) }, was && was.types ? { types: was.types } : {}));
         } else b.picks.delete(id);
         b.msg = ''; _brRender();
     };
@@ -1504,12 +1625,26 @@
         const cfg = bridgeConfig();
         if (cfg.projectId && String(cfg.projectId) !== b.projectId) cfg.systems = {};   // the system folders were in the other project
         cfg.projectId = b.projectId;
-        cfg.picks = picks.map(p => ({ id: p.id, key: p.key || '', name: p.name || '', seq: p.seq || '', kind: p.kind, container: !!p.container }));
+        cfg.picks = picks.map(p => Object.assign({ id: p.id, key: p.key || '', name: p.name || '', seq: p.seq || '', kind: p.kind, container: !!p.container },
+                                                 p.types && typeof p.types === 'object' && Object.keys(p.types).length ? { types: p.types } : {}));
         bridgeConfigSave(cfg);
         _lastDiff = null; _stageIn = null; _typeFields = null;
         _armPoll();
         window.bridgeBrowseClose();
         _renderAll();
+        return bridgeCheck(false).catch(e => { try { showToast('Bridge: ' + e.message, 'error', 6200); } catch (_) {} return null; });
+    };
+
+    // 27 Oct 2026: what one Jama item type under one ticked thing is; kept with that pick, then checked again
+    window.bridgeTypeKind = function (pickId, typeId, kind) {
+        const cfg = bridgeConfig();
+        const p = (Array.isArray(cfg.picks) ? cfg.picks : []).find(x => x && Number(x.id) === Number(pickId));
+        if (!p || !isFinite(Number(typeId))) return Promise.resolve(null);
+        const k = (kind === 'skip' || KIND_V[kind] != null) ? kind : '';
+        p.types = Object.assign({}, p.types || {});
+        if (k) p.types[String(Number(typeId))] = k; else delete p.types[String(Number(typeId))];
+        bridgeConfigSave(cfg);
+        _lastDiff = null; _stageIn = null;
         return bridgeCheck(false).catch(e => { try { showToast('Bridge: ' + e.message, 'error', 6200); } catch (_) {} return null; });
     };
 
