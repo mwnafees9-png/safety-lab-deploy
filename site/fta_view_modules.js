@@ -1290,7 +1290,7 @@ function selectNode(dataNode) {
     document.getElementById('config-name-container').style.display = (dataNode.gateType === 'TRANSFER') ? 'none' : 'block';
     document.getElementById('config-transfer-container').style.display = (dataNode.gateType === 'TRANSFER') ? 'flex' : 'none';
     document.getElementById('config-ccf-container').style.display = (dataNode.type === 'basic') ? 'flex' : 'none';
-    if(dataNode.gateType === 'TRANSFER') { const linkSel = document.getElementById('config-transfer-link'); linkSel.innerHTML = '<option value="">-- Select Tree to Link --</option>'; ftaPages.forEach(p => { if(p.id !== activeFTAPageId) linkSel.innerHTML += `<option value="${esc(p.id)}" ${dataNode.linkedPageId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`; }); }
+    if(dataNode.gateType === 'TRANSFER') { const linkSel = document.getElementById('config-transfer-link'); let _lh = '<option value="">-- Select Tree to Link --</option>'; ftaPages.forEach(p => { if(p.id !== activeFTAPageId) _lh += `<option value="${esc(p.id)}" ${dataNode.linkedPageId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`; }); linkSel.innerHTML = _lh; /* 27 Oct 2026: built once */ }
     if (dataNode.type !== 'gate' && dataNode.gateType !== 'TRANSFER') { document.getElementById('config-lambda').value = dataNode.lambda || 0; /* Phase 66.10 — the weight slider is a PERCENTAGE control; seeding it with the raw `weight || 1` wrote 1% onto any node that had no weight yet. syncWeightSliderFromNode() owns it and defaults to the node's equal share. */ if (typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); if (typeof slRenderEventReuse === 'function') slRenderEventReuse(); if(dataNode.type === 'basic') { document.getElementById('config-ccf-group').value = dataNode.ccfGroup || ''; if (typeof ccfFillConfigPanel === 'function') ccfFillConfigPanel(dataNode); else { document.getElementById('config-beta').value = dataNode.beta || 0; document.getElementById('config-gamma').value = dataNode.gamma == null ? '' : dataNode.gamma; document.getElementById('config-delta').value = dataNode.delta == null ? '' : dataNode.delta; } /* 13 Oct 2026 (fix 3): group-level MGL fields */; } }
     if (dataNode.gateType === 'VOTING') document.getElementById('config-voting-k').value = dataNode.votingK || 2;
 
@@ -1322,8 +1322,8 @@ function selectNode(dataNode) {
             const carrierWrap = document.getElementById('config-dal-carrier-container');
             const carrierSel = document.getElementById('config-dal-carrier');
             const kids = dataNode.children || dataNode._children || [];
-            carrierSel.innerHTML = '<option value="">-- pick a child --</option>';
-            kids.forEach(c => carrierSel.innerHTML += `<option value="${esc(c.id)}" ${dataNode.dalCarrierChildId === c.id ? 'selected' : ''}>[${esc(c.displayId)}] ${esc(c.name || '')}</option>`);
+            // 27 Oct 2026: built once, assigned once
+            carrierSel.innerHTML = '<option value="">-- pick a child --</option>' + kids.map(c => `<option value="${esc(c.id)}" ${dataNode.dalCarrierChildId === c.id ? 'selected' : ''}>[${esc(c.displayId)}] ${esc(c.name || '')}</option>`).join('');
             carrierWrap.style.display = (dataNode.dalOption === 'opt1') ? 'block' : 'none';
         }
     }

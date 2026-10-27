@@ -1227,11 +1227,14 @@ function populateFhaAsmDropdown(domain) {
     const sel = document.getElementById(_fhaSelectId(domain));
     if (!sel) return;
     const previous = sel.value;
-    sel.innerHTML = '<option value="">-- Link an existing assumption --</option>';
+    // 27 Oct 2026: built once and assigned once. `sel.innerHTML +=` per assumption re-parsed the whole list every
+    // time (quadratic): a project with 2,080 assumptions crashed the desktop page as the FHA tab opened.
+    let html = '<option value="">-- Link an existing assumption --</option>';
     getAllAssumptions().forEach(a => {
         const trimmed = (a.text || '').length > 60 ? (a.text || '').slice(0, 60) + '…' : (a.text || '');
-        sel.innerHTML += `<option value="${esc(a.asmId)}">[${esc(a.scope)}] ${esc(a.asmId)}: ${esc(trimmed)}</option>`;
+        html += `<option value="${esc(a.asmId)}">[${esc(a.scope)}] ${esc(a.asmId)}: ${esc(trimmed)}</option>`;
     });
+    sel.innerHTML = html;
     if (previous && Array.from(sel.options).some(o => o.value === previous)) sel.value = previous;
 }
 function linkExistingAssumption(domain) {

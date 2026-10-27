@@ -3875,7 +3875,7 @@ if(isGateAny) { selectedNodeData.type = 'gate'; selectedNodeData.gateType = val;
     document.getElementById('config-name-container').style.display = (val === 'TRANSFER') ? 'none' : 'block';
     document.getElementById('config-transfer-container').style.display = (val === 'TRANSFER') ? 'flex' : 'none';
     document.getElementById('config-ccf-container').style.display = (selectedNodeData.type === 'basic') ? 'flex' : 'none';
-    if(val === 'TRANSFER') { selectedNodeData.name = "Transfer"; const linkSel = document.getElementById('config-transfer-link'); linkSel.innerHTML = '<option value="">-- Select Tree to Link --</option>'; ftaPages.forEach(p => { if(p.id !== activeFTAPageId) linkSel.innerHTML += `<option value="${esc(p.id)}">${esc(p.name)}</option>`; }); }
+    if(val === 'TRANSFER') { selectedNodeData.name = "Transfer"; const linkSel = document.getElementById('config-transfer-link'); let _lh = '<option value="">-- Select Tree to Link --</option>'; ftaPages.forEach(p => { if(p.id !== activeFTAPageId) _lh += `<option value="${esc(p.id)}">${esc(p.name)}</option>`; }); linkSel.innerHTML = _lh; /* 27 Oct 2026: built once */ }
     // Phase 53.49 — gate type / node type change reshapes the math → flag affected reqs.
     if (typeof _markStructureChangeObsolete === 'function') _markStructureChangeObsolete('Node type changed (gate logic reshaped).');
     updateFTAConfigUI(); calculateAllProbabilities(); updateD3(); try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
