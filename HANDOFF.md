@@ -1,3 +1,13 @@
+## NEXT (agreed 27 Oct 2026, build on 28 Oct): THE BETA FACTOR IN ALLOCATION FOLLOWS THE GATE'S INDEPENDENCE
+
+Waqas: "once they confirm there is no independence that is when the beta factors apply". Plan stated back to him:
+(1) member independence COMPROMISED (by hand, or automatically from a CMA hit): the common cause (beta / MGL) term is part of the allocation; the members' budgets tighten so the exact total, common cause included, closes at or under the target (same exact close as repeated events);
+(2) CLAIMED or SUBSTANTIATED: beta stays out of the allocation (12 Oct ruling) AND out of that allocation tree's exact total, so no false "130x over";
+(3) the pill notes "Budgets tightened for common cause at G-xxxx (beta 0.05): independence compromised";
+(4) verification trees always count beta. OPEN QUESTION to Waqas: does "None, no claim" count as compromised (proposed: yes)?
+Also open: regression_change_ack_ui fails about 1 run in 7 under heavy load in B8 (undo/redo), not traced.
+Desktop 0.21.12 (Windows) published 27 Oct, web a410a4e; desktop commit c424ba5; Mac channel stays 0.21.10.
+
 ## 27 Oct 2026 (night): ALLOCATIONS NEVER CLOSE OVER THEIR TARGET; THE APP'S OWN WORK NO LONGER LISTED AS THE PERSON'S. NOT YET DEPLOYED.
 
 **Allocation (tools/patch_alloc_never_over_20261027.py):** a sweep of tree shapes through the real engine found trees with a repeated event closing a hair OVER target (up to 0.009%): the exact close allowed 0.1% over and stopped its search on either side. Now it runs for a repeated event, an FDEP or a NOT (_allocNeedsExactClose) and both searches finish at or under the target. Common cause stays OUT of allocation (12 Oct ruling); an allocation tree that carries a common cause group still shows its exact total over target (an AND of two grouped inputs: 130x) on the warning pill. OPEN: Waqas to rule what an allocation tree with a common cause group should do. Pill: over target is a warning, under is margin and says nothing; new warnings for a refused exact close and a prescribed budget over its share. regression_alloc_never_over_20261027.
