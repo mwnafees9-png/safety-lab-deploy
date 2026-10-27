@@ -97,12 +97,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // 2. the seed sweep, right after a click. Right after a load the sample has no seeded trees yet (the
     //    first sweep makes them, on its timer): that is the case B14 hit. If a sweep already ran, one seeded
     //    tree is taken away as the app would (not the person), so this sweep has one to put back.
-    await pg.evaluate(() => {
-      const i = ftaPages.findIndex(p => p && String(p.id).indexOf('idp-pg-') === 0);
-      if (i >= 0) SLChangeAck.system(() => { ftaPages.splice(i, 1); scheduleAutosave(); });
-    });
+    // 27 Oct 2026: taken away and swept in ONE step (synchronous): the sweep's own 8 s timer used to put the seed back
+    // in between ("kept 12, seeded 0"). Nothing else changes, so the wait for quiet that came between is not needed.
+    for (let i = 0; i < 40 && !(await quiet()); i++) await sleep(100);
+    // the seeds' verification copies (verify_sync.js) must exist before this sweep: they are what the sweep used to
+    // take for real MF&MS pages, removing every seed (27 Oct 2026). Wait for the first sweep and its copies.
+    const mirrored = () => pg.evaluate(() => { const s = ftaPages.filter(p => p && String(p.id).indexOf('idp-pg-') === 0); return s.length > 0 && s.every(x => ftaPages.some(p => p && p.verifies === x.id)); });
+    for (let i = 0; i < 200 && !(await mirrored()); i++) await sleep(100);
+    check('the seeds and their verification copies exist before the sweep', await mirrored());
     for (let i = 0; i < 40 && !(await quiet()); i++) await sleep(100);
     const r = await pg.evaluate(() => {
+      const i0 = ftaPages.findIndex(p => p && String(p.id).indexOf('idp-pg-') === 0);
+      if (i0 >= 0) SLChangeAck.system(() => { ftaPages.splice(i0, 1); scheduleAutosave(); });
       const sys0 = SLChangeAck.status().stats.system;
       SLChangeAck._markInput();                                   // a click a moment ago
       // run(), not SL_IDP.tick: change_ack wraps the public tick as system, but the sweep's own 8 s timer
@@ -112,6 +118,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       return { res, open: s.open, user: s.user, pend: SLChangeAck.pendingUser(), can: window.__slabCanClose(), sys: s.stats.system - sys0 };
     });
     check('the sweep right after a click seeds the multi-system trees', r.res && r.res.seeded >= 1, JSON.stringify(r));
+    check('...and removes none of its own seeds (their verification copies are not MF&MS pages)', r.res && r.res.removed === 0, JSON.stringify(r));
     check('...and its save is the app\'s own: nothing opens, nothing waits, the window can close', !r.open && !r.pend && r.can === true, JSON.stringify(r));
     check('...it is counted as a system change', r.sys >= 1, JSON.stringify(r));
     check('no uncaught page errors', errs.length === 0, errs.slice(0, 2).join(' | '));

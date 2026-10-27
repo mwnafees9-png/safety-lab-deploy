@@ -98,13 +98,17 @@
         rows.forEach(function (r) { _contribs1(r).forEach(function (s) { if (out.indexOf(s) < 0) out.push(s); }); });
         return out;
     }
+    // 27 Oct 2026: a verification tree (verify_sync.js: verifies = the tree it checks, id "ver-...") is never an
+    // MF&MS page of its own. Its name carries "MF&MS" and it links the same condition, so it was taken for a real
+    // MF&MS page covering the condition, and every untouched seed was removed once its own verification copy existed.
+    function _isVerification(p) { return !!p && (p.verifies != null || String(p.id).indexOf('ver-') === 0); }
     function _beginSweep() {
         var sys = _sys();
         var sysById = new Map();
         sys.forEach(function (x) { if (x && !sysById.has(x.id)) sysById.set(x.id, x); });
         var foreign = new Set();
         (_pages() || []).forEach(function (p) {
-            if (!p || !p.root || String(p.id).indexOf('idp-pg-') === 0) return;
+            if (!p || !p.root || String(p.id).indexOf('idp-pg-') === 0 || _isVerification(p)) return;
             if (!(String(p.id).indexOf('mac-pg-') === 0 || /MF&MS/.test(p.name || ''))) return;
             var lids = Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds : (p.linkedFhaId != null ? [p.linkedFhaId] : []);
             lids.forEach(function (l) { foreign.add(String(l)); });
@@ -180,7 +184,7 @@
         if (_ctx) return _ctx.foreign.has(String(fc.internalId));
         return (_pages() || []).some(function (p) {
             if (!p || !p.root) return false;
-            if (String(p.id).indexOf('idp-pg-') === 0) return false;
+            if (String(p.id).indexOf('idp-pg-') === 0 || _isVerification(p)) return false;
             var lids = Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds : (p.linkedFhaId != null ? [p.linkedFhaId] : []);
             if (lids.map(String).indexOf(String(fc.internalId)) === -1) return false;
             return String(p.id).indexOf('mac-pg-') === 0 || /MF&MS/.test(p.name || '');

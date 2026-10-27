@@ -1,3 +1,8 @@
+## 27 Oct 2026: MF&MS SEEDS NO LONGER DELETE THEMSELVES. NOT YET DEPLOYED.
+
+**Found (the open finding from 26 Oct):** the MF&MS seed sweep deleted every seeded tree a few seconds after making it. verify_sync.js gives each seed its verification copy ("ver-idp-pg-<n>-<stamp>", name "... (Verification)", verifies = the seed); the sweep counted any page with "MF&MS" in its name as a REAL MF&MS page covering the condition, so the copies made every untouched seed "covered" and the sweep removed all of them (11 on the sample), leaving the copies behind. Probed live: the 12 extra covering pages at the moment of removal were exactly the 12 verification copies. The ASA triage's MF&MS match counted the copies too. Earlier read as a test race; it was a real bug the test hit only when the copies existed in time (more often on a busy machine).
+**Fixed:** idp_seed_trees 1.5 (_isVerification: verifies set, or a "ver-" id, is never a real MF&MS page), asa_triage 1.14. regression_idp_seed_mirror_20261027 (7, mutation-proven); regression_bookkeeping_writes [B] now waits for the copies and sweeps in one synchronous step (the old test also raced the 8 s timer): with yesterday's file 3/3 red ("removed 11"), with the fix 12/12 green under load.
+
 ## 26 Oct 2026 (evening): FCIM N/A. NOT YET DEPLOYED (web 09ca858 is live; this is on top).
 
 **Waqas's ruling:** a failure type that does not apply to a function is written by the AI as N/A with its reason, never left blank; the engine reads N/A as not a failure condition at all and stops it at the FCIM (no AFHA/SFHA row, severity, chart, tree, DAL, requirement, thread, picker or count). The engineer can overrule an N/A and draft that cell with ANEM or by hand, and can mark a cell N/A with a required reason.

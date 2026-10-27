@@ -47,7 +47,8 @@
         return out;
     }
     function _mfmsPagesFor(fc) {
-        return _pages().filter(p => p && p.root && (String(p.linkedFhaId) === String(fc.internalId) ||
+        // 27 Oct 2026: a verification copy of an MF&MS tree is not a second MF&MS page for the condition
+        return _pages().filter(p => p && p.root && p.verifies == null && String(p.id).indexOf('ver-') !== 0 && (String(p.linkedFhaId) === String(fc.internalId) ||
             (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.map(String).indexOf(String(fc.internalId)) !== -1)) &&
             (String(p.id).indexOf('mac-pg-') === 0 || /MF&MS/.test(p.name || '')));
     }
