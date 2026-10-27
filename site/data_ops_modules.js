@@ -959,6 +959,26 @@ function importFaultTreeCSV(text) {
     try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)
 }
 
+// 27 Oct 2026: a top-down (allocation) tree is probability only (Phase 61). Leaves the app made for itself used to
+// carry a failure rate of 0, which the next recompute deletes; when that recompute was the person's change, every one
+// of those deletions was listed for the person to confirm. On load, drop a ZERO (or empty) failure rate from the
+// leaves of top-down trees: zero carries no information, so nothing is lost, and nothing is left for a recompute to
+// change. A real rate is never touched, and verification (bottom-up) trees are not walked.
+function migrateAllocationLeavesProbabilityOnly() {
+    let n = 0;
+    try {
+        (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages) ? ftaPages : []).forEach(p => {
+            if (!p || !p.root || p.verifies != null || String(p.id || '').indexOf('ver-') === 0) return;
+            if ((p.mode || 'top-down') !== 'top-down') return;
+            (function walk(x) {
+                if (!x) return;
+                if (x.type !== 'gate' && Object.prototype.hasOwnProperty.call(x, 'lambda') && (x.lambda === 0 || x.lambda === '' || x.lambda == null)) { delete x.lambda; n++; }
+                (x.children || x._children || []).forEach(walk);
+            })(p.root);
+        });
+    } catch (_) {}
+    return n;
+}
 function migrateFHAAssumptions(fhaArr) {
     if (!Array.isArray(fhaArr)) return;
     fhaArr.forEach(row => {
@@ -1746,6 +1766,7 @@ function _applyProjectData(data) {
         migrateAllFHAAssumptions();
         migrateSysSubFunctionsToFunctions();
         migrateLegacyMultiTraces();
+        migrateAllocationLeavesProbabilityOnly();   // 27 Oct 2026
         // 19 Oct 2026: one zone identity (zones-3, zonal_model.js): every zone a row names is in the zone model, by its code.
         try { if (window.ZONES && window.ZONES.upgrade) window.ZONES.upgrade(); } catch (e) { try { if (window.SLErrorWatch) SLErrorWatch.report(e, 'zones-upgrade'); } catch (_) {} }
         // Phase 53.42 — rebuild extractedFCs for every system (recovery + sample-project path).

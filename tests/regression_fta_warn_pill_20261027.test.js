@@ -57,7 +57,12 @@ check('a leaf held at the strictest allocation', keys({ type: 'basic', _sharedSt
 check('a leaf stricter than achievable names both numbers', keys({ type: 'basic', _feasibilityViolation: { achievable: 1e-6, allocated: 1e-9, delta: 1000 } }) === 'feasibility' && /P=1\.00E-6.*P=1\.00E-9.*1000\.0 times/.test(NW({ type: 'basic', _feasibilityViolation: { achievable: 1e-6, allocated: 1e-9, delta: 1000 } })[0].text));
 check('a gate with every note it has, not just the first', keys({ type: 'gate', gateType: 'PAND', _probCompromised: true, _dynStatic: { mode: 'bound', reason: 'x' } }) === 'independence,dyn-pand-bound');
 check('the top event over its target is a warning with the numbers and the %', (() => { const w = NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _bddActualProb: 6.6e-10 }, true); return w.length === 1 && w[0].key === 'actual-over' && w[0].sev === 'warn' && /P=6\.60E-10 against the target P=6\.00E-10 \(10% over\)/.test(w[0].text); })());
-check('within 1% of the target says nothing', NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _bddActualProb: 6.03e-10 }, true).length === 0);
+// 27 Oct 2026 (later): an allocation closes at or under its target; any real overshoot is a warning, rounding and margin are not
+check('0.5% over the target is a warning too', NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _bddActualProb: 6.03e-10 }, true).map(w => w.key).join() === 'actual-over');
+check('rounding (one part in ten million) says nothing', NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _bddActualProb: 6e-10 * (1 + 1e-7) }, true).length === 0);
+check('under the target is margin and says nothing', NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _bddActualProb: 3e-10 }, true).length === 0);
+check('a refused exact close is a warning on the top event', NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _exactCloseRefused: true }, true).map(w => w.key).join() === 'exact-refused');
+check('a prescribed budget over its share is a warning on that gate', /3\.0 times the P=2\.00E-10/.test((NW({ type: 'gate', gateType: 'AND', _prescribedOverallocation: { apportioned: 2e-10, prescribed: 6e-10, excessRatio: 3 } }, false)[0] || {}).text || ''));
 check('the exact total is only on the top event', NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _bddActualProb: 9e-10 }, false).length === 0);
 check('bottom-up trees have no target to compare', (() => { ctx.ftaConfig.mode = 'bottom-up'; const n = NW({ type: 'gate', gateType: 'OR', probability: 6e-10, _bddActualProb: 9e-10 }, true).length; ctx.ftaConfig.mode = 'top-down'; return n === 0; })());
 

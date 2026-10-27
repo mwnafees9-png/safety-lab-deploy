@@ -1557,6 +1557,7 @@ function loadProject(event) {
             // Phase 24: collapse system sub-functions into functions.
             migrateSysSubFunctionsToFunctions();
             migrateLegacyMultiTraces();
+            if (typeof migrateAllocationLeavesProbabilityOnly === 'function') migrateAllocationLeavesProbabilityOnly();   // 27 Oct 2026
             // 19 Oct 2026: one zone identity (zones-3, zonal_model.js): every zone a row names is in the zone model, by its code.
             try { if (window.ZONES && window.ZONES.upgrade) window.ZONES.upgrade(); } catch (e) { try { if (window.SLErrorWatch) SLErrorWatch.report(e, 'zones-upgrade'); } catch (_) {} }
             // Phase 53.42 — rebuild extractedFCs from FCIM for every system. Projects saved
@@ -4712,6 +4713,14 @@ function ftaNodeWarnings(node, isRoot) {
                   ' times more reliable than it can be. An architecture change or a higher grade part is needed.' });
     }
     if (leaf) return out;
+    // 27 Oct 2026: a gate whose prescribed budget is more than the share the top event gives it lets the
+    // tree add up to more than its target (by the engineer's choice); it says so where it happens.
+    if (node._prescribedOverallocation && isFinite(node._prescribedOverallocation.apportioned)) {
+        const po = node._prescribedOverallocation;
+        out.push({ key: 'prescribed-over', sev: 'warn',
+            title: 'Prescribed budget is more than this gate\'s share of the top event',
+            text: 'Prescribed P=' + fmt(po.prescribed) + ' is ' + (isFinite(po.excessRatio) ? Number(po.excessRatio).toFixed(1) + ' times' : 'more than') + ' the P=' + fmt(po.apportioned) + ' this gate gets from the top event, so the tree adds up to more than its target.' });
+    }
     if (node._probCompromised) {
         out.push({ key: 'independence', sev: 'warn',
             title: 'Independence compromised: a common-cause (β) term is needed',
@@ -4752,15 +4761,23 @@ function ftaNodeWarnings(node, isRoot) {
         typeof node._bddActualProb === 'number' && isFinite(node._bddActualProb)) {
         const target = (typeof node.probability === 'number' && isFinite(node.probability)) ? node.probability : null;
         const aP = node._bddActualProb;
-        const rel = (target !== null && target > 0) ? Math.abs(aP - target) / target : null;
-        if (rel === null || rel >= 0.01) {
-            const worse = target !== null && aP > target;
-            const pct = rel === null ? '' : ' (' + (rel * 100).toFixed(rel < 0.1 ? 1 : 0) + '% ' + (worse ? 'over' : 'under') + ')';
-            out.push({ key: worse ? 'actual-over' : 'actual-under', sev: worse ? 'warn' : 'info',
-                title: worse ? 'Top event: the tree adds up to more than the target' : 'Top event: the tree adds up to less than the target',
-                text: 'Actual (exact): P=' + fmt(aP) + (target !== null ? ' against the target P=' + fmt(target) + pct : '') +
-                      '. The exact total of the tree as built, with repeated events and AND gates counted exactly.' });
+        // 27 Oct 2026: an allocation is closed at or under its target, so only OVER is said (beyond rounding,
+        // one part in a million). Under the target is margin, which is fine, and says nothing.
+        const over = (target !== null && target > 0) ? (aP - target) / target : null;
+        if (over !== null && over > 1e-6) {
+            const pct = ' (' + (over * 100 < 0.01 ? '<0.01' : (over * 100).toFixed(over < 0.1 ? 2 : 0)) + '% over)';
+            out.push({ key: 'actual-over', sev: 'warn',
+                title: 'Top event: the tree adds up to more than the target',
+                text: 'Actual (exact): P=' + fmt(aP) + ' against the target P=' + fmt(target) + pct +
+                      '. The exact total of the tree as built, with repeated events, common cause and AND gates counted exactly.' });
         }
+    }
+    // 27 Oct 2026: when the exact method had to give up on this tree (too many shared events), the budget
+    // is split gate by gate and nobody can say it closes: say so rather than show nothing.
+    if (isRoot && typeof ftaConfig === 'object' && ftaConfig && ftaConfig.mode === 'top-down' && node._exactCloseRefused) {
+        out.push({ key: 'exact-refused', sev: 'warn',
+            title: 'Exact total could not be computed for this tree',
+            text: 'The exact total of this tree could not be computed (too many shared events for the exact method), so its budget is split gate by gate and is not checked against the target.' });
     }
     return out;
 }
@@ -11590,6 +11607,34 @@ function _normalizeIntermediateGatesForSharedEvents(rootNode) {
     })(rootNode);
 }
 
+// 27 Oct 2026: the tree's own logic makes the exact total of an allocation differ from its gate-by-gate
+// split in three ways: a repeated event, a functional dependency, or a NOT gate. Any of them means the
+// budget is closed against the exact total (mcsAwareRebalance). Common cause is deliberately not one of
+// them: allocation happens before the design exists, so it carries no common cause (Waqas, 12 Oct 2026);
+// its AND gates derive independence requirements instead. Follows TRANSFERs.
+function _allocNeedsExactClose(rootNode) {
+    if (!rootNode) return false;
+    if (_hasRepeatedLogicalIds(rootNode)) return true;
+    let hit = false;
+    const visited = new Set();
+    (function walk(n) {
+        if (!n || hit) return;
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !visited.has(linkedId)) {
+                visited.add(linkedId);
+                const linkedPage = (typeof ftaPages !== 'undefined') ? ftaPages.find(p => p.id === linkedId) : null;
+                if (linkedPage && linkedPage.root) walk(linkedPage.root);
+            }
+            return;
+        }
+        if (n.type === 'gate' && (n.gateType === 'FDEP' || n.gateType === 'NOT')) { hit = true; return; }
+        const kids = n.children || n._children;
+        if (kids) kids.forEach(walk);
+    })(rootNode);
+    return hit;
+}
+
 function mcsAwareRebalance(rootNode, targetProb) {
     if (!rootNode || typeof computeExactProbability !== 'function') return false;
     if (typeof targetProb !== 'number' || !isFinite(targetProb) || targetProb <= 0) return false;
@@ -11650,28 +11695,26 @@ function mcsAwareRebalance(rootNode, targetProb) {
 
     // First check: with k=1 (naive allocation), what does BDD-exact give us?
     const pAtOne = applyScaleAndEvaluate(1.0);
-    if (pAtOne <= targetProb * 1.001) {
-        // Naive is already feasible or under. Leave at k=1 (no rebalance needed)
-        // and let any small headroom show via the divergence display.
-        return true;
-    }
+    // 27 Oct 2026: at or under the target is closed (more margin is fine); a hair over is not. The old
+    // check let a tree stand 0.1% over its target.
+    if (pAtOne <= targetProb) return true;
 
-    // Bisection on k in (0, 1]. We want to shrink rates so the dominant cutset
-    // probability drops to the target. Converges in ~50 iterations.
+    // Bisection on k in (0, 1]: shrink every budget by the same factor until the exact total is at or
+    // under the target. 27 Oct 2026: the search keeps the largest k that is at or under the target
+    // (kLo) and finishes THERE; it used to finish on whichever side its last step landed, up to 0.01% over.
     let kLo = 0.0, kHi = 1.0;
-    let kBest = 1.0;
     const tolRel = 1e-4;
     for (let iter = 0; iter < 60; iter++) {
         const kMid = 0.5 * (kLo + kHi);
         const pMid = applyScaleAndEvaluate(kMid);
-        kBest = kMid;
-        if (Math.abs(pMid - targetProb) / targetProb < tolRel) break;
-        if (pMid > targetProb) kHi = kMid;
-        else                   kLo = kMid;
+        if (pMid <= targetProb) {
+            kLo = kMid;
+            if ((targetProb - pMid) / targetProb < tolRel) break;
+        } else {
+            kHi = kMid;
+        }
     }
-    // Final state at converged k. Lambda + probability on every leaf is now
-    // the MCS-aware allocated value (uniform-scaled from naive).
-    applyScaleAndEvaluate(kBest);
+    applyScaleAndEvaluate(kLo);
     return true;
 }
 
@@ -11737,16 +11780,19 @@ function mcsAwareImportanceRedistribute(rootNode, targetProb) {
     let kLo = 0.0, kHi = 4.0;   // allow some upward flex if redistribution under-shot
     // Probe upper bound
     let pHi = applyScale(kHi);
-    while (pHi < targetProb && kHi < 1e9) { kHi *= 4; pHi = applyScale(kHi); }
-    let kBest = 1.0;
+    while (pHi <= targetProb && kHi < 1e9) { kLo = kHi; kHi *= 4; pHi = applyScale(kHi); }
+    // 27 Oct 2026: finish at the largest scale whose exact total is at or under the target, never over.
     for (let i = 0; i < 60; i++) {
         const kMid = 0.5 * (kLo + kHi);
         const pMid = applyScale(kMid);
-        kBest = kMid;
-        if (Math.abs(pMid - targetProb) / targetProb < 1e-4) break;
-        if (pMid > targetProb) kHi = kMid; else kLo = kMid;
+        if (pMid <= targetProb) {
+            kLo = kMid;
+            if ((targetProb - pMid) / targetProb < 1e-4) break;
+        } else {
+            kHi = kMid;
+        }
     }
-    applyScale(kBest);
+    applyScale(kLo);
     return true;
 }
 

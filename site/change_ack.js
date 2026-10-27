@@ -1,3 +1,6 @@
+// change_ack.js - v3.4 - 27 Oct 2026 - system and background work are measured from where the project really is: a change whose
+//   autosave write is still queued is taken into the "before" first (_freshBeforeSystem), so a sweep in that moment is never handed the
+//   person's change (Discard all re-applied it). See tests/regression_bg_changes_20261027.test.js
 // ============================================================================
 // change_ack.js - v3.0 - 24 Oct 2026 - THE QUIET BAR (Waqas: "replace the confirm changes pop-up with a quiet bar").
 //   · Leaving a page or view, switching tree, system, tab or diagram, and pressing Next or Continue open NOTHING.
@@ -452,7 +455,14 @@
             if (e.space === 'fta:shell') {
                 var pg = b || a || {};
                 it.area = 'Fault trees'; it.label = pg.name || ('Tree ' + pg.id); it.ref = { kind: 'ftaPage', pageId: pg.id };
-                if (e.op === 'changed') { var fs = _fields(a, b); fs.fields = fs.fields.filter(function (x) { return x.field !== '__hasTree'; }); it.fields = fs.fields; it.derived = !fs.fields.length; }
+                // 27 Oct 2026: the third cause of the change test failing now and then ("Review your 113 changes" after a Redo).
+                // A tree's target (targetP, targetBasis) and its auto-tree record are computed by the app (fc_auto_trees.js
+                // from the FHA and the aircraft tree; verify_sync.js copies a target to the verification twin). A Redo or Undo
+                // restores a whole snapshot, taken before or after the app last settled them, so they moved with it and were
+                // listed as the person's. Computed, unless the person set the target by hand (targetManual).
+                var shellComputed = { targetBasis: 1, autoFcTree: 1 };
+                if (!pg.targetManual || pg.verifies != null) shellComputed.targetP = 1;
+                if (e.op === 'changed') { var fs = _fields(a, b, shellComputed); fs.fields = fs.fields.filter(function (x) { return x.field !== '__hasTree'; }); it.fields = fs.fields; it.derived = !fs.fields.length; }
                 if (_autoPage(pg.id)) it.derived = true;   // kept by the background seed sweep (idp_seed_trees.js), rebuilt from the interdependence table
                 items.push(it); return;
             }
@@ -669,14 +679,21 @@
     // The write for the last change is still queued: take the state now, so what is decided next is
     // measured from where the project really is.
     function _freshStash() { if (_stash != null && _stashSeq < _noteSeq) { var s = _snapNow(); if (s) { _stash = s; _stashSeq = _noteSeq; } } }
-    function system(fn) { _sysDepth++; try { return fn(); } finally { _sysDepth--; } }
+    // 27 Oct 2026: the second cause of regression_change_ack_ui's "Discard all" failing now and then. A Redo (or any
+    // change) writes its autosave a moment later; a background sweep that ran in that moment was measured from the
+    // state BEFORE the Redo, so the Redo was counted as the sweep's (background, "counts as confirmed") and Discard all,
+    // which re-applies background work, put the Redo straight back. Before system or background work starts, bring
+    // the "before" up to date if the last change's write is still queued (_freshStash). Outermost call only, and never
+    // while a change is being measured.
+    function _freshBeforeSystem() { try { if (_sysDepth === 0 && !_win && _restoreDepth === 0) _freshStash(); } catch (_) {} }
+    function system(fn) { _freshBeforeSystem(); _sysDepth++; try { return fn(); } finally { _sysDepth--; } }
     // 25 Oct 2026: background work on a timer (the verification-tree and failure-condition-tree sweeps).
     // It runs as a system change, is decided at once (never left open for a Review to list), and the
     // "before" of the next change is taken right after it: the autosave write that would carry it is
     // still queued, so without this the person's next edit was measured from before the sweep and the
     // sweep's new trees were listed as theirs.
     function background(fn) {
-        var r = system(fn);
+        var r = system(fn);   // 27 Oct 2026: system() brings the "before" up to date first
         try { if (_win && _win.system) { _win.background = true; _resolve(true); } } catch (_) {}
         try { if (!_win && _restoreDepth === 0) { var s = _snapNow(); if (s) { _stash = s; _stashSeq = _noteSeq; } } } catch (_) {}
         return r;
@@ -689,6 +706,7 @@
     // the new "before" at once, so the next change the person makes is measured from it.
     function absorb() { if (_win || _sysDepth > 0) return; system(function () { try { if (typeof W.scheduleAutosave === 'function') W.scheduleAutosave(); } catch (_) {} }); }
     function systemAsync(fn) {
+        _freshBeforeSystem();   // 27 Oct 2026
         _sysDepth++;
         var done = function () { _sysDepth = Math.max(0, _sysDepth - 1); };
         try { var r = fn(); if (r && typeof r.then === 'function') { r.then(done, done); return r; } done(); return r; }
@@ -878,7 +896,18 @@
         // before it, so the two never mix
         if (_win) { try { _resolve(true); } catch (_) {} }
         _freshStash();
-        _deferDepth++; var prev = _deferInfo; _deferInfo = info || {}; try { return fn(); } finally { _deferDepth--; _deferInfo = prev; } }
+        _deferDepth++; var prev = _deferInfo; _deferInfo = info || {};
+        try { return fn(); }
+        finally {
+            _deferDepth--; _deferInfo = prev;
+            // 27 Oct 2026: the last cause of "Discard all" failing now and then. A Redo (or a move) is a step whose autosave
+            // write lands a moment later; any change in that moment that was not the person's (a view's own bookkeeping
+            // as it drew) was measured from BEFORE the Redo, took the Redo with it as "background" and Discard all, which
+            // keeps background work, put the Redo back. The step is in the collection now: take the state right after it
+            // as the "before" of whatever comes next.
+            try { if (_deferDepth === 0 && !_win && _restoreDepth === 0) { var sNow = _snapNow(); if (sNow) { _stash = sNow; _stashSeq = _noteSeq; } } } catch (_) {}
+        }
+    }
     // Lay one background change back on top (synced stores by record; the other stores whole,
     // through their declared accessor).
     function _applyContent(D) {

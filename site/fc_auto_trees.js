@@ -186,7 +186,9 @@
     function shapeFp(n) { var o = []; (function w(x, d) { if (!x) return; o.push(d + ':' + x.type + ':' + (x.gateType || '') + ':' + (x.name || '') + ':' + JSON.stringify(x.externalSource || null)); _kids(x).forEach(function (c) { w(c, d + 1); }); })(n, 0); return o.join('|'); }
     function _node(type, name, extra) {
         var id = _nid(), n = { id: id, logicalId: id, type: type, name: name, probability: 0, children: [] };
-        if (type === 'gate') { n.gateType = 'OR'; n.displayId = 'G-' + id; } else { n.lambda = 0; n.inputMode = 'probability'; n.displayId = (type === 'undeveloped' ? 'UD-' : 'BE-') + id; }
+        // 27 Oct 2026: no failure rate on an allocation leaf (probability only, Phase 61). A lambda of 0 here was deleted by
+        // the next recompute, and when that was the person's change it listed every auto tree for them to confirm.
+        if (type === 'gate') { n.gateType = 'OR'; n.displayId = 'G-' + id; } else { n.inputMode = 'probability'; n.displayId = (type === 'undeveloped' ? 'UD-' : 'BE-') + id; }
         return Object.assign(n, extra || {});
     }
     // the SFHA failure conditions that trace to an AFHA one (their rows' acTrace), one per system and FC ID
@@ -326,9 +328,23 @@
         return rows.some(function (r) { return r && ['tl', 'pl', 'm'].some(function (k) { return String(r[k + 'NaPrevId'] || '').trim() === id && String(r[k + 'Na'] || '').trim() !== ''; }); });
     }
     var _asking = false;
+    // 27 Oct 2026: one sweep leaves everything settled. A tree made in a pass gets its system events, and a system tree
+    // its aircraft-based target, only in the NEXT pass, so the old single pass left work for later ticks; repeat
+    // (quietly, at most 4 passes) until a pass changes nothing.
     function sweep(opts) {
         opts = opts || {};
         if (root.SL_FC_TREES_OFF) return { off: true };
+        var acc = null;
+        for (var pass = 0; pass < 4; pass++) {
+            var r = _sweepOnce(pass === 0 ? opts : { quiet: true, noAsk: true });
+            if (!acc) acc = r; else { acc.made = acc.made.concat(r.made); acc.added += r.added; acc.gone = acc.gone.concat(r.gone); acc.targets += r.targets; }
+            if (!(r.made.length || r.added || r.gone.length || r.targets)) break;
+            try { _allocMemo.gen = -1; _allocMemo.map = {}; } catch (_) {}
+        }
+        return acc;
+    }
+    function _sweepOnce(opts) {
+        opts = opts || {};
         var made = [], added = 0, gone = [], ask = [];
         var all = groups('ac'); _systems().forEach(function (s) { all = all.concat(groups(s)); });
         all.forEach(function (g) {

@@ -898,8 +898,11 @@ function calculateAllProbabilities() {
             // Falls back to Phase 56.41 strictest-propagation when BDD isn't
             // available (computeExactProbability undefined).
             let rebalanced = false;
-            if (typeof _hasRepeatedLogicalIds === 'function'
-                && _hasRepeatedLogicalIds(rootPage.root)
+            delete rootPage.root._exactCloseRefused;
+            // 27 Oct 2026: not only a repeated event: an FDEP or a NOT gate also make the exact total
+            // differ from the split (_allocNeedsExactClose). Common cause stays out of allocation.
+            if (typeof _allocNeedsExactClose === 'function'
+                && _allocNeedsExactClose(rootPage.root)
                 && typeof mcsAwareRebalance === 'function'
                 && typeof computeExactProbability === 'function') {
                 // ENG-1 — BDD-aware rebalance is an ENHANCEMENT over strictest-
@@ -919,6 +922,7 @@ function calculateAllProbabilities() {
                 } catch (e) {
                     if (!(e && e.name === 'BDDExplosionError')) throw e;
                     rebalanced = false;   // → strictest-propagation fallback below
+                    rootPage.root._exactCloseRefused = true;   // 27 Oct 2026: the warning pill says so
                 }
             }
             if (!rebalanced) {

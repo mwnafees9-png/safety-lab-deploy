@@ -69,7 +69,7 @@
         try { if (typeof getSafetyTarget === 'function') dal = (getSafetyTarget(fha.severity) || {}).dal || ''; } catch (_) {}
         const starter = {
             id: _nid(), name: 'Decompose: causes of ' + (fha.fcDesc || fha.fcId || 'this condition'),
-            type: 'undeveloped', lambda: 0, probability: 0, inputMode: 'probability', children: []
+            type: 'undeveloped', probability: 0, inputMode: 'probability', children: []   // 27 Oct 2026: no failure rate on an allocation leaf
         };
         const root = {
             id: _nid(), name: fha.fcDesc || fha.fcId || 'Failure condition',
