@@ -1885,7 +1885,7 @@ function switchTab(tabId) {
         // navigation (restored last-tab, command palette, stray link) lands on the Sankey so
         // nobody hits a dead view.
         if (tabId === 'graph') { tabId = 'golden-thread'; }
-        const tabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'pasa', 'asa', 'spp', 'hfa', 'hfa-tid', 'hfa-alloc', 'hfa-hea', 'hfa-alerts', 'hfa-task', 'hfa-cd', 'hfa-sa', 'hfa-mfc', 'hfa-ergo', 'stpa', 'interdep'];
+        const tabs = ['dashboard', 'defs', 'ac-func', 'ac-fcim', 'phases', 'ac-fha', 'ac-req', 'ac-asm', 'items', 'ai', 'assumptions', 'sys-dir', 'sys-workspace', 'pra', 'zsa', 'cma', 'routing', 'resources', 'fmea', 'fta', 'library', 'markov', 'validation', 'trace', 'golden-thread', 'moc', 'baselines', 'cm', 'review', 'reqs-repo', 'arp-process', 'vv-status', 'dal-ref', 'ccmr', 'fmes', 'ipledger', 'pasa', 'asa', 'spp', 'hfa', 'hfa-tid', 'hfa-alloc', 'hfa-hea', 'hfa-alerts', 'hfa-task', 'hfa-cd', 'hfa-sa', 'hfa-mfc', 'hfa-ergo', 'stpa', 'interdep', 'conn', 'admin-ws', 'admin-lic'];   // 28 Oct 2026: the Admin page's three views
         // 2 Sep 2026 — the seven HF sub-lanes added after hfa-task/hfa-ergo were never
         // registered here. Their own module hid and showed them, so the views did not
         // stack, but the sidebar active state, the last-tab memory and the stepper all

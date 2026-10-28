@@ -1,4 +1,6 @@
 // ============================================================================
+// nav_areas.js v1.6 (28 Oct 2026): Admin is a page of its own (Connections, Workspaces and locks, Seats and license);
+// Connections leaves Requirements (Waqas: "this is not just a requirements thing").
 // nav_areas.js v1.4 (25 Oct 2026): Waqas: "when you click on left nav menu it flickers"; "CCA in system folders
 // take longer to appear"; "AFHA and SFHA symbols should match". (1) A system's CMA, R&M and HF links were
 // flipped on and off by every refresh (the on/off test could come out undefined, and toggle(x, undefined) flips):
@@ -46,7 +48,7 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.4';
+    var VERSION = '1.6';
     // A section: key, label, icon, scope ('aircraft' | 'system' | 'foot'), items (menu link ids, or a group
     // { group, label, ids }), and pages: every page (switchTab id) that belongs to it, with the link that stands
     // for it in the bar (a page that has no link of its own, such as the AFHA's Functions tab, lights its area's link).
@@ -66,7 +68,7 @@
             { group: 'rel', label: 'Reliability', ids: ['snav-ram-rel', 'snav-ram-predict', 'snav-ram-rbd', 'snav-ram-weibull', 'snav-ram-growth', 'snav-ram-alloc', 'snav-ram-tol', 'snav-rbd-mc', 'snav-rel-frameworks', 'snav-swrel', 'snav-sneak', 'snav-lcc'] },
             { group: 'mx', label: 'Maintainability', ids: ['snav-ram-mx', 'snav-ram-msg3', 'snav-msg3x', 'snav-ram-pmopt', 'snav-ram-test', 'snav-ram-lora'] },
             'snav-ram-settings'] },
-        { key: 'req', label: 'Requirements', ic: '📋', scope: 'aircraft', items: ['snav-reqs-repo', 'snav-val-matrix', 'snav-moc', 'snav-vv-status', 'snav-conn', 'snav-reqif', 'snav-xmi', 'snav-dal-ref'] },
+        { key: 'req', label: 'Requirements', ic: '📋', scope: 'aircraft', items: ['snav-reqs-repo', 'snav-val-matrix', 'snav-moc', 'snav-vv-status', 'snav-reqif', 'snav-xmi', 'snav-dal-ref'] },
         { key: 'prove', label: 'Prove', ic: '✅', scope: 'aircraft', items: ['snav-prove'],
           pages: { 'gt-integrity': 'snav-prove', evpkg: 'snav-prove', appa: 'snav-prove', validation: 'snav-prove', cm: 'snav-prove', review: 'snav-prove', pr: 'snav-prove', mod: 'snav-prove', 'sora-thread': 'snav-prove' } },
         // a system: its workspace (functions, FCIM, FHA, FMEA, assumptions: the workspace's own tabs), AI/ML
@@ -83,7 +85,9 @@
         // trees and diagrams that belong to no level, for the aircraft and every system alike
         { key: 'standalone', label: 'Standalone', ic: '🧪', scope: 'any', items: ['sl-nav-trees-standalone', 'sl-nav-diag-standalone'] },
         { key: 'ai', label: 'AI Assistant', ic: '✦', scope: 'foot', items: ['snav-ai', 'snav-anem', 'snav-assumptions'] },
-        { key: 'admin', label: 'Admin', ic: '⚙', scope: 'foot', items: ['snav-ws-locks'] }
+        // 28 Oct 2026 (Waqas): Admin is a page: Connections (not a Requirements thing: it feeds functions, failure
+        // conditions, assumptions and systems too), Workspaces and locks (no longer a pop-up), Seats and license
+        { key: 'admin', label: 'Admin', ic: '⚙', scope: 'foot', items: ['snav-conn', 'snav-ws-locks', 'snav-admin-lic'] }
     ];
     var PINS = ['snav-dashboard', 'snav-golden-thread'];
 
@@ -91,7 +95,7 @@
     var SHORT = { 'snav-conn': 'Connections', 'snav-pasa': 'PASA', 'snav-afha': 'AFHA', 'snav-ram-hub': 'Overview', 'snav-sys-dir': 'All systems', 'snav-reqif': 'Requirements exchange',
                   'snav-xmi': 'Architecture import', 'snav-defs': 'Certification basis', 'snav-arp-process': 'Safety process map', 'snav-stpa': 'STPA',
                   'snav-cea': 'Cascading effects', 'snav-zsa': 'ZSA', 'snav-pra': 'PRA', 'snav-cma': 'CMA', 'snav-asa': 'ASA', 'snav-hfa': 'HF analysis',
-                  'snav-ws-locks': 'Workspaces and locks', 'snav-anem': 'ANEM live chat', 'snav-dal-ref': 'DAL credit (DO-178C / 254)', 'snav-prove': 'Prove', 'snav-fta': 'Fault trees' };
+                  'snav-ws-locks': 'Workspaces and locks', 'snav-admin-lic': 'Seats and license', 'snav-anem': 'ANEM live chat', 'snav-dal-ref': 'DAL credit (DO-178C / 254)', 'snav-prove': 'Prove', 'snav-fta': 'Fault trees' };
     function _ids(a) { var out = []; a.items.forEach(function (it) { if (typeof it === 'string') out.push(it); else out = out.concat(it.ids); }); return out; }
     function _el(id) { return document.getElementById(id); }
     function _tabOfLink(el) { var m = /switchTab\('([^']+)'\)/.exec((el && el.getAttribute('onclick')) || ''); return m ? m[1] : null; }

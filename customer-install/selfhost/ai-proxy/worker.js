@@ -68,7 +68,7 @@ const BUILTIN_ORIGINS = ["https://safetylabaero.com", "https://www.safetylabaero
 
 const CORS_BASE = {
   "access-control-allow-methods": "GET,POST,PATCH,PUT,OPTIONS",
-  "access-control-allow-headers": "authorization,content-type,x-safetylab-itar,x-safetylab-feature",
+  "access-control-allow-headers": "authorization,content-type,x-safetylab-itar,x-safetylab-feature,x-slab-tool-headers",
   // SEC-3b: the app reads this to know the proxy has written the ledger row itself
   "access-control-expose-headers": "x-safetylab-audit",
   "access-control-max-age": "86400",
@@ -395,7 +395,7 @@ var ALM_RULES = {
             POST: [/^projects\/[^\/]+\/workitems$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/actions\/moveToDocument$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/linkedworkitems$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/comments$/],
             PATCH: [/^projects\/[^\/]+\/workitems\/[^\/]+$/]
         },
-        read: { POST: [] }
+        read: { POST: [] }, query: [], headers: []
     },
     codebeamer: {
         root: /\/api\/v3\/(.*)$/,
@@ -403,26 +403,103 @@ var ALM_RULES = {
             POST: [/^trackers\/\d+\/items$/, /^associations$/],
             PUT: [/^items\/\d+\/fields$/]
         },
-        read: { POST: [/^items\/query$/] }
+        read: { POST: [/^items\/query$/] }, query: [], headers: []
+    },
+    // DOORS Next (OSLC RM and the module structure API): create a requirement through the project's creation
+    // factory, change one (never a module itself), and add an entry to a module's structure
+    doors: {
+        root: /^\/(?:rm|dng)[\w-]*\/(.*)$/,
+        write: {
+            POST: [/^requirementFactory$/],
+            PUT: [/^resources\/(?!MD_)[\w-]+$/, /^resources\/MD_[\w-]+\/structure$/]
+        },
+        read: { POST: [] }, query: ['projectURL', 'oslc_config.context'],
+        headers: ['oslc-core-version', 'accept', 'content-type', 'configuration-context', 'doorsrp-request-type', 'vvc.configuration', 'if-match']
+    },
+    // Cameo (Teamwork Cloud): read elements one by one or in batches; create an element and change one
+    cameo: {
+        root: /^\/osmc\/(.*)$/,
+        write: {
+            POST: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements\/[\w-]+$/],
+            PATCH: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements\/[\w-]+$/]
+        },
+        read: { POST: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements$/, /^resources\/[\w-]+\/branches\/[\w-]+\/revisions\/\d+\/elements$/] },
+        query: [], headers: ['accept', 'content-type']
     }
 };
-// '' when the request may go, or the reason it may not. savedHost: the host saved with the login.
-function almRequestProblem(tool, method, rawUrl, savedHost) {
-    var R = ALM_RULES[tool]; if (!R) return 'not a connected tool';
+// '' when the request may go, or the reason it may not. savedHost: the host saved with the login. headers: the
+// extra request headers the page asks for (only the tool's own protocol headers pass).
+function almRequestProblem(tool, method, rawUrl, savedHost, headers) {
+    var R = Object.prototype.hasOwnProperty.call(ALM_RULES, tool) ? ALM_RULES[tool] : null; if (!R) return 'not a connected tool';
     var m = String(method || '').toUpperCase();
     var u; try { u = new URL(String(rawUrl)); } catch (_) { return 'not a valid address'; }
     if (u.protocol !== 'https:') return 'the address must be https';
     if (!savedHost || u.hostname.toLowerCase() !== String(savedHost).toLowerCase()) return 'only the saved address can be reached';
-    var mm = R.root.exec(u.pathname); if (!mm) return 'only the tool’s REST API is reached';
+    var mm = R.root.exec(u.pathname); if (!mm) return 'only the tool\u2019s REST API is reached';
+    var hk = Object.keys(headers || {}).map(function (k) { return String(k).toLowerCase(); }).filter(function (k) { return R.headers.indexOf(k) < 0; });
+    if (hk.length) return 'the header ' + hk[0] + ' is not sent to this tool';
     var rest = mm[1];
     if (m === 'GET') return '';
-    if (u.search) return 'no query string on a write';
+    var keys = []; u.searchParams.forEach(function (v, k) { keys.push(k); });
+    if (keys.some(function (k) { return R.query.indexOf(k) < 0; })) return 'no query string on a write';
     var ok = (R.read[m] || []).concat(R.write[m] || []).some(function (re) { return re.test(rest); });
     if (ok) return '';
     if (m === 'DELETE') return 'Safety Lab never deletes anything in a connected tool';
     return 'Safety Lab only reads, creates, changes, links and comments on items in the tool';
 }
-const TOOL_LABEL = { polarion: "Polarion", codebeamer: "Codebeamer" };
+const TOOL_LABEL = { polarion: "Polarion", codebeamer: "Codebeamer", doors: "DOORS Next", cameo: "Cameo" };
+// DOORS Next signs in with a session (as IBM's own clients do): cookies kept here, per user and host, for 25 minutes,
+// never sent to the page. The sign-in only ever goes to the saved host or the sign-in server saved with the login.
+const _toolJars = new Map();
+function toolJar(userId, host) {
+  const k = userId + "|" + host, now = Date.now();
+  let j = _toolJars.get(k);
+  if (!j || now - j.at > 25 * 60 * 1000) { j = { cookies: {}, at: now }; _toolJars.set(k, j); }
+  if (_toolJars.size > 2000) { for (const [kk, v] of _toolJars) { if (now - v.at > 25 * 60 * 1000) _toolJars.delete(kk); } }
+  return j;
+}
+function toolHostOf(u) { try { return new URL(String(u)).hostname.toLowerCase(); } catch (_) { return ""; } }
+async function toolWithJar(jar, url, init) {
+  const host = toolHostOf(url), c = jar.cookies[host] || {};
+  const ck = Object.keys(c).map(k => k + "=" + c[k]).join("; ");
+  const headers = Object.assign({}, init.headers || {}); if (ck) headers["cookie"] = ck;
+  const res = await fetch(String(url), Object.assign({}, init, { headers }));
+  let list = []; try { list = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : []; } catch (_) { list = []; }
+  if (!list.length) { const one = res.headers.get("set-cookie"); if (one) list = String(one).split(/,(?=\s*[A-Za-z0-9_.-]+=)/); }
+  list.forEach(sc => { const m = /^\s*([^=;\s]+)=([^;]*)/.exec(String(sc)); if (m) (jar.cookies[host] = jar.cookies[host] || {})[m[1]] = m[2]; });
+  jar.at = Date.now();
+  return res;
+}
+async function doorsSignIn(res, target, user, secret, meta, jar) {
+  const saved = String((meta && meta.baseHost) || "").toLowerCase(), authHost = String((meta && meta.authHost) || "").toLowerCase();
+  const allowed = h => h && (h === saved || (authHost && h === authHost));
+  const ua = "SafetyLabAero-Server" + (meta && meta.auth === "apppass" ? " app-password-enabled" : "");
+  if (res.status === 200 && /authrequired/i.test(res.headers.get("x-com-ibm-team-repository-web-auth-msg") || "")) {
+    const u = new URL(target), ctx = "/" + (u.pathname.split("/")[1] || "rm");
+    const r = await toolWithJar(jar, u.origin + ctx + "/j_security_check", { method: "POST", redirect: "manual",
+      headers: { "content-type": "application/x-www-form-urlencoded", accept: "text/html", "user-agent": ua },
+      body: "j_username=" + encodeURIComponent(user) + "&j_password=" + encodeURIComponent(secret) });
+    if (/authfailed/i.test(r.headers.get("x-com-ibm-team-repository-web-auth-msg") || "")) return "DOORS Next did not accept the username and password.";
+    return "";
+  }
+  const where = (meta && meta.auth === "apppass" && res.headers.get("x-jsa-app-password-redirect")) || res.headers.get("x-jsa-authorization-redirect");
+  if (res.status === 401 && where) {
+    let next = where, first = true;
+    for (let hop = 0; hop < 8 && next; hop++) {
+      const h = toolHostOf(next);
+      if (!allowed(h)) return "DOORS Next sent the sign-in to " + (h || "an unknown address") + ", which is not the saved server" + (authHost ? " or the saved sign-in server" : "") + ". If your company signs in through a separate server, name it in Connection settings.";
+      const headers = { accept: "text/html,application/json", "user-agent": ua };
+      if (first) headers["authorization"] = "Basic " + btoa(user + ":" + secret);
+      const r = await toolWithJar(jar, next, { method: "GET", redirect: "manual", headers });
+      if (r.status === 401) return first ? "DOORS Next did not accept the " + (meta && meta.auth === "apppass" ? "application password" : "username and password") + " (HTTP 401)." : "";
+      const loc = r.status >= 300 && r.status < 400 ? r.headers.get("location") : "";
+      next = loc ? new URL(loc, next).toString() : "";
+      first = false;
+    }
+    return "";
+  }
+  return null;
+}
 async function handleToolBridge(request, env, caller, url, tool) {
   if (!caller.userId) return jsonResponse(401, { error: { type: "unauthorized", message: "The connection needs a signed-in user." } });
   if (!Object.prototype.hasOwnProperty.call(ALM_RULES, tool)) return jsonResponse(400, { error: { type: "bad_tool", message: "Not a tool this server connects to." } });
@@ -435,28 +512,46 @@ async function handleToolBridge(request, env, caller, url, tool) {
   const savedHost = sec.meta && sec.meta.baseHost;
   const chk = bridgeTargetProblem(url.searchParams.get("target"), savedHost, env, true);
   if (chk.error) return jsonResponse(chk.status, { error: { type: "bad_target", message: chk.error } });
-  const method = String(request.method || "").toUpperCase();
-  const fp = almRequestProblem(tool, method, chk.target.toString(), savedHost);
+  const method = String(request.method || "").toUpperCase(), raw = url.searchParams.get("raw") === "1";
+  // the tool's own protocol headers the page asked for (DOORS Next, Cameo); the fence names which may pass
+  let ph = {};
+  const phRaw = request.headers.get("x-slab-tool-headers");
+  if (phRaw) { try { ph = JSON.parse(phRaw); } catch (_) { return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: malformed headers." } }); } }
+  if (!ph || typeof ph !== "object" || Array.isArray(ph) || Object.keys(ph).some(k => typeof ph[k] !== "string" || ph[k].length > 2048 || /[\r\n]/.test(ph[k]))) return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: malformed headers." } });
+  const fp = almRequestProblem(tool, method, chk.target.toString(), savedHost, ph);
   if (fp) return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: " + fp + "." } });
   let body;
   if (method !== "GET") {
     body = await request.text().catch(() => "");
     if (body.length > BRIDGE_WRITE_MAX) return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is larger than 2 MB." } });
-    try { JSON.parse(body || "null"); } catch (_) { return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is not JSON." } }); }
+    if (!raw) { try { JSON.parse(body || "null"); } catch (_) { return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is not JSON." } }); } }
   }
-  const bearer = tool === "polarion" || (sec.meta && sec.meta.auth === "bearer");
-  const auth = bearer ? "Bearer " + sec.secret : "Basic " + btoa(String((sec.meta && sec.meta.user) || "") + ":" + sec.secret);
+  const user = String((sec.meta && sec.meta.user) || "");
+  const headers = method === "GET" ? { accept: "application/json" } : { accept: "application/json", "content-type": "application/json" };
+  Object.keys(ph).forEach(k => { delete headers[k.toLowerCase()]; headers[k.toLowerCase()] = ph[k]; });
+  const session = tool === "doors";
+  if (!session) {
+    const bearer = tool === "polarion" || (sec.meta && sec.meta.auth === "bearer");
+    headers["authorization"] = bearer ? "Bearer " + sec.secret : "Basic " + btoa(user + ":" + sec.secret);
+  }
+  const init = { method: method, redirect: "manual", headers, body: method === "GET" ? undefined : body, signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined };
   try {
-    const upstream = await fetch(chk.target.toString(), {
-      method: method, redirect: "manual",
-      headers: method === "GET" ? { authorization: auth, accept: "application/json" } : { authorization: auth, accept: "application/json", "content-type": "application/json" },
-      body: method === "GET" ? undefined : body,
-      signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
-    });
+    const jar = session ? toolJar(caller.userId, String(savedHost || "").toLowerCase()) : null;
+    let upstream = session ? await toolWithJar(jar, chk.target.toString(), init) : await fetch(chk.target.toString(), init);
+    if (session) {
+      const why = await doorsSignIn(upstream, chk.target.toString(), user, sec.secret, sec.meta || {}, jar);
+      if (why) return jsonResponse(401, { error: { type: "connector_sign_in", message: why } });
+      if (why === "") {
+        upstream = await toolWithJar(jar, chk.target.toString(), init);
+        if (upstream.status === 401 || /authrequired/i.test(upstream.headers.get("x-com-ibm-team-repository-web-auth-msg") || "")) return jsonResponse(401, { error: { type: "connector_sign_in", message: "Signed in, but DOORS Next still asked for a sign-in. Check the login has access to this project." } });
+      }
+    }
     if (upstream.status === 401) return jsonResponse(401, { error: { type: "connector_refused", message: label + " did not accept the saved login (HTTP 401). Open Connection settings and sign in again." } });
     if (upstream.status >= 300 && upstream.status < 400) return jsonResponse(502, { error: { type: "upstream_redirect", message: "upstream redirected (" + upstream.status + "): redirects are not followed" } });
     const text = await upstream.text();
-    const extra = {}; const ra = upstream.headers.get("retry-after"); if (ra) extra["retry-after"] = ra;
+    const ra = upstream.headers.get("retry-after");
+    if (raw) return jsonResponse(200, { raw: true, status: upstream.status, text: text, etag: upstream.headers.get("etag") || "", location: upstream.headers.get("location") || "", retryAfter: Number(ra) || 0 });
+    const extra = {}; if (ra) extra["retry-after"] = ra;
     return new Response(text, { status: upstream.status, headers: { "content-type": upstream.headers.get("content-type") || "application/json", "cache-control": "no-store", "x-content-type-options": "nosniff", ...CORS, ...extra } });
   } catch (e) {
     // never echo the exception: it can carry the request, and the request carries the login

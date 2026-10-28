@@ -8889,12 +8889,24 @@ function _wsRequirePassword(actionLabel){
         ov.addEventListener('mousedown',function(e){ if(e.target===ov) done(false); });
     });
 }
-function openWorkspacesPanel(){
+// 28 Oct 2026 (Waqas: "make admin a page instead of a modal"): with a host element, the same areas and activity are
+// drawn on the Admin page (Workspaces and locks) instead of in a window; without one, the window as before.
+function openWorkspacesPanel(host){
+    const inline = !!(host && host.nodeType === 1);
     const u=_wsUser();
-    if(!u.email){ _wsToast('Sign in to manage workspaces.','warning'); return; }
-    if(!_wsEnsure()){ _wsToast('Open or create a project first.','warning'); return; }
+    const wsHead='<div class="cx-head"><div><h3>Workspaces and locks</h3><p>Allocate areas to people, lock the one you\'re working in, and see who changed what.</p></div></div>';
+    if(!u.email){ if(inline){ host.innerHTML=wsHead+'<div class="cx-body"><div class="cx-card cx-dim">Sign in to manage workspaces and locks.</div></div>'; return; } _wsToast('Sign in to manage workspaces.','warning'); return; }
+    if(!_wsEnsure()){ if(inline){ host.innerHTML=wsHead+'<div class="cx-body"><div class="cx-card cx-dim">Open or create a project first.</div></div>'; return; } _wsToast('Open or create a project first.','warning'); return; }
     const old=document.getElementById('ws-panel'); if(old) old.remove();
+    if(inline){
+        const ev0=function(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); };
+        host.innerHTML='<div class="cx-head"><div><h3>Workspaces and locks</h3><p>Allocate areas to people, lock the one you\'re working in, and see who changed what. You are ' + ev0(u.name) + '.</p></div></div>'
+            +'<section class="cx-card"><h4>Areas</h4><div id="ws-areas"></div></section>'
+            +'<section class="cx-card"><h4>Activity <span class="cx-dim" style="font-weight:400;">who changed what, when</span></h4><div id="ws-activity"></div></section>';
+    }
+
     const ev=function(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];}); };
+    if(!inline){
     const ov=document.createElement('div'); ov.id='ws-panel';
     ov.style.cssText='position:fixed;inset:0;z-index:2147483601;display:flex;align-items:center;justify-content:center;background:rgba(8,12,20,.55);backdrop-filter:blur(2px);padding:24px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;';
     ov.innerHTML='<div style="background:var(--color-surface-1,#fff);color:var(--color-text-primary,#111);border:1px solid var(--color-border-hair,rgba(0,0,0,.12));border-radius:14px;width:min(720px,96vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.3);overflow:hidden;">'
@@ -8912,6 +8924,7 @@ function openWorkspacesPanel(){
     ov.addEventListener('mousedown',function(e){ if(e.target===ov) close(); });
     const xb=document.getElementById('ws-x'); if(xb) xb.onclick=close;
     const db=document.getElementById('ws-done'); if(db) db.onclick=close;
+    }
     function areaRows(){
         const u2=_wsUser();
         const areas=[{scope:'ac',sysId:'',label:'Aircraft level'}].concat((systemsData||[]).map(function(s){ return {scope:'system',sysId:s.id,label:s.name||s.id}; }));

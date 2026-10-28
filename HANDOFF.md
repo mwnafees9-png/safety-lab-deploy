@@ -8,7 +8,20 @@ Waqas: "once they confirm there is no independence that is when the beta factors
 Also open: regression_change_ack_ui fails about 1 run in 7 under heavy load in B8 (undo/redo), not traced.
 Desktop 0.21.12 (Windows) published 27 Oct, web a410a4e; desktop commit c424ba5; Mac channel stays 0.21.10.
 
-## 28 Oct 2026: ONE BUILD. ANEM WRITES WHAT IT DRAFTS AND ANSWERS REVIEW COMMENTS; ANEM PILL; SAFETY LAB CONNECTIONS (JAMA TWO-WAY, POLARION, CODEBEAMER). NOT YET DEPLOYED.
+## 28 Oct 2026 (second build): DOORS NEXT AND CAMEO AS PILOTS; ADMIN IS A PAGE. NOT YET DEPLOYED.
+
+Decisions (Waqas): Cameo: Safety Lab writes only elements it created, and no admin can make Safety Lab the owner of a Cameo element ("correct, on 1"). DOORS Next: no comments; who sent and why goes in History only ("fine on the DOORS Next front"). GENESYS stays blocked until we have a Swagger file from a licensed server or Zuken support. Admin: "why dont we make admin a page instead of a a modal and make connections live there, this is not just a requirements thing", confirmed "yes that is correct"; then "AI key is fine where it is, seats, and licenses yes".
+What changed:
+- site/alm_engine.js: DOORS Next driver (rootservices, catalog, services.xml, streams; modules by OSLC query with paging; module read by the structure API then each item over OSLC with Configuration-Context; create by the factory, placement by structure PUT with If-Match, update by GET then PUT with If-Match, a 412 is an error; "Link To" links on Safety Lab's own item). Cameo driver (Basic, /osmc, branches, latest revision, batch element reads, requirements through stereotypes and tags). Both are PILOTS: reading is on, sending is switched off (outgoing lists nothing, send refuses with a plain reason) until proven on a real server; console switch for the proof: SLAlm._proveSend[tool]. Fence (ALM_RULES) extended word for word in the proxy and the desktop.
+- site/connections.js 1.1: an adapter with canOwn:false (Cameo) can never be given to Safety Lab; pilot warning on the card; per-item failure reasons kept.
+- Admin page: site/admin_page.js (new, SLAdminPage) and nav_areas 1.6: the Admin section has three tabs, Connections (moved out of Requirements; ReqIF and XMI stay there), Workspaces and locks (drawn on the page, no window; the window still opens for any old caller), Seats and license (license details, seats in use and by whom, an admin can load a renewed license file, checked by the license verifier and kept only if it verifies). Script tags 306 -> 307.
+- Proxy worker.js (customer-install copy and safety-lab-proxy-deploy): /bridge?tool= takes doors and cameo, tool protocol headers through X-Slab-Tool-Headers, raw=1 envelope, DOORS session sign-in (form login or the Jazz Authorization Server, only to the saved host or saved authHost), cookie jars per user and host for 25 minutes.
+- Desktop 0.21.15: tools/patch_alm_pilots_20261028.py (bridge_main toolRequest with headers and raw, DOORS sign-in, Cameo; shell_rules doors and cameo kinds and authHost; main.js passes opts; preload toolOpts:true so the page knows the desktop can carry the headers).
+- No migration: the doors_token and cameo_token kinds went in with 20261028a.
+Tests: new regression_admin_page_20261028, regression_alm_pilots_20261028, desktop regression_alm_pilots_desktop_20261028; updated relay_tools, project_durability (307). Cloud runs with browser checks and mutations all green; Mac runs green; desktop suite 29/29 files incl. hardening.
+Still open: real-server proofs for DOORS Next (jazz.net or an IBM ELM trial) and Cameo (a Teamwork Cloud trial) before sending is switched on; GENESYS waits on a Swagger file.
+
+## 28 Oct 2026: ONE BUILD. ANEM WRITES WHAT IT DRAFTS AND ANSWERS REVIEW COMMENTS; ANEM PILL; SAFETY LAB CONNECTIONS (JAMA TWO-WAY, POLARION, CODEBEAMER). SHIPPED BY WAQAS (web 237906d, proxy f6b3a32, desktop 0.21.14 Windows; app/ committed as dae3eab; migration 20261028a run in the SQL editor).
 
 Waqas: "lets get all of these updates in one build" ("that is correct": the ANEM fixes, the ANEM pill and all of connections).
 - Web 6156675 (ANEM): no cutoffs in what the chat sees; a `draft` op hands writing to the Draft engines; `reply_comment` and "Address all with ANEM"; safety net when a reply writes nothing. Tests regression_anem_writes_20261028, regression_anem_pill_20261028.

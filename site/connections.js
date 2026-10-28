@@ -116,6 +116,8 @@
         if (!isAdmin()) return { ok: false, err: 'Only an admin can change who owns a linked item.' };
         why = String(why || '').trim();
         if (!why) return { ok: false, err: 'Say why the owner changes; it is kept in History.' };
+        // 28 Oct 2026 (Waqas): Cameo elements your engineers made are never Safety Lab's to change
+        if (owner === 'sl') { var ad0 = _ad[_tid(tool)]; if (ad0 && ad0.canOwn === false) return { ok: false, err: _toolLabel(tool) + ' items stay owned by ' + _shortName(tool) + ': Safety Lab never changes what your engineers made there. It only sends its own items.' }; }
         return _bg(function () { return _setOwner(tool, remoteIds, owner, why); });
     }
     function _setOwner(tool, remoteIds, owner, why) {
@@ -378,6 +380,7 @@
                 '<button type="button" class="cx-tile cx-link" onclick="SLConnections.show(\'in\')"><b>Waiting to come in</b><span class="cx-big">' + nIn + ' change' + (nIn === 1 ? '' : 's') + '</span><span class="cx-dim">Review and sign in Incoming changes</span></button>' +
                 '<button type="button" class="cx-tile cx-link" onclick="SLConnections.show(\'out\')"><b>Waiting to go out</b><span class="cx-big">' + nOut + ' change' + (nOut === 1 ? '' : 's') + '</span><span class="cx-dim">Check and send in Ready to send</span></button>' +
                 '</div>' +
+                (a.pilot && a.pilot() ? '<div class="cx-warn">Pilot: reading from ' + _esc(t.label) + ' is on. Sending is switched on once it has been proven on a real ' + _esc(_shortName(t.id)) + ' server; until then nothing is written to it.</div>' : '') +
                 (a.held && a.held() ? '<div class="cx-warn">Nothing from ' + _esc(t.label) + ' is staged until each kind of item under what you chose is said what it is: answer it in Mapping.</div>' : '') +
                 (warn.length ? '<div class="cx-warn">' + warn.slice(0, 4).map(_esc).join('<br>') + (warn.length > 4 ? '<br>and ' + (warn.length - 4) + ' more' : '') + '</div>' : '') +
                 '<div class="cx-row cx-gap">' + _btn('Check now', 'SLConnections.checkNow(\'' + t.id + '\')') + _btn('Linked items and owners', 'SLConnections.show(\'map\')') + _btn('Connection settings', 'SLConnections.setup(\'' + t.id + '\')') + '</div>' +
@@ -466,7 +469,7 @@
             var q = String(_mapQ || '').toLowerCase();
             var list = rows.filter(function (r) { return !q || (r.slId + ' ' + r.name + ' ' + r.extKey).toLowerCase().indexOf(q) >= 0; });
             html += '<div class="cx-row cx-gap"><input type="search" class="cx-search" placeholder="Find an item" value="' + _esc(_mapQ) + '" oninput="SLConnections.mapFind(this.value)">' +
-                (isAdmin() ? '<span class="cx-dim">For selected:</span>' + _btn('Owner: ' + _esc(_shortName(t.id)), 'SLConnections.ownerUi(\'' + t.id + '\', \'tool\')') + _btn('Owner: Safety Lab', 'SLConnections.ownerUi(\'' + t.id + '\', \'sl\')') : '<span class="cx-dim">Only an admin can change owners.</span>') + '</div>';
+                (a.canOwn === false ? '<span class="cx-dim">' + _esc(_shortName(t.id)) + ' owns everything linked from it; Safety Lab only ever sends its own items.</span>' : (isAdmin() ? '<span class="cx-dim">For selected:</span>' + _btn('Owner: ' + _esc(_shortName(t.id)), 'SLConnections.ownerUi(\'' + t.id + '\', \'tool\')') + _btn('Owner: Safety Lab', 'SLConnections.ownerUi(\'' + t.id + '\', \'sl\')') : '<span class="cx-dim">Only an admin can change owners.</span>')) + '</div>';
             html += '<div class="cx-scroll"><table class="cx-table"><thead><tr><th></th><th>Safety Lab item</th><th>' + _esc(_shortName(t.id)) + ' item</th><th>Kind</th><th>Where</th><th>Owner</th><th>Status</th></tr></thead><tbody>' +
                 list.map(function (r) {
                     var own = ownerOf(t.id, r.remoteId);
@@ -563,7 +566,8 @@
             var a = _ad[t]; if (!a || !a.send) { res.failed.push(_toolLabel(t) + ': this connection cannot send yet'); continue; }
             var r;
             try { r = await a.send(byTool[t], signer, reason); } catch (e) { r = { ok: false, err: (e && e.message) || String(e) }; }
-            if (!r || r.ok === false) { res.failed.push(_toolLabel(t) + ': ' + ((r && r.err) || 'send failed')); continue; }
+            // nothing went: say why, item by item when the tool said (28 Oct 2026: the reasons were lost here)
+            if (!r || r.ok === false) { if (r && r.failed && r.failed.length) r.failed.forEach(function (f) { res.failed.push(_toolLabel(t) + ': ' + f); }); else res.failed.push(_toolLabel(t) + ': ' + ((r && r.err) || 'send failed')); (r && r.held || []).forEach(function (h) { res.held.push(h); }); continue; }
             res.sent += r.sent || 0;
             (r.held || []).forEach(function (h) { res.held.push(h); });
             (r.failed || []).forEach(function (f) { res.failed.push(f); });

@@ -1109,12 +1109,12 @@
                     if (!now) { res.failed.push(label + ': Jama no longer has this item'); continue; }
                     if (String(now.modifiedDate || '') !== String(l.seen || '')) { res.held.push(label + ' (changed in Jama since the last check: check Jama, then send again)'); continue; }
                     await _write('PATCH', base + '/rest/latest/items/' + Number(l.remoteId), l._ops);
+                    await _comment(base, l.remoteId, note);   // 28 Oct 2026: before the read-back, so the comment is not taken for someone's edit
                     const after = _itemOf(await _get(base + '/rest/latest/items/' + encodeURIComponent(l.remoteId)));
                     const src = l._row && (l._row.fnSource || l._row.reqSource || l._row.asmSource || l._row.fcSource);
                     _bg(() => { if (src && after) { src.lastChange = after.modifiedDate; src.sentBy = signer; src.sentAt = new Date().toISOString(); } });
                     // what Safety Lab now knows Jama holds (until the next check reads it again)
                     { const seen = _seenItem(l.remoteId), T0 = _T(); const n0 = (seen && after && T0) ? T0.normalizeItem(after) : null; if (n0) { seen.name = n0.name; seen.text = n0.text; seen.modified = n0.modified; } }
-                    await _comment(base, l.remoteId, note);
                     res.sent++; res.items.push(label); continue;
                 }
                 const sc = cfgS[l._send] || {};
@@ -1124,9 +1124,9 @@
                     if (!now) { res.failed.push(label + ': Jama no longer has this item'); continue; }
                     if (link.modified && String(now.modifiedDate || '') !== String(link.modified)) { res.held.push(label + ' (someone changed it in Jama since Safety Lab last sent it; Safety Lab owns it, so send again to overwrite, after checking what they changed)'); _bg(() => { link.modified = now.modifiedDate; }); continue; }
                     await _write('PATCH', base + '/rest/latest/items/' + Number(link.remoteId), [{ op: 'replace', path: '/fields/name', value: l._fields.name }, { op: 'replace', path: '/fields/description', value: l._fields.description }]);
-                    const after = _itemOf(await _get(base + '/rest/latest/items/' + encodeURIComponent(link.remoteId)));
-                    _bg(() => { link.fp = l._fp; link.at = new Date().toISOString(); link.by = signer; link.modified = after && after.modifiedDate; });
                     await _comment(base, link.remoteId, note);
+                    const after = _itemOf(await _get(base + '/rest/latest/items/' + encodeURIComponent(link.remoteId)));   // after every write of ours (28 Oct 2026)
+                    _bg(() => { link.fp = l._fp; link.at = new Date().toISOString(); link.by = signer; link.modified = after && after.modifiedDate; });
                     res.sent++; res.items.push(label); continue;
                 }
                 if (!sc.itemType || !sc.parent) { res.failed.push(label + ': choose the Jama item type and folder in Mapping first'); continue; }
@@ -1141,6 +1141,8 @@
                 if (l._send === 'req') { const fc = (typeof acFhaData !== 'undefined' ? acFhaData : []).find(x => x && String(x.fcId || '') === String(l._row.traceId || '')); const lk = _ownSent(fc) || (fc && fc.fcSource && fc.fcSource.tool === TOOL ? { remoteId: fc.fcSource.remoteId } : null); if (lk) from = lk.remoteId; }
                 if (from != null) { try { await _write('POST', base + '/rest/latest/relationships', { fromItem: Number(from), toItem: Number(id) }); } catch (e) { res.failed.push(label + ': made in Jama, but the link to its ' + (l._send === 'fc' ? 'function' : 'failure condition') + ' failed (' + ((e && e.message) || e) + ')'); } }
                 await _comment(base, id, note);
+                // 28 Oct 2026: the link and the comment may change the item again: what Safety Lab now knows Jama holds
+                try { const fin = _itemOf(await _get(base + '/rest/latest/items/' + encodeURIComponent(id))); if (fin) _bg(() => { l._row.sendLinks[TOOL].modified = fin.modifiedDate; }); } catch (_) {}
                 res.sent++; res.items.push(label + ' (new: ' + ((after && after.documentKey) || id) + ')');
             } catch (e) { res.failed.push(label + ': ' + ((e && e.message) || e)); }
         }

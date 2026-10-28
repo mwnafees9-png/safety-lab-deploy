@@ -233,7 +233,6 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 <a class="asb-item sub" id="snav-val-matrix" onclick="switchTab('val-matrix')" role="button" tabindex="0"><span class="asb-lbl">Validation Matrix</span></a>
                 <a class="asb-item sub" id="snav-moc" onclick="switchTab('moc')" role="button" tabindex="0"><span class="asb-lbl">Means of Compliance</span></a>
                 <a class="asb-item sub" id="snav-vv-status" onclick="switchTab('vv-status')" role="button" tabindex="0"><span class="asb-lbl">V&amp;V Status Roll-up</span></a>
-                <a class="asb-item sub" id="snav-conn" onclick="switchTab('conn')" role="button" tabindex="0"><span class="asb-lbl">Connections — Jama · Polarion · DOORS · Codebeamer · Cameo · GENESYS</span></a>
                 <a class="asb-item sub" id="snav-reqif" onclick="switchTab('reqif')" role="button" tabindex="0"><span class="asb-lbl">Requirements exchange — Jama · Polarion · DOORS</span></a>
                 <a class="asb-item sub" id="snav-xmi" onclick="switchTab('xmi')" role="button" tabindex="0"><span class="asb-lbl">Architecture import — Cameo · SysML</span></a>
                 <a class="asb-item sub" id="snav-dal-ref" onclick="switchTab('dal-ref')" role="button" tabindex="0"><span class="asb-lbl">DAL Credit (DO-178C / 254)</span></a>
@@ -244,7 +243,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             <details class="asb-grp" id="asb-grp-admin">
                 <summary><span class="asb-ico">⚙</span><span class="asb-lbl">Admin &amp; AI</span><span class="asb-chev">›</span></summary>
                 <div class="asb-sub">
-                <a class="asb-item sub" id="snav-ws-locks" onclick="openWorkspacesPanel()" role="button" tabindex="0"><span class="asb-lbl">🔒 Workspaces &amp; Locks</span></a>
+                <!-- 28 Oct 2026 (Waqas: "make admin a page instead of a modal and make connections live there, this is not just a requirements thing"): Admin is a page of its own, Connections, Workspaces and locks, Seats and license -->
+                <a class="asb-item sub" id="snav-conn" onclick="switchTab('conn')" role="button" tabindex="0"><span class="asb-lbl">Connections</span></a>
+                <a class="asb-item sub" id="snav-ws-locks" onclick="switchTab('admin-ws')" role="button" tabindex="0"><span class="asb-lbl">Workspaces and locks</span></a>
+                <a class="asb-item sub" id="snav-admin-lic" onclick="switchTab('admin-lic')" role="button" tabindex="0"><span class="asb-lbl">Seats and license</span></a>
                 <a class="asb-item sub" id="snav-ai" onclick="switchTab('ai')" role="button" tabindex="0"><span class="asb-lbl">AI Assistant</span></a>
                 <a class="asb-item sub" id="snav-anem" onclick="slOpenAnem()" role="button" tabindex="0" title="✦"><span class="asb-lbl">ANEM — live chat</span></a>
                 <a class="asb-item sub" id="snav-assumptions" onclick="switchTab('assumptions')" role="button" tabindex="0"><span class="asb-lbl">AI Assumptions</span></a>
@@ -2922,8 +2924,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
 
         <!-- Phase 56.27 — V&V Status Roll-up. Aggregates every requirement (AC + Sys)
              and breaks down validation/verification posture by status, level, and type. -->
-        <!-- 28 Oct 2026: Safety Lab Connections (connections.js draws it) -->
+        <!-- 28 Oct 2026: the Admin page: Connections (connections.js draws it), Workspaces and locks, Seats and license (admin_page.js) -->
         <div id="view-conn" style="display: none;"><div id="conn-host"></div></div>
+        <div id="view-admin-ws" style="display: none;"><div id="admin-ws-host"></div></div>
+        <div id="view-admin-lic" style="display: none;"><div id="admin-lic-host"></div></div>
 
         <div id="view-reqif" style="display: none;">
             <div class="header-with-export"><h3>ReqIF Import — Polarion · Jama · DOORS · any OMG-ReqIF tool</h3></div>
@@ -4206,9 +4210,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="func_tree.js?v=1.1" defer></script>
     <script src="data_ops_modules.js?v=66.64" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.53" defer></script>
+    <script src="support_modules.js?v=66.54" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.45" defer></script>
+    <script src="helpers_modules.js?v=3.46" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4382,6 +4386,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="live_bridge.js?v=3.5" defer></script>
     <!-- 28 Oct 2026: Polarion and Codebeamer on the Connections framework (one engine, a driver per tool) -->
     <script src="alm_engine.js?v=1.0" defer></script>
+    <!-- 28 Oct 2026: the Admin page (Workspaces and locks, Seats and license; Connections is connections.js) -->
+    <script src="admin_page.js?v=1.0" defer></script>
     <!-- M5 — Cameo/SysML XMI import (draft socket awaiting the program sample). -->
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab
@@ -4583,7 +4589,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="prove_tabs.js?v=1.8" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
-    <script src="nav_areas.js?v=1.5" defer></script>
+    <script src="nav_areas.js?v=1.6" defer></script>
     <script src="fta_tree_picker.js?v=1.3" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /

@@ -42,7 +42,7 @@
                 POST: [/^projects\/[^\/]+\/workitems$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/actions\/moveToDocument$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/linkedworkitems$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/comments$/],
                 PATCH: [/^projects\/[^\/]+\/workitems\/[^\/]+$/]
             },
-            read: { POST: [] }
+            read: { POST: [] }, query: [], headers: []
         },
         codebeamer: {
             root: /\/api\/v3\/(.*)$/,
@@ -50,20 +50,45 @@
                 POST: [/^trackers\/\d+\/items$/, /^associations$/],
                 PUT: [/^items\/\d+\/fields$/]
             },
-            read: { POST: [/^items\/query$/] }
+            read: { POST: [/^items\/query$/] }, query: [], headers: []
+        },
+        // DOORS Next (OSLC RM and the module structure API): create a requirement through the project's creation
+        // factory, change one (never a module itself), and add an entry to a module's structure
+        doors: {
+            root: /^\/(?:rm|dng)[\w-]*\/(.*)$/,
+            write: {
+                POST: [/^requirementFactory$/],
+                PUT: [/^resources\/(?!MD_)[\w-]+$/, /^resources\/MD_[\w-]+\/structure$/]
+            },
+            read: { POST: [] }, query: ['projectURL', 'oslc_config.context'],
+            headers: ['oslc-core-version', 'accept', 'content-type', 'configuration-context', 'doorsrp-request-type', 'vvc.configuration', 'if-match']
+        },
+        // Cameo (Teamwork Cloud): read elements one by one or in batches; create an element and change one
+        cameo: {
+            root: /^\/osmc\/(.*)$/,
+            write: {
+                POST: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements\/[\w-]+$/],
+                PATCH: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements\/[\w-]+$/]
+            },
+            read: { POST: [/^resources\/[\w-]+\/branches\/[\w-]+\/elements$/, /^resources\/[\w-]+\/branches\/[\w-]+\/revisions\/\d+\/elements$/] },
+            query: [], headers: ['accept', 'content-type']
         }
     };
-    // '' when the request may go, or the reason it may not. savedHost: the host saved with the login.
-    function almRequestProblem(tool, method, rawUrl, savedHost) {
-        var R = ALM_RULES[tool]; if (!R) return 'not a connected tool';
+    // '' when the request may go, or the reason it may not. savedHost: the host saved with the login. headers: the
+    // extra request headers the page asks for (only the tool's own protocol headers pass).
+    function almRequestProblem(tool, method, rawUrl, savedHost, headers) {
+        var R = Object.prototype.hasOwnProperty.call(ALM_RULES, tool) ? ALM_RULES[tool] : null; if (!R) return 'not a connected tool';
         var m = String(method || '').toUpperCase();
         var u; try { u = new URL(String(rawUrl)); } catch (_) { return 'not a valid address'; }
         if (u.protocol !== 'https:') return 'the address must be https';
         if (!savedHost || u.hostname.toLowerCase() !== String(savedHost).toLowerCase()) return 'only the saved address can be reached';
-        var mm = R.root.exec(u.pathname); if (!mm) return 'only the tool’s REST API is reached';
+        var mm = R.root.exec(u.pathname); if (!mm) return 'only the tool\u2019s REST API is reached';
+        var hk = Object.keys(headers || {}).map(function (k) { return String(k).toLowerCase(); }).filter(function (k) { return R.headers.indexOf(k) < 0; });
+        if (hk.length) return 'the header ' + hk[0] + ' is not sent to this tool';
         var rest = mm[1];
         if (m === 'GET') return '';
-        if (u.search) return 'no query string on a write';
+        var keys = []; u.searchParams.forEach(function (v, k) { keys.push(k); });
+        if (keys.some(function (k) { return R.query.indexOf(k) < 0; })) return 'no query string on a write';
         var ok = (R.read[m] || []).concat(R.write[m] || []).some(function (re) { return re.test(rest); });
         if (ok) return '';
         if (m === 'DELETE') return 'Safety Lab never deletes anything in a connected tool';
@@ -117,6 +142,81 @@
         return t.split('\n').map(function (l) { return l.replace(/[ \t]+/g, ' ').trim(); }).filter(Boolean).join('\n');
     }
     function _html(s) { return _esc(s).replace(/\n/g, '<br>'); }
+
+    // ================================================================== XML and RDF (DOORS Next speaks RDF/XML)
+    // A small namespace-aware XML reader: elements with their namespace, local name, attributes (by namespace URI +
+    // local name), text, child elements and the raw text between their tags (an rdf:parseType="Literal" value).
+    var RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+    function _xmlUnesc(t) {
+        return String(t).replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, function (m, k) {
+            var kl = k.toLowerCase();
+            if (kl[0] === '#') { var n = kl[1] === 'x' ? parseInt(kl.slice(2), 16) : parseInt(kl.slice(1), 10); return isFinite(n) ? String.fromCodePoint(n) : m; }
+            return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[kl];
+        });
+    }
+    function parseXml(text) {
+        var src = String(text || ''), i = 0, n = src.length;
+        var root = { children: [], ns: {} }, stack = [root];
+        var tagRe = /<([^\s\/>]+)((?:\s+[^\s=\/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/y;
+        while (i < n) {
+            var lt = src.indexOf('<', i);
+            var top = stack[stack.length - 1];
+            if (lt < 0) { if (top.el) top.el.text += _xmlUnesc(src.slice(i)); break; }
+            if (lt > i && top.el) top.el.text += _xmlUnesc(src.slice(i, lt));
+            if (src.startsWith('<!--', lt)) { var ce = src.indexOf('-->', lt + 4); i = ce < 0 ? n : ce + 3; continue; }
+            if (src.startsWith('<![CDATA[', lt)) { var de = src.indexOf(']]>', lt + 9); if (top.el) top.el.text += src.slice(lt + 9, de < 0 ? n : de); i = de < 0 ? n : de + 3; continue; }
+            if (src.startsWith('<?', lt)) { var pe = src.indexOf('?>', lt + 2); i = pe < 0 ? n : pe + 2; continue; }
+            if (src.startsWith('<!', lt)) { var be = src.indexOf('>', lt + 2); i = be < 0 ? n : be + 1; continue; }
+            if (src[lt + 1] === '/') {
+                var ge = src.indexOf('>', lt); var fr = stack.pop(); if (fr && fr.el) fr.el.inner = src.slice(fr.start, lt);
+                if (!stack.length) stack.push(root);
+                i = ge < 0 ? n : ge + 1; continue;
+            }
+            tagRe.lastIndex = lt;
+            var m = tagRe.exec(src);
+            if (!m) { i = lt + 1; continue; }
+            var scope = Object.assign({}, top.ns), raw = {}, ar = /([^\s=]+)\s*=\s*("([^"]*)"|'([^']*)')/g, am;
+            while ((am = ar.exec(m[2]))) { var v = _xmlUnesc(am[3] != null ? am[3] : am[4]); raw[am[1]] = v; if (am[1] === 'xmlns') scope[''] = v; else if (am[1].indexOf('xmlns:') === 0) scope[am[1].slice(6)] = v; }
+            var q = m[1], c = q.indexOf(':'), pre = c > 0 ? q.slice(0, c) : '', loc = c > 0 ? q.slice(c + 1) : q;
+            var el = { qname: q, ns: scope[pre] || '', local: loc, attrs: {}, text: '', inner: '', children: [] };
+            Object.keys(raw).forEach(function (k) { if (k === 'xmlns' || k.indexOf('xmlns:') === 0) return; var c2 = k.indexOf(':'); el.attrs[(c2 > 0 ? (scope[k.slice(0, c2)] || '') : '') + (c2 > 0 ? k.slice(c2 + 1) : k)] = raw[k]; });
+            (top.el ? top.el.children : root.children).push(el);
+            i = tagRe.lastIndex;
+            if (m[3] !== '/') stack.push({ el: el, ns: scope, start: i });
+        }
+        return root.children[0] || null;
+    }
+    // RDF/XML as nodes: { about, types[], props: { predicateURI: [ { res } | { lit, xml } | { list: [about] } ] } }.
+    // Nested descriptions become their own nodes (blank ones get a made-up id).
+    function rdfParse(text) {
+        var doc = parseXml(text), nodes = {}, blank = 0;
+        function node(el) {
+            var about = el.attrs[RDF + 'about'] != null ? el.attrs[RDF + 'about'] : (el.attrs[RDF + 'nodeID'] != null ? '_:' + el.attrs[RDF + 'nodeID'] : '_:b' + (++blank));
+            var nd = nodes[about] || (nodes[about] = { about: about, types: [], props: {} });
+            if (!(el.ns === RDF && el.local === 'Description')) nd.types.push(el.ns + el.local);
+            el.children.forEach(function (p) {
+                var pred = p.ns + p.local, val;
+                if (pred === RDF + 'type' && p.attrs[RDF + 'resource']) { nd.types.push(p.attrs[RDF + 'resource']); return; }
+                if (p.attrs[RDF + 'resource'] != null) val = { res: p.attrs[RDF + 'resource'] };
+                else if (p.attrs[RDF + 'parseType'] === 'Literal') val = { lit: plain(p.inner), xml: p.inner };
+                else if (p.attrs[RDF + 'parseType'] === 'Collection') val = { list: p.children.map(node) };
+                else if (p.children.length) val = { res: node(p.children[0]) };
+                else val = { lit: p.text.trim() };
+                (nd.props[pred] = nd.props[pred] || []).push(val);
+            });
+            return about;
+        }
+        if (doc) { if (doc.ns === RDF && doc.local === 'RDF') doc.children.forEach(node); else node(doc); }
+        var all = Object.keys(nodes).map(function (k) { return nodes[k]; });
+        return {
+            nodes: nodes, all: all,
+            ofType: function (t) { return all.filter(function (x) { return x.types.indexOf(t) >= 0; }); },
+            withProp: function (pr) { return all.filter(function (x) { return x.props[pr]; }); }
+        };
+    }
+    function rv(nd, pred) { var v = nd && nd.props[pred] && nd.props[pred][0]; return v ? (v.res != null ? v.res : (v.lit != null ? v.lit : '')) : ''; }
+    function rvs(nd, pred) { return ((nd && nd.props[pred]) || []).map(function (v) { return v.res != null ? v.res : v.lit; }); }
+    function _xesc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
     // ================================================================== the function tree (pure)
     // items: [{ id, key, name, text, modified, parentId, sort }] of one tool, ids as strings. A parentId that is not a
@@ -322,6 +422,7 @@
     // ---- Polarion (REST API v1, JSON:API). Documents hold the items; a work item's parent is its "parent" link.
     DRIVERS.polarion = {
         id: 'polarion', label: 'Polarion', short: 'Polarion', container: 'document', containers: 'documents',
+        sendFields: [{ key: 'type', label: 'Polarion work item type', placeholder: 'requirement' }],
         auths: [['bearer', 'Personal access token']],
         hint: 'The Polarion address (for example https://polarion.example.com) and the project id. A personal access token is made in Polarion under My Account, Personal Access Token. Your Polarion administrator must have turned the REST API on.',
         api: function (c) { var b = String(c.baseUrl || '').replace(/\/+$/, ''); return /\/polarion\/rest\/v1$/.test(b) ? b : (/\/polarion$/.test(b) ? b + '/rest/v1' : b + '/polarion/rest/v1'); },
@@ -483,6 +584,336 @@
         comment: null
     };
 
+    // ---- DOORS Next (OSLC RM 2.0 and the DOORS Next module structure API). PILOT: reading is on; sending switches on
+    // once it has been proven against a real DOORS Next server. Modules hold the items; the structure API gives their
+    // order and nesting. Every request carries the project's stream (configuration) when one was chosen.
+    var DCT = 'http://purl.org/dc/terms/', OSLC = 'http://open-services.net/ns/core#', ORM = 'http://open-services.net/ns/rm#', JRM = 'http://jazz.net/ns/rm#';
+    var NAV = 'http://jazz.net/ns/rm/navigation#', DNGM = 'http://jazz.net/ns/rm/dng/module#', OCFG = 'http://open-services.net/ns/config#', OAUTO = 'http://open-services.net/ns/auto#';
+    DRIVERS.doors = {
+        id: 'doors', label: 'DOORS Next', short: 'DOORS Next', container: 'module', containers: 'modules', pilotSend: true, projectByName: true, needsOpts: true,
+        sendFields: [{ key: 'type', label: 'Artifact type (its type address; empty for the project\u2019s first)', placeholder: 'https://.../rm/types/...' }, { key: 'folder', label: 'Folder for new items (its address)', placeholder: 'https://.../rm/folders/...' }],
+        auths: [['password', 'Username and password'], ['apppass', 'Username and application password (single sign-on)']],
+        hint: 'The DOORS Next address including its context root (for example https://dng.example.com:9443/rm) and the project area’s name. Sign in with your Jazz username and password; if your company signs in through single sign-on, make an application password on the Jazz Authorization Server and use that.',
+        extra: [
+            { key: 'authHost', label: 'Sign-in server, if your company’s is separate (for example jas.example.com)', placeholder: 'leave empty when it is the same server', login: true },
+            { key: 'stream', label: 'Stream (configuration)', list: 'streams', empty: 'The project’s default stream' }
+        ],
+        api: function (c) { var b = String(c.baseUrl || '').replace(/\/+$/, ''); try { var u = new URL(b); if (!u.pathname || u.pathname === '/') return b + '/rm'; } catch (_) {} return b; },
+        H: function (c, extra) { var h = { 'OSLC-Core-Version': '2.0', 'Accept': 'application/rdf+xml' }; if (c.stream) h['Configuration-Context'] = c.stream; return Object.assign(h, extra || {}); },
+        HM: function (c, accept) { var h = { 'DoorsRP-Request-Type': 'public 2.0', 'Accept': accept || 'application/rdf+xml' }; if (c.stream) h['vvc.configuration'] = c.stream; return h; },
+        async rdf(c, req, url, hdr) { var r = await req('GET', url, undefined, { raw: true, headers: hdr || this.H(c) }); return { g: rdfParse(r.text), etag: r.etag, text: r.text }; },
+        async projects(c, req) {
+            var root = await this.rdf(c, req, this.api(c) + '/rootservices', { 'OSLC-Core-Version': '2.0', 'Accept': 'application/rdf+xml' });
+            var cat = '';
+            root.g.all.forEach(function (n) { var v = rv(n, 'http://open-services.net/xmlns/rm/1.0/rmServiceProviders'); if (v && !cat) cat = v; });
+            if (!cat) throw new Error('This DOORS Next does not name its project catalog in rootservices; check the address (it ends in the context root, usually /rm).');
+            var g = (await this.rdf(c, req, cat, { 'OSLC-Core-Version': '2.0', 'Accept': 'application/rdf+xml' })).g;
+            return g.ofType(OSLC + 'ServiceProvider').map(function (sp) { return { id: sp.about, name: rv(sp, DCT + 'title') || sp.about, projectURL: rv(sp, OSLC + 'details') }; });
+        },
+        async _prov(c, req) {
+            if (c._prov) return c._prov;
+            var want = S(c.project), list = await this.projects(c, req);
+            var hit = list.filter(function (p) { return p.id === want || p.name === want || p.projectURL === want; })[0];
+            if (!hit) throw new Error('No DOORS Next project area called ' + want + ' that this login can open.');
+            return (c._prov = hit);
+        },
+        async _svc(c, req) {
+            if (c._svc) return c._svc;
+            var pv = await this._prov(c, req), g = (await this.rdf(c, req, pv.id)).g, out = { query: '', folders: '', factory: '', shapes: [], component: '' };
+            g.ofType(OSLC + 'QueryCapability').forEach(function (q) {
+                var rt = rvs(q, OSLC + 'resourceType'), t = rv(q, DCT + 'title'), qb = rv(q, OSLC + 'queryBase');
+                if (!out.query && rt.indexOf(ORM + 'Requirement') >= 0) out.query = qb;
+                if (!out.folders && /folder/i.test(t)) out.folders = qb;
+            });
+            g.ofType(OSLC + 'CreationFactory').forEach(function (f) {
+                if (out.factory || rvs(f, OSLC + 'resourceType').indexOf(ORM + 'Requirement') < 0) return;
+                out.factory = rv(f, OSLC + 'creation'); out.shapes = rvs(f, OSLC + 'resourceShape'); out.component = rv(f, OCFG + 'component');
+            });
+            if (!out.query) throw new Error('DOORS Next did not offer a requirement query for this project.');
+            return (c._svc = out);
+        },
+        async test(c, req) { var pv = await this._prov(c, req); await this._svc(c, req); return pv.name; },
+        async streams(c, req) {
+            var sv = await this._svc(c, req); if (!sv.component) return [];
+            var g = (await this.rdf(c, req, sv.component + '/configurations', { 'OSLC-Core-Version': '2.0', 'Accept': 'application/rdf+xml' })).g, ids = [];
+            g.all.forEach(function (n) { rvs(n, 'http://www.w3.org/2000/01/rdf-schema#member').forEach(function (u) { if (/\/stream\//.test(u)) ids.push(u); }); });
+            var out = [];
+            for (var i = 0; i < ids.length && i < 100; i++) { var sg = (await this.rdf(c, req, ids[i], { 'OSLC-Core-Version': '2.0', 'Accept': 'application/rdf+xml' })).g; var nd = sg.nodes[ids[i]] || sg.all[0]; out.push({ id: ids[i], name: rv(nd, DCT + 'title') || ids[i] }); }
+            return out;
+        },
+        // an OSLC query, every page of it
+        async _query(c, req, where, select) {
+            var sv = await this._svc(c, req), out = [];
+            var url = sv.query + (sv.query.indexOf('?') >= 0 ? '&' : '?') + 'oslc.prefix=' + encodeURIComponent('rdf=<' + RDF + '>,dcterms=<' + DCT + '>') +
+                '&oslc.where=' + encodeURIComponent(where) + '&oslc.select=' + encodeURIComponent(select) + '&oslc.paging=true&oslc.pageSize=200';
+            for (var g = 0; g < 200 && url; g++) {
+                var r = (await this.rdf(c, req, url)).g, next = '';
+                r.all.forEach(function (n) { rvs(n, 'http://www.w3.org/2000/01/rdf-schema#member').forEach(function (m) { if (r.nodes[m]) out.push(r.nodes[m]); }); var nx = rv(n, OSLC + 'nextPage'); if (nx) next = nx; });
+                url = next && next !== url ? next : '';
+            }
+            return out;
+        },
+        async listContainers(c, req) {
+            var mods = await this._query(c, req, 'rdf:type=<' + JRM + 'Module>', 'dcterms:title,dcterms:identifier');
+            return mods.map(function (m) { return { id: m.about.split('?')[0], name: rv(m, DCT + 'title') || m.about, where: rv(m, DCT + 'identifier') }; });
+        },
+        _art: function (g, url) { var base = url.split('?')[0]; return g.nodes[url] || g.all.filter(function (n) { return n.about.split('?')[0] === base; })[0] || null; },
+        _item: function (nd, url) {
+            var desc = nd.props[DCT + 'description'] ? rv(nd, DCT + 'description') : rv(nd, JRM + 'primaryText');
+            return { id: url.split('?')[0], key: rv(nd, DCT + 'identifier') || url.split('/').pop(), name: rv(nd, DCT + 'title'), text: desc, modified: rv(nd, DCT + 'modified') };
+        },
+        async read(c, req, module) {
+            var self = this, mg = (await this.rdf(c, req, module, this.HM(c))).g, st = '';
+            mg.all.forEach(function (n) { var v = rv(n, DNGM + 'structure'); if (v && !st) st = v; });
+            if (!st) st = module.replace(/\/+$/, '') + '/structure';
+            var sr = await req('GET', st, undefined, { raw: true, headers: this.HM(c, 'application/json') });
+            var arr; try { arr = JSON.parse(sr.text); } catch (_) { throw new Error('DOORS Next answered the module structure of ' + module + ' in a form Safety Lab cannot read.'); }
+            var by = {}; arrOf(arr).forEach(function (b) { if (b && b.uri) by[b.uri] = b; });
+            var rootB = arrOf(arr).filter(function (b) { return b && (String(b.isStructureRoot) === 'true' || b.uri === st); })[0];
+            if (!rootB) throw new Error('The module structure of ' + module + ' has no root.');
+            var flat = [], seenB = {};
+            (function walk(list, parentArt, depth) {
+                arrOf(list).forEach(function (u) {
+                    var b = by[u]; if (!b || seenB[u] || depth > 60) return; seenB[u] = 1;
+                    var art = b.boundArtifact && b.boundArtifact !== RDF + 'nil' ? String(b.boundArtifact) : '';
+                    if (art) flat.push({ art: art, parent: parentArt, heading: b.isHeading === true || String(b.isHeading) === 'true', sort: flat.length });
+                    walk(b.childBindings, art || parentArt, depth + 1);
+                });
+            })(rootB.childBindings, null, 0);
+            var items = [], warn = [], failed = 0;
+            for (var i = 0; i < flat.length; i++) {
+                var f = flat[i];
+                try {
+                    var ag = (await this.rdf(c, req, f.art)).g, nd = this._art(ag, f.art);
+                    if (!nd) { failed++; continue; }
+                    var it = this._item(nd, f.art); it.parentId = f.parent ? f.parent.split('?')[0] : null; it.sort = f.sort; it.heading = f.heading; it.container = module;
+                    items.push(it);
+                } catch (e) { failed++; if (warn.length < 3) warn.push('Could not read ' + f.art + ' in module ' + module + ': ' + ((e && e.message) || e)); }
+            }
+            if (failed) warn.push(failed + ' item(s) of module ' + module + ' could not be read; nothing from this module is flagged as missing this time.');
+            return { items: items, warnings: warn, partial: failed > 0 };
+        },
+        async seen(c, req, url) { var r = await this.rdf(c, req, url), nd = this._art(r.g, url); if (!nd) return null; var it = this._item(nd, url); it.etag = r.etag; return it; },
+        // change a literal in a resource's RDF/XML, leaving everything else exactly as the server sent it
+        _setLit: function (xml, ns, local, valueXml, literal) {
+            var pm = new RegExp('xmlns:([\\w.-]+)="' + ns.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&') + '"').exec(xml), pre = pm ? pm[1] : '';
+            var el = literal ? '<' + (pre || 'slx') + ':' + local + (pre ? '' : ' xmlns:slx="' + ns + '"') + ' rdf:parseType="Literal">' + valueXml + '</' + (pre || 'slx') + ':' + local + '>'
+                             : '<' + (pre || 'slx') + ':' + local + (pre ? '' : ' xmlns:slx="' + ns + '"') + '>' + valueXml + '</' + (pre || 'slx') + ':' + local + '>';
+            if (pre) {
+                var re = new RegExp('<' + pre + ':' + local + '\\b[^>]*?(\\/>|>[\\s\\S]*?<\\/' + pre + ':' + local + '>)');
+                if (re.test(xml)) return xml.replace(re, function () { return el; });
+            }
+            var end = xml.indexOf('</rdf:Description>');
+            return end < 0 ? xml : xml.slice(0, end) + el + xml.slice(end);
+        },
+        _xhtml: function (text) { return '<div xmlns="http://www.w3.org/1999/xhtml">' + String(text || '').split('\n').map(_xesc).join('<br/>') + '</div>'; },
+        async update(c, req, url, f) {
+            var r = await req('GET', url, undefined, { raw: true, headers: this.H(c) });
+            if (!r.etag) throw new Error('DOORS Next did not give a version (ETag) for ' + url + ', so it is not changed.');
+            var x = this._setLit(r.text, DCT, 'title', _xesc(f.name), true);
+            x = this._setLit(x, DCT, 'description', this._xhtml(f.text), true);
+            var w = await req('PUT', url, x, { raw: true, headers: this.H(c, { 'Content-Type': 'application/rdf+xml', 'If-Match': r.etag }) });
+            if (w.status === 412 || w.status === 409) throw new Error('changed in DOORS Next while Safety Lab was sending; check it, then send again');
+        },
+        async create(c, req, module, shape, f, s) {
+            var sv = await this._svc(c, req);
+            if (!sv.factory) throw new Error('DOORS Next offered no way to create a requirement in this project.');
+            var body = '<rdf:RDF xmlns:rdf="' + RDF + '" xmlns:dcterms="' + DCT + '" xmlns:oslc="' + OSLC + '" xmlns:oslc_rm="' + ORM + '" xmlns:nav="' + NAV + '">' +
+                '<rdf:Description rdf:about=""><rdf:type rdf:resource="' + ORM + 'Requirement"/>' +
+                '<dcterms:title rdf:parseType="Literal">' + _xesc(f.name) + '</dcterms:title>' +
+                '<dcterms:description rdf:parseType="Literal">' + this._xhtml(f.text) + '</dcterms:description>' +
+                ((shape || sv.shapes[0]) ? '<oslc:instanceShape rdf:resource="' + _xesc(shape || sv.shapes[0]) + '"/>' : '') +
+                (s && s.folder ? '<nav:parent rdf:resource="' + _xesc(s.folder) + '"/>' : '') + '</rdf:Description></rdf:RDF>';
+            var made = await req('POST', sv.factory, body, { raw: true, headers: this.H(c, { 'Content-Type': 'application/rdf+xml' }) });
+            if (made.status !== 201 || !made.location) throw new Error('DOORS Next did not say which requirement it made.');
+            var it = await this.seen(c, req, made.location), out = { id: made.location.split('?')[0], key: (it && it.key) || '' };
+            // into the module: the module structure, with one more entry at the end
+            try {
+                var mg = (await this.rdf(c, req, module, this.HM(c))).g, st = '';
+                mg.all.forEach(function (n) { var v = rv(n, DNGM + 'structure'); if (v && !st) st = v; });
+                if (!st) st = module.replace(/\/+$/, '') + '/structure';
+                var sr = await req('GET', st, undefined, { raw: true, headers: this.HM(c, 'application/json') });
+                var arr = JSON.parse(sr.text), rootB = arrOf(arr).filter(function (b) { return b && (String(b.isStructureRoot) === 'true' || b.uri === st); })[0];
+                if (!rootB || !sr.etag) throw new Error('the module structure could not be read');
+                var temp = st + '#1';
+                arr.push({ uri: temp, type: 'dng_module:Binding', component: rootB.component || sv.component, isHeading: false, module: module, boundArtifact: out.id, childBindings: [] });
+                rootB.childBindings = arrOf(rootB.childBindings).concat([temp]);
+                var pu = await req('PUT', st, JSON.stringify(arr), { raw: true, okStatus: [202], headers: Object.assign(this.HM(c, 'application/json'), { 'Content-Type': 'application/json', 'If-Match': sr.etag }) });
+                if (pu.status === 412) throw new Error('someone changed the module at the same moment');
+                if (pu.status === 202 && pu.location) {
+                    var done = false;
+                    for (var k = 0; k < 30 && !done; k++) {
+                        await _sleep(1000 * (W.SLAlm && W.SLAlm._waitScale != null ? W.SLAlm._waitScale : 1));
+                        var tg = (await this.rdf(c, req, pu.location, { 'Accept': 'application/rdf+xml', 'OSLC-Core-Version': '2.0' })).g, tk = tg.all.filter(function (n) { return n.props[OAUTO + 'state']; })[0];
+                        var state = rv(tk, OAUTO + 'state'), verdict = rv(tk, OAUTO + 'verdict');
+                        if (state && !/inProgress$/.test(state)) { if (/error$|unavailable$/.test(verdict)) throw new Error('DOORS Next could not add it to the module'); done = true; }
+                    }
+                    if (!done) throw new Error('DOORS Next was still adding it to the module after 30 seconds');
+                }
+            } catch (e) { out.warning = 'made in DOORS Next (' + (out.key || out.id) + '), but not placed in the module: ' + ((e && e.message) || e) + '. Place it in the module in DOORS Next.'; }
+            return out;
+        },
+        // a link from Safety Lab's own new item to the item it belongs to ("Link To"), kept on Safety Lab's item
+        async link(c, req, fromUrl, toUrl) {
+            var r = await req('GET', toUrl, undefined, { raw: true, headers: this.H(c) });
+            var end = r.text.indexOf('</rdf:Description>'); if (end < 0 || !r.etag) throw new Error('the item could not be read for the link');
+            var x = r.text.slice(0, end) + '<sllink:Link xmlns:sllink="http://www.ibm.com/xmlns/rdm/types/" rdf:resource="' + _xesc(fromUrl) + '"/>' + r.text.slice(end);
+            var w = await req('PUT', toUrl, x, { raw: true, headers: this.H(c, { 'Content-Type': 'application/rdf+xml', 'If-Match': r.etag }) });
+            if (w.status === 412) throw new Error('changed in DOORS Next while the link was being added');
+        },
+        comment: null      // DOORS Next has no public way to write a comment; the signer and reason are in History
+    };
+
+    // ---- Cameo (Teamwork Cloud REST API). PILOT: reading is on. Sending (only ever to elements Safety Lab made, never
+    // to elements your engineers made in Cameo) switches on once it has been proven against a real Teamwork Cloud.
+    DRIVERS.cameo = {
+        id: 'cameo', label: 'Cameo (Teamwork Cloud)', short: 'Cameo', container: 'package', containers: 'packages', pilotSend: true, canOwn: false, needsOpts: true,
+        auths: [['basic', 'Username and password']],
+        hint: 'The Teamwork Cloud address (for example https://twc.example.com:8111) and the project. Sign in with your Teamwork Cloud username and password. Safety Lab reads the packages you choose; it never changes an element your engineers made in Cameo.',
+        extra: [{ key: 'branch', label: 'Branch', list: 'branches', empty: 'trunk' }],
+        api: function (c) { return String(c.baseUrl || '').replace(/\/+$/, '').replace(/\/osmc$/, '') + '/osmc'; },
+        J: { 'Accept': 'application/ld+json' },
+        _title: function (o) { return S(o && (o['dcterms:title'] || o.title || o.name || (o['kerml:esiData'] && o['kerml:esiData'].name))); },
+        _idOf: function (v) { v = S(v && (v['@id'] != null ? v['@id'] : v)); return v.replace(/^#/, '').split('/').pop(); },
+        async projects(c, req) {
+            var j = await req('GET', this.api(c) + '/resources?includeBody=true', undefined, { headers: this.J }), out = [], seen = {}, self = this;
+            (function walk(o) {
+                if (Array.isArray(o)) { o.forEach(walk); return; }
+                if (!o || typeof o !== 'object') return;
+                var id = S(o.ID || o['kerml:resourceID'] || (o['@id'] && /^[0-9a-f-]{36}$/i.test(self._idOf(o['@id'])) ? self._idOf(o['@id']) : ''));
+                var t = self._title(o);
+                if (id && t && !seen[id]) { seen[id] = 1; out.push({ id: id, name: t.replace(/\.MASTER$/, '') }); }
+                Object.keys(o).forEach(function (k) { if (o[k] && typeof o[k] === 'object') walk(o[k]); });
+            })(j);
+            return out;
+        },
+        async branches(c, req) {
+            var j = await req('GET', this.api(c) + '/resources/' + encodeURIComponent(c.project) + '/branches', undefined, { headers: this.J }), self = this;
+            var ids = []; (function walk(o) { if (Array.isArray(o)) { o.forEach(walk); return; } if (o && typeof o === 'object') { arrOf(o['ldp:contains']).forEach(function (x) { ids.push(self._idOf(x)); }); } })(j);
+            var out = [];
+            for (var i = 0; i < ids.length && i < 50; i++) { var b = await this._branch(c, req, ids[i]); out.push({ id: ids[i], name: b.title || ids[i] }); }
+            return out;
+        },
+        async _branch(c, req, id) {
+            var j = await req('GET', this.api(c) + '/resources/' + encodeURIComponent(c.project) + '/branches/' + encodeURIComponent(id), undefined, { headers: this.J });
+            var out = { title: '', latest: null };
+            arrOf(Array.isArray(j) ? j : [j]).forEach(function (o) { if (o && o.latestRevision != null) { out.latest = Number(o.latestRevision); out.title = S(o['dcterms:title']); } });
+            return out;
+        },
+        async _branchId(c, req) {
+            if (c._br) return c._br;
+            if (c.branch) return (c._br = c.branch);
+            var list = await this.branches(c, req), pick = list.filter(function (b) { return /^(trunk|master|main)$/i.test(b.name); })[0] || list[0];
+            if (!pick) throw new Error('This Teamwork Cloud project has no branch this login can see.');
+            return (c._br = pick.id);
+        },
+        async test(c, req) {
+            var j = await req('GET', this.api(c) + '/resources/' + encodeURIComponent(c.project), undefined, { headers: this.J }), t = '', self = this;
+            (function walk(o) { if (Array.isArray(o)) { o.forEach(walk); return; } if (o && typeof o === 'object' && !t) t = self._title(o); })(j);
+            await this._branchId(c, req);
+            return (t || S(c.project)).replace(/\.MASTER$/, '');
+        },
+        _norm: function (id, parts) {
+            var el = arrOf(parts).filter(function (x) { return x && x['kerml:esiData']; })[0]; if (!el) return null;
+            var e = el['kerml:esiData'] || {}, ty = el['@type'], self = this;
+            ty = (Array.isArray(ty) ? ty.filter(function (t) { return !/^ldp:/.test(t); })[0] : ty) || '';
+            var ids = function (v) { return arrOf(Array.isArray(v) ? v : (v && typeof v === 'object' ? [v] : [])).map(function (x) { return self._idOf(x); }).filter(Boolean); };
+            return { id: id, type: S(ty), name: S(e.name != null ? e.name : el['kerml:name']), owner: ids(e.owner || el['kerml:owner'])[0] || null, owned: ids(e.ownedElement || el['kerml:ownedElement']),
+                     comments: ids(e.ownedComment), body: S(e.body), modified: S(el['kerml:modifiedTime']) };
+        },
+        async _batch(c, req, ids) {
+            var br = await this._branchId(c, req), out = {}, self = this;
+            for (var i = 0; i < ids.length; i += 200) {
+                var j = await req('POST', this.api(c) + '/resources/' + encodeURIComponent(c.project) + '/branches/' + encodeURIComponent(br) + '/elements', ids.slice(i, i + 200), { headers: { 'Accept': 'application/ld+json', 'Content-Type': 'application/json' } });
+                Object.keys(j || {}).forEach(function (k) { var n = self._norm(k, j[k]); if (n) out[k] = n; });
+            }
+            return out;
+        },
+        async _roots(c, req) {
+            var br = await this._branchId(c, req), b = await this._branch(c, req, br);
+            if (b.latest == null) throw new Error('Teamwork Cloud did not say which revision of the branch is the latest.');
+            var j = await req('GET', this.api(c) + '/resources/' + encodeURIComponent(c.project) + '/branches/' + encodeURIComponent(br) + '/revisions/' + b.latest, undefined, { headers: this.J }), out = [];
+            arrOf(Array.isArray(j) ? j : [j]).forEach(function (o) { arrOf(o && o.rootObjectIDs).forEach(function (x) { out.push(S(x)); }); });
+            return out;
+        },
+        _isPkg: function (t) { return /(^|:)(Package|Model|Profile)$/.test(t); },
+        async listContainers(c, req) {
+            var roots = await this._roots(c, req), out = [], queue = roots.map(function (r) { return { id: r, path: '' }; }), fetched = 0;
+            while (queue.length && fetched < 5000) {
+                var layer = queue.splice(0, 200), got = await this._batch(c, req, layer.map(function (q) { return q.id; })); fetched += layer.length;
+                var self = this;
+                layer.forEach(function (q) {
+                    var n = got[q.id]; if (!n || !self._isPkg(n.type)) return;
+                    var path = q.path ? q.path + ' / ' + n.name : n.name;
+                    if (q.path) out.push({ id: n.id, name: n.name, where: q.path });
+                    if (path.split(' / ').length < 8) n.owned.forEach(function (k) { queue.push({ id: k, path: path }); });
+                });
+            }
+            return out;
+        },
+        ETYPES: [['Activity', 'Activities'], ['Class', 'Blocks and classes'], ['Requirement', 'SysML requirements'], ['Any', 'Any named element']],
+        pickExtra: { key: 'etype', label: 'Cameo elements', options: function () { return DRIVERS.cameo.ETYPES; }, def: { fn: 'Activity', req: 'Requirement', asm: 'Requirement' } },
+        async read(c, req, pkg, pick) {
+            var et = (pick && pick.etype) || ({ fn: 'Activity', req: 'Requirement', asm: 'Requirement' })[(pick && pick.kind) || 'req'];
+            var all = {}, queue = [pkg], n0 = 0;
+            while (queue.length && n0 < 30000) {
+                var layer = queue.splice(0, 200), got = await this._batch(c, req, layer); n0 += layer.length;
+                layer.forEach(function (id) { var n = got[id]; if (!n) return; all[id] = n; n.owned.forEach(function (k) { if (!all[k]) queue.push(k); }); });
+            }
+            var want = function (n) {
+                if (n.id === pkg || !n.name) return false;
+                if (et === 'Activity') return /(^|:)Activity$/.test(n.type);
+                if (et === 'Class' || et === 'Requirement') return /(^|:)Class$/.test(n.type);
+                return !/(^|:)(Comment|Package|Model|Profile)$/.test(n.type) && !!n.name;
+            };
+            var picked = Object.keys(all).map(function (k) { return all[k]; }).filter(want);
+            var br = await this._branchId(c, req), base = this.api(c) + '/resources/' + encodeURIComponent(c.project) + '/branches/' + encodeURIComponent(br) + '/elements/';
+            var reqText = {};
+            if (et === 'Requirement') {
+                var keep = [];
+                for (var i = 0; i < picked.length; i++) {
+                    var e = picked[i], sj = await req('GET', base + e.id + '/stereotypes', undefined, { headers: this.J }), sid = '';
+                    arrOf(Array.isArray(sj) ? sj : [sj]).forEach(function (o) { arrOf(o && o['uml:stereotypes']).concat(o && o['uml:stereotypes'] && !Array.isArray(o['uml:stereotypes']) ? [o['uml:stereotypes']] : []).forEach(function (st) { if (/requirement/i.test(S(st['uml:stereotypeName'])) && !sid) sid = S(st['uml:stereotypeId']); }); });
+                    if (!sid) continue;
+                    var tj = await req('GET', base + e.id + '/stereotypes/' + encodeURIComponent(sid) + '/tags', undefined, { headers: this.J }), tags = {};
+                    arrOf(Array.isArray(tj) ? tj : [tj]).forEach(function (o) { var vs = o && o['uml:values']; arrOf(Array.isArray(vs) ? vs : (vs ? [vs] : [])).forEach(function (v) { tags[S(v['uml:tagName']).toLowerCase()] = Array.isArray(v['uml:tagValue']) ? v['uml:tagValue'].join('\n') : S(v['uml:tagValue']); }); });
+                    reqText[e.id] = tags; keep.push(e);
+                }
+                picked = keep;
+            }
+            // documentation: the element's own comments
+            var cids = []; picked.forEach(function (e) { e.comments.forEach(function (k) { if (!all[k]) cids.push(k); }); });
+            if (cids.length) { var cg = await this._batch(c, req, cids); Object.keys(cg).forEach(function (k) { all[k] = cg[k]; }); }
+            var set = {}; picked.forEach(function (e) { set[e.id] = 1; });
+            var items = picked.map(function (e, i) {
+                var doc = e.comments.map(function (k) { return all[k] ? plain(all[k].body) : ''; }).filter(Boolean).join('\n');
+                var tg = reqText[e.id] || {};
+                var par = e.owner, g = 0; while (par && !set[par] && all[par] && g++ < 200) par = all[par].owner;
+                return { id: e.id, key: S(tg.id) || e.name, name: e.name, text: S(tg.text) ? plain(tg.text) : doc, modified: e.modified, parentId: par && set[par] ? par : null, sort: i, container: pkg };
+            });
+            return { items: items, warnings: n0 >= 30000 ? ['Read the first 30,000 elements under package ' + pkg + ' only; nothing from it is flagged as missing this time.'] : [], partial: n0 >= 30000 };
+        },
+        async seen(c, req, id) {
+            var got = await this._batch(c, req, [id]), n = got[id]; if (!n) return null;
+            var cg = n.comments.length ? await this._batch(c, req, n.comments) : {};
+            return { id: id, name: n.name, text: n.comments.map(function (k) { return cg[k] ? plain(cg[k].body) : ''; }).filter(Boolean).join('\n'), modified: n.modified, comments: n.comments };
+        },
+        // PILOT (not switched on): Safety Lab's own elements only
+        async update(c, req, id, f) {
+            var br = await this._branchId(c, req), base = this.api(c) + '/resources/' + encodeURIComponent(c.project) + '/branches/' + encodeURIComponent(br) + '/elements/';
+            await req('PATCH', base + id, { 'kerml:esiData': { name: f.name }, 'kerml:comment': 'Safety Lab' }, { headers: { 'Accept': 'application/ld+json', 'Content-Type': 'application/ld+json' } });
+            var s0 = await this.seen(c, req, id);
+            if (s0 && s0.comments[0]) await req('PATCH', base + s0.comments[0], { 'kerml:esiData': { body: f.text }, 'kerml:comment': 'Safety Lab' }, { headers: { 'Accept': 'application/ld+json', 'Content-Type': 'application/ld+json' } });
+        },
+        async create(c, req, pkg, type, f) {
+            var br = await this._branchId(c, req), base = this.api(c) + '/resources/' + encodeURIComponent(c.project) + '/branches/' + encodeURIComponent(br) + '/elements/';
+            var id = (W.crypto && W.crypto.randomUUID) ? W.crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return (Math.random() * 16 | 0).toString(16); });
+            await req('POST', base + id, { '@type': 'uml:Class', 'kerml:esiData': { name: f.name, owningPackage: { '@id': pkg }, owner: [{ '@id': pkg }] }, 'kerml:comment': 'Safety Lab' }, { headers: { 'Accept': 'application/ld+json', 'Content-Type': 'application/ld+json' } });
+            return { id: id, key: f.name };
+        },
+        link: null, comment: null
+    };
+
     // ================================================================== one connected tool
     function makeTool(drv) {
         var tid = drv.id;
@@ -520,14 +951,16 @@
         }
         function doorProblem() {
             if (_desktopOld()) return 'This version of the desktop app cannot reach ' + drv.label + '. Update the app.';
+            if (_isDesktop() && drv.needsOpts && !(W.slabBridge && W.slabBridge.toolOpts === true)) return 'This version of the desktop app cannot reach ' + drv.label + ' yet. Update the app.';
             if (_isDesktop()) return '';
             var st = _store();
             if (st && st.door() === 'vault') return '';
             return drv.label + ' connects through the Safety Lab desktop app or your company’s Safety Lab server, which keep the login in the computer’s keychain or the server’s vault. A browser-only session has nowhere safe to keep it.';
         }
-        async function saveLogin(baseUrl, auth, user, token) {
+        async function saveLogin(baseUrl, auth, user, token, authHost) {
             var p = doorProblem(); if (p) return { ok: false, err: p };
             var meta = { baseHost: _host(baseUrl), user: user || '', auth: auth };
+            if (authHost) meta.authHost = String(authHost).toLowerCase();
             if (!meta.baseHost) return { ok: false, err: 'The address is not a valid https address.' };
             if (_isDesktop()) {
                 var r = await W.slabSecrets.save(tid, { user: user || '', token: token }, meta);
@@ -540,34 +973,51 @@
         }
 
         // ---- the transport: one request, through the desktop or the server, retried when the tool says "slow down"
-        async function req(method, url, body) {
-            var c = cfg();
-            var bad = almRequestProblem(tid, method, url, _host(c.baseUrl)); if (bad) throw new Error('Not sent: ' + bad + '.');
+        // opts.headers: the tool's own protocol headers (DOORS Next and Cameo; the fence names which may pass).
+        // opts.raw: the body is sent as given (RDF/XML, JSON-LD) and the answer comes back whole, as
+        // { status, text, etag, location }, whatever its status, so the driver can read an ETag, a Location, or a 412.
+        async function req(method, url, body, opts) {
+            var c = cfg(), o = opts || {}, hdr = o.headers || {};
+            var bad = almRequestProblem(tid, method, url, _host(c.baseUrl), hdr); if (bad) throw new Error('Not sent: ' + bad + '.');
             var p = doorProblem(); if (p) throw new Error(p);
+            var scale = (W.SLAlm && W.SLAlm._waitScale != null ? W.SLAlm._waitScale : 1);
             for (var tries = 0; ; tries++) {
-                var status = 0, data = null, err = '', wait = 0;
+                var status = 0, data = null, err = '', wait = 0, env = null;
                 if (_isDesktop()) {
-                    var r = await W.slabBridge.tool(tid, method, url, body);
-                    if (r && r.ok) return r.data;
-                    status = (r && r.status) || 0; err = (r && r.error) || 'the request failed'; wait = Number(r && r.retryAfter) || 0;
+                    var r = await W.slabBridge.tool(tid, method, url, body, { headers: hdr, raw: !!o.raw });
+                    if (o.raw && r && r.raw) env = r;
+                    else if (r && r.ok) return r.data;
+                    else { status = (r && r.status) || 0; err = (r && r.error) || 'the request failed'; wait = Number(r && r.retryAfter) || 0; }
                 } else {
                     var st = _store(), jwt = st.sessionJwt();
                     if (!jwt) throw new Error('Sign in again to use the connection.');
                     var base = (W.SLConfig && W.SLConfig.aiEndpoint) || '';
                     if (!base) throw new Error('This install has no Safety Lab server address configured, so the connection has nowhere to go through.');
                     var init = { method: method, headers: { 'Authorization': 'Bearer ' + jwt, 'Accept': 'application/json' } };
-                    if (method !== 'GET') { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body === undefined ? null : body); }
-                    var res = await fetch(String(base).replace(/\/+$/, '') + '/bridge?tool=' + encodeURIComponent(tid) + '&target=' + encodeURIComponent(url), init);
+                    if (Object.keys(hdr).length) init.headers['X-Slab-Tool-Headers'] = JSON.stringify(hdr);
+                    if (method !== 'GET') { init.headers['Content-Type'] = o.raw ? 'text/plain' : 'application/json'; init.body = o.raw ? String(body == null ? '' : body) : JSON.stringify(body === undefined ? null : body); }
+                    var res = await fetch(String(base).replace(/\/+$/, '') + '/bridge?tool=' + encodeURIComponent(tid) + (o.raw ? '&raw=1' : '') + '&target=' + encodeURIComponent(url), init);
                     var txt = ''; try { txt = await res.text(); } catch (_) {}
                     try { data = txt ? JSON.parse(txt) : null; } catch (_) { data = null; }
-                    if (res.ok) return data;
-                    status = res.status; wait = Number(res.headers && res.headers.get && res.headers.get('retry-after')) || 0;
-                    err = (data && data.error && (data.error.message || data.error)) || ('HTTP ' + res.status + ' from ' + drv.label);
+                    if (o.raw && res.ok && data && data.raw) env = data;
+                    else if (res.ok && !o.raw) return data;
+                    else {
+                        status = res.status; wait = Number(res.headers && res.headers.get && res.headers.get('retry-after')) || 0;
+                        err = (data && data.error && (data.error.message || data.error)) || ('HTTP ' + res.status + ' from ' + drv.label);
+                    }
                 }
-                if (status === 429 && tries < 3) { await _sleep(Math.min(60, Math.max(2, wait || 10)) * 1000 * (W.SLAlm && W.SLAlm._waitScale != null ? W.SLAlm._waitScale : 1)); continue; }
+                if (env) {
+                    var es = Number(env.status) || 0;
+                    if (es === 429 && tries < 3) { await _sleep(Math.min(60, Math.max(2, Number(env.retryAfter) || 10)) * 1000 * scale); continue; }
+                    if ((es >= 200 && es < 300) || es === 409 || es === 412 || (o.okStatus && o.okStatus.indexOf(es) >= 0)) return { status: es, text: String(env.text || ''), etag: env.etag || '', location: env.location || '' };
+                    var e0 = new Error('HTTP ' + es + ' from ' + drv.label + ' at ' + _where(url) + (env.text ? ': ' + _clipText(env.text) : '')); e0.status = es; throw e0;
+                }
+                if (status === 429 && tries < 3) { await _sleep(Math.min(60, Math.max(2, wait || 10)) * 1000 * scale); continue; }
                 var e = new Error(String(err)); e.status = status; throw e;
             }
         }
+        function _where(u) { try { return new URL(u).pathname; } catch (_) { return 'that address'; } }
+        function _clipText(t) { var x = plain(String(t)).replace(/\s+/g, ' ').trim(); return x.length > 200 ? x.slice(0, 197) + '...' : x; }
 
         // ---- reading and staging
         function picks() { return arrOf(cfg().picks).filter(function (p) { return p && p.container && /^(fn|req|asm)$/.test(p.kind); }); }
@@ -594,15 +1044,18 @@
                     if (sc !== 'ac' && !_sysById(sc)) { warn.push(drv.label + ' ' + drv.container + ' ' + (p.containerName || p.container) + ' is for a system that is no longer in this project; not read.'); continue; }
                     state.progress = 'Reading ' + (p.containerName || p.container) + '...'; _render();
                     var r;
-                    try { r = await drv.read(c, req, p.container); }
+                    try { r = await drv.read(c, req, p.container, p); }
                     catch (e) { warn.push('Could not read ' + drv.container + ' ' + (p.containerName || p.container) + ': ' + ((e && e.message) || e) + '. Nothing from it is flagged as missing.'); continue; }
                     arrOf(r.warnings).forEach(function (w) { warn.push(w); });
                     var g = sc + '|' + p.kind;
                     (groups[g] = groups[g] || []);
-                    r.items.forEach(function (it) { it.container = String(p.container); groups[g].push(it); state.seen.set(String(it.id), it); });
-                    (read[g] = read[g] || new Set()).add(String(p.container));
+                    // a heading in a module is only a function (in a functions module); elsewhere it is looked through
+                    r.items.forEach(function (it) { if (it.heading && p.kind !== 'fn') return; it.container = String(p.container); groups[g].push(it); state.seen.set(String(it.id), it); });
+                    read[g] = read[g] || new Set();
+                    if (!r.partial) read[g].add(String(p.container));   // only a container read in full can say an item is gone
                 }
                 var d = { tool: tid, scopes: {}, warnings: warn, checkedAt: _now() };
+                state.groups = groups; state.read = read;
                 Object.keys(groups).forEach(function (g) {
                     var sc = g.split('|')[0], k = g.split('|')[1], store = _store4(sc, k) || [];
                     var x;
@@ -696,14 +1149,7 @@
         }
         function restage() {
             var d = state.diff; if (!d) return;
-            var groups = {}, read = {};
-            picks().forEach(function (p) {
-                var sc = p.scope && p.scope !== 'ac' ? String(p.scope) : 'ac', g = sc + '|' + p.kind;
-                (read[g] = read[g] || new Set()).add(String(p.container));
-            });
-            state.seen.forEach(function (it) {
-                Object.keys(read).forEach(function (g) { if (read[g].has(String(it.container))) (groups[g] = groups[g] || []).push(it); });
-            });
+            var groups = state.groups || {}, read = state.read || {};
             var nd = { tool: tid, scopes: {}, warnings: d.warnings, checkedAt: d.checkedAt };
             Object.keys(d.scopes).forEach(function (sc) {
                 Object.keys(d.scopes[sc]).forEach(function (k) {
@@ -753,8 +1199,11 @@
                      html: '<p>' + _html(r.text) + '</p>' + (r.rat ? '<p><b>Rationale:</b> ' + _html(r.rat) + '</p>' : '') + '<p><i>' + OWN_NOTE + '</i></p>',
                      text: S(r.text) + (r.rat ? '\nRationale: ' + S(r.rat) : '') + '\n' + OWN_NOTE };
         }
+        // a pilot tool (DOORS Next, Cameo) sends nothing until sending has been proven on a real server; SLAlm._proveSend
+        // switches it on for that proof (from the console, by Safety Lab), never from the page
+        function sendOn() { return !drv.pilotSend || !!(W.SLAlm && W.SLAlm._proveSend && W.SLAlm._proveSend[tid]); }
         function outgoing() {
-            var out = [], C = W.SLConnections; if (!C || !configured()) return out;
+            var out = [], C = W.SLConnections; if (!C || !configured() || !sendOn()) return out;
             // 1. items from the tool that Safety Lab now owns: Safety Lab's words, where they differ from the tool's copy
             linkedRows().forEach(function (x) {
                 if (x.made || x.missing || C.ownerOf(tid, x.remoteId) !== 'sl') return;
@@ -788,6 +1237,7 @@
         }
         async function send(lines, signer, reason) {
             if (!configured()) return { ok: false, err: 'Connect ' + drv.label + ' first.' };
+            if (!sendOn()) return { ok: false, err: 'Sending to ' + drv.label + ' is not switched on yet: it is switched on once it has been proven on a real ' + drv.label + ' server.' };
             var c = rcfg(), sc = sendCfg(), res = { ok: true, sent: 0, held: [], failed: [], items: [] };
             var note = 'Sent from Safety Lab by ' + signer + (reason ? ': ' + reason : '') + '.';
             var cmt = async function (id) { if (drv.comment) { try { await drv.comment(c, req, id, note); } catch (_) {} } };
@@ -801,11 +1251,11 @@
                         if (!now) { res.failed.push(label + ': ' + drv.short + ' no longer has this item'); continue; }
                         if (S(now.modified) !== S(l.seen)) { res.held.push(label + ' (changed in ' + drv.short + ' since the last check: check ' + drv.short + ', then send again)'); continue; }
                         await drv.update(c, req, l.remoteId, { name: l._want.name, html: '<p>' + _html(l._want.text) + '</p>', text: l._want.text }, l._tracker || now.tracker);
-                        var after = await drv.seen(c, req, l.remoteId);
+                        await cmt(l.remoteId);
+                        var after = await drv.seen(c, req, l.remoteId);   // after every write of ours, so the next check does not take it for someone else's
                         var src = l._row && (l._row.fnSource || l._row.reqSource || l._row.asmSource);
                         _bg(function () { if (src && after) { src.lastChange = after.modified; src.sentBy = signer; src.sentAt = _now(); } });
                         var it0 = state.seen.get(String(l.remoteId)); if (it0 && after) { it0.name = after.name; it0.text = after.text; it0.modified = after.modified; }
-                        await cmt(l.remoteId);
                         res.sent++; res.items.push(label); continue;
                     }
                     var s = sc[l._send] || {}, link = l._row.sendLinks && l._row.sendLinks[tid];
@@ -814,21 +1264,24 @@
                         if (!now2) { res.failed.push(label + ': ' + drv.short + ' no longer has this item'); continue; }
                         if (link.modified && S(now2.modified) !== S(link.modified)) { var lk = link; res.held.push(label + ' (someone changed it in ' + drv.short + ' since Safety Lab last sent it; Safety Lab owns it, so send again to overwrite, after checking what they changed)'); _bg(function () { lk.modified = now2.modified; }); continue; }
                         await drv.update(c, req, link.remoteId, l._fields, now2.tracker || s.container);
+                        await cmt(link.remoteId);
                         var after2 = await drv.seen(c, req, link.remoteId), lk2 = link;
                         _bg(function () { lk2.fp = l._fp; lk2.at = _now(); lk2.by = signer; lk2.modified = after2 && after2.modified; });
-                        await cmt(link.remoteId);
                         res.sent++; res.items.push(label); continue;
                     }
                     if (!s.container) { res.failed.push(label + ': choose the ' + drv.label + ' ' + drv.container + ' to send to in Mapping first'); continue; }
-                    var made = await drv.create(c, req, s.container, s.type, l._fields);
+                    var made = await drv.create(c, req, s.container, s.type, l._fields, s);
                     var after3 = await drv.seen(c, req, made.id), row = l._row;
                     _bg(function () { if (!row.sendLinks || typeof row.sendLinks !== 'object') row.sendLinks = {}; row.sendLinks[tid] = { remoteId: String(made.id), key: made.key || '', fp: l._fp, at: _now(), by: signer, modified: after3 && after3.modified }; });
                     // trace: a failure condition to its function's item; a requirement to the failure condition it traces to
                     var from = null;
                     if (l._send === 'fc') { var fn = arrOf(typeof acFunctionsData !== 'undefined' ? acFunctionsData : []).filter(function (x) { return x && S(x.subId || x.funcId) === S(row.subId) && x.fnSource && x.fnSource.tool === tid; })[0]; if (fn) from = fn.fnSource.remoteId; }
                     if (l._send === 'req') { var fc = arrOf(typeof acFhaData !== 'undefined' ? acFhaData : []).filter(function (x) { return x && S(x.fcId) === S(row.traceId); })[0]; var fl = fc && fc.sendLinks && fc.sendLinks[tid]; if (fl) from = fl.remoteId; }
-                    if (from != null) { try { await drv.link(c, req, from, made.id); } catch (e) { res.failed.push(label + ': made in ' + drv.short + ', but the link to its ' + (l._send === 'fc' ? 'function' : 'failure condition') + ' failed (' + ((e && e.message) || e) + ')'); } }
+                    if (from != null && drv.link) { try { await drv.link(c, req, from, made.id); } catch (e) { res.failed.push(label + ': made in ' + drv.short + ', but the link to its ' + (l._send === 'fc' ? 'function' : 'failure condition') + ' failed (' + ((e && e.message) || e) + ')'); } }
                     await cmt(made.id);
+                    // the link and the comment changed it again: what Safety Lab now knows the tool holds
+                    try { var fin = await drv.seen(c, req, made.id); if (fin) _bg(function () { row.sendLinks[tid].modified = fin.modified; }); } catch (_) {}
+                    if (made.warning) res.failed.push(label + ': ' + made.warning);
                     res.sent++; res.items.push(label + ' (new: ' + (made.key || made.id) + ')');
                 } catch (e) { res.failed.push(label + ': ' + ((e && e.message) || e)); }
             }
@@ -855,43 +1308,61 @@
             var c = cfg(), p = doorProblem();
             await refreshHas();
             var auth = c.auth || drv.auths[0][0];
+            var ex = (drv.extra || []).map(function (f) {
+                return '<div class="cx-row cx-gap"><label class="cx-lab cx-grow">' + _esc(f.label) + '<input type="text" id="alm-x-' + f.key + '" value="' + _esc(c[f.key] || '') + '" placeholder="' + _esc(f.placeholder || f.empty || '') + '"></label>' + (f.list ? _btn('List', NS + '.listExtra(\'' + f.key + '\')') : '') + '</div><div id="alm-xl-' + f.key + '"></div>';
+            }).join('');
             var html = '<h3>' + _esc(drv.label) + ': connection</h3><p class="cx-dim">' + _esc(drv.hint) + '</p>' +
                 (p ? '<div class="cx-warn">' + _esc(p) + '</div>' : '') +
                 '<div class="cx-pop-list"><label class="cx-lab">Address<input type="url" id="alm-url" value="' + _esc(c.baseUrl || '') + '" placeholder="https://"></label>' +
-                '<div class="cx-row cx-gap"><label class="cx-lab cx-grow">Project<input type="text" id="alm-proj" value="' + _esc(c.project || '') + '"></label>' + _btn('List projects', NS + '.listProjects()') + '</div><div id="alm-projects"></div>' +
+                '<div class="cx-row cx-gap"><label class="cx-lab cx-grow">Project<input type="text" id="alm-proj" value="' + _esc(c.project || '') + '"></label>' + _btn('List projects', NS + '.listProjects()') + '</div><div id="alm-projects"></div>' + ex +
                 '<label class="cx-lab">Sign in with<select id="alm-auth" onchange="' + NS + '.authChanged()">' + drv.auths.map(function (a) { return '<option value="' + a[0] + '"' + (a[0] === auth ? ' selected' : '') + '>' + _esc(a[1]) + '</option>'; }).join('') + '</select></label>' +
-                '<label class="cx-lab" id="alm-user-w"' + (auth === 'basic' ? '' : ' style="display:none"') + '>Username<input type="text" id="alm-user" autocomplete="username" value="' + _esc(c.user || '') + '"></label>' +
-                '<label class="cx-lab"><span id="alm-tok-l">' + (auth === 'basic' ? 'Password' : 'Token') + '</span><input type="password" id="alm-tok" autocomplete="off" placeholder="' + (hasLogin() ? 'saved; type a new one to replace it' : '') + '"></label>' +
+                '<label class="cx-lab" id="alm-user-w"' + (_needsUser(auth) ? '' : ' style="display:none"') + '>Username<input type="text" id="alm-user" autocomplete="username" value="' + _esc(c.user || '') + '"></label>' +
+                '<label class="cx-lab"><span id="alm-tok-l">' + _secretWord(auth, true) + '</span><input type="password" id="alm-tok" autocomplete="off" placeholder="' + (hasLogin() ? 'saved; type a new one to replace it' : '') + '"></label>' +
                 '<label class="cx-radio"><input type="checkbox" id="alm-watch"' + (watch() ? ' checked' : '') + '> Check ' + _esc(drv.label) + ' when this project opens (this computer)</label>' +
                 '<div class="cx-dim">The login is kept ' + (_isDesktop() ? 'in this computer’s keychain' : 'in your Safety Lab server’s vault') + ' and is never part of the project. Everyone on the project shares the address, the project and what is linked.</div></div>' +
                 '<div class="cx-err" role="alert" id="alm-err"></div>' +
                 '<div class="cx-row cx-gap cx-pop-foot">' + _btn('Save and test', NS + '.saveSetup()', true) + (configured() ? _btn('Choose what is linked', NS + '.browse()') : '') + '<span class="cx-right">' + _btn('Close', 'SLAlm.close(\'alm-setup\')') + '</span></div>';
             _modal('alm-setup', html);
         }
+        function _needsUser(a) { return a !== 'bearer'; }
+        function _secretWord(a, cap) { var w = a === 'bearer' ? 'token' : (a === 'apppass' ? 'application password' : 'password'); return cap ? w.charAt(0).toUpperCase() + w.slice(1) : w; }
         function _val(id) { var e = document.getElementById(id); return e ? String(e.value || '').trim() : ''; }
         function _err(id, t) { var e = document.getElementById(id); if (e) e.textContent = t || ''; }
         var ui = {
-            authChanged: function () { var a = _val('alm-auth'); var w = document.getElementById('alm-user-w'); if (w) w.style.display = a === 'basic' ? '' : 'none'; var l = document.getElementById('alm-tok-l'); if (l) l.textContent = a === 'basic' ? 'Password' : 'Token'; },
+            authChanged: function () { var a = _val('alm-auth'); var w = document.getElementById('alm-user-w'); if (w) w.style.display = _needsUser(a) ? '' : 'none'; var l = document.getElementById('alm-tok-l'); if (l) l.textContent = _secretWord(a, true); },
+            listExtra: async function (key) {
+                var f = (drv.extra || []).filter(function (x) { return x.key === key; })[0]; if (!f || !f.list || !drv[f.list]) return;
+                if (!configured() || !hasLogin()) { _err('alm-err', 'Save the address and the login first (Save and test), then list them.'); return; }
+                try {
+                    var list = await drv[f.list](rcfg(), req), box = document.getElementById('alm-xl-' + key); if (!box) return;
+                    box.innerHTML = list.length ? '<label class="cx-lab">Choose<select onchange="document.getElementById(\'alm-x-' + key + '\').value=this.value"><option value="">' + _esc(f.empty || 'Choose') + '</option>' + list.map(function (o) { return '<option value="' + _esc(o.id) + '">' + _esc(o.name) + '</option>'; }).join('') + '</select></label>' : '<div class="cx-dim">None that this login can see.</div>';
+                } catch (e) { _err('alm-err', (e && e.message) || String(e)); }
+            },
             listProjects: async function () {
                 var url = _val('alm-url'); if (!/^https:\/\//i.test(url)) { _err('alm-err', 'Type the https address first.'); return; }
                 var c = cfg(); if (_host(c.baseUrl) !== _host(url) || !hasLogin()) { _err('alm-err', 'Save the address and the login first (Save and test), then list the projects.'); return; }
                 try {
                     var list = await drv.projects(rcfg(), req);
                     var box = document.getElementById('alm-projects'); if (!box) return;
-                    box.innerHTML = list.length ? '<label class="cx-lab">Projects you can open<select onchange="document.getElementById(\'alm-proj\').value=this.value">' + '<option value="">Choose</option>' + list.map(function (p) { return '<option value="' + _esc(p.id) + '">' + _esc(p.name + (p.name !== p.id ? ' (' + p.id + ')' : '')) + '</option>'; }).join('') + '</select></label>' : '<div class="cx-dim">This login can open no projects.</div>';
+                    box.innerHTML = list.length ? '<label class="cx-lab">Projects you can open<select onchange="document.getElementById(\'alm-proj\').value=this.value">' + '<option value="">Choose</option>' + list.map(function (p) { return '<option value="' + _esc(drv.projectByName ? p.name : p.id) + '">' + _esc(p.name + (p.name !== p.id && String(p.id).length < 40 ? ' (' + p.id + ')' : '')) + '</option>'; }).join('') + '</select></label>' : '<div class="cx-dim">This login can open no projects.</div>';
                 } catch (e) { _err('alm-err', (e && e.message) || String(e)); }
             },
             saveSetup: async function () {
                 var url = _val('alm-url').replace(/\/+$/, ''), proj = _val('alm-proj'), auth = _val('alm-auth') || drv.auths[0][0], user = _val('alm-user'), tok = (document.getElementById('alm-tok') || {}).value || '';
                 if (!/^https:\/\/[^\/\s]+/i.test(url)) { _err('alm-err', 'The address must start with https://'); return; }
                 if (!proj) { _err('alm-err', 'Type the project.'); return; }
-                if (auth === 'basic' && !user) { _err('alm-err', 'Type the username.'); return; }
-                var c = cfg(), hostChanged = _host(c.baseUrl) !== _host(url);
-                if (!tok && (hostChanged || !hasLogin())) { _err('alm-err', 'Type the ' + (auth === 'basic' ? 'password' : 'token') + '.'); return; }
+                if (_needsUser(auth) && !user) { _err('alm-err', 'Type the username.'); return; }
+                var c = cfg(), hostChanged = _host(c.baseUrl) !== _host(url), xv = {};
+                (drv.extra || []).forEach(function (f) { xv[f.key] = _val('alm-x-' + f.key); });
+                var loginChanged = hostChanged || auth !== (c.auth || drv.auths[0][0]) || (drv.extra || []).some(function (f) { return f.login && (xv[f.key] || '') !== (c[f.key] || ''); });
+                if (xv.authHost && !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(xv.authHost)) { _err('alm-err', 'The sign-in server is a host name only, like jas.example.com.'); return; }
+                if (!tok && (loginChanged || !hasLogin())) { _err('alm-err', 'Type the ' + _secretWord(auth) + '.'); return; }
                 _err('alm-err', 'Saving...');
-                if (tok) { var r = await saveLogin(url, auth, user, tok); if (!r.ok) { _err('alm-err', r.err); return; } }
+                if (tok) { var r = await saveLogin(url, auth, user, tok, xv.authHost || ''); if (!r.ok) { _err('alm-err', r.err); return; } }
                 var first = !configured();
-                c.baseUrl = url; c.project = proj; c.auth = auth; c.user = auth === 'basic' ? user : '';
+                c.baseUrl = url; c.project = proj; c.auth = auth; c.user = _needsUser(auth) ? user : '';
+                (drv.extra || []).forEach(function (f) { if (xv[f.key]) c[f.key] = xv[f.key]; else delete c[f.key]; });
+                _rt = {};   // look-ups made for the old settings
                 cfgSave(c, (first ? 'Connected ' : 'Changed the connection to ') + drv.label + ': ' + _host(url) + ', project ' + proj);
                 try { localStorage.setItem(WATCH, (document.getElementById('alm-watch') || {}).checked ? '1' : '0'); } catch (_) {}
                 _err('alm-err', 'Testing...');
@@ -904,7 +1375,9 @@
                 var pk = [];
                 rows.forEach(function (tr) {
                     var on = tr.querySelector('.alm-on'); if (!on || !on.checked) return;
-                    pk.push({ container: tr.getAttribute('data-id'), containerName: tr.getAttribute('data-name'), kind: (tr.querySelector('.alm-kind') || {}).value || 'req', scope: (tr.querySelector('.alm-scope') || {}).value || 'ac' });
+                    var one = { container: tr.getAttribute('data-id'), containerName: tr.getAttribute('data-name'), kind: (tr.querySelector('.alm-kind') || {}).value || 'req', scope: (tr.querySelector('.alm-scope') || {}).value || 'ac' };
+                    var xs = tr.querySelector('.alm-px'); if (xs && xs.value && drv.pickExtra) one[drv.pickExtra.key] = xs.value;
+                    pk.push(one);
                 });
                 var c = cfg(), before = JSON.stringify(arrOf(c.picks)); c.picks = pk;
                 if (before !== JSON.stringify(pk)) cfgSave(c, 'Chose what is linked from ' + drv.label + ': ' + (pk.length ? pk.map(function (p) { return (p.containerName || p.container) + ' as ' + ({ fn: 'functions', req: 'requirements', asm: 'assumptions' })[p.kind] + ' (' + _scopeName(p.scope) + ')'; }).join('; ') : 'nothing'));
@@ -932,9 +1405,11 @@
             var sys = _sysList();
             var scopeSel = function (cur) { return '<select class="alm-scope" aria-label="For">' + '<option value="ac"' + (cur === 'ac' ? ' selected' : '') + '>Aircraft</option>' + sys.map(function (s) { return '<option value="' + _esc(s.id) + '"' + (String(cur) === String(s.id) ? ' selected' : '') + '>' + _esc(s.name || s.id) + '</option>'; }).join('') + '</select>'; };
             var kindSel = function (cur) { return '<select class="alm-kind" aria-label="Holds">' + [['fn', 'Functions'], ['req', 'Requirements'], ['asm', 'Assumptions']].map(function (k) { return '<option value="' + k[0] + '"' + (cur === k[0] ? ' selected' : '') + '>' + k[1] + '</option>'; }).join('') + '</select>'; };
+            var px = drv.pickExtra || null;
+            var pxSel = function (p) { if (!px) return ''; var cur = (p && p[px.key]) || ''; return '<td><select class="alm-px" aria-label="' + _esc(px.label) + '"><option value="">Default for what it holds</option>' + px.options().map(function (o) { return '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + _esc(o[1]) + '</option>'; }).join('') + '</select></td>'; };
             var html = '<h3>' + _esc(drv.label) + ': choose what is linked</h3><p class="cx-dim">Tick each ' + drv.container + ' Safety Lab should follow, say what it holds and whether it is for the aircraft or a system. ' + _esc(drv.label) + ' owns what comes in: it is locked in Safety Lab, and its changes wait in Incoming changes for an engineer to sign. In a functions ' + drv.container + ', an item’s parent in ' + _esc(drv.short) + ' is its parent function here.</p>' +
-                '<div class="cx-pop-list"><table class="cx-table"><thead><tr><th></th><th>' + _esc(drv.label) + ' ' + drv.container + '</th><th>Holds</th><th>For</th></tr></thead><tbody>' +
-                (list.length ? list.map(function (x) { var p = pk[String(x.id)]; return '<tr class="alm-pick" data-id="' + _esc(x.id) + '" data-name="' + _esc(x.name) + '"><td><input type="checkbox" class="alm-on" aria-label="Link"' + (p ? ' checked' : '') + '></td><td><b>' + _esc(x.name) + '</b>' + (x.where ? ' <span class="cx-dim">' + _esc(x.where) + '</span>' : '') + '<div class="cx-dim">' + _esc(x.id) + '</div></td><td>' + kindSel(p ? p.kind : 'req') + '</td><td>' + scopeSel(p ? (p.scope || 'ac') : 'ac') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="cx-dim">This project has no ' + drv.containers + ' this login can see.</td></tr>') +
+                '<div class="cx-pop-list"><table class="cx-table"><thead><tr><th></th><th>' + _esc(drv.label) + ' ' + drv.container + '</th><th>Holds</th>' + (px ? '<th>' + _esc(px.label) + '</th>' : '') + '<th>For</th></tr></thead><tbody>' +
+                (list.length ? list.map(function (x) { var p = pk[String(x.id)]; return '<tr class="alm-pick" data-id="' + _esc(x.id) + '" data-name="' + _esc(x.name) + '"><td><input type="checkbox" class="alm-on" aria-label="Link"' + (p ? ' checked' : '') + '></td><td><b>' + _esc(x.name) + '</b>' + (x.where ? ' <span class="cx-dim">' + _esc(x.where) + '</span>' : '') + '<div class="cx-dim">' + _esc(x.id) + '</div></td><td>' + kindSel(p ? p.kind : 'req') + '</td>' + pxSel(p) + '<td>' + scopeSel(p ? (p.scope || 'ac') : 'ac') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="cx-dim">This project has no ' + drv.containers + ' this login can see.</td></tr>') +
                 '</tbody></table></div><div class="cx-row cx-gap cx-pop-foot">' + _btn('Save and check', NS + '.savePicks()', true) + '<span class="cx-right">' + _btn('Close', 'SLAlm.close(\'alm-browse\')') + '</span></div>';
             _modal('alm-browse', html);
         }
@@ -946,11 +1421,14 @@
                 if (!list.length) return '<input type="text" class="cx-num" style="width:220px" value="' + _esc(cur) + '" placeholder="' + drv.container + ' id" onchange="' + NS + '.sendCfg(\'' + k + '\', \'container\', this.value)"> ' + _btn('List ' + drv.containers, NS + '.loadContainers()');
                 return '<select onchange="' + NS + '.sendCfg(\'' + k + '\', \'container\', this.value)"><option value="">Choose</option>' + list.map(function (x) { return '<option value="' + _esc(x.id + '\u0001' + x.name) + '"' + (String(x.id) === String(cur) ? ' selected' : '') + '>' + _esc(x.name) + '</option>'; }).join('') + '</select>';
             };
+            var sf = drv.sendFields || [];
             var row = function (k, label) { var c = sc[k] || {};
                 return '<tr><td><label class="cx-radio"><input type="checkbox"' + (c.on ? ' checked' : '') + ' onchange="' + NS + '.sendCfg(\'' + k + '\', \'on\', this.checked)"> ' + label + '</label></td><td>' + opts(k) + '</td>' +
-                    (drv.id === 'polarion' ? '<td><input type="text" class="cx-num" value="' + _esc(c.type || '') + '" placeholder="requirement" onchange="' + NS + '.sendCfg(\'' + k + '\', \'type\', this.value)"></td>' : '') + '</tr>'; };
-            return '<div class="cx-sub"><b>What Safety Lab sends to ' + _esc(drv.label) + '</b><div class="cx-dim">Failure conditions and safety requirements made in Safety Lab go to the ' + drv.container + ' you choose here, linked to the function (or failure condition) they belong to. Safety Lab owns them: they are edited in Safety Lab and sent again from Ready to send. Only the title and the description are written; the engineer’s severity classification is in the description. Calculated results (probabilities, allocated budgets, DALs), signatures and history are never sent.</div>' +
-                '<table class="cx-table"><thead><tr><th>Send</th><th>' + _esc(drv.label) + ' ' + drv.container + '</th>' + (drv.id === 'polarion' ? '<th>Polarion work item type</th>' : '') + '</tr></thead><tbody>' + row('fc', 'Failure conditions (aircraft FHA)') + row('req', 'Safety requirements (aircraft)') + '</tbody></table></div>';
+                    sf.map(function (f) { return '<td><input type="text" class="cx-num" style="width:220px" value="' + _esc(c[f.key] || '') + '" placeholder="' + _esc(f.placeholder || '') + '" onchange="' + NS + '.sendCfg(\'' + k + '\', \'' + f.key + '\', this.value)"></td>'; }).join('') + '</tr>'; };
+            return '<div class="cx-sub"><b>What Safety Lab sends to ' + _esc(drv.label) + '</b>' +
+                (sendOn() ? '' : '<div class="cx-warn">Pilot: reading from ' + _esc(drv.label) + ' is on. Sending is switched on once it has been proven on a real ' + _esc(drv.label) + ' server; until then nothing is written to ' + _esc(drv.short) + '.' + (drv.canOwn === false ? ' Safety Lab never changes an element your engineers made in ' + _esc(drv.short) + '; it only ever sends its own.' : '') + '</div>') +
+                '<div class="cx-dim">Failure conditions and safety requirements made in Safety Lab go to the ' + drv.container + ' you choose here, linked to the function (or failure condition) they belong to. Safety Lab owns them: they are edited in Safety Lab and sent again from Ready to send. Only the title and the description are written; the engineer\u2019s severity classification is in the description. Calculated results (probabilities, allocated budgets, DALs), signatures and history are never sent.</div>' +
+                '<table class="cx-table"><thead><tr><th>Send</th><th>' + _esc(drv.label) + ' ' + drv.container + '</th>' + sf.map(function (f) { return '<th>' + _esc(f.label) + '</th>'; }).join('') + '</tr></thead><tbody>' + row('fc', 'Failure conditions (aircraft FHA)') + row('req', 'Safety requirements (aircraft)') + '</tbody></table></div>';
         }
 
         var api = {
@@ -968,7 +1446,8 @@
                 changes: changes, check: function (silent) { return check(!!silent); },
                 autoCheck: function () { return watch() && hasLogin(); },
                 applyKeys: applyKeys, setup: function () { setupUi().catch(function (e) { _report(e, 'setup'); }); }, browse: function () { browseUi().catch(function (e) { _report(e, 'browse'); }); },
-                linkedRows: linkedRows, outgoing: outgoing, send: send, sendSettingsHtml: sendSettingsHtml
+                linkedRows: linkedRows, outgoing: outgoing, send: send, sendSettingsHtml: sendSettingsHtml,
+                canOwn: drv.canOwn !== false, pilot: function () { return !sendOn(); }
             });
         }
         refreshHas().catch(function (e) { _report(e, 'login status'); });
@@ -978,7 +1457,7 @@
     var tools = {};
     Object.keys(DRIVERS).forEach(function (k) { tools[k] = makeTool(DRIVERS[k]); });
     W.SLAlm = {
-        RULES: ALM_RULES, almRequestProblem: almRequestProblem, plain: plain, wikiPlain: wikiPlain,
+        RULES: ALM_RULES, almRequestProblem: almRequestProblem, plain: plain, wikiPlain: wikiPlain, parseXml: parseXml, rdfParse: rdfParse,
         buildTree: buildTree, diffTree: diffTree, applyTree: applyTree, diffFlat: diffFlat, applyFlat: applyFlat,
         drivers: DRIVERS, tools: tools, tool: function (id) { return tools[id] || null; },
         ui: function (id) { return (tools[id] && tools[id].ui) || {}; },

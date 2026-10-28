@@ -20,9 +20,10 @@ const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } els
 const REPO = path.join(__dirname, '..');
 const MUT = process.env.MUTATE || '';
 const MUTATIONS = {
-  fence: ['  const fp = almRequestProblem(tool, method, chk.target.toString(), savedHost);\n  if (fp) return', '  const fp = "";\n  if (fp) return'],
+  fence: ['  const fp = almRequestProblem(tool, method, chk.target.toString(), savedHost, ph);\n  if (fp) return', '  const fp = "";\n  if (fp) return'],
   host:  ['  const chk = bridgeTargetProblem(url.searchParams.get("target"), savedHost, env, true);\n  if (chk.error) return', '  const chk = { target: new URL(url.searchParams.get("target")) };\n  if (chk.error) return'],
-  json:  ['    try { JSON.parse(body || "null"); } catch (_) { return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is not JSON." } }); }', ''],
+  json:  ['    if (!raw) { try { JSON.parse(body || "null"); } catch (_) { return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is not JSON." } }); } }', ''],
+  jar:   ['  const headers = Object.assign({}, init.headers || {}); if (ck) headers["cookie"] = ck;', '  const headers = Object.assign({}, init.headers || {});'],
   redir: ['    if (upstream.status >= 300 && upstream.status < 400) return jsonResponse(502,', '    if (false) return jsonResponse(502,'],
   route: ['      if (url.pathname === "/v1/ai/bridge" && url.searchParams.get("tool") && ["GET", "POST", "PATCH", "PUT"].includes(request.method)) return handleToolBridge(request, env, caller, url, url.searchParams.get("tool"));', '']
 };
@@ -38,10 +39,10 @@ check('the relay’s fence is the engine’s, word for word', engFence.length > 
 
 console.log('\n[B] the relay');
 const grab = re => (proxy.match(re) || [''])[0];
-const code = [grab(/const BRIDGE_WRITE_MAX = [^\n]*\n/), grab(/function bridgeInternalAllowList[\s\S]*?\n}\n/), grab(/function bridgeTargetProblem[\s\S]*?\n}\n/), pxFence, grab(/const TOOL_LABEL = [^\n]*\n/), grab(/async function handleToolBridge[\s\S]*?\n}\n/)].join('\n');
+const code = [grab(/const BRIDGE_WRITE_MAX = [^\n]*\n/), grab(/function bridgeInternalAllowList[\s\S]*?\n}\n/), grab(/function bridgeTargetProblem[\s\S]*?\n}\n/), pxFence, between(proxy, 'const TOOL_LABEL', 'async function handleBridge(request, env, caller, url) {')].join('\n');
 const calls = [];
 let upstreamAnswer = () => ({ status: 200, body: '{"ok":1}', headers: {} });
-class Resp { constructor(text, init) { this._t = text; this.status = init.status; this.headers = { get: k => (init.headers || {})[k.toLowerCase()] || null }; } async text() { return this._t; } }
+class Resp { constructor(text, init) { this._t = text; this.status = init.status; const hh = init.headers || {}; this.headers = { get: k => { const v = hh[k.toLowerCase()]; return v == null ? null : (Array.isArray(v) ? v.join(', ') : v); }, getSetCookie: () => [].concat(hh['set-cookie'] || []) }; } async text() { return this._t; } }
 const env = { LICENSE_MODE: 'offline', BRIDGE_INTERNAL_HOSTS: '' };
 const secrets = { 'u1:polarion_token': { secret: 'PAT-SECRET', meta: { baseHost: 'polarion.example.com', auth: 'bearer' } }, 'u1:codebeamer_token': { secret: 'PW-SECRET', meta: { baseHost: 'cb.example.com', user: 'sam', auth: 'basic' } } };
 const deps = {
@@ -53,8 +54,8 @@ const deps = {
 };
 let handle = null;
 try { handle = new Function(...Object.keys(deps), code + '\nreturn handleToolBridge;')(...Object.values(deps)); } catch (e) { check('the relay loads', false, e.message); }
-const reqOf = (method, body) => ({ method, text: async () => body == null ? '' : body });
-const go = (tool, method, target, body, uid) => handle(reqOf(method, body), env, { userId: uid === undefined ? 'u1' : uid }, new URL('https://ai.example.com/v1/ai/bridge?tool=' + tool + '&target=' + encodeURIComponent(target)), tool);
+const reqOf = (method, body, h) => ({ method, text: async () => body == null ? '' : body, headers: { get: k => (h || {})[k.toLowerCase()] || null } });
+const go = (tool, method, target, body, uid, opt) => handle(reqOf(method, body, opt && opt.h ? { 'x-slab-tool-headers': JSON.stringify(opt.h) } : {}), env, { userId: uid === undefined ? 'u1' : uid }, new URL('https://ai.example.com/v1/ai/bridge?tool=' + tool + (opt && opt.raw ? '&raw=1' : '') + '&target=' + encodeURIComponent(target)), tool);
 (async function () {
   if (!handle) { console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(1); }
   let r = await go('polarion', 'GET', 'https://polarion.example.com/polarion/rest/v1/projects/FCS/documents?page%5Bsize%5D=100');
@@ -90,6 +91,35 @@ const go = (tool, method, target, body, uid) => handle(reqOf(method, body), env,
   upstreamAnswer = () => ({ status: 401, body: '{}', headers: {} });
   r = await go('codebeamer', 'GET', 'https://cb.example.com/cb/api/v3/projects');
   check('a refused login says so in plain words', r.status === 401 && /Codebeamer did not accept the saved login/.test(await r.text()));
+
+  console.log('\n[B2] DOORS Next and Cameo through the relay');
+  secrets['u1:doors_token'] = { secret: 'DN-SECRET', meta: { baseHost: 'dng.example.com', user: 'sam', auth: 'password' } };
+  secrets['u1:cameo_token'] = { secret: 'TW-SECRET', meta: { baseHost: 'twc.example.com', user: 'sam', auth: 'basic' } };
+  let logins = 0;
+  upstreamAnswer = (u, init) => {
+    const p = new URL(u).pathname, ck = (init.headers && init.headers.cookie) || '';
+    if (p === '/rm/j_security_check') { logins++; return /j_password=DN-SECRET/.test(init.body) ? { status: 302, body: '', headers: { location: 'https://dng.example.com/rm/', 'set-cookie': ['JSESSIONID=S9; Path=/rm'] } } : { status: 200, body: '', headers: { 'x-com-ibm-team-repository-web-auth-msg': 'authfailed' } }; }
+    if (!/JSESSIONID=S9/.test(ck)) return { status: 200, body: '<html/>', headers: { 'x-com-ibm-team-repository-web-auth-msg': 'authrequired', 'content-type': 'text/html' } };
+    if (init.method === 'PUT') return init.headers['if-match'] === '"e1"' ? { status: 200, body: '', headers: { etag: '"e2"' } } : { status: 412, body: 'stale', headers: {} };
+    return { status: 200, body: '<rdf:RDF/>', headers: { etag: '"e1"', 'content-type': 'application/rdf+xml' } };
+  };
+  const n1 = calls.length;
+  r = await go('doors', 'GET', 'https://dng.example.com/rm/rootservices', null, 'u1', { raw: true, h: { 'OSLC-Core-Version': '2.0', 'Accept': 'application/rdf+xml' } });
+  let env1 = JSON.parse(await r.text());
+  check('DOORS Next: challenged, the relay signs in with the form and sends the request once more; the page gets the whole answer', r.status === 200 && env1.raw && env1.status === 200 && env1.text === '<rdf:RDF/>' && env1.etag === '"e1"' && logins === 1 && calls.length - n1 === 3, JSON.stringify(env1));
+  check('the protocol headers went to DOORS Next; no login header did', calls[calls.length - 1].init.headers['oslc-core-version'] === '2.0' && !calls.slice(n1).some(c => c.init.headers.authorization));
+  r = await go('doors', 'PUT', 'https://dng.example.com/rm/resources/TX_1', '<rdf:RDF/>', 'u1', { raw: true, h: { 'If-Match': '"old"', 'Content-Type': 'application/rdf+xml', 'OSLC-Core-Version': '2.0' } });
+  env1 = JSON.parse(await r.text());
+  check('the session is kept (no second sign-in), and a 412 reaches the page', logins === 1 && env1.status === 412);
+  const n2 = calls.length;
+  r = await go('doors', 'GET', 'https://dng.example.com/rm/views', null, 'u1', { raw: true, h: { Cookie: 'JSESSIONID=x' } });
+  check('a cookie from the page is refused, nothing sent', r.status === 400 && calls.length === n2);
+  r = await go('doors', 'PUT', 'https://dng.example.com/rm/resources/MD_F', '<x/>', 'u1', { raw: true, h: {} });
+  check('a module itself is never changed', r.status === 400 && calls.length === n2);
+  upstreamAnswer = () => ({ status: 200, body: '{"x":1}', headers: { 'content-type': 'application/ld+json' } });
+  r = await go('cameo', 'POST', 'https://twc.example.com/osmc/resources/r1/branches/b1/elements', '["e1"]', 'u1', { h: { Accept: 'application/ld+json', 'Content-Type': 'application/json' } });
+  check('Cameo: a batch read goes with Basic and the page’s Accept', r.status === 200 && calls[calls.length - 1].init.headers.authorization === 'Basic ' + Buffer.from('sam:TW-SECRET').toString('base64') && calls[calls.length - 1].init.headers.accept === 'application/ld+json');
+  check('CORS lets the page send its tool headers', /"access-control-allow-headers": "[^"]*x-slab-tool-headers/.test(proxy));
 
   console.log('\n[C] the route');
   check('GET, POST, PATCH and PUT with ?tool= reach the tool relay', /if \(url\.pathname === "\/v1\/ai\/bridge" && url\.searchParams\.get\("tool"\) && \["GET", "POST", "PATCH", "PUT"\]\.includes\(request\.method\)\) return handleToolBridge/.test(proxy));
