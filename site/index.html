@@ -233,6 +233,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 <a class="asb-item sub" id="snav-val-matrix" onclick="switchTab('val-matrix')" role="button" tabindex="0"><span class="asb-lbl">Validation Matrix</span></a>
                 <a class="asb-item sub" id="snav-moc" onclick="switchTab('moc')" role="button" tabindex="0"><span class="asb-lbl">Means of Compliance</span></a>
                 <a class="asb-item sub" id="snav-vv-status" onclick="switchTab('vv-status')" role="button" tabindex="0"><span class="asb-lbl">V&amp;V Status Roll-up</span></a>
+                <a class="asb-item sub" id="snav-conn" onclick="switchTab('conn')" role="button" tabindex="0"><span class="asb-lbl">Connections — Jama · Polarion · DOORS · Codebeamer · Cameo · GENESYS</span></a>
                 <a class="asb-item sub" id="snav-reqif" onclick="switchTab('reqif')" role="button" tabindex="0"><span class="asb-lbl">Requirements exchange — Jama · Polarion · DOORS</span></a>
                 <a class="asb-item sub" id="snav-xmi" onclick="switchTab('xmi')" role="button" tabindex="0"><span class="asb-lbl">Architecture import — Cameo · SysML</span></a>
                 <a class="asb-item sub" id="snav-dal-ref" onclick="switchTab('dal-ref')" role="button" tabindex="0"><span class="asb-lbl">DAL Credit (DO-178C / 254)</span></a>
@@ -2921,6 +2922,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
 
         <!-- Phase 56.27 — V&V Status Roll-up. Aggregates every requirement (AC + Sys)
              and breaks down validation/verification posture by status, level, and type. -->
+        <!-- 28 Oct 2026: Safety Lab Connections (connections.js draws it) -->
+        <div id="view-conn" style="display: none;"><div id="conn-host"></div></div>
+
         <div id="view-reqif" style="display: none;">
             <div class="header-with-export"><h3>ReqIF Import — Polarion · Jama · DOORS · any OMG-ReqIF tool</h3></div>
             <p style="font-size: 13px; color: var(--color-text-secondary); margin: 0 0 var(--s-3) 0;">The standard requirements interchange format, imported with its identifiers, typed attributes, document hierarchy and trace relations intact. Two-step (preview, then signed import); re-import is idempotent — changed rows update, vanished rows are flagged, nothing is silently deleted.</p>
@@ -4202,7 +4206,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="func_tree.js?v=1.1" defer></script>
     <script src="data_ops_modules.js?v=66.64" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.52" defer></script>
+    <script src="support_modules.js?v=66.53" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
     <script src="helpers_modules.js?v=3.45" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
@@ -4235,8 +4239,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="render_pass.js?v=1.0" defer></script>
     <!-- 13 Oct 2026 (Waqas rulings 2 and 3): every change asks for acknowledgement (what changes, what it touches; Cancel reverts),
          and saving works like Microsoft Office (unsaved work held on this device, shared on Save; Save / Don't Save / Cancel). -->
-    <script src="change_ack.js?v=3.4" defer></script>
-    <script src="save_state.js?v=3.4" defer></script>
+    <script src="change_ack.js?v=3.5" defer></script>
+    <script src="save_state.js?v=3.5" defer></script>
     <script src="p23_assessment_level.js?v=1.0" defer></script>
     <script src="zsa_record.js?v=1.0" defer></script>
     <script src="ai_audit.js?v=1.1" defer></script>
@@ -4373,7 +4377,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="jama_tree.js?v=1.3" defer></script>
     <!-- 22 Oct 2026 (live Jama on every page, aircraft and system level): jama_kinds.js maps assumptions, failure conditions, system functions and which system an item belongs to; pure, loads before the bridge. -->
     <script src="jama_kinds.js?v=1.0" defer></script>
-    <script src="live_bridge.js?v=3.3" defer></script>
+    <!-- 28 Oct 2026: Safety Lab Connections, the one framework every connected tool uses (owners, Incoming changes, Ready to send, Mapping, History) -->
+    <script src="connections.js?v=1.0" defer></script>
+    <script src="live_bridge.js?v=3.4" defer></script>
     <!-- M5 — Cameo/SysML XMI import (draft socket awaiting the program sample). -->
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab
@@ -4575,7 +4581,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="prove_tabs.js?v=1.8" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
-    <script src="nav_areas.js?v=1.4" defer></script>
+    <script src="nav_areas.js?v=1.5" defer></script>
     <script src="fta_tree_picker.js?v=1.3" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /

@@ -315,7 +315,7 @@ async function scenarios(browser, siteDir, quick) {
       fs.rmSync(dir, { recursive: true, force: true });
     };
     await mut('M1 a dialog after each change (the old behavior)', "        _collect(w, items, shown, D, Rb);\n        return _close(w, 'collected');", "        _collect(w, items, shown, D, Rb);\n        setTimeout(function () { ask({ reason: 'early' }); }, 0);\n        return _close(w, 'collected');", R2 => R2.c1.opens > 0);
-    await mut('M2 the quiet bar never shows', "        var on = n > 0 && !_askState;", "        var on = false;", R2 => !/4 changes waiting/.test(R2.c2barAfter || ''));
+    await mut('M2 the quiet bar never shows', "        var on = (n > 0 || !!inTxt) && !_askState;", "        var on = false;", R2 => !/4 changes waiting/.test(R2.c2barAfter || ''));
     await mut('M3 leaving the page opens the review again (the v2.0 behavior)', "        // 24 Oct 2026 (v3.0, Waqas): leaving a page or view,", "        W.addEventListener && W.addEventListener('load', function () { var f = W.switchTab; W.switchTab = function () { var a = arguments, self = this; if (!_col) return f.apply(self, a); return ask({ reason: 'leave' }).then(function (r) { if (r !== 'keep') return f.apply(self, a); }); }; });\n        // 24 Oct 2026 (v3.0, Waqas): leaving a page or view,", R2 => R2.c2left.opens > 0 || R2.c2left.tab !== 'dashboard');
     fs.rmSync(tmp, { recursive: true, force: true });
   } catch (e) { check('the browser suite ran to the end', false, String(e && e.stack || e).split('\n').slice(0, 8).join(' ')); }

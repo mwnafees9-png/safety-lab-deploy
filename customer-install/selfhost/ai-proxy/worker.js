@@ -67,7 +67,7 @@ const MODEL_TOKEN_WEIGHTS = {
 const BUILTIN_ORIGINS = ["https://safetylabaero.com", "https://www.safetylabaero.com"];
 
 const CORS_BASE = {
-  "access-control-allow-methods": "GET,POST,OPTIONS",
+  "access-control-allow-methods": "GET,POST,PATCH,OPTIONS",
   "access-control-allow-headers": "authorization,content-type,x-safetylab-itar,x-safetylab-feature",
   // SEC-3b: the app reads this to know the proxy has written the ledger row itself
   "access-control-expose-headers": "x-safetylab-audit",
@@ -367,6 +367,22 @@ async function bridgeOauthToken(target, basic, fresh) {
   return { access: j.access_token };
 }
 
+// 28 Oct 2026 (Safety Lab Connections): the relay sends too, for items Safety Lab owns, when an engineer signs and
+// presses Send. Same fence as the read (bridgeTargetProblem: https, the saved host, a /rest/ path, no redirects) and a
+// narrower one of its own: create an item, link two items, leave a comment, or change an item's fields. Never a
+// delete, never a PUT, never another path, no query string, a JSON body of 2 MB at most.
+const BRIDGE_WRITE_MAX = 2 * 1024 * 1024;
+function bridgeWriteProblem(method, target, text) {
+  const m = String(method || "").toUpperCase();
+  if (m !== "POST" && m !== "PATCH") return "Safety Lab only creates and changes items in Jama; it never deletes";
+  const p = target.pathname;
+  if (m === "POST" && !/\/rest\/(latest|v1)\/(items|relationships|comments)$/.test(p)) return "only Jama items, relationships and comments are created";
+  if (m === "PATCH" && !/\/rest\/(latest|v1)\/items\/\d+$/.test(p)) return "only a Jama item is changed";
+  if (target.search) return "no query string on a write";
+  if (String(text || "").length > BRIDGE_WRITE_MAX) return "the body is larger than 2 MB";
+  try { JSON.parse(String(text || "null")); } catch (_) { return "the body is not JSON"; }
+  return "";
+}
 async function handleBridge(request, env, caller, url) {
   if (!caller.userId) return jsonResponse(401, { error: { type: "unauthorized", message: "The bridge needs a signed-in user." } });
   const rl = await checkRateLimit(env, "br:" + caller.userId, 60);
@@ -378,12 +394,24 @@ async function handleBridge(request, env, caller, url) {
 
   const chk = bridgeTargetProblem(url.searchParams.get("target"), sec.meta && sec.meta.baseHost, env);
   if (chk.error) return jsonResponse(chk.status, { error: { type: "bad_target", message: chk.error } });
+  const method = request.method === "GET" ? "GET" : String(request.method || "").toUpperCase();
+  let wbody = null;
+  if (method !== "GET") {
+    wbody = await request.text().catch(() => "");
+    const wp = bridgeWriteProblem(method, chk.target, wbody);
+    if (wp) return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: " + wp + "." } });
+  }
 
   const basic = "Basic " + btoa(String((sec.meta && sec.meta.user) || "") + ":" + sec.secret);
   const oauth = !!(sec.meta && sec.meta.auth === "oauth");
-  const call = (auth) => fetch(chk.target.toString(), {
+  const call = (auth) => fetch(chk.target.toString(), method === "GET" ? {
       method: "GET", redirect: "manual",
       headers: { authorization: auth, accept: "application/json" },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
+    } : {
+      method: method, redirect: "manual",
+      headers: { authorization: auth, accept: "application/json", "content-type": "application/json" },
+      body: wbody,
       signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
     });
   try {
@@ -908,7 +936,7 @@ async function verifyOfflineLicense(env, blob) {
   } catch (_) { return { error: "invalid_token" }; }
 }
 
-export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense, auditFeature, auditOn, newAudit, bridgeTargetProblem };   // metering, testable in isolation (test/cache_metering.test.mjs)
+export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense, auditFeature, auditOn, newAudit, bridgeTargetProblem, bridgeWriteProblem };   // metering, testable in isolation (test/cache_metering.test.mjs)
 
 // The router. Everything it returns goes through withCors() at the boundary below, so no
 // handler has to know or care what the calling origin was.
@@ -1017,6 +1045,7 @@ async function routeRequest(request, env, ctx) {
 
       if (request.method === "GET" && url.pathname === "/v1/ai/usage") return handleUsage(check);
       if (request.method === "GET" && url.pathname === "/v1/ai/bridge") return handleBridge(request, env, caller, url);
+      if ((request.method === "POST" || request.method === "PATCH") && url.pathname === "/v1/ai/bridge") return handleBridge(request, env, caller, url);   // 28 Oct 2026: sending
       // SEC-3b: every AI call that gets this far is recorded by the proxy, once. A handler records
       // what it saw (model, tokens, route, outcome); anything it returned without recording (a
       // missing BYO key, a bad body, the ITAR refusal) is recorded here from the response itself.

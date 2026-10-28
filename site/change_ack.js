@@ -729,18 +729,30 @@
     // changes wait, with Review. It is gone when nothing waits and while the review itself is open.
     function _bar() {
         if (typeof document === 'undefined' || !document.body) return;
+        // 28 Oct 2026 (Waqas): one pill, "4 incoming changes from Jama + 6 changes to confirm"; each part opens its own
+        // review. The incoming part comes from the connections framework (connections.js).
         var n = count(), el = document.getElementById('sl-ack-bar');
+        var inTxt = ''; try { var CX = W.SLConnections; if (CX && typeof CX.pillText === 'function') inTxt = CX.pillText() || ''; } catch (_) { inTxt = ''; }
         if (!el) {
-            if (!n) return;
+            if (!n && !inTxt) return;
             _injectStyle();
             el = document.createElement('div'); el.id = 'sl-ack-bar'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
-            el.innerHTML = '<span class="dot" aria-hidden="true"></span><span class="txt"></span><button type="button" class="sl-ack-review">Review</button>';
-            el.querySelector('button').addEventListener('click', function () { ask({ reason: 'early' }); });
+            el.innerHTML = '<button type="button" class="sl-ack-in"><span class="dot in" aria-hidden="true"></span><span class="tin"></span></button><span class="plus" aria-hidden="true">+</span>' +
+                '<span class="dot mine" aria-hidden="true"></span><span class="txt"></span><button type="button" class="sl-ack-review">Review</button>';
+            el.querySelector('.sl-ack-review').addEventListener('click', function () { ask({ reason: 'early' }); });
+            el.querySelector('.sl-ack-in').addEventListener('click', function () { try { W.SLConnections.show('in'); } catch (_) {} });
             document.body.appendChild(el);
         }
-        var on = n > 0 && !_askState;
+        var on = (n > 0 || !!inTxt) && !_askState;
         el.classList.toggle('on', on);
-        if (on) el.querySelector('.txt').textContent = n + (n === 1 ? ' change' : ' changes') + ' waiting to be confirmed';
+        var both = n > 0 && !!inTxt;
+        el.querySelector('.sl-ack-in').style.display = inTxt ? '' : 'none';
+        el.querySelector('.plus').style.display = both ? '' : 'none';
+        el.querySelector('.dot.mine').style.display = n > 0 ? '' : 'none';
+        el.querySelector('.txt').style.display = n > 0 ? '' : 'none';
+        el.querySelector('.sl-ack-review').style.display = n > 0 ? '' : 'none';
+        if (inTxt) el.querySelector('.tin').textContent = inTxt;
+        if (on && n > 0) el.querySelector('.txt').textContent = n + (n === 1 ? ' change' : ' changes') + (both ? ' to confirm' : ' waiting to be confirmed');
     }
 
     // scheduleAutosave calls this for every change it accepts. Returns what it decided.
@@ -1078,9 +1090,48 @@
     }
     // Look at the open change and decide: nothing, automatic (a background change nobody made), or
     // the person's change, which goes into the collection.
+    var _LOCK_LIVE = {
+        acFunctionsData: function () { return (typeof acFunctionsData !== 'undefined') ? acFunctionsData : null; },
+        acReqData: function () { return (typeof acReqData !== 'undefined') ? acReqData : null; },
+        acAssumptionsData: function () { return (typeof acAssumptionsData !== 'undefined') ? acAssumptionsData : null; },
+        acFhaData: function () { return (typeof acFhaData !== 'undefined') ? acFhaData : null; }
+    };
+    var _LOCK_SYS = { functions: 'fn', req: 'req', asm: 'asm', fha: 'fc' };
+    function _lockGuard(w) {
+        var CX = W.SLConnections; if (!CX || typeof CX.guardRow !== 'function') return;
+        var base = _P(w.baseline); if (!base) return;
+        var said = [], tool = '';
+        var pair = function (kind, beforeRows, liveRows) {
+            if (!Array.isArray(beforeRows) || !Array.isArray(liveRows)) return;
+            var by = {}; beforeRows.forEach(function (r) { if (r && r.internalId != null) by[String(r.internalId)] = r; });
+            liveRows.forEach(function (r) {
+                if (!r || r.internalId == null) return;
+                var b = by[String(r.internalId)]; if (!b) return;
+                var back = CX.guardRow(kind, b, r);
+                if (back.length) { var lk = CX.lockOf(b, kind) || {}; tool = lk.toolLabel || tool; said.push(String(r.subId || r.funcId || r.id || r.asmId || r.fcId || lk.extKey || '') + ' (' + back.join(', ') + ')'); }
+            });
+        };
+        CX.lockedStores().forEach(function (st) { var get = _LOCK_LIVE[st.store]; if (get) pair(st.kind, base[st.store], get()); });
+        var liveSys = (typeof systemsData !== 'undefined' && Array.isArray(systemsData)) ? systemsData : [];
+        (Array.isArray(base.systemsData) ? base.systemsData : []).forEach(function (bs) {
+            if (!bs) return;
+            var ls = liveSys.filter(function (x) { return x && String(x.id) === String(bs.id); })[0]; if (!ls) return;
+            Object.keys(_LOCK_SYS).forEach(function (k) { pair(_LOCK_SYS[k], bs[k], ls[k]); });
+        });
+        if (!said.length) return false;
+        ['renderACFunctions', 'renderACReq', 'renderACFCIM', 'renderACFHA', 'renderACAssumptions', 'renderSysFunctions', 'renderSysReq', 'renderSysFCIM', 'renderSysFHA', 'renderSysAssumptions']
+            .forEach(function (fn) { try { if (typeof W[fn] === 'function') W[fn](); } catch (_) {} });
+        try { if (typeof W.showToast === 'function') W.showToast((said.length === 1 ? said[0] + ' is' : said.length + ' rows are') + ' owned by ' + (tool || 'the connected tool') + ', so ' + (said.length === 1 ? 'it' : 'they') + ' can only be changed there. Your edit was put back' + (said.length > 1 ? ': ' + said.slice(0, 4).join('; ') : '') + '. An admin can make Safety Lab the owner in Connections, Mapping.', 'warning', 9000); } catch (_) {}
+        return true;
+    }
     function _resolve(forced) {
         var w = _win; if (!w) return 'none';
         if (_timer) { clearTimeout(_timer); _timer = null; }
+        // 28 Oct 2026 (connections, Waqas: "if jama is the source of truth no edit permissions"): a row another tool
+        // owns cannot be changed here. Its owned fields are put back before the change is measured and before the state
+        // after this change is kept as the next starting point, and the person is told where to change it. An item
+        // Safety Lab owns, or a row no tool owns, is never touched.
+        if (w.user && !w.system) { try { if (_lockGuard(w)) _stashSeq = -1; } catch (e) { try { console.warn('[change-ack] lock guard', e); } catch (_) {} } }
         _freshStash();
         var items = [], D = [], Rb = null;
         try {
@@ -1347,6 +1398,7 @@
             // the quiet bar (24 Oct 2026): what waits, and one button to review it; it never covers the page
             + '#sl-ack-bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:1850;display:none;align-items:center;gap:12px;padding:7px 8px 7px 14px;border-radius:999px;background:var(--color-surface-1,#fff);border:1px solid var(--color-border-strong,#c9ced6);box-shadow:0 4px 16px rgba(0,0,0,.12);font-size:13px;color:' + INK + '}'
             + '#sl-ack-bar.on{display:flex}#sl-ack-bar .dot{width:8px;height:8px;border-radius:50%;background:#C88A00;flex:none}'
+            + '#sl-ack-bar .dot.in{background:#1A6EF2}#sl-ack-bar .sl-ack-in{display:inline-flex;align-items:center;gap:8px;background:none;border:none;padding:0;font:inherit;font-size:13px;color:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}#sl-ack-bar .plus{font-weight:700;color:#4A4F57}'
             + '#sl-ack-bar button{font-size:12.5px;font-weight:700;padding:5px 14px;border-radius:999px;border:1px solid var(--color-accent,#2E6BD6);background:var(--color-accent,#2E6BD6);color:#fff;cursor:pointer}'
             + '.sl-choice-card{max-width:500px}';
         (document.head || document.documentElement).appendChild(st);
@@ -1545,6 +1597,7 @@
 
     var SLRecords = { records: records, diff: diff, describe: describe, summarize: summarize, applyToModel: applyToModel, applyToObject: applyToObject, live: _live, impact: impact };
     var api = {
+        refreshBar: function () { try { _bar(); } catch (_) {} },   // 28 Oct 2026: connections.js redraws the pill
         noteChange: noteChange, stash: stash, keepJournal: keepJournal, sameContent: sameContent, system: system, background: background, systemAsync: systemAsync, restoring: restoring,
         begin: begin, end: end, batch: batch, describe: describeChange, drop: drop, settle: settle, revertTo: revertTo,
         // the one dialog and the collection

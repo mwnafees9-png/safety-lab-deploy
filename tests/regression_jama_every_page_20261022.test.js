@@ -202,7 +202,9 @@ function jama() {
     check('the ten pages (aircraft and system: Functions, FCIM, Hazard assessment, Assumptions, Requirements) each get a panel', tables.every(t => lb.indexOf("table: '" + t + "'") > 0));
     const idx = read('site/index.html');
     check('every one of those tables is on a page', tables.every(t => idx.indexOf('<table id="' + t + '"') > 0));
-    check('a page panel signs for that page only', /bridgeApply\(_lastDiff, by, p \? \{ scope: _scopeOf\(p\), kinds: p\.kinds \} : null\)/.test(lb));
+    // 28 Oct 2026: a page panel signs through the connections framework, that page's lines only (and never a rejected
+    // line); the direct apply stays for a build without the framework
+    check('a page panel signs for that page only', /c\.scope === _sc && p\.kinds\.indexOf\(c\.kind\) >= 0/.test(lb) && /bridgeApply\(_lastDiff, by, p \? \{ scope: _sc, kinds: p\.kinds \} : null\)/.test(lb));
     check('the connection form exists once, in one dialog (no second copy of the login boxes)', (lb.match(/id="lb-token"/g) || []).length === 1 && /id = 'jb-setup'/.test(lb));
     check('a system page asks which Jama folder holds that system, and one folder cannot hold two systems', /Choose the Jama folder or set that holds/.test(lb) && /already holds/.test(lb));
     // 26 Oct 2026 (Waqas: the Jama browser replaces the item-type chooser): no chooser writes typeNames

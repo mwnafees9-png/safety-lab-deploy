@@ -1589,6 +1589,12 @@ function makeCRUD(config) {
     const { key, store, formIds, submitBtn, cancelBtn, defaultText, tableBody,
             renderCells, renderRows, afterChange, validate, transform, storePrecondition,
             editFnName, deleteFnName, onEdit } = config;
+    // 28 Oct 2026 (connections): a row another tool owns shows a lock instead of Edit and Delete, and its editor does not
+    // open (Waqas: "if jama is the source of truth no edit permissions"). change_ack.js puts back any other edit of it.
+    const _CRUD_LOCK_KIND = { acFunc: 'fn', acReq: 'req', sysFunc: 'fn', sysReq: 'req' };
+    const _crudLock = (k0, row) => { try { const k = _CRUD_LOCK_KIND[k0]; const C = window.SLConnections; return (k && C && row && typeof C.lockOf === 'function') ? C.lockOf(row, k) : null; } catch (_) { return null; } };
+    const _crudLockHtml = lk => '<span class="cx-lock" title="Owned by ' + esc(lk.toolLabel) + (lk.extKey ? ' (' + esc(lk.extKey) + ')' : '') + ': change it there. An admin can make Safety Lab the owner in Connections, Mapping.">&#128274; ' + esc(String(lk.toolLabel || '').split(' ')[0]) + ' owns</span>';
+    const _crudLockSay = (lk, what) => { try { showToast((what || 'This row') + ' is owned by ' + lk.toolLabel + (lk.extKey ? ' (' + lk.extKey + ')' : '') + ', so it is changed there, not here. An admin can make Safety Lab the owner in Connections, Mapping.', 'warning', 7000); } catch (_) {} };
 
     // Mirror into formConfigs so cancelEdit/setEditMode keep working unchanged.
     formConfigs[key] = { submitBtn, cancelBtn, defaultText, fields: Object.values(formIds) };
@@ -1685,6 +1691,7 @@ function makeCRUD(config) {
         const arr = store(); if (!arr) return;
         const item = arr.find(x => String(x.internalId) === String(internalId));
         if (!item) return;
+        { const lk = _crudLock(key, item); if (lk) { _crudLockSay(lk); return; } }   // 28 Oct 2026
         writeForm(item);
         editStates[key] = internalId;
         setEditMode(key);
@@ -1694,6 +1701,7 @@ function makeCRUD(config) {
     function deleteItem(internalId) {
         const arr = store(); if (!arr) return;
         const idx = arr.findIndex(x => String(x.internalId) === String(internalId));
+        { const lk = idx >= 0 ? _crudLock(key, arr[idx]) : null; if (lk) { _crudLockSay(lk, 'This row'); return; } }   // 28 Oct 2026: flagged when it is gone from there, never deleted here
         if (idx >= 0) arr.splice(idx, 1);
         if (afterChange) afterChange();
         // #46 — surgical row removal (opt-in; falls back to full render when unsafe).
@@ -1715,7 +1723,8 @@ function makeCRUD(config) {
         const kind = _CRUD_KEY_TO_KIND[key];
         const sysId = (kind && kind.indexOf('sys') === 0) ? (typeof activeSystemId !== 'undefined' ? activeSystemId : null) : null;
         const review = kind ? reviewCellHtml(kind, row.internalId, sysId) : '';
-        return '<tr data-iid="' + esc(String(row.internalId)) + '">' + renderCells(row, rowActionsHTML(editFnName, deleteFnName, row.internalId)) + review + '</tr>';
+        const lk = _crudLock(key, row);   // 28 Oct 2026
+        return '<tr data-iid="' + esc(String(row.internalId)) + '"' + (lk ? ' class="cx-locked"' : '') + '>' + renderCells(row, lk ? _crudLockHtml(lk) : rowActionsHTML(editFnName, deleteFnName, row.internalId)) + review + '</tr>';
     }
     function render() {
         const tbody = document.getElementById(tableBody); if (!tbody) return;
@@ -1730,7 +1739,11 @@ function makeCRUD(config) {
         // sign-off. The matching `<th>Review</th>` lives in the table's <thead> in HTML.
         const kind = _CRUD_KEY_TO_KIND[key];
         const sysId = (kind && kind.indexOf('sys') === 0) ? (typeof activeSystemId !== 'undefined' ? activeSystemId : null) : null;
-        const actionsFor = (internalId) => rowActionsHTML(editFnName, deleteFnName, internalId);
+        let _byIid = null;   // 28 Oct 2026: a row another tool owns shows its lock, not Edit and Delete
+        const actionsFor = (internalId) => {
+            if (_CRUD_LOCK_KIND[key]) { if (!_byIid) { _byIid = new Map(); (all || []).forEach(r => { if (r) _byIid.set(String(r.internalId), r); }); } const lk = _crudLock(key, _byIid.get(String(internalId))); if (lk) return _crudLockHtml(lk); }
+            return rowActionsHTML(editFnName, deleteFnName, internalId);
+        };
         const reviewFor = (internalId) => kind ? reviewCellHtml(kind, internalId, sysId) : '';
         // Optional group-aware renderer. The decomposition table uses this to merge a
         // function's identity (ID / name / definition) across all of its sub-functions

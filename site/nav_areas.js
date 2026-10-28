@@ -66,7 +66,7 @@
             { group: 'rel', label: 'Reliability', ids: ['snav-ram-rel', 'snav-ram-predict', 'snav-ram-rbd', 'snav-ram-weibull', 'snav-ram-growth', 'snav-ram-alloc', 'snav-ram-tol', 'snav-rbd-mc', 'snav-rel-frameworks', 'snav-swrel', 'snav-sneak', 'snav-lcc'] },
             { group: 'mx', label: 'Maintainability', ids: ['snav-ram-mx', 'snav-ram-msg3', 'snav-msg3x', 'snav-ram-pmopt', 'snav-ram-test', 'snav-ram-lora'] },
             'snav-ram-settings'] },
-        { key: 'req', label: 'Requirements', ic: '📋', scope: 'aircraft', items: ['snav-reqs-repo', 'snav-val-matrix', 'snav-moc', 'snav-vv-status', 'snav-reqif', 'snav-xmi', 'snav-dal-ref'] },
+        { key: 'req', label: 'Requirements', ic: '📋', scope: 'aircraft', items: ['snav-reqs-repo', 'snav-val-matrix', 'snav-moc', 'snav-vv-status', 'snav-conn', 'snav-reqif', 'snav-xmi', 'snav-dal-ref'] },
         { key: 'prove', label: 'Prove', ic: '✅', scope: 'aircraft', items: ['snav-prove'],
           pages: { 'gt-integrity': 'snav-prove', evpkg: 'snav-prove', appa: 'snav-prove', validation: 'snav-prove', cm: 'snav-prove', review: 'snav-prove', pr: 'snav-prove', mod: 'snav-prove', 'sora-thread': 'snav-prove' } },
         // a system: its workspace (functions, FCIM, FHA, FMEA, assumptions: the workspace's own tabs), AI/ML
@@ -88,7 +88,7 @@
     var PINS = ['snav-dashboard', 'snav-golden-thread'];
 
     // the words a link shows as a tab (the old menu's labels were written for a long list)
-    var SHORT = { 'snav-pasa': 'PASA', 'snav-afha': 'AFHA', 'snav-ram-hub': 'Overview', 'snav-sys-dir': 'All systems', 'snav-reqif': 'Requirements exchange',
+    var SHORT = { 'snav-conn': 'Connections', 'snav-pasa': 'PASA', 'snav-afha': 'AFHA', 'snav-ram-hub': 'Overview', 'snav-sys-dir': 'All systems', 'snav-reqif': 'Requirements exchange',
                   'snav-xmi': 'Architecture import', 'snav-defs': 'Certification basis', 'snav-arp-process': 'Safety process map', 'snav-stpa': 'STPA',
                   'snav-cea': 'Cascading effects', 'snav-zsa': 'ZSA', 'snav-pra': 'PRA', 'snav-cma': 'CMA', 'snav-asa': 'ASA', 'snav-hfa': 'HF analysis',
                   'snav-ws-locks': 'Workspaces and locks', 'snav-anem': 'ANEM live chat', 'snav-dal-ref': 'DAL credit (DO-178C / 254)', 'snav-prove': 'Prove', 'snav-fta': 'Fault trees' };

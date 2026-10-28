@@ -474,6 +474,9 @@
         // 26 Oct 2026: the person chose "load the cloud copy" in the manual save after a refusal: that load is the
         // decision (this tab's state was banked to the recovery list first), so nothing is asked or saved here
         if (_choosing) return true;
+        // 28 Oct 2026 (Waqas, connections): changes to items Safety Lab owns that a connected tool does not have yet are
+        // named before signing out, closing or leaving the project, with "Review and send now" (which stays here).
+        try { var CX = W.SLConnections; if (CX && typeof CX.beforeLeave === 'function' && !(await CX.beforeLeave(reason || 'leave'))) { _paint(); return false; } } catch (_) {}
         var A = _ack();
         // the one dialog for everything waiting; Keep working stops the action here, nothing is lost
         if (A && A.pending()) {
