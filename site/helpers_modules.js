@@ -13598,7 +13598,10 @@ function _buildDashReviewBucket() {
         }).join('') + '</div>';
         if (open.length > 12) inner += '<div class="dash-worklist-empty">… and ' + (open.length - 12) + ' more.</div>';
     }
-    return '<div class="dash-worklist-card"><h4>Open review comments<span class="dash-worklist-count ' + sevClass + '">' + n + '</span></h4>' + inner + '</div>';
+    // 28 Oct 2026: ANEM replies to every open comment and proposes the changes they ask for, as cards to accept.
+    const anemAll = (n && typeof window !== 'undefined' && window.SafetyLabAI && typeof window.SafetyLabAI.addressComments === 'function')
+        ? '<button type="button" class="review-action-btn anem-ask-all" style="margin:0 0 8px;" title="ANEM replies to every open comment and proposes the change each asks for as a card for you to accept. It never closes a comment." onclick="askAnemOnComment(null)">Address all with ANEM</button>' : '';
+    return '<div class="dash-worklist-card"><h4>Open review comments<span class="dash-worklist-count ' + sevClass + '">' + n + '</span></h4>' + anemAll + inner + '</div>';
 }
 
 function _allReqsForBaseline() {

@@ -31,10 +31,13 @@ const Review = (function() {
         return id;
     }
 
-    function addComment(target, text, parentId) {
+    // 28 Oct 2026: opts { authorName, aiGenerated, aiModel, filedBy } for a reply ANEM files (marked as ANEM's, never
+    // as the engineer's); the comment is filed and broadcast once, with those fields already on it.
+    function addComment(target, text, parentId, opts) {
         text = (text || '').toString().trim();
         if (!text) return null;
-        const author = (activeReviewerName || '').trim() || 'Reviewer';
+        opts = opts || {};
+        const author = (opts.authorName || '').toString().trim() || (activeReviewerName || '').trim() || 'Reviewer';
         const c = {
             commentId: _nextId(),
             target: {
@@ -51,6 +54,7 @@ const Review = (function() {
             resolvedBy: null,
             resolutionNote: ''
         };
+        if (opts.aiGenerated) { c.aiGenerated = true; c.aiModel = opts.aiModel || null; c.filedBy = (opts.filedBy || '').toString(); }
         reviewCommentsData.push(c);
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch(_) {}
         try { if (typeof _rtBroadcastComment === 'function') _rtBroadcastComment('upsert', { c: c }); } catch(_) {}   // #27 part 2

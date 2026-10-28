@@ -930,6 +930,7 @@
             itemsData:       safe(() => itemsData, []),
             routingData:     safe(() => routingData, []),   // NEW (zonal layer): cross-zone propagation paths (HV/LV/fuel/…)
             projectSourceDocs: safe(() => projectSourceDocs, []),   // NEW: persisted AI source documents (upload-once, consumed by every feature)
+            reviewCommentsData: safe(() => reviewCommentsData, []),   // 28 Oct 2026: ANEM sees and answers review comments
             projectConfig:   safe(() => projectConfig, {})
             // add what each feature needs, read-only
         };
@@ -4471,7 +4472,7 @@
             : '';
         return '<div style="margin:0 16px 8px;padding:8px 11px;border-radius:8px;font-size:12px;line-height:1.5;'
             + (complete
-                ? 'border:1px solid #1F7A33;color:#1F7A33;">✓ <b>Coverage complete</b> — all ' + cov.total + ' ' + noun + ' drafted' + (gaps.length ? '' : ', every flight phase assessed') + '.'
+                ? 'border:1px solid #1F7A33;color:#1F7A33;">✓ <b>Coverage complete</b> — all ' + cov.total + ' ' + noun + ' drafted' + ((Array.isArray(cov.phaseGaps) && !gaps.length) ? ', every flight phase assessed' : '') + '.'
                 : 'border:1px dashed #8A6D00;color:#8A6D00;">⚠ <b>Coverage: ' + covered + ' of ' + cov.total + ' ' + noun + ' drafted — ' + (cov.total - covered) + ' NOT drafted.</b>'
                   + ' This analysis is INCOMPLETE; accepting it does not close the remaining ' + noun + '.'
                   + (shown ? ('<div style="margin-top:4px;">Not drafted: ' + shown + more + '</div>') : ''))
@@ -5722,7 +5723,9 @@
             // Evening ruling, same day: the engineer picks WHICH functions get
             // their failure conditions decomposed — all pre-checked by default.
             const _fns = _leafUnits();   // 22 Oct 2026: the bottom of each branch only, each with its path
-            _openScopePicker(_fns, {
+            // 28 Oct 2026: ANEM's chat names the functions (opts.funcIds); the same drafting runs on exactly those, no list
+            const _selC = _pickByIds(_fns, opts.funcIds, function (f) { return f.subId; });
+            (_selC ? function (cfg0, cb) { cb(_selC); } : function (cfg0, cb) { _openScopePicker(_fns, cfg0, cb); })({
                 title: '✨ AI-drafted FCIM · which functions?',
                 disclaimer: _fns.length + ' aircraft function(s) on file. All are selected — leave it that way to decompose failure conditions for the full set, or narrow the scope. One matrix row per selected function.',
                 verb: 'Draft FCIM for',
@@ -10867,7 +10870,7 @@
     let _chatHistory = [];     // [{role:'user'|'assistant', content:string}]
     let _chatActivity = [];     // parallel to _chatHistory: null | {results:[…], assumptions:[…]}
     let _chatBusy = false;
-    const _CHAT_MAXTURNS = 14;  // rolling history window sent to the model
+    // 28 Oct 2026 (Waqas: "there should be no cutoff at all"): the whole conversation is sent, not the last 14 messages.
 
     function _chatClip(str, n) { str = String(str == null ? '' : str); return str.length > n ? (str.slice(0, n) + '…') : str; }
     function _chatSysById(id) { try { return (systemsData || []).find(function (x) { return String(x.id) === String(id); }) || null; } catch (_) { return null; } }
@@ -10982,6 +10985,160 @@
         try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
         return { ok: true, summary: summary, id: rec.id };
     }
+    // ---- 28 Oct 2026: the chat hands a whole piece of analysis to its own drafting engine -------------------
+    // Customer report: "it did the correct analysis with perfect reasoning just did not populate the actual FHA".
+    // The engine is the one the page's Draft button runs: its method, the source documents, the coverage checks,
+    // and every row as a card with Accept. It runs on its own after the chat turn; its panel opens when it is done.
+    function _chatIdList(v) { return (Array.isArray(v) ? v : ((v == null || v === '') ? [] : [v])).map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean); }
+    function _chatDraft(a) {
+        if (_chatExecFeature) return { ok: false, blocked: true, error: 'a draft is started from the chat, not from inside another draft' };
+        const an = String((a && a.analysis) || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+        const subIds = _chatIdList(a.subIds), condIds = _chatIdList(a.condIds), fcIds = _chatIdList(a.fcIds), commentIds = _chatIdList(a.commentIds);
+        const sysScope = a.scope === 'system' || !!String(a.systemId || '').trim();
+        const s = snapshot();
+        const start = function (label, run, what) {
+            Promise.resolve().then(run).catch(function (e) { try { _toast('ANEM could not start the ' + label + ': ' + ((e && e.message) || e), 'warning', 9000); } catch (_) {} });
+            return { ok: true, summary: 'Drafting the ' + label + (what ? (' for ' + what) : '') + '. The rows open for review, each with Accept.' };
+        };
+        const names = function (ids) { return ids.length <= 6 ? ids.join(', ') : (ids.slice(0, 6).join(', ') + ' and ' + (ids.length - 6) + ' more'); };
+        let sy = null;
+        if (sysScope && /^(fha|sfha|fcim)$/.test(an)) {
+            sy = _chatSysByIdOrName(a.systemId);
+            if (!sy) return { ok: false, error: 'no system ' + (a.systemId || '(none named)') + ' in the project' };
+        }
+        const pickSys = function (funcs) {   // a system's functions, narrowed to the ones named
+            if (!subIds.length) return funcs;
+            const want = {}; subIds.forEach(function (k) { want[k] = 1; });
+            return (funcs || []).filter(function (f) { return f && (want[String(f.subId || '')] || want[String(f.funcId || '')] || want[String(f.internalId || '')]); });
+        };
+        switch (an) {
+            case 'fha': case 'afha': case 'sfha': {
+                if (sy) {
+                    const funcs = pickSys(_funcsNeedingFhaForSystem(sy));
+                    if (!funcs.length) return { ok: false, error: subIds.length ? ('none of ' + names(subIds) + ' is a function of ' + (sy.name || sy.id) + ' without an SFHA row') : ('every function in ' + (sy.name || sy.id) + ' already has an SFHA row') };
+                    return start('SFHA', function () { return populateFha({ systemId: sy.id, systemName: sy.name || sy.id, funcs: funcs }); }, (sy.name || sy.id) + ' (' + funcs.length + ' function' + (funcs.length === 1 ? '' : 's') + ')');
+                }
+                const ex = (s.acExtractedFCs || []).filter(function (e) { return e && e.id && e.desc; });
+                if (condIds.length) {
+                    const have = {}; ex.forEach(function (e) { have[String(e.id).toLowerCase()] = e.id; });
+                    const miss = condIds.filter(function (k) { return !have[k.toLowerCase()]; });
+                    if (miss.length) return { ok: false, error: 'no FCIM failure condition ' + names(miss) + ' in the project' };
+                    const ids = condIds.map(function (k) { return have[k.toLowerCase()]; });
+                    return start('FHA', function () { return populateFha({ condIds: ids }); }, ids.length + ' failure condition' + (ids.length === 1 ? '' : 's') + ' (' + names(ids) + ')');
+                }
+                if (subIds.length) {
+                    const fnIds = {}; (s.acFunctionsData || []).forEach(function (f) { if (f && f.subId) fnIds[String(f.subId)] = 1; });
+                    const unknown = subIds.filter(function (k) { return !fnIds[k]; });
+                    if (unknown.length) return { ok: false, error: 'no aircraft function ' + names(unknown) + ' in the project' };
+                    if (ex.length) {
+                        const want = {}; subIds.forEach(function (k) { want[k] = 1; });
+                        const ids = ex.filter(function (e) { return want[String(e.subId || '')]; }).map(function (e) { return e.id; });
+                        const without = subIds.filter(function (k) { return !ex.some(function (e) { return String(e.subId || '') === k; }); });
+                        if (!ids.length) return { ok: false, error: names(subIds) + (subIds.length === 1 ? ' has' : ' have') + ' no failure conditions in the FCIM yet. The FHA classifies what the FCIM identifies: draft the FCIM first' };
+                        const r = start('FHA', function () { return populateFha({ condIds: ids }); }, names(subIds) + ' (' + ids.length + ' failure condition' + (ids.length === 1 ? '' : 's') + ' from the FCIM)');
+                        if (without.length) r.warn = [names(without) + (without.length === 1 ? ' has' : ' have') + ' no failure conditions in the FCIM yet, so no FHA row is drafted for ' + (without.length === 1 ? 'it' : 'them')];
+                        return r;
+                    }
+                    if ((s.acFcimData || []).filter(Boolean).length) return { ok: false, error: 'the FCIM identifies no failure conditions yet (every cell is marked not applicable or not assessed). The FHA classifies what the FCIM identifies: draft or write the FCIM cells first' };
+                    return start('FHA', function () { return populateFha({ funcIds: subIds }); }, names(subIds));
+                }
+                return start('FHA', function () { return populateFha({}); }, '');
+            }
+            case 'fcim': {
+                if (sy) {
+                    const funcs = pickSys(_funcsNeedingFcimForSystem(sy));
+                    if (!funcs.length) return { ok: false, error: subIds.length ? ('none of ' + names(subIds) + ' is a function of ' + (sy.name || sy.id) + ' without an FCIM row') : ('every function in ' + (sy.name || sy.id) + ' already has an FCIM row') };
+                    return start('system FCIM', function () { return populateFcim({ systemId: sy.id, systemName: sy.name || sy.id, funcs: funcs }); }, (sy.name || sy.id) + ' (' + funcs.length + ' function' + (funcs.length === 1 ? '' : 's') + ')');
+                }
+                if (subIds.length) {
+                    const leaves = {}; (_leafUnits() || []).forEach(function (f) { if (f && f.subId) leaves[String(f.subId)] = 1; });
+                    const bad = subIds.filter(function (k) { return !leaves[k]; });
+                    if (bad.length) return { ok: false, error: names(bad) + (bad.length === 1 ? ' is not a function at the bottom of its branch' : ' are not functions at the bottom of their branches') + ' (or not in the project). The FCIM is drafted for the lowest functions: name those' };
+                    return start('FCIM', function () { return populateFcim({ funcIds: subIds }); }, names(subIds));
+                }
+                return start('FCIM', function () { return populateFcim({}); }, '');
+            }
+            case 'fault_tree': case 'fault_trees': case 'fta': case 'trees': {
+                if (fcIds.length) {
+                    const gaps = _fcsNeedingTree();
+                    const want = {}; fcIds.forEach(function (k) { want[k] = 1; });
+                    const sel = gaps.filter(function (f) { return f && want[String(f.fcId)]; });
+                    const left = fcIds.filter(function (k) { return !sel.some(function (f) { return String(f.fcId) === k; }); });
+                    if (!sel.length) return { ok: false, error: names(fcIds) + ': no FHA failure condition without a fault tree by that id' };
+                    const r = start('fault trees', function () { return synthesizeTree({ fcs: sel }); }, names(sel.map(function (f) { return f.fcId; })));
+                    if (left.length) r.warn = [names(left) + ': already has a fault tree, or no FHA failure condition by that id'];
+                    return r;
+                }
+                return start('fault trees', function () { return synthesizeTree({}); }, '');
+            }
+            case 'requirements': case 'requirement': case 'req': return start('safety requirements', function () { return recommendRequirements(); }, '');
+            case 'fmea': return start('FMEA', function () { return draftFmea({ level: a.level === 'functional' ? 'functional' : 'item' }); }, '');
+            case 'pra': return start('particular risk analysis', function () { return draftPra(); }, '');
+            case 'zsa': return start('zonal safety analysis', function () { return draftZsa(); }, '');
+            case 'cma': return start('common mode analysis', function () { return draftCma(); }, '');
+            case 'mac': return start('MAC rules', function () { return draftMac({}); }, '');
+            case 'items': case 'configuration_items': return start('configuration items', function () { return draftItems({}); }, '');
+            case 'comments': case 'review_comments': {
+                if (commentIds.length && typeof Review !== 'undefined') {
+                    const miss = commentIds.filter(function (k) { return !Review.getById(k); });
+                    if (miss.length) return { ok: false, error: 'no review comment ' + names(miss) + ' in the project' };
+                }
+                const r = start('answers to the review comments', function () { return addressComments({ commentIds: commentIds }); }, commentIds.length ? names(commentIds) : 'every open comment');
+                return r;
+            }
+        }
+        return { ok: false, error: 'draft: "' + (a.analysis || '') + '" is not an analysis ANEM can draft (fha, fcim, fault_tree, requirements, fmea, pra, zsa, cma, mac, items, comments)' };
+    }
+    // ---- 28 Oct 2026: ANEM answers a review comment. Filed under it, marked as ANEM's; it never closes it. --------
+    function _chatReplyComment(a, model) {
+        if (typeof Review === 'undefined') return { ok: false, error: 'review comments are not available here' };
+        const c = Review.getById(String((a && a.commentId) || '').trim());
+        if (!c) return { ok: false, error: 'no review comment ' + ((a && a.commentId) || '(none named)') + ' in the project' };
+        const text = String((a && a.text) || '').trim();
+        if (!text) return { ok: false, blocked: true, error: 'not written: a reply with nothing in it' };
+        let by = ''; try { by = Review.getReviewerName() || ''; } catch (_) {}
+        const made = Review.addComment(c.target, text, c.commentId, { authorName: 'ANEM', aiGenerated: true, aiModel: model || null, filedBy: by });
+        if (!made) return { ok: false, error: 'the reply could not be filed' };
+        try { if (typeof renderReviewPanelBody === 'function') renderReviewPanelBody(); } catch (_) {}
+        try { if (typeof _refreshCommentTriggersFor === 'function') _refreshCommentTriggersFor(c.target); } catch (_) {}
+        try { if (typeof _refreshReviewSummaryIfOpen === 'function') _refreshReviewSummaryIfOpen(); } catch (_) {}
+        return { ok: true, summary: 'Replied to ' + (c.authorName || 'the') + '\u2019s comment on ' + (c.target ? (c.target.kind + ' ' + c.target.id) : 'the row') + ' (left open for the reviewer)' };
+    }
+    // ---- 28 Oct 2026: the comment engine. Every comment gets a reply; a change a comment asks for comes back as a
+    // card to accept. Units are the comments; a comment is covered when it has its reply.
+    const _COMMENTS_DIRECTIVE = 'Address the engineering REVIEW COMMENTS listed for this turn (ids, the row each is on, who wrote it, its words and the thread so far). For EACH comment: (1) if it asks for a change you can make from the project and its documents, emit the edit(s) that make it (update {table, _id, fields} on the row it is on, using the _id from CURRENT PROJECT STATE, or the add_* action it asks for) AND one reply_comment {commentId, text} saying in plain words what you changed and why; (2) if it is a question, or you disagree, or the change needs information that is not in the project, emit ONLY a reply_comment that answers it, gives your reasons, or names exactly what is needed. Every comment gets exactly one reply_comment. Never resolve or close a comment. Every edit follows the rules for that row type.';
+    function _commentThreadText(c) {
+        const chain = [];
+        try { let p = c.parentId ? Review.getById(c.parentId) : null; while (p && chain.length < 1000) { chain.unshift(p); p = p.parentId ? Review.getById(p.parentId) : null; } } catch (_) {}
+        return chain.map(function (p) { return (p.authorName || 'Reviewer') + ': "' + String(p.text || '') + '"'; }).join(' / ');
+    }
+    async function addressComments(opts) {
+        opts = opts || {};
+        if (typeof Review === 'undefined') { _toast('Review comments are not available here.', 'warning'); return; }
+        const want = _chatIdList(opts.commentIds);
+        let units;
+        if (want.length) {
+            const miss = want.filter(function (k) { return !Review.getById(k); });
+            if (miss.length) throw new Error('no review comment ' + miss.join(', ') + ' in the project');
+            units = want.map(function (k) { return Review.getById(k); });
+        } else {
+            units = Review.allOpen().filter(function (c) { return c && !c.aiGenerated; });
+        }
+        if (!units.length) { _toast('There are no open review comments to address.', 'info'); return; }
+        return _anemBatch(_COMMENTS_DIRECTIVE, {
+            title: '\u2728 ANEM \u00b7 review comments', analysis: 'review.comments',
+            chunk: {
+                units: units, size: 4, noun: 'review comment',
+                keyOf:     function (c) { return c.commentId; },
+                label:     function (c) {
+                    const t = c.target || {};
+                    const th = _commentThreadText(c);
+                    return c.commentId + ' on ' + (t.kind || '') + ' ' + (t.id || '') + (t.systemId ? (' in system ' + t.systemId) : '') + ', by ' + (c.authorName || 'Reviewer') + ': "' + String(c.text || '') + '"' + (th ? (' (earlier in the thread: ' + th + ')') : '');
+                },
+                coveredBy: function (x) { return (x && x.op === 'reply_comment') ? String(x.commentId || '') : null; }
+            }
+        });
+    }
     function _chatAddSystem(a, model) {
         var name = String((a && a.name) || '').trim();
         if (!name) return { ok: false, error: 'system needs a name' };
@@ -10996,7 +11153,11 @@
     }
 
     // Compact, ID-bearing snapshot so the model can reference and edit existing
-    // artifacts by their REAL ids (_id = internalId; domain ids echoed too). Capped.
+    // artifacts by their REAL ids (_id = internalId; domain ids echoed too).
+    // 28 Oct 2026 (Waqas: "there should be no cutoff at all"): nothing is left out. It used to stop at the first 80
+    // functions, 90 FHA and FCIM rows, 60 requirements, 28 functions per system and 80 nodes per tree, and cut
+    // names at 40 to 70 characters: on a three-tier project ANEM could not see two thirds of the functions.
+    function _chatFull(v) { return String(v == null ? '' : v); }
     function _chatProjectState() {
         const s = snapshot();
         // Spine surfacing: the chat is told to preserve the golden thread, so the state
@@ -11008,14 +11169,14 @@
             try { sum = (p && p.root && typeof _treeSummary === 'function') ? _treeSummary(p) : null; } catch (_) {}
             // #271 — flat node list (id, parent p, name, type t) so ANEM can target a specific
             // gate/event for surgical add/update/delete_fta_node instead of re-authoring the tree.
-            const nodes = []; let _nc = 0;
+            const nodes = [];
             (function walk(n, parentId) {
-                if (!n || _nc > 80) return; _nc++;
-                nodes.push({ id: n.id, p: parentId, name: _chatClip(n.name, 36), t: (n.type === 'gate') ? (n.gateType || 'OR') : (n.type || 'basic') });
+                if (!n) return;
+                nodes.push({ id: n.id, p: parentId, name: _chatFull(n.name), t: (n.type === 'gate') ? (n.gateType || 'OR') : (n.type || 'basic') });
                 (n.children || n._children || []).forEach(function (c) { walk(c, n.id); });
             })(p.root, null);
             return {
-                id: p.id, name: _chatClip(p.name, 50), level: p.treeLevel, mode: p.mode, systemId: p.systemId || '',
+                id: p.id, name: _chatFull(p.name), level: p.treeLevel, mode: p.mode, systemId: p.systemId || '',
                 allocTarget: (p.targetP != null) ? (Number(p.targetP).toExponential(1) + '/fh') : null,
                 allocDAL: (p.root && p.root.allocatedDAL) || null,
                 gates: sum ? sum.gates.length : null, leaves: sum ? sum.leafCount : null,
@@ -11023,7 +11184,7 @@
                 nodes: nodes
             };
         };
-        const reqRow = function (r) { return { _id: r.internalId, reqId: r.reqId, traceTo: r.traceId || (Array.isArray(r.traceIds) ? r.traceIds.join(',') : ''), text: _chatClip(r.text, 70) }; };
+        const reqRow = function (r) { return { _id: r.internalId, reqId: r.reqId, traceTo: r.traceId || (Array.isArray(r.traceIds) ? r.traceIds.join(',') : ''), text: _chatFull(r.text) }; };
         return {
             certBasis: (typeof _certBasis === 'function') ? _certBasis() : '',
             aircraft:  (typeof _aircraftName === 'function') ? _aircraftName() : '',
@@ -11034,26 +11195,28 @@
                 cma: (s.cmaData || []).length, items: (s.itemsData || []).length, fmea: (s.fmeaData || []).length,
                 routing: (s.routingData || []).length, systems: (s.systemsData || []).length
             },
-            acFunctions: (s.acFunctionsData || []).slice(0, 80).map(function (f) { const o = { _id: f.internalId, subId: f.subId, fn: _chatClip(f.subName, 60), of: _chatClip(f.funcName, 40) }; if (f.parentSubId) o.under = f.parentSubId; return o; }),
-            acFha:       (s.acFhaData || []).slice(0, 90).map(function (r) { return { _id: r.internalId, fcId: r.fcId, subId: r.subId, sev: r.severity, fc: _chatClip(r.fcDesc, 70) }; }),
-            acFcim:      (s.acFcimData || []).slice(0, 90).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlNa: r.tlNa || undefined, plNa: r.plNa || undefined, mNa: r.mNa || undefined, tlTxt: _chatClip(r.tlDesc, 60), plTxt: _chatClip(r.plDesc, 50), mTxt: _chatClip(r.mDesc, 50), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), tlExtra: (Array.isArray(r.tlExtra) ? r.tlExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), rationale: _chatClip(r.rationale, 40) }; }),
-            acReq:       (s.acReqData || []).slice(0, 60).map(reqRow),
-            ftaPages:    (s.ftaPages || []).slice(0, 40).map(treePage),
-            pra:         (s.praData || []).slice(0, 30).map(function (p) { return { _id: p.internalId, praId: p.praId, threat: _chatClip(p.threat, 40) }; }),
-            zsa:         (s.zsaData || []).slice(0, 30).map(function (z) { return { _id: z.internalId, zoneId: z.zoneId, sev: z.severity }; }),
-            cma:         (s.cmaData || []).slice(0, 30).map(function (c) { return { _id: c.internalId, cmaId: c.cmaId, subject: _chatClip(c.subject, 40), scope: c.scope }; }),
-            items:       (s.itemsData || []).slice(0, 240).map(function (it) { return { _id: it.internalId, itemId: it.itemId, name: _chatClip(it.name, 48), sys: it.owningSystemId || '' }; }),   // run 2 (4 Sep): the 40 cap hid 18 of 58 items from the MAC drafter — 7 rules lost; items are small, list them all (with their system)
-            fmea:        (s.fmeaData || []).slice(0, 40).map(function (m) { return { _id: m.internalId, level: m.level, sub: m.funcSubId || '', mode: _chatClip(m.funcMode || '', 36), sev: m.severity, fc: m.linkedFcId || '' }; }),
-            routing:     (s.routingData || []).slice(0, 30).map(function (r) { return { _id: r.internalId, rId: r.routingId, name: _chatClip(r.name, 36), kind: r.kind }; }),
-            markov:      ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.markovModels) || []).slice(0, 12).map(function (m) { return { id: m.id, name: _chatClip(m.name, 40), states: (m.states || []).slice(0, 24).map(function (st) { return { n: st.name, failed: !!st.isFailed }; }), transitions: (m.transitions || []).slice(0, 50).map(function (t) { return { from: t.from, to: t.to }; }) }; }),
-            interfaces:  ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interfaces) || []).slice(0, 60).map(function (i) { return { id: i.id, from: i.fromSystemId, ff: i.fromFuncId || null, to: i.toSystemId, tf: i.toFuncId || null, kind: i.kind, medium: i.medium || null, dir: i.direction || null }; }),
-            mac:         ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []).slice(0, 60).map(function (r) { return { id: r.id, subId: r.subId, phase: r.phase || 'All phases', clauses: (r.clauses || []).map(function (c) { return { min: c.min, of: (c.of || []).slice(0, 12) }; }), basis: r.substantiation ? r.substantiation.kind : null }; }),
+            acFunctions: (s.acFunctionsData || []).map(function (f) { const o = { _id: f.internalId, subId: f.subId, fn: _chatFull(f.subName), def: _chatFull(f.subDef), of: _chatFull(f.funcName), ofDef: _chatFull(f.funcDef) }; if (f.parentSubId) o.under = f.parentSubId; return o; }),
+            acFha:       (s.acFhaData || []).map(function (r) { return { _id: r.internalId, fcId: r.fcId, subId: r.subId, sev: r.severity, fc: _chatFull(r.fcDesc) }; }),
+            acFcim:      (s.acFcimData || []).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlNa: r.tlNa || undefined, plNa: r.plNa || undefined, mNa: r.mNa || undefined, tlTxt: _chatFull(r.tlDesc), plTxt: _chatFull(r.plDesc), mTxt: _chatFull(r.mDesc), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatFull(e.desc) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatFull(e.desc) }; }), tlExtra: (Array.isArray(r.tlExtra) ? r.tlExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatFull(e.desc) }; }), rationale: _chatFull(r.rationale) }; }),
+            acReq:       (s.acReqData || []).map(reqRow),
+            ftaPages:    (s.ftaPages || []).map(treePage),
+            pra:         (s.praData || []).map(function (p) { return { _id: p.internalId, praId: p.praId, threat: _chatFull(p.threat) }; }),
+            zsa:         (s.zsaData || []).map(function (z) { return { _id: z.internalId, zoneId: z.zoneId, sev: z.severity }; }),
+            cma:         (s.cmaData || []).map(function (c) { return { _id: c.internalId, cmaId: c.cmaId, subject: _chatFull(c.subject), scope: c.scope }; }),
+            items:       (s.itemsData || []).map(function (it) { return { _id: it.internalId, itemId: it.itemId, name: _chatFull(it.name), sys: it.owningSystemId || '' }; }),   // run 2 (4 Sep): the 40 cap hid 18 of 58 items from the MAC drafter — 7 rules lost; items are small, list them all (with their system)
+            fmea:        (s.fmeaData || []).map(function (m) { return { _id: m.internalId, level: m.level, sub: m.funcSubId || '', mode: _chatFull(m.funcMode || ''), sev: m.severity, fc: m.linkedFcId || '' }; }),
+            routing:     (s.routingData || []).map(function (r) { return { _id: r.internalId, rId: r.routingId, name: _chatFull(r.name), kind: r.kind }; }),
+            markov:      ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.markovModels) || []).map(function (m) { return { id: m.id, name: _chatFull(m.name), states: (m.states || []).map(function (st) { return { n: st.name, failed: !!st.isFailed }; }), transitions: (m.transitions || []).map(function (t) { return { from: t.from, to: t.to }; }) }; }),
+            interfaces:  ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interfaces) || []).map(function (i) { return { id: i.id, from: i.fromSystemId, ff: i.fromFuncId || null, to: i.toSystemId, tf: i.toFuncId || null, kind: i.kind, medium: i.medium || null, dir: i.direction || null }; }),
+            mac:         ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []).map(function (r) { return { id: r.id, subId: r.subId, phase: r.phase || 'All phases', clauses: (r.clauses || []).map(function (c) { return { min: c.min, of: (c.of || []) }; }), basis: r.substantiation ? r.substantiation.kind : null }; }),
+            // 28 Oct 2026: every review comment, so ANEM can answer and address them (reply_comment, draft comments)
+            comments:    (Array.isArray(s.reviewCommentsData) ? s.reviewCommentsData : []).filter(Boolean).map(function (c) { return { id: c.commentId, on: c.target ? (c.target.kind + ' ' + c.target.id) : '', sys: (c.target && c.target.systemId) || undefined, by: c.authorName || '', anem: c.aiGenerated ? true : undefined, replyTo: c.parentId || undefined, status: c.status || 'open', text: _chatFull(c.text) }; }),
             systems:     (s.systemsData || []).map(function (sy) { return {
                 id: sy.id, name: sy.name,
-                functions: (sy.functions || []).slice(0, 28).map(function (f) { return { _id: f.internalId, fid: f.funcId, fn: _chatClip(f.funcName, 48), tracesUpTo: (f.traceIds || []).join(',') || null }; }),
-                fha:       (sy.fha || []).slice(0, 32).map(function (r) { return { _id: r.internalId, fcId: r.fcId, sev: r.severity, fc: _chatClip(r.fcDesc, 56), rollsUpTo: r.acTrace || (r.acTraces && r.acTraces[0]) || null }; }),
-                fcim:      (sy.fcim || []).slice(0, 40).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlNa: r.tlNa || undefined, plNa: r.plNa || undefined, mNa: r.mNa || undefined, tlTxt: _chatClip(r.tlDesc, 56), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatClip(e.desc, 50) }; }) }; }),
-                req:       (sy.req || []).slice(0, 30).map(reqRow)
+                functions: (sy.functions || []).map(function (f) { return { _id: f.internalId, fid: f.funcId, fn: _chatFull(f.funcName), tracesUpTo: (f.traceIds || []).join(',') || null }; }),
+                fha:       (sy.fha || []).map(function (r) { return { _id: r.internalId, fcId: r.fcId, sev: r.severity, fc: _chatFull(r.fcDesc), rollsUpTo: r.acTrace || (r.acTraces && r.acTraces[0]) || null }; }),
+                fcim:      (sy.fcim || []).map(function (r) { return { _id: r.internalId, subId: r.subId, awareness: r.awareness, tl: r.tlId, pl: r.plId, m: r.mId, tlNa: r.tlNa || undefined, plNa: r.plNa || undefined, mNa: r.mNa || undefined, tlTxt: _chatFull(r.tlDesc), mExtra: (Array.isArray(r.mExtra) ? r.mExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatFull(e.desc) }; }), plExtra: (Array.isArray(r.plExtra) ? r.plExtra : []).filter(function (e) { return e && e.id; }).map(function (e) { return { id: e.id, txt: _chatFull(e.desc) }; }) }; }),
+                req:       (sy.req || []).map(reqRow)
             }; })
         };
     }
@@ -11069,6 +11232,8 @@
             '- ALTITUDE DISCIPLINE: a failure CONDITION is not a failure MODE. AFHA failure conditions are aircraft-function level; SFHA are system-function level; never descend to piece-part in an FHA. Functions are behaviors / abstract outputs, decomposed at most one level at a time.',
             '- You NEVER author a probability, failure rate (lambda), DAL, or severity classification as established fact. You may PROPOSE a severity with rationale for the engineer to confirm, and you may build fault-tree STRUCTURE with lambda left blank (the deterministic engine owns every number). Where a value needs engineering judgment or data, put it in the "assumptions" array — never silently invent it.',
             '- GOLDEN THREAD: preserve up-links. System functions trace to aircraft functions; SFHA FCs trace to AFHA FCs; requirements trace to the function/FC they mitigate; allocation (PASA/PSSA) trees are top-down, verification (SSA/ASA) trees mirror them bottom-up. When you add something, set the trace fields.',
+            '- WRITE, DO NOT DESCRIBE: when the engineer asks you to draft, add, create, fill or populate rows of an analysis (FHA, FCIM, fault trees, requirements, FMEA, PRA, ZSA, CMA, MAC, configuration items), emit ONE draft action naming the analysis and exactly what it covers (subIds for functions, condIds for FCIM failure conditions, fcIds for FHA failure conditions). That engine carries the full method, the source documents and the coverage checks, and returns every row as a card for the engineer to accept. NEVER put drafted rows, failure conditions, effects or severities in "reply" without the action that writes them; "reply" says in a sentence or two what you started. Use the add_* actions only for one row the engineer dictated, and update for a change to an existing row.',
+            '- REVIEW COMMENTS: state.comments lists every review comment. When the engineer asks you to answer, deal with or address comments, emit draft {analysis:"comments", commentIds:[...]} (no commentIds = every open comment). To answer one comment directly in this conversation, use reply_comment. You never resolve or close a comment: the reviewer or the engineer does.',
             '- Human-in-the-loop: edits apply live but the engineer can Undo any turn. In "reply", be explicit about what you changed and what still needs their judgment.',
             '- ATTACHMENTS: the engineer may attach diagrams or documents (SDDs, specifications, ICDs). Treat them as INPUTS to reason from, never as established fact — anything you derive from an attached image is PROVISIONAL and must be confirmed against the model; log an assumption whenever you lean on an attachment.',
             '',
@@ -11083,6 +11248,9 @@
             'CHOICES — HARD RULE (be consistent, never ad hoc): if your "reply" asks the engineer anything, offers to do something, or presents two or more possible paths — i.e. it contains a question mark or phrases like "should I", "would you like", "do you want", "I can either", "which", "or should" — you MUST populate "choices" with 2–4 options. If you are reporting completed edits with no decision pending, "choices" MUST be []. Never describe selectable options in prose while leaving "choices" empty.',
             '',
             'ACTION CATALOG (op + fields). scope is "aircraft" or "system"; for system scope include systemId from the state.',
+            'DRAFT (a whole piece of analysis, through its own drafting engine; the rows come back as cards with Accept):',
+            '- draft {analysis("fha"|"fcim"|"fault_tree"|"requirements"|"fmea"|"pra"|"zsa"|"cma"|"mac"|"items"|"comments"), scope("aircraft"|"system"), systemId?, subIds?:[function subIds], condIds?:[FCIM failure condition ids], fcIds?:[FHA failure condition ids, for fault trees], commentIds?:[review comment ids], level?("item"|"functional", FMEA)}  — omit the id lists to let the engineer pick in the engine\'s own list. An FHA row classifies an FCIM failure condition: for an FHA, name the functions (subIds) or their FCIM conditions (condIds).',
+            '- reply_comment {commentId, text}  — answer ONE review comment (an id from state.comments): what you changed and why, the answer to its question, or why you disagree. Filed under the comment, marked as yours. Never closes it.',
             'ADD:',
             '- add_fha {scope, systemId?, subId, fcDesc, phases[], effAc, effCrew, effPax, effAcLevel, effCrewLevel, effPaxLevel (one label per axis from the EFFECT LEVELS block for this certification basis - the class is derived from them), severity, severityRationale, sevBasis(Table A6 anchor id - REQUIRED whenever severity is set, judged or grounded), judgementCall(true ONLY where a level or the class was set by judgment because the context did not settle it), judgementNote(when judgementCall: what was assumed and what would confirm or overturn it), realized(true when the effect is felt in the row\'s phases; false when nothing has happened yet), escape(the escape from ESCAPES BY PHASE that applies, or "none"), escapeDefeated(true when THIS failure removes that escape)}',
             '- add_mac {subId, phase, clauses:[{min, of:[configuration item ids]}], sddRef, rationale, arbitration?}  — a Minimum Acceptable Configuration rule for ONE aircraft sub-function: every clause must hold; a clause is "at least min of these REDUNDANT CONFIGURATION ITEMS available" (the copies of the same thing — engines, channels, computers). Members are ids from the project state: a system id, a system function id (fid) or an item id. Positional / symmetric minima are one clause per group. Phase from the project\'s mission profile or "All phases". Filed as an assumption carrying sddRef until the engineer substantiates it. arbitration {scheme:"voting"|"none", k, of?, ref} ONLY where the document states how the copies are arbitrated (k erroneous copies defeat voting; none = a single erroneous output propagates); omit it otherwise — never guess.',
@@ -11127,13 +11295,18 @@
     function _chatSystemPromptParts(role, lane) {
         const _defs = (lane === undefined || lane === 'chat.edit') ? _definitionsBlock('chat.edit') : '';
         const head = (_defs ? [_standardsPreamble(), '', _defs, '', role] : [_standardsPreamble(), '', role]).join('\n');
-        const stateNote = 'CURRENT PROJECT STATE (JSON, read-only — reference these ids). The connected spine is included: each fault-tree page carries its allocTarget / allocDAL and its ccfGroups / repeatedEvents; system functions carry tracesUpTo and system FCs carry rollsUpTo; requirements carry traceTo. Inherit allocated targets (never a severity-class guess when a real target exists), preserve every up-link, and never break an existing CCF grouping or independence claim.';
-        const text = [head, '', stateNote, JSON.stringify(_chatProjectState())].join('\n');
+        const stateNote = 'CURRENT PROJECT STATE (JSON, read-only — reference these ids). The connected spine is included: each fault-tree page carries its allocTarget / allocDAL and its ccfGroups / repeatedEvents; system functions carry tracesUpTo and system FCs carry rollsUpTo; requirements carry traceTo. Inherit allocated targets (never a severity-class guess when a real target exists), preserve every up-link, and never break an existing CCF grouping or independence claim. Nothing is left out: every row of every table is listed, in full. comments[] holds every review comment; "on" names the row it is on as "<kind> <id>" (acFha / sysFha = the FHA row with that fcId, acFcim / sysFcim = the FCIM row of that function, acFunc / sysFunc = that function, acReq / sysReq = that requirement, acAsm / sysAsm = that assumption, pra / zsa / cma / fmea = that row), replyTo = the comment it answers.';
+        // 28 Oct 2026: the plain chat also reads the project's source documents (the analysis lanes always did). A batch
+        // gets them from _assembleAnalysisContext, so they are added here for the chat only, never twice.
+        let _docs = '';
+        if (lane === undefined || lane === 'chat.edit') { try { _docs = _projectDocContext('chat.edit', {}) || ''; } catch (_) { _docs = ''; } }
+        const text0 = [head, '', stateNote, JSON.stringify(_chatProjectState())].join('\n');
+        const text = _docs ? (text0 + '\n\n' + _docs) : text0;
         // head + '\n' + '' + '\n' = head followed by the '\n\n' seam; the break is just past it.
         // The state break is just past the seam the CALLER appends after the JSON (every
         // systemExtra and the OUTPUT FORMAT footer begin with '\n\n'); systemBlocks drops
         // it when no seam is there.
-        return { text: text, breaks: [head.length + 2, text.length + 2] };
+        return { text: text, breaks: _docs ? [head.length + 2, text0.length + 2, text.length + 2] : [head.length + 2, text.length + 2] };
     }
 
     // ---- live action executor (reuses the same writers the review panels use) ----
@@ -12417,7 +12590,7 @@
                 // ("engine-out at V1 …"); the id-claim scanner read the hyphenated phrase as an
                 // identifier and blocked the thrust rule. The MAC executor grounds a rule the
                 // real way — every member must exist in the project — so the prose is exempt.
-                if (a && a.op !== 'add_mac' && typeof window !== 'undefined' && window.AiFidelity && window.AiFidelity.checkClaims) {
+                if (a && a.op !== 'add_mac' && a.op !== 'reply_comment' && typeof window !== 'undefined' && window.AiFidelity && window.AiFidelity.checkClaims) {
                     const txt = [a.fcDesc, a.text, a.rationale, a.severityRationale, a.effAc, a.effCrew, a.effPax, a.localEffect, a.nextEffect, a.endEffect, a.remarks]
                         .filter(Boolean).join(' · ');
                     const ctx = _pfGet();
@@ -12456,6 +12629,8 @@
                         break;
                     }
                     case 'add_function': results.push(_chatAddFunction(a, model)); break;
+                    case 'draft': results.push(_chatDraft(a)); break;                       // 28 Oct 2026
+                    case 'reply_comment': results.push(_chatReplyComment(a, model)); break; // 28 Oct 2026
                     case 'add_mac': { const r2 = _chatAddMac(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'add_system': { const r2 = _chatAddSystem(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'add_fcim': {
@@ -12574,11 +12749,11 @@
                     _toast('Extracting ' + nm + '…', 'info');
                     const res = await _extractDoc(f);
                     _chatAttachments.push({ kind: 'doc', name: nm, text: (res && res.text) || '' });
-                    ((res && res.images) || []).slice(0, 6).forEach(function (im) { if (im && im.data) _chatAttachments.push({ kind: 'image', name: nm + ' (figure)', mime: im.type || 'image/png', data: im.data }); });
+                    ((res && res.images) || []).forEach(function (im) { if (im && im.data) _chatAttachments.push({ kind: 'image', name: nm + ' (figure)', mime: im.type || 'image/png', data: im.data }); });
                     try { _persistSourceDoc({ name: nm, text: (res && res.text) || '', tables: (res && res.tables) || [], images: (res && res.images) || [] }); } catch (_) {}
                 } else {
                     const txt = await f.text();
-                    _chatAttachments.push({ kind: 'doc', name: nm, text: String(txt || '').slice(0, 200000) });
+                    _chatAttachments.push({ kind: 'doc', name: nm, text: String(txt || '') });
                 }
             } catch (e) { _toast('Could not attach ' + nm + ' — ' + ((e && e.message) || e), 'warning'); }
         }
@@ -12678,6 +12853,8 @@
         add_item: [['itemId', 'Item id'], ['name', 'Name'], ['type', 'Type'], ['dal', 'DAL'], ['daType', 'Assurance type'], ['owningSystemId', 'Owning system'], ['zoneId', 'Zone'], ['description', 'Description']],
         add_fmea: [['level', 'Level'], ['funcSubId', 'Function'], ['funcMode', 'Failure mode'], ['linkedFcId', 'Failure condition'], ['localEffect', 'Local effect'], ['nextEffect', 'Next higher effect'], ['endEffect', 'End effect'], ['detection', 'Detection'], ['compensating', 'Compensating provisions'], ['remarks', 'Remarks']],
         update: [['table', 'Table'], ['_id', 'Row'], ['fields', 'Changes']],
+        reply_comment: [['commentId', 'Comment'], ['text', 'Reply']],
+        draft: [['analysis', 'Analysis'], ['scope', 'Scope'], ['systemId', 'System'], ['subIds', 'Functions'], ['condIds', 'Failure conditions'], ['fcIds', 'FHA failure conditions'], ['commentIds', 'Comments']],
         'delete': [['table', 'Table'], ['_id', 'Row']]
     };
     // Never listed: what the card already says elsewhere (title, class, badges) or what is bookkeeping.
@@ -13308,6 +13485,9 @@
         fmea:  'Draft an item-level FMEA built from the systems\' existing fault-tree basic events: for each, the failure mode, the local → next → end effect chain, the means of detection, a SUGGESTED severity, and compensating provisions (quantification stays a human step). Emit add_fmea actions filed under the owning system.'
     };
 
+    // 28 Oct 2026: words that ask ANEM to change the project (the safety net in _chatSend).
+    const _CHAT_WRITE_ASK = /\b(draft|add|create|populate|fill|generate|write|insert|build|update|fix|change|correct|address|apply|delete|remove|rename|replace|link|trace)\b/i;
+    const _CHAT_WRITE_NOW = 'Add what you just described to the analysis now: emit the actions that write it (a draft action for a whole analysis, update for an existing row). Do not repeat the analysis in the reply.';
     async function _chatSend(text) {
         text = String(text || '').trim();
         const atts = _chatAttachments.slice();
@@ -13320,7 +13500,7 @@
         _chatRenderTranscript();
         let r, parsed = null;
         try {
-            const msgs = _chatHistory.slice(-_CHAT_MAXTURNS).map(function (m) { return { role: m.role, content: m.content }; });
+            const msgs = _chatHistory.map(function (m) { return { role: m.role, content: m.content }; });
             if (atts.length) {
                 const blocks = [{ type: 'text', text: text || 'Please review the attached material in the context of the current project.' }];
                 atts.forEach(function (a) {
@@ -13347,7 +13527,11 @@
             r = attempt.rr; parsed = attempt.parsed;
         } catch (e) {
             _chatBusy = false;
-            _chatHistory.push({ role: 'assistant', content: '⚠ ' + ((e && e.message) || e) }); _chatActivity.push(null);
+            // 28 Oct 2026: nothing is cut to fit. When the whole project and conversation are more than the AI can read
+            // at once, say so in plain words instead of the provider's error.
+            const _em = String((e && e.message) || e);
+            const _big = /prompt is too long|too many (input )?tokens|maximum context|context (length|window)|exceeds? .*(context|token)/i.test(_em);
+            _chatHistory.push({ role: 'assistant', content: '⚠ ' + (_big ? ('This conversation, the project and its documents together are more than the AI can read in one go, so nothing was sent and nothing was cut to make it fit. Clear the conversation to start a fresh one, or remove an attachment. (' + _em + ')') : _em) }); _chatActivity.push(null);
             _chatRenderTranscript(); return;
         }
         const reply = (parsed && parsed.reply) ? String(parsed.reply)
@@ -13390,7 +13574,11 @@
         } catch (_) {}
         const _replyOut = reply + (_heldImg ? ('\n\n⚠ I held ' + actions.length + ' diagram-derived edit' + (actions.length === 1 ? '' : 's') + ' — nothing was applied. Verify against your actual model, then tell me to apply them.') : '');   // #260
         _chatHistory.push({ role: 'assistant', content: _replyOut });
-        _chatActivity.push({ results: results, assumptions: asmp.map(function (a) { return a && a.text; }).filter(Boolean), choices: (parsed && Array.isArray(parsed.choices)) ? parsed.choices : [] });
+        // 28 Oct 2026 (customer report: "no lines created at all"): a turn that asked for a change and wrote nothing
+        // says so, with a button that asks ANEM to write it. Not when ANEM asked a question back (choices).
+        const _choicesOut = (parsed && Array.isArray(parsed.choices)) ? parsed.choices : [];
+        const _noEdits = !!parsed && !actions.length && !_choicesOut.length && !_heldImg && _CHAT_WRITE_ASK.test(text);
+        _chatActivity.push({ results: results, assumptions: asmp.map(function (a) { return a && a.text; }).filter(Boolean), choices: _choicesOut, noEdits: _noEdits });
         _chatBusy = false;
         _chatRenderTranscript();
     }
@@ -13498,6 +13686,10 @@
                         const _applied = act.results.filter(function (r) { return r && r.ok; }).length;
                         if (_applied > 0) html += '<div style="margin-top:7px;display:flex;align-items:center;gap:8px;"><span style="font-size:10.5px;color:' + pal.sub + ';">Looks right? It’s already applied.</span><button class="anem-undo-turn" title="Roll back this turn’s edits" style="font-size:11.5px;padding:4px 10px;border:1px solid ' + pal.border + ';border-radius:8px;background:transparent;color:inherit;cursor:pointer;">↶ Undo ' + (_applied === 1 ? 'this edit' : 'these ' + _applied + ' edits') + '</button></div>';
                     }
+                }
+                if (act && act.noEdits) {   // 28 Oct 2026: the safety net
+                    html += '<div class="anem-noedits" style="margin-top:9px;font-size:12.5px;background:' + pal.warnBg + ';color:' + pal.warnFg + ';padding:6px 9px;border-radius:6px;">⚠ Nothing was added to the analysis this turn: ANEM answered in words only.</div>';
+                    if (i === _chatHistory.length - 1 && !_chatBusy) html += '<button class="anem-choice anem-write-now" data-choice="' + _esc(_CHAT_WRITE_NOW) + '" style="margin-top:7px;padding:7px 13px;border:1.5px solid ' + _ANEM_B + ';border-radius:16px;background:transparent;color:' + pal.botFg + ';font:inherit;font-size:13px;font-weight:700;cursor:pointer;">Add it to the analysis</button>';
                 }
                 if (act && act.assumptions && act.assumptions.length) {
                     html += '<div style="margin-top:8px;font-size:12px;color:' + pal.sub + ';border-top:1px dashed ' + pal.border + ';padding-top:6px;"><b>Assumptions logged:</b> ' + act.assumptions.map(function (t) { return _esc(t); }).join(' · ') + '</div>';
@@ -13758,7 +13950,8 @@
         },
         memoryRefresh: function () { try { _memoryRefresh(); return 'refreshing…'; } catch (_) { return 'failed'; } },
         // ---- Feature #48 — FHA / FCIM population + effects assist -----------
-        populateFha: _captureGuard('populateFha', populateFha),                 // async: draft rows → review panel
+        populateFha: _captureGuard('populateFha', populateFha),
+        addressComments: _captureGuard('addressComments', addressComments),   // 28 Oct 2026: ANEM answers and addresses review comments                 // async: draft rows → review panel
         // THE CAPTURE SEAM — arm, call any lane's own entry point, await the draft.
         //   const p = SafetyLabAI.captureNextDraft(600000);
         //   SafetyLabAI.populateFha({ condIds: ['SF-001-TL','SF-001-PL'] });

@@ -5062,6 +5062,13 @@ function backrefTriggerHtml(target, label) {
 // Render the comment list inside the open panel. Re-runs on every CRUD action.
 // [P2 batch 5] L10131-10164 moved verbatim to bindings_modules.js
 
+// 28 Oct 2026: "Ask ANEM" on one comment, "Address all with ANEM" on the open-comments list.
+function askAnemOnComment(commentId) {
+    try {
+        const p = window.SafetyLabAI.addressComments(commentId ? { commentIds: [commentId] } : {});
+        if (p && typeof p.catch === 'function') p.catch(function (e) { if (typeof showToast === 'function') showToast('ANEM could not start: ' + ((e && e.message) || e), 'warning', 8000); });
+    } catch (e) { if (typeof showToast === 'function') showToast('ANEM could not start: ' + ((e && e.message) || e), 'warning', 8000); }
+}
 function _renderReviewComment(c, depth) {
     const isRoot = depth === 0;
     const cls = 'review-comment' + (isRoot ? '' : ' review-reply depth-' + Math.min(depth, 4));
@@ -5075,6 +5082,10 @@ function _renderReviewComment(c, depth) {
         actions += '<button class="review-action-btn" onclick="reopenReviewComment(\'' + esc(c.commentId) + '\')">Reopen</button>';
     }
     actions += '<button class="review-action-btn danger" onclick="deleteReviewComment(\'' + esc(c.commentId) + '\')">Delete</button>';
+    // 28 Oct 2026: ANEM answers the comment and proposes the change it asks for, as a card to accept. Never closes it.
+    if (c.status === 'open' && !c.aiGenerated && typeof window !== 'undefined' && window.SafetyLabAI && typeof window.SafetyLabAI.addressComments === 'function') {
+        actions += '<button class="review-action-btn anem-ask" title="ANEM replies to this comment, and proposes the change it asks for as a card for you to accept. It never closes the comment." onclick="askAnemOnComment(\'' + esc(c.commentId) + '\')">Ask ANEM</button>';
+    }
 
     let resolution = '';
     if (c.status === 'resolved' && (c.resolvedBy || c.resolutionNote)) {

@@ -4032,12 +4032,21 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
 
     <!-- Phase 52 — Floating feedback button (bottom-right). Opens a pre-filled mailto.
          Sits above the toast stack and avoids covering FTA toolbars / canvases. -->
+    <!-- 28 Oct 2026: ANEM's live chat in a pill right next to Feedback (Waqas). One row, so they never overlap. -->
+    <div id="sl-fab-row" class="sl-fab-row">
+    <button id="anem-fab" class="anem-fab" type="button" onclick="slOpenAnem()"
+            aria-label="Open ANEM live chat"
+            title="ANEM live chat — ask, draft and review with ANEM">
+        <span class="anem-fab-icon" aria-hidden="true">✦</span>
+        <span class="anem-fab-label">ANEM</span>
+    </button>
     <button id="feedback-fab" class="feedback-fab" onclick="openBetaFeedback()"
             aria-label="Send beta feedback"
             title="Send beta feedback — opens an email pre-filled with your build ID">
         <span class="feedback-fab-icon" aria-hidden="true">✉</span>
         <span class="feedback-fab-label">Feedback</span>
     </button>
+    </div>
 
     <!-- Phase 53.53 — copyright footer. © Muhammad Waqas Nafees. Year is set at runtime so it
          updates without a manual edit each January. -->

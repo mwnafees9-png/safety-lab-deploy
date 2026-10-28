@@ -117,7 +117,9 @@ check('the unified feature ids in _FEATURE_SPECS cover what the batch callers na
     // doc.import mirrors (spec-less by design); chat.edit is the generic Ask-AI
     // batch — heterogeneous, no single spec applies. Everything analytic must map,
     // including the 'fha' ALIAS the unified FHA batch names itself with.
-    const misses = named.filter(a => a !== 'doc.import' && a !== 'chat.edit' && specs.indexOf("'" + a + "'") === -1);
+    // 28 Oct 2026: review.comments (ANEM addressing review comments) is heterogeneous like chat.edit: each edit it
+    // proposes follows that row type's op contract; it is exempted by name, never by a pattern.
+    const misses = named.filter(a => a !== 'doc.import' && a !== 'chat.edit' && a !== 'review.comments' && specs.indexOf("'" + a + "'") === -1);
     return misses.length === 0;
   })(), 'a named analysis with no spec entry silently runs bare');
 
