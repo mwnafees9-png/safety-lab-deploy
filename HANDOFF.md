@@ -8,7 +8,17 @@ Waqas: "once they confirm there is no independence that is when the beta factors
 Also open: regression_change_ack_ui fails about 1 run in 7 under heavy load in B8 (undo/redo), not traced.
 Desktop 0.21.12 (Windows) published 27 Oct, web a410a4e; desktop commit c424ba5; Mac channel stays 0.21.10.
 
-## 28 Oct 2026 (second build): DOORS NEXT AND CAMEO AS PILOTS; ADMIN IS A PAGE. NOT YET DEPLOYED.
+## 28 Oct 2026 (night fix): 369 "CHANGES" NOBODY MADE; BLANK PAGE PILLS WITH THE MENU COLLAPSED. NOT YET DEPLOYED.
+
+Waqas: "what are these changes, I cant make sense of them and I made no changes +when you collapse the side nav all the horizontal nav pills collapse on every page" (Chrome and the desktop app).
+Cause 1, found in his browser's own saved copy of "Aeolus req test" (IndexedDB safetyLabAero/kv autosave): every one of the 369 AI-drafted Aircraft FHA rows had one edit record, diff subIds: null -> "SF-xxx", signed by nobody. Opening a project runs migrateLegacyMultiTraces (data_ops_modules.js), which gives each FHA row a copy of its function id as a one-item list. ai_audit.js counted that as an edit of every AI row, rewrote aiSeen and appended aiEdits, and change_ack.js listed those bookkeeping fields as his changes (a change touching AI rows was always treated as the person's). The cloud copy was clean (every row matched its fingerprint); the false records had already been saved in two other projects (185 rows on "Aeolus HL-1 FHA draws on run 3 inputs", 74 on an "Untitled Project").
+Fix: ai_audit.js 1.2: a list that only mirrors its single field (subIds, acTraces, traceIds, linkedFhaIds, funcSubIds) is not content; false records already saved are taken out on sight and the project journal says how many; an edit is signed only while the person is making a change (SLChangeAck.status()); the sweep's own writes run as background work. change_ack.js 3.6: aiSeen, aiEdits, aiOriginal, aiPreAudit, aiFirstSeen and aiCallId are bookkeeping, never listed.
+Cause 2: safety_lab.css hid every .asb-lbl in rail mode; the page pills (#sl-areabar) are the same elements moved out of the menu. Rules now scoped to .app-sidebar (css 65.74).
+Test: regression_ai_audit_mirror_20261028 (record alone; the real open path in the app with B1 load step, B2 saved false records, B3 a person's edit listed without ai fields, B4 an app change unsigned; the pills with the menu collapsed). Five mutations; audit, person and css need the browser and are skipped on the Mac. Cloud 28/28; wall 499/0.
+Desktop: 0.21.15 (Windows) was released at 01:51 with web 7bc7d5f (app/ committed). package.json is 0.21.16 for this fix.
+Not fixed, noted: regression_change_ack_ui_20261013b is timing-sensitive under load (different checks fail when four copies run at once; "Discard all put back everything waiting" also failed 2 of 3 alone on the shipped code). Passes in the wall.
+
+## 28 Oct 2026 (second build): DOORS NEXT AND CAMEO AS PILOTS; ADMIN IS A PAGE. WEB LIVE (the Admin page is in use); desktop 0.21.15 Windows released 01:51; proxy 8aab9c1 deploy not confirmed.
 
 Decisions (Waqas): Cameo: Safety Lab writes only elements it created, and no admin can make Safety Lab the owner of a Cameo element ("correct, on 1"). DOORS Next: no comments; who sent and why goes in History only ("fine on the DOORS Next front"). GENESYS stays blocked until we have a Swagger file from a licensed server or Zuken support. Admin: "why dont we make admin a page instead of a a modal and make connections live there, this is not just a requirements thing", confirmed "yes that is correct"; then "AI key is fine where it is, seats, and licenses yes".
 What changed:

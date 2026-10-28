@@ -1,3 +1,5 @@
+// change_ack.js - v3.6 - 28 Oct 2026 - the AI draft record's own fields (aiSeen, aiEdits, aiOriginal...) are bookkeeping, never a
+//   change to confirm (AUDIT_FIELDS). See tests/regression_ai_audit_mirror_20261028.test.js
 // change_ack.js - v3.4 - 27 Oct 2026 - system and background work are measured from where the project really is: a change whose
 //   autosave write is still queued is taken into the "before" first (_freshBeforeSystem), so a sweep in that moment is never handed the
 //   person's change (Discard all re-applied it). See tests/regression_bg_changes_20261027.test.js
@@ -338,6 +340,11 @@
     // page). Created = initialization; any later change to them is shown.
     var INIT_PC = { toolchain: 1, safetyProgramPlan: 1 };
     var LAYOUT_FIELDS = { descBoxHeight: 1, x: 1, y: 1, x0: 1, y0: 1 };
+    // 28 Oct 2026 (Waqas: "what are these changes, I cant make sense of them and I made no changes"): the AI draft record
+    // (ai_audit.js) keeps a fingerprint, the original text and the edit log on every AI-drafted row. That is the app's
+    // bookkeeping about a change, never a change: a row whose only difference is one of these is not listed, and a real
+    // edit is listed without them.
+    var AUDIT_FIELDS = { aiSeen: 1, aiEdits: 1, aiOriginal: 1, aiPreAudit: 1, aiFirstSeen: 1, aiCallId: 1 };
     // Fields the app fills in the first time it needs them (empty -> a value): an initialization,
     // not an edit. A change from one value to another is still shown.
     var INIT_FIELDS = { weight: 1, targetP: 1, descBoxHeight: 1, analysis: 1, allocatedDAL: 1, lambda: 1, inputValue: 1, exposureTime: 1 };
@@ -405,7 +412,7 @@
         Object.keys(ks).forEach(function (k) {
             var av = a ? a[k] : undefined, bv = b ? b[k] : undefined;
             if (_S(av) === _S(bv)) return;
-            if (_derivedField(k) || LAYOUT_FIELDS[k] || (computed && computed[k])) { derived++; return; }
+            if (_derivedField(k) || LAYOUT_FIELDS[k] || AUDIT_FIELDS[k] || (computed && computed[k])) { derived++; return; }
             if (INIT_FIELDS[k] && (av === undefined || av === null || av === '')) { derived++; return; }
             if ((av === undefined || av === null) && _empty(bv)) { derived++; return; }   // an empty container created on first use
             if ((av === undefined || av === null) && Object.prototype.hasOwnProperty.call(DEFAULTS, k) && DEFAULTS[k] === bv) { derived++; return; }

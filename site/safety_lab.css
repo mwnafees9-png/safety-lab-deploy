@@ -418,13 +418,15 @@ body.nav-sidebar .global-header h1 { display: none; }
    can render, and stamps the panel's header text onto data-grp. */
 body.nav-sidebar.nav-rail .app-sidebar { width: 60px; padding: 14px 6px; overflow: visible; transition: width var(--t-base) ease, padding var(--t-base) ease; }
 body.nav-sidebar.nav-rail .container { margin-left: 60px !important; }
-body.nav-sidebar.nav-rail .asb-lbl,
-body.nav-sidebar.nav-rail .asb-chev,
-body.nav-sidebar.nav-rail .asb-brandtxt,
-body.nav-sidebar.nav-rail .asb-classic,
-body.nav-sidebar.nav-rail .asb-sub,
-body.nav-sidebar.nav-rail .asb-sub2,
-body.nav-sidebar.nav-rail .asb-catsub { display: none; }
+/* 28 Oct 2026: scoped to the side menu. The page pills at the top of every page (nav_areas.js, #sl-areabar) are the
+   same .asb-item/.asb-lbl elements moved out of the menu; unscoped, collapsing the menu blanked every pill. */
+body.nav-sidebar.nav-rail .app-sidebar .asb-lbl,
+body.nav-sidebar.nav-rail .app-sidebar .asb-chev,
+body.nav-sidebar.nav-rail .app-sidebar .asb-brandtxt,
+body.nav-sidebar.nav-rail .app-sidebar .asb-classic,
+body.nav-sidebar.nav-rail .app-sidebar .asb-sub,
+body.nav-sidebar.nav-rail .app-sidebar .asb-sub2,
+body.nav-sidebar.nav-rail .app-sidebar .asb-catsub { display: none; }
 body.nav-sidebar.nav-rail .asb-rail-btn { margin: 0 auto; }
 body.nav-sidebar.nav-rail .brand-mark { display: none; }
 body.nav-sidebar.nav-rail .asb-brand { padding: 0 !important; justify-content: center; }
@@ -490,7 +492,7 @@ body.fta-fullscreen.nav-sidebar .container { margin-left: 0 !important; }
 /* third nesting level — a nested group inside a Safety sub-section (FTA under Trees & models) */
 .asb-grp.asb-nested.asb-deep > summary { padding-left: 52px; }
 .asb-grp.asb-nested.asb-deep .asb-sub2 .asb-item.sub { padding-left: 66px; }
-body.nav-sidebar.nav-rail .asb-sub2 { display: none; }
+body.nav-sidebar.nav-rail .app-sidebar .asb-sub2 { display: none; }
 
 /* Phase 75.2 — when the sidebar is on, the in-content nav lives in the sidebar instead.
    Aircraft sub-tab strip and the redundant system folder cards are hidden; the Fault

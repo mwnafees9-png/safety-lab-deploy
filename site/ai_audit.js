@@ -1,5 +1,5 @@
 // ============================================================================
-// ai_audit.js — v1.1 — the audit trail behind every AI draft
+// ai_audit.js — v1.2 — the audit trail behind every AI draft
 // (23 Sep 2026, standards gap G10; EASA AI concept paper Issue 03, NIST AI RMF).
 //
 // POSITION (Waqas, 23 Sep 2026): Safety Lab's AI is ADVISORY ONLY. It proposes;
@@ -31,7 +31,19 @@
 // Level 1B is enforced elsewhere and only surfaced here: an accepted AI row
 // stays "unreviewed" (red badge, blocks hand-off) until an engineer edits it
 // or a reviewer approves it (ai_badges.js).
-// See tests/regression_ai_audit.test.js.
+// v1.2 (28 Oct 2026, Waqas: "what are these changes, I cant make sense of them and I made no changes"): opening a
+// project runs migrateLegacyMultiTraces (data_ops_modules.js), which gives every FHA row a copy of its function id as a
+// one-item list (subId "SF-001" -> subIds ["SF-001"]). That is a change of shape, not of content, but this sweep saw it as
+// an edit of every AI-drafted row on the next open, signed it, and the change list showed the record as the person's
+// change (369 rows on Aeolus req test). Now:
+//   - a list that only mirrors its single field (subIds/subId, acTraces/acTrace, traceIds/traceId,
+//     linkedFhaIds/linkedFhaId, funcSubIds/funcSubId) is not content: fields() and replay() leave it out, so a row
+//     reads the same before and after the load step;
+//   - edit records the load step already wrote (some are saved in projects) are taken out on sight, and the project
+//     journal says how many and why;
+//   - an edit is signed with the person's name only while the person is making a change (SLChangeAck says so); the
+//     sweep's own writes run as background work, and change_ack.js never lists aiSeen/aiEdits/aiOriginal.
+// See tests/regression_ai_audit.test.js and tests/regression_ai_audit_mirror_20261028.test.js.
 // ============================================================================
 (function (root) {
     'use strict';
@@ -123,12 +135,23 @@
         if (!n || typeof n !== 'object') return '';
         return [n.id, n.type, n.gateType || '', n.name || '', n.displayId || ''].join('|') + '(' + (n.children || n._children || []).map(_treeShape).join(',') + ')';
     }
+    // A one-item list that only repeats its single field (or an empty list beside an empty field) is the load step's
+    // shape, not content (v1.2).
+    var MIRRORS = { subIds: 'subId', acTraces: 'acTrace', traceIds: 'traceId', linkedFhaIds: 'linkedFhaId', funcSubIds: 'funcSubId' };
+    function _isMirror(k, v, scalar) {
+        if (!Object.prototype.hasOwnProperty.call(MIRRORS, k)) return false;
+        var list = Array.isArray(v) ? v.map(String) : (v == null ? [] : String(v).split(', ').filter(function (x) { return x !== ''; }));
+        var one = (scalar == null || scalar === '') ? '' : String(scalar).trim();
+        if (!list.length) return one === '';
+        return list.length === 1 && String(list[0]).trim() === one;
+    }
     function fields(row) {
         var out = {};
         if (row && row.root && typeof row.root === 'object') out.treeStructure = _fnv(_treeShape(row.root));
         Object.keys(row || {}).sort().forEach(function (k) {
             if (_SKIP.test(k)) return;
             var v = row[k];
+            if (_isMirror(k, v, row[MIRRORS[k]])) return;
             if (typeof v === 'string') out[k] = v.trim().slice(0, FIELD_CAP);
             else if (typeof v === 'number' || typeof v === 'boolean') out[k] = String(v);
             else if (Array.isArray(v) && v.every(function (x) { return typeof x === 'string' || typeof x === 'number'; })) out[k] = v.join(', ').slice(0, FIELD_CAP);
@@ -140,9 +163,31 @@
     function replay(row) {
         var cur = Object.assign({}, (row && row.aiOriginal) || {});
         ((row && row.aiEdits) || []).forEach(function (ed) { (ed.diff || []).forEach(function (d) { if (d.to === null) delete cur[d.field]; else cur[d.field] = d.to; }); });
+        Object.keys(MIRRORS).forEach(function (k) { if ((k in cur) && _isMirror(k, cur[k], cur[MIRRORS[k]])) delete cur[k]; });
         return cur;
     }
-    // Inspect one AI row; returns 'new' | 'edit' | null (unchanged / not AI).
+    // Edit records whose every difference is a mirror list appearing beside its own field were written by the load step,
+    // not by anyone (v1.2). Take those differences out, and an edit left with none; return how many records went.
+    function _dropMirrorEdits(row) {
+        if (!Array.isArray(row.aiEdits) || !row.aiEdits.length) return 0;
+        var before = row.aiEdits.length, cur = Object.assign({}, row.aiOriginal || {});
+        var kept = [];
+        row.aiEdits.forEach(function (ed) {
+            var diff = (ed && ed.diff) || [];
+            var real = diff.filter(function (d) {
+                if (!d || !Object.prototype.hasOwnProperty.call(MIRRORS, d.field)) return true;
+                var sc = MIRRORS[d.field], scalar = (sc in cur) ? cur[sc] : row[sc];
+                return !(_isMirror(d.field, d.to, scalar) && (d.from == null || _isMirror(d.field, d.from, scalar)));
+            });
+            diff.forEach(function (d) { if (d) { if (d.to === null) delete cur[d.field]; else cur[d.field] = d.to; } });
+            if (real.length === diff.length) kept.push(ed);
+            else if (real.length) kept.push(Object.assign({}, ed, { diff: real }));
+        });
+        if (kept.length === before && kept.every(function (e, i) { return e === row.aiEdits[i]; })) return 0;
+        if (kept.length) row.aiEdits = kept; else delete row.aiEdits;
+        return before - kept.length || 1;
+    }
+    // Inspect one AI row; returns 'new' | 'edit' | 'cleaned' | null (unchanged / not AI).
     // opts.local: the change was made in THIS session (signed with this user);
     // otherwise it arrived by sync or a load, and is recorded without a name.
     function observe(row, opts) {
@@ -160,7 +205,8 @@
             row.aiOriginal = f; row.aiSeen = h;
             return 'new';
         }
-        if (row.aiSeen === h) return null;
+        var cleaned = _dropMirrorEdits(row);
+        if (row.aiSeen === h && !cleaned) return null;
         var last = replay(row), diff = [];
         var keys = {}; Object.keys(last).forEach(function (k) { keys[k] = 1; }); Object.keys(f).forEach(function (k) { keys[k] = 1; });
         Object.keys(keys).sort().forEach(function (k) {
@@ -168,7 +214,7 @@
             if (a !== b) diff.push({ field: k, from: a, to: b });
         });
         row.aiSeen = h;
-        if (!diff.length) return null;
+        if (!diff.length) return cleaned ? 'cleaned' : null;
         if (!Array.isArray(row.aiEdits)) row.aiEdits = [];
         row.aiEdits.push(opts.local ? { at: _nowIso(), by: _me(), via: 'edit', diff: diff } : { at: _nowIso(), by: '', via: 'sync or load', diff: diff });
         return 'edit';
@@ -199,15 +245,29 @@
         try { var HA = g('HF_ANALYSES'); if (HA && typeof HA.aiRows === 'function') HA.aiRows().forEach(function (e) { if (e && e.row && e.row.aiGenerated === true) out.push({ row: e.row, where: 'HF · ' + e.lane }); }); } catch (_) {}
         return out;
     }
+    function _hasMirrorEdits(row) {
+        return Array.isArray(row.aiEdits) && row.aiEdits.some(function (ed) { return ((ed && ed.diff) || []).some(function (d) { return d && Object.prototype.hasOwnProperty.call(MIRRORS, d.field); }); });
+    }
+    function _anyToWrite() {
+        return aiRows().some(function (x) { var r = x.row; return !r.aiOriginal || r.aiSeen !== _hash(fields(r)) || (_hasMirrorEdits(r) && _dropMirrorEdits(Object.assign({}, r, { aiEdits: r.aiEdits.slice() })) > 0); });
+    }
     // One pass over every AI row. Returns counts; saves when anything changed.
     var _inSweep = false;
     function sweep(opts) {
-        var n = { rows: 0, fresh: 0, edited: 0 };
+        var n = { rows: 0, fresh: 0, edited: 0, cleaned: 0 };
         if (_inSweep) return n;
         _inSweep = true;
         try {
-            aiRows().forEach(function (x) { n.rows++; var r = observe(x.row, opts); if (r === 'new') n.fresh++; else if (r === 'edit') n.edited++; });
-            if ((n.fresh || n.edited) && typeof root.scheduleAutosave === 'function') { try { root.scheduleAutosave(); } catch (_) {} }
+            var run = function () {
+                aiRows().forEach(function (x) { n.rows++; var r = observe(x.row, opts); if (r === 'new') n.fresh++; else if (r === 'edit') n.edited++; else if (r === 'cleaned') n.cleaned++; });
+                if (n.cleaned) { try { if (typeof root.jrnl === 'function') root.jrnl('ai-audit', 'AI draft record: took out the edit entries on ' + n.cleaned + ' AI-drafted row' + (n.cleaned === 1 ? '' : 's') + ' that opening the project had written (a copy of the function id as a list); nobody edited ' + (n.cleaned === 1 ? 'it' : 'them')); } catch (_) {} }
+                if ((n.fresh || n.edited || n.cleaned) && typeof root.scheduleAutosave === 'function') { try { root.scheduleAutosave(); } catch (_) {} }
+            };
+            // The record is the app's own bookkeeping: a sweep that is not part of the person's change runs as
+            // background work (change_ack.js), so it is never offered as the person's change.
+            // Background work is only opened when a row needs writing (it measures the whole project first).
+            var CA = root.SLChangeAck;
+            if (!(opts && opts.local) && CA && typeof CA.background === 'function' && _anyToWrite()) CA.background(run); else run();
         } finally { _inSweep = false; }
         return n;
     }
@@ -310,6 +370,13 @@
     // SYNC / LOAD: a 3 s timer (on data-change generation) catches what arrived from elsewhere;
     // anything it finds unrecorded is logged without a name ('sync or load').
     var _lastGen = -1, _timer = null, _pendingLocal = null, _hooked = false;
+    // Is the person making a change right now? Only then is an edit signed with their name (v1.2). Without the change
+    // module (tests, old pages) every save is treated as theirs, as before.
+    function _personNow() {
+        var CA = root.SLChangeAck;
+        if (!CA || typeof CA.status !== 'function') return true;
+        try { var st = CA.status(); return !!(st && st.open && st.user); } catch (_) { return false; }
+    }
     function _gen() { var dc = root.SLDataChange; return dc && typeof dc.gen === 'function' ? dc.gen() : null; }
     function _hookSave() {
         if (_hooked || typeof root.scheduleAutosave !== 'function') return;
@@ -317,7 +384,7 @@
         var orig = root.scheduleAutosave;
         var wrapped = function () {
             if (!_inSweep && !_pendingLocal && typeof setTimeout === 'function') {
-                _pendingLocal = setTimeout(function () { _pendingLocal = null; try { sweep({ local: true }); _lastGen = _gen(); } catch (_) {} }, 0);
+                _pendingLocal = setTimeout(function () { _pendingLocal = null; try { sweep({ local: _personNow() }); _lastGen = _gen(); } catch (_) {} }, 0);
             }
             return orig.apply(this, arguments);
         };
@@ -338,7 +405,7 @@
     try { if (typeof setInterval === 'function' && root.document && !root.SL_AI_AUDIT_OFF) { _timer = setInterval(tick, 3000); setTimeout(_hookSave, 0); } } catch (_) {}
 
     var api = { KEEP_TEXT: KEEP_TEXT, MAX_LOG: MAX_LOG, recordCall: recordCall, call: call, matchCall: matchCall,
-        fields: fields, replay: replay, observe: observe, aiRows: aiRows, sweep: sweep, tick: tick, hookSave: _hookSave,
+        fields: fields, replay: replay, observe: observe, isMirror: _isMirror, dropMirrorEdits: _dropMirrorEdits, MIRRORS: MIRRORS, aiRows: aiRows, sweep: sweep, tick: tick, hookSave: _hookSave,
         summary: summary, cardLine: cardLine, csv: csv, callsCsv: callsCsv, fingerprint: _fnv,
         noteDecision: noteDecision, reliance: reliance, relianceLine: relianceLine };
     try { root.SLAiAudit = api; } catch (_) {}
