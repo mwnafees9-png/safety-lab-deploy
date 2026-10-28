@@ -111,7 +111,7 @@ const JWT_ADMIN = 'aaa.admin.sig', JWT_USER = 'aaa.user.sig';
   const sql = fs.readFileSync(path.join(REPO, 'customer-install/db/26_server_admin_check.sql'), 'utf8');
   check('am_i_server_admin answers for the caller only, with the existing admin rule', /create or replace function public\.am_i_server_admin\(\)/.test(sql) && /private\.is_safety_lab_admin\(\)/.test(sql) && /security definer/.test(sql));
   check('callable by signed-in users only', /revoke all on function public\.am_i_server_admin\(\) from public, anon;/.test(sql) && /grant execute on function public\.am_i_server_admin\(\) to authenticated;/.test(sql));
-  check('apply.sh runs it', /26_server_admin_check; do/.test(fs.readFileSync(path.join(REPO, 'customer-install/db/apply.sh'), 'utf8')));
+  check('apply.sh runs it', /for f in [^;]* 26_server_admin_check[ ;]/.test(fs.readFileSync(path.join(REPO, 'customer-install/db/apply.sh'), 'utf8')));
 
   console.log('\n[app] the panel');
   const idx = fs.readFileSync(path.join(REPO, 'site/index.html'), 'utf8'), js = fs.readFileSync(path.join(REPO, 'site/server_ai_key.js'), 'utf8');

@@ -67,7 +67,7 @@ const MODEL_TOKEN_WEIGHTS = {
 const BUILTIN_ORIGINS = ["https://safetylabaero.com", "https://www.safetylabaero.com"];
 
 const CORS_BASE = {
-  "access-control-allow-methods": "GET,POST,PATCH,OPTIONS",
+  "access-control-allow-methods": "GET,POST,PATCH,PUT,OPTIONS",
   "access-control-allow-headers": "authorization,content-type,x-safetylab-itar,x-safetylab-feature",
   // SEC-3b: the app reads this to know the proxy has written the ledger row itself
   "access-control-expose-headers": "x-safetylab-audit",
@@ -314,7 +314,7 @@ function bridgeInternalAllowList(env) {
   if (!env || env.LICENSE_MODE !== "offline") return [];
   return String(env.BRIDGE_INTERNAL_HOSTS || "").split(",").map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean);
 }
-function bridgeTargetProblem(rawUrl, savedHost, env) {
+function bridgeTargetProblem(rawUrl, savedHost, env, anyPath) {
   let target;
   try { target = new URL(rawUrl || ""); } catch (_) { return { status: 400, error: "invalid target URL" }; }
   const host = target.hostname;
@@ -331,7 +331,7 @@ function bridgeTargetProblem(rawUrl, savedHost, env) {
       return { status: 400, error: allow.length ? "target must be a public https host, or one of this server's approved internal hosts" : "target must be a public https host" };
     if (target.port && target.port !== "443") return { status: 400, error: "only port 443 is bridged" };
   }
-  if (!target.pathname.includes("/rest/")) return { status: 400, error: "only ALM /rest/ APIs are bridged" };
+  if (!anyPath && !target.pathname.includes("/rest/")) return { status: 400, error: "only ALM /rest/ APIs are bridged" };   // anyPath: a tool on the Connections engine, whose own fence (almRequestProblem) names its paths
   if (!savedHost || host.toLowerCase() !== String(savedHost).toLowerCase())
     return { status: 403, error: "target host does not match the saved connector" };
   return { target };
@@ -382,6 +382,86 @@ function bridgeWriteProblem(method, target, text) {
   if (String(text || "").length > BRIDGE_WRITE_MAX) return "the body is larger than 2 MB";
   try { JSON.parse(String(text || "null")); } catch (_) { return "the body is not JSON"; }
   return "";
+}
+// ---- 28 Oct 2026: the other connected tools (Polarion, Codebeamer), on the Connections engine ----------------------
+// /v1/ai/bridge?tool=<tool>&target=<url>. The login is the user's own vault secret "<tool>_token", read here and never
+// returned. The fence is the engine's own (site/alm_engine.js, copied here word for word; a test compares them): https,
+// the host saved with the login, the tool's REST paths, and for writes only create, change, link and comment. The host
+// rules are Jama's (bridgeTargetProblem: a public host on 443, or an internal host this customer's server approved).
+var ALM_RULES = {
+    polarion: {
+        root: /\/polarion\/rest\/v1\/(.*)$/,
+        write: {
+            POST: [/^projects\/[^\/]+\/workitems$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/actions\/moveToDocument$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/linkedworkitems$/, /^projects\/[^\/]+\/workitems\/[^\/]+\/comments$/],
+            PATCH: [/^projects\/[^\/]+\/workitems\/[^\/]+$/]
+        },
+        read: { POST: [] }
+    },
+    codebeamer: {
+        root: /\/api\/v3\/(.*)$/,
+        write: {
+            POST: [/^trackers\/\d+\/items$/, /^associations$/],
+            PUT: [/^items\/\d+\/fields$/]
+        },
+        read: { POST: [/^items\/query$/] }
+    }
+};
+// '' when the request may go, or the reason it may not. savedHost: the host saved with the login.
+function almRequestProblem(tool, method, rawUrl, savedHost) {
+    var R = ALM_RULES[tool]; if (!R) return 'not a connected tool';
+    var m = String(method || '').toUpperCase();
+    var u; try { u = new URL(String(rawUrl)); } catch (_) { return 'not a valid address'; }
+    if (u.protocol !== 'https:') return 'the address must be https';
+    if (!savedHost || u.hostname.toLowerCase() !== String(savedHost).toLowerCase()) return 'only the saved address can be reached';
+    var mm = R.root.exec(u.pathname); if (!mm) return 'only the tool’s REST API is reached';
+    var rest = mm[1];
+    if (m === 'GET') return '';
+    if (u.search) return 'no query string on a write';
+    var ok = (R.read[m] || []).concat(R.write[m] || []).some(function (re) { return re.test(rest); });
+    if (ok) return '';
+    if (m === 'DELETE') return 'Safety Lab never deletes anything in a connected tool';
+    return 'Safety Lab only reads, creates, changes, links and comments on items in the tool';
+}
+const TOOL_LABEL = { polarion: "Polarion", codebeamer: "Codebeamer" };
+async function handleToolBridge(request, env, caller, url, tool) {
+  if (!caller.userId) return jsonResponse(401, { error: { type: "unauthorized", message: "The connection needs a signed-in user." } });
+  if (!Object.prototype.hasOwnProperty.call(ALM_RULES, tool)) return jsonResponse(400, { error: { type: "bad_tool", message: "Not a tool this server connects to." } });
+  const label = TOOL_LABEL[tool] || tool;
+  const rl = await checkRateLimit(env, "br:" + caller.userId, 60);
+  if (!rl.ok) return jsonResponse(429, { error: { type: "rate_limited", message: "Connection rate limit (60/min) exceeded." }, retry_after: 60 }, { "retry-after": "60" });
+  const sec = await readUserSecret(env, caller.userId, tool + "_token");
+  if (sec.error) return jsonResponse(502, { error: { type: "upstream_down", message: "Secret store unreachable." } });
+  if (sec.missing) return jsonResponse(404, { error: { type: "no_connector", message: "No " + label + " login is saved for you on this server. Open Connection settings and sign in." } });
+  const savedHost = sec.meta && sec.meta.baseHost;
+  const chk = bridgeTargetProblem(url.searchParams.get("target"), savedHost, env, true);
+  if (chk.error) return jsonResponse(chk.status, { error: { type: "bad_target", message: chk.error } });
+  const method = String(request.method || "").toUpperCase();
+  const fp = almRequestProblem(tool, method, chk.target.toString(), savedHost);
+  if (fp) return jsonResponse(400, { error: { type: "bad_request", message: "Not sent: " + fp + "." } });
+  let body;
+  if (method !== "GET") {
+    body = await request.text().catch(() => "");
+    if (body.length > BRIDGE_WRITE_MAX) return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is larger than 2 MB." } });
+    try { JSON.parse(body || "null"); } catch (_) { return jsonResponse(400, { error: { type: "bad_write", message: "Not sent: the body is not JSON." } }); }
+  }
+  const bearer = tool === "polarion" || (sec.meta && sec.meta.auth === "bearer");
+  const auth = bearer ? "Bearer " + sec.secret : "Basic " + btoa(String((sec.meta && sec.meta.user) || "") + ":" + sec.secret);
+  try {
+    const upstream = await fetch(chk.target.toString(), {
+      method: method, redirect: "manual",
+      headers: method === "GET" ? { authorization: auth, accept: "application/json" } : { authorization: auth, accept: "application/json", "content-type": "application/json" },
+      body: method === "GET" ? undefined : body,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(30000) : undefined,
+    });
+    if (upstream.status === 401) return jsonResponse(401, { error: { type: "connector_refused", message: label + " did not accept the saved login (HTTP 401). Open Connection settings and sign in again." } });
+    if (upstream.status >= 300 && upstream.status < 400) return jsonResponse(502, { error: { type: "upstream_redirect", message: "upstream redirected (" + upstream.status + "): redirects are not followed" } });
+    const text = await upstream.text();
+    const extra = {}; const ra = upstream.headers.get("retry-after"); if (ra) extra["retry-after"] = ra;
+    return new Response(text, { status: upstream.status, headers: { "content-type": upstream.headers.get("content-type") || "application/json", "cache-control": "no-store", "x-content-type-options": "nosniff", ...CORS, ...extra } });
+  } catch (e) {
+    // never echo the exception: it can carry the request, and the request carries the login
+    return jsonResponse(502, { error: { type: "upstream_fetch_failed", message: label + " did not answer." } });
+  }
 }
 async function handleBridge(request, env, caller, url) {
   if (!caller.userId) return jsonResponse(401, { error: { type: "unauthorized", message: "The bridge needs a signed-in user." } });
@@ -936,7 +1016,7 @@ async function verifyOfflineLicense(env, blob) {
   } catch (_) { return { error: "invalid_token" }; }
 }
 
-export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense, auditFeature, auditOn, newAudit, bridgeTargetProblem, bridgeWriteProblem };   // metering, testable in isolation (test/cache_metering.test.mjs)
+export { weightedTokens, MODEL_TOKEN_WEIGHTS, escHtml, escMd, notifyRecipientAllowed, itarUnconfiguredMessage, verifyOfflineLicense, auditFeature, auditOn, newAudit, bridgeTargetProblem, bridgeWriteProblem, almRequestProblem };   // metering, testable in isolation (test/cache_metering.test.mjs)
 
 // The router. Everything it returns goes through withCors() at the boundary below, so no
 // handler has to know or care what the calling origin was.
@@ -1044,6 +1124,7 @@ async function routeRequest(request, env, ctx) {
       const itar = check.itarRequired || headerItar;
 
       if (request.method === "GET" && url.pathname === "/v1/ai/usage") return handleUsage(check);
+      if (url.pathname === "/v1/ai/bridge" && url.searchParams.get("tool") && ["GET", "POST", "PATCH", "PUT"].includes(request.method)) return handleToolBridge(request, env, caller, url, url.searchParams.get("tool"));   // 28 Oct 2026: Polarion, Codebeamer
       if (request.method === "GET" && url.pathname === "/v1/ai/bridge") return handleBridge(request, env, caller, url);
       if ((request.method === "POST" || request.method === "PATCH") && url.pathname === "/v1/ai/bridge") return handleBridge(request, env, caller, url);   // 28 Oct 2026: sending
       // SEC-3b: every AI call that gets this far is recorded by the proxy, once. A handler records

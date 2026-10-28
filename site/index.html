@@ -4119,7 +4119,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="error_watch.js?v=1.0" defer></script>
     <script src="lazy_render.js?v=1.0" defer></script>
     <!-- S8 (20 Sep 2026) — the ONE place the page puts a secret: vault (any backend door), sessionStorage (browser-only), keychain (desktop). Never localStorage. Loads before every reader of an AI or connector key. -->
-    <script src="secret_store.js?v=1.1" defer></script>
+    <script src="secret_store.js?v=1.2" defer></script>
     <script src="numbering.js?v=1.0.1" defer></script>
     <!-- demo_showcase.js (~88KB) is lazy-loaded on demand by loadSampleProject() in data_ops_modules.js
          so it stays off the critical path for real users. It self-installs (SL_SHOWCASE) on execution. -->
@@ -4378,8 +4378,10 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 22 Oct 2026 (live Jama on every page, aircraft and system level): jama_kinds.js maps assumptions, failure conditions, system functions and which system an item belongs to; pure, loads before the bridge. -->
     <script src="jama_kinds.js?v=1.0" defer></script>
     <!-- 28 Oct 2026: Safety Lab Connections, the one framework every connected tool uses (owners, Incoming changes, Ready to send, Mapping, History) -->
-    <script src="connections.js?v=1.0" defer></script>
-    <script src="live_bridge.js?v=3.4" defer></script>
+    <script src="connections.js?v=1.1" defer></script>
+    <script src="live_bridge.js?v=3.5" defer></script>
+    <!-- 28 Oct 2026: Polarion and Codebeamer on the Connections framework (one engine, a driver per tool) -->
+    <script src="alm_engine.js?v=1.0" defer></script>
     <!-- M5 — Cameo/SysML XMI import (draft socket awaiting the program sample). -->
     <script src="xmi_import.js?v=0.9" defer></script>
     <!-- 13 Oct 2026: SysML v2, the model index, export / import of SysML v2 text with the open SafetyLab

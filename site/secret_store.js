@@ -1,5 +1,5 @@
 // ============================================================================
-// secret_store.js — v1.1 — S8 (20 Sep 2026). THE one place the page puts a secret.
+// secret_store.js — v1.2 (28 Oct 2026: the other connected tools' logins) — v1.1 — S8 (20 Sep 2026). THE one place the page puts a secret.
 //
 // A user's own credentials — their Anthropic key, their Voyage key, their Jama token — used
 // to sit in localStorage, which is persistent and readable by any script that runs on the
@@ -34,7 +34,8 @@
 (function () {
     'use strict';
 
-    var KINDS = { anthropic_key: 1, voyage_key: 1, jama_token: 1 };
+    // 28 Oct 2026: the logins of the other connected tools (alm_engine.js), kept in the server's vault like Jama's
+    var KINDS = { anthropic_key: 1, voyage_key: 1, jama_token: 1, polarion_token: 1, codebeamer_token: 1, doors_token: 1, cameo_token: 1, genesys_token: 1 };
     var SS_PREFIX = 'safetyLab.secret.';
     var LEGACY = {                      // pre-S8 localStorage keys, moved once then cleared
         anthropic_key: 'safetyLab.ai.anthropicKey',

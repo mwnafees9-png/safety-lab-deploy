@@ -1,5 +1,5 @@
 // ============================================================================
-// connections.js, v1.0, 28 Oct 2026: Safety Lab Connections.
+// connections.js, v1.1, 28 Oct 2026 (v1.1: a change the person made a moment ago is collected as theirs before the framework writes): Safety Lab Connections.
 //
 // Waqas: "go for it, and lets get this built". The agreed model, in his words:
 //   * every linked item has ONE owner, its source of truth, chosen "only for the items being linked not for all the
@@ -44,6 +44,8 @@
         { id: 'cameo', label: 'Cameo (Teamwork Cloud)', how: 'Teamwork Cloud REST API' },
         { id: 'genesys', label: 'GENESYS', how: 'GENESYS REST API' }
     ];
+    // a tool with no live connection yet: what works today
+    var FILES = { doors: 'ReqIF files work today, from Requirements exchange.', cameo: 'XMI files work today, from Architecture import.', genesys: 'ReqIF and XMI files work today, from Requirements exchange and Architecture import.' };
     // what a row a tool owns may not have changed in Safety Lab, per kind (the fields the tool writes)
     var LOCKED = {
         fn: ['funcId', 'funcName', 'funcDef', 'subId', 'subName', 'subDef', 'parentSubId'],
@@ -58,7 +60,15 @@
     function _save() { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
     // The framework's writes are signed decisions (an apply, a rejection, an owner change) or its own record (History):
     // they are background work for the change confirmation (change_ack.js), never "changes to confirm" a second time.
-    function _bg(fn) { try { var A = W.SLChangeAck; if (A && typeof A.background === 'function') return A.background(fn); } catch (_) {} return fn(); }
+    function _bg(fn) {
+        var A = null; try { A = W.SLChangeAck; } catch (_) {}
+        if (!A || typeof A.background !== 'function') return fn();
+        // A change the person made a moment ago may still be being measured (its window is open). Put it in the
+        // collection first, as theirs, so this write is measured on its own and never listed as theirs. Not while they
+        // are typing or dragging: then the write waits on nothing and is simply background work.
+        try { var st = A.status && A.status(); if (st && st.open && st.user && !(A.busy && A.busy()) && typeof A.collectNow === 'function') A.collectNow(); } catch (_) {}
+        return A.background(fn);
+    }
     function _now() { return new Date().toISOString(); }
     // a tool's own id on the rows it wrote (Jama's rows say 'jama-live') is the same tool here
     var ALIAS = { 'jama-live': 'jama' };
@@ -376,7 +386,7 @@
         var off = TOOLS.filter(function (t) { return on.indexOf(t.id) < 0; });
         html += '<section class="cx-card"><h4>Not connected</h4><div class="cx-grid">' + off.map(function (t) {
             var ready = !!_ad[t.id];
-            return '<div class="cx-off"><b>' + _esc(t.label) + '</b><span class="cx-dim">' + _esc(t.how) + '</span>' + (ready ? _btn('Connect', 'SLConnections.setup(\'' + t.id + '\')', 'primary') : '<span class="cx-dim">coming in this release</span>') + '</div>';
+            return '<div class="cx-off"><b>' + _esc(t.label) + '</b><span class="cx-dim">' + _esc(t.how) + '</span>' + (ready ? _btn('Connect', 'SLConnections.setup(\'' + t.id + '\')', 'primary') : '<span class="cx-dim">Live connection not available yet. ' + _esc(FILES[t.id] || '') + '</span>') + '</div>';
         }).join('') + '</div><p class="cx-dim">No live connection allowed by your IT? ReqIF and XMI files still work from Requirements exchange and Architecture import.</p></section>';
         return html;
     }
@@ -631,7 +641,7 @@
         decide: decide, signLines: signLines, reconsider: reconsider, checked: checked,
         outgoing: outgoing, sendCount: sendCount, send: send,
         lockOf: lockOf, lockedFields: lockedFields, guardRow: guardRow, lockedStores: lockedStores,
-        canSign: canSign, isAdmin: isAdmin, whoAmI: whoAmI, log: log,
+        canSign: canSign, isAdmin: isAdmin, whoAmI: whoAmI, log: log, background: _bg,
         openPopup: openPopup, beforeLeave: beforeLeave, _leave: _leave,
         show: show, render: _renderAll,
         choose: function (key, d) { if (d === 'later') delete _sel[key]; else _sel[key] = d; try { document.querySelectorAll('.cx-sign').forEach(function (el) { el.outerHTML = _signBar(el.id === 'cx-sign-pop' ? 'pop' : 'page'); }); } catch (_) {} },

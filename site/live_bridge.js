@@ -1088,7 +1088,8 @@
         });
         return out;
     }
-    function _bg(fn) { try { const A = window.SLChangeAck; if (A && typeof A.background === 'function') return A.background(fn); } catch (_) {} return fn(); }
+    // the framework's own background write (connections.js, which first collects a change the person made a moment ago)
+    function _bg(fn) { try { const C = window.SLConnections; if (C && typeof C.background === 'function') return C.background(fn); } catch (_) {} try { const A = window.SLChangeAck; if (A && typeof A.background === 'function') return A.background(fn); } catch (_) {} return fn(); }
     function _itemOf(data) { return (data && data.data) || data || null; }
     async function _comment(base, id, text) { try { await _write('POST', base + '/rest/latest/comments', { body: { text: text }, location: { item: Number(id) }, commentType: 'GENERAL' }); } catch (_) {} }
     async function bridgeSend(lines, signer, reason) {

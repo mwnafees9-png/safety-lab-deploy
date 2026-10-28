@@ -40,7 +40,7 @@ const iHost = hb.indexOf('bridgeTargetProblem('), iFence = hb.indexOf('bridgeWri
 check('the saved host is checked first, then the write fence, then the call', iHost > 0 && iFence > iHost && iCall > iFence);
 check('a write sends its method and JSON body, redirects not followed', /method: method, redirect: "manual",\s*headers: \{ authorization: auth, accept: "application\/json", "content-type": "application\/json" \},\s*body: wbody,/.test(hb));
 check('POST and PATCH reach the relay', /if \(\(request\.method === "POST" \|\| request\.method === "PATCH"\) && url\.pathname === "\/v1\/ai\/bridge"\) return handleBridge\(request, env, caller, url\);/.test(proxy));
-check('CORS allows PATCH', /"access-control-allow-methods": "GET,POST,PATCH,OPTIONS"/.test(proxy));
+check('CORS allows PATCH (and PUT, for Codebeamer, 28 Oct 2026)', /"access-control-allow-methods": "GET,POST,PATCH,PUT,OPTIONS"/.test(proxy));
 console.log('\n[C] the public site relay still only reads');
 check('the site relay refuses every write but the Jama sign-in', /read-only bridge: GET only, apart from the Jama sign-in/.test(site) && /else if \(request\.method !== 'GET'\)/.test(site) && site.indexOf('PATCH') < 0);
 if (!MUT) {
