@@ -1,4 +1,4 @@
-## 28 Oct 2026 (beta build): THE BETA FACTOR IN ALLOCATION FOLLOWS THE GATE'S INDEPENDENCE. NOT YET DEPLOYED.
+## 28 Oct 2026 (beta build): THE BETA FACTOR IN ALLOCATION FOLLOWS THE GATE'S INDEPENDENCE. SHIPPED BY WAQAS (web 84d94d2, desktop 0.21.17 Windows).
 
 Waqas: "once they confirm there is no independence that is when the beta factors apply"; the open question answered 28 Oct: "None, no claim" counts as compromised ("I agree with you on beta factor allocation"), then "yes go for it".
 The rule, built (fta_quant_modules.js 66.32: _allocCcfPlan, _withAllocCcfView, _markAllocCcf):
@@ -10,7 +10,7 @@ The rule, built (fta_quant_modules.js 66.32: _allocCcfPlan, _withAllocCcfView, _
 No default beta is invented: a gate with no common cause group asks for one.
 Tests: new regression_alloc_beta_20261028 (8 real trees in the app: plain, none, compromised, CMA finding, claimed, substantiated, members meeting under an OR, none with no group; 27 checks, 6 mutations all red); regression_alloc_never_over's close check updated for the new condition. 37 related suites green.
 Flaky, noted (both fail on the shipped code too): regression_tree_warm W4 (2 in 10: asks "busy?" while a time-sliced scan may still run) and regression_change_ack_ui under load.
-Desktop 0.21.16 (Windows) is the latest released; this web change reaches it with the next desktop release (0.21.17). The Mac channel stays on 0.21.10 (Waqas: "mac waits").
+Desktop 0.21.17 (Windows) released with this web change. The Mac channel stays on 0.21.10 (Waqas: "mac waits").
 
 ## 28 Oct 2026 (night fix): 369 "CHANGES" NOBODY MADE; BLANK PAGE PILLS WITH THE MENU COLLAPSED. SHIPPED BY WAQAS (web 1d0eecf, desktop 0.21.16 Windows, proxy 8aab9c1).
 
