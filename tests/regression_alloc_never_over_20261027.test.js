@@ -21,7 +21,8 @@ const read = f => fs.readFileSync(path.join(SITE, f), 'utf8');
 
 console.log('\n[A] wiring');
 const H = read('helpers_modules.js'), Q = read('fta_quant_modules.js');
-check('the engine closes the budget whenever the exact total can differ', /typeof _allocNeedsExactClose === 'function'\s*&& _allocNeedsExactClose\(rootPage\.root\)/.test(Q));
+// 28 Oct 2026: the close also runs for a common cause group counted under the gate's independence (regression_alloc_beta_20261028)
+check('the engine closes the budget whenever the exact total can differ', /typeof _allocNeedsExactClose === 'function'\s*&& \(_allocNeedsExactClose\(rootPage\.root\) \|\| _ccfPlan\.counted\.length > 0\)/.test(Q));
 check('an FDEP and a NOT count, as well as a repeated event', /n\.gateType === 'FDEP' \|\| n\.gateType === 'NOT'/.test(H) && /if \(_hasRepeatedLogicalIds\(rootNode\)\) return true;/.test(H));
 const trig = H.slice(H.indexOf('function _allocNeedsExactClose('), H.indexOf('function mcsAwareRebalance('));
 check('common cause is not part of the allocation close (12 Oct 2026 ruling)', trig.length > 100 && !/ccfGroup|beta/.test(trig.replace(/\/\/.*$/gm, '')));

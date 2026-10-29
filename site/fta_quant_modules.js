@@ -1,3 +1,4 @@
+// 28 Oct 2026 (beta in allocation, Waqas agreed): common cause in an allocation tree follows the independence of the AND gate where its members meet: counted for compromised or "None, no claim", left out for claimed or substantiated; see _allocCcfPlan and tests/regression_alloc_beta_20261028.test.js
 // 13 Oct 2026 (fix3-M): Markov models are drawn too: the state and transition tables and the Markov state diagram (markov_diagram.js) are two views of the same model; states get stable ids and a type (operational / degraded / failed), the start can be a distribution (initialProbs), transitions are failure (λ) or repair (μ), a renamed state is renamed in its transitions and start. Solving is unchanged. See tests/regression_rbd_markov_diagrams_20261013b.test.js
 // 13 Oct 2026 (fix G): SEQ (sequence-enforcing) gate solved exactly as a Markov chain when it is an independent constant-rate module (else the AND bound), NOT gate (NOR over several inputs) in calcBottomUp, the BDD, top-down allocation and the DFT Monte Carlo; prime implicants for trees with NOT (copies held identical to fta_engine.js v1.11). See tests/regression_fta_handbuild_20261013b.test.js
 // 13 Oct 2026 (fix 3, MGL, merged with F1 and F4/F5): common cause groups use the real Multiple Greek Letter model (NUREG/CR-5485): one BDD variable per specific common cause event, shared _mgl* helpers held identical to fta_engine.js v1.9, order-invariant group parameters, MGL cut-set rows (expandCCFCutsets) and MGL-consistent uncertainty sampling (time-averaged like P(top)). FDEP forcing covers a member's whole leaf; common cause events of periodic latent members join their interval's time average. Before, gamma and delta did not change P(top) and the group took q and beta from the first member read. See tests/regression_ccf_mgl_20261013.test.js
@@ -825,6 +826,122 @@ function _slExactTopOrNull(rootNode) {
         return (typeof p === 'number' && isFinite(p) && p >= 0) ? p : null;
     } catch (_) { return null; }
 }
+// 28 Oct 2026 (Waqas: "once they confirm there is no independence that is when the beta factors apply"; agreed rule,
+// with "None, no claim" counting as compromised): common cause in an ALLOCATION tree follows the independence of the
+// AND gate where its members meet.
+//   - compromised (set by hand, or a Common Mode Analysis finding) or "None, no claim": the group's beta / MGL terms
+//     are part of the allocation. The tree is closed against its exact total with the common cause counted
+//     (mcsAwareRebalance), so the members' budgets tighten, and the gate says why (_ccfAlloc).
+//   - claimed or substantiated: the group is left out of the allocation tree's exact total, as ruled on 12 Oct 2026
+//     (allocation comes before the design; the AND gate derives an independence requirement instead). No more
+//     "tree adds up to 130 times its target" from a beta the engineer has not been asked to carry.
+// Verification trees are not touched: they always count every common cause group.
+// A group counts when any two of its members meet (lowest common gate) at an AND, INHIBIT or k-of-n (k >= 2) VOTING
+// gate whose independence is compromised or none. TRANSFER links are followed, as everywhere in allocation.
+function _allocAndLike(g) {
+    if (!g || g.type !== 'gate') return false;
+    if (g.gateType === 'AND' || g.gateType === 'INHIBIT') return true;
+    if (g.gateType === 'VOTING') { const n = (g.children || g._children || []).length; return Math.min(parseInt(g.votingK, 10) || 2, n) >= 2; }
+    return false;
+}
+function _allocIndepState(g, cmaIdx) {
+    const raw = g && g.dalIndependence;
+    if (raw === 'compromised' || (g && g._dalCompromised)) return 'compromised';
+    try {
+        const ids = cmaIdx ? (cmaIdx.ids || (typeof cmaIdx.has === 'function' ? cmaIdx : null)) : null;
+        if (ids && ids.has(String(g.id))) return 'compromised';
+        const pairs = (cmaIdx && cmaIdx.pairs && cmaIdx.pairs.size) ? cmaIdx.pairs : null;
+        if (pairs) {
+            const lids = (g.children || g._children || []).map(c => String(c.logicalId != null ? c.logicalId : c.id));
+            for (let i = 0; i < lids.length; i++) for (let j = i + 1; j < lids.length; j++) if (pairs.get([lids[i], lids[j]].sort().join('|'))) return 'compromised';
+        }
+    } catch (_) {}
+    if (raw === 'none') return 'none';
+    return raw === 'substantiated' ? 'substantiated' : 'claimed';
+}
+// The common cause groups of one allocation tree and whether each counts. Returns
+// { counted: [{ group, beta, gate, gateLabel, state }], excluded: [{ group, members }] }.
+function _allocCcfPlan(rootNode) {
+    const out = { counted: [], excluded: [] };
+    if (!rootNode) return out;
+    let cmaIdx = null;
+    try { cmaIdx = (typeof _cmaCompromisedIndex === 'function') ? _cmaCompromisedIndex() : null; } catch (_) { cmaIdx = null; }
+    const groups = new Map();   // group -> [{ node, chain: [gates from the root down] }]
+    const visited = new Set();
+    (function walk(n, chain) {
+        if (!n) return;
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !visited.has(linkedId)) {
+                visited.add(linkedId);
+                const lp = (typeof ftaPages !== 'undefined') ? ftaPages.find(p => p.id === linkedId) : null;
+                if (lp && lp.root) walk(lp.root, chain);
+            }
+            return;
+        }
+        if (n.type !== 'gate') {
+            if (n.ccfGroup) { if (!groups.has(n.ccfGroup)) groups.set(n.ccfGroup, []); groups.get(n.ccfGroup).push({ node: n, chain: chain }); }
+            return;
+        }
+        const next = chain.concat([n]);
+        (n.children || n._children || []).forEach(c => walk(c, next));
+    })(rootNode, []);
+    groups.forEach((members, group) => {
+        let beta = 0;
+        members.forEach(m => { const b = parseFloat(m.node.beta); if (isFinite(b) && b > beta) beta = b; });
+        if (!(beta > 0) || members.length < 2) return;   // no common cause modeled: nothing to decide
+        let hit = null;
+        for (let i = 0; i < members.length && !hit; i++) for (let j = i + 1; j < members.length && !hit; j++) {
+            const a = members[i].chain, b = members[j].chain;
+            let k = 0; while (k < a.length && k < b.length && a[k] === b[k]) k++;
+            const meet = k > 0 ? a[k - 1] : null;
+            if (meet && _allocAndLike(meet)) {
+                const st = _allocIndepState(meet, cmaIdx);
+                if (st === 'compromised' || st === 'none') hit = { gate: meet, state: st };
+            }
+        }
+        if (hit) out.counted.push({ group: group, beta: beta, gate: hit.gate, gateLabel: String(hit.gate.displayId || hit.gate.name || hit.gate.id), state: hit.state });
+        else out.excluded.push({ group: group, members: members.map(m => m.node) });
+    });
+    return out;
+}
+// Run fn with the allocation view of the tree: the groups that do not count are taken out for the duration (their
+// members' ccfGroup set aside and put back, whatever happens). The P(top) cache keys on ccfGroup, so the two views
+// never share an answer.
+function _withAllocCcfView(rootNode, fn, plan) {
+    plan = plan || _allocCcfPlan(rootNode);
+    const held = [];
+    plan.excluded.forEach(x => x.members.forEach(n => { held.push([n, n.ccfGroup]); delete n.ccfGroup; }));
+    try { return fn(plan); }
+    finally { held.forEach(h => { h[0].ccfGroup = h[1]; }); }
+}
+// What each counted group says on its gate and on the top event (the warning pill reads _ccfAlloc).
+function _markAllocCcf(rootNode, plan) {
+    const visited = new Set();
+    (function clear(n) {
+        if (!n) return;
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) {
+            const linkedId = n.transferOutTo || n.linkedPageId;
+            if (linkedId && !visited.has(linkedId)) { visited.add(linkedId); const lp = (typeof ftaPages !== 'undefined') ? ftaPages.find(p => p.id === linkedId) : null; if (lp && lp.root) clear(lp.root); }
+            return;
+        }
+        delete n._ccfAlloc;
+        (n.children || n._children || []).forEach(clear);
+    })(rootNode);
+    delete rootNode._ccfAllocAll;
+    if (!plan || !plan.counted.length) return;
+    plan.counted.forEach(c => {
+        const why = c.state === 'none' ? 'no independence claim' : 'independence compromised';
+        const note = { group: c.group, beta: c.beta, state: c.state, gate: c.gateLabel,
+            text: 'Common cause counted at ' + c.gateLabel + ' (beta ' + Number(c.beta) + ', group ' + c.group + '): ' + why + '. The budgets are set so the total, common cause included, meets the target.' };
+        if (!Array.isArray(c.gate._ccfAlloc)) c.gate._ccfAlloc = [];
+        c.gate._ccfAlloc.push(note);
+        if (!Array.isArray(rootNode._ccfAllocAll)) rootNode._ccfAllocAll = [];
+        rootNode._ccfAllocAll.push(note);
+    });
+}
+try { window._allocCcfPlan = _allocCcfPlan; window._withAllocCcfView = _withAllocCcfView; window._allocIndepState = _allocIndepState; } catch (_) {}
+
 function _slApplyExactTops() {
     if (typeof computeExactProbability !== 'function' || typeof ftaPages === 'undefined' || !Array.isArray(ftaPages)) return;
     const activePage = ftaPages.find(p => p && p.id === activeFTAPageId) || null;
@@ -844,7 +961,7 @@ function _slApplyExactTops() {
             // Allocation role: the engineer's budget stays on the root.
             delete r._bddExactProb; delete r._bddBottomUpProb; delete r._exactTopRefused; delete r._topIsRollup;
             if (topDownActive && isOpen) {
-                const exact = _slExactTopOrNull(r);
+                const exact = _withAllocCcfView(r, () => _slExactTopOrNull(r));   // 28 Oct 2026: common cause by the gate's independence
                 if (exact != null) { r._bddActualProb = exact; r._bddTargetProb = r.probability; }
                 else { delete r._bddActualProb; delete r._bddTargetProb; }
                 delete r._bddActualLambda;   // Phase 61 — probability-only in allocation mode
@@ -900,11 +1017,15 @@ function calculateAllProbabilities() {
             let rebalanced = false;
             delete rootPage.root._exactCloseRefused;
             // 27 Oct 2026: not only a repeated event: an FDEP or a NOT gate also make the exact total
-            // differ from the split (_allocNeedsExactClose). Common cause stays out of allocation.
+            // differ from the split (_allocNeedsExactClose). 28 Oct 2026: and a common cause group whose
+            // members meet at an AND gate with no independence claim, or a compromised one (_allocCcfPlan);
+            // the close then runs in the allocation view, which leaves out the groups that do not count.
+            const _ccfPlan = _allocCcfPlan(rootPage.root);
+            _markAllocCcf(rootPage.root, _ccfPlan);
             if (typeof _allocNeedsExactClose === 'function'
-                && _allocNeedsExactClose(rootPage.root)
+                && (_allocNeedsExactClose(rootPage.root) || _ccfPlan.counted.length > 0)
                 && typeof mcsAwareRebalance === 'function'
-                && typeof computeExactProbability === 'function') {
+                && typeof computeExactProbability === 'function') _withAllocCcfView(rootPage.root, () => {
                 // ENG-1 — BDD-aware rebalance is an ENHANCEMENT over strictest-
                 // propagation. If the BDD refuses (node budget on adversarial
                 // repeated-event structure), fall back to the same documented
@@ -924,7 +1045,7 @@ function calculateAllProbabilities() {
                     rebalanced = false;   // → strictest-propagation fallback below
                     rootPage.root._exactCloseRefused = true;   // 27 Oct 2026: the warning pill says so
                 }
-            }
+            }, _ccfPlan);
             if (!rebalanced) {
                 const touched = _propagateStrictestAcrossSharedEvents(rootPage.root);
                 if (touched > 0) {

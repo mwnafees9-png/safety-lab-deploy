@@ -4726,9 +4726,16 @@ function ftaNodeWarnings(node, isRoot) {
             text: 'Prescribed P=' + fmt(po.prescribed) + ' is ' + (isFinite(po.excessRatio) ? Number(po.excessRatio).toFixed(1) + ' times' : 'more than') + ' the P=' + fmt(po.apportioned) + ' this gate gets from the top event, so the tree adds up to more than its target.' });
     }
     if (node._probCompromised) {
+        const none = node.dalIndependence === 'none' && !node._dalCompromised;
         out.push({ key: 'independence', sev: 'warn',
-            title: 'Independence compromised: a common-cause (β) term is needed',
-            text: 'Independence compromised: common-cause (β) term required' });
+            title: none ? 'No independence claim: a common-cause (β) term is needed' : 'Independence compromised: a common-cause (β) term is needed',
+            text: none ? 'No independence claim: common-cause (β) term required' : 'Independence compromised: common-cause (β) term required' });
+    }
+    // 28 Oct 2026: on an allocation tree, where common cause was counted in the budgets and why (_markAllocCcf).
+    if (Array.isArray(node._ccfAlloc) && typeof ftaConfig === 'object' && ftaConfig && ftaConfig.mode === 'top-down') {
+        node._ccfAlloc.forEach((c, i) => out.push({ key: 'ccf-alloc-' + i, sev: 'info',
+            title: c.state === 'none' ? 'Common cause counted: no independence claim' : 'Common cause counted: independence compromised',
+            text: c.text }));
     }
     // Dynamic gates say how their static number was done (13 Oct 2026 math audit F4 / fix G).
     const ds = node._dynStatic, exact = !!(ds && ds.mode === 'exact');
@@ -4773,7 +4780,7 @@ function ftaNodeWarnings(node, isRoot) {
             out.push({ key: 'actual-over', sev: 'warn',
                 title: 'Top event: the tree adds up to more than the target',
                 text: 'Actual (exact): P=' + fmt(aP) + ' against the target P=' + fmt(target) + pct +
-                      '. The exact total of the tree as built, with repeated events, common cause and AND gates counted exactly.' });
+                      '. The exact total of the tree as built, with repeated events and AND gates counted exactly, and common cause where an AND gate has no independence claim or a compromised one.' });
         }
     }
     // 27 Oct 2026: when the exact method had to give up on this tree (too many shared events), the budget
@@ -11626,9 +11633,11 @@ function _normalizeIntermediateGatesForSharedEvents(rootNode) {
 
 // 27 Oct 2026: the tree's own logic makes the exact total of an allocation differ from its gate-by-gate
 // split in three ways: a repeated event, a functional dependency, or a NOT gate. Any of them means the
-// budget is closed against the exact total (mcsAwareRebalance). Common cause is deliberately not one of
-// them: allocation happens before the design exists, so it carries no common cause (Waqas, 12 Oct 2026);
-// its AND gates derive independence requirements instead. Follows TRANSFERs.
+// budget is closed against the exact total (mcsAwareRebalance). Follows TRANSFERs.
+// Common cause is decided by the AND gate where a group's members meet (_allocCcfPlan, fta_quant_modules.js,
+// 28 Oct 2026): with independence claimed or substantiated it stays out of allocation (Waqas, 12 Oct 2026: the
+// AND gate derives an independence requirement instead); compromised or "None, no claim", it is counted and
+// the close runs with it. The caller adds that case; this function stays about the tree's logic.
 function _allocNeedsExactClose(rootNode) {
     if (!rootNode) return false;
     if (_hasRepeatedLogicalIds(rootNode)) return true;

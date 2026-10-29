@@ -929,14 +929,18 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
                 ? 'CMA identified an open common-mode coupling these members. The DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause (β) term (ARP4761A App M).'
                 : 'Functional independence between members not substantiated by CMA. DAL reduction is invalid (members revert to the top DAL) and the probability AND-product requires a common-cause term.')
             : null;
-        if (indep === 'compromised') {
+        if (indep === 'compromised' || indep === 'none') {
             // Probability cascade (Gaps 1/4): once independence is lost the AND independent-product
             // P(top)=ΠPᵢ no longer holds — a common-cause term now dominates. Flag the gate's
             // probability as requiring a CCF (β) term, unless the members already carry a CCF group.
+            // 28 Oct 2026 (Waqas agreed): "None, no claim" counts as compromised for common cause: an independence
+            // nobody has claimed cannot be credited, so the same term is needed.
             const ccfCovered = kids.some(c => c && c.ccfGroup && (c.beta || 0) > 0);
             node._probCompromised = !ccfCovered;
             node._probCompromiseReason = ccfCovered ? null
-                : 'Independence compromised: P(top) at this gate uses an independent product that now understates the true value — add a common-cause (β) term across the members (ARP4761A Appendix M).';
+                : (indep === 'none'
+                    ? 'No independence claim at this gate: P(top) here uses an independent product nobody has claimed — add a common-cause (β) term across the members, or record an independence claim for Common Mode Analysis (ARP4761A Appendix M).'
+                    : 'Independence compromised: P(top) at this gate uses an independent product that now understates the true value — add a common-cause (β) term across the members (ARP4761A Appendix M).');
         } else {
             node._probCompromised = false; node._probCompromiseReason = null;
         }

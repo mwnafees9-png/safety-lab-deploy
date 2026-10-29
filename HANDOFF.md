@@ -1,12 +1,16 @@
-## NEXT (agreed 27 Oct 2026, build on 28 Oct): THE BETA FACTOR IN ALLOCATION FOLLOWS THE GATE'S INDEPENDENCE
+## 28 Oct 2026 (beta build): THE BETA FACTOR IN ALLOCATION FOLLOWS THE GATE'S INDEPENDENCE. NOT YET DEPLOYED.
 
-Waqas: "once they confirm there is no independence that is when the beta factors apply". Plan stated back to him:
-(1) member independence COMPROMISED (by hand, or automatically from a CMA hit): the common cause (beta / MGL) term is part of the allocation; the members' budgets tighten so the exact total, common cause included, closes at or under the target (same exact close as repeated events);
-(2) CLAIMED or SUBSTANTIATED: beta stays out of the allocation (12 Oct ruling) AND out of that allocation tree's exact total, so no false "130x over";
-(3) the pill notes "Budgets tightened for common cause at G-xxxx (beta 0.05): independence compromised";
-(4) verification trees always count beta. OPEN QUESTION to Waqas: does "None, no claim" count as compromised (proposed: yes)?
-Also open: regression_change_ack_ui fails about 1 run in 7 under heavy load in B8 (undo/redo), not traced.
-Desktop 0.21.12 (Windows) published 27 Oct, web a410a4e; desktop commit c424ba5; Mac channel stays 0.21.10.
+Waqas: "once they confirm there is no independence that is when the beta factors apply"; the open question answered 28 Oct: "None, no claim" counts as compromised ("I agree with you on beta factor allocation"), then "yes go for it".
+The rule, built (fta_quant_modules.js 66.32: _allocCcfPlan, _withAllocCcfView, _markAllocCcf):
+(1) a common cause group counts in an ALLOCATION tree when two of its members meet (lowest common gate) at an AND, INHIBIT or k-of-n (k>=2) VOTING gate whose independence is compromised (by hand, or a Common Mode Analysis finding through _cmaCompromisedIndex) or "None, no claim". The tree is then closed against its exact total with the common cause in it (mcsAwareRebalance, run in the allocation view), so the members' budgets tighten;
+(2) claimed (the default) or substantiated: the group is left out of the allocation tree's exact total and budgets, so no false "adds up to more than its target";
+(3) the gate and the top event carry the note (warning pill, info): "Common cause counted at G-xxxx (beta 0.05, group X): no independence claim / independence compromised. The budgets are set so the total, common cause included, meets the target.";
+(4) verification trees and every pass/fail screen (SLTopBasis.exactTop) still count every common cause group;
+(5) support_modules.js 66.55: "None, no claim" with no common cause group raises the same "a common-cause (beta) term is needed" flag as compromised (helpers_modules.js 3.47 words it "No independence claim").
+No default beta is invented: a gate with no common cause group asks for one.
+Tests: new regression_alloc_beta_20261028 (8 real trees in the app: plain, none, compromised, CMA finding, claimed, substantiated, members meeting under an OR, none with no group; 27 checks, 6 mutations all red); regression_alloc_never_over's close check updated for the new condition. 37 related suites green.
+Flaky, noted (both fail on the shipped code too): regression_tree_warm W4 (2 in 10: asks "busy?" while a time-sliced scan may still run) and regression_change_ack_ui under load.
+Desktop 0.21.16 (Windows) is the latest released; this web change reaches it with the next desktop release (0.21.17). The Mac channel stays on 0.21.10 (Waqas: "mac waits").
 
 ## 28 Oct 2026 (night fix): 369 "CHANGES" NOBODY MADE; BLANK PAGE PILLS WITH THE MENU COLLAPSED. SHIPPED BY WAQAS (web 1d0eecf, desktop 0.21.16 Windows, proxy 8aab9c1).
 
