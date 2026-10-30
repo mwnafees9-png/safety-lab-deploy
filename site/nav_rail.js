@@ -1,5 +1,5 @@
 // ============================================================================
-// nav_rail.js — v1.3 — Rev C nav services (15 Aug 2026, Waqas's ruling).
+// nav_rail.js — v1.8 (30 Oct 2026: Rename or edit system / Remove system in each system folder) — v1.3 — Rev C nav services (15 Aug 2026, Waqas's ruling).
 // v1.3 (23 Aug 2026) — SYSTEM FOLDERS. Waqas: "these [PSSA / SSA / FMES /
 // Items rows] do not need to be separate menu items they will live in each
 // systems directory". Each per-system entry is now a <details> folder carrying
@@ -87,13 +87,16 @@
             { k: 'ws:pssa',      t: 'PSSA — preliminary' },
             { k: 'tab:ssa-page', t: 'SSA — as-built' },
             { k: 'tab:fmes',     t: 'FMES' },
-            { k: 'ws:items',     t: 'Items &amp; LRUs' }
+            { k: 'ws:items',     t: 'Items &amp; LRUs' },
+            // 30 Oct 2026 (Waqas: "we currently do not have a remove/rename/update the system option")
+            { k: 'act:edit',     t: 'Rename or edit system', cls: ' asb-sys-edit' },
+            { k: 'act:remove',   t: 'Remove system', cls: ' asb-sys-remove' }
         ];
         host.innerHTML = sys.map(function (s) {
             return '<details class="asb-grp asb-nested" data-sysdir="' + _esc(s.id) + '"' + (open[s.id] ? ' open' : '') + '>' +
                 '<summary class="asb-item sub" title="' + _esc(s.name) + ' — directory"><span class="asb-lbl">▣ ' + _esc(s.name) + '</span><span class="asb-chev">›</span></summary>' +
                 KIDS.map(function (c) {
-                    return '<a class="asb-item sub asb-sysdir-kid" role="button" tabindex="0" data-sysgo="' + _esc(s.id) + '|' + c.k + '">' +
+                    return '<a class="asb-item sub asb-sysdir-kid' + (c.cls || '') + '" role="button" tabindex="0" data-sysgo="' + _esc(s.id) + '|' + c.k + '">' +
                         '<span class="asb-lbl">' + c.t + '</span></a>';
                 }).join('') + '</details>';
         }).join('');
@@ -102,7 +105,10 @@
                 var bits = el.getAttribute('data-sysgo').split('|');
                 var act = bits[1].split(':');
                 try {
-                    if (act[0] === 'ws') {
+                    if (act[0] === 'act') {
+                        if (act[1] === 'edit' && typeof window.editSystem === 'function') window.editSystem(bits[0]);
+                        else if (act[1] === 'remove' && typeof window.removeSystem === 'function') window.removeSystem(bits[0]);
+                    } else if (act[0] === 'ws') {
                         if (typeof openSystemWorkspace === 'function') openSystemWorkspace(bits[0]);
                         if (typeof switchWorkspaceTab === 'function') switchWorkspaceTab(act[1]);
                     } else if (typeof switchTab === 'function') switchTab(act[1]);

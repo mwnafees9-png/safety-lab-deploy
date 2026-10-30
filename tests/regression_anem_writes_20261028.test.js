@@ -100,15 +100,17 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       window.__q.push(JSON.stringify({ reply: 'Starting the FHA for ' + sub + '.', actions: [{ op: 'draft', analysis: 'fha', scope: 'aircraft', subIds: [sub] }], choices: [], assumptions: [] }));
       window.__q.push(o => { const m = JSON.stringify(o.messages); return JSON.stringify({ reply: 'drafted', assumptions: [], actions: ex.filter(e => m.indexOf(e.id) >= 0).map(e => ({ op: 'add_fha', scope: 'aircraft', subId: sub, srcCondId: e.id, fcDesc: e.desc, phases: ['All phases'], effAc: 'Reduced margin', effCrew: 'Workload up', effPax: 'None', effAcLevel: 'MAJ', effCrewLevel: 'MAJ', effPaxLevel: 'NSE', severity: 'Major', sevBasis: 'MAJ-2', severityRationale: 'stand-in' })) }); });
       window.__nCond = ex.length;
+      // 30 Oct 2026 (no duplicates): a condition already assessed for some of these phases is refused, not added twice
+      window.__nHad = ex.filter(e => acFhaData.some(r => r && (r.fcId === e.id || r.sourceCondId === e.id))).length;
     }, sub);
     const f0 = await pg.evaluate(() => acFhaData.length);
     await send('Draft the FHA rows for ' + sub); await sleep(3000);
-    const B = await pg.evaluate(() => { const p = document.querySelector('.ai-rev-panel'); return { line: (document.getElementById('anem-panel').innerText.match(/Drafting the FHA[^\n]*/) || [''])[0], panel: !!p, title: p ? p.innerText.slice(0, 40) : '', n: window.__nCond }; });
+    const B = await pg.evaluate(() => { const p = document.querySelector('.ai-rev-panel'); return { line: (document.getElementById('anem-panel').innerText.match(/Drafting the FHA[^\n]*/) || [''])[0], panel: !!p, title: p ? p.innerText.slice(0, 40) : '', n: window.__nCond, had: window.__nHad }; });
     check('[B] the chat hands the FHA to its drafting engine and says so', /Drafting the FHA for .* failure condition/.test(B.line) && B.panel && /FHA/.test(B.title), JSON.stringify(B));
     await pg.evaluate(() => { const p = document.querySelector('.ai-rev-panel'); const b = p && [...p.querySelectorAll('button')].find(b => /accept all/i.test(b.textContent)); if (b) b.click(); });
     await sleep(1500);
     const f1 = await pg.evaluate(() => acFhaData.length);
-    check('[B] Accept all writes one FHA row per FCIM condition of that function', f1 - f0 === B.n && B.n > 0, f0 + ' -> ' + f1 + ' (' + B.n + ' conditions)');
+    check('[B] Accept all writes one FHA row per FCIM condition of that function not yet assessed (no condition assessed twice)', f1 - f0 === B.n - B.had && B.n > 0, f0 + ' -> ' + f1 + ' (' + B.n + ' conditions, ' + B.had + ' already assessed)');
     await pg.evaluate(() => { document.querySelectorAll('.ai-rev-panel').forEach(p => p.remove()); });
 
     // ---- [C] the safety net

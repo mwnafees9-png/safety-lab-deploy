@@ -753,6 +753,10 @@ const ExcelImport = (function() {
         const parentFields = PARENT_FIELDS_BY_KIND[kind] || [];
         const lastSeen = {};   // field → last non-blank value seen this sheet
         let count = 0;
+        // 30 Oct 2026 (Waqas: no duplicates anywhere): a row already there is updated in place, one that would duplicate
+        // another is skipped and named (no_dupes.js importUpsert); the report says how many of each.
+        const _ndTally = (window.SLNoDupes && window.SLNoDupes.newTally) ? window.SLNoDupes.newTally() : null;
+        const _ndUp = (store, rec, k) => { if (!store) return 'none'; if (_ndTally) return window.SLNoDupes.importUpsert(store, rec, k, _ndTally); store.push(rec); return 'added'; };
         for (const raw of sheet.rows) {
             const r = _pickRow(sheet, raw);
             // Skip totally blank mapped rows.
@@ -856,8 +860,8 @@ const ExcelImport = (function() {
                     comments: residualComments
                 };
                 if (kind === 'sysFha' && r.acTrace) rec.acTraces = splitMulti(r.acTrace);
-                if (kind === 'acFha') acFhaData.push(rec);
-                else if (sys()) sys().fha.push(rec);
+                const _ndR = (kind === 'acFha') ? _ndUp(acFhaData, rec, 'fha') : (sys() ? _ndUp(sys().fha, rec, 'fha') : 'none');   // 30 Oct 2026
+                if (_ndR === 'skipped') continue;
                 count++;
             } else if (kind === 'acReq' || kind === 'sysReq') {
                 const rec = {
@@ -904,8 +908,8 @@ const ExcelImport = (function() {
                         rec.subId = _ss; rec.subName = _ssn; rec.subDef = String(r.subSubDef || '').trim();
                         if (!rec.parentSubId || rec.parentSubId === rec.subId) delete rec.parentSubId;
                     }
-                    acFunctionsData.push(rec);
-                } else if (sys()) sys().functions.push(rec);
+                    if (_ndUp(acFunctionsData, rec, 'acFunc') === 'skipped') continue;   // 30 Oct 2026
+                } else if (sys()) { if (_ndUp(sys().functions, rec, 'sysFunc') === 'skipped') continue; }
                 count++;
             } else if (kind === 'pra') {
                 praData.push({
@@ -999,8 +1003,12 @@ const ExcelImport = (function() {
                 // 26 Oct 2026: a cell exported as "N/A: <reason>" comes back not applicable, with its reason; it is
                 // not a failure condition, so it carries no FC ID and is not extracted below.
                 if (typeof _fcimImportCells === 'function') _fcimImportCells(rec);
-                if (kind === 'acFcim') acFcimData.push(rec);
-                else if (sys()) sys().fcim.push(rec);
+                const _ndF = (kind === 'acFcim') ? _ndUp(acFcimData, rec, 'fcim') : (sys() ? _ndUp(sys().fcim, rec, 'fcim') : 'none');   // 30 Oct 2026
+                if (_ndF === 'skipped') continue;
+                if (_ndF === 'updated') {   // the condition list is rebuilt from the matrix, so an updated row is not listed twice
+                    try { if (kind === 'acFcim') { acExtractedFCs.length = 0; _pushExtractedFCs(acFcimData, acExtractedFCs); } else if (sys()) { sys().extractedFCs = []; _pushExtractedFCs(sys().fcim, sys().extractedFCs); } } catch (_) {}
+                    count++; continue;
+                }
                 // Phase 53.42 — mirror what {ac,sys}FcimCRUD.afterChange does so the FHA tab's
                 // FC-ID dropdown can find these IDs. The sysFcim branch was missing before,
                 // which made imported sys-FCIM IDs invisible to the SFHA edit form.
@@ -1021,6 +1029,7 @@ const ExcelImport = (function() {
                 count++;
             }
         }
+        { const _ndMsg = _ndTally ? window.SLNoDupes.tallyText(_ndTally) : ''; if (_ndMsg && report && Array.isArray(report.warnings)) report.warnings.push(_ndMsg); }   // 30 Oct 2026
         return count;
     }
 
@@ -1504,6 +1513,9 @@ const SysMLImport = (function() {
         });
 
         acts.forEach(a => {
+            // 30 Oct 2026 (no duplicates): an activity already imported (same model element) or a function of the same
+            // name already there is not added again
+            if ((acFunctionsData || []).some(r => r && ((a.xmiId && r._xmiId === a.xmiId) || (window.SLNoDupes && window.SLNoDupes.norm(r.subName) === window.SLNoDupes.norm(a.name) && !String(r.funcId || '').trim())))) return;
             const subId = 'FN-SYS-' + ((acFunctionsData || []).length + funcsAdded + 1).toString().padStart(3, '0');
             acFunctionsData.push({
                 internalId: (typeof newRowId === 'function' ? newRowId() : Date.now() + Math.random()),

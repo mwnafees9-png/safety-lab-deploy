@@ -755,7 +755,11 @@ function importTabularCSV(text, moduleName) {
         'HF_HEA': ['hfHea', () => _hfRows], 'HF_Alerts': ['hfAlerts', () => _hfRows], 'HF_Tasks': ['hfTasks', () => _hfRows], 'HF_Ergo': ['hfErgo', () => _hfRows],
         'HF_ControlsDisplays': ['hfCd', () => _hfRows], 'HF_TaskIdentification': ['hfTid', () => _hfRows], 'HF_SituationAwareness': ['hfSa', () => _hfRows] }[moduleName] || null;
     const _mlCol = getColIndex(['Model Links']);
-    const _fnBefore = new Set((typeof acFunctionsData !== 'undefined' && acFunctionsData) || []);   // 22 Oct 2026: the level limit only judges rows this import adds
+    const _fnBefore = new Set((typeof acFunctionsData !== 'undefined' && acFunctionsData) || []);
+    // 30 Oct 2026 (Waqas: no duplicates anywhere): a row that is already there is updated in place, one that would
+    // duplicate another is skipped and named; nothing is added twice (no_dupes.js importUpsert)
+    const _ndTally = (window.SLNoDupes && window.SLNoDupes.newTally) ? window.SLNoDupes.newTally() : null;
+    const _ndUp = (store, rec, kind) => { if (_ndTally && store) return window.SLNoDupes.importUpsert(store, rec, kind, _ndTally); if (store) store.push(rec); return 'added'; };   // 22 Oct 2026: the level limit only judges rows this import adds
     const _hfLen0 = _hfRows ? _hfRows.length : 0;   // 25 Oct 2026: the rows this import adds join the level on screen (level_view.js)
     for(let i=1; i<arr.length; i++) {
         const row = arr[i]; const newId = Date.now().toString() + Math.random().toString(36).substr(2, 5);
@@ -768,9 +772,9 @@ function importTabularCSV(text, moduleName) {
                           subSubId: getValue(row, ['Sub-Sub-Function ID']), subSubName: getValue(row, ['Sub-Sub-Function']), subSubDef: getValue(row, ['Sub-Sub-Definition']) };
             const _fx = (typeof SLFuncTree !== 'undefined' && SLFuncTree.fromThreeLevel) ? SLFuncTree.fromThreeLevel(_fr) : _fr;
             if (!_fx.parentSubId) delete _fx.parentSubId;
-            acFunctionsData.push(_fx);
+            _ndUp(acFunctionsData, _fx, 'acFunc');   // 30 Oct 2026 (no duplicates)
         } else if(moduleName === 'AC_FCIM') {
-            acFcimData.push((typeof _fcimImportCells === 'function' ? _fcimImportCells : (x => x))({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) }));   // 26 Oct 2026: "N/A: reason" reads back as not applicable
+            _ndUp(acFcimData, (typeof _fcimImportCells === 'function' ? _fcimImportCells : (x => x))({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) }), 'fcim');   // 26 Oct 2026: "N/A: reason" reads back as not applicable
         } else if(moduleName === 'AC_FHA') {
             let combinedEffects = getValue(row, ['Effects']); let effA = '', effC = '', effP = '';
             if(combinedEffects) { const parts = combinedEffects.split('\n'); parts.forEach(p => { if(p.includes('AC:')) effA = p.split('AC:')[1].trim(); if(p.includes('Crew:')) effC = p.split('Crew:')[1].trim(); if(p.includes('Pax:')) effP = p.split('Pax:')[1].trim(); }); } else { effA = getValue(row, ['Aircraft Effect']); effC = getValue(row, ['Crew Effect']); effP = getValue(row, ['Pax Effect']); }
@@ -780,7 +784,7 @@ function importTabularCSV(text, moduleName) {
             const assumptionIds = asmIdsRaw
                 ? asmIdsRaw.split(';').map(s => s.trim()).filter(Boolean)
                 : (parseAssumptionField(legacyAsm).id ? [parseAssumptionField(legacyAsm).id] : []);
-            acFhaData.push({ internalId: newId, subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) });
+            _ndUp(acFhaData, { internalId: newId, subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) }, 'fha');
         } else if(moduleName === 'AC_Requirements') {
             acReqData.push({ internalId: newId, traceId: getValue(row, ['Trace']), level: getValue(row, ['Level']), type: getValue(row, ['Type']), text: getValue(row, ['Requirement Statement']), rat: getValue(row, ['Rationale']) });
         } else if(moduleName === 'Sys_Functions') {
@@ -789,15 +793,15 @@ function importTabularCSV(text, moduleName) {
             const traceIds = tracesRaw
                 ? tracesRaw.split(';').map(s => s.trim()).filter(Boolean)
                 : [];
-            sys().functions.push({
+            _ndUp(sys().functions, {
                 internalId: newId,
                 traceIds,
                 funcId: getValue(row, ['Function ID']),
                 funcName: getValue(row, ['Function']),
                 funcDef: getValue(row, ['Definition'])
-            });
+            }, 'sysFunc');   // 30 Oct 2026 (no duplicates)
         } else if(moduleName === 'Sys_FCIM') {
-            sys().fcim.push((typeof _fcimImportCells === 'function' ? _fcimImportCells : (x => x))({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) }));   // 26 Oct 2026: "N/A: reason" reads back as not applicable
+            _ndUp(sys().fcim, (typeof _fcimImportCells === 'function' ? _fcimImportCells : (x => x))({ internalId: newId, subId: getValue(row, ['Sub-Function']), awareness: getValue(row, ['Awareness']), tlId: getValue(row, ['Total Loss ID']), tlDesc: getValue(row, ['Total Loss']), plId: getValue(row, ['Partial Loss ID']), plDesc: getValue(row, ['Partial Loss']), mId: getValue(row, ['Malfunction ID']), mDesc: getValue(row, ['Malfunction']) }), 'fcim');   // 26 Oct 2026: "N/A: reason" reads back as not applicable
         } else if(moduleName === 'Sys_FHA') {
             let combinedEffects = getValue(row, ['Effects']); let effA = '', effC = '', effP = '';
             if(combinedEffects) { const parts = combinedEffects.split('\n'); parts.forEach(p => { if(p.includes('AC:')) effA = p.split('AC:')[1].trim(); if(p.includes('Crew:')) effC = p.split('Crew:')[1].trim(); if(p.includes('Pax:')) effP = p.split('Pax:')[1].trim(); }); } else { effA = getValue(row, ['Aircraft Effect']); effC = getValue(row, ['Crew Effect']); effP = getValue(row, ['Pax Effect']); }
@@ -806,7 +810,7 @@ function importTabularCSV(text, moduleName) {
             const assumptionIds = asmIdsRaw
                 ? asmIdsRaw.split(';').map(s => s.trim()).filter(Boolean)
                 : (parseAssumptionField(legacyAsm).id ? [parseAssumptionField(legacyAsm).id] : []);
-            sys().fha.push({ internalId: newId, acTrace: getValue(row, ['AC Trace']), subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) });
+            _ndUp(sys().fha, { internalId: newId, acTrace: getValue(row, ['AC Trace']), subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) }, 'fha');
         } else if(moduleName === 'Sys_Requirements') {
             sys().req.push({ internalId: newId, traceId: getValue(row, ['Trace']), level: getValue(row, ['Level']), type: getValue(row, ['Type']), text: getValue(row, ['Requirement Statement']), rat: getValue(row, ['Rationale']) });
         } else if(moduleName === 'PRA') {
@@ -879,6 +883,8 @@ function importTabularCSV(text, moduleName) {
         const _deep = SLFuncTree.dropTooDeep(acFunctionsData, r => !_fnBefore.has(r));
         if (_deep.length) { try { slAlert(SLFuncTree.refusedText(_deep), { title: 'Import' }); } catch (_) {} }
     }
+
+    { const _ndMsg = _ndTally ? window.SLNoDupes.tallyText(_ndTally) : ''; if (_ndMsg) { try { slAlert(_ndMsg, { title: 'Import' }); } catch (_) {} } }   // 30 Oct 2026
 
     // Sync Extractors
     acExtractedFCs = []; _pushExtractedFCs(acFcimData, acExtractedFCs);
@@ -3136,7 +3142,9 @@ const _UNDO_TARGETS = [
     //     is the denominator behind every top-down apportionment. Losing a phase edit
     //     silently re-bases the whole allocation. --------------------------------------
     'deletePhaseRow', 'deleteMissionProfile',    // added 20 Aug
-    'deleteBaseline'                             // added 20 Aug
+    'deleteBaseline',                            // added 20 Aug
+    // --- systems (30 Oct 2026: rename / edit and remove; system_admin.js) ----------------
+    'applySystemEdit', 'applySystemRemove'
 ];
 
 // Deliberately NOT wrapped. Each needs a reason; the coverage test reads this list.

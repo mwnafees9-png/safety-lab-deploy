@@ -318,6 +318,15 @@
                 if (pRow && S(pRow.subId)) row.parentSubId = S(pRow.subId);
                 nodeRow.set(x.item.id, row);
             }
+            // 30 Oct 2026 (no duplicates): a row already here for the same function or sub-function (same name in the
+            // same place, typed by hand before the connection) is linked to the Jama item, not added a second time
+            { const _nd = (typeof window !== 'undefined') ? window.SLNoDupes : null;
+              const _c = _nd ? _nd.acFunctionClash(Object.assign({}, row, { subId: '' }), rows) : null;
+              const _h = _c && _c.row;
+              if (_h && !_h.fnSource && (x.funcOnly ? (S(_h.funcId) === S(row.funcId) && !S(_h.subId)) : (_nd.norm(_h.subName) === _nd.norm(row.subName) && S(_h.funcId) === S(row.funcId) && S(_h.parentSubId) === S(row.parentSubId)))) {
+                  if (!x.funcOnly) { _h.subName = row.subName; _h.subDef = row.subDef; nodeRow.set(x.item.id, _h); }
+                  _h.fnSource = row.fnSource; updated++; return;
+              } }
             rows.push(row); added++;
         });
         // 3. content changes

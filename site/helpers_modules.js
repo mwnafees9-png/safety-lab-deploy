@@ -4045,6 +4045,8 @@ function refreshFhaPhaseGrids() {
 // ==========================================
 async function promptCreateSystem() {
     const sysName = await slPrompt("Enter new system or ATA chapter name (e.g., 'Primary Flight Displays'):");
+    // 30 Oct 2026 (no duplicates): a system is unique by name (case and spaces ignored)
+    { const _cl = (sysName && window.SLNoDupes) ? window.SLNoDupes.systemNameClash(sysName, systemsData, null) : null; if (_cl) { await slAlert(_cl.reason + ' Rename or edit it from its card or its menu.'); return; } }
     if(sysName && sysName.trim() !== "") {
         // Phase 63.4 — system role (ARP4761A B.4.3.2): resource systems provide common
         // resources (electrical, hydraulic, IMA…); function providers implement aircraft
@@ -4102,6 +4104,10 @@ function renderSystemDirectory() {
                     <span class="sys-folder-metrics">Haz: ${hazCount}</span>
                     <span class="sys-folder-metrics">Req: ${reqCount}</span>
                     ${lockBadge}
+                </div>
+                <div class="sys-card-actions" style="display:flex; gap:6px; margin-top:8px;">
+                    <button type="button" class="btn-word sys-card-edit" style="font-size:11.5px;padding:3px 9px;" onclick="event.stopPropagation(); try{editSystem('${esc(s.id)}')}catch(_){}" title="Rename this system or change its role. Everything in it stays attached.">Rename or edit</button>
+                    <button type="button" class="btn-word sys-card-remove" style="font-size:11.5px;padding:3px 9px;color:#b3261e;" onclick="event.stopPropagation(); try{removeSystem('${esc(s.id)}')}catch(_){}" title="Remove this system. You see everything it takes with it first, and can undo.">Remove</button>
                 </div>
             </div>`;
     });
@@ -4910,6 +4916,8 @@ function submitACFHA() {
         assumptionIds,
         comments: document.getElementById('ac-fha-comments').value,
     };
+    // 30 Oct 2026 (no duplicates): a failure condition is assessed once per flight phase
+    { const _cl = window.SLNoDupes ? window.SLNoDupes.fhaClash(data, acFhaData) : null; if (_cl) { slAlert(_cl.reason, { title: 'FHA row not logged' }); return; } }
     if (!editStates.acFha) _slAutoNumber('acFha', data); // auto-fill blank FC ID on create only
     if (editStates.acFha) {
         const idx = acFhaData.findIndex(i => String(i.internalId) === String(editStates.acFha));   // 28 Aug 2026 — the SAVE half of the numeric-id edit bug: without this an edit that opened could still fail to write back
@@ -5645,6 +5653,7 @@ function submitSysFHA() {
         comments: document.getElementById('sys-fha-comments').value,
     };
     const arr = sys().fha;
+    { const _cl = window.SLNoDupes ? window.SLNoDupes.fhaClash(data, arr) : null; if (_cl) { slAlert(_cl.reason, { title: 'FHA row not logged' }); return; } }   // 30 Oct 2026 (no duplicates)
     if (editStates.sysFha) {
         const idx = arr.findIndex(i => String(i.internalId) === String(editStates.sysFha));   // 28 Aug 2026 — see the acFha twin
         if (idx >= 0) arr[idx] = Object.assign({}, arr[idx], data, { humanEdited: true, humanEditedAt: new Date().toISOString() }); else arr.push(data);   // 3 Sep 2026 — see submitACFHA

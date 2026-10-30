@@ -1,3 +1,4 @@
+// 30 Oct 2026 (v76.93, Waqas: no duplicates anywhere): every AI writer asks no_dupes.js. A function, an FCIM row (one Aware, one Unaware per function) or an FHA row that already exists is updated in place when the AI drafted it, kept (with a note that a newer draft was declined) when a person edited it, and an FHA row that would assess a phase already assessed for that condition is refused with the reason. add_system and the systems lane reuse a system by name. See tests/regression_no_dupes_20261030.test.js
 // 30 Oct 2026 (v76.92, Waqas: system functions, system FCIM and SFHA had no way to be drafted from their pages or the AI Assistant page): the launcher's Decompose, Generate FCIM and Draft FHA ask for the scope first (aircraft, or which system, with what each system still needs) when started from the AI Assistant page; a page button passes its own scope (_laneScope). A system FCIM and SFHA run on the same batch engine as the aircraft ones (_draftSystemFcim, _draftSystemFha: function or condition picker, slices, coverage, retries, phase coverage), and the SFHA classifies the system FCIM's failure conditions. cfg.pinScope writes the system scope onto every drafted row. See tests/regression_sys_ai_lanes_20261030.test.js
 // 27 Oct 2026 (v76.91, customer report): the right-hand AI panels. Close is red and docked in the bottom row (_dockPanelClose, one observer for every .ai-rev-panel; the ANEM chat's Undo, Clear and Close sit in a bottom row), Accept / Accept all / Generate / Draft selected are large solid buttons, every line but the disclaimer is dark and legible, and an ANEM card lists every field it would write (_anemCardFields). See tests/regression_ai_panels_20261027.test.js
 // 16 Oct 2026 (AI Assistant page, v76.83): the AI Inputs modal is replaced by the AI Assistant page (ai_inputs_page.js); _openAiInputsModal / openAiInputs() open the page, the sidebar and nav entries open the page instead of the floating menu, and the extractor and Import documents into the model are exposed for it (SafetyLabExtractDoc, SafetyLabImportDocsToModel).
@@ -3597,6 +3598,60 @@
     // a person edited is left alone and the caller is told (never overwrite the
     // engineer's work silently). Different phase coverage is a genuinely new row —
     // that is the per-phase split, and it is what makes the exposure ratio real.
+
+    // ---------------------------------------------------------------------------------------------
+    // 30 Oct 2026 — NO DUPLICATES (Waqas: "AI or the tool itself must not create duplicates anywhere in
+    // the app, once an analysis or a field has been created, it can then be updated or removed, not
+    // duplicated"). no_dupes.js says what "the same" is; these say what the AI does about it: a row the
+    // AI drafted is updated in place, a row a person wrote or edited is kept and told a newer draft was
+    // declined (the same protection _fhaUpsert has always given hand-edited FHA rows).
+    function _nd() { try { return (typeof window !== 'undefined' && window.SLNoDupes) ? window.SLNoDupes : null; } catch (_) { return null; } }
+    function _ndHandEdited(r) { return !!(r && (r.humanEdited || r.aiGenerated !== true)); }
+    function _ndDeclined(hit, what) { hit.aiNewerDraftAt = new Date().toISOString(); hit.aiNewerDraftNote = 'A newer AI draft for ' + what + ' was declined on accept because this row was written or edited by hand.'; }
+    // A function the AI proposes that already exists: update its definition in place, or keep a hand-written one.
+    function _ndFunctionUpsert(hit, defText, defKey) {
+        if (_ndHandEdited(hit)) { _ndDeclined(hit, 'this function'); return 'protected'; }
+        if (defText && String(defText).trim()) hit[defKey] = String(defText).trim();
+        hit.aiRedrafts = (hit.aiRedrafts || 0) + 1;
+        return 'updated';
+    }
+    // FCIM: the function's Aware (or Unaware) row exists already. Its condition ids are carried onto the
+    // new draft so they stay the same; returns the row to update, null for a new row, false when kept.
+    function _fcimDupPrep(row, store) {
+        const N = _nd(); if (!N) return null;
+        const c = N.fcimClash(row, store); if (!c) return null;
+        const hit = c.row, aw = N.awarenessKey(row.awareness) === 'unaware' ? 'Unaware' : 'Aware';
+        if (_ndHandEdited(hit)) {
+            _ndDeclined(hit, 'this function\'s ' + aw + ' row');
+            _applyFcimSuggestion._last = { action: 'protected', row: hit };
+            _toast('Not applied: ' + row.subId + ' already has its ' + aw + ' FCIM row, written or edited by hand. Edit that row instead; the newer draft is noted on it.', 'warning', 7000);
+            return false;
+        }
+        ['tl', 'pl', 'm'].forEach(function (k) { if (row[k + 'Desc'] && hit[k + 'Id']) row[k + 'Id'] = hit[k + 'Id']; });
+        ['plExtra', 'mExtra'].forEach(function (k) { (Array.isArray(row[k]) ? row[k] : []).forEach(function (e, i) { const h = (Array.isArray(hit[k]) ? hit[k] : [])[i]; if (e && h && h.id) e.id = h.id; }); });
+        return hit;
+    }
+    function _fcimDupMerge(hit, row) {
+        ['tl', 'pl', 'm'].forEach(function (k) { if (row[k + 'Desc']) { delete hit[k + 'Na']; delete hit[k + 'NaBy']; delete hit[k + 'NaAt']; } });
+        if (!row.mExtra) delete hit.mExtra;
+        if (!row.plExtra) delete hit.plExtra;
+        Object.assign(hit, row, { internalId: hit.internalId, aiRedrafts: (hit.aiRedrafts || 0) + 1 });
+        _applyFcimSuggestion._last = { action: 'updated', row: hit };
+    }
+    // FHA: _fhaUpsert matches a re-draft by its FCIM source id and exact phase set. This also catches the
+    // same condition by FC ID or by function + words, and a PARTLY overlapping phase set, which is refused:
+    // a flight phase has one assessment per failure condition.
+    function _fhaDupCheck(data, store) {
+        const N = _nd(); if (!N) return null;
+        const c = N.fhaClash(data, store); if (!c) return null;
+        if (!c.exact) return { action: 'overlap', reason: c.reason, rows: c.rows };
+        const hit = c.row;
+        if (_ndHandEdited(hit)) { _ndDeclined(hit, 'this condition and phase set'); return { action: 'protected', row: hit }; }
+        const keep = { internalId: hit.internalId, fcId: hit.fcId || data.fcId };
+        const merged = [].concat(Array.isArray(hit.assumptionIds) ? hit.assumptionIds : [], Array.isArray(data.assumptionIds) ? data.assumptionIds : []).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+        Object.assign(hit, data, keep, { assumptionIds: merged, aiRedrafts: (hit.aiRedrafts || 0) + 1 });
+        return { action: 'updated', row: hit };
+    }
     function _fhaUpsert(store, data) {
         var cond = String(data.sourceCondId || '').trim();
         if (!cond) return { action: 'add' };          // no stable identity → cannot de-dup safely
@@ -3753,7 +3808,9 @@
                 const sys = (systemsData || []).find(function (x) { return String(x.id) === String(s._systemId); });
                 if (!sys) { _toast('Target system not found.', 'warning'); return false; }
                 if (!Array.isArray(sys.fha)) sys.fha = [];
-                const _upS = _fhaUpsert(sys.fha, data);
+                let _upS = _fhaUpsert(sys.fha, data);
+                if (_upS.action === 'add') { const _cl = (typeof _fhaDupCheck === 'function') ? _fhaDupCheck(data, sys.fha) : null; if (_cl) _upS = _cl; }   // 30 Oct 2026 (no duplicates)
+                if (_upS.action === 'overlap') { _applyFhaSuggestion._last = _upS; _toast('Not applied: ' + _upS.reason, 'warning', 9000); return false; }
                 if (_upS.action === 'protected') { _applyFhaSuggestion._last = _upS; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
                 if (_upS.action === 'add') {
                     try { if (typeof _slAutoNumber === 'function') _slAutoNumber('sysFha', data); } catch (_) {}   // SFHA FC ID
@@ -3765,7 +3822,9 @@
                 if (typeof renderSysAssumptions === 'function') { try { renderSysAssumptions(); } catch (_) {} }   // promoted AI assumptions show at once
             } else {
                 if (typeof acFhaData === 'undefined') { _toast('FHA data not loaded in this session.', 'warning'); return false; }
-                const _upA = _fhaUpsert(acFhaData, data);
+                let _upA = _fhaUpsert(acFhaData, data);
+                if (_upA.action === 'add') { const _cl = (typeof _fhaDupCheck === 'function') ? _fhaDupCheck(data, acFhaData) : null; if (_cl) _upA = _cl; }   // 30 Oct 2026 (no duplicates)
+                if (_upA.action === 'overlap') { _applyFhaSuggestion._last = _upA; _toast('Not applied: ' + _upA.reason, 'warning', 9000); return false; }
                 if (_upA.action === 'protected') { _applyFhaSuggestion._last = _upA; _toast('Not applied: the ' + (data.sourceCondId || 'row') + ' row for these phases was edited by hand — a newer draft exists and is noted on the row.', 'warning'); return 'protected'; }
                 if (_upA.action === 'add') {
                     if (typeof _slAutoNumber === 'function') _slAutoNumber('acFha', data); // FC ID per the numbering engine
@@ -4227,7 +4286,7 @@
             // placeholder "(general)" sub-function the model never proposed.
             const subs = (g.subs || []).filter(function (sub) { return sub && _has(sub.subName); });
             if (!_has(g.funcName) || !subs.length) { _toast('Not written: ' + (_has(g.funcName) ? ('"' + String(g.funcName).trim() + '" has no named sub-function') : 'a function with no name') + '. Draft it again, or add its sub-functions by hand.', 'warning'); return 0; }
-            let added = 0;
+            let added = 0, updated = 0, kept = 0;   // 30 Oct 2026: a function that exists already is updated, never added twice
             if (scope.systemId) {
                 // ---- System decomposition: each sub-function becomes a row in the system's flat
                 // functions list (mirrors the SFHA write path), so the SFHA can run off them. ----
@@ -4241,6 +4300,7 @@
                         funcId: '', funcName: sub.subName, funcDef: sub.subDef, traceIds: [],
                         aiGenerated: true, aiFeature: 'arch.decompose', aiSkill: _skillStampFor('arch.decompose'), aiInputScope: 'System · ' + (scope.systemName || ''), aiModel: g._model || null, aiInputModality: g._modality || '', aiAt: new Date().toISOString()
                     };
+                    { const _N = (typeof _nd === 'function') ? _nd() : null, _c = _N ? _N.sysFunctionClash(row, sysObj.functions) : null; if (_c) { if (_ndFunctionUpsert(_c.row, row.funcDef, 'funcDef') === 'updated') updated++; else kept++; return; } }   // 30 Oct 2026 (no duplicates)
                     try { if (typeof _slAutoNumber === 'function') _slAutoNumber('sysFunc', row); } catch (_) {}
                     if (!row.funcId) {   // sysFunc IDs are not auto-minted by the numbering engine — assign per-system fallback
                         let max = 0; (sysObj.functions || []).forEach(function (r) { const m = String(r.funcId || '').match(/(\d+)\s*$/); if (m) { const n = +m[1]; if (n > max) max = n; } });
@@ -4260,6 +4320,7 @@
                         subId: '', subName: sub.subName, subDef: sub.subDef,
                         aiGenerated: true, aiFeature: 'arch.decompose', aiSkill: _skillStampFor('arch.decompose'), aiModel: g._model || null, aiInputModality: g._modality || '', aiAt: new Date().toISOString()
                     };
+                    { const _N = (typeof _nd === 'function') ? _nd() : null, _c = _N ? _N.acFunctionClash(Object.assign({}, row, { subId: '', funcId: ((acFunctionsData || []).find(function (r) { return r && _N.norm(r.funcName) === _N.norm(row.funcName); }) || {}).funcId || '' }), acFunctionsData) : null; if (_c) { if (_ndFunctionUpsert(_c.row, row.subDef, 'subDef') === 'updated') updated++; else kept++; return; } }   // 30 Oct 2026 (no duplicates)
                     if (typeof _slAutoNumber === 'function') _slAutoNumber('acFunc', row); // shared funcId per name + unique subId
                     _fallbackFuncIds(row);                                                 // fill any still-blank IDs if numbering engine inactive
                     acFunctionsData.push(row);
@@ -4268,6 +4329,7 @@
                 if (typeof renderACFunctions === 'function') renderACFunctions();
             }
             if (typeof scheduleAutosave === 'function') scheduleAutosave();
+            if (updated || kept) _toast((updated ? updated + ' function(s) already existed and were updated in place' : '') + (updated && kept ? '; ' : '') + (kept ? kept + ' already existed, written or edited by hand, and were kept' : '') + '. Nothing was added twice.', 'info', 7000);   // 30 Oct 2026
             return added;
         } catch (e) { _toast('Could not add functions: ' + ((e && e.message) || e), 'warning'); return 0; }
     }
@@ -6131,7 +6193,7 @@
             row[field] = 'FC-' + String(max + 1).padStart(3, '0');
         }
     }
-    function _applyFcimSuggestion(s) {
+    function _applyFcimSuggestion(s) {   _applyFcimSuggestion._last = null;   // 30 Oct 2026: what the last call did
         if (_refuseEmpty('fcim', s)) return false;   // 26 Oct 2026: the one rule (_ROW_RULES)
         if (s && typeof s === 'object') _fcimNormAction(s);   // 26 Oct 2026: a cell is a condition, or N/A with its reason
         try {
@@ -6185,11 +6247,12 @@
                 if (!sys) { _toast('Target system not found.', 'warning'); return false; }
                 if (!Array.isArray(sys.fcim)) sys.fcim = [];
                 const _sysCtx = { SYS: String(s._systemId || '') };
+                const _fh = (typeof _fcimDupPrep === 'function') ? _fcimDupPrep(row, sys.fcim) : null; if (_fh === false) return false;   // 30 Oct 2026 (no duplicates)
                 if (row.tlDesc) _fcimFcId(row, 'tlId', sys.fcim, sys.fha, _sysCtx);
                 if (row.plDesc) _fcimFcId(row, 'plId', sys.fcim, sys.fha, _sysCtx);
                 if (row.mDesc)  _fcimFcId(row, 'mId',  sys.fcim, sys.fha, _sysCtx);
                 _idExtras(sys.fcim, sys.fha, _sysCtx);
-                sys.fcim.push(row);
+                if (_fh) _fcimDupMerge(_fh, row); else sys.fcim.push(row);
                 // Rebuild the system's extracted FC set (mirrors the system FCIM form's
                 // afterChange). Routed through _pushExtractedFCs so extras and combined
                 // conditions trace too; the inline fallback mirrors its primary fields.
@@ -6206,11 +6269,12 @@
                 try { if (typeof renderSysFCIM === 'function') renderSysFCIM(); else if (typeof renderActiveSystem === 'function') renderActiveSystem(); } catch (_) {}
             } else {
                 if (typeof acFcimData === 'undefined') { _toast('FCIM data not loaded in this session.', 'warning'); return false; }
+                const _fh = (typeof _fcimDupPrep === 'function') ? _fcimDupPrep(row, acFcimData) : null; if (_fh === false) return false;   // 30 Oct 2026 (no duplicates)
                 if (row.tlDesc) _fcimFcId(row, 'tlId');
                 if (row.plDesc) _fcimFcId(row, 'plId');
                 if (row.mDesc)  _fcimFcId(row, 'mId');
                 _idExtras();
-                acFcimData.push(row);
+                if (_fh) _fcimDupMerge(_fh, row); else acFcimData.push(row);
                 // Rebuild acExtractedFCs (the FC set the FHA tab references) — mirrors the
                 // FCIM form's afterChange, routed through _pushExtractedFCs so extras and
                 // combined conditions trace too; inline fallback mirrors its primary fields.
@@ -11091,7 +11155,7 @@
     function _chatSysByIdOrName(ref) {
         if (ref == null) return null;
         try { var r = String(ref); var byId = (systemsData || []).find(function (x) { return String(x.id) === r; }); if (byId) return byId;
-            var rl = r.toLowerCase(); return (systemsData || []).find(function (x) { return String(x.name || '').toLowerCase() === rl; }) || null; } catch (_) { return null; }
+            var rl = r.replace(/\s+/g, ' ').trim().toLowerCase(); return (systemsData || []).find(function (x) { return String(x.name || '').replace(/\s+/g, ' ').trim().toLowerCase() === rl; }) || null; } catch (_) { return null; }   // 30 Oct 2026: spaces ignored
     }
     // Phase 2 — create a system from an SDD/architecture doc (idempotent by name). Mirrors the
     // System Directory shape; gated like every AI write. No λ/DAL/severity here — structure only.
@@ -11355,7 +11419,7 @@
         var name = String((a && a.name) || '').trim();
         if (!name) return { ok: false, error: 'system needs a name' };
         if (typeof systemsData === 'undefined' || !Array.isArray(systemsData)) return { ok: false, error: 'systems unavailable' };
-        var existing = _chatSysByIdOrName(name);
+        var existing = _chatSysByIdOrName(name) || (_nd() ? _nd().findSystemByName(name, systemsData) : null);   // 30 Oct 2026: spaces ignored too
         if (existing) return { ok: true, summary: 'System “' + name + '” already exists', id: existing.id };
         var sys = { id: 'sys-' + Date.now() + '-' + Math.floor(Math.random() * 1000), name: name, asmCounter: 1, functions: [], fcim: [], extractedFCs: [], fha: [], req: [], asm: [], aiGenerated: true, aiEditModel: model || null };
         systemsData.push(sys);
@@ -11675,6 +11739,7 @@
             { const _m = _rowMissing('func.sys', a); if (_m) return { ok: false, blocked: true, error: 'not written: ' + _m }; }   // 26 Oct 2026
             if (!Array.isArray(sysObj.functions)) sysObj.functions = [];
             const row = { internalId: newRowId(), funcId: '', funcName: a.subName || a.funcName || '', funcDef: a.subDef || a.funcDef || '', traceIds: a.traceIds || [], ..._chatProv(model) };
+            { const _N = (typeof _nd === 'function') ? _nd() : null, _c = _N ? _N.sysFunctionClash(row, sysObj.functions) : null; if (_c) { const _r = _ndFunctionUpsert(_c.row, row.funcDef, 'funcDef'); if (typeof renderSysFunctions === 'function') renderSysFunctions(); return _r === 'updated' ? { ok: true, summary: 'System function ' + (_c.row.funcId || '') + ' already exists: updated in place, not added again' } : { ok: false, blocked: true, error: 'system function ' + (_c.row.funcId || _c.row.funcName) + ' already exists and was written or edited by hand: not overwritten' }; } }   // 30 Oct 2026 (no duplicates)
             try { if (typeof _slAutoNumber === 'function') _slAutoNumber('sysFunc', row); } catch (_) {}
             if (!row.funcId) { let max = 0; (sysObj.functions || []).forEach(function (r) { const m = String(r.funcId || '').match(/(\d+)\s*$/); if (m) { const n = +m[1]; if (n > max) max = n; } }); row.funcId = 'SF-' + (max + 1); }
             sysObj.functions.push(row);
@@ -11684,6 +11749,7 @@
         if (typeof acFunctionsData === 'undefined') return { ok: false, error: 'functions not loaded' };
         { const _m = _rowMissing('func.ac', a); if (_m) return { ok: false, blocked: true, error: 'not written: ' + _m }; }   // 26 Oct 2026
         const row = { internalId: newRowId(), funcId: '', funcName: a.funcName || '', funcDef: a.funcDef || '', subId: '', subName: a.subName || '', subDef: a.subDef || '', ..._chatProv(model) };
+        { const _N = (typeof _nd === 'function') ? _nd() : null, _c = _N ? _N.acFunctionClash(Object.assign({}, row, { funcId: ((acFunctionsData || []).find(function (r) { return r && _N.norm(r.funcName) === _N.norm(row.funcName); }) || {}).funcId || '' }), acFunctionsData) : null; if (_c) { const _r = _ndFunctionUpsert(_c.row, row.subName ? row.subDef : row.funcDef, row.subName ? 'subDef' : 'funcDef'); if (typeof renderACFunctions === 'function') renderACFunctions(); return _r === 'updated' ? { ok: true, summary: 'Aircraft function ' + (_c.row.subId || _c.row.funcId || '') + ' already exists: updated in place, not added again' } : { ok: false, blocked: true, error: 'aircraft function ' + (_c.row.subId || _c.row.funcId) + ' already exists and was written or edited by hand: not overwritten' }; } }   // 30 Oct 2026 (no duplicates)
         if (typeof _slAutoNumber === 'function') _slAutoNumber('acFunc', row);
         if (typeof _fallbackFuncIds === 'function') _fallbackFuncIds(row);
         acFunctionsData.push(row);
@@ -12836,6 +12902,7 @@
                         const ok = _applyFhaSuggestion({ subId: a.subId, fcDesc: a.fcDesc, phases: a.phases || [], effAc: a.effAc, effCrew: a.effCrew, effPax: a.effPax, effAcLevel: a.effAcLevel, effCrewLevel: a.effCrewLevel, effPaxLevel: a.effPaxLevel, severity: a.severity, severityRationale: a.severityRationale, sevBasis: a.sevBasis, srcCondId: a.srcCondId, judgementCall: a.judgementCall === true, judgementNote: a.judgementNote, realized: a.realized, escape: a.escape, escapeDefeated: a.escapeDefeated, _assumptions: Array.isArray(a._assumptions) ? a._assumptions : [], _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
                         const _did = (_applyFhaSuggestion._last && _applyFhaSuggestion._last.action) || (ok ? 'add' : '');
                         if (ok === 'protected') results.push({ ok: false, blocked: true, error: 'row for ' + (a.srcCondId || _chatClip(a.fcDesc, 30)) + ' (same phases) was edited by hand — not overwritten; newer draft noted on it' });
+                        else if (!ok && _applyFhaSuggestion._last && _applyFhaSuggestion._last.action === 'overlap') results.push({ ok: false, blocked: true, error: 'not written: ' + _applyFhaSuggestion._last.reason });   // 30 Oct 2026
                         else if (!ok && _applyFhaSuggestion._last && _applyFhaSuggestion._last.action === 'nocondition') results.push({ ok: false, blocked: true, error: 'the drafted row names no failure condition (no text, and no condition id found in the FCIM), so nothing was written' });   // 26 Oct 2026
                         else results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'SFHA' : 'AFHA') + ' FC ' + (_did === 'updated' ? 'updated in place' : 'added') + ' — ' + _chatClip(a.fcDesc, 50) + (a.judgementCall === true ? ' · JUDGMENT CALL flagged' : '') } : { ok: false, error: 'add_fha failed' });
                         break;
@@ -12853,7 +12920,8 @@
                         // shipped a fourth time.
                         // 26 Oct 2026: and the reason a cell does not apply (totalLossNa / partialLossNa / malfunctionNa)
                         const ok = _applyFcimSuggestion({ subId: a.subId, awareness: a.awareness, totalLoss: a.totalLoss, partialLoss: a.partialLoss, malfunction: a.malfunction, malfunctions: a.malfunctions, partials: a.partials, totalLossNa: a.totalLossNa, partialLossNa: a.partialLossNa, malfunctionNa: a.malfunctionNa, _model: model, _systemId: a.scope === 'system' ? a.systemId : '', _systemName: sysName });
-                        results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'System' : 'AC') + ' FCIM added for ' + _chatClip(a.subId, 24) } : { ok: false, error: 'add_fcim failed' }); break;
+                        { const _fl = _applyFcimSuggestion._last; results.push(ok ? { ok: true, summary: (a.scope === 'system' ? 'System' : 'AC') + ' FCIM ' + ((_fl && _fl.action === 'updated') ? 'updated in place' : 'added') + ' for ' + _chatClip(a.subId, 24) } : ((_fl && _fl.action === 'protected') ? { ok: false, blocked: true, error: _chatClip(a.subId, 24) + ' already has this FCIM row, edited by hand: not overwritten; newer draft noted on it' } : { ok: false, error: 'add_fcim failed' })); }   // 30 Oct 2026
+                        break;
                     }
                     case 'add_requirement': {
                         // ADVISORY-ONLY (decided 2 Aug 2026): an AI-drafted requirement

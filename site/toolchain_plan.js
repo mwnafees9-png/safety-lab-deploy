@@ -174,7 +174,9 @@
         } else {
             // Fallback: mirror the canonical shape exactly if the creator isn't loaded.
             const name = await _ask("Enter new system or ATA chapter name (e.g., 'Primary Flight Displays'):", '');
-            if (name && name.trim() && typeof systemsData !== 'undefined' && Array.isArray(systemsData)) {
+            const _ndT = window.SLNoDupes, _sameT = (_ndT && name) ? _ndT.systemNameClash(name, (typeof systemsData !== 'undefined') ? systemsData : [], null) : null;   // 30 Oct 2026 (no duplicates)
+            if (_sameT) { try { await (window.slAlert || alert)(_sameT.reason); } catch (_) {} }
+            else if (name && name.trim() && typeof systemsData !== 'undefined' && Array.isArray(systemsData)) {
                 systemsData.push({ id: 'sys-' + Date.now(), name: name.trim(), role: 'function', asmCounter: 1, functions: [], fcim: [], extractedFCs: [], fha: [], req: [], asm: [] });
                 try { if (typeof renderSystemDirectory === 'function') renderSystemDirectory(); } catch (_) {}
                 try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}   // 13 Sep 2026 (R18)

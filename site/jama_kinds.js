@@ -284,6 +284,11 @@
             const row = { internalId: o.newId(), fcId: '', fcDesc: '', subId: '', phases: '', effAc: '', effCrew: '', effPax: '', severity: '', assumptionIds: [], comments: '',
                           fcSource: _stamp(x.item, o.by, o.at) };
             _fhaFields(row, x.want);
+            // 30 Oct 2026 (no duplicates): the condition already assessed for these phases is updated, not added again;
+            // one assessed for only some of them is refused by name
+            const _nd = (typeof window !== 'undefined') ? window.SLNoDupes : null, _c = _nd ? _nd.fhaClash(row, fha) : null;
+            if (_c && !_c.exact) { refused.push(_c.reason); return; }
+            if (_c && _c.exact) { _fhaFields(_c.row, x.want); _c.row.fcSource = row.fcSource; updated++; return; }
             fha.push(row); added++;
         });
         arrOf(diff.changed).forEach(x => {

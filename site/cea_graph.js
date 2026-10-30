@@ -399,7 +399,9 @@
                 if (kind === 'system') {
                     const sid = sysOf((a || b).id);
                     if (!b && a) {
-                        if (!S.some(s => s && String(s.id) === sid)) {
+                        const _ndC = window.SLNoDupes, _sameC = _ndC ? _ndC.findSystemByName(a.label || 'New system', S) : null;   // 30 Oct 2026 (no duplicates)
+                        if (_sameC && String(_sameC.id) !== sid) { try { if (window.showToast) window.showToast('A system called "' + _sameC.name + '" already exists, so no second one was made. Rename the new box, or use the existing system.', 'warning', 7000); } catch (_) {} }
+                        else if (!S.some(s => s && String(s.id) === sid)) {
                             const s = { id: sid, name: a.label || 'New system', role: (a.props && a.props.role) || 'function', asmCounter: 1, functions: [], fcim: [], extractedFCs: [], fha: [], req: [], asm: [] };
                             systemsData.push(s);
                             try { if (window.PROGRAM_PLAN && PROGRAM_PLAN.initSystemPlan) PROGRAM_PLAN.initSystemPlan(sid, null); } catch (_) {}

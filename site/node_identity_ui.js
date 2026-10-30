@@ -344,6 +344,9 @@
       var sys = (g('systemsData') || []).find(function (s) { return s.id === id.systemId; });
       if (!sys) return null;
       if (!Array.isArray(sys.functions)) sys.functions = [];
+      // 30 Oct 2026 (no duplicates): a function of that name already in the system is picked, not created again
+      var _nd = window.SLNoDupes, _same = _nd ? _nd.sysFunctionClash({ funcName: name }, sys.functions) : null;
+      if (_same) { try { if (window.showToast) window.showToast(_same.reason.replace(' Edit that one instead of adding it again.', ' It is picked here instead of adding it again.'), 'info', 5000); } catch (_) {} return _same.row.funcId; }
       var fid = 'F-' + (sys.functions.length + 1) + '-' + String(sys.id).slice(0, 4).toUpperCase();
       sys.functions.push({ internalId: Date.now(), funcId: fid, funcName: name.trim(), funcDef: '' });
       return fid;
@@ -354,6 +357,10 @@
       var sys2 = (g('systemsData') || []).find(function (s) { return s.id === id.systemId; });
       if (!sys2) return null;
       if (!Array.isArray(sys2.fha)) sys2.fha = [];
+      // 30 Oct 2026 (no duplicates): the same failure condition of the same function is picked, not created again
+      var _nd2 = window.SLNoDupes, _dn = _nd2 ? _nd2.norm(d1) : '';
+      var _sameFc = _nd2 ? sys2.fha.find(function (r) { return r && _nd2.norm(r.fcDesc) === _dn && String(r.subId || '') === String(id.functionId || ''); }) : null;
+      if (_sameFc && _sameFc.fcId) return _sameFc.fcId;
       var fcid = 'FC-' + String(sys2.id).slice(0, 4).toUpperCase() + '-' + (sys2.fha.length + 1);
       sys2.fha.push({ internalId: Date.now(), fcId: fcid, fcDesc: d1.trim(), severity: '', subId: id.functionId || '' });
       return fcid;

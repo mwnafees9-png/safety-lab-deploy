@@ -1702,7 +1702,8 @@ const acFuncCRUD = makeCRUD({
     // same aircraft function, to any depth (func_tree.js). Blank = directly under the function.
     formIds: { funcId: 'ac-func-id', funcName: 'ac-func-name', funcDef: 'ac-func-def', parentSubId: 'ac-subfunc-parent', subId: 'ac-subfunc-id', subName: 'ac-subfunc-name', subDef: 'ac-subfunc-def' },
     submitBtn: 'btn-submit-ac-func', cancelBtn: 'btn-cancel-ac-func', defaultText: 'Log Aircraft Function',
-    validate: (data) => (typeof SLFuncTree !== 'undefined' ? SLFuncTree.check(data, acFunctionsData) : ''),
+    // 30 Oct 2026 (no duplicates): a function or sub-function exists once (no_dupes.js)
+    validate: (data) => (typeof SLFuncTree !== 'undefined' ? SLFuncTree.check(data, acFunctionsData) : '') || ((window.SLNoDupes && (window.SLNoDupes.acFunctionClash(data, acFunctionsData) || {}).reason) || ''),
     onEdit: (item) => { try { if (typeof acFuncPopulateParents === 'function') acFuncPopulateParents(item); } catch (_) {} },
     tableBody: 'ac-func-body',
     editFnName: 'editACFunction', deleteFnName: 'deleteACFunction',
@@ -1738,6 +1739,7 @@ const acFcimCRUD = makeCRUD({
     store: () => acFcimData,
     formIds: { subId: 'ac-fcim-subfunc', awareness: 'ac-fcim-crew', tlId: 'ac-fcim-tl-id', tlDesc: 'ac-fcim-tl-desc', plId: 'ac-fcim-pl-id', plDesc: 'ac-fcim-pl-desc', mId: 'ac-fcim-m-id', mDesc: 'ac-fcim-m-desc' },
     submitBtn: 'btn-submit-ac-fcim', cancelBtn: 'btn-cancel-ac-fcim', defaultText: 'Log AC FCIM',
+    validate: (data) => (window.SLNoDupes && (window.SLNoDupes.fcimClash(data, acFcimData) || {}).reason) || '',   // 30 Oct 2026: one Aware and one Unaware row per function
     tableBody: 'ac-fcim-body',
     editFnName: 'editACFCIM', deleteFnName: 'deleteACFCIM',
     // FCIM rows define the set of failure conditions referenced by the FHA tab.
@@ -1855,6 +1857,7 @@ const sysFuncCRUD = makeCRUD({
     store: () => sys()?.functions,
     storePrecondition: () => sys() ? null : 'Please open a system folder first.',
     formIds: { funcId: 'sys-func-id', funcName: 'sys-func-name', funcDef: 'sys-func-def' },
+    validate: (data) => (window.SLNoDupes && (window.SLNoDupes.sysFunctionClash(data, sys()?.functions) || {}).reason) || '',   // 30 Oct 2026 (no duplicates)
     submitBtn: 'btn-submit-sys-func', cancelBtn: 'btn-cancel-sys-func', defaultText: 'Log System Function',
     tableBody: 'sys-func-body',
     editFnName: 'editSysFunction', deleteFnName: 'deleteSysFunction',
@@ -2135,6 +2138,7 @@ const sysFcimCRUD = makeCRUD({
     storePrecondition: () => sys() ? null : 'Please open a system folder first.',
     formIds: { subId: 'sys-fcim-subfunc', awareness: 'sys-fcim-crew', tlId: 'sys-fcim-tl-id', tlDesc: 'sys-fcim-tl-desc', plId: 'sys-fcim-pl-id', plDesc: 'sys-fcim-pl-desc', mId: 'sys-fcim-m-id', mDesc: 'sys-fcim-m-desc' },
     submitBtn: 'btn-submit-sys-fcim', cancelBtn: 'btn-cancel-sys-fcim', defaultText: 'Log System FCIM',
+    validate: (data) => (window.SLNoDupes && (window.SLNoDupes.fcimClash(data, sys()?.fcim) || {}).reason) || '',   // 30 Oct 2026: one Aware and one Unaware row per function
     tableBody: 'sys-fcim-body',
     editFnName: 'editSysFCIM', deleteFnName: 'deleteSysFCIM',
     afterChange: () => {

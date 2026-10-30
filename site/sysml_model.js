@@ -1546,6 +1546,9 @@
         byKind('sys').forEach(function (op) {
             var f = fieldsOf(op);
             if (op.target) { upd(op, op.target.obj, f); setRef(op, op.target.obj, op.target.ref); return; }
+            // 30 Oct 2026 (no duplicates): a system of the same name is the same system: updated, never added twice
+            { var _nd = (typeof window !== 'undefined') ? window.SLNoDupes : null, _same = _nd ? _nd.findSystemByName(f.name, systems(P)) : null;
+              if (_same) { upd(op, _same, f); setRef(op, _same, 'sys:' + _same.id); return; } }
             var id = idOfKey(op.key); if (systems(P).some(function (s) { return s.id === id; })) id = 'sys-' + newId();
             var s = { id: id, name: f.name, role: f.role || 'function', asmCounter: 1, functions: [], fcim: [], extractedFCs: [], fha: [], req: [], asm: [] };
             if (op.el.doc) s.description = op.el.doc;
@@ -1596,6 +1599,10 @@
             var r = { internalId: pickIid(P.acFunctionsData, op.key), funcId: g ? g.funcId : '', funcName: g ? g.funcName : '', subId: f.subId, subName: f.subName, subDef: f.subDef };
             if (g && g.funcDef) r.funcDef = g.funcDef;
             if (pr && pr.subId && pr.subId !== r.subId) r.parentSubId = pr.subId;
+            // 30 Oct 2026 (no duplicates): the same sub-function already there is updated, not added twice
+            { var _ndf = (typeof window !== 'undefined') ? window.SLNoDupes : null, _cf = _ndf ? _ndf.acFunctionClash(r, P.acFunctionsData) : null;
+              if (_cf && (String(_cf.row.subId || '') === String(r.subId || '') || !String(r.subId || '').trim())) { upd(op, _cf.row, f); setRef(op, _cf.row, refOf('fn', _cf.row)); fnRowByKey[op.key] = _cf.row; return; }
+              if (_cf) { plan.notes.push((r.subId || r.subName) + ': ' + _cf.reason + ' Left out.'); return; } }
             P.acFunctionsData.push(r); made.added++; setRef(op, r, refOf('fn', r)); fnRowByKey[op.key] = r;
         });
         byKind('sfn').forEach(function (op) {
@@ -1605,6 +1612,9 @@
             if (!s) { plan.notes.push('System function ' + (f.funcId || f.funcName) + ': its system is not in the file or the project, so it was left out.'); return; }
             s.functions = s.functions || [];
             var r = { internalId: pickIid(s.functions, op.key), traceIds: [], funcId: f.funcId, funcName: f.funcName, funcDef: f.funcDef };
+            // 30 Oct 2026 (no duplicates): the same system function already there is updated, not added twice
+            { var _nds = (typeof window !== 'undefined') ? window.SLNoDupes : null, _cs = _nds ? _nds.sysFunctionClash(r, s.functions) : null;
+              if (_cs) { upd(op, _cs.row, f); setRef(op, _cs.row, refOf('sfn', _cs.row, { systemId: s.id })); return; } }
             s.functions.push(r); made.added++; setRef(op, r, refOf('sfn', r, { systemId: s.id }));
         });
         // --- assumptions
@@ -2104,6 +2114,10 @@
     function applyForeign(P, plan, made, newId) {
         var f = plan.foreign;
         f.systems.forEach(function (s) {
+            if (!s.target) {   // 30 Oct 2026 (no duplicates): a system of the same name is the same system
+                var _ndF = (typeof window !== 'undefined') ? window.SLNoDupes : null, _sameF = _ndF ? _ndF.findSystemByName(s.name, systems(P)) : null;
+                if (_sameF) s.target = _sameF;
+            }
             if (!s.target) {
                 var base = 'sys-' + (s.code ? s.code.toLowerCase() : (S(s.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'system')), id = base, k = 2;
                 while (systems(P).some(function (x) { return x.id === id; })) id = base + '-' + k++;
@@ -2131,6 +2145,9 @@
             var sid = fn.id || nextId('FN-SYS-', function (x) { return arr(P.acFunctionsData).some(function (r) { return r.subId === x; }); });
             if (!fn.id) plan.notes.push('Function "' + fn.name + '" had no ID in the file; it is ' + sid + ' here.');
             fn.target = { internalId: newId(), funcId: gid || '', funcName: fn.groupName || '', subId: sid, subName: fn.name, subDef: fn.def || '' };
+            // 30 Oct 2026 (no duplicates): the same sub-function already there is used, not added twice
+            { var _ndG = (typeof window !== 'undefined') ? window.SLNoDupes : null, _cg = _ndG ? _ndG.acFunctionClash(fn.target, P.acFunctionsData) : null;
+              if (_cg) { fn.target = _cg.row; return; } }
             P.acFunctionsData.push(fn.target); made.added++;
         });
         arr(f.allocs).forEach(function (a) {
