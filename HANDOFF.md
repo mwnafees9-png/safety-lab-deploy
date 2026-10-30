@@ -1,4 +1,4 @@
-## 30 Oct 2026 (second build): NOTHING IS ADDED TWICE; A SYSTEM CAN BE RENAMED, EDITED OR REMOVED. WEB SHIPPED BY WAQAS (2ea80cc); desktop 0.21.19 Windows to follow.
+## 30 Oct 2026 (second build): NOTHING IS ADDED TWICE; A SYSTEM CAN BE RENAMED, EDITED OR REMOVED. SHIPPED BY WAQAS (web 2ea80cc, desktop 0.21.19 Windows; Mac channel stays 0.21.10).
 
 Waqas: "AI or the tool itself must not create duplicates anywhere in the app, once an analysis or a field has been created, it can then be updated or removed, not duplicated ... we currently do not have a remove/rename/update the system option." Rulings: no duplicate of the same function; "2 FCIM rows per function, 1 aware the second unaware"; no two FHA rows assessing the same condition for the same phase; a duplicate that comes in updates the existing row in place, shown for review first; removing a system shows everything inside it and everything that links to it, asks for its name to be typed, and can be undone; a rename keeps the hidden id and a name another system has is refused.
 One rule, every writer (site/no_dupes.js, SLNoDupes v1.0):
