@@ -1,4 +1,4 @@
-## 30 Oct 2026: SYSTEM FUNCTIONS, SYSTEM FCIM AND SFHA GET AI BUTTONS; THE AI ASSISTANT PAGE ASKS FOR THE SCOPE. NOT YET DEPLOYED.
+## 30 Oct 2026: SYSTEM FUNCTIONS, SYSTEM FCIM AND SFHA GET AI BUTTONS; THE AI ASSISTANT PAGE ASKS FOR THE SCOPE. SHIPPED BY WAQAS (web 23bb080, desktop 0.21.18 Windows; Mac channel stays 0.21.10).
 
 Waqas: "SFHAs, their respective FCIMs, and Functions do not have a human interface to run it on their respective pages or through the AI assistant page"; confirmed the plan, "existing actions should be asking for scope otherwise the AI assistant page balloon up", and that the SFHA works from the system FCIM's failure conditions like the aircraft FHA does.
 Found: the system drafting existed in the engine but nothing started it. The system pages had no AI bar; on the AI Assistant page Generate FCIM and Draft FHA only ever ran the aircraft (the unified engine branch never reached the system path; only ANEM's chat did); Decompose's system choice was only on the Aircraft Functions page. The old system FCIM path also drafted 8 functions at most, in one call.
