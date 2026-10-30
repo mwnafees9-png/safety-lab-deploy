@@ -208,7 +208,8 @@ check('untargeted path unchanged', /else if \(txt\) parts\.push\('TEXT:\\n' \+ t
 check('_specSecsForSubIds extracts cited prefixes from the selected rows',
   /function _specSecsForSubIds\(subIds\)/.test(aiSrc) && /const re = \/\\u00a7\\s\?\(\\d\{1,2\}\\\.\\d\{1,2\}\)\/g;/.test(aiSrc));
 check('FHA + FCIM scope pickers pass specSecs into the batch cfg',
-  (aiSrc.match(/specSecs: _specSecsForSubIds\(picked\.map\(/g) || []).length === 3);   // FCIM + FHA-conditions + FHA-functions-fallback
+  (aiSrc.match(/specSecs: _specSecsForSubIds\(picked\.map\(/g) || []).length >= 3   // FCIM + FHA-conditions + FHA-functions-fallback (aircraft)
+  && /function _draftSystemFha[\s\S]*?specSecs: _specSecsForSubIds\(subs\)/.test(aiSrc));   // 30 Oct 2026: and the system FCIM / SFHA drafters
 check('_projectDocContext forwards opts.specSecs to the registry',
   /window\.SLABSpecIndex\.select\(txt, feature, \(opts && opts\.specSecs\) \|\| null\)/.test(aiSrc));
 check('decompose seam targets via the registry with the full-text fallback inline',

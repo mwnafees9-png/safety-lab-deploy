@@ -167,7 +167,7 @@ ok('the in-lane bar strips the drafter suffix to find the lane',
     /\/\^HF — \(\.\+\?\)\(\?: · draft from documents\)\?\$\//.test(bar));
 ok('both entries render in the lane, not just the last one seen',
     /both labels are kept as separate keys, so both render/.test(bar));
-ok('lane bar version bumped', /lane_ai_bar\.js — v1\.2/.test(bar));
+ok('lane bar version bumped', (function () { const m = /lane_ai_bar\.js — v1\.(\d+)/.exec(bar); return !!m && +m[1] >= 2; })());
 ok('index pins the bumped lane bar', pinAtLeast(idx, 'lane_ai_bar', '1.2'));
 ok('ai_loader pins the bumped assistant', pinAtLeast(loader, 'ai_assistant', '76.22'));
 

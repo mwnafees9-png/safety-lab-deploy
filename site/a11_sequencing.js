@@ -137,7 +137,9 @@
         if (!action) { _note('Lane "' + step.launcherLabel + '" is not available (AI module not loaded?).', 'stop'); return Promise.resolve(false); }
         _note('Running: ' + step.label + ' — the lane opens its own review panel; nothing lands without your Accept.');
         _running = step.id;
-        return Promise.resolve().then(action.run).then(function () {
+        // 30 Oct 2026: the workflow's steps are the aircraft's (doneWhen reads the aircraft stores), so it
+        // passes the aircraft scope; the AI Assistant page asks, a system's pages pass the system.
+        return Promise.resolve().then(function () { return action.run({ lane: 'aircraft' }); }).then(function () {
             _render();
             return true;
         }).catch(function (e) {

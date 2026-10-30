@@ -75,7 +75,7 @@ ok('readiness is exposed for the bar to ask', /inputReady: function \(r\)/.test(
 // ------------------------------------------------------------- the bar shows the gate
 ok('the bar disables a button whose analysis is not ready', /b\.disabled = true;/.test(bar));
 ok('the disabled button says what is missing', /' — needs ' \+ rd\.need/.test(bar));
-ok('the bar asks rather than deciding', /_API\.inputReady\(a\.needs\.r\)/.test(bar));
+ok('the bar asks rather than deciding', /_API\.inputReady\((LANE_NEEDS\[tabId\] \|\| )?a\.needs\.r\)/.test(bar));
 ok('the bar records that it is not the authority', /asks, it does not decide/.test(bar));
 ok('a blocked button is visibly blocked', /slab-ai-blocked\{opacity:\.5;cursor:not-allowed;\}/.test(bar));
 

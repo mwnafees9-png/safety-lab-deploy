@@ -1,6 +1,13 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
-// lane_ai_bar.js — v1.2 — THE AI ACTION BAR, IN THE LANE ITSELF.
+// lane_ai_bar.js — v1.4 — THE AI ACTION BAR, IN THE LANE ITSELF.
+//
+// v1.4, 30 Oct 2026 (Waqas: "SFHAs, their respective FCIMs, and Functions do not have a human interface
+// to run it on their respective pages or through the AI assistant page"): each system's Functions, FCIM
+// and FHA pages get the bar too (SYS_ACTION_WRITES, mountSys), drafting that system and no other. The
+// same three launcher actions serve both levels: a button passes its own scope ({ lane: 'aircraft' } on
+// an aircraft page, { systemId, systemName } on a system's page); the AI Assistant page passes nothing,
+// and the action asks for the scope (SafetyLabAI.laneScope).
 //
 // Waqas, 2 Sep 2026: "actually I prefer having a per lane button in the actual
 // lane rather than just the AI assistant lets wire it up for all the analyses in
@@ -85,6 +92,17 @@
         'Draft Resources':                    'resources',
         'Human Factors — register crew credit': 'hfa'
     };
+
+    // 30 Oct 2026 — a system's pages. Same rule: an action sits on the page it writes. The key is the
+    // system page (switchWorkspaceTab's sub-tab), the value the button's words on that page.
+    var SYS_ACTION_WRITES = {
+        'Decompose architecture → functions': { page: 'func', text: 'Decompose → system functions' },
+        'Generate FCIM':                      { page: 'fcim', text: 'Generate system FCIM' },
+        'Draft FHA':                          { page: 'fha',  text: 'Draft SFHA' }
+    };
+    // The FHA action covers both levels on the AI Assistant page ('fha'); on the aircraft page it is the
+    // aircraft FHA, so that button keeps the aircraft gate.
+    var LANE_NEEDS = { 'ac-fha': 'afha' };
 
     // The nine HF sub-lanes are GENERATED, exactly as their launcher entries are: one
     // registry decides which HF lanes the recommender serves, and both surfaces read it.
@@ -194,7 +212,7 @@
             var rd = null;
             try {
                 var _API = (typeof window !== 'undefined') ? window.SafetyLabAI : null;
-                if (a.needs && _API && typeof _API.inputReady === 'function') rd = _API.inputReady(a.needs.r);
+                if (a.needs && _API && typeof _API.inputReady === 'function') rd = _API.inputReady(LANE_NEEDS[tabId] || a.needs.r);
             } catch (_) {}
             if (rd && !rd.ready) {
                 b.disabled = true;
@@ -205,7 +223,8 @@
                 b.title = (a.sub || '') + ' — advisory; every result lands in a review gate you accept or dismiss.';
             }
             b.onclick = function () {
-                Promise.resolve().then(a.run).catch(function (e) {
+                // 30 Oct 2026: an aircraft page drafts the aircraft (the AI Assistant page asks for the scope)
+                Promise.resolve().then(function () { return a.run({ lane: 'aircraft' }); }).catch(function (e) {
                     try {
                         if (typeof showToast === 'function') showToast((e && e.message) || String(e), 'warning', 4000);
                         else slAlert((e && e.message) || String(e));
@@ -227,11 +246,114 @@
         return true;
     }
 
+    // ------------------------------------------------------- a system's pages
+    function _env(name) {
+        try { if (typeof window !== 'undefined' && window.SLEnv && typeof window.SLEnv.get === 'function') return window.SLEnv.get(name); } catch (_) {}
+        return undefined;
+    }
+    function _activeSystem() {
+        var id = _env('activeSystemId'), list = _env('systemsData');
+        if (id == null || !Array.isArray(list)) return null;
+        for (var i = 0; i < list.length; i++) { if (list[i] && String(list[i].id) === String(id)) return list[i]; }
+        return null;
+    }
+    function _sysActionsFor(page) {
+        var API = (typeof window !== 'undefined') ? window.SafetyLabAI : null;
+        if (!API || typeof API.launcherActions !== 'function') return [];
+        var all; try { all = API.launcherActions() || []; } catch (_) { return []; }
+        var out = [];
+        Object.keys(SYS_ACTION_WRITES).forEach(function (label) {
+            if (SYS_ACTION_WRITES[label].page !== page) return;
+            for (var i = 0; i < all.length; i++) { if (all[i] && all[i].label === label) { out.push({ a: all[i], text: SYS_ACTION_WRITES[label].text }); return; } }
+        });
+        return out;
+    }
+    // What a system page's button needs, for THIS system: decomposing needs the architecture document;
+    // the FCIM and the SFHA need this system's functions.
+    function _sysGate(a, sy) {
+        var API = (typeof window !== 'undefined') ? window.SafetyLabAI : null;
+        if (a.label === 'Decompose architecture → functions') {
+            try { if (API && typeof API.inputReady === 'function') { var rd = API.inputReady('decomp'); if (rd && !rd.ready) return rd.need; } } catch (_) {}
+            return '';
+        }
+        var n = (sy && Array.isArray(sy.functions)) ? sy.functions.length : 0;
+        return n ? '' : 'this system\'s functions: add them, or decompose them first';
+    }
+    function mountSys(page) {
+        if (typeof document === 'undefined') return false;
+        var view = document.getElementById('ws-view-' + page);
+        if (!view) return false;
+        var existing = view.querySelector(':scope > .slab-ai-bar');
+        var sy = _activeSystem();
+        var acts = sy ? _sysActionsFor(page) : [];
+        if (!acts.length) { if (existing) existing.remove(); return false; }
+        _ensureStyles();
+        var bar = existing || document.createElement('div');
+        bar.className = 'slab-ai-bar';
+        bar.setAttribute('data-sys-lane', String(sy.id));
+        bar.innerHTML = '';
+        var sysName = String(sy.name || sy.id);
+        acts.forEach(function (x) {
+            var a = x.a;
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn-cyan slab-ai-btn';
+            b.textContent = '✨ ' + x.text;
+            b.setAttribute('data-lane-ai', a.label);
+            b.setAttribute('data-sys-lane-ai', x.text);
+            var need = _sysGate(a, sy);
+            if (need) {
+                b.disabled = true;
+                b.classList.add('slab-ai-blocked');
+                b.textContent = '✨ ' + x.text + ' — needs ' + need;
+                b.title = x.text + ' cannot run yet: it needs ' + need + '.';
+            } else {
+                b.title = (a.sub || '') + ' — for ' + sysName + ' only. Advisory; every result lands in a review gate you accept or dismiss.';
+            }
+            b.onclick = function () {
+                var cur = _activeSystem();
+                if (!cur) return;
+                Promise.resolve().then(function () { return a.run({ systemId: String(cur.id), systemName: String(cur.name || cur.id) }); }).catch(function (e) {
+                    try {
+                        if (typeof showToast === 'function') showToast((e && e.message) || String(e), 'warning', 4000);
+                        else slAlert((e && e.message) || String(e));
+                    } catch (_) {}
+                });
+            };
+            bar.appendChild(b);
+        });
+        var note = document.createElement('span');
+        note.className = 'slab-ai-note';
+        note.textContent = sysName + ' only — advisory, you review and accept';
+        bar.appendChild(note);
+        if (!existing) {
+            var anchor = view.querySelector(':scope > .header-with-export');
+            if (anchor && anchor.parentNode === view) anchor.insertAdjacentElement('afterend', bar);
+            else view.insertBefore(bar, view.firstChild);
+        }
+        return true;
+    }
+    function _wireSys() {
+        if (typeof window === 'undefined' || typeof window.switchWorkspaceTab !== 'function' || window.switchWorkspaceTab._laneAiWrapped) return !!(typeof window !== 'undefined' && window.switchWorkspaceTab && window.switchWorkspaceTab._laneAiWrapped);
+        var orig = window.switchWorkspaceTab;
+        var wrapped = function (subTab) {
+            var r = orig.apply(this, arguments);
+            try { mountSys(subTab); } catch (_) {}
+            try { setTimeout(function () { mountSys(subTab); }, 900); } catch (_) {}
+            return r;
+        };
+        wrapped._laneAiWrapped = true;
+        Object.keys(orig).forEach(function (k) { try { wrapped[k] = orig[k]; } catch (_) {} });
+        window.switchWorkspaceTab = wrapped;
+        return true;
+    }
+
     // Mount on every tab change. The AI module loads lazily (ai_loader), so a lane
     // shown before it arrives would render no bar and never retry — hence the short
     // re-mount after the loader's window, and the retry on the API appearing.
     function _wire() {
         if (typeof window === 'undefined' || typeof document === 'undefined') return;
+        try { _wireSys(); } catch (_) {}
         if (typeof window.switchTab === 'function' && !window.switchTab._laneAiWrapped) {
             var orig = window.switchTab;
             var wrapped = function (tabId) {
@@ -260,7 +382,7 @@
         }
     }
 
-    var API = { mount: mount, ACTION_WRITES: ACTION_WRITES, lanesFromWrites: _lanesFromWrites, actionsFor: _actionsFor, hfWrites: _hfWrites, HF_TAB_BY_NAME: _HF_TAB_BY_NAME };
+    var API = { mount: mount, mountSys: mountSys, wireSys: _wireSys, SYS_ACTION_WRITES: SYS_ACTION_WRITES, LANE_NEEDS: LANE_NEEDS, ACTION_WRITES: ACTION_WRITES, lanesFromWrites: _lanesFromWrites, actionsFor: _actionsFor, hfWrites: _hfWrites, HF_TAB_BY_NAME: _HF_TAB_BY_NAME };
     if (typeof window !== 'undefined') window.LANE_AI_BAR = API;
     if (typeof module !== 'undefined') module.exports = API;
 })();

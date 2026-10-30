@@ -71,7 +71,7 @@ console.log('\n[1d] the scope picker is bypassed under capture, and only under c
   check('with no capture armed the picker still renders normally (the guard is the only gate)',
     /if \(_capture\.armed\) \{[\s\S]{0,300}?\}\s*\n\s*_ensurePanelStyles\(\);\s*\n\s*let p = document\.getElementById\('ai-scope-pick'\)/.test(ai));
   // every picker-driven lane is now reachable, through one of the three pickers
-  [['populateFcim', /_openScopePicker\(|_openFhaScopePicker\(/], ['decompose', /_openDecompScopePicker\(/],
+  [['populateFcim', /_openScopePicker\(|_openFhaScopePicker\(/], ['decompose', /_openDecompScopePicker\b/ /* 30 Oct 2026: held in _pickDecomp; a page button passes its scope */],
    ['draftPra', /_openScopePicker\(/], ['draftZsa', /_openScopePicker\(/], ['draftCma', /_openScopePicker\(/]].forEach(function (pair) {
     const src = extractFn(ai, pair[0]) || '';
     check(pair[0] + ' reaches the seam through a guarded picker (no bespoke bypass needed)', pair[1].test(src), pair[0]);

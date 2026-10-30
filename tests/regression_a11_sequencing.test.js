@@ -133,7 +133,7 @@ check('the module never mutates a data store (no push/splice on any *Data / ftaP
 check('the module calls no model — no Provider, no fetch',
   !/Provider\.|fetch\s*\(|XMLHttpRequest/.test(src));
 check('steps are invoked THROUGH the launcher actions (same lanes, same gates)',
-  src.includes('launcherActions') && /Promise\.resolve\(\)\.then\(action\.run\)/.test(src));
+  src.includes('launcherActions') && /Promise\.resolve\(\)\.then\((action\.run\)|function \(\) \{ return action\.run\()/.test(src));   // 30 Oct 2026: run with the aircraft scope
 check('desk state lives in projectConfig (travels with the project), not localStorage',
   src.includes('projectConfig') && !src.includes('localStorage'));
 

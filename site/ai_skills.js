@@ -248,7 +248,8 @@
         "ram.msg3.rationale": "ram.msg3.rationale",
         "comment.resolve": "comment.resolve",
         "doc.review": "doc.review",
-        "fha": "fha.draft"
+        "fha": "fha.draft",
+        "sfha": "sfha.draft"   // 30 Oct 2026: the system FHA batch names its analysis 'sfha'
     };
 
     // ---- V2 (29 Aug 2026): certification-basis VARIANTS ---------------------

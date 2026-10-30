@@ -31,7 +31,7 @@
 (function () {
     'use strict';
     var W = window;
-    var VERSION = '1.0';
+    var VERSION = '1.1';
     var PER_PAGE = 15;
     var ACCEPT = '.docx,.pdf,.reqif,.reqifz,.txt,.md,.csv,.json,.xml,.xmi,.text';
     var EXTRACTED = /\.(docx|pdf|reqif|reqifz)$/i;
@@ -503,6 +503,7 @@
     // ---- which pages read the inputs ----------------------------------------------------------------
     var EXTRA_USES = [
         { tab: 'cad', name: 'CAD Model', what: 'the zonal and particular risk AI review cites passages from these documents' },
+        { tab: 'sys-dir', name: 'Each system\'s Functions, FCIM and FHA pages', what: 'Decompose architecture \u2192 functions, Generate FCIM and Draft FHA for that system' },
         { tab: null, name: 'ANEM live chat', what: 'answers and proposals grounded in these documents and the model' },
         { tab: 'ai', name: 'This page', what: 'Ask your documents, the consistency check and Import documents into the model' }
     ];
