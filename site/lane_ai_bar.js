@@ -1,6 +1,9 @@
 // 13 Sep 2026 (R19 step 3): native alert/confirm/prompt replaced by the app's own dialogs (slAlert/slConfirm/slPrompt) and typed toasts; see tests/regression_native_dialogs.test.js
 // ============================================================================
-// lane_ai_bar.js — v1.4 — THE AI ACTION BAR, IN THE LANE ITSELF.
+// lane_ai_bar.js — v1.5 — THE AI ACTION BAR, IN THE LANE ITSELF.
+//
+// v1.5, 30 Oct 2026: a page SECTION can carry the bar too (SECTION_ACTION_WRITES, mountSection): the combined
+// failure conditions panel under the aircraft and each system's FHA, whose one action proposes combinations.
 //
 // v1.4, 30 Oct 2026 (Waqas: "SFHAs, their respective FCIMs, and Functions do not have a human interface
 // to run it on their respective pages or through the AI assistant page"): each system's Functions, FCIM
@@ -100,6 +103,13 @@
         'Generate FCIM':                      { page: 'fcim', text: 'Generate system FCIM' },
         'Draft FHA':                          { page: 'fha',  text: 'Draft SFHA' }
     };
+    // 30 Oct 2026 (v1.5) — a SECTION of a page: an action that writes one panel inside a page sits in that panel's
+    // heading, not at the top of the page. Waqas: "do it the same way we have for all other analyses". Same rule (an
+    // action sits where it writes), same button, same gate, same review panel; the panel's owner calls
+    // mountSection(slot, section, scope) when it draws, with its own scope (the aircraft, or one system).
+    var SECTION_ACTION_WRITES = {
+        'Propose combined failure conditions': { section: 'fcv', text: 'Propose combined failure conditions', need: 'combos' }
+    };
     // The FHA action covers both levels on the AI Assistant page ('fha'); on the aircraft page it is the
     // aircraft FHA, so that button keeps the aircraft gate.
     var LANE_NEEDS = { 'ac-fha': 'afha' };
@@ -187,11 +197,26 @@
     }
 
     // ------------------------------------------------------------------- mount
+    // the section bars inside a view, re-mounted with the lane's own (the AI module loads late, so a panel drawn
+    // before it arrived has an empty slot until now)
+    function _mountSections(view) {
+        if (!view || !view.querySelectorAll) return;
+        Array.prototype.forEach.call(view.querySelectorAll('.slab-ai-section[data-ai-section]'), function (slot) {
+            var sc = slot.getAttribute('data-ai-scope') || 'ac', scope = { lane: 'aircraft' };
+            if (sc && sc !== 'ac') {
+                var list = _env('systemsData'), sy = null;
+                if (Array.isArray(list)) for (var i = 0; i < list.length; i++) { if (list[i] && String(list[i].id) === String(sc)) { sy = list[i]; break; } }
+                scope = { systemId: String(sc), systemName: String((sy && sy.name) || sc) };
+            }
+            try { mountSection(slot, slot.getAttribute('data-ai-section'), scope); } catch (_) {}
+        });
+    }
     function mount(tabId) {
         if (typeof document === 'undefined') return false;
         var acts = _actionsFor(tabId);
         var view = document.getElementById('view-' + tabId);
         if (!view) return false;
+        _mountSections(view);
         var existing = view.querySelector(':scope > .slab-ai-bar');
         if (!acts.length) { if (existing) existing.remove(); return false; }
         _ensureStyles();
@@ -232,6 +257,7 @@
                 });
             };
             bar.appendChild(b);
+            _stopAware(b);   // 31 Oct 2026: while its run is going, this button is Stop
         });
         var note = document.createElement('span');
         note.className = 'slab-ai-note';
@@ -283,6 +309,7 @@
         if (typeof document === 'undefined') return false;
         var view = document.getElementById('ws-view-' + page);
         if (!view) return false;
+        _mountSections(view);
         var existing = view.querySelector(':scope > .slab-ai-bar');
         var sy = _activeSystem();
         var acts = sy ? _sysActionsFor(page) : [];
@@ -321,6 +348,7 @@
                 });
             };
             bar.appendChild(b);
+            _stopAware(b);   // 31 Oct 2026: while its run is going, this button is Stop
         });
         var note = document.createElement('span');
         note.className = 'slab-ai-note';
@@ -331,6 +359,74 @@
             if (anchor && anchor.parentNode === view) anchor.insertAdjacentElement('afterend', bar);
             else view.insertBefore(bar, view.firstChild);
         }
+        return true;
+    }
+    // ------------------------------------------------------------ a section
+    function _sectionActionsFor(section) {
+        var API = (typeof window !== 'undefined') ? window.SafetyLabAI : null;
+        if (!API || typeof API.launcherActions !== 'function') return [];
+        var all; try { all = API.launcherActions() || []; } catch (_) { return []; }
+        var out = [];
+        Object.keys(SECTION_ACTION_WRITES).forEach(function (label) {
+            var w = SECTION_ACTION_WRITES[label];
+            if (w.section !== section) return;
+            for (var i = 0; i < all.length; i++) { if (all[i] && all[i].label === label) { out.push({ a: all[i], w: w }); return; } }
+        });
+        return out;
+    }
+    // what a section's button needs for ITS scope: the action's own gate (SafetyLabAI.inputReady) for the aircraft;
+    // for a system, two or more of that system's failure conditions to combine
+    function _sectionGate(x, scope) {
+        if (scope && scope.systemId) {
+            var list = _env('systemsData'), sy = null;
+            if (Array.isArray(list)) for (var i = 0; i < list.length; i++) { if (list[i] && String(list[i].id) === String(scope.systemId)) { sy = list[i]; break; } }
+            var ids = {}; ((sy && sy.fha) || []).forEach(function (r) { if (r && r.fcId && !(Array.isArray(r.combinedOf) && r.combinedOf.length)) ids[String(r.fcId)] = 1; });
+            return Object.keys(ids).length >= 2 ? '' : 'two or more failure conditions in this system\'s FHA';
+        }
+        try {
+            var API = (typeof window !== 'undefined') ? window.SafetyLabAI : null;
+            if (API && typeof API.inputReady === 'function') { var rd = API.inputReady(x.w.need); if (rd && !rd.ready) return rd.need; }
+        } catch (_) {}
+        return '';
+    }
+    function mountSection(slot, section, scope) {
+        if (typeof document === 'undefined' || !slot) return false;
+        var acts = _sectionActionsFor(section);
+        if (!acts.length) { slot.innerHTML = ''; return false; }
+        _ensureStyles();
+        var bar = slot.querySelector ? slot.querySelector('.slab-ai-bar') : null;
+        if (!bar) { bar = document.createElement('div'); bar.className = 'slab-ai-bar'; bar.style.margin = '0'; slot.innerHTML = ''; slot.appendChild(bar); }
+        bar.innerHTML = '';
+        bar.setAttribute('data-ai-section', section);
+        var where = (scope && scope.systemId) ? String(scope.systemName || scope.systemId) + ' only' : 'aircraft level';
+        acts.forEach(function (x) {
+            var a = x.a;
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn-cyan slab-ai-btn';
+            b.textContent = '✨ ' + x.w.text;
+            b.setAttribute('data-lane-ai', a.label);
+            b.setAttribute('data-section-ai', section);
+            var need = _sectionGate(x, scope);
+            if (need) {
+                b.disabled = true;
+                b.classList.add('slab-ai-blocked');
+                b.textContent = '✨ ' + x.w.text + ' — needs ' + need;
+                b.title = x.w.text + ' cannot run yet: it needs ' + need + '.';
+            } else {
+                b.title = (a.sub || '') + ' — ' + where + '. Runs only when you press it. Advisory; every result lands in a review gate you accept or dismiss.';
+            }
+            b.onclick = function () {
+                Promise.resolve().then(function () { return a.run(scope && scope.systemId ? { systemId: String(scope.systemId), systemName: String(scope.systemName || scope.systemId) } : { lane: 'aircraft' }); }).catch(function (e) {
+                    try {
+                        if (typeof showToast === 'function') showToast((e && e.message) || String(e), 'warning', 4000);
+                        else slAlert((e && e.message) || String(e));
+                    } catch (_) {}
+                });
+            };
+            bar.appendChild(b);
+            _stopAware(b);   // 31 Oct 2026: while its run is going, this button is Stop
+        });
         return true;
     }
     function _wireSys() {
@@ -382,7 +478,50 @@
         }
     }
 
-    var API = { mount: mount, mountSys: mountSys, wireSys: _wireSys, SYS_ACTION_WRITES: SYS_ACTION_WRITES, LANE_NEEDS: LANE_NEEDS, ACTION_WRITES: ACTION_WRITES, lanesFromWrites: _lanesFromWrites, actionsFor: _actionsFor, hfWrites: _hfWrites, HF_TAB_BY_NAME: _HF_TAB_BY_NAME };
+    var API = { mount: mount, mountSys: mountSys, mountSection: mountSection, SECTION_ACTION_WRITES: SECTION_ACTION_WRITES, wireSys: _wireSys, SYS_ACTION_WRITES: SYS_ACTION_WRITES, LANE_NEEDS: LANE_NEEDS, ACTION_WRITES: ACTION_WRITES, lanesFromWrites: _lanesFromWrites, actionsFor: _actionsFor, hfWrites: _hfWrites, HF_TAB_BY_NAME: _HF_TAB_BY_NAME };
+    // ---- 31 Oct 2026 (Waqas: "we need to give user an interface to be able to stop an AI run too") ----------------
+    // The button pressed becomes "Stop" while the AI run it started is going (from the moment the "AI working"
+    // indicator appears until every request has wound down); pressing it calls the one Stop (slabAiStop), the same as
+    // the Stop on the indicator. A re-rendered bar finds its running button again by its label.
+    var _armed = null, _running = null;
+    function _key(b) { return String(b.getAttribute('data-lane-ai') || '') + '|' + String(b.getAttribute('data-sys-lane-ai') || b.getAttribute('data-section-ai') || ''); }
+    function _paint(b) {
+        var on = !!_running && _key(b) === _running;
+        if (on && b.getAttribute('data-ai-running') !== '1') {
+            b.setAttribute('data-ai-orig', b.textContent); b.setAttribute('data-ai-orig-title', b.title || '');
+            b.setAttribute('data-ai-running', '1'); b.classList.add('slab-ai-stop');
+            b.textContent = '\u25A0 Stop'; b.title = 'Stop this AI run: the requests still waiting are called off and nothing more is billed. What already came back stays for review.';
+        } else if (!on && b.getAttribute('data-ai-running') === '1') {
+            b.removeAttribute('data-ai-running'); b.classList.remove('slab-ai-stop');
+            b.textContent = b.getAttribute('data-ai-orig') || b.textContent; b.title = b.getAttribute('data-ai-orig-title') || '';
+        }
+    }
+    function _paintAll() { try { document.querySelectorAll('.slab-ai-btn[data-lane-ai]').forEach(_paint); } catch (_) {} }
+    function _stopAware(b) {
+        var run = b.onclick;
+        b.onclick = function (ev) {
+            if (b.getAttribute('data-ai-running') === '1') { try { if (typeof window.slabAiStop === 'function') window.slabAiStop(); } catch (_) {} return; }
+            _armed = _key(b);
+            return run ? run.call(b, ev) : undefined;
+        };
+        _paint(b);
+    }
+    if (typeof window !== 'undefined' && window.addEventListener) {
+        window.addEventListener('slab-ai-busy', function () { if (_armed) { _running = _armed; _paintAll(); } });
+        // a run with a short gap between its calls (a retry, a follow-up pass) keeps its Stop: idle only counts once it lasts
+        window.addEventListener('slab-ai-idle', function () {
+            setTimeout(function () {
+                var busy = !!document.querySelector('.ai-busy-toast'), fl = (window.AiClient && typeof window.AiClient.inFlight === 'function') ? window.AiClient.inFlight() : 0;
+                if (busy || fl > 0) return;
+                _running = null; _armed = null; _paintAll();
+            }, 900);
+        });
+        try {
+            var st = document.createElement('style');
+            st.textContent = '.slab-ai-btn.slab-ai-stop{background:#fff;color:#B3261E;border-color:#B3261E;font-weight:700}.slab-ai-btn.slab-ai-stop:hover{background:#B3261E;color:#fff}';
+            (document.head || document.documentElement).appendChild(st);
+        } catch (_) {}
+    }
     if (typeof window !== 'undefined') window.LANE_AI_BAR = API;
     if (typeof module !== 'undefined') module.exports = API;
 })();

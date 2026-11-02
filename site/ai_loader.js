@@ -1,3 +1,10 @@
+// 1 Nov 2026: ai_assistant.js bumped to v77.00 (the free student tier has no AI at all: no flag, URL or pasted key turns it on).
+// 31 Oct 2026: ai_assistant.js bumped to v76.99 (failure rate sources: rateMatch and the rate.match skill; requirements on interfacing systems: ifaceWording and the iface.word skill).
+// 31 Oct 2026: ai_assistant.js bumped to v76.98 (the four-step CMA: cmaFlowDraft and the cma.flow skill; the reason for each FHA class: fhaReasonDraft and the fha.reason skill).
+// 31 Oct 2026: ai_assistant.js bumped to v76.97 (Stop: a stopped run is not retried and says how much came back; the AI working indicator names the analysis a batch is drafting).
+// 31 Oct 2026: ai_assistant.js bumped to v76.96 (review comments on every assessment: ANEM sees where each comment sits and changes the rows comment_kinds.js lists; update_mac; a draft hands back only what it can apply, and a CMA with no AND gates drafts from the documents).
+// 31 Oct 2026: ai_assistant.js bumped to v76.95 (combined failure conditions need their reasoning; ANEM does not add a second tree for a condition whose own tree has work in it).
+// 30 Oct 2026: ai_assistant.js bumped to v76.94 (each failure condition goes to the tree synthesis with its FCIM mode, function and sibling conditions; a drafted tree fills the empty tree made for its condition, links every row of it, and is refused when it is the same as another condition's tree).
 // 27 Oct 2026: ai_assistant.js bumped to v76.91 (the right-hand AI panels: red Close in the bottom row, solid Accept and Draft buttons, legible text, ANEM cards list every field).
 // 26 Oct 2026: ai_assistant.js bumped to v76.90 (every FCIM cell the AI drafts is a failure condition or N/A with its reason, never blank; an empty cell or an N/A with no reason is refused; one open FCIM cell can be drafted on its own).
 // 26 Oct 2026: ai_assistant.js bumped to v76.89 (the AI tree synthesis offers each failure condition once, at its most conservative row; a condition counts as having a tree when any of its rows has one).
@@ -31,7 +38,7 @@
 (function () {
     'use strict';
 
-    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'pdf_text.js?v=1.0', 'ai_assistant.js?v=76.93', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
+    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'pdf_text.js?v=1.0', 'ai_assistant.js?v=77.00', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
     let _loading = null;
 
     window.slLoadAI = function () {

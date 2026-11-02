@@ -331,6 +331,7 @@ const AutoReq = (function(){
     // Walk every node in every page; cb(node, page).
     function walkAllPages(cb){
         ftaPages.forEach(page => {
+            if (page && page.integrated) return;   // 1 Nov 2026 (item 42): an integrated tree is a view of its sources, never counted again (fta_integrated.js)
             (function walk(node){
                 if(!node) return;
                 cb(node, page);
@@ -376,7 +377,7 @@ const AutoReq = (function(){
         }
         return 'ac';
     }
-    function pageInScope(page, scope){ return _pageScopeKey(page) === scope; }
+    function pageInScope(page, scope){ return !(page && page.integrated) && _pageScopeKey(page) === scope; }   // 1 Nov 2026 (item 42): an integrated tree is a view of its sources, never counted again (fta_integrated.js)
 
     // Same walk as walkAllPages, restricted to the pages that belong to `scope`.
     function walkPagesInScope(scope, cb){
@@ -501,7 +502,7 @@ const AutoReq = (function(){
     // Every allocation page, with its ctx built once. Verification mirrors are excluded:
     // requirements are generated from allocation trees only (Phase 61).
     function _allocationPages(){
-        return (ftaPages || []).filter(p => p && !p.verifies);
+        return (ftaPages || []).filter(p => p && !p.verifies && !p.integrated);   // 1 Nov 2026 (item 42): an integrated tree is a view of its sources, never counted again (fta_integrated.js)
     }
 
     // Walk every allocation page and hand back only the nodes whose OWNER puts them in
@@ -925,7 +926,7 @@ const AutoReq = (function(){
         // by the governing row's internalId, deduped across common-mode repeats.
         const implBySafety = new Map();   // fha.internalId → [fta-interval sourceIds]
         (ftaPages || []).forEach(p => {
-            if (!p || !p.root || p.verifies) return;
+            if (!p || !p.root || p.verifies || p.integrated) return;
             // Phase 66.27 — this builds sourceIds with the scope prefix, so it must only
             // walk pages that belong to this scope, or an aircraft-scope run claims the
             // maintenance requirements of every system's trees.
@@ -1240,6 +1241,7 @@ const AutoReq = (function(){
             // mirrors are evidence sinks, not requirement sources (generating from them would
             // restate computed values as requirements).
             if (page && page.verifies) return;
+            if (node._circular) return;   // 1 Nov 2026 (item 45): a budget that depends on a circular transfer is no requirement (fta_loops.js)
             const lid = node.logicalId != null ? node.logicalId : node.id;
             if(seenLids.has(lid)) return;   // dedupe across common-mode repeats
             seenLids.add(lid);
@@ -2227,6 +2229,30 @@ const AutoReq = (function(){
                         });
                     });
                 });
+                // (d4) 31 Oct 2026 (customer checklist item 1): a concern in a four-step CMA (cma_flow.js) whose mitigation the
+                // engineer raised as a requirement. Worded by the engineer; emitted once, under the CMA's first gate, and
+                // traced to the CMA and its gates. It survives closure: it is the design constraint the mitigation made real.
+                (typeof cmaData !== 'undefined' ? cmaData : []).forEach(c => {
+                    if (!c || !c.flow || !Array.isArray(c.flow.gates) || String(c.flow.gates[0]) !== gateKey) return;
+                    const cmaIdStr = c.cmaId || ('CMA#' + c.internalId);
+                    (c.flow.concerns || []).forEach(cc => {
+                        if (!cc || !cc.raise || !String(cc.reqText || '').trim()) return;
+                        out.push({
+                            text: String(cc.reqText).trim(),
+                            rat: `Raised from ${cmaIdStr} concern ${cc.id}: ${String(cc.text || '').trim()}${cc.effect ? ' (' + String(cc.effect).trim() + ')' : ''}. It mitigates a common mode that could defeat the independence claimed at ${c.flow.gates.length} AND-family gate${c.flow.gates.length === 1 ? '' : 's'} (ARP4761A App M).`,
+                            level: 'L2', type: 'Safety', analysis: 'Independence',
+                            verifMethod: 'Analysis',
+                            traceId: node.displayId || '',
+                            reqSource: {
+                                generator: 'cma-concern',
+                                sourceId: `${scopeKey}:cma-concern:${c.internalId}:${cc.id}`,
+                                context: { cmaId: cmaIdStr, concernId: cc.id, gates: c.flow.gates.slice() },
+                                fingerprint: fp('cma-concern', String(cc.reqText).trim(), sortedChildLids),
+                                generatedAt: Date.now()
+                            }
+                        });
+                    });
+                });
             } else if(isOrFamily(node)){
                 const reasons = checkORCompromise(node, page).concat(checkCMACompromise(node, page));
                 // Phase 56.49e — NSPF requirement only at FC top with severity
@@ -2800,6 +2826,7 @@ const AutoReq = (function(){
         'gate-indep-ccf-lib':   { text: '${text}', rat: '${rat}' },
         'gate-indep-ccf-group': { text: '${text}', rat: '${rat}' },
         'gate-indep-cma': { text: '${text}', rat: '${rat}' },
+        'cma-concern': { text: '${text}', rat: '${rat}' },   // 31 Oct 2026
         'gate-indep-or':  { text: '${text}', rat: '${rat}' },
         'pra-zonal':      { text: '${text}', rat: '${rat}' },
         'pra-scenario':   { text: '${text}', rat: '${rat}' },
@@ -3051,6 +3078,7 @@ const AutoReq = (function(){
         'gate-indep-ccf-lib':   'Gate → Dissimilarity (shared library entry)',
         'gate-indep-ccf-group': 'Gate → Common-cause control (CCF group)',
         'gate-indep-cma':   'CMA → Common-mode preclusion',
+        'cma-concern':      'CMA concern → Mitigation requirement',
         'gate-indep-or':    'Gate → No-single-failure check',
         'pra-zonal':        'PRA → Zonal protection',
         'pra-scenario':     'PRA scenario → Traced protection requirement',

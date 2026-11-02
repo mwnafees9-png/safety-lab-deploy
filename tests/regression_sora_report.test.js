@@ -28,20 +28,12 @@ function check(name, cond, detail) {
 
 const reportsSrc = fs.readFileSync(path.join(__dirname, '..', 'site', 'reports.js'), 'utf8');
 
-console.log('[1] token registration — every {{...}} table parser knows the new tokens');
-// The file hardcodes the same allowlist of table-token names in four places
-// (docx renderer, markdown/pdf section splitter, custom-docx uploader ×2).
-// A token missing from any one renders as a literal "{{token}}" in that path.
-const anchors = [
-    /ffs_table\|sora_summary_table\|sora_oso_table\)\\?\}\\?\}\$/,      // docx-section splitter (^...$  anchored)
-];
-check('sora_summary_table + sora_oso_table follow ffs_table in the anchored splitter regex',
-    /ffs_table\|sora_summary_table\|sora_oso_table\)/.test(reportsSrc));
-const occurrences = (reportsSrc.match(/sora_summary_table/g) || []).length;
-check('sora_summary_table appears in all 4 known registries (splitter, docx re, pdf/tokenRe, custom-docx array) + DEFAULT_TEMPLATES + extractData',
-    occurrences >= 6, 'found ' + occurrences + ' occurrences, expected >= 6');
-const osoOccurrences = (reportsSrc.match(/sora_oso_table/g) || []).length;
-check('sora_oso_table appears in all the same registries', osoOccurrences >= 6, 'found ' + osoOccurrences);
+console.log('[1] the SORA tables render as tables');
+// 31 Oct 2026: reports.js keeps no list of table tokens any more; any {{token}} whose value is a list of rows renders
+// as a table in every path (sections, one-shot, custom .docx). So: the tokens are in the data as rows, and the rule holds.
+check('reports.js renders a token as a table by its value (sections and one-shot)', /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(reportsSrc));
+check('the custom .docx path takes its table tokens from the data', /const tableTokens = Object\.keys\(data\)\.filter\(k => _isTableVal\(data\[k\]\)/.test(reportsSrc));
+check('extractData builds sora_summary_table and sora_oso_table as rows', /sora_summary_table: \[\]/.test(reportsSrc) && /sora_oso_table:/.test(reportsSrc));
 
 // ---- headless load ----------------------------------------------------------
 globalThis.window = globalThis;

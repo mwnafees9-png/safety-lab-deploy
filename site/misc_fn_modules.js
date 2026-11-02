@@ -153,6 +153,23 @@ function isEduEmail(email) {
     return /@[\w.-]+\.(edu|edu\.[a-z]{2,3}|ac\.[a-z]{2,3})$/.test(e);
 }
 
+// 1 Nov 2026 (Waqas): university accounts are free forever on the student tier, with NO AI at all. The server decides
+// who is academic (public.users.academic: a .edu / .ac.* address, or a domain on the world university list loaded in
+// the database) and the sign-in sync keeps that answer here (safetyLab.server.academic). Before the first sync, the
+// .edu / .ac.* rule answers on its own. A comped account or a signed license (a customer's own install) is never
+// treated as a student account.
+function isAcademicAccount() {
+    try {
+        if (typeof window !== 'undefined' && window.SLLicense && window.SLLicense.authoritative) return false;
+        const email = (localStorage.getItem('safetyLab.signup.email') || '').toLowerCase();
+        if (email && typeof isCompedEmail === 'function' && isCompedEmail(email)) return false;
+        const flag = localStorage.getItem('safetyLab.server.academic');
+        if (flag === '1') return true;
+        if (flag === '0') return false;
+        return !!(email && isEduEmail(email));
+    } catch (_) { return false; }
+}
+
 function _compEntryEmail(entry) {
     return (typeof entry === 'string' ? entry : (entry && entry.email) || '').trim().toLowerCase();
 }
@@ -562,42 +579,16 @@ function applyPasteMode_CCFGroup(branchRoot, groupName, beta) {
     try { if (typeof ccfApplyGroupParams === 'function') ccfApplyGroupParams(groupName, { beta: Math.max(0, Math.min(1, beta)), model: 'beta' }); } catch (_) {}
 }
 
+// 1 Nov 2026 (customer checklist item 32): the mode (same event, copy, common cause group) is chosen before the paste
+// (fta_paste.js); accepting the review keeps the conservative merge of the allocation.
 function acceptPasteReview() {
     const modal = document.getElementById('paste-review-modal');
     const branch = modal && modal._pasteBranchRoot;
-    if (!branch) { closePasteReviewModal(); return; }
-    const modeEl = document.querySelector('input[name="paste-mode"]:checked');
-    const mode = modeEl ? modeEl.value : 'independent';
-    let toastMsg = '';
-    if (mode === 'same-event') {
-        applyPasteMode_SameEvent(branch);
-        toastMsg = 'Pasted as same physical event — source and destination linked via shared event ID.';
-    } else if (mode === 'ccf-group') {
-        const nameEl = document.getElementById('paste-ccf-name');
-        const betaEl = document.getElementById('paste-ccf-beta');
-        const name = (nameEl && nameEl.value || '').trim();
-        const beta = Math.max(0, Math.min(1, parseFloat(betaEl && betaEl.value) || 0.1));
-        if (!name) {
-            showToast('Please enter a CCF group name (e.g., BATT-PROPLOT-2024Q1).', 'warning', 4000);
-            if (nameEl) nameEl.focus();
-            return;
-        }
-        applyPasteMode_CCFGroup(branch, name, beta);
-        toastMsg = 'Pasted into CCF group "' + name + '" with β = ' + beta + ' on both sides.';
-    } else {
-        // Independent: strip the original-id marker; new IDs already in place.
-        (function strip(n) {
-            if (!n) return;
-            delete n._originalLogicalId;
-            const kids = n.children || n._children;
-            if (kids) kids.forEach(strip);
-        })(branch);
-        toastMsg = 'Pasted as independent instance. Conservative-merge allocation preserved.';
-    }
+    if (branch) (function strip(n) { if (!n) return; delete n._originalLogicalId; const kids = n.children || n._children; if (kids) kids.forEach(strip); })(branch);
     closePasteReviewModal();
     if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities();
     if (typeof updateD3 === 'function') updateD3();
-    if (typeof toast === 'function') toast(toastMsg);
+    if (typeof toast === 'function') toast('Allocation merge accepted: the stricter value kept on each pasted node.');
 }
 
 function revertPasteToNatural() {
@@ -2214,6 +2205,15 @@ async function coffeVerdict(fcInternalId, caseKey) {
     const store = _coffeStore();
     const k = String(fcInternalId) + '§' + caseKey;
     const cur = store.verdicts[k];
+    // 31 Oct 2026: ANEM's proposal (answering a review comment) is kept apart from the signed verdicts until it is signed
+    const prop = store.proposals && store.proposals[k];
+    if (prop) {
+        const by = (await slPrompt('ANEM proposes "' + prop.verdict + '"' + (prop.note ? ' (' + prop.note + ')' : '') + (cur ? ', replacing "' + cur.verdict + '" signed by ' + (cur.by || '?') : '') + '. Sign with your name to make it the verdict, or leave blank to discard the proposal:', _signoffReviewerName() || '')) || '';
+        if (by.trim()) store.verdicts[k] = { verdict: prop.verdict, by: by.trim(), at: new Date().toISOString(), note: prop.note || undefined, fromAnem: true };
+        delete store.proposals[k];
+        try { if (typeof commitSaveChanges === 'function') commitSaveChanges(); } catch (_) {}
+        renderCoffePanel(); return;
+    }
     if (cur) {
         const yes = await slConfirm('Clear verdict "' + cur.verdict + '" signed by ' + (cur.by || '?') + '?', { danger: true, okText: 'Clear' });
         if (yes) delete store.verdicts[k];
@@ -4202,6 +4202,35 @@ function _slByFcId(rows, fcId, scope) {
     return (rows || []).find(f => f && String(f.fcId || '').trim() === id) || null;
 }
 
+// 30 Oct 2026: one option of the toolbar's failure condition link. A condition that takes no fault tree under the 24 Oct
+// rule (below Major, or the 1309 chart says qualitative or similarity) is greyed with the reason; the tree's own current
+// link always stays pickable so it shows.
+function _slFcActivePage() { try { return (typeof ftaPages !== 'undefined' ? ftaPages : []).find(p => p && p.id === activeFTAPageId) || null; } catch (_) { return null; } }
+function _slFcLinkOption(d, prefix, currentVal) {
+    const val = prefix + d.internalId;
+    let nd = { needs: true, why: '' };
+    try { if (window.SLFcLink && typeof window.SLFcLink.treeNeed === 'function') nd = window.SLFcLink.treeNeed(d); } catch (_) {}
+    // 31 Oct 2026: a standalone tree may be linked to any condition, for reference (a qualitative study of a Minor one, say)
+    let lv = ''; try { lv = (window.SLFcLink && typeof window.SLFcLink.levelOf === 'function') ? window.SLFcLink.levelOf(_slFcActivePage()) : ''; } catch (_) {}
+    if (lv === 'standalone') nd = { needs: true, why: '' };
+    const off = !nd.needs && String(currentVal) !== val;
+    return `<option value="${esc(val)}"${off ? ' disabled' : ''}>${esc(d.fcId)}: ${esc((d.fcDesc||'').substring(0,25))}...${esc(_slCopiesNote(d))}${nd.needs ? '' : esc(' · ' + nd.why)}</option>`;
+}
+// 31 Oct 2026 (fc_link.js v2.0): what the link control is, said on it. A PASA or PSSA tree is linked by the app from
+// the FHA, so the control shows what the tree is for and picking another condition opens that condition's tree; on a
+// standalone tree it is a link the engineer chooses.
+function _slFcLinkLabel() {
+    const sel = document.getElementById('fta-fha-link'); if (!sel) return;
+    const cell = document.getElementById('fta-fha-link-cell'), lab = cell ? cell.querySelector('label') : null;
+    let lv = ''; try { lv = (window.SLFcLink && typeof window.SLFcLink.levelOf === 'function') ? window.SLFcLink.levelOf(_slFcActivePage()) : ''; } catch (_) {}
+    if (lv === 'pasa' || lv === 'pssa') {
+        if (lab) lab.textContent = 'Failure condition (from the FHA)';
+        sel.title = 'This tree is made for this failure condition and kept on it by the app. Pick another to open that condition\'s own tree.';
+    } else {
+        if (lab) lab.textContent = 'Link to Hazard (Exposure Duration)';
+        sel.title = lv === 'standalone' ? 'A standalone tree can be linked to any failure condition, for reference. It never replaces that condition\'s own PASA or PSSA tree.' : 'Linking an FHA hazard sets the exposure duration and the top event.';
+    }
+}
 function updateFTAConfigUI() {
     let mode = document.getElementById('fta-calc-mode').value;
     // Phase 53.28 — toolbar layout depends on mode (Apportionment + Target Rate hide in bottom-up).
@@ -4224,7 +4253,7 @@ function updateFTAConfigUI() {
     const hazardLinked = !!document.getElementById('fta-fha-link').value;
     const overrideOn = !!(document.getElementById('fta-target-override') && document.getElementById('fta-target-override').checked);
     document.getElementById('fta-target-p').disabled = (mode === 'bottom-up') || (hazardLinked && !overrideOn);
-    let linkSel = document.getElementById('fta-fha-link'); let currentVal = linkSel.value; linkSel.innerHTML = '<option value="">-- No Link (1 Hr Default) --</option>'; let acGroup = '<optgroup label="Aircraft FHA">'; _slGovOnly(acFhaData, currentVal, 'AC_').forEach(d => acGroup += `<option value="AC_${esc(d.internalId)}">${esc(d.fcId)}: ${esc((d.fcDesc||'').substring(0,25))}...${esc(_slCopiesNote(d))}</option>`); acGroup += '</optgroup>'; let sysGroup = '<optgroup label="System FHA">'; _slGovOnly(getAllSysFha(), currentVal, 'SYS_').forEach(d => sysGroup += `<option value="SYS_${esc(d.internalId)}">${esc(d.fcId)}: ${esc((d.fcDesc||'').substring(0,25))}...${esc(_slCopiesNote(d))}</option>`); sysGroup += '</optgroup>'; linkSel.innerHTML = '<option value="">-- No Link (1 Hr Default) --</option>' + acGroup + sysGroup; /* 27 Oct 2026: assigned once */ linkSel.value = currentVal; if(selectedNodeData) { let isEvent = selectedNodeData.type !== 'gate' && selectedNodeData.gateType !== 'TRANSFER'; const isRoot = (typeof getActiveFTARoot === 'function') ? (getActiveFTARoot() === selectedNodeData) : false; const isGate = selectedNodeData.type === 'gate' && selectedNodeData.gateType !== 'TRANSFER'; document.getElementById('config-lambda-container').style.display = isEvent ? 'block' : 'none'; const showWeight = !isRoot && mode === 'top-down' && ftaConfig.apportion === 'weighted'; document.getElementById('config-weight-container').style.display = showWeight ? 'block' : 'none'; if (showWeight && typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); document.getElementById('config-voting-container').style.display = (selectedNodeData.gateType === 'VOTING') ? 'block' : 'none'; document.getElementById('config-lambda').disabled = mode === 'top-down'; if(isEvent && mode === 'top-down') { document.getElementById('config-lambda').value = selectedNodeData.lambda; } const prescribedC = document.getElementById('config-prescribed-container'); if (prescribedC) { prescribedC.style.display = isGate ? 'flex' : 'none'; if (isGate && typeof syncPrescribedFromNode === 'function') syncPrescribedFromNode(); } } }
+    let linkSel = document.getElementById('fta-fha-link'); let currentVal = linkSel.value; linkSel.innerHTML = '<option value="">-- No Link (1 Hr Default) --</option>'; let acGroup = '<optgroup label="Aircraft FHA">'; _slGovOnly(acFhaData, currentVal, 'AC_').forEach(d => acGroup += _slFcLinkOption(d, 'AC_', currentVal)); acGroup += '</optgroup>'; let sysGroup = '<optgroup label="System FHA">'; _slGovOnly(getAllSysFha(), currentVal, 'SYS_').forEach(d => sysGroup += _slFcLinkOption(d, 'SYS_', currentVal)); sysGroup += '</optgroup>'; linkSel.innerHTML = '<option value="">-- No Link (1 Hr Default) --</option>' + acGroup + sysGroup; /* 27 Oct 2026: assigned once */ linkSel.value = currentVal; try { _slFcLinkLabel(); } catch (_) {} if(selectedNodeData) { let isEvent = selectedNodeData.type !== 'gate' && selectedNodeData.gateType !== 'TRANSFER'; const isRoot = (typeof getActiveFTARoot === 'function') ? (getActiveFTARoot() === selectedNodeData) : false; const isGate = selectedNodeData.type === 'gate' && selectedNodeData.gateType !== 'TRANSFER'; document.getElementById('config-lambda-container').style.display = isEvent ? 'block' : 'none'; const showWeight = !isRoot && mode === 'top-down' && ftaConfig.apportion === 'weighted'; document.getElementById('config-weight-container').style.display = showWeight ? 'block' : 'none'; if (showWeight && typeof syncWeightSliderFromNode === 'function') syncWeightSliderFromNode(); document.getElementById('config-voting-container').style.display = (selectedNodeData.gateType === 'VOTING') ? 'block' : 'none'; document.getElementById('config-lambda').disabled = mode === 'top-down'; if(isEvent && mode === 'top-down') { document.getElementById('config-lambda').value = selectedNodeData.lambda; } const prescribedC = document.getElementById('config-prescribed-container'); if (prescribedC) { prescribedC.style.display = isGate ? 'flex' : 'none'; if (isGate && typeof syncPrescribedFromNode === 'function') syncPrescribedFromNode(); } } }
 
 // Phase 56.38 — paste-origin constraint helper. Mirrors _getExternalSourceTarget
 // for nodes that carry an allocation snapshot from a cross-tree paste. Returns
@@ -4329,7 +4358,7 @@ function _cutsetWorkerEnabled() {
 // Versioned spawn — same cache-busting discipline as the page's <script> tags,
 // so a deploy can never pair a fresh page with a stale cached worker. Bump this
 // (and the importScripts version inside fta_worker.js) whenever the engine bumps.
-function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.10'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
+function _getCutsetWorker() { if (_cutsetWorker) return _cutsetWorker; try { _cutsetWorker = new Worker('fta_worker.js?v=1.11'); } catch (_) { _cutsetWorker = null; } return _cutsetWorker; }
 function _countTreeNodes(node, seen) { if (!node) return 0; seen = seen || new Set(); if (seen.has(node.id)) return 0; seen.add(node.id); var n = 1; var kids = node.children || node._children; if (kids) for (var i = 0; i < kids.length; i++) n += _countTreeNodes(kids[i], seen); return n; }
 function _reconstructCutsets(encoded, index) {
     return encoded.map(function (c) {

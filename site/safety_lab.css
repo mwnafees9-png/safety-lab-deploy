@@ -6030,3 +6030,58 @@ body.theme-dark #fta-warn-pill .fwp-btn.fwp-has-warn { background: #5c3a06 !impo
 .cfg-node-warnings .cnw-warn { background: rgba(245, 158, 11, .12); color: var(--color-warning, #b45309); }
 .cfg-node-warnings .cnw-info { background: var(--color-surface-2, rgba(0,0,0,.04)); color: var(--color-text-secondary, #555); }
 .cfg-node-warnings .cnw-glyph { font-weight: 700; flex: 0 0 auto; }
+
+/* 1 Nov 2026 (customer checklist item 45, fta_loops.js): a transfer gate on a circular transfer is drawn red; every node whose
+   result depends on the circle shows "No result: circular transfer" in red. */
+.node.fta-circular-in > path:first-of-type { stroke: #C0231D !important; stroke-width: 3px !important; stroke-dasharray: 6 3; }
+.node.fta-circular .inline-metrics, .node.fta-circular-in .inline-metrics { color: #C0231D !important; font-weight: 700; }
+
+/* 1 Nov 2026 (customer checklist item 42, fta_integrated.js): an integrated tree is read only. The edit toolbar is hidden,
+   the canvas and the properties box are locked (a node can still be selected and read), a banner says where to edit. */
+body.sl-fta-integrated .fta-toolbar { display: none !important; }
+body.sl-fta-integrated #fta-svg .node foreignObject textarea,
+body.sl-fta-integrated #fta-svg .node foreignObject input,
+body.sl-fta-integrated #fta-svg .node foreignObject select,
+body.sl-fta-integrated #fta-svg .fta-conn-handle,
+body.sl-fta-integrated #fta-svg .node-delete-btn { pointer-events: none !important; }
+body.sl-fta-integrated #fta-svg .node-delete-btn { display: none !important; }
+body.sl-fta-integrated #node-config-panel input,
+body.sl-fta-integrated #node-config-panel select,
+body.sl-fta-integrated #node-config-panel textarea,
+body.sl-fta-integrated #node-config-panel #node-drawer-save,
+body.sl-fta-integrated #fta-config-panel input,
+body.sl-fta-integrated #fta-config-panel select,
+body.sl-fta-integrated #fta-config-panel button { pointer-events: none !important; opacity: 0.7; }
+.sl-int-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 8px; font-size: 12px; border: 1px solid #0e7490; border-left: 4px solid #0e7490; border-radius: 4px; background: rgba(14, 116, 144, 0.06); color: var(--text-primary); }
+.sl-int-banner .sl-int-pill { padding: 1px 8px; border-radius: 999px; background: #0e7490; color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.sl-int-banner .sl-int-bad { color: #C0231D; }
+.sl-int-modal { position: fixed; inset: 0; z-index: 10050; background: rgba(15, 23, 42, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.sl-int-card { width: min(520px, 100%); background: var(--bg-primary, #fff); color: var(--text-primary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 18px 20px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.sl-int-card h3 { margin: 0 0 6px; font-size: 16px; }
+.sl-int-help, .sl-int-none { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; }
+.sl-int-label { display: block; font-size: 11px; font-weight: 700; margin: 10px 0 4px; text-transform: none; }
+.sl-int-card select, .sl-int-card input { width: 100%; padding: 7px 9px; font-size: 13px; border: 1px solid var(--border-primary); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); }
+.sl-int-err { min-height: 16px; margin-top: 8px; font-size: 12px; color: #C0231D; }
+.sl-int-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* 1 Nov 2026 (customer checklist item 32, fta_paste.js): the paste question, same event or independent copy */
+.sl-paste-choices { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.sl-paste-choice { display: flex; flex-direction: column; align-items: flex-start !important; justify-content: flex-start !important; gap: 3px; text-align: left; padding: 10px 12px; border: 1px solid var(--border-primary); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary); cursor: pointer; font-size: 13px; }
+.sl-paste-choice:hover, .sl-paste-choice:focus { border-color: #0e7490; outline: none; box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.25); }
+.sl-paste-choice span { font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+.sl-paste-ccf { padding: 8px 10px; border: 1px dashed var(--border-primary); border-radius: 6px; }
+
+/* 1 Nov 2026 (customer checklist item 26, fta_exchange.js): fault tree import and export */
+.sl-xchg-card { width: min(720px, 100%); max-height: 86vh; overflow: auto; overscroll-behavior: contain; }
+.sl-xchg-legend { margin: 8px 0; font-size: 12px; }
+.sl-xchg-legend table { border-collapse: collapse; margin-top: 6px; }
+.sl-xchg-legend td { padding: 2px 10px 2px 0; }
+.sl-xchg-map td { padding: 3px 10px 3px 0; font-size: 12px; }
+.sl-xchg-map select { min-width: 220px; padding: 4px 6px; }
+.sl-xchg-report { font-size: 12px; margin-top: 10px; }
+.sl-xchg-warn { color: #9A6200; }
+
+/* 1 Nov 2026 (customer items 37/43, fta_conditions.js): dispatch cases and event tree branch settings */
+.sl-dc-sets, .sl-dc-branch ul { margin: 4px 0 8px 18px; padding: 0; font-size: 12px; }
+.sl-dc-sets li, .sl-dc-branch li { margin: 2px 0; }
+.sl-dc-branch { border-top: 1px solid var(--border-primary); padding-top: 6px; margin-top: 6px; font-size: 12px; }

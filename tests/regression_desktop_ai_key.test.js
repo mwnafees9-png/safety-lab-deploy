@@ -31,6 +31,8 @@ const pick = (name, re) => { const m = core.match(re); check(name + ' located', 
 const fDoor = pick('_desktopKeyDoor', /function _desktopKeyDoor\(\)[^\n]*\n/);
 const fProxy = pick('isProxyMode', /function isProxyMode\(\)[^\n]*\n/);
 const fConf = pick('isConfigured', /function isConfigured\(\)[^\n]*\n/);
+// 1 Nov 2026: isConfigured asks first whether this is a student account (no AI on the free student tier)
+const fStudent = pick('_studentNoAI', /function _studentNoAI\(\)[^\n]*\n/);
 const fUnset = pick('unconfiguredRefusal', /function unconfiguredRefusal\(\)\{[\s\S]*?\n    \}/);
 const fSend = pick('_send', /async function _send\(b\) \{[\s\S]*?\n        \}\n/);
 function world(w) {
@@ -45,7 +47,7 @@ function world(w) {
   sb.window.slabAi = w.slabAi;
   sb.window.__SLAB_AI_DESKTOP_KEY__ = !!w.flag;
   vm.createContext(sb);
-  vm.runInContext(fDoor + fProxy + fConf + fUnset, sb);
+  vm.runInContext(fStudent + fDoor + fProxy + fConf + fUnset, sb);
   vm.runInContext('function _store(){ return window.SecretStore; } function _hasByo(k){ return !!(_store() && _store().has(k)); } function _byoViaProxy(){ return _store().door()==="vault"; } function getAnthropicKey(){ return _store().get("anthropic_key"); }', sb);
   return sb;
 }

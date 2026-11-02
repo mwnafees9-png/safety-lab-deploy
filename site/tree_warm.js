@@ -1,3 +1,4 @@
+// v1.6 (1 Nov 2026, item 45): spawns fta_worker.js v1.11, which runs fta_engine.js v1.13 (no result through a circular transfer).
 // v1.4 (13 Oct 2026, fix G): spawns fta_worker.js v1.9, which runs fta_engine.js v1.11 (SEQ gate, NOT gate with prime implicants).
 // ============================================================================
 // tree_warm.js v1.3, per-tree facts computed OFF the UI thread (23 Sep 2026).
@@ -57,7 +58,7 @@
         if (_worker || _broken) return _worker;
         if (typeof Worker === 'undefined') { _broken = true; return null; }
         try {
-            _worker = new Worker('fta_worker.js?v=1.10');
+            _worker = new Worker('fta_worker.js?v=1.11');
             _worker.addEventListener('message', _onMessage);
             _worker.addEventListener('error', function () { _reset(true); });
         } catch (_) { _worker = null; _broken = true; }

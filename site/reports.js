@@ -325,6 +325,14 @@ const Reports = (function() {
             'Minimal cut sets containing a development error are never quantified — every P(top) above is explicitly conditional on no development error. Each scenario is addressed by process assurance (the allocated DAL) and derived requirements, not by the probability budget.',
             '{{ffs_table}}',
             '',
+            '### Failure Rate Sources',
+            'Where each failure rate used above comes from (supplier guarantee, field data, calculated, library entry or engineering judgment), with its reference.',
+            '{{rate_sources_table}}',
+            '',
+            '### Latent Plus One',
+            'Every latent failure that, with one single active failure, reaches the top of a fault tree; its check interval, the requirement that covers the interval, and the pair against the failure condition objective (AC 25.1309-1B; judged for catastrophic, hazardous and major conditions).',
+            '{{latent_plus_one_table}}',
+            '',
             '## 5. Common-Mode Verification',
             'Each CMA subject linked to this system has been evaluated and dispositioned. See the CMA appendix for details.',
             '',
@@ -855,7 +863,7 @@ const Reports = (function() {
             fta_summary: _aiOriginRows(ftaPagesScoped.map(p => ({
                 'Tree':   p.name || p.id,
                 'Level':  p.treeLevel || 'standalone',
-                'Mode':   p.mode || 'top-down',
+                'Mode':   p.integrated ? 'integrated, read only' : (p.mode || 'top-down'),   // 1 Nov 2026 (item 42, fta_integrated.js)
                 'Top Event': (p.root && p.root.name) ? p.root.name : '(empty)',
                 'Linked Failure Condition(s)': Array.isArray(p.linkedFhaIds) ? p.linkedFhaIds.join(', ') : (p.linkedFhaId || ''),
             })), ftaPagesScoped, 'ftaPage', sys ? sys.id : null),
@@ -891,6 +899,9 @@ const Reports = (function() {
                 'Assessed On': z.assessedOn || '',
             })), zsa, 'zsa', null),
 
+            // 31 Oct 2026 (customer checklist item 16): where each failure rate comes from (rate_sources.js)
+            rate_sources_table: (typeof window !== 'undefined' && window.SLRateSources) ? window.SLRateSources.reportRows(sys ? sys.id : null) : [],
+            latent_plus_one_table: (typeof window !== 'undefined' && window.SLFtaLatent) ? window.SLFtaLatent.tableRows(ftaPagesScoped) : [],   // 1 Nov 2026 (item 41, fta_latent.js)
             cma_table: _aiOriginRows(cma.map(c => ({
                 'ID':       c.cmaId || '',
                 'Subject':  c.subject || '',
@@ -1917,7 +1928,12 @@ const Reports = (function() {
                 'Flight Phase': Array.isArray(f.phases) ? f.phases.join(', ') : (f.phases || ''),
                 'Effects of Failure Condition on Aircraft, Crew, Occupants': effects,
                 'Severity Classification': f.severity || '',
-                'Assumptions, Comments, Rationale or Reference to Supporting Material': f.comments || '',
+                // 31 Oct 2026: the severity rationale, and what a combined condition combines and why, belong in this column
+                'Assumptions, Comments, Rationale or Reference to Supporting Material': [
+                    (Array.isArray(f.combinedOf) && f.combinedOf.length) ? ('Combines ' + f.combinedOf.join(' + ') + (Array.isArray(f.combineBasis) && f.combineBasis.length ? ' (basis: ' + f.combineBasis.map(b => b.text || (b.kind + ' ' + b.ref)).join('; ') + ')' : '') + '.') : '',
+                    f.severityRationale ? ('Rationale: ' + f.severityRationale) : '',
+                    f.comments || ''
+                ].filter(Boolean).join(' '),
             };
         });
     }
@@ -1961,11 +1977,29 @@ const Reports = (function() {
 
     // CMA evaluation worksheet — ARP 4761A Table M2 (3 columns).
     function _buildCmaGrid(cmaRows) {
-        return (cmaRows || []).map(c => ({
+        // 31 Oct 2026 (customer checklist item 1): a four-step CMA (cma_flow.js) gives Table M2 one row per concern: the
+        // concern, its effect on the independence claim, and its mitigation (or why it is accepted) with what backs it
+        const out = [];
+        (cmaRows || []).forEach(c => {
+            const f = c && c.flow;
+            if (f && Array.isArray(f.concerns) && f.concerns.length) {
+                f.concerns.forEach(cc => out.push({
+                    'Common Failure or Error Source Concern': (c.cmaId ? c.cmaId + ' ' : '') + (cc.id || '') + ': ' + (cc.text || ''),
+                    'Description of Effect on Principle': cc.effect || ('Could defeat: ' + (f.claim || c.claim || 'the independence claim')),
+                    'Description of Mitigating Factors or Lack of Independence': cc.status === 'Accepted' ? ('Accepted: ' + (cc.acceptWhy || '')) : ((cc.mitigation || 'Not yet mitigated') + (cc.raise ? ' (requirement: ' + (cc.reqText || '') + ')' : (cc.backedBy ? ' (' + cc.backedBy + ')' : ''))),
+                }));
+                return;
+            }
+            out.push(_cmaGridRow(c));
+        });
+        return out;
+    }
+    function _cmaGridRow(c) {
+        return [c].map(c => ({
             'Common Failure or Error Source Concern': c.subject || c.cmaId || '',
             'Description of Effect on Principle': c.claim || c.findings || '',
             'Description of Mitigating Factors or Lack of Independence': c.mitigation || (c.status ? ('Status: ' + c.status) : ''),
-        }));
+        }))[0];
     }
 
     // PASA CoFFE — ARP 4761A Table B2 (Combined Functional Failure Effects).
@@ -2381,35 +2415,6 @@ const Reports = (function() {
     }
 
     // ------------------------------------------------------------------------
-    // _parseTemplate — splits a markdown template into ordered blocks:
-    //   { kind: 'h', level, text }   heading
-    //   { kind: 'p', text }          paragraph
-    //   { kind: 'tableToken', name } table placeholder (e.g. fha_table)
-    //   { kind: 'listToken', name }  list placeholder (e.g. assumptions_list)
-    //   { kind: 'appendix', name }   appendix anchor (fta, zsa, pra, cma)
-    // ------------------------------------------------------------------------
-    // 27 Sep 2026 (Q3) — appendix headings; 'src' is the by-source-analysis listing (req_basis.js).
-    function _appxTitle(name) { return name === 'src' ? 'Requirements and assumptions by source analysis' : String(name || '').toUpperCase(); }
-    function _parseTemplate(tpl) {
-        const blocks = [];
-        const lines = tpl.split(/\r?\n/);
-        for (let i = 0; i < lines.length; i++) {
-            const ln = lines[i];
-            const tab = ln.match(/^\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|goldenthread_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|sora_summary_table|sora_oso_table)\}\}$/);
-            const list = ln.match(/^\{\{(assumptions_list)\}\}$/);
-            const appx = ln.match(/^\{\{appendix:(fta|zsa|pra|cma|src)\}\}$/);
-            const h    = ln.match(/^(#{1,4})\s+(.*)$/);
-            if (tab)       blocks.push({ kind: 'tableToken', name: tab[1] });
-            else if (list) blocks.push({ kind: 'listToken',  name: list[1] });
-            else if (appx) blocks.push({ kind: 'appendix',   name: appx[1] });
-            else if (h)    blocks.push({ kind: 'h', level: h[1].length, text: h[2] });
-            else if (ln.trim() !== '') blocks.push({ kind: 'p', text: ln });
-            else blocks.push({ kind: 'blank' });
-        }
-        return blocks;
-    }
-
-    // ------------------------------------------------------------------------
     // _substituteScalars — replaces inline {{token}} in a string with values.
     // ------------------------------------------------------------------------
     function _substituteScalars(text, data) {
@@ -2422,308 +2427,95 @@ const Reports = (function() {
     }
 
     // ------------------------------------------------------------------------
-    // renderToDocx(reportType, data, opts) — builds a Word document from the
-    // chosen template via the loaded docx-js library. Returns a Blob.
+    // 31 Oct 2026 (customer checklist items 20, 22, 24): every report is written by ONE writer (report_writer.js) from a
+    // list of blocks, Word and PDF alike: contents, lists of tables and figures, numbered captions, cross references,
+    // fault trees on landscape sheets (fta_print.js) and the significant figures setting. The builders below turn a
+    // template (this one-shot path) or the dialog's sections (renderDocxFromSections / renderPdfFromSections) into
+    // blocks. A table token is any {{name}} whose value is a list of rows, so a new table never needs a list here.
     // ------------------------------------------------------------------------
+    function _appxTitle(name) { return name === 'src' ? 'Requirements and assumptions by source analysis' : String(name || '').toUpperCase(); }
+    function _sigFigs() {
+        try { const v = Number(typeof projectConfig !== 'undefined' && projectConfig ? projectConfig.reportSigFigs : NaN); if (v >= 2 && v <= 4) return v; } catch (_) {}
+        return 3;
+    }
+    function _isTableVal(v) { return !!(window.SLReportWriter ? window.SLReportWriter.isTableValue(v) : (Array.isArray(v) && v.every(r => r && typeof r === 'object'))); }
+    async function _ftaSheetsBlock(pages, o) {
+        const P = window.SLFtaPrint;
+        if (!P) return { k: 'note', text: '(The fault tree drawings are not loaded: reload the page and generate again.)' };
+        const sheets = P.plan(pages || []);
+        if (!(o && o.noImages)) for (const sh of sheets) { try { sh.dataUrl = await P.png(sh, 3); } catch (e) { sh.dataUrl = null; } }
+        if (!sheets.length) return { k: 'p', text: '(No fault trees in scope.)' };
+        return { k: 'sheets', sheets };
+    }
+    function _appendixRows(name, data) {
+        if (name === 'zsa') {
+            return data.zsa_table || (data._zsaForAppendix || []).map(z => ({
+                'Zone': z.zoneId, 'Description': z.desc, 'Equipment': z.equip,
+                'Severity': z.severity, 'Interference': z.interference, 'Mitigation': z.mitigation,
+                'Status': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.statusText(z) : (z.findingStatus || ''),
+                'Assessed By': z.assessedBy || '', 'Method': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.methodText(z) : (z.assessMethod || ''),
+                'Assessed On': z.assessedOn || '',
+            }));
+        }
+        return data[name + '_table'] || [];
+    }
+    async function _appendixBlocks(name, data, o) {
+        const out = [{ k: 'appendix', title: _appxTitle(name) }];
+        if (name === 'fta') out.push(await _ftaSheetsBlock(data._ftaPagesForAppendix || [], o));
+        else out.push({ k: 'table', name: name + '_appx', rows: _appendixRows(name, data) });
+        return out;
+    }
+    // prose with {{table}} and {{appendix:x}} tokens -> blocks; scalars are resolved by the caller, {{ref:..}} stays for the writer
+    async function _proseBlocks(text, data, appendices, section, o) {
+        const out = [], re = /\{\{(appendix:[a-z]+|[a-z0-9_]+)\}\}/gi;
+        let last = 0, m;
+        const pushText = (t) => { if (t && t.replace(/\s+/g, '') !== '') out.push({ k: 'p', text: t.replace(/^\s*\n|\n\s*$/g, ''), section }); };
+        while ((m = re.exec(text)) !== null) {
+            const name = m[1];
+            const isAppx = /^appendix:/i.test(name);
+            if (!isAppx && !_isTableVal(data[name])) continue;     // a scalar left as written
+            pushText(text.slice(last, m.index));
+            if (isAppx) { const ap = name.split(':')[1]; if ((appendices || {})[ap]) (o && o.tail ? o.tail : out).push(...await _appendixBlocks(ap, data, o)); }
+            else out.push({ k: 'table', name, rows: data[name] || [] });
+            last = m.index + m[0].length;
+        }
+        pushText(text.slice(last));
+        return out;
+    }
+    // the first H1 of a template is the report's title; the lines under it sit under the title
+    async function _blocksFromTemplate(reportType, data, opts) {
+        const tpl = (opts.customTemplateMarkdown && typeof opts.customTemplateMarkdown === 'string') ? opts.customTemplateMarkdown : DEFAULT_TEMPLATES[reportType];
+        const lines = String(tpl || '').split(/\r?\n/);
+        let title = REPORT_DEFS[reportType].name, titleLines = [], i = 0;
+        if (lines.length && /^#\s+/.test(lines[0])) {
+            title = _substituteScalars(lines[0].replace(/^#\s+/, ''), data); i = 1;
+            while (i < lines.length && !/^#{1,6}\s+/.test(lines[i])) { titleLines.push(_substituteScalars(lines[i], data)); i++; }
+        }
+        const blocks = [], tail = []; let buf = [], heading = '';
+        // appendices go after every section, wherever the template names them
+        const flush = async () => { if (buf.length) { blocks.push(...await _proseBlocks(_substituteScalars(buf.join('\n'), data), data, opts.appendices, heading, { tail, noImages: opts.noImages })); buf = []; } };
+        for (; i < lines.length; i++) {
+            const h = lines[i].match(/^(#{1,6})\s+(.*)$/);
+            if (h) { await flush(); heading = _substituteScalars(h[2], data); blocks.push({ k: 'h', level: Math.min(3, h[1].length), text: heading }); }
+            else buf.push(lines[i]);
+        }
+        await flush();
+        return { title, titleLines, blocks: blocks.concat(tail) };
+    }
+    function _reportModel(reportType, data, built) {
+        const proj = data.project_name || _projectName();
+        return { title: built.title || REPORT_DEFS[reportType].name, titleLines: built.titleLines || [], headerText: REPORT_DEFS[reportType].name + ' — ' + proj,
+                 projectName: proj, sigFigs: _sigFigs(), blocks: built.blocks.concat([{ k: 'note', text: _engineAttestationText() }]) };
+    }
     async function renderToDocx(reportType, data, opts) {
         opts = opts || {};
         const docxLib = await _loadDocxLib();
-        const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-                Header, Footer, AlignmentType, HeadingLevel, BorderStyle, WidthType,
-                PageNumber } = docxLib;
-
-        const tpl = (opts.customTemplateMarkdown && typeof opts.customTemplateMarkdown === 'string')
-                    ? opts.customTemplateMarkdown
-                    : DEFAULT_TEMPLATES[reportType];
-        const blocks = _parseTemplate(tpl);
-        const children = [];
-
-        const border = { style: BorderStyle.SINGLE, size: 6, color: '888888' };
-        const borders = { top: border, bottom: border, left: border, right: border };
-
-        function _inline(text) {
-            // Honor **bold** spans in template strings.
-            const parts = []; let i = 0;
-            while (i < text.length) {
-                if (text[i] === '*' && text[i+1] === '*') {
-                    const end = text.indexOf('**', i+2);
-                    if (end !== -1) { parts.push(new TextRun({ text: text.slice(i+2, end), bold: true })); i = end + 2; continue; }
-                }
-                let next = text.indexOf('**', i); if (next === -1) next = text.length;
-                parts.push(new TextRun(text.slice(i, next))); i = next;
-            }
-            return parts.length ? parts : [new TextRun('')];
-        }
-
-        function _renderTable(rows, headers) {
-            const headerRow = new TableRow({
-                tableHeader: true,
-                children: headers.map(h => new TableCell({
-                    borders,
-                    shading: { fill: 'D5E8F0' },
-                    children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })],
-                })),
-            });
-            const dataRows = rows.map(r => new TableRow({
-                children: headers.map(h => new TableCell({
-                    borders,
-                    children: [new Paragraph({ children: [new TextRun(String(r[h] == null ? '' : r[h]))] })],
-                })),
-            }));
-            return new Table({ width: { size: 9360, type: WidthType.DXA }, rows: [headerRow, ...dataRows] });
-        }
-
-        for (const b of blocks) {
-            if (b.kind === 'h') {
-                const heading = b.level === 1 ? HeadingLevel.HEADING_1
-                              : b.level === 2 ? HeadingLevel.HEADING_2
-                              : HeadingLevel.HEADING_3;
-                children.push(new Paragraph({
-                    heading,
-                    spacing: { before: b.level === 1 ? 320 : 200, after: 120 },
-                    children: [new TextRun({ text: _substituteScalars(b.text, data), bold: true })],
-                }));
-            } else if (b.kind === 'p') {
-                children.push(new Paragraph({
-                    spacing: { after: 120, line: 300 },
-                    children: _inline(_substituteScalars(b.text, data)),
-                }));
-            } else if (b.kind === 'tableToken') {
-                const rows = data[b.name] || [];
-                if (rows.length === 0) {
-                    children.push(new Paragraph({ children: [new TextRun({ text: '(No entries)', italics: true, color: '888888' })] }));
-                } else {
-                    const headers = Object.keys(rows[0]);
-                    children.push(_renderTable(rows, headers));
-                    children.push(new Paragraph({ children: [new TextRun('')] }));
-                }
-            } else if (b.kind === 'listToken') {
-                const rows = data[b.name] || [];
-                if (rows.length === 0) {
-                    children.push(new Paragraph({ children: [new TextRun({ text: '(No entries)', italics: true, color: '888888' })] }));
-                } else {
-                    const headers = Object.keys(rows[0]);
-                    children.push(_renderTable(rows, headers));
-                    children.push(new Paragraph({ children: [new TextRun('')] }));
-                }
-            } else if (b.kind === 'appendix') {
-                // Honor user toggle in opts.appendices
-                const wanted = (opts.appendices || {})[b.name];
-                if (!wanted) continue;
-                children.push(new Paragraph({
-                    heading: HeadingLevel.HEADING_2,
-                    spacing: { before: 320, after: 120 },
-                    children: [new TextRun({ text: 'Appendix — ' + _appxTitle(b.name), bold: true })],
-                }));
-                if (b.name === 'fta') {
-                    const ftaImages = await _renderFTAAppendixImages(data._ftaPagesForAppendix || []);
-                    for (const img of ftaImages) {
-                        children.push(new Paragraph({
-                            spacing: { before: 200, after: 80 },
-                            children: [new TextRun({ text: img.title, bold: true })],
-                        }));
-                        if (img.dataUrl) {
-                            children.push(new Paragraph({
-                                children: [new docxLib.ImageRun({
-                                    data: img.dataUrl.replace(/^data:image\/png;base64,/, ''),
-                                    transformation: { width: img.width, height: img.height },
-                                })],
-                            }));
-                        } else {
-                            children.push(new Paragraph({ children: [new TextRun({ text: '(' + img.title + ' — render unavailable. Switch to this page and regenerate to embed the canvas.)', italics: true })] }));
-                        }
-                    }
-                } else if (b.name === 'zsa') {
-                    const t = data.zsa_table || data._zsaForAppendix && data._zsaForAppendix.map(z => ({
-                        'Zone': z.zoneId, 'Description': z.desc, 'Equipment': z.equip,
-                        'Severity': z.severity, 'Interference': z.interference, 'Mitigation': z.mitigation,
-                        'Status': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.statusText(z) : (z.findingStatus || ''),
-                        'Assessed By': z.assessedBy || '', 'Method': (typeof SLZsaRecord !== 'undefined') ? SLZsaRecord.methodText(z) : (z.assessMethod || ''),
-                        'Assessed On': z.assessedOn || '',
-                    })) || [];
-                    if (t.length) { children.push(_renderTable(t, Object.keys(t[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
-                } else if (b.name === 'pra') {
-                    const t = data.pra_table || [];
-                    if (t.length) { children.push(_renderTable(t, Object.keys(t[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
-                } else if (b.name === 'cma') {
-                    const t = data.cma_table || [];
-                    if (t.length) { children.push(_renderTable(t, Object.keys(t[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
-                } else if (b.name === 'src') {
-                    // 27 Sep 2026 (Q3) — one table, grouped by the Source column (req_basis.js).
-                    const t = data.src_table || [];
-                    if (t.length) { children.push(_renderTable(t, Object.keys(t[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
-                    else children.push(new Paragraph({ children: [new TextRun({ text: '(No requirements or assumptions in scope.)', italics: true })] }));
-                }
-            } else if (b.kind === 'blank') {
-                children.push(new Paragraph({ children: [new TextRun('')] }));
-            }
-        }
-
-        // Backlog #1 — engine self-test attestation stamped into every export.
-        children.push(new Paragraph({ spacing: { before: 320 }, children: [new TextRun({ text: _engineAttestationText(), italics: true, size: 18, color: '666666' })] }));
-
-        const doc = new Document({
-            creator: 'Safety Lab Aero, Inc.',
-            title: REPORT_DEFS[reportType].name,
-            description: REPORT_DEFS[reportType].name + ' for ' + _projectName(),
-            styles: { default: { document: { run: { font: 'Arial', size: 22 } } } },
-            sections: [{
-                properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
-                headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: REPORT_DEFS[reportType].name + ' — ' + _projectName(), size: 18, color: '666666' })] })] }) },
-                footers: { default: new Footer({ children: [new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [
-                        new TextRun({ text: 'Generated by Safety Lab Aero, Inc. · ', size: 18, color: '666666' }),
-                        new TextRun({ text: 'Page ', size: 18, color: '666666' }),
-                        new TextRun({ children: [PageNumber.CURRENT], size: 18, color: '666666' }),
-                        new TextRun({ text: ' of ', size: 18, color: '666666' }),
-                        new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: '666666' }),
-                    ],
-                })] }) },
-                children,
-            }],
-        });
-
-        const blob = await Packer.toBlob(doc);
-        return blob;
+        return window.SLReportWriter.docx(_reportModel(reportType, data, await _blocksFromTemplate(reportType, data, opts)), docxLib);
     }
-
-    // ------------------------------------------------------------------------
-    // renderToPdf(reportType, data, opts) — builds a PDF via jsPDF.
-    // Uses direct doc.text + manual table layout (no autoTable dependency).
-    // Returns a jsPDF doc instance; caller saves via _savePdf().
-    // ------------------------------------------------------------------------
     async function renderToPdf(reportType, data, opts) {
         opts = opts || {};
         const { jsPDF } = await _loadJsPDF();
-        const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-        const W = doc.internal.pageSize.getWidth();
-        const H = doc.internal.pageSize.getHeight();
-        const M = 50;
-        let y = M;
-
-        const tpl = (opts.customTemplateMarkdown && typeof opts.customTemplateMarkdown === 'string')
-                    ? opts.customTemplateMarkdown
-                    : DEFAULT_TEMPLATES[reportType];
-        const blocks = _parseTemplate(tpl);
-
-        function _wrap(t, maxW, fontSize) {
-            doc.setFontSize(fontSize);
-            return doc.splitTextToSize(String(t || ''), maxW);
-        }
-        function _need(h) { if (y + h > H - M) { doc.addPage(); y = M; } }
-
-        function _drawTable(rows, headers) {
-            if (!rows.length) {
-                doc.setFontSize(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
-                _need(14); doc.text('(No entries)', M, y); y += 14;
-                doc.setTextColor(0); doc.setFont('helvetica', 'normal');
-                return;
-            }
-            const colCount = headers.length;
-            const colW = (W - 2*M) / colCount;
-            const rowH = 16;
-            const hdrH = 18;
-
-            // Header
-            _need(hdrH + 4);
-            doc.setFillColor(213, 232, 240); doc.rect(M, y, W - 2*M, hdrH, 'F');
-            doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(0);
-            headers.forEach((h, i) => { doc.text(String(h).slice(0, 30), M + i*colW + 4, y + 13); });
-            y += hdrH;
-
-            // Rows
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-            rows.forEach(r => {
-                // Pre-compute row height based on tallest cell
-                const cellLines = headers.map(h => _wrap(r[h], colW - 6, 8));
-                const maxLines = Math.max(1, ...cellLines.map(l => l.length));
-                const thisH = Math.max(rowH, maxLines * 10 + 4);
-                _need(thisH);
-                doc.setDrawColor(180);
-                doc.rect(M, y, W - 2*M, thisH);
-                headers.forEach((h, i) => {
-                    cellLines[i].forEach((ln, li) => {
-                        doc.text(ln, M + i*colW + 4, y + 11 + li*10);
-                    });
-                    if (i > 0) doc.line(M + i*colW, y, M + i*colW, y + thisH);
-                });
-                y += thisH;
-            });
-            y += 8;
-        }
-
-        // Title / header
-        doc.setFontSize(20); doc.setFont('helvetica', 'bold');
-        doc.text(REPORT_DEFS[reportType].name, M, y); y += 28;
-
-        for (const b of blocks) {
-            if (b.kind === 'h') {
-                const fs = b.level === 1 ? 18 : b.level === 2 ? 14 : 12;
-                _need(fs + 12);
-                doc.setFontSize(fs); doc.setFont('helvetica', 'bold');
-                doc.text(_substituteScalars(b.text, data), M, y);
-                y += fs + 8;
-            } else if (b.kind === 'p') {
-                doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-                const lines = _wrap(_substituteScalars(b.text, data).replace(/\*\*/g, ''), W - 2*M, 10);
-                lines.forEach(ln => { _need(13); doc.text(ln, M, y); y += 13; });
-                y += 4;
-            } else if (b.kind === 'tableToken' || b.kind === 'listToken') {
-                const rows = data[b.name] || [];
-                const headers = rows.length ? Object.keys(rows[0]) : [];
-                _drawTable(rows, headers);
-            } else if (b.kind === 'appendix') {
-                const wanted = (opts.appendices || {})[b.name];
-                if (!wanted) continue;
-                doc.addPage(); y = M;
-                doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-                doc.text('Appendix — ' + _appxTitle(b.name), M, y); y += 22;
-                if (b.name === 'fta') {
-                    const ftaImages = await _renderFTAAppendixImages(data._ftaPagesForAppendix || []);
-                    for (const img of ftaImages) {
-                        if (!img.dataUrl) {
-                            doc.setFontSize(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
-                            doc.text('(' + img.title + ' — switch to this page and regenerate to embed.)', M, y); y += 16;
-                            doc.setTextColor(0); doc.setFont('helvetica', 'normal');
-                            continue;
-                        }
-                        _need(40);
-                        doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-                        doc.text(img.title, M, y); y += 16;
-                        const maxW = W - 2*M, maxH = H - y - M;
-                        const ratio = img.width / img.height;
-                        let drawW = maxW, drawH = drawW / ratio;
-                        if (drawH > maxH) { drawH = maxH; drawW = drawH * ratio; }
-                        doc.addImage(img.dataUrl, 'PNG', M, y, drawW, drawH);
-                        y += drawH + 16;
-                    }
-                } else if (b.name === 'zsa') _drawTable(data.zsa_table || [], data.zsa_table && data.zsa_table.length ? Object.keys(data.zsa_table[0]) : []);
-                  else if (b.name === 'pra') _drawTable(data.pra_table || [], data.pra_table && data.pra_table.length ? Object.keys(data.pra_table[0]) : []);
-                  else if (b.name === 'cma') _drawTable(data.cma_table || [], data.cma_table && data.cma_table.length ? Object.keys(data.cma_table[0]) : []);
-                  else if (b.name === 'src') _drawTable(data.src_table || [], data.src_table && data.src_table.length ? Object.keys(data.src_table[0]) : []);
-            } else if (b.kind === 'blank') {
-                y += 6;
-            }
-        }
-
-        // Backlog #1 — engine self-test attestation stamped into every export.
-        (function () {
-            doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
-            const attLines = _wrap(_engineAttestationText(), W - 2*M, 8);
-            attLines.forEach(ln => { _need(11); doc.text(ln, M, y); y += 11; });
-            doc.setTextColor(0); doc.setFont('helvetica', 'normal');
-        })();
-
-        // Page numbers
-        const total = doc.internal.getNumberOfPages();
-        for (let p = 1; p <= total; p++) {
-            doc.setPage(p);
-            doc.setFontSize(9); doc.setTextColor(120); doc.setFont('helvetica', 'normal');
-            doc.text('Generated by Safety Lab Aero, Inc. · Page ' + p + ' of ' + total, W/2, H - 24, { align: 'center' });
-            doc.text(_projectName(), W - M, H - 24, { align: 'right' });
-        }
-        return doc;
+        return window.SLReportWriter.pdf(_reportModel(reportType, data, await _blocksFromTemplate(reportType, data, opts)), jsPDF);
     }
 
     // ------------------------------------------------------------------------
@@ -2752,16 +2544,15 @@ const Reports = (function() {
             }
         });
 
-        // Substitute table tokens with simple "one row per paragraph" text.
-        const tableTokens = ['fha_table','requirements_table','assumptions_list','component_list','fta_summary','pra_table','zsa_table','cma_table',
-            'afha_worksheet','sfha_worksheet','fta_summary_grid','cma_grid','coffe_table','validation_matrix','verification_matrix','compliance_posture','fc_evaluations','gaps_table','goldenthread_table',
-            'interdep_table','common_resource_table','mac_table','mfms_table','ip_ledger_table','ccmr_table','wearout_table','fmes_table','checklist_table','tailoring_table','program_scope_table',
-            'fmea_functional_table','fmea_piecepart_table','ram_prediction_table','ram_alloc_table','ram_ledger_table','ram_spares_table','ram_weibull_table','ram_growth_table','fracas_table','lcc_table','sneak_table','swrel_table','tol_derate_table','msg3_table','mmel_table','et_table','bowtie_table','stpa_losses_table','stpa_hazards_table','stpa_constraints_table','stpa_cs_table','stpa_resp_table','stpa_uca_table','stpa_scenario_table','stpa_test_table','stpa_archetype_table','stpa_conformance_table','budget_ledger_table','ffs_table','sora_summary_table','sora_oso_table'];
+        // Substitute table tokens with simple "one row per paragraph" text. 31 Oct 2026: a table token is any {{name}}
+        // whose value is a list of rows (no list kept here), and its numbers follow the significant figures setting.
+        const tableTokens = Object.keys(data).filter(k => _isTableVal(data[k]) && xml.indexOf('{{' + k + '}}') >= 0);
+        const _sf = (t) => (window.SLReportWriter ? window.SLReportWriter.fmtSig(t, _sigFigs()) : t);
         tableTokens.forEach(name => {
             const rows = data[name] || [];
             const text = rows.length === 0
                 ? '(No entries.)'
-                : rows.map(r => Object.entries(r).map(([k,v]) => k + ': ' + (v||'')).join(' · ')).join('\u2028');
+                : rows.map(r => Object.entries(r).map(([k,v]) => k + ': ' + _sf(String(v == null ? '' : v))).join(' · ')).join('\u2028');
             // \u2028 = Unicode line separator; Word renders this as a line break inside the paragraph.
             const safe = text
                 .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -2774,47 +2565,6 @@ const Reports = (function() {
 
         zip.file('word/document.xml', xml);
         return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    }
-
-    // ------------------------------------------------------------------------
-    // _renderFTAAppendixImages — converts each linked FTA page to a PNG data
-    // URL. Active page renders from the live SVG; inactive pages return
-    // null dataUrl with a placeholder note (rendering hidden trees would
-    // require duplicating the d3 layout — out of scope for v1).
-    // ------------------------------------------------------------------------
-    async function _renderFTAAppendixImages(pages) {
-        const out = [];
-        if (!Array.isArray(pages) || !pages.length) return out;
-        for (const p of pages) {
-            if (!p.root) { out.push({ title: p.name || p.id, dataUrl: null, note: 'empty' }); continue; }
-            const isActive = (typeof activeFTAPageId !== 'undefined') && p.id === activeFTAPageId;
-            if (!isActive) { out.push({ title: p.name || p.id, dataUrl: null, note: 'inactive' }); continue; }
-            try {
-                const svgEl = document.getElementById('fta-svg');
-                const svgStr = new XMLSerializer().serializeToString((typeof SLFtaEdit !== 'undefined' && SLFtaEdit.exportClone && svgEl && svgEl.id === 'fta-svg') ? SLFtaEdit.exportClone(svgEl) : svgEl);   // 13 Oct 2026 (fix G): no editing handles or unattached nodes in the picture
-                const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const img = new Image();
-                await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-                const canvas = document.createElement('canvas');
-                const scale = 2;
-                canvas.width = (img.width || 1000) * scale;
-                canvas.height = (img.height || 700) * scale;
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                URL.revokeObjectURL(url);
-                const dataUrl = canvas.toDataURL('image/png');
-                // docx ImageRun expects pixel dimensions; cap at letter width minus margins.
-                const targetW = 540;
-                const targetH = Math.min(700, targetW * (canvas.height / canvas.width));
-                out.push({ title: p.name || p.id, dataUrl, width: targetW, height: targetH });
-            } catch (e) {
-                console.warn('FTA appendix render failed:', e);
-                out.push({ title: p.name || p.id, dataUrl: null, note: 'error' });
-            }
-        }
-        return out;
     }
 
     // ------------------------------------------------------------------------
@@ -2895,6 +2645,10 @@ const Reports = (function() {
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="cma"><input type="checkbox" id="rpt-appx-cma"  style="width:auto;margin:0;"> CMA</label>',
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="src" title="Every requirement and assumption listed under the analysis it comes from (FHA, PSSA, CMA, PRA, ZSA, HF)"><input type="checkbox" id="rpt-appx-src"  style="width:auto;margin:0;"> By source analysis</label>',
             '      </div>',
+            '    </div>',
+            '    <div><label>Significant figures</label>',
+            '      <select id="rpt-sigfigs" style="width:auto;margin-bottom:0;"><option value="2">2 (1.2E-7)</option><option value="3">3 (1.23E-7)</option><option value="4">4 (1.234E-7)</option></select>',
+            '      <p style="font-size:11px;color:var(--color-text-tertiary);margin:4px 0 0 0;">Probabilities and rates in this project\'s reports are written to this many figures. A number typed with fewer figures keeps them.</p>',
             '    </div>',
             '    <div><label>Custom Template (.docx, optional)</label>',
             '      <input type="file" id="rpt-custom-template" accept=".docx" style="width:100%;margin-bottom:0;">',
@@ -3001,7 +2755,9 @@ const Reports = (function() {
              // Exposed so the v2 section renderer (separate IIFE below) can reach
              // these v1-scope helpers: the AI-draft confidence pill on headings,
              // and the engine attestation text for the Assurance Attestation section.
-             _sectionDraftPill, _engineAttestationText };
+             _sectionDraftPill, _engineAttestationText,
+             // 31 Oct 2026: the one writer's builders, shared with the section editor below
+             _proseBlocks, _appendixBlocks, _ftaSheetsBlock, _reportModel, _sigFigs, _blocksFromTemplate };
 })();
 window.Reports = Reports;
 
@@ -3241,6 +2997,14 @@ window.Reports = Reports;
         _showStep(1);
         _refreshStepOneRows();
         typeSel.onchange = _refreshStepOneRows;
+        // 31 Oct 2026 (item 24): the project's significant figures for reports
+        const sf = document.getElementById('rpt-sigfigs');
+        if (sf) {
+            sf.value = String(window.Reports._sigFigs ? window.Reports._sigFigs() : 3);
+            sf.onchange = function () {
+                try { if (typeof projectConfig !== 'undefined' && projectConfig) { projectConfig.reportSigFigs = Number(this.value); if (typeof scheduleAutosave === 'function') scheduleAutosave(); } } catch (_) {}
+            };
+        }
         modal.style.display = 'block';
     }
 
@@ -3418,6 +3182,99 @@ window.Reports = Reports;
     // template prose. A "Reset to template default" link clears the saved
     // edit and restores the template version.
     // ------------------------------------------------------------------------
+    // ------------------------------------------------------------------------
+    // 31 Oct 2026 (customer checklist items 23 and 25): the issue record and the checks before generating.
+    // Each generated report records what every section said (its prose and the rows of its tables). The next time,
+    // only the ticked sections are updated from the project; the others are written exactly as issued. Before
+    // generating, typed numbers that are no longer a value in the project, and references that point at nothing,
+    // are listed.
+    // ------------------------------------------------------------------------
+    function _issueKey(st) { return '__issued:' + st.reportType + (st.systemId ? ':' + st.systemId : ''); }
+    function _issued(st) { const r = window.projectReportEdits || {}; const v = r[_issueKey(st)]; return (v && v.sections) ? v : null; }
+    function _tablesIn(text, data) {
+        const out = {}, re = /\{\{([a-z0-9_]+)\}\}/gi; let m;
+        while ((m = re.exec(String(text || ''))) !== null) { const v = data[m[1]]; if (window.SLReportWriter && window.SLReportWriter.isTableValue(v)) out[m[1]] = v; }
+        return out;
+    }
+    function _sectionNow(st, sec) {
+        const ta = document.querySelector('#rpt-section-editor textarea[data-section-id="' + sec.id + '"]');
+        const text = (ta && !ta.readOnly) ? ta.value : _initialProseForSection(sec, st.reportType, st.data);
+        return { text, tables: _tablesIn(text, st.data) };
+    }
+    function _sectionChanged(st, sec, rec) {
+        const now = _sectionNow(st, sec);
+        if (String(now.text) !== String(rec.text || '')) return true;
+        return JSON.stringify(now.tables) !== JSON.stringify(rec.tables || {});
+    }
+    function _keepMap(st) {
+        const iss = _issued(st), keep = {};
+        if (!iss || _noKeep(st)) return keep;
+        st.sections.forEach(sec => { const rec = iss.sections[sec.id]; if (rec && !(st.update && st.update[sec.id])) keep[sec.id] = rec; });
+        return keep;
+    }
+    function _noKeep(st) { return !!(st.customDocxInfo && (st.customDocxInfo.mode === 'sectioned' || st.customDocxInfo.mode === 'token-only')); }
+    function _recordIssue(st, editedSections, keep) {
+        const r = window.projectReportEdits || (window.projectReportEdits = {});
+        const sections = {};
+        st.sections.forEach(sec => {
+            if (keep[sec.id]) { sections[sec.id] = keep[sec.id]; return; }
+            const text = (editedSections[sec.id] != null) ? editedSections[sec.id] : _initialProseForSection(sec, st.reportType, st.data);
+            sections[sec.id] = { heading: sec.heading || '', text: text, tables: _tablesIn(text, st.data), at: new Date().toISOString() };
+        });
+        let by = ''; try { if (typeof _signoffReviewerName === 'function') by = _signoffReviewerName() || ''; } catch (_) {}
+        r[_issueKey(st)] = { at: new Date().toISOString(), by: by, format: st.format, sections: sections };
+        try { if (typeof _writeAutosave === 'function') _writeAutosave(); } catch (_) {}
+    }
+    // every value the project gives this report, as numbers
+    function _knownNumbers(data) {
+        const W = window.SLReportWriter, out = [];
+        const seen = new Set();
+        (function walk(v, depth) {
+            if (v == null || depth > 6) return;
+            if (typeof v === 'number') { if (isFinite(v) && v !== 0) out.push(Math.abs(v)); return; }
+            if (typeof v === 'string') { W.numbersIn(v).forEach(n => out.push(Math.abs(n.value))); return; }
+            if (typeof v === 'object') { if (seen.has(v)) return; seen.add(v); (Array.isArray(v) ? v : Object.keys(v).filter(k => k.charAt(0) !== '_').map(k => v[k])).forEach(x => walk(x, depth + 1)); }
+        })(data, 0);
+        return out;
+    }
+    async function _preChecks(st, editedSections) {
+        const W = window.SLReportWriter; if (!W) return [];
+        const keep = _keepMap(st), out = [];
+        // references
+        try {
+            const built = await _blocksFromSections(st.reportType, st.data, st.sections, editedSections, { appendices: st.appendices, keep, noImages: true });
+            W.check({ blocks: built.blocks }).forEach(c => out.push({ kind: 'ref', text: c.text }));
+        } catch (_) {}
+        // typed numbers that are no longer a value in the project
+        const known = _knownNumbers(st.data);
+        const isKnown = (n) => known.some(k => W.sameAtFigures(Math.abs(n.value), k, n.figures));
+        st.sections.forEach(sec => {
+            const kept = keep[sec.id];
+            const typed = kept ? String(kept.text || '') : (editedSections[sec.id] != null ? editedSections[sec.id] : null);
+            if (typed == null) return;
+            const fresh = resolveScalarTokens(sec.prose || '', st.data);
+            if (!kept && typed === fresh) return;                      // not edited: every number in it comes from the project
+            const freshNums = W.numbersIn(fresh).map(n => n.value);
+            W.numbersIn(typed.replace(/\{\{[^}]+\}\}/g, ' ')).forEach(n => {
+                if (isKnown(n) || freshNums.some(v => W.sameAtFigures(n.value, v, n.figures))) return;
+                out.push({ kind: kept ? 'kept-number' : 'number', section: sec.heading || '', value: n.text,
+                    text: (kept ? 'Kept as issued, ' : '') + '\u201C' + (sec.heading || 'the report') + '\u201D says ' + n.text + ', which is not a value in the project now.' + (kept ? ' Tick the section to update it.' : ' Check it, or take it from the project.') });
+            });
+        });
+        return out;
+    }
+    function _showChecks(list) {
+        const host = document.getElementById('rpt-checks'); if (!host) return;
+        if (!list || !list.length) { host.innerHTML = ''; host.style.display = 'none'; return; }
+        const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        host.style.display = 'block';
+        host.innerHTML = '<div style="font-weight:700;margin-bottom:6px;">Check before generating (' + list.length + ')</div>' +
+            '<ul style="margin:0 0 8px 18px;padding:0;">' + list.map(c => '<li data-rpt-check="' + c.kind + '" style="margin:2px 0;">' + esc(c.text) + '</li>').join('') + '</ul>' +
+            '<button type="button" class="btn-ghost" id="rpt-generate-anyway" style="font-size:12px;padding:4px 10px;">Generate anyway</button>';
+        const b = document.getElementById('rpt-generate-anyway');
+        if (b) b.onclick = () => { if (_modalState) _modalState.checksAck = true; _generateFinal(); };
+    }
+
     function _buildSectionEditor() {
         const host = document.getElementById('rpt-section-editor');
         const st = _modalState;
@@ -3462,6 +3319,35 @@ window.Reports = Reports;
             }
             host.appendChild(bar);
         }
+
+        // 31 Oct 2026 (item 23): which sections update from the project
+        const _iss = _noKeep(st) ? null : _issued(st);
+        st.update = st.update || {};
+        if (!_noKeep(st)) {
+            const ib = document.createElement('div');
+            ib.id = 'rpt-issue-bar';
+            ib.style.cssText = 'padding:10px 12px;border:1px solid var(--color-border-hair);border-radius:var(--r-md);font-size:12.5px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;';
+            if (_iss) {
+                ib.innerHTML = '<span style="flex:1;min-width:240px;">Last issued ' + String(_iss.at || '').slice(0, 10) + (_iss.by ? ' by ' + String(_iss.by).replace(/</g, '&lt;') : '') + '. <b>Tick the sections to update from the project.</b> The others are written exactly as issued, tables included.</span>';
+                const all = document.createElement('button'); all.type = 'button'; all.className = 'ckpt-m-btn'; all.textContent = 'Tick all'; all.style.cssText = 'font-size:11.5px;padding:3px 10px;';
+                all.onclick = () => { st.sections.forEach(x => { if (_iss.sections[x.id]) st.update[x.id] = true; }); _buildSectionEditor(); };
+                const none = document.createElement('button'); none.type = 'button'; none.className = 'ckpt-m-btn'; none.textContent = 'Untick all'; none.style.cssText = 'font-size:11.5px;padding:3px 10px;';
+                none.onclick = () => { st.update = {}; _buildSectionEditor(); };
+                ib.appendChild(all); ib.appendChild(none);
+            } else {
+                ib.textContent = 'First issue of this report: every section is built from the project. After it is generated, you choose which sections to update next time.';
+            }
+            host.appendChild(ib);
+        }
+        let _refs = [];
+        try {
+            const W = window.SLReportWriter;
+            const fakeBlocks = [];
+            st.sections.forEach(sec => { if (sec.heading && sec.level > 0 && sec.heading !== '(Preamble)') fakeBlocks.push({ k: 'h', level: sec.level, text: sec.heading });
+                const re = /\{\{([a-z0-9_]+)\}\}/gi; let m; while ((m = re.exec(sec.prose || '')) !== null) if (W.isTableValue(st.data[m[1]])) fakeBlocks.push({ k: 'table', name: m[1], rows: [] });
+                if (/\{\{appendix:fta\}\}/.test(sec.prose || '') && st.appendices && st.appendices.fta && window.SLFtaPrint) fakeBlocks.push({ k: 'sheets', sheets: window.SLFtaPrint.plan(st.data._ftaPagesForAppendix || []) }); });
+            _refs = W.referable({ blocks: fakeBlocks });
+        } catch (_) {}
 
         st.sections.forEach((sec, idx) => {
             const card = document.createElement('div');
@@ -3522,6 +3408,48 @@ window.Reports = Reports;
             ta.style.cssText = 'width:100%;min-height:60px;padding:8px 10px;font-family:var(--font-system);font-size:13px;line-height:1.5;border:1px solid var(--color-border-hair);border-radius:var(--r-sm);background:var(--color-surface-1);color:var(--color-text-primary);resize:vertical;';
             ta.value = _initialProseForSection(sec, st.reportType, st.data);
             ta.dataset.sectionId = sec.id;
+            // 31 Oct 2026 (item 23): kept as issued, or updated from the project
+            const _rec = _iss ? _iss.sections[sec.id] : null;
+            if (_iss) {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;margin:0 0 6px;';
+                if (_rec) {
+                    const lab = document.createElement('label');
+                    lab.style.cssText = 'display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;text-transform:none;letter-spacing:0;margin:0;font-size:12px;';
+                    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.style.cssText = 'width:auto;margin:0;'; cb.setAttribute('data-rpt-update', sec.id);
+                    cb.checked = !!st.update[sec.id];
+                    cb.onchange = () => { st.update[sec.id] = cb.checked; _buildSectionEditor(); };
+                    lab.appendChild(cb); lab.appendChild(document.createTextNode('Update from the project'));
+                    row.appendChild(lab);
+                    const changed = _sectionChanged(st, sec, _rec);
+                    const pill = document.createElement('span');
+                    pill.setAttribute('data-rpt-changed', changed ? '1' : '0');
+                    pill.style.cssText = 'padding:1px 8px;border-radius:999px;font-weight:600;' + (changed ? 'background:rgba(217,119,6,.12);color:#9A6200;' : 'background:var(--color-surface-3,#eef0f3);color:var(--color-text-secondary);');
+                    pill.textContent = changed ? 'Changed in the project since it was issued' : 'Same as issued';
+                    row.appendChild(pill);
+                    if (!cb.checked) { ta.value = String(_rec.text || ''); ta.readOnly = true; ta.style.opacity = '0.7'; ta.title = 'Kept as issued: tick "Update from the project" to change it.'; }
+                } else {
+                    const pill = document.createElement('span');
+                    pill.style.cssText = 'padding:1px 8px;border-radius:999px;font-weight:600;background:rgba(26,110,242,.1);color:#1A56B8;';
+                    pill.textContent = 'New since the last issue: built from the project';
+                    row.appendChild(pill);
+                }
+                card.appendChild(row);
+            }
+            // 31 Oct 2026 (item 20): a cross reference to a table, a figure or a section of this report
+            if (_refs.length && !ta.readOnly) {
+                const sel = document.createElement('select');
+                sel.setAttribute('data-rpt-insert-ref', sec.id);
+                sel.style.cssText = 'font-size:11.5px;padding:2px 6px;margin:0 0 6px;width:auto;max-width:100%;';
+                sel.innerHTML = '<option value="">Insert a reference\u2026</option>' + _refs.map(r => '<option value="' + r.token.replace(/"/g, '&quot;') + '">' + r.label.replace(/</g, '&lt;') + '</option>').join('');
+                sel.onchange = () => {
+                    const tok = sel.value; sel.value = ''; if (!tok) return;
+                    const a = ta.selectionStart != null ? ta.selectionStart : ta.value.length, b = ta.selectionEnd != null ? ta.selectionEnd : a;
+                    ta.value = ta.value.slice(0, a) + tok + ta.value.slice(b);
+                    ta.dispatchEvent(new Event('input'));
+                };
+                card.appendChild(sel);
+            }
             ta.oninput = function() {
                 _setSavedEdit(st.reportType, sec.id, this.value);
                 this.style.height = 'auto'; this.style.height = Math.max(60, this.scrollHeight + 4) + 'px';
@@ -3569,6 +3497,14 @@ window.Reports = Reports;
                 editedSections[ta.dataset.sectionId] = ta.value;
             });
 
+            // 31 Oct 2026 (items 23 and 25): sections kept as issued, and what to check first
+            const keep = _keepMap(st);
+            if (!st.checksAck) {
+                const checks = await _preChecks(st, editedSections);
+                _showChecks(checks);
+                if (checks.length) { status.style.color = 'var(--color-warning, #d97706)'; status.textContent = 'Check the list above, or generate anyway.'; return; }
+            }
+            st.checksAck = false;
             status.style.color = 'var(--color-text-secondary)';
             status.textContent = 'Generating…';
 
@@ -3589,26 +3525,28 @@ window.Reports = Reports;
                 await _saveBlob(blob, fileName);
                 status.style.color = 'var(--color-success, #16a34a)';
                 status.textContent = 'Report saved: ' + fileName;
-                setTimeout(() => closeV2(), 1200);
+                setTimeout(() => { if (_modalState === st) closeV2(); }, 1200);
                 return;
             }
             if (st.format === 'docx') {
-                const blob = await renderDocxFromSections(st.reportType, st.data, st.sections, editedSections, { appendices: st.appendices });
+                const blob = await renderDocxFromSections(st.reportType, st.data, st.sections, editedSections, { appendices: st.appendices, keep });
                 const fileName = baseName + '.docx';
                 await _saveBlob(blob, fileName);
+                _recordIssue(st, editedSections, keep);
                 status.style.color = 'var(--color-success, #16a34a)';
                 status.textContent = 'Report saved: ' + fileName;
-                setTimeout(() => closeV2(), 1200);
+                setTimeout(() => { if (_modalState === st) closeV2(); }, 1200);
                 return;
             }
             if (st.format === 'pdf') {
-                const docInstance = await renderPdfFromSections(st.reportType, st.data, st.sections, editedSections, { appendices: st.appendices });
+                const docInstance = await renderPdfFromSections(st.reportType, st.data, st.sections, editedSections, { appendices: st.appendices, keep });
                 const fileName = baseName + '.pdf';
                 if (typeof _savePdf === 'function') await _savePdf(docInstance, fileName);
                 else docInstance.save(fileName);
+                _recordIssue(st, editedSections, keep);
                 status.style.color = 'var(--color-success, #16a34a)';
                 status.textContent = 'Report saved: ' + fileName;
-                setTimeout(() => closeV2(), 1200);
+                setTimeout(() => { if (_modalState === st) closeV2(); }, 1200);
                 return;
             }
             throw new Error('Unknown format: ' + st.format);
@@ -3634,282 +3572,33 @@ window.Reports = Reports;
     }
 
     // ------------------------------------------------------------------------
-    // renderDocxFromSections — replacement for the v1 renderToDocx() that
-    // honors user-edited section prose. Iterates sections in order, emits
-    // a heading paragraph for each (level → docx HeadingLevel), then the
-    // edited prose, expanding {{table_*}} and {{appendix:*}} tokens as
-    // tables and appendix blocks at their original positions.
+    // 31 Oct 2026 (customer checklist items 20, 22, 23, 24): the dialog's sections become blocks for the one writer
+    // (report_writer.js), the same writer the one-shot path uses. A section left unticked ("kept as issued") is
+    // written exactly as it was last issued: its prose and the rows of its tables come from the issue record, not
+    // from the project (opts.keep = { sectionId: issued record }).
     // ------------------------------------------------------------------------
-    async function renderDocxFromSections(reportType, data, sections, editedSections, opts) {
+    async function _blocksFromSections(reportType, data, sections, editedSections, opts) {
         opts = opts || {};
-        const docxLib = await _ensureDocxLib();
-        const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-                Header, Footer, AlignmentType, HeadingLevel, BorderStyle, WidthType,
-                PageNumber, ImageRun } = docxLib;
-
-        const REPORT_DEFS = window.Reports.REPORT_DEFS;
-        const children = [];
-        const border = { style: BorderStyle.SINGLE, size: 6, color: '888888' };
-        const borders = { top: border, bottom: border, left: border, right: border };
-
-        function _renderTable(rows, headers) {
-            const headerRow = new TableRow({
-                tableHeader: true,
-                children: headers.map(h => new TableCell({
-                    borders, shading: { fill: 'D5E8F0' },
-                    children: [new Paragraph({ children: [new TextRun({ text: h, bold: true })] })],
-                })),
-            });
-            const dataRows = rows.map(r => new TableRow({
-                children: headers.map(h => new TableCell({
-                    borders,
-                    children: [new Paragraph({ children: [new TextRun(String(r[h] == null ? '' : r[h]))] })],
-                })),
-            }));
-            return new Table({ width: { size: 9360, type: WidthType.DXA }, rows: [headerRow, ...dataRows] });
+        const R = window.Reports, keep = opts.keep || {}, tail = [];
+        let title = R.REPORT_DEFS[reportType].name, titleLines = [];
+        const blocks = [];
+        for (let i = 0; i < sections.length; i++) {
+            const sec = sections[i], kept = keep[sec.id] || null;
+            const text = kept ? String(kept.text || '') : ((editedSections && editedSections[sec.id] != null) ? editedSections[sec.id] : _initialProseForSection(sec, reportType, data));
+            const d = kept ? Object.assign(Object.create(data), kept.tables || {}) : data;
+            if (i === 0 && sec.level === 1 && !/\{\{(?!ref:)[^}]+\}\}/.test(text)) { title = sec.heading || title; titleLines = String(text || '').split(/\r?\n/); continue; }
+            if (sec.heading && sec.heading !== '(Preamble)' && sec.level > 0) blocks.push({ k: 'h', level: Math.min(3, sec.level), text: sec.heading, pill: _sectionDraftPill(reportType, sec.id), secId: sec.id, kept: !!kept });
+            blocks.push(...await R._proseBlocks(text || '', d, opts.appendices, sec.heading, Object.assign({}, opts, { tail })));
         }
-
-        function _emitProse(text) {
-            // Split prose by table / appendix tokens; render text as paragraphs and tokens as their content.
-            const re = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|sora_summary_table|sora_oso_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
-            let lastIdx = 0; let m;
-            const out = [];
-            while ((m = re.exec(text)) !== null) {
-                if (m.index > lastIdx) out.push({ kind: 'text', text: text.slice(lastIdx, m.index) });
-                out.push({ kind: 'token', name: m[1] });
-                lastIdx = m.index + m[0].length;
-            }
-            if (lastIdx < text.length) out.push({ kind: 'text', text: text.slice(lastIdx) });
-            return out;
-        }
-
-        for (const sec of sections) {
-            const edited = (editedSections && editedSections[sec.id] != null) ? editedSections[sec.id] : _initialProseForSection(sec, reportType, data);
-            // Emit heading
-            if (sec.heading && sec.heading !== '(Preamble)') {
-                const heading = sec.level === 1 ? HeadingLevel.HEADING_1
-                              : sec.level === 2 ? HeadingLevel.HEADING_2
-                              : HeadingLevel.HEADING_3;
-                // Backlog #1 — AI-drafted prose carries its pill + confidence in the final output.
-                const _pill = _sectionDraftPill(reportType, sec.id);
-                const _headRuns = [new TextRun({ text: sec.heading, bold: true })];
-                if (_pill) _headRuns.push(new TextRun({ text: _pill.text, bold: false, size: 16, color: _pill.color }));
-                children.push(new Paragraph({
-                    heading,
-                    spacing: { before: sec.level === 1 ? 320 : 200, after: 120 },
-                    children: _headRuns,
-                }));
-            }
-            // Emit prose, splitting on token markers
-            const pieces = _emitProse(edited || '');
-            for (const piece of pieces) {
-                if (piece.kind === 'text') {
-                    piece.text.split(/\r?\n/).forEach(ln => {
-                        if (ln.trim() === '') children.push(new Paragraph({ children: [new TextRun('')] }));
-                        else children.push(new Paragraph({ spacing: { after: 100, line: 300 }, children: [new TextRun(ln)] }));
-                    });
-                } else if (piece.kind === 'token') {
-                    if (piece.name.startsWith('appendix:')) {
-                        const ap = piece.name.split(':')[1];
-                        if (!(opts.appendices || {})[ap]) continue;
-                        children.push(new Paragraph({
-                            heading: HeadingLevel.HEADING_2,
-                            spacing: { before: 320, after: 120 },
-                            children: [new TextRun({ text: 'Appendix — ' + _appxTitle(ap), bold: true })],
-                        }));
-                        if (ap === 'fta') {
-                            const imgs = await _renderFTAImagesV2(data._ftaPagesForAppendix || []);
-                            for (const img of imgs) {
-                                children.push(new Paragraph({ spacing: { before: 200, after: 80 }, children: [new TextRun({ text: img.title, bold: true })] }));
-                                if (img.dataUrl) {
-                                    children.push(new Paragraph({ children: [new ImageRun({
-                                        data: img.dataUrl.replace(/^data:image\/png;base64,/, ''),
-                                        transformation: { width: img.width, height: img.height },
-                                    })] }));
-                                } else {
-                                    children.push(new Paragraph({ children: [new TextRun({ text: '(' + img.title + ' — switch to this page and regenerate to embed.)', italics: true })] }));
-                                }
-                            }
-                        } else {
-                            const tableName = ap + '_table';
-                            const rows = data[tableName] || [];
-                            if (rows.length) { children.push(_renderTable(rows, Object.keys(rows[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
-                        }
-                    } else {
-                        const rows = data[piece.name] || [];
-                        if (rows.length) { children.push(_renderTable(rows, Object.keys(rows[0]))); children.push(new Paragraph({ children: [new TextRun('')] })); }
-                        else children.push(new Paragraph({ children: [new TextRun({ text: '(No entries)', italics: true, color: '888888' })] }));
-                    }
-                }
-            }
-        }
-
-        // Backlog #1 — engine self-test attestation stamped into every export.
-        children.push(new Paragraph({ spacing: { before: 320 }, children: [new TextRun({ text: _engineAttestationText(), italics: true, size: 18, color: '666666' })] }));
-
-        const doc = new Document({
-            creator: 'Safety Lab Aero, Inc.',
-            title: REPORT_DEFS[reportType].name,
-            description: REPORT_DEFS[reportType].name + ' for ' + (data.project_name || ''),
-            styles: { default: { document: { run: { font: 'Arial', size: 22 } } } },
-            sections: [{
-                properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
-                headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: REPORT_DEFS[reportType].name + ' — ' + (data.project_name || ''), size: 18, color: '666666' })] })] }) },
-                footers: { default: new Footer({ children: [new Paragraph({
-                    alignment: AlignmentType.CENTER,
-                    children: [
-                        new TextRun({ text: 'Generated by Safety Lab Aero, Inc. · ', size: 18, color: '666666' }),
-                        new TextRun({ text: 'Page ', size: 18, color: '666666' }),
-                        new TextRun({ children: [PageNumber.CURRENT], size: 18, color: '666666' }),
-                        new TextRun({ text: ' of ', size: 18, color: '666666' }),
-                        new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: '666666' }),
-                    ],
-                })] }) },
-                children,
-            }],
-        });
-        return await Packer.toBlob(doc);
+        return { title, titleLines, blocks: blocks.concat(tail) };
     }
-
-    // ------------------------------------------------------------------------
-    // renderPdfFromSections — PDF counterpart that consumes edited sections.
-    // ------------------------------------------------------------------------
+    async function renderDocxFromSections(reportType, data, sections, editedSections, opts) {
+        const docxLib = await _ensureDocxLib();
+        return window.SLReportWriter.docx(window.Reports._reportModel(reportType, data, await _blocksFromSections(reportType, data, sections, editedSections, opts)), docxLib);
+    }
     async function renderPdfFromSections(reportType, data, sections, editedSections, opts) {
-        opts = opts || {};
         const { jsPDF } = await _loadJsPDF();
-        const doc = new jsPDF({ unit: 'pt', format: 'letter' });
-        const W = doc.internal.pageSize.getWidth();
-        const H = doc.internal.pageSize.getHeight();
-        const M = 50;
-        let y = M;
-        const REPORT_DEFS = window.Reports.REPORT_DEFS;
-
-        function _wrap(t, maxW, fs) { doc.setFontSize(fs); return doc.splitTextToSize(String(t || ''), maxW); }
-        function _need(h) { if (y + h > H - M) { doc.addPage(); y = M; } }
-        function _drawTable(rows, headers) {
-            if (!rows.length) {
-                doc.setFontSize(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
-                _need(14); doc.text('(No entries)', M, y); y += 14;
-                doc.setTextColor(0); doc.setFont('helvetica', 'normal');
-                return;
-            }
-            const colCount = headers.length;
-            const colW = (W - 2*M) / colCount;
-            _need(20);
-            doc.setFillColor(213, 232, 240); doc.rect(M, y, W - 2*M, 18, 'F');
-            doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(0);
-            headers.forEach((h, i) => { doc.text(String(h).slice(0, 30), M + i*colW + 4, y + 13); });
-            y += 18;
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-            rows.forEach(r => {
-                const cellLines = headers.map(h => _wrap(r[h], colW - 6, 8));
-                const maxLines = Math.max(1, ...cellLines.map(l => l.length));
-                const thisH = Math.max(16, maxLines * 10 + 4);
-                _need(thisH);
-                doc.setDrawColor(180);
-                doc.rect(M, y, W - 2*M, thisH);
-                headers.forEach((h, i) => {
-                    cellLines[i].forEach((ln, li) => { doc.text(ln, M + i*colW + 4, y + 11 + li*10); });
-                    if (i > 0) doc.line(M + i*colW, y, M + i*colW, y + thisH);
-                });
-                y += thisH;
-            });
-            y += 8;
-        }
-
-        // Title
-        doc.setFontSize(20); doc.setFont('helvetica', 'bold');
-        doc.text(REPORT_DEFS[reportType].name, M, y); y += 28;
-
-        const tokenRe = /\{\{(fha_table|requirements_table|component_list|pra_table|zsa_table|cma_table|fta_summary|assumptions_list|afha_worksheet|sfha_worksheet|fta_summary_grid|cma_grid|coffe_table|validation_matrix|verification_matrix|compliance_posture|fc_evaluations|gaps_table|interdep_table|common_resource_table|mac_table|mfms_table|ip_ledger_table|ccmr_table|wearout_table|fmes_table|checklist_table|tailoring_table|program_scope_table|fmea_functional_table|fmea_piecepart_table|ram_prediction_table|ram_alloc_table|ram_ledger_table|ram_spares_table|ram_weibull_table|ram_growth_table|fracas_table|lcc_table|sneak_table|swrel_table|tol_derate_table|msg3_table|mmel_table|et_table|bowtie_table|stpa_losses_table|stpa_hazards_table|stpa_constraints_table|stpa_cs_table|stpa_resp_table|stpa_uca_table|stpa_scenario_table|stpa_test_table|stpa_archetype_table|stpa_conformance_table|stpa_bridge_table|budget_ledger_table|ffs_table|sora_summary_table|sora_oso_table|appendix:fta|appendix:zsa|appendix:pra|appendix:cma)\}\}/g;
-
-        for (const sec of sections) {
-            const edited = (editedSections && editedSections[sec.id] != null) ? editedSections[sec.id] : _initialProseForSection(sec, reportType, data);
-            if (sec.heading && sec.heading !== '(Preamble)') {
-                const fs = sec.level === 1 ? 18 : sec.level === 2 ? 14 : 12;
-                _need(fs + 12);
-                doc.setFontSize(fs); doc.setFont('helvetica', 'bold');
-                doc.text(sec.heading, M, y); y += fs + 6;
-                // Backlog #1 — AI-drafted prose carries its pill + confidence in the final output.
-                const _pill = _sectionDraftPill(reportType, sec.id);
-                if (_pill) {
-                    const rgb = _pill.color === '1D6E3E' ? [29, 110, 62] : _pill.color === '9A6200' ? [154, 98, 0] : [142, 42, 42];
-                    doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(rgb[0], rgb[1], rgb[2]);
-                    _need(11); doc.text(_pill.text.trim(), M, y); y += 11;
-                    doc.setTextColor(0); doc.setFont('helvetica', 'normal');
-                }
-            }
-            // Walk prose with token splits
-            let lastIdx = 0; let m; tokenRe.lastIndex = 0;
-            const text = edited || '';
-            while ((m = tokenRe.exec(text)) !== null) {
-                const pre = text.slice(lastIdx, m.index);
-                if (pre.trim()) {
-                    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-                    _wrap(pre, W - 2*M, 10).forEach(ln => { _need(13); doc.text(ln, M, y); y += 13; });
-                    y += 4;
-                }
-                const name = m[1];
-                if (name.startsWith('appendix:')) {
-                    const ap = name.split(':')[1];
-                    if ((opts.appendices || {})[ap]) {
-                        doc.addPage(); y = M;
-                        doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-                        doc.text('Appendix — ' + _appxTitle(ap), M, y); y += 22;
-                        if (ap === 'fta') {
-                            const imgs = await _renderFTAImagesV2(data._ftaPagesForAppendix || []);
-                            for (const img of imgs) {
-                                if (!img.dataUrl) {
-                                    doc.setFontSize(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
-                                    doc.text('(' + img.title + ' — switch to this page and regenerate to embed.)', M, y); y += 16;
-                                    doc.setTextColor(0); doc.setFont('helvetica', 'normal');
-                                    continue;
-                                }
-                                _need(40);
-                                doc.setFontSize(12); doc.setFont('helvetica', 'bold');
-                                doc.text(img.title, M, y); y += 16;
-                                const maxW = W - 2*M, maxH = H - y - M;
-                                const ratio = img.width / img.height;
-                                let drawW = maxW, drawH = drawW / ratio;
-                                if (drawH > maxH) { drawH = maxH; drawW = drawH * ratio; }
-                                doc.addImage(img.dataUrl, 'PNG', M, y, drawW, drawH);
-                                y += drawH + 16;
-                            }
-                        } else {
-                            const tbl = data[ap + '_table'] || [];
-                            _drawTable(tbl, tbl.length ? Object.keys(tbl[0]) : []);
-                        }
-                    }
-                } else {
-                    const rows = data[name] || [];
-                    _drawTable(rows, rows.length ? Object.keys(rows[0]) : []);
-                }
-                lastIdx = m.index + m[0].length;
-            }
-            const tail = text.slice(lastIdx);
-            if (tail.trim()) {
-                doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-                _wrap(tail, W - 2*M, 10).forEach(ln => { _need(13); doc.text(ln, M, y); y += 13; });
-                y += 4;
-            }
-        }
-
-        // Backlog #1 — engine self-test attestation stamped into every export.
-        (function () {
-            doc.setFontSize(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
-            _wrap(_engineAttestationText(), W - 2*M, 8).forEach(ln => { _need(11); doc.text(ln, M, y); y += 11; });
-            doc.setTextColor(0); doc.setFont('helvetica', 'normal');
-        })();
-
-        // Page numbers footer
-        const total = doc.internal.getNumberOfPages();
-        for (let p = 1; p <= total; p++) {
-            doc.setPage(p);
-            doc.setFontSize(9); doc.setTextColor(120); doc.setFont('helvetica', 'normal');
-            doc.text('Generated by Safety Lab Aero, Inc. · Page ' + p + ' of ' + total, W/2, H - 24, { align: 'center' });
-            doc.text(data.project_name || '', W - M, H - 24, { align: 'right' });
-        }
-        return doc;
+        return window.SLReportWriter.pdf(window.Reports._reportModel(reportType, data, await _blocksFromSections(reportType, data, sections, editedSections, opts)), jsPDF);
     }
 
     // ------------------------------------------------------------------------
@@ -4013,44 +3702,6 @@ window.Reports = Reports;
         return out;
     }
 
-    // ------------------------------------------------------------------------
-    // _renderFTAImagesV2 — copy of the v1 helper, kept local so this module is
-    // self-contained even if v1 is refactored.
-    // ------------------------------------------------------------------------
-    async function _renderFTAImagesV2(pages) {
-        const out = [];
-        if (!Array.isArray(pages) || !pages.length) return out;
-        for (const p of pages) {
-            if (!p.root) { out.push({ title: p.name || p.id, dataUrl: null }); continue; }
-            const isActive = (typeof activeFTAPageId !== 'undefined') && p.id === activeFTAPageId;
-            if (!isActive) { out.push({ title: p.name || p.id, dataUrl: null }); continue; }
-            try {
-                const svgEl = document.getElementById('fta-svg');
-                const svgStr = new XMLSerializer().serializeToString((typeof SLFtaEdit !== 'undefined' && SLFtaEdit.exportClone && svgEl && svgEl.id === 'fta-svg') ? SLFtaEdit.exportClone(svgEl) : svgEl);   // 13 Oct 2026 (fix G): no editing handles or unattached nodes in the picture
-                const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const img = new Image();
-                await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-                const canvas = document.createElement('canvas');
-                const scale = 2;
-                canvas.width = (img.width || 1000) * scale;
-                canvas.height = (img.height || 700) * scale;
-                const ctx = canvas.getContext('2d');
-                ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                URL.revokeObjectURL(url);
-                const dataUrl = canvas.toDataURL('image/png');
-                const targetW = 540;
-                const targetH = Math.min(700, targetW * (canvas.height / canvas.width));
-                out.push({ title: p.name || p.id, dataUrl, width: targetW, height: targetH });
-            } catch (e) {
-                console.warn('FTA appendix render failed:', e);
-                out.push({ title: p.name || p.id, dataUrl: null });
-            }
-        }
-        return out;
-    }
-
     function _ensureDocxLib() {
         if (window.docx) return Promise.resolve(window.docx);
         if (typeof _loadDocxLib === 'function') return _loadDocxLib();
@@ -4095,6 +3746,10 @@ window.Reports = Reports;
             '        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;" data-appx="src" title="Every requirement and assumption listed under the analysis it comes from (FHA, PSSA, CMA, PRA, ZSA, HF)"><input type="checkbox" id="rpt-appx-src"  style="width:auto;margin:0;"> By source analysis</label>',
             '      </div>',
             '    </div>',
+            '    <div><label>Significant figures</label>',
+            '      <select id="rpt-sigfigs" style="width:auto;margin-bottom:0;"><option value="2">2 (1.2E-7)</option><option value="3">3 (1.23E-7)</option><option value="4">4 (1.234E-7)</option></select>',
+            '      <p style="font-size:11px;color:var(--color-text-tertiary);margin:4px 0 0 0;">Probabilities and rates in this project\'s reports are written to this many figures. A number typed with fewer figures keeps them.</p>',
+            '    </div>',
             '    <div><label>Custom Template (.docx, optional)</label>',
             '      <input type="file" id="rpt-custom-template" accept=".docx" style="width:100%;margin-bottom:0;">',
             '      <p style="font-size:11px;color:var(--color-text-tertiary);margin:4px 0 0 0;">Upload a customer-branded .docx with <code>{{tokens}}</code> to use it as the template. Heading1/2/3 paragraphs become editable sections in the next step. Leave blank to use the built-in default. Custom .docx only supports Word format.</p>',
@@ -4109,6 +3764,7 @@ window.Reports = Reports;
             '  <div id="rpt-step2" style="display:none;flex-direction:column;gap:14px;">',
             '    <p style="font-size:13px;color:var(--color-text-secondary);margin:0;">Edit each section\'s prose below. Tokens like <code>{{aircraft_name}}</code> have been resolved to your project data; table tokens (<code>{{fha_table}}</code>) and appendix anchors stay in place — they\'ll auto-fill at render time. Edits save automatically with your project.</p>',
             '    <div id="rpt-section-editor" style="display:flex;flex-direction:column;"></div>',
+            '    <div id="rpt-checks" style="display:none;padding:10px 12px;border:1px solid rgba(217,119,6,.45);background:rgba(217,119,6,.06);border-radius:var(--r-md);font-size:12.5px;"></div>',
             '    <div id="rpt-status2" style="font-size:12px;color:var(--color-text-secondary);min-height:18px;"></div>',
             '    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">',
             '      <button class="btn-ghost" onclick="Reports._back()">← Back</button>',
@@ -4172,6 +3828,12 @@ window.Reports = Reports;
                 state: function () { return _modalState; }, setState: function (s) { _modalState = s; } };
     v1.parseDocxToSections = parseDocxToSections;
     v1.renderDocxFromSections = renderDocxFromSections;
+    // 31 Oct 2026: the AI-draft layer below sets Reports._modalState and asks for Reports._buildSectionEditor; both now
+    // reach this module's own state, so Generate after an AI draft works on the same dialog state.
+    v1._buildSectionEditor = _buildSectionEditor;
+    try { Object.defineProperty(v1, '_modalState', { configurable: true, get: function () { return _modalState; }, set: function (v) { _modalState = v; } }); } catch (_) {}
+    v1._blocksFromSections = _blocksFromSections;
+    v1._issue = { key: _issueKey, issued: _issued, keepMap: _keepMap, preChecks: _preChecks, record: _recordIssue };
     v1.renderPdfFromSections = renderPdfFromSections;
     v1.renderCustomDocxSectioned = renderCustomDocxSectioned;
     // Hold on to v1's renderFromCustomDocx for the fallback path.
@@ -4533,6 +4195,14 @@ window.Reports = Reports;
             '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
             'Minimal cut sets containing a development error are never quantified — every P(top) above is explicitly conditional on no development error. Each scenario is addressed by process assurance (the allocated DAL) and derived requirements, not by the probability budget.',
             '{{ffs_table}}',
+            '',
+            '### Failure Rate Sources',
+            'Where each failure rate used above comes from (supplier guarantee, field data, calculated, library entry or engineering judgment), with its reference.',
+            '{{rate_sources_table}}',
+            '',
+            '### Latent Plus One',
+            'Every latent failure that, with one single active failure, reaches the top of a fault tree; its check interval, the requirement that covers the interval, and the pair against the failure condition objective (AC 25.1309-1B; judged for catastrophic, hazardous and major conditions).',
+            '{{latent_plus_one_table}}',
             '',
             '## 5. Common-Mode Verification',
             'Each CMA subject linked to this system has been evaluated and dispositioned. See the CMA appendix for details.',

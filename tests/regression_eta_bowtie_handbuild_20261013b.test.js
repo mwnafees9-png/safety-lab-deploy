@@ -179,7 +179,7 @@ function compareGeneral(A, N) {
 {
     const SRC = S('event_trees.js');
     const muts = [
-        ['coupling never switches on after a partial outcome', SRC.replace('rec(d + 1, prefix + c, p * (cp ? br[b].pc : br[b].p), up || b > 0);', 'rec(d + 1, prefix + c, p * (cp ? br[b].pc : br[b].p), up || b === br.length - 1);')],
+        ['coupling never switches on after a partial outcome', SRC.replace('rec(d + 1, prefix + c, p * (LB[d] ? 1 : (cp ? br[b].pc : br[b].p)), up || b > 0);', 'rec(d + 1, prefix + c, p * (LB[d] ? 1 : (cp ? br[b].pc : br[b].p)), up || b === br.length - 1);')],
         ['a skipped heading multiplies by its success probability', SRC.replace("if (r === 'skip') { chars[d] = '-'; rec(d + 1, prefix + '-', p, up); return; }", "if (r === 'skip') { chars[d] = '-'; rec(d + 1, prefix + '-', p * B[d][0].p, up); return; }")],
         ['an early end still asks the next heading', SRC.replace("if (r !== 'end') {\n                    const br = B[d], cp = CPL[d] && up;", "if (true) {\n                    const br = B[d], cp = CPL[d] && up;")],
     ];

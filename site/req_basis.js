@@ -33,7 +33,7 @@
                       PRA: 'Particular risk analysis', ZSA: 'Zonal safety analysis', HF: 'Human factors' };
     // generator key → tag; anything unlisted falls back to the prefix rule in tagOfGenerator.
     var GEN_TAG = { 'fha-prob': 'FHA', 'fha-dal': 'FHA', 'fha-qualitative': 'FHA', 'fha-similarity': 'FHA',
-                    'gate-indep-cma': 'CMA', 'pra-zonal': 'PRA', 'pra-scenario': 'PRA', 'zsa-separation': 'ZSA', 'zsa-phys': 'ZSA',
+                    'gate-indep-cma': 'CMA', 'cma-concern': 'CMA', 'pra-zonal': 'PRA', 'pra-scenario': 'PRA', 'zsa-separation': 'ZSA', 'zsa-phys': 'ZSA',
                     'hf-op-action': 'HF', 'hf-op-timing': 'HF', 'hf-op-info': 'HF' };
     var GEN_PREFIX = [['fha', 'FHA'], ['pra', 'PRA'], ['zsa', 'ZSA'], ['hf', 'HF'], ['fta', 'PSSA'], ['dalgebra', 'PSSA'],
                       ['gate-indep', 'PSSA'], ['iface', 'PSSA'], ['fcim', 'PSSA'], ['usoc', 'PSSA']];

@@ -162,7 +162,8 @@ console.log('\n[taxonomy] the generators emit the class AND the analysis');
     check('the FTA interval generator is Maintainability, not Safety',
         /type: 'Maintainability', analysis: 'Maintenance'/.test(asr));
     check('independence, DAL and probability requirements are all Safety class',
-        (asr.match(/type: 'Safety', analysis: 'Independence'/g) || []).length === 10 &&
+        // 31 Oct 2026: 10 -> 11, the CMA concern's mitigation requirement (generator 'cma-concern', cma_flow.js)
+        (asr.match(/type: 'Safety', analysis: 'Independence'/g) || []).length === 11 &&
         // 24 Oct 2026: 4 -> 2, the compressed default-DAL mode (its default line and its exception line) is retired:
         // one requirement per function and item from DALgebra (explicit), plus the FHA function DAL
         (asr.match(/type: 'Safety', analysis: 'Design Assurance'/g) || []).length === 2 &&

@@ -228,7 +228,7 @@ console.log('[L11] every companion wrapper around a gated renderer stands down w
   // thread_bridge wraps by name through w[fn]; count it by hand
   const tb = read('thread_bridge.js');
   wraps++; if (!/SLLazy\.skipped\(fn === 'renderACAssumptions'/.test(tb)) missing.push('thread_bridge.js -> renderACAssumptions/renderSysAssumptions');
-  check('every wrapper of a gated renderer asks SLLazy.skipped() after orig.apply (' + wraps + ' wrappers)', missing.length === 0 && wraps === 11, missing.join(', ') || String(wraps));
+  check('every wrapper of a gated renderer asks SLLazy.skipped() after orig.apply (' + wraps + ' wrappers)', missing.length === 0 && wraps === 12, missing.join(', ') || String(wraps));   // 12 since 30 Oct 2026: fc_variants.js wraps renderSysFHA (the combined panel under each system's FHA)
   const b = boot(SRC); b.el('h', false, 'view-x');
   check('skipped() is false with nothing pending', b.api.skipped('h') === false);
   b.api.defer('h', 'r', []);

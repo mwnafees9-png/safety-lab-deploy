@@ -40,7 +40,7 @@
 (function () {
     'use strict';
 
-    function _pages() { return (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : []; }
+    function _pages() { return ((typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : []).filter(function (p) { return !(p && p.integrated && p.integrated.sourcePageId != null); }); }   // 1 Nov 2026 (item 42): an integrated tree is a view of its sources, never counted again (fta_integrated.js)
     function _lid(n) { return (n && n.logicalId != null) ? n.logicalId : (n ? n.id : null); }
     function _walk(node, fn) {
         (function rec(n, depth) {
@@ -294,7 +294,7 @@
         _pages().forEach(function (page) {
             if (!page || !page.root || page.verifies) return;      // allocation pages only
             _walk(page.root, function (n) {
-                if (!n || n.type === 'gate') return;
+                if (!n || n.type === 'gate' || n.type === 'house' || n.type === 'conditioning') return;   // 2 Nov 2026: a house or conditioning event keeps the value set on it (slIsSetEvent)
                 const lid = _lid(n);
                 if (lid == null) return;
                 if (!byLid.has(lid)) byLid.set(lid, []);

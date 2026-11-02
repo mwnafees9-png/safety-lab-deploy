@@ -97,7 +97,8 @@ check('…and genuine errors still toast as errors, naming the attempts they bur
   /_toast\('Nothing drafted — every turn failed after ' \+ _TURN_TRIES \+ ' attempts\. Last error: ' \+ \(\(_hardErr && _hardErr\.message\) \|\| _hardErr\)/.test(ai) && /return;/.test(ai));
 check('the zero-actions path no longer truncates the reply into a toast',
   !/_toast\(parsed\.reply \? String\(parsed\.reply\)\.slice\(0, 160\)/.test(ai) &&
-  /if \(!actions\.length\) \{ _anemNoActionsPanel\(cfg, parsed, null, _rerun\); return; \}/.test(ai));
+  // 31 Oct 2026: the zero-actions block first says what was held back (regression_batch_holdback_20261031), then the same panel
+  /if \(!actions\.length\) \{[\s\S]{0,260}?_anemNoActionsPanel\(cfg, parsed, null, _rerun\); return;\s*\}/.test(ai));
 check('a chosen option re-runs the SAME directive with the engineer\'s steer',
   /ENGINEER CHOSE: /.test(ai) && /const _rerun = function \(steer\)/.test(ai));
 

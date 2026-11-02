@@ -30,7 +30,7 @@ function fnSrc(src, name) {
 
 console.log('\n[A] wiring');
 const A = read('ai_assistant.js'), L = read('ai_loader.js');
-check('ai_loader.js loads ai_assistant.js v76.91 or later', /ai_assistant\.js\?v=76\.(9[1-9]|\d{3})/.test(L));
+check('ai_loader.js loads ai_assistant.js v76.91 or later', /ai_assistant\.js\?v=(76\.(9[1-9]|\d{3})|(7[7-9]|[89]\d)\.\d+)/.test(L));
 check('one dock for every panel, installed when the module loads', /function _dockPanelClose\(p\)/.test(A) && /try \{ _installPanelCloseDock\(\); \} catch \(_\) \{\}/.test(A));
 check('Close is red, last, apart from the actions', /\.ai-rev-panel \.aifh-close\{margin-left:auto;background:#dc2626/.test(A));
 check('the working buttons are solid and bold', /\.ai-rev-panel \.aifh-accept,\.ai-rev-panel \.rv-accept-all\{background:#1d4ed8;color:#fff !important;border:1px solid #1e40af;font-weight:700/.test(A));

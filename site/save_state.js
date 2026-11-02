@@ -141,7 +141,7 @@
     function waiting() { var A = _ack(); return !!(A && (A.pendingUser ? A.pendingUser() : A.pending())); }
     function unsaved() { return !!_saving || !!_localFail || _cloudPending || !!_fileFail; }
 
-    // ---- the project file on this computer (desktop, 26 Oct 2026, Radia) ----------------------------
+    // ---- the project file on this computer (desktop, 26 Oct 2026, customer report) ----------------------------
     // The owner's ruling: "the file should always auto save back to where it was opened". In the desktop app the
     // shell (main.js, window.slabProjectFile from its preload) knows which .sl file the open project came from or
     // was last saved to; every confirmed save here ALSO writes the confirmed project back to that file, and a
@@ -339,7 +339,7 @@
         if (C && !holdsSync()) { try { C.release(); team = !!(C.status().online !== false); } catch (_) {} }
         else if (C && acc && C.pushAccepted) { try { team = C.pushAccepted(JSON.parse(acc)) === true && C.status().online !== false; } catch (_) {} }   // moves still wait: this change goes on its own
         // 3. the cloud copy
-        // 26 Oct 2026 (Radia): a confirmed change REACHES the server copy. With the live team sync on, this tab holds
+        // 26 Oct 2026 (customer report): a confirmed change REACHES the server copy. With the live team sync on, this tab holds
         // every teammate's work, so a server copy that moved is written over ('merged'). Without it, a moved copy is
         // asked about (the manual save: overwrite it, or load it). A refused save is never reported as saved.
         var r = { ok: false, reason: 'signed-out' };

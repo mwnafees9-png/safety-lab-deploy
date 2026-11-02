@@ -22,7 +22,7 @@
 (function () {
     'use strict';
     var ROOT = (typeof window !== 'undefined') ? window : (typeof globalThis !== 'undefined' ? globalThis : this);
-    function _pages() { return (typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : (ROOT.ftaPages || []); }
+    function _pages() { return ((typeof ftaPages !== 'undefined' && ftaPages) ? ftaPages : (ROOT.ftaPages || [])).filter(function (p) { return !(p && p.integrated && p.integrated.sourcePageId != null); }); }   // 1 Nov 2026 (item 42): an integrated tree is a view of its sources, never counted again (fta_integrated.js)
 
     // 19 Oct 2026 (build 7): one answer to "which equipment is this event", node_identity.js equipmentOf (an authored
     // equipment link, the declared identity, a MAC system event), the same one the CAD/zonal engine uses. A member that

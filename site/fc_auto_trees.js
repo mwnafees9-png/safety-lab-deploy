@@ -40,11 +40,12 @@
 // ============================================================================
 (function (root) {
     'use strict';
-    var VERSION = '1.4';   // 1.4 26 Oct 2026: a tree whose failure condition was marked not applicable in the FCIM is asked about in those words
+    var VERSION = '1.5';   // 1.5 30 Oct 2026: makeTree in the API (fc_link.js opens a picked condition's tree).
+    // 1.4 26 Oct 2026: a tree whose failure condition was marked not applicable in the FCIM is asked about in those words
     var MAJOR = 3;
 
     // 26 Oct 2026 (v1.3): the project stores are top-level `let`s, not window properties, and the app's CSP forbids
-    // eval, so v1.2's eval read threw on every install and the sweep saw an empty project (Radia: no trees made, the
+    // eval, so v1.2's eval read threw on every install and the sweep saw an empty project (customer report: no trees made, the
     // tree selector empty). Read through SLEnv (sl_env.js, rule 5); window only for what really is on it.
     function _g(n) {
         try { var E = root.SLEnv; if (E && typeof E.get === 'function') { var v = E.get(n); if (v !== undefined) return v; } } catch (_) {}
@@ -457,7 +458,9 @@
 
     var api = { VERSION: VERSION, groups: groups, route: route,
         governingRows: governingRows, governingOf: governingOf, isGoverning: isGoverning, groupOf: groupOf, byFcId: byFcId, copiesNote: copiesNote, ROUTE_WORDS: ROUTE_WORDS, characterized: characterized, needsChart: needsChart, treeFor: treeFor,
-        sweep: sweep, tick: tick, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, governingPhases: governingPhases, shapeFp: shapeFp };
+        sweep: sweep, tick: tick, syncFlags: syncFlags, flagsOutOfStep: flagsOutOfStep, effectiveTarget: effectiveTarget, governingPhases: governingPhases, shapeFp: shapeFp,
+        // 30 Oct 2026 (fc_link.js): the tree for a condition picked by hand that has none yet
+        makeTree: make };
     try { root.SLFcTrees = api; } catch (_) {}
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

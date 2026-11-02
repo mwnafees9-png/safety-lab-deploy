@@ -240,10 +240,11 @@
                 (m.sel ? ' <span class="u-mono" style="font-size:9.5px; border:1px solid currentColor; padding:0 4px; color:var(--color-text-secondary);" title="MSI selection basis (2-3-1)">MSI: ' + ['hidden','safety','ops','econ'].filter(k => m.sel[k]).join('+').toUpperCase() + '</span>' : '') +
                 ' <span class="u-mono" style="font-size:10px; color:var(--color-text-tertiary);">' + _esc(m.id) + '</span></div>' +
                 '<div><button class="btn-cyan" style="font-size:11px; padding:3px 9px;" onclick="msg3AddFf(\'' + m.id + '\')">+ Functional failure</button> ' +
+                (window.SLCommentKinds ? '<span data-ck-host="1" title="Comments on this item">' + SLCommentKinds.button({ kind: 'msg3', id: String(m.id) }) + '</span> ' : '') +   // 31 Oct 2026
                 '<button class="node-delete-btn-inner" style="font-size:11px;" onclick="msg3DeleteMsi(\'' + m.id + '\')">✕</button></div></div>';
             if (!m.ffs.length) { html += '<p style="padding:10px 14px; color:var(--color-text-tertiary); font-size:12.5px;">No functional failures analyzed yet.</p></div>'; return; }
             html += '<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12px;"><thead><tr>' +
-                '<th>Function / Failure</th><th>Effect · Cause</th><th style="width:70px">Evident?</th><th style="width:66px">Safety?</th><th style="width:66px">Operat.?</th><th style="width:150px">Category</th><th>Level-2 tasks</th><th style="width:190px">Disposition</th></tr></thead><tbody>';
+                '<th>Function / Failure</th><th>Effect · Cause</th><th style="width:70px">Evident?</th><th style="width:66px">Safety?</th><th style="width:66px">Operat.?</th><th style="width:150px">Category</th><th>Level-2 tasks</th><th style="width:190px">Disposition</th><th>Review</th></tr></thead><tbody>';
             m.ffs.forEach(ff => {
                 const cat = msg3Category(ff);
                 const disp = msg3Disposition(ff);
@@ -269,6 +270,7 @@
                         '</div>').join('') || '<span style="color:var(--color-text-tertiary); font-size:11px;">none</span>') +
                         '<div><button class="ckpt-m-btn" style="font-size:10px; padding:0 6px; margin-top:3px;" onclick="msg3AddTask(\'' + m.id + '\',\'' + ff.id + '\')">+ task' + (hidden ? ' (incl. OP/VC failure-finding)' : '') + '</button></div></td>' +
                     '<td><span style="font-family:var(--font-mono); font-size:10px; font-weight:600; color:' + disp.color + ';">' + _esc(disp.label) + '</span></td>' +
+                    (typeof SLCommentKinds !== 'undefined' ? SLCommentKinds.cell('msg3', String(m.id) + '/' + String(ff.id)) : '<td></td>') +   // 31 Oct 2026: comments
                     '</tr>';
             });
             html += '</tbody></table></div></div>';

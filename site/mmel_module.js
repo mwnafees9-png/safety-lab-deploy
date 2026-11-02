@@ -104,29 +104,24 @@
         return { ok: true, minOrder, verdict: 'order-' + minOrder + ' protection retained while dispatched (' + worstSev + ' thread)', sev: worstSev };
     }
 
-    // Quantitative check: force the event TRUE transiently, recompute the
-    // affected tops, restore. Returns worst baseline/dispatched pair + TLD.
+    // Quantitative check (1 Nov 2026, items 37/43): the item's dispatch case (fta_conditions.js: its own named case, else
+    // its event happened) calculated on a COPY of each affected tree. It used to force the event TRUE on the real tree and
+    // put it back; nothing on the tree is touched now.
     function _quantitative(beRef) {
         const aff = _affected(beRef);
         if (!aff || !aff.pages.length) return null;
-        const n = aff.hit.node;
-        const saved = { probability: n.probability, lambda: n.lambda, inputMode: n.inputMode, repairModel: n.repairModel, tau: n.tau, exposureMode: n.exposureMode, dormancyInterval: n.dormancyInterval, markovModelId: n.markovModelId };
+        const C = window.SLFtaConditions;
+        const it = _store().items.find(x => x.beRef === beRef) || { beRef: beRef, id: '' };
+        const sets = C ? C.caseForMmel(it) : [];
         let worst = null;
         try {
             aff.pages.forEach(({ page, severity }) => {
                 if (!severity) return;
-                // 13 Oct 2026 (math audit F1): calcBottomUp refreshes the leaf
-                // probabilities; the top used for the verdict is the exact one
-                // (SLTopBasis.exactTop: common cause and shared events included), not
-                // the independent gate-by-gate value calcBottomUp returns.
-                calcBottomUp(page.root, new Set());
+                // 13 Oct 2026 (math audit F1): the exact top (SLTopBasis.exactTop: common cause and shared events included)
                 const base = SLTopBasis.exactTop(page.root);
-                n.probability = 1; n.lambda = 0; n.inputMode = 'probability';
-                delete n.repairModel; delete n.tau; delete n.exposureMode; delete n.dormancyInterval; delete n.markovModelId;
-                calcBottomUp(page.root, new Set());
-                const disp = SLTopBasis.exactTop(page.root);
-                Object.keys(saved).forEach(k => { if (saved[k] === undefined) delete n[k]; else n[k] = saved[k]; });
-                calcBottomUp(page.root, new Set());   // restore computed state
+                const d = C ? C.exactWith(page, sets) : { p: null, why: 'fta_conditions.js is not loaded' };
+                if (d.p == null) throw new Error(d.why || 'the exact engine refused this tree');
+                const disp = d.p;
                 let target = null;
                 // 13 Oct 2026 (math audit F8): per-flight budget from the ONE shared
                 // normalization (SLTopBasis, the tree's mission time), not the exposure time.
@@ -137,7 +132,6 @@
                 if (!worst || (row.dispatched || 0) > (worst.dispatched || 0)) worst = row;
             });
         } catch (e) {
-            Object.keys(saved).forEach(k => { if (saved[k] === undefined) delete n[k]; else n[k] = saved[k]; });
             return { error: String(e && e.message || e) };
         }
         if (!worst) return null;
@@ -281,7 +275,7 @@
         html += '<div style="margin:0 0 12px;"><button class="btn-cyan" onclick="mmelAdd()">+ MMEL item</button> ' +
             '<button class="btn-cyan" onclick="const n = mmelDerive(true).length; showToast(n ? n + \' candidate(s) derived from ledger-linked LRUs, each pre-screened through the protection check.\' : \'No new derivable candidates.\', \'info\', 4500); renderMmelPage();">⚙ Derive candidates' + (derivable ? ' (' + derivable + ')' : '') + '</button> ' +
             '<button class="btn-cyan" onclick="(async () => { const v = parseFloat(await slPrompt(\'TLD budget share: fraction of the FC probability budget the dispatched configuration may consume (agree with the authority):\', String(_mmelStore().budgetShare))); if (v > 0 && v < 1) { _mmelStore().budgetShare = v; if (typeof commitSaveChanges === \'function\') commitSaveChanges(); renderMmelPage(); } })()">Set TLD share</button> ' +
-            '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">protection check is exact (cut sets); quantitative check forces the event TRUE through the live engine; nothing here is prose</span></div>';
+            '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">protection check is exact (cut sets); quantitative check calculates the dispatch case of the item on a copy of the trees (the stored values are never changed); nothing here is prose</span></div>';
 
         html += '<div style="overflow-x:auto;"><table class="data-table" style="width:100%; font-size:12px;"><thead><tr>' +
             '<th style="width:76px">Item</th><th>Equipment</th><th style="min-width:170px">Model links</th><th style="width:60px">ATA</th><th style="width:70px">Inst/Req</th><th style="width:96px">Category</th>' +
@@ -320,6 +314,8 @@
             '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono); margin-top:12px;">Categories: B = 3 · C = 10 · D = 120 consecutive calendar days; A as specified in remarks. ' +
             'The protection check cannot be argued with — an item in an order-1/2 cut set of a Catastrophic thread does not enter the MEL, however inconvenient. ' +
             'TLD suggestion assumes the dispatched configuration may consume the stated share of the probability budget — the AUTHORITY agrees the share, the tool only computes its consequence. Re-run ↻ after model changes; analyses do not silently go stale.</p>';
+        // 1 Nov 2026 (customer items 37/43): named dispatch cases (fta_conditions.js)
+        try { if (window.SLFtaConditions) html += window.SLFtaConditions.dispatchHtml(); } catch (_) {}
         host.innerHTML = html;
     }
 

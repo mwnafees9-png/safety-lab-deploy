@@ -29,7 +29,14 @@ function _apportionWeight(child, siblingCount, strategy) {
     return 100 / Math.max(1, siblingCount || 1);
 }
 
+// 2 Nov 2026 (Waqas: "ok lets get these done"): a HOUSE event (a condition switched on or off: true or false) and a
+// CONDITIONING event (the condition an INHIBIT gate needs, a probability of the world, entered) are facts the engineer
+// sets, not failures with a budget. Allocation never writes into them: they keep their value, and the budget is split
+// across the basic and undeveloped events around them (a gate's set-event children are held like any fixed child).
+function slIsSetEvent(n) { return !!n && (n.type === 'house' || n.type === 'conditioning'); }
+try { if (typeof window !== 'undefined') window.slIsSetEvent = slIsSetEvent; } catch (_) {}
 function allocateTopDown(node, target, strategy, visited) {
+    if (slIsSetEvent(node)) return;   // its value is the engineer's, never a budget
     // Phase 56.18c/d — external-source handling. When a node carries an
     // externalSource link, the inherited target P_ext is treated as a hard
     // value: we set node.probability to min(apportioned, P_ext). Then when we
@@ -151,6 +158,7 @@ function allocateTopDown(node, target, strategy, visited) {
     // conservative-merge (min). Free siblings absorb the remainder via the
     // existing AND/OR redistribute math.
     const childExt = actualChildren.map(c => {
+        if (slIsSetEvent(c)) { const v = Number(c.probability); return (isFinite(v) && v >= 0 && v <= 1) ? v : 0; }   // held as set (2 Nov 2026)
         try {
             let extSrc = null, paste = null, prescr = null;
             if (typeof _getPrescribedTarget === 'function') {
@@ -714,7 +722,7 @@ function _propagateStrictestAcrossSharedEvents(rootNode) {
             }
             return;
         }
-        if (n.type !== 'gate') {
+        if (n.type !== 'gate' && !slIsSetEvent(n)) {   // 2 Nov 2026: a house or conditioning event keeps the value set on it (slIsSetEvent)
             const lid = n.logicalId != null ? n.logicalId : n.id;
             const arr = buckets.get(lid) || [];
             arr.push(n);
@@ -991,6 +999,13 @@ function _slApplyExactTops() {
 }
 
 function calculateAllProbabilities() {
+    // 1 Nov 2026 (customer checklist item 45): every node whose result depends on a circular transfer is stamped
+    // node._circular first (fta_loops.js); the canvas, the warning pill, the print sheets and the reports show no number for it.
+    try { if (typeof window !== 'undefined' && window.SLFtaLoops) window.SLFtaLoops.stamp(); } catch (_) {}
+    // 1 Nov 2026 (customer checklist item 42): integrated trees rebuild from their sources when they changed (fta_integrated.js), before anything is calculated on them.
+    try { if (typeof window !== 'undefined' && window.SLFtaIntegrated) window.SLFtaIntegrated.refresh(); } catch (_) {}
+    // an integrated tree on screen is calculated from its sources' values, never allocated on its own
+    try { if (typeof window !== 'undefined' && window.SLFtaIntegrated && window.SLFtaIntegrated.guard() && ftaConfig.mode !== 'bottom-up') ftaConfig.mode = 'bottom-up'; } catch (_) {}
     if (ftaConfig.mode === 'top-down') {
         // Phase 66.19 — resolve shared events across every tree BEFORE this page is
         // apportioned, so the active tree already sees any cap its events carry.
@@ -1041,9 +1056,9 @@ function calculateAllProbabilities() {
                         mcsAwareImportanceRedistribute(rootPage.root, tc.topProbAtExposure);
                     }
                 } catch (e) {
-                    if (!(e && e.name === 'BDDExplosionError')) throw e;
+                    if (!(e && (e.name === 'BDDExplosionError' || e.name === 'CircularTransferError'))) throw e;   // 1 Nov 2026 (item 45): a circle is no result, never a broken recompute
                     rebalanced = false;   // → strictest-propagation fallback below
-                    rootPage.root._exactCloseRefused = true;   // 27 Oct 2026: the warning pill says so
+                    if (e.name === 'BDDExplosionError') rootPage.root._exactCloseRefused = true;   // 27 Oct 2026: the warning pill says so (a circle says so itself, fta_loops.js)
                 }
             }, _ccfPlan);
             if (!rebalanced) {
@@ -1106,6 +1121,8 @@ function calculateAllProbabilities() {
         const activePage = (typeof ftaPages !== 'undefined') ? ftaPages.find(p => p.id === activeFTAPageId) : null;
         if (activePage && activePage.root) _checkLeafFeasibility(activePage.root);
     }
+    // 1 Nov 2026 (customer checklist item 41): latent plus one on the tree on screen (fta_latent.js stamps node._lp1)
+    try { if (typeof window !== 'undefined' && window.SLFtaLatent) window.SLFtaLatent.stamp((typeof ftaPages !== 'undefined') ? ftaPages.find(p => p.id === activeFTAPageId) : null); } catch (_) {}
 }
 
 // [OPT-1] getCombinations — deduped; single source: fta_engine.js (publishes identical global).
@@ -1673,6 +1690,7 @@ function _bddCombinations(items, r) {
 // Merged with F4/F5 (v1.9 engine): FDEP forcing applies to the whole member leaf (own and common
 // cause events), dynamic-gate synthetic variables are 'indep' with meta.synthetic.
 function buildBDDFromFT(rootNode, scopeRoot) {
+    if (typeof _refuseLoop === 'function') _refuseLoop(scopeRoot || rootNode);   // 1 Nov 2026 (item 45): no exact probability through a circular transfer
     BDD.reset();
     if (!rootNode) return { bdd: BDD.T0, varOrder: [], lidToVar: new Map(), varMeta: [], ccfGroupToVar: new Map(), ccfGroups: [], dyn: [], fdepCount: 0, grid: null };
     const varOrder = [];
@@ -2666,6 +2684,7 @@ function renderMarkovModels() {
                 <input type="text" value="${esc(m.name)}" onchange="setMarkovName('${esc(m.id)}', this.value)" style="flex:1; margin-bottom:0; font-weight:bold;">
                 <span style="font-family: monospace; font-size: 0.9em; color: var(--header-color);">P(failed) = ${pFailedTxt}</span>
                 <code style="font-size:0.75em; color: var(--text-secondary);">${esc(m.id)}</code>
+                <span data-ck-host="1">${window.SLCommentKinds ? SLCommentKinds.button({ kind: 'markov', id: String(m.id) }) : ''}</span>
                 <button class="action-btn btn-red" onclick="deleteMarkovModel('${esc(m.id)}')">Delete Model</button>
             </div>
             ${_markovClosedFormHtml(m, result)}

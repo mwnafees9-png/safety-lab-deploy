@@ -3829,7 +3829,10 @@ function _reviewJumpDescriptorFor(target) {
         acFha: 'ac-fha', acReq: 'ac-req', acAsm: 'ac-asm',
         pra: 'pra', zsa: 'zsa', cma: 'cma', fmea: 'fmea'
     };
-    return { kind: k, id: target.id, tab: TAB_BY_KIND[k] || 'dashboard' };
+    // 31 Oct 2026: functions, FCIM, HF lanes and the rest go where the traces panel sends them, not the dashboard
+    let _tr = null; try { _tr = (typeof Traceability !== 'undefined' && Traceability.KIND_TAB) ? Traceability.KIND_TAB[k] : null; } catch (_) {}
+    if (_tr === 'sys-workspace' && target.systemId) return { kind: k, id: target.id, tab: 'sys-workspace', systemId: target.systemId };
+    return { kind: k, id: target.id, tab: TAB_BY_KIND[k] || (_tr && _tr !== 'sys-workspace' ? _tr : 'dashboard') };
 }
 
 // Lightweight refresh handle used from the side panel after a CRUD action.

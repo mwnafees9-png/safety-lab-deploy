@@ -154,9 +154,10 @@ const rep = SITE('reports.js');
 // ffs_table is still registered somewhere in each whitelist, not that nothing
 // was ever added after it — a new token appearing later doesn't un-register
 // an earlier one.
-check('v1 parser regex', /\|budget_ledger_table\|ffs_table(\|sora_summary_table\|sora_oso_table)?\)\\\}\\\}\$\//.test(rep));
-check('sectioned renderers (docx + pdf regexes)', (rep.match(/\|budget_ledger_table\|ffs_table(\|sora_summary_table\|sora_oso_table)?\|appendix:fta/g) || []).length === 2);
-check('custom-docx tableTokens array', /'budget_ledger_table','ffs_table'(,'sora_summary_table','sora_oso_table')?\]/.test(rep));
+check('one-shot reports build their blocks with the same rule (no parser list)', /async function _blocksFromTemplate\(/.test(rep) && !/function _parseTemplate\(/.test(rep));
+// 31 Oct 2026: the sectioned renderers no longer keep a list of table tokens: any {{token}} whose value is a list of rows renders as a table (report_writer.js)
+check('sectioned renderers render every table token by its value', /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(rep) && /window\.SLReportWriter\.docx\(window\.Reports\._reportModel/.test(rep) && /window\.SLReportWriter\.pdf\(window\.Reports\._reportModel/.test(rep));
+check('custom-docx table tokens come from the data, not a list', /const tableTokens = Object\.keys\(data\)\.filter\(k => _isTableVal\(data\[k\]\)/.test(rep));
 check('WS-B builder returns ffs_table', /const ffs_table = \[\];/.test(rep) && /budget_ledger_table, ffs_table,\n\s*\};/.test(rep));
 check('PASA/PSSA/SSA templates carry {{ffs_table}} (v1+v2 = 6 sites)', (rep.match(/\{\{ffs_table\}\}/g) || []).length === 6, String((rep.match(/\{\{ffs_table\}\}/g) || []).length));
 check('token palette entry', SITE('safety_lab.js').indexOf("{ id: 'ffs_table',") !== -1);

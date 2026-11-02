@@ -99,7 +99,8 @@ ok('ai_loader pin at or past 8.24', (function(){const m=idx.match(/ai_loader\.js
     // halves are analyses and both state their inputs, so both belong in this guide —
     // that is the point: an engineer looking up "what does this need" now sees that
     // drafting needs a document and recommending needs rows, as two separate answers.
-    ok('the guide is thirty-five entries — 26 plus a drafter per HF lane', guide.length === 35, 'got ' + guide.length);
+    // 35 became 36 on 30 Oct 2026: Propose combined failure conditions states its inputs too.
+    ok('the guide is thirty-six entries — 26 plus a drafter per HF lane, plus combined failure conditions', guide.length === 36, 'got ' + guide.length);
 
     // the only actions without a needs block are the ones that are not analyses
     const bare = acts.filter(a => !a.needs).map(a => a.label);

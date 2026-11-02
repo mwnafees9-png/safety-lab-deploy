@@ -17,9 +17,8 @@
 //   · extractData               — wrapped: base dict from the original (the
 //                                 STPA def exists, so scalars resolve), then
 //                                 the STPA token family merged on top
-// ONE line of reports.js is edited outside this file: the _parseTemplate
-// table-token whitelist gains the stpa_* table names (the same in-file step
-// WS-B's own tokens took — the whitelist is a hard-coded regex by design).
+// Nothing in reports.js names these tables: since 31 Oct 2026 any {{token}} whose value
+// is a list of rows renders as a table (reports.js _proseBlocks, report_writer.js).
 //
 // Content: the full J3307 walkthrough, in document order — purpose & scope
 // (meta: mission / scope / boundary / abstraction level), losses → hazards →

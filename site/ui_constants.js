@@ -42,7 +42,7 @@ const FMEA_SCOPE_COLORS = {
     'system':   { bg: 'rgba(139, 92, 246, 0.14)', fg: '#8b5cf6' }
 };
 
-const TREE_LEVEL_LABELS = { 'aircraft': 'Aircraft', 'system': 'System', 'standalone': 'Standalone', 'subtree': 'Subtree', 'verification': 'Verification' };
+const TREE_LEVEL_LABELS = { 'aircraft': 'Aircraft', 'system': 'System', 'standalone': 'Standalone', 'subtree': 'Subtree', 'verification': 'Verification', 'integrated': 'Integrated, read only' };
 
 const TREE_LEVEL_COLORS = {
     'aircraft':   { bg: 'rgba(10, 132, 255, 0.16)',  fg: '#0a84ff' },
@@ -52,7 +52,9 @@ const TREE_LEVEL_COLORS = {
     'subtree':    { bg: 'rgba(245, 158, 11, 0.16)',  fg: '#c2680a' },
     // Phase 53.46 — verification mirror pages render with a green badge (passes implementation
     // values upward to verify the apportioned targets on the source allocation tree).
-    'verification': { bg: 'rgba(52, 199, 89, 0.16)', fg: '#1f7a3a' }
+    'verification': { bg: 'rgba(52, 199, 89, 0.16)', fg: '#1f7a3a' },
+    // 1 Nov 2026 (item 42): an integrated tree (fta_integrated.js), a read-only view of a tree with every transfer in place
+    'integrated': { bg: 'rgba(14, 116, 144, 0.16)', fg: '#0e7490' }
 };
 
 const ICONS = { success: '✓', error: '✕', warning: '⚠', info: 'ⓘ' };

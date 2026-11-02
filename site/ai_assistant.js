@@ -39,6 +39,8 @@
 
     // ---- Feature flag (off by default) --------------------------------------
     function _aiEnabled() {
+        // 1 Nov 2026 (Waqas): the free student tier has no AI at all; no flag or URL turns it on
+        try { if (typeof isAcademicAccount === 'function' && isAcademicAccount()) return false; } catch (_) {}
         // Dev/override flag — ?ai=1 (or ?ai=0 to force off).
         try {
             const qs = new URLSearchParams(location.search);
@@ -169,6 +171,7 @@
 
         // True when the active backend can service a call right now.
         available() {
+            try { if (typeof isAcademicAccount === 'function' && isAcademicAccount()) return false; } catch (_) {}
             if (this.mode === 'local') return !!_localEndpoint();
             const ok = !!(window.AiClient && window.AiClient.isConfigured && window.AiClient.isConfigured());
             // 4 Sep 2026 — a "not ready" that is really "license not synced yet" kicks a
@@ -180,6 +183,7 @@
         // What to tell the engineer when available() is false — the honest reason.
         notReadyMessage() {
             try {
+                if (typeof isAcademicAccount === 'function' && isAcademicAccount()) return 'AI is not part of the free student tier: every analysis here is yours to build.';
                 if (this.mode === 'local') return 'Local AI endpoint is not configured — set it under AI Settings.';
                 const signedIn = (typeof _cloudSignedOut === 'function') ? !_cloudSignedOut() : true;
                 if (!signedIn) return 'Sign in to use the AI — your work is saved locally meanwhile.';
@@ -231,7 +235,7 @@
             // this call runs so a long assessment never looks idle. Immediate for assessment
             // features; a short delay for incidental calls avoids a flicker on sub-300ms ones.
             // Interactive ANEM chat + internal test/eval calls are skipped (label === null).
-            const _busyLabel = _aiBusyLabel(opts.feature);
+            const _busyLabel = (typeof opts.busyLabel === 'string' && opts.busyLabel) ? opts.busyLabel : _aiBusyLabel(opts.feature);   // 31 Oct 2026: a batch names its analysis
             let _busyShown = false, _busyTimer = null;
             if (_busyLabel !== null && typeof window !== 'undefined') {
                 const _busyDelay = (_ANALYSIS_FEATURES[opts.feature] === 1) ? 0 : 300;
@@ -1059,6 +1063,8 @@
     // been spoken — into a toast nobody was listening to. Now the bail carries it.
     var _lastToast = { msg: '', kind: '', at: 0 };
     function _toast(msg, kind) {
+        // 31 Oct 2026: a run the engineer stopped is not an error, whatever lane reports it ("AI error: Stopped by you.")
+        if (/\bstopped by you\b/i.test(String(msg || ''))) { msg = /^stopped by you/i.test(String(msg).trim()) ? String(msg).trim() : 'Stopped by you. Nothing more was sent, and nothing is written without your Accept.'; kind = 'info'; }
         _lastToast = { msg: String(msg == null ? '' : msg), kind: kind || 'info', at: Date.now() };
         try { if (typeof showToast === 'function') return showToast('[AI] ' + msg, kind || 'info', 4200); } catch (_) {}
         try { console.info('[Safety Lab Aero AI] ' + msg); } catch (_) {}
@@ -2028,8 +2034,9 @@
     const _ANALYSIS_FEATURES = {
         'fha.populate': 1, 'sfha.populate': 1, 'arch.decompose': 1, 'arch.systems': 1, 'arch.items': 1, 'mac.draft': 1, 'coffe.draft': 1, 'fta.review': 1,
         'req.recommend': 1, 'fcim.populate': 1, 'fta.synthesize': 1, 'pra.draft': 1,
-        'zsa.draft': 1, 'cma.draft': 1, 'fmea.functional': 1, 'fmea.item': 1, 'arch.recommend': 1,
+        'zsa.draft': 1, 'cma.draft': 1, 'cma.flow': 1, 'fha.reason': 1, 'rate.match': 1, 'iface.word': 1, 'fmea.functional': 1, 'fmea.item': 1, 'arch.recommend': 1,
         'ccf.propose': 1,  // #142 — AI CCF-group modeling (advisory proposal; never writes the trees)
+        'fha.combine': 1,  // 30 Oct 2026 — combined failure conditions (advisory proposal; only when the user asks)
         'hfa.draft': 1,    // #55 — HF crew-credit registration (candidates chosen deterministically)
         'comment.resolve': 1,  // FAA Fig 3 — comment dispositions (advisory replies; never resolves)
         'doc.review': 1,       // FAA Fig 3 — compliance-document review (advisory; findings → review comments)
@@ -2068,16 +2075,18 @@
         'fcim.populate': 'drafting the FCIM', 'arch.decompose': 'decomposing functions', 'arch.systems': 'identifying systems', 'arch.items': 'listing configuration items', 'mac.draft': 'drafting MAC rules', 'coffe.draft': 'judging CoFFE cases',
         'arch.recommend': 'recommending architecture', 'fta.review': 'reviewing the fault tree',
         'fta.synthesize': 'synthesizing the fault tree', 'req.recommend': 'recommending requirements',
-        'pra.draft': 'drafting the PRA', 'zsa.draft': 'drafting the ZSA', 'cma.draft': 'drafting the CMA',
+        'pra.draft': 'drafting the PRA', 'zsa.draft': 'drafting the ZSA', 'cma.draft': 'drafting the CMA', 'cma.flow': 'working on the CMA', 'fha.reason': 'drafting the reasons for the FHA classes', 'rate.match': 'matching basic events to the library', 'iface.word': 'wording the requirements on interfacing systems',
         'fmea.functional': 'drafting the functional FMEA', 'fmea.item': 'drafting the item FMEA',
-        'ccf.propose': 'proposing common-cause groups', 'resources.draft': 'drafting resources',
+        'ccf.propose': 'proposing common-cause groups', 'resources.draft': 'drafting resources', 'fha.combine': 'proposing combined failure conditions',
         'hf.improve': 'recommending HF design improvements',
         'hf.draftlane': 'drafting HF lane rows from your documents',
         'hfa.draft': 'registering crew credit', 'comment.resolve': 'drafting comment dispositions',
         'verifier': 'verifying', 'validate.verifier': 'validating',
         'doc.qa': 'checking the document', 'doc.consistency': 'checking consistency',
         'doc.review': 'reviewing the compliance document',
-        'chat.edit': 'answering'
+        'chat.edit': 'answering',
+        // 31 Oct 2026: a drafting batch runs as chat.edit; its indicator names the analysis it is drafting
+        fha: 'drafting the FHA', sfha: 'drafting the system FHA', 'review.comments': 'addressing review comments', 'doc.import': 'importing the document'
     };
     function _aiBusyLabel(feature) {
         if (feature && _AI_BUSY_SKIP[feature]) return null;      // interactive / internal → no toast
@@ -2087,7 +2096,7 @@
     // zones+items+functions join, the routing cross-zone propagation map, and the
     // cert-basis particular-risk applicability. Gated separately from #131.
     // ccf.propose needs co-location (zones) + shared-routing data to ground couplings.
-    const _ZONAL_FEATURES = { 'pra.draft': 1, 'zsa.draft': 1, 'cma.draft': 1, 'ccf.propose': 1 };
+    const _ZONAL_FEATURES = { 'pra.draft': 1, 'zsa.draft': 1, 'cma.draft': 1, 'cma.flow': 1, 'ccf.propose': 1 };
 
     // ---- Per-assessment STANDARDS GROUNDING (ARP4754B / ARP4761A) ------------
     // Injected into the system prompt by Provider.complete, keyed by feature id, so every
@@ -2241,6 +2250,51 @@
     // CCF quantification is NOT the CMA. App M is qualitative independence
     // evaluation; a beta factor is a modelling choice applied afterwards, and
     // conflating them lets a number stand in for an argument.
+    // 31 Oct 2026 (customer checklist item 16): ANEM matches a basic event to a component library entry; it never types a
+    // rate. Registered in ai_skills.js as rate.match v1.
+    const _SPEC_RATE_MATCH = [
+        "STANDARD GROUNDING — failure rate data sources for safety assessment (MIL-HDBK-217F, NSWC, NPRD/EPRD, FIDES and supplier data); ARP4761A App G/H on basic event data.",
+        "TASK: for each basic event in the facts, find the ONE component library entry whose part type matches the part the event describes (by the event's name and the item it belongs to), or none. You only match; you never type, estimate or adjust a failure rate, and you never say which rate is better. An event that does not clearly name a part type gets no match.",
+        "Use ONLY library keys listed in the facts. Return STRICT JSON only: {\"matches\":[{\"nodeId\":\"<event id from the facts>\",\"libraryKey\":\"<library key>\",\"why\":\"<one short sentence: the part type both name>\"}]}. No prose, no fences."
+    ].join('\n');
+    // 31 Oct 2026 (customer checklist item 10): ANEM words a requirement on an interfacing system; the budget comes from the
+    // tree and must stand in the wording exactly (iface_reqs.js checks). Registered in ai_skills.js as iface.word v1.
+    const _SPEC_IFACE_WORD = [
+        "STANDARD GROUNDING \u2014 ARP4754B \u00a75.3 requirements capture and allocation, derived requirements and interface requirements between systems; ARP4761A \u00a73.5 / App B (PASA) and \u00a73.6 (PSSA): budgets allocated to the events another system provides.",
+        "TASK: for each need in the facts, write ONE requirement on the providing system: what it shall not do (or shall do) for the consuming system, in the terms of the event and the interface, as a single sentence with \"shall\". Keep it verifiable and free of design solutions the facts do not state.",
+        "THE NUMBER IS NOT YOURS: each need carries a budget string such as 1.0E-7. Copy it into the requirement EXACTLY as given, with \"per flight hour\". Never change, round, convert or add any other number, rate, probability or DAL.",
+        "Use ONLY need keys from the facts. Return STRICT JSON only: {\"wordings\":[{\"key\":\"<need key>\",\"text\":\"<the requirement>\"}]}. No prose, no fences."
+    ].join('\n');
+    // 31 Oct 2026 (customer checklist item 5): the reason for each FHA row's class, No Safety Effect included; ANEM drafts,
+    // the engineer accepts. Registered in ai_skills.js as fha.reason v1.
+    const _SPEC_FHA_REASON = [
+        "STANDARD GROUNDING — ARP4761A Appendix A (FHA) and §A.6 severity classification; AC 25.1309-1B §8 failure condition classifications; the severity definitions of this project's certification basis as provided.",
+        "TASK: for each failure condition in the facts, write the REASON FOR ITS CLASS in one or two sentences: which effect (on the aircraft, on the crew, on the occupants), in which phases, makes it this class and not the next one up or down, in the words of the severity definitions. A No Safety Effect row says why the effects have no safety effect (for example: no effect on capability or safety margins, no extra crew workload, no effect on occupants). The FHA is functional and implementation agnostic: never credit a design feature, a monitor, an alert or a procedure that the row itself does not state; crediting normal airmanship is allowed where the row's crew effect says so.",
+        "GROUND STRICTLY: use only the row's own effects, phases and description and the severity definitions provided. Never change the class. If the stated effects read as a different class, still write the reason for the class as recorded only if it holds; otherwise leave the reason empty and say in \"disagree\" which class the effects read as and why.",
+        "Return STRICT JSON only: {\"reasons\":[{\"key\":\"<the key from the facts>\",\"reason\":\"...\",\"disagree\":\"<optional>\"}]}. No prose, no fences."
+    ].join('\n');
+    // 31 Oct 2026 (customer checklist item 1): the four-step CMA (cma_flow.js): ANEM drafts gates, the claim, open answers,
+    // mitigations and the summary; each waits for the engineer's Accept. Registered in ai_skills.js as cma.flow v1.
+    const _SPEC_CMA_FLOW = [
+        "STANDARD GROUNDING — ARP4761A Appendix M Common Mode Analysis (CMA), Table M1 common mode categories and Table M2 concerns; AC 25.1309-1B on independence.",
+        "TASK: help an engineer work one CMA in four steps. The facts give the CMA's AND gates (each a claim that its inputs fail independently) with their inputs, every other AND gate in the trees, the Table M1 categories with the answers given so far, and the concerns raised so far. The user message names ONE task; do only that task.",
+        "GROUND STRICTLY, NEVER GUESS: everything you write comes from the facts, the architecture, the zones and routing, the items and the source documents provided. Where they do not support an answer, leave that item out; never fill a gap with a plausible guess.",
+        "NEVER A NUMBER: no beta factor, no failure rate, no probability, no interval, no DAL. The engineer and the deterministic engine own every number.",
+        "TASK gates: suggest AND gates from the facts whose independence rests on the same kind of shared cause as the CMA's gates (shared power, data, cooling, zone, routing, software, maintenance), or that a DAL reduction depends on. Use ONLY gate keys listed in the facts; skip any gate already in a CMA. Return {\"gates\":[{\"key\":\"<gate key>\",\"why\":\"<one sentence: the shared cause>\"}]}.",
+        "TASK claim: write the independence claim for the CMA's gates in one or two sentences: which inputs must not share a cause, and the shared items checked (power feeds, routing, zones, cooling) as the facts show them. Return {\"claim\":\"...\",\"from\":\"<what it was drawn from>\"}.",
+        "TASK answers: for each Table M1 category in the facts that has no answer yet, answer \"no\" (no common source: say why, from the facts), \"concern\" (a possible common source the facts show: name it) or \"na\" (the category does not apply to these gates: say why). Use ONLY category ids from the facts. Return {\"answers\":[{\"cat\":\"<category id>\",\"answer\":\"no|concern|na\",\"why\":\"<one sentence>\"}]}.",
+        "TASK mitigations: for each OPEN concern in the facts, propose a design mitigation (segregation, dissimilarity, separation, protection, procedure) the facts make credible, and its effect on the claim if not stated. Use ONLY concern ids from the facts. Return {\"mitigations\":[{\"concern\":\"<concern id>\",\"mitigation\":\"...\",\"effect\":\"...\"}]}.",
+        "TASK summary: write the CMA summary in three to five sentences: the gates and the claim, how the questionnaire came out, each concern and how it was closed, and what remains open. Return {\"summary\":\"...\"}.",
+        "Return STRICT JSON only, no prose, no fences."
+    ].join('\n');
+    const _SPEC_COMBINE = [
+        'STANDARD GROUNDING — ARP4761A §A.8.3 combined failure conditions (related functions failing together, usually worse than either alone) and AC 25.1309-1B on multiple failures.',
+        'TASK: PROPOSE combinations of the EXISTING failure conditions listed in the facts, for an engineer to review. You only propose; nothing is written until the engineer accepts. Finding which failures combine inside one fault tree is the cut set analysis, not you.',
+        'GROUND STRICTLY, NEVER GUESS: propose a combination ONLY when the facts give a concrete basis for the conditions occurring together or compounding: a system that implements every one of them (kind "system"), a resource every one of them depends on (kind "resource"), an item that realizes every one of them (kind "item"), or a sentence in the source documents (kind "document"). Cite each basis by the EXACT id given in the facts (system id, resource id, item id), or for a document the sentence quoted VERBATIM. A basis that is not in the facts is discarded, and a proposal left with no basis is withheld.',
+        'SCOPE: combine two or more of the listed conditions by their exact fcId, on different functions, at the level given (the aircraft, or one system). Never repeat a combination listed as existing, and never combine a condition that is itself a combination.',
+        'SEVERITY: classify the combined effect on the project severity scale, never milder than the worst condition combined, with a one-sentence rationale grounded in the listed effects.',
+        'EXPECTED OUTPUT (proposal only): one entry per combination with parents (fcIds), fcDesc (the combined condition, stated plainly), severity, effAc (effect on the aircraft), rationale, and basis (kind, ref, why).'
+    ].join('\n');
     const _SPEC_CCF = [
         'STANDARD GROUNDING — ARP4761A Appendix M Common-Cause / Common-Mode modeling, β / Multiple-Greek-Letter (MGL) CCF quantification.',
         'REQUIRED INPUTS: the fault trees\' BASIC EVENTS (with the equipment/items they realize), the architecture/design description, and the structured co-location (zones) + shared-routing model. A candidate CCF GROUP is a set of TWO OR MORE basic events that, because of a shared cause, can fail TOGETHER and so defeat an independence/redundancy claim. Without at least two basic events that a stated mechanism can couple, return insufficient_information — do NOT invent a coupling.',
@@ -2496,6 +2550,11 @@
         'fmea.functional': _SPEC_FMEA_FUNC, 'fmea.item': _SPEC_FMEA_ITEM,
         'pra.draft': _SPEC_PRA, 'zsa.draft': _SPEC_ZSA, 'cma.draft': _SPEC_CMA,
         'ccf.propose': _SPEC_CCF,
+        'fha.combine': _SPEC_COMBINE,
+        'cma.flow': _SPEC_CMA_FLOW,
+        'fha.reason': _SPEC_FHA_REASON,
+        'rate.match': _SPEC_RATE_MATCH,
+        'iface.word': _SPEC_IFACE_WORD,
         'req.recommend': _SPEC_REQ, 'arch.decompose': _SPEC_DECOMP, 'arch.systems': _SPEC_SYSTEMS, 'arch.items': _SPEC_ITEMS, 'mac.draft': _SPEC_MAC, 'coffe.draft': _SPEC_COFFE, 'arch.recommend': _SPEC_ARCH,
         'hfa.draft': _SPEC_HFA,
         'hf.draftlane': _SPEC_HF_DRAFT, 'hf.improve': _SPEC_HF_IMPROVE,   // Skills V1.3
@@ -2565,6 +2624,11 @@
         'zsa.draft':      ['ARP4761A §4.4 · App K', 'AC 25.1309-1B'],
         'cma.draft':      ['ARP4761A §4.6 · App M', 'ARP4761A §3.5'],
         'ccf.propose':    ['ARP4761A §4.6 · App M', 'ARP4761A App G'],
+        'fha.combine':    ['ARP4761A §A.8.3', 'AC 25.1309-1B'],
+        'cma.flow':       ['ARP4761A App M (Tables M1, M2)', 'AC 25.1309-1B'],
+        'fha.reason':     ['ARP4761A App A §A.6', 'AC 25.1309-1B §8'],
+        'rate.match':     ['MIL-HDBK-217F', 'ARP4761A App G'],
+        'iface.word':     ['ARP4754B §5.3', 'ARP4761A §3.6'],
         'req.recommend':  ['ARP4754B §5.3', 'ARP4754B §5.1', 'ARP4761A §3.5'],
         'arch.decompose': ['ARP4754B §4.3', 'ARP4754B §4.5'],
         'arch.systems': ['ARP4754B §4.3', 'ARP4754B §4.5', 'ARP4761A Table Q.4-1'],
@@ -2689,9 +2753,10 @@
         'fha.populate': 'AFHA', 'sfha.populate': 'SFHA', 'fcim.populate': 'FCIM',
         'fta.synthesize': 'FTA synthesis', 'fta.review': 'FTA review',
         'req.recommend': 'Requirements', 'arch.decompose': 'Decomposition', 'arch.systems': 'Systems', 'arch.items': 'Items', 'mac.draft': 'MAC', 'coffe.draft': 'CoFFE',
-        'pra.draft': 'PRA', 'zsa.draft': 'ZSA', 'cma.draft': 'CMA',
+        'pra.draft': 'PRA', 'zsa.draft': 'ZSA', 'cma.draft': 'CMA', 'cma.flow': 'CMA', 'fha.reason': 'AFHA', 'rate.match': 'Failure rate sources', 'iface.word': 'Requirements on interfacing systems',
         'fmea.functional': 'FMEA (functional)', 'fmea.item': 'FMEA (item)',
         'ccf.propose': 'CCF',
+        'fha.combine': 'Combined failure conditions',
         // The human-factors family. Absent until 2 Sep 2026, so every HF assumption the
         // crew-credit drafter had ever declared was filed under the raw string
         // "hfa.draft" — legible to whoever wrote the code and to nobody else.
@@ -2761,6 +2826,19 @@
     }
     // Render helper: a clearly-labeled, Open-flagged "Assumptions (confirm)" block for
     // the review panels. Returns '' when there are none, so it is safe to always concat.
+    // 31 Oct 2026 (Waqas: a reason read "Every page in state.ftaPages has ..."): the names of the app's own stores
+    // never reach the engineer; the model's words are shown with each one in plain English
+    const _PLAIN_NAMES = { ftaPages: 'the fault trees', acFhaData: 'the aircraft FHA', acFha: 'the aircraft FHA', acFcimData: 'the aircraft FCIM', acFcim: 'the aircraft FCIM',
+        acFunctionsData: 'the aircraft functions', acFunctions: 'the aircraft functions', acReqData: 'the aircraft requirements', acReq: 'the aircraft requirements',
+        systemsData: 'the systems', systems: 'the systems', praData: 'the particular risks', pra: 'the particular risks', zsaData: 'the zonal safety analysis', zsa: 'the zonal safety analysis',
+        cmaData: 'the common mode analysis', cma: 'the common mode analysis', itemsData: 'the items', items: 'the items', fmeaData: 'the FMEA', fmea: 'the FMEA',
+        routingData: 'the routings', routing: 'the routings', resourcesData: 'the resources', resources: 'the resources', reviewCommentsData: 'the review comments', comments: 'the review comments',
+        projectSourceDocs: 'the source documents', markov: 'the Markov models', mac: 'the MAC rules', macModels: 'the MAC rules', interfaces: 'the interfaces', acAssumptions: 'the assumptions' };
+    function _plainWords(t) {
+        return String(t == null ? '' : t)
+            .replace(/\b(?:state|CURRENT PROJECT STATE|projectConfig|snapshot\(\))\.([A-Za-z_]+)(?:\[\])?(?:\.([A-Za-z_]+))?/g, function (m, k) { return _PLAIN_NAMES[k] || 'the project'; })
+            .replace(/\b(ftaPages|acFhaData|acFcimData|acFunctionsData|acReqData|systemsData|praData|zsaData|cmaData|itemsData|fmeaData|routingData|resourcesData|reviewCommentsData|projectSourceDocs|macModels)\b/g, function (m, k) { return _PLAIN_NAMES[k]; });
+    }
     function _assumptionsSectionHtml(assumptions) {
         if (!assumptions || !assumptions.length) return '';
         const rows = assumptions.map(function (a) {
@@ -2773,8 +2851,8 @@
                 '<span class="aifh-sev" style="color:#a16207">OPEN</span> ' +
                 '<span style="font-size:11px;opacity:.7">[' + _esc(a.type || 'other') + ']</span> ' +
                 citChip + ' ' +
-                _esc(a.text) +
-                (a.rationale ? '<div style="font-size:11px;opacity:.65;margin-top:2px;">why: ' + _esc(a.rationale) + '</div>' : '') +
+                _esc(typeof _plainWords === 'function' ? _plainWords(a.text) : a.text) +
+                (a.rationale ? '<div style="font-size:11px;opacity:.65;margin-top:2px;">why: ' + _esc(typeof _plainWords === 'function' ? _plainWords(a.rationale) : a.rationale) + '</div>' : '') +
                 '</div>';
         }).join('');
         return '<div class="aifh-card" style="border-style:dashed">' +
@@ -6430,7 +6508,12 @@
     function _fhaTreeGaps(pages) {
         const s = snapshot();
         const linked = new Set(), linkedS = new Set();
-        (pages || []).forEach(function (p) { if (!p) return; [].concat(p.linkedFhaId ? [p.linkedFhaId] : [], p.linkedFhaIds || []).forEach(function (i) { linked.add(i); linkedS.add(String(i).replace(/^(AC_|SYS_)/, '')); }); });
+        // 30 Oct 2026: the empty tree the app made for a condition (fc_auto_trees.js) is still a gap: ANEM fills it
+        // (_applyTreeSuggestion). A verification tree is not an allocation tree, so it does not close one either.
+        const _FTs = (typeof window !== 'undefined') ? window.SLFcTrees : null;
+        const _emptyAuto = function (p) { try { return !!(p.autoFcTree && _FTs && typeof _FTs.shapeFp === 'function' && _FTs.shapeFp(p.root) === p.autoFcTree.fp); } catch (_) { return false; } };
+        // 31 Oct 2026: a Standalone study never stands in for a condition's tree
+        (pages || []).forEach(function (p) { if (!p || p.verifies || _emptyAuto(p) || p.treeLevel === 'standalone') return; [].concat(p.linkedFhaId ? [p.linkedFhaId] : [], p.linkedFhaIds || []).forEach(function (i) { linked.add(i); linkedS.add(String(i).replace(/^(AC_|SYS_)/, '')); }); });
         const all = _allFhaFCs();
         const FT = (typeof window !== 'undefined') ? window.SLFcTrees : null;
         if (!FT || typeof FT.groupOf !== 'function') return all.filter(function (f) { return !linked.has(f.internalId); });
@@ -6444,7 +6527,12 @@
             try { g = r ? FT.groupOf(r) : null; } catch (_) { g = null; }
             if (!g) { if (!linked.has(f.internalId)) out.push(f); return; }
             if (g.gov !== r) return;
-            if (g.rows.some(function (x) { return x && linkedS.has(String(x.internalId)); })) return;
+            if (g.needsTree === false) return;   // 30 Oct 2026: the 24 Oct rule: below Major, or the 1309 chart needs no tree
+            // 31 Oct 2026: the gap is the condition's OWN tree (fc_auto_trees treeFor): missing, or the empty one the app
+            // made. A hand tree elsewhere, or a Standalone study linked to it, does not stand in for it.
+            let own = null; try { own = (typeof FT.treeFor === 'function') ? FT.treeFor(g) : null; } catch (_) { own = null; }
+            if (own) { if (!_emptyAuto(own)) return; }
+            else if (g.rows.some(function (x) { return x && linkedS.has(String(x.internalId)); })) return;   // a tree from before tree levels
             let note = ''; try { note = FT.copiesNote(r) || ''; } catch (_) {}
             out.push(Object.assign({}, f, { note: note }));
         });
@@ -6854,12 +6942,30 @@
     // what it is handed, chunked to the output budget, with coverage asserted.
     // opts.limit survives only as an explicit programmatic override — never a
     // silent default.
+    // the per-condition lines the tree synthesis is given (30 Oct 2026)
+    function _synthUserMsg(batch) {
+        // 30 Oct 2026 (Waqas: "ANEM when it populates one tree populates every failure condition with the same tree"):
+        // each condition goes with what tells it apart: its FCIM mode (total loss, partial loss, malfunction), its
+        // function, crew awareness, phases, aircraft effect and the other conditions of the same function
+        // (SLFcLink.contextLine). A drafted tree identical to another condition's is refused (_applyTreeSuggestion).
+        const _FLc = (typeof window !== 'undefined') ? window.SLFcLink : null;
+        const _ctxOf = function (f) {
+            try {
+                if (!_FLc || typeof _resolveLinkedFha !== 'function') return '';
+                const row = _resolveLinkedFha((f.systemId ? 'SYS_' : 'AC_') + f.fhaInternalId);
+                const line = row ? _FLc.contextLine(row) : '';
+                return line ? ' | ' + line : '';
+            } catch (_) { return ''; }
+        };
+        return 'Cert basis: ' + _certBasis() + '\nFailure conditions to synthesise (one tree each):\n' +
+            batch.map(function (f) { return '- fcId=' + f.fcId + ' | scope=' + (f.scopeLabel || 'AFHA') + ' | severity=' + (f.severity || '?') + ' | condition=' + f.fcDesc + _ctxOf(f); }).join('\n') +
+            '\nEach tree is drawn for its own condition and FCIM mode, so two conditions of one function never get the same tree: a total loss is the loss of every path that delivers the function; a partial loss is the loss or degradation of one path or one part of the function; a malfunction is a wrong output that is not caught (the fault and the failure to detect it).';
+    }
     async function _runSynth(opts, fcs, input) {
         const batch = (opts && typeof opts.limit === 'number' && opts.limit > 0) ? fcs.slice(0, opts.limit) : fcs.slice();
         const fcIdMap = {}, fcSysMap = {};
         batch.forEach(function (f) { fcIdMap[f.fcId] = f.fhaInternalId; fcSysMap[f.fcId] = f.systemId || ''; });
-        const userMsg = 'Cert basis: ' + _certBasis() + '\nFailure conditions to synthesise (one tree each):\n' +
-            batch.map(function (f) { return '- fcId=' + f.fcId + ' | scope=' + (f.scopeLabel || 'AFHA') + ' | severity=' + (f.severity || '?') + ' | condition=' + f.fcDesc; }).join('\n');
+        const userMsg = _synthUserMsg(batch);
         _toast('Synthesising ' + batch.length + ' fault tree(s)…', 'info');
         if (_useUnifiedFeatures()) {   // #273 — unified engine; carries the synth METHOD + FTA-KB via systemExtra so grounding isn't lost
             const _kind = (opts && opts.kind === 'verification') ? 'verification' : 'allocation';
@@ -6949,7 +7055,7 @@
             doneMsg: 'fault tree(s) created'
         });
     }
-    function _applyTreeSuggestion(t) {
+    function _applyTreeSuggestion(t) { _applyTreeSuggestion._last = null; _applyTreeSuggestion._why = '';
         try {
             if (typeof ftaPages === 'undefined') { _toast('Fault-tree data not loaded in this session.', 'warning'); return false; }
             const root = _buildFtaTree(t.root);
@@ -6986,6 +7092,54 @@
                     if (typeof _fcTopGateDisplayId === 'function') root.displayId = _fcTopGateDisplayId(_linkedRow, root.id);
                 } catch (_) {}
             }
+            // 30 Oct 2026 (fc_link.js; Waqas: "ANEM when it populates one tree populates every failure condition with the
+            // same tree"): one tree per failure condition, drawn for that condition.
+            //   SAME TREE: a drafted tree whose events are exactly another condition's tree at the same level is refused.
+            //   FILL:      the empty tree the app already made for the condition gets the drafted events, rather than a
+            //              second tree beside it.
+            //   LINK:      a new tree links to every row of its condition, governing first (not one row).
+            _applyTreeSuggestion._why = '';
+            const _FL = (typeof window !== 'undefined') ? window.SLFcLink : null;
+            if (_linkedRow && _FL) {
+                // the 24 Oct rule: a condition that takes no tree gets none, from ANEM either
+                let need = null; try { need = (typeof _FL.treeNeed === 'function') ? _FL.treeNeed(_linkedRow) : null; } catch (_) { need = null; }
+                if (need && !need.needs && _isAllocation) {
+                    _applyTreeSuggestion._why = (_linkedRow.fcId || 'this condition') + ' is ' + need.why + ', so no tree is made for it';
+                    _toast('Not added: ' + _applyTreeSuggestion._why + '.', 'warning', 9000);
+                    return false;
+                }
+                let same = null; try { same = _FL.sameAs(root, _linkedRow); } catch (_) { same = null; }
+                if (same) {
+                    _applyTreeSuggestion._why = 'the drafted tree for ' + (_linkedRow.fcId || 'this condition') + ' is the same as the tree for ' + same.fcId + ' ("' + (same.page.name || same.page.id) + '"); each failure condition needs a tree of its own (a total loss, a partial loss and a malfunction fail differently)';
+                    _toast('Not added: ' + _applyTreeSuggestion._why + '.', 'warning', 9000);
+                    return false;
+                }
+                let host = null; try { host = _isAllocation ? _FL.untouchedTree(_linkedRow) : null; } catch (_) { host = null; }
+                if (host && host.root) {
+                    host.root.children = root.children || [];
+                    if (host.root._children) host.root._children = null;
+                    Object.assign(host, { aiGenerated: true, aiFeature: 'fta.synthesize', aiSkill: _skillStampFor('fta.synthesize'), aiAssessment: t._assessment || host.aiAssessment || '', aiModel: t._model || null, aiInputModality: t._modality || '', aiAt: new Date().toISOString() });
+                    try { _FL.linkTo(host, _linkedRow); } catch (_) {}
+                    try { activeFTAPageId = host.id; } catch (_) {}
+                    try { selectedNodeData = null; } catch (_) {}
+                    if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
+                    if (typeof renderFTASidebar === 'function') renderFTASidebar();
+                    if (typeof calculateAllProbabilities === 'function') calculateAllProbabilities();
+                    if (typeof updateD3 === 'function') updateD3();
+                    if (typeof scheduleAutosave === 'function') scheduleAutosave();
+                    try { _aiConsistencyAutoCheck(); } catch (_) {}
+                    _applyTreeSuggestion._last = { action: 'filled', pageId: host.id };
+                    return true;
+                }
+                // 31 Oct 2026 (fc_link.js v2.0): one tree per condition. A condition whose own tree already has work in it
+                // does not get a second allocation tree: the change goes into that tree (node edits), or into Standalone.
+                let own = null; try { own = (_isAllocation && typeof _FL.ownTree === 'function') ? _FL.ownTree(_linkedRow) : null; } catch (_) { own = null; }
+                if (own) {
+                    _applyTreeSuggestion._why = (_linkedRow.fcId || 'this condition') + ' already has its tree ("' + (own.name || own.id) + '") with work in it; change that tree node by node, or build a side study in Standalone, rather than add a second tree';
+                    _toast('Not added: ' + _applyTreeSuggestion._why + '.', 'warning', 9000);
+                    return false;
+                }
+            }
             const page = {
                 id: pageId, name: (_linkedRow && typeof _fcPageName === 'function') ? _fcPageName(_linkedRow) : (t.topEvent || 'Synthesised tree'), root: root,
                 systemId: t._systemId || '',                                  // SFHA-derived trees file under their system
@@ -6994,6 +7148,8 @@
             };
             if (t._fhaInternalId) page.linkedFhaId = t._fhaInternalId;
             ftaPages.push(page);
+            if (_linkedRow && _FL) { try { _FL.linkTo(page, _linkedRow); } catch (_) {} }
+            _applyTreeSuggestion._last = { action: 'added', pageId: page.id };
             try { activeFTAPageId = pageId; } catch (_) {}
             try { selectedNodeData = null; } catch (_) {}
             if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
@@ -7290,6 +7446,12 @@
             case 'zsa':     return (zonesN&&itemsN)?ok:no(zonesN?'equipment installed per zone':'a zonal layout');
             case 'cma':     return treesN?ok:no('fault trees with independence (AND) claims');
             case 'ccf':     return treesN?ok:no('fault trees with basic events');
+            // 30 Oct 2026: combinations need two or more aircraft failure conditions on different functions to combine
+            case 'combos': {
+                let fcN=0, fnN=0;
+                try{ const ids={}, fns={}; (Array.isArray(s.acFhaData)?s.acFhaData:[]).forEach(function(f){ if(f&&f.fcId&&!f.deleted&&!(Array.isArray(f.combinedOf)&&f.combinedOf.length)){ ids[String(f.fcId)]=1; if(f.subId) fns[String(f.subId)]=1; } }); fcN=Object.keys(ids).length; fnN=Object.keys(fns).length; }catch(_){}
+                return (fcN>=2&&fnN>=2)?ok:no('two or more aircraft failure conditions on different functions');
+            }
             case 'req':     return fhaN?ok:no('FHA failure conditions to close');
             case 'archrec': return ((funcsN||sysArr.length)&&fhaN)?ok:no(fhaN?'an architecture with function allocations':'an FHA');
             case 'stpa':    return funcsN?ok:no('functions and a stated mission');
@@ -7554,6 +7716,7 @@
             { group: 'Safety assessment', label: 'Zonal Safety Analysis (ZSA)', needs: { r: 'zsa', std: 'ARP4761A', t: 'The zonal layout (zones & boundaries); equipment installed per zone; routing / installation data; plus installation / independence requirements from PSSA / PRA / CMA.' }, sub: 'Per-zone installation / interference hazards', run: function () { return draftZsa(); } },
             { group: 'Safety assessment', label: 'Common Mode Analysis (CMA)', needs: { r: 'cma', std: 'ARP4761A', t: 'The independence / redundancy claims relied upon (typically the AND-gate independence in the trees / PSSA); plus the architecture, installation, and maintenance descriptions.' }, sub: 'Shared resource / design / environment', run: function () { return draftCma(); } },
             { group: 'Safety assessment', label: 'Draft Resources', needs: { r: 'resources', std: 'ARP4754B \u00a74.3', t: 'The system list (with names) to provide the resources, and the function list that consumes them. A resource with no provider in that system list does not exist for this aircraft.' }, sub: 'Electrical / hydraulic / pneumatic / fuel — provider → consumer', run: function () { return draftResources(); } },
+            { group: 'Safety assessment', label: 'Propose combined failure conditions', needs: { r: 'combos', std: 'ARP4761A §A.8.3', t: 'Two or more classified failure conditions on different functions, plus what can couple them: the systems implementing each function, the resources they depend on, the items that realize them, or your source documents. A combination with no basis in those is not proposed.' }, sub: 'Combinations worse than their parts → review & accept (only when you ask)', run: function (o) { return proposeCombinedFcs(o); } },
             { group: 'Safety assessment', label: 'Propose CCF groups', needs: { r: 'ccf', std: 'ARP4761A App M', t: 'Fault-tree basic events with the items they realize, plus the co-location (zones) and shared-routing model that could couple them. A coupling with no grounding in that model is not proposed.' }, sub: 'Advisory β-model couplings → review & approve', run: function () { return proposeCcfGroups(); } },
             { group: 'Safety assessment', label: 'FMEA — by system', needs: { r: 'fmeaI', std: 'ARP4761A App. J', t: 'A component / part list (with part types) for the system, ideally with failure rates (\u03bb) and per-mode distribution; the next-higher-assembly effects.' }, sub: 'Item-level failure modes from a system\'s fault trees', run: function () { return draftFmea(); } },
             { group: 'Safety assessment', label: 'Recommend architecture', needs: { r: 'archrec', std: 'ARP4754B', t: 'The proposed architecture with function allocations, and the safety analysis so far (FHA, FTA-derived functional failure sets).' }, sub: 'Advisory design improvements', run: function () { return recommendArchitecture(); } },
@@ -8799,6 +8962,8 @@
                 linkedGateIds: Array.isArray(x._linkedGateIds) ? x._linkedGateIds : [],
                 aiGenerated: true, aiFeature: 'cma.draft', aiSkill: _skillStampFor('cma.draft'), aiModel: x._model || null, aiAt: new Date().toISOString()
             };
+            // 31 Oct 2026: a row drafted before the trees have AND gates says so, in its findings, until it is tied to one
+            if (!row.linkedGateIds.length) { row.aiGateNote = 'Not tied to a fault-tree gate yet: drafted from the source documents; tie it to its AND gate once the trees are developed.'; row.findings = row.aiGateNote + (row.findings ? '\n' + row.findings : ''); }
             // Additive-only structured extras (do not feed the engine; harmless if the table ignores them).
             if (principle) row.aiPrinciple = principle;
             if (m2.length) row.aiM2Rows = m2;
@@ -8811,6 +8976,7 @@
             return true;
         } catch (e) { _toast('Could not add CMA: ' + ((e && e.message) || e), 'warning'); return false; }
     }
+    const _CMA_NO_GATES_STEER = ' NO AND GATE EXISTS in any fault tree yet (the trees are still undeveloped), so there is no gate to link. Do not stop and do not ask to start another draft: take the independence claims the SOURCE DOCUMENTS make (redundancy, segregation, separation, shared routing or zones, shared resources, common equipment) and emit one add_cma row per claim, quoting the document in source.quote. Leave the gate link out; each row is tied to its gate later, when the trees have AND gates. If the documents make no independence claim, return no rows and say so in the reply.';
     function draftCma() {
         if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
         if (_useUnifiedFeatures()) {
@@ -8832,7 +8998,10 @@
                     })(pg.root);
                 });
             } catch (_) {}
-            if (!_gates.length) return _anemBatch(_FEATURE_DIRECTIVE.cma, { title: '✨ Common Mode Analysis · review', analysis: 'cma.draft', verifyKind: 'cma' });
+            // 31 Oct 2026 (Waqas, live Aeolus: every tree still the empty one the app made, so ANEM stopped and asked to
+            // start another draft instead). With no AND gate anywhere, the independence claims are the ones the source
+            // documents make; the CMA works from those, cites them, and says each row is not tied to a gate yet.
+            if (!_gates.length) return _anemBatch(_FEATURE_DIRECTIVE.cma + _CMA_NO_GATES_STEER, { title: '✨ Common Mode Analysis · review', analysis: 'cma.draft', verifyKind: 'cma' });
             _openScopePicker(_gates, {
                 title: '✨ Common Mode Analysis · which independence claims?',
                 disclaimer: _gates.length + ' AND gate(s) across the fault trees — each is a claim that its inputs fail independently, and each is a CMA candidate. All are selected — narrow the scope to challenge fewer.',
@@ -9318,6 +9487,407 @@
     let _ccfEventIndex = null;        // ref/logical/node lookup for the current proposal batch
     let _ccfAnchorMap = {};           // anchor ref -> gateKeys (for the impact note)
     let _ccfAssumptions = [];         // F6 — model-declared assumptions for the current batch
+
+    // =========================================================================
+    // 30 Oct 2026 — COMBINED FAILURE CONDITIONS (ARP4761A §A.8.3), proposed only when the user asks.
+    // Waqas: "There shouldn't be combo failures proposed initially till the user prompts"; "We do not guess";
+    // "do it the same way we have for all other analyses". The button sits in the combined panel under the aircraft
+    // FHA and each system's FHA (lane_ai_bar.js mountSection); this action is also on the AI Assistant page, where
+    // it asks for the scope. The model proposes from the facts gathered here; _combineVerify then checks every
+    // proposal against the project, by code: the conditions exist at that level, are on different functions, are not
+    // already combined, the severity is not milder than the worst part, and each cited basis is real (the system
+    // implements all of them, the resource is consumed for all of them, the item realizes all of them, the document
+    // sentence is in the source documents verbatim). An unverified basis is dropped; a proposal with none is withheld
+    // and counted. Accept goes through the one writer, SLFcVariants.createCombined.
+    // =========================================================================
+    function _combineGlobals(name) { try { if (name === 'resourcesData') return (typeof resourcesData !== 'undefined' ? resourcesData : []) || []; } catch (_) {} return []; }
+    function _combineNorm(t) { return String(t == null ? '' : t).toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim(); }
+    function _combineScopeObj(sc) { if (!sc || !sc.systemId) return 'ac'; const sy = _sysFor(sc); return sy || null; }
+    // a condition's aircraft sub-functions: its own (aircraft), or its system function's traces (system)
+    function _combineSubs(row, scope) {
+        const V = window.SLFcVariants;
+        const own = V ? V.subsOf(row) : [row.subId].filter(Boolean);
+        if (scope === 'ac') return own;
+        const out = [];
+        own.forEach(function (su) { (V ? V.sysFuncTraces(scope, su) : [su]).forEach(function (x) { if (out.indexOf(x) < 0) out.push(x); }); });
+        return out;
+    }
+    function _combineFacts(scope) {
+        const s = snapshot(), V = window.SLFcVariants, FL = window.SLFcLink;
+        const rows = scope === 'ac' ? (s.acFhaData || []) : (scope.fha || []);
+        const gov = {}, order = [];
+        rows.forEach(function (r) {
+            if (!r || r.deleted || !r.fcId || (Array.isArray(r.combinedOf) && r.combinedOf.length)) return;
+            const k = String(r.fcId).trim();
+            if (!gov[k]) { gov[k] = r; order.push(k); }
+            else if (((typeof SEVERITY_RANK !== 'undefined' ? SEVERITY_RANK[r.severity] : 0) || 0) > ((typeof SEVERITY_RANK !== 'undefined' ? SEVERITY_RANK[gov[k].severity] : 0) || 0)) gov[k] = r;
+        });
+        const resources = _combineGlobals('resourcesData'), items = s.itemsData || [], systems = s.systemsData || [];
+        const sysName = function (id) { const x = systems.find(function (y) { return y && String(y.id) === String(id); }); return x ? (x.name || x.id) : String(id); };
+        const conds = order.slice(0, 150).map(function (k) {
+            const r = gov[k], subs = _combineSubs(r, scope);
+            const o = { fcId: k, fcDesc: r.fcDesc || '', severity: r.severity || '', function: r.subId || '', effAc: String(r.effAc || '').slice(0, 220) };
+            try { const c = FL && FL.fcContext ? FL.fcContext(r) : null; if (c && c.mode) o.fcimMode = c.mode; if (c && c.functionName) o.functionName = c.functionName; } catch (_) {}
+            if (scope === 'ac' && V) { try { o.implementedBy = V.implementingSystems(r).map(function (id) { return { id: String(id), name: sysName(id) }; }); } catch (_) {} }
+            o.resources = resources.filter(function (res) { return res && _combineResFor(res, r, scope); }).map(function (res) { return { id: String(res.resId || res.internalId), name: res.name || '' }; });
+            o.items = items.filter(function (it) { return it && _combineItemFor(it, r, scope, subs); }).slice(0, 12).map(function (it) { return { id: String(it.itemId || it.internalId), name: it.name || '' }; });
+            return o;
+        });
+        const existing = (V ? V.combinedRows(scope) : []).map(function (f) { return { fcId: f.fcId, parents: (f.combinedOf || []).slice() }; });
+        return { level: scope === 'ac' ? 'aircraft' : ('system ' + (scope.name || scope.id)), certBasis: _certBasis(), conditions: conds, existingCombinations: existing, truncated: order.length > 150 ? order.length - 150 : 0 };
+    }
+    function _combineResFor(res, row, scope) {
+        if (scope === 'ac') { try { if (typeof _idpResConsumedFor === 'function') return !!_idpResConsumedFor(res, row); } catch (_) {} return (res.consumedBy || []).indexOf(row.subId) !== -1; }
+        const traces = _combineSubs(row, scope);
+        return (res.consumedBySystems || []).map(String).indexOf(String(scope.id)) !== -1 || (res.consumedBy || []).some(function (x) { return traces.indexOf(x) !== -1; });
+    }
+    function _combineItemFor(it, row, scope, subs) {
+        subs = subs || _combineSubs(row, scope);
+        const tr = Array.isArray(it.traceIds) ? it.traceIds : (it.traceId ? [it.traceId] : []);
+        if (scope !== 'ac' && String(it.owningSystemId || '') !== String(scope.id)) return false;
+        return tr.some(function (x) { return subs.indexOf(x) !== -1; });
+    }
+    const _COMBINE_SEVS = ['No Safety Effect', 'Minor', 'Major', 'Hazardous', 'Catastrophic'];
+    function _combineSev(v) {
+        const t = String(v || '').trim().toLowerCase();
+        if (!t) return '';
+        if (t === 'negligible' || t === 'nse' || t === 'no safety effect') return 'No Safety Effect';
+        return _COMBINE_SEVS.find(function (x) { return x.toLowerCase() === t; }) || '';
+    }
+    function _combineRank(sv) { return ((typeof SEVERITY_RANK !== 'undefined' ? SEVERITY_RANK[sv] : 0) || 0); }
+    // check one proposal against the project. Returns { ok, item } or { ok:false, why }.
+    function _combineVerify(raw, scope, ctx) {
+        const V = window.SLFcVariants;
+        if (!V || !raw) return { ok: false, why: 'no proposal' };
+        const ids = [];
+        (Array.isArray(raw.parents) ? raw.parents : []).forEach(function (x) { const k = String(x == null ? '' : x).trim(); if (k && ids.indexOf(k) < 0) ids.push(k); });
+        if (ids.length < 2) return { ok: false, why: 'fewer than two conditions' };
+        const parents = ids.map(function (id) { return V.parentOf(id, scope); });
+        if (parents.some(function (p) { return !p; })) return { ok: false, why: 'names a condition not in this FHA (' + ids.filter(function (id, i) { return !parents[i]; }).join(', ') + ')' };
+        if (parents.some(function (p) { return Array.isArray(p.combinedOf) && p.combinedOf.length; })) return { ok: false, why: 'combines a combination' };
+        const subsets = parents.map(function (p) { return V.subsOf(p).map(String).sort().join('|'); });
+        if (subsets.every(function (x) { return x && x === subsets[0]; })) return { ok: false, why: 'all on one function' };
+        if (V.findCombined(scope, ids)) return { ok: false, why: 'already recorded' };
+        const setKey = ids.slice().sort().join('|');
+        if (ctx.seen[setKey]) return { ok: false, why: 'proposed twice' };
+        // the basis, checked
+        const resources = _combineGlobals('resourcesData'), items = (snapshot().itemsData || []), systems = (snapshot().systemsData || []);
+        const docs = ctx.docNorm;
+        const kept = [], dropped = [];
+        (Array.isArray(raw.basis) ? raw.basis : []).forEach(function (b) {
+            if (!b) return;
+            const kind = String(b.kind || '').toLowerCase().trim(), ref = String(b.ref == null ? '' : b.ref).trim();
+            if (kind === 'system' && scope === 'ac') {
+                const sy = systems.find(function (x) { return x && (String(x.id) === ref || _combineNorm(x.name) === _combineNorm(ref)); });
+                if (sy && parents.every(function (p) { return V.implementingSystems(p).map(String).indexOf(String(sy.id)) !== -1; })) { kept.push({ kind: 'system', ref: String(sy.id), text: 'all implemented by ' + (sy.name || sy.id) }); return; }
+            } else if (kind === 'resource') {
+                const res = resources.find(function (x) { return x && (String(x.resId || '') === ref || String(x.internalId) === ref || _combineNorm(x.name) === _combineNorm(ref)); });
+                if (res && parents.every(function (p) { return _combineResFor(res, p, scope); })) { kept.push({ kind: 'resource', ref: String(res.resId || res.internalId), text: 'all depend on ' + (res.name || res.resId) }); return; }
+            } else if (kind === 'item') {
+                const it = items.find(function (x) { return x && (String(x.itemId || '') === ref || String(x.internalId) === ref); });
+                if (it && parents.every(function (p) { return _combineItemFor(it, p, scope); })) { kept.push({ kind: 'item', ref: String(it.itemId || it.internalId), text: 'all realized by ' + (it.name || it.itemId) }); return; }
+            } else if (kind === 'document') {
+                const q = _combineNorm(ref);
+                if (q.length >= 20 && docs && docs.indexOf(q) !== -1) { kept.push({ kind: 'document', ref: ref, text: 'source document: "' + ref.slice(0, 160) + (ref.length > 160 ? '…' : '') + '"' }); return; }
+            }
+            dropped.push(kind + ' ' + ref.slice(0, 40));
+        });
+        // 31 Oct 2026: no reasoning, no proposal ("rationale and reasoning needs to be there")
+        if (!kept.length) return { ok: false, why: 'no basis in the project' + (dropped.length ? ' (unconfirmed: ' + dropped.join('; ') + ')' : '') };
+        if (!String(raw.rationale || '').trim()) return { ok: false, why: 'no reasoning given for its severity' };
+        ctx.seen[setKey] = 1;
+        let worst = parents[0];
+        parents.forEach(function (p) { if (_combineRank(p.severity) > _combineRank(worst.severity)) worst = p; });
+        let sev = _combineSev(raw.severity), sevNote = '';
+        if (!sev) { sev = worst.severity; sevNote = 'No valid severity proposed: set to its worst part, ' + worst.severity + '.'; }
+        else if (_combineRank(sev) < _combineRank(worst.severity)) { sevNote = 'Proposed ' + sev + ', milder than ' + worst.fcId + ' (' + worst.severity + '): raised to ' + worst.severity + '.'; sev = worst.severity; }
+        return { ok: true, item: {
+            parents: parents.map(function (p) { return p.fcId; }), parentRows: parents,
+            fcDesc: String(raw.fcDesc || '').trim(), severity: sev, effAc: String(raw.effAc || '').trim(), rationale: String(raw.rationale || '').trim(),
+            basis: kept, droppedBasis: dropped, sevNote: sevNote
+        } };
+    }
+    // ---- 31 Oct 2026 (customer checklist item 16): ANEM finds the library entry that matches a basic event ---------------
+    async function rateMatch(nodeIds) {
+        const R = window.SLRateSources;
+        if (!R) return { ok: false, why: 'The failure rate sources module is not loaded yet.' };
+        if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
+        const ids = (nodeIds || []).map(String);
+        if (!ids.length) return { ok: false, why: 'Every failure rate already has a source.' };
+        let lib = {}; try { lib = (typeof COMPONENT_LIBRARY !== 'undefined') ? COMPONENT_LIBRARY : {}; } catch (_) {}
+        const catalogue = Object.keys(lib).map(function (k) { return k + ' | ' + (lib[k].name || '') + ' | ' + (lib[k].category || ''); });
+        const s = snapshot();
+        const itemName = function (n) { try { const l = (n.modelLinks || {}).item || n.itemRef || n.item; const it = (s.itemsData || []).find(function (x) { return x && (String(x.itemId) === String(l) || String(x.internalId) === String(l)); }); return it ? it.name : ''; } catch (_) { return ''; } };
+        const evs = ids.map(function (id) { const n = R.findNode(id); return n ? { nodeId: String(n.id), event: n.name || '', id: n.displayId || '', item: itemName(n) || undefined } : null; }).filter(Boolean);
+        const out = []; let stopped = false;
+        for (let i = 0; i < evs.length && !stopped; i += 40) {
+            const part = evs.slice(i, i + 40);
+            let r;
+            try {
+                r = await Provider.complete({ feature: 'rate.match', model: MODELS.reason, system: _standardsPreamble(),
+                    messages: [{ role: 'user', content: 'Match each basic event to a library entry, or none.\n\nEVENTS:\n' + JSON.stringify(part) + '\n\nLIBRARY (key | name | category):\n' + catalogue.join('\n') }], maxTokens: 4000 });
+            } catch (e) { if (e && e.stoppedByUser) { stopped = true; break; } if (e && e.isInsufficient) continue; return { ok: false, why: 'ANEM could not match: ' + ((e && e.message) || e) }; }
+            const res = _safeParseJson(String((r && r.text) || '')) || {};
+            const want = {}; part.forEach(function (e) { want[e.nodeId] = 1; });
+            (Array.isArray(res.matches) ? res.matches : []).forEach(function (m) {
+                const nid = String((m && m.nodeId) || ''), key = String((m && m.libraryKey) || '');
+                if (!want[nid] || !lib[key]) return;   // only events asked about, only entries in the library
+                out.push({ nodeId: nid, libraryKey: key, why: String(m.why || '').slice(0, 200) });
+            });
+        }
+        if (!out.length) return { ok: false, why: stopped ? 'Stopped by you. Nothing was matched.' : 'ANEM found no library entry that clearly matches these events.' };
+        return { ok: true, matches: out, summary: 'ANEM matched ' + out.length + ' event' + (out.length === 1 ? '' : 's') + ' to library entries: cite each one, use its rate, or discard it.' };
+    }
+    // ---- 31 Oct 2026 (customer checklist item 10): ANEM words the requirements on interfacing systems --------------------
+    // The need and its budget come from the trees (iface_reqs.js). ANEM writes the sentence only; SLIfaceReqs.offerDraft
+    // keeps a wording only if it says "shall", carries the budget exactly and no other number.
+    async function ifaceWording(keys) {
+        const I = window.SLIfaceReqs;
+        if (!I) return { ok: false, why: 'The interface requirements module is not loaded yet.' };
+        keys = (Array.isArray(keys) ? keys : [keys]).filter(Boolean).map(String);
+        if (!keys.length) return { ok: false, why: 'Every requirement on an interfacing system already has its wording.' };
+        if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
+        const sysName = function (id) { try { const sy = (snapshot().systemsData || []).find(function (x) { return x && String(x.id) === String(id); }); return sy ? (sy.name || sy.id) : id; } catch (_) { return id; } };
+        const facts = keys.map(function (k) { const h = I.find(k); if (!h) return null; const nd = h.need, ifc = nd.iface || {};
+            return { key: k, consumer: sysName(nd.consumer), provider: sysName(nd.provider), event: nd.node.name || '', eventId: nd.node.displayId || '', tree: nd.page.name || '', via: nd.via,
+                     interface: nd.iface ? { id: I.ifaceLabel(ifc), kind: ifc.kind || undefined, medium: ifc.medium || undefined, direction: ifc.direction || undefined } : null, budget: I.fmtRate(nd.budget) }; }).filter(Boolean);
+        if (!facts.length) return { ok: false, why: 'Those needs are no longer in the trees.' };
+        let n = 0, stopped = false; const dropped = [];
+        for (let i = 0; i < facts.length && !stopped; i += 30) {
+            const part = facts.slice(i, i + 30);
+            let r;
+            try {
+                r = await Provider.complete({ feature: 'iface.word', model: MODELS.reason, system: _standardsPreamble(),
+                    messages: [{ role: 'user', content: 'Word one requirement on the providing system for each need.\n\nNEEDS:\n' + JSON.stringify(part) }], maxTokens: 4000 });
+            } catch (e) { if (e && e.stoppedByUser) { stopped = true; break; } if (e && e.isInsufficient) continue; return { ok: false, why: 'ANEM could not word them: ' + ((e && e.message) || e) }; }
+            const res = _safeParseJson(String((r && r.text) || '')) || {};
+            const want = {}; part.forEach(function (f) { want[f.key] = 1; });
+            (Array.isArray(res.wordings) ? res.wordings : []).forEach(function (w) {
+                const k = String((w && w.key) || ''); if (!want[k]) return;
+                delete want[k];
+                const got = I.offerDraft(k, String((w && w.text) || '').slice(0, 600));
+                if (got && got.ok) n++; else dropped.push(got && got.why);
+            });
+        }
+        if (!n) return { ok: false, why: stopped ? 'Stopped by you. Nothing was worded.' : (dropped.length ? 'ANEM\'s wording was not kept: ' + dropped[0] + '.' : 'ANEM did not word any of them.') };
+        return { ok: true, count: n, summary: 'ANEM worded ' + n + ' requirement' + (n === 1 ? '' : 's') + ': accept, edit or discard each one.' + (dropped.length ? ' ' + dropped.length + ' wording' + (dropped.length === 1 ? ' was' : 's were') + ' not kept (' + dropped[0] + ').' : '') };
+    }
+    // ---- 31 Oct 2026 (customer checklist item 5): the reason for each FHA row's class -----------------------------------
+    // keys are 'ac:<internalId>' or 'sys:<systemId>:<internalId>' (helpers_modules _fhaReasonKey). ANEM writes a reason
+    // per row; it never changes a class. A row whose effects read as another class gets no reason, only the note.
+    const _SEV_WORDS = ['Catastrophic', 'Hazardous', 'Major', 'Minor', 'No Safety Effect'];
+    function _fhaReasonFacts(keys) {
+        const s = snapshot(), out = [];
+        keys.forEach(function (k) {
+            const m = /^(?:ac:(.+)|sys:([^:]+):(.+))$/.exec(String(k || '')); if (!m) return;
+            let row = null, sys = null;
+            if (m[1] != null) row = (s.acFhaData || []).find(function (r) { return r && String(r.internalId) === m[1]; });
+            else { sys = (s.systemsData || []).find(function (x) { return x && String(x.id) === m[2]; }); row = sys ? (sys.fha || []).find(function (r) { return r && String(r.internalId) === m[3]; }) : null; }
+            if (!row || !String(row.severity || '').trim()) return;
+            out.push({ key: k, level: sys ? ('system ' + (sys.name || sys.id)) : 'aircraft', fcId: row.fcId || '', condition: row.fcDesc || '', function: row.subId || '', phases: Array.isArray(row.phases) ? row.phases.join(', ') : (row.phases || ''),
+                       effectAircraft: row.effAc || '', effectCrew: row.effCrew || '', effectOccupants: row.effPax || '', levels: [row.effAcLevel, row.effCrewLevel, row.effPaxLevel].filter(Boolean).join(' / ') || undefined, class: row.severity, row: row });
+        });
+        return out;
+    }
+    async function fhaReasonDraft(keys) {
+        keys = (Array.isArray(keys) ? keys : [keys]).filter(Boolean);
+        if (!keys.length) return { ok: false, why: 'Every classified row already has its reason.' };
+        if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
+        const facts = _fhaReasonFacts(keys);
+        if (!facts.length) return { ok: false, why: 'Those rows are not classified yet: classify them first.' };
+        const drafts = (window.SLFhaReasonDrafts = window.SLFhaReasonDrafts || {});
+        let n = 0, notes = 0, stopped = false; const left = [];
+        for (let i = 0; i < facts.length && !stopped; i += 25) {
+            const part = facts.slice(i, i + 25);
+            let r;
+            try {
+                r = await Provider.complete({ feature: 'fha.reason', model: MODELS.reason, system: _standardsPreamble(),
+                    messages: [{ role: 'user', content: 'Write the reason for the class of each of these failure conditions.\n\nFACTS:\n' + JSON.stringify(part.map(function (f) { const o = Object.assign({}, f); delete o.row; return o; })) }], maxTokens: 6000 });
+            } catch (e) {
+                if (e && e.stoppedByUser) { stopped = true; break; }
+                if (e && e.isInsufficient) { left.push('the definitions or effects were not enough: ' + ((e.insufficient && e.insufficient.reason) || '')); continue; }
+                return { ok: false, why: 'ANEM could not draft the reasons: ' + ((e && e.message) || e) };
+            }
+            const out = _safeParseJson(String((r && r.text) || '')) || {};
+            const byKey = {}; part.forEach(function (f) { byKey[f.key] = f; });
+            (Array.isArray(out.reasons) ? out.reasons : []).forEach(function (x) {
+                const f = x && byKey[String(x.key)]; if (!f) { left.push('a reason for ' + (x && x.key) + ' (not a row asked for)'); return; }
+                if (String(f.row.severityRationale || '').trim()) return;
+                const reason = String(x.reason || '').trim(), dis = String(x.disagree || '').trim();
+                // a reason that names another class than the row's is not a reason for this class: it goes to the note
+                const other = _SEV_WORDS.filter(function (w) { return w !== f.class && new RegExp('\\b' + w + '\\b', 'i').test(reason) && !new RegExp('\\bnot\\s+(?:a\\s+|an\\s+)?' + w, 'i').test(reason) && !new RegExp('rather than\\s+' + w + '|than\\s+' + w, 'i').test(reason); });
+                if (dis || (reason && other.length && !new RegExp('\\b' + f.class + '\\b', 'i').test(reason))) {
+                    drafts[f.key] = { text: reason || ('(no reason drafted: the effects as written read as another class)'), note: 'ANEM: ' + (dis || ('the effects read as ' + other.join(' or '))) + '. Check the class; ANEM did not change it.', model: (r && r.model) || null, at: Date.now() }; notes++; n++;
+                    return;
+                }
+                if (!reason) return;
+                drafts[f.key] = { text: reason, model: (r && r.model) || null, at: Date.now() }; n++;
+            });
+        }
+        if (stopped && !n) return { ok: false, why: 'Stopped by you. Nothing was drafted.' };
+        if (!n) return { ok: false, why: 'ANEM drafted no reason it could ground' + (left.length ? ' (' + left.slice(0, 2).join('; ') + ')' : '') + '.' };
+        return { ok: true, count: n, summary: 'ANEM drafted ' + n + ' reason' + (n === 1 ? '' : 's') + (notes ? ', ' + notes + ' with a note to check the class' : '') + (stopped ? ' before you stopped it' : '') + ': review each on its row.' };
+    }
+    // ---- 31 Oct 2026 (customer checklist item 1): ANEM in the four-step CMA (cma_flow.js) -----------------------------
+    // One call per press: suggested gates, the claim, the open answers, mitigations for open concerns, or the summary.
+    // What comes back is checked by code (only gate keys, category ids and concern ids from the facts; no numbers) and
+    // kept on the CMA as drafts, which the page shows with Accept beside each. Nothing is written until the engineer accepts.
+    const _CMA_NUM_RE = /\bbeta\b|β|\b\d+(?:\.\d+)?\s*[eE]\s*-?\d+\b|\b\d+(?:\.\d+)?\s*(?:\/\s*(?:fh|h|hr|flight))\b|\bDAL\s*[A-E]\b/i;
+    function _cmaFlowFacts(row) {
+        const F = window.SLCmaFlow, f = row.flow;
+        const gate = function (k) { return { key: k, gate: F.gateLabel(k), inputs: F.gateMembers(k) }; };
+        const others = F.allGates().filter(function (g) { return f.gates.indexOf(g.key) < 0; }).map(function (g) { const o = gate(g.key); if (g.critical) o.critical = true; const c = F.cmaForGate(g.key); if (c) o.inCma = c.cmaId; return o; });
+        const cats = []; F.categories().forEach(function (g) { (g.items || []).forEach(function (it) { const a = f.answers[it[0]] || {}; cats.push({ id: it[0], group: g.g, category: it[1], answer: a.a || null, why: a.why || undefined }); }); });
+        return { cma: row.cmaId, subject: row.subject, claim: f.claim || null, gates: f.gates.map(gate), otherAndGates: others, categories: cats,
+                 concerns: (f.concerns || []).map(function (c) { return { id: c.id, concern: c.text, effect: c.effect || undefined, mitigation: c.mitigation || undefined, status: c.status }; }) };
+    }
+    async function cmaFlowDraft(kind, rowId) {
+        const F = window.SLCmaFlow;
+        if (!F) return { ok: false, why: 'The CMA module is not loaded yet.' };
+        if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
+        const row = (typeof cmaData !== 'undefined' ? cmaData : []).find(function (c) { return c && String(c.internalId) === String(rowId); });
+        if (!row || !row.flow) return { ok: false, why: 'That CMA is no longer in the project.' };
+        const f = row.flow; f.drafts = f.drafts || {};
+        const facts = _cmaFlowFacts(row);
+        const asks = {
+            gates: 'TASK gates. Suggest gates for ' + row.cmaId + '.',
+            claim: 'TASK claim. Write the independence claim for ' + row.cmaId + '.',
+            answers: 'TASK answers. Answer every category that has no answer yet.',
+            mitigations: 'TASK mitigations. Propose a mitigation for every open concern.',
+            summary: 'TASK summary. Write the summary of ' + row.cmaId + '.'
+        };
+        if (!asks[kind]) return { ok: false, why: 'unknown task ' + kind };
+        if ((kind === 'claim' || kind === 'answers' || kind === 'summary' || kind === 'mitigations') && !f.gates.length) return { ok: false, why: 'Pick the gates first (step 1): everything else is about them.' };
+        if (kind === 'answers' && !facts.categories.some(function (c) { return !c.answer; })) return { ok: false, why: 'Every category already has an answer.' };
+        if (kind === 'mitigations' && !(f.concerns || []).some(function (c) { return c.status === 'Open'; })) return { ok: false, why: 'There is no open concern to mitigate.' };
+        if (kind === 'gates' && !facts.otherAndGates.some(function (g) { return !g.inCma; })) return { ok: false, why: 'There is no other AND gate free to add.' };
+        let r;
+        try {
+            r = await Provider.complete({ feature: 'cma.flow', model: MODELS.reason, system: _standardsPreamble(),
+                messages: [{ role: 'user', content: asks[kind] + '\n\nFACTS:\n' + JSON.stringify(facts) }], maxTokens: kind === 'answers' ? 8000 : 3000 });
+        } catch (e) {
+            if (e && e.stoppedByUser) return { ok: false, why: 'Stopped by you.' };
+            if (e && e.isInsufficient) return { ok: false, why: 'ANEM found nothing grounded to draft: ' + ((e.insufficient && e.insufficient.reason) || 'the project does not support it.') };
+            return { ok: false, why: 'ANEM could not draft it: ' + ((e && e.message) || e) };
+        }
+        const out = _safeParseJson(String((r && r.text) || '')) || {};
+        const dropped = [];
+        const clean = function (t, what) { t = String(t == null ? '' : t).trim(); if (!t) return ''; if (_CMA_NUM_RE.test(t)) { dropped.push(what + ' (it set a number)'); return ''; } return t; };
+        let n = 0;
+        if (kind === 'gates') {
+            const free = {}; facts.otherAndGates.forEach(function (g) { if (!g.inCma) free[g.key] = 1; });
+            f.drafts.gates = (Array.isArray(out.gates) ? out.gates : []).filter(function (x) { if (!x || !free[String(x.key)]) { dropped.push('gate ' + (x && x.key) + ' (not a free AND gate in the trees)'); return false; } return true; })
+                .map(function (x) { return { key: String(x.key), why: clean(x.why, 'reason for ' + x.key) || 'suggested' }; });
+            n = f.drafts.gates.length;
+        } else if (kind === 'claim') {
+            const t = clean(out.claim, 'the claim');
+            if (t) { f.drafts.claim = { text: t, from: clean(out.from, 'the source') }; n = 1; }
+        } else if (kind === 'answers') {
+            const open = {}; facts.categories.forEach(function (c) { if (!c.answer) open[c.id] = 1; });
+            f.drafts.answers = f.drafts.answers || {};
+            (Array.isArray(out.answers) ? out.answers : []).forEach(function (x) {
+                const id = String((x && x.cat) || ''), a = String((x && x.answer) || '').toLowerCase().replace('n/a', 'na');
+                if (!open[id]) { dropped.push('category ' + id + ' (not an open category)'); return; }
+                if (['no', 'concern', 'na'].indexOf(a) < 0) { dropped.push('category ' + id + ' (answer "' + a + '")'); return; }
+                const why = clean(x.why, 'the answer for ' + id); if (!why) { dropped.push('category ' + id + ' (no reason)'); return; }
+                f.drafts.answers[id] = { a: a, why: why }; n++;
+            });
+        } else if (kind === 'mitigations') {
+            const openC = {}; (f.concerns || []).forEach(function (c) { if (c.status === 'Open') openC[c.id] = 1; });
+            f.drafts.mitigations = f.drafts.mitigations || {};
+            (Array.isArray(out.mitigations) ? out.mitigations : []).forEach(function (x) {
+                const id = String((x && x.concern) || '');
+                if (!openC[id]) { dropped.push('concern ' + id + ' (not an open concern)'); return; }
+                const m = clean(x.mitigation, 'the mitigation for ' + id); if (!m) return;
+                f.drafts.mitigations[id] = { mitigation: m, effect: clean(x.effect, 'the effect for ' + id) || undefined }; n++;
+            });
+        } else if (kind === 'summary') {
+            const t = clean(out.summary, 'the summary'); if (t) { f.drafts.summary = { text: t }; n = 1; }
+        }
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        if (!n) return { ok: false, why: 'ANEM drafted nothing it could ground' + (dropped.length ? ' (left out: ' + dropped.slice(0, 4).join('; ') + ')' : '') + '.' };
+        return { ok: true, count: n, summary: 'ANEM drafted ' + n + ' ' + ({ gates: 'gate suggestion', claim: 'claim', answers: 'answer', mitigations: 'mitigation', summary: 'summary' }[kind]) + (n === 1 ? '' : 's') + ': review and accept below.' + (dropped.length ? ' Left out: ' + dropped.slice(0, 3).join('; ') + '.' : '') };
+    }
+    function proposeCombinedFcs(opts) {
+        if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
+        const sc = _laneScope(opts);
+        if (sc.askScope) {
+            const s = snapshot();
+            const sysOk = (s.systemsData || []).filter(function (sy) { const ids = {}; (sy && sy.fha || []).forEach(function (r) { if (r && r.fcId && !(Array.isArray(r.combinedOf) && r.combinedOf.length)) ids[String(r.fcId)] = 1; }); return Object.keys(ids).length >= 2; });
+            _openFhaScopePicker(sysOk, function (pick) { _runCombine(pick.systemId ? { systemId: pick.systemId, systemName: pick.systemName } : { lane: 'aircraft' }); }, {
+                title: '✨ Propose combined failure conditions · pick the level',
+                disclaimer: 'Combinations of failure conditions at one level: the aircraft FHA, or one system\'s FHA. Nothing is written until you accept a proposal.',
+                acTitle: 'Aircraft FHA', acMeta: ((s.acFhaData || []).length) + ' row(s)',
+                sysPrefix: 'System FHA · ', sysMetaSuffix: ' condition(s)',
+                countFn: function (sy) { return (sy.fha || []).filter(function (r) { return r && r.fcId; }); }
+            });
+            return;
+        }
+        return _runCombine(sc.systemId ? { systemId: sc.systemId, systemName: sc.systemName } : { lane: 'aircraft' });
+    }
+    async function _runCombine(sc) {
+        const scope = _combineScopeObj(sc);
+        if (!scope) { _toast('That system is no longer in the project.', 'warning'); return; }
+        if (!window.SLFcVariants) { _toast('The combined failure conditions module is not loaded yet. Try again in a moment.', 'warning'); return; }
+        const facts = _combineFacts(scope);
+        if (facts.conditions.length < 2) { _toast('There are fewer than two failure conditions to combine at this level.', 'info'); return; }
+        const label = scope === 'ac' ? 'aircraft FHA' : ((scope.name || scope.id) + ' FHA');
+        _toast('Proposing combined failure conditions for the ' + label + ' (advisory, nothing is written)…', 'info');
+        let r;
+        try {
+            r = await Provider.complete({
+                feature: 'fha.combine', model: MODELS.reason, system: _standardsPreamble(),
+                messages: [{ role: 'user', content: 'Propose combined failure conditions at the ' + facts.level + ' level from these project facts. Return STRICT JSON only: { "combinations": [ { "parents": ["fcId", "fcId"], "fcDesc": "...", "severity": "...", "effAc": "...", "rationale": "...", "basis": [ { "kind": "system|resource|item|document", "ref": "...", "why": "..." } ] } ] }\n\nFACTS:\n' + JSON.stringify(facts, null, 1) }],
+                maxTokens: 6000
+            });
+        } catch (e) {
+            if (e && e.isInsufficient) { _toast('No grounded combination found: ' + ((e.insufficient && e.insufficient.reason) || 'the project gives no basis that couples these conditions.'), 'info', 7000); return; }
+            _toast('The proposal failed: ' + ((e && e.message) || e), 'warning'); return;
+        }
+        const raw = _parseItems(r.text, 'combinations');
+        const _assumptions = _parseAssumptions(r.text, 'fha.combine');
+        // the closed-list clause citation (_withBasisClause): top level, or on a row
+        let _topBasis = ''; try { const _pj = _safeParseJson(String(r.text || '')); _topBasis = (_pj && typeof _pj.standardBasis === 'string') ? _pj.standardBasis : ''; } catch (_) {}
+        let docText = ''; try { docText = (snapshot().projectSourceDocs || []).map(function (d) { return (d && d.text) || ''; }).join('\n'); } catch (_) {}
+        const ctx = { seen: {}, docNorm: _combineNorm(docText) };
+        const items = [], withheld = [];
+        raw.forEach(function (x, i) {
+            const v = _combineVerify(x, scope, ctx);
+            if (v.ok) { v.item._k = 'aicomb-' + Date.now() + '-' + i; v.item._model = r.model || MODELS.reason; v.item.standardBasis = String((x && x.standardBasis) || _topBasis || ''); items.push(v.item); }
+            else withheld.push(((x && Array.isArray(x.parents)) ? x.parents.join(' + ') : 'a proposal') + ': ' + v.why);
+        });
+        if (!items.length) {
+            _toast(raw.length ? ('No proposal could be confirmed against the project, so none is shown. ' + withheld.slice(0, 3).join(' · ')) : 'ANEM proposed no combinations for the ' + label + '.', 'info', 9000);
+            return;
+        }
+        const sevPill = function (sv) { try { return (typeof sevPillHtml === 'function') ? sevPillHtml(sv) : _esc(sv); } catch (_) { return _esc(sv); } };
+        _makeReviewPanel({
+            id: 'ai-rev-panel-combine', feature: 'fha.combine',
+            title: '✨ Proposed combined failure conditions · ' + label,
+            disclaimer: 'Advisory proposals, made only because you asked. Nothing is written until you Accept. Every basis shown was checked against your project: the systems, resources, items and source documents.' + (withheld.length ? ' ' + withheld.length + ' proposal' + (withheld.length === 1 ? ' was' : 's were') + ' withheld because they could not be confirmed: ' + withheld.slice(0, 4).join(' · ') + (withheld.length > 4 ? ' …' : '') + '.' : ''),
+            items: items, assumptions: _assumptions,
+            editableFields: [{ key: 'fcDesc', label: 'Combined condition', multiline: false }, { key: 'severity', label: 'Severity (never milder than its worst part)', multiline: false }, { key: 'effAc', label: 'Effect on the aircraft' }, { key: 'rationale', label: 'Why this severity' }],
+            getKey: function (it) { return it._k; },
+            cardHtml: function (it) {
+                const parts = it.parentRows.map(function (p) { return '<div class="aifh-eff" style="margin:2px 0">• <strong>' + _esc(p.fcId) + '</strong> ' + sevPill(p.severity) + ' ' + _esc(p.fcDesc || '') + '</div>'; }).join('');
+                return '<h4>' + _esc(it.fcDesc || ('Combined: ' + it.parents.join(' + '))) + '</h4>' +
+                    '<div class="aifh-meta">' + sevPill(it.severity) + ' · combines ' + _esc(it.parents.join(' + ')) + '</div>' +
+                    '<div style="margin-top:4px">' + parts + '</div>' +
+                    (it.effAc ? '<div class="aifh-meta" style="margin-top:4px"><strong>Effect:</strong> ' + _esc(it.effAc) + '</div>' : '') +
+                    (it.rationale ? '<div class="aifh-meta"><strong>Why this severity:</strong> ' + _esc(it.rationale) + '</div>' : '') +
+                    (it.sevNote ? '<div class="aifh-meta" style="color:var(--aifh-warn,#b26a00)">' + _esc(it.sevNote) + '</div>' : '') +
+                    '<div class="aifh-meta" style="margin-top:4px"><strong>Basis (checked):</strong> ' + _esc(it.basis.map(function (b) { return b.text; }).join('; ')) + '</div>' +
+                    (it.droppedBasis.length ? '<div class="aifh-meta" style="opacity:.7">Not confirmed, left out: ' + _esc(it.droppedBasis.join('; ')) + '</div>' : '');
+            },
+            onAccept: function (it) {
+                const res = window.SLFcVariants.createCombined(scope, it.parents, { severity: it.severity, fcDesc: it.fcDesc, effAc: it.effAc, rationale: it.rationale, differentFunctions: true, ai: { model: it._model, skill: _skillStampFor('fha.combine'), basis: it.basis } });
+                if (!res.ok) { _toast('Not added: ' + res.why + '.', 'warning', 6000); return false; }
+                try { _logDelta('fha.combine', 'accept', { fcId: res.row.fcId, parents: it.parents }); } catch (_) {}
+                return true;
+            },
+            doneMsg: 'combined failure condition(s) added'
+        });
+    }
 
     function proposeCcfGroups(opts) {
         opts = opts || {};
@@ -9841,6 +10411,8 @@
         try {
             const k = target && target.kind, id = target && target.id;
             const clip = function (s) { return String(s || '').slice(0, 200); };
+            // 31 Oct 2026: fault trees and their nodes, CCMR, MAC, CoFFE, resources, R&M, crew credit (comment_kinds.js)
+            if (typeof window !== 'undefined' && window.SLCommentKinds && window.SLCommentKinds.has(k)) { const t0 = window.SLCommentKinds.title(target); if (t0) return clip(t0); }
             if (k === 'acFha') { const r = (acFhaData || []).find(function (x) { return String(x.internalId) === String(id); }); if (r) return clip((r.fcId || '') + ' ' + (r.fcDesc || '') + ' [' + (r.severity || 'unclassified') + ']'); }
             if (k === 'sysFha') { let hit = null; (systemsData || []).forEach(function (s) { (s.fha || []).forEach(function (x) { if (String(x.internalId) === String(id)) hit = x; }); }); if (hit) return clip((hit.fcId || '') + ' ' + (hit.fcDesc || '') + ' [' + (hit.severity || 'unclassified') + ']'); }
             if (k === 'acReq') { const r = (acReqData || []).find(function (x) { return String(x.internalId) === String(id); }); if (r) return clip(r.text); }
@@ -11166,6 +11738,37 @@
     // "All phases"); a rule for the same sub-function + phase is UPDATED in place when
     // it is the model's own and untouched, never duplicated, never overwriting a
     // signed one. The rule stays an assumption — the engineer flips it to SDD.
+    // 31 Oct 2026: a review comment asks for a change to a MAC rule. The rule is rebuilt through add_mac's own checks
+    // (members resolved from the model, phase from the mission profile, arbitration only with its citation) and put back
+    // under its own id. Whoever signed the old rule is named on the new one, which comes back unsigned.
+    function _chatUpdateMac(a, model) {
+        if (typeof projectConfig === 'undefined' || !projectConfig || !Array.isArray(projectConfig.macModels)) return { ok: false, error: 'no MAC rules in this project' };
+        const store = projectConfig.macModels, id = String((a && a.id) || '').trim();
+        const at = store.findIndex(function (r) { return r && String(r.id) === id; });
+        if (at < 0) return { ok: false, error: 'no MAC rule ' + (id || '(none named)') };
+        const old = store[at], f = (a && a.fields && typeof a.fields === 'object') ? a.fields : {};
+        if (f.subId != null && String(f.subId) !== String(old.subId)) return { ok: false, blocked: true, error: 'not changed: a MAC rule stays on its function (' + old.subId + '); add a rule for the other function instead' };
+        const args = { subId: old.subId, phase: f.phase != null ? f.phase : old.phase, clauses: f.clauses != null ? f.clauses : old.clauses, sddRef: f.sddRef != null ? f.sddRef : ((old.substantiation && old.substantiation.ref) || ''), rationale: f.rationale != null ? f.rationale : (old.aiRationale || '') };
+        if (f.arbitration != null) args.arbitration = f.arbitration; else if (old.arbitration) args.arbitration = Object.assign({}, old.arbitration, { ref: old.arbitration.ref || '' });
+        store.splice(at, 1);
+        const others = store.slice();
+        const putBack = function () { store.length = 0; others.forEach(function (x) { store.push(x); }); store.splice(at, 0, old); };
+        let r;
+        try { r = _chatAddMac(args, model); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+        // add_mac writes over an unsigned rule for the same function and phase: here that would be ANOTHER rule, so no
+        if (r && r.ok && store.length !== others.length + 1) { putBack(); return { ok: false, blocked: true, error: 'not changed: another MAC rule already covers ' + old.subId + ' in that phase' }; }
+        const made = r && r.ok ? store.findIndex(function (x) { return x && String(x.id) === String(r.id); }) : -1;
+        if (!r || !r.ok || made < 0) { putBack(); return { ok: false, error: (r && r.error) || 'the rule could not be rebuilt' }; }
+        const rec = store.splice(made, 1)[0];
+        rec.id = old.id;
+        const wasBy = old.substantiation && old.substantiation.by && !old.aiGenerated ? old.substantiation.by : '';
+        if (wasBy) rec.replacedSignature = wasBy;
+        rec.changedForComment = true;
+        store.splice(at, 0, rec);
+        try { if (typeof renderMacPage === 'function') renderMacPage(); } catch (_) {}
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        return { ok: true, summary: 'MAC rule ' + old.id + ' changed (' + Object.keys(f).join(', ') + ')' + (wasBy ? '; it was signed by ' + wasBy + ' and needs signing again' : '; it needs signing') };
+    }
     function _chatAddMac(a, model) {
         if (typeof projectConfig === 'undefined' || !projectConfig) return { ok: false, error: 'project not loaded' };
         const subId = String((a && a.subId) || '').trim();
@@ -11409,7 +12012,8 @@
                 label:     function (c) {
                     const t = c.target || {};
                     const th = _commentThreadText(c);
-                    return c.commentId + ' on ' + (t.kind || '') + ' ' + (t.id || '') + (t.systemId ? (' in system ' + t.systemId) : '') + ', by ' + (c.authorName || 'Reviewer') + ': "' + String(c.text || '') + '"' + (th ? (' (earlier in the thread: ' + th + ')') : '');
+                    const wh = _commentWhere(t);   // 31 Oct 2026: the row in the terms ANEM edits it by
+                    return c.commentId + ' on ' + (t.kind || '') + ' ' + (t.id || '') + (t.systemId ? (' in system ' + t.systemId) : '') + (wh ? (' [' + wh + ']') : '') + ', by ' + (c.authorName || 'Reviewer') + ': "' + String(c.text || '') + '"' + (th ? (' (earlier in the thread: ' + th + ')') : '');
                 },
                 coveredBy: function (x) { return (x && x.op === 'reply_comment') ? String(x.commentId || '') : null; }
             }
@@ -11434,7 +12038,16 @@
     // functions, 90 FHA and FCIM rows, 60 requirements, 28 functions per system and 80 nodes per tree, and cut
     // names at 40 to 70 characters: on a three-tier project ANEM could not see two thirds of the functions.
     function _chatFull(v) { return String(v == null ? '' : v); }
+    // 31 Oct 2026: where a comment's row lives, for ANEM: the table and _id it edits, the op for a tree, or reply-only
+    function _commentWhere(t) { try { return (typeof window !== 'undefined' && window.SLCommentKinds) ? window.SLCommentKinds.anemRef(t) : ''; } catch (_) { return ''; } }
     function _chatProjectState() {
+        const out = _chatProjectState0();
+        // 31 Oct 2026: the rows the review comments can sit on that the state did not carry (assumptions, STPA scope,
+        // resources, HF lanes, RBD, event trees, FRACAS, MSG-3, CoFFE), all of them; a key already there is kept
+        try { const ck = (typeof window !== 'undefined' && window.SLCommentKinds) ? window.SLCommentKinds.state() : null; if (ck) Object.keys(ck).forEach(function (k) { if (out[k] === undefined) out[k] = ck[k]; }); } catch (_) {}
+        return out;
+    }
+    function _chatProjectState0() {
         const s = snapshot();
         // Spine surfacing: the chat is told to preserve the golden thread, so the state
         // must actually CARRY it — each fault-tree page's allocated target/DAL and its
@@ -11486,7 +12099,7 @@
             interfaces:  ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.interfaces) || []).map(function (i) { return { id: i.id, from: i.fromSystemId, ff: i.fromFuncId || null, to: i.toSystemId, tf: i.toFuncId || null, kind: i.kind, medium: i.medium || null, dir: i.direction || null }; }),
             mac:         ((typeof projectConfig !== 'undefined' && projectConfig && projectConfig.macModels) || []).map(function (r) { return { id: r.id, subId: r.subId, phase: r.phase || 'All phases', clauses: (r.clauses || []).map(function (c) { return { min: c.min, of: (c.of || []) }; }), basis: r.substantiation ? r.substantiation.kind : null }; }),
             // 28 Oct 2026: every review comment, so ANEM can answer and address them (reply_comment, draft comments)
-            comments:    (Array.isArray(s.reviewCommentsData) ? s.reviewCommentsData : []).filter(Boolean).map(function (c) { return { id: c.commentId, on: c.target ? (c.target.kind + ' ' + c.target.id) : '', sys: (c.target && c.target.systemId) || undefined, by: c.authorName || '', anem: c.aiGenerated ? true : undefined, replyTo: c.parentId || undefined, status: c.status || 'open', text: _chatFull(c.text) }; }),
+            comments:    (Array.isArray(s.reviewCommentsData) ? s.reviewCommentsData : []).filter(Boolean).map(function (c) { return { id: c.commentId, on: c.target ? (c.target.kind + ' ' + c.target.id) : '', sys: (c.target && c.target.systemId) || undefined, where: _commentWhere(c.target) || undefined, by: c.authorName || '', anem: c.aiGenerated ? true : undefined, replyTo: c.parentId || undefined, status: c.status || 'open', text: _chatFull(c.text) }; }),
             systems:     (s.systemsData || []).map(function (sy) { return {
                 id: sy.id, name: sy.name,
                 functions: (sy.functions || []).map(function (f) { return { _id: f.internalId, fid: f.funcId, fn: _chatFull(f.funcName), tracesUpTo: (f.traceIds || []).join(',') || null }; }),
@@ -11535,6 +12148,7 @@
             '- add_fcim {scope, systemId?, subId, awareness("Aware"|"Unaware"|"Both"|"N/A"), totalLoss, partialLoss, malfunction, partials?, malfunctions?}  — totalLoss/partialLoss/malfunction are TERSE 4–12-word noun phrases naming the lost/degraded/erroneous capability ONLY: no sentences, no rationale, and NEVER a severity word ("Catastrophic"/"Hazardous"/"Major"/"Minor"/"severity"/"(proposed …)"). Severity lives in the FHA, NOT the FCIM. A cell may hold SEVERAL distinct conditions (ARP4761A Table A3): use partials[] / malfunctions[] arrays, one condition per entry, NEVER merged into one phrase (a complete-loss TL typically splits partials into within-MAC and outside-MAC). Two rows per subId when awareness changes severity, one "Both" row when it does not, "N/A" awareness (with a short rationale) when the unaware case is inapplicable. EVERY CELL IS ANSWERED: totalLoss / partialLoss / malfunction each hold a condition, or {"na": true, "rationale": "why this type of failure cannot occur for the function"}; an empty cell, or N/A with no rationale, is refused.',
             '- add_requirement {scope, systemId?, text("The X shall ..."), rationale, traceSubId, level, type, verifMethod} — ADVISORY: files as a review comment on the traced failure condition for the engineer to disposition; the AI never writes requirement rows (document import mirroring the engineer\'s own existing requirements is the one exception)',
             '- add_fta_tree {scope, systemId?, topEvent, kind("allocation"|"verification"), fhaFcId?, root:{name,type("gate"|"basic"),gateType("AND"|"OR"),children:[...]}}  (lambda always blank)',
+            '- add_combined_fc {scope, systemId?, parents:[fcId, fcId, ...], fcDesc, severity, effAc, rationale, basis:[{kind("system"|"resource"|"item"|"document"), ref, why}]}  (ONLY when the user asks for combined failure conditions; every basis must cite a system, resource or item id from the model, or quote a source document verbatim)',
             '- add_fta_node {pageId, parentId, node:{name, type("basic"|"gate"), gateType("AND"|"OR") for gates}}  — splice ONE node under an existing GATE on a tree page (λ left blank). Use the page id + node ids in state.ftaPages[].nodes (each {id, p=parent id, name, t=type/gate}).',
             '- update_fta_node {pageId, nodeId, fields:{name?, gateType?("AND"|"OR")}}  — rename a node or change a gate\'s logic. NEVER sets λ/probability/severity.',
             '- delete_fta_node {pageId, nodeId}  — remove a node (and its subtree) from a tree; cannot delete the top event.',
@@ -11553,6 +12167,8 @@
             '- update {table, _id, systemId?, fields:{ ...only the fields to change... }}',
             '- delete {table, _id, systemId?}',
             '  table in: ac_fha, sys_fha, ac_func, sys_func, ac_fcim, sys_fcim, ac_req, sys_req, pra, zsa, cma, routing, item, fmea',
+            '  also (text fields only; never a number, a status or a signature): ac_asm, sys_asm (_id = asmId), stpa_scope (_id "STPA-SCOPE"), resource, hf_tid, hf_tasks, hf_hea, hf_alerts, hf_ergo, hf_cd, hf_sa, hf_alloc, hf_mfc, markov, rbd, eta, fracas, msg3 (_id = MSI id, or MSI id/FF id), coffe (_id = the case key; verdict "yes"|"no" and note, kept as your proposal until the engineer signs). Each review comment in state.comments says where its row is ("where").',
+            '- update_mac {id, fields:{phase?, clauses?, arbitration?, sddRef?, rationale?}}  — change a MAC rule a review comment is about (same rules as add_mac); the changed rule comes back unsigned, for the engineer to sign again.',
             '',
             'Keep replies concise and engineer-to-engineer. Prefer a few precise edits over many speculative ones. If you are missing an id or scope, ASK rather than guess.'
         ].join('\n');
@@ -11781,6 +12397,9 @@
     }
     function _chatUpdateRow(a, model) {
         const ref = _chatTableRef(a.table, a.systemId);
+        // 31 Oct 2026: assumptions, STPA scope, resources, the HF lanes, Markov, RBD, event trees, FRACAS, MSG-3 and CoFFE
+        // (comment_kinds.js): text fields only, never a number, a status or a signature
+        if (!ref && typeof window !== 'undefined' && window.SLCommentKinds && window.SLCommentKinds.hasTable(a.table)) return window.SLCommentKinds.update(a.table, a._id, a.systemId, a.fields, model);
         if (!ref || !ref.arr) return { ok: false, error: 'unknown/empty table "' + a.table + '"' };
         const row = ref.arr.find(function (r) { return String(r.internalId) === String(a._id); });
         if (!row) return { ok: false, error: 'no ' + (ref.label || a.table) + ' with _id ' + a._id };
@@ -11795,6 +12414,7 @@
     }
     function _chatDeleteRow(a) {
         const ref = _chatTableRef(a.table, a.systemId);
+        if (!ref && typeof window !== 'undefined' && window.SLCommentKinds && window.SLCommentKinds.hasTable(a.table)) return window.SLCommentKinds.remove(a.table, a._id, a.systemId);   // 31 Oct 2026
         if (!ref || !ref.arr) return { ok: false, error: 'unknown/empty table "' + a.table + '"' };
         const idx = ref.arr.findIndex(function (r) { return String(r.internalId) === String(a._id); });
         if (idx < 0) return { ok: false, error: 'no ' + (ref.label || a.table) + ' with _id ' + a._id };
@@ -12911,6 +13531,7 @@
                     case 'draft': results.push(_chatDraft(a)); break;                       // 28 Oct 2026
                     case 'reply_comment': results.push(_chatReplyComment(a, model)); break; // 28 Oct 2026
                     case 'add_mac': { const r2 = _chatAddMac(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
+                    case 'update_mac': { const r2 = _chatUpdateMac(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error, blocked: r2.blocked }); break; }   // 31 Oct 2026
                     case 'add_system': { const r2 = _chatAddSystem(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'add_fcim': {
                         // malfunctions[]/partials[] ride through — _SPEC_FCIM asks for the
@@ -12953,11 +13574,26 @@
                         let fhaIid = null;
                         if (a.fhaFcId) {
                             const pool = (a.scope === 'system' && a.systemId) ? ((_chatSysById(a.systemId) || {}).fha || []) : ((typeof acFhaData !== 'undefined') ? acFhaData : []);
-                            const hit = (pool || []).find(function (r) { return String(r.fcId) === String(a.fhaFcId); });
+                            let hit = (pool || []).find(function (r) { return String(r.fcId) === String(a.fhaFcId); });
+                            // 30 Oct 2026: the governing row of the condition (worst severity), not the first row with the ID
+                            try { const FT = window.SLFcTrees; if (hit && FT && typeof FT.governingOf === 'function') hit = FT.governingOf(hit) || hit; } catch (_) {}
                             if (hit) fhaIid = hit.internalId;
                         }
                         const ok = _applyTreeSuggestion({ root: a.root, topEvent: a.topEvent, _kind: a.kind || 'allocation', _systemId: a.scope === 'system' ? a.systemId : '', _assessment: a.assessment || '', _model: model, _fhaInternalId: fhaIid, _modality: modality || '' });
-                        results.push(ok ? { ok: true, summary: (a.kind === 'verification' ? 'Verification' : 'Allocation') + ' tree added — ' + _chatClip(a.topEvent, 44) } : { ok: false, error: 'add_fta_tree failed' }); break;
+                        const _tl = _applyTreeSuggestion._last;
+                        results.push(ok ? { ok: true, summary: (a.kind === 'verification' ? 'Verification' : 'Allocation') + ' tree ' + ((_tl && _tl.action === 'filled') ? 'filled in (its empty tree)' : 'added') + ' — ' + _chatClip(a.topEvent, 44) } : (_applyTreeSuggestion._why ? { ok: false, blocked: true, error: 'Not added: ' + _applyTreeSuggestion._why } : { ok: false, error: 'add_fta_tree failed' })); break;
+                    }
+                    case 'add_combined_fc': {
+                        // 30 Oct 2026: the same check and the same writer as the panel's button (_combineVerify, SLFcVariants.createCombined)
+                        if (!window.SLFcVariants) { results.push({ ok: false, error: 'the combined failure conditions module is not loaded' }); break; }
+                        const _cs = _combineScopeObj(a.scope === 'system' && a.systemId ? { systemId: a.systemId } : null);
+                        if (!_cs) { results.push({ ok: false, error: 'system not found' }); break; }
+                        let _dt = ''; try { _dt = (snapshot().projectSourceDocs || []).map(function (d) { return (d && d.text) || ''; }).join('\n'); } catch (_) {}
+                        const _v = _combineVerify(a, _cs, { seen: {}, docNorm: _combineNorm(_dt) });
+                        if (!_v.ok) { results.push({ ok: false, blocked: true, error: 'Not added: ' + _v.why }); break; }
+                        const _cr = window.SLFcVariants.createCombined(_cs, _v.item.parents, { severity: _v.item.severity, fcDesc: _v.item.fcDesc, effAc: _v.item.effAc, rationale: _v.item.rationale, differentFunctions: true, ai: { model: model, skill: _skillStampFor('fha.combine'), basis: _v.item.basis } });
+                        results.push(_cr.ok ? { ok: true, summary: 'Combined failure condition ' + _cr.row.fcId + ' added — ' + _chatClip(_v.item.parents.join(' + '), 40) + (_v.item.sevNote ? ' (' + _v.item.sevNote + ')' : '') } : { ok: false, blocked: true, error: 'Not added: ' + _cr.why });
+                        break;
                     }
                     case 'add_fta_node':    { const r2 = _ftaAddNode(a, model);    results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
                     case 'update_fta_node': { const r2 = _ftaUpdateNode(a, model); results.push(r2.ok ? { ok: true, summary: r2.summary } : { ok: false, error: r2.error }); break; }
@@ -13083,7 +13719,7 @@
         // 5 Sep 2026 — this call is labelled chat.edit for the spec/context injection keyed on it, so
         // it silently ran at the CHAT temperature (0.3) for every analysis batch — the FHA on the
         // golden thread included. The batch passes 0 explicitly; the chat passes nothing and keeps 0.3.
-        const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, cacheBreaks: _breaks, messages: messages, maxTokens: (typeof maxTokens === 'number' ? maxTokens : 16000), temperature: (typeof temperature === 'number' ? temperature : undefined) });
+        const rr = await Provider.complete({ feature: 'chat.edit', model: MODELS.reason, system: sys, cacheBreaks: _breaks, messages: messages, maxTokens: (typeof maxTokens === 'number' ? maxTokens : 16000), temperature: (typeof temperature === 'number' ? temperature : undefined) , busyLabel: (lane && _AI_BUSY_LABELS[lane]) || undefined });   // 31 Oct 2026: the indicator names the analysis
         return { rr: rr, parsed: _safeParseJson(String(rr.text || '')) };
     }
     // 6 Sep 2026 — the controlled-document guard that used to live here (chat lane only;
@@ -13115,6 +13751,7 @@
         add_fcim: [['subId', 'Function'], ['awareness', 'Crew awareness']],
         add_requirement: [['text', 'Requirement'], ['rationale', 'Rationale'], ['traceSubId', 'Traces to'], ['level', 'Level'], ['type', 'Type'], ['verifMethod', 'Verification method']],
         add_fta_tree: [['topEvent', 'Top event'], ['kind', 'Kind'], ['fhaFcId', 'Failure condition'], ['root', 'Structure']],
+        add_combined_fc: [['parents', 'Combines'], ['fcDesc', 'Combined condition'], ['severity', 'Severity'], ['basis', 'Basis']],
         add_fta_node: [['pageId', 'Tree'], ['parentId', 'Under node'], ['node', 'Node']],
         update_fta_node: [['pageId', 'Tree'], ['nodeId', 'Node'], ['fields', 'Changes']],
         delete_fta_node: [['pageId', 'Tree'], ['nodeId', 'Node']],
@@ -13134,6 +13771,7 @@
         add_fmea: [['level', 'Level'], ['funcSubId', 'Function'], ['funcMode', 'Failure mode'], ['linkedFcId', 'Failure condition'], ['localEffect', 'Local effect'], ['nextEffect', 'Next higher effect'], ['endEffect', 'End effect'], ['detection', 'Detection'], ['compensating', 'Compensating provisions'], ['remarks', 'Remarks']],
         update: [['table', 'Table'], ['_id', 'Row'], ['fields', 'Changes']],
         reply_comment: [['commentId', 'Comment'], ['text', 'Reply']],
+        update_mac: [['id', 'MAC rule'], ['fields', 'Changes']],
         draft: [['analysis', 'Analysis'], ['scope', 'Scope'], ['systemId', 'System'], ['subIds', 'Functions'], ['condIds', 'Failure conditions'], ['fcIds', 'FHA failure conditions'], ['commentIds', 'Comments']],
         'delete': [['table', 'Table'], ['_id', 'Row']]
     };
@@ -13171,7 +13809,7 @@
     // Render a heterogeneous ANEM action as a review card (op-aware; carries #258 confidence/source).
     function _anemActionCard(a) {
         const op = String(a.op || '?');
-        const title = ({ add_fha: 'Failure condition', add_function: 'Function', add_system: 'System', add_mac: 'MAC rule', add_fcim: 'FCIM', add_requirement: 'Requirement', add_fta_tree: 'Fault tree', add_fta_node: 'FTA node', update_fta_node: 'FTA node', delete_fta_node: 'FTA node', link: 'Link', add_markov_state: 'Markov state', delete_markov_state: 'Markov state', add_markov_transition: 'Markov transition', delete_markov_transition: 'Markov transition', add_interface: 'Interface', update_interface: 'Interface', delete_interface: 'Interface', add_pra: 'Particular risk', add_zsa: 'Zonal', add_cma: 'Common mode', add_fmea: 'FMEA', add_routing: 'Routing', add_item: 'Item', update: 'Update', 'delete': 'Delete' })[op] || op;
+        const title = ({ add_fha: 'Failure condition', add_function: 'Function', add_system: 'System', add_mac: 'MAC rule', update_mac: 'MAC rule', add_fcim: 'FCIM', add_requirement: 'Requirement', add_fta_tree: 'Fault tree', add_combined_fc: 'Combined failure condition', add_fta_node: 'FTA node', update_fta_node: 'FTA node', delete_fta_node: 'FTA node', link: 'Link', add_markov_state: 'Markov state', delete_markov_state: 'Markov state', add_markov_transition: 'Markov transition', delete_markov_transition: 'Markov transition', add_interface: 'Interface', update_interface: 'Interface', delete_interface: 'Interface', add_pra: 'Particular risk', add_zsa: 'Zonal', add_cma: 'Common mode', add_fmea: 'FMEA', add_routing: 'Routing', add_item: 'Item', update: 'Update', 'delete': 'Delete' })[op] || op;
         const _bodyKey = ['fcDesc', 'funcName', 'subName', 'text', 'topEvent', 'threat', 'zoneId', 'subject', 'mode'].filter(function (k) { return a[k]; })[0] || '';
         const body = (_bodyKey ? a[_bodyKey] : '') || (a.subId ? ('subId ' + a.subId) : '') || '';
         // A classified row says "· Catastrophic". An abstained row used to say
@@ -13215,10 +13853,37 @@
              + _anemCardFields(a, op, _bodyKey)   // 27 Oct 2026: every field the action would write
              + _fcimCells + _abReason + _judgeNote + _droppedPh
              + _abstainChips(a, { fcDesc: 'Failure condition', effAc: 'Aircraft effect', effCrew: 'Crew effect', effPax: 'Passenger effect', severity: 'Severity', severityRationale: 'Severity rationale', text: 'Requirement', rationale: 'Rationale', totalLoss: 'Total loss', partialLoss: 'Partial loss', malfunction: 'Malfunction', desc: 'Description', mitigation: 'Mitigation', claim: 'Independence claim', verification: 'Verification', threat: 'Particular risk', interference: 'Interference' })
-             + _confidenceBadge(a);
+             ;   // 31 Oct 2026: the review panel adds the confidence and source lines once (they were printed twice)
     }
     // BATCH SURFACE — drive the SAME brain in one shot, route actions to a review panel.
     // Accept applies through the SAME executor (_chatRunActions) + safeguards as the chat.
+    // 31 Oct 2026: what each one-analysis drafting lane may hand back. A lane not listed (the comment engine, the
+    // architecture lanes, the fault-tree lanes) keeps every action the executor knows; no lane keeps a nested draft.
+    const _BATCH_LANE_OPS = {
+        'cma.draft': ['add_cma', 'link'], 'pra.draft': ['add_pra'], 'zsa.draft': ['add_zsa'], 'fmea.item': ['add_fmea'],
+        'mac.draft': ['add_mac'], 'fcim.populate': ['add_fcim'], fha: ['add_fha'], sfha: ['add_fha'], 'req.recommend': ['add_requirement']
+    };
+    const _BATCH_LANE_NOUN = { 'cma.draft': 'common mode analysis', 'pra.draft': 'particular risk', 'zsa.draft': 'zonal safety', 'fmea.item': 'FMEA', 'mac.draft': 'MAC rule', 'fcim.populate': 'FCIM', fha: 'FHA', sfha: 'FHA', 'req.recommend': 'requirement' };
+    function _batchKnownOp(op) { return op === 'add_fha' || op === 'delete' || Object.prototype.hasOwnProperty.call(_ANEM_CARD_FIELDS, op); }
+    // removes, in place, what this draft cannot apply; returns [{op, why}]
+    function _batchHoldBack(actions, analysis) {
+        const lane = String(analysis || '').toLowerCase(), allow = _BATCH_LANE_OPS[lane] || null, held = [];
+        for (let i = actions.length - 1; i >= 0; i--) {
+            const a = actions[i], op = String((a && a.op) || '');
+            let why = '';
+            if (op === 'draft') why = 'it asked to start another draft, which a draft cannot do';
+            else if (!_batchKnownOp(op)) why = 'it is not something the app can apply (' + (op || 'no action named') + ')';
+            else if (allow && allow.indexOf(op) < 0) why = 'it is not a ' + (_BATCH_LANE_NOUN[lane] || lane) + ' row';
+            if (why) { held.unshift({ op: op, why: why }); actions.splice(i, 1); }
+        }
+        if (held.length) { try { console.info('[AI] ' + held.length + ' drafted action(s) held back: ' + held.map(function (h) { return h.op + ' (' + h.why + ')'; }).join('; ')); } catch (_) {} }
+        return held;
+    }
+    function _heldBackWords(held, analysis, left) {
+        const lane = String(analysis || '').toLowerCase(), noun = _BATCH_LANE_NOUN[lane] || 'analysis';
+        const uniq = []; held.forEach(function (h) { if (uniq.indexOf(h.why) < 0) uniq.push(h.why); });
+        return (left ? '' : 'ANEM returned no ' + noun + ' rows. ') + held.length + ' other thing' + (held.length === 1 ? '' : 's') + ' it returned ' + (held.length === 1 ? 'was' : 'were') + ' held back and ' + (held.length === 1 ? 'is' : 'are') + ' not shown: ' + uniq.join('; ') + '.';
+    }
     async function _anemBatch(taskDirective, cfg) {
         cfg = cfg || {};
         if (!Provider.available()) { _toast(Provider.notReadyMessage(), 'warning', 5000); return; }
@@ -13348,7 +14013,7 @@
         // and on a metered backend can spend money to learn nothing. These fail on the
         // FIRST attempt and are reported in the operator's own words.
         const _PERMANENT_RE = /credit balance|plans & billing|purchase credits|quota|insufficient_quota|payment required|invalid[_ ]api[_ ]key|authentication|unauthorized|forbidden|permission|not entitled|account (is )?(suspended|disabled)/i;
-        // 24 Oct 2026 (Radia, NS-6): the one rule now lives in AiClient.isPermanentError, which
+        // 24 Oct 2026 (customer report, NS-6): the one rule now lives in AiClient.isPermanentError, which
         // also reads the status and error type the backend sent (a server with no AI key answers
         // 503 no_server_key, which this regex never matched, so it was retried twice). The local
         // copy below stays only for a page whose core_modules is older.
@@ -13362,6 +14027,7 @@
         };
         let _retried = 0;               // turns that needed a retry and then succeeded
         let _permanentErr = null;       // a condition no retry can clear (billing, auth, quota)
+        let _userStopped = false;       // 31 Oct 2026: the engineer pressed Stop (AiClient.stop); nothing more is sent
         const _turnErrs = [];           // what the failed attempts said, for the console summary
         const _results = new Array(_slices.length);
         // 26 Oct 2026: a turn with no actions at all (unreadable, or readable with nothing in it)
@@ -13407,6 +14073,7 @@
                     return;
                 } catch (e) {
                     _lastErr = e;
+                    if (e && e.stoppedByUser) { _userStopped = true; break; }   // 31 Oct 2026: Stop is never retried
                     if (e && e.isInsufficient) break;
                     if (_isPermanent(e)) { _permanentErr = _permanentErr || e; break; }
                     if (_try < _TURN_TRIES) {
@@ -13422,7 +14089,7 @@
             let _next = 0;
             // 24 Oct 2026: once a turn has met a condition no retry can clear, the turns not yet
             // started are not sent at all (they would only meet it again).
-            const _worker = async function () { while (_next < _slices.length && !_permanentErr) { const i = _next++; await _runSlice(i); } };
+            const _worker = async function () { while (_next < _slices.length && !_permanentErr && !_userStopped) { const i = _next++; await _runSlice(i); } };
             await Promise.all(Array.from({ length: Math.min(_POOL, _slices.length) }, _worker));
         }
 
@@ -13435,6 +14102,7 @@
                     if (!_declined) _declined = { parsed: e.parsed, insufficient: e.insufficient };
                     continue;   // one slice declining must not discard the slices that worked
                 }
+                if (_userStopped && (!e || e.stoppedByUser)) continue;   // 31 Oct 2026: stopped, not failed
                 if (e && e.emptyTurn) {   // 26 Oct 2026: empty after every try; its cause is kept
                     _emptyTurns++;
                     const _ea = e.a || {};
@@ -13488,6 +14156,10 @@
             if (_turnErrs.length) console.info('[AI] retried turns: ' + _turnErrs.slice(0, 12).join(' | '));
         } catch (_) {}
 
+        // 31 Oct 2026: stopped by the engineer. Nothing came back: say so plainly (it is not an error). Some came back:
+        // those rows go to review as usual, and the panel says how much of the run came back.
+        const _stopWords = _userStopped ? ('Stopped by you: ' + _slicesRun + ' of ' + _slices.length + ' part' + (_slices.length === 1 ? '' : 's') + ' came back before the stop' + (actions.length ? '; only those rows are below, and nothing is written until you accept it.' : '.')) : '';
+        if (_userStopped && !actions.length) { _toast(_stopWords + ' Nothing was drafted.', 'info', 6000); return; }
         if (!actions.length) {
             if (_declined) { _anemNoActionsPanel(cfg, _declined.parsed, _declined.insufficient, _rerun); return; }
             if (_emptyTurns && !_permanentErr && _emptyTurns === _slices.length - _slicesRun) {   // 26 Oct 2026: every turn came back empty
@@ -13529,7 +14201,12 @@
         const _noCond = Object.keys(_emptyBy).reduce(function (n, k) { return n + _emptyBy[k]; }, 0);
         const _emptyWords = Object.keys(_emptyBy).map(function (k) { const r = _ROW_RULES[k]; return _emptyBy[k] + ' ' + r.label + (_emptyBy[k] === 1 ? '' : 's') + ' with no ' + r.need.replace(/^an? /, ''); }).join(', ');
         if (_noCond) { try { console.info('[AI] ' + _noCond + ' drafted row(s) were empty and left out: ' + _emptyWords); } catch (_) {} }
-        const parsed = { reply: _replies.join(' '), actions: actions, assumptions: _batchAsms };
+        // 31 Oct 2026 (Waqas, live Aeolus CMA: the draft came back as one "start another CMA draft" action, shown as a
+        // row with Accept, counted as "passed the checker", then "Applied 0 of 1 BLOCKED"). A draft hands back only what
+        // a draft can apply: never a draft of its own, never an action the app does not know, and on a one-analysis lane
+        // only that analysis's rows. Anything else is held back here with one plain reason, never shown as a row.
+        const _held = (typeof _batchHoldBack === 'function') ? _batchHoldBack(actions, cfg.analysis) : [];
+        const parsed = { reply: _replies.join(' '), actions: actions, assumptions: _batchAsms, heldBack: _held };
 
         // The assertion the whole change exists for: what did we ask for, and what
         // came back? Computed from the ACTIONS, never from the model's own claim.
@@ -13549,7 +14226,7 @@
         if (_chunk && typeof _chunk.gapsOf === 'function' && actions.length) {
             let _gaps = [];
             try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) { _gaps = []; }
-            if (_gaps.length && !_permanentErr) {
+            if (_gaps.length && !_permanentErr && !_userStopped) {
                 const _steer = '\n\nPHASE COVERAGE — for one failure condition, every phase of the mission profile belongs to EXACTLY ONE row: one effect, one class. The rows returned for the conditions below leave phases unassessed, or assess a phase twice. For each condition: where phases are UNASSESSED, return ONLY the additional add_fha rows that cover them (group phases that share the same effects and class on one row; where the effect is not realized and the flight can be aborted or the condition escaped, that is a No Safety Effect row; where the effect is not realized yet but cannot be escaped, the row carries the end effect and its class). Where a phase is ASSESSED TWICE, return the condition\'s COMPLETE set of rows again with each phase on exactly one row — those rows replace the ones you returned before. Echo srcCondId and fcDesc exactly.\n'
                     + _gaps.map(function (g) { return '- ' + g.label + (g.missing && g.missing.length ? ' — phases unassessed: ' + g.missing.join(', ') : '') + (g.twice && g.twice.length ? ' — phases assessed twice: ' + g.twice.join(', ') : ''); }).join('\n');
                 try {
@@ -13575,7 +14252,10 @@
         // (Assumption normalization + ledger persistence moved INTO the chunk loop
         // above on 26 Aug, so a multi-turn draft accumulates and de-dupes them
         // across turns rather than keeping only the last turn's.)
-        if (!actions.length) { _anemNoActionsPanel(cfg, parsed, null, _rerun); return; }
+        if (!actions.length) {
+            if (_held.length) parsed.reply = _heldBackWords(_held, cfg.analysis, 0) + (parsed.reply ? ' ' + parsed.reply : '');
+            _anemNoActionsPanel(cfg, parsed, null, _rerun); return;
+        }
         // Which fields each action type offers, so the Edit gate and the coverage /
         // declined telemetry work per-op on a heterogeneous batch.
         const _OP_FIELDS = {
@@ -13635,7 +14315,9 @@
                 const _jc = (_gvr.rows || []).filter(function (r) { return r && r.op === 'add_fha' && r.judgementCall === true; }).length;
                 return 'Advisory drafts from the unified AI engine. Severities are proposed for your confirmation. Accept applies through the same executor + safeguards as the live assistant.'
                      + (_jc ? (' **' + _jc + ' row' + (_jc === 1 ? '' : 's') + ' classified by JUDGMENT on limited information: each is flagged and its assumption is filed on accept.**') : '')
-                     + (_noCond ? (' **' + _noCond + ' drafted row' + (_noCond === 1 ? ' was' : 's were') + ' empty and left out (' + _emptyWords + '); draft ' + (_noCond === 1 ? 'it' : 'them') + ' again.**') : '');
+                     + (_noCond ? (' **' + _noCond + ' drafted row' + (_noCond === 1 ? ' was' : 's were') + ' empty and left out (' + _emptyWords + '); draft ' + (_noCond === 1 ? 'it' : 'them') + ' again.**') : '')
+                     + (_held.length ? (' **' + _heldBackWords(_held, cfg.analysis, actions.length) + '**') : '')   // 31 Oct 2026
+                     + (_stopWords ? (' **' + _stopWords + '**') : '');
             })(),
             notes: _replies,
             items: _gvr.rows,
@@ -13690,7 +14372,7 @@
             + '<div class="aifh-disclaimer">' + _esc(head)
             + '. This is a considered abstention, not a failure — nothing was written to the project.</div>'
             + '<div class="aifh-body">'
-            + '<div style="white-space:pre-wrap;line-height:1.5;font-size:13px;">' + _esc(reply) + '</div>';
+            + '<div style="white-space:pre-wrap;line-height:1.5;font-size:13px;">' + _esc(typeof _plainWords === 'function' ? _plainWords(reply) : reply) + '</div>';
         if (missing.length) {
             html += '<div style="margin-top:10px;font-size:12px;"><b>Named as missing:</b><ul style="margin:4px 0 0 18px;padding:0;">'
                 + missing.map(function (m) { return '<li>' + _esc(String(m)) + '</li>'; }).join('') + '</ul></div>';
@@ -14333,6 +15015,15 @@
         // rather than offering an action that will refuse the moment it is clicked.
         inputReady: function (r) { try { return _aiInputReady(r); } catch (_) { return { ready: true }; } },
         laneScope: _laneScope,   // 30 Oct 2026
+        _treeLaneTest: { runActions: _chatRunActions, needing: _fcsNeedingTree, synthUserMsg: _synthUserMsg },
+        cmaFlowDraft: cmaFlowDraft,   // 31 Oct 2026: the four-step CMA's ANEM drafts
+        fhaReasonDraft: fhaReasonDraft,   // 31 Oct 2026: the reason for each FHA row's class
+        ifaceWording: ifaceWording,   // 31 Oct 2026: wording of requirements on interfacing systems (the budget is the tree's)
+        rateMatch: rateMatch,   // 31 Oct 2026: library matches for basic events (never a rate)
+        _cmaFlowTest: { facts: _cmaFlowFacts, numRe: _CMA_NUM_RE },
+        _batchTest: { holdBack: _batchHoldBack, plain: _plainWords, cmaNoGatesSteer: function () { return _CMA_NO_GATES_STEER; } },   // 31 Oct 2026
+        _commentsTest: { runActions: _chatRunActions, state: function () { return _chatProjectState(); }, where: _commentWhere, snippet: _artifactSnippet },   // 31 Oct 2026
+        _combineTest: { facts: function (sc) { return _combineFacts(_combineScopeObj(sc)); }, verify: function (raw, sc, docText) { return _combineVerify(raw, _combineScopeObj(sc), { seen: {}, docNorm: _combineNorm(docText || '') }); }, run: _runCombine },   // 30 Oct 2026 (tests/regression_fc_combine_20261030)   // 30 Oct 2026 (tests/regression_fc_link_20261030)
         _sysLaneTest: { sysFuncUnits: _sysFuncUnits, sysCondUnits: _sysCondUnits, sysFcimMeta: _sysFcimMeta, sysFhaMeta: _sysFhaMeta, sysFcimDirective: _sysFcimDirective, sysFhaDirective: _sysFhaDirective },
         // 16 Oct 2026: what each analysis needs, derived from the launcher (the AI Assistant page shows it per action)
         inputGuide: function () { try { return _aiInputGuide(); } catch (_) { return []; } }

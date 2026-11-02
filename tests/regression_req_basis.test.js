@@ -238,9 +238,10 @@ const req = (iid, extra) => Object.assign({ internalId: iid, type: 'Safety', tex
     const a1 = t.find(r => r.Kind === 'Assumption' && r.ID === 'A-1');
     check('B6: an assumption row carries its state and the requirement holding it, by ID', a1 && /Validated · held by REQ-4/.test(a1.Status) && Object.keys(a1).join(',') === 'Source,Kind,ID,Statement,Rationale,Status', JSON.stringify(a1));
     check('B6: reports.js puts the Source column on the requirements and assumptions tables', /'Source':\s+_srcTag\('req', r, sys\)/.test(REPORTS) && /'Source':\s+_srcTag\('asm', a, sys\)/.test(REPORTS));
-    check('B6: reports.js builds src_table from req_basis and parses {{appendix:src}}', /src_table: _srcRows\(sys\)/.test(REPORTS) && /appendix:\(fta\|zsa\|pra\|cma\|src\)/.test(REPORTS) && (REPORTS.match(/'\{\{appendix:src\}\}',/g) || []).length === 8);
+    check('B6: reports.js builds src_table from req_basis and parses {{appendix:src}}', /src_table: _srcRows\(sys\)/.test(REPORTS) && /const out = \[\], re = \/\\\{\\\{\(appendix:\[a-z\]\+\|/.test(REPORTS) && (REPORTS.match(/'\{\{appendix:src\}\}',/g) || []).length === 8);
     check('B6: the six core reports allow the appendix and the modal offers it', ['AFHA', 'PASA', 'ASA', 'SFHA', 'PSSA', 'SSA'].every(k => new RegExp(k + ":\\s*\\{[^\\n]*'src'\\]").test(REPORTS)) && (REPORTS.match(/id="rpt-appx-src"/g) || []).length === 2 && (REPORTS.match(/\['fta','zsa','pra','cma','src'\].forEach/g) || []).length === 5);
-    check('B6: both renderers draw the src table under a plain-language heading', /b\.name === 'src'/.test(REPORTS) && (REPORTS.match(/data\.src_table/g) || []).length >= 3 && /_appxTitle\(name\) \{ return name === 'src' \? 'Requirements and assumptions by source analysis'/.test(REPORTS) && (REPORTS.match(/_appxTitle\((b\.name|ap)\)/g) || []).length === 4);
+    // 31 Oct 2026: both formats come from one writer; every appendix table is data[<name>_table] under _appxTitle
+    check('B6: both renderers draw the src table under a plain-language heading', /return data\[name \+ '_table'\] \|\| \[\];/.test(REPORTS) && /\{ k: 'appendix', title: _appxTitle\(name\) \}/.test(REPORTS) && /_appxTitle\(name\) \{ return name === 'src' \? 'Requirements and assumptions by source analysis'/.test(REPORTS));
 }
 
 // ---- B7 decorations ----------------------------------------------------------------------------

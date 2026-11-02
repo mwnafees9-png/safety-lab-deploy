@@ -1,4 +1,6 @@
 // ============================================================================
+// fta_tree_picker.js, v1.5 (1 Nov 2026, item 26): an "Import / Export" button (fta_exchange.js).
+// fta_tree_picker.js, v1.4 (1 Nov 2026, item 42): a "+ Integrated Tree" button beside + New, and an integrated tree is listed as "(integrated, read only)".
 // fta_tree_picker.js, v1.3 (24 Oct 2026, tree_homes.js): the picker lists the trees of the home on screen
 // (PASA, ASA, a system's PSSA or SSA, Standalone) and its label names that home; the tree on screen decides the
 // home, so a tree opened from anywhere lists with its own. The + New button is the home's (none in ASA or SSA:
@@ -94,7 +96,7 @@
 
     function _sig() {
         var H = _homes(), c = H ? H.current() : null;
-        return _roots().map(function (p) { return p.id + ':' + (p.name || '') + ':' + (p.treeLevel || '') + ':' + (p.systemId || '') + ':' + (p.mode || '') + ':' + (p.verifies || ''); }).join('|') + '@' +
+        return _roots().map(function (p) { return p.id + ':' + (p.name || '') + ':' + (p.treeLevel || '') + ':' + (p.systemId || '') + ':' + (p.mode || '') + ':' + (p.verifies || '') + ':' + (p.integrated ? 'i' : ''); }).join('|') + '@' +
             String(_activeId() || '') + (c ? '#' + c.home + ':' + (c.systemId || '') : '');
     }
 
@@ -124,7 +126,19 @@
                 try { if (typeof addNewFTAPage === 'function') addNewFTAPage(); } catch (_) {}
                 try { render(true); } catch (_) {}
             });
-            host.appendChild(lbl); host.appendChild(sel); host.appendChild(nb);
+            // 1 Nov 2026 (customer checklist item 42): an integrated tree, the whole tree in one piece through every transfer (fta_integrated.js)
+            var ib = document.createElement('button');
+            ib.type = 'button'; ib.id = 'fta-tree-integrated'; ib.className = 'action-btn'; ib.setAttribute('data-int-open', '1');
+            ib.textContent = '+ Integrated Tree';
+            ib.title = 'Pick a top event; the app follows every transfer gate and builds the whole tree in one piece, read only.';
+            ib.addEventListener('click', function () { try { if (window.SLFtaIntegrated) window.SLFtaIntegrated.open(); } catch (_) {} });
+            // 1 Nov 2026 (customer checklist item 26): import and export, Open-PSA MEF and spreadsheet (fta_exchange.js)
+            var xb = document.createElement('button');
+            xb.type = 'button'; xb.id = 'fta-tree-exchange'; xb.className = 'action-btn';
+            xb.textContent = 'Import / Export';
+            xb.title = 'Fault trees in and out: Open-PSA MEF (.xml) and spreadsheets (.csv, .xlsx), type codes carried both ways.';
+            xb.addEventListener('click', function () { try { if (window.SLFtaExchange) window.SLFtaExchange.open(); } catch (_) {} });
+            host.appendChild(lbl); host.appendChild(sel); host.appendChild(nb); host.appendChild(ib); host.appendChild(xb);
             view.insertBefore(host, view.firstChild);
             sel.addEventListener('change', function () {
                 var id = sel.value;
@@ -157,7 +171,7 @@
         sel2.innerHTML = '<option value="">' + (_none ? (H ? 'No trees here yet' : '— pick a fault tree —') : '— pick a fault tree —') + '</option>' + _gs.map(function (g) {
             return '<optgroup label="' + _esc(g.label) + '">' + g.pages.map(function (p) {
                 return '<option value="' + _esc(p.id) + '"' + (String(p.id) === String(cur) ? ' selected' : '') + '>' +
-                    _esc(p.name || p.id) + '</option>';
+                    _esc((p.name || p.id) + (p.integrated ? ' (integrated, read only)' : '')) + '</option>';
             }).join('') + '</optgroup>';
         }).join('');
     }

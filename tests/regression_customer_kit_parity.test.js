@@ -58,6 +58,8 @@ const NOT_PORTED = {
   '20260920a_notify_timeout_and_no_reply.sql':   'hosted-only: notify outbox timeout handling',
   '20261009a_notify_request_ids_repeat.sql':    'hosted-only: notify outbox request ids after a pg_net restart (13 Oct 2026: named here; it had no bucket since 9 Oct and held the wall red)',
   '20260929b_register_28sep_concurrency_forks.sql': 'production data only: registers chain breaks in OUR audit history; a fresh install has none',
+  '20261101a_university_accounts.sql':           'hosted-only: the free student tier and its sign-up trial live on the hosted cloud; a customer install is licensed by its signed license file, never by an email domain',
+  '20261101b_university_accounts_no_expiry.sql': 'production data only: removes the trial expiry from existing university accounts on the hosted cloud',
 };
 
 // Bucket 5 — kit-only files: things production has that no migration file ever created

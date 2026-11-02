@@ -517,8 +517,9 @@ check('R2: panel authors the disposition on the worksheet row — non-critical R
     /stpa_bridge_summary/.test(repSrc) && /stpa_bridge_table/.test(repSrc) && /Bridge: REFUSED — /.test(repSrc));
   check('BRIDGE report: template carries the bridge section (rollup line + table token)',
     /UCA ↔ FTA\/FMEA Bridge/.test(repSrc) && /\{\{stpa_bridge_summary\}\}/.test(repSrc) && /\{\{stpa_bridge_table\}\}/.test(repSrc));
-  check('BRIDGE report: whitelist — stpa_bridge_table registered in reports.js table regexes (×3)',
-    (S('reports.js').match(/stpa_bridge_table/g) || []).length >= 3);
+  // 31 Oct 2026: no whitelist any more: a {{token}} whose value is a list of rows is a table (reports.js _proseBlocks)
+  check('BRIDGE report: stpa_bridge_table is built as rows, so it renders as a table',
+    /stpa_bridge_table/.test(S('stpa_report.js')) && /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(S('reports.js')));
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

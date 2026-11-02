@@ -77,16 +77,17 @@ check('REPORT_DEFS.STPA present (aircraft scope)', !!R.REPORT_DEFS.STPA && R.REP
 check('template landed in the closure dictionary (_V1_TEMPLATES)', typeof R._V1_TEMPLATES.STPA === 'string' && /Clause-9 Conformance/.test(R._V1_TEMPLATES.STPA));
 check('extractData wrapped exactly once', R.extractData._stpaWrapped === true);
 
-console.log('\n[2] table-token whitelist (the WS-B rule: no literal tokens)');
+console.log('\n[2] table tokens render as tables (no literal tokens)');
 const tpl = globalThis.STPA_REPORT.TEMPLATE;
 const src = S('reports.js');
-const whitelistLine = (src.match(/const tab = ln\.match\(([^\n]+)\)/) || [])[1] || '';
 const tableTokens = [...new Set([...tpl.matchAll(/^\{\{([a-z_]+_table)\}\}$/gm)].map(m => m[1]))];
 check('template uses the full STPA table family (' + tableTokens.length + ' tables)', tableTokens.length >= 9);
-tableTokens.forEach(t => check('whitelisted: ' + t, whitelistLine.includes(t), 'add to _parseTemplate table regex'));
+// 31 Oct 2026: no whitelist any more: reports.js renders any {{token}} whose value is a list of rows as a table
+check('reports.js renders a token as a table by its value, not from a list', /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(src) && !/const tab = ln\.match\(/.test(src));
 
 console.log('\n[3] tokens on a real model');
 const T = globalThis.STPA_REPORT.stpaTokens();
+tableTokens.forEach(t => check('built as rows, so it renders as a table: ' + t, Array.isArray(T[t]) && T[t].every(r => r && typeof r === 'object' && !Array.isArray(r))));
 check('meta scalars carried', T.stpa_mission === 'Part 25 transport ops' && T.stpa_abstraction === 'system' && T.stpa_cs_state === 'approved');
 check('spine tables populated', T.stpa_losses_table.length === 1 && T.stpa_hazards_table.length === 1 && T.stpa_constraints_table.length === 1 &&
   T.stpa_hazards_table[0]['Leads to losses'] === 'L-1');

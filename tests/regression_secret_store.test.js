@@ -143,7 +143,7 @@ function part5() {
     /if \(_byoViaProxy\(\)\) \{[\s\S]{0,700}?AI_PROXY_BASE_URL \+ '\/anthropic\/messages'[\s\S]{0,300}?'Bearer ' \+ jwt/.test(core));
   check('core_modules: the direct api.anthropic.com call survives ONLY for the browser-only door',
     /Browser-only door: no backend, no proxy[\s\S]{0,400}?api\.anthropic\.com/.test(core));
-  check('core_modules: isConfigured asks the store, not localStorage', /function isConfigured\(\)\s*\{ return isProxyMode\(\) \|\| _hasByo\('anthropic_key'\); \}/.test(core));
+  check('core_modules: isConfigured asks the store, not localStorage', /function isConfigured\(\)\s*\{ (if \(_studentNoAI\(\)\) return false; )?return isProxyMode\(\) \|\| _hasByo\('anthropic_key'\); \}/.test(core));   // 1 Nov 2026: the student tier is refused first
 
   const lb = read('site/live_bridge.js');
   check('live_bridge: the vault door calls the proxy /bridge with the JWT, no Basic header built here',

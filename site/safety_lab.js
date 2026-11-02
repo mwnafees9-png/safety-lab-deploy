@@ -2666,7 +2666,7 @@ const resourcesCRUD = makeCRUD({
              + '<td>' + chips((row.providedBy || []).map(sysName)) + '</td>'
              + '<td>' + chips((row.consumedBy || []).map(fnName)) + '</td>'
              + '<td><span style="font-size: 11.5px; color: var(--color-text-secondary);">' + esc(row.description || '') + '</span></td>'
-             + '<td><button class="btn-ghost" onclick="showResourceImpact(' + row.internalId + ')">Impact</button></td>';
+             + '<td><button class="btn-ghost" onclick="showResourceImpact(' + esc(JSON.stringify(row.internalId)).replace(/&quot;/g, '&#39;') + ')">Impact</button></td>';
     },
 });
 const _origResourceSubmit = resourcesCRUD.submit;
@@ -4266,7 +4266,7 @@ window._autoReqActiveScope = 'ac';
 // AI.complete() (the single AI chokepoint) — see ai_assistant.js.
 // [P2 batch 5] L8684-8684 moved verbatim to bindings_modules.js
 // [P2 batch 4] L16956-17002 moved verbatim to helpers_modules.js
-try { window.slabAiBusyBegin = slabAiBusyBegin; window.slabAiBusyEnd = slabAiBusyEnd; } catch(_){}
+try { window.slabAiBusyBegin = slabAiBusyBegin; window.slabAiBusyEnd = slabAiBusyEnd; window.slabAiStop = slabAiStop; } catch(_){}
 
 // ── Rule: every modal has a visible exit ───────────────────────────────────────────
 // No user should be trapped in a modal with no visible way out. Any `.modal-overlay` (the app's
@@ -4980,6 +4980,7 @@ window._bulkSel = new Set();
         'gate-indep-ccf-lib':   'AND gate → Dissimilarity (shared library entry)',
         'gate-indep-ccf-group': 'AND gate → Common-cause control (declared CCF group)',
         'gate-indep-cma': 'CMA common mode → Preclusion requirement',
+        'cma-concern': 'CMA concern → Mitigation requirement',
         'gate-indep-or':  'OR gate → No-single-failure claim',
         'pra-zonal':      'PRA hazard → Zonal protection requirement',
         'pra-scenario':   'PRA scenario → Traced protection requirement',
@@ -4991,7 +4992,7 @@ window._bulkSel = new Set();
         'fha-prob', 'fha-qualitative', 'fha-similarity', 'fha-dal',
         'fta-event', 'fta-interval', 'dalgebra', 'dalgebra-default',
         'gate-indep-and', 'gate-indep-dev', 'gate-indep-phys',
-        'gate-indep-ccf-lib', 'gate-indep-ccf-group', 'gate-indep-cma',
+        'gate-indep-ccf-lib', 'gate-indep-ccf-group', 'gate-indep-cma', 'cma-concern',
         'gate-indep-or',
         'pra-zonal', 'pra-scenario', 'zsa-separation', 'zsa-phys', 'usoc-info'
     ];
@@ -6801,7 +6802,7 @@ window._bulkSel = new Set();
 
     // ========================================================================
     // HTML → MARKDOWN — walks the contenteditable DOM and emits markdown that
-    // Reports._parseTemplate can read. Supported: h1-h3, paragraphs, ul/ol,
+    // the report builder (Reports._blocksFromTemplate) can read. Supported: h1-h3, paragraphs, ul/ol,
     // bold/italic, token chips (passed through as {{name}}).
     // ========================================================================
     function _htmlToMarkdown(root) {

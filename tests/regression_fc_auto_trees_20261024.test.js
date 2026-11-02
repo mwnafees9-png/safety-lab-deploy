@@ -98,9 +98,13 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const a2 = row({ fcId: 'TST-02', fcDesc: 'Minor annoyance', severity: 'Minor' });
             const a3 = row({ fcId: 'TST-03', fcDesc: 'Qualitative one', severity: 'Major', chartProps: { isSimple: true, isRedundant: true } });
             acFhaData.push(a1, a1b, a1c, a2, a3);
+            // rows pushed straight into the store, not through an edit: say so, the way every app writer does (scheduleAutosave), so a
+            // reader that remembered the groups at this generation (fc_link.js's open check, 30 Oct 2026) sees them
+            if (window.SLDataChange && typeof SLDataChange.bump === 'function') SLDataChange.bump();
             const sys = systemsData[0];
             const s1 = row({ fcId: 'TST-S1', fcDesc: 'System part of the test function', severity: 'Major', acTrace: 'TST-01', phases: P(2) });
             sys.fha = sys.fha || []; sys.fha.push(s1);
+            if (window.SLDataChange && typeof SLDataChange.bump === 'function') SLDataChange.bump();
             // [G] the condition and its governing row
             const g = SLFcTrees.groups('ac').find(x => x.fcId === 'TST-01');
             const longer = (r1, r2) => getPhaseExposureRatio(r1.phases).exposedHours >= getPhaseExposureRatio(r2.phases).exposedHours ? r1 : r2;

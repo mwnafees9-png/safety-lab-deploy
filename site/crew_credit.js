@@ -307,6 +307,13 @@
             var fcId = String(cells[2].textContent || '').trim().split(/\s+/)[0];
             var hit = byFc[fcId];
             if (hit && hit.findings.length) cells[6].insertAdjacentHTML('beforeend', badgeHtml({ findings: hit.findings }));
+            // 31 Oct 2026: comments on the crew credit this failure condition claims (comment_kinds.js, kind crewCredit)
+            try {
+                var art = tr.querySelector('[data-artifact-id]'), iid = art ? art.getAttribute('data-artifact-id') : '';
+                var CK = root.SLCommentKinds, tgt = iid ? { kind: 'crewCredit', id: String(iid), systemId: scope === 'ac' ? null : (_g('activeSystemId') || null) } : null;
+                var any = false; try { any = !!(tgt && typeof Review !== 'undefined' && Review.totalCountFor(tgt) > 0); } catch (_) {}
+                if (CK && tgt && ((hit && hit.findings.length) || any)) cells[6].insertAdjacentHTML('beforeend', '<span data-ck-host="1" data-cc-comment="1" title="Comments on the crew credit" style="margin-left:4px;">' + CK.button(tgt) + '</span>');
+            } catch (_) {}
             tr.setAttribute('data-cc', '1'); n++;
         });
         return n;

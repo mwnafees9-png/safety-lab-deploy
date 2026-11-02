@@ -144,7 +144,7 @@ const AiClient = (function(){
     // 2 Oct 2026 — the desktop key door: the user's own Anthropic key sits in the OS keychain and
     // the desktop's main process makes the call (window.slabAi). No proxy, no server, nothing of
     // ours in the path. The shell sets the flag only when AI mode is "my own key".
-    // 24 Oct 2026 (Radia, open item NS-6): a failed AI call used to throw a bare Error with only
+    // 24 Oct 2026 (customer report, open item NS-6): a failed AI call used to throw a bare Error with only
     // the message, so the drafting turns could not tell "this server has no AI key" (a 503 from
     // the server's AI service) from a busy provider, and retried it twice with a pause each time
     // before saying so. Every failure now carries the HTTP status and the error type the backend
@@ -156,6 +156,7 @@ const AiClient = (function(){
     function isPermanentError(e) {
         try {
             if (!e) return false;
+            if (e.stoppedByUser || e.studentTier) return true;
             if (e.permanent === true) return true;
             if (e.status === 401 || e.status === 402 || e.status === 403) return true;
             if (e.type && _PERMANENT_TYPES[e.type]) return true;
@@ -183,7 +184,10 @@ const AiClient = (function(){
     }
     function _desktopKeyDoor()  { try { return !!(typeof window !== 'undefined' && window.__SLAB_AI_DESKTOP_KEY__ && window.slabAi && typeof window.slabAi.messages === 'function'); } catch (_) { return false; } }
     function isProxyMode()     { return !_desktopKeyDoor() && !!(typeof isProPlusLicensed === 'function' && isProPlusLicensed() && getLicenseToken()); }
-    function isConfigured()    { return isProxyMode() || _hasByo('anthropic_key'); }
+    // 1 Nov 2026 (Waqas): the free student tier has no AI at all, not even with a key the student pastes in
+    function _studentNoAI() { try { return typeof isAcademicAccount === 'function' && isAcademicAccount(); } catch (_) { return false; } }
+    const STUDENT_NO_AI = 'AI is not part of the free student tier: every analysis here is yours to build.';
+    function isConfigured()    { if (_studentNoAI()) return false; return isProxyMode() || _hasByo('anthropic_key'); }
     function hasMemory()       { return isProxyMode() || _hasByo('voyage_key'); }
 
     // Token allowance tracker — measured in Sonnet-equivalent tokens / calendar month.
@@ -513,7 +517,38 @@ const AiClient = (function(){
         blocks.push({ type: 'text', text: system.slice(from) });
         return blocks;
     }
+    // 31 Oct 2026 (Waqas: "we need to give user an interface to be able to stop an AI run too"). stop() calls off every
+    // request still waiting for an answer: the fetch is aborted, so the backend stops working on it and nothing more is
+    // billed, and the caller gets one error marked stoppedByUser (a permanent one: never retried). Until everything
+    // that was running has wound down (no request in flight and the "AI working" indicator gone), a new request from
+    // the same run is refused the same way, so a batch's remaining turns, retries and follow-up passes never go out.
+    // The next run starts clean.
+    const _halt = { on: false, ctrls: new Set(), stopped: 0 };
+    function _stoppedError() { const e = new Error('Stopped by you.'); e.stoppedByUser = true; e.permanent = true; return e; }
+    function _busyCount() { try { return (typeof _aiBusy !== 'undefined' && _aiBusy) ? (_aiBusy.n || 0) : 0; } catch (_) { return 0; } }
+    function _idleCheck() {
+        if (_halt.on && _halt.ctrls.size === 0 && _busyCount() === 0) { _halt.on = false; try { window.dispatchEvent(new CustomEvent('slab-ai-idle', { detail: { afterStop: true } })); } catch (_) {} }
+    }
+    function stop() {
+        const n = _halt.ctrls.size;
+        _halt.on = true; _halt.stopped++;
+        _halt.ctrls.forEach(function (c) { try { c.abort(); } catch (_) {} });
+        try { window.dispatchEvent(new CustomEvent('slab-ai-stopping', { detail: { requests: n } })); } catch (_) {}
+        if (typeof setTimeout === 'function') setTimeout(_idleCheck, 0); else _idleCheck();
+        return n;
+    }
+    function stopping() { return _halt.on; }
+    function inFlight() { return _halt.ctrls.size; }
     async function messages(opts){
+        // 31 Oct 2026: Stop (see stop() above). A stopped run sends nothing more; this request's fetch is tied to Stop.
+        if (_halt.on) throw _stoppedError();
+        if (_studentNoAI()) { const se = new Error(STUDENT_NO_AI); se.permanent = true; se.studentTier = true; throw se; }
+        const _ac = (typeof AbortController === 'function') ? new AbortController() : null;
+        if (_ac) _halt.ctrls.add(_ac);
+        const _sig = _ac ? _ac.signal : undefined;
+        const _abortedP = new Promise(function (_, rej) { if (_ac) _ac.signal.addEventListener('abort', function () { rej(_stoppedError()); }); });
+        _abortedP.catch(function () {});
+        try {
         const s = _settings();
         const _cap = Number(s.costCap) || 0;   // 0 = uncapped (default); a per-customer cap is honored when set
         if (_cap > 0 && getSessionCost() >= _cap) throw new Error('Session cost cap ($' + _cap + ') reached. Raise or clear the cap in AI Settings, or reset the session.');
@@ -570,7 +605,7 @@ const AiClient = (function(){
                 // makes the request, streaming the answer back as a Response. The ITAR fence
                 // above already refused controlled projects before we got here.
                 if (!_hasByo('anthropic_key')) throw new Error('No AI key on this computer yet. Paste your Anthropic key under Advanced, or choose an AI endpoint in Settings.');
-                return window.slabAi.messages(b, { feature: opts.feature || 'messages', itar: itar });
+                const _dk = window.slabAi.messages(b, { feature: opts.feature || 'messages', itar: itar }); return (typeof _abortedP !== 'undefined') ? Promise.race([_dk, _abortedP]) : _dk;   // 31 Oct 2026: Stop does not wait for the shell
             }
             if (proxy) {
                 // Route via Safety Lab Aero proxy. Proxy handles Anthropic vs Azure OpenAI
@@ -583,7 +618,8 @@ const AiClient = (function(){
                         'x-safetylab-itar': itar ? '1' : '0',
                         'x-safetylab-feature': opts.feature || 'messages'
                     },
-                    body: JSON.stringify(b)
+                    body: JSON.stringify(b),
+                    signal: (typeof _sig !== 'undefined' ? _sig : undefined)
                 });
             }
             // BYO Anthropic key path.
@@ -602,7 +638,8 @@ const AiClient = (function(){
                         'x-safetylab-itar': itar ? '1' : '0',
                         'x-safetylab-feature': opts.feature || 'messages'
                     },
-                    body: JSON.stringify(b)
+                    body: JSON.stringify(b),
+                    signal: (typeof _sig !== 'undefined' ? _sig : undefined)
                 });
             }
             // Browser-only door: no backend, no proxy. The key is in sessionStorage for this tab.
@@ -616,7 +653,8 @@ const AiClient = (function(){
                     'anthropic-version': '2023-06-01',
                     'anthropic-dangerous-direct-browser-access': 'true'
                 },
-                body: JSON.stringify(b)
+                body: JSON.stringify(b),
+                signal: (typeof _sig !== 'undefined' ? _sig : undefined)
             });
         }
         let response, _preErr = null, _preType = '';   // _preErr: error already read off the first response (body is single-use)
@@ -657,7 +695,7 @@ const AiClient = (function(){
         const _ctype = (response.headers.get('content-type') || '');
         let json;
         if (_ctype.indexOf('text/event-stream') !== -1 && response.body && response.body.getReader) {
-            json = await _readAnthropicStream(response);
+            json = await Promise.race([_readAnthropicStream(response), _abortedP]);
         } else {
             json = await response.json();
             // a buffered answer from a thinking model starts with thinking blocks: callers read content[0].text, so the
@@ -672,6 +710,13 @@ const AiClient = (function(){
         // cache hit?" — cacheRead large and tokensIn small on the second call is the proof.
         _logCall({ feature: opts.feature || 'messages', model, ok: true, observed: _proxyAudited(response), tokensIn: usage.input_tokens, tokensOut: usage.output_tokens, cacheWrite: _cw, cacheRead: _cr, cacheMarkers: _cached, cost: incCost, startedAt, proxy, itar, temperatureAsked: _tempAsked, temperatureApplied: _tempApplied, effort: _shape ? _shape.effort : null });
         return json;
+        } catch (e) {
+            if (_ac && _ac.signal.aborted) throw _stoppedError();   // the fetch's own AbortError reads as the one plain stop
+            throw e;
+        } finally {
+            if (_ac) _halt.ctrls.delete(_ac);
+            if (typeof setTimeout === 'function') setTimeout(_idleCheck, 0); else _idleCheck();
+        }
     }
 
     // Voyage embeddings — single text or batch. Same Pro+ proxy / BYO key routing as messages().
@@ -778,7 +823,7 @@ const AiClient = (function(){
     }
     function getAuditLog(){ return (projectConfig && projectConfig.aiAuditLog) || []; }
 
-    return { isPermanentError, isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, getAuditLog, controlledRefusal, controlledRefusalMessage, unconfiguredRefusal, systemBlocks, billableTokens: _billableTokens };
+    return { isPermanentError, isConfigured, hasMemory, isProxyMode, getTokenUsage, getSessionCost, resetSessionCost, messages, embed, stop, stopping, inFlight, _idleCheck, getAuditLog, controlledRefusal, controlledRefusalMessage, unconfiguredRefusal, systemBlocks, billableTokens: _billableTokens };
 })();
 window.AiClient = AiClient;
 

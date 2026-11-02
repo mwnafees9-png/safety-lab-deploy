@@ -560,7 +560,8 @@ const APPROVABLE_KINDS = new Set([
 const _CRUD_KEY_TO_KIND = {
     'acFunc': 'acFunc', 'acFcim': 'acFcim', 'acReq': 'acReq',
     'sysFunc': 'sysFunc', 'sysFcim': 'sysFcim', 'sysReq': 'sysReq',
-    'pra': 'pra', 'zsa': 'zsa', 'cma': 'cma'
+    'pra': 'pra', 'zsa': 'zsa', 'cma': 'cma',
+    'resources': 'resource'   // 31 Oct 2026: comments on resources (comment_kinds.js)
 };
 
 window.openSignoffPanel = async function (kind, id, systemId) {
@@ -2077,11 +2078,7 @@ window.onFtaSysFuncChange = function() {
     _refreshSysWizard(page);
 };
 
-window.onFtaSysFcChange = function() {
-    // Phase 53.35 — marker so we can confirm the fresh JS loaded. If you don't see this in the
-    // browser console when picking an FC, the page is running cached JS — Cmd+Shift+R to hard
-    // reload. (No new fault tree should be added to the sidebar.)
-    if (typeof console !== 'undefined' && console.log) console.log('[SafetyLab] onFtaSysFcChange (Phase 53.34/35 — reusing current page)');
+window.onFtaSysFcChange = async function() {
     const currentPage = ftaPages.find(p => p.id === activeFTAPageId);
     if (!currentPage) return;
     const fcSel = document.getElementById('fta-sys-fc');
@@ -2104,6 +2101,22 @@ window.onFtaSysFcChange = function() {
         }
     });
 
+    // 31 Oct 2026 (fc_link.js v2.0; Waqas: "why are we not picking up the hazard assessment and doing the population
+    // automatically", "there shouldnt be any room for errors"): a PASA or PSSA tree is linked by the app, from the FHA.
+    // Picking a condition here OPENS that condition's own tree; nothing is relinked and nothing is asked. A condition
+    // that takes no tree is refused with the reason (the list greys it). Only a standalone tree is linked by a pick.
+    const FL = (typeof window !== 'undefined') ? window.SLFcLink : null;
+    if (FL && typeof FL.go === 'function') {
+        const res = FL.go(currentPage, fha);
+        if (res.action === 'refused') { _refreshSysWizard(currentPage); if (typeof showToast === 'function') showToast(res.why, 'warning', 7000); return; }
+        if (res.action === 'same') { _refreshSysWizard(currentPage); return; }
+        if (res.action === 'opened') { if (typeof showToast === 'function') showToast('Opened the tree for ' + (fha.fcId || 'that failure condition') + '. Each failure condition has its own tree, made from the FHA.', 'info', 4200); return; }
+        if (res.action !== 'linked') { _refreshSysWizard(currentPage); return; }
+        try { if (FL.rowsFor(fha)[0]) fha = FL.rowsFor(fha)[0]; } catch (_) {}
+    } else {
+        currentPage.linkedFhaIds = [fha.internalId];
+    }
+
     // Phase 53.44 — non-destructive FC re-pick. If the page already has a developed tree
     // (children under the root), preserve them entirely and just RE-LINK the FHA — update the
     // top event's name and probability target in place, and update the page label. The user
@@ -2113,12 +2126,15 @@ window.onFtaSysFcChange = function() {
     page.treeLevel = 'system';
     page.systemId = currentPage.systemId;
 
-    const target = (typeof getSafetyTarget === 'function') ? getSafetyTarget(fha.severity) : { prob: null, dal: null };
+    const target = (typeof getSafetyTarget === 'function') ? Object.assign({}, getSafetyTarget(fha.severity)) : { prob: null, dal: null };
+    // the tree's own target (the stricter of the class target and the aircraft tree's allocation), when it has one
+    if (typeof page.targetP === 'number' && isFinite(page.targetP) && page.targetP > 0 && FL) target.prob = page.targetP;
     // Phase 56.23 — description = fcDesc only, displayId = fcId (with TOP-XXX
     // fallback if the FHA has no fcId yet).
     const newTopName = (fha.fcDesc || 'Failure condition').trim();
     const newTopDisplayId = (fha.fcId && fha.fcId.trim()) ? fha.fcId.trim() : null;
-    const newPageName = (fha.fcId || 'FHA') + (fha.fcDesc ? ' — ' + fha.fcDesc.trim().slice(0, 40) : '');
+    // an app-made tree keeps its PASA/PSSA name (fc_link.js sets it); any other tree is named for its condition
+    const newPageName = page.autoFcTree ? page.name : (fha.fcId || 'FHA') + (fha.fcDesc ? ' — ' + fha.fcDesc.trim().slice(0, 40) : '');
 
     const hasChildren = !!(page.root && (
         (page.root.children && page.root.children.length > 0) ||
@@ -2154,6 +2170,7 @@ window.onFtaSysFcChange = function() {
     }
     page.name = newPageName;
     page.linkedFhaId = fha.internalId;
+    page._wizardSubId = picked.subId || page._wizardSubId;
 
     // Drive the existing FHA-link dropdown to the chosen FHA so the toolbar (top-event target
     // panel, event-allocation panel, AC↔Sys link panel) all refresh in step.
@@ -2181,7 +2198,11 @@ window.onFtaSysFcChange = function() {
     if (typeof updateD3 === 'function') updateD3();
     if (typeof fitToScreen === 'function') fitToScreen();
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
-    const probStr = target.prob != null ? target.prob.toExponential(0) + ' /FH' : 'no quantitative target';
+    // the picker shows the condition this tree is now linked to (it used to go blank)
+    try { _refreshSysWizard(page); } catch (_) {}
+    if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
+    if (typeof updateFTAConfigUI === 'function') { try { updateFTAConfigUI(); } catch (_) {} }
+    const probStr = target.prob != null ? target.prob.toExponential(1) + ' /FH' : 'no quantitative target';
     if (typeof showToast === 'function') showToast(
         (action === 'relinked' ? 'Re-linked to' : 'Fault tree initialized for') + ' ' + (fha.fcId || '') +
         ' (severity ' + (fha.severity || '—') + ' → top-event target ' + probStr + ').' +
@@ -3193,7 +3214,9 @@ const _SHORTCUT_GROUPS = [
 window.reviewJumpFromComment = function(commentId) {
     const c = Review.getById(commentId);
     if (!c) return;
-    const desc = _reviewJumpDescriptorFor(c.target);
+    // 31 Oct 2026: the kinds comment_kinds.js adds know their own way there (a tree, a diagram, a model on screen)
+    let _done = false; try { _done = !!(window.SLCommentKinds && SLCommentKinds.has(c.target && c.target.kind) && SLCommentKinds.jump(c.target)); } catch (_) {}
+    const desc = _done ? null : _reviewJumpDescriptorFor(c.target);
     if (desc) jumpToArtifact(desc);
     setTimeout(() => openReviewPanel(c.target), 200);
 };

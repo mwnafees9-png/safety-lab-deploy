@@ -580,7 +580,8 @@
             btn('new', '+ New diagram', 'Start a blank diagram with a start and an end, then draw blocks and links') +
             (pages.length ? '<span style="display:inline-flex; gap:6px; align-items:center;"><select id="rbd-tree-pick" aria-label="Fault tree to derive from" style="width:auto; max-width:240px; margin:0;">' + pages.map(p => '<option value="' + _esc(p.id) + '">' + _esc(p.name || p.id) + '</option>').join('') + '</select>' + btn('derive', 'Derive from fault tree', 'Draw the success view of the chosen fault tree (OR becomes series, AND becomes parallel, voting becomes k-out-of-n); you can edit it afterwards') + '</span>' : '') +
             btn('formula', 'Import formula', 'Type series(...), parallel(...), koon(k, ...), block(name, λ) and get a diagram you can edit') +
-            (m ? btn('rename', 'Rename', 'Rename this diagram') + btn('delete', 'Delete', 'Remove this diagram') : '');
+            (m ? btn('rename', 'Rename', 'Rename this diagram') + btn('delete', 'Delete', 'Remove this diagram') : '') +
+            ((m && window.SLCommentKinds) ? '<span data-ck-host="1" title="Comments on this diagram">' + SLCommentKinds.button({ kind: 'rbd', id: String(m.id) }) + '</span>' : '');   // 31 Oct 2026
         const eh = document.getElementById('rbd-editor-host');
         if (!m) {
             if (_ed) { try { _ed.destroy(); } catch (_) {} _ed = null; }

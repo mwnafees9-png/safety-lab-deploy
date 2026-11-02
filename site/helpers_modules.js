@@ -725,28 +725,7 @@ function openPasteReviewModal(branchRoot) {
         '    <span style="color:#6D7CF0;"><strong>' + totalStrictFromSrc + '</strong> kept source</span>',
         '    <span style="color:#34c759;"><strong>' + totalStrictFromDst + '</strong> kept destination</span>',
         '  </div>',
-        '  <div style="padding:14px 22px;border-bottom:1px solid var(--color-border-thin,#e5e5e7);">',
-        '    <p style="font-size:12px;font-weight:600;margin:0 0 8px 0;color:var(--color-text-primary,#111);">How should the pasted events be modeled?</p>',
-        '    <label style="display:block;padding:4px 0;cursor:pointer;font-size:13px;color:var(--color-text-primary,#111);">',
-        '      <input type="radio" name="paste-mode" value="independent" checked onchange="onPasteModeChange()" style="margin-right:6px;">',
-        '      <strong>Independent instance</strong> — new IDs, no correlation. Right for template reuse on a different physical system.',
-        '    </label>',
-        '    <label style="display:block;padding:4px 0;cursor:pointer;font-size:13px;color:var(--color-text-primary,#111);">',
-        '      <input type="radio" name="paste-mode" value="same-event" onchange="onPasteModeChange()" style="margin-right:6px;">',
-        '      <strong>Same physical event</strong> — share IDs with the source. The same battery / pump / SW function in both trees, fully correlated.',
-        '    </label>',
-        '    <label style="display:block;padding:4px 0;cursor:pointer;font-size:13px;color:var(--color-text-primary,#111);">',
-        '      <input type="radio" name="paste-mode" value="ccf-group" onchange="onPasteModeChange()" style="margin-right:6px;">',
-        '      <strong>CCF group</strong> — partial correlation via β-factor. Same vendor lot, same family, similar-but-not-identical events.',
-        '    </label>',
-        '    <div id="paste-ccf-config" style="display:none;margin:8px 0 0 22px;padding:10px;background:var(--color-surface-2,rgba(0,0,0,0.04));border-radius:8px;">',
-        '      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--color-text-secondary,#666);display:block;margin-bottom:4px;">CCF group name</label>',
-        '      <input type="text" id="paste-ccf-name" placeholder="e.g., BATT-PROPLOT-2024Q1" style="width:100%;padding:6px 8px;margin:0 0 10px 0;font-size:13px;border:1px solid var(--color-border-thin,#ddd);border-radius:6px;box-sizing:border-box;background:var(--color-surface-1,#fff);color:var(--color-text-primary,#111);">',
-        '      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--color-text-secondary,#666);display:block;margin-bottom:4px;">β-factor (0–1)</label>',
-        '      <input type="number" id="paste-ccf-beta" placeholder="0.1" step="0.01" min="0" max="1" value="0.1" style="width:100%;padding:6px 8px;margin:0;font-size:13px;border:1px solid var(--color-border-thin,#ddd);border-radius:6px;box-sizing:border-box;background:var(--color-surface-1,#fff);color:var(--color-text-primary,#111);">',
-        '      <p style="font-size:10px;color:var(--color-text-tertiary,#888);margin:6px 0 0 0;line-height:1.4;">Applied to all basic events in the pasted subtree AND their source-tree counterparts. β = 0.1 (common starting point) means 10% of failures are common-cause.</p>',
-        '    </div>',
-        '  </div>',
+        // 1 Nov 2026 (item 32): same event, copy or common cause group is asked BEFORE the paste (fta_paste.js); this dialog only reviews the allocation.
         '  <div style="overflow:auto;flex:1;padding:0 22px;">',
         '    <table style="width:100%;border-collapse:collapse;font-size:13px;margin:12px 0;color:var(--color-text-primary,#111);">',
         '      <thead style="position:sticky;top:0;background:var(--color-surface-1,#fff);">',
@@ -1499,7 +1478,7 @@ function _cssZoomOf(el) {
 }
 
 async function saveProject() {
-    // 26 Oct 2026 (desktop, Radia): the native Save As, the same as File > Save As, so the shell knows the file and
+    // 26 Oct 2026 (desktop, customer report): the native Save As, the same as File > Save As, so the shell knows the file and
     // every confirmed save from now on goes back to it (save_state.js). The browser keeps its download below.
     if (typeof window !== 'undefined' && window.slabProjectFile && typeof window.slabProjectFile.saveAs === 'function') {
         try { await window.slabProjectFile.saveAs(); } catch (e) { showToast('Save failed: ' + ((e && e.message) || e), 'error', 5000); }
@@ -1971,7 +1950,7 @@ function renderCcmrPage() {
         html += '<p style="color: var(--color-text-tertiary); font-size: 13px;">No latent events found in Catastrophic/Hazardous trees. Latents are basic events with a periodic-test repair model (τ) or latent exposure mode (dormancy interval) exceeding the mission time.</p>';
     } else {
         html += '<table class="data-table" style="width:100%; font-size:12.5px;"><thead><tr>' +
-            '<th>Event</th><th>Tree</th><th>System</th><th>FC</th><th>Sev</th><th>Detection</th><th style="text-align:right;">λ /h</th><th style="text-align:right;">Current interval</th><th style="text-align:right;">Not-to-exceed</th><th style="text-align:right;">Margin</th><th>Note</th>' +
+            '<th>Event</th><th>Tree</th><th>System</th><th>FC</th><th>Sev</th><th>Detection</th><th style="text-align:right;">λ /h</th><th style="text-align:right;">Current interval</th><th style="text-align:right;">Not-to-exceed</th><th style="text-align:right;">Margin</th><th>Note</th><th>Review</th>' +
             '</tr></thead><tbody>';
         rows.forEach(r => {
             const margin = (r.nte != null && isFinite(r.nte) && r.nte < 1e6 && r.interval > 0) ? (r.nte / r.interval) : null;
@@ -1986,7 +1965,8 @@ function renderCcmrPage() {
                 '<td class="u-mono" style="text-align:right;">' + _ccmrFmtH(r.interval) + '</td>' +
                 '<td class="u-mono" style="text-align:right;' + (r.exceeds ? ' color: var(--color-danger); font-weight:600;' : '') + '">' + _ccmrFmtH(r.nte) + '</td>' +
                 '<td class="u-mono" style="text-align:right;">' + (margin != null ? ('×' + (Math.round(margin * 100) / 100)) : '—') + '</td>' +
-                '<td style="color: var(--color-text-tertiary);">' + esc(r.note) + '</td></tr>';
+                '<td style="color: var(--color-text-tertiary);">' + esc(r.note) + '</td>' +
+                ((r.pageId != null && r.lid != null && typeof SLCommentKinds !== 'undefined') ? SLCommentKinds.cell('ccmr', String(r.pageId) + '|' + String(r.lid)) : '<td></td>') + '</tr>';   // 31 Oct 2026: comments
         });
         html += '</tbody></table>';
         html += '<p style="font-size: 11.5px; color: var(--color-text-tertiary); font-family: var(--font-mono);">Not-to-exceed = largest interval at which the tree\'s top event still meets its severity target (per-FH target × ' + _ccmrFmtH(tExp) + ' exposure), all other events at current values. Rows over their bound are CCMR candidates requiring an interval reduction or design change (AC 25-19A).</p>';
@@ -3290,7 +3270,7 @@ function renderCoffePanel() {
         '<th style="width:44px;">Case</th>' +
         cols.map(id => '<th style="text-align:center; min-width:86px;">' + esc(_macSysName(id)) + '</th>').join('') +
         '<th style="min-width:150px;">Capability result</th>' +
-        '<th style="text-align:center; min-width:130px;">Results in FC?</th></tr></thead><tbody>';
+        '<th style="text-align:center; min-width:130px;">Results in FC?</th><th>Review</th></tr></thead><tbody>';
     if (!projectConfig.coffe.results) projectConfig.coffe.results = {};
     const _coffeRow = (kase) => {
         const idx = caseNo[kase.key] - 1;
@@ -3335,7 +3315,8 @@ function renderCoffePanel() {
              'var(--color-text-tertiary);">MAC: ' + (c === 'yes' ? 'breaches' : 'survives') + ((v && v.verdict === c) ? ' ✓' : '')) + '</div>';
         html += '<tr><td class="u-mono">' + (idx + 1) + '</td>' + stateCells +
             '<td style="cursor:pointer; font-size:11.5px;" title="Capability result — click to describe (Table B2 column 6)" onclick="coffeEditResult(\'' + esc(String(fc.internalId)) + '\',\'' + esc(kase.key) + '\')">' + (result ? esc(result) : '<span style="color:var(--color-text-tertiary);">describe…</span>') + '</td>' +
-            '<td style="text-align:center;">' + det + '</td></tr>';
+            '<td style="text-align:center;">' + det + ((projectConfig.coffe.proposals && projectConfig.coffe.proposals[rKey]) ? '<div style="font-size:10px; color:#6B4FD8; font-weight:600;" title="' + esc(projectConfig.coffe.proposals[rKey].note || '') + '">ANEM proposes ' + esc(projectConfig.coffe.proposals[rKey].verdict) + ': click ' + (v ? 'the verdict' : 'determine') + ' to sign it or discard it</div>' : '') + '</td>' +
+            (typeof SLCommentKinds !== 'undefined' ? SLCommentKinds.cell('coffe', String(fc.internalId) + '§' + kase.key) : '<td></td>') + '</tr>';   // 31 Oct 2026: comments
         return html;
     };
     html += '<h4 style="margin: var(--s-3) 0 6px;">Elicit — judgment residue <span style="font-weight:400; font-size:11px; color:var(--color-text-tertiary);">(malfunction · unmodelled systems · disagreements)</span></h4>';
@@ -3607,7 +3588,7 @@ function renderMacPage() {
     if (!rules.length) {
         html += '<p style="color: var(--color-text-tertiary); font-size: 13px;">No MAC rules yet. Start at F0 (Counted): pick a function and state its minimum surviving equipment — the breach set compiles instantly, single-point findings included. Numbers can replace judgment later (F2 · Measured) without losing anything.</p>';
     } else {
-        html += '<table class="data-table" style="width:100%; font-size:12.5px;"><thead><tr><th>Function</th><th>Phase</th><th>Level</th><th>MAC holds when</th><th>Breach set</th><th>Substantiation</th><th></th></tr></thead><tbody>';
+        html += '<table class="data-table" style="width:100%; font-size:12.5px;"><thead><tr><th>Function</th><th>Phase</th><th>Level</th><th>MAC holds when</th><th>Breach set</th><th>Substantiation</th><th></th><th>Review</th></tr></thead><tbody>';
         rules.forEach(r => {
             const bcheck = macBreachSetsChecked(r);
             const breaches = bcheck.sets;
@@ -3639,7 +3620,8 @@ function renderMacPage() {
                 '<td>' + subst + '</td>' +
                 '<td style="white-space:nowrap;"><button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macFidToggle(\'' + esc(r.id) + '\')">' + (_macFidOpen[r.id] ? 'Fidelity ▴' : 'Fidelity F1/F2 ▾') + '</button> ' +
                 '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macSubstantiate(\'' + esc(r.id) + '\')">' + (r.substantiation && r.substantiation.kind === 'sdd' ? 'Revert' : 'Substantiate') + '</button> ' +
-                '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macDeleteRule(\'' + esc(r.id) + '\')">✕</button></td></tr>';
+                '<button class="ckpt-m-btn" style="font-size:11px; padding:2px 8px;" onclick="macDeleteRule(\'' + esc(r.id) + '\')">✕</button></td>' +
+                (typeof SLCommentKinds !== 'undefined' ? SLCommentKinds.cell('mac', String(r.id)) : '<td></td>') + '</tr>';   // 31 Oct 2026: comments
             if (!mchk.ok) {
                 const rp = mchk.systems.map(m => {
                     const fns = SLFnResolve.functionsOf(m);
@@ -3650,9 +3632,9 @@ function renderMacPage() {
                             : '<i>declare functions on this system first</i>') + '</div>';
                 }).join('');
                 const un = mchk.unknown.map(m => '<div style="margin:3px 0;">Member &ldquo;' + esc(m) + '&rdquo; resolves to nothing &mdash; deleted or renamed. Remove it or restore the function.</div>').join('');
-                html += '<tr><td colspan="7" style="background:var(--color-surface-2); border-left:3px solid #9A6200; padding:8px 16px; font-size:12px; color:var(--color-text-secondary);"><b style="color:#9A6200;">Member granularity &mdash; ' + (mchk.systems.length + mchk.unknown.length) + ' finding(s)</b>' + rp + un + '</td></tr>';
+                html += '<tr><td colspan="8" style="background:var(--color-surface-2); border-left:3px solid #9A6200; padding:8px 16px; font-size:12px; color:var(--color-text-secondary);"><b style="color:#9A6200;">Member granularity &mdash; ' + (mchk.systems.length + mchk.unknown.length) + ' finding(s)</b>' + rp + un + '</td></tr>';
             }
-            if (_macFidOpen[r.id]) html += '<tr><td colspan="7" style="background:var(--color-surface-2); border-left:3px solid var(--color-text-primary); padding:10px 16px;">' + _macFidEditorHtml(r) + '</td></tr>';
+            if (_macFidOpen[r.id]) html += '<tr><td colspan="8" style="background:var(--color-surface-2); border-left:3px solid var(--color-text-primary); padding:10px 16px;">' + _macFidEditorHtml(r) + '</td></tr>';
         });
         html += '</tbody></table>';
         html += '<p style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">Breach set = minimal failure combinations defeating the rule (F0 Counted: every (n−min+1)-subset · F1 Weighted / F2 Measured: minimal damage assignments driving surviving capacity below the floor; degraded states are their own events; loss dominates degraded — never double-counted; subsumption-reduced). Red singletons are single-point MAC breaches. Every compile is equivalence-proven against these sets.</p>';
@@ -4629,6 +4611,8 @@ function _computeTopAllocatorContext() {
 
 function formatNodeMetrics(d) {
     const node = d.data;
+    // 1 Nov 2026 (customer checklist item 45): a result that depends on a circular transfer is no number at all (fta_loops.js)
+    if (node && node._circular) return 'No result: circular transfer';
     const isLeaf = node.type !== 'gate' && node.gateType !== 'TRANSFER';
     const tExp = ftaConfig.exposureTime || 1;
     // Tree-type-aware display. An ALLOCATION tree (top-down apportionment) shows the probability
@@ -4722,7 +4706,41 @@ function ftaNodeWarnings(node, isRoot) {
                   (isFinite(v.delta) ? Number(v.delta).toFixed(1) : '?') +
                   ' times more reliable than it can be. An architecture change or a higher grade part is needed.' });
     }
+    // 31 Oct 2026 (customer checklist item 16): a rate with no source (rate_sources.js)
+    // 2 Nov 2026: a house event is a condition switched on or off; anything but true (1) or false (0) on it is most likely a
+    // budget an earlier allocation wrote into it (allocation no longer touches house events)
+    if (leaf && node.type === 'house' && !(Number(node.probability) === 0 || Number(node.probability) === 1)) out.push({ key: 'house-value', sev: 'warn',
+        title: 'House event not set to true or false',
+        text: 'A house event is a condition switched on or off, so its value is true (1) or false (0). This one holds ' + fmt(node.probability) + ', most likely a budget an earlier allocation wrote into it. Set it to 1 or 0.' });
+    // 1 Nov 2026 (customer checklist item 41): a latent event and every active failure that, with it, reaches the top (fta_latent.js)
+    if (leaf && Array.isArray(node._lp1) && node._lp1.length) {
+        const L = window.SLFtaLatent, bad = node._lp1.filter(x => L && L.isOpen(x.status));
+        const iv = node._lp1[0].interval ? ('checked every ' + node._lp1[0].interval.hours + ' h') : 'with no check interval';
+        const list = node._lp1.map(x => x.active.trim() + ' (' + ((L && L.STATUS_TEXT[x.status]) || x.status) + (x.rate != null ? ', pair ' + fmt(x.rate) + '/FH' : '') + (x.req ? ', ' + x.req : '') + ')').join('; ');
+        out.push({ key: bad.length ? 'latent-plus-one' : 'latent-plus-one-ok', sev: bad.length ? 'warn' : 'info',
+            title: bad.length ? 'Latent plus one: open' : 'Latent plus one: covered',
+            text: 'Latent event, ' + iv + '. With it, ' + node._lp1.length + ' single active failure' + (node._lp1.length === 1 ? '' : 's') + ' reach' + (node._lp1.length === 1 ? 'es' : '') + ' the top: ' + list + '.' });
+    }
+    // 1 Nov 2026 (customer checklist item 42): on an integrated tree, where each transferred branch comes from (fta_integrated.js)
+    if (node.intFrom) out.push({ key: 'int-from', sev: 'info', title: 'Integrated: branches brought in from other trees',
+        text: 'This branch is the tree "' + (node.intFrom.name || node.intFrom.pageId) + '", brought in through a transfer gate. Edit it on that tree; this integrated tree rebuilds itself.' });
+    if (node.intNote) out.push({ key: 'int-note', sev: 'warn', title: 'Integrated tree has no content', text: node.intNote });
+    // 1 Nov 2026 (customer checklist item 45): a budget on an allocation tree that depends on a circular transfer (fta_loops.js)
+    if (leaf && node._circular) out.push({ key: 'circular-result', sev: 'warn', title: 'No result: depends on a circular transfer',
+        text: 'No budget is shown here because this tree depends on a circular transfer: ' + ((window.SLFtaLoops && window.SLFtaLoops.path) ? window.SLFtaLoops.path(node._circular.loop) : '') + '. Break the circle and the budget comes back.' });
+    try { if (leaf && window.SLRateSources && window.SLRateSources.missing(node)) out.push({ key: 'rate-source', sev: 'warn', title: 'Failure rate with no source', text: 'This failure rate does not say where it comes from (supplier guarantee, field data, calculated, library entry or engineering judgment). The SSA needs a source for every rate it uses.' }); } catch (_) {}
     if (leaf) return out;
+    // 1 Nov 2026 (customer checklist item 45): circular transfers (fta_loops.js stamps node._circular). A transfer ON the
+    // circle is a warning with the whole path; every gate whose result depends on the circle says why it has no number.
+    if (node._circular) {
+        const _lp = (window.SLFtaLoops && window.SLFtaLoops.path) ? window.SLFtaLoops.path(node._circular.loop) : '';
+        if (node._circular.inLoop) out.push({ key: 'circular-transfer', sev: 'warn',
+            title: 'Circular transfer: no result for any tree on the circle',
+            text: 'This transfer is part of a circle: ' + _lp + '. A fault tree cannot be calculated around a circle, so no tree on it, and no tree that transfers into it, has a result. Point this transfer at a different tree, or remove it, and the results come back.' });
+        else out.push({ key: 'circular-result', sev: 'warn',
+            title: 'No result: depends on a circular transfer',
+            text: 'No number is shown here because this result depends on a circular transfer: ' + _lp + '. Break the circle and the result comes back.' });
+    }
     // 27 Oct 2026: a gate whose prescribed budget is more than the share the top event gives it lets the
     // tree add up to more than its target (by the engineer's choice); it says so where it happens.
     if (node._prescribedOverallocation && isFinite(node._prescribedOverallocation.apportioned)) {
@@ -5204,6 +5222,93 @@ function acFhaAddPhaseVariant(iId) {
     if (typeof showToast === 'function') showToast('Phase variant added under ' + (src.fcId || 'this condition') + ' — set its phases and severity (per-phase classification, one FC id). The fault trees take the group\'s worst case.', 'success', 5200);
 }
 
+// 31 Oct 2026 (Waqas: "rationale and reasoning needs to be there"): under a failure condition, why it carries its class
+// (severityRationale), and for a combined condition what it combines and on what basis (fc_variants.js v2.0).
+function _fhaWhyHtml(row) {
+    if (!row) return '';
+    const out = [];
+    if (Array.isArray(row.combinedOf) && row.combinedOf.length) {
+        const basis = Array.isArray(row.combineBasis) && row.combineBasis.length ? ' · basis: ' + row.combineBasis.map(b => b.text || (b.kind + ' ' + b.ref)).join('; ') : '';
+        out.push('<div class="fha-why" style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;"><strong>Combines</strong> ' + esc(row.combinedOf.join(' + ')) + esc(basis) + '</div>');
+    }
+    const r = String(row.severityRationale || '').trim();
+    if (r) out.push('<div class="fha-why" style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;"><strong>Why this severity:</strong> ' + esc(r) + '</div>');
+    // 31 Oct 2026 (customer checklist item 5): every classified row says why it is that class, No Safety Effect included.
+    // ANEM drafts the reason from the row's own effects and phases; the draft waits here for Accept, Edit or Discard.
+    else if (String(row.severity || '').trim()) {
+        const k = _fhaReasonKey(row), d = k && window.SLFhaReasonDrafts ? window.SLFhaReasonDrafts[k] : null;
+        if (d) out.push('<div class="fha-why fha-why-draft" data-fha-reason-draft="' + esc(k) + '" style="font-size:11.5px;margin-top:4px;padding:6px 8px;border-radius:7px;background:rgba(107,79,216,.05);outline:1.5px dashed rgba(107,79,216,.55);outline-offset:-2px;">' +
+            '<span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:700;background:rgba(107,79,216,.12);color:#4B33B0;">ANEM</span> <strong>Why ' + esc(row.severity) + ':</strong> ' + esc(d.text) +
+            (d.note ? '<div style="color:#7A4800;margin-top:3px;">' + esc(d.note) + '</div>' : '') +
+            '<div style="margin-top:5px;display:flex;gap:6px;"><button type="button" class="btn-cyan" style="font-size:11px;padding:2px 9px;" onclick="event.stopPropagation();fhaReasonAccept(\'' + esc(k) + '\')">Accept</button>' +
+            '<button type="button" class="btn-ghost" style="font-size:11px;padding:2px 9px;" onclick="event.stopPropagation();fhaReasonEdit(\'' + esc(k) + '\')">Edit</button>' +
+            '<button type="button" class="btn-ghost" style="font-size:11px;padding:2px 9px;" onclick="event.stopPropagation();fhaReasonDiscard(\'' + esc(k) + '\')">Discard</button></div></div>');
+        else out.push('<div class="fha-why fha-why-missing" data-fha-reason-missing="' + esc(k || '') + '" style="font-size:11px;color:var(--color-warning,#b26a00);margin-top:4px;">No reason recorded for ' + esc(row.severity) + ' ' +
+            '<button type="button" class="btn-ghost" style="font-size:11px;padding:1px 8px;border-color:#6B4FD8;color:#4B33B0;" onclick="event.stopPropagation();fhaReasonDraft(\'' + esc(k || '') + '\')">\u2728 Draft with ANEM</button></div>');
+    }
+    return out.join('');
+}
+// the row's place: 'ac:<internalId>' or 'sys:<systemId>:<internalId>'
+function _fhaReasonKey(row) {
+    if (!row) return '';
+    try { if ((acFhaData || []).indexOf(row) >= 0) return 'ac:' + row.internalId; } catch (_) {}
+    try { const sy = (systemsData || []).find(x => x && (x.fha || []).indexOf(row) >= 0); if (sy) return 'sys:' + sy.id + ':' + row.internalId; } catch (_) {}
+    return '';
+}
+function _fhaReasonRow(k) {
+    const m = /^(?:ac:(.+)|sys:([^:]+):(.+))$/.exec(String(k || '')); if (!m) return null;
+    if (m[1] != null) return { row: (acFhaData || []).find(r => r && String(r.internalId) === m[1]) || null, sys: null };
+    const sy = (systemsData || []).find(x => x && String(x.id) === m[2]);
+    return { row: sy ? ((sy.fha || []).find(r => r && String(r.internalId) === m[3]) || null) : null, sys: sy || null };
+}
+function _fhaReasonRerender(hit) { try { if (hit && hit.sys) { if (typeof renderSysFHA === 'function') renderSysFHA(); } else if (typeof renderACFHA === 'function') renderACFHA(); } catch (_) {} }
+async function fhaReasonDraft(k) {
+    const keys = Array.isArray(k) ? k : [k];
+    try { if (typeof window.slLoadAI === 'function') await window.slLoadAI(); } catch (_) {}
+    if (!(window.SafetyLabAI && typeof window.SafetyLabAI.fhaReasonDraft === 'function')) { showToast('ANEM is not available here.', 'warning'); return; }
+    const res = await window.SafetyLabAI.fhaReasonDraft(keys);
+    if (res && !res.ok && res.why) showToast(res.why, 'warning', 6000); else if (res && res.summary) showToast(res.summary, 'info', 4000);
+    _fhaReasonRerender(_fhaReasonRow(keys[0]));
+}
+function fhaReasonAccept(k) {
+    const hit = _fhaReasonRow(k), d = window.SLFhaReasonDrafts && window.SLFhaReasonDrafts[k];
+    if (!hit || !hit.row || !d) return;
+    hit.row.severityRationale = d.text; hit.row.severityRationaleBy = 'ANEM, accepted'; hit.row.aiRationaleModel = d.model || null;
+    delete window.SLFhaReasonDrafts[k];
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+    _fhaReasonRerender(hit);
+}
+async function fhaReasonEdit(k) {
+    const hit = _fhaReasonRow(k), d = window.SLFhaReasonDrafts && window.SLFhaReasonDrafts[k];
+    if (!hit || !hit.row || !d) return;
+    const t = await slPrompt('Why ' + (hit.row.fcId || 'this condition') + ' is ' + hit.row.severity + ':', d.text);
+    if (t == null || !String(t).trim()) return;
+    hit.row.severityRationale = String(t).trim(); hit.row.severityRationaleBy = 'ANEM, edited and accepted';
+    delete window.SLFhaReasonDrafts[k];
+    try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+    _fhaReasonRerender(hit);
+}
+function fhaReasonDiscard(k) { if (window.SLFhaReasonDrafts) delete window.SLFhaReasonDrafts[k]; _fhaReasonRerender(_fhaReasonRow(k)); }
+// every classified row of one FHA with no reason yet ('ac' or a system id)
+function fhaReasonMissingKeys(scope) {
+    const rows = scope === 'ac' ? (acFhaData || []) : (((systemsData || []).find(x => x && String(x.id) === String(scope)) || {}).fha || []);
+    return rows.filter(r => r && String(r.severity || '').trim() && !String(r.severityRationale || '').trim()).map(_fhaReasonKey).filter(Boolean);
+}
+// a line above an FHA table: how many classified rows have no reason, and one button to draft them all
+function _fhaReasonBar(scope, tbodyId) {
+    try {
+        const tb = document.getElementById(tbodyId); const table = tb && tb.closest('table'); if (!table) return;
+        const id = 'fha-reason-bar-' + (scope === 'ac' ? 'ac' : 'sys');
+        let bar = document.getElementById(id);
+        const keys = fhaReasonMissingKeys(scope);
+        if (!keys.length) { if (bar) bar.remove(); return; }
+        if (!bar) { bar = document.createElement('div'); bar.id = id; bar.style.cssText = 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0;font-size:12.5px;color:var(--color-warning,#b26a00);'; table.parentNode.insertBefore(bar, table); }
+        bar.setAttribute('data-fha-reason-scope', String(scope));
+        bar.innerHTML = '<span>' + keys.length + ' classified row' + (keys.length === 1 ? ' has' : 's have') + ' no reason for the class (No Safety Effect included).</span>' +
+            '<button type="button" class="btn-ghost" style="font-size:12px;padding:3px 10px;border-color:#6B4FD8;color:#4B33B0;" onclick="fhaReasonDraft(fhaReasonMissingKeys(this.parentNode.getAttribute(\'data-fha-reason-scope\')))">\u2728 Draft the missing reasons with ANEM</button>';
+    } catch (_) {}
+}
+try { window.SLFhaReasonDrafts = window.SLFhaReasonDrafts || {}; window.fhaReasonDraft = fhaReasonDraft; window.fhaReasonAccept = fhaReasonAccept; window.fhaReasonEdit = fhaReasonEdit; window.fhaReasonDiscard = fhaReasonDiscard; window.fhaReasonMissingKeys = fhaReasonMissingKeys; } catch (_) {}
 function renderACFHA() {
     if (typeof SLLazy !== 'undefined' && SLLazy.defer('ac-fha-body', 'renderACFHA', arguments)) return;   // lazy_render.js: off screen -> pending, runs on arrival
     // The entry form's phase grid is derived from the project's phase table, so it
@@ -5275,7 +5380,7 @@ function renderACFHA() {
         // opens the Comments cell of the group head instead, so nothing is lost. Sub-Function
         // a bit wider; Effects and Comments much wider.
         const _findingHtml = _grpBadge ? `<div style="margin:0 0 4px 0;">${_grpBadge.replace('margin-left:6px;', 'margin-left:0;')}</div>` : '';
-        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('acFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'ac')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('acFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}${_fhaWhyHtml(row)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'ac')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${customTds}${reviewTd}</tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
         SLPaginate.pageTbody({ key: 'fha-ac', tbody, rows: _fhaGrouping.ordered, rowHtml: _fhaRowHtml,
@@ -5285,6 +5390,7 @@ function renderACFHA() {
     }
     // Phase 54 — keep the thead in sync with the body.
     if (typeof _injectCustomColumnHeaders === 'function') _injectCustomColumnHeaders();
+    try { _fhaReasonBar('ac', 'ac-fha-body'); } catch (_) {}   // 31 Oct 2026 (item 5)
 }
 
 // 24 Oct 2026 (fc_auto_trees.js): every Major-or-worse row says, in words, where the 1309 chart routes it; a
@@ -5757,7 +5863,7 @@ function renderSysFHA() {
                   _l1Fns.map(f => `<option value="${esc(f.funcId)}"${_l1Sugg === String(f.funcId) ? ' selected-suggested' : ''}>${esc(f.funcName || f.funcId)}${_l1Sugg === String(f.funcId) ? ' (FCIM match)' : ''}</option>`).join('') + `</select>`
                 : `<div style="font-size:10px; color:var(--color-text-tertiary);">declare functions on this system first</div>`)
         ;
-        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('sysFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'sys')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('sysFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}${_fhaWhyHtml(row)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'sys')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>`;
     };
     // 31 Aug 2026 — same ordered view as the AC table: natural ascending fcId,
     // same-id phase rows clustered, blank ids last.
@@ -5768,6 +5874,7 @@ function renderSysFHA() {
     } else {
         _sysFhaOrdered.forEach(row => tbody.insertAdjacentHTML('beforeend', _sysFhaRowHtml(row)));
     }
+    try { _fhaReasonBar((typeof activeSystemId !== 'undefined' ? activeSystemId : null), 'sys-fha-body'); } catch (_) {}   // 31 Oct 2026 (item 5)
 }
 
 function _populatePraModelTypeDropdown(){
@@ -8130,7 +8237,7 @@ function _onSupabaseSignedIn(user) {
                 if (_signedLicenseAuthority().authoritative) return;
                 Promise.all([
                     _supabaseClient.from('license_tokens').select('plan,expires_at').limit(1).maybeSingle(),
-                    _supabaseClient.from('users').select('tier,trial_ends_at').limit(1).maybeSingle()
+                    _supabaseClient.from('users').select('tier,trial_ends_at,academic').limit(1).maybeSingle()
                 ]).then(function (r) {
                     const lic = r[0] && r[0].data;
                     const usr = r[1] && r[1].data;
@@ -8138,7 +8245,9 @@ function _onSupabaseSignedIn(user) {
                     const activeLicense = !!(lic && lic.plan && !(lic.expires_at && new Date(lic.expires_at).getTime() <= nowMs));
                     const comped   = (typeof isCompedEmail === 'function') && isCompedEmail(email);
                     const compedTier = (typeof compedTierFor === 'function') ? compedTierFor(email) : null;
-                    const academic = (typeof isEduEmail === 'function') && isEduEmail(email);
+                    // 1 Nov 2026: the server says who is academic (a .edu / .ac.* address or a domain on the world
+                    // university list), so a university that is not .edu (tum.de, carleton.ca) is free forever too
+                    const academic = !!(usr && usr.academic) || ((typeof isEduEmail === 'function') && isEduEmail(email));
                     const trialEndsAt = (usr && usr.trial_ends_at) ? new Date(usr.trial_ends_at).getTime() : null;
                     const onTrial = (trialEndsAt != null) && (trialEndsAt > nowMs);
                     const verdict = (typeof _slEntitlementVerdict === 'function')
@@ -8156,6 +8265,8 @@ function _onSupabaseSignedIn(user) {
                         } else if (typeof endTrial === 'function') { endTrial(); }
                     }
                     try { localStorage.setItem('safetyLab.server.paywalled', verdict.paywalled ? '1' : '0'); } catch(_) {}
+                    // the student tier has no AI at all (isAcademicAccount); a paid license or a comp is never a student account
+                    try { localStorage.setItem('safetyLab.server.academic', (academic && !activeLicense && !comped) ? '1' : '0'); } catch(_) {}
                     if (typeof refreshSigninChip === 'function') refreshSigninChip();
                     if (typeof _refreshAiAllowance === 'function') _refreshAiAllowance();
                     try { if (window.SafetyLab && typeof window.SafetyLab._recheckPaywall === 'function') window.SafetyLab._recheckPaywall(); } catch(_) {}
@@ -10641,7 +10752,7 @@ async function autoGenerateTopGateForFha(page, fha, opts) {
             type: 'gate', gateType: 'OR', probability: 0,
             children: []
         };
-        page.name = _fcPageName(fha);
+        if (!page.autoFcTree) page.name = _fcPageName(fha);   // an app-made tree keeps its PASA/PSSA name
         if (typeof showToast === 'function') showToast('Top event "' + _fcTopGateName(fha) + '" created from linked FHA.', 'success', 2800);
         return true;
     }
@@ -10649,7 +10760,7 @@ async function autoGenerateTopGateForFha(page, fha, opts) {
         // Placeholder root with no events — silently retitle + restamp displayId.
         page.root.name = _fcTopGateName(fha);
         page.root.displayId = _fcTopGateDisplayId(fha, page.root.id);
-        page.name = _fcPageName(fha);
+        if (!page.autoFcTree) page.name = _fcPageName(fha);   // an app-made tree keeps its PASA/PSSA name
         if (typeof showToast === 'function') showToast('Top event renamed to match the linked FHA.', 'info', 2400);
         return true;
     }
@@ -10657,14 +10768,14 @@ async function autoGenerateTopGateForFha(page, fha, opts) {
     if (opts.force) {
         page.root.name = _fcTopGateName(fha);
         page.root.displayId = _fcTopGateDisplayId(fha, page.root.id);
-        page.name = _fcPageName(fha);
+        if (!page.autoFcTree) page.name = _fcPageName(fha);   // an app-made tree keeps its PASA/PSSA name
         return true;
     }
     const ok = await slConfirm('This fault tree already has events.\n\nUpdate the top-event name to "' + _fcTopGateName(fha) + '"? (children are preserved.)', { okText: 'Update' });
     if (ok) {
         page.root.name = _fcTopGateName(fha);
         page.root.displayId = _fcTopGateDisplayId(fha, page.root.id);
-        page.name = _fcPageName(fha);
+        if (!page.autoFcTree) page.name = _fcPageName(fha);   // an app-made tree keeps its PASA/PSSA name
         if (typeof showToast === 'function') showToast('Top event renamed.', 'info', 2400);
         return true;
     }
@@ -10707,18 +10818,35 @@ async function onFtaFhaLinkChange() {
         return;
     }
 
-    page.linkedFhaId = fha.internalId;
-    // Keep the plural list in step. This is not belt-and-braces: syncFtaConfigFromActivePage
-    // reads `Array.isArray(page.linkedFhaIds) ? page.linkedFhaIds : ...` — an EMPTY array
-    // (which ANEM's unlink leaves behind) wins over the scalar and would swallow the link we
-    // just wrote. Primary first, no duplicates, order otherwise preserved.
-    if (Array.isArray(page.linkedFhaIds)) {
-        page.linkedFhaIds = [fha.internalId].concat(
-            page.linkedFhaIds.filter(id => String(id) !== String(fha.internalId)));
+    // 31 Oct 2026 (fc_link.js v2.0): a PASA or PSSA tree is linked by the app, from the FHA. Picking a condition here OPENS
+    // that condition's own tree (this tree is left exactly as it is); a condition that takes no tree is refused with the
+    // reason. Only a standalone tree is linked by a pick, for reference. Nothing is asked.
+    let _row = fha;
+    const _FL = (typeof window !== 'undefined') ? window.SLFcLink : null;
+    if (_FL && typeof _FL.go === 'function') {
+        const res = _FL.go(page, fha);
+        if (res.action !== 'linked') {
+            if (res.action === 'refused' && typeof showToast === 'function') showToast(res.why, 'warning', 7000);
+            if (res.action === 'opened' && typeof showToast === 'function') showToast('Opened the tree for ' + (fha.fcId || 'that failure condition') + '. Each failure condition has its own tree, made from the FHA.', 'info', 4200);
+            // the toolbar shows what the tree on screen is for
+            if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
+            if (typeof updateFTAConfigUI === 'function') { try { updateFTAConfigUI(); } catch (_) {} }
+            try { _renderFtaLinkedChip(); } catch (_) {}
+            return;
+        }
+        try { _row = _FL.rowsFor(fha)[0] || fha; } catch (_) {}
+    } else {
+        page.linkedFhaId = fha.internalId;
+        page.linkedFhaIds = [fha.internalId];
     }
     if (typeof scheduleAutosave === 'function') scheduleAutosave();
+    // the toolbar shows the governing row (the one that decides the target and the DAL)
+    if (typeof syncFtaConfigFromActivePage === 'function') syncFtaConfigFromActivePage();
+    if (typeof updateFTAConfigUI === 'function') { try { updateFTAConfigUI(); } catch (_) {} }
+    try { _renderFtaLinkedChip(); } catch (_) {}
+    try { if (typeof refreshSystemPickerRow === 'function') refreshSystemPickerRow(); } catch (_) {}
 
-    const changed = await autoGenerateTopGateForFha(page, fha);
+    const changed = await autoGenerateTopGateForFha(page, _row);
     // Phase 57 — the FHA link is part of the mirror's inherited context; keep it in step
     // (this also re-syncs the mirror's exposure source through its own page link).
     if (typeof _syncMirrorOwnershipFromSource === 'function') _syncMirrorOwnershipFromSource(page);
@@ -11689,7 +11817,7 @@ function mcsAwareRebalance(rootNode, targetProb) {
             }
             return;
         }
-        if (n.type !== 'gate') {
+        if (n.type !== 'gate' && !(typeof slIsSetEvent === 'function' && slIsSetEvent(n))) {   // 2 Nov 2026: a house or conditioning event keeps the value set on it (slIsSetEvent)
             const lid = n.logicalId != null ? n.logicalId : n.id;
             if (!uniqueVars.has(lid)) uniqueVars.set(lid, []);
             uniqueVars.get(lid).push(n);
@@ -11772,7 +11900,7 @@ function mcsAwareImportanceRedistribute(rootNode, targetProb) {
             }
             return;
         }
-        if (n.type !== 'gate') {
+        if (n.type !== 'gate' && !(typeof slIsSetEvent === 'function' && slIsSetEvent(n))) {   // 2 Nov 2026: a house or conditioning event keeps the value set on it (slIsSetEvent)
             const lid = n.logicalId != null ? n.logicalId : n.id;
             if (!uniqueVars.has(lid)) uniqueVars.set(lid, []);
             uniqueVars.get(lid).push(n);
@@ -12436,7 +12564,9 @@ function _aiBusyEnsureStyle() {
         '.ai-busy-quip{font-size:11px;opacity:.72;font-style:italic;animation:slAiQuip 5s ease-in-out infinite}' +
         '@media (prefers-reduced-motion: reduce){.ai-busy-quip{animation:none;opacity:.72}.ai-busy-spinner{animation-duration:2.4s}}' +
         '.ai-busy-spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--color-border-hair,#d0d5dd);border-top-color:var(--color-accent,#6D7CF0);display:inline-block;animation:slAiSpin .7s linear infinite;flex:none;margin-right:9px;vertical-align:middle}' +
-        '.ai-busy-count{opacity:.65;font-size:11px;margin-left:7px}';
+        '.ai-busy-count{opacity:.65;font-size:11px;margin-left:7px}' +
+        '.ai-busy-stop{margin-left:10px;align-self:center;font:inherit;font-size:12px;font-weight:700;padding:4px 12px;border-radius:7px;border:1px solid #B3261E;background:#fff;color:#B3261E;cursor:pointer;min-height:28px}' +
+        '.ai-busy-stop:hover{background:#B3261E;color:#fff}.ai-busy-stop:disabled{opacity:.6;cursor:default;background:#fff;color:#B3261E}';
     document.head.appendChild(st);
 }
 // Phase 66.14 — the wait has a voice now. The indicator stays up for the WHOLE
@@ -12449,7 +12579,7 @@ const _AI_BUSY_QUIPS = [
     'it drafts — the engine still owns every number',
     'no arithmetic is happening back here',
     'reading is the slow part',
-    'a good failure-condition row is worth the wait',
+    'a careful draft is worth the wait',   // 31 Oct 2026: was "a good failure-condition row", shown on every analysis
     'long answers take longer than short ones',
     'structure and narrative only; severity stays deterministic',
     'still going — the slow part is prose, not math',
@@ -12476,11 +12606,13 @@ function _aiBusyRender() {
     const sub = (secs >= 6000 && (_aiBusy.quip % 2 === 1))
         ? _AI_BUSY_QUIPS[Math.floor(_aiBusy.quip / 2) % _AI_BUSY_QUIPS.length]
         : label;
+    const subShown = _aiBusy.stopping ? 'stopping: calling off the requests still waiting' : sub;   // 31 Oct 2026
+    try { const _sb = _aiBusy.el.querySelector('.ai-busy-stop'); if (_sb) { _sb.disabled = !!_aiBusy.stopping; _sb.textContent = _aiBusy.stopping ? 'Stopping…' : 'Stop'; } } catch (_) {}
     // \ud83e\udd41 = drum, \ud83e\udd41\ud83e\udd41 either side of the line (his call, 18 Aug: "with drum emojis").
     // Escaped rather than pasted so the file stays plain ASCII and no editor or
     // transfer can mangle the surrogate pair into a replacement character.
     body.innerHTML = '<div class="toast-msg">\ud83e\udd41 AI Working \u2014 Drum Roll Please \ud83e\udd41' + clock + extra + '</div>' +
-                     '<div class="ai-busy-quip">' + esc(sub) + '</div>';
+                     '<div class="ai-busy-quip">' + esc(subShown) + '</div>';
 }
 function slabAiBusyBegin(label) {
     _aiBusy.n++;
@@ -12493,8 +12625,12 @@ function slabAiBusyBegin(label) {
         el.className = 'toast toast-info ai-busy-toast';
         el.setAttribute('role', 'status');
         el.setAttribute('aria-live', 'polite');
-        el.innerHTML = '<span class="ai-busy-spinner"></span><div class="ai-busy-body"></div>';
+        el.innerHTML = '<span class="ai-busy-spinner"></span><div class="ai-busy-body"></div>' +
+            '<button type="button" class="ai-busy-stop" title="Stop this AI run: the requests still waiting are called off and nothing more is billed. What already came back stays for review.">Stop</button>';
+        // 31 Oct 2026 (Waqas: "we need to give user an interface to be able to stop an AI run too")
+        el.querySelector('.ai-busy-stop').addEventListener('click', function (ev) { ev.stopPropagation(); slabAiStop(); });
         stack.appendChild(el);
+        try { window.dispatchEvent(new CustomEvent('slab-ai-busy', { detail: { label: _aiBusy.label || '' } })); } catch (_) {}
         _aiBusy.el = el;
         _aiBusy.t0 = Date.now();
         _aiBusy.quip = 0;
@@ -12516,8 +12652,17 @@ function slabAiBusyBegin(label) {
     }
     _aiBusyRender();
 }
+// 31 Oct 2026: the one Stop for every AI run (the button on this indicator, and an AI bar button while its run is going)
+function slabAiStop() {
+    let n = 0;
+    try { if (window.AiClient && typeof window.AiClient.stop === 'function') n = window.AiClient.stop(); } catch (_) {}
+    _aiBusy.stopping = true;
+    try { _aiBusyRender(); } catch (_) {}
+    return n;
+}
 function slabAiBusyEnd() {
     _aiBusy.n = Math.max(0, _aiBusy.n - 1);
+    if (_aiBusy.n === 0) { _aiBusy.stopping = false; try { if (window.AiClient && typeof window.AiClient._idleCheck === 'function') setTimeout(window.AiClient._idleCheck, 0); } catch (_) {} try { window.dispatchEvent(new CustomEvent('slab-ai-idle', { detail: {} })); } catch (_) {} }
     if (_aiBusy.n === 0 && _aiBusy.el) {
         const el = _aiBusy.el; _aiBusy.el = null; _aiBusy.label = '';
         _aiBusy.t0 = 0; _aiBusy.quip = 0;
@@ -13429,35 +13574,39 @@ function exportValidationReport() {
 function _reviewTargetSubtitle(target) {
     if (!target) return '';
     const { kind, id, systemId } = target;
+    // 31 Oct 2026: the kinds comment_kinds.js adds (fault trees, CCMR, MAC, CoFFE, resources, R&M, crew credit)
+    try { if (window.SLCommentKinds && SLCommentKinds.has(kind)) return SLCommentKinds.title(target); } catch (_) {}
     let rec = null, idLabel = id, desc = '';
+    // 31 Oct 2026: a row's comments are filed under its internal id (reviewCellHtml); match that or the display id
+    const _is = (r, disp) => r && (String(r.internalId) === String(id) || (r[disp] != null && r[disp] === id));
     try {
         if (kind === 'acFha') {
-            rec = acFhaData.find(r => r.fcId === id);
+            rec = acFhaData.find(r => _is(r, 'fcId'));
             if (rec) { idLabel = rec.fcId; desc = rec.fcDesc || rec.severity || ''; }
         } else if (kind === 'acReq') {
-            rec = acReqData.find(r => r.reqId === id);
-            if (rec) { idLabel = rec.reqId; desc = rec.reqText || ''; }
+            rec = acReqData.find(r => _is(r, 'reqId'));
+            if (rec) { idLabel = rec.reqId; desc = rec.reqText || rec.text || ''; }
         } else if (kind === 'acAsm') {
-            rec = acAssumptionsData.find(r => r.asmId === id);
-            if (rec) { idLabel = rec.asmId; desc = rec.statement || ''; }
+            rec = acAssumptionsData.find(r => _is(r, 'asmId'));
+            if (rec) { idLabel = rec.asmId; desc = rec.statement || rec.text || ''; }
         } else if (kind === 'pra') {
-            rec = praData.find(r => r.praId === id);
+            rec = praData.find(r => _is(r, 'praId'));
             if (rec) { idLabel = rec.praId; desc = rec.threat || rec.description || ''; }
         } else if (kind === 'zsa') {
-            rec = zsaData.find(r => r.zsaId === id);
+            rec = zsaData.find(r => _is(r, 'zsaId') || _is(r, 'zoneId'));
             if (rec) { idLabel = rec.zsaId; desc = rec.zone || rec.threat || ''; }
         } else if (kind === 'cma') {
-            rec = cmaData.find(r => r.cmaId === id);
+            rec = cmaData.find(r => _is(r, 'cmaId'));
             if (rec) { idLabel = rec.cmaId; desc = rec.subject || rec.claim || ''; }
         } else if (kind === 'fmea') {
-            rec = fmeaData.find(r => r.fmeaId === id);
+            rec = fmeaData.find(r => _is(r, 'fmeaId'));
             if (rec) { idLabel = rec.fmeaId; desc = rec.mode || rec.part || rec.failureMode || rec.component || ''; }
         } else if (kind === 'sysFha' || kind === 'sysReq' || kind === 'sysAsm') {
             const sys = systemId ? systemsData.find(s => s.id === systemId) : null;
             if (sys) {
-                if (kind === 'sysFha') { rec = (sys.fha || []).find(r => r.fcId === id); if (rec) { idLabel = rec.fcId; desc = rec.fcDesc || rec.severity || ''; } }
-                if (kind === 'sysReq') { rec = (sys.req || []).find(r => r.reqId === id); if (rec) { idLabel = rec.reqId; desc = rec.reqText || ''; } }
-                if (kind === 'sysAsm') { rec = (sys.asm || []).find(r => r.asmId === id); if (rec) { idLabel = rec.asmId; desc = rec.statement || ''; } }
+                if (kind === 'sysFha') { rec = (sys.fha || []).find(r => _is(r, 'fcId')); if (rec) { idLabel = rec.fcId; desc = rec.fcDesc || rec.severity || ''; } }
+                if (kind === 'sysReq') { rec = (sys.req || []).find(r => _is(r, 'reqId')); if (rec) { idLabel = rec.reqId; desc = rec.reqText || rec.text || ''; } }
+                if (kind === 'sysAsm') { rec = (sys.asm || []).find(r => _is(r, 'asmId')); if (rec) { idLabel = rec.asmId; desc = rec.statement || rec.text || ''; } }
             }
             if (sys) desc = (desc ? desc + ' · ' : '') + 'in ' + (sys.name || sys.id);
         } else if (/^hf[A-Z]/.test(String(kind))) {
@@ -13830,7 +13979,7 @@ function applyCollapsibleForms() {
         // Cross-cutting analyses
         ['view-pra',      '.controls', 'Log PRA evaluation'],
         ['view-zsa',      '.controls', 'Log zonal analysis'],
-        ['view-cma',      '.controls', 'Log CMA entry'],
+        // 31 Oct 2026: no fold-out entry form on the CMA page: '+ New CMA' (cma_flow.js) is the one way to make a CMA.
         ['view-fmea',     '.controls', 'Log FMEA entry']
     ];
     targets.forEach(([viewId, sel, title]) => wrapFormCollapsible(viewId, sel, { title }));

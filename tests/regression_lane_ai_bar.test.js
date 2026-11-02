@@ -111,7 +111,9 @@ ok('every button says the result is advisory', /advisory; every result lands in 
 
     // (b) the scope rule holds for every lane
     const byLane = M.lanesFromWrites();
-    const writes = Object.assign({}, M.ACTION_WRITES, M.hfWrites());
+    // 30 Oct 2026: an action that writes a SECTION of a page (the combined failure conditions panel) sits in that
+    // section's heading (SECTION_ACTION_WRITES, mountSection) — placed, not laneless.
+    const writes = Object.assign({}, M.ACTION_WRITES, M.hfWrites(), M.SECTION_ACTION_WRITES || {});
     let violations = [];
     Object.keys(byLane).forEach(lane => {
         byLane[lane].forEach(label => { if (writes[label] !== lane) violations.push(label + ' on ' + lane); });
@@ -156,6 +158,12 @@ ok('every button says the result is advisory', /advisory; every result lands in 
         laneless.indexOf('Recommend architecture') >= 0);
     ok('no RAM lane is wired yet — the skills come first, and this is the marker',
         covered.filter(l => /^ram-|^markov$|^eta$/.test(l)).length === 0);
+
+    // (e2) the section bar: the combined failure conditions action sits in the combined panel, and only there
+    ok('"Propose combined failure conditions" writes the fcv section', M.SECTION_ACTION_WRITES && M.SECTION_ACTION_WRITES['Propose combined failure conditions'] && M.SECTION_ACTION_WRITES['Propose combined failure conditions'].section === 'fcv');
+    ok('it is not on any lane bar (it writes a section, not the page)', !Object.keys(M.ACTION_WRITES).some(k => /combined failure/i.test(k)));
+    ok('it resolves against the live launcher', launcher.some(a => a.label === 'Propose combined failure conditions'));
+    ok('mountSection is exported', typeof M.mountSection === 'function');
 
     // (f) resolution returns the launcher's own runnable action, not a copy
     const fta = M.actionsFor('fta');

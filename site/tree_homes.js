@@ -65,6 +65,7 @@
     function _rootOf(p) {
         var byId = {}; _pages().forEach(function (x) { if (x && x.id != null) byId[x.id] = x; });
         var cur = p, seen = {};
+        if (cur && cur.integrated && byId[cur.integrated.sourcePageId]) cur = byId[cur.integrated.sourcePageId];   // 1 Nov 2026 (item 42): an integrated tree lives where its source lives
         while (cur && cur.transferInFrom && cur.transferInFrom.sourcePageId && byId[cur.transferInFrom.sourcePageId] && !seen[cur.id]) { seen[cur.id] = 1; cur = byId[cur.transferInFrom.sourcePageId]; }
         return cur || p;
     }
@@ -233,7 +234,7 @@
         if (!page) return;
         var h = homeOf(page), lv = levelOf(page);
         // the direction is the home's: a tree outside Standalone carries it explicitly (no mode was top-down already)
-        if (h.home !== 'standalone' && page.mode !== h.dir) {
+        if (h.home !== 'standalone' && page.mode !== h.dir && !page.integrated) {   // 1 Nov 2026 (item 42): an integrated tree is always calculated from its sources' values, never allocated
             // writing what the engine already assumed (no mode is top-down): background, not the person's change
             var CA = root.SLChangeAck;
             if (CA && typeof CA.system === 'function') CA.system(function () { page.mode = h.dir; }); else page.mode = h.dir;

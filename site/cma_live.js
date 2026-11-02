@@ -55,7 +55,7 @@
     var AND_FAMILY = { AND: 1, INHIBIT: 1, PAND: 1, SPARE: 1, SEQ: 1, VOTING: 1 };   // 13 Oct 2026 (fix G): SEQ
 
     // ---------------------------------------------------------------- model access (guarded)
-    function _pages() { try { return (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : []; } catch (_) { return []; } }
+    function _pages() { try { return (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages.filter(function (p) { return !(p && p.integrated && p.integrated.sourcePageId != null); }) : []; } catch (_) { return []; } }   // 1 Nov 2026 (item 42): an integrated tree is a view of its sources, never counted again (fta_integrated.js)
     function _cma() {
         try { if (typeof cmaData !== 'undefined') { if (!Array.isArray(cmaData)) cmaData = []; return cmaData; } } catch (_) {}
         if (!Array.isArray(root.cmaData)) root.cmaData = [];
@@ -290,6 +290,9 @@
         return base;
     }
     function _applyAccept(s, entry) {
+        // 31 Oct 2026: gates a four-step CMA covers get the finding there, as a concern that defeats the claim until it
+        // is closed (cma_flow.js), never a second row for the same gates
+        try { var fr = (root.SLCmaFlow && typeof root.SLCmaFlow.takeLiveFinding === 'function') ? root.SLCmaFlow.takeLiveFinding(s) : null; if (fr) { entry.cmaInternalId = fr.internalId; entry.cmaId = fr.cmaId; return; } } catch (_) {}
         var row = _rowFor(s.key);
         var linked = s.coupledGates.length ? s.coupledGates : s.locations;
         if (row) {

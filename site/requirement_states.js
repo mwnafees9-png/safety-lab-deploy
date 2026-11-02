@@ -24,7 +24,7 @@
     }
     function kindOf(gen) {
         return ({ 'gate-indep-and': 'functional', 'gate-indep-or': 'single-failure', 'gate-indep-phys': 'physical', 'gate-indep-dev': 'development',
-            'gate-indep-ccf-lib': 'common-design', 'gate-indep-ccf-group': 'common-cause', 'gate-indep-cma': 'common-mode' })[gen] || '';
+            'gate-indep-ccf-lib': 'common-design', 'gate-indep-ccf-group': 'common-cause', 'gate-indep-cma': 'common-mode', 'cma-concern': 'common-mode' })[gen] || '';
     }
     function plain(v) { try { return v == null ? null : JSON.parse(JSON.stringify(v)); } catch (e) { return null; } }
     function evidenceOf(r, deps) {

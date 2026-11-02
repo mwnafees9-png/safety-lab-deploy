@@ -137,6 +137,30 @@
     }
     // P(not success) of a heading: pFail for a plain one, 1 - p(outcome 0) for a multi-outcome one.
     function _pNotOk(h) { return _isMulti(h) ? _clamp01(1 - (_num(h.branches[0] && h.branches[0].p) || 0)) : _clamp01(_num(h && h.pFail) || 0); }
+    // 1 Nov 2026 (items 37/43): the events a branch sets, { branchId: [{ lid, state }] } on the heading
+    function _branchSets(h, bid) { const s = h && h.sets && h.sets[bid]; return Array.isArray(s) ? s : []; }
+    function _setsOnPath(bars, chars) { let out = []; for (let i = 0; i < bars.length; i++) { const c = chars[i]; if (c === '-' || c == null) continue; out = out.concat(_branchSets(bars[i], _branchIds(bars[i])[+c])); } return out; }
+    // a sequence's probability from its headings' fault trees: the product, heading by heading, of the tree's failure
+    // (or success) probability given the headings before it and the events set by the branches before it. At each
+    // branch point success and failure share those conditions, so they sum to one and the sequences still sum to one.
+    function _sequenceFromTrees(bars, chars, LB) {
+        const C = window.SLFtaConditions;
+        let f = 1, parts = [], sets = [];
+        for (let i = 0; i < bars.length; i++) {
+            const c = chars[i]; if (c === '-' || c == null) continue;
+            if (LB[i]) {
+                const part = { page: bars[i].linkedPageId, neg: c === '0' };
+                const den = parts.length ? C.conjunction(parts, sets) : { p: 1 };
+                const num = C.conjunction(parts.concat([part]), sets);
+                if (den.p == null) return { p: null, why: den.why };
+                if (num.p == null) return { p: null, why: num.why };
+                f *= den.p > 0 ? num.p / den.p : 0;
+                parts.push(part);
+            }
+            sets = sets.concat(_branchSets(bars[i], _branchIds(bars[i])[+c]));
+        }
+        return { p: f };
+    }
     function _rulesOf(t) { const r = t && t.nodeRules; return (r && typeof r === 'object') ? r : {}; }
     function _rev(s) { let o = ''; for (let i = s.length - 1; i >= 0; i--) o += s[i]; return o; }
     function _keyOf(chars, n) { if (!n) return '0'; let k = ''; for (let j = n - 1; j >= 0; j--) k += chars[j]; return k; }
@@ -259,8 +283,14 @@
         const cons = tree.consequences || {};
         const outcomes = [];
         const coupled = CPL.some(Boolean);
+        // 1 Nov 2026 (customer items 37/43, fta_conditions.js): "calculate linked headings from their fault trees". A plain
+        // heading with a fault tree takes its probability on each sequence from that tree, given the headings before it and
+        // the events their branches set; the others keep their entered numbers. Off: the v1.x arithmetic, unchanged.
+        const FT = !!(tree.fromTrees && typeof window !== 'undefined' && window.SLFtaConditions);
+        const LB = bars.map(h => FT && !_isMulti(h) && !!(h && h.linkedPageId));
+        const anyLB = LB.some(Boolean);
         const chars = new Array(n);
-        let row = 0;
+        let row = 0, treeError = null;
         (function rec(d, prefix, p, up) {
             if (d < n) {
                 const r = rules[prefix];
@@ -269,11 +299,17 @@
                     const br = B[d], cp = CPL[d] && up;
                     for (let b = 0; b < br.length; b++) {
                         const c = CH[b]; chars[d] = c;
-                        rec(d + 1, prefix + c, p * (cp ? br[b].pc : br[b].p), up || b > 0);
+                        rec(d + 1, prefix + c, p * (LB[d] ? 1 : (cp ? br[b].pc : br[b].p)), up || b > 0);
                     }
                     return;
                 }
                 for (let j = d; j < n; j++) chars[j] = '-';
+            }
+            let fromTrees = null, noResult = null;
+            if (anyLB) {
+                const q = _sequenceFromTrees(bars, chars, LB);
+                if (q.p == null) { noResult = q.why || 'no result'; if (!treeError) treeError = noResult; p = 0; }
+                else { fromTrees = q.p; p = p * q.p; }
             }
             const key = _keyOf(chars, n);
             const seq = [];
@@ -286,14 +322,15 @@
             }
             const c = cons[key] || {};
             outcomes.push({ key, seq, prob: p, freq: p * freq, severity: c.severity || '', linkedFcId: c.linkedFcId || '', note: c.note || '',
-                label: c.label || '', category: c.category || '', transferTo: c.transferTo || '', seqNo: ++row, path: n ? chars.join('') : '' });
+                label: c.label || '', category: c.category || '', transferTo: c.transferTo || '', seqNo: ++row, path: n ? chars.join('') : '',
+                fromTrees: fromTrees, noResult: noResult, trees: bars.filter((h, i) => h && h.linkedPageId && chars[i] !== '-').map(h => String(h.linkedPageId)), sets: anyLB ? _setsOnPath(bars, chars) : [] });
         })(0, '', 1, false);
         // the v1.x order: by key (for a plain tree, exactly the ascending bit mask)
         outcomes.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
         let sum = 0;
         for (let i = 0; i < outcomes.length; i++) sum += outcomes[i].prob;
-        const closed = Math.abs(sum - 1) < 1e-9;
-        return { outcomes, freq, closed, sum, coupled, fromTransfers, transferCycle };
+        const closed = !treeError && Math.abs(sum - 1) < 1e-9;
+        return { outcomes, freq, closed, sum, coupled, fromTransfers, transferCycle, fromTrees: anyLB, treeError };
     }
 
     // roll-up: Σ frequency and count by severity, plus worst credible outcome
@@ -408,6 +445,7 @@
     // DETERMINISTIC — set intersections over user-declared facts; no numbers
     // originate here.
     function etaCoupling(tree) {
+        // 1 Nov 2026 (items 37/43): calculated from the fault trees, the shared events ARE in the arithmetic (one decision diagram)
         const bars = (tree && tree.barriers) || [];
         const sig = {};   // barrier index → signals of its linked page
         bars.forEach((b, i) => { if (b && b.linkedPageId) sig[i] = _treeSignals(_pageById(b.linkedPageId)); });
@@ -424,7 +462,7 @@
                     treeId: tree.id, i, j, aName: a.name || ('B' + (i + 1)), bName: b.name || ('B' + (j + 1)),
                     aPageId: a.linkedPageId, bPageId: b.linkedPageId,
                     samePage, sharedGroups, sharedEvents,
-                    modeled: _coupledHeading(b),
+                    modeled: _coupledHeading(b) || !!(tree.fromTrees && !_isMulti(a) && !_isMulti(b)),
                     why: samePage
                         ? 'both barriers are implemented by the same fault tree'
                         : (sharedGroups.length ? 'linked trees share CCF group(s) ' + sharedGroups.join(', ') : '')
@@ -560,6 +598,52 @@
         _jr('eta', treeId + ': − barrier "' + (removed && removed.name) + '" — outcome set regenerated, consequence calls reset');
         _save();
         return { ok: true };
+    };
+    // 1 Nov 2026 (items 37/43, fta_conditions.js): calculate linked headings from their fault trees; branch event settings
+    window.etaSetFromTrees = function (treeId, on) {
+        const t = _store().find(x => x.id === treeId); if (!t) return false;
+        if (on) t.fromTrees = true; else delete t.fromTrees;
+        _jr('eta', treeId + ': linked headings ' + (on ? 'calculated from their fault trees' : 'use their entered probabilities'));
+        _save(); try { _render(); } catch (_) {}
+        return true;
+    };
+    window.etaSetBranchEvent = function (treeId, hi, branchId, lid, state) {
+        const t = _store().find(x => x.id === treeId); const h = t && (t.barriers || [])[hi]; if (!h) return false;
+        if (_branchIds(h).indexOf(String(branchId)) < 0) return false;
+        h.sets = h.sets || {}; const list = (h.sets[branchId] = (h.sets[branchId] || []).filter(x => String(x.lid) !== String(lid)));
+        if (state === 0 || state === 1) list.push({ lid: String(lid), state: state });
+        if (!list.length) delete h.sets[branchId];
+        if (!Object.keys(h.sets).length) delete h.sets;
+        _jr('eta', treeId + ': heading ' + (h.name || hi) + ' branch ' + branchId + (state == null ? ' no longer sets ' : ' sets ') + lid + (state == null ? '' : state ? ' happened' : ' did not happen'));
+        _save();
+        return true;
+    };
+    window.etaBranchSetsUi = function (treeId, hi) {
+        const t = _store().find(x => x.id === treeId); const h = t && (t.barriers || [])[hi]; if (!h || !window.SLFtaConditions) return null;
+        const C = window.SLFtaConditions, evs = C.events();
+        const old = document.getElementById('sl-eta-sets-modal'); if (old) old.remove();
+        const wrap = document.createElement('div'); wrap.id = 'sl-eta-sets-modal'; wrap.className = 'sl-int-modal';
+        const draw = () => {
+            const B = _branchesOf(h);
+            wrap.innerHTML = '<div class="sl-int-card sl-xchg-card" role="dialog" aria-modal="true"><h3>' + _esc(h.name || ('Heading ' + (hi + 1))) + ': what each branch sets</h3>' +
+                '<p class="sl-int-help">A branch can set events to happened or did not happen. The fault trees of the headings after it are calculated with those settings on every sequence through that branch (switch on "Calculate linked headings from their fault trees"). The values stored on the trees are never changed.</p>' +
+                B.map(br => '<div class="sl-dc-branch" data-eta-branch="' + _esc(br.id) + '"><b>' + _esc(br.label) + '</b>' + (_branchSets(h, br.id).length ? '<ul>' + _branchSets(h, br.id).map(x => '<li>' + _esc(C.eventLabel(x.lid)) + ': <b>' + (x.state ? 'happened' : 'did not happen') + '</b> <button type="button" class="action-btn" data-eta-del="' + _esc(br.id) + '|' + _esc(x.lid) + '">Remove</button></li>').join('') + '</ul>' : ' <span class="sl-int-help">sets nothing</span>') +
+                    '<div style="display:flex; gap:6px; margin:4px 0 10px;"><input list="sl-eta-evlist" data-eta-pick="' + _esc(br.id) + '" placeholder="Event ID or name" style="flex:1"><select data-eta-state="' + _esc(br.id) + '"><option value="1">happened</option><option value="0">did not happen</option></select><button type="button" class="action-btn btn-cyan" data-eta-add="' + _esc(br.id) + '">Add</button></div></div>').join('') +
+                '<datalist id="sl-eta-evlist">' + evs.map(e => '<option value="' + _esc(e.displayId || e.lid) + '">' + _esc(e.name + ' (' + e.page + ')') + '</option>').join('') + '</datalist>' +
+                '<div class="sl-int-err" data-eta-err></div><div class="sl-int-actions"><button type="button" class="action-btn" data-eta-done>Done</button></div></div>';
+            wrap.querySelector('[data-eta-done]').onclick = () => { wrap.remove(); try { _render(); } catch (_) {} };
+            wrap.querySelectorAll('[data-eta-del]').forEach(b => { b.onclick = () => { const p = b.getAttribute('data-eta-del').split('|'); window.etaSetBranchEvent(treeId, hi, p[0], p.slice(1).join('|'), null); draw(); }; });
+            wrap.querySelectorAll('[data-eta-add]').forEach(b => { b.onclick = () => {
+                const bid = b.getAttribute('data-eta-add');
+                const q = String((wrap.querySelector('[data-eta-pick="' + bid + '"]') || {}).value || '').trim().toLowerCase();
+                const e = evs.find(x => String(x.displayId).toLowerCase() === q || x.lid.toLowerCase() === q) || evs.find(x => String(x.name).toLowerCase() === q);
+                if (!e) { wrap.querySelector('[data-eta-err]').textContent = 'No event "' + q + '" in this project.'; return; }
+                window.etaSetBranchEvent(treeId, hi, bid, e.lid, (wrap.querySelector('[data-eta-state="' + bid + '"]') || {}).value === '0' ? 0 : 1); draw();
+            }; });
+        };
+        document.body.appendChild(wrap); draw();
+        wrap.addEventListener('keydown', e => { if (e.key === 'Escape') { wrap.remove(); try { _render(); } catch (_) {} } });
+        return wrap;
     };
     window.etaDelete = function (treeId) {
         const s = _store(); const i = s.findIndex(x => x.id === treeId);
@@ -1248,8 +1332,12 @@
         const cWarn = unmod
             ? '<span title="Barrier pairs whose linked fault trees share a CCF group or event, with no conditional pFail entered — INV-28." style="font-size:10.5px; color:#8E2A2A; font-weight:700;">⚠ ' + unmod + ' unmodeled coupling' + (unmod === 1 ? '' : 's') + '</span>'
             : '';
+        // 1 Nov 2026 (items 37/43): the switch, and what it does
+        const linkedN = (t.barriers || []).filter(h => h && h.linkedPageId && !_isMulti(h)).length;
+        const ftSwitch = linkedN ? '<label data-eta-fromtrees-wrap style="font-size:11px; display:inline-flex; gap:5px; align-items:center; text-transform:none;" title="Each plain heading with a fault tree takes its probability on each sequence from that tree, given the headings before it and the events their branches set. Headings without a fault tree keep their entered numbers."><input type="checkbox" data-eta-fromtrees' + (t.fromTrees ? ' checked' : '') + ' onchange="etaSetFromTrees(\'' + t.id + '\', this.checked)"> Calculate linked headings from their fault trees</label>' : '';
+        const ftErr = ev.treeError ? '<span style="font-size:10.5px; color:#8E2A2A; font-weight:700;" title="' + _esc(ev.treeError) + '">no result: ' + _esc(String(ev.treeError).slice(0, 80)) + '</span>' : '';
         return '<div style="padding:8px 14px; border:1px solid var(--color-border-strong); display:flex; gap:10px; flex-wrap:wrap; align-items:center; background:var(--color-surface-2);">' +
-            closeBadge + '<span style="color:var(--color-border-strong);">|</span>' + worst + chips + '<span style="margin-left:auto; display:inline-flex; gap:10px; align-items:center;">' + cWarn + couple + '</span></div>';
+            ftSwitch + ftErr + closeBadge + '<span style="color:var(--color-border-strong);">|</span>' + worst + chips + '<span style="margin-left:auto; display:inline-flex; gap:10px; align-items:center;">' + cWarn + couple + '</span></div>';
     }
 
     let _selId = null, _page = 0;
@@ -1267,7 +1355,7 @@
         const cps = etaCoupling(t);
         return '<div style="margin:12px 0 0; border:1px solid var(--color-border-strong);">' +
             '<table class="data-table" style="width:100%; font-size:11.5px; margin:0;"><thead><tr>' +
-            '<th style="width:26px;">#</th><th>Heading</th><th>pFail (elicited)</th><th>pFail | upstream failed</th><th>Implemented by (fault tree — elicited link)</th><th>Linked tree P(top) — annotation only</th><th>Coupling</th></tr></thead><tbody>' +
+            '<th style="width:26px;">#</th><th>Heading</th><th>pFail (elicited)</th><th>pFail | upstream failed</th><th>Implemented by (fault tree — elicited link)</th><th>Linked tree P(top) — annotation only</th><th>Coupling</th><th>Branches set events</th></tr></thead><tbody>' +
             (t.barriers || []).map((b, bi) => {
                 const sel = '<select aria-label="Fault tree that implements heading ' + (bi + 1) + '" style="font-size:11px; padding:2px 4px; max-width:220px; border:1px solid var(--color-border-strong); background:var(--color-surface-2); color:var(--color-text-primary);" onchange="_etaLinkUi(\'' + t.id + '\',' + bi + ', this.value)">' +
                     '<option value="">— not linked —</option>' +
@@ -1293,7 +1381,8 @@
                 return '<tr><td class="u-mono">' + (bi + 1) + '</td><td>' + _esc(b.name || '') + (multi ? ' <span style="color:var(--color-text-tertiary);">(' + b.branches.length + ' outcomes)</span>' : '') + '</td>' +
                     '<td class="u-mono">' + _pNotOk(b).toExponential(2) + '</td>' +
                     '<td class="u-mono">' + (!multi && _num(b.pCcf) !== null ? _clamp01(_num(b.pCcf)).toExponential(2) : (multi && _coupledHeading(b) ? 'per outcome' : '<span style="color:var(--color-text-tertiary);">—</span>')) + '</td>' +
-                    '<td>' + sel + '</td><td>' + pTopCell + '</td><td>' + cCell + '</td></tr>';
+                    '<td>' + sel + '</td><td>' + pTopCell + (t.fromTrees && b.linkedPageId && !multi ? '<br><span style="font-size:10px; color:#0A5AA8; font-weight:700;">used on every sequence, conditioned</span>' : '') + '</td><td>' + cCell + '</td>' +
+                    '<td><button type="button" class="ckpt-m-btn" style="font-size:10.5px; padding:1px 7px;" data-eta-sets="' + bi + '" onclick="etaBranchSetsUi(\'' + t.id + '\',' + bi + ')">' + (function () { const n = Object.keys(b.sets || {}).reduce((a, k) => a + ((b.sets[k] || []).length), 0); return n ? n + ' set' : 'Set events'; })() + '</button></td></tr>';
             }).join('') + '</tbody></table></div>';
     }
 
@@ -1311,8 +1400,9 @@
                 const fcCell = flag ? _esc(o.linkedFcId || '—') + ' <span title="' + _esc(flag.detail) + '" style="color:#B7791F; font-weight:700;">⚠</span>' : _esc(o.linkedFcId || '—');
                 return '<tr' + rowStyle + '><td class="u-mono">' + o.seqNo + '</td><td class="u-mono">' + _esc(o.key) + '</td>' +
                     '<td style="font-size:11px;">' + o.seq.map(_esc).join(' → ') + '</td>' +
-                    '<td class="u-mono" style="font-size:11px;">' + o.prob.toExponential(3) + '</td>' +
-                    '<td class="u-mono" style="font-size:11px;">' + o.freq.toExponential(3) + '</td>' +
+                    (o.noResult ? '<td colspan="2" style="font-size:11px; color:#8E2A2A; font-weight:700;" title="' + _esc(o.noResult) + '">No result</td>' :
+                    '<td class="u-mono" style="font-size:11px;">' + o.prob.toExponential(3) + (o.fromTrees != null ? ' <span title="From the fault trees under its headings, conditioned on the sequence' + (o.sets && o.sets.length ? ' and ' + o.sets.length + ' event setting(s)' : '') + '" style="color:#0A5AA8; font-weight:700;">FT</span>' : '') + '</td>' +
+                    '<td class="u-mono" style="font-size:11px;">' + o.freq.toExponential(3) + '</td>') +
                     '<td style="font-size:11px;">' + _esc(o.label || '') + (o.transferTo ? ' <span title="Transfers to another event tree">→ ' + _esc(o.transferTo) + '</span>' : '') + (o.category ? ' <span style="color:var(--color-text-tertiary);">(' + _esc(o.category) + ')</span>' : '') + '</td>' +
                     '<td>' + _sevChip(o.severity) + '</td>' +
                     '<td class="u-mono" style="font-size:11px;">' + fcCell + '</td>' +
@@ -1390,6 +1480,7 @@
             (s.length ? s.map(x => '<option value="' + _esc(x.id) + '"' + (t && x.id === t.id ? ' selected' : '') + '>' + _esc(x.id + ' · ' + (x.name || '')) + '</option>').join('') : '<option value="">No event trees yet</option>') + '</select>' +
             '<button type="button" class="sl-db-primary" onclick="SLEtaUI.create()">+ New event tree</button>' +
             (t ? '<button type="button" onclick="SLEtaUI.rename()">Rename</button><button type="button" title="Delete this event tree" onclick="_etaDeleteUi(\'' + t.id + '\')">Delete</button>' : '') +
+            ((t && window.SLCommentKinds) ? '<span data-ck-host="1" title="Comments on this event tree">' + SLCommentKinds.button({ kind: 'eta', id: String(t.id) }) + '</span>' : '') +   // 31 Oct 2026
             // 30 Aug 2026 - export parity batch 2b
             '<button type="button" onclick="exportData(&quot;Event_Trees&quot;, &quot;csv&quot;)" title="Export every tree&#39;s full outcome enumeration as CSV">&#8595; Export CSV</button>' +
             '<span id="eta-err" style="color:var(--color-danger); font-size:11px; font-weight:600;"></span></div>';

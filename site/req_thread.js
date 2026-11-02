@@ -279,7 +279,7 @@
         'fta-resource-iface': 'Fault tree shared resource', 'dalgebra': 'Fault tree DAL (DALgebra)',
         'gate-indep': 'Independence', 'gate-indep-and': 'Independence', 'gate-indep-or': 'Independence', 'gate-indep-dev': 'Development independence',
         'gate-indep-phys': 'Physical independence', 'gate-indep-ccf-lib': 'Common cause', 'gate-indep-ccf-group': 'Common cause',
-        'gate-indep-cma': 'Common mode analysis', 'pra-zonal': 'Particular risk', 'pra-scenario': 'Particular risk scenario',
+        'gate-indep-cma': 'Common mode analysis', 'cma-concern': 'Common mode analysis', 'pra-zonal': 'Particular risk', 'pra-scenario': 'Particular risk scenario',
         'zsa-separation': 'Zonal safety', 'zsa-phys': 'Zonal safety', 'hf-op-action': 'Human factors', 'hf-op-timing': 'Human factors',
         'hf-op-info': 'Human factors', 'assumption': 'Assumption', 'fcim-monitor': 'Crew alerting', 'usoc-info': 'Unsafe operating condition',
         'stpa': 'STPA' };

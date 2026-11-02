@@ -333,7 +333,7 @@
     });
     // Settings the app keeps for itself: never shown as a change, and a change made only of
     // these is automatic.
-    var BOOK_PC = { journal: 1, changeLog: 1, acWorkspace: 1, aiAuditLog: 1, aiDraftLog: 1, aiDraftCounter: 1, cmaDecisionTag: 1, staleBaselines: 1, uiState: 1, lastOpened: 1, lastPlace: 1, invariantsLast: 1, cmaDecisionLog: 1 };   // cmaDecisionLog: each entry IS a recorded decision (cma_live.js), answered in its own dialog
+    var BOOK_PC = { journal: 1, changeLog: 1, acWorkspace: 1, aiAuditLog: 1, aiDraftLog: 1, aiDraftCounter: 1, cmaDecisionTag: 1, staleBaselines: 1, uiState: 1, lastOpened: 1, lastPlace: 1, invariantsLast: 1, cmaDecisionLog: 1, aiTokenUsage: 1 };   // aiTokenUsage (1 Nov 2026): the monthly AI usage counter; its November rollover was listed beside a person's change   // cmaDecisionLog: each entry IS a recorded decision (cma_live.js), answered in its own dialog
     // Fields the app computes or lays out as it draws (measured 13 Oct 2026 by opening every tab
     // and every fault tree of the K350 sample with no edit): never the person's change.
     // Settings a view creates with default content the first time it opens (the program plan
@@ -1006,8 +1006,11 @@
         if (c.noRevert) return false;
         var n = _lines(c).length, text = _summaryText(c);
         _rc = null;
+        // 1 Nov 2026: the AI usage counter is not the person's change: Discard never takes it back
+        var _usage = null; try { var _pc0 = _live().projectConfig; if (_pc0 && _pc0.aiTokenUsage) _usage = _S(_pc0.aiTokenUsage); } catch (_) {}
         _own(function () {
             revertTo(c.baseline, c.undoMark);
+            try { if (_usage) { var _pc1 = _live().projectConfig; if (_pc1) _pc1.aiTokenUsage = _P(_usage); } } catch (_) {}
             // background changes made while it waited are not the person's: they stay
             if (c.autoD.length) { c.autoD.forEach(function (a) { try { _applyContent(a.D); } catch (_) {} }); try { if (typeof W.scheduleAutosave === 'function') W.scheduleAutosave(); } catch (_) {} }
         });

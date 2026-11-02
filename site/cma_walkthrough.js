@@ -298,6 +298,8 @@
             '<div style="margin-top:10px;text-align:right;"><button onclick="_cmaSaveWalk(\'' + ctx + '\')" style="font-size:12px;padding:5px 14px;border:1px solid #007AFF;border-radius:6px;background:#007AFF;color:#fff;cursor:pointer;">Save assessment</button></div>';
     }
 
+    // 31 Oct 2026: the four-step CMA (cma_flow.js) asks the same tailored Table M1 categories
+    window.SLCmaWalk = { m1: function () { return _m1Effective(); } };
     window.cmaWalkthrough = function (ctx, label) {
         ctx = ctx || 'aircraft';
         window._cmaCloseWalk();

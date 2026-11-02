@@ -18,26 +18,28 @@
 
     // Safety-lane columns, left → right. HF and RAM are NOT columns here — they
     // are feeder lanes below. 'ip' (independence) folds into the REQUIREMENT column.
-    const SAFE_COLS = ['func', 'sys', 'stpa', 'fc', 'fta', 'cca', 'req', 'vv'];
+    // 1 Nov 2026 (items 37/43, fta_conditions.js): EVENT TREE (sequences ending in a failure condition) and DISPATCH (dispatch
+    // cases and their MMEL items) columns; empty columns are not drawn, so a thread without them looks as it did.
+    const SAFE_COLS = ['func', 'sys', 'stpa', 'fc', 'eta', 'fta', 'disp', 'cca', 'req', 'vv'];
     const CNAME = {
         func: 'FUNCTION', sys: 'SYSTEM', stpa: 'STPA', fc: 'FAILURE CONDITION',
-        fta: 'FAULT TREE', cca: 'COMMON CAUSE', req: 'REQUIREMENT', vv: 'VERIFICATION',
+        fta: 'FAULT TREE', eta: 'EVENT TREE', disp: 'DISPATCH', cca: 'COMMON CAUSE', req: 'REQUIREMENT', vv: 'VERIFICATION',
         ram: 'RAM', hf: 'HUMAN FACTORS'
     };
     const ACCENT = {
-        func: '#2E6FB0', sys: '#1D9E75', stpa: '#6D28D9', fc: '#7F77DD', fta: '#D85A30',
+        func: '#2E6FB0', sys: '#1D9E75', stpa: '#6D28D9', fc: '#7F77DD', fta: '#D85A30', eta: '#0A5AA8', disp: '#3D5A80', mmel: '#3D5A80',
         cca: '#BA7517', ph: '#A8552E', req: '#D4537E', vv: '#12A150', ip: '#D4537E', ram: '#C88A00', hf: '#7A3EA8'
     };
     // independence renders in the requirement column; a physical hazard (8 Aug
     // 2026, the twelfth node kind) renders in the common-cause column — beside
     // the functional conditions, never inside them, next to the CCA that found it.
-    function colKind(k) { return k === 'ip' ? 'req' : (k === 'ph' ? 'cca' : k); }
+    function colKind(k) { return k === 'ip' ? 'req' : (k === 'ph' ? 'cca' : (k === 'mmel' ? 'disp' : k)); }
     const IS_FEEDER = { ram: 1, hf: 1 };
 
     const SAF_C = '#586472', RAM_C = '#C88A00', HF_C = '#7A3EA8';
     const INK = '#101216', INK3 = '#14171c', MUTE = '#14171c', HAIR = '#14171c';
     const RED = '#C0231D', GREEN = '#0E7A3C', AMBER = '#C88A00', BLUE = '#2E6BD6';
-    const FLAG = { compromised: RED, stale: AMBER, obsolete: INK3, finding: AMBER };   // finding (24 Oct 2026): an open FMEA finding on the verification side
+    const FLAG = { compromised: RED, stale: AMBER, obsolete: INK3, finding: AMBER, circular: RED };   // circular (1 Nov 2026, item 45): a fault tree on or above a circular transfer, no valid result   // finding (24 Oct 2026): an open FMEA finding on the verification side
     const PROVC = { human: '#2E6BD6', ai: '#7A3EA8', engine: '#0E7490' };
     const PROVL = { human: 'Human', ai: 'AI', engine: 'Engine' };
 
@@ -215,6 +217,25 @@
             const sN = byKey[L.s], tN = byKey[L.t];
             if (!sN || !tN || IS_FEEDER[sN.kind] || IS_FEEDER[tN.kind]) return;   // feeders drawn separately
             let a = pos[L.s], b = pos[L.t]; if (!a || !b) return;
+            // 1 Nov 2026 (customer checklist item 45): a circular transfer is a red broken link between the trees on the
+            // circle (dashed, a cross at its middle, the path in its tooltip). Trees share the FAULT TREE column, so the
+            // link runs out to the right of the cards and back in; a tree that transfers to itself gets a small hook.
+            if (L.broken || (a.x === b.x && ((sN.kind === 'fta' && tN.kind === 'fta') || (colKind(sN.kind) === 'disp' && colKind(tN.kind) === 'disp')))) {
+                const col0 = L.broken ? RED : ((sN.flag || tN.flag) ? (FLAG[sN.flag || tN.flag] || RED) : 'rgba(26,28,34,.6)');
+                const xr = a.x + a.w, ya = a.y + a.h / 2, yb = b.y + b.h / 2;
+                const off = 12 + (Math.abs(ya - yb) / RP) * 3;
+                const bx = xr + Math.min(off, Math.max(12, GAPX - 8));
+                const d0 = L.self ? ('M' + xr + ',' + (ya - 8) + ' L' + (xr + 14) + ',' + (ya - 8) + ' L' + (xr + 14) + ',' + (ya + 8) + ' L' + xr + ',' + (ya + 8))
+                                  : ('M' + xr + ',' + ya + ' L' + bx + ',' + ya + ' L' + bx + ',' + yb + ' L' + xr + ',' + yb);
+                s += '<g' + (L.broken ? ' data-gt-broken="1"' : '') + '><path data-s="' + esc(L.s) + '" data-t="' + esc(L.t) + '" d="' + d0 + '" fill="none" stroke="' + col0 + '" stroke-width="2" stroke-dasharray="' + (L.broken ? '5,4' : '') + '" stroke-linejoin="round"/>';
+                if (L.broken) {
+                    const mx = L.self ? xr + 14 : bx, my = L.self ? ya : (ya + yb) / 2;
+                    s += '<circle cx="' + mx + '" cy="' + my + '" r="6" fill="#fff" stroke="' + RED + '" stroke-width="1.6"/><path d="M' + (mx - 3) + ',' + (my - 3) + ' L' + (mx + 3) + ',' + (my + 3) + ' M' + (mx + 3) + ',' + (my - 3) + ' L' + (mx - 3) + ',' + (my + 3) + '" stroke="' + RED + '" stroke-width="1.6"/>';
+                    s += '<title>' + esc(L.why || 'Circular transfer') + '</title>';
+                }
+                s += '</g>';
+                return;
+            }
             // orient left→right
             if (b.x < a.x) { const t = a; a = b; b = t; }
             const x0 = a.x + a.w, y0 = a.y + a.h / 2, x1 = b.x, y1 = b.y + b.h / 2;
@@ -277,7 +298,7 @@
             c += '<text x="' + (px + pw / 2) + '" y="' + (py + 8.7) + '" text-anchor="middle" font-size="7" font-weight="700" fill="#fff">' + PROVL[pv] + '</text>';
             // bottom-left chip: flag OR role
             let bl = null;
-            if (n.flag) bl = { t: n.flag.toUpperCase(), c: ((n.flag === 'stale' || n.flag === 'finding') ? AMBER : n.flag === 'obsolete' ? INK3 : RED) };
+            if (n.flag) bl = { t: (n.flag === 'circular' ? 'NO RESULT' : n.flag.toUpperCase()), c: ((n.flag === 'stale' || n.flag === 'finding') ? AMBER : n.flag === 'obsolete' ? INK3 : RED) };
             else if (n.kind === 'sys' && n.role) { const base = n.role === 'primary' ? 'PRIMARY' : 'RESOURCE'; bl = { t: (n.role === 'resource' && (n.hops || 1) > 1) ? base + ' ·' + n.hops : base, c: n.role === 'primary' ? '#12A150' : AMBER }; }
             if (bl) {
                 const rw = bl.t.length * 5.1 + 10, rx = p.x + 11, ry = p.y + p.h - 15;

@@ -98,7 +98,7 @@ function renderFTASidebar() {
     const childrenByParent = new Map();
     const rootPages = [];
     (ftaPages || []).forEach(p => {
-        const parentId = p.transferInFrom && p.transferInFrom.sourcePageId;
+        const parentId = (p.transferInFrom && p.transferInFrom.sourcePageId) || (p.integrated && p.integrated.sourcePageId);   // 1 Nov 2026 (item 42): an integrated tree sits under the tree it starts from
         if (parentId && pageById.has(parentId)) {
             if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
             childrenByParent.get(parentId).push(p);
@@ -230,7 +230,7 @@ function renderFTASidebar() {
         // Phase 53.46 — verification mirror pages take a 'verification' badge; subtree wins
         // over treeLevel; otherwise show the page's treeLevel.
         const isVerification = !!page.verifies;
-        const lvl = isVerification ? 'verification' : (isSubtree ? 'subtree' : (page.treeLevel || 'standalone'));
+        const lvl = page.integrated ? 'integrated' : (isVerification ? 'verification' : (isSubtree ? 'subtree' : (page.treeLevel || 'standalone')));
         // v66.14 — fallback for unknown treeLevel values: an unmapped level used
         // to throw ("reading 'bg'") and abort the ENTIRE sidebar render (seen in
         // live console history against scratch/test pages). Unknown levels now
@@ -292,7 +292,7 @@ function renderFTASidebar() {
         // Only rendered for root sandbox pages (transferred subtrees inherit their
         // parent's promotion automatically).
         let promoteBtn = null;
-        if (isSandbox && !isSubtree) {
+        if (isSandbox && !isSubtree && !page.integrated) {
             promoteBtn = document.createElement('button');
             promoteBtn.className = 'action-btn';
             promoteBtn.style.cssText = 'padding: 2px 6px; background: var(--color-purple, #8b5cf6); color: #fff;';
@@ -497,6 +497,13 @@ function _renderFtaLinkedChip() {
         chip.title = 'This tree has no owning failure condition. Click to set it (DAL is derived from severity).';
         chip.innerHTML = '⚠ Unlinked — set owning function';
     }
+    // 31 Oct 2026: comments on the whole tree (PASA, PSSA, SSA, ASA or Standalone), beside its link
+    try {
+        let slot = document.getElementById('fta-comment-slot');
+        if (!slot) { slot = document.createElement('span'); slot.id = 'fta-comment-slot'; slot.setAttribute('data-ck-host', '1'); slot.title = 'Comments on this tree'; slot.style.cssText = 'margin-left:8px;vertical-align:middle;display:inline-flex;align-items:center;'; h.appendChild(slot); }
+        const pid = (typeof activeFTAPageId !== 'undefined') ? activeFTAPageId : null;
+        slot.innerHTML = (pid != null && pid !== '' && window.SLCommentKinds) ? SLCommentKinds.button({ kind: 'ftaPage', id: String(pid) }) : '';
+    } catch (_) {}
 }
 // #47 — when the Calculation Mode & Exposure panel is collapsed, show a one-line basis summary
 // (mode · apportionment · exposure · linked FC) so the tree's setup is visible without expanding.
@@ -625,6 +632,7 @@ function updateD3() {
             // 13 Oct 2026 (fix G): an empty page still shows the toolbox, its unattached nodes and the overview map.
             try { if (typeof SLFtaEdit !== 'undefined') SLFtaEdit.afterRender(null, [], document.body.classList.contains('theme-dark')); } catch (_) {}
             try { if (typeof SLFtaWarn !== 'undefined') SLFtaWarn.afterRender(null, []); } catch (_) {}
+            try { if (window.SLFtaIntegrated) window.SLFtaIntegrated.afterRender(); } catch (_) {}
             return;
         }
         // Phase 53.40 — refresh nodeSize on every render so Reconfigure Layout (and any future
@@ -982,7 +990,7 @@ function updateD3() {
         }
 
         const nodeUpdate = nodeEnter.merge(nodes); nodeUpdate.transition().duration(180).attr('transform', d => `translate(${d.x},${d.y})`);
-        nodeUpdate.attr('class', d => `node ${selectedNodeData && selectedNodeData.id === d.data.id ? 'selected' : ''}`);
+        nodeUpdate.attr('class', d => `node ${selectedNodeData && selectedNodeData.id === d.data.id ? 'selected' : ''}${d.data._circular ? (d.data._circular.inLoop ? ' fta-circular-in' : ' fta-circular') : ''}`);   // 1 Nov 2026 (item 45): a transfer on a circle is drawn red; a result that depends on one reads red (fta_loops.js)
         
         nodeUpdate.select('.inline-desc').each(function(d) {
             if(document.activeElement !== this) this.value = d.data.name || '';
@@ -1108,6 +1116,7 @@ function updateD3() {
         try { if (_FE) _FE.afterRender(root, _allDesc, isDark); } catch (_) {}
         // 27 Oct 2026 (customer report): the tree's warning pill on the canvas, and its node highlight.
         try { if (typeof SLFtaWarn !== 'undefined') SLFtaWarn.afterRender(rootNode, _allDesc); } catch (_) {}
+        try { if (window.SLFtaIntegrated) window.SLFtaIntegrated.afterRender(); } catch (_) {}   // 1 Nov 2026 (item 42): the read-only lock and banner
     } catch (err) { console.error("D3 Rendering Error:", err); }
 }
 
@@ -1226,6 +1235,7 @@ function _initNodeDrawerResize() {
 
 function selectNode(dataNode) {
     selectedNodeData = dataNode; document.getElementById('config-node-id').innerText = dataNode.displayId; document.getElementById('config-name').value = dataNode.name;
+    try { const _cs = document.getElementById('config-node-comment'); if (_cs) _cs.innerHTML = window.SLCommentKinds ? SLCommentKinds.button({ kind: 'ftaNode', id: String(dataNode.id) }) : ''; } catch (_) {}   // 31 Oct 2026: comments on this gate or event
     if (typeof refreshBasicEventDerived === 'function') refreshBasicEventDerived();
     // Phase 66.33 — "what is this node?" renders first in the drawer. Guarded: the
     // identity editor is additive, and a node with no coordinate is still perfectly
@@ -1894,13 +1904,29 @@ function _refreshSysWizard(page) {
     if (!sys) { _hideSysWizard(); return; }
 
     fr.style.display = 'flex';
+    // 30 Oct 2026 (Waqas: "it keeps blanking out and not showing updated link"): a linked tree opens the picker on
+    // its own function and failure condition. Only an unlinked tree starts blank.
+    let _linkedRow = null;
+    try {
+        const _FL = (typeof window !== 'undefined') ? window.SLFcLink : null;
+        const _cur = _FL ? _FL.currentRow(page) : null;
+        if (_cur && (sys.fha || []).indexOf(_cur) >= 0) _linkedRow = _cur;
+        else {
+            const _ids = (Array.isArray(page.linkedFhaIds) && page.linkedFhaIds.length) ? page.linkedFhaIds : (page.linkedFhaId != null ? [page.linkedFhaId] : []);
+            _linkedRow = (sys.fha || []).find(f => _ids.some(id => String(id).replace(/^(AC_|SYS_)/, '') === String(f.internalId))) || null;
+        }
+    } catch (_) { _linkedRow = null; }
+    if (_linkedRow && page._wizardSubId === undefined && _linkedRow.subId) page._wizardSubId = _linkedRow.subId;
     // Populate function dropdown from the picked system's functions.
-    // No auto-selection — the user must explicitly pick each step.
     const fnOpts = ['<option value="">-- Select a function --</option>'];
     (sys.functions || []).forEach(f => {
         const label = (f.funcId || '') + (f.funcName ? '  ·  ' + f.funcName : '');
         fnOpts.push('<option value="' + esc(f.funcId || '') + '">' + esc(label) + '</option>');
     });
+    // a failure condition filed under a function this system does not list (an aircraft function, say) still shows
+    if (page._wizardSubId && !(sys.functions || []).some(f => String(f.funcId || '') === String(page._wizardSubId))) {
+        fnOpts.push('<option value="' + esc(page._wizardSubId) + '">' + esc(page._wizardSubId + '  ·  (as filed in the FHA)') + '</option>');
+    }
     funcSel.innerHTML = fnOpts.join('');
     funcSel.value = page._wizardSubId || '';
 
@@ -1939,8 +1965,16 @@ function _refreshSysWizard(page) {
             groups.set(key, f);
         }
     });
+    // 30 Oct 2026 (Waqas: "his picker was populated with every single failure condition if quantitative analyses are
+    // not applicable no fault trees get prepopulated"): only the conditions that take a tree under the 24 Oct rule can
+    // be picked; the others are listed greyed, with the reason (SLFcLink.treeNeed).
+    const _FLn = (typeof window !== 'undefined') ? window.SLFcLink : null;
+    const _need = (f) => { try { return _FLn && typeof _FLn.treeNeed === 'function' ? _FLn.treeNeed(f) : { needs: true, why: '' }; } catch (_) { return { needs: true, why: '' }; } };
     const fcOpts = ['<option value="">-- Select a failure condition --</option>'];
+    const fcNoTree = [];
     Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([fcKey, f]) => {
+        const nd = _need(f);
+        if (!nd.needs) { fcNoTree.push('<option value="' + esc(f.internalId) + '" disabled>' + esc(fcKey + ': ' + (f.fcDesc || 'failure condition') + ' · ' + nd.why) + '</option>'); return; }
         // Tag entries where multiple severities exist for the same FC ID to make the
         // "most conservative wins" choice transparent.
         const variants = matching.filter(x => (x.fcId || '#' + x.internalId) === fcKey);
@@ -1950,9 +1984,20 @@ function _refreshSysWizard(page) {
         const label = fcKey + ': ' + (f.fcDesc || 'failure condition') + sev + variantTag;
         fcOpts.push('<option value="' + esc(f.internalId) + '">' + esc(label) + '</option>');
     });
+    if (fcNoTree.length) fcOpts.push('<optgroup label="No fault tree needed (1309 chart or severity)">' + fcNoTree.join('') + '</optgroup>');
     fcSel.innerHTML = fcOpts.join('');
-    // No pre-selection — the user picks the FC to develop the tree for.
+    // the condition the tree is linked to, when it is under this function; otherwise the user picks
     fcSel.value = '';
+    if (_linkedRow) {
+        const _k = (_linkedRow.fcId || '#' + _linkedRow.internalId), _g = groups.get(_k);
+        if (_g) fcSel.value = String(_g.internalId);
+    }
+    if (fcHint) {
+        if (_linkedRow && !fcSel.value) {
+            fcHint.style.display = 'block';
+            fcHint.textContent = 'This tree is linked to ' + (_linkedRow.fcId || 'a failure condition') + (_linkedRow.subId ? ', under ' + _linkedRow.subId : '') + '. Pick that function to see it, or pick another failure condition.';
+        } else fcHint.style.display = 'none';
+    }
 }
 
 function refreshFcLinkPanel() {
@@ -2287,6 +2332,7 @@ function _generateCutsetReportAsync(rootNode) {
         });
     }, function (err) {
         if (_ftaComputeStale(token)) return;
+        if (err && err.name === 'CircularTransferError') return _renderCutsetCircular(rootNode, err);   // 1 Nov 2026 (item 45)
         if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err);
         const summary = document.getElementById('cutset-summary');
         if (err && err.name === 'NonCoherentCutsetError') { if (summary) summary.innerHTML = '<div style="padding:10px 14px; background:var(--bg-control); border:1px solid var(--border-primary); border-radius:4px; font-size:12px; color:var(--text-secondary);">' + esc(err.message) + '</div>'; return; }   // 13 Oct 2026 (fix G)
@@ -2294,10 +2340,24 @@ function _generateCutsetReportAsync(rootNode) {
     }).catch(function (e) { if (window.SLErrorWatch) SLErrorWatch.report(e, 'fta_view_modules'); });
 }
 
+// 1 Nov 2026 (customer checklist item 45): a tree that depends on a circular transfer has no cut sets and no
+// probability: the panel says so with the circle spelled out, and shows no number at all.
+function _renderCutsetCircular(rootNode, err) {
+    const loop = (err && err.loop) || [];
+    const path = (window.SLFtaLoops && window.SLFtaLoops.path) ? window.SLFtaLoops.path(loop) : loop.map(p => p && (p.name || p.id)).join(' \u2192 ');
+    const tbody = document.getElementById('cutset-body'); if (tbody) tbody.innerHTML = '';
+    const tbl = document.getElementById('cutset-table'); if (tbl) tbl.style.display = 'none';
+    const summary = document.getElementById('cutset-summary');
+    if (summary) summary.innerHTML = '<div data-fta-circular="1" style="padding:10px 14px;background:var(--bg-control);border:1px solid #C0231D;border-left:4px solid #C0231D;border-radius:4px;font-size:12px;">' +
+        '<div style="color:#C0231D;font-weight:700;margin-bottom:4px;">No result: circular transfer</div>' +
+        '<div>This tree depends on a circle of transfers: <b>' + esc(path) + '</b>. A fault tree cannot be calculated around a circle, so there are no cut sets and no probability for this tree, or for any tree that transfers into the circle.</div>' +
+        '<div style="margin-top:4px;color:var(--text-secondary);">Point one of the transfers on the circle at a different tree, or remove it, and the results come back.</div></div>';
+}
 function _generateCutsetReportSync(rootNode) {
     let raw;
     try { raw = _perfTime('fta.cutsets', function () { return _quantCachedCutsets(rootNode); }); }
     catch (err) {
+        if (err && err.name === 'CircularTransferError') return _renderCutsetCircular(rootNode, err);   // 1 Nov 2026 (item 45)
         if (err && err.name === 'CutsetExplosionError') return _renderCutsetTooComplex(rootNode, err);
         // 13 Oct 2026 (fix G): a NOT tree with too many prime implicants is refused in plain words, never shown partly.
         if (err && err.name === 'NonCoherentCutsetError') {
@@ -2686,7 +2746,8 @@ function _renderGoldenThread(fha, domain, highlight){
             budgetStatus = pass ? 'ok' : 'gap';
             budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · BDD-exact top ' + computed.toExponential(2) + ' per flight = ' + v.rate.toExponential(2) + '/fh over a ' + v.hours.toFixed(3) + ' h flight'
                 + _gtChip(pass ? 'within budget' : 'exceeds budget', pass ? 'ok' : 'gap');
-        } else if(refused){ warns++; budgetStatus = 'warn'; budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · the exact engine refused this tree (decision diagram too large); no verdict stated' + _gtChip('no exact value', 'warn'); }
+        } else if(refused && window.SLFtaLoops && window.SLFtaLoops.loopFor(tree)){ gaps++; budgetStatus = 'gap'; budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · no valid result: the tree depends on a circular transfer (' + esc(window.SLFtaLoops.path(window.SLFtaLoops.loopFor(tree))) + '); no verdict stated' + _gtChip('no valid result', 'gap'); }   // 1 Nov 2026 (item 45)
+        else if(refused){ warns++; budgetStatus = 'warn'; budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · the exact engine refused this tree (decision diagram too large); no verdict stated' + _gtChip('no exact value', 'warn'); }
         else { warns++; budgetStatus = 'warn'; budgetBody = 'Target ≤ ' + sevTarget.prob.toExponential(1) + '/fh · no fault tree linked' + _gtChip('no tree', 'warn'); }
     } else { budgetStatus = 'info'; budgetBody = 'No quantitative target for this severity / cert basis (' + esc((sevTarget && sevTarget.scope) || '—') + ').'; }
     html += _gtStage('Budget check', budgetBody, budgetStatus);
@@ -2909,6 +2970,13 @@ function _gtvBuildGraph(opts){
     // thread (FMEA, PRA, ZSA, human factors, R&M) joins it; the index is built once per graph.
     let _mlIdx = null;
     try { if (typeof window !== 'undefined' && window.SLModelLinks && typeof window.SLModelLinks.threadIndex === 'function') _mlIdx = window.SLModelLinks.threadIndex(); } catch(_){ _mlIdx = null; }
+    let _gtvEta = null, _gtvCases = null;   // 1 Nov 2026 (items 37/43): event trees and dispatch cases, evaluated once per graph
+    try { if(typeof window !== 'undefined' && typeof window.etaEvaluate === 'function' && typeof window.etaStore === 'function'){ _gtvEta = []; window.etaStore().forEach(t => { try { _gtvEta.push({ tree: t, ev: window.etaEvaluate(t) }); } catch(_){} }); if(!_gtvEta.length) _gtvEta = null; } } catch(_){ _gtvEta = null; }
+    try { if(typeof window !== 'undefined' && window.SLFtaConditions){ const cs = window.SLFtaConditions.cases(); if(cs.length) _gtvCases = cs.map(c => ({ c, ev: window.SLFtaConditions.evaluateCase(c) })); } } catch(_){ _gtvCases = null; }
+    let _gtvShared = null;   // 1 Nov 2026 (item 32): page id -> the shared events on it, found once per graph (fta_paste.js)
+    try { if(typeof window !== 'undefined' && window.SLFtaPaste){ _gtvShared = new Map(); window.SLFtaPaste.sharedEvents().forEach(e => e.pages.forEach(pp => { const a = _gtvShared.get(pp.id) || []; a.push(e); _gtvShared.set(pp.id, a); })); } } catch(_){ _gtvShared = null; }
+    let _gtvLoops = null;   // 1 Nov 2026 (item 45): circular transfers, found once per graph (fta_loops.js)
+    try { if(typeof window !== 'undefined' && window.SLFtaLoops){ _gtvLoops = window.SLFtaLoops.analyze(); if(!_gtvLoops.loops.length) _gtvLoops = null; } } catch(_){ _gtvLoops = null; }
     const _gtvFcT = (typeof SLFcTrees !== 'undefined' && SLFcTrees && typeof SLFcTrees.governingOf === 'function') ? SLFcTrees : null;
     const rows = [];
     (acFhaData||[]).forEach(f => rows.push({ fha: f, domain: 'AC', system: null }));
@@ -2990,7 +3058,96 @@ function _gtvBuildGraph(opts){
         const linkedPages = (ftaPages||[]).filter(p => { const L = (Array.isArray(p.linkedFhaIds) && p.linkedFhaIds.length) ? p.linkedFhaIds : (p.linkedFhaId ? [p.linkedFhaId] : []); return L.includes(fha.internalId); });
         const pageIds = linkedPages.map(p => String(p.id));
         const ftaKeys = [];
-        linkedPages.forEach(p => { const k = addNode('fta', p.id, (p.name || ('Tree ' + p.id)), 'Fault tree', { kind: 'ftaPage', id: p.id }, p.obsolete ? 'obsolete' : null, p.obsoleteReason || ''); ftaKeys.push(k); addLink(fcKey, k); });
+        linkedPages.forEach(p => { const k = addNode('fta', p.id, (p.name || ('Tree ' + p.id)), p.importedFrom ? ('Fault tree · imported from ' + (p.importedFrom.file || 'a file')) : 'Fault tree', { kind: 'ftaPage', id: p.id }, p.obsolete ? 'obsolete' : null, p.obsoleteReason || ''); ftaKeys.push(k); addLink(fcKey, k); });   // 1 Nov 2026 (item 26): an imported tree names its file
+        // 1 Nov 2026 (customer checklist item 32): an event that sits in more than one tree (pasted as the same event) shows
+        // once, in the common cause column, linked to every tree it sits in (fta_paste.js sharedEvents).
+        if(_gtvShared) linkedPages.forEach(p => {
+            (_gtvShared.get(String(p.id)) || []).forEach(e => {
+                const ek = addNode('cca', 'ev:' + e.lid, 'Shared event ' + (e.displayId || e.lid), (e.name ? e.name + ' · ' : '') + 'same event in ' + e.pages.length + ' trees', { kind: 'ftaEvent', id: e.lid });
+                const en = nodes.get(ek); if(en) en.sharedEvent = e.pages.map(x => x.name);
+                e.pages.forEach(tp => {
+                    const tk = addNode('fta', tp.id, tp.name || ('Tree ' + tp.id), 'Fault tree', { kind: 'ftaPage', id: tp.id });
+                    addLink(tk, ek);
+                });
+            });
+        });
+        // 1 Nov 2026 (customer checklist item 41): latent plus one. One card per latent event that, with a single active
+        // failure, reaches the top, linked to the requirement that covers its check interval, or flagged open (fta_latent.js).
+        if(typeof window !== 'undefined' && window.SLFtaLatent) linkedPages.forEach(p => {
+            if(p.integrated) return;
+            let res = null; try { res = window.SLFtaLatent.pairs(p); } catch(_){ res = null; }
+            if(!res || !res.rows.length) return;
+            const byLid = new Map();
+            res.rows.forEach(r => { const a = byLid.get(r.latentLid) || []; a.push(r); byLid.set(r.latentLid, a); });
+            byLid.forEach((rows, lid) => {
+                const L = rows[0].latent, open = rows.filter(r => window.SLFtaLatent.isOpen(r.status));
+                const why = open.length ? (window.SLFtaLatent.STATUS_TEXT[open[0].status] + ' (' + open.length + ' of ' + rows.length + ' pairs)') : '';
+                const lk = addNode('cca', 'lp1:' + lid, 'Latent + one: ' + (L.displayId || lid), rows.length + ' active failure' + (rows.length === 1 ? '' : 's') + ' with it reach the top', { kind: 'ftaEvent', id: lid }, open.length ? 'finding' : null, why);
+                ftaKeys.forEach(fk => { if(fk === 'fta:' + p.id) addLink(fk, lk); });
+                const cov = rows[0].requirement;
+                if(cov && cov.req){
+                    const r = cov.req;
+                    const rk = addNode('req', cov.kind + ':' + r.internalId, (r.traceId || r.id || ('REQ-' + r.internalId)), 'Check interval', { kind: cov.kind, id: r.internalId, systemId: cov.systemId }, cov.stale ? 'stale' : null, cov.stale ? 'The check interval changed since this requirement was written.' : '');
+                    addLink(lk, rk);
+                }
+            });
+        });
+        // 1 Nov 2026 (customer items 37/43): event tree sequences that end in this failure condition, linked to the fault trees
+        // under their headings; dispatch cases that reach this condition's trees, linked to them and to their MMEL item.
+        if(_gtvEta) _gtvEta.forEach(({ tree, ev }) => {
+            (ev.outcomes || []).forEach(o => {
+                if(!o.linkedFcId || String(o.linkedFcId) !== String(_gov.fcId || fha.fcId || '')) return;
+                const sk = addNode('eta', tree.id + ':' + o.key, (tree.name || tree.id) + ' · sequence ' + o.seqNo, (o.noResult ? 'no result' : (o.freq != null ? o.freq.toExponential(2) + '/FH' : '')) + (o.fromTrees != null ? ' · from its fault trees' : ''), { kind: 'eventTree', id: tree.id, key: o.key }, o.noResult ? 'circular' : null, o.noResult ? ('No result: ' + o.noResult) : '');
+                addLink(fcKey, sk);
+                (o.trees || []).forEach(pid => { const tp = (ftaPages || []).find(x => x && String(x.id) === String(pid)); if(!tp) return; addLink(sk, addNode('fta', tp.id, tp.name || ('Tree ' + tp.id), 'Fault tree', { kind: 'ftaPage', id: tp.id })); });
+            });
+        });
+        if(_gtvCases && linkedPages.length) _gtvCases.forEach(({ c, ev }) => {
+            const mine = ev.rows.filter(r => linkedPages.some(p => p === r.page));
+            if(!mine.length) return;
+            const bad = mine.find(r => r.within === false), w = bad || mine[0];
+            const ck = addNode('disp', c.id, c.id + ' ' + c.name, 'Dispatch case' + (w && w.dispatchedRate != null ? ' · ' + w.dispatchedRate.toExponential(2) + '/FH' : ''), { kind: 'dispatchCase', id: c.id }, bad ? 'finding' : null, bad ? ('Exceeds the objective on ' + (bad.page.name || bad.page.id) + ' while dispatched') : '');
+            mine.forEach(r => addLink('fta:' + r.page.id, ck));
+            const it = ((typeof projectConfig !== 'undefined' && projectConfig.mmel && projectConfig.mmel.items) || []).find(x => x.id === c.mmelItemId);
+            if(it) addLink(ck, addNode('mmel', it.id, it.id + ' ' + (it.title || ''), 'MMEL item · Cat ' + (it.category || ''), { kind: 'mmel', id: it.id }));
+        });
+        // 1 Nov 2026 (customer checklist item 42): an integrated tree joins the thread of every failure condition its source
+        // trees serve, linked to the condition and to each tree it is built from (fta_integrated.js).
+        if(typeof window !== 'undefined' && window.SLFtaIntegrated) linkedPages.forEach(p => {
+            window.SLFtaIntegrated.integratedOf(p.id).forEach(ip => {
+                const ik = addNode('fta', ip.id, ip.name || ('Tree ' + ip.id), 'Integrated tree · read only', { kind: 'ftaPage', id: ip.id }, ip.integrated && ip.integrated.blocked ? 'circular' : null, ip.integrated && ip.integrated.blocked ? ('Circular transfer: ' + ip.integrated.blocked + '. No valid result until the circle is broken.') : '');
+                const inode = nodes.get(ik); if(inode) inode.integrated = true;
+                addLink(fcKey, ik);
+                (ip.integrated.sources || []).forEach(sid => {
+                    const sp = (ftaPages || []).find(x => x && String(x.id) === String(sid)); if(!sp) return;
+                    const sk = addNode('fta', sp.id, sp.name || ('Tree ' + sp.id), 'Fault tree', { kind: 'ftaPage', id: sp.id }, sp.obsolete ? 'obsolete' : null, sp.obsoleteReason || '');
+                    addLink(sk, ik);
+                });
+            });
+        });
+        // 1 Nov 2026 (customer checklist item 45): a circular transfer is a red broken link between the trees on the circle,
+        // the path spelled out; a tree that transfers into the circle is linked to it; the failure condition shows no valid result.
+        if(_gtvLoops) linkedPages.forEach(p => {
+            const loop = _gtvLoops.tainted.get(String(p.id)); if(!loop) return;
+            const pth = window.SLFtaLoops.path(loop);
+            const why = 'Circular transfer: ' + pth + '. No valid result until the circle is broken.';
+            const fn = nodes.get(fcKey); if(fn && !fn.flag){ fn.flag = 'circular'; fn.flagReason = 'No valid result: depends on a circular transfer (' + pth + ')'; }
+            const keyOf = pid => { const pg = _gtvLoops.byId.get(pid); return addNode('fta', pid, (pg && pg.name) || ('Tree ' + pid), 'Fault tree', { kind: 'ftaPage', id: pid }, 'circular', why); };
+            const pk = keyOf(String(p.id));
+            // the lead-in: follow transfers from this tree to the first tree on the circle
+            let cur = String(p.id), guard = 0;
+            while(!_gtvLoops.onLoop.has(cur) && guard++ < 200){
+                const nxt = (_gtvLoops.edges.get(cur) || []).find(t => _gtvLoops.tainted.get(t) === loop); if(!nxt) break;
+                addLink(keyOf(cur), keyOf(nxt)); cur = nxt;
+            }
+            for(let i = 0; i + 1 < loop.length; i++){
+                const a = keyOf(String(loop[i].id)), b = keyOf(String(loop[i + 1].id));
+                if(a === b){ const L0 = { s: a, t: b, broken: true, why: why, self: true }; if(!linkSet.has(a + '|self')){ linkSet.add(a + '|self'); links.push(L0); } continue; }
+                addLink(a, b);
+                const L = links.find(x => x.s === a && x.t === b); if(L){ L.broken = true; L.why = why; }
+            }
+            void pk;
+        });
 
         (cmaData||[]).forEach(c => { if((c.linkedGateIds||[]).some(k => pageIds.includes(String(k).split(':')[0]))){ const k = addNode('cca', 'cma:' + c.internalId, ('CMA ' + (c.cmaId || '')).trim(), c.subject || 'Common mode', { kind: 'cma', id: c.internalId }, c.ipCompromised ? 'compromised' : null, c.ipCompromised ? ('Independence compromised — ' + c.ipCompromised.principle) : ''); if(ftaKeys.length) ftaKeys.forEach(fk => addLink(fk, k)); else addLink(fcKey, k); } });
 
@@ -3554,6 +3711,7 @@ function getAutoReqVerificationEvidence(row) {
         // paths refill with the independent gate-by-gate roll-up.
         const populated = (typeof slMirrorIsPopulated === 'function') ? slMirrorIsPopulated(mirror) : true;
         const actual = populated ? SLTopBasis.exactTop(mirror.root) : 0;
+        if (actual == null) { const _cl = (window.SLFtaLoops && window.SLFtaLoops.loopFor) ? window.SLFtaLoops.loopFor(mirror) : null; if (_cl) return { state: 'awaiting', label: 'No result: circular transfer', detail: window.SLFtaLoops.message(_cl) + ' No pass or fail is stated.' }; }   // 1 Nov 2026 (item 45)
         if (actual == null) return { state: 'awaiting', label: 'Exact P(top) unavailable', detail: 'The exact engine refused this verification tree (decision diagram too large), so no pass or fail is stated. The independent gate-by-gate roll-up is not used for a verdict.' };
         if (!(actual > 0)) return { state: 'awaiting', label: 'Awaiting verification', detail: 'Populate leaf λ values in the verification tree; the top-event probability rolls up automatically.' };
         // Pull the target from the req's text or context (lambdaOperational not set on FHA reqs).

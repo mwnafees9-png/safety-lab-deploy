@@ -494,118 +494,12 @@ function copySelectedBranch() {
     if (typeof toast === 'function') toast('Branch copied — allocation snapshot captured for cross-tree paste.');
 }
 
-// Paste rules:
-//   • If the active tree has no top event, the clipboard becomes the new root.
-//   • If a non-transfer gate is selected, paste under it.
-//   • Otherwise, user needs to either select a gate or clear the top event first.
-function pasteAsChild() {
-    if (!nodeClipboard) { showToast('Clipboard is empty. Copy a node first.', 'warning', 4000); return; }
-    const root = getActiveFTARoot();
-    const sameTree = nodeClipboard.sourceTreeId === activeFTAPageId;
-    const cloned = cloneSubtree(nodeClipboard.subtree, sameTree);
-
-    // Phase 56.38 — same-tree paste: strip allocation snapshots. The natural
-    // re-allocation produces the correct values; carrying snapshots would
-    // over-constrain identical-tree clones. Cross-tree paste: KEEP the
-    // snapshots so allocateTopDown's conservative-merge can run.
-    (function postProcess(n, depth) {
-        if (!n) return;
-        if (sameTree) {
-            delete n._pasteOrigin;
-        } else {
-            if (n._pasteOrigin) {
-                n._pasteOrigin.pastedAt = Date.now();
-                if (depth === 0) n._pasteOrigin.isBranchRoot = true;
-            }
-        }
-        const kids = n.children || n._children;
-        if (kids) kids.forEach(c => postProcess(c, depth + 1));
-    })(cloned, 0);
-
-    if (!root) {
-        const page = ftaPages.find(p => p.id === activeFTAPageId);
-        if (!page) { showToast('No active fault tree.', 'warning', 4000); return; }
-        page.root = cloned;
-        page.name = cloned.name || page.name;
-        renderFTASidebar();
-    } else if (selectedNodeData && selectedNodeData.type === 'gate' && selectedNodeData.gateType !== 'TRANSFER') {
-        // If selected gate is transferred out, route the paste to the destination root.
-        const target = resolveTransferOutTarget(selectedNodeData);
-        if (!target.children) target.children = [];
-        target.children.push(cloned);
-    } else {
-        slAlert('Select a non-transfer gate to paste under, or delete the top event first to paste as the new root.', { title: 'Paste' }); return;
-    }
-    calculateAllProbabilities();
-    updateD3();
-    // Phase 56.38 — cross-tree paste: surface the merge result so the engineer
-    // can review what was kept-from-source vs would-be-destination, and accept
-    // or override. Defer so calculateAllProbabilities completes first.
-    if (!sameTree && typeof openPasteReviewModal === 'function') {
-        setTimeout(() => openPasteReviewModal(cloned), 60);
-    } else if (!sameTree && typeof toast === 'function') {
-        toast('Cross-tree paste: source allocations preserved where stricter than destination.');
-    }
-}
-
-// Phase 56.51 — Paste Special. Forces the three-way mode-choice modal even
-// when source and destination are the same tree. Useful when the engineer
-// wants to convert a same-tree paste from repeat-event (the default) to an
-// independent copy or a CCF group without re-pasting from scratch.
-//
-// Workflow: paste normally (defaults to repeat-event for same-tree), then
-// open the paste review modal with the cloned subtree so the engineer can
-// pick a different mode if they want.
-function pasteSpecial() {
-    if (!nodeClipboard) { showToast('Clipboard is empty. Copy a node first.', 'warning', 4000); return; }
-    const root = getActiveFTARoot();
-    const sameTree = nodeClipboard.sourceTreeId === activeFTAPageId;
-    // For Paste Special we force the modal to open regardless of same/cross tree.
-    // To make the modal work we need to annotate the clone with _pasteOrigin
-    // (even for same-tree paste) so the modal handlers can re-resolve mode.
-    const cloned = cloneSubtree(nodeClipboard.subtree, true);   // preserve IDs as default
-    (function postProcess(n, depth) {
-        if (!n) return;
-        // Ensure each node has a _pasteOrigin marker so the review modal
-        // recognizes it as a paste subject.
-        if (!n._pasteOrigin) {
-            n._pasteOrigin = {
-                sourceTreeId: nodeClipboard.sourceTreeId,
-                sourcePageName: nodeClipboard.sourcePageName || '',
-                snapshotProb: n.probability != null ? n.probability : null,
-                snapshotDAL: n.allocatedDAL || null,
-                snapshotLambda: n.lambda != null ? n.lambda : null,
-                snapshotAt: Date.now(),
-                pastedAt: Date.now()
-            };
-        }
-        n._pasteOrigin.isBranchRoot = (depth === 0) ? true : !!n._pasteOrigin.isBranchRoot;
-        // For Paste Special, capture the original logicalId so the modal's
-        // Same-event / Independent / CCF handlers can do their thing.
-        if (n._originalLogicalId == null) n._originalLogicalId = n.logicalId;
-        const kids = n.children || n._children;
-        if (kids) kids.forEach(c => postProcess(c, depth + 1));
-    })(cloned, 0);
-
-    if (!root) {
-        const page = ftaPages.find(p => p.id === activeFTAPageId);
-        if (!page) { showToast('No active fault tree.', 'warning', 4000); return; }
-        page.root = cloned;
-        page.name = cloned.name || page.name;
-        renderFTASidebar();
-    } else if (selectedNodeData && selectedNodeData.type === 'gate' && selectedNodeData.gateType !== 'TRANSFER') {
-        const target = resolveTransferOutTarget(selectedNodeData);
-        if (!target.children) target.children = [];
-        target.children.push(cloned);
-    } else {
-        slAlert('Select a non-transfer gate to paste under, or delete the top event first to paste as the new root.', { title: 'Paste' }); return;
-    }
-    calculateAllProbabilities();
-    updateD3();
-    if (typeof openPasteReviewModal === 'function') {
-        setTimeout(() => openPasteReviewModal(cloned), 60);
-    }
-}
+// 1 Nov 2026 (customer checklist item 32): every paste asks first, same event or independent copy (fta_paste.js);
+// nothing is placed until the engineer answers. Paste Special adds a common cause group.
+// Paste rules (unchanged): a tree with no top event takes the paste as its root; otherwise paste under the selected
+// non-transfer gate (a transferred-out gate pastes into its destination tree).
+function pasteAsChild() { if (window.SLFtaPaste) return window.SLFtaPaste.run(false); }
+function pasteSpecial() { if (window.SLFtaPaste) return window.SLFtaPaste.run(true); }
 
 function clearAllAllocations() {
     function strip(node) {
@@ -859,6 +753,10 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
         }
     }
     if (cmaHit) indep = 'compromised';
+    // 31 Oct 2026 (customer checklist item 1): a four-step CMA that is mitigated or closed, with this gate as it was when it
+    // was mitigated, substantiates the claim here (cma_flow.js). Only a claim: an engineer's "none" stays none, and a
+    // compromise found anywhere still wins.
+    if (indep === 'claimed') { try { if (typeof window !== 'undefined' && window.SLCmaFlow && window.SLCmaFlow.substantiatedGateIds().has(String(node.id))) { indep = 'substantiated'; node._cmaSubstantiatedBy = (window.SLCmaFlow.substantiatedBy(node.id) || {}).cmaId || ''; } else if (node._cmaSubstantiatedBy) delete node._cmaSubstantiatedBy; } catch (_) {} }
 
     // The reduction THIS gate would take under substantiated independence: one entry per child,
     // { dal, role }. Pure function of the row, this gate's position in it, its option and k-of-n.

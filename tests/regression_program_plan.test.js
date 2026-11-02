@@ -173,8 +173,9 @@ global.projectConfig.regulation = 'Part 25';
 
 // ---- [8] the printed SSPP carries the scope (nav = plan = report) -------------
 const rep = fs.readFileSync(path.join(__dirname, '..', 'site', 'reports.js'), 'latin1');
-check('program_scope_table token registered (regex + editor list + data build)',
-  rep.indexOf('|program_scope_table|') >= 0 && rep.indexOf("'program_scope_table',") >= 0 &&
+// 31 Oct 2026: no token lists any more; a {{token}} whose value is a list of rows renders as a table
+check('program_scope_table is built as rows, and reports.js renders such a token as a table',
+  /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(rep) &&
   /program_scope_table:\s+_buildProgramScopeTable\(\)/.test(rep));
 check('scope-table builder reads the live plan (laneOn/tailoring/basisNow)',
   /_buildProgramScopeTable/.test(rep) && /PROGRAM_PLAN\.laneOn\(l\.id\)/.test(rep) && /TAILORED OUT \(signed\)/.test(rep));

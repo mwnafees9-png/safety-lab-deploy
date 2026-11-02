@@ -180,7 +180,7 @@
     function ccfPairs() {
         const out = [];
         (typeof ftaPages !== 'undefined' ? ftaPages : []).forEach(page => {
-            if (!page || !page.root || page.verifies) return;   // allocation trees only
+            if (!page || !page.root || page.verifies || page.integrated) return;   // allocation trees only (1 Nov 2026: never an integrated tree, fta_integrated.js)
             (function walk(n) {
                 if (!n) return;
                 if (_isAndFamily(n)) out.push(..._pairsForGate(n, page));
@@ -236,7 +236,7 @@
         if (!p) return false;
         const lids = new Set([_lid(p.a), _lid(p.b)]);
         (typeof ftaPages !== 'undefined' ? ftaPages : []).forEach(page => {
-            if (!page || !page.root) return;
+            if (!page || !page.root || page.integrated) return;
             (function walk(n) {
                 if (!n) return;
                 if (_isLeaf(n) && lids.has(_lid(n))) { n.ccfGroup = grp; n.beta = beta; }

@@ -357,8 +357,8 @@
         html += '<h3 style="margin-top:var(--s-5);">FRACAS — field lane vs prediction (MIL-HDBK-781A)</h3>' +
             '<div style="margin:0 0 10px;"><button class="btn-cyan" onclick="ramAddField()">+ Field record</button> ' +
             '<span style="font-size:11px; color:var(--color-text-tertiary); font-family:var(--font-mono);">verified = 60% lower confidence bound clears the prediction; field below prediction = finding, never averaged in</span></div>';
-        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Basic event</th><th>Model links</th><th>Predicted MTBF</th><th>Field data (window)</th><th>MTBF LCB (60%)</th><th>Verdict</th><th>Corrective action</th><th>By</th></tr></thead><tbody>';
-        if (!field.length) html += '<tr><td colspan="8" style="color:var(--color-text-tertiary);">No field data yet.</td></tr>';
+        html += '<table class="data-table" style="width:100%;  font-size:12.5px;"><thead><tr><th>Basic event</th><th>Model links</th><th>Predicted MTBF</th><th>Field data (window)</th><th>MTBF LCB (60%)</th><th>Verdict</th><th>Corrective action</th><th>By</th><th>Review</th></tr></thead><tbody>';
+        if (!field.length) html += '<tr><td colspan="9" style="color:var(--color-text-tertiary);">No field data yet.</td></tr>';
         field.forEach(x => {
             const dataTxt = x.statistical
                 ? Math.round(x.f.hours).toLocaleString() + ' h · ' + x.f.failures + ' failure' + (x.f.failures === 1 ? '' : 's') + ' (' + x.f.windowMonths + ' mo)'
@@ -376,7 +376,8 @@
                 '<td class="clickable" style="font-size:11.5px;" onclick="ramFracasAction(\'' + x.f.id + '\')">' +
                 (x.f.action ? _esc(x.f.action.slice(0, 60)) + ' · ' + (x.f.actionClosed ? '<span style="color:#1D9E75;" class="u-mono">CLOSED</span>' : '<span style="color:#9A6200;" class="u-mono">OPEN</span>')
                     : (x.verdict === 'finding' ? '<span style="color:#8E2A2A;">action required…</span>' : '<span class="prov">record…</span>')) + '</td>' +
-                '<td>' + _esc(x.f.by || '') + '</td></tr>';
+                '<td>' + _esc(x.f.by || '') + '</td>' +
+                (typeof SLCommentKinds !== 'undefined' ? SLCommentKinds.cell('fracas', String(x.f.id)) : '<td></td>') + '</tr>';   // 31 Oct 2026: comments
         });
         html += '</tbody></table>';
         const openActions = field.filter(x => x.verdict === 'finding' && !(x.f.action && x.f.actionClosed)).length;

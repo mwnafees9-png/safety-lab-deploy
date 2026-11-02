@@ -39,7 +39,7 @@ function fnSrc(src, name) {
 
 console.log('\n[A] wiring');
 const A = read('ai_assistant.js'), BAR = read('lane_ai_bar.js'), L = read('ai_loader.js'), IDX = read('index.html'), A11 = read('a11_sequencing.js');
-check('ai_loader.js loads ai_assistant.js v76.92 or later', /ai_assistant\.js\?v=76\.(9[2-9]|\d{3})/.test(L));
+check('ai_loader.js loads ai_assistant.js v76.92 or later', /ai_assistant\.js\?v=(76\.(9[2-9]|\d{3})|(7[7-9]|[89]\d)\.\d+)/.test(L));
 check('index pins lane_ai_bar.js 1.4 or later', /lane_ai_bar\.js\?v=1\.([4-9]|\d{2})/.test(IDX));
 // R3: one action per analysis, each taking the caller's scope
 const launcher = fnSrc(A, '_launcherActions') || '';

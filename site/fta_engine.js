@@ -70,6 +70,61 @@ function CutsetExplosionError(count) {
 }
 CutsetExplosionError.prototype = Object.create(Error.prototype);
 CutsetExplosionError.prototype.constructor = CutsetExplosionError;
+
+// 1 Nov 2026 (customer checklist item 45; Waqas: "no number is the way to go"): a transfer that comes back round to a
+// tree it came from (A -> B -> A) is a circle, and a fault tree cannot be quantified around a circle. The engine used
+// to stop following a page it had already visited, so where the circle was cut depended on which tree you started
+// from: the same system could give two numbers and nobody was told. Now every quantification whose tree reaches a
+// circle (its own page in it, or any page it transfers into, at any depth) refuses with this error: no number at all
+// until the circle is broken. The circle is named in the order it is walked, first page repeated at the end.
+function CircularTransferError(loop) {
+    this.name = 'CircularTransferError';
+    this.loop = loop || [];
+    this.permanent = true;
+    var names = (this.loop || []).map(function (p) { return p && (p.name || p.id) || '?'; });
+    this.message = 'No result: this depends on a circular transfer (' + names.join(' \u2192 ') + '). A fault tree cannot be calculated around a circle. Break the circle and the results come back.';
+    if (Error.captureStackTrace) Error.captureStackTrace(this, CircularTransferError);
+}
+CircularTransferError.prototype = Object.create(Error.prototype);
+CircularTransferError.prototype.constructor = CircularTransferError;
+function _transferTargetsOf(node, out) {
+    (function walk(n, seen) {
+        if (!n || seen.has(n)) return; seen.add(n);
+        if (n.gateType === 'TRANSFER' || n.transferOutTo) { var to = n.transferOutTo || n.linkedPageId; if (to) out.push(String(to)); }
+        var kids = n.children || n._children; if (kids) for (var i = 0; i < kids.length; i++) walk(kids[i], seen);
+    })(node, new Set());
+    return out;
+}
+// the first circle reachable from this node through transfers, as [page, page, ..., first page again], or null
+function findTransferLoop(rootNode, pages) {
+    if (!rootNode) return null;
+    if (!pages) { try { pages = (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) ? ftaPages : null; } catch (_) { pages = null; } }
+    if (!pages || !pages.length) return null;
+    var byId = new Map(); pages.forEach(function (p) { if (p && p.id != null) byId.set(String(p.id), p); });
+    var state = new Map(), stack = [], found = null;
+    function visit(pid) {
+        if (found) return;
+        var st = state.get(pid);
+        if (st === 2) return;
+        if (st === 1) { var i = stack.indexOf(pid); found = stack.slice(i).concat([pid]); return; }
+        var pg = byId.get(pid); if (!pg || !pg.root) { state.set(pid, 2); return; }
+        state.set(pid, 1); stack.push(pid);
+        var tos = _transferTargetsOf(pg.root, []);
+        for (var k = 0; k < tos.length && !found; k++) visit(tos[k]);
+        stack.pop(); state.set(pid, 2);
+    }
+    // start from the page this node is the root of (so A -> B -> A is found from A), else from its transfers
+    var own = null; for (var j = 0; j < pages.length; j++) { if (pages[j] && pages[j].root === rootNode) { own = String(pages[j].id); break; } }
+    if (own) visit(own);
+    else { var t0 = _transferTargetsOf(rootNode, []); for (var m = 0; m < t0.length && !found; m++) visit(t0[m]); }
+    if (!found) return null;
+    // read the circle from the tree that comes first in the project, as SLFtaLoops (fta_loops.js) does, so every screen names it the same way
+    var ring = found.slice(0, -1), order = pages.map(function (p) { return p && String(p.id); }), at = 0;
+    for (var r = 1; r < ring.length; r++) if (order.indexOf(ring[r]) < order.indexOf(ring[at])) at = r;
+    ring = ring.slice(at).concat(ring.slice(0, at)); ring.push(ring[0]);
+    return ring.map(function (id) { var p = byId.get(id); return { id: id, name: p ? (p.name || id) : id }; });
+}
+function _refuseLoop(rootNode, pages) { var loop = findTransferLoop(rootNode, pages); if (loop) throw new CircularTransferError(loop); }
 function getCombinations(array, k) { let result = []; function combine(elements, k, start, current) { if (current.length === k) { result.push([...current]); if (result.length > _CUTSET_BUDGET) throw new CutsetExplosionError(result.length); return; } for (let i = start; i < elements.length; i++) { current.push(elements[i]); combine(elements, k, i + 1, current); current.pop(); } } combine(array, k, 0, []); return result; }
 // Key cutset elements by logicalId so repeated events (same event in multiple branches)
 // dedupe into a single occurrence in the AND-product result.
@@ -106,6 +161,7 @@ function _csForce(r, triggers, key, visited, ctx) {
 }
 function getCutsets(node, visited = new Set(), ctx) {
     if (!ctx) {
+        _refuseLoop(node);   // 1 Nov 2026 (item 45): no cut sets through a circular transfer
         // 13 Oct 2026 (fix G): a tree with a NOT gate is non-coherent; its cut sets are prime implicants.
         if (node && _treeHasNot(node)) return _primeImplicantCutsets(node);
         ctx = { fdep: _collectFdep(node), forcing: new Set() };
@@ -171,6 +227,7 @@ function _gateCutsets(node, visited, ctx) {
 // getCutsets transfer recursion), and builds an id→node index for result reconstruction.
 function _cloneNodeShallow(n) { const c = {}; for (const k in n) { if (k !== 'children' && k !== '_children') c[k] = n[k]; } return c; }
 function flattenTransfers(rootNode, pages) {
+    _refuseLoop(rootNode, pages);   // 1 Nov 2026 (item 45): the worker never gets a tree cut open at a circle
     const index = {};
     function rec(node, seenPages) {
         if (!node) return null;
@@ -1028,6 +1085,7 @@ function _bddCombinations(items, r) {
 // (same reduced BDD as the subset expansion, far fewer operations); _bddCombinations stays for
 // callers and the page/engine parity check.
 function buildBDDFromFT(rootNode, scopeRoot) {
+    if (typeof _refuseLoop === 'function') _refuseLoop(scopeRoot || rootNode);   // 1 Nov 2026 (item 45): no exact probability through a circular transfer
     BDD.reset();
     if (!rootNode) return { bdd: BDD.T0, varOrder: [], lidToVar: new Map(), varMeta: [], ccfGroupToVar: new Map(), ccfGroups: [], dyn: [], fdepCount: 0, grid: null };
     const varOrder = [];
@@ -1908,6 +1966,8 @@ var SLFTAEngine = {
     treeFactsForWorker: treeFactsForWorker,
     ccfModelNotes: ccfModelNotes,
     duplicateNodeIds: duplicateNodeIds,
+    findTransferLoop: findTransferLoop,
+    CircularTransferError: CircularTransferError,
     mgl: { planGroup: _mglPlanGroup, eventProb: _mglEventProb, eventRate: _mglEventRate, eventNode: _mglEventNode, memberParams: _mglMemberParams, eventTau: _mglEventTau, MAX_EVENTS: _MGL_MAX_EVENTS }
 };
 
@@ -1916,6 +1976,6 @@ var SLFTAEngine = {
 // and Worker scopes; we also publish the namespace and the budget for explicit access.
 try { root.SLFTAEngine = SLFTAEngine; } catch (_) {}
 try { root._CUTSET_BUDGET = _CUTSET_BUDGET; } catch (_) {}
-try { root.getCutsets = getCutsets; root.multiplyCutsets = multiplyCutsets; root.getCombinations = getCombinations; root._eventKey = _eventKey; root.CutsetExplosionError = CutsetExplosionError; } catch (_) {}
+try { root.getCutsets = getCutsets; root.multiplyCutsets = multiplyCutsets; root.getCombinations = getCombinations; root._eventKey = _eventKey; root.CutsetExplosionError = CutsetExplosionError; root.CircularTransferError = CircularTransferError; root.findTransferLoop = findTransferLoop; root._refuseLoop = _refuseLoop; } catch (_) {}
 
 })(typeof self !== 'undefined' ? self : (typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this)));

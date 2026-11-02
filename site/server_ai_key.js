@@ -9,7 +9,7 @@
 // it on the server and uses it from the next AI call. The key never comes back: this page can
 // only learn THAT a key is set and its last four characters. Everyone else sees who to ask.
 //
-// 24 Oct 2026 (v1.3, Radia): the box still empties when a save is tried (a pasted key never stays
+// 24 Oct 2026 (v1.3, customer report): the box still empties when a save is tried (a pasted key never stays
 // in the page), so the RESULT now stays: it names the key it was about by its last four characters,
 // gives the time, carries Anthropic's own reason word for word (the server quotes it), and is
 // still there when the person leaves AI settings and comes back, until the next save or removal.

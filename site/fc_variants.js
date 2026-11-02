@@ -28,6 +28,24 @@
 //   INV-30 (advisory) — coupled Cat/Haz pairs with neither a combined FC nor
 //                       a signed disposition; combined FCs whose parents'
 //                       severity changed since creation (stale).
+//
+// v2.0, 30 Oct 2026 (Waqas: "We need to have an AI drafting interface ... the combine failures table under the FHAs",
+// "do it the same way we have for all other analyses", "There shouldn't be combo failures proposed initially till
+// the user prompts", "We do not guess"):
+//   · BOTH LEVELS. The panel sits under the aircraft FHA and under each system's FHA (wrapping renderSysFHA the way
+//     renderACFHA is wrapped). A system's combined conditions are rows of that system's FHA, combining that system's
+//     conditions only. The coupled-pair candidates stay aircraft-level (they come from the aircraft functions'
+//     implementing systems).
+//   · ONE WRITER. createCombined(scope, parents, opts) is the only way a combined row is made, by hand (+ Combine FCs)
+//     or from an accepted ANEM proposal: two or more distinct conditions of this scope, none itself a combination,
+//     no combination of the same set already recorded (nothing is added twice), never milder than its worst part,
+//     its FC ID from the programme's numbering scheme. It says why when it refuses.
+//   · THE AI BAR. The panel's heading carries the same AI bar as every analysis (lane_ai_bar.js mountSection), whose
+//     one action, "Propose combined failure conditions", runs only when pressed. Its proposals open in the standard
+//     review panel; every basis a proposal cites is checked against the project before it is shown
+//     (ai_assistant.js _combineVerify).
+//   · v2.1, 31 Oct 2026 (Waqas: "rationale and reasoning needs to be there"): no combined condition without its
+//     reasoning (why the combination carries its class): the writer refuses one, the panel and the FHA table show it.
 // ============================================================================
 (function () {
     var _sevPill = function (s, o) { return (typeof sevPillHtml === 'function') ? sevPillHtml(s, o) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }; // severity pill (helpers_modules.js); safe when helpers is not loaded (test sandboxes)
@@ -41,6 +59,13 @@
     function _isCatHaz(s) { return /catastrophic|hazardous/i.test(String(s || '')); }
     function _disp() { const pc = _pc(); if (!pc.fcCombDispositions) pc.fcCombDispositions = {}; return pc.fcCombDispositions; }
     function _ask(m, d) { return slPrompt(m, d || ''); }
+    // ---- scope: 'ac' (the aircraft FHA) or a system object (that system's FHA) --------------------------------
+    function _systems() { return (typeof systemsData !== 'undefined' ? systemsData : null) || []; }
+    function _sysById(id) { return _systems().find(s => s && String(s.id) === String(id)) || null; }
+    function _scope(x) { if (!x || x === 'ac' || x === 'aircraft') return 'ac'; if (typeof x === 'object') return x; return _sysById(x) || 'ac'; }
+    function _rowsOf(scope) { scope = _scope(scope); return scope === 'ac' ? _fha() : ((scope.fha = scope.fha || [])); }
+    function _scopeLabel(scope) { scope = _scope(scope); return scope === 'ac' ? 'aircraft FHA' : ((scope.name || scope.id) + ' FHA'); }
+    function _activeSys() { try { return (typeof activeSystemId !== 'undefined' && activeSystemId) ? _sysById(activeSystemId) : null; } catch (_) { return null; } }
 
     const OP_SUGGEST = 'RTO / rejected landing / diversion / go-around / single-engine taxi / ferry';
     const ENV_SUGGEST = 'icing / HIRF / lightning / bird strike / volcanic ash / heavy rain';
@@ -127,14 +152,43 @@
     }
 
     // ---- combined-FC bookkeeping ----------------------------------------------
-    function combinedRows() { return _fha().filter(f => f && Array.isArray(f.combinedOf) && f.combinedOf.length >= 2); }
-    function _parentOf(fcId) { return _fha().find(f => f && f.fcId === fcId) || null; }
-    function combinedIssues() {
+    function combinedRows(scope) { return _rowsOf(scope).filter(f => f && Array.isArray(f.combinedOf) && f.combinedOf.length >= 2); }
+    // the row an FC ID names in a scope: its worst-severity row (a condition can have one row per flight phase)
+    function _parentOf(fcId, scope) {
+        const id = String(fcId == null ? '' : fcId).trim(); if (!id) return null;
+        let best = null;
+        _rowsOf(scope).forEach(f => { if (f && !f.deleted && String(f.fcId || '').trim() === id && (!best || _rank(f.severity) > _rank(best.severity))) best = f; });
+        return best;
+    }
+    // 31 Oct 2026 (customer checklist item 3): each combined condition checked against the conditions it is made of, every
+    // time the panel or the checks run: every part still in this FHA, no part itself a combination, the parts on more
+    // than one function, the combination at least as severe as its worst part, each part's class as it was when the
+    // combination was assessed, and the reasoning recorded. -> [{ ok, text, hard }]
+    function checkCombined(f, scope) {
+        const out = [], ids = (f && Array.isArray(f.combinedOf)) ? f.combinedOf.map(String) : [];
+        const parts = ids.map(id => ({ id: id, row: _parentOf(id, scope) }));
+        const gone = parts.filter(p => !p.row).map(p => p.id);
+        out.push(gone.length ? { ok: false, hard: true, text: gone.join(', ') + (gone.length === 1 ? ' is' : ' are') + ' no longer in this FHA' } : { ok: true, text: 'every part is in this FHA' });
+        const nested = parts.filter(p => p.row && Array.isArray(p.row.combinedOf) && p.row.combinedOf.length).map(p => p.id);
+        if (nested.length) out.push({ ok: false, hard: true, text: nested.join(', ') + ' is itself a combination' });
+        const subs = parts.filter(p => p.row).map(p => (_subsOf(p.row)[0] || ''));
+        if (subs.length >= 2 && subs.every(x => x && x === subs[0])) out.push({ ok: false, hard: true, text: 'every part belongs to one function (' + subs[0] + '): that is the function\'s FCIM, not a combination' });
+        let worst = 0, worstName = '', worstId = '';
+        parts.forEach(p => { if (p.row && _rank(p.row.severity) > worst) { worst = _rank(p.row.severity); worstName = p.row.severity; worstId = p.id; } });
+        if (worst && _rank(f.severity) < worst) out.push({ ok: false, hard: true, text: 'it is ' + (f.severity || 'not classified') + ', milder than ' + worstId + ' (' + worstName + '): a combination cannot dilute severity (A.8.3)' });
+        else if (worst) out.push({ ok: true, text: 'at least as severe as its worst part (' + worstId + ', ' + worstName + ')' });
+        const changed = parts.filter(p => p.row && f.parentSevAtCreate && f.parentSevAtCreate[p.id] && f.parentSevAtCreate[p.id] !== p.row.severity);
+        out.push(changed.length ? { ok: false, hard: false, text: changed.map(p => p.id + ' was ' + f.parentSevAtCreate[p.id] + ', now ' + p.row.severity).join('; ') + ': re-assess the combination' } : { ok: true, text: 'each part\'s class is as it was when the combination was assessed' });
+        out.push(String(f.severityRationale || '').trim() ? { ok: true, text: 'the reasoning is recorded' } : { ok: false, hard: false, text: 'no reasoning recorded for why it is ' + (f.severity || 'classified as it is') });
+        return out;
+    }
+    function combinedIssues(scope) {
         const hard = [], stale = [];
-        combinedRows().forEach(f => {
+        combinedRows(scope).forEach(f => {
+            checkCombined(f, scope).forEach(c => { if (!c.ok && c.hard && !/milder than/.test(c.text)) hard.push(f.fcId + ': ' + c.text); });
             let worst = 0, worstName = '';
             (f.combinedOf || []).forEach(pid => {
-                const p = _parentOf(pid);
+                const p = _parentOf(pid, scope);
                 if (p && _rank(p.severity) > worst) { worst = _rank(p.severity); worstName = p.severity; }
                 if (p && f.parentSevAtCreate && f.parentSevAtCreate[pid] && f.parentSevAtCreate[pid] !== p.severity)
                     stale.push(f.fcId + ': parent ' + pid + ' severity changed ' + f.parentSevAtCreate[pid] + ' → ' + p.severity + ' since the combination was assessed — re-review');
@@ -157,32 +211,104 @@
         f.eventContext = { kind: k, ref: String(ref).trim() };
         _save(); _render();
     }
-    async function fcvCombine(prefill) {
-        const ids = await _ask('Combine failure conditions, comma-separated FC ids (e.g. FC-01, FC-03):', prefill || '');
-        if (!ids) return;
-        const parents = String(ids).split(/[,\s]+/).filter(Boolean).map(_parentOf);
-        if (parents.length < 2 || parents.some(p => !p)) { try { showToast('Need ≥2 valid FC ids.', 'warn'); } catch (_) {} return; }
+    // ---- the one writer of combined rows ------------------------------------------------------------------------
+    function _sameSet(a, b) { if (a.length !== b.length) return false; const x = a.slice().sort().join('|'); return x === b.slice().sort().join('|'); }
+    function _sysFuncTraces(scope, subId) {
+        if (scope === 'ac') return [subId];
+        const fn = (scope.functions || []).find(x => x && String(x.funcId || '') === String(subId));
+        const t = fn ? (Array.isArray(fn.traceIds) ? fn.traceIds : (fn.traceId ? [fn.traceId] : [])) : [];
+        return t.length ? t : [subId];
+    }
+    // does a combination of these conditions already exist? (the same set, in any order)
+    function findCombined(scope, parentFcIds) {
+        const ids = (parentFcIds || []).map(x => String(x).trim()).filter(Boolean);
+        return combinedRows(scope).find(f => _sameSet((f.combinedOf || []).map(String), ids)) || null;
+    }
+    // Create a combined failure condition. opts: { severity, fcDesc, effAc, effCrew, effPax, rationale, differentFunctions,
+    // ai: { model, basis } }. Returns { ok:true, row } or { ok:false, why }.
+    function createCombined(scope, parentFcIds, opts) {
+        opts = opts || {};
+        scope = _scope(scope);
+        const rows = _rowsOf(scope);
+        const ids = [];
+        (parentFcIds || []).forEach(x => { const k = String(x == null ? '' : x).trim(); if (k && ids.indexOf(k) < 0) ids.push(k); });
+        if (ids.length < 2) return { ok: false, why: 'a combination needs two or more different failure conditions' };
+        const parents = ids.map(id => _parentOf(id, scope));
+        const missing = ids.filter((id, i) => !parents[i]);
+        if (missing.length) return { ok: false, why: missing.join(', ') + (missing.length === 1 ? ' is' : ' are') + ' not a failure condition in the ' + _scopeLabel(scope) };
+        const nested = parents.filter(p => Array.isArray(p.combinedOf) && p.combinedOf.length);
+        if (nested.length) return { ok: false, why: nested.map(p => p.fcId).join(', ') + ' is itself a combination; combine its parts instead' };
+        const dup = findCombined(scope, ids);
+        if (dup) return { ok: false, why: 'this combination is already recorded as ' + (dup.fcId || 'a combined condition'), existing: dup };
+        if (opts.differentFunctions) {
+            const subsets = parents.map(p => _subsOf(p).map(String).sort().join('|'));
+            if (subsets.every(x => x && x === subsets[0])) return { ok: false, why: 'all of them belong to one function (' + _subsOf(parents[0])[0] + '); its failure modes are that function\'s FCIM, not a combination' };
+        }
         let worst = parents[0];
         parents.forEach(p => { if (_rank(p.severity) > _rank(worst.severity)) worst = p; });
-        const sev = await _ask('Severity of the COMBINED condition (default = worst parent, ' + worst.severity + '). Combination may escalate, never dilute:', worst.severity);
-        if (sev === null) return;
-        const n = _fha().reduce((m, f) => Math.max(m, parseInt(String(f.fcId || '').replace(/\D/g, ''), 10) || 0), 0);
+        const sev = String(opts.severity || worst.severity || '').trim();
+        if (_rank(sev) < _rank(worst.severity)) return { ok: false, why: 'a combination cannot be milder than its worst part (' + worst.fcId + ' is ' + worst.severity + ')' };
+        // 31 Oct 2026 (Waqas: "rationale and reasoning needs to be there"): no combined condition without its reasoning
+        if (!String(opts.rationale || '').trim()) return { ok: false, why: 'a combined condition needs its reasoning: why these conditions together are ' + sev + ' (the rationale)' };
         const subIds = [...new Set(parents.flatMap(_subsOf))];
         const sevAt = {}; parents.forEach(p => { sevAt[p.fcId] = p.severity; });
-        _fha().push({
-            internalId: 'fcc-' + Date.now(),
-            fcId: 'FC-' + String(n + 1).padStart(2, '0'),
+        const row = {
+            internalId: 'fcc-' + Date.now() + '-' + Math.floor(Math.random() * 1e6),
+            fcId: '',
             subId: subIds[0] || '', subIds,
-            fcDesc: 'Combined: ' + parents.map(p => p.fcDesc).join(' + '),
-            severity: String(sev).trim() || worst.severity,
+            fcDesc: String(opts.fcDesc || '').trim() || ('Combined: ' + parents.map(p => p.fcDesc || p.fcId).join(' + ')),
+            severity: sev,
             phases: [...new Set(parents.flatMap(p => String(p.phases || '').split(/,\s*/)))].filter(Boolean).join(', '),
-            effAc: 'Combined condition — effects of ' + parents.map(p => p.fcId).join(' + ') + ' occurring together.',
-            effCrew: '', effPax: '', assumptionIds: [...new Set(parents.flatMap(p => p.assumptionIds || []))], comments: '',
+            effAc: String(opts.effAc || '').trim() || ('Effects of ' + parents.map(p => p.fcId).join(' + ') + ' occurring together.'),
+            effCrew: String(opts.effCrew || '').trim(), effPax: String(opts.effPax || '').trim(),
+            assumptionIds: [...new Set(parents.flatMap(p => p.assumptionIds || []))], comments: '',
             combinedOf: parents.map(p => p.fcId), parentSevAtCreate: sevAt
-        });
+        };
+        if (scope !== 'ac' && parents.some(p => p.acTrace != null)) { const t = parents.find(p => p.acTrace != null); row.acTrace = t.acTrace; }
+        row.severityRationale = String(opts.rationale).trim();
+        if (opts.ai) {
+            row.aiGenerated = true; row.aiFeature = 'fha.combine'; row.aiModel = opts.ai.model || null; row.aiAt = new Date().toISOString();
+            if (opts.ai.skill) row.aiSkill = opts.ai.skill;
+            if (Array.isArray(opts.ai.basis)) row.combineBasis = opts.ai.basis.map(b => ({ kind: b.kind, ref: b.ref, text: b.text || '' }));
+        }
+        // the FC ID from the programme's numbering scheme (the same path as every FHA row); a plain next number otherwise
+        try { if (typeof _slAssignFcId === 'function' && window.SafetyLabNumbering && typeof slNumberingScheme !== 'undefined' && slNumberingScheme) _slAssignFcId(row, rows, scope === 'ac' ? null : { SYS: String(scope.id) }); } catch (_) {}
+        if (!String(row.fcId || '').trim() || rows.some(f => f && String(f.fcId || '').trim() === String(row.fcId).trim())) {
+            const used = new Set(rows.map(f => f && String(f.fcId || '').trim()));
+            const pre = scope === 'ac' ? 'FC-C' : (String(scope.id).toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 6) + '-FC-C');
+            let n = 1; while (used.has(pre + String(n).padStart(2, '0'))) n++;
+            row.fcId = pre + String(n).padStart(2, '0');
+        }
+        rows.push(row);
         _save();
-        try { if (typeof renderACFHA === 'function') renderACFHA(); } catch (_) {}
-        try { showToast('Combined FC created — it is an ordinary FHA row: allocate a tree, budget, DAL as usual.', 'info', 4000); } catch (_) {}
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        _rerender(scope);
+        return { ok: true, row };
+    }
+    function _rerender(scope) {
+        scope = _scope(scope);
+        try { if (scope === 'ac') { if (typeof renderACFHA === 'function') renderACFHA(); else _render(); } else { const a = _activeSys(); if (a && String(a.id) === String(scope.id) && typeof renderSysFHA === 'function') renderSysFHA(); } } catch (_) {}
+    }
+    // + Combine FCs, by hand. prefill: "FC-01, FC-03"; sysId: a system's panel (blank: the aircraft)
+    async function fcvCombine(prefill, sysId) {
+        const scope = sysId ? _scope(sysId) : 'ac';
+        const ids = await _ask('Combine failure conditions of the ' + _scopeLabel(scope) + ', comma-separated FC IDs (e.g. FC-01, FC-03):', prefill || '');
+        if (!ids) return;
+        const list = String(ids).split(/[,\s]+/).filter(Boolean);
+        const parents = list.map(id => _parentOf(id, scope));
+        if (list.length < 2 || parents.some(p => !p)) { try { showToast('Give two or more FC IDs from the ' + _scopeLabel(scope) + '.', 'warning', 4000); } catch (_) {} return; }
+        let worst = parents[0];
+        parents.forEach(p => { if (_rank(p.severity) > _rank(worst.severity)) worst = p; });
+        const sev = await _ask('Severity of the combined condition (default: its worst part, ' + worst.severity + '). A combination may be worse than its parts, never milder:', worst.severity);
+        if (sev === null) return;
+        const why = await _ask('Why is this combination ' + (String(sev).trim() || worst.severity) + '? Say what happens when ' + list.join(' and ') + ' occur together (required):', '');
+        if (why === null) return;
+        if (!String(why).trim()) { try { showToast('Not added: a combined condition needs its reasoning.', 'warning', 5000); } catch (_) {} return; }
+        const res = createCombined(scope, list, { severity: String(sev).trim() || worst.severity, rationale: String(why).trim() });
+        try {
+            if (res.ok) showToast('Combined condition ' + res.row.fcId + ' added. It is an ordinary FHA row: its tree, budget and DAL follow as usual.', 'info', 4500);
+            else showToast('Not added: ' + res.why + '.', 'warning', 6000);
+        } catch (_) {}
     }
     async function fcvDisposition(key) {
         const d = _disp();
@@ -201,14 +327,20 @@
     const CAND_PAGE = 50;
     let _candLimit = CAND_PAGE;
     function fcvShowMore() { _candLimit += CAND_PAGE; _render(); }
-    function _render() {
-        const view = document.getElementById('view-ac-fha'); if (!view) return;
-        let host = document.getElementById('fcv-panel');
-        if (!host) { host = document.createElement('div'); host.id = 'fcv-panel'; host.style.cssText = 'margin-top:18px;'; view.appendChild(host); }
-        const combined = combinedRows();
-        const tagged = _fha().filter(f => f && f.eventContext && f.eventContext.kind);
-        // Only the pairs on screen become objects; the counts cover every pair.
-        const pairs = _pairs(), rowsE = _eligible(), disp = _disp();
+    function _render() { return _renderScope('ac'); }
+    function _renderSys() { const s = _activeSys(); if (s) return _renderScope(s); }
+    function _renderScope(scope) {
+        scope = _scope(scope);
+        const isAc = scope === 'ac';
+        const view = document.getElementById(isAc ? 'view-ac-fha' : 'ws-view-fha'); if (!view) return;
+        const hostId = isAc ? 'fcv-panel' : 'fcv-panel-sys';
+        let host = document.getElementById(hostId);
+        if (!host) { host = document.createElement('div'); host.id = hostId; host.style.cssText = 'margin-top:18px;'; view.appendChild(host); }
+        const sysArg = isAc ? '' : _esc(String(scope.id));
+        const combined = combinedRows(scope);
+        const tagged = isAc ? _fha().filter(f => f && f.eventContext && f.eventContext.kind) : [];
+        // Only the pairs on screen become objects; the counts cover every pair. (Aircraft level only.)
+        const pairs = isAc ? _pairs() : [], rowsE = isAc ? _eligible() : [], disp = _disp();
         let openCount = 0;
         const openShown = [], doneShown = [];
         pairs.forEach(p => {
@@ -217,22 +349,31 @@
             else if (doneShown.length < _candLimit) doneShown.push(p);
         });
         const toCand = p => ({ a: rowsE[p.i], b: rowsE[p.j], key: p.key, shared: p.shared, disposition: disp[p.key] || null });
-        const iss = combinedIssues();
+        const iss = combinedIssues(scope);
 
         let html = '<div style="border:1px solid var(--color-border-hair,rgba(0,0,0,.14));border-radius:var(--r-lg,12px);padding:14px 16px;background:var(--color-surface,#fff);">';
         html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' +
-            '<strong style="font-size:14px;">Combined &amp; conditioned failure conditions <span style="font-weight:400;font-size:11.5px;color:var(--color-text-tertiary,#888);">— A.8.3 combinations · A.8.4 operational · A.8.5 environmental</span></strong>' +
-            '<span><button class="btn-cyan" onclick="fcvCombine()" style="font-size:12px;">+ Combine FCs</button></span></div>';
+            '<strong style="font-size:14px;">' + (isAc ? 'Combined &amp; conditioned failure conditions <span style="font-weight:400;font-size:11.5px;color:var(--color-text-tertiary,#888);">— A.8.3 combinations · A.8.4 operational · A.8.5 environmental</span>' : 'Combined failure conditions · ' + _esc(scope.name || scope.id) + ' <span style="font-weight:400;font-size:11.5px;color:var(--color-text-tertiary,#888);">— ARP4761A A.8.3, this system\'s conditions</span>') + '</strong>' +
+            '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span class="fcv-ai-slot slab-ai-section" data-ai-section="fcv" data-ai-scope="' + (isAc ? 'ac' : sysArg) + '"></span><button class="btn-cyan" onclick="fcvCombine(\'\', \'' + sysArg + '\')" style="font-size:12px;">+ Combine FCs</button></span></div>';
         html += '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-bottom:10px;color:var(--color-text-secondary,#666);">' +
             '<span><strong>' + combined.length + '</strong> combined FC(s)</span>' +
-            '<span><strong>' + tagged.length + '</strong> conditioned FC(s)</span>' +
-            '<span style="color:' + (openCount ? 'var(--color-warning,#b7791f)' : 'var(--color-success,#1a7f37)') + ';"><strong>' + openCount + '</strong> coupled Cat/Haz pair(s) undispositioned</span>' +
-            (iss.hard.length ? '<span style="color:var(--color-danger,#b42318);font-weight:600;">' + iss.hard.length + ' severity dilution(s) — INV-29</span>' : '') + '</div>';
+            (isAc ? '<span><strong>' + tagged.length + '</strong> conditioned FC(s)</span>' +
+            '<span style="color:' + (openCount ? 'var(--color-warning,#b7791f)' : 'var(--color-success,#1a7f37)') + ';"><strong>' + openCount + '</strong> coupled Cat/Haz pair(s) undispositioned</span>' : '') +
+            (iss.hard.length ? '<span style="color:var(--color-danger,#b42318);font-weight:600;">' + iss.hard.length + ' combination check(s) failed — INV-29</span>' : '') + '</div>';
 
         if (combined.length) {
             html += '<div style="font-size:11px;color:var(--color-text-tertiary,#888);margin:6px 0 2px;">COMBINED (ordinary FHA rows — trees/budgets/DAL apply as usual)</div>';
             combined.forEach(f => {
-                html += '<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><strong>' + _esc(f.fcId) + '</strong> ' + _sevPill(f.severity) + ' = ' + _esc((f.combinedOf || []).join(' + ')) + ' — ' + _esc(f.fcDesc) + '</div>';
+                const basis = (f.severityRationale ? '<div style="font-size:11.5px;margin-top:3px;"><strong>Why ' + _esc(f.severity) + ':</strong> ' + _esc(f.severityRationale) + '</div>' : '<div style="font-size:11.5px;margin-top:3px;color:var(--color-warning,#b26a00);">No reasoning recorded yet: edit the row to add why this combination is ' + _esc(f.severity) + '.</div>') +
+                    (f.effAc ? '<div style="font-size:11px;color:var(--color-text-secondary,#666);margin-top:2px;"><strong>Effect together:</strong> ' + _esc(f.effAc) + '</div>' : '') +
+                    (Array.isArray(f.combineBasis) && f.combineBasis.length ? '<div style="font-size:11px;color:var(--color-text-tertiary,#888);margin-top:2px;">Basis: ' + _esc(f.combineBasis.map(b => b.text || (b.kind + ' ' + b.ref)).join('; ')) + (f.aiGenerated ? ' · proposed by ANEM, accepted' : '') + '</div>' : '');
+                // 31 Oct 2026 (item 3): the parts with their classes, and the check against them
+                const _ck = checkCombined(f, scope), _bad = _ck.filter(c => !c.ok);
+                const _parts = (f.combinedOf || []).map(id => { const p = _parentOf(id, scope); return '<span data-fcv-part="' + _esc(id) + '">' + _esc(id) + ' ' + (p ? _sevPill(p.severity) : '<span style="color:var(--color-danger,#b42318);">missing</span>') + '</span>'; }).join(' + ');
+                const _check = '<div data-fcv-check="' + _esc(f.fcId) + '" style="font-size:11.5px;margin-top:3px;">' + _parts + ' \u2192 ' + _sevPill(f.severity) + ' &nbsp; ' +
+                    (_bad.length ? _bad.map(c => '<span style="color:' + (c.hard ? 'var(--color-danger,#b42318)' : 'var(--color-warning,#b26a00)') + ';font-weight:600;">\u26a0 ' + _esc(c.text) + '</span>').join(' &nbsp; ')
+                                 : '<span style="color:var(--color-success,#1a7f37);font-weight:600;" title="' + _esc(_ck.map(c => c.text).join('; ')) + '">\u2713 checked against its parts</span>') + '</div>';
+                html += '<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><strong>' + _esc(f.fcId) + '</strong> ' + _sevPill(f.severity) + ' = ' + _esc((f.combinedOf || []).join(' + ')) + ' — ' + _esc(f.fcDesc) + basis + _check + '</div>';
             });
         }
         if (tagged.length) {
@@ -241,7 +382,8 @@
                 html += '<div style="font-size:12px;padding:4px 0;border-top:1px solid var(--color-border-hair,rgba(0,0,0,.07));"><strong>' + _esc(f.fcId) + '</strong> · <span style="text-transform:uppercase;font-size:10px;letter-spacing:.4px;color:var(--color-text-tertiary,#888);">' + _esc(f.eventContext.kind) + '</span> <strong>' + _esc(f.eventContext.ref) + '</strong> — ' + _esc(f.fcDesc) + ' <a href="#" onclick="fcvTagContext(\'' + _esc(String(f.internalId)) + '\');return false;" style="font-size:11px;color:var(--color-link,#0b57d0);">edit</a></div>';
             });
         }
-        html += '<div style="font-size:11px;color:var(--color-text-tertiary,#888);margin:10px 0 2px;">TAG A CONDITION</div>' +
+        if (!combined.length && !isAc) html += '<div style="font-size:12px;color:var(--color-text-tertiary,#888);padding:4px 0;">No combined conditions in this system yet. Combine two of its conditions by hand, or ask ANEM to propose some.</div>';
+        if (isAc) html += '<div style="font-size:11px;color:var(--color-text-tertiary,#888);margin:10px 0 2px;">TAG A CONDITION</div>' +
             '<div style="font-size:12px;">' + _fha().filter(f => f && !f.eventContext).slice(0, 200).map(f => '<a href="#" onclick="fcvTagContext(\'' + _esc(String(f.internalId)) + '\');return false;" style="display:inline-block;margin:2px 6px 2px 0;color:var(--color-link,#0b57d0);">' + _esc(f.fcId) + '</a>').join('') + '</div>';
 
         if (pairs.length) {
@@ -266,6 +408,11 @@
         }
         html += '</div>';
         host.innerHTML = html;
+        // the standard AI bar, in the panel's heading (lane_ai_bar.js); nothing runs until it is pressed
+        try {
+            const slot = host.querySelector ? host.querySelector('.fcv-ai-slot') : null;
+            if (slot && window.LANE_AI_BAR && typeof window.LANE_AI_BAR.mountSection === 'function') window.LANE_AI_BAR.mountSection(slot, 'fcv', isAc ? { lane: 'aircraft' } : { systemId: String(scope.id), systemName: String(scope.name || scope.id) });
+        } catch (_) {}
     }
 
     // ---- invariants ---------------------------------------------------------------
@@ -274,7 +421,12 @@
             if (typeof window.invRegister !== 'function') return false;
             window.invRegister({
                 id: 'INV-29', name: 'Combined failure conditions are at least as severe as their worst parent', sev: 'hard',
-                run: () => { const iss = combinedIssues(); return { checked: combinedRows().length, fails: iss.hard }; }
+                run: () => {
+                    // every level: the aircraft FHA and each system's
+                    let checked = combinedRows('ac').length, fails = combinedIssues('ac').hard.slice();
+                    _systems().forEach(sy => { if (!sy) return; checked += combinedRows(sy).length; combinedIssues(sy).hard.forEach(m => fails.push((sy.name || sy.id) + ': ' + m)); });
+                    return { checked, fails };
+                }
             });
             window.invRegister({
                 id: 'INV-30', name: 'Coupled Cat/Haz combinations assessed or dispositioned; combined FCs not stale', sev: 'advisory',
@@ -308,8 +460,19 @@
         window.renderACFHA = wrapped;
         return true;
     }
+    function _wrapSys() {
+        if (typeof window.renderSysFHA !== 'function' || window.renderSysFHA._fcvWrapped) return !!(window.renderSysFHA && window.renderSysFHA._fcvWrapped);
+        const orig = window.renderSysFHA;
+        const wrapped = function () { const r = orig.apply(this, arguments); if (typeof SLLazy !== 'undefined' && SLLazy.skipped('sys-fha-body')) return r; /* lazy_render.js: the original was deferred, so is this companion */ try { _renderSys(); } catch (_) {} return r; };
+        wrapped._fcvWrapped = true;
+        window.renderSysFHA = wrapped;
+        return true;
+    }
     function _ready(fn) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn); else fn(); }
-    _ready(function () { let tries = 30; const t = setInterval(function () { if (_wrap() || --tries <= 0) clearInterval(t); }, 250); try { _render(); } catch (_) {} });
+    _ready(function () {
+        let tries = 30; const t = setInterval(function () { if (_wrap() || --tries <= 0) clearInterval(t); }, 250); try { _render(); } catch (_) {}
+        let triesS = 30; const t2 = setInterval(function () { if (_wrapSys() || --triesS <= 0) clearInterval(t2); }, 250);
+    });
 
     // exports
     window.fcvTagContext = fcvTagContext;
@@ -318,4 +481,7 @@
     window.fcvCandidates = combinationCandidates;
     window.fcvShowMore = fcvShowMore;
     window._renderFcVariants = _render;
+    window._renderFcVariantsSys = _renderSys;
+    // 30 Oct 2026 (v2.0): the one writer, and the reads ANEM's proposals are checked against
+    window.SLFcVariants = { VERSION: '2.2', checkCombined, createCombined, findCombined, combinedRows, combinedIssues, parentOf: _parentOf, rowsOf: _rowsOf, scope: _scope, subsOf: _subsOf, sysFuncTraces: _sysFuncTraces, implementingSystems: _implSystemsList };
 })();

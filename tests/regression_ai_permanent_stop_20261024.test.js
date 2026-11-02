@@ -60,7 +60,7 @@ const ai = fs.readFileSync(process.env.SL_AI || path.join(SITE, 'ai_assistant.js
     const c = { console, setTimeout, Math, Promise, Array, String, AiClient: { isPermanentError } };
     vm.createContext(c);
     const src = `
-      const _TURN_TRIES = 3; let _retried = 0; const _turnErrs = []; let _permanentErr = null;
+      const _TURN_TRIES = 3; let _retried = 0; const _turnErrs = []; let _permanentErr = null; let _userStopped = false;   // 31 Oct 2026: Stop
       const _PERMANENT_RE = /credit balance/i;
       ${ai.slice(pa, pe + '\n        };'.length)}
       const _slices = Array.from({ length: ${n} }, (_, i) => ['u' + i]);

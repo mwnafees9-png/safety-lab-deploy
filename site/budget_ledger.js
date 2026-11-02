@@ -148,7 +148,11 @@
             const allocated = allocN ? allocN.rate : null;
             const achieved = achN ? achN.rate : null;
             let status;
-            if (achieved == null) status = 'unverified';
+            // 1 Nov 2026 (customer checklist item 45): a tree on or above a circular transfer has no valid result (fta_loops.js)
+            let circular = null;
+            try { if (window.SLFtaLoops) { const lp = window.SLFtaLoops.loopFor(alloc) || (mirror ? window.SLFtaLoops.loopFor(mirror) : null); if (lp) circular = window.SLFtaLoops.path(lp); } } catch (_) {}
+            if (circular) status = 'no-result-circular';
+            else if (achieved == null) status = 'unverified';
             else if (objective == null) status = 'no-objective';
             else if (achieved <= objective * (1 + SLTopBasis.TOL)) status = (allocated != null && achieved > allocated * (1 + SLTopBasis.TOL)) ? 'meets-objective-over-allocation' : 'meets-objective';
             else status = 'EXCEEDS-objective';
@@ -162,6 +166,7 @@
                 allocPage: { id: alloc.id, name: alloc.name || alloc.id }, mirrorPage: mirror ? { id: mirror.id, name: mirror.name || mirror.id } : null,
                 status, margin: (achieved != null && objective != null && achieved > 0) ? objective / achieved : null,
                 marginInfo: _marginFor(alloc),
+                circular: circular,
             });
         });
         return out;
@@ -208,6 +213,7 @@
             met: by('meets-objective') + by('meets-objective-over-allocation'),
             exceeds: by('EXCEEDS-objective'),
             unverified: by('unverified'),
+            circular: by('no-result-circular'),
             noTree: by('no-tree') + by('no-allocation-tree'),
             noObjective: by('no-objective'),
             // A9 — the budget tri-state, counted over rows (worst gate per row).
@@ -314,6 +320,7 @@
         if (s === 'meets-objective') return '<span style="color:#1D6E3E; font-family:var(--font-mono); font-size:11px; font-weight:600;">MEETS objective (advisory)</span>';
         if (s === 'meets-objective-over-allocation') return '<span style="color:#9A6200; font-family:var(--font-mono); font-size:11px; font-weight:600;">meets objective · over its allocation</span>';
         if (s === 'EXCEEDS-objective') return '<span style="color:#8E2A2A; font-family:var(--font-mono); font-size:11px; font-weight:700;">EXCEEDS objective</span>';
+        if (s === 'no-result-circular') return '<span style="color:#C0231D; font-family:var(--font-mono); font-size:11px; font-weight:700;">no result: circular transfer</span>';
         if (s === 'unverified') return '<span style="color:#9A6200; font-family:var(--font-mono); font-size:11px;">unverified — no mirror result</span>';
         if (s === 'no-objective') return '<span style="color:var(--color-text-tertiary); font-size:11px;">no quantitative objective</span>';
         if (s === 'no-allocation-tree') return '<span style="color:var(--color-text-tertiary); font-size:11px;">trees linked, none top-down</span>';

@@ -231,6 +231,7 @@ console.log('\n[E5] MMEL');
            // the RAM-thread lookups the MMEL module reads (stubs: find the event by displayId, page -> FC map)
            function _fmesFindBe(ref) { let hit = null; (function w(n) { if (!n || hit) return; if (n.displayId === ref) hit = n; (n.children || []).forEach(w); })(ftaPages[0].root); return hit ? { node: hit } : null; }
            window._ramPageFcMap = () => new Map([['T', new Set(['3'])]]);`);
+    P.run(read('fta_conditions.js'), 'fta_conditions.js');   // 1 Nov 2026: the MMEL check calculates the dispatch case on a copy (items 37/43)
     P.run(read('mmel_module.js'), 'mmel_module.js');
     P.run('calculateAllProbabilities()');
     let quant = null;
