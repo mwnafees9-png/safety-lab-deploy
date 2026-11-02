@@ -29,7 +29,7 @@ const MUT = process.env.SL_FM_MUTATE || '';
 function mutate(file, body) {
     if (MUT === 'dupes' && file === 'fmea_modes.js') return body.replace("if (clash(n, m.mode)) { already++; return; }", '');
     if (MUT === 'aialpha' && file === 'ai_assistant.js') return body.replace("delete x.alphaFm;   // never ANEM's: the split's, on Accept", '').replace("if (_itemSplitMode) {\n                    row.alphaFm = Number(_itemSplitMode.alphaFm);", "if (x.alphaFm != null) { row.alphaFm = Number(x.alphaFm); } if (false) {");
-    if (MUT === 'offlist' && file === 'ai_assistant.js') return body.replace("if (be._split && !be._split.modes.some(function (m) { return _modeKey(m.mode) === mk; })) { offList++; return false; }", '').replace("if (!_itemSplitMode) { _toast('Not added: \"' + _md + '\" is not one of the failure modes in the library split for this part.', 'warning'); return false; }", '');
+    if (MUT === 'offlist' && file === 'ai_assistant.js') return body.replace("if (be._split && !be._split.modes.some(function (m) { return _modeKey(m.mode) === mk; })) { offList++; return false; }", '').replace("if (!_itemSplitMode) { _toast('Not added: \"' + _md + '\" is not one of the library\\'s failure modes for this part.', 'warning'); return false; }", '');
     if (MUT === 'fmesdet' && file === 'misc_fn_modules.js') return body.replace("const key = sysKey + '§' + eff + '§' + det;", "const key = sysKey + '§' + eff;");
     return body;
 }

@@ -69,7 +69,7 @@ console.log('[U] the reader' + (MUT ? ' (MUTATION ' + MUT + ')' : ''));
     for (const p of ['playwright', '/home/claude/.npm-global/lib/node_modules/playwright']) { try { pw = require(p); break; } catch (_) {} }
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('library_byol.js v1.0 loads right after fta_conditions.js, before fmea_modes.js', /fta_conditions\.js\?v=1\.0" defer><\/script>\s*<!--[^>]*-->\s*<script src="library_byol\.js\?v=1\.0" defer><\/script>\s*<script src="fmea_modes\.js\?v=1\.0" defer>/.test(HTML));
+    check('library_byol.js v1.1 loads right after fta_conditions.js, before fmea_modes.js', /fta_conditions\.js\?v=1\.0" defer><\/script>\s*<!--[^>]*-->\s*<script src="library_byol\.js\?v=1\.1" defer><\/script>\s*<script src="fmea_modes\.js\?v=1\.1" defer>/.test(HTML));
     check('NPRD / EPRD / FMD is a licensed family in the Standard family list', /<option value="NPRD\/EPRD">/.test(HTML));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
     const demo = require('./lib/demo_projects_all.js').all().find(d => d.key === 'showcase:kestrel');

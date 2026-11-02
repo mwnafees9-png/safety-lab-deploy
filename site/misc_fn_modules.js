@@ -1515,15 +1515,19 @@ function fmesGroups() {
         // consumer's implicit "all rows are piece-part" assumption live; this
         // is the one place that assumption carried rate semantics.
         if ((r.fmeaType || 'piece-part') !== 'piece-part') return;
-        const eff = _fmesNorm(r.endEffect);
+        let eff = _fmesNorm(r.endEffect);
         const det = _fmesNorm(r.detection);
         if (!eff || !det) { incomplete.push(r); return; }
         const sysKey = (r.scope === 'system' ? String(r.owningSystemId || '') : 'AC');
+        // 2 Nov 2026 (item 50): effects a person merged (same system, same detection) group under the merged name (fmes_merge.js)
+        let effText = String(r.endEffect).trim();
+        const _mg = (typeof SLFmesMerge !== 'undefined') ? SLFmesMerge.canonical(sysKey, det, eff) : null;
+        if (_mg) { eff = 'merged:' + _mg.id; effText = _mg.name; }
         const key = sysKey + '§' + eff + '§' + det;
         if (!groups.has(key)) groups.set(key, {
             key, systemId: r.scope === 'system' ? r.owningSystemId : '',
             system: _fmesSysName(r.scope === 'system' ? r.owningSystemId : ''),
-            effect: String(r.endEffect).trim(), detection: String(r.detection).trim(),
+            effect: effText, detection: String(r.detection).trim(), mergeId: _mg ? _mg.id : null,
             rows: [], sumRate: 0, beIds: new Set(), worstSev: '', modes: []
         });
         const g = groups.get(key);

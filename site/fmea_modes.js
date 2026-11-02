@@ -65,18 +65,20 @@
         if (!B) return { rows: out, already: 0, noSplit: noSplit };
         events(systemId).forEach(function (ev) {
             var n = ev.node, key = S(n.libraryKey), e = key ? lib[key] : null;
-            var sp = e ? B.splitFor(key) : null;
+            // 2 Nov 2026 (item 48, the rest): the split first; else the part's mode names (no share, no rate)
+            var sp = e ? (B.modesFor ? B.modesFor(key) : B.splitFor(key)) : null;
             if (!sp) { noSplit.push(ev); return; }
-            var lam = B.partLambda(key);
+            var lam = B.partLambda(key), named = sp.from === 'named';
             sp.modes.forEach(function (m) {
                 if (clash(n, m.mode)) { already++; return; }
-                var a = Number(m.alphaFm);
+                var a = named ? null : Number(m.alphaFm);
                 out.push({
                     fmeaType: 'piece-part', scope: 'system', owningSystemId: systemId,
                     beId: n.id, parentLibKey: key, part: S(n.name) || S(e.name) || key, mode: S(m.mode),
-                    alphaFm: a, rate: lam > 0 ? lam * a : 0, modeSource: S(m.source || sp.source) || (sp.from === 'imported' ? 'imported split' : 'built-in split'),
+                    alphaFm: a, rate: (!named && lam > 0) ? lam * a : 0, modeSource: named ? '' : (S(m.source || sp.source) || (sp.from === 'imported' ? 'imported split' : 'built-in split')),
                     localEffect: '', nextEffect: '', endEffect: '', detection: '', severity: '', compensating: '',
-                    remarks: 'Mode and share from the library split for ' + (S(e.name) || key) + (lam > 0 ? '' : '. The part has no rate yet, so the mode rate is blank') + '.'
+                    remarks: named ? ('Mode name from the library for ' + (S(e.name) || key) + '. No share yet, so no rate: enter the shares with their source on the library part.')
+                                   : ('Mode and share from the library split for ' + (S(e.name) || key) + (lam > 0 ? '' : '. The part has no rate yet, so the mode rate is blank') + '.')
                 });
             });
         });

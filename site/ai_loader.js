@@ -1,3 +1,4 @@
+// 2 Nov 2026: ai_assistant.js bumped to v77.02 (fmesSimilar, modesName, typeGroup and the fmes.similar, modes.name, type.group skills; rateMatch reads the active library).
 // 2 Nov 2026: ai_assistant.js bumped to v77.01 (item FMEA: every row born linked to its basic event, the library split names the modes and gives the share and rate, ANEM outputs no number; fmea.item skill v2).
 // 1 Nov 2026: ai_assistant.js bumped to v77.00 (the free student tier has no AI at all: no flag, URL or pasted key turns it on).
 // 31 Oct 2026: ai_assistant.js bumped to v76.99 (failure rate sources: rateMatch and the rate.match skill; requirements on interfacing systems: ifaceWording and the iface.word skill).
@@ -39,7 +40,7 @@
 (function () {
     'use strict';
 
-    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'pdf_text.js?v=1.0', 'ai_assistant.js?v=77.01', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
+    const FILES = ['fta_kb_data.js?v=1.3', 'sora_kb_data.js?v=0.1', 'stpa_kb_data.js?v=0.3', 'hf_kb_data.js?v=0.2', 'cert_std_kb_data.js?v=0.14', 'ac_library_kb_data.js?v=1.0', 'cfr_ruletext_kb_data.js?v=1.0', 'pdf_text.js?v=1.0', 'ai_assistant.js?v=77.02', 'ai_fidelity.js?v=65.25', 'ai_consistency.js?v=1.5'];
     let _loading = null;
 
     window.slLoadAI = function () {

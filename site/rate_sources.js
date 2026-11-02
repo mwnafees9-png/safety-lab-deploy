@@ -33,6 +33,7 @@
     function value(n) {
         if (!n) return 0;
         if (n.inputMode === 'library' && n.libraryKey && _lib()[n.libraryKey]) return Number(_lib()[n.libraryKey].lambda) || 0;
+        if (n.inputMode === 'typecode') return root.SLTypeCodes ? root.SLTypeCodes.lambdaFor(n.typeCode) : (Number(n.lambda) || 0);   // 2 Nov 2026 (item 29)
         if (n.inputMode === 'probability') return Number(n.inputValue != null ? n.inputValue : n.probability) || 0;
         if (n.inputMode === 'mtbf') { var m = Number(n.inputValue); return m > 0 ? 1 / m : 0; }
         return Number(n.lambda != null ? n.lambda : (n.inputValue != null ? n.inputValue : 0)) || 0;
@@ -40,6 +41,7 @@
     function sourceOf(n) {
         if (!n) return null;
         if (n.inputMode === 'library' && n.libraryKey && _lib()[n.libraryKey]) { var e = _lib()[n.libraryKey]; var dt = (root.SLLibraryByol && (e.env || e.quality || e.records != null || e.dataDate)) ? root.SLLibraryByol.detail(e) : S(e.source); return { kind: 'library', ref: S(e.name) + (dt ? ' (' + dt + ')' : ''), date: S(e.dataDate), auto: true }; }
+        if (n.inputMode === 'typecode' && root.SLTypeCodes) { var ts = root.SLTypeCodes.sourceFor(n); return (ts && KINDS[ts.kind]) ? { kind: ts.kind, ref: ts.ref, date: ts.date, typeCode: true } : null; }   // 2 Nov 2026 (item 29): the type's source
         var s = n.rateSource;
         return (s && KINDS[s.kind]) ? { kind: s.kind, ref: S(s.ref), date: S(s.date), cited: s.cited || undefined } : null;
     }
@@ -85,6 +87,10 @@
         if (!n || !isLeaf(n) || fedFromElsewhere(n)) { host.style.display = 'none'; host.innerHTML = ''; return; }
         var src = sourceOf(n), lib = n.inputMode === 'library';
         host.style.display = 'flex';
+        if (n.inputMode === 'typecode') {   // 2 Nov 2026 (item 29): the source belongs to the type, set in the type codes table
+            host.innerHTML = '<div style="flex:1 1 100%;"><label>Source of the failure rate</label><div style="font-size:12.5px;padding:7px 0;">' + (src ? E(KINDS[src.kind]) + ': ' + E(src.ref) + (src.date ? ' (' + E(src.date) + ')' : '') : '<span style="color:#9A6200;">Type ' + E(n.typeCode || '') + ' has no source yet. Set it in the type codes table.</span>') + '</div></div>';
+            return;
+        }
         host.innerHTML = '<div style="flex:1 1 180px;"><label>Source of the failure rate</label>' +
             (lib ? '<div style="font-size:12.5px;padding:7px 0;">Library entry: ' + E(src ? src.ref : '') + '</div>'
                  : '<select id="config-rate-source-kind" onchange="SLRateSources.ui.fromPanel()"><option value="">No source yet</option>' + Object.keys(KINDS).map(function (k) { return '<option value="' + k + '"' + (src && src.kind === k ? ' selected' : '') + '>' + E(KINDS[k]) + '</option>'; }).join('') + '</select>') + '</div>' +

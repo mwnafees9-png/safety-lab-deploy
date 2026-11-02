@@ -29,7 +29,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
     const iCK = HTML.indexOf('comment_kinds.js?v=1.0'), iAs = HTML.indexOf('assurance_modules.js?v=');
-    check('rate_sources.js v1.2 loads (2 Nov 2026: the active library, so an imported part counts as a library source, item 46)', /rate_sources\.js\?v=1\.2/.test(HTML));
+    check('rate_sources.js v1.3 loads (2 Nov 2026: the active library, so an imported part counts as a library source, item 46; a type code event takes its type\'s source, item 29)', /rate_sources\.js\?v=1\.3/.test(HTML));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
     const demo = require('./lib/demo_projects_all.js').all().find(d => d.key === 'showcase:kestrel');
     const CSP = (() => { const w = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8'); const m = /const CSP_POLICY = \[([\s\S]*?)\]\.join\('; '\)/.exec(w); return eval('[' + m[1] + ']').join('; '); })();

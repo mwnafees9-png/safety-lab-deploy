@@ -2064,6 +2064,8 @@ function renderFmesPage() {
         '<div class="ckpt-tile"><div class="ckpt-tile-label">Linked to basic events</div><div class="ckpt-tile-value">' + linked + '</div><div class="ckpt-tile-sub">of ' + groups.length + ' groups</div></div>' +
         '<div class="ckpt-tile' + (lints.length ? ' ckpt-tile-danger' : ' ckpt-tile-ok') + '"><div class="ckpt-tile-label">Lint findings</div><div class="ckpt-tile-value">' + lints.length + '</div><div class="ckpt-tile-sub">' + (lints.length ? 'need attention' : 'clean') + '</div></div></div>';
 
+    // 2 Nov 2026 (item 50): effects that say the same thing, merged on a person's Merge (fmes_merge.js)
+    if (typeof SLFmesMerge !== 'undefined') html += SLFmesMerge.panelHtml();
     if (lints.length) {
         html += '<div style="border: 1px solid var(--color-danger); border-radius: var(--r-md); padding: 10px 14px; margin-bottom: var(--s-4); background: var(--sev-cat-bg);">' +
             lints.map(l => '<div style="font-size: 12.5px; padding: 2px 0;">' + (l.kind === 'incomplete' ? '· ' : '⚠ ') + esc(l.msg) + '</div>').join('') + '</div>';
@@ -2079,7 +2081,7 @@ function renderFmesPage() {
             const stColor = st.cls === 'ok' ? 'var(--color-success)' : st.cls === 'danger' ? 'var(--color-danger)' : st.cls === 'warn' ? 'var(--color-warning)' : 'var(--color-text-tertiary)';
             html += '<tr>' +
                 '<td>' + esc(g.system) + '</td>' +
-                '<td>' + esc(g.effect) + '</td>' +
+                '<td>' + esc(g.effect) + (g.mergeId ? ' <span style="font-size:10.5px;font-weight:600;">(merged)</span>' : '') + '</td>' +
                 '<td>' + esc(g.detection) + '</td>' +
                 '<td title="' + esc(g.modes.join(' | ')) + '">' + g.rows.length + '</td>' +
                 '<td class="u-mono" style="text-align:right;">' + g.sumRate.toExponential(3) + '</td>' +
@@ -7915,7 +7917,7 @@ function renderLibraryTable() {
             <td><input type="number" step="any" min="0" value="${def.lambda}" onchange="onLibraryLambdaChange('${esc(key)}', this.value)" style="width: 130px; margin: 0; font-family: var(--font-mono); font-size: 12px;"></td>
             <td>${effDisplay}</td>
             <td><span class="u-muted-small">${esc(def.source||'')}</span>${(typeof SLLibraryByol !== 'undefined' && (def.env || def.quality || def.records != null || def.dataDate || (def.modes && def.modes.length))) ? `<div class="u-muted-small" style="font-size:10.5px;">${esc(SLLibraryByol.detail(def).split(' · ').slice(1).join(' · '))}</div>` : ''}</td>
-            <td>${status} ${action}${(libUsageCount[key] >= 2) ? ` <button class="action-btn btn-amber" onclick="createCcfGroupFromLibrary('${esc(key)}')" title="${libUsageCount[key]} basic events share this entry — create a β-factor CCF group">CCF group (${libUsageCount[key]})</button>` : ''}</td>
+            <td>${status} ${action}${(typeof SLLibraryByol !== 'undefined') ? ' ' + SLLibraryByol.cellHtml(key) : ''}${(libUsageCount[key] >= 2) ? ` <button class="action-btn btn-amber" onclick="createCcfGroupFromLibrary('${esc(key)}')" title="${libUsageCount[key]} basic events share this entry — create a β-factor CCF group">CCF group (${libUsageCount[key]})</button>` : ''}</td>
         </tr>`);
     });
     // ENG-2 phase 1c — the component library ships with hundreds of entries;
@@ -7928,6 +7930,9 @@ function renderLibraryTable() {
     }
     const counter = document.getElementById('lib-count');
     if (counter) counter.textContent = `(${shown.toLocaleString()} of ${total.toLocaleString()})`;
+    // 2 Nov 2026 (item 48): parts used in the trees with no failure modes, offered to ANEM for names only (library_byol.js)
+    const modesBar = document.getElementById('lib-modes-bar');
+    if (modesBar) modesBar.innerHTML = (typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.barHtml() : '';
 }
 
 function onLibStandardChange() {

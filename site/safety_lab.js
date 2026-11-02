@@ -3850,7 +3850,19 @@ function onInputModeChange() {
     const valWrap = document.getElementById('config-input-value-container');
     const libWrap = document.getElementById('config-input-library-container');
     const valLabel = document.getElementById('config-input-value-label');
-    if (mode === 'library') {
+    // 2 Nov 2026 (item 29): a type code event takes its numbers from its type (type_codes.js)
+    const tcWrap = document.getElementById('config-input-typecode-container');
+    if (tcWrap) tcWrap.style.display = mode === 'typecode' ? 'block' : 'none';
+    if (mode === 'typecode') {
+        const tcSel = document.getElementById('config-input-typecode');
+        if (tcSel && typeof SLTypeCodes !== 'undefined') {
+            const keep = tcSel.value || (selectedNodeData && selectedNodeData.typeCode) || '';
+            tcSel.innerHTML = '<option value="">-- pick a type code --</option>' + SLTypeCodes.list().map(t => '<option value="' + esc(t.code) + '">' + esc(t.code + ' · ' + t.name) + '</option>').join('');
+            tcSel.value = keep;
+        }
+        valWrap.style.display = 'none';
+        libWrap.style.display = 'none';
+    } else if (mode === 'library') {
         valWrap.style.display = 'none';
         libWrap.style.display = 'block';
     } else {

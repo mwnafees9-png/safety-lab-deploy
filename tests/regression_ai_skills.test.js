@@ -60,7 +60,7 @@ check('registry loads and exports SLABSkills', !!S);
 // 21 -> 23 (Skills V1.3, later the same day): ram.fracas.draft + ram.msg3.rationale, the
 // two prose-only RAM drafters in ram_ai.js, found unregistered by the Phase 4 census.
 // 23 -> 24 (F15, 4 Sep 2026): arch.systems — systems + their functions from the SDD.
-check('32 skills registered (31 Oct 2026: iface.word, the wording of requirements on interfacing systems; rate.match, library matches for basic events; fha.reason, the reason for each FHA class; cma.flow, the four-step CMA drafts; 30 Oct 2026: fha.combine, combined failure conditions; V1.3: hf.draftlane + hf.improve, the two RAM prose drafters; F15: arch.systems, arch.items, mac.draft, coffe.draft)', S && Object.keys(S.skills).length === 32);
+check('35 skills registered (2 Nov 2026: fmes.similar, FMES effects that say the same thing; modes.name, failure mode names for library parts; type.group, basic events that share a part type; 31 Oct 2026: iface.word, the wording of requirements on interfacing systems; rate.match, library matches for basic events; fha.reason, the reason for each FHA class; cma.flow, the four-step CMA drafts; 30 Oct 2026: fha.combine, combined failure conditions; V1.3: hf.draftlane + hf.improve, the two RAM prose drafters; F15: arch.systems, arch.items, mac.draft, coffe.draft)', S && Object.keys(S.skills).length === 35);
 if (S) {
   // 29 Aug (V1.1) - Waqas ruling: EACH analysis is its own skill. SFHA gets its
   // own identity; body intentionally byte-identical to fha.draft TODAY (one App

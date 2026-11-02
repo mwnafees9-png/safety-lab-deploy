@@ -954,6 +954,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button onclick="exportTabAsPDF('Library')" class="btn-cyan" title="Export the active component library as PDF">↓ Export PDF</button>
                 </div>
             </div>
+            <!-- 2 Nov 2026 (item 48): parts in the trees with no failure modes; ANEM names them, names only (library_byol.js) -->
+            <div id="lib-modes-bar"></div>
 
             <!-- Reliability prediction parameters -->
             <div class="controls" style="border-left-color: var(--color-purple);">
@@ -2301,6 +2303,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                     <button class="tab-dropbtn">Data Actions &#9662;</button>
                     <div class="tab-dropdown-content">
                         <div onclick="triggerCSVImport('Fault_Tree')">Import Tree (CSV)</div>
+                        <div onclick="SLTypeCodes.ui.open()">Type codes…</div>
                         <div onclick="exportData('Fault_Tree', 'csv')">Export CSV</div>
                         <div onclick="exportData('Fault_Tree', 'pdf')">Export Trees (table PDF)</div>
                         <div onclick="openTemplateEditor()">🧩 Templates…</div>
@@ -2620,6 +2623,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                                     <option value="mtbf">MTBF (hours) — &#955; = 1 / MTBF</option>
                                     <option value="probability">Probability P at exposure time</option>
                                     <option value="library">Component library (typical &#955;)</option>
+                                    <option value="typecode">Type code (your own part types)</option>
                                 </select>
                             </div>
                             <div style="flex: 1;" id="config-input-value-container">
@@ -2629,6 +2633,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                             <div style="flex: 2; display: none;" id="config-input-library-container">
                                 <label>Component (MIL-HDBK-217F / FIDES typical)</label>
                                 <select id="config-input-library" onchange="updateNodeData()"></select>
+                            </div>
+                            <!-- 2 Nov 2026 (item 29): the event's type code; its rate and model come from the type (type_codes.js) -->
+                            <div style="flex: 2; display: none;" id="config-input-typecode-container">
+                                <label>Type code <button type="button" class="btn-ghost" style="font-size:11px;padding:0 6px;" onclick="SLTypeCodes.ui.open()">Edit the table</button></label>
+                                <select id="config-input-typecode" onchange="updateNodeData()"></select>
                             </div>
                         </div>
                         <!-- 31 Oct 2026 (customer checklist item 16): where this event's failure rate comes from (rate_sources.js). -->
@@ -4183,7 +4192,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="severity_rubrics.js?v=1.4" defer></script>
     <script src="severity_tables.js?v=1.1" defer></script>
     <script src="f3061_dal.js?v=1.0" defer></script>
-    <script src="reliability_data.js?v=1.2" defer></script>
+    <script src="reliability_data.js?v=1.3" defer></script>
     <script src="catalogue_data.js?v=1.11" defer></script>
     <script src="ui_constants.js?v=1.2" defer></script>
     <script src="config_data.js?v=1.2" defer></script>
@@ -4205,8 +4214,11 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 1 Nov 2026 (customer items 37/43): fta_conditions.js (SLFtaConditions): fault trees calculated with events set to happened or did not happen, on a copy: event tree sequences from their fault trees, and named dispatch cases. -->
     <script src="fta_conditions.js?v=1.0" defer></script>
     <!-- 2 Nov 2026 (items 46/48): library_byol.js (SLLibraryByol): NPRD, EPRD and FMD loaded by the customer, with environment, quality, records, data date and failure mode splits; fmea_modes.js (SLFmeaModes): failure modes and rates from the library split, no AI -->
-    <script src="library_byol.js?v=1.0" defer></script>
-    <script src="fmea_modes.js?v=1.0" defer></script>
+    <script src="library_byol.js?v=1.1" defer></script>
+    <script src="fmea_modes.js?v=1.1" defer></script>
+    <!-- 2 Nov 2026 (items 50, 29): fmes_merge.js (SLFmesMerge): FMES effects that say the same thing, merged on Accept within one detection; type_codes.js (SLTypeCodes): your own part types, events share their rate and model -->
+    <script src="fmes_merge.js?v=1.0" defer></script>
+    <script src="type_codes.js?v=1.0" defer></script>
     <script src="fta_quant_modules.js?v=66.37" defer></script>
     <!-- P2 batch 2 — FTA/golden-thread view layer + data operations layer, moved verbatim from safety_lab.js. Pure runtime declarations; load anywhere before the monolith. -->
     <script src="event_reuse.js?v=1.4" defer></script>
@@ -4223,9 +4235,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          boundary rule, and derived display text. Pure; loaded before its consumers. -->
     <script src="node_identity.js?v=1.1" defer></script>
     <script src="node_identity_ui.js?v=1.6" defer></script>
-    <script src="fta_view_modules.js?v=66.58" defer></script>
+    <script src="fta_view_modules.js?v=66.59" defer></script>
     <!-- 13 Oct 2026 (fix G) — SLFtaEdit: the fault tree built by hand (toolbox, drawn connections, unattached nodes, canvas λ/P, model link, overview map) and the ONE change path (SLFtaEdit.applyEdit). After fta_view_modules.js. -->
-    <script src="fta_canvas_edit.js?v=1.1" defer></script>
+    <script src="fta_canvas_edit.js?v=1.2" defer></script>
     <!-- 27 Oct 2026 (customer report): fta_warn_pill.js (SLFtaWarn): the fault tree canvas's warning pill and the properties box warnings. After fta_view_modules.js. -->
     <script src="fta_warn_pill.js?v=1.0" defer></script>
     <!-- Golden Thread rendered as the Defense-Lab chain of custody (replaces the Sankey). -->
@@ -4239,9 +4251,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="system_admin.js?v=1.0" defer></script>
     <script src="data_ops_modules.js?v=66.67" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.58" defer></script>
+    <script src="support_modules.js?v=66.59" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
-    <script src="helpers_modules.js?v=3.61" defer></script>
+    <script src="helpers_modules.js?v=3.62" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
     <script src="severity_axes.js?v=1.36" defer></script>
     <!-- 5 Sep 2026 — levers 2 + 3: escapes per phase; aircraft / crew levels derived from the MAC and the Task Analysis. -->
@@ -4251,8 +4263,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- P2 batch 6 — residual function layer (182 validated segments, 310 functions). NOTE: CutsetExplosionError intentionally overrides fta_engine.js's page-side copy, exactly as the monolith did. -->
     <!-- 16 Oct 2026: the shared AI inputs file ("safetylab-ai-inputs" v1, the same in Safety Lab, Sys Lab and Cert Lab); the source document store hashes with it. -->
     <script src="ai_inputs_exchange.js?v=1.0" defer></script>
-    <script src="misc_fn_modules.js?v=66.94" defer></script>
-    <script src="safety_lab.js?v=65.76" defer></script>
+    <script src="misc_fn_modules.js?v=66.95" defer></script>
+    <script src="safety_lab.js?v=65.77" defer></script>
     <!-- Phase 66.34 — read access to the app's top-level lexical globals. MUST load
          after the declarations exist. Top-level `let` is NOT on window; anything that
          reached for window.selectedNodeData got undefined and failed silently. -->
@@ -4653,7 +4665,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 31 Oct 2026: cma_flow.js (SLCmaFlow): the Common Mode Analysis in four steps (gates and claim, the App M questionnaire, concerns and mitigations, close out), a status that means something, and the DAL reduction given back only when it is mitigated. After cma_walkthrough.js, cma_live.js and critical_gates.js. -->
     <script src="cma_flow.js?v=1.2" defer></script>
     <!-- 31 Oct 2026: rate_sources.js (SLRateSources): every failure rate names its source (supplier guarantee, field data, calculated, library entry, engineering judgment); the sources table, the canvas warning and the SSA table; ANEM only matches library entries. After cma_flow.js. -->
-    <script src="rate_sources.js?v=1.2" defer></script>
+    <script src="rate_sources.js?v=1.3" defer></script>
     <!-- 31 Oct 2026: iface_reqs.js (SLIfaceReqs): requirements on interfacing systems. The need and its budget come from the trees (an event another system provides); the interfaces stay owned by Sys Lab; ANEM drafts the wording only and the budget must stand in it exactly. After rate_sources.js. -->
     <script src="iface_reqs.js?v=1.0" defer></script>
     <script src="cca_models.js?v=1.03" defer></script>
@@ -4662,7 +4674,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
          first completion; the engine falls back to inline specs if absent. -->
     <script src="spec_index.js?v=1.3" defer></script>
     <script src="eval_core.js?v=1.9" defer></script>
-    <script src="ai_skills.js?v=2.22" defer></script>
+    <script src="ai_skills.js?v=2.23" defer></script>
     <!-- AI lane (assistant + KB + fidelity) is LAZY: ai_loader.js pulls it on first AI intent. -->
     <script src="ai_loader.js?v=8.88" defer></script>
     <!-- 16 Oct 2026: the AI Assistant page (AI inputs, every AI analysis and the chat, the pages that read the inputs). -->

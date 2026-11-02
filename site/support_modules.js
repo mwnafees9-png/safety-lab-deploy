@@ -959,6 +959,7 @@ function lambdaFromInputMode(mode, value, libraryKey, exposureTime) {
         const p = Math.min(0.999999, Math.max(0, v));
         return p > 0 ? -Math.log1p(-p) / t : 0;
     }
+    if (mode === 'typecode') return (typeof SLTypeCodes !== 'undefined') ? SLTypeCodes.lambdaFor(libraryKey) : 0;   // 2 Nov 2026 (item 29): the code rides in the key argument
     if (mode === 'library')     {
         const entry = getActiveLibrary()[libraryKey] || {};
         // Apply standard-aware π_E × π_Q (and π_T when stress prediction is on) per
@@ -2775,12 +2776,21 @@ function updateNodeData() {
             const libSel = document.getElementById('config-input-library');
             if (modeSel) {
                 selectedNodeData.inputMode = modeSel.value;
+                if (modeSel.value === 'typecode') {
+                    // 2 Nov 2026 (item 29): the type gives the rate and the model; nothing typed here (type_codes.js)
+                    const tcSel = document.getElementById('config-input-typecode');
+                    const code = tcSel ? tcSel.value : '';
+                    if (code && typeof SLTypeCodes !== 'undefined' && SLTypeCodes.get(code)) { selectedNodeData.typeCode = code; SLTypeCodes.apply(selectedNodeData); }
+                    else delete selectedNodeData.typeCode;
+                } else {
+                delete selectedNodeData.typeCode;
                 selectedNodeData.inputValue = parseFloat(valEl.value) || 0;
                 selectedNodeData.libraryKey = libSel ? libSel.value : '';
                 selectedNodeData.lambda = lambdaFromInputMode(
                     selectedNodeData.inputMode, selectedNodeData.inputValue,
                     selectedNodeData.libraryKey, ftaConfig.exposureTime
                 );
+                }
             } else if (ftaConfig.mode === 'bottom-up') {
                 const lam = parseFloat(document.getElementById('config-lambda').value) || 0;
                 selectedNodeData.lambda = Math.max(0, lam);
@@ -2806,6 +2816,8 @@ function updateNodeData() {
                     if (_libEntry.tau != null) selectedNodeData.tau = parseFloat(_libEntry.tau) || 0;
                 }
             }
+            // 2 Nov 2026 (item 29): a type code event keeps its type's model, whatever the repair fields above say
+            if (selectedNodeData.inputMode === 'typecode' && selectedNodeData.typeCode && typeof SLTypeCodes !== 'undefined') SLTypeCodes.apply(selectedNodeData);
             const mkvSel = document.getElementById('config-markov-model');
             if (mkvSel) selectedNodeData.markovModelId = mkvSel.value || undefined;
             // Phase 57 — per-event exposure model.

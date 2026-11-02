@@ -2034,7 +2034,7 @@
     const _ANALYSIS_FEATURES = {
         'fha.populate': 1, 'sfha.populate': 1, 'arch.decompose': 1, 'arch.systems': 1, 'arch.items': 1, 'mac.draft': 1, 'coffe.draft': 1, 'fta.review': 1,
         'req.recommend': 1, 'fcim.populate': 1, 'fta.synthesize': 1, 'pra.draft': 1,
-        'zsa.draft': 1, 'cma.draft': 1, 'cma.flow': 1, 'fha.reason': 1, 'rate.match': 1, 'iface.word': 1, 'fmea.functional': 1, 'fmea.item': 1, 'arch.recommend': 1,
+        'zsa.draft': 1, 'cma.draft': 1, 'cma.flow': 1, 'fha.reason': 1, 'rate.match': 1, 'iface.word': 1, 'fmes.similar': 1, 'modes.name': 1, 'type.group': 1, 'fmea.functional': 1, 'fmea.item': 1, 'arch.recommend': 1,
         'ccf.propose': 1,  // #142 — AI CCF-group modeling (advisory proposal; never writes the trees)
         'fha.combine': 1,  // 30 Oct 2026 — combined failure conditions (advisory proposal; only when the user asks)
         'hfa.draft': 1,    // #55 — HF crew-credit registration (candidates chosen deterministically)
@@ -2075,7 +2075,7 @@
         'fcim.populate': 'drafting the FCIM', 'arch.decompose': 'decomposing functions', 'arch.systems': 'identifying systems', 'arch.items': 'listing configuration items', 'mac.draft': 'drafting MAC rules', 'coffe.draft': 'judging CoFFE cases',
         'arch.recommend': 'recommending architecture', 'fta.review': 'reviewing the fault tree',
         'fta.synthesize': 'synthesizing the fault tree', 'req.recommend': 'recommending requirements',
-        'pra.draft': 'drafting the PRA', 'zsa.draft': 'drafting the ZSA', 'cma.draft': 'drafting the CMA', 'cma.flow': 'working on the CMA', 'fha.reason': 'drafting the reasons for the FHA classes', 'rate.match': 'matching basic events to the library', 'iface.word': 'wording the requirements on interfacing systems',
+        'pra.draft': 'drafting the PRA', 'zsa.draft': 'drafting the ZSA', 'cma.draft': 'drafting the CMA', 'cma.flow': 'working on the CMA', 'fha.reason': 'drafting the reasons for the FHA classes', 'rate.match': 'matching basic events to the library', 'iface.word': 'wording the requirements on interfacing systems', 'fmes.similar': 'finding FMES effects that say the same thing', 'modes.name': 'naming failure modes for library parts', 'type.group': 'grouping basic events into part types',
         'fmea.functional': 'drafting the functional FMEA', 'fmea.item': 'drafting the item FMEA',
         'ccf.propose': 'proposing common-cause groups', 'resources.draft': 'drafting resources', 'fha.combine': 'proposing combined failure conditions',
         'hf.improve': 'recommending HF design improvements',
@@ -2257,6 +2257,24 @@
         "STANDARD GROUNDING — failure rate data sources for safety assessment (MIL-HDBK-217F, NSWC, NPRD/EPRD, FIDES and supplier data); ARP4761A App G/H on basic event data.",
         "TASK: for each basic event in the facts, find the ONE component library entry whose part type matches the part the event describes (by the event's name and the item it belongs to), or none. You only match; you never type, estimate or adjust a failure rate, and you never say which rate is better. An event that does not clearly name a part type gets no match.",
         "Use ONLY library keys listed in the facts. Return STRICT JSON only: {\"matches\":[{\"nodeId\":\"<event id from the facts>\",\"libraryKey\":\"<library key>\",\"why\":\"<one short sentence: the part type both name>\"}]}. No prose, no fences."
+    ].join('\n');
+    // 2 Nov 2026 (customer checklist items 50, 48 and 29): FMES effects that say the same thing (merge only on Accept, only
+    // within one detection), failure mode NAMES for library parts (never a share), and basic events that share a part type
+    // (never a rate). Registered in ai_skills.js as fmes.similar, modes.name and type.group v1.
+    const _SPEC_FMES_SIMILAR = [
+        "STANDARD GROUNDING \u2014 ARP4761A Appendix J, the FMES (Table J3): failure modes are summarized by identical failure effect and identical means of detection, and their rates are summed.",
+        "TASK: the facts list, for one system, groups of FMEA end effects; every effect in a group shares one means of detection. In each group, find effects that describe the SAME failure effect in different words, so the FMES can sum their rates under one effect. Merge only effects that are the same effect at the same level: the same function lost, degraded or erroneous, in the same direction and to the same extent. Never merge a loss with a degradation, an erroneous output with a loss, one side, channel or unit with another, or a partial effect with a total one. When in doubt, do not merge.",
+        "Use ONLY effects written exactly as listed, and never merge across groups. Name each merged effect with one of its listed effects, written exactly. Return STRICT JSON only: {\"merges\":[{\"group\":\"<group id from the facts>\",\"effects\":[\"<effect>\",\"<effect>\"],\"name\":\"<one of those effects>\",\"why\":\"<one short sentence>\"}]}. No prose, no fences."
+    ].join('\n');
+    const _SPEC_MODES_NAME = [
+        "STANDARD GROUNDING \u2014 ARP4761A Appendix J piece-part FMEA failure modes; MIL-HDBK-338B Section 7.8 failure mode distributions of parts.",
+        "TASK: for each library part in the facts (key, name, group), name its credible failure modes the way a piece-part FMEA lists them for that part type: 2 to 6 modes, each a short noun phrase (for example Open, Short, Stuck closed, External leak, Loss of output, Erroneous output), together covering the ways the part fails. You name modes only: never give a share, a rate, a percentage or any other number, and never write a digit. A part that is not a physical part with failure modes (a human error, a software level, a generic system rollup) gets no modes.",
+        "Use ONLY keys listed in the facts. Return STRICT JSON only: {\"parts\":[{\"key\":\"<library key>\",\"modes\":[\"<mode>\",\"<mode>\"],\"why\":\"<one short sentence>\"}]}. No prose, no fences."
+    ].join('\n');
+    const _SPEC_TYPE_GROUP = [
+        "STANDARD GROUNDING \u2014 ARP4761A Appendix G basic events and Appendix J part types.",
+        "TASK: the facts list basic events from the project's fault trees (id, name, the item it belongs to) and the project's type codes (code, part type). Find basic events that describe the same kind of part, so they can share one type code. For each group, either use an existing type code from the facts or propose a new one: a short code of capital letters, digits and hyphens, with the part type in words. Group only events that clearly name the same kind of part; the same part on another side or channel is still the same part type. You never type, estimate or change a failure rate.",
+        "Use ONLY event ids and type codes listed in the facts. Return STRICT JSON only: {\"groups\":[{\"code\":\"<existing or new code>\",\"type\":\"<part type in words>\",\"isNew\":true,\"events\":[\"<event id>\",\"<event id>\"],\"why\":\"<one short sentence>\"}]}. No prose, no fences."
     ].join('\n');
     // 31 Oct 2026 (customer checklist item 10): ANEM words a requirement on an interfacing system; the budget comes from the
     // tree and must stand in the wording exactly (iface_reqs.js checks). Registered in ai_skills.js as iface.word v1.
@@ -2555,6 +2573,7 @@
         'cma.flow': _SPEC_CMA_FLOW,
         'fha.reason': _SPEC_FHA_REASON,
         'rate.match': _SPEC_RATE_MATCH,
+        'fmes.similar': _SPEC_FMES_SIMILAR, 'modes.name': _SPEC_MODES_NAME, 'type.group': _SPEC_TYPE_GROUP,
         'iface.word': _SPEC_IFACE_WORD,
         'req.recommend': _SPEC_REQ, 'arch.decompose': _SPEC_DECOMP, 'arch.systems': _SPEC_SYSTEMS, 'arch.items': _SPEC_ITEMS, 'mac.draft': _SPEC_MAC, 'coffe.draft': _SPEC_COFFE, 'arch.recommend': _SPEC_ARCH,
         'hfa.draft': _SPEC_HFA,
@@ -2629,6 +2648,9 @@
         'cma.flow':       ['ARP4761A App M (Tables M1, M2)', 'AC 25.1309-1B'],
         'fha.reason':     ['ARP4761A App A §A.6', 'AC 25.1309-1B §8'],
         'rate.match':     ['MIL-HDBK-217F', 'ARP4761A App G'],
+        'fmes.similar':   ['ARP4761A App J (Table J3)'],
+        'modes.name':     ['ARP4761A App J', 'MIL-HDBK-338B §7.8'],
+        'type.group':     ['ARP4761A App G', 'ARP4761A App J'],
         'iface.word':     ['ARP4754B §5.3', 'ARP4761A §3.6'],
         'req.recommend':  ['ARP4754B §5.3', 'ARP4754B §5.1', 'ARP4761A §3.5'],
         'arch.decompose': ['ARP4754B §4.3', 'ARP4754B §4.5'],
@@ -2754,7 +2776,7 @@
         'fha.populate': 'AFHA', 'sfha.populate': 'SFHA', 'fcim.populate': 'FCIM',
         'fta.synthesize': 'FTA synthesis', 'fta.review': 'FTA review',
         'req.recommend': 'Requirements', 'arch.decompose': 'Decomposition', 'arch.systems': 'Systems', 'arch.items': 'Items', 'mac.draft': 'MAC', 'coffe.draft': 'CoFFE',
-        'pra.draft': 'PRA', 'zsa.draft': 'ZSA', 'cma.draft': 'CMA', 'cma.flow': 'CMA', 'fha.reason': 'AFHA', 'rate.match': 'Failure rate sources', 'iface.word': 'Requirements on interfacing systems',
+        'pra.draft': 'PRA', 'zsa.draft': 'ZSA', 'cma.draft': 'CMA', 'cma.flow': 'CMA', 'fha.reason': 'AFHA', 'rate.match': 'Failure rate sources', 'iface.word': 'Requirements on interfacing systems', 'fmes.similar': 'FMES', 'modes.name': 'Component library', 'type.group': 'Type codes',
         'fmea.functional': 'FMEA (functional)', 'fmea.item': 'FMEA (item)',
         'ccf.propose': 'CCF',
         'fha.combine': 'Combined failure conditions',
@@ -9188,7 +9210,7 @@
                 _itemSplit = _splitOf(x._libKey);
                 if (_itemSplit) {
                     _itemSplitMode = _itemSplit.modes.find(function (m) { return _modeKey(m.mode) === _modeKey(_md); }) || null;
-                    if (!_itemSplitMode) { _toast('Not added: "' + _md + '" is not one of the failure modes in the library split for this part.', 'warning'); return false; }
+                    if (!_itemSplitMode) { _toast('Not added: "' + _md + '" is not one of the library\'s failure modes for this part.', 'warning'); return false; }
                 }
                 const _ex = _existingModeRow(_itemBe, _itemSplitMode ? _itemSplitMode.mode : _md);
                 if (_ex && _hasEffects(_ex)) { _toast('Not added: ' + (_ex.fmeaId || 'a row') + ' already covers "' + _md + '" for this basic event.', 'info'); return false; }
@@ -9235,7 +9257,7 @@
                 row.scope = 'system';
                 // 2 Nov 2026 (item 48): the share and the mode rate come from the library split (λ_mode = αFM × the part's
                 // rate as the fault tree sees it), never from ANEM. A part with no split gets no share and no rate.
-                if (_itemSplitMode) {
+                if (_itemSplitMode && _itemSplitMode.alphaFm != null) {
                     row.alphaFm = Number(_itemSplitMode.alphaFm);
                     const _pl = (window.SLLibraryByol) ? window.SLLibraryByol.partLambda(row.parentLibKey) : 0;
                     if (_pl > 0) row.rate = row.alphaFm * _pl;
@@ -9259,6 +9281,7 @@
     function _fmeaLambdaNote(x) {
         var sp = _splitOf(x._libKey); if (!sp) return ' · no library split: no share or rate';
         var m = sp.modes.find(function (q) { return _modeKey(q.mode) === _modeKey(x.mode); }); if (!m) return '';
+        if (m.alphaFm == null) return ' · mode name from the library: no share or rate yet' + (x._fillRowId ? ' · fills the existing blank row' : '');
         var s = ' · ' + (Math.round(Number(m.alphaFm) * 1000) / 10) + '% of the part (' + _esc(m.source || sp.source || sp.from) + ')';
         var lam = window.SLLibraryByol ? window.SLLibraryByol.partLambda(x._libKey) : 0;
         if (lam > 0) s += ' → λ ' + (Number(m.alphaFm) * lam).toExponential(2) + '/hr';
@@ -9303,7 +9326,8 @@
     //     effects already is left alone and ANEM's copy is dropped (the no duplicates rule);
     //   - the share and the mode rate come from the split on Accept, never from ANEM.
     function _modeKey(m) { return String(m == null ? '' : m).trim().replace(/\s+/g, ' ').toLowerCase(); }
-    function _splitOf(libKey) { try { return (libKey && window.SLLibraryByol) ? window.SLLibraryByol.splitFor(libKey) : null; } catch (_) { return null; } }
+    // the part's fixed mode names: its split (with shares), else the mode names accepted on the library part (no shares)
+    function _splitOf(libKey) { try { const B = window.SLLibraryByol; return (libKey && B) ? (B.modesFor ? B.modesFor(libKey) : B.splitFor(libKey)) : null; } catch (_) { return null; } }
     function _existingModeRow(node, mode) { try { return window.SLFmeaModes ? window.SLFmeaModes.clash(node, mode) : null; } catch (_) { return null; } }
     function _hasEffects(row) { return !!(row && (String(row.endEffect || '').trim() || String(row.localEffect || '').trim())); }
     async function _itemFmeaRows(sysEntry) {
@@ -9703,8 +9727,9 @@
         if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
         const ids = (nodeIds || []).map(String);
         if (!ids.length) return { ok: false, why: 'Every failure rate already has a source.' };
-        let lib = {}; try { lib = (typeof COMPONENT_LIBRARY !== 'undefined') ? COMPONENT_LIBRARY : {}; } catch (_) {}
-        const catalogue = Object.keys(lib).map(function (k) { return k + ' | ' + (lib[k].name || '') + ' | ' + (lib[k].category || ''); });
+        // 2 Nov 2026 (item 46): the ACTIVE library, so a part the customer imported (NPRD, EPRD, their own) can be matched
+        let lib = {}; try { lib = (typeof getActiveLibrary === 'function') ? getActiveLibrary() : ((typeof COMPONENT_LIBRARY !== 'undefined') ? COMPONENT_LIBRARY : {}); } catch (_) {}
+        const catalogue = Object.keys(lib).map(function (k) { return k + ' | ' + (lib[k].name || '') + ' | ' + (lib[k].category || lib[k].group || ''); });
         const s = snapshot();
         const itemName = function (n) { try { const l = (n.modelLinks || {}).item || n.itemRef || n.item; const it = (s.itemsData || []).find(function (x) { return x && (String(x.itemId) === String(l) || String(x.internalId) === String(l)); }); return it ? it.name : ''; } catch (_) { return ''; } };
         const evs = ids.map(function (id) { const n = R.findNode(id); return n ? { nodeId: String(n.id), event: n.name || '', id: n.displayId || '', item: itemName(n) || undefined } : null; }).filter(Boolean);
@@ -9726,6 +9751,87 @@
         }
         if (!out.length) return { ok: false, why: stopped ? 'Stopped by you. Nothing was matched.' : 'ANEM found no library entry that clearly matches these events.' };
         return { ok: true, matches: out, summary: 'ANEM matched ' + out.length + ' event' + (out.length === 1 ? '' : 's') + ' to library entries: cite each one, use its rate, or discard it.' };
+    }
+    // ---- 2 Nov 2026 (customer checklist item 50): FMES effects that say the same thing -----------------------------------
+    // fmes_merge.js lists, per system, the end effects that share one detection (raw, before any merge). ANEM suggests which
+    // say the same thing; SLFmesMerge.check keeps a suggestion only when every effect is listed in that one group and the
+    // name is one of them. Nothing merges until a person presses Merge on the FMES page.
+    async function fmesSimilar() {
+        const M = window.SLFmesMerge;
+        if (!M) return { ok: false, why: 'The FMES merge module is not loaded yet.' };
+        if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
+        const systems = M.groupsForAnem();
+        if (!systems.length) return { ok: false, why: 'No detection group has two or more different end effects to compare.' };
+        const out = []; let stopped = false;
+        for (let i = 0; i < systems.length && !stopped; i++) {
+            const sysFacts = systems[i];
+            let r;
+            try {
+                r = await Provider.complete({ feature: 'fmes.similar', model: MODELS.reason, system: _standardsPreamble(),
+                    messages: [{ role: 'user', content: 'Find the end effects that say the same thing, within each group.\n\nSYSTEM: ' + sysFacts.system + '\nGROUPS:\n' + JSON.stringify(sysFacts.groups) }], maxTokens: 4000 });
+            } catch (e) { if (e && e.stoppedByUser) { stopped = true; break; } if (e && e.isInsufficient) continue; return { ok: false, why: 'ANEM could not compare the effects: ' + ((e && e.message) || e) }; }
+            const res = _safeParseJson(String((r && r.text) || '')) || {};
+            (Array.isArray(res.merges) ? res.merges : []).forEach(function (m) {
+                const c = M.check(String((m && m.group) || ''), (m && m.effects) || [], String((m && m.name) || ''));
+                if (c.ok) out.push({ groupId: c.groupId, effects: c.effects, name: c.name, why: String((m && m.why) || '').slice(0, 200) });
+            });
+        }
+        if (!out.length) return { ok: false, why: stopped ? 'Stopped by you. Nothing was suggested.' : 'ANEM found no effects that clearly say the same thing.' };
+        return { ok: true, suggestions: out };
+    }
+    // ---- 2 Nov 2026 (customer checklist item 48): failure mode NAMES for library parts ------------------------------------
+    // Names only: SLLibraryByol.cleanNames drops any name with a digit; a share comes only from a source the engineer enters.
+    async function modesName(keys) {
+        const B = window.SLLibraryByol;
+        if (!B) return { ok: false, why: 'The library module is not loaded yet.' };
+        if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
+        let lib = {}; try { lib = (typeof getActiveLibrary === 'function') ? getActiveLibrary() : {}; } catch (_) {}
+        const facts = (keys || []).map(String).filter(function (k) { return lib[k]; }).map(function (k) { return { key: k, name: lib[k].name || k, group: lib[k].group || lib[k].category || '' }; });
+        if (!facts.length) return { ok: false, why: 'No library parts to name.' };
+        const out = []; let stopped = false;
+        for (let i = 0; i < facts.length && !stopped; i += 40) {
+            const part = facts.slice(i, i + 40);
+            let r;
+            try {
+                r = await Provider.complete({ feature: 'modes.name', model: MODELS.reason, system: _standardsPreamble(),
+                    messages: [{ role: 'user', content: 'Name the failure modes of each part.\n\nPARTS:\n' + JSON.stringify(part) }], maxTokens: 4000 });
+            } catch (e) { if (e && e.stoppedByUser) { stopped = true; break; } if (e && e.isInsufficient) continue; return { ok: false, why: 'ANEM could not name the modes: ' + ((e && e.message) || e) }; }
+            const res = _safeParseJson(String((r && r.text) || '')) || {};
+            const want = {}; part.forEach(function (p) { want[p.key] = 1; });
+            (Array.isArray(res.parts) ? res.parts : []).forEach(function (p) {
+                const k = String((p && p.key) || ''); if (!want[k]) return; want[k] = 0;   // only parts asked about, once each
+                const names = B.cleanNames((p && p.modes) || []);
+                if (names.length) out.push({ key: k, modes: names, why: String((p && p.why) || '').slice(0, 200) });
+            });
+        }
+        if (!out.length) return { ok: false, why: stopped ? 'Stopped by you. Nothing was named.' : 'ANEM named no modes for these parts.' };
+        return { ok: true, parts: out };
+    }
+    // ---- 2 Nov 2026 (customer checklist item 29): basic events that share a part type -------------------------------------
+    // SLTypeCodes.checkGroup keeps a group only with events asked about and a valid code; it never carries a rate.
+    async function typeGroup() {
+        const T = window.SLTypeCodes;
+        if (!T) return { ok: false, why: 'The type codes module is not loaded yet.' };
+        if (!Provider.available()) return { ok: false, why: Provider.notReadyMessage() };
+        const facts = T.factsForAnem();
+        if (!facts.events.length) return { ok: false, why: 'Every basic event already has a type code.' };
+        const out = []; let stopped = false;
+        for (let i = 0; i < facts.events.length && !stopped; i += 80) {
+            const part = facts.events.slice(i, i + 80);
+            let r;
+            try {
+                r = await Provider.complete({ feature: 'type.group', model: MODELS.reason, system: _standardsPreamble(),
+                    messages: [{ role: 'user', content: 'Group the basic events that describe the same kind of part.\n\nEVENTS:\n' + JSON.stringify(part) + '\n\nTYPE CODES:\n' + JSON.stringify(facts.codes) }], maxTokens: 4000 });
+            } catch (e) { if (e && e.stoppedByUser) { stopped = true; break; } if (e && e.isInsufficient) continue; return { ok: false, why: 'ANEM could not group the events: ' + ((e && e.message) || e) }; }
+            const res = _safeParseJson(String((r && r.text) || '')) || {};
+            const asked = {}; part.forEach(function (e) { asked[e.id] = 1; });
+            (Array.isArray(res.groups) ? res.groups : []).forEach(function (g) {
+                const c = T.checkGroup(g, asked);
+                if (c.ok) out.push(c.group);
+            });
+        }
+        if (!out.length) return { ok: false, why: stopped ? 'Stopped by you. Nothing was grouped.' : 'ANEM found no events that clearly share a part type.' };
+        return { ok: true, groups: out };
     }
     // ---- 31 Oct 2026 (customer checklist item 10): ANEM words the requirements on interfacing systems --------------------
     // The need and its budget come from the trees (iface_reqs.js). ANEM writes the sentence only; SLIfaceReqs.offerDraft
@@ -15109,6 +15215,7 @@
         fhaReasonDraft: fhaReasonDraft,   // 31 Oct 2026: the reason for each FHA row's class
         ifaceWording: ifaceWording,   // 31 Oct 2026: wording of requirements on interfacing systems (the budget is the tree's)
         rateMatch: rateMatch,   // 31 Oct 2026: library matches for basic events (never a rate)
+        fmesSimilar: fmesSimilar, modesName: modesName, typeGroup: typeGroup,   // 2 Nov 2026: items 50, 48, 29
         _cmaFlowTest: { facts: _cmaFlowFacts, numRe: _CMA_NUM_RE },
         _batchTest: { holdBack: _batchHoldBack, plain: _plainWords, cmaNoGatesSteer: function () { return _CMA_NO_GATES_STEER; } },   // 31 Oct 2026
         _commentsTest: { runActions: _chatRunActions, state: function () { return _chatProjectState(); }, where: _commentWhere, snippet: _artifactSnippet },   // 31 Oct 2026

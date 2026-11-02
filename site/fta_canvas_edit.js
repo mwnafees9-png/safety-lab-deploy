@@ -684,13 +684,14 @@
 
     // ------------------------------------------- failure rate / P on the canvas
     function metricEditable(n) {
-        return !!n && (n.type === 'basic' || n.type === 'undeveloped') && (n.inputMode || 'lambda') !== 'library' && n.eventClass !== 'dev-error' && !n.markovModelId;
+        return !!n && (n.type === 'basic' || n.type === 'undeveloped') && (n.inputMode || 'lambda') !== 'library' && n.inputMode !== 'typecode' && n.eventClass !== 'dev-error' && !n.markovModelId;
     }
     const _MODE_NAME = { lambda: 'failure rate λ per hour', mtbf: 'MTBF in hours', probability: 'probability P at the exposure time' };
     function metricTitle(n) {
         if (!n || (n.type !== 'basic' && n.type !== 'undeveloped')) return 'Computed from the inputs below this gate.';
         if (n.eventClass === 'dev-error') return 'Development error: never quantified (ARP 4761A 4.1.1.1).';
         if ((n.inputMode || 'lambda') === 'library') return 'Taken from the component library. Change the source in the drop-down below or in the properties panel.';
+        if (n.inputMode === 'typecode') return 'Taken from its type code' + (n.typeCode ? ' ' + n.typeCode : '') + '. Change the rate in the type codes table (Data Actions, Type codes).';
         if (n.markovModelId) return 'Taken from its Markov model (properties panel).';
         return 'Click to type the ' + (_MODE_NAME[n.inputMode || 'lambda'] || 'value') + '. Enter saves, Esc cancels. The drop-down below picks λ, MTBF or P.';
     }

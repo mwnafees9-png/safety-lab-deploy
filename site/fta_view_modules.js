@@ -959,7 +959,7 @@ function updateD3() {
         const inputDiv = inputFo.append('xhtml:div').attr('xmlns', 'http://www.w3.org/1999/xhtml')
             .style('width', '100%');
         inputDiv.append('xhtml:select').attr('class', 'inline-mode')
-            .html('<option value="lambda">λ — Failure rate</option><option value="mtbf">MTBF (hours)</option><option value="probability">P at exposure t</option><option value="library">Component library</option>')
+            .html('<option value="lambda">λ — Failure rate</option><option value="mtbf">MTBF (hours)</option><option value="probability">P at exposure t</option><option value="library">Component library</option><option value="typecode">Type code</option>')
             .on('change', function(e, d) {
                 // 13 Oct 2026 (fix G): through the one change path (undo, recalculation, redraw, autosave, listeners).
                 const sel = this;
@@ -980,7 +980,8 @@ function updateD3() {
                 else if (newMode === 'probability') d.data.inputValue = -Math.expm1(-oldLambda * t);
                 // For library mode the user picks via the panel; leave inputValue alone.
                 d.data.inputMode = newMode;
-                if (newMode !== 'library') {
+                if (newMode !== 'typecode') delete d.data.typeCode;   // 2 Nov 2026 (item 29): a type code is picked in the panel
+                if (newMode !== 'library' && newMode !== 'typecode') {
                     d.data.lambda = lambdaFromInputMode(newMode, d.data.inputValue, d.data.libraryKey, t);
                 }
                 // Backlog #4 — a dev-error event never carries a number,
@@ -1364,6 +1365,8 @@ function selectNode(dataNode) {
             document.getElementById('config-input-mode').value = dataNode.inputMode || 'lambda';
             document.getElementById('config-input-value').value = dataNode.inputValue != null ? dataNode.inputValue : (dataNode.lambda || 0);
             if (dataNode.libraryKey) document.getElementById('config-input-library').value = dataNode.libraryKey;
+            const _tcSel = document.getElementById('config-input-typecode');   // 2 Nov 2026 (item 29)
+            if (_tcSel) { if (typeof SLTypeCodes !== 'undefined') _tcSel.innerHTML = '<option value="">-- pick a type code --</option>' + SLTypeCodes.list().map(t => '<option value="' + esc(t.code) + '">' + esc(t.code + ' · ' + t.name) + '</option>').join(''); _tcSel.value = dataNode.typeCode || ''; }
             onInputModeChange(); // sync labels and visibility
         }
     }
