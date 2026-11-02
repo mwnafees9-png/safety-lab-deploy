@@ -1595,17 +1595,19 @@ window.onFmeaParentLibChange = function(){
     const key = (document.getElementById('fmea-parent-lib') || {}).value;
     const menu = document.getElementById('fmea-mode-menu');
     if (!menu) return;
-    if (!key || !FAILURE_MODE_DISTRIBUTIONS[key]) {
+    // 2 Nov 2026 (item 48): the customer's imported split first, then the built-in table (library_byol.js)
+    const _sp = (typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.splitFor(key) : (FAILURE_MODE_DISTRIBUTIONS[key] ? { modes: FAILURE_MODE_DISTRIBUTIONS[key], from: 'built-in' } : null);
+    if (!key || !_sp) {
         menu.style.display = 'none';
         menu.innerHTML = '';
         return;
     }
-    const modes = FAILURE_MODE_DISTRIBUTIONS[key];
+    const modes = _sp.modes;
     const sumA = modes.reduce((s, m) => s + (m.alphaFm || 0), 0);
     const sumChip = Math.abs(sumA - 1.0) <= 0.02
         ? '<span style="background: rgba(52,199,89,0.14); color: var(--sev-min-fg); padding: 1px 8px; border-radius: var(--r-full); font-size: 10px; font-weight: 700; letter-spacing: 0.04em;">Σα = ' + sumA.toFixed(2) + '</span>'
         : '<span style="background: rgba(255,149,0,0.14); color: var(--sev-haz-fg); padding: 1px 8px; border-radius: var(--r-full); font-size: 10px; font-weight: 700; letter-spacing: 0.04em;">Σα = ' + sumA.toFixed(2) + ' (≠ 1)</span>';
-    let html = '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;"><strong>Published failure mode distribution</strong> ' + sumChip + '</div>';
+    let html = '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;"><strong>' + (_sp.from === 'imported' ? 'Your imported failure mode split' : 'Published failure mode distribution') + '</strong> ' + sumChip + '</div>';
     html += '<div style="display: flex; flex-direction: column; gap: 4px;">';
     modes.forEach((m, idx) => {
         const a = (m.alphaFm * 100).toFixed(0);
@@ -1620,7 +1622,8 @@ window.onFmeaParentLibChange = function(){
 };
 
 window.applyFmeaModeMenuPick = function(libKey, idx){
-    const modes = FAILURE_MODE_DISTRIBUTIONS[libKey];
+    const _sp = (typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.splitFor(libKey) : null;
+    const modes = _sp ? _sp.modes : FAILURE_MODE_DISTRIBUTIONS[libKey];
     if (!modes || !modes[idx]) return;
     const m = modes[idx];
     const modeEl = document.getElementById('fmea-mode');
@@ -1635,10 +1638,11 @@ window.onFmeaAlphaFmChange = function(){
     const alphaEl = document.getElementById('fmea-alpha-fm');
     const rateEl = document.getElementById('fmea-rate');
     if (!key || !alphaEl || !rateEl) return;
-    const parent = COMPONENT_LIBRARY[key] || ((projectConfig && projectConfig.customLibrary) || {})[key];
+    // 2 Nov 2026 (item 46/48): the part's rate as the fault tree sees it (imported copy first, same factors)
+    const parentLam = (typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.partLambda(key) : ((((projectConfig && projectConfig.customLibrary) || {})[key] || COMPONENT_LIBRARY[key] || {}).lambda || 0);
     const a = parseFloat(alphaEl.value);
-    if (parent && parent.lambda > 0 && !isNaN(a) && a > 0) {
-        rateEl.value = parent.lambda * a;
+    if (parentLam > 0 && !isNaN(a) && a > 0) {
+        rateEl.value = parentLam * a;
         if (typeof calcFMEAProb === 'function') calcFMEAProb();
     }
 };
@@ -1896,6 +1900,7 @@ window.deleteFMEA = function(iId) {
 
 window.renderFMEA = function() {
     _setFmeaTableHead();
+    try { if (typeof SLFmeaModes !== 'undefined') SLFmeaModes.renderBar(); } catch (_) {}   // 2 Nov 2026 (item 48)
     if (typeof refreshFmeaModeButtons === 'function') refreshFmeaModeButtons();
     _populateFmeaFunctionLink();
     _populateFmeaFuncLinkedFc();
@@ -1959,7 +1964,7 @@ window.renderFMEA = function() {
             '<td>' + display + '</td>' +
             // 13 Oct 2026: the part's model links: the item it belongs to, its interfaces, the basic event it feeds.
             '<td>' + esc(row.part || '') + (typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('fmea', row, { slots: ['item', 'interface'] }) : '') + '</td>' +
-            '<td>' + esc(row.mode || '') + '</td>' +
+            '<td>' + esc(row.mode || '') + ((row.alphaFm != null && row.modeSource) ? '<div style="font-size:10.5px;color:var(--color-text-tertiary);">' + esc(Math.round(Number(row.alphaFm) * 1000) / 10) + '% of the part, ' + esc(row.modeSource) + '</div>' : '') + '</td>' +   // 2 Nov 2026 (item 48): the share and where it came from
             '<td>' + esc(row.localEffect || '') + '</td>' +
             '<td>' + esc(row.nextEffect || '') + '</td>' +
             '<td>' + esc(row.endEffect || '') + '</td>' +
@@ -2034,7 +2039,8 @@ const PRO_LICENSED_STANDARDS = new Set([
     'FIDES 2022',
     'Telcordia SR-332',
     'Siemens SN 29500',
-    'IEC TR 62380'
+    'IEC TR 62380',
+    'NPRD/EPRD'   // 2 Nov 2026 (item 46)
 ]);
 
 let _supabaseClient = null;

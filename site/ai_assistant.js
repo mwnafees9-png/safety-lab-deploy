@@ -2197,6 +2197,7 @@
         'REQUIRED INPUTS: a component/part list (with part types) for the chosen system, ideally with failure rates (lambda) and per-mode distribution, and the next-higher-assembly effects of interest. Build ONLY from the EXISTING basic events / parts of that system — never invent components. Without a parts / basic-event list, return insufficient_information.',
         'NOTATION: part failure modes — open, short, parameter shift, out-of-adjustment, intermittent, inoperative, spurious, wear, fracture, sticking, leak. Use the worst-case effect when undetermined.',
         'COLUMNS (Table J2): Part Number | Part Type | Failure Mode | Mode Failure Rate (lambda) | Flight Phase | Failure Effect (local -> next-higher) | Detection Method | Comments. Each row must echo the basic-event reference it derives from.',
+        'MODE NAMES, NEVER NUMBERS: when a component lists modes (its library failure mode split), use exactly those mode names, one row each; never add, rename or merge one. When it lists none, name its credible modes yourself. You never output a share, a rate or any other number: the tool computes every mode rate from the split.',
         'EXPECTED OUTPUTS: per-part modes with next-higher effect / detection / lambda; an FMES rollup that groups modes with identical effect AND identical detection (lambda summed) to feed fault-tree basic events.',
         'THE FMES IS A SUMMARY, NOT A SECOND ANALYSIS: App J states it need not be a separate analysis and may be done as part of the FMEA. The failure EFFECTS from the FMEA become the failure MODES of the FMES, and each FMES row should carry the potential failure causes it came from, so a grouped row traces back to the contributing FMEA rows.',
         'CAVEAT WHEN THE FMES FEEDS A FAULT TREE: an FMEA considers SINGLE failures; a fault tree considers single failures AND combinations. An FMES exists partly to simplify the tree by collapsing OR-gates at the lowest level, so state that the summed rate is a single-failure rate and must not be read as covering combinations.'
@@ -9098,7 +9099,7 @@
                 // The user's reliability prediction for this component (failure rate λ/hr),
                 // fed to the AI as a grounding input so failure-mode apportioning is real.
                 const lam = (typeof n.lambda === 'number' && isFinite(n.lambda) && n.lambda > 0) ? n.lambda : null;
-                out.push({ id: n.id, label: (n.name || n.displayId || ('BE-' + n.id)), libKey: n.libraryKey || '', libName: libName, lambda: lam });
+                out.push({ id: n.id, label: (n.name || n.displayId || ('BE-' + n.id)), libKey: n.libraryKey || '', libName: libName, lambda: lam, node: n });
             }
             (n.children || n._children || []).forEach(walk);
         })(page.root);
@@ -9145,10 +9146,10 @@
             return [
                 _standardsPreamble(), '',
                 'You draft a PIECE-PART / ITEM-level FMEA (ARP 4761A) by DETAILING a list of fault-tree BASIC EVENTS — each one is a component failure that already exists in a tree. For each component provided, enumerate its CREDIBLE failure modes. Do NOT invent new components or basic events; only detail the ones listed.',
-                'When a component carries "predictedLambda", that is the USER\'S reliability prediction (failure rate λ, per hour) for that component — treat it as ground truth and use it as a primary input. Apportion it across that component\'s failure modes with "alphaFm" (each 0–1; the alphaFm values for one component should sum to ≈ 1, and weight the dominant modes higher). Do NOT invent or alter the base λ; if a component has no predictedLambda, omit alphaFm for its modes.',
-                'For each failure mode return: ref (echo the EXACT ref of the basic event this row details — this is what keeps it linked), part (component name; default to the provided one), mode (the failure mode), alphaFm (0–1 fraction of λ for this mode — ONLY when predictedLambda is provided), localEffect, nextEffect, endEffect (the ARP 4761A effect chain), detection (means of detection), a SUGGESTED severity (' + FHA_SEVERITIES.join(' / ') + '), compensating (compensating provision, optional), remarks (optional — cause / occurrence notes), confidence (high|medium|low).',
-                'Keep every field concise (a phrase, not a paragraph). The ONLY number you may output is alphaFm; never invent a base failure rate or a probability.',
-                'Severity must be DERIVED from the effects you state, using the classification definitions in AC/AMC 25.1309. If the evidence will not support a class, return "" and say why in the remarks rather than guessing — never pick a middle value to avoid leaving a blank. Return STRICT JSON only: { "rows": [ { "ref":"...", "part":"...", "mode":"...", "alphaFm":0.35, "localEffect":"...", "nextEffect":"...", "endEffect":"...", "detection":"...", "severity":"<class, or \"\" if it cannot be derived from the effects>", "compensating":"...", "remarks":"...", "confidence":"high" } ] }'
+                'When a component carries "modes", those are its failure modes from the library split the engineer chose: return exactly one row for each of them, with the mode written exactly as given, and no other modes for that component. When a component carries no "modes", enumerate its credible failure modes yourself.',
+                'For each failure mode return: ref (echo the EXACT ref of the basic event this row details — this is what keeps it linked), part (component name; default to the provided one), mode (the failure mode), localEffect, nextEffect, endEffect (the ARP 4761A effect chain), detection (means of detection), a SUGGESTED severity (' + FHA_SEVERITIES.join(' / ') + '), compensating (compensating provision, optional), remarks (optional — cause / occurrence notes), confidence (high|medium|low).',
+                'Keep every field concise (a phrase, not a paragraph). Output no numbers at all: no share of a failure rate, no failure rate and no probability. The tool computes each mode rate from the library split.',
+                'Severity must be DERIVED from the effects you state, using the classification definitions in AC/AMC 25.1309. If the evidence will not support a class, return "" and say why in the remarks rather than guessing — never pick a middle value to avoid leaving a blank. Return STRICT JSON only: { "rows": [ { "ref":"...", "part":"...", "mode":"...", "localEffect":"...", "nextEffect":"...", "endEffect":"...", "detection":"...", "severity":"<class, or \"\" if it cannot be derived from the effects>", "compensating":"...", "remarks":"...", "confidence":"high" } ] }'
             ].join('\n');
         }
         return [
@@ -9172,6 +9173,37 @@
             // (classic panels, chat, unified batch) answers to the programme plan.
             const _lane = (level === 'item') ? 'ppfmea' : 'ffmea';
             if (!_aiLaneOn(_lane)) { _toast('Out of program scope — the ' + (level === 'item' ? 'piece-part' : 'functional') + ' FMEA lane is not in this program\'s plan. Add it on the Program Planning tab first.', 'warning'); return false; }
+            // 2 Nov 2026 (item 48): an item row is born linked to the basic event it details, its mode is the split's when
+            // the part has one, it is never a second row for a mode the event already has, and its share and rate are the
+            // split's, never ANEM's.
+            let _itemBe = null, _itemSplitMode = null, _itemSplit = null;
+            if (level === 'item') {
+                const _hit = (x._beId != null && x._beId !== '' && typeof _fmesFindBe === 'function') ? _fmesFindBe(x._beId) : null;
+                if (!_hit || !_hit.node || _hit.node.type !== 'basic') { _toast('Not added: an item FMEA row must name the basic event it details, and that event was not found in any tree.', 'warning'); return false; }
+                _itemBe = _hit.node;
+                if (!x._libKey && _itemBe.libraryKey) x._libKey = _itemBe.libraryKey;
+                if (!x._systemId && _hit.page && _hit.page.systemId) x._systemId = _hit.page.systemId;
+                const _md = String(x.mode || x.failureMode || '').trim();
+                if (!_md) { _toast('Not added: the row names no failure mode.', 'warning'); return false; }
+                _itemSplit = _splitOf(x._libKey);
+                if (_itemSplit) {
+                    _itemSplitMode = _itemSplit.modes.find(function (m) { return _modeKey(m.mode) === _modeKey(_md); }) || null;
+                    if (!_itemSplitMode) { _toast('Not added: "' + _md + '" is not one of the failure modes in the library split for this part.', 'warning'); return false; }
+                }
+                const _ex = _existingModeRow(_itemBe, _itemSplitMode ? _itemSplitMode.mode : _md);
+                if (_ex && _hasEffects(_ex)) { _toast('Not added: ' + (_ex.fmeaId || 'a row') + ' already covers "' + _md + '" for this basic event.', 'info'); return false; }
+                if (_ex) {
+                    // fill the blank fields of the row the library button made; nothing it already holds is changed
+                    ['localEffect', 'nextEffect', 'endEffect', 'detection', 'compensating', 'phase'].forEach(function (k) { if (!String(_ex[k] || '').trim() && String(x[k] || '').trim()) _ex[k] = String(x[k]); });
+                    if (!_ex.severity && x.severity) _ex.severity = (typeof normSeverity === 'function') ? normSeverity(x.severity) : x.severity;
+                    if (x.remarks && String(_ex.remarks || '').indexOf(String(x.remarks)) < 0) _ex.remarks = (_ex.remarks ? _ex.remarks + ' ' : '') + String(x.remarks);
+                    _ex.aiFilled = { feature: 'fmea.item', skill: _skillStampFor('fmea.item'), model: x._model || null, at: new Date().toISOString() };
+                    if (typeof renderFMEA === 'function') renderFMEA();
+                    if (typeof scheduleAutosave === 'function') scheduleAutosave();
+                    try { _aiConsistencyAutoCheck(); } catch (_) {}
+                    return true;
+                }
+            }
             let fid = '';
             try { if (typeof _newAnalysisId === 'function') fid = _newAnalysisId('FMEA'); } catch (_) {}
             if (!fid) { try { fid = (level === 'item' ? 'FMEA-PP-' : 'FMEA-F-') + String(fmeaCounter++).padStart(3, '0'); } catch (_) { fid = 'FMEA-' + (Date.now() % 100000); } }
@@ -9198,16 +9230,16 @@
                 row.beId = (x._beId != null) ? x._beId : 0;     // links to the fault-tree basic event
                 row.parentLibKey = x._libKey || '';             // links to the component library
                 row.part = x.part || x._partDefault || '';
-                row.mode = x.mode || x.failureMode || '';
+                row.mode = _itemSplitMode ? String(_itemSplitMode.mode) : (x.mode || x.failureMode || '');
                 row.owningSystemId = x._systemId || '';         // FILED UNDER ITS SYSTEM (no aircraft-level FMEA)
                 row.scope = 'system';
-                // Ground quantification in the USER'S reliability prediction: λ_mode = αFM × λ_component.
-                // The base λ is never invented — it comes from the basic event. Stored on the row only
-                // (not pushed onto the tree) so nothing is recomputed until the analyst commits the row.
-                var _af = parseFloat(x.alphaFm), _lam = parseFloat(x._lambda);
-                if (!isNaN(_af) && _af >= 0) {
-                    row.alphaFm = _af;
-                    if (!isNaN(_lam) && _lam > 0) row.rate = _af * _lam;
+                // 2 Nov 2026 (item 48): the share and the mode rate come from the library split (λ_mode = αFM × the part's
+                // rate as the fault tree sees it), never from ANEM. A part with no split gets no share and no rate.
+                if (_itemSplitMode) {
+                    row.alphaFm = Number(_itemSplitMode.alphaFm);
+                    const _pl = (window.SLLibraryByol) ? window.SLLibraryByol.partLambda(row.parentLibKey) : 0;
+                    if (_pl > 0) row.rate = row.alphaFm * _pl;
+                    row.modeSource = String(_itemSplitMode.source || _itemSplit.source || (_itemSplit.from === 'imported' ? 'imported split' : 'built-in split'));
                 }
             } else {
                 row.funcSubId = x._funcSubId || '';             // links to the AC sub-function
@@ -9223,12 +9255,14 @@
     }
     // Show the reliability-grounded apportioning (αFM and the derived λ_mode) when the AI
     // had a user-predicted λ to work from, so the analyst can see it's not invented.
+    // 2 Nov 2026 (item 48): the share shown is the library split's (what Accept will store), never a number from ANEM
     function _fmeaLambdaNote(x) {
-        var af = parseFloat(x.alphaFm), lam = parseFloat(x._lambda);
-        if (isNaN(af)) return '';
-        var s = ' · α<sub>FM</sub> ' + af;
-        if (!isNaN(lam) && lam > 0) s += ' → λ ' + (af * lam).toExponential(2) + '/hr';
-        return s;
+        var sp = _splitOf(x._libKey); if (!sp) return ' · no library split: no share or rate';
+        var m = sp.modes.find(function (q) { return _modeKey(q.mode) === _modeKey(x.mode); }); if (!m) return '';
+        var s = ' · ' + (Math.round(Number(m.alphaFm) * 1000) / 10) + '% of the part (' + _esc(m.source || sp.source || sp.from) + ')';
+        var lam = window.SLLibraryByol ? window.SLLibraryByol.partLambda(x._libKey) : 0;
+        if (lam > 0) s += ' → λ ' + (Number(m.alphaFm) * lam).toExponential(2) + '/hr';
+        return s + (x._fillRowId ? ' · fills the existing blank row' : '');
     }
     function _fmeaCard(x) {
         if (x._level === 'item') {
@@ -9260,7 +9294,19 @@
         if (!rows.length) { _toast('No linkable functional FMEA rows drafted — try again.', 'warning'); return; }
         _makeReviewPanel({ id: 'ai-rev-panel-fmea', title: '✨ Functional FMEA · review', disclaimer: 'Advisory drafts. Severity is a suggestion. Each row links to its AC sub-function (funcSubId). Accept adds it to the FMEA table.', items: rows, assumptions: _assumptions, getKey: function (x) { return x._k; }, cardHtml: _fmeaCard, onAccept: _applyFmea, doneMsg: 'FMEA row(s) added' });
     }
-    async function _runItemFmea(sysEntry) {
+    // 2 Nov 2026 (item 48, Waqas: "the AI names modes only"). The library split decides a part's mode names and shares
+    // (library_byol.js splitFor: the customer's imported split first, then the built-in table). ANEM gets the mode names
+    // where a split exists and names the modes only where none does; it never outputs a number. On the way back:
+    //   - a row is kept only when it echoes a basic event that was asked about (born linked);
+    //   - a part with a split keeps only rows whose mode is one of its split's modes (written the same, any case);
+    //   - a mode the event already has a row for: a row with blank effects is FILLED in place on Accept, a row with
+    //     effects already is left alone and ANEM's copy is dropped (the no duplicates rule);
+    //   - the share and the mode rate come from the split on Accept, never from ANEM.
+    function _modeKey(m) { return String(m == null ? '' : m).trim().replace(/\s+/g, ' ').toLowerCase(); }
+    function _splitOf(libKey) { try { return (libKey && window.SLLibraryByol) ? window.SLLibraryByol.splitFor(libKey) : null; } catch (_) { return null; } }
+    function _existingModeRow(node, mode) { try { return window.SLFmeaModes ? window.SLFmeaModes.clash(node, mode) : null; } catch (_) { return null; } }
+    function _hasEffects(row) { return !!(row && (String(row.endEffect || '').trim() || String(row.localEffect || '').trim())); }
+    async function _itemFmeaRows(sysEntry) {
         // Gather basic events across ALL of this system's already-created trees (dedup by id),
         // remembering which tree each came from so the analyst sees its origin.
         const bes = [], seen = {};
@@ -9269,23 +9315,62 @@
                 if (!seen[String(b.id)]) { seen[String(b.id)] = 1; b._tree = (pg.name || pg.id); bes.push(b); }
             });
         });
-        const list = bes.slice(0, 30);
-        if (!list.length) { _toast('That system has no basic events to FMEA.', 'info'); return; }
-        const byRef = {}; list.forEach(function (b) { byRef[String(b.id)] = b; });
-        const ctx = { certBasis: _certBasis(), system: sysEntry.name, components: list.map(function (b) { var c = { ref: String(b.id), part: b.label, library: b.libName || '', tree: b._tree || '' }; if (b.lambda != null) c.predictedLambda = b.lambda; return c; }) };
-        _toast('Drafting item-level FMEA for system "' + sysEntry.name + '"…', 'info');
+        // An event already fully covered is not asked about again: with a split, every split mode has a row with effects;
+        // with no split, the event already has a row with effects.
+        const todo = bes.filter(function (b) {
+            const sp = _splitOf(b.libKey);
+            if (sp) return sp.modes.some(function (m) { return !_hasEffects(_existingModeRow(b.node, m.mode)); });
+            return !(typeof fmeaData !== 'undefined' && fmeaData.some(function (r) { return r && (r.fmeaType || 'piece-part') === 'piece-part' && String(r.beId) === String(b.id) && _hasEffects(r); }));
+        });
+        const list = todo.slice(0, 30);
+        if (!list.length) return { rows: [], assumptions: [], none: bes.length ? 'covered' : 'empty' };
+        const byRef = {}; list.forEach(function (b) { byRef[String(b.id)] = b; b._split = _splitOf(b.libKey); });
+        const ctx = { certBasis: _certBasis(), system: sysEntry.name, components: list.map(function (b) {
+            const c = { ref: String(b.id), part: b.label, library: b.libName || '', tree: b._tree || '' };
+            if (b._split) c.modes = b._split.modes.map(function (m) { return String(m.mode); });
+            return c;
+        }) };
         let r; try { r = await Provider.complete({ feature: 'fmea.item', model: MODELS.reason, system: _fmeaSystemPrompt('item'), messages: [{ role: 'user', content: JSON.stringify(ctx, null, 1) }], maxTokens: 7000 }); }
-        catch (e) { _toast('FMEA draft failed: ' + ((e && e.message) || e), 'warning'); return; }
-        const rows = _parseItems(r.text, 'rows').filter(function (x) { return x && byRef[String(x.ref)]; }).map(function (x, i) {
+        catch (e) { _toast('FMEA draft failed for "' + sysEntry.name + '": ' + ((e && e.message) || e), 'warning'); return { rows: [], assumptions: [], none: 'failed' }; }
+        let offList = 0, dupes = 0;
+        const taken = {};
+        const rows = _parseItems(r.text, 'rows').filter(function (x) { return x && byRef[String(x.ref)]; }).filter(function (x) {
+            const be = byRef[String(x.ref)], mk = _modeKey(x.mode || x.failureMode);
+            if (!mk) return false;
+            if (be._split && !be._split.modes.some(function (m) { return _modeKey(m.mode) === mk; })) { offList++; return false; }
+            const tk = String(be.id) + '§' + mk; if (taken[tk]) { dupes++; return false; } taken[tk] = 1;
+            const ex = _existingModeRow(be.node, x.mode || x.failureMode);
+            if (ex && _hasEffects(ex)) { dupes++; return false; }
+            if (ex) x._fillRowId = ex.internalId;
+            return true;
+        }).map(function (x, i) {
             const be = byRef[String(x.ref)];
-            x._k = 'aifmea-' + Date.now() + '-' + i; x._model = r.model || MODELS.reason; x._level = 'item';
-            x._beId = be.id; x._libKey = be.libKey || ''; x._partDefault = be.label; x._systemId = sysEntry.id;
-            x._lambda = (be.lambda != null) ? be.lambda : '';   // the user's predicted λ for this component
+            delete x.alphaFm;   // never ANEM's: the split's, on Accept
+            x._k = 'aifmea-' + Date.now() + '-' + sysEntry.id + '-' + i; x._model = r.model || MODELS.reason; x._level = 'item';
+            x._beId = be.id; x._libKey = be.libKey || ''; x._partDefault = be.label; x._systemId = sysEntry.id; x._systemName = sysEntry.name;
             return x;
         });
-        const _assumptions = _parseAssumptions(r.text, 'fmea.item');   // F6
-        if (!rows.length) { _toast('No linkable item FMEA rows drafted — the model must echo a basic-event ref. Try again.', 'warning'); return; }
-        _makeReviewPanel({ id: 'ai-rev-panel-fmea', title: '✨ Item-level FMEA · ' + _esc(sysEntry.name), disclaimer: 'Advisory drafts. Each row links to the fault-tree basic event it details (beId) + its component-library entry, and is filed under this system. Quantification (λ) stays a human step. Accept adds it to the system\'s FMEA.', items: rows, assumptions: _assumptions, getKey: function (x) { return x._k; }, cardHtml: _fmeaCard, onAccept: _applyFmea, doneMsg: 'FMEA row(s) added' });
+        return { rows: rows, assumptions: _parseAssumptions(r.text, 'fmea.item'), offList: offList, dupes: dupes };
+    }
+    async function _runItemFmea(sysEntries) {
+        sysEntries = [].concat(sysEntries || []);
+        let rows = [], assumptions = [], offList = 0, dupes = 0, covered = 0;
+        for (let i = 0; i < sysEntries.length; i++) {
+            _toast('Drafting item-level FMEA for system "' + sysEntries[i].name + '"' + (sysEntries.length > 1 ? ' (' + (i + 1) + ' of ' + sysEntries.length + ')' : '') + '…', 'info');
+            const got = await _itemFmeaRows(sysEntries[i]);
+            rows = rows.concat(got.rows || []); assumptions = assumptions.concat(got.assumptions || []);
+            offList += got.offList || 0; dupes += got.dupes || 0; if (got.none === 'covered') covered++;
+        }
+        const notes = [];
+        if (offList) notes.push(offList + ' drafted mode' + (offList === 1 ? ' was' : 's were') + ' not in its part\'s library split and ' + (offList === 1 ? 'was' : 'were') + ' left out');
+        if (dupes) notes.push(dupes + ' drafted row' + (dupes === 1 ? '' : 's') + ' would have repeated a mode already in the FMEA and ' + (dupes === 1 ? 'was' : 'were') + ' left out');
+        if (!rows.length) {
+            _toast(covered === sysEntries.length ? 'Every basic event already has its failure modes and effects in the FMEA.' : ('No linkable item FMEA rows drafted' + (notes.length ? ': ' + notes.join('; ') : ': every row must name a basic event it was asked about. Try again') + '.'), covered === sysEntries.length ? 'info' : 'warning', 6000);
+            return;
+        }
+        if (notes.length) _toast(notes.join('. ') + '.', 'info', 6000);
+        const title = sysEntries.length === 1 ? _esc(sysEntries[0].name) : (sysEntries.length + ' systems');
+        _makeReviewPanel({ id: 'ai-rev-panel-fmea', title: '✨ Item-level FMEA · ' + title, disclaimer: 'Advisory drafts. Each row links to the fault-tree basic event it details and its library part, and is filed under its system. Where the part has a library failure mode split, the modes are the split\'s and the share and rate come from it; ANEM never supplies a number. A row for a mode already in the FMEA with blank effects fills that row. Accept adds it to the system\'s FMEA.', items: rows, assumptions: assumptions, getKey: function (x) { return x._k; }, cardHtml: _fmeaCard, onAccept: _applyFmea, doneMsg: 'FMEA row(s) added' });
     }
     async function draftFmea(opts) {
         // FMEA is per-system, item-level only. Build the list of systems that already have
@@ -9295,7 +9380,9 @@
         // Checked before the unified short-circuit so neither path spends tokens
         // drafting into a lane the programme has not committed to.
         if (!_aiLaneOn('ppfmea')) { _toast('Piece-part FMEA is opt-in and not in this program\'s scope — add it first: Program Planning → Program scope. ARP4761A J.3.2: it is performed as necessary to refine a failure rate.', 'warning'); return; }
-        if (_useUnifiedFeatures() && !(opts && opts.systemId)) return _anemBatch(_FEATURE_DIRECTIVE.fmea, { title: '✨ Item-level FMEA · review', analysis: 'fmea.item', verifyKind: 'fmea' });   // #272 unified engine
+        // 2 Nov 2026 (item 48): the unified batch route (#272) wrote item rows with no basic event and no mode, so the FMES
+        // could not carry their rates to the tree. Every item FMEA now drafts on the linked engine below: all systems with
+        // basic events in one review, or the one system asked for.
         const s = snapshot();
         const pages = (s.ftaPages || []).filter(function (p) { return p && p.root; });
         const systems = (s.systemsData || []).map(function (sy) {
@@ -9304,7 +9391,9 @@
             return { id: sy.id, name: sy.name || sy.id, pages: sysPages, beCount: beCount };
         }).filter(function (x) { return x.beCount > 0; });
         if (!systems.length) { _toast('No system has fault trees with basic events yet. Build a system\'s fault tree first, then run its FMEA.', 'info'); return; }
-        _fmeaSystemPicker(systems, function (sysEntry) { _runItemFmea(sysEntry); });
+        if (opts && opts.systemId) { const one = systems.filter(function (x) { return String(x.id) === String(opts.systemId); }); if (!one.length) { _toast('That system has no basic events to FMEA.', 'info'); return; } return _runItemFmea(one); }
+        if (opts && opts.pick) { _fmeaSystemPicker(systems, function (sysEntry) { _runItemFmea([sysEntry]); }); return; }
+        return _runItemFmea(systems);
     }
 
     // =========================================================================
@@ -12162,7 +12251,7 @@
             '- add_cma {subject, claim, principle, findings, mitigation, status, requirements[], verification}',
             '- add_routing {name, kind("HV"|"LV"|"Fuel"|"Hydraulic"|"Data"|"Pneumatic"), desc, routesThroughZones[], carriesFunctions[], carriesItems[]}',
             '- add_item {itemId?, name, type, dal, daType("FDAL"|"IDAL"), owningSystemId, zoneId, description}',
-            '- add_fmea {level("functional"|"item"), systemId?, funcSubId, funcMode, linkedFcId, localEffect, nextEffect, endEffect, detection, severity, compensating, remarks}',
+            '- add_fmea {level("functional"|"item"), systemId?, funcSubId, funcMode, linkedFcId, beId (item: the id of the basic event it details, from state.ftaPages[].nodes), part (item), mode (item: the failure mode name, no number), localEffect, nextEffect, endEffect, detection, severity, compensating, remarks}',
             'EDIT / REMOVE (reference rows by their "_id" from CURRENT PROJECT STATE):',
             '- update {table, _id, systemId?, fields:{ ...only the fields to change... }}',
             '- delete {table, _id, systemId?}',
@@ -13615,7 +13704,7 @@
                     case 'add_cma': { const ok = _applyCma({ subject: a.subject, claim: a.claim, principle: a.principle, findings: a.findings, mitigation: a.mitigation, status: a.status, requirements: a.requirements, verification: a.verification, _model: model }); results.push(ok ? { ok: true, summary: 'CMA added — ' + _chatClip(a.subject, 44) } : { ok: false, error: 'add_cma failed' }); break; }
                     case 'add_routing': results.push(_chatAddRouting(a, model)); break;
                     case 'add_item': results.push(_chatAddItem(a, model)); break;
-                    case 'add_fmea': { const ok = _applyFmea({ _level: a.level || 'functional', localEffect: a.localEffect, nextEffect: a.nextEffect, endEffect: a.endEffect, detection: a.detection, severity: a.severity, compensating: a.compensating, remarks: a.remarks, _funcSubId: a.funcSubId, funcMode: a.funcMode, _linkedFcId: a.linkedFcId, _systemId: a.systemId, mode: a.mode, part: a.part, _model: model }); results.push(ok ? { ok: true, summary: (a.level === 'item' ? 'Item' : 'Functional') + ' FMEA added' } : { ok: false, error: 'add_fmea failed' }); break; }
+                    case 'add_fmea': { const ok = _applyFmea({ _level: a.level || 'functional', localEffect: a.localEffect, nextEffect: a.nextEffect, endEffect: a.endEffect, detection: a.detection, severity: a.severity, compensating: a.compensating, remarks: a.remarks, _funcSubId: a.funcSubId, funcMode: a.funcMode, _linkedFcId: a.linkedFcId, _systemId: a.systemId, mode: a.mode, part: a.part, _beId: a.beId, _model: model }); results.push(ok ? { ok: true, summary: (a.level === 'item' ? 'Item' : 'Functional') + ' FMEA added' } : { ok: false, error: 'add_fmea failed' }); break; }
                     case 'update': results.push(_chatUpdateRow(a, model)); break;
                     case 'delete': results.push(_chatDeleteRow(a)); break;
                     default: results.push({ ok: false, error: 'unknown op "' + a.op + '"' });
@@ -13768,7 +13857,7 @@
         add_cma: [['subject', 'Subject'], ['claim', 'Independence claim'], ['principle', 'Principle'], ['findings', 'Findings'], ['mitigation', 'Mitigation'], ['status', 'Status'], ['requirements', 'Requirements'], ['verification', 'Verification']],
         add_routing: [['name', 'Name'], ['kind', 'Kind'], ['desc', 'Description'], ['routesThroughZones', 'Zones'], ['carriesFunctions', 'Functions'], ['carriesItems', 'Items']],
         add_item: [['itemId', 'Item id'], ['name', 'Name'], ['type', 'Type'], ['dal', 'DAL'], ['daType', 'Assurance type'], ['owningSystemId', 'Owning system'], ['zoneId', 'Zone'], ['description', 'Description']],
-        add_fmea: [['level', 'Level'], ['funcSubId', 'Function'], ['funcMode', 'Failure mode'], ['linkedFcId', 'Failure condition'], ['localEffect', 'Local effect'], ['nextEffect', 'Next higher effect'], ['endEffect', 'End effect'], ['detection', 'Detection'], ['compensating', 'Compensating provisions'], ['remarks', 'Remarks']],
+        add_fmea: [['level', 'Level'], ['funcSubId', 'Function'], ['funcMode', 'Failure mode'], ['beId', 'Basic event'], ['part', 'Part'], ['mode', 'Part failure mode'], ['linkedFcId', 'Failure condition'], ['localEffect', 'Local effect'], ['nextEffect', 'Next higher effect'], ['endEffect', 'End effect'], ['detection', 'Detection'], ['compensating', 'Compensating provisions'], ['remarks', 'Remarks']],
         update: [['table', 'Table'], ['_id', 'Row'], ['fields', 'Changes']],
         reply_comment: [['commentId', 'Comment'], ['text', 'Reply']],
         update_mac: [['id', 'MAC rule'], ['fields', 'Changes']],

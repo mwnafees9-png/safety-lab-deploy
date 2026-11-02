@@ -3708,6 +3708,20 @@ function revertLibraryEntry(key) {
 // Import the component library from CSV. Accepts the same columns the exporter writes
 // (Key, Name, Group, Lambda, Source). Built-in keys become overrides; novel keys become customs.
 function importComponentLibraryCSV(text) {
+    // 2 Nov 2026 (item 46): library_byol.js reads both shapes (parts with environment, quality, records, data date
+    // and a failure mode split; or an FMD style split file) and names every row it leaves out.
+    if (typeof SLLibraryByol !== 'undefined') {
+        const res = SLLibraryByol.apply(SLLibraryByol.parse(text));
+        refreshLibraryDependentNodes();
+        renderLibraryTable();
+        try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {}
+        const lines = [];
+        if (res.added || res.overridden) lines.push(res.added + ' new part' + (res.added === 1 ? '' : 's') + ', ' + res.overridden + ' replacing a built-in part.');
+        if (res.splits) lines.push(res.splits + ' failure mode split' + (res.splits === 1 ? '' : 's') + ' loaded.');
+        if (res.skipped.length) lines.push(res.skipped.length + ' left out:\n' + res.skipped.slice(0, 12).map(s => '  ' + (s.row ? 'row ' + s.row + ', ' : '') + s.key + ': ' + s.why).join('\n') + (res.skipped.length > 12 ? '\n  and ' + (res.skipped.length - 12) + ' more' : ''));
+        slAlert(lines.join('\n') || 'Nothing to load.', { title: 'Library import' });
+        return;
+    }
     const arr = csvToArray(text);
     if (arr.length < 2) throw new Error('Library CSV is empty or missing a header row.');
     const headers = arr[0].map(h => h.trim().toUpperCase());

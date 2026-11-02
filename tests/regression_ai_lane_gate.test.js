@@ -81,8 +81,10 @@ check('_applyFmea enforces at the accept, so every route answers',
   'classic panels do not cross the op dispatch; the accept is their seam');
 check('draftStpa gates before spending tokens',
   /function draftStpa\(\) \{[\s\S]{0,400}_aiLaneOn\('stpa'\)/.test(ai));
-check('draftFmea gates before the unified short-circuit',
-  /_aiLaneOn\('ppfmea'\)[\s\S]{0,600}_useUnifiedFeatures\(\)/.test((ai.match(/async function draftFmea\(opts\) \{[\s\S]{0,1200}/) || [''])[0]),
+// 2 Nov 2026 (item 48): the unified short-circuit is gone (it wrote item rows with no basic event); the gate must still come
+// before the first drafting call, which is now _runItemFmea.
+check('draftFmea gates before any drafting path (2 Nov 2026: _runItemFmea, the unified short-circuit removed)',
+  (function () { const b = (ai.match(/async function draftFmea\(opts\) \{[\s\S]{0,3000}/) || [''])[0]; const g = b.indexOf("_aiLaneOn('ppfmea')"), d = b.indexOf('_runItemFmea('); return g > 0 && d > g && b.indexOf('_anemBatch(') < 0; })(),
   'gating after the short-circuit would leave the primary path ungated — the 1 Aug reachability lesson');
 
 // ---- [4] ETA has no surface to gate — pinned --------------------------------

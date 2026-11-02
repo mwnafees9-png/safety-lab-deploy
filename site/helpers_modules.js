@@ -7764,6 +7764,9 @@ function computePiT(tjC, ea) {
 // Non-electronic sources (NSWC mechanical, NPRD/EPRD field data) skip π_T.
 function effectiveLambdaForLibraryEntry(entry) {
     if (!entry || !(entry.lambda > 0)) return 0;
+    // 2 Nov 2026 (item 46): NPRD / EPRD field rates are already stated for their environment and quality. Applying the
+    // project's factors on top would count the environment twice, so they are used exactly as published.
+    if (typeof SLLibraryByol !== 'undefined' && SLLibraryByol.asPublished(entry)) return entry.lambda;
     _ensureLibPredictionDefaults();
     const family = _sourceFamily(entry.source || '');
     // Phase 53.57/58 — only MIL-HDBK-217F has a parts-count π_T model among the bundled
@@ -7911,7 +7914,7 @@ function renderLibraryTable() {
             <td><span class="u-text-sm">${esc(def.category||'')}</span></td>
             <td><input type="number" step="any" min="0" value="${def.lambda}" onchange="onLibraryLambdaChange('${esc(key)}', this.value)" style="width: 130px; margin: 0; font-family: var(--font-mono); font-size: 12px;"></td>
             <td>${effDisplay}</td>
-            <td><span class="u-muted-small">${esc(def.source||'')}</span></td>
+            <td><span class="u-muted-small">${esc(def.source||'')}</span>${(typeof SLLibraryByol !== 'undefined' && (def.env || def.quality || def.records != null || def.dataDate || (def.modes && def.modes.length))) ? `<div class="u-muted-small" style="font-size:10.5px;">${esc(SLLibraryByol.detail(def).split(' · ').slice(1).join(' · '))}</div>` : ''}</td>
             <td>${status} ${action}${(libUsageCount[key] >= 2) ? ` <button class="action-btn btn-amber" onclick="createCcfGroupFromLibrary('${esc(key)}')" title="${libUsageCount[key]} basic events share this entry — create a β-factor CCF group">CCF group (${libUsageCount[key]})</button>` : ''}</td>
         </tr>`);
     });
@@ -7943,7 +7946,8 @@ function onLibStandardChange() {
             return e && e.source && (
                 e.source.indexOf(v) === 0 ||
                 (v === '217Plus 2015' && e.source.indexOf('217Plus') === 0) ||
-                (v === 'Siemens SN 29500' && (e.source.indexOf('SN 29500') === 0 || e.source.indexOf('Siemens') === 0))
+                (v === 'Siemens SN 29500' && (e.source.indexOf('SN 29500') === 0 || e.source.indexOf('Siemens') === 0)) ||
+                (v === 'NPRD/EPRD' && /^(NPRD|EPRD|FMD)\b/i.test(e.source))   // 2 Nov 2026 (item 46)
             );
         }));
         if (!hasImported) {

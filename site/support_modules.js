@@ -944,6 +944,7 @@ function _sourceFamily(source) {
     if(source.indexOf('Telcordia') === 0) return 'Telcordia SR-332';
     if(source.indexOf('Siemens') === 0 || source.indexOf('SN 29500') === 0) return 'Siemens SN 29500';
     if(source.indexOf('IEC TR 62380') === 0 || source.indexOf('IEC 62380') === 0) return 'IEC TR 62380';
+    if(/^(NPRD|EPRD|FMD)\b/i.test(source)) return 'NPRD/EPRD';   // 2 Nov 2026 (item 46): licensed field data, used as published
     // All FAA / NASA / NRC / MIL-HDBK-338B / 756B / AC 25.1309 entries are taken as published.
     return 'Public Domain';
 }
@@ -2599,9 +2600,11 @@ function _readFmeaForm() {
         const alphaFm = parseFloat(get('fmea-alpha-fm'));
         let rate = parseFloat(get('fmea-rate')) || 0;
         if (parentLibKey && !isNaN(alphaFm) && alphaFm > 0) {
-            const parent = (COMPONENT_LIBRARY[parentLibKey] || (projectConfig.customLibrary || {})[parentLibKey]);
-            if (parent && parent.lambda > 0) {
-                rate = parent.lambda * alphaFm;
+            // 2 Nov 2026 (item 46/48): the part's rate as the fault tree sees it (the imported copy before the built-in one,
+            // with the same factors), so the mode rates add back up to the event's rate.
+            const parentLam = (typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.partLambda(parentLibKey) : (((projectConfig.customLibrary || {})[parentLibKey] || COMPONENT_LIBRARY[parentLibKey] || {}).lambda || 0);
+            if (parentLam > 0) {
+                rate = parentLam * alphaFm;
                 const rateEl = document.getElementById('fmea-rate');
                 if (rateEl) rateEl.value = rate;
             }
@@ -2613,6 +2616,7 @@ function _readFmeaForm() {
             part: get('fmea-part'),
             mode: get('fmea-mode'),
             alphaFm: isNaN(alphaFm) ? null : alphaFm,
+            modeSource: _fmeaModeSource(parentLibKey, get('fmea-mode'), alphaFm),   // 2 Nov 2026 (item 48): where the split came from
             rate,
             time,
             prob: -Math.expm1(-rate * time)
@@ -2660,15 +2664,26 @@ function _writeFmeaForm(row) {
     }
 }
 
+// 2 Nov 2026 (item 48): the source of a row's mode share, when the mode and share are the part's published split
+function _fmeaModeSource(libKey, mode, alpha) {
+    if (!libKey || typeof SLLibraryByol === 'undefined') return '';
+    const sp = SLLibraryByol.splitFor(libKey); if (!sp) return '';
+    const k = String(mode || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const m = sp.modes.find(x => String(x.mode).trim().toLowerCase().replace(/\s+/g, ' ') === k);
+    return (m && Math.abs(Number(m.alphaFm) - Number(alpha)) < 1e-9) ? (m.source || sp.source || (sp.from === 'imported' ? 'imported split' : '')) : '';
+}
+
 // Phase 53.60 — populate the parent library dropdown. Filters to entries that
 // have a defined failure mode distribution (so the picker stays usable).
+// 2 Nov 2026 (item 48): includes the parts the customer imported a split for (library_byol.js).
 function _populateFmeaParentLib() {
     const sel = document.getElementById('fmea-parent-lib');
     if (!sel) return;
     const opts = ['<option value="">-- No parent (enter λ directly) --</option>'];
     const groups = {};
-    Object.keys(FAILURE_MODE_DISTRIBUTIONS).forEach(key => {
-        const entry = COMPONENT_LIBRARY[key];
+    const act = (typeof getActiveLibrary === 'function') ? getActiveLibrary() : COMPONENT_LIBRARY;
+    ((typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.keysWithSplit() : Object.keys(FAILURE_MODE_DISTRIBUTIONS)).forEach(key => {
+        const entry = act[key];
         if (!entry) return;
         const g = entry.group || 'Other';
         (groups[g] = groups[g] || []).push({ key, name: entry.name, lambda: entry.lambda });

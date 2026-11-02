@@ -270,11 +270,14 @@ function exportData(moduleName, format) {
             case 'Library': {
                 const active = getActiveLibrary();
                 return downloadCSV(file('Component_Library'),
-                    ['Key','Name','Group','Lambda','Source','Status'],
+                    ['Key','Name','Group','Lambda','Source','Environment','Quality','Records','Data_Date','Modes','Status'],
                     Object.entries(active).map(([key, def]) => {
                         const isCustom = !isBuiltinLibraryEntry(key);
                         const isOverride = !isCustom && projectConfig.customLibrary[key];
+                        // 2 Nov 2026 (item 46): the record detail and the split go out too, so the export loads back as it was.
                         return [key, def.name, def.group || '', def.lambda, def.source || '',
+                                def.env || '', def.quality || '', def.records != null ? def.records : '', def.dataDate || '',
+                                (typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.modesCell(def) : '',
                                 isCustom ? 'custom' : (isOverride ? 'override' : 'built-in')];
                     }));
             }
@@ -2233,11 +2236,13 @@ function _pdfDataForModule(moduleName) {
             if (typeof getActiveLibrary !== 'function') return null;
             const active = getActiveLibrary();
             return { title: 'Component Library',
-                headers: ['Key','Name','Group','λ','Source','Status'],
+                headers: ['Key','Name','Group','λ','Source','Environment','Quality','Records','Data date','Modes','Status'],
                 rows: Object.entries(active).map(([key, def]) => {
                     const isCustom = !isBuiltinLibraryEntry(key);
                     const isOverride = !isCustom && projectConfig.customLibrary[key];
                     return [key, def.name, def.group || '', def.lambda, def.source || '',
+                            def.env || '', def.quality || '', def.records != null ? def.records : '', def.dataDate || '',
+                            (typeof SLLibraryByol !== 'undefined') ? SLLibraryByol.modesCell(def) : '',
                             isCustom ? 'custom' : (isOverride ? 'override' : 'built-in')];
                 }) };
         }

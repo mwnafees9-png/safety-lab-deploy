@@ -887,7 +887,9 @@ const STANDARD_ENVIRONMENTS = {
     'FIDES 2022':         { 'BYOL': { label: 'Per imported CSV (Pro · BYOL consortium)',  piE: 1.0 } },
     'Telcordia SR-332':   { 'BYOL': { label: 'Per imported CSV (Pro · BYOL iconectiv)',   piE: 1.0 } },
     'Siemens SN 29500':   { 'BYOL': { label: 'Per imported CSV (Pro · BYOL Siemens AG)',  piE: 1.0 } },
-    'IEC TR 62380':       { 'BYOL': { label: 'Per imported CSV (Pro · BYOL IEC)',         piE: 1.0 } }
+    'IEC TR 62380':       { 'BYOL': { label: 'Per imported CSV (Pro · BYOL IEC)',         piE: 1.0 } },
+    // 2 Nov 2026 (item 46): NPRD / EPRD rates are field data already stated per environment; used as published.
+    'NPRD/EPRD':          { 'BYOL': { label: 'As published per row (Pro · BYOL Quanterion)', piE: 1.0 } }
 };
 
 // ==========================================
@@ -911,5 +913,6 @@ const STANDARD_QUALITIES = {
     'FIDES 2022':         { 'BYOL': { label: 'Per imported CSV (Pro · BYOL)', piQ: 1.0 } },
     'Telcordia SR-332':   { 'BYOL': { label: 'Per imported CSV (Pro · BYOL)', piQ: 1.0 } },
     'Siemens SN 29500':   { 'BYOL': { label: 'Per imported CSV (Pro · BYOL)', piQ: 1.0 } },
-    'IEC TR 62380':       { 'BYOL': { label: 'Per imported CSV (Pro · BYOL)', piQ: 1.0 } }
+    'IEC TR 62380':       { 'BYOL': { label: 'Per imported CSV (Pro · BYOL)', piQ: 1.0 } },
+    'NPRD/EPRD':          { 'BYOL': { label: 'As published per row (Pro · BYOL)', piQ: 1.0 } }
 };

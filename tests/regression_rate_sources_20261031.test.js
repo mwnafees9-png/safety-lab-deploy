@@ -19,7 +19,7 @@ function mutate(file, body) {
     if (MUT === 'notable' && file === 'reports.js') return body.split('|rate_sources_table|appendix:fta').join('|appendix:fta');
     if (MUT === 'nowarn' && file === 'helpers_modules.js') return body.replace("if (leaf && window.SLRateSources && window.SLRateSources.missing(node)) out.push(", "if (false) out.push(");
     if (MUT === 'anykey' && file === 'ai_assistant.js') return body.replace("if (!want[nid] || !lib[key]) return;", "if (!want[nid]) return;");
-    if (MUT === 'nolib' && file === 'rate_sources.js') return body.replace("if (n.inputMode === 'library' && n.libraryKey && _lib()[n.libraryKey]) { var e = _lib()[n.libraryKey]; return", "if (false) { var e; return");
+    if (MUT === 'nolib' && file === 'rate_sources.js') return body.replace("if (n.inputMode === 'library' && n.libraryKey && _lib()[n.libraryKey]) { var e = _lib()[n.libraryKey]; var dt", "if (false) { var e = {}; var dt");   // 2 Nov 2026: the line now builds the record detail (item 46)
     return body;
 }
 const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('timed out after ' + ms / 1000 + ' s: ' + what)), ms))]);
@@ -29,7 +29,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
     const iCK = HTML.indexOf('comment_kinds.js?v=1.0'), iAs = HTML.indexOf('assurance_modules.js?v=');
-    check('rate_sources.js v1.1 loads', /rate_sources\.js\?v=1\.1/.test(HTML));
+    check('rate_sources.js v1.2 loads (2 Nov 2026: the active library, so an imported part counts as a library source, item 46)', /rate_sources\.js\?v=1\.2/.test(HTML));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }
     const demo = require('./lib/demo_projects_all.js').all().find(d => d.key === 'showcase:kestrel');
     const CSP = (() => { const w = fs.readFileSync(path.join(__dirname, '..', 'worker.js'), 'utf8'); const m = /const CSP_POLICY = \[([\s\S]*?)\]\.join\('; '\)/.exec(w); return eval('[' + m[1] + ']').join('; '); })();

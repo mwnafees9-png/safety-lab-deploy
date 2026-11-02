@@ -20,7 +20,8 @@
     function S(v) { return String(v == null ? '' : v); }
     function E(v) { return S(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function _pages() { try { if (typeof ftaPages !== 'undefined' && Array.isArray(ftaPages)) return ftaPages.filter(function (p) { return !(p && p.integrated && p.integrated.sourcePageId != null); }); } catch (_) {} return []; }   // 1 Nov 2026 (item 42): an integrated tree is a view of its sources, never counted again (fta_integrated.js)
-    function _lib() { try { if (typeof COMPONENT_LIBRARY !== 'undefined') return COMPONENT_LIBRARY; } catch (_) {} return {}; }
+    // 2 Nov 2026 (item 46): the ACTIVE library, so a part the customer imported (NPRD, EPRD, their own) counts as a library source
+    function _lib() { try { if (typeof getActiveLibrary === 'function') return getActiveLibrary(); if (typeof COMPONENT_LIBRARY !== 'undefined') return COMPONENT_LIBRARY; } catch (_) {} return {}; }
     function _kids(n) { return (n && (n.children || n._children)) || []; }
     function _save() { try { if (typeof scheduleAutosave === 'function') scheduleAutosave(); } catch (_) {} }
     function _toast(m, k, ms) { try { if (typeof showToast === 'function') showToast(m, k || 'info', ms || 3500); } catch (_) {} }
@@ -38,7 +39,7 @@
     }
     function sourceOf(n) {
         if (!n) return null;
-        if (n.inputMode === 'library' && n.libraryKey && _lib()[n.libraryKey]) { var e = _lib()[n.libraryKey]; return { kind: 'library', ref: S(e.name) + (e.source ? ' (' + e.source + ')' : ''), date: '', auto: true }; }
+        if (n.inputMode === 'library' && n.libraryKey && _lib()[n.libraryKey]) { var e = _lib()[n.libraryKey]; var dt = (root.SLLibraryByol && (e.env || e.quality || e.records != null || e.dataDate)) ? root.SLLibraryByol.detail(e) : S(e.source); return { kind: 'library', ref: S(e.name) + (dt ? ' (' + dt + ')' : ''), date: S(e.dataDate), auto: true }; }
         var s = n.rateSource;
         return (s && KINDS[s.kind]) ? { kind: s.kind, ref: S(s.ref), date: S(s.date), cited: s.cited || undefined } : null;
     }
