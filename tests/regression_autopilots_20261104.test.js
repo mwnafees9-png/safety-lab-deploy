@@ -19,7 +19,7 @@
  *        event reaches together are asked about, and a shared rotor answer counts for every engine; an answer writes the
  *        risk's PRA row (adopted by its PRA id, praTyped kept, zones and systems from the model).
  *   [R]  both reports are written.
- * MUTATION PROOFS: SL_AP_MUTATE=fuelcomputer | adopt | signopen | shared | fragments | nextgate. Each turns this red.
+ * MUTATION PROOFS: SL_AP_MUTATE=fuelcomputer | adopt | signopen | calc | alt | inputs | nextgate. Each turns this red.
  * Run: node tests/regression_autopilots_20261104.test.js
  */
 'use strict';
@@ -32,8 +32,9 @@ const MUTS = {
   fuelcomputer: ['zsa_autopilot.js', "if (!elec && (/fuel/.test(lname) || sys === 'sys-fue'))", "if ((/fuel/.test(lname) || sys === 'sys-fue'))"],
   adopt:        ['zsa_autopilot.js', 'var row = rows.find(function (r) { return r && r.zoneId === code; });', 'var row = null;'],
   signopen:     ['zsa_autopilot.js', "var state = answered < n ? 'todo' : (open ? 'open' : (signed ? 'done' : 'ready'));", "var state = answered < n ? 'todo' : (signed ? 'done' : 'ready');"],
-  shared:       ['pra_autopilot.js', "Q.push({ id: (r.kind === 'ROTOR' ? 'rotor' : r.key) + ':lanes:'", "Q.push({ id: r.key + ':lanes:'"],
-  fragments:    ['pra_autopilot.js', "var frags = FRAG.filter(function (f) { return !f.optional || pick === 'ac+alt'; });", 'var frags = FRAG.filter(function (f) { return !f.optional; });'],
+  calc:         ['pra_autopilot.js', "calc = (r.calc && r.calc.groups[gk]) || null; if (!calc || calc.status === 'meets' || calc.status === 'clear') return; }", "calc = (r.calc && r.calc.groups[gk]) || { status: 'fails', models: {} }; }"],
+  alt:          ['pra_autopilot.js', "var frags = FRAG.filter(function (f) { return !f.optional || !!(_peekStore().settings || {}).alternate; });", 'var frags = FRAG.filter(function (f) { return !f.optional; });'],
+  inputs:       ['pra_autopilot.js', "        if (!(mass > 0)) return { ok: false, err: 'Enter the disc mass with its blades (kg), from the engine maker\\'s data.' };\n", ''],
   nextgate:     ['zsa_autopilot.js', "class=\"slap-btn p\" ' + (o ? '' : 'disabled') + ' onclick=\"SLZsaAuto.ui.step(", "class=\"slap-btn p\" ' + '' + ' onclick=\"SLZsaAuto.ui.step("]
 };
 if (MUT && !MUTS[MUT]) { console.error('unknown mutation ' + MUT); process.exit(3); }
@@ -120,18 +121,32 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
       check('a click on an answer picks it and Next becomes available', q2.picked && q2.next, JSON.stringify(q2));
 
       console.log('\n[P] the PRA Autopilot');
-      const P1 = await pg.evaluate(() => { const r = SLPraAuto.compute(); return { keys: r.risks.map((k) => k.key), kinds: [...new Set(r.risks.map((k) => k.kind))].sort(), frag: r.risks.filter((k) => k.questions.some((q) => q.id === 'rotor:fragments')).map((k) => k.key), hits1: r.byKey['rotor-1'].hits.length, tireLines: r.risks.filter((k) => k.kind === 'TIRE').some((k) => k.questions.some((q) => q.rule === 'LINES' && /H-A-0\d/.test(q.text) && /H-B-0\d/.test(q.text))), says: r.risks.every((k) => k.questions.every((q) => q.options.every((o) => o.impact && o.status))) }; });
+      const P1 = await pg.evaluate(() => { const r = SLPraAuto.compute(); return { keys: r.risks.map((k) => k.key), kinds: [...new Set(r.risks.map((k) => k.kind))].sort(), tireLines: r.risks.filter((k) => k.kind === 'TIRE').some((k) => k.questions.some((q) => q.rule === 'LINES' && /H-A-0\d/.test(q.text) && /H-B-0\d/.test(q.text))), says: r.risks.every((k) => k.questions.every((q) => q.options.every((o) => o.impact && o.status))), vouch: r.risks.some((k) => k.questions.some((q) => q.id === 'rotor:fragments' || q.options.some((o) => o.id === 'chance'))), r2: { ready: r.byKey['rotor-2'].inputsReady, q: r.byKey['rotor-2'].questions.length, st: SLPraAuto.riskStatus(r.byKey['rotor-2']) } }; });
       check('the risks on the model: four engine rotor bursts, tire burst, the fires, bird strike, lightning', ['rotor-1', 'rotor-2', 'rotor-3', 'rotor-4', 'bird', 'lightning'].every((k) => P1.keys.includes(k)) && JSON.stringify(P1.kinds) === JSON.stringify(['BIRD', 'FIRE', 'LIGHT', 'ROTOR', 'TIRE']), JSON.stringify(P1));
-      check('the fragments question is asked once, on the first engine', JSON.stringify(P1.frag) === JSON.stringify(['rotor-1']), JSON.stringify(P1.frag));
+      check('no question asks the engineer to vouch for a number the tool can work out (no "which fragments", no "the chance is within")', !P1.vouch);
+      check('a rotor burst starts with its disc numbers: nothing asked and nothing signed before they are in', P1.r2.ready === false && P1.r2.q === 0 && P1.r2.st.state === 'todo' && P1.r2.st.inputs === true, JSON.stringify(P1.r2));
       check('a tire burst that can cut both hydraulic lanes (A and B) is asked about', P1.tireLines);
       check('every PRA answer says what it changes', P1.says);
-      const P2 = await pg.evaluate(() => { SLPraAuto.answer('rotor:fragments', 'ac+alt'); const r = SLPraAuto.compute(); return { hits1: r.byKey['rotor-1'].hits.length, frags: r.byKey['rotor-1'].frags.map((f) => f.id) }; });
-      check('choosing the alternative fragment model too changes what every engine is checked with', P2.frags.includes('alternate') && P2.hits1 >= P1.hits1, JSON.stringify(P2) + ' vs ' + P1.hits1);
-      const P3 = await pg.evaluate(() => { const r = SLPraAuto.compute(); const q = r.byKey['rotor-2'].questions.find((x) => x.rule === 'LANES' || x.rule === 'LINES'); SLPraAuto.answer(q.id, 'shield'); const r2 = SLPraAuto.compute(); const inOthers = ['rotor-1', 'rotor-3', 'rotor-4'].filter((k) => r2.byKey[k].questions.some((x) => x.id === q.id)); return { id: q.id, inOthers, others: inOthers.map((k) => SLPraAuto.riskStatus(r2.byKey[k]).answered) }; });
-      check('a rotor burst lanes answer counts for every engine that reaches them', P3.inOthers.length >= 1 && P3.others.every((n) => n >= 1), JSON.stringify(P3));
-      const P4 = await pg.evaluate(() => { const row = praData.find((r) => r.praId === 'PRA-001'); return { n: praData.filter((r) => r.praId === 'PRA-001').length, zones: row.affectedZones, typed: row.praTyped && row.praTyped.desc, mit: row.mitigation, sys: row.systems, disp: row.disposition }; });
-      check('an answer writes the PRA-001 row in place: one row, zones and systems from the model', P4.n === 1 && P4.zones.includes('Z-NAC2') && /Electrical Power System/.test(P4.sys) && /Shield between/.test(P4.mit), JSON.stringify(P4));
+      // the inputs screen, by clicking: the numbers from the CAD model (and the demo's assumptions), then the calculation
+      await pg.evaluate(() => switchTab('pra')); await tick(1200);
+      await pg.click('#pra-auto-host [data-slap-rail="rotor-2"]'); await tick(400);
+      const I = await pg.evaluate(() => ({ fields: [...document.querySelectorAll('#pra-auto-host [data-pra-in]')].map((e) => e.getAttribute('data-pra-in')), dia: (document.querySelector('[data-pra-in="0:dia"]') || {}).value, mass: (document.querySelector('[data-pra-in="0:mass"]') || {}).value, demo: /demo assumption/.test(document.querySelector('#pra-auto-host').textContent) }));
+      check('the inputs screen shows each disc: position, diameter, blade length, fragment width, mass, redline, spin direction', ['0:cx', '0:dia', '0:blade', '0:width', '0:mass', '0:rpm', '0:rot', '1:dia'].every((f) => I.fields.includes(f)) && Number(I.dia) > 0, JSON.stringify(I));
+      check('...the demo\'s mass and speed are filled and marked as demo assumptions', Number(I.mass) > 0 && I.demo, JSON.stringify(I));
+      await pg.fill('[data-pra-in="0:mass"]', ''); await pg.click('#pra-auto-host [data-pra-save="rotor-2"]'); await tick(300);
+      check('a missing mass is refused in plain words, and nothing is worked out', await pg.evaluate(() => /Enter the disc mass/.test(document.querySelector('#pra-auto-host').textContent) && !SLPraAuto.compute().byKey['rotor-2'].inputsReady));
+      await pg.fill('[data-pra-in="0:mass"]', '450'); await pg.click('#pra-auto-host [data-pra-save="rotor-2"]'); await tick(600);
+      const C1 = await pg.evaluate(() => { const r = SLPraAuto.compute().byKey['rotor-2']; const g = r.calc.groups; return { ready: r.inputsReady, rotors: r.calc.rotors, statuses: Object.keys(g).map((k) => g[k].status), withNumbers: Object.keys(g).every((k) => Object.keys(g[k].models).length >= 3 && Object.values(g[k].models).every((m) => typeof m.share === 'number')), asked: r.questions.map((q) => q.rule + ':' + (r.calc.groups['u:' + (q.marks || []).map(() => '').join('')] ? '' : '') + q.why.slice(0, 40)), askedFor: r.questions.length, failOrSmall: Object.keys(g).filter((k) => g[k].status === 'fails' || g[k].status === 'small').length, stored: (projectConfig.praRotors || []).filter((x) => /^ap-/.test(x.id)).length, confirmed: (projectConfig.praRotors || []).filter((x) => /^ap-/.test(x.id)).every((x) => x.confirmedBy && x.confirms && x.confirms.mass && x.confirms.rpm && x.confirms.axialWidth), page: /The AC 20-128A calculation/.test(document.querySelector('#pra-auto-host').textContent) }; });
+      check('the numbers go into Safety Lab\'s rotor store, confirmed with who (the PRA panel sees the same rotors)', C1.stored >= 2 && C1.confirmed, JSON.stringify(C1));
+      check('the AC 20-128A sweep runs for both discs, and every lane set gets its share per fragment type', C1.ready && C1.rotors.length === 2 && C1.rotors.every((x) => x.ok) && C1.statuses.length >= 3 && C1.withNumbers, JSON.stringify(C1));
+      check('only lanes over the limit (or reached together by small pieces) are asked about; the rest are answered by the numbers', C1.askedFor === C1.failOrSmall && C1.statuses.some((x) => x === 'meets' || x === 'clear'), JSON.stringify(C1));
+      check('the page shows the calculation, lane by lane', C1.page);
+      const P4 = await pg.evaluate(() => { SLPraAuto.materialize('PRA-001'); const row = praData.find((r) => r.praId === 'PRA-001'); return { n: praData.filter((r) => r.praId === 'PRA-001').length, zones: row.affectedZones, typed: row.praTyped && row.praTyped.desc, mit: row.mitigation, sys: row.systems, desc: row.desc, calc: row.praCalc && row.praCalc['rotor-2'] }; });
+      check('the PRA-001 row is adopted in place, with the numbers: one row, zones and systems from the model, the calculation lane by lane', P4.n === 1 && P4.zones.includes('Z-NAC2') && /Electrical Power System/.test(P4.sys) && /AC 20-128A, .*%/.test(P4.desc) && Array.isArray(P4.calc) && P4.calc.length >= 3, JSON.stringify(P4).slice(0, 400));
+      check('...lanes within the limit are recorded as such, with no question', /Within AC 20-128A for /.test(P4.mit) || P4.calc.every((c) => c.status !== 'meets'), P4.mit);
       check('...what it said before is kept (praTyped)', /four rotor-burst planes/.test(P4.typed || ''), P4.typed);
+      const A1 = await pg.evaluate(() => { const n0 = SLPraAuto.compute().byKey['rotor-2'].frags.length; SLPraAuto.ui.alternate(true); const r = SLPraAuto.compute().byKey['rotor-2']; const out = { n0, n1: r.frags.length, models: Object.values(r.calc.groups)[0] ? Object.keys(Object.values(r.calc.groups)[0].models) : [] }; SLPraAuto.ui.alternate(false); return out; });
+      check('ticking the alternative model adds it to the calculation', A1.n1 === A1.n0 + 1 && A1.models.includes('alternate'), JSON.stringify(A1));
 
       console.log('\n[R] the reports');
       const R1 = await pg.evaluate(() => { window.__opened = []; SLZsaAuto.report(); SLPraAuto.report(); return window.__opened.map((h) => h.length + ':' + /Zonal Safety Analysis|Particular Risk Assessment/.exec(h)); });

@@ -313,7 +313,8 @@
         var basis = _s(opts.basis || _projBasis()).toLowerCase();
         var p23nc = _p23nc(basis), FAW = fragmentAxialWidth(r, C), fawOk = FAW.source === 'engineer';
         if (!fawOk) FAW = P(0, FAW.source === 'unconfirmed' ? 'unconfirmed' : 'missing', null, FAW.source === 'proposed' ? 'fragment axial width not entered (the CAD box proposes ' + FAW.value + ' mm: pre-fills the Step 1 input only): angles shown with no thickness; the risk results are refused until it is entered and confirmed' : FAW.note);
-        var parts = C.partsOf(m).filter(function (p) { return p && p.bbox && String(p.pid) !== r.pid; }).slice().sort(function (a, b) { return _cmp(a.pid, b.pid); })
+        var only = (opts.only && typeof opts.only === 'object') ? opts.only : null;   // 4 Nov 2026: the parts to check (the PRA Autopilot: the equipment and lines), every part when not given
+        var parts = C.partsOf(m).filter(function (p) { return p && p.bbox && String(p.pid) !== r.pid && (!only || only[String(p.pid)]); }).slice().sort(function (a, b) { return _cmp(a.pid, b.pid); })
             .map(function (p) { var g = _partTrisGeom(String(p.pid), F, r.center) || _partGeom(p, F, r.center);
                 // R9: the fragment has an axial width; a part is reached when any of the fragment's thickness meets it, so its
                 // elevation interval grows by the angle the fragment half-width subtends at the part's nearest distance

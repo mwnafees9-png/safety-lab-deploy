@@ -145,7 +145,10 @@
             '<div class="slap-why">' + (adding ? 'Adding the Aeolus HL-1 3D model to this project...' : E(what) + ' Import the CAD model and the zone list first. The table below still works by hand.') + '</div>' +
             '<div class="slap-nav">' + importButtons(false) + '</div></div>';
     }
+    // who answered: the signed-in person (4 Nov 2026: it read "Engineer" for a signed-in user)
     function who() {
+        try { var ss = (typeof _supabaseSession !== 'undefined' && _supabaseSession) || root._supabaseSession, u0 = ss && ss.user; if (u0 && u0.email) { var md = u0.user_metadata || {}; return md.full_name || md.name || u0.email; } } catch (_) {}
+        try { var me = root.SLAvatar && root.SLAvatar.me && root.SLAvatar.me(); if (me && me.name && me.name !== 'Someone') return me.name; } catch (_) {}
         try { if (typeof root._signoffReviewerName === 'function') { var n = root._signoffReviewerName(); if (n) return n; } } catch (_) {}
         try { var u = root.__slUser; if (u && (u.name || u.email)) return u.name || u.email; } catch (_) {}
         return 'Engineer';
