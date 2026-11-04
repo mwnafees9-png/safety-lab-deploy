@@ -69,9 +69,10 @@ const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } els
             const host = document.getElementById('zsa-analysis'), head = document.querySelector('#view-zsa .header-with-export'), res = SLZsaEngine.compute();
             const shown = [...host.querySelectorAll('[data-zsae-zone]')].map(d => d.getAttribute('data-zsae-zone'));
             const withOpenV = res.zones.filter(z => z.findings.some(id => { const f = res.findings.find(x => x.id === id); return f.severity === 'violation' && f.status === 'open'; })).map(z => z.zoneId);
-            return { text: host.innerText, under: head && head.nextSibling === host, s: res.summary, gaps: res.gaps.length, shown, withOpenV, color: getComputedStyle(host.querySelector('.zsae-text') || host).color };
+            return { text: host.innerText, under: head && (head.nextElementSibling === host || (head.nextElementSibling && head.nextElementSibling.id === 'zsa-auto-host' && head.nextElementSibling.nextElementSibling === host)), order: [...head.parentNode.children].slice(0, 4).map(e => e.id || e.className),   // 4 Nov 2026: the ZSA Autopilot comes first, then this panel
+                 s: res.summary, gaps: res.gaps.length, shown, withOpenV, color: getComputedStyle(host.querySelector('.zsae-text') || host).color };
         });
-        check('it sits right under the ZSA heading', A.under);
+        check('it sits right under the ZSA heading (after the ZSA Autopilot, 4 Nov 2026)', A.under, JSON.stringify(A.order));
         check('it says the totals the engine computes', new RegExp(A.s.zones + ' zones, ' + A.s.findings + ' findings: ' + A.s.violations + ' violations, ' + A.s.advisories + ' advisories').test(A.text), A.text.slice(0, 300));
         check('it says what the analysis is missing (the untyped run, the undeclared redundancy)', /What the analysis is missing/.test(A.text) && /W-RT-005 has no type/.test(A.text) && /no redundancy declared/.test(A.text));
         check('by default only the zones with open violations are listed', A.shown.length > 0 && J(A.shown.slice().sort()) === J(A.withOpenV.slice().sort()), J({ shown: A.shown.length, want: A.withOpenV.length }));

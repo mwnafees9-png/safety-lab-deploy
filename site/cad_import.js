@@ -1092,12 +1092,7 @@
             if (r.stream) {
                 // each real shape replaces its box in the model; the finished model replaces the
                 // cached first view, so the next open is complete
-                r.stream.on(function (b) { (b.protos || []).forEach(function (p) {
-                    r.model.protos[p.proto] = { position: p.position, index: p.index, normal: null, faces: p.faces || null };
-                    // the placed copies' boxes, worked out by the part reader with this shape (or dropped: a shape without them is boxed here)
-                    var pl = r.model.placed || (r.model.placed = {});
-                    if (p.placed && p.placed.idx && p.placed.box && p.placed.cen) pl[p.proto] = { idx: p.placed.idx, box: p.placed.box, cen: p.placed.cen, position: p.position }; else delete pl[p.proto];
-                }); });
+                _takeDetail(r);
                 r.stream.onEnd(function (e) {
                     if (e.type !== 'detail-done') return;
                     if (r.model.streaming) r.model.streaming.done = e.total;
@@ -1112,14 +1107,37 @@
             return { entry: entry, model: r.model, revision: reviseFrom(entry, o.by), worker: r.worker || null, stream: r.stream || null };
         });
     }
+    // Each real shape streamed in behind the first view replaces its box in the model (import and re-open alike).
+    function _takeDetail(r) {
+        r.stream.on(function (b) { (b.protos || []).forEach(function (p) {
+            r.model.protos[p.proto] = { position: p.position, index: p.index, normal: null, faces: p.faces || null };
+            // the placed copies' boxes, worked out by the part reader with this shape (or dropped: a shape without them is boxed here)
+            var pl = r.model.placed || (r.model.placed = {});
+            if (p.placed && p.placed.idx && p.placed.box && p.placed.cen) pl[p.proto] = { idx: p.placed.idx, box: p.placed.box, cen: p.placed.cen, position: p.position }; else delete pl[p.proto];
+        }); });
+    }
     // Geometry is missing on this computer: the user re-opens the STEP file. Its
     // fingerprint must match the project's record; nothing is downloaded.
+    // 4 Nov 2026: a large model streams its real shapes in behind the first view, as on import. They now go into the
+    // model, and the cache is written with the complete model once the stream ends. Before, the first view (every part a
+    // box) was cached and shown, and stayed boxes on that computer for good.
     function reopen(file, entry, opts) {
         opts = opts || {};
         var job = runWorker(file, Object.assign({}, opts, { expectSha: entry.sha256 }));
         var promise = job.promise.then(function (r) {
             if (r.sha256 !== entry.sha256) { var e = new Error('This file is not the one the model was imported from (fingerprints differ).'); e.code = 'mismatch'; throw e; }
             var cache = opts.cache || { put: cachePut, putStep: stepPut };
+            if (r.stream) {
+                _takeDetail(r);
+                r.stream.onEnd(function (ev) {
+                    if (ev.type !== 'detail-done') return;
+                    if (r.model.streaming) r.model.streaming.done = ev.total;
+                    setTimeout(function () { Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model))).then(function () { if (cache.putStep) return cache.putStep(r.sha256, file); }).catch(function () {}); }, 0);
+                });
+                var E0 = root.SLCadZonal;
+                if (entry.partStore === 'local' && E0 && E0.registerLocalParts) E0.registerLocalParts(entry.sha256, projectEntry(r.model, {}).parts);
+                return { entry: entry, model: r.model, worker: r.worker || null, stream: r.stream };
+            }
             return Promise.resolve(cache.put(r.sha256, _cachePayload(r.sha256, r.model)))
                 .then(function () { if (cache.putStep) return Promise.resolve(cache.putStep(r.sha256, file)).catch(function () {}); })
                 .then(function () {

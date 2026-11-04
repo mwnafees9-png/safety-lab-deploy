@@ -39,6 +39,30 @@
         return HL1_DOMAINS.indexOf(dom) >= 0;
     }
 
+    // 4 Nov 2026: the HL-1 carries its CAD model. demo/hl1_cad_data.js (made by tools/demo/hl1_cad/build_demo_cad.js with
+    // the CAD page's own engine) holds the parts, the 47 zones with their boxes, the part links and the risk volumes; the
+    // geometry itself comes from the bundled STEP (demo/hl1_cad_step.js), which the 3D view reads the first time it is
+    // needed on a computer, checked against the fingerprint like any re-opened file (cad_viewer.js, SLCadBundled).
+    var CAD_DATA_SRC = 'demo/hl1_cad_data.js?v=1', CAD_STEP_SRC = 'demo/hl1_cad_step.js?v=1';
+    function _loadScript(id, src) {
+        return new Promise(function (resolve, reject) {
+            var ex = document.getElementById(id);
+            if (ex) { if (ex.getAttribute('data-ok')) return resolve(); ex.addEventListener('load', function () { resolve(); }); ex.addEventListener('error', function () { reject(new Error(src + ' failed')); }); return; }
+            var s = document.createElement('script'); s.id = id; s.src = src;
+            s.onload = function () { s.setAttribute('data-ok', '1'); resolve(); };
+            s.onerror = function () { reject(new Error(src + ' failed')); };
+            document.head.appendChild(s);
+        });
+    }
+    function _addCad(data) {
+        var C = window.SL_HL1_CAD;
+        if (!C || !C.projectConfig || !data || !data.projectConfig) return false;
+        Object.keys(C.projectConfig).forEach(function (k) { data.projectConfig[k] = JSON.parse(JSON.stringify(C.projectConfig[k])); });
+        // the 3D view finds the geometry for this fingerprint in the bundled STEP
+        window.SLCadBundled = window.SLCadBundled || {};
+        window.SLCadBundled[C.sha256] = { fileName: C.fileName, label: 'the Aeolus HL-1 demo aircraft', text: function () { return _loadScript('sl-hl1-cad-step', CAD_STEP_SRC).then(function () { var S = window.SL_HL1_STEP; if (!S || S.sha256 !== C.sha256) throw new Error('The bundled demo model does not match.'); return S.text; }); } };
+        return true;
+    }
     function _ensureLoaded() {
         return new Promise(function (resolve, reject) {
             if (window.SL_SHOWCASE_HL1 && typeof window.SL_SHOWCASE_HL1.build === 'function') return resolve();
@@ -63,6 +87,7 @@
             return;
         }
         try { await _ensureLoaded(); } catch (_) {}
+        try { await _loadScript('sl-hl1-cad-data', CAD_DATA_SRC); } catch (_) {}   // the demo opens without it if it cannot load
         if (!(window.SL_SHOWCASE_HL1 && typeof window.SL_SHOWCASE_HL1.build === 'function')) {
             try { showToast('The HL-1 demo is unavailable in this build.', 'error', 3500); } catch (_) {}
             return;
@@ -70,6 +95,7 @@
         var data;
         try { data = window.SL_SHOWCASE_HL1.build(); }
         catch (err) { try { showToast('Could not build the demo: ' + ((err && err.message) || err), 'error', 4500); } catch (_) {} return; }
+        try { _addCad(data); } catch (_) {}
         try {
             if (typeof _applyProjectData === 'function') _applyProjectData(data);
             else if (typeof window._applyProjectData === 'function') window._applyProjectData(data);

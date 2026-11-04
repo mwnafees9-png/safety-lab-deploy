@@ -700,6 +700,19 @@
     // Geometry is not on this computer: ask for the file, verify, cache, show.
     P._askReopen = function (entry) {
         var self = this;
+        // 4 Nov 2026: a demo project's model whose STEP ships with the app (window.SLCadBundled, hl1_showcase.js) is read
+        // from there, with no file to pick; the fingerprint is checked as for any re-opened file
+        var B = root.SLCadBundled && entry && entry.sha256 ? root.SLCadBundled[entry.sha256] : null;
+        if (B && typeof B.text === 'function' && !this._bundledTried) {
+            this._bundledTried = true;
+            this._overlay('<div class="scv-card"><b>Loading the 3D model of ' + esc(B.label || entry.fileName) + '...</b><div class="scv-prog" style="display:block"><div></div></div><div data-reopen-msg style="margin-top:8px"></div></div>');
+            Promise.resolve().then(function () { return B.text(); }).then(function (text) {
+                var file; try { file = new File([text], B.fileName || entry.fileName, { type: 'application/step' }); } catch (_) { file = new Blob([text]); file.name = B.fileName || entry.fileName; }
+                return self.reopenWith(file, entry);
+            }).then(function (ok) { if (ok === false) self._askReopen(entry); else self._bundledTried = false; }, function () { self._askReopen(entry); });
+            return;
+        }
+        this._bundledTried = false;
         this._overlay('<div class="scv-card"><b>The geometry for ' + esc(entry.fileName) + ' is not on this computer.</b><br>' +
             'CAD geometry is kept only on the computer that read the file and is never uploaded. Open the same CAD file (STEP or IGES) from this computer to view it; it is checked against the project\'s fingerprint first.' +
             '<div style="margin-top:12px"><button type="button" class="scv-btn" data-reopen>Open the CAD file...</button></div><div class="scv-prog" style="display:none"><div></div></div><div data-reopen-msg style="font-size:12px;color:var(--scv-muted)"></div></div>');
@@ -720,6 +733,11 @@
         return job.promise.then(function (r) {
             self._job = null;
             if (r.worker && root.SLCadExact) root.SLCadExact.attach(r.worker, entry);
+            // 4 Nov 2026: a large model's real shapes stream in behind the first view (as on import, cad_page.js)
+            if (r.stream) {
+                r.stream.onEnd(function () { if (r.stream.worker && root.SLCadExact) root.SLCadExact.attach(r.stream.worker, entry); });
+                return self.showModel(entry, r.model).then(function (v) { r.stream.on(function (b) { self.applyDetail(b.protos); }); return v; });
+            }
             return self.showModel(entry, r.model);
         }, function (e) {
             self._job = null;

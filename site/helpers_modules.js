@@ -1477,11 +1477,23 @@ function _cssZoomOf(el) {
     return z || 1;
 }
 
-async function saveProject() {
-    // 26 Oct 2026 (desktop, customer report): the native Save As, the same as File > Save As, so the shell knows the file and
-    // every confirmed save from now on goes back to it (save_state.js). The browser keeps its download below.
+async function saveProjectAs() {
+    // 4 Nov 2026 (desktop): choose another file; from then on confirmed work saves there. The browser has one Save (a download).
     if (typeof window !== 'undefined' && window.slabProjectFile && typeof window.slabProjectFile.saveAs === 'function') {
         try { await window.slabProjectFile.saveAs(); } catch (e) { showToast('Save failed: ' + ((e && e.message) || e), 'error', 5000); }
+        return;
+    }
+    return saveProject();
+}
+async function saveProject() {
+    // 4 Nov 2026 (Radia, desktop 0.21.23): Save Project is the same as File > Save: with a project file open it writes
+    // to that file and asks nothing; only with none does the shell ask where (Save As). It was Save As every time, so
+    // Windows asked "already exists, do you want to replace it?" on every save. Save Project As... asks.
+    // (26 Oct 2026: the shell knows the file either way, so every confirmed save from then on goes back to it.)
+    // The browser keeps its download below.
+    if (typeof window !== 'undefined' && window.slabProjectFile && (typeof window.slabProjectFile.save === 'function' || typeof window.slabProjectFile.saveAs === 'function')) {
+        const P = window.slabProjectFile;
+        try { await (typeof P.save === 'function' ? P.save() : P.saveAs()); } catch (e) { showToast('Save failed: ' + ((e && e.message) || e), 'error', 5000); }
         return;
     }
     // Phase 42 — beta build watermark + timestamp now travel inside _slabBuildProjectExport().
@@ -13066,6 +13078,7 @@ function _writeAutosave() {
                 if (_am.unacked) meta.unacked = true;
                 if (_am.cloudPending) meta.cloudPending = true;
                 if (_am.acceptedId) meta.acceptedId = _am.acceptedId;
+                if (_am.fileLink) meta.fileLink = _am.fileLink;   // 4 Nov 2026: which project file this project saves to (desktop)
             }
         } catch (_) {}
         // 31 Aug 2026 — the autosave slot restores the DATA on resume but used to

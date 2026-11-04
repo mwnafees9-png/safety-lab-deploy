@@ -155,6 +155,25 @@
     var _fileEpoch = 0;          // which project is open (see above)
     var _fileName = null;        // the file the shell saves this project to (its name only; the shell owns the path)
     var _fileFail = null;        // { name, reason, code }: the last write to that file failed
+    // 4 Nov 2026 (Radia, desktop 0.21.23): the shell remembers the file across a restart. It gives each file link a
+    // token; the token rides in this device's autosave meta (fileLink), so after a restart the project brought back
+    // from the autosave says which file it belongs to, and the shell links it again only when that file is the one
+    // it last wrote (window.__slabProjectFileLink). Before: a restart forgot the file, confirmed work said "Saved"
+    // and never reached the .sl, and Project > Save Project asked "already exists, overwrite?" every time.
+    var _fileToken = null;       // the shell's token for the file this project saves to
+    var _recoveredLink = null;   // the token the autosave carried when this project was brought back after a restart
+    var _broughtBack = false;    // the project on screen came back from this device's autosave (a restart, a reload)
+    // Desktop only: the work is kept in the app on this computer and nowhere else (no file, no server). Said plainly,
+    // never as a bare "Saved", and a click saves it to a file (Save As).
+    function _unlinked() {
+        if (!_pf() || _fileName || _fileFail) return false;
+        return (_state === 'saved' && _where === 'device') || (_state === 'idle' && _broughtBack);
+    }
+    function _saveToFile() {
+        var P = _pf(); if (!P) return Promise.resolve(false);
+        var f = (typeof P.save === 'function') ? P.save : P.saveAs;   // an older shell has Save As only
+        try { return Promise.resolve(f.call(P)).then(function (r) { return !!(r && r.ok); }, function () { return false; }); } catch (_) { return Promise.resolve(false); }
+    }
     function _pf() { try { var P = W.slabProjectFile; return (P && typeof P.write === 'function') ? P : null; } catch (_) { return null; } }
     function _fileShort(code) { return ({ ENOENT: 'file not found', ENODIR: 'folder not reachable', READONLY: 'read-only', EROFS: 'read-only', ENOSPC: 'disk full', EBUSY: 'file locked', EPERM: 'file locked', EACCES: 'file locked' })[code] || 'could not write'; }
     // The confirmed project as the file holds it, taken NOW (at the start of a save): the .sl export when nothing
@@ -192,7 +211,12 @@
     function _fileState(s) {
         s = s || {};
         if (s.epoch != null && s.epoch !== _fileEpoch) return;   // about a project no longer open
+        var hadToken = _fileToken;
         _fileName = s.name || null;
+        _fileToken = (s.name && typeof s.token === 'string' && s.token) ? s.token : (s.name ? _fileToken : null);
+        if (_fileToken) _recoveredLink = null;
+        // the link goes into this device's autosave meta now, so a restart brings the project back still knowing its file
+        if (_fileToken && _fileToken !== hadToken) _refreshLinkMeta();
         if (s.saved && s.name) {   // File > Save / Save As just wrote the whole project there
             _fileFail = null;
             if (_state === 'error' && _reasonCode === 'file') {
@@ -230,6 +254,10 @@
             cls = 'error';
             text = 'Not saved: ' + (_state === 'offline' ? 'offline' : _short(_reasonCode)) + '. Retry';
             title = 'Not saved: ' + _reason + '. ' + (_localFail ? 'Your changes are still on screen; do not close this tab.' : 'Your changes are kept on this device and will be uploaded ' + (_state === 'offline' ? 'when you are back online' : 'automatically') + '. Click to retry now.');
+        } else if (_unlinked()) {
+            cls = 'error';
+            text = 'On this computer only. Save to a file';
+            title = 'Your confirmed work is kept in the app on this computer, but it is not in a project file. Click to choose where to save it. After that, every confirmed change saves to that file.';
         } else if (_state === 'saved') {
             text = 'Saved ' + (_fileName ? 'to ' + _fileName + ' ' : '') + _hhmm(_savedAt);
             title = 'Saved ' + (_where === 'cloud' ? 'on this device and to the cloud' : (_where === 'team' ? 'on this device and shared with your team' : 'on this device')) + (_fileName ? ' and to the file ' + _fileName : '') + ' at ' + _hhmm(_savedAt) + '. Confirmed changes save automatically.';
@@ -288,7 +316,11 @@
     }
     // what the autosave meta carries (helpers_modules._writeAutosave)
     var _metaUnacked = false;     // the last autosave meta written said something was waiting
-    function autosaveMeta() { var h = holdsSync(); _metaUnacked = h; return { unacked: h, cloudPending: _cloudPending, acceptedId: h ? _acceptedId : null }; }
+    function autosaveMeta() { var h = holdsSync(); _metaUnacked = h; return { unacked: h, cloudPending: _cloudPending, acceptedId: h ? _acceptedId : null, fileLink: _fileName ? _fileToken : null }; }
+    // the autosave meta written again (as the app's own change, nothing to confirm) so it carries the file link
+    function _refreshLinkMeta() {
+        try { var A = _ack(), run = function () { if (typeof W._writeAutosave === 'function') W._writeAutosave(); }; if (A && A.system) A.system(run); else run(); } catch (_) {}
+    }
     // Nothing waits any more but the last meta on this device still says it did (a change decided as the
     // app's own, or taken back): write it again, so a reload never offers back what nobody has to confirm.
     function _refreshMeta() {
@@ -448,6 +480,8 @@
             if (r0 === 'keep') { _paint(); return false; }
             if (r0 === 'confirmed' && _saving) return _saving;   // Confirm all started the save already: one save, not two
         }
+        // 4 Nov 2026 (desktop): the work is in the app only: Save chooses the file (once); from then on it saves there
+        if (_unlinked() && !(A && A.pending())) { var sv = await _saveToFile(); _paint(); return sv; }
         // 26 Oct 2026 (desktop): the project file was not written: Retry, or Save As to another file
         if (_fileFail && _pf() && !(A && A.pending())) {
             var fc = await choice({
@@ -510,7 +544,7 @@
         _state = 'idle'; _reason = ''; _reasonCode = ''; _savedAt = 0; _where = '';
         // 26 Oct 2026 (desktop): another project is open now: the file the last one saved to is not its file. The shell
         // unbinds it (it keeps a file only for the epoch it was bound to), and nothing of this project goes there.
-        _fileEpoch++; _fileFail = null; _fileName = null;
+        _fileEpoch++; _fileFail = null; _fileName = null; _fileToken = null; _recoveredLink = null; _broughtBack = false;
         try { var P = _pf(), pr = (P && typeof P.replaced === 'function') ? P.replaced(_fileEpoch) : null; if (pr && typeof pr.catch === 'function') pr.catch(function () {}); } catch (_) {}
         _paint();
     }
@@ -519,6 +553,8 @@
     function recovered(meta, restored) {
         var A = _ack(); if (A) A.settle();
         meta = meta || {};
+        _recoveredLink = (typeof meta.fileLink === 'string' && meta.fileLink) ? meta.fileLink : null;
+        _broughtBack = true;
         // a copy, now: the restore adopted the parsed stores by reference, and the app keeps writing to them
         if (meta.unacked && restored) { try { restored = (typeof restored === 'string') ? JSON.parse(restored) : JSON.parse(JSON.stringify(restored)); } catch (_) { restored = null; } }   // the restore as stored (the apply normalizes parsed rows in place)
         if (meta.cloudPending) {
@@ -703,6 +739,9 @@
     if (typeof window !== 'undefined') {
         window.__slabOpenProjectFile = function (str) { return openProjectFileText(str); };
         // File > Save / Save As: the whole project as the .sl export, with the epoch the shell binds the file to
+        // 4 Nov 2026: after a restart or reload, which file link the project on screen carries (the shell links the file
+        // again only for this token, and only when the file is still the one it last wrote)
+        window.__slabProjectFileLink = function () { return { epoch: _fileEpoch, token: _fileToken || _recoveredLink || null, linked: !!_fileName }; };
         window.__slabProjectFileSnapshot = function () { return { json: (typeof W.__slabGetProjectJSON === 'function') ? String(W.__slabGetProjectJSON() || '') : '', epoch: _fileEpoch }; };
     }
     // The Project menu's "Load Project" and the welcome card click the hidden file input: in the desktop that is the
@@ -716,8 +755,10 @@
     // which file the shell saves this project to (its name), now and whenever it changes
     (function () {
         var P = _pf(); if (!P) return;
+        // 4 Nov 2026: the Project menu's Save Project As... exists in the desktop only
+        try { var sa = document.getElementById('pm-save-as'); if (sa && typeof P.saveAs === 'function') sa.style.display = ''; } catch (_) {}
         try { if (typeof P.onState === 'function') P.onState(_fileState); } catch (_) {}
-        try { var s = (typeof P.status === 'function') ? P.status() : null; if (s && typeof s.then === 'function') s.then(function (x) { if (x && x.ok && x.name) _fileState({ name: x.name, epoch: x.epoch }); }, function () {}); } catch (_) {}
+        try { var s = (typeof P.status === 'function') ? P.status() : null; if (s && typeof s.then === 'function') s.then(function (x) { if (x && x.ok && x.name) _fileState({ name: x.name, epoch: x.epoch, token: x.token }); }, function () {}); } catch (_) {}
     })();
 
     W.__slabCanClose = function () { return !_needsGuard(); };
@@ -731,7 +772,7 @@
         renderIndicator: renderIndicator, autosaveMeta: autosaveMeta, pendingCount: _collectedCount, EXPORTS: EXPORTS,
         whenSaved: function () { return _saving || Promise.resolve(!(_cloudPending || _localFail || _fileFail)); },
         status: function () { return { state: _state, savedAt: _savedAt, where: _where, reason: _reason, reasonCode: _reasonCode, cloudPending: _cloudPending, localFail: _localFail, waiting: waiting(), saving: !!_saving, collected: _collectedCount(), acceptedId: _acceptedId, file: { name: _fileName, epoch: _fileEpoch, fail: _fileFail ? JSON.parse(JSON.stringify(_fileFail)) : null }, stats: JSON.parse(JSON.stringify(_stats)) }; },
-        openProjectFile: openProjectFileText, _fileState: _fileState,
+        openProjectFile: openProjectFileText, _fileState: _fileState, saveToFile: _saveToFile,
         _ackOpened: _ackOpened, _ackClosed: _ackClosed, _wrapAll: _wrapAll, _allowUnload: function (v) { _allowUnload = !!v; }, _paint: _paint,
         ACCEPTED_KEY: ACCEPTED_KEY, RETRY_MS: RETRY_MS
     };
