@@ -172,8 +172,9 @@ function exportData(moduleName, format) {
                 // worksheet (natural ascending fcId, phase groups clustered).
                 const _acOrd = (typeof _fhaGroupRows === 'function') ? _fhaGroupRows(acFhaData).ordered : acFhaData;
                 return downloadCSV(file('AC_FHA'),
-                    ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments','Model Links'],
-                    _acOrd.map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments, _ml('acFha', r)]));
+                    // 4 Nov 2026: why each row carries its severity, beside the comments (it was missing from the exports)
+                    ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Why this severity','Comments','Model Links'],
+                    _acOrd.map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.severityRationale || '', r.comments, _ml('acFha', r)]));
             }
             case 'AC_Requirements':
                 return downloadCSV(file('AC_Requirements'),
@@ -205,8 +206,8 @@ function exportData(moduleName, format) {
                 if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
                 const _sysOrd = (typeof _fhaGroupRows === 'function') ? _fhaGroupRows(sys().fha).ordered : sys().fha;
                 return downloadCSV(file(`${sys().name}_FHA`),
-                    ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments','Model Links'],
-                    _sysOrd.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments, _ml('sysFha', r)]));
+                    ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Why this severity','Comments','Model Links'],
+                    _sysOrd.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.severityRationale || '', r.comments, _ml('sysFha', r)]));
             }
             case 'Sys_Requirements': {
                 if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return; }
@@ -787,7 +788,7 @@ function importTabularCSV(text, moduleName) {
             const assumptionIds = asmIdsRaw
                 ? asmIdsRaw.split(';').map(s => s.trim()).filter(Boolean)
                 : (parseAssumptionField(legacyAsm).id ? [parseAssumptionField(legacyAsm).id] : []);
-            _ndUp(acFhaData, { internalId: newId, subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) }, 'fha');
+            _ndUp(acFhaData, { internalId: newId, subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']), ...(getValue(row, ['Why this severity']) ? { severityRationale: getValue(row, ['Why this severity']) } : {}) }, 'fha');   // 4 Nov 2026: the reason comes back from its own column (never blanked by a file without it)
         } else if(moduleName === 'AC_Requirements') {
             acReqData.push({ internalId: newId, traceId: getValue(row, ['Trace']), level: getValue(row, ['Level']), type: getValue(row, ['Type']), text: getValue(row, ['Requirement Statement']), rat: getValue(row, ['Rationale']) });
         } else if(moduleName === 'Sys_Functions') {
@@ -813,7 +814,7 @@ function importTabularCSV(text, moduleName) {
             const assumptionIds = asmIdsRaw
                 ? asmIdsRaw.split(';').map(s => s.trim()).filter(Boolean)
                 : (parseAssumptionField(legacyAsm).id ? [parseAssumptionField(legacyAsm).id] : []);
-            _ndUp(sys().fha, { internalId: newId, acTrace: getValue(row, ['AC Trace']), subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']) }, 'fha');
+            _ndUp(sys().fha, { internalId: newId, acTrace: getValue(row, ['AC Trace']), subId: getValue(row, ['Sub-Function']), fcId: getValue(row, ['FC ID']), fcDesc: getValue(row, ['Failure Condition']), phases: getValue(row, ['Phases']), effAc: effA, effCrew: effC, effPax: effP, effAcLevel: _axisLvl('ac', getValue(row, ['Aircraft Level'])), effCrewLevel: _axisLvl('crew', getValue(row, ['Crew Level'])), effPaxLevel: _axisLvl('pax', getValue(row, ['Pax Level'])), severity: getValue(row, ['Severity']), assumptionIds, comments: getValue(row, ['Comments']), ...(getValue(row, ['Why this severity']) ? { severityRationale: getValue(row, ['Why this severity']) } : {}) }, 'fha');   // 4 Nov 2026: the reason comes back from its own column (never blanked by a file without it)
         } else if(moduleName === 'Sys_Requirements') {
             sys().req.push({ internalId: newId, traceId: getValue(row, ['Trace']), level: getValue(row, ['Level']), type: getValue(row, ['Type']), text: getValue(row, ['Requirement Statement']), rat: getValue(row, ['Rationale']) });
         } else if(moduleName === 'PRA') {
@@ -2127,8 +2128,8 @@ function _pdfDataForModule(moduleName) {
                 rows: (acFcimData || []).map(r => (typeof _fcimExportRow === 'function' ? _fcimExportRow : (r => [r.subId, r.awareness, r.tlId, r.tlDesc, r.plId, r.plDesc, r.mId, r.mDesc]))(r)) };   // 26 Oct 2026: N/A with its reason
         case 'AC_FHA':
             return { title: 'Aircraft FHA',
-                headers: ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
-                rows: (acFhaData || []).map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments]) };
+                headers: ['Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Why this severity','Comments'],
+                rows: (acFhaData || []).map(r => [r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.severityRationale || '', r.comments]) };
         case 'AC_Requirements':
             return { title: 'Aircraft Safety Requirements',
                 headers: ['Trace','Level','Type','Requirement Statement','Rationale'],
@@ -2158,8 +2159,8 @@ function _pdfDataForModule(moduleName) {
         case 'Sys_FHA': {
             if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }
             return { title: sName + ' FHA',
-                headers: ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Comments'],
-                rows: sys().fha.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.comments]) };
+                headers: ['AC Trace','Sub-Function','FC ID','Failure Condition','Phases','Effect on Aircraft','Effect on Crew','Effect on Pax','Aircraft Level','Crew Level','Pax Level','Severity','Assumption IDs','Why this severity','Comments'],
+                rows: sys().fha.map(r => [r.acTrace, r.subId, r.fcId, r.fcDesc, r.phases, r.effAc, r.effCrew, r.effPax, _axisShow('ac', r.effAcLevel), _axisShow('crew', r.effCrewLevel), _axisShow('pax', r.effPaxLevel), r.severity, (r.assumptionIds || []).join('; '), r.severityRationale || '', r.comments]) };
         }
         case 'Sys_Requirements': {
             if (!sys()) { showToast('Open a system folder first.', 'warning', 4000); return null; }

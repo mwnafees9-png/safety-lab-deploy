@@ -403,7 +403,7 @@ check('pin: helpers ≥2.58 (floor, rule 12)', parseFloat((idx.match(/helpers_mo
     // 5 Sep 2026 (Waqas): "effects and comments columns much wider" — 480px / 34%, and the
     // AC table's Comments cell opens with the group finding when there is one.
     (helpers.match(/<td style="min-width:480px;width:34%;">\$\{effectsHtml\}<\/td>/g) || []).length === 2
-    && (helpers.match(/<td style="min-width:480px;width:34%;">(\$\{_findingHtml\})?\$\{_fhaCommentsCell\(row\)\}<\/td>/g) || []).length === 2
+    && (helpers.match(/<td style="min-width:480px;width:34%;">(\$\{_findingHtml\})?\$\{_fhaCommentsCell\(row\)\}(\$\{_fhaWhyHtml\(row\)\})?<\/td>/g) || []).length === 2   // 4 Nov 2026: the severity reason follows the comments
     && (helpers.match(/style="width:1%;white-space:nowrap;">\$\{sevPillHtml\(row\.severity, \{ dal: true \}\)\}/g) || []).length === 2
     && (helpers.match(/<td style="width:1%;white-space:nowrap;">\$\{_fhaPhasesCell\(row\)\}/g) || []).length === 2);
 }

@@ -59,7 +59,10 @@ const readGlobal = (file, name) => { const w = {}; new Function('window', fs.rea
     } catch (e) { same = 'build failed: ' + String(e.stderr || e).slice(0, 300); }
     check('build_demo_cad.js rebuilt elsewhere gives the same data (made by Safety Lab\'s own code, deterministic)', same === true, same);
     const idx = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('the cache keys moved with the change', /hl1_showcase\.js\?v=9"/.test(idx) && /cad_viewer\.js\?v=2\.8"/.test(idx) && /cad_import\.js\?v=2\.6"/.test(idx));
+    // floors, not exact pins: later changes move the keys on again
+    const pinOf = (f) => { const m = new RegExp(f.replace('.', '\\.') + '\\?v=([0-9.]+)"').exec(idx); return m ? m[1].split('.').map(Number) : [0]; };
+    const atLeast = (v, min) => { for (let i = 0; i < Math.max(v.length, min.length); i++) { const a = v[i] || 0, b = min[i] || 0; if (a !== b) return a > b; } return true; };
+    check('the cache keys moved with the change (hl1_showcase 9, cad_viewer 2.8, cad_import 2.6 or later)', atLeast(pinOf('hl1_showcase.js'), [9]) && atLeast(pinOf('cad_viewer.js'), [2, 8]) && atLeast(pinOf('cad_import.js'), [2, 6]));
   }
   try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {}
 

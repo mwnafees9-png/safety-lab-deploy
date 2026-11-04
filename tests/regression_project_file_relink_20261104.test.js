@@ -132,7 +132,10 @@ function boot(opts) {
     check('Save Project in the desktop is the shell\'s save() (the open file; asks only with none)', /typeof P\.save === 'function' \? P\.save\(\) : P\.saveAs\(\)/.test(sp), sp.slice(0, 400));
     check('Save Project As... calls the shell\'s Save As', /async function saveProjectAs\(\) \{[\s\S]*?window\.slabProjectFile\.saveAs\(\)/.test(hm));
     check('the Project menu has Save Project As..., hidden until the desktop shows it', /<div id="pm-save-as" class="sl-desktop-only" style="display:none" onclick="saveProjectAs\(\)">/.test(idx));
-    check('the cache keys moved with the change', /save_state\.js\?v=3\.6"/.test(idx) && /helpers_modules\.js\?v=3\.63"/.test(idx));
+    // a floor, not an exact pin: later changes to these files move the keys on again
+    const pinOf = (f) => { const m = new RegExp(f.replace('.', '\\.') + '\\?v=([0-9.]+)"').exec(idx); return m ? m[1].split('.').map(Number) : [0]; };
+    const atLeast = (v, min) => { for (let i = 0; i < Math.max(v.length, min.length); i++) { const a = v[i] || 0, b = min[i] || 0; if (a !== b) return a > b; } return true; };
+    check('the cache keys moved with the change (save_state 3.6 or later, helpers_modules 3.63 or later)', atLeast(pinOf('save_state.js'), [3, 6]) && atLeast(pinOf('helpers_modules.js'), [3, 63]));
     // a helpers_modules meta written in a VM carries the link
     const fn = (hm.match(/function _writeAutosave\(\) \{[\s\S]*?\n\}/) || [''])[0];
     check('_writeAutosave is found', fn.length > 500);
