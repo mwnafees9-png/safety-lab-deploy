@@ -58,11 +58,63 @@
         var C = window.SL_HL1_CAD;
         if (!C || !C.projectConfig || !data || !data.projectConfig) return false;
         Object.keys(C.projectConfig).forEach(function (k) { data.projectConfig[k] = JSON.parse(JSON.stringify(C.projectConfig[k])); });
-        // the 3D view finds the geometry for this fingerprint in the bundled STEP
-        window.SLCadBundled = window.SLCadBundled || {};
-        window.SLCadBundled[C.sha256] = { fileName: C.fileName, label: 'the Aeolus HL-1 demo aircraft', text: function () { return _loadScript('sl-hl1-cad-step', CAD_STEP_SRC).then(function () { var S = window.SL_HL1_STEP; if (!S || S.sha256 !== C.sha256) throw new Error('The bundled demo model does not match.'); return S.text; }); } };
+        _register();   // the 3D view finds the geometry for this fingerprint in the bundled STEP
         return true;
     }
+    // 4 Nov 2026 (Waqas: "prefeed the model in aeolus demo"): an Aeolus HL-1 project that has no
+    // CAD model (a copy saved before the model was bundled, on the web or in the desktop) gets it added when it opens,
+    // through the CAD page's own engine (cad_zonal.js): the zone boxes by code, the model, the part links, the risk volumes.
+    // Nothing else in the project changes. Any Aeolus project whose model is the bundled one finds its geometry in the
+    // bundled STEP. A newer model can still be imported on the CAD page or from the Autopilots.
+    function _pcNow() { try { if (window.SLEnv && SLEnv.get) { var v = SLEnv.get('projectConfig'); if (v) return v; } } catch (_) {} try { return projectConfig; } catch (_) { return window.projectConfig || null; } }
+    function _isAeolus() { var n = ''; try { n = (window.SLEnv && SLEnv.get) ? SLEnv.get('projectName') : ''; } catch (_) {} if (!n) { try { n = projectName; } catch (_) {} } return /^Aeolus HL-1\b/.test(String(n || '')); }
+    function _register() {
+        var C = window.SL_HL1_CAD; if (!C) return;
+        window.SLCadBundled = window.SLCadBundled || {};
+        window.SLCadBundled[C.sha256] = { fileName: C.fileName, label: 'the Aeolus HL-1 demo aircraft', text: function () { return _loadScript('sl-hl1-cad-step', CAD_STEP_SRC).then(function () { var S = window.SL_HL1_STEP; if (!S || S.sha256 !== C.sha256) throw new Error('The bundled demo model does not match.'); return S.text; }); } };
+    }
+    var _ensuring = null;
+    function ensureCad() {
+        if (_ensuring) return _ensuring;
+        if (!_isAeolus()) return Promise.resolve(false);
+        _ensuring = _loadScript('sl-hl1-cad-data', CAD_DATA_SRC).then(function () {
+            var C = window.SL_HL1_CAD, E = window.SLCadZonal, pc = _pcNow();
+            if (!C || !C.projectConfig || !E || !pc || !_isAeolus()) return false;
+            _register();
+            if (Array.isArray(pc.cadModels) && pc.cadModels.length) return false;   // it has a model (this one or a newer one): left alone
+            var run = function () {
+                var D = C.projectConfig, zs = D.zones || [], byId = {}; zs.forEach(function (z) { byId[z.id] = z; });
+                var rows = zs.filter(function (z) { return z.volume && z.volume.kind === 'box'; }).map(function (z) { var p = z.parentId && byId[z.parentId] ? byId[z.parentId].code : ''; return { code: z.code, name: z.name, parentCode: p, xMin: z.volume.min[0], xMax: z.volume.max[0], yMin: z.volume.min[1], yMax: z.volume.max[1], zMin: z.volume.min[2], zMax: z.volume.max[2] }; });
+                rows.sort(function (a, b) { return (a.parentCode ? 1 : 0) - (b.parentCode ? 1 : 0); });   // parents first
+                E.importZoneList(rows);
+                var m0 = (D.cadModels || [])[0]; if (!m0) return false;
+                var r = E.addCadModel({ fileName: m0.fileName, sha256: m0.sha256, revision: m0.revision, importedAt: m0.importedAt, units: 'mm', parts: m0.parts });
+                if (!r || !r.ok) return false;
+                Object.keys(D.cadLinks || {}).forEach(function (k) { var L = D.cadLinks[k]; if (L && L.sysId && L.pid) E.confirmLink(r.model.id, L.pid, L.sysId, L.by || 'Aeolus demo', { on: L.on || 'system', at: L.at }); });
+                (D.praVolumes || []).forEach(function (v) { if (!(E.riskVolumes() || []).some(function (x) { return x.label === v.label; })) E.addRiskVolume({ kind: v.kind, shape: v.shape, label: v.label, source: v.source || 'manual', praId: v.praId }); });
+                try { if (typeof window.scheduleAutosave === 'function') window.scheduleAutosave(); } catch (_) {}
+                return true;
+            };
+            var A = window.SLChangeAck, ok = (A && typeof A.system === 'function') ? A.system(run) : run();
+            if (ok) {
+                try { if (window.SLZsaAuto) { SLZsaAuto.reset(); SLZsaAuto.render(); } if (window.SLPraAuto) { SLPraAuto.reset(); SLPraAuto.render(); } } catch (_) {}
+                try { if (typeof showToast === 'function') showToast('The Aeolus HL-1 3D model, its zones and risk areas were added to this project.', 'info', 5000); } catch (_) {}
+            }
+            return !!ok;
+        }, function () { return false; }).then(function (v) { _ensuring = null; return v; }, function () { _ensuring = null; return false; });
+        return _ensuring;
+    }
+    // every project load (a file, the cloud, a restore, the autosave) goes through _applyProjectData
+    function _hookLoads() {
+        var orig = window._applyProjectData;
+        if (typeof orig !== 'function' || orig._slHl1Cad) return !!(orig && orig._slHl1Cad);
+        var w = function () { var r = orig.apply(this, arguments); setTimeout(function () { ensureCad(); }, 0); return r; };
+        w._slHl1Cad = true;
+        try { if (window.SLWrap) window.SLWrap.preserve(orig, w); } catch (_) {}
+        window._applyProjectData = w;
+        return true;
+    }
+    (function () { var n = 0, t = setInterval(function () { if (_hookLoads() || ++n > 60) { clearInterval(t); setTimeout(function () { ensureCad(); }, 1500); } }, 250); })();
     function _ensureLoaded() {
         return new Promise(function (resolve, reject) {
             if (window.SL_SHOWCASE_HL1 && typeof window.SL_SHOWCASE_HL1.build === 'function') return resolve();
@@ -110,5 +162,6 @@
     }
 
     window.loadHL1Demo = loadHL1Demo;
+    window.SLHl1Cad = { ensure: ensureCad, isAeolus: _isAeolus };
     window.slHL1Visible = isVisible;
 })();

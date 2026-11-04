@@ -286,14 +286,14 @@
         // the Autopilot is the first thing under the ZSA heading; the computed analysis panel (zsa_engine_ui.js) follows it
         try { var hd = h.parentNode && h.parentNode.querySelector('.header-with-export'); if (hd && hd.nextSibling !== h) h.parentNode.insertBefore(h, hd.nextSibling); } catch (_) {}
         var res = compute();
-        if (!res) { h.innerHTML = '<div class="slap slap-card"><div class="slap-head"><span class="slap-title">ZSA Autopilot</span></div><div class="slap-sub">The ZSA Autopilot works the zonal analysis out from the CAD model. Import the CAD model and the zone list first (Common cause, ZSA, CAD Model). The table below still works by hand.</div></div>'; return; }
+        if (!res) { h.innerHTML = U().emptyCard('ZSA Autopilot', 'The ZSA Autopilot works the zonal analysis out from the CAD model.'); return; }
         var tot = { q: 0, a: 0, open: 0, done: 0 };
         res.zones.forEach(function (z) { var s = zoneStatus(z); tot.q += s.questions; tot.a += s.answered; tot.open += s.open; if (s.state === 'done') tot.done++; });
         var items = res.zones.map(function (z) { var s = zoneStatus(z); return { key: z.code, label: z.code + ' ' + z.name, sub: s.questions ? (s.answered + ' of ' + s.questions + ' answered' + (s.open ? ', ' + s.open + ' open' : '') + (s.state === 'done' ? ', signed' : '')) : (s.state === 'done' ? 'nothing to ask, signed' : 'nothing to ask'), state: s.state === 'done' ? 'done' : (s.open ? 'open' : 'todo'), on: state.zone === z.code }; });
         var body = state.zone && res.byCode[state.zone] ? _zoneHtml(res, res.byCode[state.zone]) : _overviewHtml(res, tot);
         h.innerHTML = '<div class="slap slap-card" data-zsa-auto="1">' +
             '<div class="slap-head"><span class="slap-title">ZSA Autopilot</span><span class="slap-sub">' + res.zones.length + ' zones, ' + tot.q + ' questions, ' + tot.a + ' answered, ' + tot.open + ' open, ' + tot.done + ' zones signed</span>' + U().progress(tot.a, tot.q) +
-            '<button type="button" class="slap-btn" onclick="SLZsaAuto.ui.report()">Write the ZSA report</button></div>' +
+            '<button type="button" class="slap-btn" onclick="SLZsaAuto.ui.report()">Write the ZSA report</button>' + U().importButtons(true) + '</div>' +
             '<div class="slap-grid"><div>' + U().rail(items, 'SLZsaAuto.ui.zone') + '</div><div data-zsa-auto-body="1">' + body + '</div></div></div>';
     }
     function _overviewHtml(res, tot) {

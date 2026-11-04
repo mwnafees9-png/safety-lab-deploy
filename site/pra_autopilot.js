@@ -262,13 +262,13 @@
         var h = _host(); if (!h || !U()) return;
         U().style();
         var res = compute();
-        if (!res) { h.innerHTML = '<div class="slap slap-card"><div class="slap-head"><span class="slap-title">PRA Autopilot</span></div><div class="slap-sub">The PRA Autopilot works the particular risks out on the CAD model. Import the CAD model and the zone list first (Common cause, ZSA, CAD Model). The table below still works by hand.</div></div>'; return; }
+        if (!res) { h.innerHTML = U().emptyCard('PRA Autopilot', 'The PRA Autopilot works the particular risks out on the CAD model.'); return; }
         var tot = { q: 0, a: 0, open: 0, done: 0 };
         res.risks.forEach(function (r) { var s = riskStatus(r); tot.q += s.questions; tot.a += s.answered; tot.open += s.open; if (s.state === 'done') tot.done++; });
         var items = res.risks.map(function (r) { var s = riskStatus(r); return { key: r.key, label: r.title, sub: r.hits.length + ' units reached, ' + (s.questions ? s.answered + ' of ' + s.questions + ' answered' : 'nothing to ask') + (s.open ? ', ' + s.open + ' open' : '') + (s.state === 'done' ? ', signed' : ''), state: s.state === 'done' ? 'done' : (s.open ? 'open' : 'todo'), on: state.risk === r.key }; });
         var body = state.risk && res.byKey[state.risk] ? _riskHtml(res, res.byKey[state.risk]) : _overviewHtml(res, tot);
         h.innerHTML = '<div class="slap slap-card" data-pra-auto="1"><div class="slap-head"><span class="slap-title">PRA Autopilot</span><span class="slap-sub">' + res.risks.length + ' risks, ' + tot.q + ' questions, ' + tot.a + ' answered, ' + tot.open + ' open, ' + tot.done + ' signed</span>' + U().progress(tot.a, tot.q) +
-            '<button type="button" class="slap-btn" onclick="SLPraAuto.ui.report()">Write the PRA report</button></div>' +
+            '<button type="button" class="slap-btn" onclick="SLPraAuto.ui.report()">Write the PRA report</button>' + U().importButtons(true) + '</div>' +
             '<div class="slap-grid"><div>' + U().rail(items, 'SLPraAuto.ui.risk') + '</div><div data-pra-auto-body="1">' + body + '</div></div></div>';
     }
     function _overviewHtml(res, tot) {

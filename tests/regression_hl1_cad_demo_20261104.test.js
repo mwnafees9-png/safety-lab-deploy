@@ -9,7 +9,11 @@
  *        model from the bundled STEP with no file to pick (checked against the fingerprint); the real shapes stream in and
  *        the complete model is cached (4 Nov fix: a re-opened large model was cached and shown as boxes for good); the
  *        next visit draws from the cache without reading the bundled STEP again.
- * MUTATION PROOFS: SL_CD_MUTATE=bundle | stream | adddata. Each turns this red.
+ *   [O]  an Aeolus HL-1 copy saved before the model (no CAD model, zones without boxes) gets the model, the zone boxes,
+ *        the links and the risk volumes when it opens, as the app's own change (nothing to confirm), and both Autopilots
+ *        start; a project that is not the Aeolus demo is left alone and its Autopilots offer the import buttons; with a
+ *        model, the Autopilots still offer "Import a newer CAD model" (Waqas: "the button should still be there").
+ * MUTATION PROOFS: SL_CD_MUTATE=bundle | stream | adddata | ensure | buttons. Each turns this red.
  * Run: node tests/regression_hl1_cad_demo_20261104.test.js
  */
 'use strict';
@@ -21,7 +25,9 @@ const MUT = process.env.SL_CD_MUTATE || '';
 const MUTS = {
   bundle:  ['cad_viewer.js', 'if (B && typeof B.text === \'function\' && !this._bundledTried) {', 'if (false) {'],
   stream:  ['cad_import.js', '            if (r.stream) {\n                _takeDetail(r);\n                r.stream.onEnd(function (ev) {', '            if (r.stream && false) {\n                _takeDetail(r);\n                r.stream.onEnd(function (ev) {'],
-  adddata: ['hl1_showcase.js', '        try { _addCad(data); } catch (_) {}', '']
+  adddata: ['hl1_showcase.js', '        try { _addCad(data); } catch (_) {}', ''],
+  ensure:  ['hl1_showcase.js', '        var w = function () { var r = orig.apply(this, arguments); setTimeout(function () { ensureCad(); }, 0); return r; };', '        var w = function () { return orig.apply(this, arguments); };'],
+  buttons: ['autopilot_ui.js', "            '<div class=\"slap-nav\">' + importButtons(false) + '</div></div>';", "            '</div>';"]
 };
 if (MUT && !MUTS[MUT]) { console.error('unknown mutation ' + MUT); process.exit(3); }
 function src(name) { let s = fs.readFileSync(path.join(SITE, name), 'utf8'); const m = MUTS[MUT]; if (m && m[0] === name) { if (s.indexOf(m[1]) < 0) throw new Error('mutation site missing: ' + m[1]); s = s.replace(m[1], m[2]); } return s; }
@@ -53,7 +59,7 @@ const readGlobal = (file, name) => { const w = {}; new Function('window', fs.rea
     } catch (e) { same = 'build failed: ' + String(e.stderr || e).slice(0, 300); }
     check('build_demo_cad.js rebuilt elsewhere gives the same data (made by Safety Lab\'s own code, deterministic)', same === true, same);
     const idx = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('the cache keys moved with the change', /hl1_showcase\.js\?v=8"/.test(idx) && /cad_viewer\.js\?v=2\.8"/.test(idx) && /cad_import\.js\?v=2\.6"/.test(idx));
+    check('the cache keys moved with the change', /hl1_showcase\.js\?v=9"/.test(idx) && /cad_viewer\.js\?v=2\.8"/.test(idx) && /cad_import\.js\?v=2\.6"/.test(idx));
   }
   try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (_) {}
 
@@ -107,6 +113,27 @@ const readGlobal = (file, name) => { const w = {}; new Function('window', fs.rea
       await pg.evaluate(() => switchTab('cad')); await tick(6000);
       const again = await pg.evaluate(() => { const v = SLCadPage.state.viewer; return { has: !!(v && v.scene3), ov: v && v.$ && v.$.overlay ? v.$.overlay.textContent.slice(0, 80) : '' }; });
       check('the next visit draws from this computer\'s cache, without reading the bundled STEP again', again.has && !/not on this computer/.test(again.ov) && stepServed === before, JSON.stringify(again) + ' served ' + before + ' -> ' + stepServed);
+      await pg.close();
+
+      console.log('\n[O] an Aeolus copy saved before the model, and the import buttons');
+      const ctx2 = await b.newContext({ viewport: { width: 1500, height: 1000 } });
+      const pg2 = await ctx2.newPage(); pg2.on('pageerror', (e) => errs.push(String(e).slice(0, 200))); pg2.on('dialog', (d) => d.dismiss().catch(() => {}));
+      await pg2.goto(URL); await tick(5000);
+      await pg2.evaluate(() => { document.documentElement.classList.remove('sl-auth-gate-blocked'); const g = document.getElementById('sl-auth-gate'); if (g) g.remove(); });
+      await pg2.addStyleTag({ content: '#signup-modal{display:none!important} .modal-overlay{display:none!important}' });
+      // a project that is not the demo first: nothing added, the Autopilots offer the import buttons
+      await pg2.evaluate(() => { window._applyProjectData({ projectName: 'Another aircraft', systemsData: [], acFhaData: [], projectConfig: {} }); });
+      await tick(3000);
+      const other = await pg2.evaluate(() => { switchTab('zsa'); return new Promise((r) => setTimeout(() => r({ models: (projectConfig.cadModels || []).length, empty: !!document.querySelector('#zsa-auto-host [data-slap-empty]'), btns: [...document.querySelectorAll('#zsa-auto-host [data-slap-import]')].map((b) => b.getAttribute('data-slap-import')) }), 1200)); });
+      check('a project that is not the Aeolus demo is left alone, and its Autopilot offers Import a CAD model, Import a zone list, Open the CAD Model page', other.models === 0 && other.empty && JSON.stringify(other.btns) === JSON.stringify(['cad', 'zones', 'page']), JSON.stringify(other));
+      await pg2.evaluate(async () => { await new Promise((res) => { const s = document.createElement('script'); s.src = 'demo_showcase_hl1.js?v=7'; s.onload = res; document.head.appendChild(s); }); const d = SL_SHOWCASE_HL1.build(); window._applyProjectData(d); });
+      await tick(6000);
+      const O = await pg2.evaluate(() => ({ models: (projectConfig.cadModels || []).map((m) => m.sha256), boxes: (projectConfig.zones || []).filter((z) => z.volume).length, links: Object.keys(projectConfig.cadLinks || {}).length, vols: (projectConfig.praVolumes || []).length, ack: SLChangeAck.count(), zsa: !!SLZsaAuto.compute(), pra: !!SLPraAuto.compute(), fha: acFhaData.length }));
+      check('an Aeolus copy saved before the model gets the model, the zone boxes, the links and the risk volumes when it opens', O.models.length === 1 && O.models[0] === stepSha && O.boxes === 47 && O.links >= 200 && O.vols === 10, JSON.stringify(O));
+      check('...as the app\'s own change (nothing for the person to confirm), and the rest of the project untouched', O.ack === 0 && O.fha > 0, JSON.stringify(O));
+      check('...and both Autopilots start', O.zsa && O.pra);
+      const withModel = await pg2.evaluate(() => { switchTab('zsa'); return new Promise((r) => setTimeout(() => r([...document.querySelectorAll('#zsa-auto-host [data-slap-import]')].map((b) => b.textContent)), 1200)); });
+      check('with a model the Autopilot still offers "Import a newer CAD model" and a zone list', withModel[0] === 'Import a newer CAD model' && withModel.length === 3, JSON.stringify(withModel));
       check('no page errors', errs.length === 0, errs.slice(0, 3).join(' | '));
     } finally { await b.close(); srv.close(); }
   }

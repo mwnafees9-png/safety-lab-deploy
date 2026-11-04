@@ -155,7 +155,7 @@
     var _fileEpoch = 0;          // which project is open (see above)
     var _fileName = null;        // the file the shell saves this project to (its name only; the shell owns the path)
     var _fileFail = null;        // { name, reason, code }: the last write to that file failed
-    // 4 Nov 2026 (Radia, desktop 0.21.23): the shell remembers the file across a restart. It gives each file link a
+    // 4 Nov 2026 (customer report, desktop 0.21.23): the shell remembers the file across a restart. It gives each file link a
     // token; the token rides in this device's autosave meta (fileLink), so after a restart the project brought back
     // from the autosave says which file it belongs to, and the shell links it again only when that file is the one
     // it last wrote (window.__slabProjectFileLink). Before: a restart forgot the file, confirmed work said "Saved"

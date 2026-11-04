@@ -127,6 +127,24 @@
         }).join('') + '</div>';
     }
     function progress(done, total) { var f = total ? Math.round(100 * done / total) : 0; return '<div class="slap-progress" title="' + done + ' of ' + total + '"><i style="width:' + f + '%"></i></div>'; }
+    // 4 Nov 2026 (Waqas: "the button should still be there, in case users want to import newer models"): the import
+    // buttons on both Autopilots, the CAD page's own import (a new revision of the model, or a zone list)
+    function importCad() { try { if (typeof root.switchTab === 'function') root.switchTab('cad'); } catch (_) {} try { if (typeof root.cadImportStep === 'function') root.cadImportStep(); } catch (_) {} }
+    function importZones() { try { if (typeof root.switchTab === 'function') root.switchTab('cad'); } catch (_) {} try { if (typeof root.cadImportZones === 'function') root.cadImportZones(); } catch (_) {} }
+    function openCad() { try { if (typeof root.switchTab === 'function') root.switchTab('cad'); } catch (_) {} }
+    function importButtons(hasModel) {
+        return '<button type="button" class="slap-btn' + (hasModel ? '' : ' p') + '" data-slap-import="cad" onclick="SLAutopilotUI.importCad()">' + (hasModel ? 'Import a newer CAD model' : 'Import a CAD model (STEP or IGES)') + '</button>' +
+            '<button type="button" class="slap-btn" data-slap-import="zones" onclick="SLAutopilotUI.importZones()">Import a zone list</button>' +
+            '<button type="button" class="slap-btn" data-slap-import="page" onclick="SLAutopilotUI.openCad()">Open the CAD Model page</button>';
+    }
+    // what an Autopilot shows with no CAD model yet: what to do, with the buttons; the Aeolus demo adds its own
+    function emptyCard(title, what) {
+        var adding = !!(root.SLHl1Cad && root.SLHl1Cad.isAeolus && root.SLHl1Cad.isAeolus());
+        if (adding) { try { root.SLHl1Cad.ensure(); } catch (_) {} }
+        return '<div class="slap slap-card" data-slap-empty="1"><div class="slap-head"><span class="slap-title">' + E(title) + '</span></div>' +
+            '<div class="slap-why">' + (adding ? 'Adding the Aeolus HL-1 3D model to this project...' : E(what) + ' Import the CAD model and the zone list first. The table below still works by hand.') + '</div>' +
+            '<div class="slap-nav">' + importButtons(false) + '</div></div>';
+    }
     function who() {
         try { if (typeof root._signoffReviewerName === 'function') { var n = root._signoffReviewerName(); if (n) return n; } } catch (_) {}
         try { var u = root.__slUser; if (u && (u.name || u.email)) return u.name || u.email; } catch (_) {}
@@ -141,6 +159,6 @@
         try { var b = new Blob([doc], { type: 'text/html' }), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = title.replace(/[^\w-]+/g, '_') + '.html'; a.click(); } catch (_) {}
         return false;
     }
-    root.SLAutopilotUI = { VERSION: VERSION, E: E, style: style, picture: picture, question: question, pill: pill, rail: rail, progress: progress, who: who, save: save, openReport: openReport };
+    root.SLAutopilotUI = { VERSION: VERSION, E: E, importCad: importCad, importZones: importZones, openCad: openCad, importButtons: importButtons, emptyCard: emptyCard, style: style, picture: picture, question: question, pill: pill, rail: rail, progress: progress, who: who, save: save, openReport: openReport };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLAutopilotUI;
 })(typeof window !== 'undefined' ? window : globalThis);

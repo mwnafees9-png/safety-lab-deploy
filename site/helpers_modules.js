@@ -1486,7 +1486,7 @@ async function saveProjectAs() {
     return saveProject();
 }
 async function saveProject() {
-    // 4 Nov 2026 (Radia, desktop 0.21.23): Save Project is the same as File > Save: with a project file open it writes
+    // 4 Nov 2026 (customer report, desktop 0.21.23): Save Project is the same as File > Save: with a project file open it writes
     // to that file and asks nothing; only with none does the shell ask where (Save As). It was Save As every time, so
     // Windows asked "already exists, do you want to replace it?" on every save. Save Project As... asks.
     // (26 Oct 2026: the shell knows the file either way, so every confirmed save from then on goes back to it.)
