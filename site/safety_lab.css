@@ -6085,3 +6085,16 @@ body.sl-fta-integrated #fta-config-panel button { pointer-events: none !importan
 .sl-dc-sets, .sl-dc-branch ul { margin: 4px 0 8px 18px; padding: 0; font-size: 12px; }
 .sl-dc-sets li, .sl-dc-branch li { margin: 2px 0; }
 .sl-dc-branch { border-top: 1px solid var(--border-primary); padding-top: 6px; margin-top: 6px; font-size: 12px; }
+
+/* 5 Nov 2026: the row an edit came from, lit for a moment when Save or Cancel brings the page back to it */
+tr.sl-row-flash > td { background: rgba(255, 210, 80, .28) !important; transition: background .4s; }
+
+/* 5 Nov 2026 (table_find.js): the find bar Ctrl+F opens, top right like the browser's own */
+.sl-find-bar { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 99990; display: none; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; background: var(--color-surface, #fff); color: var(--color-text-primary, #16213A); border: 1px solid var(--color-border-hair, rgba(0,0,0,.18)); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.18); font-size: 13px; max-width: min(520px, 94vw); }
+.sl-find-bar input { width: 240px; height: 30px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--color-border-hair, rgba(0,0,0,.25)); border-radius: 6px; font: inherit; background: var(--color-surface-2, #F3F5F9); color: inherit; }
+.sl-find-bar button { height: 30px; min-width: 30px; border: 1px solid var(--color-border-hair, rgba(0,0,0,.18)); border-radius: 6px; background: var(--color-surface-2, #F3F5F9); color: inherit; cursor: pointer; font-size: 14px; }
+.sl-find-count { min-width: 74px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sl-find-count.none { color: var(--color-danger, #b42318); font-weight: 600; }
+.sl-find-scope { flex-basis: 100%; font-size: 11.5px; }
+mark.sl-find-hit { background: #FFE27A; color: inherit; border-radius: 2px; padding: 0 1px; }
+tr.sl-find-row > td { box-shadow: inset 0 0 0 9999px rgba(255, 226, 122, .18); }

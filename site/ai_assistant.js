@@ -1846,19 +1846,21 @@
             const norm = function (v) { return String(v || '').replace(/\s+/g, ' ').trim().toLowerCase(); };
             const descMap = {};
             const condOf = function (a) { return (a && a.op === 'add_fha') ? (a.srcCondId || descMap[norm(a.fcDesc)] || null) : null; };
+            const _fill = _fhaFillSetup(opts, sy.id);   // 5 Nov 2026: fill the missing phases only
             const go = function (picked) {
                 picked.forEach(function (e) { descMap[norm(e.desc)] = e.id; });
                 const subs = []; picked.forEach(function (e) { if (e.subId && subs.indexOf(String(e.subId)) < 0) subs.push(String(e.subId)); });
                 return _anemBatch(_sysFhaDirective(sy, true), Object.assign({}, base, {
                     thread: { scope: 'system', systemId: sy.id, funcKeys: subs },
                     specSecs: _specSecsForSubIds(subs),
-                    systemExtra: _SYS_FHA_COND_EXTRA + _fhaEscapesClause() + mac,
+                    systemExtra: _SYS_FHA_COND_EXTRA + _fhaEscapesClause() + (_fill ? _fill.extra : _fhaProfileClause(null)) + mac,
+                    shapeActions: _fill ? function (acts) { return _fill.shape(acts, condOf); } : null,
                     chunk: {
                         units: picked, size: 5, noun: 'failure condition',
                         keyOf:     function (e) { return e.id; },
                         label:     function (e) { return e.id + ' — ' + String(e.desc || '').slice(0, 80) + ' (function ' + String(e.subId || '') + ')'; },
                         coveredBy: condOf,
-                        gapsOf:    function (acts) { return _fhaPhaseGaps(picked, acts, condOf); },
+                        gapsOf:    function (acts) { return _fhaPhaseGaps(picked, _fill ? acts.concat(_fill.have) : acts, condOf); },
                         extraOf:   function (slice) { return _fhaDerivedClause(slice, sy.id); }
                     }
                 }));
@@ -1903,6 +1905,51 @@
     }
 
     // 5 Sep 2026 (lever 3) — the escapes clause the FHA prompts carry, from the mission profile.
+    /* 5 Nov 2026 (Waqas, on Radia's FHA: "it completely left out Cruise ... till Brian went in and had to update it
+       manually"). Three things, each on its own not enough:
+         · the exact mission profile goes into every FHA turn, so the model never works from a phase list it assumed;
+         · the phase-coverage follow-up runs until no phase is left or a pass adds nothing (it ran once);
+         · "fill the missing phases" drafts only the phases a condition does not have yet, the rows already there (and
+           the phases marked does-not-apply) counted as covered, anything else the model returns dropped.
+       What is still unassessed after all that is flagged on the FHA table itself (fha_phase_cover.js), not only on
+       the review panel. */
+    function _fhaProfileClause(only) {
+        const prof = _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); });
+        if (!prof.length) return '';
+        return '\n\nTHE MISSION PROFILE (this project\'s flight phases, exactly these, verbatim): ' + prof.join(', ') + '. For each failure condition, EVERY one of these phases is placed on exactly one row; none is skipped because it seems less relevant (Cruise and the ground phases included). "All phases" stands for all of them.'
+            + (only ? '\n\nFILL THE MISSING PHASES ONLY: for the conditions below, rows already cover the other phases. Return add_fha rows ONLY for the phases listed against each condition (group the listed phases that share effects and class onto one row); never return a row naming a phase not listed for its condition.\n' + Object.keys(only).map(function (k) { return '- ' + k + ': ' + only[k].join(', '); }).join('\n') : '');
+    }
+    // the rows already in the FHA for the conditions being filled, as add_fha actions, so the coverage check counts them
+    function _fhaFillSetup(opts, systemId) {
+        const only = opts && opts.onlyPhases && typeof opts.onlyPhases === 'object' ? opts.onlyPhases : null;
+        if (!only || !Object.keys(only).length) return null;
+        let rows = [];
+        try { rows = systemId ? (((snapshot().systemsData || []).find(function (x) { return x && String(x.id) === String(systemId); }) || {}).fha || []) : (snapshot().acFhaData || []); } catch (_) { rows = []; }
+        if (systemId && !rows.length && typeof window !== 'undefined' && window.SLPhaseCover) { try { rows = window.SLPhaseCover.rowsOf('sys', systemId) || []; } catch (_) {} }
+        const have = [];
+        Object.keys(only).forEach(function (cond) {
+            rows.filter(function (r) { return r && String(r.sourceCondId || r.srcCondId || r.fcId || '').trim() === cond; }).forEach(function (r) { have.push({ op: 'add_fha', srcCondId: cond, phases: String(r.phases || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean), _existing: 1 }); });
+            const na = (typeof window !== 'undefined' && window.SLPhaseCover) ? window.SLPhaseCover.naPhases(rows, cond) : [];
+            if (na.length) have.push({ op: 'add_fha', srcCondId: cond, phases: na, _existing: 1 });
+        });
+        const keyP = function (x) { return String(x == null ? '' : x).toLowerCase().replace(/[^a-z0-9]+/g, ''); };
+        return {
+            only: only, have: have, extra: _fhaProfileClause(only),
+            // keep only the phases asked for, per condition; an action left with none is dropped
+            shape: function (acts, condOf) {
+                return (acts || []).filter(function (a) {
+                    if (!a || a.op !== 'add_fha') return true;
+                    const want = only[condOf(a)]; if (!want) return false;
+                    const wk = want.map(keyP);
+                    const ph = Array.isArray(a.phases) ? a.phases : String(a.phases || '').split(',');
+                    const kept = ph.map(function (x) { return String(x).trim(); }).filter(function (x) { return /^all phases$/i.test(x) ? false : wk.indexOf(keyP(x)) >= 0; });
+                    const all = ph.some(function (x) { return /^all phases$/i.test(String(x).trim()); });
+                    a.phases = all ? want.slice() : kept;
+                    return a.phases.length > 0;
+                });
+            }
+        };
+    }
     function _fhaEscapesClause() {
         try { const t = (typeof window !== 'undefined' && window.SLFhaDerive) ? window.SLFhaDerive.escapesPromptText() : ''; return t ? (' ' + t) : ''; } catch (_) { return ''; }
     }
@@ -2914,11 +2961,15 @@
                 const _draftForConditions = function (picked) {
                     const _descMap = {};
                     picked.forEach(function (e) { _descMap[String(e.desc).replace(/\s+/g, ' ').trim().toLowerCase()] = e.id; });
+                    const _condOf = function (a) { return (a && a.op === 'add_fha') ? (a.srcCondId || _descMap[String(a.fcDesc || '').replace(/\s+/g, ' ').trim().toLowerCase()] || null) : null; };
+                    const _fill = _fhaFillSetup(opts, null);   // 5 Nov 2026: fill the missing phases only
                     _anemBatch(_FEATURE_DIRECTIVE.fha, {
                         title: '✨ AI-drafted FHA · review', analysis: 'fha', verifyKind: 'fha',
+                        shapeActions: _fill ? function (acts) { return _fill.shape(acts, _condOf); } : null,
                         specSecs: _specSecsForSubIds(picked.map(function (e) { return e.subId; })),   // per-system doc narrowing
                         systemExtra: '\n\nSOURCE-CONDITION TRACE (required): every add_fha action MUST carry "srcCondId": the id of the failure condition it classifies, echoed VERBATIM from the THIS TURN list (e.g. "SF-001-TL").\n\nROWS PER CONDITION (4 Sep 2026 ruling): every condition applies to every flight phase. Return as MANY add_fha rows for one condition as its effects across the flight require — phases that share the same effects and class sit on ONE row; where the effects or the class differ, that is ANOTHER row, and there is no limit on how many. All the rows for a condition together must cover every phase of this project\'s mission profile: ' + _projectPhaseNames().filter(function (x) { return !/^all phases$/i.test(x); }).join(', ') + '. A phase where the effect is not realized and the flight can be aborted or the condition escaped is a No Safety Effect row; a phase where nothing has happened yet but the end effect cannot be escaped carries that end effect. "All phases" only when the effects and class are identical everywhere — never the worst class of one phase on a row that lists every phase. A phase belongs to EXACTLY ONE row of a condition — one effect, one class — never to two rows with different classes.'
-                            + _fhaEscapesClause(),   // 5 Sep 2026 (lever 3)
+                            + _fhaEscapesClause()   // 5 Sep 2026 (lever 3)
+                            + (_fill ? _fill.extra : _fhaProfileClause(null)),   // 5 Nov 2026: the mission profile, verbatim
                         chunk: {
                             units: picked, size: 5, noun: 'failure condition',
                             keyOf:     function (e) { return e.id; },
@@ -2934,7 +2985,7 @@
                             // together cover the whole mission profile. Run 3 (fha.draft v7) returned one
                             // row per condition for all 107, 58 of them "All phases": the coverage check
                             // counted every one as complete. This hook names the phases still unassessed.
-                            gapsOf: function (acts) { return _fhaPhaseGaps(picked, acts, function (a) { return (a && a.op === 'add_fha') ? (a.srcCondId || _descMap[String(a.fcDesc || '').replace(/\s+/g, ' ').trim().toLowerCase()] || null) : null; }); },
+                            gapsOf: function (acts) { return _fhaPhaseGaps(picked, _fill ? acts.concat(_fill.have) : acts, _condOf); },
                             // 5 Sep 2026 (lever 2) — per turn, the levels derived by rule for the conditions in the slice.
                             extraOf: function (slice) { return _fhaDerivedClause(slice, ''); }
                         }
@@ -14418,10 +14469,17 @@
         // from effects, as many as the effects require). A lane that declares gapsOf gets ONE
         // follow-up turn for the phases its rows left unassessed; what is still missing after
         // that is reported on the panel beside the ordinary coverage line, never hidden.
+        // 5 Nov 2026: a lane may keep only what it asked for (the FHA's fill-the-missing-phases mode)
+        const _shape = function () { if (typeof cfg.shapeActions === 'function') { try { const k = cfg.shapeActions(actions.slice()) || []; actions.length = 0; Array.prototype.push.apply(actions, k); } catch (_) {} } };
+        _shape();
         if (_chunk && typeof _chunk.gapsOf === 'function' && actions.length) {
             let _gaps = [];
             try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) { _gaps = []; }
-            if (_gaps.length && !_permanentErr && !_userStopped) {
+            // 5 Nov 2026 (Radia: Cruise left out): the follow-up runs until no phase is left, up to three passes, and
+            // stops early when a pass adds nothing
+            const _gapCount = g => g.reduce((n, x) => n + ((x.missing || []).length) + ((x.twice || []).length), 0);
+            for (let _pass = 0; _pass < 3 && _gaps.length && !_permanentErr && !_userStopped; _pass++) {
+                const _before = _gapCount(_gaps);
                 const _steer = '\n\nPHASE COVERAGE — for one failure condition, every phase of the mission profile belongs to EXACTLY ONE row: one effect, one class. The rows returned for the conditions below leave phases unassessed, or assess a phase twice. For each condition: where phases are UNASSESSED, return ONLY the additional add_fha rows that cover them (group phases that share the same effects and class on one row; where the effect is not realized and the flight can be aborted or the condition escaped, that is a No Safety Effect row; where the effect is not realized yet but cannot be escaped, the row carries the end effect and its class). Where a phase is ASSESSED TWICE, return the condition\'s COMPLETE set of rows again with each phase on exactly one row — those rows replace the ones you returned before. Echo srcCondId and fcDesc exactly.\n'
                     + _gaps.map(function (g) { return '- ' + g.label + (g.missing && g.missing.length ? ' — phases unassessed: ' + g.missing.join(', ') : '') + (g.twice && g.twice.length ? ' — phases assessed twice: ' + g.twice.join(', ') : ''); }).join('\n');
                 try {
@@ -14431,7 +14489,9 @@
                     if (_pp2.reply) _replies.push(String(_pp2.reply));
                     try { console.info('[AI] phase-coverage pass: ' + _gaps.length + ' condition(s) re-asked, ' + ((_pp2.actions || []).length) + ' row(s) added'); } catch (_) {}
                 } catch (e) { _turnErrs.push('phase-coverage pass: ' + ((e && e.message) || e)); }
+                _shape();
                 try { _gaps = _chunk.gapsOf(actions) || []; } catch (_) {}
+                if (_gapCount(_gaps) >= _before) break;
             }
             if (_coverage) _coverage.phaseGaps = _gaps.map(function (g) { return g.label + ' (' + [g.missing && g.missing.length ? 'unassessed: ' + g.missing.join(', ') : '', g.twice && g.twice.length ? 'assessed twice: ' + g.twice.join(', ') : ''].filter(Boolean).join('; ') + ')'; });
         }

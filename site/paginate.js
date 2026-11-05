@@ -1,5 +1,5 @@
 // ============================================================================
-// paginate.js — v1.3 — ENG-2 phase 1: shared table pagination. (1.3, 6 Sep 2026: one aligned control style)
+// paginate.js — v1.4 (5 Nov 2026: Ctrl+F reaches every page, table_find.js) — v1.3 — ENG-2 phase 1: shared table pagination. (1.3, 6 Sep 2026: one aligned control style)
 //
 // One pager, every big table. 50 rows per page by default (one screen — the
 // reviewer-friendly unit), selector to 100/250/500, jump-to-page, and an
@@ -128,6 +128,8 @@
             renderPage(from, to, info);
         }
         _render();
+        // 5 Nov 2026 (table_find.js): Ctrl+F reaches every page of a paged table
+        try { if (window.SLFind) window.SLFind.register(host, { key, page: () => st.page, pages: () => pages, goPage: p => { const q = Math.min(Math.max(1, p | 0), pages); if (q !== st.page) { st.page = q; _render(); } } }); } catch (_) {}
         return { get page() { return st.page; }, pageSize, pages, refresh: _render };
     }
 
@@ -152,6 +154,17 @@
             if (tbl && tbl.parentNode) {
                 pager = document.getElementById('slp-' + opts.key);
                 if (!pager) { pager = document.createElement('div'); pager.id = 'slp-' + opts.key; tbl.parentNode.insertBefore(pager, tbl); }
+            }
+        } catch (_) {}
+        // 5 Nov 2026 (table_find.js): the rows themselves, so Ctrl+F reads every row of every page; goto(i) turns to
+        // row i's page and hands back its <tr>
+        try {
+            if (window.SLFind) {
+                let prefixRows = 0; if (prefix) { const t = document.createElement('template'); t.innerHTML = prefix; prefixRows = t.content.querySelectorAll('tr').length; }
+                window.SLFind.register(tbody, { key: opts.key, rows, rowHtml, goto: i => {
+                    if (rows.length > 50 && pager) { const size = _prefSize(opts.key), want = Math.floor(i / size) + 1, st = _state.get(opts.key) || { page: 1 }; if (st.page !== want) { st.page = want; _state.set(opts.key, st); attach({ key: opts.key, host: pager, total: rows.length, label: opts.label, renderPage: renderRange }); } return tbody.rows[prefixRows + (i - (want - 1) * size)] || null; }
+                    return tbody.rows[prefixRows + i] || null;
+                } });
             }
         } catch (_) {}
         if (rows.length > 50 && pager) {

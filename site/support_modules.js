@@ -1744,8 +1744,28 @@ function cancelEdit(module) {
     // Module-specific cleanup: clear FHA assumption chips when their forms reset.
     if (module === 'acFha') renderFhaAsmChips('ac', []);
     if (module === 'sysFha') renderFhaAsmChips('sys', []);
+    _slEditReturnTo(module);   // 5 Nov 2026: back to the row edited
 }
-function setEditMode(module) { const config = formConfigs[module]; if(config) { document.getElementById(config.submitBtn).innerText = "Update Entry"; document.getElementById(config.cancelBtn).style.display = 'inline-block'; } }
+function setEditMode(module) { _slEditRemember(module); const config = formConfigs[module]; if(config) { document.getElementById(config.submitBtn).innerText = "Update Entry"; document.getElementById(config.cancelBtn).style.display = 'inline-block'; } }
+/* 5 Nov 2026 (Waqas: "when you edit or do anything in the table it jumps to the top"). Opening a row to edit takes the
+   page up to the entry form; Save and Cancel left it there, far from the row. Now the place is remembered when the edit
+   opens, and on Save or Cancel (both end in cancelEdit) the page goes back to it and the row edited is lit for a
+   moment. Every table that edits through the entry form gets it: the FHA tables, the shared table editor, items. */
+const _slEditReturn = {};
+function _slEditRemember(module) { try { if (!_slEditReturn[module]) _slEditReturn[module] = { y: window.scrollY || (document.scrollingElement ? document.scrollingElement.scrollTop : 0), id: (typeof editStates !== 'undefined' && editStates) ? editStates[module] : null }; else _slEditReturn[module].id = editStates[module]; } catch (_) {} }
+function _slEditReturnTo(module) {
+    const r = _slEditReturn[module]; if (!r) return; delete _slEditReturn[module];
+    const go = () => {
+        try {
+            let tr = null;
+            if (r.id != null) { const q = "'" + String(r.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; const btn = Array.from(document.querySelectorAll('tr [onclick]')).find(el => (el.getAttribute('onclick') || '').indexOf('(' + q + ')') >= 0 || (el.getAttribute('onclick') || '').indexOf('(' + String(r.id) + ')') >= 0); tr = btn ? btn.closest('tr') : null; }
+            if (tr && tr.offsetParent) { const box = tr.getBoundingClientRect(); window.scrollTo(0, Math.max(0, (window.scrollY || 0) + box.top - Math.max(80, (window.innerHeight - box.height) / 3))); tr.classList.add('sl-row-flash'); setTimeout(() => tr.classList.remove('sl-row-flash'), 1800); }
+            else window.scrollTo(0, r.y || 0);
+        } catch (_) {}
+    };
+    // after the table has been drawn again (save renders it; some renders run a tick later)
+    setTimeout(go, 30); setTimeout(() => { try { if (Math.abs((window.scrollY || 0) - (r.y || 0)) > window.innerHeight * 2) go(); } catch (_) {} }, 250);
+}
 
 // Phase 53 — project name + save folder UI plumbing.
 function _refreshProjectNameUI() {

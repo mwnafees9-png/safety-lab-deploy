@@ -22,7 +22,7 @@ const REPO = path.join(__dirname, '..'), SITE = path.join(REPO, 'site');
 const MUT = process.env.SL_FR_MUTATE || '';
 const MUTS = {
   fccell:   ['helpers_modules.js', '<td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}${_fhaWhyHtml(row)}</td>', '<td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>'],
-  comments: ['helpers_modules.js', '<td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}${_fhaWhyHtml(row)}</td>${reviewTd}</tr>', '<td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}</td>${reviewTd}</tr>'],
+  comments: ['helpers_modules.js', '<td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}${_fhaWhyHtml(row)}</td>${reviewTd}</tr>', '<td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}</td>${reviewTd}</tr>'],
   csv:      ['data_ops_modules.js', "(r.assumptionIds || []).join('; '), r.severityRationale || '', r.comments, _ml('acFha', r)]));", "(r.assumptionIds || []).join('; '), '', r.comments, _ml('acFha', r)]));"]
 };
 if (MUT && !MUTS[MUT]) { console.error('unknown mutation ' + MUT); process.exit(3); }
@@ -34,7 +34,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms || 0));
   const hm = src('helpers_modules.js'), dm = src('data_ops_modules.js');
   check('the failure condition cell holds the condition only (both tables)', !/\$\{esc\(row\.fcDesc\)\}\$\{_fhaWhyHtml\(row\)\}/.test(hm) && (hm.match(/\$\{_obsBadge\}\$\{esc\(row\.fcDesc\)\}<\/td>/g) || []).length === 2);
   check('the aircraft FHA Comments cell carries the reason', /\$\{_findingHtml\}\$\{_fhaCommentsCell\(row\)\}\$\{_fhaWhyHtml\(row\)\}<\/td>/.test(hm));
-  check('the system FHA Comments cell carries the reason', /\$\{_fhaCommentsCell\(row\)\}\$\{_fhaWhyHtml\(row\)\}<\/td>\$\{reviewTd\}<\/tr>/.test(hm));
+  check('the system FHA Comments cell carries the reason', /\$\{_findingHtml\}\$\{_fhaCommentsCell\(row\)\}\$\{_fhaWhyHtml\(row\)\}<\/td>\$\{reviewTd\}<\/tr>/.test(hm));
   check('ANEM still drafts a missing reason there (draft box with Accept, Edit, Discard; the missing note)', /function _fhaWhyHtml\(row\) \{[\s\S]*?fhaReasonAccept[\s\S]*?fhaReasonEdit[\s\S]*?fhaReasonDiscard[\s\S]*?No reason recorded for/.test(hm));
   check('the CSV exports carry "Why this severity" beside Comments (aircraft and system)', (dm.match(/'Assumption IDs','Why this severity','Comments','Model Links'\]/g) || []).length === 2 && /r\.severityRationale \|\| '', r\.comments, _ml\('acFha', r\)/.test(dm) && /r\.severityRationale \|\| '', r\.comments, _ml\('sysFha', r\)/.test(dm));
   check('the Excel and PDF exports too', (dm.match(/'Assumption IDs','Why this severity','Comments'\],\n\s+rows:/g) || []).length === 2);

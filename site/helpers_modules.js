@@ -5099,6 +5099,10 @@ function _fhaPhasesCell(row) {
     const list = String((row && row.phases) || '').split(',').map(x => x.trim()).filter(Boolean);
     return list.map(esc).join('<br>');
 }
+// 5 Nov 2026 (fha_phase_cover.js): at the top of the Comments cell of a condition's first row (where group findings go,
+// 5 Sep ruling; the Phases cell lists the ticked phases only, 4 Sep ruling), the phases the condition leaves unassessed
+// and those marked does not apply
+function _fhaPhaseNote(row, rows) { try { return (rows && window.SLPhaseCover) ? SLPhaseCover.cellNote(row, rows) : ''; } catch (_) { return ''; } }
 // 4 Sep 2026 (Waqas, second layout pass, screenshot of run 1): "judgement tag can be
 // removed and comments judgement call to be color coded". The Severity cell is a
 // pick-list column and stays narrow; the judgement lives in Comments, where the
@@ -5396,7 +5400,7 @@ function renderACFHA() {
         // id alone; the group finding (duplicate / conflict / phase assessed twice / merge)
         // opens the Comments cell of the group head instead, so nothing is lost. Sub-Function
         // a bit wider; Effects and Comments much wider.
-        const _findingHtml = _grpBadge ? `<div style="margin:0 0 4px 0;">${_grpBadge.replace('margin-left:6px;', 'margin-left:0;')}</div>` : '';
+        const _findingHtml = _grpBadge ? `<div style="margin:0 0 4px 0;">${_grpBadge.replace('margin-left:6px;', 'margin-left:0;')}</div>` : '' + _fhaPhaseNote(row, acFhaData);
         return `<tr${_obsCls}${_hfwAttr}${_isMember ? ' data-fha-group-member="1"' : ''}><td>${rowActionsHTML('editACFHA', 'deleteACFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_fhaSubCell(row.subId)}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('acFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;">${_fcCell}</td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'ac')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}${_fhaWhyHtml(row)}</td>${customTds}${reviewTd}</tr>`;
     };
     if (typeof SLPaginate !== 'undefined' && SLPaginate.pageTbody) {
@@ -5408,6 +5412,7 @@ function renderACFHA() {
     // Phase 54 — keep the thead in sync with the body.
     if (typeof _injectCustomColumnHeaders === 'function') _injectCustomColumnHeaders();
     try { _fhaReasonBar('ac', 'ac-fha-body'); } catch (_) {}   // 31 Oct 2026 (item 5)
+    try { if (window.SLPhaseCover) SLPhaseCover.bar('ac', null, 'ac-fha-body'); } catch (_) {}   // 5 Nov 2026: every phase accounted for
 }
 
 // 24 Oct 2026 (fc_auto_trees.js): every Major-or-worse row says, in words, where the 1309 chart routes it; a
@@ -5859,6 +5864,7 @@ function renderSysFHA() {
         // mapping lives on the Traceability tab + each row's back-reference panel).
         const _fhaExtra = `<button type="button" role="menuitem" onclick="openGoldenThreadModal('${esc(row.internalId)}', 'SYS')">🧵 Golden Thread</button>${chartBtn}`;
         // Cascade obsolescence — flag the whole row + badge the failure-condition cell.
+        const _findingHtml = _fhaPhaseNote(row, (sys() && sys().fha) || []);   // 5 Nov 2026: the phases left unassessed
         const _obsCls = row.obsolete ? ' class="slab-obsolete"' : '';
         const _obsBadge = row.obsolete ? '<span class="slab-obsolete-badge" title="' + esc(row.obsoleteReason || 'Obsolete') + '">OBSOLETE</span>' : '';
         // INV-HFW — crew-workload ↔ severity divergence badge (hf_severity_badge.js).
@@ -5880,7 +5886,7 @@ function renderSysFHA() {
                   _l1Fns.map(f => `<option value="${esc(f.funcId)}"${_l1Sugg === String(f.funcId) ? ' selected-suggested' : ''}>${esc(f.funcName || f.funcId)}${_l1Sugg === String(f.funcId) ? ' (FCIM match)' : ''}</option>`).join('') + `</select>`
                 : `<div style="font-size:10px; color:var(--color-text-tertiary);">declare functions on this system first</div>`)
         ;
-        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('sysFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'sys')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_fhaCommentsCell(row)}${_fhaWhyHtml(row)}</td>${reviewTd}</tr>`;
+        return `<tr${_obsCls}${_hfwAttr}><td>${rowActionsHTML('editSysFHA', 'deleteSysFHA', row.internalId, _fhaExtra)}</td><td style="width:1%;min-width:160px;">${_l1Cell}${typeof SLModelLinks !== 'undefined' ? SLModelLinks.cellHtml('sysFha', row, { compact: true }) : ''}</td><td style="width:1%;white-space:nowrap;"><strong>${esc(row.fcId)}</strong></td><td style="min-width:120px;max-width:170px;">${_obsBadge}${esc(row.fcDesc)}</td><td style="width:1%;white-space:nowrap;">${_fhaPhasesCell(row)}</td><td style="min-width:480px;width:34%;">${effectsHtml}</td><td class="cell-${esc(row.severity)}" style="width:1%;white-space:nowrap;">${sevPillHtml(row.severity, { dal: true })}${_hfwBadge}${_fhaRouteChip(row, 'sys')}</td><td style="width:1%;max-width:120px;">${renderFhaAsmLinksHtml(row.assumptionIds)}</td><td style="min-width:480px;width:34%;">${_findingHtml}${_fhaCommentsCell(row)}${_fhaWhyHtml(row)}</td>${reviewTd}</tr>`;
     };
     // 31 Aug 2026 — same ordered view as the AC table: natural ascending fcId,
     // same-id phase rows clustered, blank ids last.
@@ -5891,7 +5897,8 @@ function renderSysFHA() {
     } else {
         _sysFhaOrdered.forEach(row => tbody.insertAdjacentHTML('beforeend', _sysFhaRowHtml(row)));
     }
-    try { _fhaReasonBar((typeof activeSystemId !== 'undefined' ? activeSystemId : null), 'sys-fha-body'); } catch (_) {}   // 31 Oct 2026 (item 5)
+    try { _fhaReasonBar((typeof activeSystemId !== 'undefined' ? activeSystemId : null), 'sys-fha-body'); } catch (_) {}
+    try { if (window.SLPhaseCover && sys()) SLPhaseCover.bar('sys', sys().id, 'sys-fha-body'); } catch (_) {}   // 5 Nov 2026: every phase accounted for   // 31 Oct 2026 (item 5)
 }
 
 function _populatePraModelTypeDropdown(){
