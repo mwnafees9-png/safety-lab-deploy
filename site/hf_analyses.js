@@ -702,7 +702,7 @@
         var minCrew = parseInt(String(concl.minCrew || '').replace(/[^0-9]/g, ''), 10);
         var incap = (!isNaN(minCrew) && minCrew >= 2) && (!factors[9] || !String(factors[9]).trim());
         var crewCount = 0;
-        try { (_read('alloc').rows || []).forEach(function (r) { if (r.allocation === 'Crew' || r.allocation === 'Shared') crewCount++; }); } catch (_) {}
+        try { (_read('alloc').rows || []).forEach(function (r) { var a = String(r.allocation || '').toLowerCase(); if (a === 'crew' || a === 'shared') crewCount++; }); } catch (_) {}   // 6 Nov 2026: the stored values are lower case (ALLOCATIONS); 'Crew' never matched, so the one-pilot crew-heavy check never fired
         var crewHeavy = (!isNaN(minCrew) && minCrew <= 1) && crewCount >= 8;
         return { unassigned: unassigned, high: high, openFactors: openFactors, incap: incap, crewHeavy: crewHeavy, crewCount: crewCount };
     }

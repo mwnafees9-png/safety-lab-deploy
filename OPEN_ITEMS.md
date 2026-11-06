@@ -29,6 +29,9 @@ closed it. 137 entries became 52 open and 72 closed; the rest were duplicate or 
 - [x] **RA-3 systemsData briefly empty while a report draft runs**: not the app. The live page's CSP (no unsafe-eval) blocked markov_ai.js's new Function read of the stores once a call had awaited; markov_ai now reads through SLEnv like every module, and its test serves the production CSP.
 - [x] **RA-4 DAL reductions held for CMA substantiation** (Waqas 6 Nov: "why are no DAL reductions happening?"; "the requirements generated for independence and DAL need to show need for independence and develop DAL for that"). Decided and built 6 Nov: a claimed independence takes the reduction, marked CMA pending (dashed badge + tag), resting on the gate's independence requirements; the DAL requirement's rationale names them and what the member reverts to (_dalIfReverted); a CMA common mode reverts. Tests regression_dal_row_20261013 [4][7][8], regression_indep_global, regression_f3061_dal F4.
 
+- [ ] **HF-A1 HF Autopilot at system level**: the Autopilot works the aircraft level; five HF lanes also exist per system (level_view). Decide whether a system gets its own run.
+- [ ] **HF-A2 University domain list (20261106a) not loaded yet**: Waqas runs it in the Supabase SQL editor later ("we will do the supabase later").
+
 ## 28 Sep 2026 — ACTIVE SECURITY QUEUE (Waqas: "mark the security ones as items to do")
 
 The open security work, in the order it should be done. Everything not listed here is closed and

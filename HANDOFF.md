@@ -1,3 +1,13 @@
+## 6 Nov 2026 (later): THE HF AUTOPILOT: HUMAN FACTORS THROUGH THE DESIGN CYCLE, ONE PLAIN QUESTION AT A TIME. Not shipped yet.
+
+**Why.** Waqas: "how do we make our human factors assessments way more intuitive"; "make sure we have full end to end coverage on a typical aircraft design cycle"; on the first draft, "make these in line options and nice and neat, we offer premium experience" and "more description when they select what could go wrong".
+
+**What (hf_autopilot.js v1.0, SLHfAuto).** First on the Human Factors page. Ten steps in design-cycle order: Concept (1 who does what), Preliminary design (2 crew procedures, 3 how busy the crew is, 4 what the crew could get wrong, 5 how the crew is told), Detailed design (6 controls and displays 25.1302, 7 situation awareness, 8 reach and view 25.777/25.1321), Certification (9 minimum crew, Appendix D and 25.1523, 10 credit and evidence). Questions are built from the project (functions, FHA crew effects, flight phases, items, HF assumptions); every answer writes its HF table row by hfAutoKey (adopted, never duplicated; "not a crew task", "not credible", "no alert" remove the row they wrote; rows already in a table count as answers). Task times are typed with their basis, never filled in; a workload chart per flight phase against 80%. Credit makes an HF assumption on the register (Proposed); a validation plan is written only where none exists. Steps sign when complete; a changed answer reopens. A report with the coverage table and the chart. Choices are joined one-line controls with the meaning of the chosen one shown under it; the error step is one card per error type with a plain description and an example. HF tabs reordered to the cycle with plain names (nav_areas 1.7).
+
+**Fixed on the way.** hf_analyses 1.21: the one-pilot crew-heavy check compared 'Crew'/'Shared' against the stored lower-case values, so it never fired.
+
+**Tests.** regression_hf_autopilot_20261106 (34 checks, production CSP; mutations dup, nodrop, noreopen red). Durability script count 334. The HF, nav and level-view suites green.
+
 ## 6 Nov 2026: AI-DRAFTED REPORTS KEEP THEIR TABLES AND FIGURES AND CARRY NO PLACEHOLDERS; MARKOV MODELS DRAFTED BY THE AI; DALGEBRA REDUCES ON A CLAIMED INDEPENDENCE AGAIN, CMA PENDING. Not shipped yet: committed for ./ship.sh.
 
 **Why.** Waqas: "the current PASA AI generated report, doesnt create tables and diagrams, gave a lot of errors and place holders rather than drafting accurate reports"; "I want safety lab AI generated for every 4761 artifact". Live baseline on the deployed reports.js v66.23: 10 of 27 PASA sections came back with "[Data to be added in subsequent revisions]" on a project that has the data. Full findings and plan: docs/REPORT_AI_REBUILD_2026-11-06.md.

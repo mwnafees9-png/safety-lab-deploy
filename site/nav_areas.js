@@ -63,7 +63,7 @@
         { key: 'cca', label: 'Common cause', ic: '🔗', scope: 'aircraft', items: ['snav-zsa', 'snav-pra', 'snav-cma', 'snav-cea', 'snav-stpa'],
           pages: { zonal: 'snav-zsa', cad: 'snav-zsa', routing: 'snav-zsa', phys: 'snav-zsa', ipledger: 'snav-cma', cra: 'snav-cma' } },
         { key: 'asa', label: 'ASA', ic: '✈', scope: 'aircraft', items: ['snav-asa', 'sl-nav-trees-asa', 'snav-ccmr', 'snav-mmel', 'snav-sse'] },
-        { key: 'hf', label: 'Human factors', ic: '👤', scope: 'aircraft', items: ['snav-hfa', 'snav-hfa-tid', 'snav-hfa-alloc', 'snav-hfa-hea', 'snav-hfa-alerts', 'snav-hfa-task', 'snav-hfa-ergo', 'snav-hfa-cd', 'snav-hfa-sa', 'snav-hfa-mfc'] },
+        { key: 'hf', label: 'Human factors', ic: '👤', scope: 'aircraft', items: ['snav-hfa', 'snav-hfa-alloc', 'snav-hfa-tid', 'snav-hfa-task', 'snav-hfa-hea', 'snav-hfa-alerts', 'snav-hfa-cd', 'snav-hfa-sa', 'snav-hfa-ergo', 'snav-hfa-mfc'] },
         { key: 'ram', label: 'R&M', ic: '🔧', scope: 'aircraft', items: ['snav-ram-hub', 'snav-library',
             { group: 'rel', label: 'Reliability', ids: ['snav-ram-rel', 'snav-ram-predict', 'snav-ram-rbd', 'snav-ram-weibull', 'snav-ram-growth', 'snav-ram-alloc', 'snav-ram-tol', 'snav-rbd-mc', 'snav-rel-frameworks', 'snav-swrel', 'snav-sneak', 'snav-lcc'] },
             { group: 'mx', label: 'Maintainability', ids: ['snav-ram-mx', 'snav-ram-msg3', 'snav-msg3x', 'snav-ram-pmopt', 'snav-ram-test', 'snav-ram-lora'] },
@@ -94,7 +94,10 @@
     // the words a link shows as a tab (the old menu's labels were written for a long list)
     var SHORT = { 'snav-conn': 'Connections', 'snav-pasa': 'PASA', 'snav-afha': 'AFHA', 'snav-ram-hub': 'Overview', 'snav-sys-dir': 'All systems', 'snav-reqif': 'Requirements exchange',
                   'snav-xmi': 'Architecture import', 'snav-defs': 'Certification basis', 'snav-arp-process': 'Safety process map', 'snav-stpa': 'STPA',
-                  'snav-cea': 'Cascading effects', 'snav-zsa': 'ZSA', 'snav-pra': 'PRA', 'snav-cma': 'CMA', 'snav-asa': 'ASA', 'snav-hfa': 'HF analysis',
+                  'snav-cea': 'Cascading effects', 'snav-zsa': 'ZSA', 'snav-pra': 'PRA', 'snav-cma': 'CMA', 'snav-asa': 'ASA', 'snav-hfa': 'HF Autopilot',
+                  // 6 Nov 2026: the HF pages in the order the design cycle does them, in plain words (hf_autopilot.js)
+                  'snav-hfa-alloc': '1. Who does what', 'snav-hfa-tid': '2. Crew procedures', 'snav-hfa-task': '3. Crew workload', 'snav-hfa-hea': '4. Crew errors', 'snav-hfa-alerts': '5. Alerts',
+                  'snav-hfa-cd': '6. Controls and displays', 'snav-hfa-sa': '7. Situation awareness', 'snav-hfa-ergo': '8. Reach and view', 'snav-hfa-mfc': '9. Minimum crew',
                   'snav-ws-locks': 'Workspaces and locks', 'snav-admin-lic': 'Seats and license', 'snav-anem': 'ANEM live chat', 'snav-dal-ref': 'DAL credit (DO-178C / 254)', 'snav-prove': 'Prove', 'snav-fta': 'Fault trees' };
     function _ids(a) { var out = []; a.items.forEach(function (it) { if (typeof it === 'string') out.push(it); else out = out.concat(it.ids); }); return out; }
     function _el(id) { return document.getElementById(id); }
