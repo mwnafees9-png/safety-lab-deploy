@@ -436,6 +436,15 @@
             '<div class="slap-note">Worked out with the AC 20-128A angle sweep for ' + r.calc.rotors.map(function (x) { return E(x.label); }).join(' and ') + ' (the worst disc counts); no credit is taken for a fragment passing above or below a part within its spread.</div>' +
             '<div class="slap-nav" style="margin-top:6px;"><button type="button" class="slap-btn" onclick="SLPraAuto.ui.editInputs(' + E(JSON.stringify(r.key)) + ')">Change the disc numbers</button></div>';
     }
+    // 6 Nov 2026 (report_ai.js rebuild): each particular risk's picture as a figure for the PRA report, {{figure:pra_risks}}
+    function figures() {
+        var res = compute(); if (!res) return [];
+        return res.risks.map(function (r) {
+            var f = U().figure({ outline: _outline(), volumes: r.shapes, marks: r.hits.map(function (u) { return { min: u.bbox.min, max: u.bbox.max, color: '#2563EB' }; }) }, { width: 460 });
+            if (!f) return null; var svg = f.svg, w = f.w, h = f.h;
+            return { title: r.title, caption: r.title + (r.praId ? ' (' + r.praId + ')' : '') + ': the danger areas (red) and the ' + r.hits.length + ' units they reach (blue), from the CAD model', svg: svg, w: w, h: h };
+        }).filter(Boolean);
+    }
     function report() {
         var res = compute(); if (!res) return false;
         var E = U().E, html = '<h1>Particular Risk Assessment</h1><p class="muted">' + E(_g('projectName') || '') + '. Worked out by the PRA Autopilot on the CAD model ' + E((C().model(res.cadId) || {}).fileName || '') + '; every choice made by an engineer, with who and when. ' + new Date().toISOString().slice(0, 10) + '.</p>';
@@ -486,6 +495,6 @@
         return true;
     }
     if (typeof document !== 'undefined') { var tries = 40, t = setInterval(function () { if (mount() || --tries <= 0) clearInterval(t); }, 250); }
-    root.SLPraAuto = { VERSION: VERSION, FRAG: FRAG, compute: function () { return compute(); }, riskStatus: riskStatus, answer: answer, sign: sign, materialize: materialize, report: report, render: render, ui: ui, state: state, reset: function () { _cache = null; } };
+    root.SLPraAuto = { VERSION: VERSION, FRAG: FRAG, compute: function () { return compute(); }, riskStatus: riskStatus, answer: answer, sign: sign, materialize: materialize, report: report, figures: figures, render: render, ui: ui, state: state, reset: function () { _cache = null; } };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLPraAuto;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -155,8 +155,9 @@ const rep = SITE('reports.js');
 // was ever added after it — a new token appearing later doesn't un-register
 // an earlier one.
 check('one-shot reports build their blocks with the same rule (no parser list)', /async function _blocksFromTemplate\(/.test(rep) && !/function _parseTemplate\(/.test(rep));
+// 6 Nov 2026: a {{figure:...}} token renders too (report_ai.js rebuild).
 // 31 Oct 2026: the sectioned renderers no longer keep a list of table tokens: any {{token}} whose value is a list of rows renders as a table (report_writer.js)
-check('sectioned renderers render every table token by its value', /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(rep) && /window\.SLReportWriter\.docx\(window\.Reports\._reportModel/.test(rep) && /window\.SLReportWriter\.pdf\(window\.Reports\._reportModel/.test(rep));
+check('sectioned renderers render every table token by its value', /if \(!isAppx && (!isFig && )?!_isTableVal\(data\[name\]\)\) continue;/.test(rep) && /window\.SLReportWriter\.docx\(window\.Reports\._reportModel/.test(rep) && /window\.SLReportWriter\.pdf\(window\.Reports\._reportModel/.test(rep));
 check('custom-docx table tokens come from the data, not a list', /const tableTokens = Object\.keys\(data\)\.filter\(k => _isTableVal\(data\[k\]\)/.test(rep));
 check('WS-B builder returns ffs_table', /const ffs_table = \[\];/.test(rep) && /budget_ledger_table, ffs_table,\n\s*\};/.test(rep));
 check('PASA/PSSA/SSA templates carry {{ffs_table}} (v1+v2 = 6 sites)', (rep.match(/\{\{ffs_table\}\}/g) || []).length === 6, String((rep.match(/\{\{ffs_table\}\}/g) || []).length));

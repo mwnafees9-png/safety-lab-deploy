@@ -934,6 +934,7 @@ function updateD3() {
         const dalBadge = nodeEnter.append('g').attr('class', 'dal-badge').attr('transform', 'translate(35, -22)');
         // Phase 53.41 — bigger rect + bigger bolder text + darker text fill for readability.
         dalBadge.append('rect').attr('class', 'dal-badge-rect').attr('x', -27).attr('y', -11).attr('width', 54).attr('height', 20).attr('rx', 5).attr('ry', 5).attr('stroke', '#0f172a').attr('stroke-width', 1.25);
+        dalBadge.append('text').attr('class', 'dal-pending-tag').attr('x', 31).attr('y', 3).attr('text-anchor', 'start').attr('font-size', '9px').attr('font-weight', '600').attr('fill', '#b45309').style('display', 'none').text('CMA pending');
         dalBadge.append('text').attr('class', 'dal-badge-text').attr('y', 4).attr('text-anchor', 'middle').attr('font-weight', '700').attr('font-size', '11.5px').attr('fill', '#0f172a').style('letter-spacing', '0.3px');
         // 13 Oct 2026 (fix 7): hover title: what the DAL would be once CMA substantiates a pending claim.
         dalBadge.append('title').attr('class', 'dal-badge-title');
@@ -1096,12 +1097,16 @@ function updateD3() {
         nodeUpdate.select('.dal-badge-text').text(d => d.data.allocatedDAL ? `${dalPrefixForNode(d.data)} ${d.data.allocatedDAL}` : '');
         // 13 Oct 2026 (fix 7): a member held at its incoming DAL because an independence claim above it
         // is not yet substantiated by CMA shows a dashed badge, and its hover says what it would drop to.
-        nodeUpdate.select('.dal-badge-rect').attr('stroke-dasharray', d => (d.data._dalIfSubstantiated && d.data.allocatedDAL && d.data._dalIfSubstantiated !== d.data.allocatedDAL) ? '3,2' : null);
+        // 6 Nov 2026: a claimed independence takes the reduction; a member whose DAL rests on a claim no CMA has
+        // substantiated yet shows a dashed badge marked CMA pending, and its hover says what it reverts to.
+        const _pend = n => !!(n && n.allocatedDAL && n._dalIfReverted && n._dalIfReverted !== n.allocatedDAL);
+        nodeUpdate.select('.dal-badge-rect').attr('stroke-dasharray', d => _pend(d.data) ? '3,2' : null);
+        nodeUpdate.select('.dal-pending-tag').style('display', d => _pend(d.data) ? 'inline' : 'none');
         nodeUpdate.select('.dal-badge-title').text(d => {
             const n = d.data; if (!n.allocatedDAL) return '';
             const k = dalPrefixForNode(n);
-            if (n._dalIfSubstantiated && n._dalIfSubstantiated !== n.allocatedDAL)
-                return k + ' ' + n.allocatedDAL + ' now. Would be ' + k + ' ' + n._dalIfSubstantiated + ' once Common Mode Analysis substantiates the independence claimed above it (no reduction is taken before that).';
+            if (_pend(n))
+                return k + ' ' + n.allocatedDAL + ', CMA pending: the reduction rests on the independence claimed at ' + ((n._dalRestsOn || []).map(g => g.label).join(', ') || 'the gate above') + ', whose independence requirements Common Mode Analysis must verify. If a common mode is found it reverts to ' + k + ' ' + n._dalIfReverted + '.';
             return k + ' ' + n.allocatedDAL;
         });
         // Phase 46 — VOTING K/N badge. Only shown when the gate is VOTING.

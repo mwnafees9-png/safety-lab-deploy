@@ -15,6 +15,10 @@
  *   gate already one level below keeps one member at that level. VOTING k-of-n reduces rigorously
  *   (Option 1: n-k+1 carriers; Option 2: n-k+2 uppers). No reduction is taken until independence
  *   is 'substantiated'; a claim holds the members and keeps the would-be DAL (_dalIfSubstantiated).
+ * 6 Nov 2026 (Waqas: "the requirements generated for independence and DAL need to show need for independence and
+ *   develop DAL for that"): a CLAIM takes the reduction again, now marked CMA pending (_dalPending on the gate,
+ *   _dalRestsOn on each member it lowers) and resting on the gate's independence requirements; the DAL a member
+ *   reverts to if a CMA finds a common mode is kept as _dalIfReverted. [4], [7] and [8] check that.
  *   The F3061 Table 1 path keeps its secondary floor. A Cert Lab compliance-basis hook
  *   (dalRowComplianceBasis, projectConfig.dalComplianceBasis) exists; no SC-VTOL Note A rule is
  *   hard-coded.
@@ -62,13 +66,13 @@ function mkCtx(supportSrc) {
 const NEW = mkCtx(S('support_modules.js'));
 // Mutation proofs that do not depend on git history: the CURRENT source with the fix reverted in place.
 //   MUT_ROW: each gate takes its OWN incoming DAL as the row start (the old per-gate reduction).
-//   MUT_CLAIM: a bare claim applies the reduction (the old provisional default).
+//   MUT_CLAIM: a bare claim holds the members (the 13 Oct to 6 Nov 2026 rule).
 const _sup = S('support_modules.js');
 const _rowLine = 'let below = 0;';
-const _claimLine = "const applies = (indep === 'substantiated') || (!actual && indep === 'claimed');";
+const _claimLine = "const applies = (indep === 'substantiated') || (actual && indep === 'claimed');";
 if (_sup.indexOf(_rowLine) < 0 || _sup.indexOf(_claimLine) < 0) throw new Error('mutation anchors missing in allocateDAL');
 const MUT_ROW = mkCtx(_sup.replace(_rowLine, 'row = Object.assign({}, row, { start: propagateDal }); ' + _rowLine));
-const MUT_CLAIM = mkCtx(_sup.replace(_claimLine, "const applies = (indep === 'substantiated') || (indep === 'claimed');"));
+const MUT_CLAIM = mkCtx(_sup.replace(_claimLine, "const applies = (indep === 'substantiated') || (!actual && indep === 'claimed');"));
 // The production allocator itself (base fd6e4de), when the history is available: an extra proof.
 let BASE = null;
 for (const rev of ['fd6e4de', '7e1a988']) {
@@ -206,28 +210,27 @@ function minCount(n, k, level) {
     check('1-of-3 VOTING is a single-failure gate: no reduction', dals(...ks) === 'AAA');
 }
 
-// ---- [4] no reduction before CMA substantiation; the would-be DAL is kept -------------------
-console.log('\n[4] the default claim does not reduce; the would-be DAL is shown');
+// ---- [4] a claim takes the reduction, CMA pending; what it reverts to is kept (6 Nov 2026) ---------
+console.log('\n[4] the default claim reduces, marked CMA pending, and keeps what it reverts to');
 {
     const mk = (indep) => { const x = leaf(), y = leaf(), z = leaf(); const inner = gate('AND', [y, z], indep ? { dalIndependence: indep } : {});
         const g = gate('AND', [x, inner], Object.assign({ dalOption: 'opt1' }, indep ? { dalIndependence: indep } : {})); return { g, inner, x, y, z }; };
     const d = mk(null); alloc(NEW, d.g, 'A');
     const s = mk('substantiated'); alloc(NEW, s.g, 'A');
-    check('default (no dalIndependence = claimed): every member holds A', dals(d.x, d.y, d.z) === 'AAA', dals(d.x, d.y, d.z));
-    check('the would-be DALs equal the substantiated allocation (A, C, C)',
-        [d.x, d.y, d.z].map(n => n._dalIfSubstantiated).join('') === dals(s.x, s.y, s.z) && dals(s.x, s.y, s.z) === 'ACC',
-        [d.x, d.y, d.z].map(n => n._dalIfSubstantiated).join(''));
-    check('the claimed gate is pending, not reduced, and raises its requirement with status claimed',
-        d.g._dalPending === true && d.g._dalReduced === false && d.g._independenceReq && d.g._independenceReq.status === 'claimed' && d.g._independenceReq.reductionApplied === false);
-    check('the substantiated gate is reduced and its requirement is substantiated',
-        s.g._dalReduced === true && s.g._dalPending === false && s.g._independenceReq.status === 'substantiated' && s.g._independenceReq.reductionApplied === true);
-    check('the pending member explains itself (basis pending, would-be recorded)', d.z._dalDerivation.basis === 'pending' && d.z._dalDerivation.wouldBe);
+    check('default (no dalIndependence = claimed): the reduction is taken, the same as substantiated (A, C, C)', dals(d.x, d.y, d.z) === 'ACC' && dals(s.x, s.y, s.z) === 'ACC', dals(d.x, d.y, d.z));
+    check('the claimed members keep what they revert to if a CMA finds a common mode (A, A, A)', [d.x, d.y, d.z].map(n => n._dalIfReverted).join('') === 'AAA', [d.x, d.y, d.z].map(n => n._dalIfReverted).join(''));
+    check('the claimed gate is reduced AND pending, and raises its requirement with status claimed',
+        d.g._dalPending === true && d.g._dalReduced === true && d.g._independenceReq && d.g._independenceReq.status === 'claimed' && d.g._independenceReq.reductionApplied === true && /marked CMA pending/.test(d.g._independenceReq.rationale));
+    check('the substantiated gate is reduced, not pending, and nothing reverts',
+        s.g._dalReduced === true && s.g._dalPending === false && s.g._independenceReq.status === 'substantiated' && [s.x, s.y, s.z].map(n => n._dalIfReverted).join('') === 'ACC' && !s.z._dalRestsOn);
+    check('a member lowered by a claim names the gate it rests on; the carrier rests on nothing',
+        Array.isArray(d.z._dalRestsOn) && d.z._dalRestsOn.some(g => g.nodeId === d.g.id) && Array.isArray(d.y._dalRestsOn) && !d.x._dalRestsOn, JSON.stringify([d.x._dalRestsOn, d.z._dalRestsOn]));
+    check('the claimed member explains itself (Option 1 reduced under a claimed independence)', d.inner._dalDerivation.basis === 'option1' && d.inner._dalDerivation.independence === 'claimed');
     const n = mk('none'); alloc(NEW, n.g, 'A');
-    check("'none': no reduction and no would-be reduction either", dals(n.x, n.y, n.z) === 'AAA' && [n.x, n.y, n.z].every(v => v._dalIfSubstantiated === 'A') && !n.g._independenceReq);
+    check("'none': no reduction, nothing pending, no requirement", dals(n.x, n.y, n.z) === 'AAA' && [n.x, n.y, n.z].every(v => v._dalIfReverted === 'A' && !v._dalRestsOn) && !n.g._independenceReq);
     const j = mk('option-1'); alloc(NEW, j.g, 'A');
-    check("a stray value ('option-1', the old demo data) is read as an unsubstantiated claim, never as a reduction", dals(j.x, j.y, j.z) === 'AAA' && j.g._dalPending === true);
-    { const b = mk(null); alloc(MUT_CLAIM, b.g, 'A'); check('MUTATION PROOF: let a bare claim reduce again and the default no longer holds A/A/A (gives ' + dals(b.x, b.y, b.z) + ')', dals(b.x, b.y, b.z) !== 'AAA'); }
-    if (BASE) { const b = mk(null); alloc(BASE, b.g, 'A'); check('MUTATION PROOF: the production default reduced before CMA (base gives ' + dals(b.x, b.y, b.z) + ')', dals(b.x, b.y, b.z) !== 'AAA'); }
+    check("a stray value ('option-1', the old demo data) is read as a claim: reduced and pending", dals(j.x, j.y, j.z) === 'ACC' && j.g._dalPending === true);
+    { const b = mk(null); alloc(MUT_CLAIM, b.g, 'A'); check('MUTATION PROOF: hold a bare claim again and the default no longer reduces (gives ' + dals(b.x, b.y, b.z) + ')', dals(b.x, b.y, b.z) !== 'ACC'); }
 }
 
 // ---- [5] F3061 Table 1 path: nesting never goes below the secondary ------------------------
@@ -289,12 +292,12 @@ console.log('\n[7] each member takes the strictest DAL across failure conditions
     propagateDalAllRoots();
     const rows = genDALgebra('ac');
     const sRow = rows.find(r => /:S$/.test(r.reqSource.sourceId));
-    // S is C in the Cat tree (Option 1 non-carrier, substantiated) and B in the Haz tree (claim pending: held at B)
-    check('shared member S: C under the Cat tree, B (held, pending) under the Haz tree; the register takes B',
+    // S is C in the Cat tree (Option 1 non-carrier, substantiated) and B in the Haz tree (its Option 1 carrier)
+    check('shared member S: C under the Cat tree, B (the carrier) under the Haz tree; the register takes B',
         ftaPages[0].root.children[1].allocatedDAL === 'C' && ftaPages[1].root.children[1].allocatedDAL === 'B' && sRow && / B\.$/.test(sRow.text), sRow && sRow.text);
     const qRow = rows.find(r => /:Q$/.test(r.reqSource.sourceId));
-    check('the pending member\'s register rationale says it is held and what it would be once CMA substantiates it',
-        qRow && /not yet substantiated by Common Mode Analysis/.test(qRow.rat) && /would be IDAL D/.test(qRow.rat), qRow && qRow.rat);
+    check('the claimed member is developed to the reduced DAL, and its rationale names the independence it rests on and what it reverts to',
+        ftaPages[1].root.children[0].allocatedDAL === 'D' && qRow && / IDAL D\.$/.test(qRow.text) && /rests on the independence requirements derived at/.test(qRow.rat) && /CMA pending/.test(qRow.rat) && /reverts to IDAL B/.test(qRow.rat), qRow && (qRow.text + ' | ' + qRow.rat));
     // strictest smoothing of the would-be DAL within one tree
     globalThis.ftaPages = [{ id: 'p3', name: 'T', root: { id: 3, type: 'gate', gateType: 'OR', children: [
         { id: 31, logicalId: 'R', type: 'basic' },
@@ -303,21 +306,21 @@ console.log('\n[7] each member takes the strictest DAL across failure conditions
     allocateDAL(ftaPages[0].root, 'A', new Set(), null, null);
     _propagateStrictestDALAcrossSharedEvents(ftaPages[0].root);
     const r1 = ftaPages[0].root.children[0], r2 = ftaPages[0].root.children[1].children[1];
-    check('a shared event takes its strictest position for the would-be DAL too (R: A in the OR, would be C under the AND -> A)',
-        r1.allocatedDAL === 'A' && r2.allocatedDAL === 'A' && r1._dalIfSubstantiated === 'A' && r2._dalIfSubstantiated === 'A');
+    check('a shared event takes its strictest position, and so does what it reverts to (R: A in the OR, C under the claimed AND -> A, nothing pending)',
+        r1.allocatedDAL === 'A' && r2.allocatedDAL === 'A' && r1._dalIfReverted === 'A' && r2._dalIfReverted === 'A');
 }
 
 // ---- [8] consumers and the user-facing explanation ------------------------------------------
 console.log('\n[8] consumers read the new meaning');
 {
     const inv = S('invariants.js'), ic = S('independence_claims.js'), fv = S('fta_view_modules.js'), hp = S('helpers_modules.js'), idx = S('index.html'), asr = S('assurance_modules.js');
-    check('INV-05 calls a claimed gate a WITHHELD reduction, not a taken one', /DAL reduction withheld: independence is CLAIMED/.test(inv) && !/DAL reduction rests on CLAIMED/.test(inv));
+    check('INV-05 calls a claimed gate a reduction taken with CMA pending', /DAL reduction taken on a CLAIMED independence, CMA substantiation pending/.test(inv) && !/DAL reduction withheld/.test(inv));
     check('independence claims carry pending beside reduced, and read VOTING gates', /pending: !!n\._dalPending/.test(ic) && /n\.gateType === 'VOTING'/.test(ic));
-    check('the AutoReq note says the reduction is withheld until CMA', /DAL reduction withheld: independence is claimed but not yet substantiated/.test(asr));
-    check('the canvas badge shows the would-be DAL on hover (dashed while pending)', /_dalIfSubstantiated !== n\.allocatedDAL/.test(fv) && /once Common Mode Analysis substantiates/.test(fv) && /stroke-dasharray/.test(fv));
+    check('the AutoReq note says the reduction is taken, CMA pending', /DAL reduction taken on the claimed independence and marked CMA pending/.test(asr) && !/DAL reduction withheld/.test(asr));
+    check('the canvas badge is dashed and marked CMA pending, and its hover says what it reverts to', /n\._dalIfReverted !== n\.allocatedDAL/.test(fv) && /'CMA pending'/.test(fv) && /reverts to/.test(fv) && /stroke-dasharray/.test(fv));
     check('the DAL panel opens on VOTING gates', /const isAndLike = dataNode\.gateType === 'AND' \|\| dataNode\.gateType === 'INHIBIT' \|\| dataNode\.gateType === 'VOTING'/.test(fv));
     const expl = slice(hp, 'function dalgebraOptionsTableHTML', "try { window.dalgebraOptionsTableHTML", 'explanation');
-    check('the DALgebra explanation states the row rule in plain words', /sets the row and the whole tree stays in it/.test(expl) && /nobody goes more than two levels below it/.test(expl) && /however deep the tree/.test(expl) && /Nothing is reduced until Common Mode Analysis/.test(expl));
+    check('the DALgebra explanation states the row rule in plain words', /sets the row and the whole tree stays in it/.test(expl) && /nobody goes more than two levels below it/.test(expl) && /however deep the tree/.test(expl) && /marked CMA pending until Common Mode Analysis shows it/.test(expl));
     check('the explanation has no em dash in the new text', !/sets the row[^<]*\u2014/.test(expl));
     check('the panel option says a claim takes no reduction yet', /Claimed, pending CMA \(no reduction yet\)/.test(idx));
 }

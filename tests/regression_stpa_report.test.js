@@ -83,7 +83,7 @@ const src = S('reports.js');
 const tableTokens = [...new Set([...tpl.matchAll(/^\{\{([a-z_]+_table)\}\}$/gm)].map(m => m[1]))];
 check('template uses the full STPA table family (' + tableTokens.length + ' tables)', tableTokens.length >= 9);
 // 31 Oct 2026: no whitelist any more: reports.js renders any {{token}} whose value is a list of rows as a table
-check('reports.js renders a token as a table by its value, not from a list', /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(src) && !/const tab = ln\.match\(/.test(src));
+check('reports.js renders a token as a table by its value, not from a list', /if \(!isAppx && (!isFig && )?!_isTableVal\(data\[name\]\)\) continue;/.test(src) && !/const tab = ln\.match\(/.test(src));
 
 console.log('\n[3] tokens on a real model');
 const T = globalThis.STPA_REPORT.stpaTokens();

@@ -22,6 +22,13 @@ closed it. 137 entries became 52 open and 72 closed; the rest were duplicate or 
 - [ ] **NS-6 AI turns retry a "no AI key on this server" answer 3 times** before saying so; a permanent error should stop at once.
 - [ ] **NS-7 Mac app main window takes no key presses** (Settings window does); blank window after restart on Aeolus HL-1. Parked by Waqas (no Mac users expected). Diagnose with a dev run.
 
+## 6 Nov 2026, report AI rebuild and Markov AI (docs/REPORT_AI_REBUILD_2026-11-06.md)
+
+- [ ] **RA-1 Dependence diagram, CEA and the PSSA/SSA budget pages have no AI drafting** (Markov done 6 Nov).
+- [ ] **RA-2 Architecture diagrams and event tree / bow-tie pictures in the report body** (need an editor instance for toSvg).
+- [x] **RA-3 systemsData briefly empty while a report draft runs**: not the app. The live page's CSP (no unsafe-eval) blocked markov_ai.js's new Function read of the stores once a call had awaited; markov_ai now reads through SLEnv like every module, and its test serves the production CSP.
+- [x] **RA-4 DAL reductions held for CMA substantiation** (Waqas 6 Nov: "why are no DAL reductions happening?"; "the requirements generated for independence and DAL need to show need for independence and develop DAL for that"). Decided and built 6 Nov: a claimed independence takes the reduction, marked CMA pending (dashed badge + tag), resting on the gate's independence requirements; the DAL requirement's rationale names them and what the member reverts to (_dalIfReverted); a CMA common mode reverts. Tests regression_dal_row_20261013 [4][7][8], regression_indep_global, regression_f3061_dal F4.
+
 ## 28 Sep 2026 — ACTIVE SECURITY QUEUE (Waqas: "mark the security ones as items to do")
 
 The open security work, in the order it should be done. Everything not listed here is closed and

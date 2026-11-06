@@ -1807,10 +1807,23 @@ const AutoReq = (function(){
         // a summary line cannot be traced to a failure condition, verified item by item or flowed down, and it
         // silently changes meaning when one item moves. Stored default rows become "source gone" orphans on the
         // next generation (the engineer decides; nothing is removed automatically).
+        // 6 Nov 2026 (Waqas): a DAL reduced on a claimed independence names the independence requirements it rests
+        // on (stored ones by their id, the rest by the gate that derives them) and what it reverts to.
+        const _pendRat = a => {
+            const n = a.node;
+            if (!n || !n._dalIfReverted || n._dalIfReverted === a.dal || !(n._dalRestsOn || []).length) return '';
+            let st = []; try { st = storeForScope(scopeKey) || []; } catch (_) {}
+            const parts = n._dalRestsOn.map(g => {
+                const ids = st.filter(r => r && !r.deleted && r.reqSource && /:gate-indep(-dev|-phys)?:/.test(String(r.reqSource.sourceId || '')) && String(r.reqSource.sourceId).slice(String(r.reqSource.sourceId).lastIndexOf(':') + 1) === String(g.nodeId))
+                    .map(r => r.id || r.traceId || ('REQ-' + r.internalId));
+                return g.label + (ids.length ? ' (' + ids.join(', ') + ')' : ' (functional, physical and development independence, not yet accepted into the register)');
+            });
+            return ' This DAL rests on the independence requirements derived at ' + parts.join('; ') + '. Common Mode Analysis (ARP4761A App M) must verify them (CMA pending); if it finds a common mode, this ' + (a.node.type === 'basic' ? 'item' : 'function') + ' reverts to ' + a.kind + ' ' + n._dalIfReverted + '.';
+        };
         perLid.forEach(a => {
             out.push({
                 text: `${a.node.name || a.node.displayId || 'Item'} shall be developed to ${a.kind} ${a.dal}.`,
-                rat: _dalgebraRat(a) + _disagreeRat(a),
+                rat: _dalgebraRat(a) + _pendRat(a) + _disagreeRat(a),
                 level: 'L2', type: 'Safety', analysis: 'Design Assurance',
                 verifMethod: 'Inspection',
                 traceId: a.node.displayId || '',
@@ -2055,13 +2068,15 @@ const AutoReq = (function(){
             // Surface the allocateDAL-generated independence requirement's substantiation state
             // (the precondition for the DAL reduction) in the AutoReq rationale.
             const _ir = node._independenceReq;
-            // 13 Oct 2026 (fix 7): a claim no longer reduces: the reduction is TAKEN only once CMA
-            // has substantiated the independence; until then it is withheld and stated as available.
-            const irNote = _ir
+            // 6 Nov 2026: a claim takes the reduction, marked CMA pending; these requirements are what it rests on.
+            // 6 Nov 2026 (Waqas): the independence requirement says which DALs rest on it
+            const _redList = (_ir && Array.isArray(kids)) ? kids.filter(c => c && c.allocatedDAL && c._dalIfReverted && c._dalIfReverted !== c.allocatedDAL)
+                .map(c => (c.name || c.displayId || String(c.id)) + ' ' + c.allocatedDAL + ' (from ' + c._dalIfReverted + ')') : [];
+            const irNote = (_redList.length ? ' The development assurance reduction rests on this independence: ' + _redList.join('; ') + '.' : '') + (_ir
                 ? (_ir.status === 'substantiated'
                     ? ' DAL reduction taken under substantiated independence: CMA substantiation (ARP4761A App M) is recorded.'
-                    : ' DAL reduction withheld: independence is claimed but not yet substantiated, and CMA substantiation (ARP4761A App M) is REQUIRED before the reduction can be taken.')
-                : '';
+                    : ' DAL reduction taken on the claimed independence and marked CMA pending: Common Mode Analysis (ARP4761A App M) must verify the independence requirements of this gate; a common mode found reverts the members to the incoming DAL.')
+                : '');
 
             if(isAndFamily(node)){
                 if (kids.length < 2) return;   // independence needs ≥2 members
@@ -2111,7 +2126,7 @@ const AutoReq = (function(){
                     const opt = node.dalOption === 'opt1' ? '1' : '2';
                     out.push({
                         text: `${childAssetSubject} shall be developed with ${kw} development independence.`,
-                        rat: `The DAL reduction at gate ${gateLabel} (ARP4754B §5.2.3 / ARP4761A Table P2, Option ${opt}) is predicated on development independence between the members. ${_ir.status === 'substantiated' ? 'CMA substantiation (ARP4761A App M) is recorded and the reduction is taken' : 'CMA substantiation (ARP4761A App M) is REQUIRED; until then the reduction is withheld and every member holds the incoming DAL'}. Children: ${childLabels}.`,
+                        rat: `The DAL reduction at gate ${gateLabel} (ARP4754B §5.2.3 / ARP4761A Table P2, Option ${opt}) is predicated on development independence between the members. ${_ir.status === 'substantiated' ? 'CMA substantiation (ARP4761A App M) is recorded and the reduction is taken' : 'The reduction is taken on the claim and marked CMA pending: Common Mode Analysis (ARP4761A App M) must verify this requirement, and a common mode found reverts every member to the incoming DAL'}. Children: ${childLabels}.`,
                         level: 'L2', type: 'Safety', analysis: 'Independence',
                         verifMethod: 'Analysis',
                         traceId: node.displayId || '',

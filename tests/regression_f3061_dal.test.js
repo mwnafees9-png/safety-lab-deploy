@@ -120,15 +120,14 @@ x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalIndependence: 'compromis
 alloc({ regulation: 'Part 23', part23Class: 'IV' }, 'Catastrophic', root);
 check('F4 EXEC: compromised independence reverts every member to the top DAL', x.allocatedDAL === 'A' && y.allocatedDAL === 'A');
 
-// 13 Oct 2026 (fix 7): the old check expected a bare claim to REDUCE (root._dalReduced === true). The
-// agreed rule is no reduction until CMA substantiates independence: the claim raises its requirement,
-// holds both members at the primary, and keeps the secondary as the would-be DAL.
+// 6 Nov 2026 (Waqas): a bare claim takes the reduction again, marked CMA pending and resting on the independence
+// requirement it raises; what the members revert to if a CMA finds a common mode is kept (_dalIfReverted).
 x = leaf(); y = leaf(); root = gate('AND', [x, y], { dalIndependence: 'claimed' });
 alloc({ regulation: 'Part 23', part23Class: 'I' }, 'Hazardous', root);
-check('F4 EXEC: a claimed gate raises its independence requirement but takes no reduction until CMA (I Haz: C / C now, would be C / D)',
-    root._dalReduced === false && root._dalPending === true && root._independenceReq && root._independenceReq.status === 'claimed'
-    && x.allocatedDAL === 'C' && y.allocatedDAL === 'C' && x._dalIfSubstantiated === 'C' && y._dalIfSubstantiated === 'D',
-    [x, y].map(n => n.allocatedDAL + '/' + n._dalIfSubstantiated).join(' '));
+check('F4 EXEC: a claimed gate raises its independence requirement and takes the reduction, CMA pending (I Haz: C / D, reverts to C / C)',
+    root._dalReduced === true && root._dalPending === true && root._independenceReq && root._independenceReq.status === 'claimed'
+    && x.allocatedDAL === 'C' && y.allocatedDAL === 'D' && x._dalIfReverted === 'C' && y._dalIfReverted === 'C',
+    [x, y].map(n => n.allocatedDAL + '/' + n._dalIfReverted).join(' '));
 
 // ---- F5 EXEC ----------------------------------------------------------------------------
 // 13 Oct 2026 (fix 7): F5 tests the reduction itself, so independence is substantiated explicitly.

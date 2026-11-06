@@ -1,4 +1,4 @@
-/* report_writer.js v1.0 (31 Oct 2026): one writer for every report, Word and PDF (customer checklist items 20, 22, 24).
+/* report_writer.js v1.2 (6 Nov 2026: the titles of the CoFFE, MAC, MF&MS, independence principle and CCMR tables say what they are). v1.0 (31 Oct 2026): one writer for every report, Word and PDF (customer checklist items 20, 22, 24).
  *
  * The report builders (reports.js: the dialog's section editor and the one-shot Reports.generate) describe a report
  * as a list of blocks; this writer turns the same list into a Word file and a PDF, so both formats always carry the
@@ -17,7 +17,7 @@
  */
 (function (root) {
     'use strict';
-    var VERSION = '1.0';
+    var VERSION = '1.2';
     function S(v) { return String(v == null ? '' : v); }
 
     // ---- table titles (a table token with no title here is named from its token) ---------------------------------
@@ -25,10 +25,10 @@
         fha_table: 'Failure conditions', requirements_table: 'Requirements', component_list: 'Components', pra_table: 'Particular risk evaluations',
         zsa_table: 'Zonal safety findings', cma_table: 'Common mode analyses', fta_summary: 'Fault tree summary', assumptions_list: 'Assumptions',
         afha_worksheet: 'Aircraft FHA worksheet', sfha_worksheet: 'System FHA worksheet', fta_summary_grid: 'Fault tree results by failure condition',
-        cma_grid: 'Common mode analysis', coffe_table: 'Combinations of failures and failure effects', validation_matrix: 'Requirements validation matrix',
+        cma_grid: 'Common mode analysis', coffe_table: 'Combined functional failure effects (CoFFE)', validation_matrix: 'Requirements validation matrix',
         verification_matrix: 'Requirements verification matrix', compliance_posture: 'Compliance posture', fc_evaluations: 'Failure condition evaluations',
         gaps_table: 'Open gaps', goldenthread_table: 'Golden thread', interdep_table: 'System interdependencies', common_resource_table: 'Common resources',
-        mac_table: 'Multiple aircraft configurations', mfms_table: 'Multiple failure modes', ip_ledger_table: 'Issue papers', ccmr_table: 'Certification check maintenance requirements',
+        mac_table: 'Minimum acceptable configuration model', mfms_table: 'Malfunction and failure mode summary trees', ip_ledger_table: 'Independence principles', ccmr_table: 'Candidate certification maintenance requirements',
         wearout_table: 'Wear-out items', fmes_table: 'Failure modes and effects summary', checklist_table: 'Checklist', tailoring_table: 'Tailoring',
         program_scope_table: 'Program scope', fmea_functional_table: 'Functional FMEA', fmea_piecepart_table: 'Piece-part FMEA', ram_prediction_table: 'Reliability prediction',
         ram_alloc_table: 'Reliability allocation', ram_ledger_table: 'Reliability ledger', ram_spares_table: 'Spares', ram_weibull_table: 'Weibull analysis',

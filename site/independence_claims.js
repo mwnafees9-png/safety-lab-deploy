@@ -62,7 +62,7 @@
                     out.push({
                         pageId: p.id, page: p.name, gateId: n.id, gate: n.displayId || n.id, gateType: n.gateType,
                         // reduced = the DAL reduction is TAKEN (CMA-substantiated); pending = it is
-                        // claimed and withheld until CMA substantiates it (13 Oct 2026, fix 7).
+                        // claimed: the reduction is taken, CMA pending, until CMA substantiates it (6 Nov 2026; 13 Oct to 6 Nov it was withheld).
                         independence: n.dalIndependence, reduced: !!n._dalReduced, pending: !!n._dalPending,
                         members: members,
                         resolved: members.filter(function (m) { return m.equipmentId; }).length,

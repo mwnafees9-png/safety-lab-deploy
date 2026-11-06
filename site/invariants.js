@@ -200,10 +200,9 @@
                     _walkGates(p.root, g => {
                         if (!g._independenceReq) return;
                         checked++;
-                        // 13 Oct 2026 (fix 7): a claim no longer reduces the DAL: the reduction is
-                        // withheld (members hold the incoming DAL) until CMA substantiates it.
+                        // 6 Nov 2026: a claim takes the reduction, marked CMA pending until a CMA substantiates it.
                         if (g._independenceReq.status !== 'substantiated')
-                            fails.push('Gate ' + (g.displayId || g.id) + ' on "' + p.name + '": DAL reduction withheld: independence is CLAIMED, CMA substantiation pending');
+                            fails.push('Gate ' + (g.displayId || g.id) + ' on "' + p.name + '": DAL reduction taken on a CLAIMED independence, CMA substantiation pending');
                     });
                 });
                 return { checked, fails };

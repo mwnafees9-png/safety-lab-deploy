@@ -100,7 +100,8 @@ ok('ai_loader pin at or past 8.24', (function(){const m=idx.match(/ai_loader\.js
     // that is the point: an engineer looking up "what does this need" now sees that
     // drafting needs a document and recommending needs rows, as two separate answers.
     // 35 became 36 on 30 Oct 2026: Propose combined failure conditions states its inputs too.
-    ok('the guide is thirty-six entries — 26 plus a drafter per HF lane, plus combined failure conditions', guide.length === 36, 'got ' + guide.length);
+    // 36 became 37 on 6 Nov 2026: Draft a Markov model states its inputs too (markov_ai.js).
+    ok('the guide is thirty-seven entries — 26 plus a drafter per HF lane, plus combined failure conditions and the Markov model', guide.length === 37, 'got ' + guide.length);
 
     // the only actions without a needs block are the ones that are not analyses
     const bare = acts.filter(a => !a.needs).map(a => a.label);

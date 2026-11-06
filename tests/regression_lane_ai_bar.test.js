@@ -145,7 +145,8 @@ ok('every button says the result is advisory', /advisory; every result lands in 
 
     // (e) coverage — which analysis lanes now have a bar, and which honestly do not
     const covered = Object.keys(byLane).sort();
-    ok('twenty-one lanes carry an AI bar', covered.length === 21, 'got ' + covered.length + ': ' + covered.join(' '));
+    // 6 Nov 2026: 22 with the Markov page (markov_ai.js, skill markov.draft v1)
+    ok('twenty-two lanes carry an AI bar', covered.length === 22, 'got ' + covered.length + ': ' + covered.join(' '));
 
     // Deliberately laneless. An action that does not write ONE lane does not get a lane
     // bar — under the rule that is not an omission, it is the rule working. They stay
@@ -156,8 +157,9 @@ ok('every button says the result is advisory', /advisory; every result lands in 
         laneless.join(' | '));
     ok('"Recommend architecture" is laneless on purpose — it writes advice, not a lane\'s rows',
         laneless.indexOf('Recommend architecture') >= 0);
-    ok('no RAM lane is wired yet — the skills come first, and this is the marker',
-        covered.filter(l => /^ram-|^markov$|^eta$/.test(l)).length === 0);
+    ok('no RAM or event tree lane is wired yet — the skills come first, and this is the marker',
+        covered.filter(l => /^ram-|^eta$/.test(l)).length === 0);
+    ok('the Markov page is wired, its skill first (markov.draft v1, markov_ai.js)', covered.indexOf('markov') >= 0);
 
     // (e2) the section bar: the combined failure conditions action sits in the combined panel, and only there
     ok('"Propose combined failure conditions" writes the fcv section', M.SECTION_ACTION_WRITES && M.SECTION_ACTION_WRITES['Propose combined failure conditions'] && M.SECTION_ACTION_WRITES['Propose combined failure conditions'].section === 'fcv');

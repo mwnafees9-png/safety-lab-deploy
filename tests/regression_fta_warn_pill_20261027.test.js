@@ -189,7 +189,9 @@ let clickRow = null;   // set once the page is up: a real click event on the pil
         });
         check('B2 the pill shows, inside the canvas at the bottom', b2.shown && b2.inside);
         check('B2 it is small (a pill, not a bar)', b2.w <= 120 && b2.h <= 34, Math.round(b2.w) + 'x' + Math.round(b2.h));
-        check('B2 it counts the warnings: "\u26a0 2"', b2.label === '\u26a0 2', b2.label);
+        // 6 Nov 2026: the fixture's leaf carries a failure rate with no source, which the rate-source check (rate_sources.js,
+        // 31 Oct) rightly warns about: three warnings, not two.
+        check('B2 it counts the warnings: "\u26a0 3" (actual over, feasibility, a rate with no source)', b2.label === '\u26a0 3' && b2.rows.includes('rate-source'), b2.label + ' ' + b2.rows.join(','));
         check('B2 the list stays closed until the pill is clicked', b2.listHidden);
         await pg.click('#fta-warn-pill .fwp-btn'); await sleep(200);
         const b2o = await pg.evaluate(() => { const l = document.querySelector('#fta-warn-pill .fwp-list'); const r = l.getBoundingClientRect(), c = document.getElementById('svg-wrap-container').getBoundingClientRect(); return { open: getComputedStyle(l).display !== 'none', fits: r.top >= c.top && r.left >= c.left && r.right <= c.right }; });

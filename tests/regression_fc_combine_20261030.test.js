@@ -46,7 +46,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     for (const p of ['playwright', '/home/claude/.npm-global/lib/node_modules/playwright']) { try { pw = require(p); break; } catch (_) {} }
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('fc_variants.js v2.2 and lane_ai_bar.js v1.6 are the versions loaded', /fc_variants\.js\?v=2\.2/.test(HTML) && /lane_ai_bar\.js\?v=1\.6/.test(HTML));
+    check('fc_variants.js v2.2 and lane_ai_bar.js v1.6+ are the versions loaded', /fc_variants\.js\?v=2\.2/.test(HTML) && /lane_ai_bar\.js\?v=1\.([6-9]|\d\d)/.test(HTML));
     const skills = fs.readFileSync(path.join(SITE, 'ai_skills.js'), 'utf8');
     check('the combined-failure skill is registered (fha.combine, v1)', /'fha\.combine': "STANDARD GROUNDING/.test(skills) && /'fha\.combine': 1,/.test(skills) && /"fha\.combine": "fha\.combine"/.test(skills));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }

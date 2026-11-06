@@ -86,6 +86,7 @@
         'Synthesize fault trees':             'fta',
         'Review fault trees':                 'fta',
         'Propose CCF groups':                 'fta',
+        'Draft a Markov model':               'markov',
         'FMEA — by system':                   'fmea',
         'Particular Risk Analysis (PRA)':     'pra',
         'Zonal Safety Analysis (ZSA)':        'zsa',

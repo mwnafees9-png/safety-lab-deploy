@@ -108,6 +108,20 @@
             (opts.legend ? '<div class="slap-legend">' + opts.legend.map(function (l) { return '<span><i style="background:' + l[0] + '"></i>' + E(l[1]) + '</span>'; }).join('') + '</div>' : '');
     }
 
+    // 6 Nov 2026 (report_ai.js rebuild): the same picture as ONE standalone svg for a report figure (Word, PDF):
+    // the views stacked top to bottom, no HTML wrapper and no legend div. Returns { svg, w, h } or null.
+    function figure(shapes, opts) {
+        var html = picture(shapes, opts); if (!html) return null;
+        var views = html.match(/<svg[\s\S]*?<\/svg>/g) || []; if (!views.length) return null;
+        var y = 0, w = 0, body = '';
+        views.forEach(function (v) {
+            var vw = +((v.match(/width="(\d+)"/) || [])[1] || 0), vh = +((v.match(/height="(\d+)"/) || [])[1] || 0);
+            body += v.replace(/^<svg /, '<svg x="0" y="' + y + '" '); y += vh + 6; w = Math.max(w, vw);
+        });
+        var h = Math.max(1, y - 6);
+        return { svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '"><rect width="100%" height="100%" fill="#ffffff"/>' + body + '</svg>', w: w, h: h };
+    }
+
     // ---- a question: big buttons, what each answer changes -------------------------------------------------
     // q: { id, text, why, options: [{ id, label, impact }], picked, act } ; act(qid, optionId) is the onclick call
     function question(q, act) {
@@ -162,6 +176,6 @@
         try { var b = new Blob([doc], { type: 'text/html' }), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = title.replace(/[^\w-]+/g, '_') + '.html'; a.click(); } catch (_) {}
         return false;
     }
-    root.SLAutopilotUI = { VERSION: VERSION, E: E, importCad: importCad, importZones: importZones, openCad: openCad, importButtons: importButtons, emptyCard: emptyCard, style: style, picture: picture, question: question, pill: pill, rail: rail, progress: progress, who: who, save: save, openReport: openReport };
+    root.SLAutopilotUI = { VERSION: VERSION, E: E, importCad: importCad, importZones: importZones, openCad: openCad, importButtons: importButtons, emptyCard: emptyCard, style: style, picture: picture, figure: figure, question: question, pill: pill, rail: rail, progress: progress, who: who, save: save, openReport: openReport };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLAutopilotUI;
 })(typeof window !== 'undefined' ? window : globalThis);

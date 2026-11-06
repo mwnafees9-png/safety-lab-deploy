@@ -188,3 +188,10 @@ declares identity on a node sitting on an aircraft page. Max theoretical movers 
     passes happen in between; same-day intermediate builds are withdrawn, not left in the revision
     history. "Nobody releases the same document a million times in the same day." SL-DG-0001 went
     2.0 (held by Radia) to 2.1, with the 2.2/2.3/2.4 builds of 2 Oct removed from the repo.
+
+33. **A browser test of code that reads app state serves the production CSP (6 Nov 2026).** The page
+    policy (worker.js) has no 'unsafe-eval', so new Function and eval fail in production while a
+    plain test server lets them pass. markov_ai.js read the stores with new Function and would have
+    seen an empty project live. Read app state through SLEnv (sl_env.js); in the test server send
+    `Content-Security-Policy: script-src 'self' 'unsafe-inline'` with index.html (see
+    tests/regression_markov_ai_20261106.test.js).

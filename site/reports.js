@@ -123,6 +123,7 @@ const Reports = (function() {
             '',
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
             'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
@@ -193,6 +194,7 @@ const Reports = (function() {
             '',
             '## 4. Rolled-Up Quantitative Evidence',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '## 5. Common-Cause Verification',
             'Evidence from ZSA, PRA, and CMA is summarized; full analyses appear in appendices.',
@@ -280,6 +282,7 @@ const Reports = (function() {
             '',
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
             'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
@@ -320,6 +323,7 @@ const Reports = (function() {
             '',
             '## 4. Quantitative Evidence',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
             'Minimal cut sets containing a development error are never quantified — every P(top) above is explicitly conditional on no development error. Each scenario is addressed by process assurance (the allocated DAL) and derived requirements, not by the probability budget.',
@@ -379,6 +383,7 @@ const Reports = (function() {
             '',
             '## 3. Zone-by-Zone Findings',
             '{{zsa_table}}',
+            '{{figure:zsa_zones}}',
             '',
             '## 4. Assumptions',
             '{{assumptions_list}}',
@@ -402,6 +407,7 @@ const Reports = (function() {
             '',
             '## 3. Particular Risk Catalog',
             '{{pra_table}}',
+            '{{figure:pra_risks}}',
             '',
             '## 4. Assumptions',
             '{{assumptions_list}}',
@@ -2466,15 +2472,37 @@ const Reports = (function() {
         return out;
     }
     // prose with {{table}} and {{appendix:x}} tokens -> blocks; scalars are resolved by the caller, {{ref:..}} stays for the writer
+    // 6 Nov 2026 (report_ai.js rebuild): figures in the body of a report, {{figure:<name>}}. fta_top: the first sheet of
+    // every fault tree in the report's scope (the appendix keeps every sheet). A figure with nothing to draw says so.
+    async function _figureBlocks(name, data, o) {
+        if (name === 'fta_top') {
+            const P = window.SLFtaPrint;
+            if (!P) return [{ k: 'note', text: 'The fault tree drawings are not loaded: reload the page and generate again.' }];
+            const sheets = P.plan(data._ftaPagesForAppendix || []).filter(sh => sh.sheet === 1).map(sh => Object.assign({}, sh, { caption: 'Fault tree: ' + sh.title + (sh.of > 1 ? ' (first of ' + sh.of + ' sheets; every sheet is in the appendix)' : '') }));
+            if (!(o && o.noImages)) for (const sh of sheets) { try { sh.dataUrl = await P.png(sh, 3); } catch (e) { sh.dataUrl = null; } }
+            return sheets.length ? [{ k: 'sheets', sheets }] : [{ k: 'p', text: 'No fault trees are recorded for this scope yet.' }];
+        }
+        // zsa_zones / pra_risks: the Autopilots' pictures of each zone and each particular risk, from the CAD model
+        const auto = name === 'zsa_zones' ? window.SLZsaAuto : name === 'pra_risks' ? window.SLPraAuto : null;
+        if (auto) {
+            let figs = []; try { figs = (auto.figures && auto.figures()) || []; } catch (_) { figs = []; }
+            if (!figs.length) return [{ k: 'p', text: name === 'zsa_zones' ? 'No zone pictures: the project has no CAD model with zones yet.' : 'No particular risk pictures: the project has no CAD model with risk areas yet.' }];
+            const P = window.SLFtaPrint, sheets = figs.map(x => ({ title: x.title, caption: x.caption, svg: x.svg, w: x.w, h: x.h }));
+            if (P && !(o && o.noImages)) for (const sh of sheets) { try { sh.dataUrl = await P.png(sh, 3); } catch (e) { sh.dataUrl = null; } }
+            return [{ k: 'sheets', sheets }];
+        }
+        return [{ k: 'note', text: 'Figure ' + name + ' is not one the reports know.' }];
+    }
     async function _proseBlocks(text, data, appendices, section, o) {
-        const out = [], re = /\{\{(appendix:[a-z]+|[a-z0-9_]+)\}\}/gi;
+        const out = [], re = /\{\{(appendix:[a-z]+|figure:[a-z_]+|[a-z0-9_]+)\}\}/gi;
         let last = 0, m;
         const pushText = (t) => { if (t && t.replace(/\s+/g, '') !== '') out.push({ k: 'p', text: t.replace(/^\s*\n|\n\s*$/g, ''), section }); };
         while ((m = re.exec(text)) !== null) {
             const name = m[1];
-            const isAppx = /^appendix:/i.test(name);
-            if (!isAppx && !_isTableVal(data[name])) continue;     // a scalar left as written
+            const isAppx = /^appendix:/i.test(name), isFig = /^figure:/i.test(name);
+            if (!isAppx && !isFig && !_isTableVal(data[name])) continue;     // a scalar left as written
             pushText(text.slice(last, m.index));
+            if (isFig) { out.push(...await _figureBlocks(name.split(':')[1], data, o)); last = m.index + m[0].length; continue; }
             if (isAppx) { const ap = name.split(':')[1]; if ((appendices || {})[ap]) (o && o.tail ? o.tail : out).push(...await _appendixBlocks(ap, data, o)); }
             else out.push({ k: 'table', name, rows: data[name] || [] });
             last = m.index + m[0].length;
@@ -2561,7 +2589,7 @@ const Reports = (function() {
         });
 
         // Appendix tokens: strip them (custom docx assumes user has their own structure).
-        xml = xml.replace(/\{\{appendix:[a-z]+\}\}/g, '');
+        xml = xml.replace(/\{\{(appendix|figure):[a-z_]+\}\}/g, '');
 
         zip.file('word/document.xml', xml);
         return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -3345,6 +3373,7 @@ window.Reports = Reports;
             const fakeBlocks = [];
             st.sections.forEach(sec => { if (sec.heading && sec.level > 0 && sec.heading !== '(Preamble)') fakeBlocks.push({ k: 'h', level: sec.level, text: sec.heading });
                 const re = /\{\{([a-z0-9_]+)\}\}/gi; let m; while ((m = re.exec(sec.prose || '')) !== null) if (W.isTableValue(st.data[m[1]])) fakeBlocks.push({ k: 'table', name: m[1], rows: [] });
+                if (/\{\{figure:fta_top\}\}/.test(sec.prose || '') && window.SLFtaPrint) fakeBlocks.push({ k: 'sheets', sheets: window.SLFtaPrint.plan(st.data._ftaPagesForAppendix || []).filter(sh => sh.sheet === 1) });
                 if (/\{\{appendix:fta\}\}/.test(sec.prose || '') && st.appendices && st.appendices.fta && window.SLFtaPrint) fakeBlocks.push({ k: 'sheets', sheets: window.SLFtaPrint.plan(st.data._ftaPagesForAppendix || []) }); });
             _refs = W.referable({ blocks: fakeBlocks });
         } catch (_) {}
@@ -3698,7 +3727,7 @@ window.Reports = Reports;
             out = out.replace(new RegExp('\\{\\{' + name + '\\}\\}', 'g'), flat);
         });
         // Appendices — drop the markers (custom templates handle their own structure)
-        out = out.replace(/\{\{appendix:[a-z]+\}\}/g, '');
+        out = out.replace(/\{\{(appendix|figure):[a-z_]+\}\}/g, '');
         return out;
     }
 
@@ -3919,6 +3948,7 @@ window.Reports = Reports;
             '',
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
             'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
@@ -4009,6 +4039,7 @@ window.Reports = Reports;
             '',
             '## 4. Rolled-Up Quantitative Evidence',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '## 5. Common-Cause Verification',
             'Evidence from ZSA, PRA, and CMA is summarized; full analyses appear in appendices.',
@@ -4127,6 +4158,7 @@ window.Reports = Reports;
             '',
             '## 8. Linked Fault Trees',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
             'Minimal cut sets containing a development error form the qualitative lane: never quantified, addressed by process assurance (DAL) and derived requirements. Quantified P(top) figures are conditional on no development error.',
@@ -4191,6 +4223,7 @@ window.Reports = Reports;
             '',
             '## 4. Quantitative Evidence',
             '{{fta_summary}}',
+            '{{figure:fta_top}}',
             '',
             '### Qualitative Functional Failure Scenarios (ARP 4761A 4.1.1.1)',
             'Minimal cut sets containing a development error are never quantified — every P(top) above is explicitly conditional on no development error. Each scenario is addressed by process assurance (the allocated DAL) and derived requirements, not by the probability budget.',
@@ -4274,6 +4307,7 @@ window.Reports = Reports;
             '',
             '## 3. Zone-by-Zone Findings',
             '{{zsa_table}}',
+            '{{figure:zsa_zones}}',
             '',
             '## 4. Assumptions',
             '{{assumptions_list}}',
@@ -4304,6 +4338,7 @@ window.Reports = Reports;
             '',
             '## 3. Particular Risk Catalog',
             '{{pra_table}}',
+            '{{figure:pra_risks}}',
             '',
             '## 4. Assumptions',
             '{{assumptions_list}}',
@@ -4499,118 +4534,61 @@ window.Reports = Reports;
     }
 
     // ------------------------------------------------------------------------
-    // _systemPromptForSection(section, reportType, headingPath) — builds the
-    // system prompt. Heavily constrained: no fabrication, no quantitative
-    // claims beyond what's in the data, certification-appropriate tone.
+    // _draftSectionWithAI(section, reportType, data, def) (6 Nov 2026, report_ai.js): the AI writes the narrative only;
+    // every table, list, appendix and figure the section names is put back by the engine (SLReportAI.compose), a section
+    // of empty tables is written by the engine without the AI, and a draft the guard or the claim checker flags is sent
+    // back once with what they found. Returns { prose, model, generatedAt, review, attempts } or throws.
     // ------------------------------------------------------------------------
-    function _systemPromptForSection(section, reportType, def) {
-        return [
-            'You are drafting prose for the "' + section.heading + '" section of an ' + def.name + ' (' + reportType + ').',
-            'This document is a CERTIFICATION artifact reviewed by a Designated Engineering Representative (DER) or Authorized Representative (AR). Accuracy matters.',
-            '',
-            'STRICT CONSTRAINTS:',
-            '1. Use ONLY the project data provided below. Do NOT invent failure conditions, hazard classifications, DAL allocations, system architectures, or quantitative reliability claims that are not present in the data.',
-            '2. If the section concerns a topic for which the data is empty or insufficient, write 1 paragraph acknowledging that and noting "[Data to be added in subsequent revisions]" — do not fabricate.',
-            '3. Match ARP 4761A / AC 25.1309-1B / equivalent terminology for the certification basis given in the data.',
-            '4. Do not include the section heading in your response — only the prose body.',
-            '5. Do not include markdown headers (#, ##), bullet lists, or numbered lists unless the source data explicitly contains a list. Prose paragraphs only.',
-            '6. Preserve any {{table_token}} or {{appendix:xxx}} markers that appear in the template prose by inserting them at appropriate positions. Tokens like {{fha_table}} indicate a table will be inserted at render time — write prose leading into the table.',
-            '7. 2-4 paragraphs, ~80-200 words total. Match the level of detail expected for this section.',
-            '8. Tone: formal, technical, factual. No marketing language. No "we", "our" — use third-person "the aircraft / the system".',
-            '',
-            'GROUNDING IN THE DERIVED ANALYSIS (build #144):',
-            '9. The JSON includes a "derived_analysis" object distilled from the actual safety model — per-failure-condition evaluations (single-failure / order-1 cut-set posture, required-vs-allocated DAL, inferred protective strategy, open requirements, unconfirmed assumptions), the compliance-risk roll-up, and a list of surfaced gaps. When it is present and relevant to this section, GROUND your prose in it: cite the specific posture (e.g. an order-1 cut set indicating a single point of failure, a DAL allocation that is short of the required level, an open requirement, an orphan trace, or an unconfirmed assumption).',
-            '10. SURFACE gaps; never bury them. If derived_analysis.gaps or open compliance risks exist for the topic of this section, state them plainly as open/tracked items with the recommended path — do not smooth them over or imply they are resolved.',
-            '',
-            'ADVISORY — NEVER DETERMINATIVE (hard rule):',
-            '11. This report is ADVISORY. It presents safety POSTURE + RISK + PATH. It must NEVER assert final regulatory compliance or state that a failure condition "is compliant", "meets all requirements", or "is certified". Where the data shows an objective is satisfied, phrase it as "the model indicates …", "the allocated DAL meets the required level", or "no structural single point of failure was identified (advisory)". The Designated Engineering Representative / certifying authority makes the compliance determination — say so where a section would otherwise read as a compliance conclusion.',
-            '',
-            'TEMPLATE DEFAULT PROSE (for tone and structural reference; you may improve clarity but stay on-topic):',
-            '"""',
-            section.prose || '(empty)',
-            '"""',
-            '',
-            'Project data follows in the user message as JSON.',
-        ].join('\n');
-    }
-
-    // ------------------------------------------------------------------------
-    // _draftSectionWithAI(section, reportType, data, def) — single AI call.
-    // Returns { prose, model, generatedAt } on success or { error } on failure.
-    // ------------------------------------------------------------------------
-    async function _draftSectionWithAI(section, reportType, data, def) {
-        const AF = (typeof window !== 'undefined' && window.AiFidelity) || null;
-        let systemPrompt = _systemPromptForSection(section, reportType, def);
-        let ctx = _buildContextForAI(reportType, data, section);
-        let manifest = null;
-        if (AF && AF.sectionContext) {
-            // Phase E2.1 — closed-world context contract: per-section scoping with
-            // a truncation manifest (the model is told what it cannot see), plus
-            // the clause library as the ONLY permitted external references.
-            const sc = AF.sectionContext(reportType, data, section, ctx);
-            ctx = sc.ctx; manifest = sc.manifest;
-            if (sc.clauses && sc.clauses.length) {
-                systemPrompt += '\n\nSTANDARD CLAUSE REFERENCES — the ONLY external references you may cite:\n' +
-                    sc.clauses.map(c => '- ' + c.ref + ' — ' + c.note).join('\n');
-            }
-            systemPrompt += [
-                '', '',
-                'CLOSED-WORLD CONTRACT (Phase E2 — enforced by a deterministic checker):',
-                '12. Every sentence must be supported by the JSON data or the clause references above. Nothing else exists.',
-                '13. Prefer {{token}} references for scalar facts that have tokens (e.g. {{cert_basis}}, {{system_name}}, {{checklist_summary}}) — the engine resolves them; never write out an ID, probability, or DAL letter that does not appear verbatim in the data.',
-                '14. context_manifest inside the JSON lists tables omitted or truncated for token budget. If a topic falls in omitted data, refer the reader to the corresponding table — do not describe contents you were not shown.',
-                '15. A deterministic claim checker parses every ID, number, and DAL letter in your prose and flags anything unmatched to the model. Unverifiable prose is rejected.',
-            ].join('\n');
-        }
-        const userMsg = 'Draft the "' + section.heading + '" section prose. Project data:\n\n' + JSON.stringify(ctx, null, 2);
-        // Route through the AI module's Provider so report drafting honors the active
-        // backend (cloud / self-hosted local). This is the path the rest of
-        // the AI features use; falling back to the raw client only if the module is absent.
-        let out;
+    async function _aiText(system, messages, maxTokens) {
         if (window.SafetyLabAI && typeof window.SafetyLabAI.complete === 'function') {
-            const r = await window.SafetyLabAI.complete({
-                feature: 'report.section.draft',
-                system: systemPrompt,
-                messages: [{ role: 'user', content: userMsg }],
-                maxTokens: 800
-            });
-            const txt = (r && (r.text || (r.raw && r.raw.content && r.raw.content[0] && r.raw.content[0].text))) || '';
-            out = { prose: String(txt).trim(), model: (r && r.model) || 'local', generatedAt: new Date().toISOString() };
-        } else {
-            if (!window.AiClient) throw new Error('AI assistant not available — configure in Settings.');
-            const r = await window.AiClient.messages({
-                feature: 'report.section.draft',
-                system: systemPrompt,
-                messages: [{ role: 'user', content: userMsg }],
-                maxTokens: 800,
-            });
-            const txt = (r.content && r.content[0] && r.content[0].text) || '';
-            out = { prose: txt.trim(), model: (r.model || 'claude-sonnet-4-6'), generatedAt: new Date().toISOString() };
+            const r = await window.SafetyLabAI.complete({ feature: 'report.section.draft', system, messages, maxTokens });
+            return { text: String((r && (r.text || (r.raw && r.raw.content && r.raw.content[0] && r.raw.content[0].text))) || '').trim(), model: (r && r.model) || 'local' };
         }
-        // Phase E2.3/E2.5 — deterministic review of the returned prose + a
-        // provenance record + a 'drafted' entry in the draft state machine.
+        if (!window.AiClient) throw new Error('AI assistant not available — configure in Settings.');
+        const r = await window.AiClient.messages({ feature: 'report.section.draft', system, messages, maxTokens });
+        return { text: String((r.content && r.content[0] && r.content[0].text) || '').trim(), model: r.model || 'claude-sonnet-4-6' };
+    }
+    function _reviewOf(AF, prose, data) {
+        const RA = window.SLReportAI;
+        const rev = AF ? AF.reviewDraft(prose, data) : { claims: [], tone: [], tokens: [], total: 0, clean: true };
+        const g = RA ? RA.guard(prose, data) : [];
+        rev.tone = (rev.tone || []).concat(g); rev.guard = g; rev.total = (rev.total || 0) + g.length; rev.clean = !rev.total;
+        return rev;
+    }
+    async function _draftSectionWithAI(section, reportType, data, def) {
+        const AF = (typeof window !== 'undefined' && window.AiFidelity) || null, RA = window.SLReportAI;
+        if (!RA) throw new Error('The report drafting module is not loaded: reload the page and try again.');
+        const at = new Date().toISOString();
+        // a section of empty tables with nothing of its own to say: the engine writes it
+        const det = RA.deterministic(section, data);
+        if (det != null) return { prose: det, model: 'engine', generatedAt: at, review: _reviewOf(null, det, data), attempts: 0, engine: true };
+        let system = RA.systemPrompt(reportType, def, section);
+        const base = _buildContextForAI(reportType, data, section);
+        const ctx = RA.context(reportType, section, data, base);
+        if (AF && AF.sectionContext) {
+            try { const sc = AF.sectionContext(reportType, data, section, {}); if (sc.clauses && sc.clauses.length) system += '\n\nSTANDARD CLAUSE REFERENCES (the only external references you may cite):\n' + sc.clauses.map(c => '- ' + c.ref + ' — ' + c.note).join('\n'); } catch (_) {}
+        }
+        system += '\n\nA deterministic checker reads every ID, number and DAL letter in your text against the project data, and a guard refuses placeholders. Unsupported text is sent back.';
+        const userMsg = 'Write the "' + section.heading + '" section. Project data:\n\n' + JSON.stringify(ctx, null, 1);
+        const messages = [{ role: 'user', content: userMsg }];
+        let r = await _aiText(system, messages, RA.MAX_TOKENS);
+        let prose = RA.compose(r.text, section.prose, data), review = _reviewOf(AF, prose, data), attempts = 1;
+        if (review.total) {
+            // one redraft with what the checks found
+            const r2 = await _aiText(system, messages.concat([{ role: 'assistant', content: r.text }, { role: 'user', content: RA.feedback([].concat(review.claims || [], review.tokens || [], review.tone || [])) }]), RA.MAX_TOKENS);
+            const p2 = RA.compose(r2.text, section.prose, data), rv2 = _reviewOf(AF, p2, data); attempts = 2;
+            if (rv2.total <= review.total) { r = r2; prose = p2; review = rv2; }
+        }
+        const out = { prose, model: r.model, generatedAt: at, review, attempts };
         if (AF) {
             try {
-                out.review = AF.reviewDraft(out.prose, data);
-                out.promptHash = AF.fnv(systemPrompt + ' ' + userMsg);
+                out.promptHash = AF.fnv(system + '' + userMsg);
                 out.inputFp = AF.fnv(JSON.stringify(ctx));
-                out.manifest = manifest;
                 const systemId = (R._modalState && R._modalState.systemId) || '';
                 const key = AF.draftKey(reportType, systemId, section.id);
                 out._afKey = key;
-                AF.noteDrafted(key, {
-                    heading: section.heading, model: out.model,
-                    promptHash: out.promptHash, inputFp: out.inputFp, flags: out.review.total,
-                    // Backlog #1 — input-fidelity evidence for the confidence badge:
-                    // what the closed-world manifest declared cut from this section's context.
-                    truncated: Object.keys((manifest && manifest.truncated) || {}).length,
-                    omitted: ((manifest && manifest.omitted) || []).length,
-                });
-                AF.recordProvenance({
-                    kind: 'draft', feature: 'report.section.draft', reportType,
-                    section: section.heading, model: out.model,
-                    promptHash: out.promptHash, inputFp: out.inputFp, flags: out.review.total,
-                });
+                AF.noteDrafted(key, { heading: section.heading, model: out.model, promptHash: out.promptHash, inputFp: out.inputFp, flags: review.total, skill: RA.SKILL + ' v' + RA.SKILL_VERSION, attempts });
+                AF.recordProvenance({ kind: 'draft', feature: 'report.section.draft', skill: RA.SKILL + ' v' + RA.SKILL_VERSION, reportType, section: section.heading, model: out.model, promptHash: out.promptHash, inputFp: out.inputFp, flags: review.total, attempts });
             } catch (_) { /* fidelity layer must never break drafting */ }
         }
         return out;
@@ -4903,7 +4881,8 @@ window.Reports = Reports;
                 const aiBox = document.createElement('div');
                 aiBox.dataset.role = 'ai-proposal';
                 aiBox.style.cssText = 'padding:8px 10px;font-size:12.5px;line-height:1.5;border:1px solid var(--color-accent-soft, rgba(0,122,255,0.3));border-radius:var(--r-sm);background:rgba(0,122,255,0.04);color:var(--color-text-primary);min-height:80px;white-space:pre-wrap;';
-                aiBox.textContent = draft.prose;
+                // the tables, figures and appendices the engine puts in are shown as what they are (report_ai.js)
+                if (window.SLReportAI && window.SLReportAI.previewHtml) aiBox.innerHTML = window.SLReportAI.previewHtml(draft.prose, st.data || (R._modalState && R._modalState.data) || {}); else aiBox.textContent = draft.prose;
                 aiCol.appendChild(aiBox);
                 sidebySide.appendChild(aiCol);
                 card.appendChild(sidebySide);

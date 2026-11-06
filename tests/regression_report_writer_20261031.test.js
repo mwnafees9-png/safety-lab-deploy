@@ -32,7 +32,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     for (const p of ['playwright', '/home/claude/.npm-global/lib/node_modules/playwright']) { try { pw = require(p); break; } catch (_) {} }
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/opt/pw-browsers')) process.env.PLAYWRIGHT_BROWSERS_PATH = '/opt/pw-browsers';
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('fta_print.js and report_writer.js load right before reports.js', /fta_print\.js\?v=1\.\d+" defer><\/script>\s*<script src="report_writer\.js\?v=1\.\d+" defer><\/script>\s*<script src="reports\.js\?v=/.test(HTML));
+    check('fta_print.js and report_writer.js load right before reports.js', /fta_print\.js\?v=1\.\d+" defer><\/script>\s*<script src="report_writer\.js\?v=1\.\d+" defer><\/script>\s*(<!--[^>]*-->\s*<script src="(report_ai|markov_ai)\.js\?v=[\d.]+" defer><\/script>\s*)*<script src="reports\.js\?v=/.test(HTML));
     const REP = fs.readFileSync(path.join(SITE, 'reports.js'), 'utf8');
     check('no renderer keeps its own list of table tokens or draws the canvas picture of a tree any more', !/_renderFTAImagesV2|_renderFTAAppendixImages/.test(REP) && !/fta_summary_grid\|cma_grid\|coffe_table\|validation_matrix[^\n]*appendix:fta/.test(REP));
     if (!pw) { console.log('  note  Playwright is not installed: the browser part did not run'); console.log('\n' + pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0); }

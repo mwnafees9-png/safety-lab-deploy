@@ -31,7 +31,7 @@ const reportsSrc = fs.readFileSync(path.join(__dirname, '..', 'site', 'reports.j
 console.log('[1] the SORA tables render as tables');
 // 31 Oct 2026: reports.js keeps no list of table tokens any more; any {{token}} whose value is a list of rows renders
 // as a table in every path (sections, one-shot, custom .docx). So: the tokens are in the data as rows, and the rule holds.
-check('reports.js renders a token as a table by its value (sections and one-shot)', /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(reportsSrc));
+check('reports.js renders a token as a table by its value (sections and one-shot)', /if \(!isAppx && (!isFig && )?!_isTableVal\(data\[name\]\)\) continue;/.test(reportsSrc));
 check('the custom .docx path takes its table tokens from the data', /const tableTokens = Object\.keys\(data\)\.filter\(k => _isTableVal\(data\[k\]\)/.test(reportsSrc));
 check('extractData builds sora_summary_table and sora_oso_table as rows', /sora_summary_table: \[\]/.test(reportsSrc) && /sora_oso_table:/.test(reportsSrc));
 

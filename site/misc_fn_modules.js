@@ -1,3 +1,4 @@
+// 6 Nov 2026: the strictest-DAL smoothing smooths the reverted DAL (_dalIfReverted), claims now reduce (support_modules allocateDAL).
 // 16 Oct 2026 (AI Assistant page): _slabGuardSourceDoc keeps controlled, addedBy, revision, the text hash and processedVia through a save (the controlled flag the ITAR fence reads used to be dropped on save).
 // 13 Oct 2026 (fix G): spawns fta_worker.js v1.9 with the engine v1.11 (SEQ gate, NOT gate with prime implicants).
 // 13 Oct 2026 (Office-style saving + change acknowledgement, fix2-J): scheduleAutosave reports every accepted change to SLChangeAck.noteChange() (change_ack.js); the unsaved flag belongs to save_state.js when it is loaded.
@@ -4147,9 +4148,10 @@ function _propagateStrictestDALAcrossSharedEvents(rootNode) {
         arr.forEach(n => { n.allocatedDAL = strict; });
         // 13 Oct 2026 (fix 7): the would-be DAL (once CMA substantiates a pending claim) follows the
         // same strictest-position rule, so the hover and the register agree across positions.
+        // 6 Nov 2026: and so does the DAL a member reverts to if a pending claim is not shown (_dalIfReverted).
         let strictIf = null;
-        arr.forEach(n => { if (n._dalIfSubstantiated) strictIf = dalMax(strictIf, n._dalIfSubstantiated); });
-        if (strictIf) arr.forEach(n => { n._dalIfSubstantiated = strictIf; });
+        arr.forEach(n => { if (n._dalIfReverted) strictIf = dalMax(strictIf, n._dalIfReverted); });
+        if (strictIf) arr.forEach(n => { n._dalIfReverted = strictIf; });
     });
 }
 

@@ -519,6 +519,10 @@ function clearAllAllocations() {
         // 13 Oct 2026 (fix 7): the reduction a pending claim would earn, and the pending flag.
         node._dalIfSubstantiated = null;
         node._dalPending = false;
+        // 6 Nov 2026: the DAL a member reverts to if the independence its reduction rests on is not shown, and the
+        // gates whose claims it rests on.
+        node._dalIfReverted = null;
+        node._dalRestsOn = null;
         const kids = node.children || node._children;
         if (kids) kids.forEach(strip);
     }
@@ -640,10 +644,15 @@ function dalRowComplianceBasis(startDal, ctx) {
 // VOTING k-of-n gates reduce too, rigorously: every k-member subset is a failure set, so Option 1
 // needs n-k+1 carriers (every k-subset then holds one) and Option 2 needs n-k+2 uppers (every
 // k-subset then holds two). An AND gate is the n-of-n case (1 carrier, 2 uppers).
-// No reduction is APPLIED until Common Mode Analysis substantiates the independence
-// (dalIndependence 'substantiated'). A claim (the default) holds every member at the incoming DAL
-// and the reduction it would earn is computed in a second pass and kept on each node as
-// `_dalIfSubstantiated`, so the user still sees what substantiation would buy.
+// 6 Nov 2026 (Waqas: "the requirements generated for independence and DAL need to show need for independence and
+// develop DAL for that"): a CLAIMED independence (the default) now takes the reduction, as ARP4754B planning does:
+// the members are developed to the reduced DAL and the gate derives the independence requirements that reduction
+// rests on (functional, physical, development), which Common Mode Analysis (App M) must verify. Until a CMA
+// substantiates it the reduction is marked CMA pending (_dalPending on the gate, _dalRestsOn on every member whose
+// DAL depends on it); a CMA that finds a common mode compromises the gate and every member reverts to the incoming
+// DAL. The second pass works out that reverted DAL (`_dalIfReverted`: claims not counted, only substantiated
+// independence), so the badge and the requirement say what the member goes back to. (13 Oct to 6 Nov 2026 a claim
+// held every member at the incoming DAL and showed the reduction as "would be".)
 // `_row` and `_pass` are internal (recursion only); callers pass the first five arguments.
 function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
     if (!node || !parentDal) return;
@@ -660,7 +669,13 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
         return;
     }
     const actual = (_pass !== 'potential');
-    const F = actual ? 'allocatedDAL' : '_dalIfSubstantiated';
+    const F = actual ? 'allocatedDAL' : '_dalIfReverted';
+    // the claimed gates this node's DAL rests on (6 Nov 2026)
+    if (actual && _row.pend && _row.pend.length) {
+        const have = node._dalRestsOn || [];
+        _row.pend.forEach(g => { if (!have.some(h => h.pageId === g.pageId && h.nodeId === g.nodeId)) have.push(g); });
+        node._dalRestsOn = have;
+    }
     const down = (c, dal) => allocateDAL(c, dal, visited, cmaSet, ctx, _row, _pass);
     // Phase 56.38 — conservative-merge for cross-tree paste. If the node carries
     // a snapshot DAL from its source tree (and the user hasn't overridden it),
@@ -725,9 +740,9 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
     // AND / INHIBIT / k-of-n VOTING: a reduction below the top DAL is permitted ONLY with functional
     // independence between the members (ARP4754B §5.2.3 / ARP4761A Table P2 step f). Independence is a
     // CLAIM that Common Mode Analysis (Appendix M) must substantiate. node.dalIndependence:
-    //   'claimed':      the DEFAULT. No reduction yet: members hold the incoming DAL and the
-    //                     reduction the claim would earn is shown (_dalIfSubstantiated) until CMA
-    //                     substantiates it. (Before 13 Oct 2026 a claim reduced provisionally.)
+    //   'claimed':      the DEFAULT. The reduction is taken, marked CMA pending, and rests on the
+    //                     independence requirements this gate derives (6 Nov 2026; 13 Oct to 6 Nov a
+    //                     claim held the members at the incoming DAL).
     //   'substantiated' — reduction applied (CMA demonstrated independence)
     //   'none'          — no independence claimed -> group members, NO reduction (all at top DAL)
     //   'compromised'   — CMA/architecture found a common mode -> reduction INVALID, reverted + flagged
@@ -804,8 +819,9 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
         });
     }
     const reducible = plan.some(p => p.dal !== propagateDal);
-    // In the potential pass a bare claim counts as substantiated: that is the "what it would be".
-    const applies = (indep === 'substantiated') || (!actual && indep === 'claimed');
+    // A claim takes the reduction (6 Nov 2026); the second pass counts only substantiated independence: the DAL a
+    // member reverts to if the claim is not shown.
+    const applies = (indep === 'substantiated') || (actual && indep === 'claimed');
     const optLabel = (opt === 'opt1') ? '1' : '2';
     const deriv = (p, basis) => {
         const d = { basis: basis, option: optLabel, independence: indep, role: p.role, row: row.start, rule: rule };
@@ -851,10 +867,10 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
         node._independenceReq = ((indep === 'claimed' || indep === 'substantiated') && reducible) ? {
             text: 'Members of ' + (node.displayId || ('gate-' + node.id)) + ' shall be physically and functionally independent.',
             rationale: 'No common-mode development error, common-cause failure, shared-resource coupling or shared installation (location, routing, power) may exist between the members. Substantiation by Common Mode Analysis (ARP4761A App M) validates the DAL reduction and the independent-product P(top) at this gate.'
-                + (indep === 'claimed' ? ' Until it is substantiated the reduction is withheld and every member holds ' + propagateDal + '.' : ''),
+                + (indep === 'claimed' ? ' The reduction is taken on this claim and marked CMA pending; if Common Mode Analysis finds a common mode, every member reverts to ' + propagateDal + '.' : ''),
             members: kids.map(function (c) { return c.displayId || c.id; }),
             status: (indep === 'substantiated') ? 'substantiated' : 'claimed',
-            reductionApplied: indep === 'substantiated'
+            reductionApplied: true
         } : null;
     }
 
@@ -891,7 +907,10 @@ function allocateDAL(node, parentDal, visited, cmaSet, ctx, _row, _pass) {
                 : rule === 'option1' ? 'option1' : 'row-hold';
             c._dalDerivation = deriv(p, basis);
         }
-        down(c, plan[i].dal);
+        if (actual && indep === 'claimed' && reducible && plan[i].dal !== propagateDal) {
+            const g = { pageId: (_row.pageId != null ? _row.pageId : null), nodeId: node.id, label: node.displayId || ('G-' + node.id) };
+            allocateDAL(c, plan[i].dal, visited, cmaSet, ctx, Object.assign({}, _row, { pend: (_row.pend || []).concat([g]) }), _pass);
+        } else down(c, plan[i].dal);
     });
 }
 

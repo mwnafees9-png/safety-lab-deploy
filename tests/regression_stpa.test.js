@@ -519,7 +519,7 @@ check('R2: panel authors the disposition on the worksheet row — non-critical R
     /UCA ↔ FTA\/FMEA Bridge/.test(repSrc) && /\{\{stpa_bridge_summary\}\}/.test(repSrc) && /\{\{stpa_bridge_table\}\}/.test(repSrc));
   // 31 Oct 2026: no whitelist any more: a {{token}} whose value is a list of rows is a table (reports.js _proseBlocks)
   check('BRIDGE report: stpa_bridge_table is built as rows, so it renders as a table',
-    /stpa_bridge_table/.test(S('stpa_report.js')) && /if \(!isAppx && !_isTableVal\(data\[name\]\)\) continue;/.test(S('reports.js')));
+    /stpa_bridge_table/.test(S('stpa_report.js')) && /if \(!isAppx && (!isFig && )?!_isTableVal\(data\[name\]\)\) continue;/.test(S('reports.js')));
 }
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

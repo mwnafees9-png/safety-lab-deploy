@@ -333,6 +333,15 @@
             (st.state === 'ready' ? '<button type="button" class="slap-btn p" onclick="SLZsaAuto.ui.sign(' + U().E(JSON.stringify(z.code)) + ')">Sign this zone</button>' : '') +
             '<button type="button" class="slap-btn" onclick="SLZsaAuto.ui.next()">Next zone</button></div>';
     }
+    // 6 Nov 2026 (report_ai.js rebuild): the zone pictures as figures for the ZSA report, {{figure:zsa_zones}}
+    function figures() {
+        var res = compute(); if (!res) return [];
+        return res.zones.map(function (z) {
+            var f = U().figure({ outline: _outline(res), zone: z.box, marks: z.units.map(function (u) { return { min: u.bbox.min, max: u.bbox.max, color: u.k.fluid ? '#DC2626' : (u.k.hot ? '#EA580C' : '#2563EB') }; }) }, { width: 460 });
+            if (!f) return null; var svg = f.svg, w = f.w, h = f.h;
+            return { title: z.code + ' ' + z.name, caption: 'Zone ' + z.code + ' ' + z.name + ': ' + z.units.length + ' units and ' + z.runs.length + ' runs from the CAD model (red: fluid carrying, orange: hot, blue: other equipment)', svg: svg, w: w, h: h };
+        }).filter(Boolean);
+    }
     function report() {
         var res = compute(); if (!res) return false;
         var E = U().E, html = '<h1>Zonal Safety Analysis</h1><p class="muted">' + E(_g('projectName') || '') + '. Worked out by the ZSA Autopilot from the CAD model ' + E((C().model(res.cadId) || {}).fileName || '') + ' and the zone list; every choice made by an engineer, with who and when. ' + new Date().toISOString().slice(0, 10) + '.</p>';
@@ -368,6 +377,6 @@
         return true;
     }
     if (typeof document !== 'undefined') { var tries = 40, t = setInterval(function () { if (mount() || --tries <= 0) clearInterval(t); }, 250); }
-    root.SLZsaAuto = { VERSION: VERSION, compute: compute, classify: classify, laneKey: laneKey, worstOf: worstOf, zoneStatus: zoneStatus, answer: answer, sign: sign, materialize: materialize, materializeAll: materializeAll, report: report, render: render, ui: ui, state: state, reset: function () { _cache = null; } };
+    root.SLZsaAuto = { VERSION: VERSION, compute: compute, classify: classify, laneKey: laneKey, worstOf: worstOf, zoneStatus: zoneStatus, answer: answer, sign: sign, materialize: materialize, materializeAll: materializeAll, report: report, figures: figures, render: render, ui: ui, state: state, reset: function () { _cache = null; } };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLZsaAuto;
 })(typeof window !== 'undefined' ? window : globalThis);
