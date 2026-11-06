@@ -73,7 +73,8 @@ check('a row with no consideration is unconsidered, not a phantom coverage', API
 console.log('4. wiring pins');
 check('API exports full CRUD + findings', ['addCd','setCd','removeCd','renderCd','cdFindings'].every(k => typeof API[k] === 'function'));
 check('VIEWS map routes hfa-cd to renderCd', /'hfa-cd': renderCd/.test(src));
-check('index.html: nav entry', /id="snav-hfa-cd"/.test(idx) && /switchTab\('hfa-cd'\)/.test(idx));
+// 6 Nov 2026 (Waqas: "scrap existing tables"): the old view stays for its data, off the menu; the HF Autopilot is on the menu.
+check('index.html: CD view stays, off the menu; Autopilot on the menu', /id="view-hfa-cd"/.test(idx) && !/id="snav-hfa-cd"/.test(idx) && /id="snav-hfa-auto"/.test(idx));
 check('index.html: view container + host', /id="view-hfa-cd"/.test(idx) && /id="hfa-cd-host"/.test(idx));
 // 2 Sep 2026 — the in-lane recommender button is no longer hand-placed in index.html.
 // lane_ai_bar.js mounts one from a registry so all nine HF lanes and every safety lane

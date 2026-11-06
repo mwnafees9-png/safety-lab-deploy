@@ -59,7 +59,8 @@ check('open count reflects the not-Closed row', f.open.length === 1 && f.count =
 console.log('4. wiring pins');
 check('API exports full CRUD + findings', ['addSa','setSa','removeSa','renderSa','saFindings'].every(k => typeof API[k] === 'function'));
 check('VIEWS map routes hfa-sa to renderSa', /'hfa-sa': renderSa/.test(src));
-check('index.html: nav + view + host', /id="snav-hfa-sa"/.test(idx) && /id="view-hfa-sa"/.test(idx) && /id="hfa-sa-host"/.test(idx));
+// 6 Nov 2026 (Waqas: "scrap existing tables"): the old view stays for its data, off the menu; the HF Autopilot is on the menu.
+check('index.html: view + host stay, off the menu', !/id="snav-hfa-sa"/.test(idx) && /id="snav-hfa-auto"/.test(idx) && /id="view-hfa-sa"/.test(idx) && /id="hfa-sa-host"/.test(idx));
 // 2 Sep 2026 — the in-lane recommender button is no longer hand-placed in index.html.
 // lane_ai_bar.js mounts one from a registry so all nine HF lanes and every safety lane
 // share ONE mechanism instead of nine copies. The invariant is unchanged — this lane has

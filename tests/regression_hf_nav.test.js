@@ -33,11 +33,12 @@ const helpers = R('site/helpers_modules.js');
 
 // the DOM is the source of truth: every HF sidebar item, by id
 const snav = [...idx.matchAll(/id="snav-(hfa[a-z-]*)"/g)].map(m => m[1]);
-ok('the sidebar carries the HF lanes', snav.length >= 10, snav.join(','));
+// 6 Nov 2026: the HF section is the HF Autopilot and the HF results (Waqas: "scrap existing tables")
+ok('the sidebar carries the HF Autopilot and results', snav.indexOf('hfa-auto') >= 0 && snav.indexOf('hfa-results') >= 0, snav.join(','));
 ok('HF is its own top-level sidebar group', /id="asb-grp-hf"/.test(idx));
 ok('every HF sidebar item sits inside the HF group', (() => {
     const start = idx.indexOf('id="asb-grp-hf"');
-    const end = idx.indexOf('</details>', idx.indexOf('id="snav-hfa-mfc"'));
+    const end = idx.indexOf('</details>', idx.indexOf('id="asb-grp-hf"'));
     return snav.every(id => { const p = idx.indexOf('id="snav-' + id + '"'); return p > start && p < end; });
 })());
 

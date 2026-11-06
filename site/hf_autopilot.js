@@ -131,9 +131,9 @@
         { id: 'analysis', label: 'Analysis (task timing and workload)' }, { id: 'bench', label: 'Bench or part-task trial' }
     ];
     var STAGES = [
-        { key: 'alloc', n: 1, phase: 'Concept', title: 'Who does what', what: 'Each aircraft function goes to the crew, the automation, or both.' },
-        { key: 'tid', n: 2, phase: 'Preliminary design', title: 'Crew procedures', what: 'What the crew does in normal operation, and when each failure condition happens.' },
-        { key: 'load', n: 3, phase: 'Preliminary design', title: 'How busy the crew is', what: 'How long each task takes, against the time the flight phase leaves for it.' },
+        { key: 'alloc', n: 1, phase: 'Concept', title: 'Who does what', what: 'In every flight phase, each aircraft function goes to the crew, the automation, or both.' },
+        { key: 'tid', n: 2, phase: 'Preliminary design', title: 'Crew procedures', what: 'Which pilot does each crew function (its tasks per phase are made by the tool), and what the crew does when each failure condition happens.' },
+        { key: 'load', n: 3, phase: 'Preliminary design', title: 'How busy the crew is', what: 'Each pilot\'s workload in every flight phase, and the time each failure response takes.' },
         { key: 'err', n: 4, phase: 'Preliminary design', title: 'What the crew could get wrong', what: 'The five ways a task goes wrong, how they would notice, how they recover, and what it leads to.' },
         { key: 'alert', n: 5, phase: 'Preliminary design', title: 'How the crew is told', what: 'Warning, caution or advisory for each failure condition, and how it reaches them.' },
         { key: 'cd', n: 6, phase: 'Detailed design', title: 'Controls and displays', what: 'The four questions of 25.1302 for each flight deck control and display.' },
@@ -144,79 +144,101 @@
     ];
 
     // ---- the questions --------------------------------------------------------------------------------------
-    function _allocOf(f) {
-        var a = answerOf('alloc:' + f.internalId); if (a) return a.pick;
-        var r = _laneRows('alloc').find(function (x) { return x && S(x.key) === S(f.internalId); });
-        return r && r.allocation ? S(r.allocation).toLowerCase() : null;
+    // ---- who does each function, phase by phase (v2) ----------------------------------------------------------
+    // answer 'alloc:<fid>' = { byPhase: { phase: 'crew' | 'automation' | 'shared' | 'na' } }; a v1 answer ({ pick }) or an
+    // allocation row typed in the old table counts for every phase
+    function allocMap(f) {
+        var ph = phases(), a = answerOf('alloc:' + f.internalId), out = {};
+        var legacy = a && a.pick ? a.pick : null;
+        if (!legacy) { var r = _laneRows('alloc').find(function (x) { return x && S(x.key) === S(f.internalId); }); if (r && r.byPhase && typeof r.byPhase === 'object') { ph.forEach(function (p) { if (r.byPhase[p]) out[p] = r.byPhase[p]; }); } else if (r && r.allocation) legacy = S(r.allocation).toLowerCase(); }
+        ph.forEach(function (p) { var v = a && a.byPhase && a.byPhase[p]; if (v) out[p] = v; else if (!out[p] && legacy) out[p] = legacy; });
+        return out;
+    }
+    function crewPhases(f) { var m = allocMap(f); return phases().filter(function (p) { return m[p] === 'crew' || m[p] === 'shared'; }); }
+    function _whoOf(f) { var a = answerOf('who:' + f.internalId) || answerOf('tidn:' + f.internalId); return a && a.pick && a.pick !== 'none' ? a.pick : null; }
+    function _summary(m) { var v = Object.keys(m).map(function (k) { return m[k]; }).filter(function (x) { return x && x !== 'na'; }); if (!v.length) return ''; if (v.every(function (x) { return x === v[0]; })) return v[0]; return v.some(function (x) { return x !== 'automation'; }) ? 'shared' : 'automation'; }
+    // the normal crew tasks of a function: one per flight phase the crew has a part in, made by the tool
+    function syncTasks(f) {
+        var who = _whoOf(f), m = allocMap(f), want = {};
+        if (who) crewPhases(f).forEach(function (p) {
+            var key = 'tid:n:' + f.internalId + ':' + p; want[key] = 1;
+            _upsert('tid', key, 'taskId', 'TSK-', { procId: S(f.funcId), procName: S(f.funcName), opsMode: 'Normal', phase: p, taskName: fnLabel(f) + ' (' + p + ')',
+                taskDef: m[p] === 'shared' ? 'Watch the automation do it; take over when it hands back.' : 'Do it by hand.', crew: who, trigger: 'Normal operation', source: 'HF Autopilot: function ' + S(f.subId || f.funcId), notes: '', fnId: S(f.internalId) }, 'hfTid');
+        });
+        var st = _lane('tid');
+        st.rows = st.rows.filter(function (r) { var k = r && r.hfAutoKey; if (!k || k.indexOf('tid:n:' + f.internalId) !== 0) return true; return !!want[k]; });
+        var ts = _lane('tasks'); ts.rows = ts.rows.filter(function (r) { var k = r && r.hfAutoKey; if (!k || k.indexOf('load:') !== 0) return true; return st.rows.some(function (t) { return 'load:' + t.taskId === k; }); });
     }
     function _tidRows() { return _laneRows('tid').filter(function (r) { return r && S(r.taskName || r.taskDef); }); }
     function _taskRowFor(t) { return _laneRows('tasks').find(function (r) { return r && (S(r.tidId) === S(t.taskId) || (t.hfAutoKey && r.hfAutoKey === 'load:' + t.taskId)); }) || null; }
+    function _windowS(p) { var row = _arr(_g('flightPhasesData')).find(function (x) { return x && S(x.phase).toLowerCase() === S(p).toLowerCase(); }); var w = parseFloat(row && row.windowS); return w > 0 ? w : null; }
+    function _isPilot(crew, pilot) { return S(crew) === pilot || S(crew) === 'Both' || S(crew) === 'PF+PM' || (S(crew) === 'Either' && pilot === 'PF'); }
+    var ALLOC_OPTS = [{ id: 'crew', label: 'Crew', desc: 'The crew does it by hand in this phase.' }, { id: 'shared', label: 'Both', desc: 'The automation does it; the crew watches and takes over.' }, { id: 'automation', label: 'Automation', desc: 'The automation does it; the crew is told if it cannot.' }, { id: 'na', label: 'Not used', desc: 'This function is not used in this phase.' }];
     function compute() {
-        var st = _peek(), res = { stages: [], byKey: {} };
+        var res = { stages: [], byKey: {} };
         var mk = function (key) { var d = STAGES.find(function (x) { return x.key === key; }); var s = { key: key, def: d, questions: [] }; res.stages.push(s); res.byKey[key] = s; return s; };
-        var funcs = functions(), fcs = crewFcs();
-        // 1 who does what
+        var funcs = functions(), fcs = crewFcs(), ph = phases();
+        // 1 who does what, in every flight phase
         var s1 = mk('alloc');
         funcs.forEach(function (f) {
-            var pick = _allocOf(f);
-            s1.questions.push({ id: 'alloc:' + f.internalId, stage: 'alloc', kind: 'pick', subject: fnLabel(f), picked: pick, done: !!pick,
-                text: 'Who does "' + fnLabel(f) + '"?', why: (S(f.subDef) ? E(_short(f.subDef, 220)) + '<br>' : '') + 'Part of ' + E(S(f.funcId) + ' ' + S(f.funcName)) + '.',
-                options: [
-                    { id: 'crew', label: 'The crew', impact: 'A crew task in normal operation, with its workload and errors analyzed.' },
-                    { id: 'automation', label: 'The automation', impact: 'No routine crew task; the crew is told when the automation cannot do it.' },
-                    { id: 'shared', label: 'Both: the automation does it, the crew watches and takes over', impact: 'A monitoring task for the crew, and a takeover when the automation hands back.' }
-                ], apply: function (pick) { HF().setAlloc(f.internalId, 'allocation', pick); var r = _laneRows('alloc').find(function (x) { return S(x.key) === S(f.internalId); }); if (r && !S(r.rationale)) r.rationale = 'Chosen in the HF Autopilot by ' + _who() + '.'; } });
+            var m = allocMap(f);
+            s1.questions.push({ id: 'alloc:' + f.internalId, stage: 'alloc', kind: 'phasegrid', subject: fnLabel(f), fn: f, map: m, done: ph.length > 0 && ph.every(function (p) { return !!m[p]; }) });
         });
-        // 2 crew procedures
+        // 2 crew procedures: which pilot for each crew function (its tasks per phase are made by the tool), and a procedure per failure condition
         var s2 = mk('tid');
         funcs.forEach(function (f) {
-            var al = _allocOf(f); if (al !== 'crew' && al !== 'shared') return;
-            var qid = 'tidn:' + f.internalId, a = answerOf(qid);
-            s2.questions.push({ id: qid, stage: 'tid', kind: 'pick', subject: fnLabel(f) + ' (normal)', picked: a ? a.pick : null, done: !!a,
-                text: 'How does the crew handle "' + fnLabel(f) + '" in normal operation?', why: al === 'shared' ? 'The automation does it and the crew watches.' : 'The crew does it.',
+            var cp = crewPhases(f); if (!cp.length) return;
+            var qid = 'who:' + f.internalId, who = _whoOf(f);
+            s2.questions.push({ id: qid, stage: 'tid', kind: 'pick', subject: fnLabel(f), picked: who, done: !!who,
+                text: 'Which pilot does "' + fnLabel(f) + '"?',
+                why: 'The crew has a part in it in ' + cp.length + ' flight phase' + (cp.length > 1 ? 's' : '') + ': ' + E(cp.join(', ')) + '. The tool makes one crew task for each of those phases, for the workload in step 3.',
                 options: [
-                    { id: 'PF', label: 'The pilot flying, hands-on', impact: 'A normal task for the pilot flying, in every flight phase.' },
-                    { id: 'PM', label: 'The pilot monitoring watches it and calls out', impact: 'A monitoring task for the pilot monitoring.' },
-                    { id: 'Both', label: 'Both pilots, with a cross-check', impact: 'A task for both pilots: a cross-check or challenge and response.' },
-                    { id: 'none', label: 'No routine crew task', impact: 'Nothing is added to the crew procedures for this function.' }
-                ], apply: function (pick) {
-                    var key = 'tid:n:' + f.internalId;
-                    if (pick === 'none') { _drop('tid', key); return; }
-                    _upsert('tid', key, 'taskId', 'TSK-', { procId: S(f.funcId), procName: S(f.funcName), opsMode: 'Normal', phase: 'All phases', taskName: fnLabel(f) + ' (normal operation)',
-                        taskDef: al === 'shared' ? 'Monitor the automation doing it; take over when it hands back.' : 'Do it by hand.', crew: pick, trigger: 'Normal operation', source: 'HF Autopilot: function ' + S(f.subId || f.funcId), notes: '' }, 'hfTid');
-                } });
+                    { id: 'PF', label: 'The pilot flying', impact: 'A task for the pilot flying in each of those phases.' },
+                    { id: 'PM', label: 'The pilot monitoring', impact: 'A task for the pilot monitoring in each of those phases.' },
+                    { id: 'Both', label: 'Both pilots, with a cross-check', impact: 'A task for both pilots in each of those phases (it counts in both workloads).' }
+                ], apply: function () { syncTasks(f); } });
         });
         fcs.forEach(function (fc) {
             var qid = 'tidf:' + fc.fcId, a = answerOf(qid);
             s2.questions.push({ id: qid, stage: 'tid', kind: 'pick', subject: S(fc.fcId) + ' procedure', picked: a ? a.pick : null, done: !!a,
                 text: 'What does the crew do when this happens: ' + _short(fc.fcDesc, 140) + '?',
-                why: 'The FHA says the crew effect is: <b>' + E(fc.effCrew) + '</b> (' + E(fc.severity || '') + (fc.phases ? ', ' + E(fc.phases) : '') + ').',
+                why: 'The FHA says the crew effect is: <b>' + E(fc.effCrew) + '</b> (' + E(fc.severity || '') + (fc.phases ? ', in ' + E(fc.phases) : '') + ').',
                 options: [
-                    { id: 'nonnormal', label: 'A non-normal procedure: the pilot flying flies, the pilot monitoring runs the checklist', impact: 'A non-normal crew task, analyzed for time and errors.' },
-                    { id: 'emergency', label: 'An emergency: memory actions by both pilots, then the checklist', impact: 'An emergency crew task, analyzed for time and errors.' },
+                    { id: 'nonnormal', label: 'A non-normal procedure: the pilot flying flies, the pilot monitoring runs the checklist', impact: 'A non-normal crew task in the phases it can happen in, timed in step 3.' },
+                    { id: 'emergency', label: 'An emergency: memory actions by both pilots, then the checklist', impact: 'An emergency crew task in the phases it can happen in, timed in step 3.' },
                     { id: 'auto', label: 'Nothing: the aircraft handles it on its own', impact: 'No crew task. The automatic response has to be shown in the system safety analysis.' },
                     { id: 'none', label: 'Nothing the crew can do: it cannot be recovered', impact: 'No crew task, and no crew credit for this failure condition.' }
                 ], apply: function (pick) {
                     var key = 'tid:f:' + fc.fcId;
                     if (pick === 'auto' || pick === 'none') { _drop('tid', key); return; }
                     _upsert('tid', key, 'taskId', 'TSK-', { procId: S(fc.fcId), procName: (pick === 'emergency' ? 'Emergency: ' : 'Non-normal: ') + _short(fc.fcDesc, 80), opsMode: pick === 'emergency' ? 'Emergency' : 'Non-normal',
-                        phase: S(fc.phases) || 'All phases', taskName: 'Recognize and respond: ' + _short(fc.fcDesc, 100), taskDef: S(fc.effCrew), crew: 'Both', trigger: S(fc.fcId) + ': ' + _short(fc.fcDesc, 100), source: 'HF Autopilot: FHA ' + S(fc.fcId), notes: '', fcId: S(fc.fcId) }, 'hfTid');
+                        phase: S(fc.phases) || 'All phases', taskName: 'Respond to: ' + _short(fc.fcDesc, 100), taskDef: S(fc.effCrew), crew: 'Both', trigger: S(fc.fcId) + ': ' + _short(fc.fcDesc, 100), source: 'HF Autopilot: FHA ' + S(fc.fcId), notes: '', fcId: S(fc.fcId) }, 'hfTid');
                 } });
         });
         var tids = _tidRows();
-        // 3 how busy
+        // 3 how busy: every phase (the share of each pilot's time each task takes), then every failure response (its time)
         var s3 = mk('load');
-        tids.forEach(function (t) {
-            var tr = _taskRowFor(t), a = answerOf('load:' + t.taskId);
-            var resp = tr ? HF().taskResponseS(tr) : null;
-            s3.questions.push({ id: 'load:' + t.taskId, stage: 'load', kind: 'load', subject: S(t.taskId) + ' ' + _short(t.taskName, 50), task: t, taskRow: tr, done: resp != null && resp > 0 && !!(tr && S(tr.basis)), answer: a });
+        ph.forEach(function (p) {
+            var ts = tids.filter(function (t) { return t.opsMode === 'Normal' && HF().taskPhases(t.phase).some(function (x) { return x.toLowerCase() === p.toLowerCase() || /^all phases$/i.test(x); }); });
+            var a = answerOf('loadp:' + p) || {}, share = a.share || {};
+            var shareOf = function (t) { if (share[t.taskId] != null && share[t.taskId] !== '') return share[t.taskId]; var tr = _taskRowFor(t); return tr && S(tr.shareP) !== '' ? tr.shareP : null; };
+            var basis = a.basis || (ts.length && (_taskRowFor(ts[0]) || {}).basis) || null;
+            s3.questions.push({ id: 'loadp:' + p, stage: 'load', kind: 'loadphase', subject: p, phase: p, tasks: ts, shareOf: shareOf, basis: basis, window: _windowS(p),
+                done: !!_windowS(p) && (!ts.length || (!!basis && ts.every(function (t) { var v = shareOf(t); return v != null && v !== ''; }))) });
         });
-        // 4 errors
+        tids.filter(function (t) { return t.fcId; }).forEach(function (t) {
+            var tr = _taskRowFor(t), resp = tr ? HF().taskResponseS(tr) : null;
+            s3.questions.push({ id: 'proc:' + t.fcId, stage: 'load', kind: 'proc', subject: S(t.fcId) + ' response time', task: t, taskRow: tr, answer: answerOf('proc:' + t.fcId), done: resp != null && resp > 0 && !!(tr && S(tr.basis)) });
+        });
+        // 4 errors: once per crew function and per failure response (the same errors whatever the phase)
         var s4 = mk('err');
-        tids.forEach(function (t) {
-            var a = answerOf('err:' + t.taskId), modes = (a && a.modes) || {};
+        var groups = [];
+        funcs.forEach(function (f) { if (crewPhases(f).length && _whoOf(f)) groups.push({ key: 'fn:' + f.internalId, taskName: fnLabel(f) + ' (normal operation)', fcId: '', fnId: S(f.internalId) }); });
+        tids.filter(function (t) { return t.fcId; }).forEach(function (t) { groups.push({ key: 'fc:' + t.fcId, taskName: t.taskName, fcId: t.fcId, tidId: t.taskId }); });
+        groups.forEach(function (g) {
+            var a = answerOf('err:' + g.key), modes = (a && a.modes) || {};
             var done = !!a && ERR.every(function (m) { var x = modes[m.mode]; return x && (x.v === 'no' || (x.v === 'yes' && x.detect && x.recover && x.fc)); });
-            s4.questions.push({ id: 'err:' + t.taskId, stage: 'err', kind: 'err', subject: S(t.taskId) + ' ' + _short(t.taskName, 50), task: t, modes: modes, done: done });
+            s4.questions.push({ id: 'err:' + g.key, stage: 'err', kind: 'err', subject: _short(g.taskName, 60), task: g, modes: modes, done: done });
         });
         // 5 alerts
         var s5 = mk('alert');
@@ -288,12 +310,12 @@
         if (a.channels != null) row.channels = a.channels.join(',');
         return row;
     }
-    function _materializeErr(t, modes) {
+    function _materializeErr(g, modes) {
         ERR.forEach(function (m) {
-            var key = 'err:' + t.taskId + ':' + m.mode, x = modes[m.mode];
+            var key = 'err:' + g.key + ':' + m.mode, x = modes[m.mode];
             if (!x || x.v !== 'yes') { _drop('hea', key); return; }
-            var tr = _taskRowFor(t), fc = fcById(x.fc);
-            _upsert('hea', key, 'heaId', 'HEA-', { asmId: tr && tr.asmId ? tr.asmId : '', tidId: S(t.taskId), task: S(t.taskName), errorMode: m.mode, effect: fc ? S(fc.fcDesc) : (x.fc === 'nse' ? 'No safety effect' : ''),
+            var tid = g.tidId ? _tidRows().find(function (t) { return t.taskId === g.tidId; }) : null, tr = tid ? _taskRowFor(tid) : null, fc = fcById(x.fc);
+            _upsert('hea', key, 'heaId', 'HEA-', { asmId: tr && tr.asmId ? tr.asmId : '', tidId: S(g.tidId || ''), fnId: S(g.fnId || ''), task: S(g.taskName), errorMode: m.mode, effect: fc ? S(fc.fcDesc) : (x.fc === 'nse' ? 'No safety effect' : ''),
                 detection: (DETECT.find(function (d) { return d.id === x.detect; }) || {}).label || '', recovery: (RECOVER.find(function (d) { return d.id === x.recover; }) || {}).label || '', fcIds: fc ? S(fc.fcId) : '' }, 'hfHea');
         });
     }
@@ -315,8 +337,39 @@
         var q = _find(qid); if (!q || q.kind !== 'pick' || !q.options.some(function (o) { return o.id === pick; })) return false;
         _set(qid, { pick: pick }, q.stage); q.apply(pick); _save(); return true;
     }
-    function setLoad(taskId, field, value) {
-        var q = _find('load:' + taskId); if (!q) return false;
+    // who does a function in one phase, or in every phase at once
+    function setAlloc(fnId, phase, value) {
+        if (!ALLOC_OPTS.some(function (o) { return o.id === value; })) return false;
+        var f = functions().find(function (x) { return S(x.internalId) === S(fnId); }); if (!f) return false;
+        var ph = phases(); if (phase !== '*' && ph.indexOf(phase) < 0) return false;
+        var cur = allocMap(f), a = { byPhase: {} };
+        ph.forEach(function (p) { a.byPhase[p] = phase === '*' || p === phase ? value : (cur[p] || ''); if (!a.byPhase[p]) delete a.byPhase[p]; });
+        _set('alloc:' + f.internalId, a, 'alloc');
+        var sum = _summary(a.byPhase);
+        if (sum) { HF().setAlloc(f.internalId, 'allocation', sum === 'na' ? 'automation' : sum); }
+        var r = _laneRows('alloc').find(function (x) { return S(x.key) === S(f.internalId); });
+        if (r) { r.byPhase = JSON.parse(JSON.stringify(a.byPhase)); if (!S(r.rationale) || /HF Autopilot/.test(r.rationale)) r.rationale = 'Chosen phase by phase in the HF Autopilot by ' + _who() + '.'; }
+        syncTasks(f); _save(); return true;
+    }
+    // a phase: the crew's response window (on the Flight Phases table), the share of each pilot's time each task takes, the basis
+    function setPhase(phase, field, taskId, value) {
+        var q = _find('loadp:' + phase); if (!q) return false;
+        var a = Object.assign({ share: {} }, answerOf(q.id) || {}); a.share = Object.assign({}, a.share || {});
+        if (field === 'window') {
+            var w = parseFloat(value); if (!(w > 0)) return false;
+            var row = _arr(_g('flightPhasesData')).find(function (x) { return x && S(x.phase).toLowerCase() === S(phase).toLowerCase(); }); if (!row) return false;
+            row.windowS = String(w); row.windowSrc = row.windowSrc || 'HF Autopilot';
+        } else if (field === 'share') {
+            var t = q.tasks.find(function (x) { return x.taskId === taskId; }); if (!t) return false;
+            var n = parseFloat(value); if (S(value) === '') delete a.share[taskId]; else if (!isFinite(n) || n < 0 || n > 100) return false; else a.share[taskId] = n;
+        } else if (field === 'basis') a.basis = S(value);
+        else return false;
+        _set(q.id, a, 'load');
+        q.tasks.forEach(function (t) { var row = _upsert('tasks', 'load:' + t.taskId, 'taskId', 'TASK-', { tidId: S(t.taskId), phase: S(t.phase), crewmember: S(t.crew) === 'Both' ? 'PF+PM' : S(t.crew), task: S(t.taskName) }, 'hfTasks'); if (a.share[t.taskId] != null) row.shareP = String(a.share[t.taskId]); if (a.basis) row.basis = a.basis; });
+        _save(); return true;
+    }
+    function setLoad(fcId, field, value) {
+        var q = _find('proc:' + fcId); if (!q) return false;
         var a = Object.assign({}, answerOf(q.id) || {}), t = q.task;
         if (field === 'reactionS' || field === 'execS') { var n = parseFloat(value); if (S(value) === '') a[field] = ''; else if (!isFinite(n) || n < 0) return false; else a[field] = n; }
         else if (field === 'basis') a.basis = S(value);
@@ -324,8 +377,8 @@
         else return false;
         _set(q.id, a, 'load'); _materializeLoad(t, a); _save(); return true;
     }
-    function setErr(taskId, mode, field, value) {
-        var q = _find('err:' + taskId); if (!q || !ERR.some(function (m) { return m.mode === mode; })) return false;
+    function setErr(groupKey, mode, field, value) {
+        var q = _find('err:' + groupKey); if (!q || !ERR.some(function (m) { return m.mode === mode; })) return false;
         var a = Object.assign({ modes: {} }, answerOf(q.id) || {}); a.modes = JSON.parse(JSON.stringify(a.modes || {}));
         var x = a.modes[mode] = a.modes[mode] || {};
         if (field === 'v') { x.v = value; if (value === 'yes' && !x.fc && S(q.task.fcId)) x.fc = S(q.task.fcId); }
@@ -370,7 +423,7 @@
     function _open(stage, q) {   // answers that leave something open in the design
         if (stage === 'err') return ERR.filter(function (m) { var x = q.modes[m.mode]; return x && x.v === 'yes' && (x.detect === 'none' || x.recover === 'none'); }).length;
         if (q.kind === 'grid') return q.rows.filter(function (r) { return q.v[r.id] && q.v[r.id].v === 'gap'; }).length;
-        if (stage === 'load') { var tr = q.taskRow; var occ = tr ? HF().taskOccupancy(tr) : null; return occ != null && occ > 0.8 ? 1 : 0; }
+        if (stage === 'load' && q.kind === 'loadphase') { var w = workload().find(function (x) { return x.phase === q.phase; }); return w ? ['PF', 'PM'].filter(function (pl) { return (w[pl].normal != null && w[pl].normal > 80) || (w[pl].worst && w[pl].worst.total > 80); }).length : 0; }
         return 0;
     }
     function stageStatus(s) {
@@ -389,38 +442,48 @@
         var res = compute();
         return res.stages.map(function (s) { var st = stageStatus(s); return { key: s.key, n: s.def.n, phase: s.def.phase, title: s.def.title, questions: st.questions, answered: st.answered, open: st.open, state: st.state, signedBy: st.signed && st.signed.by }; });
     }
-    // the busiest crew task in each flight phase: time needed against time available (the 80% line, HIDH 5.7.5.1)
+    // each pilot's workload in each flight phase (HIDH 5.7.5.1, the 80% line): normal operation is the sum of the shares of
+    // the pilot's time the phase's tasks take; with a failure, its response time over the phase's response window comes on top
     function workload() {
-        var out = {};
-        phases().forEach(function (p) { out[p] = { phase: p, max: null, task: null, src: null }; });
-        _laneRows('tasks').forEach(function (tr) {
-            var occ = null; try { occ = HF().taskOccupancy(tr); } catch (_) {}
-            if (occ == null) return;
-            var av = HF().taskAvailableS(tr);
-            var ps = HF().taskPhases(tr.phase); if (ps.some(function (x) { return /^all phases$/i.test(x); })) ps = phases();
-            ps.forEach(function (p) {
-                var key = Object.keys(out).find(function (k) { return k.toLowerCase() === p.toLowerCase(); }); if (!key) return;
-                var avp = (av.per || []).find(function (x) { return S(x.phase).toLowerCase() === p.toLowerCase(); });
-                var o = avp ? HF().taskResponseS(tr) / avp.s : occ;
-                if (out[key].max == null || o > out[key].max) out[key] = { phase: key, max: o, task: S(tr.taskId) + ' ' + _short(tr.task, 40), src: avp ? avp.src : av.src };
+        var tids = _tidRows(), rows = [];
+        phases().forEach(function (p) {
+            var inPh = function (t) { return HF().taskPhases(t.phase).some(function (x) { return x.toLowerCase() === p.toLowerCase() || /^all phases$/i.test(x); }); };
+            var win = _windowS(p), out = { phase: p, window: win };
+            ['PF', 'PM'].forEach(function (pl) {
+                var n = 0, any = false, list = [];
+                tids.filter(function (t) { return t.opsMode === 'Normal' && inPh(t) && _isPilot(t.crew, pl); }).forEach(function (t) { var tr = _taskRowFor(t); var v = tr && S(tr.shareP) !== '' ? parseFloat(tr.shareP) : NaN; if (isFinite(v)) { n += v; any = true; list.push({ task: t.taskName, share: v }); } });
+                var worst = null;
+                tids.filter(function (t) { return t.fcId && inPh(t) && _isPilot(t.crew, pl); }).forEach(function (t) {
+                    var tr = _taskRowFor(t), need = tr ? HF().taskResponseS(tr) : null; if (!(need > 0) || !win) return;
+                    var total = (any ? n : 0) + need / win * 100;
+                    if (!worst || total > worst.total) worst = { fcId: t.fcId, need: need, total: total };
+                });
+                out[pl] = { normal: any ? n : null, tasks: list, worst: worst };
             });
+            rows.push(out);
         });
-        return Object.keys(out).map(function (k) { return out[k]; });
+        return rows;
     }
     function workloadSvg() {
-        var rows = workload(), W = 560, rowH = 26, pad = 150, H = 30 + rows.length * rowH + 20, x0 = pad, x1 = W - 20, cap = 1.2;
+        var rows = workload(), W = 640, rowH = 40, x0 = 170, x1 = W - 30, cap = 120;
+        var H = 46 + rows.length * rowH + 24;
         var X = function (v) { return x0 + Math.min(v, cap) / cap * (x1 - x0); };
-        var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="Crew workload by flight phase"><rect width="100%" height="100%" fill="#ffffff"/>' +
-            '<text x="10" y="16" font-size="12" font-family="system-ui,sans-serif" fill="#101216">Busiest crew task in each flight phase: time needed against time available</text>';
+        var col = function (v) { return v > 80 ? '#DC2626' : (v > 60 ? '#D97706' : '#16A34A'); };
+        var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="Pilot workload by flight phase"><rect width="100%" height="100%" fill="#ffffff"/>' +
+            '<text x="10" y="16" font-size="12.5" font-weight="600" font-family="system-ui,sans-serif" fill="#101216">Each pilot\'s workload in each flight phase</text>' +
+            '<text x="10" y="32" font-size="10.5" font-family="system-ui,sans-serif" fill="#5b6270">Bar: normal operation. Mark: with the worst failure in that phase on top. Red line: 80%, the most a pilot should carry.</text>';
         rows.forEach(function (r, i) {
-            var y = 30 + i * rowH;
-            s += '<text x="10" y="' + (y + 15) + '" font-size="11" font-family="system-ui,sans-serif" fill="#101216">' + E(r.phase) + '</text>';
-            s += '<rect x="' + x0 + '" y="' + (y + 4) + '" width="' + (x1 - x0) + '" height="14" fill="#eef1f5"/>';
-            if (r.max != null) { var c = r.max > 0.8 ? '#DC2626' : (r.max > 0.6 ? '#D97706' : '#16A34A'); s += '<rect x="' + x0 + '" y="' + (y + 4) + '" width="' + Math.max(2, X(r.max) - x0).toFixed(1) + '" height="14" fill="' + c + '"><title>' + E(r.task + ': ' + Math.round(r.max * 100) + '% of the ' + (r.src || 'time available')) + '</title></rect>' +
-                '<text x="' + (Math.min(X(r.max), x1 - 30) + 4).toFixed(1) + '" y="' + (y + 15) + '" font-size="10" font-family="system-ui,sans-serif" fill="#101216">' + Math.round(r.max * 100) + '%</text>'; }
-            else s += '<text x="' + (x0 + 6) + '" y="' + (y + 15) + '" font-size="10" font-family="system-ui,sans-serif" fill="#5b6270">no task times yet</text>';
+            var y = 46 + i * rowH;
+            s += '<text x="10" y="' + (y + 20) + '" font-size="11.5" font-family="system-ui,sans-serif" fill="#101216">' + E(r.phase) + '</text>';
+            ['PF', 'PM'].forEach(function (pl, j) {
+                var yy = y + 3 + j * 17, d = r[pl];
+                s += '<text x="' + (x0 - 26) + '" y="' + (yy + 11) + '" font-size="10" font-family="system-ui,sans-serif" fill="#5b6270">' + pl + '</text><rect x="' + x0 + '" y="' + yy + '" width="' + (x1 - x0) + '" height="13" rx="3" fill="#eef1f5"/>';
+                if (d.normal != null) s += '<rect x="' + x0 + '" y="' + yy + '" width="' + Math.max(2, X(d.normal) - x0).toFixed(1) + '" height="13" rx="3" fill="' + col(d.normal) + '"><title>' + E(pl + ' in ' + r.phase + ': ' + Math.round(d.normal) + '% in normal operation') + '</title></rect><text x="' + (Math.min(X(d.normal), x1 - 34) + 4).toFixed(1) + '" y="' + (yy + 10.5) + '" font-size="9.5" font-family="system-ui,sans-serif" fill="#101216">' + Math.round(d.normal) + '%</text>';
+                else s += '<text x="' + (x0 + 6) + '" y="' + (yy + 10.5) + '" font-size="9.5" font-family="system-ui,sans-serif" fill="#5b6270">not answered yet</text>';
+                if (d.worst) s += '<rect x="' + (X(d.worst.total) - 2).toFixed(1) + '" y="' + (yy - 2) + '" width="4" height="17" fill="' + col(d.worst.total) + '"><title>' + E(pl + ' in ' + r.phase + ' with ' + d.worst.fcId + ': ' + Math.round(d.worst.total) + '%') + '</title></rect>';
+            });
         });
-        var xl = X(0.8); s += '<line x1="' + xl.toFixed(1) + '" y1="26" x2="' + xl.toFixed(1) + '" y2="' + (H - 14) + '" stroke="#DC2626" stroke-dasharray="4 3"/><text x="' + (xl - 12).toFixed(1) + '" y="' + (H - 3) + '" font-size="10" font-family="system-ui,sans-serif" fill="#DC2626">80%</text>';
+        var xl = X(80); s += '<line x1="' + xl.toFixed(1) + '" y1="42" x2="' + xl.toFixed(1) + '" y2="' + (H - 16) + '" stroke="#DC2626" stroke-dasharray="4 3"/><text x="' + (xl - 12).toFixed(1) + '" y="' + (H - 4) + '" font-size="10" font-family="system-ui,sans-serif" fill="#DC2626">80%</text>';
         return { svg: s + '</svg>', w: W, h: H };
     }
 
@@ -446,14 +509,14 @@
         var body = state.stage && res.byKey[state.stage] ? _stageHtml(res, res.byKey[state.stage]) : _overviewHtml(res, cov, tot);
         h.innerHTML = '<div class="slap slap-card" data-hf-auto="1">' +
             '<div class="slap-head"><span class="slap-title">HF Autopilot</span><span class="slap-sub">10 steps through the design cycle, ' + tot.q + ' questions, ' + tot.a + ' answered, ' + tot.open + ' open, ' + tot.done + ' of 10 steps signed</span>' + U().progress(tot.a, tot.q) +
-            '<button type="button" class="slap-btn" onclick="SLHfAuto.ui.report()">Write the human factors report</button></div>' +
+            '<button type="button" class="slap-btn" onclick="switchTab(\'hfa-results\')">See the results</button><button type="button" class="slap-btn" onclick="SLHfAuto.ui.report()">Write the human factors report</button></div>' +
             '<div class="slap-grid"><div>' + U().rail(items, 'SLHfAuto.ui.stage') + '</div><div data-hf-auto-body="1">' + body + '</div></div></div>';
     }
     function _overviewHtml(res, cov, tot) {
         var first = cov.find(function (c) { return c.st.state === 'todo'; });
         var groups = ['Concept', 'Preliminary design', 'Detailed design', 'Certification'];
         return '<div class="slap-q">The human factors work for this aircraft, in the order the design does it</div>' +
-            '<div class="slap-why">Each step asks plain questions built from the project: the aircraft functions, the failure conditions and what they do to the crew, the flight phases, the flight deck. Every answer is written into the human factors tables below the Autopilot, which stay the detailed record.</div>' +
+            '<div class="slap-why">Each step asks plain questions built from the project: the aircraft functions, the failure conditions and what they do to the crew, the flight phases, the flight deck. Every answer fills the tables on the HF results page; nothing is typed twice.</div>' +
             '<table class="slap-tbl"><tr><th>Design stage</th><th>Step</th><th>What it settles</th><th>Progress</th></tr>' + groups.map(function (g) {
                 return cov.filter(function (c) { return c.s.def.phase === g; }).map(function (c, i) {
                     return '<tr>' + (i === 0 ? '<td rowspan="' + cov.filter(function (x) { return x.s.def.phase === g; }).length + '"><b>' + E(g) + '</b></td>' : '') + '<td><a href="javascript:void(0)" onclick="SLHfAuto.ui.stage(' + J(c.s.key) + ')">' + c.s.def.n + '. ' + E(c.s.def.title) + '</a></td><td>' + E(c.s.def.what) + '</td><td>' +
@@ -475,11 +538,10 @@
         if (step === n) return head + chips + _summaryHtml(s, st);
         var q = s.questions[step];
         var html = q.kind === 'pick' ? U().question({ id: q.id, text: q.text, why: q.why, options: q.options, picked: q.picked }, 'SLHfAuto.ui.pick')
-            : q.kind === 'load' ? _loadHtml(q) : q.kind === 'err' ? _errHtml(q) : q.kind === 'alert' ? _alertHtml(q) : q.kind === 'grid' ? _gridHtml(q)
+            : q.kind === 'proc' ? _loadHtml(q) : q.kind === 'phasegrid' ? _allocHtml(q) : q.kind === 'loadphase' ? _phaseLoadHtml(q) : q.kind === 'err' ? _errHtml(q) : q.kind === 'alert' ? _alertHtml(q) : q.kind === 'grid' ? _gridHtml(q)
             : q.kind === 'mfcfn' ? _mfcFnHtml() : q.kind === 'mfcfac' ? _mfcFacHtml() : q.kind === 'mfccrew' ? _mfcCrewHtml() : '';
         var a = answerOf(q.id);
-        var noWin = s.key === 'load' && !_arr(_g('flightPhasesData')).some(function (p) { return parseFloat(p && p.windowS) > 0; });
-        return head + chips + (s.key === 'load' ? '<div class="hfa-fig">' + workloadSvg().svg + '</div>' + (noWin ? '<div class="slap-note">No crew response window is set on the Flight Phases page, so each task is measured against the whole length of its phase. Set the windows there for a real workload check.</div>' : '') : '') + html +
+        return head + chips + (s.key === 'load' ? '<div class="hfa-fig">' + workloadSvg().svg + '</div>' : '') + html +
             (a && a.by ? '<div class="slap-note">Last answered by ' + E(a.by) + ' on ' + E(String(a.at).slice(0, 10)) + '.</div>' : '') +
             ((s.key === 'cd' || s.key === 'ergo') && step === n - 1 ? _addIfaceHtml() : '') +
             '<div class="slap-nav"><button type="button" class="slap-btn" ' + (step ? '' : 'disabled') + ' onclick="SLHfAuto.ui.step(' + (step - 1) + ')">Back</button><button type="button" class="slap-btn p" onclick="SLHfAuto.ui.step(' + (step + 1) + ')">' + (step === n - 1 ? 'See the result' : 'Next') + '</button></div>';
@@ -495,26 +557,47 @@
     function _addIfaceHtml() {
         return '<div class="hfa-add"><label>Add a flight deck control or display the crew uses <input type="text" id="hfa-add-if" placeholder="for example: Thrust levers, Engine display, Flight control panel"></label><button type="button" class="slap-btn" onclick="SLHfAuto.ui.addIface()">Add</button></div>';
     }
+    function _allocHtml(q) {
+        var f = q.fn, ph = phases(), m = q.map;
+        var call = function (p) { return function (id) { return 'SLHfAuto.ui.alloc(' + J(String(f.internalId)) + ',' + J(p) + ',' + J(id) + ')'; }; };
+        return '<div class="slap-q">Who does "' + E(fnLabel(f)) + '" in each flight phase?</div>' +
+            '<div class="slap-why">' + (S(f.subDef) ? E(_short(f.subDef, 220)) + ' ' : '') + 'Part of ' + E(S(f.funcId) + ' ' + S(f.funcName)) + '. The answer can differ by phase: the automation may do it in cruise while the crew does it on landing. Every phase where the crew has a part becomes a crew task, made by the tool.</div>' +
+            '<div class="hfa-field"><span class="hfa-lab">The same in every phase</span>' + _btns(ALLOC_OPTS.map(function (o) { return { id: o.id, label: o.label, tip: o.desc }; }), null, call('*')) + '</div>' +
+            '<table class="slap-tbl hfa-grid"><tr><th>Flight phase</th><th>Who does it</th></tr>' + ph.map(function (p) { return '<tr><td>' + E(p) + '</td><td>' + _btns(ALLOC_OPTS, m[p] || null, call(p)) + '</td></tr>'; }).join('') + '</table>';
+    }
+    function _phaseLoadHtml(q) {
+        var p = q.phase, w = workload().find(function (x) { return x.phase === p; }) || { PF: {}, PM: {} };
+        var BASIS = [{ id: 'Measured in the simulator', label: 'Measured in the simulator', desc: 'Measured with crews in the simulator: the strongest basis.' }, { id: 'Estimated by the engineer', label: 'Estimated', desc: 'An engineer\'s estimate. Fine early on; to be measured before it is credited.' }, { id: 'From a similar aircraft', label: 'From a similar aircraft', desc: 'Measured on an aircraft with the same tasks and flight deck.' }, { id: 'Pilot assessment', label: 'Pilot assessment', desc: 'Rated by line or test pilots in a review of the procedures.' }];
+        var who = { PF: 'the pilot flying', PM: 'the pilot monitoring', Both: 'both pilots', Either: 'either pilot' };
+        var bar = function (pl) { var d = w[pl] || {}; var v = d.normal; return '<div class="hfa-pl"><span class="hfa-pl-n">' + (pl === 'PF' ? 'Pilot flying' : 'Pilot monitoring') + '</span><span class="hfa-pl-bar"><i style="width:' + Math.min(100, v || 0) + '%;background:' + (v > 80 ? '#DC2626' : (v > 60 ? '#D97706' : '#16A34A')) + '"></i><b style="left:80%"></b></span><span class="hfa-pl-v">' + (v != null ? Math.round(v) + '%' : '-') + (d.worst ? ', ' + Math.round(d.worst.total) + '% with ' + E(d.worst.fcId) : '') + '</span></div>'; };
+        return '<div class="slap-q">How busy is each pilot in ' + E(p) + '?</div>' +
+            '<div class="slap-why">For each crew task in this phase, the share of that pilot\'s time it takes, in percent. A task both pilots do counts for both. Above 80% a pilot has no spare capacity for the unexpected (the NASA Human Integration Design Handbook guidance). Type the numbers; the tool never fills them in.</div>' +
+            '<div class="hfa-form"><label>Time the crew has to respond to a failure in ' + E(p) + ' (seconds)<input type="number" min="1" step="1" value="' + E(q.window || '') + '" onchange="SLHfAuto.ui.phase(' + J(p) + ',\'window\',\'\',this.value)"></label></div>' +
+            (q.tasks.length ? '<table class="slap-tbl hfa-grid"><tr><th>Crew task</th><th>Who</th><th>Share of the pilot\'s time (%)</th></tr>' + q.tasks.map(function (t) { var v = q.shareOf(t); return '<tr><td>' + E(t.taskName.replace(' (' + p + ')', '')) + '</td><td>' + E(who[t.crew] || t.crew) + '</td><td><input type="number" class="hfa-pct" min="0" max="100" step="1" value="' + E(v == null ? '' : v) + '" onchange="SLHfAuto.ui.phase(' + J(p) + ',\'share\',' + J(t.taskId) + ',this.value)"></td></tr>'; }).join('') + '</table>' +
+                '<div class="hfa-field"><span class="hfa-lab">Where the numbers come from</span>' + _btns(BASIS, q.basis, function (id) { return 'SLHfAuto.ui.phase(' + J(p) + ',\'basis\',\'\',' + J(id) + ')'; }) + '</div>' : '<div class="slap-note">The crew has no routine task in this phase (step 1 gives every function to the automation here).</div>') +
+            '<div class="hfa-bars">' + bar('PF') + bar('PM') + '</div>';
+    }
     function _loadHtml(q) {
         var t = q.task, tr = q.taskRow || {}, a = q.answer || {};
         var val = function (f) { var v = a[f] != null ? a[f] : tr[f]; return v == null ? '' : v; };
         var ch = a.channels || (S(tr.channels) ? S(tr.channels).split(',').map(S) : []);
-        var occ = tr.taskId ? HF().taskOccupancy(tr) : null, av = tr.taskId ? HF().taskAvailableS(tr) : { s: null };
+        var wins = HF().taskPhases(t.phase).map(function (p) { return { p: p, w: _windowS(p) }; }), known = wins.filter(function (x) { return x.w; });
+        var need = tr.taskId ? HF().taskResponseS(tr) : null, tight = known.length ? known.reduce(function (m, x) { return !m || x.w < m.w ? x : m; }, null) : null;
         var BASIS = [{ id: 'Measured in the simulator', label: 'Measured in the simulator', desc: 'Timed with crews in the simulator: the strongest basis.' }, { id: 'Estimated by the engineer', label: 'Estimated', desc: 'An engineer\'s estimate. Fine early on; to be measured before the time is credited.' },
             { id: 'From a similar aircraft', label: 'From a similar aircraft', desc: 'Measured on an aircraft with the same task and flight deck. Say which in the table\'s notes.' }, { id: 'Published human performance data', label: 'Published data', desc: 'From human performance references such as the NASA Human Integration Design Handbook.' }];
         var CH = [{ id: 'VIS', label: 'Looking', desc: 'Eyes on a display, the instruments or outside.' }, { id: 'AUD', label: 'Listening', desc: 'Listening to an aural alert, a callout or the radio.' }, { id: 'COG', label: 'Thinking', desc: 'Working out what is happening and deciding what to do.' }, { id: 'PSY', label: 'Hands and feet', desc: 'Moving a control, a switch or the pedals.' }, { id: 'VER', label: 'Talking', desc: 'Callouts, crew coordination or radio calls.' }];
-        return '<div class="slap-q">How long does this take: ' + E(t.taskName) + '?</div>' +
-            '<div class="slap-why">' + E(t.opsMode || '') + ' task for ' + E(({ PF: 'the pilot flying', PM: 'the pilot monitoring', Both: 'both pilots', Either: 'either pilot' })[t.crew] || t.crew || 'the crew') + ' in ' + E(/^all phases$/i.test(S(t.phase)) || !S(t.phase) ? 'every flight phase' : t.phase) + '. Type the times; the tool never fills them in. Time to notice and decide is the reaction; time to act is the execution.</div>' +
-            '<div class="hfa-form"><label>Notice and decide (seconds)<input type="number" min="0" step="0.1" value="' + E(val('reactionS')) + '" onchange="SLHfAuto.ui.load(' + J(t.taskId) + ',\'reactionS\',this.value)"></label>' +
-            '<label>Act (seconds)<input type="number" min="0" step="0.1" value="' + E(val('execS')) + '" onchange="SLHfAuto.ui.load(' + J(t.taskId) + ',\'execS\',this.value)"></label></div>' +
-            '<div class="hfa-field"><span class="hfa-lab">Where the times come from</span>' + _btns(BASIS, S(val('basis')), function (id) { return 'SLHfAuto.ui.load(' + J(t.taskId) + ',\'basis\',' + J(id) + ')'; }) + '</div>' +
-            '<div class="hfa-field"><span class="hfa-lab">What it keeps the crew busy with (pick all that apply)</span>' + _btns(CH, ch, function (id) { return 'SLHfAuto.ui.load(' + J(t.taskId) + ',\'channel\',' + J(id) + ')'; }, true) + '</div>' +
-            (occ != null ? '<div class="slap-note">That is ' + Math.round(occ * 100) + '% of the time available (' + Math.round(av.s) + ' s, from the ' + E(av.src || 'flight phase') + ').' + (occ > 0.8 ? ' <b>Over 80%: the crew has too little time. This stays open.</b>' : '') + '</div>' : '');
+        return '<div class="slap-q">How long does the crew take to respond to: ' + E(_short((fcById(t.fcId) || {}).fcDesc || t.taskName, 120)) + '?</div>' +
+            '<div class="slap-why">' + E(t.opsMode || '') + ' procedure, both pilots, in ' + E(t.phase || 'every phase') + '. Type the times; the tool never fills them in. Noticing and deciding is the reaction; acting is the execution. The total is checked against the time each phase leaves the crew to respond (step 3\'s phase screens).</div>' +
+            '<div class="hfa-form"><label>Notice and decide (seconds)<input type="number" min="0" step="0.1" value="' + E(val('reactionS')) + '" onchange="SLHfAuto.ui.load(' + J(t.fcId) + ',\'reactionS\',this.value)"></label>' +
+            '<label>Act (seconds)<input type="number" min="0" step="0.1" value="' + E(val('execS')) + '" onchange="SLHfAuto.ui.load(' + J(t.fcId) + ',\'execS\',this.value)"></label></div>' +
+            '<div class="hfa-field"><span class="hfa-lab">Where the times come from</span>' + _btns(BASIS, S(val('basis')), function (id) { return 'SLHfAuto.ui.load(' + J(t.fcId) + ',\'basis\',' + J(id) + ')'; }) + '</div>' +
+            '<div class="hfa-field"><span class="hfa-lab">What it keeps the crew busy with (pick all that apply)</span>' + _btns(CH, ch, function (id) { return 'SLHfAuto.ui.load(' + J(t.fcId) + ',\'channel\',' + J(id) + ')'; }, true) + '</div>' +
+            (need > 0 && tight ? '<div class="slap-note">' + Math.round(need * 10) / 10 + ' s against ' + Math.round(tight.w) + ' s in ' + E(tight.p) + ' (the tightest phase it can happen in): ' + Math.round(need / tight.w * 100) + '% of the window.' + (need / tight.w > 0.8 ? ' <b>Over 80%: too little time. This stays open.</b>' : '') + '</div>' : (need > 0 ? '<div class="slap-note">Set the crew response windows on the phase screens of this step to check the time.</div>' : '')) + (known.length < wins.length && known.length ? '' : '');
     }
     function _errHtml(q) {
         var t = q.task, fcs = _arr(_g('acFhaData')).filter(function (f) { return f && S(f.fcId); });
         var YN = [{ id: 'yes', label: 'It can happen', tip: 'Say how they would notice, how it is put right, and what it leads to.' }, { id: 'no', label: 'Not credible here', tip: 'This kind of error cannot happen in this task, or makes no difference to it.' }];
-        var call = function (mode, f) { return function (id) { return 'SLHfAuto.ui.err(' + J(t.taskId) + ',' + J(mode) + ',' + J(f) + ',' + J(id) + ')'; }; };
+        var call = function (mode, f) { return function (id) { return 'SLHfAuto.ui.err(' + J(t.key) + ',' + J(mode) + ',' + J(f) + ',' + J(id) + ')'; }; };
         return '<div class="slap-q">What could the crew get wrong: ' + E(t.taskName) + '?</div>' +
             '<div class="slap-why">Go through the five ways a crew task goes wrong (the NUREG/CR-1278 error types). For each one that can happen here, say how the crew would notice, how it is put right, and which failure condition it leads to. Each one written becomes a row of the crew error table.</div>' +
             '<div class="hfa-cards">' + ERR.map(function (m) {
@@ -587,38 +670,105 @@
         var st = document.createElement('style'); st.id = 'hfa-auto-style';
         st.textContent = '.hfa-chips{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0 10px}.hfa-chip{font:inherit;font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid var(--border-primary,#d0d5dd);background:transparent;color:inherit;cursor:pointer}.hfa-chip.on{border-color:#1A6EF2;background:rgba(26,110,242,.1)}.hfa-chip.done{color:#16794a}' +
             '.hfa-form{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0}.hfa-form label,.hfa-add label{display:flex;flex-direction:column;font-size:12px;gap:4px}.hfa-form input{width:140px}.hfa-row{display:flex;flex-direction:column;gap:4px;margin:8px 0;font-size:12px}' +
-            '.hfa-seg-wrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;max-width:100%}.hfa-seg{display:inline-flex;flex-wrap:nowrap;border:1px solid var(--border-primary,#d0d5dd);border-radius:8px;overflow:hidden;background:var(--bg-primary,#fff);max-width:100%;overflow-x:auto}.hfa-seg .hfa-seg-b{font:inherit;font-size:12px;line-height:1.2;padding:6px 12px;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;border-right:1px solid var(--border-primary,#d0d5dd)!important;background:transparent;color:inherit;cursor:pointer;white-space:nowrap;min-height:0;height:auto}.hfa-seg .hfa-seg-b:last-child{border-right:0!important}.hfa-num .hfa-seg-b{padding:6px 9px;min-width:28px}.hfa-seg-b:hover{background:rgba(26,110,242,.06)}.hfa-seg .hfa-seg-b.on{background:#1A6EF2!important;color:#fff!important}.hfa-seg .hfa-seg-b.warn.on{background:#B42318!important;color:#fff!important}.hfa-seg-b:focus-visible{outline:2px solid #1A6EF2;outline-offset:-2px}.hfa-desc{font-size:11.5px;color:var(--text-secondary,#5b6270);line-height:1.45;max-width:640px}.hfa-cards{display:flex;flex-direction:column;gap:10px;margin:10px 0}.hfa-card{border:1px solid var(--border-primary,#d0d5dd);border-left:4px solid #98a2b3;border-radius:10px;background:var(--bg-primary,#fff)}.hfa-card.ok{border-left-color:#16A34A}.hfa-card.open{border-left-color:#B42318}.hfa-card-h{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 14px}.hfa-card-h>div:first-child{flex:1;min-width:0}.hfa-card-h .hfa-seg-wrap{flex:none}.hfa-card-t{font-weight:600;font-size:13.5px}.hfa-card-d{font-size:12px;color:var(--text-secondary,#5b6270);margin-top:2px;max-width:560px}.hfa-card-b{border-top:1px solid var(--border-primary,#e4e7ec);padding:10px 14px 12px;display:flex;flex-direction:column;gap:10px}.hfa-field{display:flex;flex-direction:column;gap:5px;margin:8px 0}.hfa-card-b .hfa-field{margin:0}.hfa-lab{font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--text-secondary,#5b6270)}.hfa-select{font:inherit;font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid var(--border-primary,#d0d5dd);max-width:520px}.hfa-grid td{vertical-align:top}.slap-mini{display:inline-flex;flex-wrap:wrap;gap:4px}.slap-mini .slap-btn{font-size:11.5px;padding:3px 8px}.hfa-hi{border-color:#DC262666}.hfa-note{width:100%;min-width:180px}.hfa-add{display:flex;gap:8px;align-items:flex-end;margin:10px 0}.hfa-add input{min-width:320px}.hfa-fig{margin:6px 0 10px;overflow-x:auto}.hfa-err select{margin-top:2px;max-width:420px}.hfa-err td:nth-child(2){white-space:nowrap;width:110px}.hfa-err td:nth-child(2) .slap-mini{flex-wrap:nowrap}.hfa-sub{font-size:11px;color:var(--text-secondary,#5b6270);margin:6px 0 2px}.hfa-sub:first-child{margin-top:0}.hfa-jump{display:flex;align-items:center;gap:8px;margin:6px 0 10px;font-size:12px}.hfa-jump select{max-width:520px}.slap-tbl td .slap-mini{flex-wrap:wrap}';
+            '.hfa-seg-wrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px;max-width:100%}.hfa-seg{display:inline-flex;flex-wrap:nowrap;border:1px solid var(--border-primary,#d0d5dd);border-radius:8px;overflow:hidden;background:var(--bg-primary,#fff);max-width:100%;overflow-x:auto}.hfa-seg .hfa-seg-b{font:inherit;font-size:12px;line-height:1.2;padding:6px 12px;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;border-right:1px solid var(--border-primary,#d0d5dd)!important;background:transparent;color:inherit;cursor:pointer;white-space:nowrap;min-height:0;height:auto}.hfa-seg .hfa-seg-b:last-child{border-right:0!important}.hfa-num .hfa-seg-b{padding:6px 9px;min-width:28px}.hfa-seg-b:hover{background:rgba(26,110,242,.06)}.hfa-seg .hfa-seg-b.on{background:#1A6EF2!important;color:#fff!important}.hfa-seg .hfa-seg-b.warn.on{background:#B42318!important;color:#fff!important}.hfa-seg-b:focus-visible{outline:2px solid #1A6EF2;outline-offset:-2px}.hfa-desc{font-size:11.5px;color:var(--text-secondary,#5b6270);line-height:1.45;max-width:640px}.hfa-cards{display:flex;flex-direction:column;gap:10px;margin:10px 0}.hfa-card{border:1px solid var(--border-primary,#d0d5dd);border-left:4px solid #98a2b3;border-radius:10px;background:var(--bg-primary,#fff)}.hfa-card.ok{border-left-color:#16A34A}.hfa-card.open{border-left-color:#B42318}.hfa-card-h{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 14px}.hfa-card-h>div:first-child{flex:1;min-width:0}.hfa-card-h .hfa-seg-wrap{flex:none}.hfa-card-t{font-weight:600;font-size:13.5px}.hfa-card-d{font-size:12px;color:var(--text-secondary,#5b6270);margin-top:2px;max-width:560px}.hfa-card-b{border-top:1px solid var(--border-primary,#e4e7ec);padding:10px 14px 12px;display:flex;flex-direction:column;gap:10px}.hfa-field{display:flex;flex-direction:column;gap:5px;margin:8px 0}.hfa-card-b .hfa-field{margin:0}.hfa-lab{font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--text-secondary,#5b6270)}.hfa-select{font:inherit;font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid var(--border-primary,#d0d5dd);max-width:520px}.hfa-grid td{vertical-align:middle}.hfr-lead{font-size:13px;color:var(--text-secondary,#5b6270);max-width:900px}.hfr-pna{background:var(--bg-secondary,#f2f4f7);color:var(--text-secondary,#475467);font-weight:500}.hfr-na{color:var(--text-tertiary,#98a2b3);font-style:italic;font-size:12px}.hfr-tabs{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;gap:4px;margin:10px 0 14px;border-bottom:1px solid var(--border-primary,#d0d5dd)}.hfr-tab{white-space:nowrap;flex:0 0 auto;font:inherit;font-size:12.5px;padding:7px 12px;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;background:none;color:var(--text-secondary,#475467);cursor:pointer;margin-bottom:-1px}.hfr-tab:hover{background:var(--bg-secondary,#f2f4f7)}.hfr-tab.on{background:var(--bg-primary,#fff);border-color:var(--border-primary,#d0d5dd);color:inherit;font-weight:600}.hfr-tab b{color:#B42318;font-size:11px;margin-left:3px}.hfr-nav{display:flex;justify-content:space-between;margin-top:12px}.hfr-step{font:inherit;font-size:12px;padding:5px 10px;border:1px solid var(--border-primary,#d0d5dd);border-radius:6px;background:none;color:inherit;cursor:pointer}.hfr-toc{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 16px}.hfr-chip{font-size:11.5px;padding:4px 10px;border-radius:14px;border:1px solid var(--border-primary,#d0d5dd);text-decoration:none;color:inherit}.hfr-chip.open{border-color:#B4231866}.hfr-chip b{color:#B42318}.hfr-card{border:1px solid var(--border-primary,#d0d5dd);border-radius:12px;padding:14px 16px;margin:0 0 14px;background:var(--bg-primary,#fff)}.hfr-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px}.hfr-q{font-weight:600;font-size:14.5px}.hfr-p{font-size:12px;color:var(--text-secondary,#5b6270);margin-top:3px;max-width:820px}.hfr-wrap{overflow-x:auto}.hfr-t{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}.hfr-t th{text-align:left;font-weight:600;font-size:11.5px;color:var(--text-secondary,#5b6270);padding:7px 10px;border-bottom:1px solid var(--border-primary,#d0d5dd);background:var(--bg-secondary,#f7f8fa);white-space:nowrap}.hfr-t td{padding:7px 10px;border-bottom:1px solid var(--border-primary,#eef0f3);vertical-align:top}.hfr-t tr:last-child td{border-bottom:0}.hfr-good{color:#16794a}.hfr-warn{color:#B54708}.hfr-bad{color:#B42318;font-weight:600}.hfr-crew{background:rgba(26,110,242,.10);font-weight:600}.hfr-both{background:rgba(26,110,242,.05)}.hfr-empty{font-size:12.5px;color:var(--text-secondary,#5b6270);padding:8px 0}.hfr-foot{font-size:12.5px;margin-top:8px;font-weight:600}.hfa-pct{width:90px}.hfa-bars{display:flex;flex-direction:column;gap:6px;margin:10px 0}.hfa-pl{display:flex;align-items:center;gap:10px;font-size:12px}.hfa-pl-n{width:120px}.hfa-pl-bar{position:relative;flex:1;max-width:420px;height:12px;border-radius:6px;background:#eef1f5;overflow:hidden}.hfa-pl-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:6px}.hfa-pl-bar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:#DC2626}.hfa-pl-v{min-width:150px;color:var(--text-secondary,#5b6270)}.slap-mini{display:inline-flex;flex-wrap:wrap;gap:4px}.slap-mini .slap-btn{font-size:11.5px;padding:3px 8px}.hfa-hi{border-color:#DC262666}.hfa-note{width:100%;min-width:180px}.hfa-add{display:flex;gap:8px;align-items:flex-end;margin:10px 0}.hfa-add input{min-width:320px}.hfa-fig{margin:6px 0 10px;overflow-x:auto}.hfa-err select{margin-top:2px;max-width:420px}.hfa-err td:nth-child(2){white-space:nowrap;width:110px}.hfa-err td:nth-child(2) .slap-mini{flex-wrap:nowrap}.hfa-sub{font-size:11px;color:var(--text-secondary,#5b6270);margin:6px 0 2px}.hfa-sub:first-child{margin-top:0}.hfa-jump{display:flex;align-items:center;gap:8px;margin:6px 0 10px;font-size:12px}.hfa-jump select{max-width:520px}.slap-tbl td .slap-mini{flex-wrap:wrap}';
         document.head.appendChild(st);
     }
 
     // ---- the report ---------------------------------------------------------------------------------------------
     function report() {
-        var res = compute(), cov = coverage(), pc = _pc();
+        var cov = coverage(), T = results();
+        var cell = function (c) { return c && typeof c === 'object' ? '<td class="' + (c.c === 'bad' ? 'open' : (c.c === 'good' ? 'ok' : '')) + '">' + E(c.v) + '</td>' : '<td>' + E(c == null ? '' : c) + '</td>'; };
         var html = '<h1>Human Factors Assessment</h1><p class="muted">' + E(_g('projectName') || '') + '. Worked through the HF Autopilot: every answer by an engineer, with who and when. ' + new Date().toISOString().slice(0, 10) + '.</p>';
         html += '<h2>Coverage of the design cycle</h2><table><tr><th>Design stage</th><th>Step</th><th>Answered</th><th>Open</th><th>Signed</th></tr>' + cov.map(function (c) { return '<tr><td>' + E(c.phase) + '</td><td>' + c.n + '. ' + E(c.title) + '</td><td>' + c.answered + ' of ' + c.questions + '</td><td class="' + (c.open ? 'open' : 'ok') + '">' + c.open + '</td><td>' + (c.signedBy ? E(c.signedBy) : '-') + '</td></tr>'; }).join('') + '</table>';
-        var lanes = [['alloc', '1. Who does what', ['subName', 'allocation', 'rationale'], ['Function', 'Who', 'Why']], ['tid', '2. Crew procedures', ['taskId', 'opsMode', 'phase', 'taskName', 'crew', 'trigger'], ['Task', 'Kind', 'Phase', 'What', 'Who', 'Starts when']],
-            ['tasks', '3. How busy the crew is', ['taskId', 'task', 'phase', 'reactionS', 'execS', 'basis'], ['Task', 'What', 'Phase', 'Notice and decide (s)', 'Act (s)', 'Where the times come from']],
-            ['hea', '4. What the crew could get wrong', ['heaId', 'task', 'errorMode', 'detection', 'recovery', 'fcIds'], ['Row', 'Task', 'Error', 'How they notice', 'How it is put right', 'Leads to']],
-            ['alerts', '5. How the crew is told', ['alertId', 'name', 'priority', 'modality', 'fcIds'], ['Alert', 'For', 'Level', 'How', 'Failure condition']],
-            ['cd', '6. Controls and displays (25.1302)', ['cdId', 'item', 'consideration', 'finding', 'status'], ['Row', 'Control or display', 'Question', 'Finding', 'Status']],
-            ['sa', '7. Situation awareness', ['saId', 'phase', 'level', 'finding', 'status'], ['Row', 'Phase', 'Level', 'Finding', 'Status']],
-            ['ergo', '8. Reach and view', ['ergoId', 'item', 'clause', 'finding', 'status'], ['Row', 'Control or display', 'Rule', 'Finding', 'Status']]];
-        lanes.forEach(function (L) {
-            var rows = _laneRows(L[0]); html += '<h2>' + E(L[1]) + '</h2>';
-            if (L[0] === 'tasks') { var f = workloadSvg(); html += f.svg; }
-            html += rows.length ? '<table><tr>' + L[3].map(function (h) { return '<th>' + E(h) + '</th>'; }).join('') + '</tr>' + rows.map(function (r) { return '<tr>' + L[2].map(function (k) { return '<td>' + E(r[k] == null ? '' : r[k]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' : '<p class="muted">Nothing recorded yet.</p>';
+        T.forEach(function (t, i) {
+            html += '<h2>' + (i + 1) + '. ' + E(t.q) + '</h2><p class="muted">' + E(t.purpose) + (t.open ? ' Open: ' + t.open + '.' : '') + '</p>';
+            if (t.key === 'workload') html += workloadSvg().svg;
+            html += t.rows.length ? '<table><tr>' + t.head.map(function (h) { return '<th>' + E(h) + '</th>'; }).join('') + '</tr>' + t.rows.map(function (r) { return '<tr>' + r.map(cell).join('') + '</tr>'; }).join('') + '</table>' : '<p class="muted">Nothing recorded yet.</p>';
+            if (t.foot) html += '<p><b>' + E(t.foot) + '</b></p>';
         });
-        var m = _mfc(); html += '<h2>9. Minimum crew (25.1523)</h2><table><tr><th>Function</th><th>Who</th><th>Bedford</th></tr>' + ((HF() && HF().MFC_FUNCTIONS) || []).map(function (f) { var r = _arr(m.rows).find(function (x) { return x.key === f.key; }) || {}; return '<tr><td>' + E(f.label) + '</td><td>' + E(r.role || '') + '</td><td>' + E(r.bedford || '') + '</td></tr>'; }).join('') + '</table>' +
-            '<p><b>Minimum flight crew:</b> ' + E((m.conclusion || {}).minCrew || 'not decided') + '. ' + E((m.conclusion || {}).rationale || '') + '</p>';
-        html += '<h2>10. Credit and evidence</h2>' + (_hfAsms().length ? '<table><tr><th>Assumption</th><th>What the crew does</th><th>State</th><th>How it is shown</th><th>Results</th></tr>' + _hfAsms().map(function (a) { return '<tr><td>' + E(a.asmId) + '</td><td>' + E(a.statement || '') + '</td><td>' + E(a.state || '') + '</td><td>' + E(a.valStrategy || '') + '</td><td>' + E(_evidenceLine(a.asmId)) + '</td></tr>'; }).join('') + '</table>' : '<p class="muted">No crew action is credited yet.</p>');
         return U().openReport('Human Factors Assessment', html);
     }
 
+    // ---- the results page: one table per question the certification case has to answer ------------------------
+    // Every table is built from the HF records (the Autopilot's answers, and rows typed before it), states what it is
+    // for in one line, and counts what is still open. Nothing here is typed in; the Autopilot is where answers change.
+    function results() {
+        var ph = phases(), funcs = functions(), tids = _tidRows(), wl = workload();
+        var T = [];
+        var tbl = function (key, q, purpose, head, rows, open, empty) { T.push({ key: key, q: q, purpose: purpose, head: head, rows: rows, open: open || 0, empty: empty || 'Nothing recorded yet: answer the step in the HF Autopilot.' }); };
+        var lab = { crew: 'Crew', shared: 'Both', automation: 'Automation', na: '-' };
+        tbl('alloc', 'Who does each function in each flight phase?', 'Shows where the crew has a part in flying the aircraft, phase by phase: the starting point of every workload and error question (step 1).',
+            ['Function'].concat(ph), funcs.map(function (f) { var m = allocMap(f); return [fnLabel(f)].concat(ph.map(function (p) { return { v: lab[m[p]] || '', c: m[p] === 'crew' ? 'crew' : (m[p] === 'shared' ? 'both' : '') }; })); }),
+            funcs.filter(function (f) { var m = allocMap(f); return ph.some(function (p) { return !m[p]; }); }).length);
+        tbl('pilots', 'What does each pilot do in each flight phase?', 'The crew tasks per phase, by pilot: what the procedures and the flight deck have to support (step 2, made by the tool from step 1).',
+            ['Flight phase', 'Pilot flying', 'Pilot monitoring'], ph.map(function (p) {
+                var inPh = function (t) { return t.opsMode === 'Normal' && HF().taskPhases(t.phase).some(function (x) { return x.toLowerCase() === p.toLowerCase() || /^all phases$/i.test(x); }); };
+                var names = function (pl) { return tids.filter(function (t) { return inPh(t) && _isPilot(t.crew, pl); }).map(function (t) { return t.taskName.replace(' (' + p + ')', ''); }).join('; ') || '-'; };
+                return [p, names('PF'), names('PM')]; }), 0);
+        tbl('workload', 'Can each pilot cope in every flight phase?', 'Each pilot\'s workload per phase in normal operation, and with the worst failure of the phase on top, against the 80% limit (step 3). Over 80% is open.',
+            ['Flight phase', 'Pilot flying', 'Pilot flying, worst failure', 'Pilot monitoring', 'Pilot monitoring, worst failure'], wl.map(function (r) { var c = function (v) { return v == null ? '' : { v: Math.round(v) + '%', c: v > 80 ? 'bad' : (v > 60 ? 'warn' : 'good') }; }; return [r.phase, c(r.PF.normal), r.PF.worst ? { v: Math.round(r.PF.worst.total) + '% (' + r.PF.worst.fcId + ')', c: r.PF.worst.total > 80 ? 'bad' : '' } : '', c(r.PM.normal), r.PM.worst ? { v: Math.round(r.PM.worst.total) + '% (' + r.PM.worst.fcId + ')', c: r.PM.worst.total > 80 ? 'bad' : '' } : '']; }),
+            wl.reduce(function (n, r) { return n + ['PF', 'PM'].filter(function (pl) { return (r[pl].normal > 80) || (r[pl].worst && r[pl].worst.total > 80); }).length; }, 0));
+        var procs = tids.filter(function (t) { return t.fcId; });
+        var procRows = procs.map(function (t) { var tr = _taskRowFor(t), need = tr ? HF().taskResponseS(tr) : null; var ws = HF().taskPhases(t.phase).map(function (p) { return _windowS(p); }).filter(Boolean); var w = ws.length ? Math.min.apply(null, ws) : null; var o = need > 0 && w ? need / w : null;
+            return [S(t.fcId) + ' ' + _short((fcById(t.fcId) || {}).fcDesc, 60), t.opsMode, need > 0 ? Math.round(need * 10) / 10 + ' s' : '', w ? Math.round(w) + ' s' : '', o != null ? { v: Math.round(o * 100) + '%', c: o > 0.8 ? 'bad' : 'good' } : '']; });
+        tbl('time', 'Is there time to handle each failure?', 'For every failure condition the crew responds to: the time the response takes against the time the tightest phase allows (step 3). Over 80% is open.',
+            ['Failure condition', 'Procedure', 'Time needed', 'Time available', 'Share of the window'], procRows, procRows.filter(function (r) { return r[4] && r[4].c === 'bad'; }).length);
+        var hea = _laneRows('hea');
+        tbl('errors', 'What could the crew get wrong, and is it caught?', 'Every credible crew error, how it is noticed and put right, and the failure condition it leads to (step 4). An error nobody notices, or nobody can put right, is open.',
+            ['Task', 'Error', 'How it is noticed', 'How it is put right', 'Leads to'], hea.map(function (r) { var bad = /Nobody notices|Too late|cannot be put right/i.test(S(r.detection) + S(r.recovery)); return [S(r.task), (ERR.find(function (m) { return m.mode === r.errorMode; }) || {}).label || S(r.errorMode), { v: S(r.detection), c: /Nobody/i.test(S(r.detection)) ? 'bad' : '' }, { v: S(r.recovery), c: /Too late|cannot/i.test(S(r.recovery)) ? 'bad' : '' }, S(r.fcIds) || S(r.effect)]; }),
+            hea.filter(function (r) { return /Nobody notices|Too late|cannot be put right/i.test(S(r.detection) + S(r.recovery)); }).length);
+        var fcs = crewFcs(), alerts = _laneRows('alerts');
+        tbl('alerts', 'Is the crew told about every failure that needs them?', 'Each failure condition with a crew effect, and how the crew learns of it (step 5, 14 CFR 25.1322). One with no answer is open.',
+            ['Failure condition', 'Alert', 'How it reaches them'], fcs.map(function (fc) { var a = answerOf('alert:' + fc.fcId); var r = alerts.find(function (x) { return S(x.fcIds).split(',').map(S).indexOf(S(fc.fcId)) >= 0; }); return [S(fc.fcId) + ' ' + _short(fc.fcDesc, 60), r ? r.priority : (a && a.pick === 'none' ? 'None: seen directly' : { v: 'Not decided', c: 'bad' }), r ? S(r.modality).replace(/,/g, ', ') : '']; }),
+            fcs.filter(function (fc) { var a = answerOf('alert:' + fc.fcId); return !(a && a.pick === 'none') && !alerts.some(function (x) { return S(x.fcIds).split(',').map(S).indexOf(S(fc.fcId)) >= 0; }); }).length);
+        var ifs = interfaces(), cd = _laneRows('cd');
+        var cdCell = function (it, c) { var r = cd.find(function (x) { return S(x.item) === it.name && S(x.consideration) === c.cons; }); return r ? { v: r.status === 'Closed' ? 'Yes' : 'No: ' + _short(r.finding, 50), c: r.status === 'Closed' ? 'good' : 'bad' } : ''; };
+        tbl('cd', 'Do the flight deck controls and displays meet 25.1302?', 'The four questions of 14 CFR 25.1302 for each control and display the crew uses (step 6). A "No" is an open finding.',
+            ['Control or display', 'Gives the information', 'Usable', 'Predictable', 'Errors can be undone'], ifs.map(function (it) { return [it.name].concat(CD.map(function (c) { return cdCell(it, c); })); }), cd.filter(function (r) { return r.status === 'Open'; }).length);
+        var sa = _laneRows('sa');
+        tbl('sa', 'Does the crew know what is going on in every phase?', 'Whether the crew can see, understand and anticipate what they need, phase by phase (step 7). A gap is open.',
+            ['Flight phase', 'See it', 'Understand it', 'Anticipate it'], ph.map(function (p) { return [p].concat(SA.map(function (c) { var r = sa.find(function (x) { return S(x.phase) === p && S(x.level) === c.level; }); return r ? { v: r.status === 'Closed' ? 'Yes' : 'Gap: ' + _short(r.finding, 50), c: r.status === 'Closed' ? 'good' : 'bad' } : ''; })); }), sa.filter(function (r) { return r.status === 'Open'; }).length);
+        var ergo = _laneRows('ergo');
+        tbl('ergo', 'Can the crew reach and see everything they use?', 'Reach (14 CFR 25.777) and view (14 CFR 25.1321) for each control and display (step 8). A "No" is open.',
+            ['Control or display', 'Reach', 'View'], ifs.map(function (it) { return [it.name].concat(ERGO.map(function (c) { var r = ergo.find(function (x) { return S(x.item) === it.name && S(x.clause) === c.clause; }); return r ? { v: r.status === 'Closed' ? 'Yes' : 'No: ' + _short(r.finding, 50), c: r.status === 'Closed' ? 'good' : 'bad' } : ''; })); }), ergo.filter(function (r) { return r.status === 'Open'; }).length);
+        var m = _mfc(), mrows = _arr(m.rows);
+        tbl('mfc', 'How many pilots does the aircraft need?', 'The six basic workload functions of Part 25 Appendix D, who does each and how hard it is (Bedford), and the minimum crew decided from them (step 9, 14 CFR 25.1523).',
+            ['Workload function', 'Who', 'How hard (Bedford)'], ((HF() && HF().MFC_FUNCTIONS) || []).map(function (f) { var r = mrows.find(function (x) { return x.key === f.key; }) || {}; var b = parseFloat(r.bedford); return [f.label, r.role || '', isFinite(b) ? { v: String(b) + ': ' + BEDFORD[b - 1], c: b >= 7 ? 'bad' : '' } : '']; }), 0);
+        T[T.length - 1].foot = 'Minimum flight crew: ' + (S((m.conclusion || {}).minCrew) || 'not decided yet') + '.';
+        var asms = _hfAsms();
+        tbl('credit', 'Which crew actions does the safety case count on, and how are they shown?', 'Every crew action an FHA classification relies on, its state on the register, how it will be shown to hold and the results so far (step 10). One without a plan is open.',
+            ['Assumption', 'What the crew does', 'State', 'How it is shown', 'Results'], asms.map(function (a) { return [S(a.asmId), _short(a.statement || a.text, 90), S(a.state), S(a.valStrategy) ? _short(a.valStrategy, 70) : { v: 'No plan yet', c: 'bad' }, _evidenceLine(a.asmId)]; }), asms.filter(function (a) { return !S(a.valStrategy); }).length);
+        return T;
+    }
+    function _cell(c) { if (c && typeof c === 'object') return '<td class="hfr-' + (c.c || 'n') + '">' + E(c.v) + '</td>'; return (c == null || c === '') ? '<td class="hfr-na">Not answered yet</td>' : '<td>' + E(c) + '</td>'; }
+    // a row with nothing after its name has not been answered; a table with only such rows is not "Nothing open"
+    function _blank(r) { return r.slice(1).every(function (c) { return c == null || c === '' || (typeof c === 'object' && (c.v == null || c.v === '')); }); }
+    function renderResults() {
+        if (typeof document === 'undefined' || !HF() || !U()) return;
+        var v = document.getElementById('view-hfa-results'); if (!v) return;
+        U().style(); _styleOnce();
+        var T = results(), open = T.reduce(function (n, t) { return n + t.open; }, 0);
+        // 6 Nov 2026 (Waqas: "HF results should be broken up in multiple tabs containing a table each, one page with all
+        // that info seems overwhelming"): one tab per table, one table on screen at a time; the tab picked is kept.
+        var TAB = { alloc: 'Who does what', pilots: 'Pilot tasks', workload: 'Workload', time: 'Time to respond', errors: 'Crew errors', alerts: 'Alerts', cd: 'Controls and displays', sa: 'Situation awareness', ergo: 'Reach and view', mfc: 'Minimum crew', credit: 'Credit and evidence' };
+        var cur = T.some(function (t) { return t.key === state.resTab; }) ? state.resTab : (T[0] && T[0].key);
+        state.resTab = cur;
+        var t = T.filter(function (x) { return x.key === cur; })[0], i = T.indexOf(t);
+        v.innerHTML = '<div class="header-with-export"><h3>Human factors results</h3></div>' +
+            '<p class="hfr-lead">One table per question the certification case has to answer. Everything here comes from the HF Autopilot; change an answer there and these tables follow. ' + (open ? '<b>' + open + ' open item' + (open > 1 ? 's' : '') + '</b> in all.' : 'Nothing open.') + ' <a href="javascript:void(0)" onclick="switchTab(\'hfa-auto\')">Open the HF Autopilot</a> · <a href="javascript:void(0)" onclick="SLHfAuto.report()">Write the report</a></p>' +
+            '<div class="hfr-tabs" role="tablist">' + T.map(function (x) { return '<button type="button" role="tab" aria-selected="' + (x.key === cur) + '" class="hfr-tab' + (x.key === cur ? ' on' : '') + (x.open ? ' open' : '') + '" onclick="SLHfAuto.ui.resTab(\'' + x.key + '\')">' + E(TAB[x.key] || x.q) + (x.open ? ' <b>' + x.open + '</b>' : '') + '</button>'; }).join('') + '</div>' +
+            (!t ? '' : '<section class="hfr-card" id="hfr-' + t.key + '" role="tabpanel"><div class="hfr-h"><div><div class="hfr-q">' + (i + 1) + ' of ' + T.length + '. ' + E(t.q) + '</div><div class="hfr-p">' + E(t.purpose) + '</div></div>' + (t.open ? '<span class="slap-pill open">' + t.open + ' open</span>' : (t.rows.length && !t.rows.every(_blank) ? '<span class="slap-pill ok">Nothing open</span>' : '<span class="slap-pill hfr-pna">Not answered yet</span>')) + '</div>' +
+                (t.rows.length ? '<div class="hfr-wrap"><table class="hfr-t"><thead><tr>' + t.head.map(function (h) { return '<th>' + E(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + t.rows.map(function (r) { return '<tr>' + r.map(_cell).join('') + '</tr>'; }).join('') + '</tbody></table></div>' : '<div class="hfr-empty">' + E(t.empty) + '</div>') +
+                (t.key === 'workload' ? '<div class="hfa-fig">' + workloadSvg().svg + '</div>' : '') + (t.foot ? '<div class="hfr-foot">' + E(t.foot) + '</div>' : '') +
+                '<div class="hfr-nav">' + (i > 0 ? '<button type="button" class="hfr-step" onclick="SLHfAuto.ui.resTab(\'' + T[i - 1].key + '\')">&larr; ' + E(TAB[T[i - 1].key]) + '</button>' : '<span></span>') + (i < T.length - 1 ? '<button type="button" class="hfr-step" onclick="SLHfAuto.ui.resTab(\'' + T[i + 1].key + '\')">' + E(TAB[T[i + 1].key]) + ' &rarr;</button>' : '') + '</div></section>');
+    }
     var ui = {
         stage: function (key) { state.stage = key || null; state.step = 0; render(); },
         step: function (n) { state.step = n; render(); },
         pick: function (qid, opt) { answer(qid, opt); render(); },
         load: function (id, f, v) { setLoad(id, f, v); render(); },
+        alloc: function (fid, p, v) { setAlloc(fid, p, v); render(); },
+        phase: function (p, f, id, v) { setPhase(p, f, id, v); render(); },
         err: function (id, mode, f, v) { setErr(id, mode, f, v); render(); },
         alertPick: function (qid, opt) { setAlert(String(qid).replace(/^alert:/, ''), 'pick', opt); render(); },
         alert: function (fcId, f, v) { setAlert(fcId, f, v); render(); },
@@ -627,31 +777,27 @@
         addIface: function () { var el = typeof document !== 'undefined' && document.getElementById('hfa-add-if'); if (el && addInterface(el.value)) render(); },
         sign: function (key) { sign(key); render(); },
         next: function () { var i = STAGES.findIndex(function (x) { return x.key === state.stage; }); var nx = STAGES[(i + 1) % STAGES.length]; ui.stage(nx.key); },
+        resTab: function (k) { state.resTab = k; renderResults(); },
         report: report
     };
     function mount() {
         if (typeof document === 'undefined') return false;
-        var v = document.getElementById('view-hfa'); if (!v) return false;
+        var v = document.getElementById('view-hfa-auto'), r = document.getElementById('view-hfa-results'); if (!v || !r) return false;
         var host = document.getElementById('hf-auto-host');
-        if (!host) { host = document.createElement('div'); host.id = 'hf-auto-host'; }
-        // first under the page heading; the register page redraws itself (innerHTML), so the host is put back each time
-        var place = function () { var hd = v.querySelector(':scope > .header-with-export'); var want = hd ? hd.nextSibling : v.firstChild; if (host.parentNode === v && (hd ? host.previousSibling === hd : v.firstChild === host)) return; if (hd) v.insertBefore(host, want); else v.insertBefore(host, v.firstChild); };
-        place();
-        if (!v._hfAutoObs && typeof MutationObserver === 'function') {
-            var shown = v.style.display !== 'none' && v.style.display !== '';
-            v._hfAutoObs = new MutationObserver(function () {
-                var now = v.style.display !== 'none';
-                try { place(); } catch (_) {}
-                if (now && !shown) { try { render(); } catch (e) { try { console.warn('[hf-autopilot]', e); } catch (_) {} } }
-                shown = now;
-            });
-            v._hfAutoObs.observe(v, { attributes: true, attributeFilter: ['style', 'class'], childList: true });
-            if (v.style.display !== 'none') { try { render(); } catch (_) {} }
-        }
+        if (!host) { host = document.createElement('div'); host.id = 'hf-auto-host'; v.appendChild(host); }
+        var watch = function (el, fn) {
+            if (el._hfObs || typeof MutationObserver !== 'function') return;
+            var shown = el.style.display !== 'none' && el.style.display !== '';
+            el._hfObs = new MutationObserver(function () { var now = el.style.display !== 'none'; if (now && !shown) { try { fn(); } catch (e) { try { console.warn('[hf-autopilot]', e); } catch (_) {} } } shown = now; });
+            el._hfObs.observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
+            if (shown) { try { fn(); } catch (_) {} }
+        };
+        watch(v, render); watch(r, renderResults);
         return true;
     }
     if (typeof document !== 'undefined') { var tries = 40, t = setInterval(function () { if (mount() || --tries <= 0) clearInterval(t); }, 250); }
     root.SLHfAuto = { VERSION: VERSION, STAGES: STAGES, ERR: ERR, compute: compute, stageStatus: stageStatus, coverage: coverage, answer: answer, setLoad: setLoad, setErr: setErr, setAlert: setAlert, setGrid: setGrid, setMfc: setMfc, addInterface: addInterface,
-        sign: sign, workload: workload, workloadSvg: workloadSvg, interfaces: interfaces, report: report, render: render, ui: ui, state: state };
+        sign: sign, workload: workload, workloadSvg: workloadSvg, interfaces: interfaces, report: report, render: render, ui: ui, state: state,
+        setAlloc: setAlloc, setPhase: setPhase, allocMap: allocMap, syncTasks: syncTasks, results: results, renderResults: renderResults };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLHfAuto;
 })(typeof window !== 'undefined' ? window : globalThis);

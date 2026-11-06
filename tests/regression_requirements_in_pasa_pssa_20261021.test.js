@@ -39,7 +39,7 @@ check('pasaGo opens the PASA when it is not on screen, then the page', /function
 check('the sidebar lists Aircraft requirements under the PASA group', (() => { const a = idx.indexOf('id="asb-grp-pasa"'), b = idx.indexOf('id="asb-grp-asa"'), r = idx.indexOf('id="snav-ac-req"'); return a > 0 && r > a && r < b; })());
 check('the sidebar opens the PASA group for it, not the AFHA group', /inAfha = cur\.indexOf\('ac-'\) === 0 && cur !== 'ac-req'/.test(helpers) && /inPasa = \['pasa','ac-req',/.test(helpers));
 check('switchTab moves the PASA bar on every tab change', /_syncPasaNav\(tabId\)/.test(sup));
-check('ac-req stays a real tab (locks, saves, deep links key on it)', /'ac-req'/.test(sup.slice(sup.indexOf("const tabs = ['dashboard'"), sup.indexOf("const tabs = ['dashboard'") + 400)) && /id="view-ac-req"/.test(idx));
+check('ac-req stays a real tab (locks, saves, deep links key on it)', /'ac-req'/.test(sup.slice(sup.indexOf("const tabs = ["), sup.indexOf("const tabs = [") + 400)) && /id="view-ac-req"/.test(idx));
 
 console.log('\n[sfha -> pssa] system requirements');
 const wsNav = idx.slice(idx.indexOf('<button id="ws-tab-func"'), idx.indexOf('id="ws-pssa-subnav"'));

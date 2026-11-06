@@ -34,7 +34,8 @@ const links = [...nav.matchAll(/<a class="asb-item[^"]*"[^>]*id="(snav-[^"]+)"/g
 const placed = {};
 NA.PINS.forEach(id => { placed[id] = (placed[id] || 0) + 1; });
 NA.AREAS.forEach(a => a.items.forEach(it => (typeof it === 'string' ? [it] : it.ids).forEach(id => { placed[id] = (placed[id] || 0) + 1; })));
-check('[A] the menu as shipped has its links (' + links.length + ')', links.length >= 60);
+// 6 Nov 2026: the floor went from 60 to 55 when the ten HF table pages left the menu for the HF Autopilot and the HF results (Waqas: "scrap existing tables")
+check('[A] the menu as shipped has its links (' + links.length + ')', links.length >= 55);
 const missing = links.filter(id => !placed[id]), twice = links.filter(id => placed[id] > 1);
 check('[A] every menu link belongs to a section or is pinned', !missing.length, missing.join(', '));
 check('[A] no link is in two places', !twice.length, twice.join(', '));
@@ -125,7 +126,7 @@ async function partB() {
                 }
             }
         }
-        check('[B] every menu link is reached through its section and opens its page (' + reached + ' of ' + total + ')', reached === total && total >= 60, dead.join('; '));
+        check('[B] every menu link is reached through its section and opens its page (' + reached + ' of ' + total + ')', reached === total && total >= 55, dead.join('; '));
         check('[B] no page errors while walking every link', errs.length === 0, errs.slice(0, 3).join(' | '));
 
         console.log('\n[B] the licence tier still decides what shows');

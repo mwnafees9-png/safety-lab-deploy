@@ -40,9 +40,9 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     const SRC = fs.readFileSync(path.join(SITE, 'hf_autopilot.js'), 'utf8');
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
     check('no eval of any kind (the CSP forbids it); the stores are read through SLEnv', !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
-    check('hf_autopilot.js loads after the shared Autopilot look; the pins moved', /autopilot_ui\.js\?v=1\.\d+" defer><\/script>[\s\S]{0,400}<script src="hf_autopilot\.js\?v=1\.0" defer>/.test(HTML) && /nav_areas\.js\?v=1\.7/.test(HTML) && /hf_analyses\.js\?v=1\.21/.test(HTML));
+    check('hf_autopilot.js v2 loads after the shared Autopilot look; the pins moved', /autopilot_ui\.js\?v=1\.\d+" defer><\/script>[\s\S]{0,400}<script src="hf_autopilot\.js\?v=2\.1" defer>/.test(HTML) && /nav_areas\.js\?v=1\.(8|9|\d\d)/.test(HTML) && /hf_analyses\.js\?v=1\.21/.test(HTML) && /support_modules\.js\?v=66\.6[2-9]/.test(HTML));
     const NAV = fs.readFileSync(path.join(SITE, 'nav_areas.js'), 'utf8');
-    check('the HF tabs follow the design cycle, in plain words', /items: \['snav-hfa', 'snav-hfa-alloc', 'snav-hfa-tid', 'snav-hfa-task', 'snav-hfa-hea', 'snav-hfa-alerts', 'snav-hfa-cd', 'snav-hfa-sa', 'snav-hfa-ergo', 'snav-hfa-mfc'\]/.test(NAV) && /'snav-hfa-alloc': '1\. Who does what'/.test(NAV) && /'snav-hfa-mfc': '9\. Minimum crew'/.test(NAV));
+    check('the HF section is the Autopilot and the results; the old table pages leave the menu (their pages and data stay)', /items: \['snav-hfa-auto', 'snav-hfa-results'\]/.test(NAV) && /id="view-hfa-auto"/.test(HTML) && /id="view-hfa-results"/.test(HTML) && /id="view-hfa-tid"/.test(HTML) && !/id="snav-hfa-tid"/.test(HTML) && /const tabs = \[('plan-auto', )?'hfa-auto', 'hfa-results',/.test(fs.readFileSync(path.join(SITE, 'support_modules.js'), 'utf8')));
     check('the one-pilot crew-heavy check counts the stored lower-case allocations', /var a = String\(r\.allocation \|\| ''\)\.toLowerCase\(\); if \(a === 'crew' \|\| a === 'shared'\) crewCount\+\+; \}\); \} catch/.test(fs.readFileSync(path.join(SITE, 'hf_analyses.js'), 'utf8')));
 
     for (const f of ['hf_autopilot.js', 'hf_analyses.js', 'nav_areas.js']) { let okp = true; try { new Function(fs.readFileSync(path.join(SITE, f), 'utf8')); } catch (e) { okp = false; } check(f + ' parses', okp); }
@@ -67,52 +67,79 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const g0 = document.getElementById('sl-auth-gate'); if (g0) g0.remove(); document.documentElement.classList.remove('sl-auth-gate-blocked');
             document.querySelectorAll('.modal-overlay.show').forEach(m => { m.classList.remove('show'); m.style.display = 'none'; });
             const out = {};
+            const fnLabelOf = f => String(f.subName || f.funcName || f.subId || f.funcId).trim();
             const A = await until(() => window.HF_ANALYSES && window.SLAutopilotUI && window.SLHfAuto, 20000);
             const pc = SLEnv.get('projectConfig'), hf = k => ((pc.hf && pc.hf[k] && pc.hf[k].rows) || []);
-            switchTab('hfa'); await wait(800);
-            const v = document.getElementById('view-hfa'), host = document.getElementById('hf-auto-host');
-            out.page = { host: !!host && host.parentNode === v && !!host.querySelector('[data-hf-auto="1"]'), first: !!host && [...v.children].indexOf(host) <= 1 };
+            switchTab('hfa-auto'); await wait(800);
+            const v = document.getElementById('view-hfa-auto'), host = document.getElementById('hf-auto-host');
+            out.page = { host: !!host && host.parentNode === v && !!host.querySelector('[data-hf-auto="1"]'), first: true, shown: v.style.display !== 'none' };
             const cov0 = A.coverage();
             out.stages = cov0.map(c => c.n + ' ' + c.phase + ' ' + c.title);
             out.cov0 = cov0.map(c => c.key + ':' + c.questions);
-            // 1 who does what
-            const fns = SLEnv.get('acFunctionsData');
+            const PH = A.compute().byKey.sa.questions.map(q => q.phase);
+            // 1 who does what, in every flight phase
             const q1 = A.compute().byKey.alloc.questions;
-            q1.forEach((q, i) => A.answer(q.id, i % 3 === 0 ? 'crew' : (i % 3 === 1 ? 'automation' : 'shared')));
-            out.alloc = { n: q1.length, rows: hf('alloc').length, crew: hf('alloc').filter(x => x.allocation === 'crew').length, why: hf('alloc').every(x => /HF Autopilot/.test(x.rationale)), refuse: A.answer(q1[0].id, 'nobody') === false };
+            q1.forEach((q, i) => {
+                const fid = q.fn.internalId;
+                if (i % 3 === 0) A.setAlloc(fid, '*', 'crew');
+                else if (i % 3 === 1) { A.setAlloc(fid, '*', 'automation'); A.setAlloc(fid, 'Landing', 'crew'); }
+                else { A.setAlloc(fid, '*', 'shared'); A.setAlloc(fid, 'Standing', 'na'); }
+            });
+            const f1 = q1[1].fn;
+            out.alloc = { n: q1.length, phases: PH.length, rows: hf('alloc').length, mixed: JSON.stringify(A.allocMap(f1)), sum: (hf('alloc').find(x => String(x.key) === String(f1.internalId)) || {}).allocation,
+                byPhase: !!(hf('alloc').find(x => String(x.key) === String(f1.internalId)) || {}).byPhase, why: hf('alloc').every(x => /HF Autopilot/.test(x.rationale)), refuse: A.setAlloc(f1.internalId, 'Cruise', 'nobody') === false && A.setAlloc(f1.internalId, 'Moon', 'crew') === false,
+                done: A.compute().byKey.alloc.questions.every(q => q.done) };
             out.mfcCrewCount = HF_ANALYSES.mfcFindings().crewCount;
-            // 2 crew procedures
+            // 2 which pilot, and the procedures; the tasks per phase are made by the tool
             const q2 = A.compute().byKey.tid.questions;
-            q2.forEach((q, i) => A.answer(q.id, q.id.startsWith('tidf') ? (i % 4 === 0 ? 'emergency' : 'nonnormal') : 'PF'));
+            q2.forEach((q, i) => A.answer(q.id, q.id.startsWith('tidf') ? (i % 4 === 0 ? 'emergency' : 'nonnormal') : (q.id === 'who:' + q1[0].fn.internalId ? 'PF' : (i % 2 ? 'PF' : 'Both'))));
+            const normal = hf('tid').filter(x => x.opsMode === 'Normal');
+            out.tid = { who: q2.filter(q => q.id.startsWith('who')).length, fc: q2.filter(q => q.id.startsWith('tidf')).length,
+                f0tasks: normal.filter(x => x.fnId === String(q1[0].fn.internalId)).map(x => x.phase).join(','), f1tasks: normal.filter(x => x.fnId === String(f1.internalId)).map(x => x.phase).join(','),
+                f2tasks: normal.filter(x => x.fnId === String(q1[2].fn.internalId)).length, emergencyRow: !!hf('tid').find(x => x.fcId && x.opsMode === 'Emergency'), fcLinked: hf('tid').filter(x => x.fcId).length };
+            // a phase given back to the automation takes its task away
+            const before = hf('tid').length;
+            A.setAlloc(q1[0].fn.internalId, 'Cruise', 'automation');
+            out.taskGone = hf('tid').length === before - 1 && !hf('tid').find(x => x.fnId === String(q1[0].fn.internalId) && x.phase === 'Cruise');
+            A.setAlloc(q1[0].fn.internalId, 'Cruise', 'crew');
+            out.taskBack = hf('tid').length === before;
             const fcQ = q2.find(q => q.id.startsWith('tidf'));
             const tidBefore = hf('tid').length;
             A.answer(fcQ.id, 'nonnormal'); A.answer(fcQ.id, 'emergency');
-            out.tid = { n: q2.length, normal: q2.filter(q => q.id.startsWith('tidn')).length, fc: q2.filter(q => q.id.startsWith('tidf')).length, rows: hf('tid').length, sameAfterReanswer: hf('tid').length === tidBefore,
-                emergencyRow: !!hf('tid').find(x => x.fcId && x.opsMode === 'Emergency'), fcLinked: hf('tid').filter(x => x.fcId).length };
+            out.tid.sameAfterReanswer = hf('tid').length === tidBefore;
             A.answer(fcQ.id, 'auto');
             out.tidDropped = hf('tid').length === tidBefore - 1 && !hf('tid').find(x => x.hfAutoKey === 'tid:f:' + fcQ.id.slice(5));
             A.answer(fcQ.id, 'nonnormal');
-            // 3 how busy
-            const q3 = A.compute().byKey.load.questions;
-            const t0 = q3[0].task.taskId;
-            out.loadRefuse = A.setLoad(t0, 'reactionS', -2) === false;
-            A.setLoad(t0, 'reactionS', 2.5); A.setLoad(t0, 'execS', 4); A.setLoad(t0, 'basis', 'Measured in the simulator'); A.setLoad(t0, 'channel', 'VIS'); A.setLoad(t0, 'channel', 'PSY'); A.setLoad(t0, 'channel', 'VIS');
-            const tr = hf('tasks').find(x => x.tidId === t0);
-            out.load = { n: q3.length, row: !!tr, times: tr && tr.reactionS + '/' + tr.execS, resp: tr && HF_ANALYSES.taskResponseS(tr), basis: tr && tr.basis, channels: tr && tr.channels, done: A.compute().byKey.load.questions[0].done };
-            const wl = A.workload(), svg = A.workloadSvg();
-            out.workload = { phases: wl.length, some: wl.some(x => x.max != null), svg: /^<svg[^>]*xmlns=/.test(svg.svg) };
+            // 3 how busy: every phase, every pilot; and every failure response
+            const lp = A.compute().byKey.load.questions.filter(q => q.kind === 'loadphase');
+            const take = lp.find(q => q.phase === 'Takeoff');
+            out.loadRefuse = A.setPhase('Takeoff', 'window', '', -5) === false && A.setPhase('Takeoff', 'share', take.tasks[0].taskId, 140) === false;
+            A.setPhase('Takeoff', 'window', '', 30);
+            take.tasks.forEach((t, i) => A.setPhase('Takeoff', 'share', t.taskId, 10));
+            A.setPhase('Takeoff', 'basis', '', 'Pilot assessment');
+            const fp = SLEnv.get('flightPhasesData').find(p => p.phase === 'Takeoff');
+            const wl = A.workload().find(x => x.phase === 'Takeoff');
+            const pfN = take.tasks.filter(t => t.crew === 'PF' || t.crew === 'Both').length * 10, pmN = take.tasks.filter(t => t.crew === 'PM' || t.crew === 'Both').length * 10;
+            out.phase = { tasks: take.tasks.length, window: fp && fp.windowS, pf: wl.PF.normal, pm: wl.PM.normal, wantPf: pfN, wantPm: pmN, done: A.compute().byKey.load.questions.find(q => q.id === 'loadp:Takeoff').done, ledger: hf('tasks').filter(x => x.phase === 'Takeoff' && x.shareP === '10' && x.basis === 'Pilot assessment').length };
+            const pq = A.compute().byKey.load.questions.find(q => q.kind === 'proc' && /Takeoff/.test(q.task.phase));
+            A.setLoad(pq.task.fcId, 'reactionS', 3); A.setLoad(pq.task.fcId, 'execS', 3); A.setLoad(pq.task.fcId, 'basis', 'Estimated by the engineer');
+            const wl2 = A.workload().find(x => x.phase === 'Takeoff');
+            out.proc = { refuse: A.setLoad(pq.task.fcId, 'reactionS', -1) === false, worstPf: wl2.PF.worst, wantTotal: pfN + 6 / 30 * 100, done: A.compute().byKey.load.questions.find(q => q.id === pq.id).done };
+            const svg = A.workloadSvg();
+            out.workload = { phases: A.workload().length, svg: /^<svg[^>]*xmlns=/.test(svg.svg), pilots: /Pilot workload|workload in each flight phase/.test(svg.svg) };
             out.png = (window.SLFtaPrint && SLFtaPrint.png) ? String(await SLFtaPrint.png(svg, 1).catch(() => '')).length : -1;
-            // 4 errors
-            const tq = A.compute().byKey.err.questions.find(q => q.task.fcId);
-            const tid4 = tq.task.taskId;
-            A.setErr(tid4, 'omission', 'v', 'yes'); A.setErr(tid4, 'omission', 'detect', 'xcheck'); A.setErr(tid4, 'omission', 'recover', 'procedure');
-            A.setErr(tid4, 'timing', 'v', 'yes'); A.setErr(tid4, 'timing', 'detect', 'none'); A.setErr(tid4, 'timing', 'recover', 'none');
-            ['commission', 'sequence', 'selection'].forEach(m => A.setErr(tid4, m, 'v', 'no'));
-            const heaRows = () => hf('hea').filter(x => x.tidId === tid4);
+            // 4 errors: once per crew function and per failure response
+            const s4q = A.compute().byKey.err.questions;
+            out.errGroups = { fn: s4q.filter(q => q.id.startsWith('err:fn:')).length, fc: s4q.filter(q => q.id.startsWith('err:fc:')).length };
+            const tq = s4q.find(q => q.task.fcId), gk = tq.task.key;
+            A.setErr(gk, 'omission', 'v', 'yes'); A.setErr(gk, 'omission', 'detect', 'xcheck'); A.setErr(gk, 'omission', 'recover', 'procedure');
+            A.setErr(gk, 'timing', 'v', 'yes'); A.setErr(gk, 'timing', 'detect', 'none'); A.setErr(gk, 'timing', 'recover', 'none');
+            ['commission', 'sequence', 'selection'].forEach(m => A.setErr(gk, m, 'v', 'no'));
+            const heaRows = () => hf('hea').filter(x => x.hfAutoKey && x.hfAutoKey.indexOf('err:' + gk + ':') === 0);
             const e1 = heaRows().find(x => x.errorMode === 'omission');
-            const s4 = A.compute().byKey.err, eq = s4.questions.find(q => q.task.taskId === tid4);
+            const s4 = A.compute().byKey.err, eq = s4.questions.find(q => q.task.key === gk);
             out.err = { rows: heaRows().length, fcDefault: e1 && e1.fcIds === tq.task.fcId, detect: e1 && e1.detection, recover: e1 && e1.recovery, done: eq.done, open: A.stageStatus(s4).open };
-            A.setErr(tid4, 'timing', 'v', 'no');
+            A.setErr(gk, 'timing', 'v', 'no');
             out.errDropped = heaRows().length === 1;
             // 5 alerts
             const fcA = A.compute().byKey.alert.questions[0].fc.fcId;
@@ -152,39 +179,46 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const asmList = SLEnv.get('acAssumptionsData'), newAsm = asmList[asmList.length - 1];
             const ctr = hf('tasks').find(x => x.tidId === cq.id.slice(7));
             out.credit = { added: asmList.length === asmBefore + 1, type: newAsm && newAsm.type, state: newAsm && newAsm.state, linked: !!ctr && ctr.asmId === newAsm.asmId };
-            const pq = A.compute().byKey.credit.questions.find(q => q.id === 'plan:' + newAsm.asmId);
-            A.answer(pq.id, 'sim');
+            const planQ = A.compute().byKey.credit.questions.find(q => q.id === 'plan:' + newAsm.asmId);
+            A.answer(planQ.id, 'sim');
             const keep = asmList.find(a => /human/i.test(a.type) && a.asmId !== newAsm.asmId && a.valStrategy);
             const keepBefore = keep && keep.valStrategy; if (keep) A.answer('plan:' + keep.asmId, 'flight');
             out.plan = { newPlan: newAsm.valStrategy, kept: !keep || keep.valStrategy === keepBefore };
             // sign and reopen
             const s1 = A.compute().byKey.alloc;
             out.sign = { ready: A.stageStatus(s1).state, refuseUnready: A.sign('load') === false, ok: A.sign('alloc'), state: A.stageStatus(A.compute().byKey.alloc).state };
-            A.answer(q1[1].id, 'crew');
+            A.setAlloc(q1[1].fn.internalId, 'Taxi', 'crew');
             out.reopened = A.stageStatus(A.compute().byKey.alloc).state;
             // existing rows are answers
-            A.answer(q1[0].id, 'crew');
             delete pc.hfAuto.answers[q1[0].id];
             out.adopted = A.compute().byKey.alloc.questions.find(q => q.id === q1[0].id).done;
             // the page renders every step without errors, and the report
             const kinds = [];
             for (const s of A.compute().stages) { A.ui.stage(s.key); for (let i = 0; i <= Math.min(2, s.questions.length); i++) { A.ui.step(i); kinds.push(!!document.querySelector('[data-hf-auto-body="1"] .slap-q, [data-hf-auto-body="1"] .slap-why')); } }
             out.render = kinds.every(Boolean) && kinds.length > 10;
+            switchTab('hfa-results'); await wait(600);
+            const rv = document.getElementById('view-hfa-results'), T = A.results();
+            out.results = { shown: rv.style.display !== 'none', cards: rv.querySelectorAll('.hfr-card').length, tabs: rv.querySelectorAll('.hfr-tab').length, tabOn: (rv.querySelector('.hfr-tab.on') || {}).textContent, tab2: (A.ui.resTab('workload'), rv.querySelectorAll('.hfr-card').length === 1 && !!rv.querySelector('#hfr-workload svg') && /Workload/.test((rv.querySelector('.hfr-tab.on') || {}).textContent)), purposes: T.every(t => t.q && t.purpose && t.purpose.length > 40), keys: T.map(t => t.key).join(','),
+                allocRow: (T.find(t => t.key === 'alloc').rows.find(r => r[0] === fnLabelOf(f1)) || []).map(c => c && c.v != null ? c.v : c).join('|'),
+                openTime: T.find(t => t.key === 'alerts').open, noInputs: !rv.querySelector('input, select, textarea'), oldOffMenu: !document.querySelector('#sl-areabar #snav-hfa-tid') && !document.querySelector('#sl-areabar #snav-hfa-hea') };
             let doc = ''; const o = window.open; window.open = () => ({ document: { open() {}, write(h) { doc += h; }, close() {} } });
             A.report(); window.open = o;
-            out.report = { cov: /Coverage of the design cycle/.test(doc), svg: /Busiest crew task in each flight phase/.test(doc), mfc: /Minimum flight crew:<\/b> 2 pilots/.test(doc), steps: (doc.match(/<h2>\d+\. /g) || []).length };
+            out.report = { cov: /Coverage of the design cycle/.test(doc), svg: /workload in each flight phase/.test(doc), mfc: /Minimum flight crew: 2 pilots/.test(doc), steps: (doc.match(/<h2>\d+\. /g) || []).length };
             return out;
         }, demo.data), 240000, 'the HF Autopilot');
-        check('the Autopilot sits first on the HF page', r.page.host && r.page.first, JSON.stringify(r.page));
+        check('the Autopilot has its own page', r.page.host && r.page.shown, JSON.stringify(r.page));
         check('ten steps in design-cycle order', JSON.stringify(r.stages) === JSON.stringify(['1 Concept Who does what', '2 Preliminary design Crew procedures', '3 Preliminary design How busy the crew is', '4 Preliminary design What the crew could get wrong', '5 Preliminary design How the crew is told', '6 Detailed design Controls and displays', '7 Detailed design Situation awareness', '8 Detailed design Reach and view', '9 Certification Minimum crew', '10 Certification Credit and evidence']), JSON.stringify(r.stages));
-        check('built from the project: a question per function (23), per crew-effect failure condition (30), per flight phase, the minimum crew', /alloc:23/.test(r.cov0.join()) && /alert:30/.test(r.cov0.join()) && /sa:8/.test(r.cov0.join()) && /mfc:3/.test(r.cov0.join()), r.cov0.join(' '));
-        check('who does what writes the allocation table, with a reason; a made-up answer is refused', r.alloc.rows === 23 && r.alloc.crew === 8 && r.alloc.why && r.alloc.refuse, JSON.stringify(r.alloc));
-        check('the crew-heavy check now counts crew and shared functions (8 + 7)', r.mfcCrewCount === 15, r.mfcCrewCount);
-        check('crew procedures: a normal task per crew function, a procedure per crew-effect failure condition, linked to it', r.tid.normal === 15 && r.tid.fc === 30 && r.tid.rows === 45 && r.tid.fcLinked === 30 && r.tid.emergencyRow, JSON.stringify(r.tid));
+        check('built from the project: a phase grid per function (23), a screen per flight phase (8) and per failure response, a question per crew-effect failure condition (30)', /alloc:23/.test(r.cov0.join()) && /alert:30/.test(r.cov0.join()) && /sa:8/.test(r.cov0.join()) && /mfc:3/.test(r.cov0.join()) && /load:8/.test(r.cov0.join()), r.cov0.join(' '));
+        check('who does what, phase by phase: the answer can differ by phase, the table keeps the phases and a summary, made-up answers and phases are refused', r.alloc.phases === 8 && r.alloc.rows === 23 && /"Landing":"crew"/.test(r.alloc.mixed) && /"Cruise":"automation"/.test(r.alloc.mixed) && r.alloc.sum === 'shared' && r.alloc.byPhase && r.alloc.why && r.alloc.refuse && r.alloc.done, JSON.stringify(r.alloc));
+        check('the crew-heavy check counts every function the crew has a part in (all 23 here)', r.mfcCrewCount === 23, r.mfcCrewCount);
+        check('the tool makes a crew task for each phase the crew has a part in: all 8, only Landing, the 7 shared phases', r.tid.f0tasks.split(',').length === 8 && r.tid.f1tasks === 'Landing' && r.tid.f2tasks === 7 && r.tid.who === 23 && r.tid.fc === 30 && r.tid.fcLinked === 30 && r.tid.emergencyRow, JSON.stringify(r.tid));
+        check('a phase given back to the automation takes its task away, and back again', r.taskGone && r.taskBack);
         check('a changed answer updates its row, never a second one', r.tid.sameAfterReanswer, JSON.stringify(r.tid));
         check('"the aircraft handles it" removes the procedure it wrote', r.tidDropped);
-        check('task times are typed (a negative one refused) and land in the ledger with the task id, basis and channels', r.loadRefuse && r.load.row && r.load.times === '2.5/4' && r.load.resp === 6.5 && r.load.basis === 'Measured in the simulator' && r.load.channels === 'PSY' && r.load.done, JSON.stringify(r.load));
-        check('the workload chart: one bar per flight phase, a standalone picture that renders', r.workload.phases === 8 && r.workload.some && r.workload.svg && r.png > 2000, JSON.stringify(r.workload) + ' png ' + r.png);
+        check('each phase: the response window lands on the flight phases table; each pilot\'s workload is the sum of the shares of the tasks they do (both-pilot tasks count for both); out-of-range values refused', r.loadRefuse && r.phase.window === '30' && r.phase.pf === r.phase.wantPf && r.phase.pm === r.phase.wantPm && r.phase.done && r.phase.ledger === r.phase.tasks, JSON.stringify(r.phase));
+        check('a failure response: its time over the phase window comes on top of the pilot\'s workload', r.proc.refuse && r.proc.worstPf && Math.abs(r.proc.worstPf.total - r.proc.wantTotal) < 1e-6 && r.proc.done, JSON.stringify(r.proc));
+        check('the workload chart: both pilots in every flight phase, a standalone picture that renders', r.workload.phases === 8 && r.workload.svg && r.workload.pilots && r.png > 2000, JSON.stringify(r.workload) + ' png ' + r.png);
+        check('crew errors are asked once per crew function and per failure response, not per phase', r.errGroups.fn === 23 && r.errGroups.fc === 30, JSON.stringify(r.errGroups));
         check('crew errors: a row per credible error, with how it is noticed and put right and the failure condition (the task\'s own by default)', r.err.rows === 2 && r.err.fcDefault && r.err.detect === 'The other pilot catches it' && r.err.recover === 'A crew procedure' && r.err.done, JSON.stringify(r.err));
         check('an error nobody notices and nobody can put right stays open', r.err.open >= 1, JSON.stringify(r.err));
         check('"not credible" removes the error row', r.errDropped);
@@ -200,6 +234,9 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         check('a changed answer reopens a signed step', r.reopened === 'ready', r.reopened);
         check('a row already in a table counts as the answer', r.adopted);
         check('every step renders', r.render);
+        // 6 Nov 2026 (Waqas: "HF results should be broken up in multiple tabs containing a table each"): 11 tabs, one table on screen
+        check('the results page: a tab per question, one table on screen at a time with its purpose, nothing to type, the old tables off the menu', r.results.shown && r.results.cards === 1 && r.results.tabs === 11 && /Who does what/.test(r.results.tabOn) && r.results.tab2 && r.results.purposes && r.results.noInputs && r.results.oldOffMenu && /^alloc,pilots,workload,time,errors,alerts,cd,sa,ergo,mfc,credit$/.test(r.results.keys), JSON.stringify(r.results));
+        check('the results show who does a function phase by phase, and count what is open', r.results.allocRow.split('|').slice(1).join(',') === 'Automation,Crew,Automation,Automation,Automation,Automation,Automation,Crew' && r.results.openTime >= 1, JSON.stringify(r.results));
         check('the report: coverage of the design cycle, the workload chart, every step, the crew decision', r.report.cov && r.report.svg && r.report.mfc && r.report.steps >= 8, JSON.stringify(r.report));
         check('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
     } catch (e) { check('the app part ran', false, e.message); }

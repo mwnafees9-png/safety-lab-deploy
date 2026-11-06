@@ -177,21 +177,21 @@ const support = fs.readFileSync(path.join(__dirname, '..', 'site', 'support_modu
 check('hfa + hfa-task + hfa-ergo + stpa registered in the switchTab tabs array',
   (() => { const t = (support.match(/const tabs = \[([^\]]*)\];/) || ['', ''])[1];
            return ['hfa', 'hfa-task', 'hfa-ergo', 'stpa'].every(id => t.indexOf("'" + id + "'") >= 0); })());
-check('nav entries for the three HF tabs wired in index.html',
-  indexHtml.includes('id="snav-hfa-task"') && indexHtml.includes('id="snav-hfa-ergo"') &&
+// 6 Nov 2026 (Waqas: "scrap existing tables"): the HF table pages left the menu for the HF Autopilot and the HF
+// results; their views stay in the page for their data and the links that open them.
+check('the HF tab views stay in index.html, the menu carries the HF Autopilot and results',
   indexHtml.includes('id="view-hfa-task"') && indexHtml.includes('id="view-hfa-ergo"') &&
-  indexHtml.includes("switchTab('hfa-task')") && indexHtml.includes("switchTab('hfa-ergo')"));
+  indexHtml.includes('id="snav-hfa-auto"') && indexHtml.includes('id="snav-hfa-results"'));
 // SUPERSEDED 23 Aug 2026 (Waqas: "it is its own lane"): the Rev C home (HF
 // inside Analyze > Aircraft > PASA, 15 Aug) is retired. Human Factors is its
 // OWN top-level lane — id asb-grp-hf, sibling of Systems and RAM, never inside
 // the aircraft group and never labeled R&M. What this check guarantees: the HFA
 // entry and its view container exist, and the entry sits in its own lane.
 check('nav entry + view container wired in index.html (own lane: asb-grp-hf)',
-  indexHtml.includes("id=\"snav-hfa\"") && indexHtml.includes('id="view-hfa"') &&
-  indexHtml.includes('Human Factors Analysis (HFA)') &&
-  indexHtml.indexOf('id="snav-hfa"') > indexHtml.indexOf('id="asb-grp-hf"') &&
+  indexHtml.includes('id="snav-hfa-auto"') && indexHtml.includes('id="view-hfa"') && indexHtml.includes('id="view-hfa-auto"') &&
+  indexHtml.indexOf('id="snav-hfa-auto"') > indexHtml.indexOf('id="asb-grp-hf"') &&
   indexHtml.indexOf('id="asb-grp-hf"') > indexHtml.indexOf('id="asb-grp-systems"') &&
-  indexHtml.indexOf('id="snav-hfa"') < indexHtml.indexOf('id="asb-grp-ram"'));
+  indexHtml.indexOf('id="snav-hfa-auto"') < indexHtml.indexOf('id="asb-grp-ram"'));
 // Pinned to a FLOOR, not an exact string. An exact pin fails on every unrelated
 // bump, which trains people to edit the assertion instead of thinking about it —
 // and an assertion nobody reads is not defending anything. What these need to

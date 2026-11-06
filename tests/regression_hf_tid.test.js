@@ -107,9 +107,10 @@ ok('API exports the lane', /addTid: addTid, setTid: setTid, removeTid: removeTid
 ok('switchTab VIEWS routes hfa-tid first', /var VIEWS = \{ 'hfa-tid': renderTid,/.test(src));
 
 const idx = R('site/index.html');
-ok('index: side-nav entry', /id="snav-hfa-tid"[^>]*switchTab\('hfa-tid'\)/.test(idx));
-ok('index: nav label reads Task Identification', /<span class="asb-lbl">Task Identification<\/span>/.test(idx));
-ok('index: nav sits BEFORE Function Allocation', idx.indexOf('snav-hfa-tid') < idx.indexOf('snav-hfa-alloc'));
+// 6 Nov 2026 (Waqas: "scrap existing tables"): the task identification page left the menu; the HF Autopilot's step 2
+// makes its rows (one per crew function per flight phase) and the HF results page shows them. The page and its data stay.
+ok('index: the page stays for its data, off the menu', /id="view-hfa-tid"/.test(idx) && !/id="snav-hfa-tid"/.test(idx));
+ok('index: the HF Autopilot is on the menu in its place', /id="snav-hfa-auto"[^>]*switchTab\('hfa-auto'\)/.test(idx));
 ok('index: view container', /<div id="view-hfa-tid"/.test(idx));
 ok('index: host div', /<div id="hfa-tid-host"><\/div>/.test(idx));
 // 2 Sep 2026 — the in-lane recommender button is no longer hand-placed in index.html.

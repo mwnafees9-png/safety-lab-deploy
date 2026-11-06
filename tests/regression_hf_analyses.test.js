@@ -191,8 +191,9 @@ console.log('5. wiring — views, exports, pins');
     /No error rows in the human error analysis yet/.test(dataOpsSrc));
   check('allocation export never drops unallocated functions (UNALLOCATED is a value, not a filter)',
     /UNALLOCATED/.test(dataOpsSrc));
-  check('nav: the three analyses sit in the Human Factors group',
-    ['hfa-alloc', 'hfa-hea', 'hfa-alerts'].every(t => new RegExp('snav-' + t).test(indexSrc)));
+  // 6 Nov 2026 (Waqas: "scrap existing tables"): the HF menu is the HF Autopilot and the HF results; these pages stay, off the menu
+  check('nav: the Human Factors group is the HF Autopilot and the results; the three analysis pages stay in the page, off the menu',
+    /id="snav-hfa-auto"/.test(indexSrc) && ['hfa-alloc', 'hfa-hea', 'hfa-alerts'].every(t => !new RegExp('id="snav-' + t + '"').test(indexSrc) && new RegExp('id="view-' + t + '"').test(indexSrc)));
   check('views + hosts exist in index.html',
     ['view-hfa-alloc', 'hfa-alloc-host', 'view-hfa-hea', 'hfa-hea-host', 'view-hfa-alerts', 'hfa-alerts-host'].every(id => indexSrc.indexOf('id="' + id + '"') >= 0));
   function pin(re) { const m = indexSrc.match(re); return m ? parseFloat(m[1]) : -1; }

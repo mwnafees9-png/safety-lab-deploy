@@ -154,6 +154,8 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 <div class="asb-sub">
                 <a class="asb-item sub" id="snav-defs" onclick="switchTab('defs')" role="button" tabindex="0"><span class="asb-lbl">Certification basis (AC 1309)</span></a>
                 <a class="asb-item sub" id="snav-arp-process" onclick="switchTab('arp-process')" role="button" tabindex="0"><span class="asb-lbl">Safety process map (ARP 4761A)</span></a>
+                <!-- 6 Nov 2026 (Waqas: "program planing in safety lab needs to have the same interface as sys lab planing auto-pilot"): the Plan Autopilot writes the SSPP, the HF plan and the RAM plan from questions, plan_autopilot.js -->
+                <a class="asb-item sub" id="snav-plan-auto" onclick="switchTab('plan-auto')" role="button" tabindex="0"><span class="asb-lbl">Plan Autopilot</span></a>
                 <a class="asb-item sub" id="snav-spp" onclick="switchTab('spp')" role="button" tabindex="0"><span class="asb-lbl">Program Planning</span></a>
                 <a class="asb-item sub" id="snav-phases" onclick="switchTab('phases')" role="button" tabindex="0"><span class="asb-lbl">Flight Phases</span></a>
                 </div>
@@ -188,16 +190,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
                 <div id="asb-sys-dirs"></div>
             </div></details>
             <details class="asb-grp asb-cat" id="asb-grp-hf" open><summary><span class="asb-lbl asb-cat-lbl">Human Factors</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
-                <a class="asb-item sub" id="snav-hfa" onclick="switchTab('hfa')" role="button" tabindex="0"><span class="asb-lbl">Human Factors Analysis (HFA)</span></a>
-                <a class="asb-item sub" id="snav-hfa-tid" onclick="switchTab('hfa-tid')" role="button" tabindex="0"><span class="asb-lbl">Task Identification</span></a>
-                <a class="asb-item sub" id="snav-hfa-alloc" onclick="switchTab('hfa-alloc')" role="button" tabindex="0"><span class="asb-lbl">Function Allocation</span></a>
-                <a class="asb-item sub" id="snav-hfa-hea" onclick="switchTab('hfa-hea')" role="button" tabindex="0"><span class="asb-lbl">Human Error Analysis</span></a>
-                <a class="asb-item sub" id="snav-hfa-alerts" onclick="switchTab('hfa-alerts')" role="button" tabindex="0"><span class="asb-lbl">Crew Alerting</span></a>
-                <a class="asb-item sub" id="snav-hfa-task" onclick="switchTab('hfa-task')" role="button" tabindex="0"><span class="asb-lbl">Task Analysis</span></a>
-                <a class="asb-item sub" id="snav-hfa-ergo" onclick="switchTab('hfa-ergo')" role="button" tabindex="0"><span class="asb-lbl">Ergonomics</span></a>
-                <a class="asb-item sub" id="snav-hfa-cd" onclick="switchTab('hfa-cd')" role="button" tabindex="0"><span class="asb-lbl">Controls &amp; Displays (&sect;25.1302)</span></a>
-                <a class="asb-item sub" id="snav-hfa-sa" onclick="switchTab('hfa-sa')" role="button" tabindex="0"><span class="asb-lbl">Situation Awareness</span></a>
-                <a class="asb-item sub" id="snav-hfa-mfc" onclick="switchTab('hfa-mfc')" role="button" tabindex="0"><span class="asb-lbl">Minimum Flight Crew (&sect;25.1523)</span></a>
+                <!-- 6 Nov 2026 (Waqas: "can we scrap existing tables its hard to explain their purposes"): Human Factors is the HF Autopilot and the HF results. The old table pages (view-hfa, view-hfa-tid ... view-hfa-mfc) stay in the page for their data and links, off the menu. -->
+                <a class="asb-item sub" id="snav-hfa-auto" onclick="switchTab('hfa-auto')" role="button" tabindex="0"><span class="asb-lbl">HF Autopilot</span></a>
+                <a class="asb-item sub" id="snav-hfa-results" onclick="switchTab('hfa-results')" role="button" tabindex="0"><span class="asb-lbl">HF results</span></a>
             </div></details>
             <details class="asb-grp asb-cat" id="asb-grp-ram"><summary><span class="asb-lbl asb-cat-lbl">R&amp;M — reliability &amp; maintainability</span><span class="asb-chev">›</span></summary><div class="asb-catsub">
                 <a class="asb-item sub" id="snav-ram-hub" onclick="switchTab('ram-hub')" role="button" tabindex="0"><span class="asb-lbl">Overview &mdash; Start Here</span></a>
@@ -1770,6 +1765,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             </table>
         </div>
 
+        <!-- 6 Nov 2026: the HF Autopilot (the questions) and the HF results (the tables it fills), hf_autopilot.js -->
+        <div id="view-hfa-auto" style="display: none;"></div>
+        <div id="view-hfa-results" style="display: none;"></div>
         <div id="view-hfa" style="display: none;"></div>
         <div id="view-hfa-task" style="display: none;"></div>
         <div id="view-hfa-ergo" style="display: none;"></div>
@@ -3325,6 +3323,12 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             <div id="evpkg-host"></div>
         </div>
 
+        <!-- 6 Nov 2026: the Plan Autopilot (plan_autopilot.js): the SSPP, HF plan and RAM plan from questions, tied to the development assurance objectives and the pages that hold the evidence -->
+        <div id="view-plan-auto" style="display: none;">
+            <div class="header-with-export"><h3>Plan Autopilot</h3></div>
+            <div id="plan-auto-host"></div>
+        </div>
+
         <div id="view-spp" style="display: none;">
             <div class="header-with-export">
                 <h3>Program Planning</h3>
@@ -4253,7 +4257,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="system_admin.js?v=1.0" defer></script>
     <script src="data_ops_modules.js?v=66.68" defer></script>
     <!-- P2 batch 3 — cross-cutting support layer (DALgebra, phase math, virtual tables, switchTab, trace/FMEA/library helpers), moved verbatim from safety_lab.js. -->
-    <script src="support_modules.js?v=66.61" defer></script>
+    <script src="support_modules.js?v=66.63" defer></script>
     <!-- P2 batch 4 — bulk runtime-helper layer (125 machine-validated segments, 426 functions), moved verbatim from safety_lab.js. NOTE: contains two historical _stableStringify defs in original order — later one wins, same as in the monolith. -->
     <script src="helpers_modules.js?v=3.66" defer></script>
     <script src="cloud_writer.js?v=1.3" defer></script>
@@ -4483,7 +4487,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="hf_assumptions.js?v=0.9" defer></script>
     <script src="hf_register_panel.js?v=1.9" defer></script>
     <script src="hf_analyses.js?v=1.21" defer></script>
-    <script src="field_defs.js?v=1.7" defer></script>
+    <script src="field_defs.js?v=1.9" defer></script>
     <script src="lane_ai_bar.js?v=1.7" defer></script>
     <script src="hf_evidence.js?v=0.2" defer></script>
     <!-- INV-HFW — crew workload ↔ FHA severity consistency (born modular; registers into the invariants sweep). -->
@@ -4532,7 +4536,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- THE PLAN DRIVES THE NAV — program-scope catalogue, lane gating, signed tailoring.
          Loads after the panels whose tabs it gates; wraps switchTab last-ish so its guard
          sits outermost on the chain. -->
-    <script src="program_plan.js?v=2.8" defer></script>
+    <script src="program_plan.js?v=2.9" defer></script>
     <!-- Rev C nav services: per-system rail directories, open-state persistence,
          and the SILENT ⌘K palette (23 Aug: the catalogue service and its residue
          are deleted — see nav_rail.js v1.2). Loads AFTER program_plan.js (reads
@@ -4576,7 +4580,9 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="zsa_autopilot.js?v=1.2" defer></script>
     <script src="pra_autopilot.js?v=1.3" defer></script>
     <!-- 6 Nov 2026: the HF Autopilot (SLHfAuto): the human factors work through the design cycle, one plain question at a time, written into the HF tables -->
-    <script src="hf_autopilot.js?v=1.0" defer></script>
+    <script src="hf_autopilot.js?v=2.1" defer></script>
+    <!-- 6 Nov 2026: the Plan Autopilot. After autopilot_ui.js (the shared look), objectives_matrix.js (the objectives) and program_plan.js (the lanes). -->
+    <script src="plan_autopilot.js?v=1.0" defer></script>
     <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
     <script src="requirement_states.js?v=1.1" defer></script>
     <script src="pra_report.js?v=1.5" defer></script>
@@ -4645,7 +4651,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="prove_tabs.js?v=1.8" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
-    <script src="nav_areas.js?v=1.7" defer></script>
+    <script src="nav_areas.js?v=1.9" defer></script>
     <script src="fta_tree_picker.js?v=1.5" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /

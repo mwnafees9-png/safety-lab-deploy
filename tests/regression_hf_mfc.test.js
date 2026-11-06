@@ -69,9 +69,10 @@ API.setMfcConclusion('minCrew', '1 pilot');
 
 // ---- wiring ----
 check('renderMfc joined the switchTab VIEWS map (hfa-mfc)', /'hfa-mfc':\s*renderMfc/.test(src));
-check('index.html has the MFC nav, view and host', (function () {
+// 6 Nov 2026 (Waqas: "scrap existing tables"): the old view stays for its data, off the menu; the HF Autopilot is on the menu.
+check('index.html keeps the MFC view and host, off the menu', (function () {
   const h = R('index.html');
-  return /snav-hfa-mfc/.test(h) && /view-hfa-mfc/.test(h) && /hfa-mfc-host/.test(h);
+  return !/id="snav-hfa-mfc"/.test(h) && /view-hfa-mfc/.test(h) && /hfa-mfc-host/.test(h) && /id="snav-hfa-auto"/.test(h);
 })());
 check('program_plan carries the hfa-mfc sub-lane', /id: 'hfa-mfc'/.test(R('program_plan.js')));
 

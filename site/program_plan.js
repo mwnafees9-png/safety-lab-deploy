@@ -132,7 +132,7 @@
         // analyses; the typed-assumption register is the bridge into the
         // safety argument, one angle among them.
         { id: 'hfa',    group: 'hf', name: 'Human Factors Analysis (allocation · error analysis · alerting · task ledger · ergonomics · typed-assumption bridge)', std: 'HIDH · CS 25.1302 · 25.1322 · NUREG/CR-1278 · ISO 9241',
-          snav: ['snav-hfa'],    tabs: ['hfa'],
+          snav: ['snav-hfa', 'snav-hfa-auto', 'snav-hfa-results'],    tabs: ['hfa', 'hfa-auto', 'hfa-results'],
           expected: ['Part 25', 'sc-vtol'] },
         // ---- Sub-analyses (phase 1): gate independently; hidden WITH their parent lane.
         //      subLane:true => defaults ON (these were always-shown before gating).
