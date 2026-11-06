@@ -86,6 +86,9 @@
             } else if (b.k === 'table') {
                 t++; b.number = t; b.anchor = 'sl_t' + t; b.caption = 'Table ' + t + ': ' + (b.title || tableTitle(b.name));
                 idx.tables.push(b); if (!idx.byTable[b.name]) idx.byTable[b.name] = b;
+            } else if (b.k === 'img') {   // 6 Nov 2026: a figure in the run of the text (the plans' diagrams), portrait, numbered with the rest
+                f++; b.number = f; b.anchor = 'sl_f' + f; b.fullCaption = 'Figure ' + f + ': ' + S(b.caption);
+                idx.figures.push(b); if (!idx.firstFigure) idx.firstFigure = b;
             } else if (b.k === 'sheets') {
                 (b.sheets || []).forEach(function (s) {
                     f++; s.number = f; s.anchor = 'sl_f' + f; s.fullCaption = 'Figure ' + f + ': ' + s.caption;
@@ -165,6 +168,16 @@
         var front = [];
         front.push(new D.Paragraph({ spacing: { after: 240 }, children: [new D.TextRun({ text: S(model.title), bold: true, size: 40 })] }));
         (model.titleLines || []).forEach(function (ln) { if (S(ln).trim()) front.push(new D.Paragraph({ spacing: { after: 60 }, children: runs(S(ln).trim()) })); });
+        // 6 Nov 2026: a document's cover (the plans): its control tables (document control, approvals, revision history),
+        // then the contents start on a page of their own
+        if (model.cover && model.cover.tables) {
+            model.cover.tables.forEach(function (ct) {
+                front.push(new D.Paragraph({ spacing: { before: 240, after: 80 }, keepNext: true, children: [new D.TextRun({ text: S(ct.title), bold: true, size: 22 })] }));
+                var hd = ct.rows.length ? Object.keys(ct.rows[0]) : [];
+                front.push(new D.Table({ width: { size: TW, type: D.WidthType.DXA }, rows: [new D.TableRow({ tableHeader: true, children: hd.map(function (h) { return new D.TableCell({ borders: borders, shading: { fill: 'D5E8F0' }, children: [new D.Paragraph({ children: [new D.TextRun({ text: S(h), bold: true, size: 18 })] })] }); }) })].concat(ct.rows.map(function (r) { return new D.TableRow({ children: hd.map(function (h) { return new D.TableCell({ borders: borders, children: [new D.Paragraph({ children: [new D.TextRun({ text: S(r[h] == null ? '' : r[h]), size: 18 })] })] }); }) }); })) }));
+            });
+            front.push(new D.Paragraph({ children: [new D.PageBreak()] }));
+        }
         var listHead = function (t) { return new D.Paragraph({ spacing: { before: 240, after: 120 }, children: [new D.TextRun({ text: t, bold: true, size: 28 })] }); };
         front.push(listHead('Contents'));
         idx.headings.forEach(function (h) { front.push(tocLine(h.text, h.anchor, (Math.max(1, h.level) - 1) * 360)); });
@@ -201,6 +214,11 @@
                 if (b.rows && b.rows.length) cur.push(table(b.rows));
                 else cur.push(new D.Paragraph({ children: [new D.TextRun({ text: '(No entries)', italics: true, color: '888888' })] }));
                 cur.push(new D.Paragraph({ children: [new D.TextRun('')] }));
+            } else if (b.k === 'img') {
+                var iw = Math.min(624, b.w || 624), ih = Math.round((b.h || 400) * iw / (b.w || 624));
+                if (b.dataUrl) cur.push(new D.Paragraph({ keepNext: true, children: [new D.ImageRun({ data: S(b.dataUrl).replace(/^data:image\/png;base64,/, ''), transformation: { width: iw, height: ih } })] }));
+                else cur.push(new D.Paragraph({ children: [new D.TextRun({ text: '(This figure could not be drawn.)', italics: true, color: 'B42318' })] }));
+                cur.push(caption(b.anchor, b.fullCaption));
             } else if (b.k === 'sheets') {
                 for (var si = 0; si < b.sheets.length; si++) {
                     var s = b.sheets[si];
@@ -332,6 +350,11 @@
                 wrap(b.caption, W - 2 * M, 9.5).forEach(function (ln) { doc.text(ln, M, y); y += 12; });
                 y += 2; doc.setFont('helvetica', 'normal');
                 drawTable(b.rows || []);
+            } else if (b.k === 'img') {
+                var pw0 = W - 2 * M, ph0 = (b.h || 300) * pw0 / (b.w || pw0);
+                need(ph0 + 24); at[b.anchor] = { page: cur(), y: y };
+                if (b.dataUrl) doc.addImage(b.dataUrl, 'PNG', M, y, pw0, ph0); y += ph0 + 12;
+                doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); wrap(b.fullCaption, W - 2 * M, 9.5).forEach(function (ln) { doc.text(ln, M, y); y += 12; }); doc.setFont('helvetica', 'normal'); y += 4;
             } else if (b.k === 'sheets') {
                 (b.sheets || []).forEach(function (s) {
                     doc.addPage('letter', 'landscape');

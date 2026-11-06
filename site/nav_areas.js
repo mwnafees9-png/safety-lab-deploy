@@ -53,7 +53,7 @@
     // { group, label, ids }), and pages: every page (switchTab id) that belongs to it, with the link that stands
     // for it in the bar (a page that has no link of its own, such as the AFHA's Functions tab, lights its area's link).
     var AREAS = [
-        { key: 'plan', label: 'Plan and basis', ic: '📐', scope: 'aircraft', items: ['snav-plan-auto', 'snav-defs', 'snav-arp-process', 'snav-spp', 'snav-phases'] },
+        { key: 'plan', label: 'Plan and basis', ic: '📐', scope: 'aircraft', items: ['snav-plan-auto', 'snav-arp-process', 'snav-spp', 'snav-phases'] },
         { key: 'afha', label: 'AFHA', ic: '⚠', scope: 'aircraft', items: ['snav-afha'],
           pages: { 'ac-func': 'snav-afha', 'ac-fcim': 'snav-afha', 'ac-asm': 'snav-afha' } },
         // the fault trees and diagram tools of a level are links made here (DYN below): their pages decide their

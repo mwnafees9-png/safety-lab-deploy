@@ -57,7 +57,7 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     const RW = fs.readFileSync(path.join(SITE, 'report_writer.js'), 'utf8');
     check('the table titles say what they are (MAC, MF&MS, CoFFE, independence principles, CCMR)', /mac_table: 'Minimum acceptable configuration model'/.test(RW) && /mfms_table: 'Malfunction and failure mode summary trees'/.test(RW) && /coffe_table: 'Combined functional failure effects \(CoFFE\)'/.test(RW) && /ip_ledger_table: 'Independence principles'/.test(RW) && /ccmr_table: 'Candidate certification maintenance requirements'/.test(RW));
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
-    check('report_ai.js loads between report_writer.js and reports.js', /report_writer\.js\?v=1\.2" defer><\/script>\s*<!--[^>]*-->\s*<script src="report_ai\.js\?v=1\.0" defer><\/script>\s*(<!--[^>]*-->\s*<script src="markov_ai\.js\?v=[\d.]+" defer><\/script>\s*)?<script src="reports\.js\?v=66\.2[4-9]" defer>/.test(HTML));
+    check('report_ai.js loads between report_writer.js and reports.js', /report_writer\.js\?v=1\.[2-9]" defer><\/script>\s*<!--[^>]*-->\s*<script src="report_ai\.js\?v=1\.0" defer><\/script>\s*(<!--[^>]*-->\s*<script src="markov_ai\.js\?v=[\d.]+" defer><\/script>\s*)?<script src="reports\.js\?v=66\.2[4-9]" defer>/.test(HTML));
     const RJ = fs.readFileSync(path.join(SITE, 'reports.js'), 'utf8');
     check('the PASA, ASA, PSSA and SSA templates draw the fault trees in the body', (RJ.match(/'\{\{fta_summary\}\}',\n\s*'\{\{figure:fta_top\}\}',/g) || []).length >= 4);
 

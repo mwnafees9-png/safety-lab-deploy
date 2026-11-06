@@ -1,36 +1,32 @@
-/* regression_plan_autopilot_20261106.test.js: the Plan Autopilot writes the SSPP, the Human Factors Plan and the RAM Plan
- * from questions, with the Sys Lab Planning Autopilot's layout (plan_autopilot.js v1.0).
+/* regression_plan_autopilot_20261106.test.js: the Plan Autopilot (plan_autopilot.js v2.0) writes the SSPP, the Human
+ * Factors Plan and the RAM Plan from questions, with the Sys Lab Planning Autopilot's layout.
  *
  * Waqas, 6 Nov 2026: "program planing in safety lab needs to have the same interface as sys lab planing auto-pilot,
- * questions to be in conjunction with DA assurance and the tool linkings, there's a copy of ARP4754 B which has an
- * example of safety program plan I want our program planing to replicate that too"; "in planing I want similar
- * treatment for the HF plan and RAM plan too".
- * Checks:
- *   - the page: first under Plan and basis; three plan cards; a plan page with the questions grouped by the section
- *     each answer is written into, what it sets in Safety Lab (now and after), the objectives covered, the gaps, and the
- *     live preview
- *   - the SSPP's first five sections follow the order of the ARP4754B Appendix B example plan (scope, organization,
- *     responsibilities, the assessments and methods, common cause)
- *   - every question names objectives that exist on the Objectives matrix and pages that exist in the app
- *   - a made-up answer is refused; an answer sets nothing until the plan's settings are applied; applying turns lanes
- *     on and off (an expected lane holding work is turned off with a signed tailoring entry, its data kept), sets the
- *     method slots and the declared tools (the signature cleared)
- *   - the HF plan's "no human factors work" takes the HF Autopilot off the menu, and back
- *   - the plan text follows the answers; an unanswered question is "To be decided" and listed; the Word file writes
- * MUTATION PROOFS: SL_PLA_MUTATE=nogate (an answer applies at once) and =nosign (a lane off without its signed entry)
- *   must fail.
+ * questions to be in conjunction with DA assurance and the tool linkings"; the SSPP follows the ARP4754B Appendix B
+ * example plan; "similar treatment for the HF plan and RAM plan too"; then, the same day:
+ *   "why is this plan showing resulting numbers again" (plans carry no counts or status: those are status reports),
+ *   "Will a PASA be performed not already done" (forward-looking questions),
+ *   "failure conditions addressed by multiple systems can be addressed with interdependence analysis, MAC, and CoFFE",
+ *   "we need to cover all different permutations",
+ *   "rope in the cert basis directly into the program planning rather than a separate tab" (the plan's severity,
+ *     probability and DAL table from the same engine the tool uses),
+ *   "we are still missing the table of contents, table of tables, table of figures etc. cover page",
+ *   and it was slow: 3.4 s per click.
+ * MUTATION PROOFS: SL_PLA_MUTATE=nogate (an answer applies at once), =nosign (a lane off without its signed entry),
+ *   =statusleak (a count gets into the plan) must fail.
  * Run: node tests/regression_plan_autopilot_20261106.test.js
  */
 'use strict';
 const fs = require('fs'), path = require('path'), http = require('http');
 let pass = 0, fail = 0;
-const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' (' + String(d).slice(0, 1200) + ')' : '')); } };
+const check = (n, c, d) => { if (c) { pass++; console.log('  PASS  ' + n); } else { fail++; console.log('  FAIL  ' + n + (d ? ' (' + String(d).slice(0, 1400) + ')' : '')); } };
 const SITE = path.join(__dirname, '..', 'site');
 const MUT = process.env.SL_PLA_MUTATE || '';
 function mutate(file, body) {
     if (file !== 'plan_autopilot.js') return body;
     if (MUT === 'nogate') return body.replace("s.answers[k] = val; s.who[k] = { by: who(), at: now() };", "s.answers[k] = val; s.who[k] = { by: who(), at: now() }; try { (q.set || []).forEach(function (st) { var af = st.after(val); if (af != null && af !== st.now()) st.apply(val, who(), BY[q.plan], q); }); } catch (_) {}");
-    if (MUT === 'nosign') return body.replace("PP().setLane(id, on, on ? {} : { rationale: 'The ' + plan.title + ' says: ' + optLabel(q, v) + '.', sig: by });", "PP().setLane(id, on, {});");
+    if (MUT === 'nosign') return body.replace("PP().setLane(id, on, on ? {} : { rationale: 'The ' + plan.title + ' says: ' + optLabel(q, v) + '.' + (why ? ' Reason: ' + why : ''), sig: by });", "PP().setLane(id, on, {});");
+    if (MUT === 'statusleak') return body.replace("var it = intro(key, sec); if (it) blocks.push(P(it));", "var it = intro(key, sec); if (it) blocks.push(P(it + ' (' + counts().afha + ' failure conditions so far.)'));");
     return body;
 }
 const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error('timed out after ' + ms / 1000 + ' s: ' + what)), ms))]);
@@ -40,11 +36,13 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     const SRC = fs.readFileSync(path.join(SITE, 'plan_autopilot.js'), 'utf8');
     const HTML = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
     const NAV = fs.readFileSync(path.join(SITE, 'nav_areas.js'), 'utf8');
+    const RW = fs.readFileSync(path.join(SITE, 'report_writer.js'), 'utf8');
     let okp = true; try { new Function(SRC); } catch (e) { okp = false; }
-    check('plan_autopilot.js parses; no eval of any kind (the CSP forbids it); the stores are read through SLEnv', okp && !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
-    check('the Plan Autopilot is first under Plan and basis; its view and host are in the page', /items: \['snav-plan-auto', 'snav-defs'/.test(NAV) && /id="snav-plan-auto"/.test(HTML) && /id="view-plan-auto"/.test(HTML) && /id="plan-auto-host"/.test(HTML));
-    check('it loads after the shared look, the objectives and the lanes', (() => { const i = s => HTML.indexOf(s); return i('plan_autopilot.js?v=1.0') > i('autopilot_ui.js?v=') && i('plan_autopilot.js?v=1.0') > i('objectives_matrix.js?v=') && i('plan_autopilot.js?v=1.0') > i('program_plan.js?v='); })());
+    check('plan_autopilot.js v2 parses; no eval of any kind (the CSP forbids it); the stores are read through SLEnv', okp && /VERSION = '2\.0'/.test(SRC) && !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
+    check('the Plan Autopilot is first under Plan and basis; the certification basis page leaves the menu, its page stays', /items: \['snav-plan-auto', 'snav-arp-process'/.test(NAV) && /id="snav-plan-auto"/.test(HTML) && !/id="snav-defs"/.test(HTML) && /id="view-defs"/.test(HTML) && /id="view-plan-auto"/.test(HTML));
+    check('it loads after the shared look, the objectives and the lanes; the pins moved', (() => { const i = s => HTML.indexOf(s); return i('plan_autopilot.js?v=2.0') > i('autopilot_ui.js?v=') && i('plan_autopilot.js?v=2.0') > i('objectives_matrix.js?v=') && i('plan_autopilot.js?v=2.0') > i('program_plan.js?v=') && /report_writer\.js\?v=1\.3/.test(HTML); })());
     check('the plan-auto tab is registered with switchTab', /const tabs = \['plan-auto', /.test(fs.readFileSync(path.join(SITE, 'support_modules.js'), 'utf8')));
+    check('the Word writer takes a cover (document control, approvals, revision history) and figures in the run of the text, numbered with the rest', /model\.cover && model\.cover\.tables/.test(RW) && /b\.k === 'img'/.test(RW) && /idx\.figures\.push\(b\)/.test(RW));
 
     let pw = null;
     for (const p of ['playwright', '/home/claude/.npm-global/lib/node_modules/playwright']) { try { pw = require(p); break; } catch (_) {} }
@@ -67,97 +65,120 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
             const g0 = document.getElementById('sl-auth-gate'); if (g0) g0.remove(); document.documentElement.classList.remove('sl-auth-gate-blocked');
             document.querySelectorAll('.modal-overlay.show').forEach(m => { m.classList.remove('show'); m.style.display = 'none'; });
             const out = {};
-            const P = await until(() => window.PROGRAM_PLAN && window.appAMatrixRows && window.SLPlanAuto, 20000);
-            const pc = SLEnv.get('projectConfig');
-            switchTab('plan-auto'); await wait(700);
+            const P = await until(() => window.PROGRAM_PLAN && window.appAMatrixRows && window.getSafetyTarget && window.SLPlanAuto, 20000);
+            const pc = SLEnv.get('projectConfig'), txtOf = bl => bl.map(b => b.k === 'p' ? b.text : b.k === 'h' ? b.text : b.k === 'table' ? b.caption + ' ' + JSON.stringify(b.rows) : b.k === 'fig' ? b.caption + ' ' + b.svg.replace(/<[^>]+>/g, ' ') : '').join('\n');
+            switchTab('plan-auto'); await wait(600);
             const v = document.getElementById('view-plan-auto');
-            out.cards = { shown: v.style.display !== 'none', n: v.querySelectorAll('[data-placard]').length, keys: [...v.querySelectorAll('[data-placard]')].map(x => x.dataset.placard).join(','), da: !!v.querySelector('[data-pla-da]'), menuFirst: (document.querySelector('#sl-areabar .sl-ab-tab, #sl-areabar button, #sl-areabar a') || {}).textContent };
-            // the questions name real objectives and real pages
-            const objIds = new Set(appAMatrixRows().map(o => o.id));
-            const allQ = P.PLANS.reduce((a, p) => a.concat(p.qs), []);
-            const badDa = allQ.filter(q => q.da.some(id => !objIds.has(id))).map(q => q.k);
-            const badTool = allQ.filter(q => q.tools.some(t => !document.getElementById('view-' + t) && !document.querySelector('[onclick="switchTab(\'' + t + '\')"]'))).map(q => q.k + ':' + q.tools.join('/'));
-            out.links = { badDa, badTool, withDa: allQ.filter(q => q.da.length).length, n: allQ.length, perPlan: P.PLANS.map(p => p.code + ':' + p.qs.length).join(' ') };
-            out.ssppSecs = P.BY.sspp.secs.slice(0, 5).join(' | ');
-            // the plan page
-            P.ui.open('sspp'); await wait(300);
-            out.page = { qs: v.querySelectorAll('[data-plaqbox]').length, secs: v.querySelectorAll('[data-plasec]').length, wires: !!v.querySelector('[data-pla-wires]'), dacov: !!v.querySelector('[data-pla-dacov]'), gaps: !!v.querySelector('[data-pla-gaps]'), prev: !!v.querySelector('[data-pladoc] h3'), tags: !!v.querySelector('.pla-t.da') && !!v.querySelector('.pla-t.tool') && !!v.querySelector('.pla-t.set') };
-            // a made-up answer is refused
-            let refused = false; try { P.answer('sspp.zsa', 'maybe'); } catch (e) { refused = /not one of the answers/.test(e.message); }
-            let refusedTwo = false; try { P.answer('sspp.zsa', ['cad', 'list']); } catch (e) { refusedTwo = /Pick one/.test(e.message); }
-            out.refuse = refused && refusedTwo;
-            // nothing is set until applied
-            const zsaBefore = (SLEnv.get('zsaData') || []).length, zsaOn0 = PROGRAM_PLAN.laneOn('zsa'), zsaExpected = PROGRAM_PLAN.isExpected('zsa');
-            P.ui.pick('sspp.zsa', 'no'); P.ui.pick('sspp.pssa', 'markov'); P.ui.pick('sspp.rmtool', 'jama'); P.ui.pick('sspp.indep', 'cma');
-            const w = P.wires('sspp'), wz = w.find(x => /Zonal/.test(x.what));
-            out.gate = { zsaOn0, zsaExpected, zsaItems: PROGRAM_PLAN.laneData('zsa'), stillOn: PROGRAM_PLAN.laneOn('zsa'), wire: wz && (wz.now + '>' + wz.after), slot0: (pc.safetyProgramPlan.slots || {}).quantification, apply: P.status('sspp').apply,
-                applyBtn: (v.querySelector('[data-pla-wires] button') || {}).textContent };
-            const tc = pc.toolchain || {};
-            if (tc.rm) { tc.rm.by = 'Someone'; tc.rm.at = '2026-01-01'; }
-            const res = P.apply('sspp');
-            const tail = PROGRAM_PLAN.tailoring().filter(t => t.laneId === 'zsa' && !t.cleared).pop();
-            out.applied = { errs: res.errs, done: res.done.length, zsaOn: PROGRAM_PLAN.laneOn('zsa'), zsaKept: (SLEnv.get('zsaData') || []).length === zsaBefore, tail: tail && tail.rationale, sig: tail && tail.sig,
-                markov: PROGRAM_PLAN.laneOn('markov'), slot: pc.safetyProgramPlan.slots.quantification, indepSlot: pc.safetyProgramPlan.slots.independence, ipledger: PROGRAM_PLAN.laneOn('ipledger'),
-                rm: pc.toolchain && pc.toolchain.rm.tool, rmSig: pc.toolchain && pc.toolchain.rm.by, after: P.wires('sspp').filter(x => !x.same).length, menuZsa: (document.getElementById('snav-zsa') || {}).style ? getComputedStyle(document.getElementById('snav-zsa')).display : 'none' };
-            // the zsa lane back on through the plan
-            P.ui.pick('sspp.zsa', 'cad'); P.apply('sspp'); out.zsaBack = PROGRAM_PLAN.laneOn('zsa');
-            // checks: several FMEAs
-            P.ui.toggle('sspp.fmea', 'ffmea'); P.ui.toggle('sspp.fmea', 'fmes');
-            out.checks = { v: pc.planAuto.answers['sspp.fmea'], txt: P.doc('sspp').some(b => b.k === 'p' && /functional FMEAs and a failure modes summary/.test(b.text)) };
-            P.ui.toggle('sspp.fmea', 'ffmea'); out.checks.after = pc.planAuto.answers['sspp.fmea'];
-            // the plan text follows the answers
-            P.ui.pick('sspp.org', 'embedded');
-            const d1 = P.doc('sspp'), hs = d1.filter(b => b.k === 'h').map(b => b.text);
-            out.doc = { heads: hs.slice(0, 5).join(' | '), org: d1.some(b => b.k === 'p' && /system team does its own system assessments/.test(b.text)), tbd: d1.some(b => b.k === 'p' && /^To be decided: who owns this plan/.test(b.text)), gapsSec: hs.some(h => /To be decided/.test(h)), daTable: (d1.find(b => b.k === 'table' && /Development assurance objectives/.test(b.title)) || { rows: [] }).rows.length, preview: /system team does its own system assessments/.test((v.querySelector('[data-pladoc]') || {}).textContent || '') };
-            P.ui.pick('sspp.org', 'central');
-            out.doc.changed = P.doc('sspp').some(b => b.k === 'p' && /One aircraft safety group does the safety work/.test(b.text)) && !P.doc('sspp').some(b => b.k === 'p' && /system team does its own system assessments/.test(b.text));
-            const cov = P.daCover('sspp'), a34 = cov.find(x => x.id === 'A3-4');
-            out.da = { a34how: a34 && a34.how.join('; '), a34tools: a34 && a34.tools.join(','), none: cov.filter(x => !x.qs.length).length };
-            // the HF plan takes the HF Autopilot off the menu, and back
-            P.ui.open('hfp'); await wait(200);
-            P.ui.pick('hfp.need', 'none'); P.apply('hfp'); await wait(200);
+            out.cards = { shown: v.style.display !== 'none', keys: [...v.querySelectorAll('[data-placard]')].map(x => x.dataset.placard).join(','), da: !!v.querySelector('[data-pla-da]'), docNo: P.docCtl('sspp').no };
+            // speed: a click redraws in well under half a second (it took 3.4 s)
+            const T = f => { const t = performance.now(); f(); return performance.now() - t; };
+            const tOpen = T(() => P.ui.open('sspp')), tPick = [T(() => P.ui.pick('sspp.org', 'embedded')), T(() => P.ui.pick('sspp.org', 'central')), T(() => P.ui.pick('sspp.org', 'embedded'))].sort((a, b) => a - b)[1];
+            out.speed = { open: Math.round(tOpen), pick: Math.round(tPick) };
+            // the questions: forward-looking, real objectives and pages, options that cover the permutations
+            const all = P.PLANS.reduce((a, p) => a.concat(p.qs), []), objIds = new Set(appAMatrixRows().map(o => o.id));
+            out.q = { n: all.length, perPlan: P.PLANS.map(p => p.code + ':' + p.qs.length).join(' '),
+                backward: all.filter(q => !/^basis\./.test(q.k) && (/^(Is|Are|Does|Do|Has|Have)\b/.test(q.text) || /\b(is|are) (done|performed)\b/.test(q.text) || !/\bwill\b/i.test(q.text))).map(q => q.k + ': ' + q.text),
+                badDa: all.filter(q => q.da.some(id => !objIds.has(id))).map(q => q.k), badTool: all.filter(q => q.tools.some(t => !document.getElementById('view-' + t) && !document.querySelector('[onclick="switchTab(\'' + t + '\')"]'))).map(q => q.k + ':' + q.tools.join('/')),
+                fewOpts: all.filter(q => q.opts.length < 2).map(q => q.k), checks: all.filter(q => q.type === 'checks').length, own: all.filter(q => q.opts.some(o => o[0] === 'own')).length, notPlanned: all.filter(q => q.opts.some(o => o[0] === 'none' && /Not planned/.test(o[1]))).length,
+                pasa: P.QBY['sspp.pasa'].text, combined: P.QBY['sspp.combined'].opts.map(o => o[0]).join(',') };
+            // the certification basis, first, with its follow-ups by basis
+            const showsFor = reg => { P.answer('basis.reg', reg); P.forget(); return P.questions('sspp').filter(q => /^basis\./.test(q.k)).map(q => q.k.slice(6)).join(','); };
+            out.basisQs = { first: P.BY.sspp.qs.findIndex(q => q.k === 'basis.reg') <= 3 && P.BY.sspp.secs[1] === 'Certification basis and safety objectives', p25: showsFor('Part 25'), p23: showsFor('Part 23'), p27: showsFor('Part 27'), vtol: showsFor('SC-VTOL'), p33: showsFor('Part 33'), p107: showsFor('Part 107') };
+            // the plan's table comes from the same engine: Part 23 level 2, one piston engine, before and after applying
+            P.answer('basis.reg', 'Part 23'); P.answer('basis.p23level', '2'); P.answer('basis.p23prop', 'recip-1'); P.answer('basis.p23dal', 'f3061'); P.forget();
+            const planT = P.doc('sspp').find(b => b.k === 'table' && b.name === 'targets');
+            const regBefore = pc.regulation, infoLines = P.wires('sspp').filter(x => x.info).length;
+            const res0 = P.apply('sspp');
+            const eng = ['Catastrophic', 'Hazardous', 'Major', 'Minor'].map(s => { const t = getSafetyTarget(s); return s + ':' + t.prob + ':' + t.dal; }).join('|');
+            P.forget(); const planT2 = P.doc('sspp').find(b => b.k === 'table' && b.name === 'targets');
+            const planStr = rows => rows.slice(0, 4).map(r => r.Classification + ':' + r['Function DAL']).join('|');
+            out.basis = { before: regBefore, after: pc.regulation, cls: pc.part23Class, sel: (document.getElementById('proj-regulation') || {}).value, infoLines, errs: res0.errs, planBefore: planStr(planT.rows), planAfter: planStr(planT2.rows), engDal: eng.split('|').map(x => x.split(':')[0] + ':' + x.split(':')[2]).join('|'), probs: planT2.rows.slice(0, 4).map(r => r['Probability target']).join('|'), engProbs: eng, sevdefs: !!P.doc('sspp').find(b => b.k === 'table' && b.name === 'sevdefs') };
+            P.answer('basis.reg', 'Part 25'); P.apply('sspp'); P.forget();
+            out.basis.back = pc.regulation;
+            // picks that do not work together
+            P.answer('sspp.combined', ['mac', 'coffe']); const mm1 = P.mismatches('sspp').map(x => x.k);
+            P.answer('sspp.combined', ['interdep', 'mac', 'coffe']); const mm2 = P.mismatches('sspp').map(x => x.k);
+            P.answer('sspp.cma', 'none'); P.answer('sspp.dal', 'indep'); const mm3 = P.mismatches('sspp').map(x => x.k);
+            P.answer('sspp.cma', 'yes'); const mm4 = P.mismatches('sspp').map(x => x.k);
+            out.mm = { macNoInterdep: mm1.includes('sspp.combined'), fixed: !mm2.includes('sspp.combined'), dalNoCma: mm3.includes('sspp.dal'), cleared: !mm4.includes('sspp.dal'), slot: P.wires('sspp').find(x => /Failure conditions across systems/.test(x.what)).after };
+            // our own way, and not planned with its reason
+            P.answer('sspp.afha', 'own'); const gapOwn = !P.complete(P.QBY['sspp.afha']); P.setOwn('sspp.afha', 'The FHA will follow the company procedure SP-12, function by function.'); const ownIn = /company procedure SP-12/.test(txtOf(P.doc('sspp')));
+            P.answer('sspp.pasa', 'none'); const gapWhy = !P.complete(P.QBY['sspp.pasa']); P.setWhy('sspp.pasa', 'the architecture is carried over from a certified aircraft'); const whyIn = /Reason: the architecture is carried over/.test(txtOf(P.doc('sspp')));
+            out.own = { gapOwn, ownIn, gapWhy, whyIn, funnel: /Not planned: tailored out/.test(txtOf(P.doc('sspp').filter(b => b.k === 'fig'))) };
+            P.answer('sspp.pasa', 'yes');
+            // applying: an expected lane off with a signed entry naming the answer and reason; methods, slots and tools
+            const zsaKept = (SLEnv.get('zsaData') || []).length;
+            P.answer('sspp.zsa', 'none'); P.setWhy('sspp.zsa', 'no installation zones change on this program'); P.answer('sspp.pssa', ['fta', 'markov']); P.answer('sspp.rmtool', 'jama'); P.answer('sspp.indep', 'cma');
+            const zsaStill = PROGRAM_PLAN.laneOn('zsa');
+            if (pc.toolchain && pc.toolchain.rm) { pc.toolchain.rm.by = 'Someone'; pc.toolchain.rm.at = '2026-01-01'; }
+            const res = P.apply('sspp'); const tail = PROGRAM_PLAN.tailoring().filter(t => t.laneId === 'zsa' && !t.cleared).pop();
+            out.apply = { zsaStill, errs: res.errs, zsaOn: PROGRAM_PLAN.laneOn('zsa'), zsaKept: (SLEnv.get('zsaData') || []).length === zsaKept, tail: tail && tail.rationale, markov: PROGRAM_PLAN.laneOn('markov'), quant: pc.safetyProgramPlan.slots.quantification, combined: pc.safetyProgramPlan.slots.combinedEffects, indep: pc.safetyProgramPlan.slots.independence, rm: pc.toolchain && pc.toolchain.rm.tool, rmSig: pc.toolchain && pc.toolchain.rm.by, left: P.wires('sspp').filter(x => !x.same).length };
+            P.answer('sspp.zsa', 'cad'); P.apply('sspp'); out.apply.back = PROGRAM_PLAN.laneOn('zsa');
+            // a plan is a plan: no counts; adding work changes the status report, never the plan
+            const snap = () => P.PLANS.map(p => txtOf(P.doc(p.key))).join('\n#\n'), rep = () => txtOf(P.statusDoc('sspp'));
+            P.forget(); const p0 = snap(), r0 = rep();
+            const fha = SLEnv.get('acFhaData'); fha.push(Object.assign({}, fha[0], { internalId: 999901, fcId: 'FC-T1', fcDesc: 'Test-only failure condition' }));
+            const ft = SLEnv.get('ftaPages'); ft.push({ id: 'pla-test-tree', name: 'Test tree', root: { id: 'r', type: 'or', label: 'T', children: [] } });
+            P.forget(); const p1 = snap(), r1 = rep();
+            fha.pop(); ft.pop(); P.forget();
+            out.status = { planSame: p0 === p1, reportMoved: r0 !== r1, noCounts: !/\b\d+ (aircraft |system )?failure conditions\b|\b\d+ fault trees\b|\b\d+ rows\b|DAL A\)|answered|\d+ of \d+/.test(p0), reportHas: /\d+ aircraft failure conditions/.test(r0) && /\d+ fault trees/.test(r0) };
+            // the front matter: cover with document control, approvals and history; contents; lists; numbered captions with a lead each
+            P.ui.open('sspp'); await wait(100);
+            const pv = () => document.querySelector('[data-pladoc]'), bl = P.doc('sspp'), tbs = bl.filter(b => b.k === 'table'), fgs = bl.filter(b => b.k === 'fig'), hs = bl.filter(b => b.k === 'h');
+            const leadOk = bl.every((b, i) => !(b.k === 'table' || b.k === 'fig') || (bl[i - 1] && bl[i - 1].k === 'p' && bl[i - 1].text.indexOf((b.k === 'table' ? 'Table ' : 'Figure ') + b.n) >= 0));
+            out.front = { cover: !!pv().querySelector('[data-pla-cover]'), ctl: /Document control/.test(pv().textContent) && /Approvals/.test(pv().textContent) && /Revision history/.test(pv().textContent) && /HL1-SSPP-001/.test(pv().textContent),
+                toc: pv().querySelectorAll('[data-pla-toc] .pla-tl a[href^="#pla-plan-h"]').length, heads: hs.length, lot: pv().querySelectorAll('[data-pla-lot]').length, tables: tbs.length, lof: pv().querySelectorAll('[data-pla-lof]').length, figs: fgs.length,
+                seq: tbs.every((t, i) => t.n === i + 1) && fgs.every((f, i) => f.n === i + 1), leadOk, standard: ['through the development phases', 'beside the development process', 'levels are assigned', 'plans are made', 'Validation and verification', 'Configuration management', 'certification basis sets'].every(t => fgs.some(f => f.title.indexOf(t) >= 0)), proc: (tbs.find(t => t.name === 'processes') || { rows: [] }).rows.length };
+            // revisions: one per issue; the same day replaces that day's
+            const a1 = P.issue('sspp', 'First issue'), a2 = P.issue('sspp', 'First issue, corrected'); const d = P.docCtl('sspp');
+            const sameDay = d.issues.length === 1 && a2.rev === 'A' && d.issues[0].note === 'First issue, corrected';
+            d.issues[0].date = '2026-01-01'; const b1 = P.issue('sspp', 'Updated after review');
+            out.rev = { sameDay, next: b1.rev === 'B' && d.issues.length === 2, cover: /Revision history[\s\S]*B[\s\S]*Updated after review/.test(P.fullHtml('sspp', 'plan')) };
+            let roleRefused = false; try { P.setDoc('sspp', 'appr', 'Bob Smith'); } catch (e) { roleRefused = /roles/.test(e.message); }
+            P.setDoc('sspp', 'appr', 'Chief safety engineer'); out.rev.roles = roleRefused && /Chief safety engineer/.test(P.fullHtml('sspp', 'plan'));
+            // the status report view
+            P.ui.view('status'); await wait(60); out.report = { view: pv().dataset.plakind === 'status', title: /System Safety Status Report/.test(pv().textContent), dalFig: !!P.statusDoc('sspp').find(b => b.k === 'fig' && /level their severity/.test(b.title)), objFig: !!P.statusDoc('sspp').find(b => b.k === 'fig' && /area by area/.test(b.title)) }; P.ui.view('plan');
+            // the HF plan: no human factors work takes the HF Autopilot off the menu, and back
+            P.ui.open('hfp'); await wait(60);
+            P.ui.pick('hfp.need', 'none'); P.setWhy('hfp.need', 'the flight deck does not change'); P.apply('hfp'); await wait(150);
             const shownNav = id => { const e = document.getElementById(id); return !!e && getComputedStyle(e).display !== 'none' && !e.hasAttribute('data-pp-hidden'); };
-            out.hf = { off: !PROGRAM_PLAN.laneOn('hfa'), navOff: !shownNav('snav-hfa-auto') };
-            P.ui.pick('hfp.need', 'full'); P.apply('hfp'); await wait(200);
-            out.hf.on = PROGRAM_PLAN.laneOn('hfa'); out.hf.navOn = shownNav('snav-hfa-auto');
-            out.hf.steps = (P.doc('hfp').find(b => b.k === 'table' && /ten steps/.test(b.title)) || { rows: [] }).rows.length;
-            // RAM: a question shown only when it applies
-            const n0 = P.questions('ramp').length; P.answer('ramp.need', 'full'); const n1 = P.questions('ramp').length;
-            out.ram = { n0, n1 };
-            // the diagrams (Waqas: "I want development assurance choices and diagrams"): drawn from the answers
-            const figs = k => P.doc(k).filter(b => b.k === 'fig');
-            const orgA = figs('sspp').find(f => /organized/.test(f.title)).svg; P.ui.pick('sspp.org', 'supplier'); const orgB = figs('sspp').find(f => /organized/.test(f.title)).svg;
-            const dalA = figs('sspp').find(f => /assigned/.test(f.title)).svg; P.ui.pick('sspp.dal', 'indep'); const dalB = figs('sspp').find(f => /assigned/.test(f.title)).svg;
-            out.figs = { sspp: figs('sspp').length, hfp: figs('hfp').length, ramp: figs('ramp').length, standalone: ['sspp', 'hfp', 'ramp'].every(k => figs(k).every(f => /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg"/.test(f.svg) && !/<script/i.test(f.svg) && f.w > 0 && f.h > 0)),
-                orgFollows: orgA !== orgB && /supplier/.test(orgB), dalFollows: (t => /lowered only where independence allows it, marked CMA pending/.test(t(dalB)) && !/marked CMA pending/.test(t(dalA)))(x => x.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')), preview: v.querySelectorAll('[data-pladoc] .pla-fig svg').length,
-                lanes: /Left out of the program/.test(figs('sspp').find(f => /development phases/.test(f.title)).svg), methods: /PSSA[\s\S]*Methods: [^<]*Markov/.test(figs('sspp').find(f => /development phases/.test(f.title)).svg), model: figs('sspp').some(f => /beside the development process/.test(f.title) && /Zonal safety/.test(f.svg) && /Jama Connect/.test(f.svg)), standard: ['development phases', 'beside the development process', 'levels are assigned', 'plans are made', 'Validation and verification', 'Configuration management'].every(t => figs('sspp').some(f => f.title.indexOf(t) >= 0)) };
-            out.da6 = ['sspp.levels', 'sspp.idal', 'sspp.transition', 'sspp.ccat', 'sspp.toolq', 'sspp.show'].every(k => P.QBY[k] && P.QBY[k].da.length && P.QBY[k].txt);
-            // the Word file
-            try { const lib = await _loadDocxLib(); const blob = await SLReportWriter.docx(P.model('sspp'), lib); out.word = blob.size; } catch (e) { out.word = 'error ' + e.message; }
-            // the answers survive a save and a reload
+            out.hf = { off: !PROGRAM_PLAN.laneOn('hfa'), navOff: !shownNav('snav-hfa-auto'), fewQs: P.questions('hfp').length <= 2 };
+            P.ui.pick('hfp.need', 'full'); P.apply('hfp'); await wait(150);
+            out.hf.on = PROGRAM_PLAN.laneOn('hfa'); out.hf.navOn = shownNav('snav-hfa-auto'); out.hf.steps = !!P.doc('hfp').find(b => b.k === 'fig' && /design cycle/.test(b.title));
+            // RAM: targets and growth asked only for a full program
+            const n0 = P.questions('ramp').length; P.answer('ramp.need', 'full'); P.forget(); out.ram = { n0, n1: P.questions('ramp').length };
+            // every option of every question, alone, and every multi-pick question with all its options: the plan text reads
+            const bad = [];
+            for (const p of P.PLANS) for (const q of p.qs) {
+                const saved = pc.planAuto.answers[q.k];
+                const tries = q.opts.map(o => [o[0]]); if (q.type === 'checks') tries.push(q.opts.map(o => o[0]).filter(x => x !== 'none' && x !== 'none0'));
+                for (const t of tries) { try { P.answer(q.k, t); P.forget(); const tx = txtOf(P.doc(p.key)); if (/undefined|NaN|\[object/.test(tx)) bad.push(q.k + '=' + t.join('+')); } catch (e) { bad.push(q.k + '=' + t.join('+') + ': ' + e.message); } }
+                if (saved) P.answer(q.k, saved.split('|')); else P.answer(q.k, '');
+            }
+            out.perm = { bad: bad.slice(0, 8), n: bad.length };
+            // the Word files: plan and report, with the figures in the text
+            try { const lib = await _loadDocxLib(); const m = P.model('sspp', 'plan'); const imgs = m.blocks.filter(b => b.k === 'img'); for (const b of imgs) b.dataUrl = await SLFtaPrint.png({ svg: b.svg, w: b.w, h: b.h }, 2); const blob = await SLReportWriter.docx(m, lib); const blob2 = await SLReportWriter.docx(P.model('sspp', 'status'), lib); out.word = { plan: blob.size, imgs: imgs.length, cover: !!m.cover && m.cover.tables.length === 3, report: blob2.size }; } catch (e) { out.word = 'error ' + e.message; }
             out.saved = JSON.parse(JSON.stringify(pc.planAuto)).answers['sspp.pssa'];
             return out;
-        }, demo.data), 240000, 'the Plan Autopilot');
-        check('the page: three plan cards (SSPP, HFP, RAMP) and the objectives summary', r.cards.shown && r.cards.n === 3 && r.cards.keys === 'sspp,hfp,ramp' && r.cards.da, JSON.stringify(r.cards));
-        check('the SSPP follows the order of the ARP4754B Appendix B example plan', r.ssppSecs === 'Scope and purpose | How the safety program is organized | Safety responsibilities | The safety assessment process and its methods | Common cause analyses', r.ssppSecs);
-        check('every question names objectives on the Objectives matrix and pages that exist; nearly all name an objective', !r.links.badDa.length && !r.links.badTool.length && r.links.withDa >= r.links.n - 3, JSON.stringify(r.links));
-        check('a plan page: questions by section, what it sets (now and after), objectives covered, gaps, the live preview; tags for objectives, pages and settings', r.page.qs >= 25 && r.page.secs >= 7 && r.page.wires && r.page.dacov && r.page.gaps && r.page.prev && r.page.tags, JSON.stringify(r.page));
-        check('a made-up answer, or two answers to a one-answer question, is refused', r.refuse);
-        check('an answer sets nothing until applied: ZSA still in, shown as In to Out, the slot unchanged, the Apply button counts it', r.gate.zsaOn0 && r.gate.stillOn && r.gate.wire === 'In>Out' && r.gate.slot0 !== 1 && r.gate.apply >= 4 && /Apply [4-9]/.test(r.gate.applyBtn || ''), JSON.stringify(r.gate));
-        check('applying: ZSA out with a signed tailoring entry naming the plan answer, its data kept, off the menu', !r.applied.errs.length && !r.applied.zsaOn && r.applied.zsaKept && (!r.gate.zsaExpected || !r.gate.zsaItems || /System Safety Program Plan says: No/.test(r.applied.tail || '')) && r.applied.menuZsa === 'none', JSON.stringify(r.applied) + ' ' + JSON.stringify(r.gate));
-        check('applying: Markov lane in and the quantitative method slot set; independence by CMA worksheets takes the ledger out', r.applied.markov && r.applied.slot === 1 && r.applied.indepSlot === 1 && !r.applied.ipledger, JSON.stringify(r.applied));
-        check('applying: the declared requirements tool is set and its old signature cleared; nothing left to apply', r.applied.rm === 'jama' && !r.applied.rmSig && r.applied.after === 0, JSON.stringify(r.applied));
-        check('the lane comes back when the answer changes', r.zsaBack);
-        check('several answers at once (the FMEAs), written into the plan', r.checks.v === 'ffmea|fmes' && r.checks.txt && r.checks.after === 'fmes', JSON.stringify(r.checks));
-        check('the plan text follows the answers, in the preview too; unanswered is "To be decided", with a section listing them; the objectives table is filled', r.doc.org && r.doc.tbd && r.doc.gapsSec && r.doc.daTable >= 20 && r.doc.preview && r.doc.changed && /^1\. Scope and purpose \| 2\. How the safety program is organized/.test(r.doc.heads), JSON.stringify(r.doc));
-        check('each objective says how the program meets it, from the answers, with the evidence pages', /No|Yes/.test(r.da.a34how || '') && /zsa/.test(r.da.a34tools || '') && /cma/.test(r.da.a34tools || ''), JSON.stringify(r.da));
-        check('the HF plan: no human factors work takes the HF Autopilot off the menu, and a full program puts it back; the plan lists the ten HF steps', r.hf.off && r.hf.navOff && r.hf.on && r.hf.navOn && r.hf.steps === 10, JSON.stringify(r.hf));
-        check('the RAM plan asks about targets and growth only for a full reliability program', r.ram.n1 === r.ram.n0 + 2, JSON.stringify(r.ram));
-        check('the diagrams: nine in the SSPP, six of them in the layout of the ARP4761A and ARP4754B example figures (the funnel through the phases, the process model beside development, DAL assignment, planning, validation and verification, configuration management), three in the HF plan, two in the RAM plan; the methods in each box from the lanes; standalone pictures in the preview', r.figs.sspp === 9 && r.figs.standard && r.figs.methods && r.figs.model && r.figs.hfp === 3 && r.figs.ramp === 2 && r.figs.standalone && r.figs.preview >= 3 && r.figs.lanes, JSON.stringify(r.figs));
-        check('the diagrams follow the answers: the organization chart and the DAL flow redraw when the answer changes', r.figs.orgFollows && r.figs.dalFollows, JSON.stringify(r.figs));
-        check('the development assurance choices ARP4754B leaves to the program are asked, each tied to its objectives', r.da6);
-        check('the plan writes to Word, with its diagrams', typeof r.word === 'number' && r.word > 8000, r.word);
-        check('the answers are in the project data', r.saved === 'markov', r.saved);
+        }, demo.data), 300000, 'the Plan Autopilot');
+        check('the page: three plan cards (SSPP, HFP, RAMP), each with its document number', r.cards.shown && r.cards.keys === 'sspp,hfp,ramp' && r.cards.da && r.cards.docNo === 'HL1-SSPP-001', JSON.stringify(r.cards));
+        check('fast: opening a plan and picking an answer each redraw in under half a second (3.4 s before)', r.speed.open < 500 && r.speed.pick < 500, JSON.stringify(r.speed));
+        check('every question asks what the program will do (the plan comes first), and names real objectives and pages', !r.q.backward.length && !r.q.badDa.length && !r.q.badTool.length && !r.q.fewOpts.length && /^Will a preliminary aircraft safety assessment \(PASA\) be performed\?$/.test(r.q.pasa), JSON.stringify(r.q));
+        check('the options cover the permutations: pick-several questions, our own way, not planned with a reason; interdependence, MAC and CoFFE for multi-system failure conditions', r.q.checks >= 15 && r.q.own >= 50 && r.q.notPlanned >= 8 && /^interdep,mac,coffe/.test(r.q.combined) && r.q.n >= 75, JSON.stringify(r.q));
+        check('the certification basis is the second section of the SSPP; its follow-up questions follow the basis (Part 23 level, propulsion and DAL method; Part 27 class; SC-VTOL category; no flight duration for engines or drones)', r.basisQs.first && /p23level,p23prop,p23dal/.test(r.basisQs.p23) && /p27/.test(r.basisQs.p27) && !/p23/.test(r.basisQs.p27) && /scvtol/.test(r.basisQs.vtol) && /mission/.test(r.basisQs.p25) && !/mission/.test(r.basisQs.p33) && !/mission/.test(r.basisQs.p107), JSON.stringify(r.basisQs));
+        check('the plan\'s classifications, targets and DALs come from the tool\'s own engine, before and after applying; the basis is shown before it applies and written to the same place the basis page writes', r.basis.before !== 'Part 23' && r.basis.after === 'Part 23' && r.basis.sel === 'Part 23' && !!r.basis.cls && r.basis.planBefore === r.basis.planAfter && r.basis.planAfter === r.basis.engDal && r.basis.infoLines >= 1 && !r.basis.errs.length && r.basis.sevdefs && r.basis.back === 'Part 25', JSON.stringify(r.basis));
+        check('picks that do not work together are caught: MAC or CoFFE without the interdependence analysis; a lowered DAL with no CMA; and they clear when fixed', r.mm.macNoInterdep && r.mm.fixed && r.mm.dalNoCma && r.mm.cleared && /Hybrid/.test(r.mm.slot), JSON.stringify(r.mm));
+        check('our own way is a gap until it is written, then goes into the plan; "not planned" needs its reason, which goes into the plan and the funnel diagram', r.own.gapOwn && r.own.ownIn && r.own.gapWhy && r.own.whyIn && r.own.funnel, JSON.stringify(r.own));
+        check('applying: nothing set before Apply; ZSA out with a signed entry naming the answer and its reason, data kept; Markov in, the method slots and the requirements tool set (its old signature cleared); and back', r.apply.zsaStill && !r.apply.errs.length && !r.apply.zsaOn && r.apply.zsaKept && /System Safety Program Plan says: Not planned\. Reason: no installation zones change/.test(r.apply.tail || '') && r.apply.markov && r.apply.quant === 1 && r.apply.combined === 2 && r.apply.indep === 1 && r.apply.rm === 'jama' && !r.apply.rmSig && r.apply.left === 0 && r.apply.back, JSON.stringify(r.apply));
+        check('a plan is a plan: no counts or status in any of the three; adding a failure condition and a fault tree changes the status report, never the plan', r.status.planSame && r.status.reportMoved && r.status.noCounts && r.status.reportHas, JSON.stringify(r.status));
+        check('a cover with document control, approvals and revision history; a table of contents, list of tables and list of figures; numbered captions, each introduced before it appears; the process definitions; the standard-layout diagrams', r.front.cover && r.front.ctl && r.front.toc === r.front.heads && r.front.lot === r.front.tables && r.front.lof === r.front.figs && r.front.figs >= 8 && r.front.seq && r.front.leadOk && r.front.standard && r.front.proc >= 12, JSON.stringify(r.front));
+        check('revisions: one per issue, a same-day issue replaces that day\'s; a later issue is the next letter and goes into the history; approvals by role only', r.rev.sameDay && r.rev.next && r.rev.cover && r.rev.roles, JSON.stringify(r.rev));
+        check('the status report is its own document, with the counts and the charts the plan does not carry', r.report.view && r.report.title && r.report.dalFig && r.report.objFig, JSON.stringify(r.report));
+        check('the HF plan: no human factors work (with its reason) takes the HF Autopilot off the menu, and a full program puts it back with the ten steps', r.hf.off && r.hf.navOff && r.hf.fewQs && r.hf.on && r.hf.navOn && r.hf.steps, JSON.stringify(r.hf));
+        check('the RAM plan asks about targets, growth and life data only for a full reliability program', r.ram.n1 === r.ram.n0 + 3, JSON.stringify(r.ram));
+        check('every option of every question, and every pick-several question with all its picks, writes plan text that reads (no "undefined")', r.perm.n === 0, JSON.stringify(r.perm));
+        check('the plan and its status report write to Word: the cover\'s three tables and the figures in the text', typeof r.word === 'object' && r.word.plan > 40000 && r.word.imgs >= 8 && r.word.cover && r.word.report > 8000, JSON.stringify(r.word));
+        check('the answers are in the project data', r.saved === 'fta|markov', r.saved);
         check('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
     } catch (e) { check('the app part ran', false, e.message); }
     finally { await browser.close(); srv.close(); }

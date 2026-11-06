@@ -152,7 +152,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
             <details class="asb-grp" id="asb-grp-ac">
                 <summary><span class="asb-ico">📐</span><span class="asb-lbl">Define</span><span class="asb-chev">›</span></summary>
                 <div class="asb-sub">
-                <a class="asb-item sub" id="snav-defs" onclick="switchTab('defs')" role="button" tabindex="0"><span class="asb-lbl">Certification basis (AC 1309)</span></a>
+                <!-- 6 Nov 2026 (Waqas: "rope in the cert basis directly into the program planning rather than a separate tab"): the certification basis is the first section of the SSPP in the Plan Autopilot; its page (view-defs) stays for the definitions and a custom basis, reached from there, off the menu -->
                 <a class="asb-item sub" id="snav-arp-process" onclick="switchTab('arp-process')" role="button" tabindex="0"><span class="asb-lbl">Safety process map (ARP 4761A)</span></a>
                 <!-- 6 Nov 2026 (Waqas: "program planing in safety lab needs to have the same interface as sys lab planing auto-pilot"): the Plan Autopilot writes the SSPP, the HF plan and the RAM plan from questions, plan_autopilot.js -->
                 <a class="asb-item sub" id="snav-plan-auto" onclick="switchTab('plan-auto')" role="button" tabindex="0"><span class="asb-lbl">Plan Autopilot</span></a>
@@ -4325,7 +4325,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="autonomy_metrics.js?v=0.3" defer></script>
     <!-- 31 Oct 2026: fta_print.js (SLFtaPrint: fault trees drawn for reports on landscape sheets, 7.5 pt text, split at transfers) and report_writer.js (SLReportWriter: the one Word and PDF writer: contents, lists of tables and figures, captions, cross references, significant figures). Right before reports.js. -->
     <script src="fta_print.js?v=1.1" defer></script>
-    <script src="report_writer.js?v=1.2" defer></script>
+    <script src="report_writer.js?v=1.3" defer></script>
     <!-- 6 Nov 2026: report_ai.js (SLReportAI): the AI drafts a report section's narrative only; tables, lists, appendices and figures are put back by the engine; no placeholders (docs/REPORT_AI_REBUILD_2026-11-06.md). -->
     <script src="report_ai.js?v=1.0" defer></script>
     <!-- 6 Nov 2026: markov_ai.js (SLMarkovAI): the AI drafts a Markov model's states and transitions; every rate is the sum of the project's own recorded rates it names. -->
@@ -4582,7 +4582,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <!-- 6 Nov 2026: the HF Autopilot (SLHfAuto): the human factors work through the design cycle, one plain question at a time, written into the HF tables -->
     <script src="hf_autopilot.js?v=2.1" defer></script>
     <!-- 6 Nov 2026: the Plan Autopilot. After autopilot_ui.js (the shared look), objectives_matrix.js (the objectives) and program_plan.js (the lanes). -->
-    <script src="plan_autopilot.js?v=1.0" defer></script>
+    <script src="plan_autopilot.js?v=2.0" defer></script>
     <!-- 18 Oct 2026: the live state of every generated requirement, written beside the project for Sys Lab (requirement-states.json). -->
     <script src="requirement_states.js?v=1.1" defer></script>
     <script src="pra_report.js?v=1.5" defer></script>
@@ -4651,7 +4651,7 @@ if(document.readyState!=='loading') initNavActivePath(); else document.addEventL
     <script src="prove_tabs.js?v=1.8" defer></script>
     <!-- 24 Oct 2026: nav_areas.js (SLNavAreas) lays the left menu out the way Sys Lab does: a Working on picker, sections, and each section's pages as tabs above the page. After support_modules.js, helpers_modules.js, program_plan.js and prove_tabs.js. -->
     <script src="level_view.js?v=1.2" defer></script>
-    <script src="nav_areas.js?v=1.9" defer></script>
+    <script src="nav_areas.js?v=2.0" defer></script>
     <script src="fta_tree_picker.js?v=1.5" defer></script>
     <!-- 25 Aug 2026 — the way back from a golden-thread jump (reviewer: "to go
          back you have to click on the golden thread"). Wraps _gtvShowEco /
