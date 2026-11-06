@@ -28,7 +28,7 @@
 // (program_plan.js doctrine); an expected lane holding work is turned off with a signed tailoring entry naming the answer.
 (function (root) {
     'use strict';
-    var VERSION = '2.0';
+    var VERSION = '2.1';
     function E(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function U() { return root.SLAutopilotUI || null; }
     function PP() { return root.PROGRAM_PLAN || null; }
@@ -130,7 +130,7 @@
             return SEVS.map(function (sv) { var t = safe(function () { return root.getSafetyTarget(sv); }, null) || {}; return { sev: sv, prob: t.prob, dal: t.dal || '', scope: t.scope || '' }; });
         } finally { Object.keys(keep).forEach(function (f) { p[f] = keep[f]; }); }
     }
-    function probWords(x) { if (x == null || !(x < 1)) return 'No numerical target'; var e = Math.round(Math.log10(x)), m = x / Math.pow(10, e); return 'Less than ' + (Math.abs(m - 1) < 1e-9 ? '' : (Math.round(m * 10) / 10) + ' x ') + '10^' + e + ' per flight hour'; }
+    function probWords(x) { if (x == null || !(x < 1)) return 'No numerical target'; var e = Math.round(Math.log10(x)), m = x / Math.pow(10, e); var sup = String(e).replace(/-/g, '\u207B').replace(/[0-9]/g, function (d) { return '\u2070\u00B9\u00B2\u00B3\u2074\u2075\u2076\u2077\u2078\u2079'.charAt(+d); }); return 'Less than ' + (Math.abs(m - 1) < 1e-9 ? '' : (Math.round(m * 10) / 10) + ' x ') + '10' + sup + ' per flight hour'; }
     function sevTable(cfg) { return safe(function () { return root.SLSeverityTables.exportTable(cfg); }, null); }
     // the analysis lanes a basis expects
     function expectedFor(reg) { return safe(function () { return PP().CATALOGUE.filter(function (l) { return !l.parent && PP().isExpected(l.id, canonReg(reg)); }).map(function (l) { return l.id; }); }, []); }
@@ -469,10 +469,252 @@
           basis: 'MIL-HDBK-338B, MIL-STD-785B, MIL-HDBK-217F, MIL-HDBK-470A and MIL-HDBK-472, ATA MSG-3, adapted for a civil aircraft program; the failure rates feed the safety assessment' }
     ];
     var BY = {}, QBY = {}, OWN = ['own', 'Our own way', 'You write how the program will do it; it goes into the plan as you write it.'];
-    PLANS.forEach(function (p) { BY[p.key] = p; p.qs.forEach(function (q) { if (q.own !== false && q.type !== 'num') q.opts = q.opts.concat([OWN]); QBY[q.k] = q; q.plan = p.key; }); });
+    PLANS.forEach(function (p) { BY[p.key] = p; p.qs.forEach(function (q) { q.excl = q.type === 'checks' ? q.opts.filter(function (o) { return o[0] === 'none' || o[0] === 'none0'; }).map(function (o) { return o[0]; }) : []; if (q.own !== false && q.type !== 'num') q.opts = q.opts.concat([OWN]); QBY[q.k] = q; q.plan = p.key; }); });
     function optLabelK(k, v) { return optLabel(QBY[k], v); }
     function shown(q) { return !q.when || safe(q.when, true); }
     function questions(key) { return BY[key].qs.filter(shown); }
+
+    // ---- the explanations: why each decision matters, and what each answer means for the program --------------------
+    // (Waqas: "proper detailed explanations provided with every choice"; "humans like words, the more the better";
+    // "but we want to control the noise, and be specific to their choices". Each explanation says what the answer means,
+    // when a program picks it, what it commits the program to, and the trade-off.)
+    var EX = {
+        'sspp.kind': { q: 'The kind of program sets how much of the aircraft has to be assessed from scratch, and what can be carried over from earlier certification. Authorities expect the plan to say this first, because everything else is sized from it.',
+            o: { new: 'Nothing is carried over. Every aircraft function gets an FHA, every system a PSSA and SSA, and every independence the architecture relies on gets a common cause check. This is the largest scope, and the authority will review the whole safety case.',
+                derivative: 'The program changes a certified aircraft under an amended type certificate. Only the new and changed functions are assessed from scratch, but every function they touch must be re-checked, and each piece of carried-over safety work needs a written reason why it still holds. Picking this means the plan must keep a clear list of what changed.',
+                stc: 'The change is made under a supplemental type certificate, often by a company other than the original manufacturer. The assessment covers the change and its effects on the existing aircraft; the original safety case is used where it still applies, and the program may not have access to all of it, which must be planned for.',
+                supplier: 'The program designs systems for someone else\'s aircraft. It writes the system FHAs, PSSAs and SSAs and hands them to the aircraft maker, who owns the aircraft-level work (AFHA, PASA, ASA). The plan then has to say what the aircraft maker provides as inputs and what the program owes back.' } },
+        'sspp.authority': { q: 'The authorities decide which rules apply and who reviews the work. Working with more than one means planning how each will accept it, and meeting the stricter of their requirements where they differ.',
+            o: { faa: 'The Federal Aviation Administration: the US authority, working to 14 CFR and its advisory circulars (for example AC 25.1309-1B).',
+                easa: 'The European Union Aviation Safety Agency, working to the CS rules and their AMC material (for example AMC 25.1309). It often adds special conditions for new technology.',
+                tcca: 'Transport Canada Civil Aviation, usually validating FAA or EASA work under a bilateral agreement.',
+                ukcaa: 'The UK Civil Aviation Authority, which has worked to its own copy of the EASA rules since 2021.',
+                anac: 'Brazil\'s authority. Its rules closely follow the FAA\'s; it is usually involved through validation.',
+                caac: 'China\'s authority, typically involved through validation of a foreign type certificate, with its own review of the safety case.',
+                mil: 'A military airworthiness authority. These often adopt civil standards such as ARP4761A but set their own acceptance rules, so the plan must say which civil practices are kept and which are replaced.' } },
+        'sspp.second': { q: 'With more than one authority, the plan must say how the second and later authorities will come to accept the safety work. This decides how many reviews the work goes through and when.',
+            o: { validation: 'The first authority certifies; the others validate that certificate under their bilateral agreements. The safety work is written once, to the strictest basis, and the validating authorities review only the areas they flag. This is the most common route and the least repeated work.',
+                concurrent: 'All authorities review the work as it is produced. It takes more coordination early, but avoids late surprises from a validating authority that disagrees with an approach after the first certificate is granted.',
+                each: 'Each authority reviews on its own schedule. This suits programs where the authorities\' timings or bases differ a lot, but expect the same questions to be answered more than once.' } },
+        'basis.reg': { q: 'The certification basis is the set of rules the aircraft is certified to. It decides the failure condition classes, the probability target each class must meet, and the development assurance level each class calls for. Safety Lab uses this choice to check every fault tree against its target and to assign DALs, so it is the first decision the plan makes.',
+            o: { 'Part 25': 'Transport category airplanes. Catastrophic failure conditions must be extremely improbable (less than 1 x 10^-9 per flight hour), with DAL A for the functions that could cause them. AC 25.1309-1B is the guidance.',
+                'Part 23': 'Normal category airplanes. Targets and DALs depend on the certification level (passenger seats) and the propulsion, through ASTM F3230; a small single-engine airplane has looser targets than a 19-seat turboprop. The follow-up questions set the level and propulsion.',
+                'Part 27': 'Normal category rotorcraft. Targets depend on the class of rotorcraft (engines and occupants), following the FAA\'s safety continuum policy. A follow-up question sets the class.',
+                'Part 29': 'Transport category rotorcraft. Targets similar to Part 25, with AC 29-2C as the guidance.',
+                'SC-VTOL': 'EASA\'s special condition for powered lift and eVTOL aircraft. The Enhanced category (passenger carrying over congested areas) has targets as strict as Part 25; the Basic categories scale with passenger seats. A follow-up question sets the category.',
+                'Part 33': 'Aircraft engines. Engine failure effects are classed as major or hazardous under 33.75 with their own probability targets, rather than the airplane classes.',
+                'Part 35': 'Propellers. Propeller failure effects follow 35.15, with targets for hazardous propeller effects.',
+                'Part 450': 'Commercial space launch and reentry. Safety is judged on risk to the public (expected casualties) rather than per-flight-hour targets, so the fault tree targets work differently.',
+                'Part 107': 'Small unmanned aircraft. Under SORA the risk is judged by the operation (ground and air risk) and its mitigations, not by per-flight-hour targets on every failure condition.',
+                Custom: 'A basis agreed for this applicant alone, through special conditions. The targets and DALs are defined on the certification basis page and must match what the authority has agreed in writing.' } },
+        'basis.p23level': { q: 'Under Part 23 the certification level, set by the number of passenger seats, is one of two inputs that decide the safety targets (ASTM F3230 Table 3). More seats means stricter targets.',
+            o: { 1: 'Up to one passenger seat. The loosest targets in Part 23.', 2: 'Two to six passenger seats.', 3: 'Seven to nine passenger seats.', 4: 'Ten to nineteen passenger seats. The strictest Part 23 targets, close to Part 25 for catastrophic failure conditions.' } },
+        'basis.p23prop': { q: 'The propulsion is the second input to the Part 23 assessment level. Multi-engine and turbine airplanes get stricter targets than single piston airplanes of the same size.',
+            o: { 'recip-1': 'One piston or electric engine.', 'recip-multi': 'More than one piston or electric engine.', 'turbine-1': 'One turbine engine.', 'turbine-multi': 'More than one turbine engine.', other: 'Hybrid, distributed electric, eVTOL or anything else outside ASTM F3230 Table 3. The assessment level is then agreed with the authority (the next question).' } },
+        'basis.p23manual': { q: 'When the propulsion falls outside ASTM F3230 Table 3, the assessment level has to be agreed with the authority. The plan records the level agreed.',
+            o: { I: 'Assessment level I: the loosest Part 23 targets, as for the smallest single-engine airplanes.', II: 'Assessment level II: one step stricter, as for small multi-engine or larger single-engine airplanes.', III: 'Assessment level III: two steps stricter.', IV: 'Assessment level IV: the strictest Part 23 targets, close to Part 25 for catastrophic failure conditions.' } },
+        'basis.p23dal': { q: 'Part 23 lets the program choose how software and electronic hardware DALs are set (ASTM F3061 4.2.5). The choice changes how much development assurance effort the lower-level airplanes need.',
+            o: { f3061: 'ASTM F3061 Table 1 gives each failure condition class a primary DAL and a secondary DAL for each assessment level. Smaller airplanes get lower DALs than the ARP4754 method would give, which saves effort without reducing safety for their class.',
+                arp4754: 'The ARP4754 method sets DALs from the severity alone (A for catastrophic, B for hazardous and so on), as on larger airplanes. More effort, but consistent with a fleet or supplier that works to ARP4754 everywhere.' } },
+        'basis.p27': { q: 'Under Part 27 the class of rotorcraft sets the targets, following the FAA\'s policy for normal category rotorcraft.',
+            o: { I: 'Reciprocating engine, up to five occupants. The loosest targets.', II: 'Single turbine, up to five occupants, up to 4,000 lb.', III: 'Single turbine, six or more occupants, 4,001 to 7,000 lb.', IV: 'Twin turbine. Targets close to Part 29.' } },
+        'basis.scvtol': { q: 'The SC-VTOL category sets how strict the targets are. EASA ties it to passenger seats and to whether the aircraft carries passengers commercially over congested areas.',
+            o: { 'Basic 1': 'No more than one passenger. The loosest targets.', 'Basic 2': 'Two to six passengers.', 'Basic 3': 'Seven to nine passengers.', Enhanced: 'Commercial passenger transport or flight over congested areas. Catastrophic failure conditions must be extremely improbable, as on a transport airplane, and the aircraft must be able to continue safe flight and landing after a failure.' } },
+        'basis.mission': { q: 'Probability targets are per flight hour, but many failure conditions only matter in some phases of flight. The certification flight duration is used to turn a phase-limited risk into a per-hour figure fairly, so this choice changes how strict each phase-limited target really is.',
+            o: { auto: 'The flight duration is the sum of the flight phases on the flight phases page. Use this when the phases already describe a typical flight.', 1: 'One-hour flights: typical of short regional or eVTOL operations.', 2: 'Two-hour flights.', 3: 'Three-hour flights: a common average for regional jets.', 5: 'Five-hour flights.', 10: 'Ten-hour flights: long-range operations. Longer flights make phase-limited targets slightly looser per hour.' } },
+        'basis.special': { q: 'Special conditions, equivalent safety findings and exemptions change the basis for this applicant. Where they set their own safety objectives, those objectives become part of the classifications the program must meet.',
+            o: { none0: 'The published rules only. Nothing extra to plan for.', sc: 'Special conditions are added rules for novel features (for example electric propulsion or fly-by-wire). Each one\'s safety objectives come into this plan and are assessed like the others.', esf: 'An equivalent safety finding accepts a different way of meeting a rule. The safety assessment must show the alternative gives the same level of safety.', elos: 'An exemption relieves the applicant from a rule. The plan should record what the exemption covers so no assessment relies on the rule it removes.' } },
+        'sspp.org': { q: 'Who does the safety work, and how the teams fit together, decides who signs what and where hand-offs happen. ARP4754B expects the plan to name the organization before it names the processes.',
+            o: { central: 'One safety group does all the assessments. Consistent methods and one set of eyes on the whole aircraft, but the group can become a bottleneck on a large program.',
+                embedded: 'A small central group sets the methods and owns the aircraft level; safety engineers sit in each system team and do the system work. Faster, and closer to the design, at the cost of needing the central group to review each team\'s work for consistency.',
+                supplier: 'Suppliers do the system assessments for what they supply. Common on large programs, but the program must define exactly what each supplier delivers, in what form, and how it is checked.',
+                mixed: 'Some systems are assessed in-house and some by suppliers. Each system is listed with who assesses it, and the hand-offs are planned per system.' } },
+        'sspp.owner': { q: 'The plan needs one owner, by role, who signs every change to it. Without one, the plan drifts away from how the program actually works.',
+            o: { cse: 'The chief safety engineer: the most common owner, closest to the work the plan governs.', lead: 'The aircraft safety lead, on programs where the safety lead reports into engineering.', ce: 'The chief engineer, where the program wants the plan owned at the top of engineering.', cert: 'The certification manager, where the plan is treated mainly as a certification document.', airw: 'The head of airworthiness, typical in design organizations with a separate airworthiness office.' } },
+        'sspp.suppliers': { q: 'When suppliers do safety work, the plan must say which plan they work to, so their outputs fit the program\'s.',
+            o: { this: 'Suppliers work to this plan, written into each contract. The simplest way to keep methods consistent, but suppliers with their own established processes may push back.',
+                theirs: 'Each supplier works to its own plan, which the program accepts against this one before the work starts. Respects mature suppliers\' processes; the program must check each plan carefully.',
+                each: 'Decided per supplier in its contract. Flexible, but the plan must keep track of which supplier works to which plan.' } },
+        'sspp.deleg': { q: 'Delegation lets people inside the company make findings of compliance on the authority\'s behalf, which speeds up approvals. The plan should say whether it is used, so reviews are planned accordingly.',
+            o: { none0: 'The authority reviews everything directly. Simple, but every finding waits for the authority\'s time.', der: 'Designated engineering representatives: individuals appointed by the FAA to approve data in their area.', oda: 'An organization designation authorization: the company itself holds delegated authority from the FAA, within agreed limits.', doa: 'An EASA design organization approval: the company is approved to perform design and some approvals under EASA oversight.' } },
+        'sspp.reqs': { q: 'Safety requirements come out of the FHAs, PSSAs and common cause analyses. Where they are kept decides how they stay traced to their source and how changes flow back to the safety assessment.',
+            o: { sl: 'Kept in Safety Lab, each traced to the failure condition or finding it came from. Simplest trace, best when the program has no separate requirements tool.', rm: 'Kept in the program\'s requirements tool, with Safety Lab sending new ones across and reading status back. Fits programs where all requirements must live in one tool.', both: 'Written and traced in Safety Lab, baselined in the requirements tool. Keeps the safety trace where it is made and the baseline where the program controls it.' } },
+        'sspp.reviews': { q: 'The plan sets when the safety work is shown at design reviews. ARP4754B expects transition criteria, so each review knows what safety work must be ready.',
+            o: { pdr_cdr: 'Preliminary assessments at PDR, system safety assessments at CDR, each after an engineering safety review. The common pattern for a design-driven program.', every: 'A safety item at every program review. Keeps safety visible throughout, though reviews are less focused on completion.', gates: 'Separate safety reviews at each completion gate in Safety Lab. Safety progress is judged on its own merits, not tied to the program\'s design reviews.', srr_pdr_cdr: 'FHAs at SRR, PSSAs at PDR and SSAs at CDR. The most complete pattern: the hazards are agreed before the requirements are baselined.' } },
+        'sspp.signoff': { q: 'Who signs a finished assessment decides how much independence the review has. Higher DALs expect more independence in checking.',
+            o: { indep: 'The author plus a reviewer who did not write it. The standard minimum for independent review.', lead: 'The safety lead alone. Quick, but the same person may have shaped the work.', board: 'A safety review board. More eyes, more time.', indep_board: 'Author and independent reviewer, then the board for the assessments covering catastrophic and hazardous failure conditions. Spends the board\'s time where the risk is highest.' } },
+        'sspp.maint': { q: 'Some failures stay hidden until a check finds them. If a failure condition relies on such a check, the check becomes a certification maintenance requirement (CMR). The plan must say how those are found.',
+            o: { ccmr: 'The fault trees give each latent failure the longest check interval at which its failure condition still meets its target. Precise and traceable to the safety case.', msg3: 'The latent failures go to the MSG-3 analysis as candidate tasks; the ones the safety case relies on are kept as CMRs. Fits programs that build their maintenance program with MSG-3.', none: 'No failure condition relies on a hidden failure being found by a check. Rare for complex aircraft; the reason is recorded.' } },
+        'sspp.mmel': { q: 'A master minimum equipment list lets the aircraft fly with some equipment inoperative. Each item on it must be shown safe for the time it may be inoperative.',
+            o: { yes: 'The aircraft will have an MMEL. Each proposed item is checked against the fault trees with the extra exposure time it adds.', none: 'No MMEL. Every listed piece of equipment must work for every flight.' } },
+        'sspp.testkind': { q: 'Some safety claims can only be shown by test. Naming the kinds of test early lets the test program plan for them.',
+            o: { lab: 'Bench tests of parts and units.', ironbird: 'A rig with the real systems connected, testing how they behave together.', ground: 'Tests on the real aircraft on the ground.', flight: 'Flight tests, for claims that depend on the aircraft in the air.', sim: 'Simulator tests, often for crew-related claims.' } },
+        'sspp.test': { q: 'Test results that support the safety case must be tied back to the claim they support.',
+            o: { link: 'Each claim is linked to its verification activity and closed when the result is recorded. Nothing is left to be gathered at the end.', ssa: 'Results are gathered when the SSA is written. Less tracking during the program, but gaps show up late.' } }
+    };
+
+    Object.assign(EX, {
+        'sspp.afha': { q: 'The aircraft FHA finds and classifies every way an aircraft function can fail. Everything downstream (DALs, targets, requirements) starts from it, so how it is done decides how complete the safety case is.',
+            o: { functions: 'Work through the aircraft function list, each function\'s loss and malfunction in every flight phase. Systematic and repeatable; completeness depends on the function list being complete.',
+                workshop: 'Pilots and engineers work through each function together. Draws on operational experience the function list may miss, but takes more people\'s time and needs careful recording.',
+                both: 'Draft from the function list, then check in workshops. The most common good practice: systematic coverage first, judgment second.',
+                ai: 'The AI Assistant drafts the failure conditions from the functions, phases and basis; an engineer reviews and accepts each one before it counts. Fastest start, with the engineer still deciding every classification.' } },
+        'sspp.pasa': { q: 'The preliminary aircraft safety assessment checks the aircraft architecture against the aircraft failure conditions before the systems are designed, including failures that involve several systems at once. ARP4761A expects it for complex, highly integrated aircraft.',
+            o: { yes: 'The aircraft architecture is checked early, and the systems inherit safety requirements and FDALs from it. Problems that span systems are caught before each system is designed on its own.',
+                none: 'No PASA. Acceptable when the aircraft-level architecture is simple or carried over; the system PSSAs and the ASA then carry the multi-system checks, and the reason must be recorded.' } },
+        'sspp.combined': { q: 'Some aircraft failure conditions only happen when several systems fail together. These methods work out how. Pick all that the program will use; MAC and CoFFE both need the interdependence analysis first.',
+            o: { interdep: 'Records which systems contribute to each aircraft failure condition. It is the input to MAC and CoFFE: without it there is nothing to combine.',
+                mac: 'A model of how the systems combine, from which Safety Lab builds the multi-system fault trees automatically. Consistent and quick to update when the design changes.',
+                coffe: 'Combined functional failure effects: engineers work through the combinations case by case. Catches cases a model cannot express, at the cost of more manual effort.' } },
+        'sspp.sfha': { q: 'Each system gets its own FHA, built from its functions and the aircraft failure conditions it takes part in. The plan says who writes them.',
+            o: { teams: 'Each system team, with its safety engineer. Closest to the design.', safety: 'The safety group writes them all. Most consistent.', supplier: 'The supplier writes its system\'s FHA; the program checks it against the aircraft failure conditions.', mixed: 'Set system by system in the system register.' } },
+        'sspp.pssa': { q: 'The PSSA shows each proposed system architecture can meet its targets, and sets the requirements and DALs for its items. Pick every method the program will use.',
+            o: { fta: 'Fault trees: the standard method, showing how failures combine to cause each failure condition, with exact probabilities.', dd: 'Dependence diagrams: an alternative picture of the same logic, sometimes preferred for showing redundancy.', markov: 'Markov models, attached to fault trees where repair, the order of failures or time spent in a degraded state matters. More effort; needed when the simple fault tree math would be wrong.' } },
+        'sspp.quant': { q: 'Not every failure condition needs numbers. The plan says which classes must be shown to meet their targets with probabilities.',
+            o: { cathaz: 'Catastrophic and hazardous with numbers; major qualitatively unless the design is complex. The usual practice under AC 25.1309-1B.', catmaj: 'Down to major. More work; some authorities expect it for novel designs.', all: 'Every classified failure condition. The most work; rarely needed.' } },
+        'sspp.notg': { q: 'NOT logic lets a fault tree say "this happens only if that did not". Aviation trees are usually kept without it (coherent), because it makes the math harder to check.',
+            o: { no: 'Coherent trees only: a failure never makes things safer. Simpler to review.', yes: 'NOT logic where it is needed, for example a protection that acts only when another event has not happened. Each use is reviewed.' } },
+        'sspp.fmea': { q: 'FMEAs look at how each part or function can fail and what happens next. They feed the fault trees with failure modes and rates.',
+            o: { ffmea: 'Functional FMEA: failure modes of functions. Early in the design, before parts are known.', ppfmea: 'Piece-part FMEA: failure modes of each hardware part. Detailed and late, needed for the most critical items.', fmes: 'A failure modes summary that groups failure modes with the same effect, so they enter the fault trees once.', none: 'No FMEA. The fault trees take their failure modes and rates from elsewhere, and the reason is recorded.' } },
+        'sspp.ssa': { q: 'The SSA shows the design as actually built meets its targets, using real failure rates and test results.',
+            o: { trees: 'Carry the PSSA fault trees forward and update them. One set of trees from start to finish, with the history of every change.', new: 'Build fresh trees from the as-built design. A clean check, but two sets of trees to keep consistent.' } },
+        'sspp.asa': { q: 'The aircraft-level fault trees show each aircraft failure condition is met by the systems together.',
+            o: { compiled: 'Compiled automatically from the model of how the systems combine.', authored: 'Written by the safety engineers, checked against the model.', both: 'Both, compared. The strongest check: any difference must be explained before the ASA is signed.' } },
+        'sspp.dal': { q: 'ARP4754B lets a function\'s or item\'s DAL be lower than its worst failure condition asks, but only where the architecture gives real independence. The plan says whether the program will use this.',
+            o: { indep: 'DALs may be lowered where independence allows. Safety Lab takes the lower level at once, marked "CMA pending", and it only counts once the common mode analysis confirms the independence. Saves development effort; needs a CMA.', no: 'Every DAL is what the worst failure condition asks. More development effort, but no independence claims to defend.' } },
+        'sspp.idal': { q: 'Each item (software, hardware) gets an IDAL that sets how rigorously it is developed. It can simply follow the function it serves, or be set lower where the architecture gives proven independence between items.',
+            o: { fdal: 'Each item takes its function\'s DAL. Simple, conservative.', arch: 'Set from the architecture: independent items in a failure set may take a lower DAL, with the independence recorded and confirmed by the CMA.' } },
+        'sspp.items': { q: 'The kinds of items decide which development assurance standards apply beneath this plan.',
+            o: { sw: 'Software, developed to DO-178C at its IDAL.', aeh: 'Airborne electronic hardware, developed to DO-254.', simple: 'Simple hardware that can be fully tested, with no IDAL needed.', cots: 'Bought or previously developed items, shown fit by service history or added verification.' } },
+        'sspp.indep': { q: 'Every independence claim (between functions, items or systems) must be tracked so it can be checked and defended.',
+            o: { ledger: 'A ledger of every claim with its basis and the CMA check. Safety Lab flags a claim the CMA cannot support and raises the DALs that depend on it.', cma: 'Recorded in the CMA worksheets only. Less structure; works for programs with few claims.' } },
+        'sspp.cma': { q: 'The common mode analysis checks that things assumed independent really are: no shared design, software, manufacturing, maintenance or installation that could fail them together.',
+            o: { yes: 'Performed. Needed whenever the fault trees or the DAL assignment rely on independence.', none: 'Not performed. Only defensible when nothing relies on independence; the reason is recorded, and lowered DALs are then not possible.' } },
+        'sspp.pra': { q: 'Particular risks are events outside the systems (rotor burst, fire, bird strike and so on) that could defeat several systems at once. Pick each one the program will analyze.',
+            o: { rotor: 'Engine and APU rotor fragments, which can cut through several systems on their path.', tire: 'Tire and wheel failure, throwing debris into the wheel well and wing.', bird: 'Bird strike on the nose, wings, engines and tail.', fire: 'Fire in a zone damaging what is installed there.', hirf: 'Lightning and high-intensity radiated fields upsetting electronics.', fluid: 'Leaks and bursting high-energy lines damaging nearby equipment.', battery: 'Battery thermal runaway, important on electric aircraft.', ice: 'Ice shedding and hail striking structure and engines.', none: 'No particular risk analysis. The reason is recorded.' } },
+        'sspp.zsa': { q: 'The zonal safety analysis looks at each zone of the aircraft for installation and maintenance errors and for one system harming another nearby.',
+            o: { cad: 'From the CAD model and its zones, so every part\'s real location is used.', list: 'From a zone list and installation drawings, when no CAD model is available.', none: 'Not performed. Only defensible when installation errors and nearby failures cannot affect anything that matters, for example a change with no new installations; the reason is recorded and the authority must accept it.' } },
+        'sspp.stpa': { q: 'STPA looks for hazards from the way systems, crew and automation interact, even when no part fails. Useful for highly automated aircraft.',
+            o: { yes: 'Used alongside the FHAs.', no: 'Not used.' } },
+        'sspp.cea': { q: 'A failure in one system can cascade into others through their interfaces. This decides whether that is traced separately.',
+            o: { yes: 'Traced through the interfaces and checked against the failure conditions.', no: 'Covered inside each system\'s fault trees.' } },
+        'sspp.levels': { q: 'The development assurance objectives a program must meet depend on the DAL. The plan says whether the highest DAL sets them for all the work or each item meets its own.',
+            o: { top: 'The highest DAL sets the objectives for everything. Simple to manage; more effort on lower-level work.', each: 'Each function and item meets its own DAL\'s objectives. Less effort; more tracking.' } },
+        'sspp.transition': { q: 'Transition criteria say when work may move from one step to the next. ARP4754B expects them in the plan.',
+            o: { gates: 'A signed completion gate in Safety Lab: checklist complete, reviewer signed.', review: 'The exit criteria of the design review.', both: 'Both, the strictest.' } },
+        'sspp.indepvv': { q: 'At DAL A and B, validation and verification must be done or checked by someone independent of the work. The plan names who.',
+            o: { peer: 'An engineer from another team who did not write the work.', group: 'A separate validation and verification group.', der: 'A designated engineering representative or the customer.' } },
+        'sspp.valm': { q: 'Validation shows each safety requirement is correct and complete before it is built to. Pick each method the program will use.',
+            o: { trace: 'Trace each requirement to the failure condition it comes from.', analysis: 'Show it by analysis.', similar: 'Show it by similarity to a design already in service.', review: 'An engineering review by someone who did not write it.', test: 'Test or simulation.' } },
+        'sspp.pa': { q: 'Process assurance checks the work follows this plan. ARP4754B expects it to be independent of the people doing the work.',
+            o: { qa: 'The quality organization, outside the engineering line.', eng: 'An engineer from outside the program.', third: 'An independent company.' } },
+        'sspp.show': { q: 'How the program shows the authority that each objective is met.',
+            o: { report: 'In the safety assessment reports, objective by objective.', matrix: 'In a compliance matrix in the certification plan.', both: 'Both.' } },
+        'sspp.rmtool': { q: 'If requirements live in another tool, the plan names it so the exchange with Safety Lab can be controlled.',
+            o: { none: 'Requirements stay in Safety Lab.', jama: 'Jama Connect, with a live connection or ReqIF exchange.', doors: 'IBM DOORS Classic, by ReqIF.', 'doors-next': 'IBM DOORS Next, by ReqIF.', polarion: 'Siemens Polarion, by ReqIF.', codebeamer: 'PTC Codebeamer, by ReqIF.' } },
+        'sspp.mbse': { q: 'The functions and architecture the safety work uses can come from a modeling tool, so both work from the same model.',
+            o: { syslab: 'From Sys Lab.', cameo: 'From Cameo Systems Modeler, by XMI.', capella: 'From Capella, by XMI.', genesys: 'From GENESYS.', none: 'Written in Safety Lab.' } },
+        'sspp.toolq': { q: 'A tool whose output is used without checking may need qualification under DO-330. The plan says how Safety Lab\'s results are trusted.',
+            o: { review: 'An engineer reviews each result the safety case relies on, so no qualification is needed.', qualify: 'Safety Lab is qualified to DO-330 for the analyses that take credit unchecked.' } },
+        'sspp.ai': { q: 'How AI-drafted content is handled has to be stated, so reviewers know what was drafted and who accepted it.',
+            o: { accept: 'Every draft is logged and counts only after an engineer accepts it. Numbers always come from the tool, never the AI.', off: 'Not used.' } },
+        'sspp.cm': { q: 'Baselines freeze the safety data at known points, so later changes can be compared and reviewed.',
+            o: { reviews: 'At each design review.', gates: 'At each signed gate.', cert: 'At each certification submission.' } },
+        'sspp.ccat': { q: 'ARP4754B sets two control categories for data: category 1 (full change control and problem reporting) and category 2 (identified and retrievable).',
+            o: { dal: 'Category 1 for DAL A and B data, 2 below. The usual practice.', sc1: 'Category 1 for all. Simpler, more control effort.' } },
+        'sspp.soi': { q: 'How the authority is kept informed decides when they see the work.',
+            o: { soi: 'Stages of involvement: planning, development, verification and final.', submit: 'At each submission only.' } },
+        'sspp.keep': { q: 'Safety records must be kept and retrievable for as long as the authority may ask for them.',
+            o: { life: 'For the life of the type certificate and the aircraft in service.', company: 'To the company\'s records policy, at least as long as required.' } }
+    });
+
+    Object.assign(EX, {
+        'sspp.sfha': { q: 'Each system gets its own FHA, built from its system functions and the aircraft failure conditions it takes part in. Who writes them decides how close the FHA is to the design and how consistent the FHAs are across systems.',
+            o: { teams: 'Each system team writes its own, with the safety engineer in the team. The FHA is written by the people who know the system best; the aircraft safety group reviews for consistency.', safety: 'The safety group writes every system FHA. One consistent style and depth across all systems, but the group has to get the system knowledge from the teams.', supplier: 'The supplier writes the FHA for what it supplies, and the program checks that it covers every aircraft failure condition the system takes part in. Usual when the supplier owns the system design.', mixed: 'Set system by system in the system register, for programs where some systems are in-house and some supplied.' } },
+        'sspp.items': { q: 'The kinds of items the program develops decide which development assurance standards apply beneath this plan, and which item plans must be written under it. Pick all that apply.',
+            o: { sw: 'Software, developed to DO-178C at the IDAL the safety assessment assigns. Each software item needs its own plan for software aspects of certification.', aeh: 'Airborne electronic hardware (programmable devices, complex boards), developed to DO-254 at its IDAL, with its own hardware plan.', simple: 'Simple hardware that can be fully tested and analyzed, so no IDAL is needed; its correctness is shown by test and analysis alone.', cots: 'Bought or previously developed items. Their fitness is shown by service history (hours, failures, the configuration that flew) or by the verification they are missing.' } },
+        'sspp.stpa': { q: 'STPA (system-theoretic process analysis) looks for hazards that come from how the systems, the crew and the automation interact, even when nothing fails: a command given at the wrong time, or a feedback the crew misreads. It complements the FHAs on highly automated aircraft.',
+            o: { yes: 'STPA will be used alongside the FHAs. Its unsafe control actions become additional failure conditions or requirements, traced like the rest.', no: 'Not used. Interaction hazards are left to the FHAs and the human factors work, which is usual for conventional designs.' } },
+        'sspp.cea': { q: 'A failure in one system can spread into the systems that depend on it, through power, data or hydraulic interfaces. This decides whether those cascades are traced as their own analysis.',
+            o: { yes: 'Cascades are traced through the interfaces and each is checked against the failure conditions. Catches dependencies the individual system trees can hide.', no: 'Each system\'s fault trees include its dependencies on other systems, so no separate tracing is done. Fine for simpler architectures.' } },
+        'sspp.transition': { q: 'Transition criteria say when work may move from one step to the next (for example from PSSA to detailed design). ARP4754B expects the plan to state them so nothing moves on half done.',
+            o: { gates: 'A step is complete when its completion gate in Safety Lab is signed: every checklist item done or tailored out with a signed reason, and a reviewer has signed. Objective and recorded in the tool.', review: 'A step is complete when the design review\'s exit criteria are met. Ties safety progress to the program\'s review rhythm.', both: 'Both the gate and the review exit criteria. The strictest choice, usual on DAL A programs.' } },
+        'sspp.indepvv': { q: 'At DAL A and B, ARP4754B asks that validation and verification are done or checked by someone independent of the person who did the work. The plan names who that will be.',
+            o: { peer: 'An engineer from another team who did not write the work. The usual choice: independent enough, and quick to arrange.', group: 'A separate validation and verification group outside the design teams. The most independent; needs the people.', der: 'A designated engineering representative or the customer does or witnesses the checks. Brings authority-level scrutiny in early.' } },
+        'sspp.valm': { q: 'Validation shows each safety requirement is correct and complete before anyone builds to it. ARP4754B asks for more methods at higher DALs. Pick every method the program will use.',
+            o: { trace: 'Trace each requirement back to the failure condition, fault tree or finding it came from. The minimum for every requirement.', analysis: 'Show the requirement is right by analysis, for example that a stated limit really keeps the failure condition within its target.', similar: 'Show it is right by similarity to a requirement on a design already in service.', review: 'An engineering review by someone who did not write the requirement.', test: 'Test or simulation, for requirements whose correctness can only be seen by running the system.' } },
+        'sspp.pa': { q: 'Process assurance checks that the work actually follows this plan. ARP4754B expects it to be independent of the people doing the work, and its findings to be closed with evidence.',
+            o: { qa: 'The quality organization, which sits outside the engineering line. The most common choice and the easiest independence to show.', eng: 'An engineer from outside the program. Knows the work well; independence must be shown by keeping them off the program\'s tasks.', third: 'An independent company. Most independent, and useful for small organizations without a quality function.' } },
+        'sspp.show': { q: 'The authority must be shown that each development assurance objective is met. This decides where that evidence is presented.',
+            o: { report: 'In the safety assessment reports, objective by objective, with the evidence behind each.', matrix: 'In a compliance matrix in the certification plan, pointing to the evidence.', both: 'Both: the reports carry the evidence and the matrix summarizes it for the authority\'s review.' } },
+        'sspp.rmtool': { q: 'If the program\'s requirements live in another tool, the plan names it so the exchange with Safety Lab can be controlled at each baseline.',
+            o: { none: 'All requirements stay in Safety Lab: one place, no exchange to control.', jama: 'Jama Connect, with a live two-way connection or ReqIF exchange.', doors: 'IBM DOORS Classic, exchanged by ReqIF.', 'doors-next': 'IBM DOORS Next, exchanged by ReqIF.', polarion: 'Siemens Polarion, exchanged by ReqIF.', codebeamer: 'PTC Codebeamer, exchanged by ReqIF.' } },
+        'sspp.mbse': { q: 'The functions and architecture the safety assessment works from can come from a modeling tool, so the safety work and the design use the same model and changes flow through.',
+            o: { syslab: 'From Sys Lab, Safety Lab\'s companion systems tool: functions and architecture come across directly.', cameo: 'From Cameo Systems Modeler, brought in by XMI.', capella: 'From Capella, brought in by XMI.', genesys: 'From GENESYS.', none: 'The functions and systems are written in Safety Lab itself.' } },
+        'sspp.cm': { q: 'Baselines freeze the safety data at known points, so every later change can be compared with what was reviewed and approved.',
+            o: { reviews: 'A signed snapshot at each design review: what the review saw is exactly what is kept.', gates: 'A snapshot each time a completion gate is signed: finer grained, more snapshots.', cert: 'A snapshot at each certification submission only: fewer snapshots, less history between them.' } },
+        'sspp.ccat': { q: 'ARP4754B sets two control categories for development data: category 1 (full change control, problem reporting and baselines) and category 2 (identified, protected and retrievable).',
+            o: { dal: 'Category 1 for the data of DAL A and B functions, category 2 below. The usual practice, putting the effort where the risk is.', sc1: 'Category 1 for everything. Simpler to explain, more control effort on low-risk data.' } },
+        'sspp.soi': { q: 'How the authority is kept informed decides when they see the safety work, and so when their comments arrive.',
+            o: { soi: 'Stages of involvement at planning, development, verification and final submission. Comments arrive while they are still cheap to act on.', submit: 'At each submission only. Fewer meetings, but comments arrive late.' } },
+        'sspp.keep': { q: 'Safety records must stay retrievable for as long as the authority or an investigation may ask for them.',
+            o: { life: 'For the life of the type certificate and of every aircraft in service. The safe choice for a type certificate holder.', company: 'To the company\'s records policy, and at least as long as the authority requires.' } },
+        'sspp.ai': { q: 'The plan states how content drafted by the AI Assistant is handled, so reviewers know what was drafted, by what, and who accepted it.',
+            o: { accept: 'Every AI draft is logged with what produced it and counts only after an engineer reads and accepts it. Numbers always come from Safety Lab\'s calculations, never from the AI.', off: 'The AI Assistant will not be used on this program; everything is written by engineers.' } },
+        'sspp.toolq': { q: 'Under DO-330, a tool whose output is used without being checked may need qualification. The plan says how Safety Lab\'s results will be trusted.',
+            o: { review: 'An engineer reviews every result the safety case relies on (a probability, a cut set, a DAL), so the tool needs no qualification. The usual choice.', qualify: 'Safety Lab is qualified to DO-330 for the analyses that take credit without an independent check. More upfront work, less checking later.' } },
+        // ---- Human Factors Plan ----
+        'hfp.need': { q: 'How much human factors work is needed depends on how much of the flight deck is new. 25.1302 applies to every control, display and procedure the crew uses that is new or changed.',
+            o: { full: 'A new flight deck: every function\'s crew part, workload in every phase, crew errors, alerts and the minimum crew are assessed.', changed: 'Only the changed parts of the flight deck are assessed, plus everything they affect. The unchanged parts are listed as carried over, with the reason.', none: 'Nothing the crew uses changes, so no human factors program is run. The reason goes into the SSPP\'s tailoring section.' } },
+        'hfp.basis': { q: 'The flight deck rules the design must meet depend on the aircraft type and the authorities. Pick all that apply.',
+            o: { 25: '14 CFR 25.1302 (the crew can use the systems safely) and 25.1523 with Appendix D (the minimum crew).', cs25: 'The EASA equivalents, CS 25.1302 and CS 25.1523.', 23: '14 CFR 23.2600 and 23.2605 for normal category airplanes.', 29: 'The rotorcraft rules, 27.1302 or 29.1302.', vtol: 'The SC-VTOL flight deck requirements.' } },
+        'hfp.crew': { q: 'The crew the design assumes drives every later human factors analysis: who carries which task, how busy each pilot is, and what the minimum crew must be shown to be.',
+            o: { two: 'Two pilots, pilot flying and pilot monitoring: tasks can be shared and cross-checked.', one: 'One pilot: every task falls on one person, so workload limits are tighter.', remote: 'One pilot supported from the ground. The ground station\'s part is analyzed like a crew member\'s.', none: 'No pilot on board: the remote pilot station is treated as the flight deck.' } },
+        'hfp.alloc': { q: 'Deciding what the crew does and what the automation does is the first human factors decision; every later analysis builds on it.',
+            o: { phase: 'Decided per function and per flight phase, so a function can be the crew\'s in landing and automatic in cruise. The most accurate input to workload and error analysis.', function: 'Decided once per function for all phases. Simpler, but hides phases where the crew\'s part changes.' } },
+        'hfp.workload': { q: 'Workload must be shown acceptable in every flight phase, including with the worst failure of that phase. Pick every measure the program will use.',
+            o: { share: 'Analysis: each pilot\'s task times as a share of the time available in each phase, with the worst failure on top, against an 80% limit. Can be done before any simulator exists.', bedford: 'Pilots rate their workload on the Bedford scale in the simulator.', tlx: 'Pilots rate workload with NASA-TLX in the simulator: six dimensions, more detail than Bedford.', swat: 'Secondary task or physiological measures in the simulator: objective, but harder to set up.' } },
+        'hfp.error': { q: 'Crew errors must be found and shown to be noticed and put right, or designed out.',
+            o: { qual: 'Each crew task and failure response gets its credible errors, how each is noticed, and how it is put right. An error nobody notices or can fix stays open until the design changes.', quant: 'The same, plus an error probability for each, which goes into the fault trees. Needed where a failure condition\'s classification depends on the crew.' } },
+        'hfp.alerts': { q: 'Crew alerts must tell the crew about the failure conditions they need to act on, at the right urgency.',
+            o: { 1322: 'Warning, caution and advisory levels as 25.1322 defines them.', philo: 'The company\'s own alerting philosophy, shown equivalent to 25.1322.' } },
+        'hfp.eval': { q: 'Human factors claims must be shown, not just asserted. Pick every means the program will use.',
+            o: { analysis: 'Analysis of tasks, times and errors.', mock: 'Mock-ups early in the design, to check layout and reach before anything is built.', sim: 'A simulator campaign with scenarios for each phase and crew-relevant failure: the main evidence for most claims.', flight: 'Flight test, for claims that only the real aircraft can show.' } },
+        'hfp.pilots': { q: 'Who flies the evaluations decides how independent the evidence is. Pilots who designed the flight deck know its quirks too well.',
+            o: { line: 'Line pilots from operators, not involved in the design. The most representative and independent.', test: 'The company\'s test pilots. Experienced, but close to the design.', both: 'Both: test pilots for depth, line pilots for independence.', authority: 'Both, plus the authority\'s pilots, so the authority sees the flight deck first hand.' } },
+        'hfp.mfc': { q: 'The minimum flight crew must be shown under 25.1523 and Appendix D: enough crew to fly safely, with acceptable workload, in every phase and with the failures they must handle.',
+            o: { appd: 'Work through the Appendix D workload functions and factors for each phase, then confirm in the simulator.', similar: 'Compare with a certified aircraft with the same crew and analyze each workload difference.' } },
+        'hfp.credit': { q: 'When a failure condition\'s classification depends on the crew doing something, that action becomes a claim the program must prove.',
+            o: { asm: 'Each such action becomes a human factors assumption, linked to its crew task, and counts only once validated in the evaluations.', note: 'Noted on the failure condition only. Less tracking; the evidence is harder to find later.' } },
+        'hfp.feed': { q: 'Crew errors that matter to a failure condition must reach the safety assessment.',
+            o: { events: 'As basic events in the fault trees, so their contribution is counted.', fha: 'Through the crew effects recorded in the FHAs only.' } },
+        // ---- Reliability and Maintainability Plan ----
+        'ramp.need': { q: 'The reliability work ranges from the failure rates the safety assessment needs to a full reliability program. This sets everything else in the plan.',
+            o: { safety: 'Only the failure rates the fault trees need. The least work.', full: 'Prediction, allocation of targets to systems, growth through test and failure reporting: needed for dispatch reliability or customer commitments.', contract: 'What the customer contract asks, often tailored from MIL-HDBK-338B.' } },
+        'ramp.rates': { q: 'Failure rates drive every probability in the fault trees, so their source must be stated and defensible. Pick every source the program will use, best first.',
+            o: { supplier: 'Supplier data backed by service history: the most realistic for proven parts.', field: 'The program\'s own field data from earlier aircraft.', nprd: 'Field data handbooks (NPRD, EPRD): broad coverage of real-world rates.', 217: 'MIL-HDBK-217F parts count and stress predictions: widely accepted, often pessimistic.', fides: 'FIDES: a modern European prediction method that accounts for the mission profile.', '217plus': '217Plus: an updated successor to 217F.' } },
+        'ramp.env': { q: 'Failure rates depend on where a part is installed. The environment assumed must match.',
+            o: { ai: 'Airborne, inhabited: the conditions in the cabin and flight deck. Mild, so rates are lower; only right for parts installed there.', au: 'Airborne, uninhabited: unpressurized bays with harsher temperature and vibration. Higher, more cautious rates.', mix: 'Item by item, from where each is actually installed. The most accurate, and needs each item\'s location.' } },
+        'ramp.alloc': { q: 'Reliability targets for each system let the program check each design against its share of the aircraft\'s target.',
+            o: { yes: 'The aircraft reliability target (for example dispatch reliability) is shared out to the systems, and each system\'s prediction is checked against its share. Shows early which system will miss.', no: 'No system targets. Only the safety targets apply, which is enough when reliability is not a contract commitment.' } },
+        'ramp.growth': { q: 'Reliability usually improves through test as faults are found and fixed. Tracking it shows whether the program is on course.',
+            o: { crow: 'The Crow-AMSAA model, tracked against a planned growth curve. The usual method: it shows whether test is finding and fixing faults fast enough to reach the target by entry into service.', duane: 'The Duane model: simpler and older, plotting failure rate against cumulative test time on log scales.', no: 'Not tracked. Reliability is judged from the predictions and service data instead.' } },
+        'ramp.fracas': { q: 'Failures in test and service must be reported, their cause found and a fix made. A failure the fault trees did not expect must go back to the safety assessment.',
+            o: { sl: 'In Safety Lab\'s failure reporting system, linked directly to the fault trees.', other: 'In the company\'s own system, with unexpected failures passed back to the safety assessment.' } },
+        'ramp.life': { q: 'Life data from test and service shows whether parts fail at the steady rate the fault trees assume, or wear out with age, which would make the trees optimistic.',
+            o: { yes: 'Weibull analysis of test and service data. A wear-out pattern the fault trees did not assume (they usually assume a constant failure rate) goes back to the safety assessment.', no: 'Not analyzed separately. The fault trees keep their constant failure rate assumption, checked through failure reporting.' } },
+        'ramp.mx': { q: 'Maintainability decides how fast and surely failures are found and fixed. Pick every analysis the program will do.',
+            o: { mttr: 'Repair time and downtime for each replaceable unit.', test: 'Testability: how well each failure is detected and isolated, which also matters for latent failures.', lora: 'Level of repair: whether each unit is fixed on the aircraft, in the shop or replaced.', none: 'No maintainability analysis. The reason is recorded.' } },
+        'ramp.msg3': { q: 'Scheduled maintenance must include the certification maintenance requirements from the safety assessment, kept apart from ordinary tasks.',
+            o: { msg3: 'MSG-3, the industry method used by maintenance review boards: systems, structures, zonal and lightning tasks, with the CMRs from the safety assessment kept apart and never escalated without the safety group.', own0: 'The manufacturer\'s own method, which must still keep the CMRs apart and controlled by the safety group.', none: 'Scheduled maintenance is outside this program, for example a supplier program where the aircraft maker owns it.' } },
+        'ramp.lcc': { q: 'Life-cycle cost estimates what the aircraft will cost to own and run, from the reliability and maintainability results.', o: { yes: 'Estimated from the reliability and maintainability results: spares, repairs, scheduled maintenance and downtime over the aircraft\'s life. Useful when the customer buys on cost of ownership.', no: 'Not estimated. Usual when cost of ownership is handled outside the engineering program.' } },
+        'ramp.sw': { q: 'Software reliability can be estimated from test failures as a measure of maturity. It never replaces the software DAL.', o: { yes: 'Estimated from the failures found in software test, as a measure of how mature the software is. It is reported alongside, never instead of, the development assurance level.', no: 'Not estimated. The software\'s development assurance level is the only measure, which is the normal practice under DO-178C.' } },
+        'ramp.sneak': { q: 'A sneak circuit analysis looks for unintended electrical paths that could make something operate when nobody asked.', o: { yes: 'Performed on the electrical design: every path, including through switches and grounds, is checked for one that could power a function when nobody asked. Worth it for electrical systems that control critical functions.', no: 'Not performed. Usual where the wiring is simple or already proven in service.' } },
+        'ramp.eta': { q: 'Event trees show how one initiating failure leads to different outcomes depending on which protections work.', o: { yes: 'Used where one initiating failure has several possible outcomes depending on which protections work, and the order matters (for example a fire with detection and then extinguishing).', no: 'Not used. The fault trees cover the protections without modeling the sequence.' } }
+    });
+    var OWN_EX = 'Write how the program will do it, in your own words. Use this when none of the answers fits; what you write goes into the plan exactly as written.';
+    function exQ(q) { return (EX[q.k] || {}).q || ''; }
+    function exO(q, id) { if (id === 'own') return OWN_EX; var e = (EX[q.k] || {}).o || {}; return e[id] || ''; }
 
     // ---- answering ----------------------------------------------------------------------------------------------
     function answer(k, v) {
@@ -481,12 +723,14 @@
         if (v === '' || v == null || (Array.isArray(v) && !v.length)) { delete s.answers[k]; delete s.who[k]; save(); return ''; }
         var vs = Array.isArray(v) ? v.map(String) : String(v).split('|');
         if (q.type !== 'checks' && vs.length > 1) throw fail('Pick one answer for: ' + q.text);
+        if (vs.length > 1 && vs.some(function (x) { return (q.excl || []).indexOf(x) >= 0; })) throw fail('"' + optLabel(q, vs.filter(function (x) { return q.excl.indexOf(x) >= 0; })[0]) + '" cannot be picked with other answers to: ' + q.text);
         vs.forEach(function (x) { if (!q.opts.some(function (o) { return o[0] === x; })) throw fail('"' + x + '" is not one of the answers to: ' + q.text); });
         var val = q.opts.map(function (o) { return o[0]; }).filter(function (o) { return vs.indexOf(o) >= 0; }).join('|');   // in the options' order
         s.answers[k] = val; s.who[k] = { by: who(), at: now() };
         save(); return val;
     }
-    function toggle(k, opt) { var cur = picked(k), i = cur.indexOf(opt); if (i >= 0) cur.splice(i, 1); else cur.push(opt); return answer(k, cur); }
+    // picking an exclusive answer clears the others; picking any other clears the exclusive one
+    function toggle(k, opt) { var q = QBY[k], ex = (q && q.excl) || [], cur = picked(k), i = cur.indexOf(opt); if (i >= 0) cur.splice(i, 1); else if (ex.indexOf(opt) >= 0) cur = [opt]; else { cur = cur.filter(function (x) { return ex.indexOf(x) < 0; }); cur.push(opt); } return answer(k, cur); }
     function setOwn(k, text) { var s = store(); forget(); text = String(text || '').trim(); if (text) s.own[k] = text; else delete s.own[k]; save(); }
     function setWhy(k, text) { var s = store(); forget(); text = String(text || '').trim(); if (text) s.why[k] = text; else delete s.why[k]; save(); }
     function needsOwn(q) { return has(q.k, 'own') && !store().own[q.k]; }
@@ -614,6 +858,115 @@
         return R;
     }
 
+    // ---- the inputs and outputs of each assessment, and the data exchanged between them ------------------------------
+    // (Waqas: "we need to define inputs and outputs required off each of the assessments, example what you want to come
+    // out of SPP, AFHA etc", "the diagrams needs to be explained about data exchanges".) Built from the answers: an
+    // assessment that is not planned is left out and its outputs are taken from where the plan says instead.
+    // An assessment: { id, name, plan, tab, on(), inputs: [[what, from-id]], outputs: [{ id, what, to: [ids], accept, fp() }] }
+    function fpOf(x) { var s = ''; try { s = JSON.stringify(x == null ? null : x); } catch (_) { s = String(x); } var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+    function hasPasa() { return A('sspp.pasa') !== 'none'; }
+    function isSup() { return A('sspp.kind') === 'supplier'; }
+    function assessments() {
+        var aft = isSup() ? 'aircraft maker' : 'afha';
+        var L = [
+            { id: 'spp', name: 'System Safety Program Plan', plan: 'sspp', tab: 'plan-auto', on: function () { return true; },
+              inputs: [['The certification basis and any special conditions', 'basis'], ['The program\'s scope, organization and schedule', 'program'], ['The development process (ARP4754B) and its plans', 'program']],
+              outputs: [{ id: 'spp.plan', what: 'This plan, approved and issued', to: ['afha', 'sfha', 'pssa', 'cca', 'ssa', 'asa'], accept: 'Every decision made, signed by the approver, submitted to the authority', fp: function () { return fpOf(store().answers); } },
+                        { id: 'spp.obj', what: 'The safety objectives: classifications, probability targets and DALs for the basis', to: ['afha', 'sfha', 'dal'], accept: 'Match the certification basis exactly (taken from Safety Lab\'s engine)', fp: function () { return fpOf(targetsFor(plannedCfg())); } },
+                        { id: 'spp.tailor', what: 'The tailoring decisions, each with its reason', to: ['afha', 'pssa', 'cca'], accept: 'Each expected analysis left out has a written reason the authority accepts', fp: function () { return fpOf(store().why); } }] },
+            { id: 'afha', name: 'Aircraft FHA', plan: 'sspp', tab: 'ac-fha', on: function () { return !isSup(); },
+              inputs: [['The aircraft functions', 'design'], ['The flight phases', 'design'], ['The safety objectives for the basis', 'spp']],
+              outputs: [{ id: 'afha.fc', what: 'Aircraft failure conditions, each with its effects, classification and safety objective', to: [hasPasa() ? 'pasa' : 'pssa', 'sfha', 'dal'], accept: 'Every function, in every flight phase, assessed for loss and malfunction; each classification has its reason; reviewed and signed', fp: function () { return fpOf(arr('acFhaData').map(function (f) { return [f.fcId, f.severity, f.fcDesc]; })); } }] },
+            { id: 'pasa', name: 'PASA', plan: 'sspp', tab: 'pasa', on: function () { return !isSup() && hasPasa(); },
+              inputs: [['Aircraft failure conditions and classifications', aft], ['The proposed aircraft architecture', 'design']].concat(has('sspp.combined', 'interdep') ? [['Which systems contribute to each failure condition (interdependence)', 'design']] : []),
+              outputs: [{ id: 'pasa.req', what: 'Aircraft safety requirements and the independence the architecture needs', to: ['sfha', 'pssa'], accept: 'Each aircraft failure condition shown achievable by the architecture; requirements traced to it', fp: function () { return fpOf(arr('acReqData').length); } },
+                        { id: 'pasa.fdal', what: 'FDALs for the aircraft functions', to: ['dal', 'pssa'], accept: 'Each FDAL from its worst failure condition, any lowering backed by an independence claim', fp: function () { return fpOf(arr('acFunctionsData').map(function (f) { return f.fdal || f.dal || ''; })); } }]
+                .concat(has('sspp.combined', 'mac') ? [{ id: 'pasa.mfms', what: 'The multi-system fault trees built by MAC', to: ['asa'], accept: 'Each multi-system failure condition has its tree; the model and the trees agree', fp: function () { return fpOf(arr('ftaPages').filter(function (p) { return p.generatedFrom === 'mac'; }).length); } }] : [])
+                .concat(has('sspp.combined', 'coffe') ? [{ id: 'pasa.coffe', what: 'The CoFFE cases, each decided and signed', to: ['asa'], accept: 'Every case the model cannot answer is decided by an engineer', fp: function () { return fpOf(safe(function () { return pc().coffe; }, null)); } }] : []) },
+            { id: 'sfha', name: 'System FHAs', plan: 'sspp', tab: 'sys-dir', on: function () { return true; },
+              inputs: [['The system functions', 'design'], [isSup() ? 'Aircraft failure conditions from the aircraft maker' : 'The aircraft failure conditions each system takes part in', hasPasa() && !isSup() ? 'pasa' : aft]],
+              outputs: [{ id: 'sfha.fc', what: 'System failure conditions, each with its classification and safety objective', to: ['pssa', 'dal'], accept: 'Every system function assessed; each traced to the aircraft failure condition it feeds; signed', fp: function () { return fpOf(arr('systemsData').map(function (s) { return (s.fha || []).length; })); } }] },
+            { id: 'pssa', name: 'PSSAs', plan: 'sspp', tab: 'fta', on: function () { return true; },
+              inputs: [['System failure conditions and objectives', 'sfha'], ['The proposed system architecture', 'design'], ['Failure rates', planned('ram-reliability') ? 'ram' : 'design']].concat(planned('ffmea') || planned('ppfmea') ? [['Failure modes from the FMEAs', 'fmea']] : []),
+              outputs: [{ id: 'pssa.trees', what: 'Fault trees' + (planned('markov') ? ' with Markov models' : '') + ' showing each architecture can meet its targets', to: ['ssa', 'cca'], accept: (A('sspp.quant') === 'all' ? 'Every' : A('sspp.quant') === 'catmaj' ? 'Catastrophic, hazardous and major' : 'Catastrophic and hazardous') + ' failure conditions shown with numbers to meet their targets', fp: function () { return fpOf(arr('ftaPages').length); } },
+                        { id: 'pssa.req', what: 'System and item safety requirements, and the independence each architecture needs', to: ['cca', 'items'], accept: 'Every requirement traced to its tree or finding, and validated', fp: function () { return fpOf(arr('systemsData').map(function (s) { return (s.req || []).length; })); } }] },
+            { id: 'dal', name: 'DAL assignment', plan: 'sspp', tab: 'dal-ref', on: function () { return true; },
+              inputs: [['Failure conditions and their classifications', isSup() ? 'sfha' : aft], ['The architecture and its independence claims', 'pssa']],
+              outputs: [{ id: 'dal.levels', what: 'An FDAL for each function and an IDAL for each item', to: ['items', 'cca'], accept: A('sspp.dal') === 'indep' ? 'Each level from its worst failure condition; every lowered level confirmed by the CMA' : 'Each level from its worst failure condition', fp: function () { return fpOf(arr('itemsData').map(function (i) { return i.dal || i.idal || ''; })); } }] }
+        ];
+        if (planned('cma') || planned('pra') || planned('zsa')) L.push({ id: 'cca', name: 'Common cause analyses', plan: 'sspp', tab: planned('cma') ? 'cma' : planned('zsa') ? 'zsa' : 'pra', on: function () { return true; },
+            inputs: [['The independence the trees and DALs rely on', 'pssa'], ['The installation and the zones', 'design']].concat(planned('pra') ? [['The particular risks to analyze', 'spp']] : []),
+            outputs: [planned('cma') ? { id: 'cca.cma', what: 'Common mode findings, each closed', to: ['ssa', 'dal'], accept: 'Every independence claim checked; each finding closed by a change, a requirement or a justification', fp: function () { return fpOf(arr('cmaData').length); } } : null,
+                      planned('pra') ? { id: 'cca.pra', what: 'Particular risk findings, each closed', to: ['ssa'], accept: 'Every planned particular risk analyzed in every zone it reaches', fp: function () { return fpOf(arr('praData').length); } } : null,
+                      planned('zsa') ? { id: 'cca.zsa', what: 'Zonal findings, each closed', to: ['ssa'], accept: 'Every zone inspected; installation and maintenance errors addressed', fp: function () { return fpOf(arr('zsaData').length); } } : null].filter(Boolean) });
+        if (planned('ffmea') || planned('ppfmea')) L.push({ id: 'fmea', name: 'FMEA', plan: 'sspp', tab: 'fmea', on: function () { return true; },
+            inputs: [['The design (functions or parts)', 'design'], ['Failure rates', planned('ram-reliability') ? 'ram' : 'design']],
+            outputs: [{ id: 'fmea.modes', what: 'Failure modes, effects and rates' + (planned('fmes') ? ', summarized in an FMES' : ''), to: ['pssa', 'ssa'], accept: 'Every function or part covered; each mode\'s effect traced to the trees', fp: function () { return fpOf(arr('fmeaData').length); } }] });
+        L.push({ id: 'ssa', name: 'SSAs', plan: 'sspp', tab: 'asa', on: function () { return true; },
+            inputs: [['The as-built design and failure rates', 'design'], ['The PSSA fault trees', 'pssa'], ['Verification results', 'verification']].concat(L.some(function (x) { return x.id === 'cca'; }) ? [['Closed common cause findings', 'cca']] : []),
+            outputs: [{ id: 'ssa.met', what: 'Each system failure condition shown to meet its target, and the safety requirements verified', to: isSup() ? ['aircraft maker'] : ['asa'], accept: 'Every target met with as-built data; every safety requirement verified; signed', fp: function () { return fpOf(arr('ftaPages').length); } }] });
+        if (!isSup()) L.push({ id: 'asa', name: 'ASA', plan: 'sspp', tab: 'asa', on: function () { return true; },
+            inputs: [['Signed SSAs', 'ssa']].concat(has('sspp.combined', 'mac') ? [['Multi-system fault trees', 'pasa']] : []),
+            outputs: [{ id: 'asa.case', what: 'Each aircraft failure condition shown to meet its target: the safety case for certification', to: ['authority'], accept: 'Every aircraft failure condition met; aircraft-level trees ' + (A('sspp.asa') === 'both' ? 'compiled and written by hand agree' : 'complete') + '; signed', fp: function () { return fpOf(arr('ftaPages').length + ':' + arr('acFhaData').length); } }] });
+        if (planned('ccmr')) L.push({ id: 'ccmr', name: 'Latent failures (CCMR)', plan: 'sspp', tab: 'ccmr', on: function () { return true; },
+            inputs: [['Fault trees with their latent failures', 'pssa']],
+            outputs: [{ id: 'ccmr.list', what: 'Candidate certification maintenance requirements with their intervals', to: has('sspp.maint', 'msg3') ? ['msg3'] : ['authority'], accept: 'Every latent failure in a catastrophic or hazardous tree has its interval', fp: function () { return fpOf(safe(function () { return pc().ccmr; }, null)); } }] });
+        if (A('hfp.need') !== 'none' && A('hfp.need')) L.push({ id: 'hf', name: 'Human factors', plan: 'hfp', tab: 'hfa-auto', on: function () { return true; },
+            inputs: [['The aircraft functions and flight phases', 'design'], ['Failure conditions with a crew effect', aft]],
+            outputs: [{ id: 'hf.alloc', what: 'Who does what in every flight phase, and the crew tasks', to: ['hf'], accept: 'Every function given to the crew, automation or both, phase by phase', fp: function () { return fpOf(safe(function () { return pc().hf.alloc; }, null)); } },
+                      { id: 'hf.workload', what: 'Each pilot\'s workload in every phase, with the worst failure on top', to: ['authority'], accept: 'No pilot over the limit in any phase', fp: function () { return fpOf(safe(function () { return pc().hf.tasks; }, null)); } },
+                      { id: 'hf.credit', what: 'Crew actions the safety case counts on, as validated assumptions', to: [aft, 'pssa'], accept: 'Each validated in the evaluations before it counts', fp: function () { return fpOf(arr('acAssumptionsData').length); } },
+                      { id: 'hf.mfc', what: 'The minimum flight crew decision', to: ['authority'], accept: 'Decided with its reasons and confirmed in the evaluations', fp: function () { return fpOf(safe(function () { return pc().hf.mfc; }, null)); } }] });
+        L.push({ id: 'ram', name: 'Reliability', plan: 'ramp', tab: 'ram-hub', on: function () { return true; },
+            inputs: [['The parts and where they are installed', 'design'], ['Failures in test and service', 'verification']],
+            outputs: [{ id: 'ram.rates', what: 'A failure rate for every item the fault trees use, with its source', to: ['pssa', 'fmea'], accept: 'Each rate names its source and environment', fp: function () { return fpOf(safe(function () { return pc().ram; }, null)); } }]
+              .concat(planned('ram-msg3') ? [{ id: 'ram.msg3', what: 'The scheduled maintenance tasks, with the CMRs kept apart', to: ['authority'], accept: 'Every CMR included and never escalated without the safety group', fp: function () { return fpOf(safe(function () { return pc().msg3x; }, null)); } }] : []) });
+        return L.filter(function (x) { return safe(function () { return x.on(); }, true); });   // an assessment not planned is left out: no inputs, outputs or exchanges
+    }
+    var NODE_NAMES = { basis: 'Certification basis', program: 'The program', design: 'Design and development', verification: 'Verification', authority: 'The authority', 'aircraft maker': 'The aircraft maker', items: 'Item development (software and hardware)', msg3: 'MSG-3 scheduled maintenance' };
+    function nodeName(id) { var a = assessments().filter(function (x) { return x.id === id; })[0]; return a ? a.name : (NODE_NAMES[id] || id); }
+    // every exchange: from, to, what passes, when (when the output is due)
+    function exchanges() {
+        var out = [];
+        assessments().forEach(function (a) { a.outputs.forEach(function (o) { o.to.forEach(function (t) { out.push({ from: a.id, to: t, what: o.what, when: dueOf(a.id) }); }); }); });
+        return out;
+    }
+    function dueOf(id) { var w = { afha: when('afha'), pasa: when('pasa'), sfha: when('sfha'), pssa: when('pssa'), dal: when('pssa'), cca: when('cca'), fmea: when('pssa'), ssa: when('ssa'), asa: when('asa'), ccmr: when('ssa'), spp: 'At the start of the program; revised when a decision changes' }[id]; return w || 'As the plan sets out'; }
+    function ioRows(key) {
+        return assessments().filter(function (a) { return a.plan === key || (key === 'sspp' && ['spp'].indexOf(a.id) >= 0); }).map(function (a) {
+            return { Assessment: a.name, 'Inputs required (from)': a.inputs.map(function (i) { return i[0] + ' (' + nodeName(i[1]) + ')'; }).join('; '), 'Outputs expected (to)': a.outputs.map(function (o) { return o.what + ' (to ' + listJoin(o.to.map(nodeName)) + ')'; }).join('; ') };
+        });
+    }
+    // the outputs each plan commits to, with how each is accepted; the ticks are kept in the project, never in the plan
+    function outputsOf(key) {
+        var role = { sspp: docCtl('sspp').appr || (A('sspp.owner') ? optLabelK('sspp.owner', A('sspp.owner')).replace(/^The /, '') : 'The plan\'s approver'), hfp: docCtl('hfp').appr || 'Human factors lead', ramp: docCtl('ramp').appr || 'Reliability and maintainability lead' }[key];
+        var out = [];
+        assessments().filter(function (a) { return a.plan === key; }).forEach(function (a) { a.outputs.forEach(function (o) { out.push({ id: o.id, what: o.what, from: a.name, tab: a.tab, accept: o.accept, due: dueOf(a.id), role: String(role).replace(/^./, function (c) { return c.toUpperCase(); }), fp: o.fp }); }); });
+        return out;
+    }
+    function acceptance(key) {
+        var s = store(); if (!s.accept) s.accept = {};
+        return outputsOf(key).map(function (o) { var r = s.accept[o.id], fp = safe(o.fp, ''); var st = !r ? 'open' : r.fp === fp ? 'accepted' : 'reopened'; return Object.assign({}, o, { state: st, by: r && r.by, at: r && r.at }); });
+    }
+    function acceptOutput(id) {
+        var s = store(); if (!s.accept) s.accept = {};
+        var o = PLANS.reduce(function (a, p) { return a.concat(outputsOf(p.key)); }, []).filter(function (x) { return x.id === id; })[0]; if (!o) throw fail('No such output: ' + id);
+        s.accept[id] = { by: who(), at: now(), fp: safe(o.fp, '') }; save(); return s.accept[id];
+    }
+    function unacceptOutput(id) { var s = store(); if (s.accept) delete s.accept[id]; save(); }
+    // where each assessment stands (shown on demand only: the "show where the program stands" switch and the node panel)
+    function liveOf(id) {
+        var c = counts(), m = {
+            afha: c.afha + ' aircraft failure conditions', sfha: c.sfha + ' system failure conditions in ' + c.systems + ' systems', pssa: c.trees + ' fault trees', ssa: c.trees + ' fault trees', asa: c.trees + ' fault trees',
+            cca: [planned('cma') ? c.cma + ' CMA rows' : '', planned('pra') ? c.pra + ' PRA rows' : '', planned('zsa') ? c.zsa + ' ZSA rows' : ''].filter(Boolean).join(', '),
+            cma: c.cma + ' rows', pra: c.pra + ' rows', zsa: c.zsa + ' rows', fmea: c.fmea + ' rows', dal: c.items + ' items', items: c.items + ' items',
+            pasa: laneItems('fta') ? 'Fault trees: ' + c.trees : '', ipledger: laneItems('ipledger') + ' claims', hf: safe(function () { var cv = root.SLHfAuto.coverage(); return cv.filter(function (x) { return x.state === 'done'; }).length + ' of ' + cv.length + ' steps signed'; }, ''),
+            ram: laneItems('ram-reliability') + ' items', ccmr: laneItems('ccmr') + ' latent failures', spp: PLANS.map(function (p) { return p.code + ' rev ' + rev(p.key); }).join(', '),
+            'dev-func': c.functions + ' functions', 'dev-sys': c.systems + ' systems', 'dev-req': c.reqs + ' requirements', 'dev-items': c.items + ' items'
+        };
+        return m[id] || '';
+    }
+
     // ---- the documents ----------------------------------------------------------------------------------------------
     // blocks: { k:'h', level, text } | { k:'p', text } | { k:'table', name, title, rows, lead } | { k:'fig', name, title, svg, w, h, lead }
     // A table or figure's lead sentence names it by number ({N}) and comes right before it, so each is referred to first.
@@ -715,7 +1068,7 @@
                 var st = sevTable(cfg);
                 if (st && st.headers && st.rows) out.push(TBL('sevdefs', 'The classifications as the basis defines them', st.rows.map(function (r) { var o = {}; st.headers.forEach(function (h, i) { o[h] = r[i]; }); return o; }), '{N} gives each classification as the basis defines it, with its source.'));
             }
-            if (sec === 'The safety assessment process and its methods') out.push(procTable());
+            if (sec === 'The safety assessment process and its methods') { out.push(procTable()); out.push(TBL('io', 'Inputs and outputs of each assessment', ioRows('sspp'), '{N} defines what each assessment needs, where each input comes from, and what it must produce and for whom.')); out.push(TBL('exchanges', 'Data exchanged between the assessments', exchanges().filter(function (x) { var a = assessments().filter(function (y) { return y.id === x.from; })[0]; return a && a.plan === 'sspp'; }).map(function (x) { return { From: nodeName(x.from), To: nodeName(x.to), 'What passes': x.what, When: x.when }; }), '{N} lists every exchange of data between the assessments: what passes, from which to which, and when. The arrows in the diagrams show the same exchanges.')); }
             if (sec === 'Development assurance') out.push(objTable());
             if (sec === 'Tools') out.push(TBL('tools', 'The program\'s tools', [{ Work: 'Safety and reliability analyses', Tool: 'Safety Lab Aero', 'Trusted by': A('sspp.toolq') ? optLabelK('sspp.toolq', A('sspp.toolq')) : 'To be decided' }, { Work: 'Requirements management', Tool: A('sspp.rmtool') ? (RM_NAMES[A('sspp.rmtool')] || optLabelK('sspp.rmtool', A('sspp.rmtool'))) : 'To be decided', 'Trusted by': 'Exchange checked at each baseline' }, { Work: 'System architecture', Tool: A('sspp.mbse') ? (MBSE_NAMES[A('sspp.mbse')] || optLabelK('sspp.mbse', A('sspp.mbse'))) : 'To be decided', 'Trusted by': 'Import checked at each baseline' }], '{N} lists the tools the program will use and how their output will be trusted.'));
             if (sec === 'Tailoring' && PP()) {
@@ -726,11 +1079,11 @@
             }
         }
         if (key === 'hfp' && A('hfp.need') !== 'none') {
-            if (sec === 'The human factors work through the design cycle') out.push(procTable());
+            if (sec === 'The human factors work through the design cycle') { out.push(procTable()); out.push(TBL('io', 'Inputs and outputs of the human factors work', ioRows('hfp'), '{N} defines what the human factors work needs and what it must produce, and for whom.')); }
             if (sec === 'Development assurance') out.push(objTable());
         }
         if (key === 'ramp') {
-            if (sec === 'Scope and purpose') out.push(procTable());
+            if (sec === 'Scope and purpose') { out.push(procTable()); out.push(TBL('io', 'Inputs and outputs of the reliability work', ioRows('ramp'), '{N} defines what the reliability work needs and what it must produce, and for whom.')); }
             if (sec === 'Development assurance') out.push(objTable());
         }
         return out;
@@ -740,12 +1093,16 @@
         plan.secs.forEach(function (sec, i) {
             blocks.push(H(1, (i + 1) + '. ' + sec));
             var it = intro(key, sec); if (it) blocks.push(P(it));
-            questions(key).filter(function (q) { return q.sec === sec; }).forEach(function (q) { blocks.push(P(txtOf(q))); });
+            questions(key).filter(function (q) { return q.sec === sec; }).forEach(function (q) { var b = P(txtOf(q)); b.q = q.k; blocks.push(b); });
             secFigs(key, sec).forEach(function (f) { blocks.push(f); });
             planTables(key, sec).forEach(function (t) { blocks.push(t); });
         });
+        var outs = outputsOf(key), n0 = plan.secs.length + 1;
+        blocks.push(H(1, n0 + '. Outputs and acceptance'));
+        blocks.push(P('This plan is complete when each output below has been produced and accepted against its criteria by the role named. The acceptance is recorded in Safety Lab, with who accepted it and when; if an output changes after it is accepted, its acceptance is reopened. The columns for the acceptance are left blank here for signing.'));
+        blocks.push(TBL('outputs', 'Outputs and how each will be accepted', outs.map(function (o, i) { return { '#': String(i + 1), Output: o.what, 'Produced by': o.from, 'Accepted when': o.accept, Due: o.due, 'Accepted by (role)': o.role, Signature: '', Date: '' }; }), '{N} lists every output this plan commits to and how each will be accepted.'));
         var gp = gaps(key);
-        if (gp.length) { blocks.push(H(1, (plan.secs.length + 1) + '. To be decided')); blocks.push(P('These decisions are not made yet. Each is written into the plan above as "To be decided" until it is.')); blocks.push(TBL('open', 'Decisions still to be made', gp.map(function (x, i) { return { '#': String(i + 1), Decision: x }; }), '{N} lists them.')); }
+        if (gp.length) { blocks.push(H(1, (n0 + 1) + '. To be decided')); blocks.push(P('These decisions are not made yet. Each is written into the plan above as "To be decided" until it is.')); blocks.push(TBL('open', 'Decisions still to be made', gp.map(function (x, i) { return { '#': String(i + 1), Decision: x }; }), '{N} lists them.')); }
         return number(blocks);
     }
     // the status report: where the work the plan sets out stands, read from the project (the plan never carries this)
@@ -772,8 +1129,10 @@
         b.push(H(1, '3. Development assurance objectives'));
         b.push(TBL('st-obj', 'Where each objective stands', daCover(key === 'sspp' ? null : key).map(function (r) { return { Objective: r.id + ' ' + r.text, 'Where it stands': STATE_WORD[r.state] || r.state, Evidence: r.detail || '' }; }), '{N} gives where each objective stands on the evidence in the project.'));
         b.push(figObjectives(key));
+        b.push(H(1, '4. Outputs and acceptance'));
+        b.push(TBL('st-accept', 'Where each output stands', acceptance(key).map(function (o) { return { Output: o.what, State: o.state === 'accepted' ? 'Accepted' : o.state === 'reopened' ? 'Reopened: changed since it was accepted' : 'Not yet accepted', By: o.by || '', When: o.at ? String(o.at).slice(0, 10) : '' }; }), '{N} gives where each output the plan commits to stands.'));
         var gp = gaps(key);
-        b.push(H(1, '4. Decisions still open in the plan'));
+        b.push(H(1, '5. Decisions still open in the plan'));
         b.push(gp.length ? TBL('st-open', 'Open decisions in the plan', gp.map(function (x, i) { return { '#': String(i + 1), Decision: x }; }), '{N} lists the plan\'s decisions not yet made.') : P('None: every decision in the plan is made.'));
         return number(b.filter(Boolean));
     }
@@ -803,7 +1162,7 @@
         var hi = 0; kind = kind || 'plan';
         return blocks.map(function (b) {
             if (b.k === 'h') return '<h3 class="pla-dh" id="pla-' + kind + '-h' + (hi++) + '">' + E(b.text) + '</h3>';
-            if (b.k === 'p') return '<p class="' + (/To be decided|To be written/.test(b.text) ? 'pla-tbd' : '') + '">' + E(b.text) + '</p>';
+            if (b.k === 'p') return '<p class="' + (/To be decided|To be written/.test(b.text) ? 'pla-tbd' : '') + '"' + (b.q ? ' data-plap="' + E(b.q) + '"' : '') + '>' + E(b.text) + '</p>';
             if (b.k === 'fig') return '<div class="pla-fig" id="pla-' + kind + '-f' + b.n + '">' + b.svg + '</div><div class="pla-cap">' + E(b.caption) + '</div>';
             if (b.k === 'table') { var hd = b.rows.length ? Object.keys(b.rows[0]) : []; return '<div class="pla-cap" id="pla-' + kind + '-t' + b.n + '">' + E(b.caption) + '</div>' + (b.rows.length ? '<table class="pla-dt"><thead><tr>' + hd.map(function (h) { return '<th>' + E(h) + '</th>'; }).join('') + '</tr></thead><tbody>' + b.rows.map(function (r) { return '<tr>' + hd.map(function (h) { return '<td>' + E(r[h]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>' : '<p class="pla-tbd">(No entries)</p>'); }
             return '';
@@ -834,6 +1193,19 @@
     function svgWrap(w, h, body, title) { return { svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="' + sx(title) + '"><defs><marker id="pla-ah" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="' + C.line + '"/></marker><style>.pla-l{paint-order:stroke;stroke:#ffffff;stroke-width:3.5px;stroke-linejoin:round}</style></defs><rect width="100%" height="100%" fill="#ffffff"/>' + body + '</svg>', w: w, h: h }; }
     function wrapText(t, n) { var words = String(t || '').split(/\s+/), lines = [], cur = ''; words.forEach(function (w0) { if ((cur + ' ' + w0).trim().length > n && cur) { lines.push(cur); cur = w0; } else cur = (cur + ' ' + w0).trim(); }); if (cur) lines.push(cur); return lines; }
     // a box: kind 'on' (in the program, with work), 'ok', 'warn', 'off' (out of the program: dashed), 'tbd' (not decided)
+    // which assessment or part of the program each diagram box stands for (by its title)
+    var NODE_OF = { 'AFHA': 'afha', 'PASA': 'pasa', 'System FHAs': 'sfha', 'PSSA': 'pssa', 'PSSAs': 'pssa', 'SSA': 'ssa', 'SSAs': 'ssa', 'ASA': 'asa', 'Hardware and software': 'items', 'Common cause analyses': 'cca', 'FDAL and IDAL assignment': 'dal',
+        'Zonal safety': 'zsa', 'Particular risks': 'pra', 'Common mode': 'cma', 'Independence ledger': 'ipledger', 'Aircraft functions and requirements': 'dev-func', 'Aircraft architecture, functions given to systems': 'dev-sys', 'System requirements': 'dev-req',
+        'System architecture, requirements given to items': 'dev-items', 'Implementation': 'items', 'HF Autopilot analysis': 'hf', 'Failure rates': 'ram', 'Fault trees': 'pssa', 'Latent failures': 'ccmr', 'Reliability program': 'ram', 'CMRs': 'ccmr', 'Scheduled maintenance': 'ram-msg3', 'Maintainability': 'ram-mx', 'Dispatch relief': 'mmel', 'Test and service': 'ram',
+        'Identification and baselines': 'cm', 'Archive and retrieval': 'cm', 'Interim configurations': 'cm', 'Design complete': 'cm', 'Configuration management of the safety data': 'cm', 'Write the plans': 'spp', 'Review the plans': 'spp', 'Development': 'dev-func', 'Correct and complete checks': 'validation', 'Approach by DAL': 'validation', 'Tests, analyses, reviews': 'vv-status', 'Results': 'vv-status', 'Verification plan': 'vv-status', 'Validation summary': 'validation', 'Verification summary': 'vv-status' };
+    var NODE_TAB = { 'dev-func': 'ac-func', 'dev-sys': 'sys-dir', 'dev-req': 'ac-req', 'dev-items': 'items', cm: 'cm', spp: 'plan-auto', cma: 'cma', pra: 'pra', zsa: 'zsa', ipledger: 'ipledger', 'ram-msg3': 'ram-msg3', 'ram-mx': 'ram-mx', mmel: 'mmel', validation: 'validation', 'vv-status': 'vv-status', items: 'items' };
+    var LIVE = false;   // set only while the page draws the preview with "show where the program stands" on: never in the plan, print or Word
+    function nodeWrap(title, inner, x, y, w) {
+        var id = NODE_OF[String(title).replace(/:.*$/, '')]; if (!id) return inner;
+        var badge = '';
+        if (LIVE) { var lv = safe(function () { return liveOf(id); }, ''); if (lv) { lv = String(lv).split(/ in |, /)[0]; if (lv.length * 5.6 + 10 > w - 8) lv = lv.replace(/ (aircraft|system) failure conditions$/, ' failure conditions').replace(/ failure conditions$/, ' FCs'); var bw = Math.min(w - 8, 10 + lv.length * 5.6); badge = '<rect x="' + (x + w - bw - 4) + '" y="' + (y - 9) + '" width="' + bw + '" height="17" rx="8.5" fill="#101216"/><text x="' + (x + w - bw / 2 - 4) + '" y="' + (y + 3) + '" font-size="10" fill="#fff" text-anchor="middle">' + sx(lv) + '</text>'; } }
+        return '<g class="pla-node" data-node="' + id + '" style="cursor:pointer" onclick="SLPlanAuto.ui.node(\'' + id + '\')"><title>' + sx(nodeName(id)) + ': click for its inputs, outputs and where it stands</title>' + inner + badge + '</g>';
+    }
     function box(x, y, w, h, title, sub, kind) {
         var st = { on: [C.on, C.onF], ok: [C.ok, C.okF], warn: [C.warn, C.warnF], off: [C.off, C.offF], tbd: [C.tbd, C.tbdF] }[kind || 'on'];
         var tl = wrapText(title, Math.max(8, Math.floor(w / 7.4))), sl = sub ? wrapText(sub, Math.max(10, Math.floor(w / 6.2))) : [];
@@ -841,7 +1213,7 @@
         var s = '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="8" fill="' + st[1] + '" stroke="' + st[0] + '" stroke-width="1.4"' + (kind === 'off' || kind === 'tbd' ? ' stroke-dasharray="5 4"' : '') + '/>';
         tl.forEach(function (l, i) { s += '<text x="' + (x + w / 2) + '" y="' + (y0 + i * lh) + '" font-size="12.5" font-weight="700" fill="' + C.ink + '" text-anchor="middle">' + sx(l) + '</text>'; });
         sl.forEach(function (l, i) { s += '<text x="' + (x + w / 2) + '" y="' + (y0 + tl.length * lh + i * 12 + 1) + '" font-size="10.5" fill="' + C.sub + '" text-anchor="middle">' + sx(l) + '</text>'; });
-        return s;
+        return nodeWrap(title, s, x, y, w);
     }
     function arrow(x1, y1, x2, y2, label, dashed) {
         var s = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + C.line + '" stroke-width="1.3" stroke-linecap="round" marker-end="url(#pla-ah)"' + (dashed ? ' stroke-dasharray="4 3"' : '') + '/>';
@@ -968,6 +1340,7 @@
         o = o || {};
         var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0] + ',' + p[1]; }).join(' ');
         var s = '<path d="' + d + '" fill="none" stroke="' + C.line + '" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"' + (o.end === false ? '' : ' marker-end="url(#pla-ah)"') + (o.both ? ' marker-start="url(#pla-ah)"' : '') + (o.dash ? ' stroke-dasharray="4 3"' : '') + '/>';
+        if (label) s = '<g><title>' + sx(label) + '</title>' + s + '</g>';
         if (label) { var lx = o.lx != null ? o.lx : (pts[0][0] + pts[1][0]) / 2, ly = o.ly != null ? o.ly : (pts[0][1] + pts[1][1]) / 2 - 4; wrapText(label, o.wrap || 30).forEach(function (l, i) { s += '<text class="pla-l" x="' + lx + '" y="' + (ly + i * 11) + '" font-size="9.5" fill="' + C.sub + '"' + (o.anchor ? ' text-anchor="' + o.anchor + '"' : '') + '>' + sx(l) + '</text>'; }); }
         return s;
     }
@@ -981,7 +1354,7 @@
         var tl = wrapText(title, Math.max(8, Math.floor(w / 7.6))), sl = sub ? wrapText(sub, Math.max(10, Math.floor(w / 5.6))) : [], tot = tl.length * 14 + sl.length * 11, y0 = y + h / 2 - tot / 2 + 11;
         tl.forEach(function (l, i) { s += '<text x="' + (x + w / 2) + '" y="' + (y0 + i * 14) + '" font-size="12.5" font-weight="700" fill="' + (kind === 'off' ? C.off : C.ink) + '" text-anchor="middle">' + sx(l) + '</text>'; });
         sl.forEach(function (l, i) { s += '<text x="' + (x + w / 2) + '" y="' + (y0 + tl.length * 14 + i * 11) + '" font-size="9.5" fill="' + (kind === 'tbd' ? C.tbd : C.sub) + '" text-anchor="middle">' + sx(l) + '</text>'; });
-        return s;
+        return nodeWrap(title, s, x, y, w);
     }
     function methods(list) { var m = list.filter(function (x) { return planned(x[0]); }).map(function (x) { return x[1]; }); return m.length ? 'Methods: ' + m.join(', ') : 'No methods in the program'; }
     function toolOf(sec) { var t = safe(function () { return root.declaredToolchain(); }, null) || {}; var r = t[sec] || {}; return r.tool === 'other' ? (r.toolOther || '') : sec === 'rm' ? (RM_NAMES[r.tool] || '') : (MBSE_NAMES[r.tool] || ''); }
@@ -1149,7 +1522,7 @@
     }
 
     // ---- the page ----------------------------------------------------------------------------------------------------
-    var ui0 = { open: null, msg: null, view: 'plan' };
+    var ui0 = { open: null, msg: null, view: 'plan', live: false, node: null, flash: null };
     var TONE = { 'not started': 'todo', open: 'open', apply: 'open', ready: 'ok' };
     function _style() {
         if (typeof document === 'undefined' || document.getElementById('pla-style')) return;
@@ -1175,7 +1548,13 @@
             + '.pla-chg{font-weight:600;color:#0A4FB8}.pla-acts{display:flex;gap:8px;flex-wrap:wrap}.pla-msg{font-size:12.5px;margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(31,122,51,.08)}.pla-msg.err{background:rgba(180,35,24,.08)}'
             + '.pla-crumb{font:inherit;font-size:12px;border:none;background:none;color:#1A6EF2;cursor:pointer;padding:0;margin-bottom:4px}'
             + '.pla-doc{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;align-items:end}.pla-doc label{font-size:11.5px;font-weight:600;display:block;margin-bottom:3px}'
-            + '.pla-vt{display:flex;gap:4px;margin-bottom:6px}.pla-vt button{font:inherit;font-size:12.5px;padding:6px 12px;border:1px solid var(--color-border-strong,#c7cbd1);border-radius:8px;background:none;color:inherit;cursor:pointer}.pla-vt button.on{background:#101216;color:#fff;border-color:#101216}';
+            + '.pla-qx{font-size:12.5px;line-height:1.5;margin:0 0 8px}.pla-hint{font-weight:400;font-size:11.5px;margin-left:6px}.pla-opts{display:flex;flex-direction:column;gap:6px}'
+            + '.pla-opt{font:inherit;text-align:left;display:flex;gap:10px;align-items:flex-start;width:100%;padding:9px 12px;border-radius:10px;border:1.5px solid var(--color-border-strong,#c7cbd1);background:var(--color-surface-1,#fff);color:inherit;cursor:pointer}'
+            + '.pla-opt:hover{border-color:#1A6EF2}.pla-opt.on{border-color:#1A6EF2;background:rgba(26,110,242,.06)}.pla-mk{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid #6b7280;margin-top:2px;box-sizing:border-box}.pla-mk.sq{border-radius:4px}.pla-opt.on .pla-mk{border-color:#1A6EF2;background:#1A6EF2;box-shadow:inset 0 0 0 2.5px #fff}'
+            + '.pla-ob{display:flex;flex-direction:column;gap:3px;min-width:0}.pla-ol{font-weight:600;font-size:13.5px}.pla-oe{font-size:12.5px;line-height:1.45}.pla-oc{font-size:12px}'
+            + '.pla-prev{position:relative}.pla-flash{animation:plaFlash 2.2s ease-out}@keyframes plaFlash{0%,35%{background:#FFF1A8;box-shadow:0 0 0 4px #FFF1A8}100%{background:transparent;box-shadow:none}}'
+            + '.pla-node-panel{border-left:4px solid #1A6EF2}.pla-fig .pla-node:hover rect{stroke-width:2.4}'
+            + '.pla-vt{display:flex;gap:4px;margin-bottom:6px}.pla-vt button{font:inherit;font-size:12.5px;padding:6px 12px;border:1px solid var(--color-border-strong,#c7cbd1);border-radius:8px;background:none;color:inherit;cursor:pointer}.pla-vt button.on{background:#101216;color:#fff;border-color:#101216}.pla-vt{flex-wrap:wrap}';
         document.head.appendChild(st);
     }
     function _cards() {
@@ -1190,20 +1569,42 @@
             + '<div class="pla-box" data-pla-da="1"><h4>Development assurance objectives</h4><div class="pla-g">' + withHow + ' of ' + withQ + ' objectives the plans answer have an answer that says how the program will meet them. The rest of the ' + cov.length + ' are met by the work itself (see the <a href="javascript:void(0)" onclick="switchTab(\'appa\')">Objectives matrix</a>).</div></div>';
     }
     function _qHtml(q) {
-        var v = A(q.k), s = store(), daTxt = function (id) { var o = objectives().filter(function (x) { return x.id === id; })[0]; return o ? id + ': ' + o.text : id; };
-        var input = q.type === 'checks'
-            ? '<div class="pla-chk">' + q.opts.map(function (o) { return '<label><input type="checkbox" data-plaqc="' + E(q.k) + '" value="' + E(o[0]) + '"' + (has(q.k, o[0]) ? ' checked' : '') + ' onchange="SLPlanAuto.ui.toggle(\'' + E(q.k) + '\',\'' + E(o[0]) + '\')"> <span>' + E(o[1]) + (o[2] ? ' <span class="pla-imp">(' + E(o[2]) + ')</span>' : '') + '</span></label>'; }).join('') + '</div>'
-            : '<select data-plaq="' + E(q.k) + '" onchange="SLPlanAuto.ui.pick(\'' + E(q.k) + '\', this.value)"><option value="">Not answered</option>' + q.opts.map(function (o) { return '<option value="' + E(o[0]) + '"' + (v === o[0] ? ' selected' : '') + '>' + E(o[1]) + '</option>'; }).join('') + '</select>';
-        var o1 = q.type !== 'checks' && v ? q.opts.filter(function (x) { return x[0] === v; })[0] : null;
+        var v = A(q.k), s = store(), multi = q.type === 'checks', daTxt = function (id) { var o = objectives().filter(function (x) { return x.id === id; })[0]; return o ? id + ': ' + o.text : id; };
+        var cards = q.opts.map(function (o) {
+            var on = has(q.k, o[0]), ex = exO(q, o[0]);
+            return '<button type="button" class="pla-opt' + (on ? ' on' : '') + (multi ? ' multi' : '') + '" role="' + (multi ? 'checkbox' : 'radio') + '" aria-checked="' + on + '" data-plaopt="' + E(q.k + '|' + o[0]) + '" onclick="SLPlanAuto.ui.' + (multi ? 'toggle' : 'pick') + '(\'' + E(q.k) + '\',\'' + E(o[0]) + '\')">'
+                + '<span class="pla-mk' + (multi ? ' sq' : '') + '"></span><span class="pla-ob"><span class="pla-ol">' + E(o[1]) + '</span>' + (ex ? '<span class="pla-oe">' + E(ex) + '</span>' : '') + (o[2] && (q.set || /reason/i.test(o[2])) ? '<span class="pla-oc"><b>What this changes:</b> ' + E(o[2]) + '</span>' : '') + '</span></button>';
+        }).join('');
         var ownBox = has(q.k, 'own') ? '<textarea data-plaown="' + E(q.k) + '" placeholder="How the program will do it, in your own words (it goes into the plan as written)" onchange="SLPlanAuto.ui.own(\'' + E(q.k) + '\', this.value)">' + E(s.own[q.k] || '') + '</textarea>' : '';
         var whyBox = picked(q.k).some(function (x) { return (q.reasonFor || []).indexOf(x) >= 0; }) ? '<textarea data-plawhy="' + E(q.k) + '" placeholder="The reason (it goes into the plan and the tailoring section)" onchange="SLPlanAuto.ui.why(\'' + E(q.k) + '\', this.value)">' + E(s.why[q.k] || '') + '</textarea>' : '';
         var bad = v && q.need ? safe(function () { return q.need(v); }, '') : '';
-        return '<div class="pla-q' + (bad ? ' bad' : complete(q) ? '' : ' gap') + '" data-plaqbox="' + E(q.k) + '"><div class="pla-qt">' + E(q.text) + '</div>' + input + (o1 && o1[2] ? '<div class="pla-imp"><b>What this changes:</b> ' + E(o1[2]) + '</div>' : '') + ownBox + whyBox
+        return '<div class="pla-q' + (bad ? ' bad' : complete(q) ? '' : ' gap') + '" data-plaqbox="' + E(q.k) + '" id="pla-q-' + E(q.k.replace(/\W/g, '-')) + '"><div class="pla-qt">' + E(q.text) + (multi ? ' <span class="pla-hint">Pick all that apply</span>' : '') + '</div>'
+            + (exQ(q) ? '<div class="pla-qx">' + E(exQ(q)) + '</div>' : '') + '<div class="pla-opts" role="' + (multi ? 'group' : 'radiogroup') + '">' + cards + '</div>' + ownBox + whyBox
             + (bad ? '<div class="pla-bad" data-plabad="' + E(q.k) + '">' + E(bad) + '</div>' : '')
             + '<div class="pla-tags">' + (q.set ? '<span class="pla-t set">Sets Safety Lab</span>' : '<span class="pla-t">Written into the plan</span>')
             + q.da.map(function (id) { return '<span class="pla-t da" title="' + E(daTxt(id)) + '">Meets ' + E(id) + '</span>'; }).join('')
             + q.tools.map(function (t) { return '<a class="pla-t tool" href="javascript:void(0)" onclick="switchTab(\'' + E(t) + '\')" title="Open the page the evidence will be on">' + E(pageName(t)) + ' &rarr;</a>'; }).join('')
+            + (v ? '<a class="pla-t" href="javascript:void(0)" onclick="SLPlanAuto.ui.jump(\'' + E(q.k) + '\')" title="Show what this answer wrote into the plan">See it in the plan &rarr;</a>' : '')
             + (!complete(q) ? '<span class="pla-t" style="color:#9A3412">' + (A(q.k) ? (needsWhy(q) ? 'Reason to write' : 'Own way to write') : 'Gap: not answered') + '</span>' : '') + '</div></div>';
+    }
+    // the box a diagram node opens: what the assessment needs and produces, and (because the user asked) where it stands
+    function _nodePanel() {
+        var id = ui0.node; if (!id) return '';
+        var a = assessments().filter(function (x) { return x.id === id; })[0], tab = (a && a.tab) || NODE_TAB[id] || '', lv = safe(function () { return liveOf(id); }, '');
+        var ins = a ? a.inputs.map(function (i) { return '<li>' + E(i[0]) + ' <span class="pla-g">(from ' + E(nodeName(i[1])) + ')</span></li>'; }).join('') : '';
+        var outs = a ? a.outputs.map(function (o) { return '<li>' + E(o.what) + ' <span class="pla-g">(to ' + E(listJoin(o.to.map(nodeName))) + ')</span><div class="pla-g">Accepted when: ' + E(o.accept) + '</div></li>'; }).join('') : '';
+        var inEx = exchanges().filter(function (x) { return x.to === id; }), outEx = exchanges().filter(function (x) { return x.from === id; });
+        return '<div class="pla-box pla-node-panel" data-pla-node="' + E(id) + '"><div class="pla-ch"><h4>' + E(nodeName(id)) + '</h4><span class="pla-acts">' + (tab ? '<button type="button" class="slap-btn p" onclick="switchTab(\'' + E(tab) + '\')">Open ' + E(pageName(tab)) + '</button>' : '') + '<button type="button" class="slap-btn" onclick="SLPlanAuto.ui.node(null)">Close</button></span></div>'
+            + '<div class="pla-g" data-pla-nodelive="1"><b>Where it stands now:</b> ' + E(lv || 'Nothing recorded yet') + ' <span class="pla-g">(shown here on request; never written into the plan)</span></div>'
+            + (ins ? '<div style="margin-top:6px"><b>Inputs it needs</b><ul style="margin:2px 0 0;padding-left:18px">' + ins + '</ul></div>' : '')
+            + (outs ? '<div style="margin-top:6px"><b>Outputs it must produce</b><ul style="margin:2px 0 0;padding-left:18px">' + outs + '</ul></div>' : '')
+            + (!a && (inEx.length || outEx.length) ? '<div style="margin-top:6px"><b>Data exchanged</b><ul style="margin:2px 0 0;padding-left:18px">' + inEx.map(function (x) { return '<li>From ' + E(nodeName(x.from)) + ': ' + E(x.what) + '</li>'; }).join('') + outEx.map(function (x) { return '<li>To ' + E(nodeName(x.to)) + ': ' + E(x.what) + '</li>'; }).join('') + '</ul></div>' : '')
+            + '</div>';
+    }
+    function _acceptBox(key) {
+        var L = acceptance(key); if (!L.length) return '';
+        return '<div class="pla-box" data-pla-accept="1"><h4>4. Outputs to accept</h4><div class="pla-g" style="margin-bottom:6px">The outputs this plan commits to. Accept each when it meets its criteria; a change to an accepted output reopens it. Where each stands is kept in Safety Lab and the status report, never in the plan.</div><table class="pla-wt"><thead><tr><th>Output</th><th>Accepted when</th><th>State</th><th></th></tr></thead><tbody>'
+            + L.map(function (o) { var pill = o.state === 'accepted' ? '<span class="slap-pill ok">Accepted</span>' : o.state === 'reopened' ? '<span class="slap-pill open">Reopened</span>' : '<span class="slap-pill todo">Open</span>'; return '<tr data-pla-out="' + E(o.id) + '"><td><b>' + E(o.what) + '</b><div class="pla-g">' + E(o.from) + ' · due ' + E(o.due) + ' · ' + E(o.role) + '</div></td><td class="pla-g">' + E(o.accept) + '</td><td>' + pill + (o.by ? '<div class="pla-g">' + E(o.by) + ' ' + E(String(o.at || '').slice(0, 10)) + '</div>' : '') + '</td><td>' + (o.state === 'accepted' ? '<button type="button" class="slap-btn" onclick="SLPlanAuto.ui.unaccept(\'' + E(o.id) + '\')">Undo</button>' : '<button type="button" class="slap-btn p" onclick="SLPlanAuto.ui.accept(\'' + E(o.id) + '\')">Accept</button>') + ' <a href="javascript:void(0)" onclick="switchTab(\'' + E(o.tab) + '\')">Open</a></td></tr>'; }).join('') + '</tbody></table></div>';
     }
     function _docPanel(key) {
         var d = docCtl(key), sel = function (f, list, cur, ph) { return '<select data-pladocf="' + f + '" onchange="SLPlanAuto.ui.doc(\'' + key + '\',\'' + f + '\', this.value)">' + (ph ? '<option value="">' + E(ph) + '</option>' : '') + list.map(function (x) { return '<option' + (x === cur ? ' selected' : '') + '>' + E(x) + '</option>'; }).join('') + '</select>'; };
@@ -1235,10 +1636,12 @@
         if (mm.length) h += '<div class="pla-box" data-pla-mm="1"><h4>Picks that do not work together (' + mm.length + ')</h4><ul style="margin:0;padding-left:18px">' + mm.map(function (x) { return '<li><b>' + E(x.q) + '</b> ' + E(x.msg) + '</li>'; }).join('') + '</ul></div>';
         h += '<div class="pla-box" data-pla-dacov="1"><h4>3. Development assurance objectives this plan covers</h4><table class="pla-wt"><thead><tr><th>Objective</th><th>How the program will meet it</th><th>Evidence will be on</th></tr></thead><tbody>'
             + da.map(function (r) { return '<tr><td title="' + E(r.text) + '"><b>' + E(r.id) + '</b> ' + E(r.text) + '</td><td>' + (r.how.length ? E(r.how.join('; ')) : '<span class="pla-tbd">To be decided</span>') + '</td><td>' + r.tools.map(function (t) { return '<a href="javascript:void(0)" onclick="switchTab(\'' + E(t) + '\')">' + E(pageName(t)) + '</a>'; }).join(', ') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+        h += _acceptBox(key);
         if (gp.length) h += '<div class="pla-box" data-pla-gaps="1"><h4>To be decided (' + gp.length + ')</h4><ul style="margin:0;padding-left:18px">' + gp.map(function (x) { return '<li>' + E(x) + '</li>'; }).join('') + '</ul></div>';
         h += '</div><div class="pla-right"><div class="pla-vt"><button type="button" class="' + (view === 'plan' ? 'on' : '') + '" data-plaview="plan" onclick="SLPlanAuto.ui.view(\'plan\')">The plan</button><button type="button" class="' + (view === 'status' ? 'on' : '') + '" data-plaview="status" onclick="SLPlanAuto.ui.view(\'status\')">' + E(plan.report) + '</button><span style="flex:1"></span>'
+            + (view === 'plan' ? '<button type="button" class="' + (ui0.live ? 'on' : '') + '" data-plalive="1" onclick="SLPlanAuto.ui.live()" title="Show where the program stands on the diagrams. Never written into the plan.">' + (ui0.live ? 'Hide where the program stands' : 'Show where the program stands') + '</button>' : '')
             + '<button type="button" onclick="SLPlanAuto.ui.word(\'' + key + '\',\'' + view + '\')">Word (.docx)</button><button type="button" onclick="SLPlanAuto.print(\'' + key + '\',\'' + view + '\')">Print</button></div>'
-            + '<div class="pla-prev" data-pladoc="1" data-plakind="' + view + '">' + fullHtml(key, view) + '</div></div></div>';
+            + _nodePanel() + '<div class="pla-prev" data-pladoc="1" data-plakind="' + view + '">' + (function () { LIVE = !!ui0.live && view === 'plan'; try { return fullHtml(key, view); } finally { LIVE = false; } })() + '</div></div></div>';
         return h;
     }
     function render() {
@@ -1248,13 +1651,28 @@
         var pv0 = document.querySelector('[data-pladoc]'), scroll = pv0 ? pv0.scrollTop : 0;
         host.innerHTML = '<div class="pla">' + (ui0.open && BY[ui0.open] ? _plan(ui0.open) : _cards()) + '</div>';
         var pv = document.querySelector('[data-pladoc]'); if (pv) pv.scrollTop = scroll;
+        if (ui0.flash) { var k = ui0.flash; ui0.flash = null; flash(k); }
+    }
+    // scroll the preview to the sentence an answer wrote, and light it up
+    function flash(k) {
+        if (typeof document === 'undefined') return false;
+        var pv = document.querySelector('[data-pladoc]'); if (!pv) return false;
+        var el = pv.querySelector('[data-plap="' + k + '"]'); if (!el) return false;
+        pv.scrollTop = Math.max(0, el.offsetTop - 90);
+        el.classList.remove('pla-flash'); void el.offsetWidth; el.classList.add('pla-flash');
+        return true;
     }
     var ui = {
         open: function (k) { ui0.open = k || null; ui0.msg = null; render(); try { var v = document.getElementById('view-plan-auto'); if (v && v.scrollIntoView) v.scrollIntoView({ block: 'start' }); } catch (_) {} },
-        pick: function (k, v) { try { answer(k, v); ui0.msg = null; } catch (e) { ui0.msg = { text: e.message, err: true }; } render(); },
-        toggle: function (k, o) { try { toggle(k, o); ui0.msg = null; } catch (e) { ui0.msg = { text: e.message, err: true }; } render(); },
-        own: function (k, t) { setOwn(k, t); render(); },
-        why: function (k, t) { setWhy(k, t); render(); },
+        pick: function (k, v) { try { answer(k, v); ui0.msg = null; ui0.flash = k; if (ui0.view === 'status') ui0.view = 'plan'; } catch (e) { ui0.msg = { text: e.message, err: true }; } render(); },
+        toggle: function (k, o) { try { toggle(k, o); ui0.msg = null; ui0.flash = k; if (ui0.view === 'status') ui0.view = 'plan'; } catch (e) { ui0.msg = { text: e.message, err: true }; } render(); },
+        own: function (k, t) { setOwn(k, t); ui0.flash = k; render(); },
+        why: function (k, t) { setWhy(k, t); ui0.flash = k; render(); },
+        jump: function (k) { if (ui0.view !== 'plan') { ui0.view = 'plan'; ui0.flash = k; render(); } else flash(k); },
+        node: function (id) { ui0.node = id || null; render(); try { var np = document.querySelector('[data-pla-node]'); if (np && np.scrollIntoView) np.scrollIntoView({ block: 'nearest' }); } catch (_) {} },
+        live: function () { ui0.live = !ui0.live; render(); },
+        accept: function (id) { try { acceptOutput(id); ui0.msg = null; } catch (e) { ui0.msg = { text: e.message, err: true }; } render(); },
+        unaccept: function (id) { unacceptOutput(id); render(); },
         doc: function (key, f, v) { try { setDoc(key, f, v); ui0.msg = null; } catch (e) { ui0.msg = { text: e.message, err: true }; } render(); },
         issue: function (key) { var it = issue(key); ui0.msg = { text: 'Issued revision ' + it.rev + ' (' + it.date + ').' }; render(); },
         view: function (v) { ui0.view = v === 'status' ? 'status' : 'plan'; render(); },
@@ -1276,6 +1694,6 @@
     if (typeof document !== 'undefined') { var tries = 40, t0 = setInterval(function () { if (mount() || --tries <= 0) clearInterval(t0); }, 250); }
     root.SLPlanAuto = { VERSION: VERSION, PLANS: PLANS, BY: BY, QBY: QBY, answer: answer, toggle: toggle, setOwn: setOwn, setWhy: setWhy, wires: wires, apply: apply, status: status, gaps: gaps, mismatches: mismatches, complete: complete,
         daCover: daCover, doc: doc, statusDoc: statusDoc, docHtml: docHtml, fullHtml: fullHtml, model: model, word: word, print: print, render: render, ui: ui, state: ui0, questions: questions,
-        plannedCfg: plannedCfg, targetsFor: targetsFor, planned: planned, procRows: procRows, docCtl: docCtl, issue: issue, setDoc: setDoc, rev: rev, ROLES: ROLES, forget: forget };
+        plannedCfg: plannedCfg, targetsFor: targetsFor, assessments: assessments, exchanges: exchanges, outputsOf: outputsOf, acceptance: acceptance, acceptOutput: acceptOutput, liveOf: liveOf, EX: EX, flash: flash, planned: planned, procRows: procRows, docCtl: docCtl, issue: issue, setDoc: setDoc, rev: rev, ROLES: ROLES, forget: forget };
     if (typeof module !== 'undefined' && module.exports) module.exports = root.SLPlanAuto;
 })(typeof window !== 'undefined' ? window : globalThis);

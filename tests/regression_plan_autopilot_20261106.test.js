@@ -38,9 +38,9 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
     const NAV = fs.readFileSync(path.join(SITE, 'nav_areas.js'), 'utf8');
     const RW = fs.readFileSync(path.join(SITE, 'report_writer.js'), 'utf8');
     let okp = true; try { new Function(SRC); } catch (e) { okp = false; }
-    check('plan_autopilot.js v2 parses; no eval of any kind (the CSP forbids it); the stores are read through SLEnv', okp && /VERSION = '2\.0'/.test(SRC) && !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
+    check('plan_autopilot.js v2 parses; no eval of any kind (the CSP forbids it); the stores are read through SLEnv', okp && /VERSION = '2\.1'/.test(SRC) && !/new Function|\beval\(/.test(SRC) && /SLEnv/.test(SRC));
     check('the Plan Autopilot is first under Plan and basis; the certification basis page leaves the menu, its page stays', /items: \['snav-plan-auto', 'snav-arp-process'/.test(NAV) && /id="snav-plan-auto"/.test(HTML) && !/id="snav-defs"/.test(HTML) && /id="view-defs"/.test(HTML) && /id="view-plan-auto"/.test(HTML));
-    check('it loads after the shared look, the objectives and the lanes; the pins moved', (() => { const i = s => HTML.indexOf(s); return i('plan_autopilot.js?v=2.0') > i('autopilot_ui.js?v=') && i('plan_autopilot.js?v=2.0') > i('objectives_matrix.js?v=') && i('plan_autopilot.js?v=2.0') > i('program_plan.js?v=') && /report_writer\.js\?v=1\.3/.test(HTML); })());
+    check('it loads after the shared look, the objectives and the lanes; the pins moved', (() => { const i = s => HTML.indexOf(s); return i('plan_autopilot.js?v=2.1') > i('autopilot_ui.js?v=') && i('plan_autopilot.js?v=2.1') > i('objectives_matrix.js?v=') && i('plan_autopilot.js?v=2.1') > i('program_plan.js?v=') && /report_writer\.js\?v=1\.3/.test(HTML); })());
     check('the plan-auto tab is registered with switchTab', /const tabs = \['plan-auto', /.test(fs.readFileSync(path.join(SITE, 'support_modules.js'), 'utf8')));
     check('the Word writer takes a cover (document control, approvals, revision history) and figures in the run of the text, numbered with the rest', /model\.cover && model\.cover\.tables/.test(RW) && /b\.k === 'img'/.test(RW) && /idx\.figures\.push\(b\)/.test(RW));
 
@@ -156,6 +156,37 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
                 if (saved) P.answer(q.k, saved.split('|')); else P.answer(q.k, '');
             }
             out.perm = { bad: bad.slice(0, 8), n: bad.length };
+            // v2.1: explanations on every choice; "Not planned" excludes the others; the jump; clickable diagrams; the
+            // program's state on demand only; inputs, outputs and exchanges; the outputs to accept
+            out.ex = { noIntro: all.filter(q => !(P.EX[q.k] && P.EX[q.k].q && P.EX[q.k].q.length >= 80)).map(q => q.k), noOpt: all.reduce((a, q) => a.concat(q.opts.filter(o => o[0] !== 'own' && !(P.EX[q.k] && P.EX[q.k].o && P.EX[q.k].o[o[0]])).map(o => q.k + ':' + o[0])), []), cards: 0, shownEx: false };
+            P.ui.open('sspp'); await wait(60);
+            out.ex.cards = document.querySelectorAll('[data-plaopt]').length; out.ex.shownEx = !!document.querySelector('[data-plaqbox="sspp.kind"] .pla-qx') && /Nothing is carried over/.test((document.querySelector('[data-plaopt="sspp.kind|new"]') || {}).textContent || '');
+            P.answer('sspp.fmea', ['ffmea', 'fmes']); P.toggle('sspp.fmea', 'none'); const ex1 = pc.planAuto.answers['sspp.fmea']; P.toggle('sspp.fmea', 'ppfmea'); const ex2 = pc.planAuto.answers['sspp.fmea'];
+            let ex3 = false; try { P.answer('sspp.fmea', ['none', 'ffmea']); } catch (e) { ex3 = /cannot be picked with other answers/.test(e.message); }
+            out.excl = { ex1, ex2, ex3, noBad: !P.mismatches('sspp').some(m => m.k === 'sspp.fmea') };
+            P.ui.pick('sspp.keep', 'company'); await wait(60);
+            const pvj = document.querySelector('[data-pladoc]'), hit = pvj && pvj.querySelector('[data-plap="sspp.keep"]');
+            out.jump = { flashed: !!hit && hit.classList.contains('pla-flash'), scrolled: pvj && pvj.scrollTop > 200, link: !!document.querySelector('[data-plaqbox="sspp.keep"] a[onclick*="ui.jump"]') };
+            P.ui.node('pssa'); await wait(60);
+            const np = document.querySelector('[data-pla-node="pssa"]');
+            out.nodeClick = { panel: !!np, inputs: !!np && /Inputs it needs/.test(np.textContent) && /System failure conditions/.test(np.textContent), outputs: !!np && /Outputs it must produce/.test(np.textContent) && /Accepted when/.test(np.textContent), live: !!np && /Where it stands now: \d+ fault trees/.test(np.textContent), open: !!np && /Open Fault trees/.test(np.textContent), clickable: document.querySelectorAll('[data-pladoc] .pla-node[data-node]').length };
+            P.ui.node(null);
+            const badge = () => /<rect[^>]*fill="#101216"(\/>|><\/rect>)<text[^>]*>\d+ (aircraft failure conditions|fault trees)/.test(document.querySelector('[data-pladoc]').innerHTML);
+            const lb0 = badge(); P.ui.live(); await wait(60); const lb1 = badge(); const wordModel = JSON.stringify(P.model('sspp', 'plan')); const printHtml = P.fullHtml('sspp', 'plan'); P.ui.live(); await wait(30);
+            out.live = { off: !lb0, on: lb1, notInWord: !/\d+ fault trees|\d+ aircraft failure conditions/.test(wordModel), notInPrint: !/\d+ fault trees|\d+ aircraft failure conditions/.test(printHtml), after: !badge() };
+            const d1 = P.doc('sspp'), io = d1.find(b => b.k === 'table' && b.name === 'io'), exch = d1.find(b => b.k === 'table' && b.name === 'exchanges'), outsT = d1.find(b => b.k === 'table' && b.name === 'outputs');
+            const nodesKnown = P.exchanges().every(x => P.assessments().some(a => a.id === x.from));
+            out.io = { io: io && io.rows.length, afhaIn: io && /aircraft functions \(Design and development\)/i.test(JSON.stringify(io.rows)), sppOut: io && /safety objectives/.test(JSON.stringify(io.rows.find(r => /Program Plan/.test(r.Assessment)) || {})), exch: exch && exch.rows.length, nodesKnown, outs: outsT && outsT.rows.length, blank: outsT && outsT.rows.every(r => r.Signature === '' && r.Date === ''), last: d1.filter(b => b.k === 'h').slice(-2).map(b => b.text).join(' | ') };
+            P.answer('sspp.pasa', 'yes'); P.answer('sspp.combined', ['interdep', 'mac']); const withMac = P.outputsOf('sspp').some(o => o.id === 'pasa.mfms'); P.answer('sspp.pasa', 'none'); P.setWhy('sspp.pasa', 'carried over'); const noPasa = !P.outputsOf('sspp').some(o => /^pasa\./.test(o.id)) && JSON.stringify(P.assessments().find(a => a.id === 'sfha').inputs).indexOf('"afha"') >= 0; P.answer('sspp.pasa', 'yes');
+            out.io.follows = withMac && noPasa;
+            // accepting an output; a change reopens it; the plan never changes
+            const planBefore = txtOf(P.doc('sspp'));
+            P.ui.accept('afha.fc'); await wait(30); const ac1 = P.acceptance('sspp').find(o => o.id === 'afha.fc').state;
+            const fha2 = SLEnv.get('acFhaData'); fha2.push(Object.assign({}, fha2[0], { internalId: 999902, fcId: 'FC-T2', fcDesc: 'Another test-only failure condition' })); P.forget();
+            const ac2 = P.acceptance('sspp').find(o => o.id === 'afha.fc').state; const inReport = /Reopened/.test(txtOf(P.statusDoc('sspp'))); fha2.pop(); P.forget();
+            const ac3 = P.acceptance('sspp').find(o => o.id === 'afha.fc').state;
+            out.accept = { a1: ac1, a2: ac2, a3: ac3, inReport, planSame: txtOf(P.doc('sspp')) === planBefore, box: !!document.querySelector('[data-pla-accept] [data-pla-out="afha.fc"]') };
+            P.ui.unaccept('afha.fc');
             // the Word files: plan and report, with the figures in the text
             try { const lib = await _loadDocxLib(); const m = P.model('sspp', 'plan'); const imgs = m.blocks.filter(b => b.k === 'img'); for (const b of imgs) b.dataUrl = await SLFtaPrint.png({ svg: b.svg, w: b.w, h: b.h }, 2); const blob = await SLReportWriter.docx(m, lib); const blob2 = await SLReportWriter.docx(P.model('sspp', 'status'), lib); out.word = { plan: blob.size, imgs: imgs.length, cover: !!m.cover && m.cover.tables.length === 3, report: blob2.size }; } catch (e) { out.word = 'error ' + e.message; }
             out.saved = JSON.parse(JSON.stringify(pc.planAuto)).answers['sspp.pssa'];
@@ -177,6 +208,13 @@ const within = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTi
         check('the HF plan: no human factors work (with its reason) takes the HF Autopilot off the menu, and a full program puts it back with the ten steps', r.hf.off && r.hf.navOff && r.hf.fewQs && r.hf.on && r.hf.navOn && r.hf.steps, JSON.stringify(r.hf));
         check('the RAM plan asks about targets, growth and life data only for a full reliability program', r.ram.n1 === r.ram.n0 + 3, JSON.stringify(r.ram));
         check('every option of every question, and every pick-several question with all its picks, writes plan text that reads (no "undefined")', r.perm.n === 0, JSON.stringify(r.perm));
+        check('a proper explanation for every question and every answer, shown on the answer cards', !r.ex.noIntro.length && !r.ex.noOpt.length && r.ex.cards >= 150 && r.ex.shownEx, JSON.stringify(r.ex).slice(0, 600));
+        check('"Not planned" excludes the other answers: picking it clears them, picking another clears it, and the two together are refused', r.excl.ex1 === 'none' && r.excl.ex2 === 'ppfmea' && r.excl.ex3 && r.excl.noBad, JSON.stringify(r.excl));
+        check('picking an answer jumps the plan preview to the sentence it wrote and lights it up; each answered question links to it', r.jump.flashed && r.jump.scrolled && r.jump.link, JSON.stringify(r.jump));
+        check('the diagrams are clickable: a box opens what that assessment needs and produces, where it stands, and its page', r.nodeClick.panel && r.nodeClick.inputs && r.nodeClick.outputs && r.nodeClick.live && r.nodeClick.open && r.nodeClick.clickable >= 20, JSON.stringify(r.nodeClick));
+        check('where the program stands shows on the diagrams only when asked, and never in the Word file or the printout', r.live.off && r.live.on && r.live.notInWord && r.live.notInPrint && r.live.after, JSON.stringify(r.live));
+        check('the inputs and outputs of each assessment and the data exchanged between them are defined, follow the answers (MAC trees; no PASA), and end in the outputs to accept with blank signature columns', r.io.io >= 8 && r.io.afhaIn && r.io.sppOut && r.io.exch >= 15 && r.io.nodesKnown && r.io.outs >= 10 && r.io.blank && /Outputs and acceptance/.test(r.io.last) && r.io.follows, JSON.stringify(r.io));
+        check('an output is accepted in Safety Lab; a change to it reopens it (in the status report too); the plan never changes', r.accept.a1 === 'accepted' && r.accept.a2 === 'reopened' && r.accept.a3 === 'accepted' && r.accept.inReport && r.accept.planSame && r.accept.box, JSON.stringify(r.accept));
         check('the plan and its status report write to Word: the cover\'s three tables and the figures in the text', typeof r.word === 'object' && r.word.plan > 40000 && r.word.imgs >= 8 && r.word.cover && r.word.report > 8000, JSON.stringify(r.word));
         check('the answers are in the project data', r.saved === 'fta|markov', r.saved);
         check('no page errors', !errs.length, errs.slice(0, 3).join(' | '));
