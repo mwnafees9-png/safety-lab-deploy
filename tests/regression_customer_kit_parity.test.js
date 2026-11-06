@@ -60,6 +60,8 @@ const NOT_PORTED = {
   '20260929b_register_28sep_concurrency_forks.sql': 'production data only: registers chain breaks in OUR audit history; a fresh install has none',
   '20261101a_university_accounts.sql':           'hosted-only: the free student tier and its sign-up trial live on the hosted cloud; a customer install is licensed by its signed license file, never by an email domain',
   '20261101b_university_accounts_no_expiry.sql': 'production data only: removes the trial expiry from existing university accounts on the hosted cloud',
+  '20261106a_university_domains_swot.sql':       'hosted-only: more university domains for the free student tier on the hosted cloud (the JetBrains swot list); a customer install is licensed by its license file',
+  '20261106b_mark_university_domain.sql':        'hosted-only: the owner\'s one-call fix to comp a university the lists miss, on the hosted cloud',
 };
 
 // Bucket 5 — kit-only files: things production has that no migration file ever created
