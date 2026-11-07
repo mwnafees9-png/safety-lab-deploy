@@ -22,7 +22,7 @@ const END = "<!-- SITE-FOOTER:END -->";
 // landing.html keeps its own footer (different layout); everything else carries this one.
 export const PAGES = [
   "fault-tree-analysis.html", "functional-hazard-assessment.html", "arp-4761a.html", "arp-4754b.html",
-  "fmea-software.html", "common-cause-analysis.html", "medini-analyze-alternative.html", "resources.html",
+  "fmea-software.html", "common-cause-analysis.html", "autopilots.html", "medini-analyze-alternative.html", "resources.html",
   "roi.html", "tools.html", "templates.html", "ai-guardrails.html", "trust.html", "legal.html", "privacy.html", "404.html",
 ];
 
@@ -34,6 +34,7 @@ export const LINKS = {
     ["/arp-4754b", "ARP 4754B and DAL allocation"],
     ["/fmea-software", "FMEA"],
     ["/common-cause-analysis", "CMA, PRA and ZSA"],
+    ["/autopilots", "Autopilots"],
   ],
   Resources: [
     ["/resources", "Guides"],

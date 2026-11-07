@@ -209,6 +209,7 @@ const CONTENT_PAGES = new Set([
     // 23 Sep 2026 (SEO read): a page for the query nothing targeted, the comparison page,
     // and the privacy policy the trust page referred to but the site never had.
     'functional-hazard-assessment',
+    'autopilots',
     'medini-analyze-alternative',
     'privacy',
 ]);

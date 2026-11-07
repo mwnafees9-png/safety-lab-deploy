@@ -33,6 +33,7 @@ export const PAGES = [
   { url: "/arp-4754b",             file: "arp-4754b.html",             changefreq: "monthly", priority: "0.9" },
   { url: "/fmea-software",         file: "fmea-software.html",         changefreq: "monthly", priority: "0.9" },
   { url: "/common-cause-analysis", file: "common-cause-analysis.html", changefreq: "monthly", priority: "0.9" },
+  { url: "/autopilots",            file: "autopilots.html",            changefreq: "monthly", priority: "0.9" },
   { url: "/medini-analyze-alternative", file: "medini-analyze-alternative.html", changefreq: "monthly", priority: "0.8" },
   { url: "/resources",             file: "resources.html",             changefreq: "monthly", priority: "0.7" },
   { url: "/roi",                   file: "roi.html",                   changefreq: "monthly", priority: "0.7" },

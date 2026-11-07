@@ -83,3 +83,7 @@ td{border-bottom:1px solid rgba(20,23,28,.35) !important;}
 /* ── footers: gradient line above, ink text */
 footer, .foot, footer.legal{border-top:4px solid transparent !important; border-image:var(--sl-grad) 1; color:var(--sl-ink) !important;}
 footer a, .foot a, .foot-links a, .foot-copy{color:var(--sl-ink) !important;}
+
+/* the second next step beside the trial (7 Nov 2026): outlined, so the two buttons read as two choices */
+.btn.btn-ghost{background:transparent !important;color:inherit !important;border:1.5px solid currentColor !important;margin-left:8px;text-decoration:none !important}
+.btn.btn-ghost:hover{background:rgba(26,110,242,.08) !important}

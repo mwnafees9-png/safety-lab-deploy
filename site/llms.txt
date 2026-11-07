@@ -13,6 +13,7 @@ Safety Lab Aero, Inc. (Delaware; operating from Colorado, USA). Contact: waqas.n
 - [ARP 4754B and DAL allocation](https://safetylabaero.com/arp-4754b): top-down development assurance level allocation with the AND-gate options.
 - [FMEA](https://safetylabaero.com/fmea-software): functional and piece-part FMEA wired into the fault tree.
 - [Common cause analysis](https://safetylabaero.com/common-cause-analysis): common-mode, particular-risk and zonal safety analysis.
+- [Autopilots](https://safetylabaero.com/autopilots): the safety program plans, zonal, particular risk and human factors work, done one plain question at a time from the project and CAD model.
 - [Medini Analyze alternative](https://safetylabaero.com/medini-analyze-alternative): what to test when evaluating a replacement on an aerospace program.
 
 ## Resources
