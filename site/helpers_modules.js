@@ -8869,7 +8869,7 @@ function openAccountPanel() {
     ov.addEventListener('mousedown', function(e){ if (e.target === ov) close(); });
     const xb = document.getElementById('acct-x'); if (xb) xb.onclick = close;
     const signout = document.getElementById('acct-signout');
-    if (signout) signout.onclick = async function(){ if (!(await slConfirm('Sign out of Safety Lab Aero?\n\n(' + email + ')', { okText: 'Sign out' }))) return; close(); try { supabaseSignOut(); } catch(_){} try { setSignupEmail(''); } catch(_){} try { refreshSigninChip(); } catch(_){} };
+    if (signout) signout.onclick = async function(){ close(); if (!(await slConfirm('Sign out of Safety Lab Aero on this browser?\n\n(' + email + ')\n\nThe desktop app and your other browsers stay signed in.', { okText: 'Sign out' }))) return; try { await supabaseSignOut(); } catch(_){} };
     const del = document.getElementById('acct-delete');
     if (del) del.onclick = function(){ close(); _openEraseAccountModal(email); };
     const save = document.getElementById('acct-save');

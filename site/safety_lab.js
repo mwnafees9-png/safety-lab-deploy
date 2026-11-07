@@ -5281,8 +5281,9 @@ window._bulkSel = new Set();
         }
         window.location.href = STRIPE_CHECKOUT_BASE + t.stripeId;
     }
-    function _signOut(e) {
+    async function _signOut(e) {
         if (e && e.preventDefault) e.preventDefault();
+        try { if (typeof window.supabaseSignOut === 'function') await window.supabaseSignOut(); } catch (_) {}   // the account too, not only the stored details (7 Nov 2026)
         try {
             const keys = ['safetyLab.signup.email','safetyLab.signup.name','safetyLab.signup.org','safetyLab.signup.signupDate','safetyLab.license.tier','safetyLab.license.trialStartedAt','safetyLab.license.trialTarget'];
             keys.forEach(k => localStorage.removeItem(k));

@@ -3128,15 +3128,17 @@ async function verifyEmailOtp(email, input) {
     return { ok: true, session: (res.data && res.data.session) || null };
 }
 
+// 7 Nov 2026 (Waqas: "only the browser, and take you back to the sign in page"). Every sign-out button comes here.
+// LOCAL scope, like the inactivity lock (Phase 66.12): signing out on one browser leaves the desktop app and other
+// browsers signed in. It never waits on the network, so it cannot fail, and the sign-in page always comes up.
 async function supabaseSignOut() {
     const client = _initSupabaseClient();
-    if (!client) {
-        // Best-effort local sign-out if Supabase isn't available.
-        try { setSignupEmail(''); } catch (_) {}
-        try { refreshSigninChip(); } catch (_) {}
-        return;
-    }
-    try { await client.auth.signOut(); } catch (e) { console.error(e); }
+    if (client) { try { await client.auth.signOut({ scope: 'local' }); } catch (e) { console.error(e); } }
+    try { setSignupEmail(''); } catch (_) {}
+    try { refreshSigninChip(); } catch (_) {}
+    try { if (window.SLLicenseToken) window.SLLicenseToken.clear(); } catch (_) {}
+    // the gate also comes up on the SIGNED_OUT event; this covers no client, or an event that never arrives
+    try { if (window.SafetyLab && typeof window.SafetyLab._authShowGate === 'function') window.SafetyLab._authShowGate(); } catch (_) {}
 }
 
 function closeSignupModal() {
@@ -4704,7 +4706,11 @@ function _slDialog(opts) {
 function _slDialogShow(opts) {
     return new Promise(resolve => {
         let ov = document.getElementById('sl-dialog-overlay');
-        if (!ov) { ov = document.createElement('div'); ov.id = 'sl-dialog-overlay'; ov.className = 'modal-overlay'; document.body.appendChild(ov); }
+        if (!ov) { ov = document.createElement('div'); ov.id = 'sl-dialog-overlay'; ov.className = 'modal-overlay'; }
+        // 7 Nov 2026 ("why is sign out not working"): the account panel sat at z-index 2147483600 and this dialog at 2000,
+        // so the confirm opened underneath it and its button could not be clicked. A question asked of the user is
+        // always the top layer: the highest z-index, and moved to the end of the page so nothing opened later covers it.
+        ov.style.zIndex = '2147483647'; if (ov.parentNode !== document.body || document.body.lastElementChild !== ov) document.body.appendChild(ov);
         if (ov._hideTimer) { clearTimeout(ov._hideTimer); ov._hideTimer = null; }   // cancel a prior dialog's pending hide
         const isPrompt = opts.type === 'prompt';
         const isAlert = opts.type === 'alert';          // R19 step 3: one OK button, nothing to cancel

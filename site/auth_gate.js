@@ -928,7 +928,7 @@
 
   async function _mfaGateThenLift(sb, onLift) {
     const _signOutToGate = async function () {
-      try { if (sb && sb.auth && typeof sb.auth.signOut === 'function') await sb.auth.signOut(); } catch (_) {}
+      try { if (sb && sb.auth && typeof sb.auth.signOut === 'function') await sb.auth.signOut({ scope: 'local' }); } catch (_) {}   // this browser only (7 Nov 2026)
       try { renderGate(); } catch (_) {}
     };
     try {
@@ -1000,6 +1000,7 @@
   window.SafetyLab._authBackToSignIn = backToSignIn;
   window.SafetyLab._authResendVerification = resendVerification;
   window.SafetyLab._authLiftGate = liftGate;
+  window.SafetyLab._authShowGate = function () { try { renderGate(); } catch (_) {} };
 
   // ---- desktop SSO return (17 Sep 2026) ------------------------------------------------
   // The shell receives safetylab://auth-callback?code=… from the system browser and calls this

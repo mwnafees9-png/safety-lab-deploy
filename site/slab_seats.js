@@ -96,7 +96,7 @@
       '<div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" id="slab-seats-signout" style="padding:8px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer">Sign out</button>' +
       '<button type="button" id="slab-seats-retry" style="padding:8px 14px;border-radius:8px;border:0;background:#1d4ed8;color:#fff;cursor:pointer">Try again</button></div></div>';
     document.getElementById('slab-seats-retry').onclick = function () { claimNow(); };
-    document.getElementById('slab-seats-signout').onclick = function () { try { var c = W.getSupabaseClient && W.getSupabaseClient(); if (c) c.auth.signOut(); } catch (_) {} };
+    document.getElementById('slab-seats-signout').onclick = function () { try { if (typeof W.supabaseSignOut === 'function') { W.supabaseSignOut(); return; } var c = W.getSupabaseClient && W.getSupabaseClient(); if (c) c.auth.signOut({ scope: 'local' }); } catch (_) {} };
     try { document.getElementById('slab-seats-retry').focus(); } catch (_) {}
   }
   function hide() { if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay); overlay = null; }
